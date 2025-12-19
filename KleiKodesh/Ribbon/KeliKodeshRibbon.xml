@@ -1,0 +1,63 @@
+﻿<customUI xmlns="http://schemas.microsoft.com/office/2009/07/customui" onLoad="Ribbon_Load">
+	<ribbon>
+		<tabs>
+			<tab idMso="TabHome">
+				<group id="Klei_Kodesh3"
+					   label="כלי קודש"
+					   insertAfterMso="GroupEditing"
+					   screentip="כלי קודש לוורד"
+					   supertip="ארגז כלים לעורך התורני">
+
+					<splitButton id="mySplitButton" size="large">
+
+						<button id="KleiKodesh_Main"
+								label="כלי קודש"
+								getImage="getImage"
+								onAction="button_Click"/>
+
+						<menu itemSize="large">
+
+							<button id="Kezayit"
+									label="כזית"
+									screentip="כזית"
+									supertip="תוסף לוורד עבור מאגר הספרים - זית"
+									getImage="getImage"
+									onAction="button_Click"
+									getVisible="getVisible"/>
+
+							<button id="HebrewBooks"
+									label="היברו-בוקס"
+									screentip="היברו-בוקס"
+									supertip="גישה נוחה לספריית היברו-בוקס (דרוש חיבור לאינטרנט)"
+									getImage="getImage"
+									onAction="button_Click"
+									getVisible="getVisible"/>
+
+							<button id="WebSites"
+									label="דרך האתרים"
+									screentip="דרך האתרים"
+									supertip="פתיחת אתרים ייעודיים לעורך התורני - בתוך וורד"
+									getImage="getImage"
+									onAction="button_Click"
+									getVisible="getVisible"/>
+
+							<button id="KleiKodesh"
+									label="עיצוב תורני"
+									screentip="עיצוב תורני"
+									supertip="כלים לעיצוב ספרי קודש"
+									getImage="getImage"
+									onAction="button_Click"
+									getVisible="getVisible"/>
+
+							<button id="Settings"
+									label="הגדרות"
+									imageMso="ComAddInsDialog"
+									onAction="button_Click"/>
+
+						</menu>
+					</splitButton>
+				</group>
+			</tab>
+		</tabs>
+	</ribbon>
+</customUI>
