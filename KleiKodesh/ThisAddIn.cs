@@ -12,6 +12,8 @@ namespace KleiKodesh
 {
     public partial class ThisAddIn
     {
+        public OfficeThemeWatcher ThemeWatcher { get; private set; }
+
         protected override Office.IRibbonExtensibility CreateRibbonExtensibilityObject()
         {
             return new KeliKodeshRibbon();
@@ -19,11 +21,12 @@ namespace KleiKodesh
 
         private void ThisAddIn_Startup(object sender, System.EventArgs e)
         {
+            ThemeWatcher = new OfficeThemeWatcher();
         }
 
         private void ThisAddIn_Shutdown(object sender, System.EventArgs e)
         {
-
+            ThemeWatcher.Dispose();
         }
 
         #region VSTO generated code

@@ -68,7 +68,7 @@ namespace KleiKodesh.Settings
             this.flowLayoutPanel.Location = new System.Drawing.Point(0, 0);
             this.flowLayoutPanel.Margin = new System.Windows.Forms.Padding(0);
             this.flowLayoutPanel.Name = "flowLayoutPanel";
-            this.flowLayoutPanel.Size = new System.Drawing.Size(222, 512);
+            this.flowLayoutPanel.Size = new System.Drawing.Size(186, 512);
             this.flowLayoutPanel.TabIndex = 0;
             this.flowLayoutPanel.WrapContents = false;
             // 
@@ -83,7 +83,7 @@ namespace KleiKodesh.Settings
             this.label1.Margin = new System.Windows.Forms.Padding(0, 0, 0, 5);
             this.label1.Name = "label1";
             this.label1.Padding = new System.Windows.Forms.Padding(5, 5, 0, 5);
-            this.label1.Size = new System.Drawing.Size(222, 42);
+            this.label1.Size = new System.Drawing.Size(186, 42);
             this.label1.TabIndex = 4;
             this.label1.Text = "רכיבים זמינים";
             // 
@@ -91,7 +91,7 @@ namespace KleiKodesh.Settings
             // 
             this.Kezayit_Visible.AutoSize = true;
             this.Kezayit_Visible.Font = new System.Drawing.Font("Tahoma", 10F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(177)));
-            this.Kezayit_Visible.Location = new System.Drawing.Point(139, 52);
+            this.Kezayit_Visible.Location = new System.Drawing.Point(103, 52);
             this.Kezayit_Visible.Margin = new System.Windows.Forms.Padding(10, 5, 10, 5);
             this.Kezayit_Visible.Name = "Kezayit_Visible";
             this.Kezayit_Visible.Size = new System.Drawing.Size(73, 28);
@@ -103,7 +103,7 @@ namespace KleiKodesh.Settings
             // 
             this.HebrewBooks_Visible.AutoSize = true;
             this.HebrewBooks_Visible.Font = new System.Drawing.Font("Tahoma", 10F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(177)));
-            this.HebrewBooks_Visible.Location = new System.Drawing.Point(75, 90);
+            this.HebrewBooks_Visible.Location = new System.Drawing.Point(39, 90);
             this.HebrewBooks_Visible.Margin = new System.Windows.Forms.Padding(10, 5, 10, 5);
             this.HebrewBooks_Visible.Name = "HebrewBooks_Visible";
             this.HebrewBooks_Visible.Size = new System.Drawing.Size(137, 28);
@@ -115,7 +115,7 @@ namespace KleiKodesh.Settings
             // 
             this.WebSites_Visible.AutoSize = true;
             this.WebSites_Visible.Font = new System.Drawing.Font("Tahoma", 10F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(177)));
-            this.WebSites_Visible.Location = new System.Drawing.Point(64, 128);
+            this.WebSites_Visible.Location = new System.Drawing.Point(28, 128);
             this.WebSites_Visible.Margin = new System.Windows.Forms.Padding(10, 5, 10, 5);
             this.WebSites_Visible.Name = "WebSites_Visible";
             this.WebSites_Visible.Size = new System.Drawing.Size(148, 28);
@@ -127,7 +127,7 @@ namespace KleiKodesh.Settings
             // 
             this.KleiKodesh_Visible.AutoSize = true;
             this.KleiKodesh_Visible.Font = new System.Drawing.Font("Tahoma", 10F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(177)));
-            this.KleiKodesh_Visible.Location = new System.Drawing.Point(79, 166);
+            this.KleiKodesh_Visible.Location = new System.Drawing.Point(43, 166);
             this.KleiKodesh_Visible.Margin = new System.Windows.Forms.Padding(10, 5, 10, 5);
             this.KleiKodesh_Visible.Name = "KleiKodesh_Visible";
             this.KleiKodesh_Visible.Size = new System.Drawing.Size(133, 28);
@@ -146,7 +146,7 @@ namespace KleiKodesh.Settings
             this.label2.Margin = new System.Windows.Forms.Padding(0, 5, 0, 5);
             this.label2.Name = "label2";
             this.label2.Padding = new System.Windows.Forms.Padding(5, 5, 0, 5);
-            this.label2.Size = new System.Drawing.Size(222, 42);
+            this.label2.Size = new System.Drawing.Size(186, 42);
             this.label2.TabIndex = 5;
             this.label2.Text = "לחצן ראשי";
             // 
@@ -154,7 +154,7 @@ namespace KleiKodesh.Settings
             // 
             this.Kezayit_Option.AutoSize = true;
             this.Kezayit_Option.Font = new System.Drawing.Font("Tahoma", 10F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(177)));
-            this.Kezayit_Option.Location = new System.Drawing.Point(140, 256);
+            this.Kezayit_Option.Location = new System.Drawing.Point(104, 256);
             this.Kezayit_Option.Margin = new System.Windows.Forms.Padding(10, 5, 5, 5);
             this.Kezayit_Option.Name = "Kezayit_Option";
             this.Kezayit_Option.Size = new System.Drawing.Size(72, 28);
@@ -167,7 +167,7 @@ namespace KleiKodesh.Settings
             // 
             this.HebrewBooks_Option.AutoSize = true;
             this.HebrewBooks_Option.Font = new System.Drawing.Font("Tahoma", 10F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(177)));
-            this.HebrewBooks_Option.Location = new System.Drawing.Point(76, 294);
+            this.HebrewBooks_Option.Location = new System.Drawing.Point(40, 294);
             this.HebrewBooks_Option.Margin = new System.Windows.Forms.Padding(10, 5, 5, 5);
             this.HebrewBooks_Option.Name = "HebrewBooks_Option";
             this.HebrewBooks_Option.Size = new System.Drawing.Size(136, 28);
@@ -180,7 +180,7 @@ namespace KleiKodesh.Settings
             // 
             this.WebSites_Option.AutoSize = true;
             this.WebSites_Option.Font = new System.Drawing.Font("Tahoma", 10F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(177)));
-            this.WebSites_Option.Location = new System.Drawing.Point(65, 332);
+            this.WebSites_Option.Location = new System.Drawing.Point(29, 332);
             this.WebSites_Option.Margin = new System.Windows.Forms.Padding(10, 5, 5, 5);
             this.WebSites_Option.Name = "WebSites_Option";
             this.WebSites_Option.Size = new System.Drawing.Size(147, 28);
@@ -193,7 +193,7 @@ namespace KleiKodesh.Settings
             // 
             this.KleiKodesh_Option.AutoSize = true;
             this.KleiKodesh_Option.Font = new System.Drawing.Font("Tahoma", 10F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(177)));
-            this.KleiKodesh_Option.Location = new System.Drawing.Point(80, 370);
+            this.KleiKodesh_Option.Location = new System.Drawing.Point(44, 370);
             this.KleiKodesh_Option.Margin = new System.Windows.Forms.Padding(10, 5, 5, 5);
             this.KleiKodesh_Option.Name = "KleiKodesh_Option";
             this.KleiKodesh_Option.Size = new System.Drawing.Size(132, 28);
@@ -206,7 +206,7 @@ namespace KleiKodesh.Settings
             // 
             this.Settings_Option.AutoSize = true;
             this.Settings_Option.Font = new System.Drawing.Font("Tahoma", 10F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(177)));
-            this.Settings_Option.Location = new System.Drawing.Point(112, 408);
+            this.Settings_Option.Location = new System.Drawing.Point(76, 408);
             this.Settings_Option.Margin = new System.Windows.Forms.Padding(10, 5, 5, 5);
             this.Settings_Option.Name = "Settings_Option";
             this.Settings_Option.Size = new System.Drawing.Size(100, 28);
@@ -217,7 +217,6 @@ namespace KleiKodesh.Settings
             // 
             // ResetButton
             // 
-            this.ResetButton.AutoSize = true;
             this.ResetButton.BackColor = System.Drawing.Color.Transparent;
             this.ResetButton.FlatAppearance.BorderColor = System.Drawing.Color.LightGray;
             this.ResetButton.FlatAppearance.MouseDownBackColor = System.Drawing.Color.Transparent;
@@ -227,7 +226,7 @@ namespace KleiKodesh.Settings
             this.ResetButton.Location = new System.Drawing.Point(10, 456);
             this.ResetButton.Margin = new System.Windows.Forms.Padding(10, 15, 10, 10);
             this.ResetButton.Name = "ResetButton";
-            this.ResetButton.Size = new System.Drawing.Size(202, 46);
+            this.ResetButton.Size = new System.Drawing.Size(166, 46);
             this.ResetButton.TabIndex = 0;
             this.ResetButton.Text = "איפוס הגדרות";
             this.ResetButton.UseVisualStyleBackColor = false;
@@ -242,7 +241,7 @@ namespace KleiKodesh.Settings
             this.Controls.Add(this.flowLayoutPanel);
             this.Name = "RibbonSettingsControl";
             this.RightToLeft = System.Windows.Forms.RightToLeft.Yes;
-            this.Size = new System.Drawing.Size(222, 512);
+            this.Size = new System.Drawing.Size(186, 512);
             this.flowLayoutPanel.ResumeLayout(false);
             this.flowLayoutPanel.PerformLayout();
             this.ResumeLayout(false);

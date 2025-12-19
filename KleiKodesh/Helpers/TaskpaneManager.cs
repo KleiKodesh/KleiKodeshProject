@@ -10,18 +10,15 @@ namespace KleiKodesh.Helpers
 {
     public class TaskPaneManager
     {
-        readonly OfficeThemeWatcher _themeWatcher = new OfficeThemeWatcher();
-
         public CustomTaskPane Show(
             UserControl userControl,
             string title,
             int width = 600,
+            bool matchOfficeTheme = true,
             bool popOutBehavior = false)
         {
             try
             {
-                UpdateManager.CheckForUpdates("KleiKodesh", "KleiKodesh", "נמצאו עדכונים עבור כלי קודש בוורד, האם ברצונך להורידם כעת?", 1);
-
                 var panes = Globals.ThisAddIn.CustomTaskPanes;
                 var window = Globals.ThisAddIn.Application.ActiveWindow;
                 var type = userControl.GetType();
@@ -32,13 +29,18 @@ namespace KleiKodesh.Helpers
                 if (pane == null)
                 {
                     pane = panes.Add(userControl, title);
-                    pane.Width = width;
 
                     RestoreDockPosition(pane, type.Name);
                     RestoreWidth(pane, userControl, type.Name, width);
+                    AttachRemoveOnClose(pane, userControl);
+
                     if (popOutBehavior)
                         new TaskPanePopOut(userControl, userControl, pane);
-                    _themeWatcher.Attach(userControl);
+
+                    if (matchOfficeTheme)
+                        Globals.ThisAddIn.ThemeWatcher.Attach(userControl);
+
+                    UpdateManager.CheckForUpdates("KleiKodesh", "KleiKodesh", "נמצאו עדכונים עבור כלי קודש בוורד, האם ברצונך להורידם כעת?", 1);
                 }
 
                 pane.Visible = true;
@@ -53,16 +55,23 @@ namespace KleiKodesh.Helpers
 
         void RestoreDockPosition(CustomTaskPane pane, string type)
         {
-            var defaultPos = GetDefaultDockPosition();
+            try
+            {
+                var defaultPos = GetDefaultDockPosition();
 
-            pane.DockPosition = SettingsManager.GetEnum(
-                type,
-                "DockPosition",
-                defaultPos
-            );
+                pane.DockPosition = SettingsManager.GetEnum(
+                    type,
+                    "DockPosition",
+                    defaultPos
+                );
 
-            pane.DockPositionChanged += (s, e) =>
-                SettingsManager.Save(type, "DockPosition", pane.DockPosition);
+                pane.DockPositionChanged += (s, e) =>
+                    SettingsManager.Save(type, "DockPosition", pane.DockPosition);
+            }
+            catch
+            {
+                pane.DockPosition = DockPosition.msoCTPDockPositionLeft;
+            }
         }
 
         DockPosition GetDefaultDockPosition()
@@ -72,8 +81,8 @@ namespace KleiKodesh.Helpers
                 .LanguageID[Microsoft.Office.Core.MsoAppLanguageID.msoLanguageIDUI];
 
             return (uiLang == 1037 || uiLang == 1025)
-                ? DockPosition.msoCTPDockPositionRight
-                : DockPosition.msoCTPDockPositionLeft;
+                ? DockPosition.msoCTPDockPositionLeft
+                : DockPosition.msoCTPDockPositionRight;
         }
 
         static void RestoreWidth(
@@ -82,10 +91,28 @@ namespace KleiKodesh.Helpers
             string type,
             int defaultWidth)
         {
-            pane.Width = SettingsManager.GetInt(type, "TaskPaneWidth", defaultWidth);
+            try
+            {
+                pane.Width = SettingsManager.GetInt(type, "TaskPaneWidth", defaultWidth);
 
-            control.SizeChanged += (s, e) =>
-                SettingsManager.Save(type, "TaskPaneWidth", pane.Width);
+                control.SizeChanged += (s, e) =>
+                    SettingsManager.Save(type, "TaskPaneWidth", pane.Width);
+            }
+            catch { /* Swallow errors silently */ }
+        }
+
+        private static void AttachRemoveOnClose(CustomTaskPane pane, UserControl userControl)
+        {
+            try
+            {
+                Globals.Factory.GetVstoObject(Globals.ThisAddIn.Application.ActiveDocument)
+                    .CloseEvent += () =>
+                    {
+                        Globals.ThisAddIn.CustomTaskPanes.Remove(pane);
+                        userControl.Dispose();
+                    };
+            }
+            catch { /* Swallow errors silently */ }
         }
     }
 }

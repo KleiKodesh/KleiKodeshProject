@@ -75,14 +75,17 @@ public sealed class OfficeThemeWatcher : IDisposable
         btn.UseVisualStyleBackColor = false;
         btn.FlatStyle = FlatStyle.Flat;
 
-        btn.BackColor = _currentTheme.ButtonBack;
-        btn.ForeColor = _currentTheme.ForeColor;
+        //btn.BackColor = _currentTheme.ButtonBack;
+        //btn.ForeColor = _currentTheme.ForeColor;
 
-        btn.FlatAppearance.BorderSize = 1;
         btn.FlatAppearance.BorderColor = _currentTheme.ButtonBorder;
+        btn.FlatAppearance.BorderSize = 1;
+
+        // Fluent-style soft colors
         btn.FlatAppearance.MouseOverBackColor = _currentTheme.ButtonHover;
         btn.FlatAppearance.MouseDownBackColor = _currentTheme.ButtonPressed;
     }
+
 
     /* ================= THEME CHANGE ================= */
 
@@ -109,33 +112,34 @@ public sealed class OfficeThemeWatcher : IDisposable
         {
             case OfficeThemeCode.Black:
                 return new OfficeTheme(
-                    Color.FromArgb(38, 38, 38),
-                    Color.White,
-                    Color.FromArgb(64, 64, 64),
-                    Color.FromArgb(90, 90, 90),
-                    Color.FromArgb(110, 110, 110),
-                    Color.FromArgb(120, 120, 120));
+                    Color.FromArgb(38, 38, 38),      // BackColor
+                    Color.White,                     // ForeColor
+                    Color.FromArgb(60, 60, 60),      // ButtonBack
+                    Color.FromArgb(90, 90, 90),      // ButtonHover (soft Fluent gray)
+                    Color.FromArgb(120, 120, 120),   // ButtonPressed
+                    Color.FromArgb(150, 150, 150));  // ButtonBorder
 
             case OfficeThemeCode.DarkGray:
                 return new OfficeTheme(
                     Color.FromArgb(102, 102, 102),
                     Color.White,
-                    Color.FromArgb(130, 130, 130),
-                    Color.FromArgb(150, 150, 150),
-                    Color.FromArgb(170, 170, 170),
-                    Color.FromArgb(180, 180, 180));
+                    Color.FromArgb(160, 160, 160),   // ButtonBack
+                    Color.FromArgb(200, 200, 200),   // ButtonHover (Fluent soft hover)
+                    Color.FromArgb(180, 180, 180),   // ButtonPressed
+                    Color.FromArgb(190, 190, 190));  // ButtonBorder
 
             case OfficeThemeCode.White:
             default:
                 return new OfficeTheme(
                     Color.White,
                     Color.FromArgb(38, 38, 38),
-                    Color.FromArgb(240, 240, 240),
-                    Color.FromArgb(225, 225, 225),
-                    Color.FromArgb(210, 210, 210),
-                    Color.FromArgb(200, 200, 200));
+                    Color.FromArgb(240, 240, 240),   // ButtonBack
+                    Color.FromArgb(229, 241, 251),   // ButtonHover (Fluent blue-ish hover)
+                    Color.FromArgb(204, 228, 247),   // ButtonPressed
+                    Color.FromArgb(200, 200, 200));  // ButtonBorder
         }
     }
+
 
     private OfficeThemeCode ReadThemeCode()
     {
