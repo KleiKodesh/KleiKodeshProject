@@ -38,7 +38,7 @@ namespace KleiKodesh.Helpers
                         new TaskPanePopOut(userControl, userControl, pane);
 
                     if (matchOfficeTheme)
-                        Globals.ThisAddIn.ThemeWatcher.Attach(userControl);
+                        OfficeThemeWatcher.Attach(userControl);
 
                     UpdateManager.CheckForUpdates("KleiKodesh", "KleiKodesh", "נמצאו עדכונים עבור כלי קודש בוורד, האם ברצונך להורידם כעת?", 1);
                 }
