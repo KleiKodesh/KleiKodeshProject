@@ -65,7 +65,7 @@ namespace KleiKodesh.Ribbon
                     //WpfTaskPane.Show(new DocSeferLib.DocSeferLibView(Globals.ThisAddIn.Application, Globals.Factory), LocaleDictionary.Translate(id), 510);
                     break;
                 case "Settings":
-                    taskPaneManager.Show(new RibbonSettingsControl(ribbon), "הגדרות", 300);
+                    taskPaneManager.Show(new RibbonSettingsControl(ribbon), "הגדרות - כלי קודש", 400);
                     break;
             }
         }
