@@ -26,14 +26,24 @@
     </Content>
   </ItemGroup>
 
-  <!-- Prebuild event to build KleiKodesh VSTO and create zip package -->
-  <Target Name="BuildVstoAndPack" BeforeTargets="PrepareForBuild" Condition="'$(Configuration)' == 'Release' AND !Exists('KleiKodesh.zip')">
+  <!-- Prebuild event to update version, build KleiKodesh VSTO and create zip package -->
+  <Target Name="BuildVstoAndPack" BeforeTargets="PrepareForBuild" Condition="'$(Configuration)' == 'Release'">
     <PropertyGroup>
       <KleiKodeshProject>$(MSBuildProjectDirectory)\..\KleiKodesh\KleiKodesh.csproj</KleiKodeshProject>
       <VstoOutputPath>$(MSBuildProjectDirectory)\..\KleiKodesh\bin\Release</VstoOutputPath>
       <TempPackageDir>$(OutputPath)VstoPackage</TempPackageDir>
       <ZipOutputPath>$(MSBuildProjectDirectory)\KleiKodesh.zip</ZipOutputPath>
+      <InstallProgressFile>$(MSBuildProjectDirectory)\InstallProgressWindow.xaml.cs</InstallProgressFile>
     </PropertyGroup>
+    
+    <Message Text="Getting latest version from GitHub..." Importance="high" />
+    
+    <!-- Get latest version from GitHub and update InstallProgressWindow.xaml.cs -->
+    <Exec Command="powershell -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\UpdateVersion.ps1&quot; -FilePath &quot;$(InstallProgressFile)&quot;" 
+          ContinueOnError="false" />
+    
+    <!-- Delete existing zip to force rebuild -->
+    <Delete Files="$(ZipOutputPath)" Condition="Exists('$(ZipOutputPath)')" />
     
     <Message Text="Building KleiKodesh VSTO in Release mode..." Importance="high" />
     

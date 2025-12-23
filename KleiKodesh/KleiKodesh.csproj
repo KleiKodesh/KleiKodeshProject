@@ -247,8 +247,7 @@
     <Compile Include="Helpers\OfficeThemeWatcher.cs" />
     <Compile Include="Helpers\SettingsManager.cs" />
     <Compile Include="Helpers\TaskpaneManager.cs" />
-    <Compile Include="Helpers\VelopackUpdateManager.cs" />
-    <Compile Include="Helpers\VstoRegistration.cs" />
+    <Compile Include="Helpers\GitHubUpdateChecker.cs" />
     <Compile Include="Properties\AssemblyInfo.cs">
       <SubType>Code</SubType>
     </Compile>

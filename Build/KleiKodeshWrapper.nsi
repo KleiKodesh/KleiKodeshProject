@@ -2,7 +2,7 @@
 ; Purpose: Check .NET dependencies, run WPF installer, and provide uninstaller
 
 !define PRODUCT_NAME "KleiKodesh"
-!define PRODUCT_VERSION "1.0.0"
+!define PRODUCT_VERSION "v1.0.31"
 !define PRODUCT_PUBLISHER "KleiKodesh Team"
 !define PRODUCT_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
 !define PRODUCT_UNINST_ROOT_KEY "HKLM"
@@ -10,6 +10,9 @@
 !define DOTNET_REGKEY "SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full"
 
 !include "LogicLib.nsh"
+!include "FileFunc.nsh"
+
+!insertmacro GetParameters
 
 ; Classic NSIS UI for minimal window
 Icon "..\KleiKodeshInstallerWpf\KleiKodesh_Main.ico"
@@ -52,8 +55,26 @@ Section "Main"
   File /nonfatal "..\KleiKodeshInstallerWpf\bin\Release\net8.0-windows\*.json"
   File "..\KleiKodeshInstallerWpf\KleiKodesh.zip"
   
-  ; Run WPF installer
-  ExecWait '"$TEMP\KleiKodeshInstaller\KleiKodeshInstallerWpf.exe"' $0
+  ; Check if silent mode was requested
+  ${GetParameters} $R0
+  StrCpy $R1 ""
+  
+  ; Check for --silent
+  StrLen $R3 $R0
+  ${If} $R3 > 0
+    StrCpy $R2 $R0 8  ; Get first 8 chars
+    ${If} $R2 == "--silent"
+      StrCpy $R1 " --silent"
+    ${Else}
+      StrCpy $R2 $R0 7  ; Get first 7 chars  
+      ${If} $R2 == "/silent"
+        StrCpy $R1 " /silent"
+      ${EndIf}
+    ${EndIf}
+  ${EndIf}
+  
+  ; Run WPF installer with or without silent argument
+  ExecWait '"$TEMP\KleiKodeshInstaller\KleiKodeshInstallerWpf.exe"$R1' $0
   
   ; Clean up temp files
   RMDir /r "$TEMP\KleiKodeshInstaller"
@@ -67,6 +88,7 @@ Section "Main"
     WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "UninstallString" "$INSTDIR\uninstall.exe"
     WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayVersion" "${PRODUCT_VERSION}"
     WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "Publisher" "${PRODUCT_PUBLISHER}"
+    WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayIcon" "$INSTDIR\uninstall.exe"
     WriteRegDWORD ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "NoModify" 1
     WriteRegDWORD ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "NoRepair" 1
   ${EndIf}

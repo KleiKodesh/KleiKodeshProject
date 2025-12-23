@@ -1,4 +1,5 @@
-﻿using Microsoft.Win32;
+using KleiKodesh.Helpers;
+using Microsoft.Win32;
 using System;
 using System.IO;
 using System.IO.Compression;
@@ -15,8 +16,8 @@ namespace KleiKodeshInstallerWpf
     /// </summary>
     public partial class InstallProgressWindow : Window
     {
-        const string AppName = "כלי קודש";
-        const string Version = "1.0.0";
+        const string AppName = "��� ����";
+        const string Version = "v1.0.3";
         const string InstallFolderName = "KleiKodesh";
         const string ZipResourceName = "KleiKodesh.zip";
         const string VstoFileName = "KleiKodesh.vsto";
@@ -27,7 +28,7 @@ namespace KleiKodeshInstallerWpf
         public InstallProgressWindow(Window mainWindow)
         {
             InitializeComponent();
-            mainWindow.Close();
+            mainWindow?.Close();
             Install();
         }
 
@@ -53,7 +54,10 @@ namespace KleiKodeshInstallerWpf
                     await Task.Delay(10);
                 }
 
-                MessageBox.Show("ההתקנה הסתיימה");
+                MessageBox.Show("������ �������");
+                
+                // Save version to registry after successful installation
+                SaveVersionToRegistry(Version);
                 
                 // Installation completed successfully - exit with code 0
                 Environment.Exit(0);
@@ -141,6 +145,24 @@ namespace KleiKodeshInstallerWpf
                     addinKey.SetValue("Manifest", $"file:///{InstallPath}\\{VstoFileName}|vstolocal");
                     addinKey.SetValue("LoadBehavior", 3, RegistryValueKind.DWord);
                 }
+            }
+        }
+
+        private void SaveVersionToRegistry(string version)
+        {
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"SOFTWARE\KleiKodesh"))
+                {
+                    if (key != null)
+                    {
+                        key.SetValue("Version", version);
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // Ignore registry errors - don't fail installation for this
             }
         }
     }
