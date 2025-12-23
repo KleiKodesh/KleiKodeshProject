@@ -1,0 +1,71 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <ApplicationIcon>KleiKodesh_Main.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Temporarily commented out COM reference that causes issues with dotnet build -->
+    <!--<COMReference Include="{000204ef-0000-0000-c000-000000000046}">
+      <WrapperTool>tlbimp</WrapperTool>
+      <VersionMinor>0</VersionMinor>
+      <VersionMajor>6</VersionMajor>
+      <Guid>000204ef-0000-0000-c000-000000000046</Guid>
+    </COMReference>-->
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="KleiKodesh_Main.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <!-- Prebuild event to build KleiKodesh VSTO and create zip package -->
+  <Target Name="BuildVstoAndPack" BeforeTargets="PrepareForBuild" Condition="'$(Configuration)' == 'Release' AND !Exists('KleiKodesh.zip')">
+    <PropertyGroup>
+      <KleiKodeshProject>$(MSBuildProjectDirectory)\..\KleiKodesh\KleiKodesh.csproj</KleiKodeshProject>
+      <VstoOutputPath>$(MSBuildProjectDirectory)\..\KleiKodesh\bin\Release</VstoOutputPath>
+      <TempPackageDir>$(OutputPath)VstoPackage</TempPackageDir>
+      <ZipOutputPath>$(MSBuildProjectDirectory)\KleiKodesh.zip</ZipOutputPath>
+    </PropertyGroup>
+    
+    <Message Text="Building KleiKodesh VSTO in Release mode..." Importance="high" />
+    
+    <!-- Build the VSTO project in Release mode using Exec command -->
+    <Exec Command="&quot;C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe&quot; &quot;$(KleiKodeshProject)&quot; /p:Configuration=Release /p:Platform=AnyCPU" 
+          ContinueOnError="false" />
+    
+    <!-- Create output directory for the zip -->
+    <MakeDir Directories="$(TempPackageDir)" />
+    
+    <!-- Copy VSTO files to temp directory -->
+    <ItemGroup>
+      <VstoFiles Include="$(VstoOutputPath)\**\*.*" />
+    </ItemGroup>
+    
+    <Copy SourceFiles="@(VstoFiles)" 
+          DestinationFolder="$(TempPackageDir)\%(RecursiveDir)" />
+    
+    <!-- Create zip package in project directory -->
+    <Message Text="Creating VSTO zip package..." Importance="high" />
+    <Exec Command="powershell -Command &quot;Compress-Archive -Path '$(TempPackageDir)\*' -DestinationPath '$(ZipOutputPath)' -Force&quot;" />
+    
+    <!-- Clean up temp directory -->
+    <RemoveDir Directories="$(TempPackageDir)" />
+    
+    <Message Text="VSTO package created: $(ZipOutputPath)" Importance="high" />
+  </Target>
+
+  <ItemGroup>
+    <EmbeddedResource Include="KleiKodesh.zip" Condition="Exists('KleiKodesh.zip')">
+      <LogicalName>KleiKodesh.zip</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>

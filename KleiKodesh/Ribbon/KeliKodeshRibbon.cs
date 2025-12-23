@@ -1,12 +1,8 @@
 ﻿using KleiKodesh.Helpers;
-using KleiKodesh.Settings;
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Text;
 using Office = Microsoft.Office.Core;
 
 namespace KleiKodesh.Ribbon
@@ -61,7 +57,7 @@ namespace KleiKodesh.Ribbon
                 case "HebrewBooks":
                     //WpfTaskPane.Show(new HebrewBooksLib.HebrewBooksView(), LocaleDictionary.Translate(id), 600);
                     break;
-                case "Typesetting":
+                case "KleiKodesh":
                     //WpfTaskPane.Show(new DocSeferLib.DocSeferLibView(Globals.ThisAddIn.Application, Globals.Factory), LocaleDictionary.Translate(id), 510);
                     break;
                 case "Settings":
@@ -74,7 +70,7 @@ namespace KleiKodesh.Ribbon
         {
             try
             {
-                string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", control.Id.Replace("_Main", "") + ".png");
+                string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", control.Id + ".png");
                 System.Drawing.Bitmap image = new System.Drawing.Bitmap(path);
                 return image;
             }

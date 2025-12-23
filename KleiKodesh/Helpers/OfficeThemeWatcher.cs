@@ -1,6 +1,7 @@
 ﻿using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Drawing;
 using System.Management;
 using System.Security.Principal;
@@ -9,27 +10,26 @@ using System.Windows.Forms;
 public static class OfficeThemeWatcher
 {
     /* ================= STATE ================= */
-
     private static readonly HashSet<Control> _roots = new HashSet<Control>();
     private static ManagementEventWatcher _watcher;
-    private static OfficeTheme _currentTheme;
     private static bool _watcherRunning;
 
-    /* ================= PUBLIC API ================= */
+    private static readonly OfficeTheme _theme = new OfficeTheme();
 
-    public static void Attach(Control control)
+    /* ================= PUBLIC API ================= */
+    public static void Attach(Control root)
     {
-        if (control == null || control.IsDisposed)
+        if (root == null || root.IsDisposed)
             return;
 
         bool startWatcher = false;
 
         lock (_roots)
         {
-            if (_roots.Add(control))
+            if (_roots.Add(root))
             {
-                control.ControlAdded += ControlAdded;
-                control.Disposed += ControlDisposed;
+                root.ControlAdded += OnControlAdded;
+                root.Disposed += OnRootDisposed;
 
                 if (_roots.Count == 1)
                     startWatcher = true;
@@ -39,25 +39,22 @@ public static class OfficeThemeWatcher
         if (startWatcher)
             EnsureWatcher();
 
-        ApplyThemeRecursive(control);
+        AttachRecursive(root);
     }
 
     /* ================= CONTROL LIFECYCLE ================= */
-
-    private static void ControlDisposed(object sender, EventArgs e)
+    private static void OnRootDisposed(object sender, EventArgs e)
     {
-        var control = sender as Control;
-        if (control == null)
-            return;
+        var root = sender as Control;
+        if (root == null) return;
 
         bool stopWatcher = false;
 
         lock (_roots)
         {
-            control.ControlAdded -= ControlAdded;
-            control.Disposed -= ControlDisposed;
-
-            _roots.Remove(control);
+            root.ControlAdded -= OnControlAdded;
+            root.Disposed -= OnRootDisposed;
+            _roots.Remove(root);
 
             if (_roots.Count == 0)
                 stopWatcher = true;
@@ -67,61 +64,78 @@ public static class OfficeThemeWatcher
             StopWatcher();
     }
 
-    private static void ControlAdded(object sender, ControlEventArgs e)
+    private static void OnControlAdded(object sender, ControlEventArgs e)
     {
-        ApplyThemeRecursive(e.Control);
+        AttachRecursive(e.Control);
     }
 
-    /* ================= THEME APPLY ================= */
-
-    private static void ApplyThemeRecursive(Control root)
+    private static void AttachRecursive(Control control)
     {
-        ApplyTheme(root);
-
-        foreach (Control child in root.Controls)
-            ApplyThemeRecursive(child);
+        AttachControl(control);
+        foreach (Control child in control.Controls)
+            AttachRecursive(child);
     }
 
-    private static void ApplyTheme(Control control)
+    private static void AttachControl(Control control)
     {
-        control.BackColor = _currentTheme.BackColor;
-        control.ForeColor = _currentTheme.ForeColor;
+        // Bind BackColor / ForeColor for all controls
+        if (control.DataBindings.Count == 0)
+        {
+            control.DataBindings.Add(nameof(Control.BackColor), _theme, nameof(OfficeTheme.BackColor), false, DataSourceUpdateMode.Never);
+            control.DataBindings.Add(nameof(Control.ForeColor), _theme, nameof(OfficeTheme.ForeColor), false, DataSourceUpdateMode.Never);
+        }
 
-        var btn = control as Button;
-        if (btn != null)
-            ApplyFlatButtonTheme(btn);
+        // Special button styling
+        if (control is Button btn)
+            AttachButtonTheme(btn);
     }
 
-    private static void ApplyFlatButtonTheme(Button btn)
+    private static void AttachButtonTheme(Button btn)
     {
         btn.UseVisualStyleBackColor = false;
         btn.FlatStyle = FlatStyle.Flat;
 
-        btn.FlatAppearance.BorderColor = _currentTheme.ButtonBorder;
-        btn.FlatAppearance.BorderSize = 1;
-        btn.FlatAppearance.MouseOverBackColor = _currentTheme.ButtonHover;
-        btn.FlatAppearance.MouseDownBackColor = _currentTheme.ButtonPressed;
+        void Apply()
+        {
+            btn.FlatAppearance.BorderSize = 1;
+            btn.FlatAppearance.BorderColor = _theme.ButtonBorder;
+            btn.FlatAppearance.MouseOverBackColor = _theme.ButtonHover;
+            btn.FlatAppearance.MouseDownBackColor = _theme.ButtonPressed;
+        }
+
+        Apply();
+
+        PropertyChangedEventHandler handler = (s, e) =>
+        {
+            if (e.PropertyName == nameof(OfficeTheme.ButtonBorder) ||
+                e.PropertyName == nameof(OfficeTheme.ButtonHover) ||
+                e.PropertyName == nameof(OfficeTheme.ButtonPressed))
+            {
+                Apply();
+            }
+        };
+
+        _theme.PropertyChanged += handler;
+
+        btn.Disposed += (s, e) =>
+        {
+            _theme.PropertyChanged -= handler;
+        };
     }
 
     /* ================= WATCHER ================= */
-
     private static void EnsureWatcher()
     {
         if (_watcherRunning)
             return;
 
-        _currentTheme = ReadCurrentTheme();
+        UpdateThemeSafe(ReadCurrentTheme());
 
         string version = GetOfficeVersionKey();
-        if (version == null)
-            return;
+        if (version == null) return;
 
-        string sid = WindowsIdentity.GetCurrent().User != null
-            ? WindowsIdentity.GetCurrent().User.Value
-            : null;
-
-        if (string.IsNullOrEmpty(sid))
-            return;
+        string sid = WindowsIdentity.GetCurrent().User?.Value;
+        if (string.IsNullOrEmpty(sid)) return;
 
         string query =
             "SELECT * FROM RegistryValueChangeEvent " +
@@ -130,7 +144,10 @@ public static class OfficeThemeWatcher
             "AND ValueName='UI Theme'";
 
         _watcher = new ManagementEventWatcher(new WqlEventQuery(query));
-        _watcher.EventArrived += (s, e) => OnThemeChanged();
+        _watcher.EventArrived += (s, e) =>
+        {
+            UpdateThemeSafe(ReadCurrentTheme());
+        };
         _watcher.Start();
 
         _watcherRunning = true;
@@ -152,27 +169,32 @@ public static class OfficeThemeWatcher
         _watcherRunning = false;
     }
 
-    private static void OnThemeChanged()
+    /* ================= THEME UPDATE ================= */
+    private static void UpdateThemeSafe(OfficeTheme newTheme)
     {
-        _currentTheme = ReadCurrentTheme();
-
-        lock (_roots)
+        foreach (var root in _roots)
         {
-            foreach (var root in _roots)
+            if (root.IsHandleCreated)
             {
-                if (root.IsDisposed || !root.IsHandleCreated)
-                    continue;
-
                 root.BeginInvoke((Action)(() =>
                 {
-                    ApplyThemeRecursive(root);
+                    UpdateTheme(newTheme);
                 }));
+                break;
             }
         }
     }
 
-    /* ================= THEME READ ================= */
+    private static void UpdateTheme(OfficeTheme newTheme)
+    {
+        _theme.BackColor = newTheme.BackColor;
+        _theme.ForeColor = newTheme.ForeColor;
+        _theme.ButtonHover = newTheme.ButtonHover;
+        _theme.ButtonPressed = newTheme.ButtonPressed;
+        _theme.ButtonBorder = newTheme.ButtonBorder;
+    }
 
+    /* ================= THEME READ ================= */
     private static OfficeTheme ReadCurrentTheme()
     {
         switch (ReadThemeCode())
@@ -181,17 +203,17 @@ public static class OfficeThemeWatcher
                 return new OfficeTheme(
                     Color.FromArgb(38, 38, 38),
                     Color.White,
+                    Color.FromArgb(70, 70, 70),
                     Color.FromArgb(90, 90, 90),
-                    Color.FromArgb(120, 120, 120),
-                    Color.FromArgb(150, 150, 150));
+                    Color.FromArgb(120, 120, 120));
 
             case OfficeThemeCode.DarkGray:
                 return new OfficeTheme(
                     Color.FromArgb(102, 102, 102),
                     Color.White,
-                    Color.FromArgb(200, 200, 200),
+                    Color.FromArgb(160, 160, 160),
                     Color.FromArgb(180, 180, 180),
-                    Color.FromArgb(190, 190, 190));
+                    Color.FromArgb(200, 200, 200));
 
             default:
                 return new OfficeTheme(
@@ -206,16 +228,13 @@ public static class OfficeThemeWatcher
     private static OfficeThemeCode ReadThemeCode()
     {
         string version = GetOfficeVersionKey();
-        if (version == null)
-            return OfficeThemeCode.Colorful;
+        if (version == null) return OfficeThemeCode.Colorful;
 
         using (var key = Registry.CurrentUser.OpenSubKey(
             @"Software\Microsoft\Office\" + version + @"\Common"))
         {
-            object value = key != null ? key.GetValue("UI Theme") : null;
-            return value is int
-                ? (OfficeThemeCode)value
-                : OfficeThemeCode.Colorful;
+            object value = key?.GetValue("UI Theme");
+            return value is int ? (OfficeThemeCode)value : OfficeThemeCode.Colorful;
         }
     }
 
@@ -226,43 +245,38 @@ public static class OfficeThemeWatcher
             using (var key = Registry.CurrentUser.OpenSubKey(
                 @"Software\Microsoft\Office\" + v + @"\Common"))
             {
-                if (key != null)
-                    return v;
+                if (key != null) return v;
             }
         }
         return null;
     }
 
     /* ================= SUPPORT TYPES ================= */
+    private enum OfficeThemeCode { Colorful = 0, DarkGray = 3, Black = 4, White = 5 }
 
-    private enum OfficeThemeCode
+    private sealed class OfficeTheme : INotifyPropertyChanged
     {
-        Colorful = 0,
-        DarkGray = 3,
-        Black = 4,
-        White = 5
-    }
+        public event PropertyChangedEventHandler PropertyChanged;
 
-    private sealed class OfficeTheme
-    {
-        public Color BackColor { get; private set; }
-        public Color ForeColor { get; private set; }
-        public Color ButtonHover { get; private set; }
-        public Color ButtonPressed { get; private set; }
-        public Color ButtonBorder { get; private set; }
+        private Color _back, _fore, _hover, _pressed, _border;
 
-        public OfficeTheme(
-            Color back,
-            Color fore,
-            Color hover,
-            Color pressed,
-            Color border)
+        public Color BackColor { get => _back; set { _back = value; OnChanged(nameof(BackColor)); } }
+        public Color ForeColor { get => _fore; set { _fore = value; OnChanged(nameof(ForeColor)); } }
+        public Color ButtonHover { get => _hover; set { _hover = value; OnChanged(nameof(ButtonHover)); } }
+        public Color ButtonPressed { get => _pressed; set { _pressed = value; OnChanged(nameof(ButtonPressed)); } }
+        public Color ButtonBorder { get => _border; set { _border = value; OnChanged(nameof(ButtonBorder)); } }
+
+        public OfficeTheme() { }
+
+        public OfficeTheme(Color back, Color fore, Color hover, Color pressed, Color border)
         {
-            BackColor = back;
-            ForeColor = fore;
-            ButtonHover = hover;
-            ButtonPressed = pressed;
-            ButtonBorder = border;
+            _back = back;
+            _fore = fore;
+            _hover = hover;
+            _pressed = pressed;
+            _border = border;
         }
+
+        private void OnChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 }

@@ -1,15 +1,19 @@
 ﻿using Microsoft.Office.Interop.Word;
 using Microsoft.Office.Tools;
 using System;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Windows.Forms;
-using WpfLib.Helpers;
+using KleiKodesh.Helpers;
 using DockPosition = Microsoft.Office.Core.MsoCTPDockPosition;
 
 namespace KleiKodesh.Helpers
 {
     public class TaskPaneManager
     {
+        private static bool _updateCheckDone = false;
+        
         public CustomTaskPane Show(
             UserControl userControl,
             string title,
@@ -19,6 +23,16 @@ namespace KleiKodesh.Helpers
         {
             try
             {
+                // // Check for updates on first taskpane open - DISABLED for now to prevent crashes
+                // if (!_updateCheckDone)
+                // {
+                //     _updateCheckDone = true;
+                //     Debug.WriteLine("[TaskPaneManager] First taskpane open - update check disabled for stability");
+                    
+                //     // TODO: Re-enable update check once we find a safer approach
+                //     // The PowerShell script launch is causing Word crashes
+                // }
+                
                 var panes = Globals.ThisAddIn.CustomTaskPanes;
                 var window = Globals.ThisAddIn.Application.ActiveWindow;
                 var type = userControl.GetType();
@@ -39,8 +53,6 @@ namespace KleiKodesh.Helpers
 
                     if (matchOfficeTheme)
                         OfficeThemeWatcher.Attach(userControl);
-
-                    UpdateManager.CheckForUpdates("KleiKodesh", "KleiKodesh", "נמצאו עדכונים עבור כלי קודש בוורד, האם ברצונך להורידם כעת?", 1);
                 }
 
                 pane.Visible = true;

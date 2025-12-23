@@ -6,8 +6,7 @@ namespace KleiKodesh.Helpers
 {
     public static class SettingsManager
     {
-        static string AppName =>
-            AppDomain.CurrentDomain.FriendlyName;
+        const string AppName = "KleiKodesh";
 
         public static string Get(
             string section,
