@@ -16,24 +16,23 @@
         MouseDown="Window_MouseDown"
         TouchDown="Window_TouchDown">
     <Grid>
-
+        
         <Image Source="/KleiKodesh_Main.ico" 
                Opacity="0.04"
                Height="400"
                Width="450"
                Margin="-40"
                Stretch="Fill"/>
-        
+
         <Grid Margin="35,16"
               Opacity="0.8">
             <Grid.RowDefinitions>
-                <RowDefinition/>
-                <RowDefinition/>
+                <RowDefinition Height="auto"/>
                 <RowDefinition Height="16"/>
-                <RowDefinition/>
+                <RowDefinition Height="auto"/>
                 <RowDefinition Height="16"/>
-                <RowDefinition/>
-                <RowDefinition/>
+                <RowDefinition Height="auto"/>
+                <RowDefinition Height="auto"/>
             </Grid.RowDefinitions>
 
             <StackPanel x:Name="HeaderPanel"
@@ -50,7 +49,7 @@
             </StackPanel>
 
             <Grid x:Name="OptionsGrid"
-              Grid.Row="3">
+              Grid.Row="2">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition/>
                     <ColumnDefinition Width="35"/>
@@ -64,10 +63,12 @@
                     <Style TargetType="CheckBox">
                         <Setter Property="Margin" Value="4"/>
                         <Setter Property="VerticalContentAlignment" Value="Center"/>
+                        <Setter Property="Cursor" Value="Hand"/>
                     </Style>
                     <Style TargetType="RadioButton">
                         <Setter Property="Margin" Value="4"/>
                         <Setter Property="VerticalContentAlignment" Value="Center"/>
+                        <Setter Property="Cursor" Value="Hand"/>
                     </Style>
                 </Grid.Resources>
 
@@ -102,15 +103,15 @@
 
             </Grid>
 
-
             <StackPanel x:Name="ButtonsPanel"
-                        Grid.Row="5"
+                        Grid.Row="4"
                         Orientation="Horizontal"
                         HorizontalAlignment="Right">
                 <StackPanel.Resources>
                     <Style TargetType="Button">
                         <Setter Property="Margin" Value="5,0,0,0"/>
                         <Setter Property="Padding" Value="20,2"/>
+                        <Setter Property="Cursor" Value="Hand"/>
                     </Style>
                 </StackPanel.Resources>
                 <Button x:Name="CancelButton"
@@ -128,14 +129,14 @@
         </Grid>
 
         <TextBlock x:Name="EmailTextBlock"
-           Grid.Row="6"
-           VerticalAlignment="Bottom"
-           FontSize="10"
+                   VerticalAlignment="Bottom"
+                   HorizontalAlignment="Left"
+                   FontSize="10"
                    Padding="10">
-    <Hyperlink NavigateUri="mailto:kleikodeshproject@gmail.com"
-               RequestNavigate="Hyperlink_RequestNavigate">
-        kleikodeshproject@gmail.com
-    </Hyperlink>
+<Hyperlink NavigateUri="mailto:kleikodeshproject@gmail.com"
+           RequestNavigate="Hyperlink_RequestNavigate">
+    kleikodeshproject@gmail.com
+</Hyperlink>
         </TextBlock>
     </Grid>
 </Window>

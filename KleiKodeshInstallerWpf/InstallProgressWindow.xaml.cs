@@ -1,6 +1,7 @@
 using KleiKodesh.Helpers;
 using Microsoft.Win32;
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Reflection;
@@ -21,13 +22,16 @@ namespace KleiKodeshInstallerWpf
         const string InstallFolderName = "KleiKodesh";
         const string ZipResourceName = "KleiKodesh.zip";
         const string VstoFileName = "KleiKodesh.vsto";
+        readonly IProgress<double> _progress;
 
         static string InstallPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), InstallFolderName);
         static string AddinRegistryPath => $@"Software\Microsoft\Office\Word\Addins\{AppName}";
+        
 
         public InstallProgressWindow(Window mainWindow)
         {
             InitializeComponent();
+            _progress = new Progress<double>(UpdateProgress);
             mainWindow?.Close();
             Install();
         }
@@ -112,15 +116,19 @@ namespace KleiKodeshInstallerWpf
                         }
 
                         current++;
-                        double progressValue = (double)current / total * 100;
-
-                        await Dispatcher.InvokeAsync(() =>
+                        if ((double)current% 10 == 0)
                         {
-                            ProgressBar.Value = progressValue;
-                        });
+                            double progressValue = (double)current / total * 100;
+                            _progress.Report(progressValue);
+                        }
                     }
                 }
             }
+        }
+
+        public void UpdateProgress (double progress)
+        {
+            ProgressBar.Value = progress;
         }
 
         async Task RegisterAddIn()
