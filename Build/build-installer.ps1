@@ -5,6 +5,18 @@ param(
 
 Write-Host "Building KleiKodesh Installer..." -ForegroundColor Green
 
+# Get version from InstallProgressWindow.xaml.cs first
+$progressWindowPath = "..\KleiKodeshInstallerWpf\InstallProgressWindow.xaml.cs"
+$versionMatch = Select-String -Path $progressWindowPath -Pattern 'const string Version = "([^"]+)"'
+if ($versionMatch) {
+    $version = $versionMatch.Matches[0].Groups[1].Value
+    Write-Host "Detected version: $version" -ForegroundColor Cyan
+} else {
+    Write-Host "ERROR: Could not detect version from InstallProgressWindow.xaml.cs" -ForegroundColor Red
+    if (-not $NoWait) { Read-Host "Press Enter to continue" }
+    exit 1
+}
+
 # Build WPF installer first
 Write-Host "Building WPF installer in Release mode..." -ForegroundColor Yellow
 $buildResult = dotnet build "..\KleiKodeshInstallerWpf\KleiKodeshInstallerWpf.csproj" -c Release
@@ -27,9 +39,9 @@ if (-not (Test-Path $nsisPath)) {
     }
 }
 
-# Build NSIS wrapper
-Write-Host "Building NSIS wrapper..." -ForegroundColor Yellow
-& $nsisPath "KleiKodeshWrapper.nsi"
+# Build NSIS wrapper with version parameter
+Write-Host "Building NSIS wrapper with version $version..." -ForegroundColor Yellow
+& $nsisPath "/DPRODUCT_VERSION=$version" "KleiKodeshWrapper.nsi"
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: NSIS build failed" -ForegroundColor Red
@@ -47,18 +59,7 @@ if (-not (Test-Path $installerPath)) {
 Write-Host ""
 Write-Host "SUCCESS: KleiKodeshSetup.exe created!" -ForegroundColor Green
 Write-Host "This wrapper checks .NET and runs your WPF installer." -ForegroundColor Cyan
-
-# Get version from InstallProgressWindow.xaml.cs (already incremented by prebuild)
-$progressWindowPath = "..\KleiKodeshInstallerWpf\InstallProgressWindow.xaml.cs"
-$versionMatch = Select-String -Path $progressWindowPath -Pattern 'const string Version = "([^"]+)"'
-if ($versionMatch) {
-    $version = $versionMatch.Matches[0].Groups[1].Value
-    Write-Host "Using version from WPF installer: $version" -ForegroundColor Cyan
-} else {
-    Write-Host "ERROR: Could not detect version from InstallProgressWindow.xaml.cs" -ForegroundColor Red
-    if (-not $NoWait) { Read-Host "Press Enter to continue" }
-    exit 1
-}
+Write-Host "Using version: $version" -ForegroundColor Cyan
 
 # Create GitHub release if authenticated with gh CLI and not skipped
 if (-not $NoRelease) {

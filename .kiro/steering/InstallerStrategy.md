@@ -27,6 +27,9 @@
 - **Update Checking**: GitHubUpdateChecker reads registry version and compares with latest GitHub release
 - **Build Automation**: WPF installer prebuild event automatically updates version from latest GitHub release
 - **Version Sync**: Both WPF installer and NSIS wrapper use the same version number
+- **Dynamic Version Passing**: Build script extracts version from `InstallProgressWindow.xaml.cs` and passes to NSIS via `/DPRODUCT_VERSION=$version` parameter
+- **NSIS Version Handling**: NSIS script uses `!ifndef PRODUCT_VERSION` with fallback to avoid hardcoded versions
+- **Build Order**: Version extraction happens BEFORE NSIS compilation to ensure proper parameter passing
 
 ### Coding Style:
 - **Concise Code**: Prefer compact, readable code over verbose implementations
@@ -35,10 +38,11 @@
 - **Single Responsibility**: Each class should have one clear purpose
 
 ### Build Pipeline:
-1. **WPF Installer Prebuild** - Runs on EVERY Release build: deletes old zip, gets latest version from GitHub, updates InstallProgressWindow.xaml.cs, builds VSTO with latest code, creates fresh zip, adds to resource stream
-2. **PowerShell Build Script** - Builds WPF installer in Release mode, compiles NSIS wrapper
-3. **GitHub Release Creation** - Automatically creates new GitHub release with installer as asset
-4. **NSIS Compilation** - Packs the Release WPF installer into final executable
+1. **Version Extraction** - Build script first extracts version from `InstallProgressWindow.xaml.cs` using regex pattern
+2. **WPF Installer Build** - Builds WPF installer in Release mode with prebuild events
+3. **NSIS Compilation** - Compiles NSIS wrapper with dynamic version parameter `/DPRODUCT_VERSION=$version`
+4. **GitHub Release Creation** - Automatically creates new GitHub release with installer as asset
+5. **Final Packaging** - NSIS packs the Release WPF installer into final executable with correct version
 
 ### Build Automation Details:
 - **Always Fresh**: Prebuild event runs on every Release build (not conditional on zip existence)

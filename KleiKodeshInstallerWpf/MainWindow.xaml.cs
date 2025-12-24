@@ -73,6 +73,15 @@ namespace KleiKodeshInstallerWpf
             Install();
         }
 
+        private void Hyperlink_RequestNavigate(object sender, RequestNavigateEventArgs e)
+        {
+            var email = e.Uri.AbsoluteUri.Replace("mailto:", "");
+            Clipboard.SetText(email);
+            MessageBox.Show($"כתובת האימייל הועתקה ללוח: {email}");
+            e.Handled = true;
+        }
+
+
         void Install()
         {
             try 

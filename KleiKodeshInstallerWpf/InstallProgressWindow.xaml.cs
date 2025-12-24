@@ -16,8 +16,8 @@ namespace KleiKodeshInstallerWpf
     /// </summary>
     public partial class InstallProgressWindow : Window
     {
-        const string AppName = "��� ����";
-        const string Version = "v1.0.3";
+        const string AppName = "KleiKodesh";
+        const string Version = "v1.0.7";
         const string InstallFolderName = "KleiKodesh";
         const string ZipResourceName = "KleiKodesh.zip";
         const string VstoFileName = "KleiKodesh.vsto";
@@ -54,7 +54,7 @@ namespace KleiKodeshInstallerWpf
                     await Task.Delay(10);
                 }
 
-                MessageBox.Show("������ �������");
+                MessageBox.Show("ההתקנה הסתיימה");
                 
                 // Save version to registry after successful installation
                 SaveVersionToRegistry(Version);

@@ -11,7 +11,6 @@
         SizeToContent="WidthAndHeight"
         FontFamily="Segoe UI"
         FontSize="16"
-        FontWeight="Light"
         Title="התקנת כלי קודש"
         PreviewKeyDown="Window_PreviewKeyDown"
         MouseDown="Window_MouseDown"
@@ -19,7 +18,7 @@
     <Grid>
 
         <Image Source="/KleiKodesh_Main.ico" 
-               Opacity="0.03"
+               Opacity="0.04"
                Height="400"
                Width="450"
                Margin="-40"
@@ -34,6 +33,7 @@
                 <RowDefinition/>
                 <RowDefinition Height="16"/>
                 <RowDefinition/>
+                <RowDefinition/>
             </Grid.RowDefinitions>
 
             <StackPanel x:Name="HeaderPanel"
@@ -45,7 +45,7 @@
 
                 <TextBlock VerticalAlignment="Center"
                        Text="ארגז כלים לעורך התורני"
-                       FontWeight="Normal"
+                       FontWeight="SemiBold"
                            Opacity="0.9"/>
             </StackPanel>
 
@@ -62,11 +62,11 @@
                         <Setter Property="Padding" Value="10"/>
                     </Style>
                     <Style TargetType="CheckBox">
-                        <Setter Property="Margin" Value="2"/>
+                        <Setter Property="Margin" Value="4"/>
                         <Setter Property="VerticalContentAlignment" Value="Center"/>
                     </Style>
                     <Style TargetType="RadioButton">
-                        <Setter Property="Margin" Value="2"/>
+                        <Setter Property="Margin" Value="4"/>
                         <Setter Property="VerticalContentAlignment" Value="Center"/>
                     </Style>
                 </Grid.Resources>
@@ -125,7 +125,17 @@
                         BorderThickness="0"
                         Click="InstallButton_Click"/>
             </StackPanel>
-
         </Grid>
+
+        <TextBlock x:Name="EmailTextBlock"
+           Grid.Row="6"
+           VerticalAlignment="Bottom"
+           FontSize="10"
+                   Padding="10">
+    <Hyperlink NavigateUri="mailto:kleikodeshproject@gmail.com"
+               RequestNavigate="Hyperlink_RequestNavigate">
+        kleikodeshproject@gmail.com
+    </Hyperlink>
+        </TextBlock>
     </Grid>
 </Window>

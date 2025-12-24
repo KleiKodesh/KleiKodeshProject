@@ -1,4 +1,4 @@
-﻿using KleiKodesh.Helpers;
+using KleiKodesh.Helpers;
 using System;
 using System.Drawing;
 using System.Windows.Forms;
@@ -7,139 +7,134 @@ namespace KleiKodesh.Ribbon
 {
     public class RibbonSettingsControl : UserControl
     {
-        private Microsoft.Office.Core.IRibbonUI _ribbon;
+        private readonly Microsoft.Office.Core.IRibbonUI _ribbon;
 
         public RibbonSettingsControl(Microsoft.Office.Core.IRibbonUI ribbon)
         {
             _ribbon = ribbon;
             SuspendLayout();
 
-            Dock = DockStyle.Fill;
-            Font = new Font("Segoe UI", 10F, FontStyle.Regular);
-            RightToLeft = RightToLeft.Yes;
-            AutoSize = true;
-            string defaultButtonId = SettingsManager.Get("Ribbon", "DefaultButton", "Settings");
+            this.AutoScaleMode = AutoScaleMode.Dpi;
+            this.AutoScaleDimensions = new SizeF(96F, 96F);
 
-            FlowLayoutPanel flowLayoutPanelTemplate() => new FlowLayoutPanel
+            Dock = DockStyle.Fill;
+            this.Font = SystemFonts.MessageBoxFont;
+            RightToLeft = RightToLeft.Yes;
+            AutoScroll = true;
+
+            var defaultButtonId = SettingsManager.Get("Ribbon", "DefaultButton", "Settings");
+
+            // Compact templates
+            FlowLayoutPanel CreateFlow() => new FlowLayoutPanel
             {
                 FlowDirection = FlowDirection.TopDown,
                 WrapContents = false,
                 AutoSize = true,
                 Dock = DockStyle.Fill,
-                Padding = new Padding(16)
+                Margin = Padding.Empty
             };
 
-            GroupBox groupBoxTemplate(string title) => new GroupBox
+            GroupBox CreateGroup(string title) => new GroupBox
             {
                 Text = title,
                 AutoSize = true,
-                Font = new Font("Segoe UI", 11F, FontStyle.Bold),
-                Padding = new Padding(5),
-                Margin = new Padding(0, 0, 0, 16),
+                Margin = new Padding(0, 0, 0, 15),
+                Padding = new Padding(15,10,15,10),
                 FlatStyle = FlatStyle.Flat
             };
 
-            CheckBox checkBoxTemplate(string text, string name)
+            CheckBox CreateCheckBox(string text, string name) => new CheckBox
             {
-                var checkBox = new CheckBox
-                {
-                    Text = text,
-                    Name = name,
-                    AutoSize = true,
-                    Padding = new Padding(2),
-                    Margin = new Padding(0, 8, 0, 8),
-                    Checked = SettingsManager.GetBool("Ribbon", name, true)
-                };
+                Text = text,
+                Name = name,
+                AutoSize = true,
+                Margin = new Padding(0, 0, 0, 4),
+                Checked = SettingsManager.GetBool("Ribbon", name, true)
+            };
 
-                checkBox.CheckedChanged += (s, e) =>
-                {
-                    SettingsManager.Save("Ribbon", checkBox.Name, checkBox.Checked);
-                    _ribbon.InvalidateControl(checkBox.Name.Replace("_Visible", ""));
-                };
-                return checkBox;
-            }
-
-            RadioButton radioButtonTemplate(string text, string name)
+            RadioButton CreateRadioButton(string text, string name) => new RadioButton
             {
-                var radioButton = new RadioButton
-                {
-                    Text = text,
-                    Name = name,
-                    AutoSize = true,
-                    Padding = new Padding(2),
-                    Margin = new Padding(0, 8, 0, 8),
-                    Checked = name.Contains(defaultButtonId)
-                };
+                Text = text,
+                Name = name,
+                AutoSize = true,
+                Margin = new Padding(0, 0, 0, 4),
+                Checked = name.Contains(defaultButtonId)
+            };
 
-                radioButton.CheckedChanged += (s, e) =>
-                {
-                    if (radioButton.Checked)
-                        SettingsManager.Save("Ribbon", "DefaultButton", name.Replace("_Option", ""));
-                };
+            // Available components
+            var availableGroup = CreateGroup("רכיבים זמינים");
+            var availableFlow = CreateFlow();
+            
+            var checkBoxes = new[] {
+                CreateCheckBox("כזית", "Kezayit_Visible"),
+                CreateCheckBox("היברו בוקס", "HebrewBooks_Visible"),
+                CreateCheckBox("דרך האתרים", "WebSites_Visible"),
+                CreateCheckBox("עיצוב תורני", "KleiKodesh_Visible")
+            };
 
-                return radioButton;
+            foreach (var cb in checkBoxes)
+            {
+                cb.CheckedChanged += (s, e) =>
+                {
+                    SettingsManager.Save("Ribbon", cb.Name, cb.Checked);
+                    _ribbon.InvalidateControl(cb.Name.Replace("_Visible", ""));
+                };
+                availableFlow.Controls.Add(cb);
             }
-
-            // Available components group
-            var availableGroup = groupBoxTemplate("רכיבים זמינים");
-            var availableFlow = flowLayoutPanelTemplate();
-            availableFlow.Controls.AddRange(new Control[] {
-                checkBoxTemplate("כזית", "Kezayit_Visible"),
-                checkBoxTemplate("היברו בוקס", "HebrewBooks_Visible"),
-                checkBoxTemplate("דרך האתרים", "WebSites_Visible"),
-                checkBoxTemplate("עיצוב תורני", "KleiKodesh_Visible")
-            });
             availableGroup.Controls.Add(availableFlow);
 
-            // Primary button group
-            var primaryGroup = groupBoxTemplate("לחצן ראשי");
-            var primaryFlow = flowLayoutPanelTemplate();
-            primaryFlow.Controls.AddRange(new Control[]
+            // Primary button
+            var primaryGroup = CreateGroup("לחצן ראשי");
+            var primaryFlow = CreateFlow();
+            
+            var radioButtons = new[] {
+                CreateRadioButton("כזית", "Kezayit_Option"),
+                CreateRadioButton("היברו בוקס", "HebrewBooks_Option"),
+                CreateRadioButton("דרך האתרים", "WebSites_Option"),
+                CreateRadioButton("עיצוב תורני", "KleiKodesh_Option"),
+                CreateRadioButton("הגדרות", "Settings_Option")
+            };
+
+            foreach (var rb in radioButtons)
             {
-                radioButtonTemplate("כזית", "Kezayit_Option"),
-                radioButtonTemplate("היברו בוקס", "HebrewBooks_Option"),
-                radioButtonTemplate("דרך האתרים", "WebSites_Option"),
-                radioButtonTemplate("עיצוב תורני", "KleiKodesh_Option"),
-                radioButtonTemplate("הגדרות", "Settings_Option")
-            });
+                rb.CheckedChanged += (s, e) =>
+                {
+                    if (rb.Checked)
+                        SettingsManager.Save("Ribbon", "DefaultButton", rb.Name.Replace("_Option", ""));
+                };
+                primaryFlow.Controls.Add(rb);
+            }
             primaryGroup.Controls.Add(primaryFlow);
 
             var resetButton = new Button
             {
-                Text = "איפוס הגדרות",
+                Text = "איפוס התוכנה",
                 AutoSize = true,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.Transparent,
-                Margin = new Padding(0, 16, 0, 0),
+                Margin = Padding.Empty
             };
 
             resetButton.Click += (s, e) =>
             {
-                foreach (var control in availableFlow.Controls)
-                    if (control is CheckBox c)
-                        c.Checked = true;
+                foreach (var cb in checkBoxes) cb.Checked = true;
+                foreach (var rb in radioButtons)
+                    if (rb.Name == "Settings_Option") rb.Checked = true;
 
-                foreach (var control in primaryFlow.Controls)
-                    if (control is RadioButton r && r.Name == "Settings_Option")
-                        r.Checked = true;
+                SettingsManager.ClearAll();
+                MessageBox.Show("התוכנה אופסה בהצלחה - אנא התחל את וורד מחדש");
             };
 
-            var rootLayout = new FlowLayoutPanel
+            Controls.Add(new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 FlowDirection = FlowDirection.TopDown,
                 WrapContents = false,
                 AutoSize = true,
-                Padding = new Padding(16, 0, 0, 0),
-                Controls =
-                {
-                    availableGroup,
-                    primaryGroup,
-                    resetButton
-                }
-            };
+                Padding = new Padding(12),
+                Controls = { availableGroup, primaryGroup, resetButton }
+            });
 
-            Controls.Add(rootLayout);
             ResumeLayout(true);
         }
     }

@@ -1,10 +1,17 @@
-; KleiKodesh Simple NSIS Wrapper
+﻿; KleiKodesh Simple NSIS Wrapper
 ; Purpose: Check .NET dependencies, run WPF installer, and provide uninstaller
 
-!define PRODUCT_NAME "KleiKodesh"
-!define PRODUCT_VERSION "v1.0.31"
-!define PRODUCT_PUBLISHER "KleiKodesh Team"
-!define PRODUCT_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
+; Set Hebrew language and RTL support
+!define MUI_LANGDLL_ALLLANGUAGES
+!include "MUI2.nsh"
+
+!define PRODUCT_NAME "כלי קודש"
+; Version is now passed as a parameter from build script
+!ifndef PRODUCT_VERSION
+  !define PRODUCT_VERSION "v1.0.0"  ; Fallback version if not provided
+!endif
+!define PRODUCT_PUBLISHER "צוות כלי קודש"
+!define PRODUCT_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\KleiKodesh"
 !define PRODUCT_UNINST_ROOT_KEY "HKLM"
 !define DOTNET_VERSION "4.8"
 !define DOTNET_REGKEY "SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full"
@@ -14,13 +21,16 @@
 
 !insertmacro GetParameters
 
+; Set Hebrew language
+!insertmacro MUI_LANGUAGE "Hebrew"
+
 ; Classic NSIS UI for minimal window
 Icon "..\KleiKodeshInstallerWpf\KleiKodesh_Main.ico"
 UninstallIcon "..\KleiKodeshInstallerWpf\KleiKodesh_Main.ico"
 
-Name "${PRODUCT_NAME} Installer"
+Name "מתקין ${PRODUCT_NAME}"
 OutFile "KleiKodeshSetup.exe"
-InstallDir "$PROGRAMFILES\${PRODUCT_NAME}"
+InstallDir "$PROGRAMFILES\KleiKodesh"
 RequestExecutionLevel admin
 SilentInstall silent
 AutoCloseWindow true
@@ -34,13 +44,13 @@ Function CheckDotNetFramework
   ; Check if .NET Framework 4.8 or higher is installed
   ReadRegDWORD $0 HKLM "${DOTNET_REGKEY}" "Release"
   ${If} $0 == ""
-    MessageBox MB_OK|MB_ICONSTOP ".NET Framework ${DOTNET_VERSION} or higher is required.$\r$\n$\r$\nPlease install .NET Framework and try again.$\r$\n$\r$\nDownload: https://dotnet.microsoft.com/download/dotnet-framework"
+    MessageBox MB_OK|MB_ICONSTOP|MB_RTLREADING "נדרש .NET Framework ${DOTNET_VERSION} או גרסה חדשה יותר.$\r$\n$\r$\nאנא התקן את .NET Framework ונסה שוב.$\r$\n$\r$\nהורדה: https://dotnet.microsoft.com/download/dotnet-framework"
     Abort
   ${EndIf}
   
   ; Check version (Release value for .NET 4.8 is 528040 or higher)
   ${If} $0 < 528040
-    MessageBox MB_OK|MB_ICONSTOP ".NET Framework ${DOTNET_VERSION} or higher is required.$\r$\n$\r$\nCurrent version is older than required.$\r$\n$\r$\nPlease install .NET Framework ${DOTNET_VERSION} and try again.$\r$\n$\r$\nDownload: https://dotnet.microsoft.com/download/dotnet-framework"
+    MessageBox MB_OK|MB_ICONSTOP|MB_RTLREADING "נדרש .NET Framework ${DOTNET_VERSION} או גרסה חדשה יותר.$\r$\n$\r$\nהגרסה הנוכחית ישנה מהנדרש.$\r$\n$\r$\nאנא התקן את .NET Framework ${DOTNET_VERSION} ונסה שוב.$\r$\n$\r$\nהורדה: https://dotnet.microsoft.com/download/dotnet-framework"
     Abort
   ${EndIf}
 FunctionEnd
@@ -95,7 +105,7 @@ Section "Main"
 SectionEnd
 
 Function un.onInit
-  MessageBox MB_ICONQUESTION|MB_YESNO|MB_DEFBUTTON2 "Are you sure you want to completely remove ${PRODUCT_NAME} and all of its components?" IDYES +2
+  MessageBox MB_ICONQUESTION|MB_YESNO|MB_DEFBUTTON2|MB_RTLREADING "האם אתה בטוח שברצונך להסיר לחלוטין את ${PRODUCT_NAME} ואת כל הרכיבים שלו?" IDYES +2
   Abort
 FunctionEnd
 
