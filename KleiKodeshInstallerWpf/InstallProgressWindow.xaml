@@ -18,7 +18,7 @@
                      Height="22"
                      Width="250"
                      Background="#FF7333FF"
-                     Maximum="120"
+                     Maximum="124"
                      />
         <TextBlock Text="התקנת כלי קודש לוורד"
                    HorizontalAlignment="Center"

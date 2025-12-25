@@ -29,8 +29,8 @@ Icon "..\KleiKodeshInstallerWpf\KleiKodesh_Main.ico"
 UninstallIcon "..\KleiKodeshInstallerWpf\KleiKodesh_Main.ico"
 
 Name "מתקין ${PRODUCT_NAME}"
-OutFile "KleiKodeshSetup.exe"
-InstallDir "$PROGRAMFILES\KleiKodesh"
+OutFile "KleiKodeshSetup-${PRODUCT_VERSION}.exe"
+InstallDir "$PROGRAMFILES86\KleiKodesh"
 RequestExecutionLevel admin
 SilentInstall silent
 AutoCloseWindow true
@@ -110,38 +110,24 @@ Function un.onInit
 FunctionEnd
 
 Section Uninstall
-  ; Remove application files (WPF installer creates these)
-  RMDir /r "$INSTDIR\Application"
+  ; Remove exact files and directories created by WPF installer
+  ; WPF installer extracts to $PROGRAMFILES86\KleiKodesh
+  RMDir /r "$PROGRAMFILES86\KleiKodesh"
   
-  ; Remove installation directory
-  RMDir /r "$INSTDIR"
-  
-  ; Remove registry keys created by WPF installer
-  ; Office Add-in registry cleanup
-  DeleteRegKey HKCU "Software\Microsoft\Office\Word\Addins\KleiKodesh"
-  DeleteRegKey HKCU "Software\Microsoft\Office\Excel\Addins\KleiKodesh"
-  DeleteRegKey HKCU "Software\Microsoft\Office\PowerPoint\Addins\KleiKodesh"
+  ; Remove exact registry entries created by WPF installer
+  ; Office Add-in registry cleanup (Word only, both 32-bit and 64-bit views)
+  ; The WPF installer creates these in HKLM with both registry views
+  SetRegView 64
   DeleteRegKey HKLM "Software\Microsoft\Office\Word\Addins\KleiKodesh"
-  DeleteRegKey HKLM "Software\Microsoft\Office\Excel\Addins\KleiKodesh"
-  DeleteRegKey HKLM "Software\Microsoft\Office\PowerPoint\Addins\KleiKodesh"
+  SetRegView 32
+  DeleteRegKey HKLM "Software\Microsoft\Office\Word\Addins\KleiKodesh"
+  SetRegView default
   
-  ; VSTO registry cleanup
-  DeleteRegKey HKCU "Software\Microsoft\VSTO\Security\Inclusion\*KleiKodesh*"
-  DeleteRegKey HKLM "Software\Microsoft\VSTO\Security\Inclusion\*KleiKodesh*"
+  ; Version registry cleanup (created by SaveVersionToRegistry in HKCU)
+  DeleteRegKey HKCU "SOFTWARE\KleiKodesh"
   
-  ; Application-specific registry cleanup
-  DeleteRegKey HKCU "Software\KleiKodesh"
-  DeleteRegKey HKLM "Software\KleiKodesh"
-  
-  ; Remove uninstaller registry entries
+  ; Remove uninstaller registry entries (created by NSIS)
   DeleteRegKey ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}"
-  
-  ; Clean up Start Menu shortcuts (if any were created)
-  Delete "$SMPROGRAMS\${PRODUCT_NAME}\*.*"
-  RMDir "$SMPROGRAMS\${PRODUCT_NAME}"
-  
-  ; Clean up Desktop shortcuts (if any were created)
-  Delete "$DESKTOP\${PRODUCT_NAME}.lnk"
   
   ; Close silently when completed
   SetAutoClose true

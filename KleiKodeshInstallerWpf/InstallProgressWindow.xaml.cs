@@ -28,12 +28,22 @@ namespace KleiKodeshInstallerWpf
         static string AddinRegistryPath => $@"Software\Microsoft\Office\Word\Addins\{AppName}";
         
 
-        public InstallProgressWindow(Window mainWindow)
+        public InstallProgressWindow(Window mainWindow, 
+            string defaultButton,
+            bool KeZayit,
+            bool hebrewbooks,
+            bool websites,
+            bool KleiKodesh)
         {
             InitializeComponent();
             _progress = new Progress<double>(UpdateProgress);
             mainWindow?.Close();
-            Install();
+            Install(defaultButton, KeZayit, hebrewbooks, websites, KleiKodesh);
+        }
+
+        public void UpdateProgress(double progress)
+        {
+            ProgressBar.Value = progress;
         }
 
         private void Window_MouseDown(object sender, MouseButtonEventArgs e)
@@ -46,11 +56,19 @@ namespace KleiKodeshInstallerWpf
             this.DragMove();
         }
 
-        async void Install()
+        async void Install(string defaultButton,
+            bool KeZayit,
+            bool hebrewbooks,
+            bool websites,
+            bool KleiKodesh)
         {
             try
             {
-                await RunInstall();
+                if (!Directory.Exists(InstallPath))
+                    Directory.CreateDirectory(InstallPath);
+
+                await Extract();
+                await RegisterAddIn();
 
                 while (ProgressBar.Value < ProgressBar.Maximum)
                 {
@@ -72,15 +90,6 @@ namespace KleiKodeshInstallerWpf
                 // Installation failed - exit with code 1
                 Environment.Exit(1);
             }
-        }
-
-        async Task RunInstall()
-        {
-            if (!Directory.Exists(InstallPath))
-                Directory.CreateDirectory(InstallPath);
-
-            await Extract();
-            await RegisterAddIn();
         }
 
         // do we need to ensure recursive directory extraction?????
@@ -116,44 +125,52 @@ namespace KleiKodeshInstallerWpf
                         }
 
                         current++;
-                        if ((double)current% 10 == 0)
-                        {
-                            double progressValue = (double)current / total * 100;
-                            _progress.Report(progressValue);
-                        }
+                        double progressValue = (double)current / total * 100;
+                        _progress.Report(progressValue);
                     }
                 }
             }
         }
 
-        public void UpdateProgress (double progress)
-        {
-            ProgressBar.Value = progress;
-        }
+       
 
         async Task RegisterAddIn()
         {
-            // 64-bit
-            using (RegistryKey key64 = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64))
+            try
             {
-                using (RegistryKey addinKey = key64.CreateSubKey(AddinRegistryPath))
+                // 64-bit
+                using (RegistryKey key64 = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64))
                 {
-                    addinKey.SetValue("FriendlyName", AppName);
-                    addinKey.SetValue("Manifest", $"file:///{InstallPath}\\{VstoFileName}|vstolocal");
-                    addinKey.SetValue("LoadBehavior", 3, RegistryValueKind.DWord);
+                    using (RegistryKey addinKey = key64.CreateSubKey(AddinRegistryPath))
+                    {
+                        addinKey.SetValue("FriendlyName", AppName);
+                        _progress.Report(103);
+                        addinKey.SetValue("Manifest", $"file:///{InstallPath}\\{VstoFileName}|vstolocal");
+                        _progress.Report(106);
+                        addinKey.SetValue("LoadBehavior", 3, RegistryValueKind.DWord);
+                        _progress.Report(109);
+                    }
                 }
             }
+            catch { }
 
-            // 32-bit
-            using (RegistryKey key32 = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32))
+            try
             {
-                using (RegistryKey addinKey = key32.CreateSubKey(AddinRegistryPath))
+                // 32-bit
+                using (RegistryKey key32 = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32))
                 {
-                    addinKey.SetValue("FriendlyName", AppName);
-                    addinKey.SetValue("Manifest", $"file:///{InstallPath}\\{VstoFileName}|vstolocal");
-                    addinKey.SetValue("LoadBehavior", 3, RegistryValueKind.DWord);
+                    using (RegistryKey addinKey = key32.CreateSubKey(AddinRegistryPath))
+                    {
+                        addinKey.SetValue("FriendlyName", AppName);
+                        _progress.Report(112);
+                        addinKey.SetValue("Manifest", $"file:///{InstallPath}\\{VstoFileName}|vstolocal");
+                        _progress.Report(115);
+                        addinKey.SetValue("LoadBehavior", 3, RegistryValueKind.DWord);
+                        _progress.Report(118);
+                    }
                 }
             }
+            catch { }
         }
 
         private void SaveVersionToRegistry(string version)
