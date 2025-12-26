@@ -84,9 +84,9 @@ defineEmits<{
 }
 
 .btn-large {
-  height: 24px;
+  height: 28px;
   font-size: 12px;
-  padding: 4px 12px;
+  padding: 5px 12px;
   width: auto;
   min-width: fit-content;
 }

@@ -328,6 +328,10 @@ async function handleSelectInDocument() {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
 }
 
 body {
@@ -370,7 +374,7 @@ body {
   gap: 8px;
   justify-content: space-between;
   align-items: center;
-  height: 32px;
+  height: 28px;
   width: 100%;
 }
 
@@ -400,14 +404,14 @@ body {
   gap: 12px;
   align-items: center;
   margin: 0 8px;
-  height: 32px;
+  height: 28px;
 }
 
 .header-controls .input-with-label {
   display: flex;
   align-items: center;
   gap: 4px;
-  height: 32px;
+  height: 28px;
 }
 
 .header-controls label {
@@ -445,9 +449,13 @@ body {
   font-size: 12px;
   font-family: inherit;
   width: 40px;
-  height: 24px;
+  height: 28px;
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
 }
 
 .slop-input:hover {
@@ -464,8 +472,8 @@ body {
 }
 
 .icon-button {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border: none;
   background: transparent;
   cursor: pointer;
@@ -532,6 +540,10 @@ body {
   font-family: inherit;
   outline: none;
   background: transparent;
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
 }
 
 .search-input::placeholder {
@@ -674,6 +686,10 @@ body {
   font-family: inherit;
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
 }
 
 .size-input:hover {

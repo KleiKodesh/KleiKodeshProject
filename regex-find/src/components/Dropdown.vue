@@ -102,11 +102,11 @@ onUnmounted(() => {
   border: 1px solid #d2d0ce;
   border-radius: 4px;
   background: white;
-  padding: 4px 1px 4px 6px;
+  padding: 5px 1px 5px 6px;
   font-size: 12px;
   cursor: pointer;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
-  min-height: 24px;
+  height: 28px;
   box-sizing: border-box;
   width: auto;
   min-width: 80px;

@@ -197,6 +197,10 @@ function handleKeyDown(event: KeyboardEvent) {
   font-size: 12px;
   font-family: inherit;
   background: transparent;
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
 }
 
 .combobox-input::placeholder {
@@ -214,10 +218,6 @@ function handleKeyDown(event: KeyboardEvent) {
   justify-content: center;
   box-sizing: border-box;
   cursor: pointer;
-}
-
-.combobox-arrow:hover {
-  background: #f0f0f0;
 }
 
 .combobox-dropdown {
