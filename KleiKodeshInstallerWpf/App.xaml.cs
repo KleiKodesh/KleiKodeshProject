@@ -28,7 +28,7 @@ namespace KleiKodeshInstallerWpf
             if (silentMode)
             {
                 // Silent mode: go directly to installation
-                var progressWindow = new InstallProgressWindow(null);
+                var progressWindow = new InstallProgressWindow(null, "Install", true, true, true, true);
                 progressWindow.Show();
             }
             else

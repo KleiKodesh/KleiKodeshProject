@@ -91,7 +91,7 @@ namespace KleiKodeshInstallerWpf
                     MessageBox.Show("אנא סגור את וורד לפני ההתקנה");
                     return;
                 }
-                new InstallProgressWindow(this).Show();               
+                new InstallProgressWindow(this, "Install", true, true, true, true).Show();               
             } 
             catch (Exception ex)
             {
