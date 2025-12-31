@@ -201,9 +201,10 @@
     <!-- Color Picker Dialog -->
     <div id="color-picker-overlay" class="color-picker-overlay" style="display: none">
       <div id="color-picker" class="color-picker">
-        <button class="close-btn" id="color-picker-close">×</button>
-
-        <div class="color-picker-content">
+        <!-- Title Bar -->
+        <div class="color-picker-title-bar">
+          <button class="close-btn" id="color-picker-close">×</button>
+          
           <!-- Auto and No Color buttons -->
           <div class="auto-no-colors">
             <button class="color-option auto-color" data-color="#000000">
@@ -215,9 +216,10 @@
               <span>ללא צבע</span>
             </button>
           </div>
+        </div>
 
-          <div class="separator"></div>
-
+        <!-- Scrollable Content -->
+        <div class="color-picker-content">
           <!-- Theme Colors - First -->
           <div class="color-section">
             <div class="section-title">צבעי ערכת נושא</div>

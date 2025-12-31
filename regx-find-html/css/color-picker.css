@@ -34,14 +34,23 @@
   margin-top: 12px;
 }
 
-/* Close button - nicer styling */
-.close-btn {
-  position: absolute;
-  top: 8px;
-  left: 8px;
+/* Title Bar - Fixed at top */
+.color-picker-title-bar {
   background: var(--secondary-background-color, #f5f5f5);
-  border: 1px solid var(--border-color, #ddd);
-  border-radius: 4px;
+  border-bottom: 1px solid var(--border-color, #d1d1d1);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-shrink: 0;
+  position: relative;
+  direction: ltr;
+}
+
+/* Close button - positioned in title bar */
+.close-btn {
+  background: transparent;
+  border: none;
   font-size: 14px;
   cursor: pointer;
   padding: 0;
@@ -51,8 +60,8 @@
   align-items: center;
   justify-content: center;
   color: var(--text-color, #666);
-  z-index: 1;
   transition: background-color 0.15s ease;
+  flex-shrink: 0;
 }
 
 .close-btn:hover {
@@ -60,22 +69,21 @@
   color: var(--text-color, #333);
 }
 
+/* Auto and No Color buttons - in title bar */
+.auto-no-colors {
+  display: flex;
+  gap: 6px;
+  flex-direction: row-reverse;
+  margin-left: auto;
+  direction: rtl;
+}
+
+/* Scrollable Content Area */
 .color-picker-content {
-  padding: 10px 12px 12px;
-  padding-top: 6px;
+  padding: 12px;
   overflow-y: auto;
   flex: 1;
   min-height: 0;
-}
-
-/* Auto and No Color buttons - aligned right */
-.auto-no-colors {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 6px;
-  justify-content: flex-end;
-  flex-direction: row-reverse;
 }
 
 .color-option {
@@ -122,6 +130,10 @@
 
 .color-section {
   margin-bottom: 6px;
+}
+
+.color-section:first-child {
+  margin-top: 0;
 }
 
 .section-title {
@@ -211,6 +223,7 @@
 
 .color-btn.active {
   /* Border color will be set by JavaScript */
+  position: relative;
 }
 
 .color-btn[data-selected-color] .icon {

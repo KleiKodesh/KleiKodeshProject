@@ -13,6 +13,7 @@ import '../js/recent-searches.js';
 import '../js/search-combobox.js';
 import '../js/regex-palette.js';
 import '../js/toggle-buttons.js';
+import '../js/color-calculations.js';
 import '../js/color-picker.js';
 import '../js/main.js';
 
