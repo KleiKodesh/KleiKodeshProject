@@ -1,0 +1,337 @@
+* {
+  margin: 0;
+  padding: 0;
+  color: var(--text-primary);
+  box-sizing: border-box;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+    transition: none !important;
+    animation: none !important;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  height: 100%;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue",
+    sans-serif;
+  font-size: 14px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  zoom: var(--app-zoom);
+  direction: rtl;
+  display: flex;
+  flex-direction: column;
+}
+
+:focus {
+  outline: none;
+}
+
+input {
+    background: none;
+    border: var(--border-color) 1px solid;
+    border-radius: var(--border-radius);
+    padding: 5px;
+
+    min-width: 0;
+}
+
+input[type="number"] {
+    width: 6ch;
+    text-align: center;
+}
+
+input[list] {
+    flex: 1;
+}
+
+select {
+    background: var(--primary-background-color);
+    color: var(--text-color);
+    border: var(--border-color) 1px solid;
+    border-radius: var(--border-radius);
+    padding: 5px 2px;
+}
+
+select:focus {
+    border-color: var(--accent-color);
+    outline: none;
+}
+
+select option {
+    background: var(--primary-background-color);
+    color: var(--text-color);
+}
+
+select option:hover {
+    background: var(--hover-background-color);
+}
+
+select option:checked {
+    background: var(--accent-color);
+    color: var(--primary-background-color);
+}
+
+/* Datalist styling for theme support */
+datalist {
+    background: var(--primary-background-color);
+    border: var(--border-color) 1px solid;
+    border-radius: var(--border-radius);
+}
+
+datalist option {
+    background: var(--primary-background-color);
+    color: var(--text-color);
+    padding: 5px;
+}
+
+datalist option:hover {
+    background: var(--hover-background-color);
+}
+
+/* Font inputs show preview in their own font */
+#find-font-input,
+#replace-font-input {
+    transition: font-family 0.2s ease;
+}
+
+/* Style inputs use standard font */
+#find-style-input,
+#replace-style-input {
+    font-family: inherit;
+}
+
+.flex-row {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 10px;
+}
+
+#title-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    justify-content: space-between;
+    padding: 5px 10px;
+    border-bottom: 0.5px solid var(--border-color);
+    background: var(--secondary-background-color);
+}
+
+#title-bar label {
+   margin-right: 5px;
+   font-size: 0.9em;
+}
+
+#title-bar button img {
+   padding: 2px;
+}
+
+#show-replace-button {
+    padding: 0 6px 0 10px;
+    border: var(--border-color) 1px solid;
+}
+
+#show-replace-button img {
+    padding: 4px !important;
+}
+
+#content {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    flex: 1;
+    overflow: hidden;
+}
+
+.search-button img {
+    padding: 1px;
+}
+
+#search-replace-container {
+     background: var(--secondary-background-color);
+     border-top: 0.5px solid var(--border-color);
+     border-bottom: 0.5px solid var(--border-color);
+}
+
+.search-replace-button img {
+    padding: 3px;
+}
+
+#results-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0; /* Important for flex child to shrink properly */
+}
+
+/* Regex Tips Styling */
+.regex-palette {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--secondary-background-color);
+    border-top: 0.5px solid var(--border-color);
+}
+
+.regex-grid {
+    flex: 1;
+    overflow-y: auto;
+    background: var(--primary-background-color);
+    padding: 5px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.regex-tip {
+    padding: 4px 8px; /* Reduce padding to fit more tips */
+    cursor: pointer;
+    transition: background-color 0.1s ease;
+    width: 100%;
+    border-radius: var(--border-radius, 4px);
+    flex-shrink: 0; /* Don't shrink tips */
+    min-height: auto; /* Allow natural height */
+}
+
+.regex-tip:hover {
+    background: var(--hover-background-color);
+}
+
+.regex-symbol-meaning {
+    display: flex;
+    gap: 10px; /* Reduce gap */
+    align-items: baseline;
+    margin-bottom: 2px; /* Reduce margin */
+}
+
+.regex-symbol {
+    font-weight: bold;
+    font-family: 'Courier New', monospace;
+    font-size: 1em; /* Reduce font size */
+    color: var(--accent-color);
+    min-width: 60px; /* Reduce min-width */
+    flex-shrink: 0;
+}
+
+.regex-meaning {
+    font-weight: normal;
+    flex: 1;
+    line-height: 1.2; /* Reduce line height */
+    font-size: 0.9em; /* Slightly smaller font */
+}
+
+.regex-example {
+    font-size: 0.8em; /* Smaller example text */
+    opacity: 0.7;
+    font-family: 'Courier New', monospace;
+    margin-right: 60px; /* Match the reduced symbol min-width */
+    line-height: 1.1; /* Tighter line height */
+    color: var(--text-secondary, var(--text-color));
+}
+
+/* Search Results - Flat styling matching regex tips */
+.search-results {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--secondary-background-color);
+    border-top: 0.5px solid var(--border-color);
+}
+
+.results-list {
+    flex: 1;
+    overflow-y: auto;
+    background: var(--primary-background-color);
+    padding: 5px;
+    display: flex;
+    flex-direction: column;
+}
+
+.result-item {
+    padding: 4px 8px;
+    cursor: pointer;
+    width: 100%;
+    flex-shrink: 0;
+    min-height: auto;
+    outline: none;
+}
+
+.result-item:hover {
+    background: var(--hover-background-color);
+}
+
+.result-item.focused {
+    background: var(--hover-background-color);
+}
+
+.result-item.selected {
+    background: var(--active-background-color);
+}
+
+.result-item.selected .result-location {
+    opacity: 0.7;
+}
+
+.result-text {
+    font-size: 14px;
+    line-height: 1.2;
+    margin-bottom: 2px;
+    word-wrap: break-word;
+    color: var(--text-color);
+}
+
+.search-highlight {
+    font-weight: bold;
+}
+
+.result-location {
+    font-size: 0.8em;
+    color: var(--text-secondary, var(--text-color));
+    opacity: 0.7;
+    line-height: 1.1;
+}
+
+.no-results {
+    padding: 20px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+/* Scrollbar styling for results */
+.results-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.results-list::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+}
+
+.results-list::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+.results-list::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+}

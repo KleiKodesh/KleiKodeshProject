@@ -1,0 +1,28 @@
+﻿<Window x:Class="KleiKodeshVstoInstallerWpf.InstallProgressWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:KleiKodeshVstoInstallerWpf"
+        mc:Ignorable="d"
+        WindowStyle="None"
+        WindowStartupLocation="CenterScreen"
+        SizeToContent="WidthAndHeight"
+        MouseDown="Window_MouseDown"
+        TouchDown="Window_TouchDown"
+        FlowDirection="RightToLeft">
+    <Grid Margin="16"
+          Opacity="0.5">
+        <ProgressBar x:Name="ProgressBar"
+                     VerticalAlignment="Center"
+                     Height="22"
+                     Width="250"
+                     Background="#FF7333FF"
+                     Maximum="124"
+                     />
+        <TextBlock Text="התקנת כלי קודש לוורד"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   Foreground="White"/>
+    </Grid>
+</Window>

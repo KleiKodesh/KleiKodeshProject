@@ -1,0 +1,22 @@
+.input-wrapper {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 5px;
+    border: var(--border-color) 1px solid;
+    border-radius: 4px;
+}
+
+.input-wrapper:focus-within {
+    border-bottom:  var(--accent-color) solid 2px;
+}
+
+.input-wrapper > input[type="text"] {
+    flex: 1;
+    border: none;
+    padding: 0 7px;
+}
+
+.input-wrapper > button > img {
+    width: 18px;
+}

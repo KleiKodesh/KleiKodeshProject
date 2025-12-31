@@ -1,0 +1,81 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <ApplicationIcon>KleiKodesh_Main.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Temporarily commented out COM reference that causes issues with dotnet build -->
+    <!--<COMReference Include="{000204ef-0000-0000-c000-000000000046}">
+      <WrapperTool>tlbimp</WrapperTool>
+      <VersionMinor>0</VersionMinor>
+      <VersionMajor>6</VersionMajor>
+      <Guid>000204ef-0000-0000-c000-000000000046</Guid>
+    </COMReference>-->
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="KleiKodesh_Main.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <!-- Prebuild event to update version, build KleiKodeshVsto VSTO and create zip package -->
+  <Target Name="BuildVstoAndPack" BeforeTargets="BeforeBuild" Condition="'$(Configuration)' == 'Release'">
+    <PropertyGroup>
+      <KleiKodeshProject>$(MSBuildProjectDirectory)\..\KleiKodeshVsto\KleiKodeshVsto.csproj</KleiKodeshProject>
+      <VstoOutputPath>$(MSBuildProjectDirectory)\..\KleiKodeshVsto\bin\Release</VstoOutputPath>
+      <TempPackageDir>$(OutputPath)VstoPackage</TempPackageDir>
+      <ZipOutputPath>$(MSBuildProjectDirectory)\KleiKodesh.zip</ZipOutputPath>
+      <InstallProgressFile>$(MSBuildProjectDirectory)\InstallProgressWindow.xaml.cs</InstallProgressFile>
+    </PropertyGroup>
+    
+    <Message Text="Getting latest version from GitHub..." Importance="high" />
+    
+    <!-- Get latest version from GitHub and update InstallProgressWindow.xaml.cs -->
+    <Exec Command="powershell -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\UpdateVersion.ps1&quot; -FilePath &quot;$(InstallProgressFile)&quot;" 
+          ContinueOnError="false" />
+    
+    <!-- Delete existing zip to force rebuild -->
+    <Delete Files="$(ZipOutputPath)" Condition="Exists('$(ZipOutputPath)')" />
+    
+    <Message Text="Building KleiKodeshVsto VSTO in Release mode..." Importance="high" />
+    
+    <!-- Build the VSTO project in Release mode using Exec command -->
+    <Exec Command="&quot;C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe&quot; &quot;$(KleiKodeshProject)&quot; /p:Configuration=Release /p:Platform=AnyCPU" 
+          ContinueOnError="false" />
+    
+    <!-- Create output directory for the zip -->
+    <MakeDir Directories="$(TempPackageDir)" />
+    
+    <!-- Copy VSTO files to temp directory -->
+    <ItemGroup>
+      <VstoFiles Include="$(VstoOutputPath)\**\*.*" />
+    </ItemGroup>
+    
+    <Copy SourceFiles="@(VstoFiles)" 
+          DestinationFolder="$(TempPackageDir)\%(RecursiveDir)" />
+    
+    <!-- Create zip package in project directory -->
+    <Message Text="Creating VSTO zip package..." Importance="high" />
+    <Exec Command="powershell -Command &quot;Compress-Archive -Path '$(TempPackageDir)\*' -DestinationPath '$(ZipOutputPath)' -Force&quot;" />
+    
+    <!-- Clean up temp directory -->
+    <RemoveDir Directories="$(TempPackageDir)" />
+    
+    <Message Text="VSTO package created: $(ZipOutputPath)" Importance="high" />
+  </Target>
+
+  <ItemGroup>
+    <EmbeddedResource Include="KleiKodesh.zip">
+      <LogicalName>KleiKodesh.zip</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>

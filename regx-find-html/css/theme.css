@@ -1,0 +1,94 @@
+/* =======================
+   Root Variables & Theming
+======================= */
+:root {
+  --icon-size: 20px;
+  --app-zoom: 1;
+  --border-radius: 6px;
+
+  /* ===== Light theme – Windows 11 Fluent ===== */
+  --primary-background-color: #ffffff;
+  --secondary-background-color: #f9f9f9;
+
+  --border-color: rgba(0, 0, 0, 0.0578);
+  --focus-color: rgba(0, 95, 184, 0.3);
+  --focus-offset: 3px;
+
+  --text-color: rgba(0, 0, 0, 0.8956);
+  --text-secondary: rgba(0, 0, 0, 0.6063);
+
+  --icon-color: rgba(0, 0, 0, 0.6063);
+  --icon-color-filter: none;
+
+  --accent-color: #005fb8;
+  --hover-background-color: rgba(0, 0, 0, 0.0373);
+  --active-background-color: rgba(0, 0, 0, 0.0578);
+
+  /* ===== Scrollbar – Light ===== */
+  --scrollbar-thumb: rgba(0, 0, 0, 0.3);
+  --scrollbar-track: rgba(0, 0, 0, 0.05);
+
+  /* Vue compatibility */
+  --bg-primary: var(--primary-background-color);
+  --bg-secondary: var(--secondary-background-color);
+  --text-primary: var(--text-color);
+  --hover-bg: var(--hover-background-color);
+  --active-bg: var(--active-background-color);
+}
+
+/* =======================
+   Dark Theme Overrides
+======================= */
+:root.dark {
+  --primary-background-color: #202020;
+  --secondary-background-color: #1c1c1c;
+
+  --border-color: rgba(255, 255, 255, 0.0578);
+
+  --text-color: rgba(255, 255, 255, 1);
+  --text-secondary: rgba(255, 255, 255, 0.786);
+
+  --icon-color: rgba(255, 255, 255, 0.786);
+  --icon-color-filter: brightness(0) saturate(100%)
+    invert(79%) sepia(6%) saturate(346%)
+    hue-rotate(202deg) brightness(95%) contrast(87%);
+
+  --hover-background-color: rgba(255, 255, 255, 0.0605);
+  --active-background-color: rgba(255, 255, 255, 0.0837);
+
+  /* ===== Scrollbar – Dark ===== */
+  --scrollbar-thumb: rgba(255, 255, 255, 0.3);
+  --scrollbar-track: var(--secondary-background-color);
+
+  /* Vue compatibility */
+  --bg-primary: var(--primary-background-color);
+  --bg-secondary: var(--secondary-background-color);
+  --text-primary: var(--text-color);
+  --hover-bg: var(--hover-background-color);
+  --active-bg: var(--active-background-color);
+}
+
+/* =======================
+   Inputs
+======================= */
+input,
+select {
+  background-color: var(--primary-background-color);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+}
+
+input:focus,
+select:focus {
+  border-color: var(--accent-color);
+  outline: none;
+}
+
+/* =======================
+   Scrollbars (ALL themes)
+======================= */
+* {
+  scrollbar-color:
+    var(--scrollbar-thumb)
+    var(--scrollbar-track);
+}

@@ -1,0 +1,213 @@
+/* Color Picker Styles */
+.color-picker-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.color-picker {
+  background: var(--primary-background-color, #ffffff);
+  border: 1px solid var(--border-color, #e1dfdd);
+  border-radius: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  width: 240px;
+  max-height: calc(100vh - 40px);
+  direction: rtl;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue",
+    sans-serif;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.color-picker.position-top {
+  align-self: flex-start;
+  margin-top: 20px;
+}
+
+.color-picker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--secondary-background-color, #f3f2f1);
+  border-bottom: 1px solid var(--border-color, #e1dfdd);
+  font-size: 16px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0;
+  color: var(--text-color, #484644);
+}
+
+.close-btn:hover {
+  background: var(--hover-background-color, #edebe9);
+}
+
+.color-picker-content {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.auto-no-colors {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.color-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-radius: 0;
+  font-size: 14px;
+  text-align: right;
+  transition: background-color 0.15s ease;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.color-option:hover {
+  background: var(--secondary-background-color, #f3f2f1);
+}
+
+.color-preview {
+  width: 18px;
+  height: 18px;
+  border-radius: 0;
+  flex-shrink: 0;
+}
+
+.no-color-preview {
+  border: 1px solid var(--border-color, #c8c6c4);
+  background: var(--primary-background-color, #ffffff);
+}
+
+.separator {
+  height: 1px;
+  background: var(--border-color, #e1dfdd);
+  margin: 8px 0;
+}
+
+.color-section {
+  margin-bottom: 8px;
+}
+
+.section-title {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--text-color, #484644);
+}
+
+.color-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  justify-content: center;
+}
+
+.theme-colors-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  justify-content: center;
+  max-width: 100%;
+}
+
+.theme-colors-container .color-swatch {
+  width: 30px;
+  height: 30px;
+  margin: 2px;
+}
+
+.color-swatch {
+  width: 30px;
+  height: 30px;
+  border: 1px solid white;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+  outline: none;
+  margin: 2px;
+  border: solid 0.5px lightgray;
+}
+
+.color-swatch:hover {
+  transform: scale(1.1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.color-swatch:focus {
+  outline: 2px solid var(--accent-color, #0078d4);
+  outline-offset: 1px;
+}
+
+.more-colors-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-radius: 0;
+  text-align: right;
+  transition: background-color 0.15s ease;
+  color: var(--accent-color, #0078d4);
+}
+
+.more-colors-btn:hover {
+  background: var(--secondary-background-color, #f3f2f1);
+}
+
+.more-colors-btn .icon {
+  flex-shrink: 0;
+}
+
+/* Color button states */
+.color-btn {
+    border-bottom: 3px solid transparent;
+    transition: border-bottom-color 0.2s ease;
+}
+
+.color-btn.active {
+    /* Border color will be set by JavaScript */
+}
+
+.color-btn[data-selected-color] .icon {
+    opacity: 0.8;
+}
+
+/* Initially hide replace container */
+#search-replace-container {
+    display: none;
+}

@@ -6,7 +6,7 @@ param(
 Write-Host "Building KleiKodesh Installer..." -ForegroundColor Green
 
 # Get version from InstallProgressWindow.xaml.cs first
-$progressWindowPath = "..\KleiKodeshInstallerWpf\InstallProgressWindow.xaml.cs"
+$progressWindowPath = "KleiKodeshVstoInstallerWpf\InstallProgressWindow.xaml.cs"
 $versionMatch = Select-String -Path $progressWindowPath -Pattern 'const string Version = "([^"]+)"'
 if ($versionMatch) {
     $version = $versionMatch.Matches[0].Groups[1].Value
@@ -19,7 +19,7 @@ if ($versionMatch) {
 
 # Build WPF installer first
 Write-Host "Building WPF installer in Release mode..." -ForegroundColor Yellow
-$buildResult = dotnet build "..\KleiKodeshInstallerWpf\KleiKodeshInstallerWpf.csproj" -c Release
+$buildResult = dotnet build "KleiKodeshVstoInstallerWpf\KleiKodeshVstoInstallerWpf.csproj" -c Release
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: Failed to build WPF installer" -ForegroundColor Red
@@ -41,7 +41,7 @@ if (-not (Test-Path $nsisPath)) {
 
 # Build NSIS wrapper with version parameter
 Write-Host "Building NSIS wrapper with version $version..." -ForegroundColor Yellow
-& $nsisPath "/DPRODUCT_VERSION=$version" "KleiKodeshWrapper.nsi"
+& $nsisPath "/DPRODUCT_VERSION=$version" "Build\KleiKodeshWrapper.nsi"
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: NSIS build failed" -ForegroundColor Red
@@ -49,15 +49,15 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-$installerPath = "KleiKodeshSetup.exe"
+$installerPath = "Build\KleiKodeshSetup-$version.exe"
 if (-not (Test-Path $installerPath)) {
-    Write-Host "ERROR: Installer not created" -ForegroundColor Red
+    Write-Host "ERROR: Installer not created at $installerPath" -ForegroundColor Red
     if (-not $NoWait) { Read-Host "Press Enter to continue" }
     exit 1
 }
 
 Write-Host ""
-Write-Host "SUCCESS: KleiKodeshSetup.exe created!" -ForegroundColor Green
+Write-Host "SUCCESS: KleiKodeshSetup-$version.exe created!" -ForegroundColor Green
 Write-Host "This wrapper checks .NET and runs your WPF installer." -ForegroundColor Cyan
 Write-Host "Using version: $version" -ForegroundColor Cyan
 

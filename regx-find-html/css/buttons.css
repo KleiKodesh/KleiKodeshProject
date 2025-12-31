@@ -1,0 +1,31 @@
+button {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    border-radius: 2px;
+    padding: 4px;
+    align-items: center;
+    justify-content: center;
+    display: flex;
+    gap: 5px;
+    border-radius: var(--border-radius);
+}
+
+button:hover {
+    background-color: var(--hover-background-color);
+}
+
+button:active {
+    opacity: 0.9;
+    transform: scale(0.95);
+}
+
+button img {
+    width: var(--icon-size);
+    aspect-ratio: 1 / 1;
+    filter: var(--icon-color-filter);
+}
+
+.toggle-button.active {
+    background-color: var(--active-bg);
+}

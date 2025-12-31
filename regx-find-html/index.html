@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="he">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <link rel="stylesheet" href="css/theme.css" />
+    <link rel="stylesheet" href="css/buttons.css" />
+    <link rel="stylesheet" href="css/regex-find.css" />
+    <link rel="stylesheet" href="css/color-picker.css" />
+    <link rel="stylesheet" href="css/input-wrapper.css" />
+    <link rel="stylesheet" href="css/custom-combobox.css" />
+  </head>
+  <body>
+      <div id="title-bar">
+        <button id="show-replace-button" class="toggle-button" title="החלף">
+          <img src="Resources/replaceall-icon.svg" class="icon" />
+          <span>החלפה</span>
+        </button>
+
+        <div id="search-options-group" class="flex-row">
+          <select id="search-mode-select" title="כיוון החיפוש">
+            <option value="All">הכל</option>
+            <option value="Forward">כלפי מטה</option>
+            <option value="Back">כלפי מעלה</option>
+            <option value="Selection">לפי בחירה</option>
+          </select>
+
+          <label id="slop-input-label" for="slop-input">מרחק:</label>
+          <input type="number" id="slop-input" min="0" value="0" class="slop-input" title="מרחק בין מילים" />
+        </div>
+
+        <div id="help-buttons-group" class="flex-row">
+          <button id="theme-toggle-button" class="icon-button" title="החלף ערכת נושא">
+            <img src="Resources/theme-icon.svg" class="icon" />
+          </button>
+
+          <button id="help-toggle-button" class="icon-button toggle-button" title="לוח תווי רג'קס">
+            <img src="Resources/regex-icon.svg" class="icon" />
+          </button>
+
+          <button id="about-button" class="icon-button" title="אודות">
+            <img src="Resources/info-icon.svg" class="icon" />
+          </button>
+        </div>
+      </div>
+
+      <div id="content">
+        <!-- find area -->
+        <div id="search-find-container" class="container">
+          <div class="input-wrapper">
+            <input type="text" id="find-text-input" placeholder="חיפוש..." class="search-input" title="חיפוש" />
+            <datalist id="search-history-datalist"></datalist>
+            <button id="find-button" class="search-button" title="חיפוש">
+              <img src="Resources/search-icon.svg" class="icon" />
+            </button>
+            <button id="regex-toggle-button" class="toggle-button search-button" title="השתמש בתווים כלליים">
+              <img src="Resources/regex-icon.svg" class="icon" />
+            </button>
+          </div>
+
+          <div id="find-options-wrapper" class="flex-row">
+            <input
+              type="number"
+              id="find-font-size-input"
+              min="8"
+              max="72"
+              value="12"
+              class="font-size-input"
+              title="גודל גופן"
+            />
+
+            <button id="find-bold-toggle" class="format-btn toggle-button" title="מודגש">
+              <img src="Resources/text-bold.svg" class="icon" />
+            </button>
+            <button id="find-italic-toggle" class="format-btn toggle-button" title="נטוי">
+              <img src="Resources/text-italic.svg" class="icon" />
+            </button>
+            <button id="find-underline-toggle" class="format-btn toggle-button" title="קו תחתון">
+              <img src="Resources/text-underline.svg" class="icon" />
+            </button>
+            <button id="find-subscript-toggle" class="format-btn toggle-button" title="כתב תחתי">
+              <img src="Resources/subscript-icon.svg" class="icon" />
+            </button>
+            <button id="find-superscript-toggle" class="format-btn toggle-button" title="כתב עילי">
+              <img src="Resources/superscript-icon.svg" class="icon" />
+            </button>
+            <button id="find-color-button" class="format-btn color-btn" title="צבע גופן">
+              <img src="Resources/color-palette-icon.svg" class="icon" />
+            </button>
+            <button id="find-clear-button" class="format-btn" title="נקה הגדרות עיצוב">
+              <img src="Resources/clear-icon.svg" class="icon" />
+            </button>
+            <button id="find-dipper-button" class="format-btn" title="שאב הגדרות עיצוב">
+              <img src="Resources/copy-icon.svg" class="icon" />
+            </button>
+          </div>
+
+          <div id="find-font-style-wrapper" class="flex-row">
+            <custom-combobox 
+                id="find-style-input" 
+                type="style" 
+                placeholder="בחר סגנון">
+            </custom-combobox>
+
+            <custom-combobox 
+                id="find-font-input" 
+                type="font" 
+                placeholder="בחר גופן">
+            </custom-combobox>
+          </div>
+        </div>
+
+        <!-- replace area -->
+        <div id="search-replace-container" class="container">
+          <div class="input-wrapper">
+            <input type="text" id="replace-text-input" placeholder="החלף ב.." class="search-input" title="החלף ב.." />
+            <button id="replace-button" class="search-replace-button" title="החלף">
+              <img src="Resources/replace-icon.svg" class="icon" />
+            </button>
+            <button id="replace-all-button" class="search-replace-button" title="החלף הכל">
+              <img src="Resources/replaceall-icon.svg" class="icon" />
+            </button>
+          </div>
+
+          <div id="replace-options-wrapper" class="flex-row">
+            <input
+              type="number"
+              id="replace-font-size-input"
+              min="8"
+              max="72"
+              value="12"
+              class="font-size-input"
+              title="גודל גופן"
+            />
+
+            <button id="replace-bold-toggle" class="format-btn toggle-button" title="מודגש">
+              <img src="Resources/text-bold.svg" class="icon" />
+            </button>
+            <button id="replace-italic-toggle" class="format-btn toggle-button" title="נטוי">
+              <img src="Resources/text-italic.svg" class="icon" />
+            </button>
+            <button id="replace-underline-toggle" class="format-btn toggle-button" title="קו תחתון">
+              <img src="Resources/text-underline.svg" class="icon" />
+            </button>
+            <button id="replace-subscript-toggle" class="format-btn toggle-button" title="כתב תחתי">
+              <img src="Resources/subscript-icon.svg" class="icon" />
+            </button>
+            <button id="replace-superscript-toggle" class="format-btn toggle-button" title="כתב עילי">
+              <img src="Resources/superscript-icon.svg" class="icon" />
+            </button>
+            <button id="replace-color-toggle" class="format-btn color-btn" title="צבע גופן">
+              <img src="Resources/color-palette-icon.svg" class="icon" />
+            </button>
+            <button id="replace-options-clear-button" class="format-btn" title="נקה הגדרות עיצוב">
+              <img src="Resources/clear-icon.svg" class="icon" />
+            </button>
+            <button id="replace-options-dipper-button" class="format-btn" title="שאב הגדרות עיצוב">
+              <img src="Resources/copy-icon.svg" class="icon" />
+            </button>
+          </div>
+
+          <div id="replace-font-style-wrapper" class="flex-row">
+            <custom-combobox 
+                id="replace-style-input" 
+                type="style" 
+                placeholder="בחר סגנון">
+            </custom-combobox>
+
+            <custom-combobox 
+                id="replace-font-input" 
+                type="font" 
+                placeholder="בחר גופן">
+            </custom-combobox>
+          </div>
+        </div>
+
+        <div id="results-container">
+          <!-- Regex Palette (hidden by default) -->
+          <div id="regex-palette" class="regex-palette" style="display: none">
+            <div class="regex-grid" id="regex-grid">
+              <!-- Regex tips will be populated by JavaScript -->
+            </div>
+          </div>
+
+          <!-- Search Results -->
+          <div id="search-results" class="search-results">
+            <div class="results-list" id="results-list-content"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Color Picker Dialog -->
+    <div id="color-picker-overlay" class="color-picker-overlay" style="display: none">
+      <div id="color-picker" class="color-picker">
+        <div class="color-picker-header">
+          <span>צבע גופן</span>
+          <button class="close-btn" id="color-picker-close">×</button>
+        </div>
+
+        <div class="color-picker-content">
+          <!-- Auto and No Color buttons -->
+          <div class="auto-no-colors">
+            <button class="color-option auto-color" data-color="#000000">
+              <div class="color-preview" style="background-color: #000000"></div>
+              <span>אוטומטי</span>
+            </button>
+            <button class="color-option no-color" data-color="null">
+              <div class="color-preview no-color-preview"></div>
+              <span>ללא צבע</span>
+            </button>
+          </div>
+
+          <div class="separator"></div>
+
+          <!-- Theme Colors -->
+          <div class="color-section">
+            <div class="section-title">צבעי ערכת נושא</div>
+            <div class="theme-colors-container" id="theme-colors-grid">
+              <!-- Theme colors will be populated by JavaScript -->
+              <!-- First row: Base theme colors -->
+              <!-- Following rows: Tint/shade variations -->
+            </div>
+          </div>
+
+          <div class="separator"></div>
+
+          <!-- Standard Office Colors -->
+          <div class="color-section">
+            <div class="section-title">צבעי אופיס סטנדרטים</div>
+            <div class="color-grid" id="standard-colors-grid">
+              <!-- Standard colors will be populated by JavaScript -->
+            </div>
+          </div>
+
+          <div class="separator"></div>
+
+          <!-- More Colors -->
+          <button class="more-colors-btn" id="more-colors-btn">
+            <img src="Resources/color-palette-icon.svg" class="icon" style="width: 16px; height: 16px" />
+            <span>צבעים נוספים...</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="src/main.js"></script>
+  </body>
+</html>
