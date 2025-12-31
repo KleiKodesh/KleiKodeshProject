@@ -55,13 +55,27 @@ let fontsRequested = false;
 
 // Generate search JSON data to match RegexFind.cs properties exactly
 function generateSearchData() {
+    // Helper function to get three-state value
+    function getThreeState(element) {
+        if (!element) return null;
+        
+        if (element.classList.contains('toggled-true')) {
+            return true;
+        } else if (element.classList.contains('toggled-false')) {
+            return false;
+        } else {
+            return null; // Default state - not specified
+        }
+    }
+
     return {
         Text: findTextInput.value,
-        Bold: findBoldToggle.classList.contains('active'),
-        Italic: findItalicToggle.classList.contains('active'),
-        Underline: findUnderlineToggle.classList.contains('active'),
-        Superscript: findSuperscriptToggle.classList.contains('active'),
-        Subscript: findSubscriptToggle.classList.contains('active'),
+        Bold: getThreeState(findBoldToggle),
+        Italic: getThreeState(findItalicToggle),
+        Underline: getThreeState(findUnderlineToggle),
+        Superscript: getThreeState(findSuperscriptToggle),
+        Subscript: getThreeState(findSubscriptToggle),
+        TextColor: findColorButton?.dataset.selectedColor ? parseInt(findColorButton.dataset.selectedColor) : null,
         Style: findStyleInput.getValue(),
         Font: findFontInput.getValue(),
         FontSize: parseInt(findFontSizeInput.value) || null,
@@ -70,11 +84,12 @@ function generateSearchData() {
         UseWildcards: regexToggleButton.classList.contains('active'),
         Replace: {
             Text: '', // Empty for search-only operations
-            Bold: false,
-            Italic: false,
-            Underline: false,
-            Superscript: false,
-            Subscript: false,
+            Bold: null,
+            Italic: null,
+            Underline: null,
+            Superscript: null,
+            Subscript: null,
+            TextColor: null,
             Style: '',
             Font: '',
             FontSize: null
@@ -84,13 +99,26 @@ function generateSearchData() {
 
 // Generate replace JSON data to match RegexFind.cs properties exactly
 function generateReplaceData() {
+    // Helper function to get three-state value
+    function getThreeState(element) {
+        if (!element) return null;
+        
+        if (element.classList.contains('toggled-true')) {
+            return true;
+        } else if (element.classList.contains('toggled-false')) {
+            return false;
+        } else {
+            return null; // Default state - not specified
+        }
+    }
+
     return {
         Text: findTextInput.value,
-        Bold: findBoldToggle.classList.contains('active'),
-        Italic: findItalicToggle.classList.contains('active'),
-        Underline: findUnderlineToggle.classList.contains('active'),
-        Superscript: findSuperscriptToggle.classList.contains('active'),
-        Subscript: findSubscriptToggle.classList.contains('active'),
+        Bold: getThreeState(findBoldToggle),
+        Italic: getThreeState(findItalicToggle),
+        Underline: getThreeState(findUnderlineToggle),
+        Superscript: getThreeState(findSuperscriptToggle),
+        Subscript: getThreeState(findSubscriptToggle),
         Style: findStyleInput.getValue(),
         Font: findFontInput.getValue(),
         FontSize: parseInt(findFontSizeInput.value) || null,
@@ -99,11 +127,12 @@ function generateReplaceData() {
         UseWildcards: regexToggleButton.classList.contains('active'),
         Replace: {
             Text: replaceTextInput.value,
-            Bold: replaceBoldToggle.classList.contains('active'),
-            Italic: replaceItalicToggle.classList.contains('active'),
-            Underline: replaceUnderlineToggle.classList.contains('active'),
-            Superscript: replaceSuperscriptToggle.classList.contains('active'),
-            Subscript: replaceSubscriptToggle.classList.contains('active'),
+            Bold: getThreeState(replaceBoldToggle),
+            Italic: getThreeState(replaceItalicToggle),
+            Underline: getThreeState(replaceUnderlineToggle),
+            Superscript: getThreeState(replaceSuperscriptToggle),
+            Subscript: getThreeState(replaceSubscriptToggle),
+            TextColor: replaceColorToggle?.dataset.selectedColor ? parseInt(replaceColorToggle.dataset.selectedColor) : null,
             Style: replaceStyleInput.getValue(),
             Font: replaceFontInput.getValue(),
             FontSize: parseInt(replaceFontSizeInput.value) || null
@@ -208,12 +237,12 @@ function setupButtonEvents() {
     // Clear formatting buttons
     findClearButton.addEventListener('click', (e) => {
         e.preventDefault();
-        // Clear UI
-        findBoldToggle.classList.remove('active');
-        findItalicToggle.classList.remove('active');
-        findUnderlineToggle.classList.remove('active');
-        findSubscriptToggle.classList.remove('active');
-        findSuperscriptToggle.classList.remove('active');
+        // Clear UI - remove all three-state classes
+        findBoldToggle.classList.remove('active', 'toggled-true', 'toggled-false');
+        findItalicToggle.classList.remove('active', 'toggled-true', 'toggled-false');
+        findUnderlineToggle.classList.remove('active', 'toggled-true', 'toggled-false');
+        findSubscriptToggle.classList.remove('active', 'toggled-true', 'toggled-false');
+        findSuperscriptToggle.classList.remove('active', 'toggled-true', 'toggled-false');
 
         // Clear color data properly
         findColorButton.removeAttribute('data-selected-color');
@@ -229,12 +258,12 @@ function setupButtonEvents() {
 
     replaceOptionsClearButton.addEventListener('click', (e) => {
         e.preventDefault();
-        // Clear UI
-        replaceBoldToggle.classList.remove('active');
-        replaceItalicToggle.classList.remove('active');
-        replaceUnderlineToggle.classList.remove('active');
-        replaceSubscriptToggle.classList.remove('active');
-        replaceSuperscriptToggle.classList.remove('active');
+        // Clear UI - remove all three-state classes
+        replaceBoldToggle.classList.remove('active', 'toggled-true', 'toggled-false');
+        replaceItalicToggle.classList.remove('active', 'toggled-true', 'toggled-false');
+        replaceUnderlineToggle.classList.remove('active', 'toggled-true', 'toggled-false');
+        replaceSubscriptToggle.classList.remove('active', 'toggled-true', 'toggled-false');
+        replaceSuperscriptToggle.classList.remove('active', 'toggled-true', 'toggled-false');
 
         // Clear color data properly
         replaceColorToggle.removeAttribute('data-selected-color');
@@ -251,12 +280,20 @@ function setupButtonEvents() {
     // Copy formatting buttons (dipper/eyedropper functionality)
     findDipperButton.addEventListener('click', (e) => {
         e.preventDefault();
-        sendToCS('CopyFormatting', { target: 'find' });
+        if (webViewBridge) {
+            webViewBridge.handleCopyFormatting('find');
+        } else {
+            sendToCS('CopyFormatting', { target: 'find' });
+        }
     });
 
     replaceOptionsDipperButton.addEventListener('click', (e) => {
         e.preventDefault();
-        sendToCS('CopyFormatting', { target: 'replace' });
+        if (webViewBridge) {
+            webViewBridge.handleCopyFormatting('replace');
+        } else {
+            sendToCS('CopyFormatting', { target: 'replace' });
+        }
     });
 
     // Enter key support

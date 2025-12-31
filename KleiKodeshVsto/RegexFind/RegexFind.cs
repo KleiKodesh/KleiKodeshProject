@@ -4,6 +4,7 @@ using Microsoft.Office.Interop.Word;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection.Emit;
 using System.Text.RegularExpressions;
 using System.Web;
 using System.Windows.Forms;
@@ -30,14 +31,15 @@ namespace KleiKodesh.RegexFind
     public class RegexFindBase
     {
         public string Text { get; set; }
-        public bool Bold { get; set; }
-        public bool Italic { get; set; }
-        public bool Underline { get; set; }
-        public bool Superscript { get; set; }
-        public bool Subscript { get; set; }
+        public bool? Bold { get; set; }
+        public bool? Italic { get; set; }
+        public bool? Underline { get; set; }
+        public bool? Superscript { get; set; }
+        public bool? Subscript { get; set; }
         public string Style { get; set; }
         public string Font { get; set; }
         public float? FontSize { get; set; }
+        public int? TextColor { get; set; }
     }
 
     public class RegexFind : RegexFindBase
@@ -64,7 +66,7 @@ namespace KleiKodesh.RegexFind
         // Public Methods      
         public void Search()
         {
-            if (string.IsNullOrEmpty(Text))
+            if (!HasSearchText())
                 return;
 
             _effectivePattern = ComputeEffectivePattern();
@@ -114,75 +116,67 @@ namespace KleiKodesh.RegexFind
 
         public void ReplaceAll()
         {
-            if (string.IsNullOrEmpty(Text))
-            {
-                MessageBox.Show("אנא הזן מחרוזת לחיפוש");
+            if (!HasSearchText())
                 return;
-            }
+
+            Search();
 
             if (Results == null || Results.Length == 0)
                 return;
 
             using (_ = new RecordUndo("החלפה"))
-            {
                 for (int i = Results.Length - 1; i >= 0; i--)
-                {
-                    var result = Results[i];
-                    var rng = result.Range;
-                    string replacementText = Regex.Replace(rng.Text, _effectivePattern, Replace.Text);
-                    rng.Text = replacementText;
-                    // Apply formatting
-                    if (Replace.Bold) rng.Font.Bold = 1; else rng.Font.Bold = 0;
-                    if (Replace.Italic) rng.Font.Italic = 1; else rng.Font.Italic = 0;
-                    if (Replace.Underline) rng.Font.Underline = WdUnderline.wdUnderlineSingle; else rng.Font.Underline = WdUnderline.wdUnderlineNone;
-                    if (Replace.Superscript) rng.Font.Superscript = 1; else rng.Font.Superscript = 0;
-                    if (Replace.Subscript) rng.Font.Subscript = 1; else rng.Font.Subscript = 0;
-                    if (!string.IsNullOrEmpty(Replace.Style)) rng.set_Style(Replace.Style);
-                    if (!string.IsNullOrEmpty(Replace.Font)) rng.Font.Name = Replace.Font;
-                    if (Replace.FontSize.HasValue) rng.Font.Size = Replace.FontSize.Value;
-                }
-            }
+                    ApplyReplace(Results[i].Range);
         }
 
         public void ReplaceCurrent()
         {
-            if (string.IsNullOrEmpty(Text))
-            {
-                MessageBox.Show("אנא הזן מחרוזת לחיפוש");
+            if (!HasSearchText())
                 return;
-            }
 
-            
+            _effectivePattern = ComputeEffectivePattern();
             using (_ = new RecordUndo("החלפה"))
-            {
-                try
-                {
-                    var regex = new Regex(_effectivePattern);
-                    var rng = Selection.Range;
-                    var match = regex.Match(rng.Text);
-                    if (!match.Success)
-                        return;
-
-                    rng.Start += match.Index;
-                    rng.End = rng.Start + match.Length;
-                    rng.Text = regex.Replace(rng.Text ?? "", Replace.Text);
-
-                    // Apply formatting
-                    if (Replace.Bold) rng.Font.Bold = 1; else rng.Font.Bold = 0;
-                    if (Replace.Italic) rng.Font.Italic = 1; else rng.Font.Italic = 0;
-                    if (Replace.Underline) rng.Font.Underline = WdUnderline.wdUnderlineSingle; else rng.Font.Underline = WdUnderline.wdUnderlineNone;
-                    if (Replace.Superscript) rng.Font.Superscript = 1; else rng.Font.Superscript = 0;
-                    if (Replace.Subscript) rng.Font.Subscript = 1; else rng.Font.Subscript = 0;
-                    if (!string.IsNullOrEmpty(Replace.Style)) rng.set_Style(Replace.Style);
-                    if (!string.IsNullOrEmpty(Replace.Font)) rng.Font.Name = Replace.Font;
-                    if (Replace.FontSize.HasValue) rng.Font.Size = Replace.FontSize.Value;
-                }
-                catch { }
-            }
+                ApplyReplace(Selection.Range);
 
             // Rerun the search to update results
             Search();
         }
+
+        //need to use dynamic to expose decimal text color prop
+        void ApplyReplace(dynamic rng)
+        {
+            var regex = new Regex(_effectivePattern);
+            var match = regex.Match(rng.Text);
+            if (!match.Success)
+                return;
+
+            rng.Start += match.Index;
+            rng.End = rng.Start + match.Length;
+            rng.Text = regex.Replace(rng.Text ?? "", Replace.Text);
+
+            // Apply formatting only if specified
+            if (Replace.Bold.HasValue) rng.Font.Bold = Replace.Bold.Value ? -1 : 0;
+            if (Replace.Italic.HasValue) rng.Font.Italic = Replace.Italic.Value ? -1 : 0;
+            if (Replace.Underline.HasValue) rng.Font.Underline = Replace.Underline.Value ? WdUnderline.wdUnderlineSingle : WdUnderline.wdUnderlineNone;
+            if (Replace.Superscript.HasValue) rng.Font.Superscript = Replace.Superscript.Value ? -1 : 0;
+            if (Replace.Subscript.HasValue) rng.Font.Subscript = Replace.Subscript.Value ? -1 : 0;
+            if (!string.IsNullOrEmpty(Replace.Style)) rng.set_Style(Replace.Style);
+            if (!string.IsNullOrEmpty(Replace.Font)) rng.Font.Name = Replace.Font;
+            if (Replace.FontSize.HasValue) rng.Font.Size = Replace.FontSize.Value;
+            if (Replace.TextColor.HasValue) rng.Font.Color = (int)Replace.TextColor;
+        }
+
+        bool HasSearchText()
+        {
+            if (string.IsNullOrEmpty(Text))
+            {
+                MessageBox.Show("אנא הזן מחרוזת לחיפוש");
+                return false;
+            }
+
+            return true;
+        }
+
 
         // Private Methods
         private Range GetCurrentRange()
@@ -251,18 +245,44 @@ namespace KleiKodesh.RegexFind
             var docStart = Document.Range().Start;
             var docEnd = Document.Range().End;
 
+            System.Diagnostics.Debug.WriteLine($"GetResults: Found {matches.Length} text matches, applying formatting filters...");
+            System.Diagnostics.Debug.WriteLine($"Formatting filters - Bold: {Bold}, Italic: {Italic}, Underline: {Underline}");
+
             foreach (var m in matches)
             {
-                Range rng = Document.Range(startPos + m.Index, startPos + m.Index + m.Length);
+                dynamic rng = Document.Range(startPos + m.Index, startPos + m.Index + m.Length);
                 bool matchConditions = true;
-                if (Bold) matchConditions &= rng.Font.Bold == 1;
-                if (Italic) matchConditions &= rng.Font.Italic == 1;
-                if (Underline) matchConditions &= rng.Font.Underline != WdUnderline.wdUnderlineNone;
-                if (Superscript) matchConditions &= rng.Font.Superscript == 1;
-                if (Subscript) matchConditions &= rng.Font.Subscript == 1;
+                
+                // Debug each formatting check
+                if (Bold.HasValue) 
+                {
+                    bool isBold = rng.Font.Bold == -1;
+                    bool boldMatches = isBold == Bold.Value;
+                    System.Diagnostics.Debug.WriteLine($"Bold check: text is bold={isBold}, required={Bold.Value}, matches={boldMatches}");
+                    matchConditions &= boldMatches;
+                }
+                if (Italic.HasValue) 
+                {
+                    bool isItalic = rng.Font.Italic == -1;
+                    bool italicMatches = isItalic == Italic.Value;
+                    System.Diagnostics.Debug.WriteLine($"Italic check: text is italic={isItalic}, required={Italic.Value}, matches={italicMatches}");
+                    matchConditions &= italicMatches;
+                }
+                if (Underline.HasValue) 
+                {
+                    bool isUnderlined = rng.Font.Underline != WdUnderline.wdUnderlineNone;
+                    bool underlineMatches = isUnderlined == Underline.Value;
+                    System.Diagnostics.Debug.WriteLine($"Underline check: text is underlined={isUnderlined}, required={Underline.Value}, matches={underlineMatches}");
+                    matchConditions &= underlineMatches;
+                }
+                if (Superscript.HasValue) matchConditions &= (rng.Font.Superscript == -1) == Superscript.Value;
+                if (Subscript.HasValue) matchConditions &= (rng.Font.Subscript == -1) == Subscript.Value;
                 if (!string.IsNullOrEmpty(Style)) matchConditions &= rng.get_Style().NameLocal == Style;
                 if (!string.IsNullOrEmpty(Font)) matchConditions &= rng.Font.Name == Font;
                 if (FontSize.HasValue) matchConditions &= Math.Abs(rng.Font.Size - FontSize.Value) < 0.01;
+                if (TextColor.HasValue) matchConditions &= rng.Font.Color == (int)TextColor.Value;
+
+                System.Diagnostics.Debug.WriteLine($"Match at {m.Index}: '{m.Value}' - conditions met: {matchConditions}");
 
                 if (matchConditions)
                 {
@@ -286,7 +306,37 @@ namespace KleiKodesh.RegexFind
                 }
             }
 
+            System.Diagnostics.Debug.WriteLine($"GetResults: {list.Count} matches passed formatting filters");
             return list.OrderBy(r => r.Start).ToArray();
+        }
+
+        public RegexFindBase GetSelectionFormatting()
+        {
+            try
+            {
+                var selection = Selection;
+                if (selection == null || selection.Range == null)
+                    return new RegexFindBase();
+
+                var rng = selection.Range;
+                return new RegexFindBase
+                {
+                    Bold = rng.Font.Bold == -1 ? true : (rng.Font.Bold == 0 ? false : (bool?)null),
+                    Italic = rng.Font.Italic == -1 ? true : (rng.Font.Italic == 0 ? false : (bool?)null),
+                    Underline = rng.Font.Underline != WdUnderline.wdUnderlineNone ? true : false,
+                    Superscript = rng.Font.Superscript == -1 ? true : (rng.Font.Superscript == 0 ? false : (bool?)null),
+                    Subscript = rng.Font.Subscript == -1 ? true : (rng.Font.Subscript == 0 ? false : (bool?)null),
+                    Style = rng.get_Style()?.NameLocal ?? "",
+                    Font = rng.Font.Name ?? "",
+                    FontSize = rng.Font.Size > 0 ? rng.Font.Size : (float?)null,
+                    TextColor = (int)rng.Font.Color
+                };
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error getting selection formatting: {ex.Message}");
+                return new RegexFindBase();
+            }
         }
 
         public readonly RegexFindBase Replace = new RegexFindBase();

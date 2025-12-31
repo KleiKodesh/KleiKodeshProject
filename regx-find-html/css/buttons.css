@@ -26,6 +26,51 @@ button img {
     filter: var(--icon-color-filter);
 }
 
+/* Three-state toggle buttons for formatting */
+.toggle-button {
+    position: relative;
+}
+
+/* State 1: Not toggled (default) - no special styling */
+.toggle-button {
+    background-color: transparent;
+}
+
+/* State 2: Toggled TRUE - use existing active style */
+.toggle-button.toggled-true {
+    background-color: var(--active-bg);
+}
+
+/* State 3: Toggled FALSE - soft reddish background with cross-out line */
+.toggle-button.toggled-false {
+    background-color: var(--error-light, #f8d7da);
+}
+
+/* Simple diagonal line for false state */
+.toggle-button.toggled-false::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: linear-gradient(45deg, transparent 47%, var(--error-line-color, #dc3545) 47%, var(--error-line-color, #dc3545) 53%, transparent 53%);
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+    pointer-events: none;
+    opacity: 0.9;
+}
+
+/* Dark theme variant for false state */
+:root.dark .toggle-button.toggled-false {
+    background-color: var(--error-dark-bg, #5a1e1e);
+}
+
+:root.dark .toggle-button.toggled-false::after {
+    background-image: linear-gradient(45deg, transparent 47%, var(--error-line-color-dark, #ff6b6b) 47%, var(--error-line-color-dark, #ff6b6b) 53%, transparent 53%);
+}
+
+/* Legacy support for two-state toggles */
 .toggle-button.active {
     background-color: var(--active-bg);
 }

@@ -45,14 +45,28 @@ function createWebViewBridge() {
 
     // Get find formatting options
     function getFindOptions() {
+        // Helper function to get three-state value with fallback
+        function getThreeState(elementId) {
+            const element = document.getElementById(elementId);
+            if (!element) return null;
+            
+            if (element.classList.contains('toggled-true')) {
+                return true;
+            } else if (element.classList.contains('toggled-false')) {
+                return false;
+            } else {
+                return null; // Default state - not specified
+            }
+        }
+
         return {
-            fontSize: parseInt(document.getElementById('find-font-size-input')?.value) || 12,
-            bold: document.getElementById('find-bold-toggle')?.classList.contains('active') || false,
-            italic: document.getElementById('find-italic-toggle')?.classList.contains('active') || false,
-            underline: document.getElementById('find-underline-toggle')?.classList.contains('active') || false,
-            subscript: document.getElementById('find-subscript-toggle')?.classList.contains('active') || false,
-            superscript: document.getElementById('find-superscript-toggle')?.classList.contains('active') || false,
-            color: document.getElementById('find-color-button')?.dataset.selectedColor || null,
+            fontSize: parseInt(document.getElementById('find-font-size-input')?.value) || null,
+            bold: getThreeState('find-bold-toggle'),
+            italic: getThreeState('find-italic-toggle'),
+            underline: getThreeState('find-underline-toggle'),
+            subscript: getThreeState('find-subscript-toggle'),
+            superscript: getThreeState('find-superscript-toggle'),
+            textColor: document.getElementById('find-color-button')?.dataset.selectedColor ? parseInt(document.getElementById('find-color-button').dataset.selectedColor) : null,
             style: document.getElementById('find-style-input')?.value || '',
             font: document.getElementById('find-font-input')?.value || ''
         };
@@ -60,14 +74,28 @@ function createWebViewBridge() {
 
     // Get replace formatting options
     function getReplaceOptions() {
+        // Helper function to get three-state value with fallback
+        function getThreeState(elementId) {
+            const element = document.getElementById(elementId);
+            if (!element) return null;
+            
+            if (element.classList.contains('toggled-true')) {
+                return true;
+            } else if (element.classList.contains('toggled-false')) {
+                return false;
+            } else {
+                return null; // Default state - not specified
+            }
+        }
+
         return {
-            fontSize: parseInt(document.getElementById('replace-font-size-input')?.value) || 12,
-            bold: document.getElementById('replace-bold-toggle')?.classList.contains('active') || false,
-            italic: document.getElementById('replace-italic-toggle')?.classList.contains('active') || false,
-            underline: document.getElementById('replace-underline-toggle')?.classList.contains('active') || false,
-            subscript: document.getElementById('replace-subscript-toggle')?.classList.contains('active') || false,
-            superscript: document.getElementById('replace-superscript-toggle')?.classList.contains('active') || false,
-            color: document.getElementById('replace-color-toggle')?.dataset.selectedColor || null,
+            fontSize: parseInt(document.getElementById('replace-font-size-input')?.value) || null,
+            bold: getThreeState('replace-bold-toggle'),
+            italic: getThreeState('replace-italic-toggle'),
+            underline: getThreeState('replace-underline-toggle'),
+            subscript: getThreeState('replace-subscript-toggle'),
+            superscript: getThreeState('replace-superscript-toggle'),
+            textColor: document.getElementById('replace-color-toggle')?.dataset.selectedColor ? parseInt(document.getElementById('replace-color-toggle').dataset.selectedColor) : null,
             style: document.getElementById('replace-style-input')?.value || '',
             font: document.getElementById('replace-font-input')?.value || ''
         };
@@ -139,7 +167,7 @@ function createWebViewBridge() {
 
     // Handle copy formatting
     function handleCopyFormatting(target) {
-        sendCommand('copyFormatting', { target: target });
+        sendCommand('CopyFormatting', { target: target });
     }
 
     // Handle font list request
@@ -181,6 +209,9 @@ function createWebViewBridge() {
                 break;
             case 'replaceComplete':
                 handleReplaceComplete(message.data);
+                break;
+            case 'formattingCopied':
+                handleFormattingCopied(message.data);
                 break;
             case 'success':
                 // Success - no status message needed
@@ -321,6 +352,75 @@ function createWebViewBridge() {
     }
     function handleReplaceComplete(data) {
         // Replace complete - no status message needed
+    }
+
+    // Handle formatting copied from selection
+    function handleFormattingCopied(data) {
+        console.log('Formatting copied:', data);
+        
+        const target = data.target; // 'find' or 'replace'
+        const formatting = data.formatting;
+        
+        // Apply the formatting to the appropriate UI elements
+        applyFormattingToUI(formatting, target);
+    }
+
+    // Apply formatting data to UI elements
+    function applyFormattingToUI(formatting, target) {
+        const prefix = target === 'find' ? 'find' : 'replace';
+        
+        // Apply three-state formatting
+        setThreeStateButton(`${prefix}-bold-toggle`, formatting.bold);
+        setThreeStateButton(`${prefix}-italic-toggle`, formatting.italic);
+        setThreeStateButton(`${prefix}-underline-toggle`, formatting.underline);
+        setThreeStateButton(`${prefix}-superscript-toggle`, formatting.superscript);
+        setThreeStateButton(`${prefix}-subscript-toggle`, formatting.subscript);
+        
+        // Apply font size
+        if (formatting.fontSize) {
+            const fontSizeInput = document.getElementById(`${prefix}-font-size-input`);
+            if (fontSizeInput) fontSizeInput.value = formatting.fontSize;
+        }
+        
+        // Apply font
+        if (formatting.font) {
+            const fontInput = document.getElementById(`${prefix}-font-input`);
+            if (fontInput && fontInput.setValue) fontInput.setValue(formatting.font);
+        }
+        
+        // Apply style
+        if (formatting.style) {
+            const styleInput = document.getElementById(`${prefix}-style-input`);
+            if (styleInput && styleInput.setValue) styleInput.setValue(formatting.style);
+        }
+        
+        // Apply text color
+        if (formatting.textColor !== null && formatting.textColor !== undefined) {
+            const colorButton = document.getElementById(target === 'find' ? 'find-color-button' : 'replace-color-toggle');
+            if (colorButton && window.colorPicker) {
+                // Convert Word decimal color to hex
+                const hexColor = wordDecimalToHex(formatting.textColor);
+                colorButton.style.borderBottom = `3px solid ${hexColor}`;
+                colorButton.setAttribute('data-selected-color', formatting.textColor.toString());
+                colorButton.classList.add('active');
+            }
+        }
+    }
+    
+    // Helper function to set three-state button
+    function setThreeStateButton(buttonId, value) {
+        const button = document.getElementById(buttonId);
+        if (!button) return;
+        
+        // Clear all states
+        button.classList.remove('toggled-true', 'toggled-false');
+        
+        if (value === true) {
+            button.classList.add('toggled-true');
+        } else if (value === false) {
+            button.classList.add('toggled-false');
+        }
+        // null/undefined = default state (no classes)
     }
 
     // Display error message - removed, no longer needed

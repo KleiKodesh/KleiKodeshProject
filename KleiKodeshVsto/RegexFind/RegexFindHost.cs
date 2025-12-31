@@ -140,6 +140,10 @@ namespace KleiKodesh.RegexFind
                 target.Style = GetStringProperty(element, "style", "Style") ?? "";
                 target.Font = GetStringProperty(element, "font", "Font") ?? "";
                 target.FontSize = GetFloatProperty(element, "fontSize", "FontSize");
+                target.TextColor = GetIntProperty(element, "textColor", "TextColor", "color", "Color");
+
+                // Debug: Log the mapped formatting properties
+                System.Diagnostics.Debug.WriteLine($"Mapped formatting - Bold: {target.Bold}, Italic: {target.Italic}, Underline: {target.Underline}, TextColor: {target.TextColor}");
 
                 // Handle search mode
                 var modeStr = GetStringProperty(element, "searchMode", "SearchMode", "mode", "Mode") ?? "All";
@@ -147,7 +151,7 @@ namespace KleiKodesh.RegexFind
                     target.Mode = mode;
 
                 target.Slop = (short)GetIntProperty(element, "slop", "Slop");
-                target.UseWildcards = GetBoolProperty(element, "useRegex", "UseRegex", "useWildcards", "UseWildcards");
+                target.UseWildcards = GetBoolPropertyNonNullable(element, "useRegex", "UseRegex", "useWildcards", "UseWildcards");
 
                 // Copy replace properties with better error handling
                 var replaceElement = GetObjectProperty(element, "replaceOptions", "ReplaceOptions", "replace", "Replace");
@@ -162,11 +166,9 @@ namespace KleiKodesh.RegexFind
                     target.Replace.Subscript = GetBoolProperty(replace, "subscript", "Subscript");
                     target.Replace.Style = GetStringProperty(replace, "style", "Style") ?? "";
                     target.Replace.Font = GetStringProperty(replace, "font", "Font") ?? "";
-
-                    // Handle FontSize with null check
-                    var fontSize = GetFloatProperty(replace, "fontSize", "FontSize");
-                    if (fontSize > 0)
-                        target.Replace.FontSize = fontSize;
+                    target.Replace.FontSize = GetFloatProperty(replace, "fontSize", "FontSize");
+                    target.Replace.TextColor = GetIntProperty(replace, "textColor", "TextColor", "color", "Color");
+                    target.Replace.TextColor = GetNullableIntProperty(replace, "textColor", "TextColor", "color", "Color");
                 }
             }
             catch (Exception ex)
@@ -186,7 +188,22 @@ namespace KleiKodesh.RegexFind
             return null;
         }
 
-        private bool GetBoolProperty(JsonElement element, params string[] propertyNames)
+        private bool? GetBoolProperty(JsonElement element, params string[] propertyNames)
+        {
+            foreach (var name in propertyNames)
+            {
+                if (element.TryGetProperty(name, out var prop))
+                {
+                    if (prop.ValueKind == JsonValueKind.Null)
+                        return null;
+                    if (prop.ValueKind == JsonValueKind.True || prop.ValueKind == JsonValueKind.False)
+                        return prop.GetBoolean();
+                }
+            }
+            return null; // Return null when property is not specified
+        }
+
+        private bool GetBoolPropertyNonNullable(JsonElement element, params string[] propertyNames)
         {
             foreach (var name in propertyNames)
             {
@@ -194,20 +211,40 @@ namespace KleiKodesh.RegexFind
                     (prop.ValueKind == JsonValueKind.True || prop.ValueKind == JsonValueKind.False))
                     return prop.GetBoolean();
             }
-            return false;
+            return false; // Return false as default for non-nullable booleans
         }
 
-        private int GetIntProperty(JsonElement element, params string[] propertyNames)
+        private int? GetIntProperty(JsonElement element, params string[] propertyNames)
         {
             foreach (var name in propertyNames)
             {
-                if (element.TryGetProperty(name, out var prop) && prop.TryGetInt32(out var value))
-                    return value;
+                if (element.TryGetProperty(name, out var prop))
+                {
+                    if (prop.ValueKind == JsonValueKind.Null)
+                        return null;
+                    if (prop.TryGetInt32(out var value))
+                        return value;
+                }
             }
-            return 0;
+            return null;
         }
 
-        private float GetFloatProperty(JsonElement element, params string[] propertyNames)
+        private int? GetNullableIntProperty(JsonElement element, params string[] propertyNames)
+        {
+            foreach (var name in propertyNames)
+            {
+                if (element.TryGetProperty(name, out var prop))
+                {
+                    if (prop.ValueKind == JsonValueKind.Null)
+                        return null;
+                    if (prop.TryGetInt32(out var value))
+                        return value;
+                }
+            }
+            return null; // Return null when property is not specified
+        }
+
+        private float? GetFloatProperty(JsonElement element, params string[] propertyNames)
         {
             foreach (var name in propertyNames)
             {
@@ -215,7 +252,7 @@ namespace KleiKodesh.RegexFind
                 {
                     // Handle null values
                     if (prop.ValueKind == JsonValueKind.Null)
-                        continue;
+                        return null;
 
                     if (prop.TryGetSingle(out var value))
                         return value;
@@ -225,7 +262,7 @@ namespace KleiKodesh.RegexFind
                         return intValue;
                 }
             }
-            return 0;
+            return null; // Return null when property is not specified
         }
 
         private JsonElement? GetObjectProperty(JsonElement element, params string[] propertyNames)
@@ -332,6 +369,25 @@ namespace KleiKodesh.RegexFind
             {
                 System.Diagnostics.Debug.WriteLine($"GetStyleList error: {ex.Message}");
                 SendErrorToHtml($"Get style list failed: {ex.Message}");
+            }
+        }
+
+        public void CopyFormatting(CopyFormattingDto data)
+        {
+            try
+            {
+                System.Diagnostics.Debug.WriteLine($"CopyFormatting called for target: {data.Target}");
+                
+                var formatting = _regexFind.GetSelectionFormatting();
+                
+                System.Diagnostics.Debug.WriteLine($"Retrieved formatting - Bold: {formatting.Bold}, Italic: {formatting.Italic}, TextColor: {formatting.TextColor}");
+                
+                SendFormattingToHtml(formatting, data.Target);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"CopyFormatting error: {ex.Message}");
+                SendErrorToHtml($"Copy formatting failed: {ex.Message}");
             }
         }
 
@@ -534,6 +590,33 @@ namespace KleiKodesh.RegexFind
             _regexFindWebView.CoreWebView2?.PostWebMessageAsString(json);
         }
 
+        private void SendFormattingToHtml(RegexFindBase formatting, string target)
+        {
+            var response = new
+            {
+                command = "formattingCopied",
+                data = new
+                {
+                    target = target,
+                    formatting = new
+                    {
+                        bold = formatting.Bold,
+                        italic = formatting.Italic,
+                        underline = formatting.Underline,
+                        superscript = formatting.Superscript,
+                        subscript = formatting.Subscript,
+                        textColor = formatting.TextColor,
+                        fontSize = formatting.FontSize,
+                        font = formatting.Font,
+                        style = formatting.Style
+                    }
+                }
+            };
+            var json = JsonSerializer.Serialize(response);
+            System.Diagnostics.Debug.WriteLine($"Sending formatting to HTML: {json}");
+            _regexFindWebView.CoreWebView2?.PostWebMessageAsString(json);
+        }
+
         private void SendSuccessToHtml(string message)
         {
             var response = new
@@ -609,6 +692,11 @@ namespace KleiKodesh.RegexFind
     public class SelectResultDto
     {
         public int Index { get; set; }
+    }
+
+    public class CopyFormattingDto
+    {
+        public string Target { get; set; } = "find"; // "find" or "replace"
     }
 
     public class ThemeDto

@@ -1,0 +1,202 @@
+﻿<Window x:Class="RegexInWord.SimpleColorsDialog.ColorsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:RegexInWord.SimpleColorsDialog"
+             xmlns:loc="clr-namespace:RegexInWord.Locale"
+             xmlns:helpers="clr-namespace:RegexInWord.Helpers"
+             SizeToContent="WidthAndHeight"
+             ResizeMode="NoResize"
+             FlowDirection="{Binding FlowDirection, ElementName=MainPanel}"
+             Title="{loc:Locale Text=Font_color}"
+             WindowStartupLocation="CenterOwner"
+             PreviewKeyDown="Window_PreviewKeyDown"
+             Background="{Binding Path=(helpers:ThemingHelper.BackGround)}"
+             Foreground="{Binding Path=(helpers:ThemingHelper.ForeGround)}">
+    <Window.DataContext>
+        <local:ColorsHelper/>
+    </Window.DataContext>
+
+    <Window.Style>
+        <Style TargetType="Window">
+            <Style.Resources>
+                <SolidColorBrush x:Key="HoverBackGroundBrush" Color="#ff646464" Opacity="0.2"/>
+                <SolidColorBrush x:Key="SelectedBackGroundBrush" Color="#ff646464" Opacity="0.3"/>
+                <SolidColorBrush x:Key="WindowBorderBrush" Color="#FFABADB3"/>
+                <SolidColorBrush x:Key="TitlebarBrush" Color="#ff646464" Opacity="0.1"/>
+                <SolidColorBrush x:Key="Generic.LightBackGround" Opacity="0.3" Color="#FFABADB3"/>
+                <Style x:Key="TitleBarButton" TargetType="Button">
+                    <Setter Property="Width" Value="{Binding ActualHeight, RelativeSource={RelativeSource Mode=Self}}"/>
+                    <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True"/>
+                    <Setter Property="Background" Value="Transparent"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="{x:Type Button}">
+                                <Border x:Name="border" Background="{TemplateBinding Background}"
+                                    Padding="10">
+                                    <ContentPresenter x:Name="contentPresenter"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="true">
+                                        <Setter Property="Background" Value="{StaticResource HoverBackGroundBrush}"/>
+                                    </Trigger>
+                                    <Trigger Property="AreAnyTouchesOver" Value="true">
+                                        <Setter Property="Background" Value="{StaticResource HoverBackGroundBrush}" />
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="true">
+                                        <Setter Property="Background" Value="{StaticResource SelectedBackGroundBrush}" />
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </Style.Resources>
+            <Setter Property="WindowChrome.WindowChrome">
+                <Setter.Value>
+                    <WindowChrome
+                          CornerRadius="{x:Static SystemParameters.WindowCornerRadius}"
+                          UseAeroCaptionButtons="False"
+                          CaptionHeight="25"
+                           NonClientFrameEdges="Bottom"/>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Window">
+                        <Border  BorderBrush="{StaticResource WindowBorderBrush}" 
+                       BorderThickness="0.8"
+                       Background="{TemplateBinding Background}">
+                            <Grid x:Name="RootGrid">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition x:Name="TitleBarRow" Height="auto"/>
+                                    <RowDefinition x:Name="ContentRow" Height="*"/>
+                                </Grid.RowDefinitions>
+
+                                <Grid x:Name="TitleBarGrid"
+                            Height="25"
+                            Background="{StaticResource TitlebarBrush}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="auto" x:Name="CaptionColumn"/>
+                                        <ColumnDefinition Width="*" x:Name="PlaceHolderColumn"/>
+                                        <ColumnDefinition Width="auto" x:Name="TitleBarButtonsColumn"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock x:Name="WindowTitle" Padding="10" VerticalAlignment="Center" IsHitTestVisible="False"
+                                     Text="{TemplateBinding Title}"/>
+
+                                    <Button x:Name="X_Button" Grid.Column="2" Margin="1" Click="X_Button_Click"
+                                                Style="{StaticResource TitleBarButton}" HorizontalAlignment="Left">
+                                        <TextBlock Margin="-4" Foreground="{Binding Path=(helpers:ThemingHelper.ForeGround)}"
+                                      Text="X" FontSize="12" 
+                                      HorizontalAlignment="Center" 
+                                      FontFamily="Yu Gothic UI"/>
+                                    </Button>
+                                </Grid>
+
+                                <ContentPresenter x:Name="PART_MainContentPresenter"  Grid.Row="1"/>
+                            </Grid>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Style>
+
+    <Window.Resources>
+        <loc:LocaleToFlowDirectionConverter x:Key="LocaleToFlowDirectionConverter"/>
+        <Style TargetType="ListBox" x:Key="ColorsListBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled"/>
+            <Setter Property="MinHeight" Value="30"/>
+            <Setter Property="ItemsPanel">
+                <Setter.Value>
+                    <ItemsPanelTemplate>
+                        <WrapPanel/>
+                    </ItemsPanelTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="ItemTemplate">
+                <Setter.Value>
+                    <DataTemplate>
+                        <Border Background="White">
+                            <Rectangle
+                             Width="25" Height="25" 
+                             Fill="{Binding HexValue}"/>
+                        </Border>
+                    </DataTemplate>
+                </Setter.Value>
+            </Setter>
+            <EventSetter Event="SelectionChanged" Handler="ListBox_SelectionChanged"/>
+        </Style>
+        <Style TargetType="Separator">
+            <Setter Property="Height" Value="0.5"/>
+            <Setter Property="Margin" Value="0,3,0,3"/>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Height" Value="29"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        </Style>
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{Binding Path=(helpers:ThemingHelper.ForeGround)}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+    </Window.Resources>
+
+    <StackPanel x:Name="MainPanel"
+                Width="180" 
+                FlowDirection="{Binding Source={x:Static loc:LocaleDictionary.Locale}, 
+                 Converter={StaticResource LocaleToFlowDirectionConverter}}">
+
+        <Grid x:Name="AutoNoColorsPanel">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition/>
+                <ColumnDefinition/>
+            </Grid.ColumnDefinitions>
+
+            <Button x:Name="AutoColorButton"
+                    Click="AutoColorButton_Click">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <Rectangle Margin="5" Width="15" Height="15" 
+                               Fill="#000000"/>
+                    <TextBlock Text="{loc:Locale Text=Auto}" Margin="5"/>
+                </StackPanel>
+            </Button>
+
+            <Button x:Name="NoColorButton" Grid.Column="1"
+                    Click="NoColorButton_Click">
+                <StackPanel Orientation="Horizontal">
+                    <Border Margin="5" Width="15" Height="15" 
+                            BorderBrush="LightGray" BorderThickness="1"/>
+                    <TextBlock Text="{loc:Locale Text=No_color}" Margin="5"/>
+                </StackPanel>
+            </Button>
+        </Grid>
+        <Separator/>
+
+        <TextBlock Text="{loc:Locale Text=Theme_colors}" FontWeight="Bold" Margin="3,0,0,0"/>
+        <ListBox x:Name="ThemeColorsListBox" Style="{StaticResource ColorsListBox}"
+                 ItemsSource="{Binding ThemeColors}"/>
+        <Separator/>
+
+        <TextBlock Text="{loc:Locale Text=Standard_Office_Colors}" FontWeight="Bold" Margin="3,0,0,0"/>
+        <ListBox x:Name="StandardColorsListBox" Style="{StaticResource ColorsListBox}"
+                 ItemsSource="{Binding StandardOfficeColors}"/>
+        <Separator/>
+
+        <Button x:Name="MoreColors" Click="MoreColors_Click" Margin="0,0,0,5">
+            <StackPanel Orientation="Horizontal" Margin="5">
+                <Path Fill="BlueViolet" Stretch="UniformToFill" Height="15" Width="15"
+                  Data="M12.022,23a11.053,11.053,0,0,0,10.921-9.5,5.853,5.853,0,0,0-.577-3.5c-1.655-3.146-4.777-2.671-7.056-2.322-1.18.178-2.4.366-2.865-.035A2.416,2.416,0,0,1,12.02,6c0-2.683,0-5-3-5C3.753,1,1,6.534,1,12A11.023,11.023,0,0,0,12.022,23ZM9.016,3c.909,0,1,0,1,3a3.941,3.941,0,0,0,1.122,3.168c1.163,1,2.844.741,4.469.494,2.483-.379,4.061-.482,4.986,1.276a3.844,3.844,0,0,1,.363,2.293A9.024,9.024,0,0,1,3,12C3,8.382,4.6,3,9.016,3ZM5,7.5A1.5,1.5,0,1,1,6.5,9,1.5,1.5,0,0,1,5,7.5ZM4,12a1.5,1.5,0,1,1,1.5,1.5A1.5,1.5,0,0,1,4,12Zm3.5,3A1.5,1.5,0,1,1,6,16.5,1.5,1.5,0,0,1,7.5,15Zm8,3A3.5,3.5,0,1,0,12,14.5,3.5,3.5,0,0,0,15.5,18Zm0-5A1.5,1.5,0,1,1,14,14.5,1.5,1.5,0,0,1,15.5,13Z"/>
+                <TextBlock Margin="5,0,0,0" Text="{loc:Locale Text=More_colors}"/>
+            </StackPanel>
+        </Button>
+        
+    </StackPanel>
+</Window>
