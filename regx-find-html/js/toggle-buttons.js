@@ -20,6 +20,9 @@ function setupToggleButtons() {
                 } else {
                     // none → true
                     this.classList.add('toggled-true');
+                    
+                    // Mutual exclusion: subscript and superscript can't both be true
+                    handleSubscriptSuperscriptExclusion(this);
                 }
             } else {
                 // Two-state toggle for non-formatting buttons (legacy behavior)
@@ -27,6 +30,31 @@ function setupToggleButtons() {
             }
         });
     });
+}
+
+// Handle mutual exclusion between subscript and superscript
+function handleSubscriptSuperscriptExclusion(button) {
+    const buttonId = button.id;
+    
+    // Check if this is a subscript button being set to true
+    if (buttonId.includes('subscript') && !buttonId.includes('superscript')) {
+        // Find the corresponding superscript button and clear it
+        const prefix = buttonId.replace('-subscript-toggle', '');
+        const superscriptButton = document.getElementById(`${prefix}-superscript-toggle`);
+        if (superscriptButton?.classList.contains('toggled-true')) {
+            superscriptButton.classList.remove('toggled-true');
+        }
+    }
+    
+    // Check if this is a superscript button being set to true
+    if (buttonId.includes('superscript')) {
+        // Find the corresponding subscript button and clear it
+        const prefix = buttonId.replace('-superscript-toggle', '');
+        const subscriptButton = document.getElementById(`${prefix}-subscript-toggle`);
+        if (subscriptButton?.classList.contains('toggled-true')) {
+            subscriptButton.classList.remove('toggled-true');
+        }
+    }
 }
 
 // Helper function to get the three-state value of a formatting button

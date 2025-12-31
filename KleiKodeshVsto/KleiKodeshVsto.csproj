@@ -245,13 +245,14 @@
     <Compile Include="Common\KleiKodeshWebView.cs">
       <SubType>Component</SubType>
     </Compile>
+    <Compile Include="Helpers\JsonExtensions.cs" />
     <Compile Include="Helpers\MsgBox.cs" />
     <Compile Include="Helpers\TaskPanePopOut.cs" />
     <Compile Include="Helpers\OfficeThemeWatcher.cs" />
     <Compile Include="Helpers\SettingsManager.cs" />
     <Compile Include="Helpers\TaskpaneManager.cs" />
     <Compile Include="Helpers\GitHubUpdateChecker.cs" />
-    <Compile Include="Helpers\RecordUndo.cs" />
+    <Compile Include="Helpers\WdActionManager.cs" />
     <Compile Include="Properties\AssemblyInfo.cs">
       <SubType>Code</SubType>
     </Compile>
@@ -274,10 +275,13 @@
       <AutoGen>True</AutoGen>
       <DependentUpon>Settings.settings</DependentUpon>
     </Compile>
-    <Compile Include="RegexFind\RegexFind.cs" />
+    <Compile Include="RegexFind\RegexSearchMain.cs" />
+    <Compile Include="RegexFind\RegexSearchReplace.cs" />
+    <Compile Include="RegexFind\RegexSearchFind.cs" />
     <Compile Include="RegexFind\RegexFindHost.cs">
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Include="RegexFind\RegexSearchModels.cs" />
     <Compile Include="Ribbon\RibbonSettingsControl.cs">
       <SubType>UserControl</SubType>
     </Compile>

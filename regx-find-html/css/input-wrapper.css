@@ -2,9 +2,9 @@
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 5px;
     border: var(--border-color) 1px solid;
     border-radius: 4px;
+    background: var(--primary-background-color);
 }
 
 .input-wrapper:focus-within {
@@ -15,6 +15,32 @@
     flex: 1;
     border: none;
     padding: 0 7px;
+}
+
+.input-wrapper > search-combobox {
+    flex: 1;
+    border: none;
+}
+
+.input-wrapper > search-combobox .search-input {
+    border: none;
+    border-radius: 0;
+    padding: 6px 7px 6px 30px;
+}
+
+.input-wrapper > search-combobox .search-input:focus {
+    border: none;
+    outline: none;
+}
+
+.input-wrapper > button {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+}
+
+.input-wrapper > button:hover {
+    background: var(--hover-background-color);
 }
 
 .input-wrapper > button > img {

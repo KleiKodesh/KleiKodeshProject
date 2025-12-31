@@ -9,6 +9,8 @@ import '../css/input-wrapper.css';
 import '../js/webview-bridge.js';
 import '../js/font-manager.js';
 import '../js/custom-combobox.js';
+import '../js/recent-searches.js';
+import '../js/search-combobox.js';
 import '../js/regex-palette.js';
 import '../js/toggle-buttons.js';
 import '../js/color-picker.js';

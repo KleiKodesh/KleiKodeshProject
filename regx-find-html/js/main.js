@@ -1,6 +1,7 @@
 // Button elements
 let showReplaceButton = document.getElementById('show-replace-button');
 let themeToggleButton = document.getElementById('theme-toggle-button');
+let helpToggleButton = document.getElementById('help-toggle-button');
 let findButton = document.getElementById('find-button');
 let regexToggleButton = document.getElementById('regex-toggle-button');
 let findBoldToggle = document.getElementById('find-bold-toggle');
@@ -27,10 +28,12 @@ let searchModeSelect = document.getElementById('search-mode-select');
 
 // Input elements
 let slopInput = document.getElementById('slop-input');
-let findTextInput = document.getElementById('find-text-input');
 let findFontSizeInput = document.getElementById('find-font-size-input');
-let replaceTextInput = document.getElementById('replace-text-input');
 let replaceFontSizeInput = document.getElementById('replace-font-size-input');
+
+// Search combobox elements (these are custom elements, not regular inputs)
+let findTextInput = document.getElementById('find-text-input');
+let replaceTextInput = document.getElementById('replace-text-input');
 
 // Custom combobox elements
 let findStyleInput = document.getElementById('find-style-input');
@@ -53,110 +56,34 @@ let fontManager;
 // Font loading state
 let fontsRequested = false;
 
-// Generate search JSON data to match RegexFind.cs properties exactly
-function generateSearchData() {
-    // Helper function to get three-state value
-    function getThreeState(element) {
-        if (!element) return null;
-        
-        if (element.classList.contains('toggled-true')) {
-            return true;
-        } else if (element.classList.contains('toggled-false')) {
-            return false;
-        } else {
-            return null; // Default state - not specified
-        }
-    }
-
-    return {
-        Text: findTextInput.value,
-        Bold: getThreeState(findBoldToggle),
-        Italic: getThreeState(findItalicToggle),
-        Underline: getThreeState(findUnderlineToggle),
-        Superscript: getThreeState(findSuperscriptToggle),
-        Subscript: getThreeState(findSubscriptToggle),
-        TextColor: findColorButton?.dataset.selectedColor ? parseInt(findColorButton.dataset.selectedColor) : null,
-        Style: findStyleInput.getValue(),
-        Font: findFontInput.getValue(),
-        FontSize: parseInt(findFontSizeInput.value) || null,
-        Mode: searchModeSelect.value, // "All", "Forward", "Back", "Selection"
-        Slop: parseInt(slopInput.value) || 0,
-        UseWildcards: regexToggleButton.classList.contains('active'),
-        Replace: {
-            Text: '', // Empty for search-only operations
-            Bold: null,
-            Italic: null,
-            Underline: null,
-            Superscript: null,
-            Subscript: null,
-            TextColor: null,
-            Style: '',
-            Font: '',
-            FontSize: null
-        }
-    };
-}
-
-// Generate replace JSON data to match RegexFind.cs properties exactly
-function generateReplaceData() {
-    // Helper function to get three-state value
-    function getThreeState(element) {
-        if (!element) return null;
-        
-        if (element.classList.contains('toggled-true')) {
-            return true;
-        } else if (element.classList.contains('toggled-false')) {
-            return false;
-        } else {
-            return null; // Default state - not specified
-        }
-    }
-
-    return {
-        Text: findTextInput.value,
-        Bold: getThreeState(findBoldToggle),
-        Italic: getThreeState(findItalicToggle),
-        Underline: getThreeState(findUnderlineToggle),
-        Superscript: getThreeState(findSuperscriptToggle),
-        Subscript: getThreeState(findSubscriptToggle),
-        Style: findStyleInput.getValue(),
-        Font: findFontInput.getValue(),
-        FontSize: parseInt(findFontSizeInput.value) || null,
-        Mode: searchModeSelect.value, // "All", "Forward", "Back", "Selection"
-        Slop: parseInt(slopInput.value) || 0,
-        UseWildcards: regexToggleButton.classList.contains('active'),
-        Replace: {
-            Text: replaceTextInput.value,
-            Bold: getThreeState(replaceBoldToggle),
-            Italic: getThreeState(replaceItalicToggle),
-            Underline: getThreeState(replaceUnderlineToggle),
-            Superscript: getThreeState(replaceSuperscriptToggle),
-            Subscript: getThreeState(replaceSubscriptToggle),
-            TextColor: replaceColorToggle?.dataset.selectedColor ? parseInt(replaceColorToggle.dataset.selectedColor) : null,
-            Style: replaceStyleInput.getValue(),
-            Font: replaceFontInput.getValue(),
-            FontSize: parseInt(replaceFontSizeInput.value) || null
-        }
-    };
-}
-
 // Send JSON directly to C# using webview bridge with proper command structure
 function sendToCS(command, data) {
     if (webViewBridge) {
-        webViewBridge.sendCommand(command, data);
-    } else {
-        // Fallback to direct WebView2 communication - always send JSON strings
-        const message = {
-            command: command,
-            data: data,
-            timestamp: new Date().toISOString()
-        };
-        
-        if (window.chrome && window.chrome.webview) {
-            window.chrome.webview.postMessage(JSON.stringify(message));
-        } else {
-            console.warn('WebView2 API not available. Command would be:', JSON.stringify(message, null, 2));
+        // Use the refactored bridge methods
+        switch(command) {
+            case 'Search':
+                webViewBridge.search();
+                break;
+            case 'Replace':
+                webViewBridge.replace();
+                break;
+            case 'ReplaceAll':
+                webViewBridge.replaceAll();
+                break;
+            case 'GetFontList':
+                webViewBridge.getFontList();
+                break;
+            case 'GetStyleList':
+                webViewBridge.getStyleList();
+                break;
+            case 'CopyFormatting':
+                webViewBridge.copyFormatting(data.target);
+                break;
+            default:
+                console.warn('Unknown command:', command);
         }
+    } else {
+        console.warn('WebView bridge not available. Command:', command);
     }
 }
 
@@ -198,41 +125,74 @@ function setupButtonEvents() {
     findButton.addEventListener('click', (e) => {
         e.preventDefault();
         
+        // Add current search to history
+        const findInput = document.getElementById('find-text-input');
+        if (findInput?.addCurrentToHistory) {
+            findInput.addCurrentToHistory();
+        }
+        
         // Hide regex palette and show search results
         if (regexPalette && regexPalette.hideForSearch) {
             regexPalette.hideForSearch();
         }
         
-        const searchData = generateSearchData();
-        sendToCS('Search', searchData);
+        sendToCS('Search');
         
         // Focus the search box after search operation
         setTimeout(() => {
-            findTextInput.focus();
+            if (findInput?.shadowRoot) {
+                findInput.shadowRoot.querySelector('.search-input')?.focus();
+            } else {
+                findInput?.focus();
+            }
         }, 50);
     });
 
     // Replace button
     replaceButton.addEventListener('click', (e) => {
         e.preventDefault();
-        const replaceData = generateReplaceData();
-        sendToCS('Replace', replaceData);
+        
+        // Add current replace text to history
+        const replaceInput = document.getElementById('replace-text-input');
+        if (replaceInput?.addCurrentToHistory) {
+            replaceInput.addCurrentToHistory();
+        }
+        
+        sendToCS('Replace');
     });
 
     // Replace all button
     replaceAllButton.addEventListener('click', (e) => {
         e.preventDefault();
-        const replaceData = generateReplaceData();
-        sendToCS('ReplaceAll', replaceData);
+        
+        // Add current replace text to history
+        const replaceInput = document.getElementById('replace-text-input');
+        if (replaceInput?.addCurrentToHistory) {
+            replaceInput.addCurrentToHistory();
+        }
+        
+        sendToCS('ReplaceAll');
     });
 
     // Theme toggle
     themeToggleButton.addEventListener('click', (e) => {
         e.preventDefault();
         document.documentElement.classList.toggle('dark');
-        const isDark = document.documentElement.classList.contains('dark');
-        sendToCS('ThemeToggle', { Theme: isDark ? 'dark' : 'light' });
+        // Theme toggle is purely UI - no need to send to C#
     });
+
+    // Help toggle (regex palette)
+    if (helpToggleButton) {
+        helpToggleButton.addEventListener('click', (e) => {
+            e.preventDefault();
+            console.log('Help button clicked, regexPalette:', regexPalette);
+            if (regexPalette) {
+                regexPalette.toggle();
+            } else {
+                console.error('regexPalette is not initialized');
+            }
+        });
+    }
 
     // Clear formatting buttons
     findClearButton.addEventListener('click', (e) => {
@@ -250,7 +210,7 @@ function setupButtonEvents() {
         findColorButton.classList.remove('active');
         findColorButton.style.borderBottom = '';
 
-        findFontSizeInput.value = '12';
+        findFontSizeInput.value = '';
         findStyleInput.setValue('');
         findFontInput.setValue('');
         // No need to send to C# - this is pure UI operation
@@ -271,7 +231,7 @@ function setupButtonEvents() {
         replaceColorToggle.classList.remove('active');
         replaceColorToggle.style.borderBottom = '';
 
-        replaceFontSizeInput.value = '12';
+        replaceFontSizeInput.value = '';
         replaceStyleInput.setValue('');
         replaceFontInput.setValue('');
         // No need to send to C# - this is pure UI operation
@@ -281,76 +241,81 @@ function setupButtonEvents() {
     findDipperButton.addEventListener('click', (e) => {
         e.preventDefault();
         if (webViewBridge) {
-            webViewBridge.handleCopyFormatting('find');
-        } else {
-            sendToCS('CopyFormatting', { target: 'find' });
+            webViewBridge.copyFormatting('find');
         }
     });
 
     replaceOptionsDipperButton.addEventListener('click', (e) => {
         e.preventDefault();
         if (webViewBridge) {
-            webViewBridge.handleCopyFormatting('replace');
-        } else {
-            sendToCS('CopyFormatting', { target: 'replace' });
+            webViewBridge.copyFormatting('replace');
         }
     });
 
-    // Enter key support
-    findTextInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            
+    // Enter key support for search comboboxes
+    const findTextInput = document.getElementById('find-text-input');
+    const replaceTextInput = document.getElementById('replace-text-input');
+    
+    if (findTextInput) {
+        findTextInput.addEventListener('enter', (e) => {
             // Hide regex palette and show search results
             if (regexPalette && regexPalette.hideForSearch) {
                 regexPalette.hideForSearch();
             }
             
-            const searchData = generateSearchData();
-            sendToCS('Search', searchData);
+            sendToCS('Search');
             
             // Keep focus in search box after search
             setTimeout(() => {
-                findTextInput.focus();
+                if (findTextInput.shadowRoot) {
+                    findTextInput.shadowRoot.querySelector('.search-input')?.focus();
+                }
             }, 50);
-        }
-    });
+        });
 
-    replaceTextInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            const replaceData = generateReplaceData();
-            sendToCS('Replace', replaceData);
-        }
-    });
+        // Escape key support - clear input text
+        findTextInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !findTextInput.hasAttribute('open')) {
+                e.preventDefault();
+                findTextInput.clearValue();
+                if (findTextInput.shadowRoot) {
+                    findTextInput.shadowRoot.querySelector('.search-input')?.focus();
+                }
+            }
+        });
+    }
 
-    // Escape key support - clear input text
-    findTextInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            e.preventDefault();
-            findTextInput.value = '';
-            findTextInput.focus();
-        }
-    });
+    if (replaceTextInput) {
+        replaceTextInput.addEventListener('enter', (e) => {
+            sendToCS('Replace');
+        });
 
-    replaceTextInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            e.preventDefault();
-            replaceTextInput.value = '';
-            replaceTextInput.focus();
-        }
-    });
+        // Escape key support - clear input text
+        replaceTextInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !replaceTextInput.hasAttribute('open')) {
+                e.preventDefault();
+                replaceTextInput.clearValue();
+                if (replaceTextInput.shadowRoot) {
+                    replaceTextInput.shadowRoot.querySelector('.search-input')?.focus();
+                }
+            }
+        });
+    }
 
     // Request style list when style inputs are focused (dynamic)
     if (findStyleInput) {
         findStyleInput.addEventListener('focus', () => {
-            sendToCS('GetStyleList', {});
+            if (webViewBridge) {
+                webViewBridge.getStyleList();
+            }
         });
     }
 
     if (replaceStyleInput) {
         replaceStyleInput.addEventListener('focus', () => {
-            sendToCS('GetStyleList', {});
+            if (webViewBridge) {
+                webViewBridge.getStyleList();
+            }
         });
     }
 
@@ -373,7 +338,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!fontsRequested) {
             setTimeout(() => {
                 console.log('Requesting font list on page load...');
-                sendToCS('GetFontList', {});
+                webViewBridge.getFontList();
                 fontsRequested = true;
             }, 100);
         }
@@ -390,6 +355,10 @@ document.addEventListener('DOMContentLoaded', () => {
         fontManager = createFontManager();
         fontManager.initialize();
     }
+
+    // Re-get references to elements after DOM is fully loaded
+    findTextInput = document.getElementById('find-text-input');
+    replaceTextInput = document.getElementById('replace-text-input');
 
     // Setup all event listeners
     setupColorPickerEvents();

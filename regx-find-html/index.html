@@ -49,8 +49,12 @@
         <!-- find area -->
         <div id="search-find-container" class="container">
           <div class="input-wrapper">
-            <input type="text" id="find-text-input" placeholder="חיפוש..." class="search-input" title="חיפוש" />
-            <datalist id="search-history-datalist"></datalist>
+            <search-combobox 
+                id="find-text-input" 
+                search-type="find"
+                placeholder="חיפוש..." 
+                title="חיפוש">
+            </search-combobox>
             <button id="find-button" class="search-button" title="חיפוש">
               <img src="Resources/search-icon.svg" class="icon" />
             </button>
@@ -65,7 +69,6 @@
               id="find-font-size-input"
               min="8"
               max="72"
-              value="12"
               class="font-size-input"
               title="גודל גופן"
             />
@@ -114,7 +117,12 @@
         <!-- replace area -->
         <div id="search-replace-container" class="container">
           <div class="input-wrapper">
-            <input type="text" id="replace-text-input" placeholder="החלף ב.." class="search-input" title="החלף ב.." />
+            <search-combobox 
+                id="replace-text-input" 
+                search-type="replace"
+                placeholder="החלף ב.." 
+                title="החלף ב..">
+            </search-combobox>
             <button id="replace-button" class="search-replace-button" title="החלף">
               <img src="Resources/replace-icon.svg" class="icon" />
             </button>
@@ -129,7 +137,6 @@
               id="replace-font-size-input"
               min="8"
               max="72"
-              value="12"
               class="font-size-input"
               title="גודל גופן"
             />
@@ -194,10 +201,7 @@
     <!-- Color Picker Dialog -->
     <div id="color-picker-overlay" class="color-picker-overlay" style="display: none">
       <div id="color-picker" class="color-picker">
-        <div class="color-picker-header">
-          <span>צבע גופן</span>
-          <button class="close-btn" id="color-picker-close">×</button>
-        </div>
+        <button class="close-btn" id="color-picker-close">×</button>
 
         <div class="color-picker-content">
           <!-- Auto and No Color buttons -->
@@ -214,33 +218,40 @@
 
           <div class="separator"></div>
 
-          <!-- Theme Colors -->
+          <!-- Theme Colors - First -->
           <div class="color-section">
             <div class="section-title">צבעי ערכת נושא</div>
-            <div class="theme-colors-container" id="theme-colors-grid">
+            <div class="color-row" id="theme-colors-grid">
               <!-- Theme colors will be populated by JavaScript -->
-              <!-- First row: Base theme colors -->
-              <!-- Following rows: Tint/shade variations -->
             </div>
           </div>
 
           <div class="separator"></div>
 
-          <!-- Standard Office Colors -->
+          <!-- Standard Colors - Second -->
           <div class="color-section">
-            <div class="section-title">צבעי אופיס סטנדרטים</div>
-            <div class="color-grid" id="standard-colors-grid">
+            <div class="section-title">צבעים רגילים</div>
+            <div class="color-row" id="standard-colors-grid">
               <!-- Standard colors will be populated by JavaScript -->
             </div>
           </div>
 
           <div class="separator"></div>
 
-          <!-- More Colors -->
+          <!-- More Colors Link -->
           <button class="more-colors-btn" id="more-colors-btn">
-            <img src="Resources/color-palette-icon.svg" class="icon" style="width: 16px; height: 16px" />
+            <img src="Resources/color-wheel-icon.svg" class="color-wheel-icon" />
             <span>צבעים נוספים...</span>
           </button>
+
+          <!-- Recent Colors (hidden until colors are used) -->
+          <div class="color-section" id="recent-colors-section" style="display: none">
+            <div class="separator"></div>
+            <div class="section-title">צבעים שהיו בשימוש לאחרונה</div>
+            <div class="color-row" id="recent-colors-grid">
+              <!-- Recent colors will be populated by JavaScript -->
+            </div>
+          </div>
         </div>
       </div>
     </div>

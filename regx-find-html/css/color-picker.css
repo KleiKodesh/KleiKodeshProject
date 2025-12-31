@@ -1,4 +1,4 @@
-/* Color Picker Styles */
+/* Color Picker Styles - Word-style design */
 .color-picker-overlay {
   position: fixed;
   top: 0;
@@ -10,89 +10,87 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: 12px;
 }
 
 .color-picker {
   background: var(--primary-background-color, #ffffff);
-  border: 1px solid var(--border-color, #e1dfdd);
-  border-radius: 0;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  width: 240px;
-  max-height: calc(100vh - 40px);
+  border: 1px solid var(--border-color, #d1d1d1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  width: auto;
+  min-width: 200px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
   direction: rtl;
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue",
-    sans-serif;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 .color-picker.position-top {
   align-self: flex-start;
-  margin-top: 20px;
+  margin-top: 12px;
 }
 
-.color-picker-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  background: var(--secondary-background-color, #f3f2f1);
-  border-bottom: 1px solid var(--border-color, #e1dfdd);
-  font-size: 16px;
-  font-weight: 500;
-  flex-shrink: 0;
-}
-
+/* Close button - nicer styling */
 .close-btn {
-  background: none;
-  border: none;
-  font-size: 18px;
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: var(--secondary-background-color, #f5f5f5);
+  border: 1px solid var(--border-color, #ddd);
+  border-radius: 4px;
+  font-size: 14px;
   cursor: pointer;
   padding: 0;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 0;
-  color: var(--text-color, #484644);
+  color: var(--text-color, #666);
+  z-index: 1;
+  transition: background-color 0.15s ease;
 }
 
 .close-btn:hover {
-  background: var(--hover-background-color, #edebe9);
+  background: var(--hover-background-color, #e8e8e8);
+  color: var(--text-color, #333);
 }
 
 .color-picker-content {
-  padding: 16px;
+  padding: 10px 12px 12px;
+  padding-top: 6px;
   overflow-y: auto;
   flex: 1;
   min-height: 0;
 }
 
+/* Auto and No Color buttons - aligned right */
 .auto-no-colors {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  margin-bottom: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+  justify-content: flex-end;
+  flex-direction: row-reverse;
 }
 
 .color-option {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: 5px;
+  padding: 4px 8px;
   background: transparent;
-  border: none;
+  border: 1px solid var(--border-color, #d1d1d1);
+  border-radius: 3px;
   cursor: pointer;
-  border-radius: 0;
-  font-size: 14px;
+  font-size: 12px;
   text-align: right;
   transition: background-color 0.15s ease;
   white-space: nowrap;
-  min-width: 0;
 }
 
 .color-option:hover {
@@ -100,69 +98,64 @@
 }
 
 .color-preview {
-  width: 18px;
-  height: 18px;
-  border-radius: 0;
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
 }
 
 .no-color-preview {
   border: 1px solid var(--border-color, #c8c6c4);
   background: var(--primary-background-color, #ffffff);
+  position: relative;
 }
 
-.separator {
+.no-color-preview::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -1px;
+  right: -1px;
   height: 1px;
-  background: var(--border-color, #e1dfdd);
-  margin: 8px 0;
+  background: #c00;
+  transform: rotate(-45deg);
 }
 
 .color-section {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .section-title {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   margin-bottom: 6px;
-  color: var(--text-color, #484644);
+  color: var(--text-color, #333);
+  text-align: right;
 }
 
-.color-grid {
+/* Color row - wraps to next line, RTL flow */
+.color-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 2px;
-  justify-content: center;
-}
-
-.theme-colors-container {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
-  justify-content: center;
-  max-width: 100%;
-}
-
-.theme-colors-container .color-swatch {
-  width: 30px;
-  height: 30px;
-  margin: 2px;
+  gap: 3px;
+  direction: rtl;
 }
 
 .color-swatch {
-  width: 30px;
-  height: 30px;
-  border: 1px solid white;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 2px;
   cursor: pointer;
-  transition: transform 0.1s ease;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
   outline: none;
-  margin: 2px;
-  border: solid 0.5px lightgray;
+  padding: 0;
+  flex-shrink: 0;
 }
 
 .color-swatch:hover {
   transform: scale(1.1);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  z-index: 1;
 }
 
 .color-swatch:focus {
@@ -170,44 +163,61 @@
   outline-offset: 1px;
 }
 
+/* White/light swatches need a border */
+.color-swatch[data-color="#FFFFFF"],
+.color-swatch[data-color="#E7E6E6"] {
+  border: 1px solid #d1d1d1;
+}
+
+.separator {
+  height: 1px;
+  background: var(--border-color, #e1e1e1);
+  margin: 8px 0;
+}
+
+/* More Colors button */
 .more-colors-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
-  padding: 8px;
+  padding: 6px 0;
   background: transparent;
   border: none;
   cursor: pointer;
-  border-radius: 0;
   text-align: right;
-  transition: background-color 0.15s ease;
+  transition: color 0.15s ease;
   color: var(--accent-color, #0078d4);
+  font-size: 13px;
+  justify-content: flex-end;
+  flex-direction: row-reverse;
 }
 
 .more-colors-btn:hover {
-  background: var(--secondary-background-color, #f3f2f1);
+  text-decoration: underline;
 }
 
-.more-colors-btn .icon {
+.color-wheel-icon {
+  width: 18px;
+  height: 18px;
   flex-shrink: 0;
 }
 
-/* Color button states */
+/* Color button states in toolbar */
 .color-btn {
-    border-bottom: 3px solid transparent;
-    transition: border-bottom-color 0.2s ease;
+  border-bottom: 3px solid transparent;
+  transition: border-bottom-color 0.2s ease;
 }
 
 .color-btn.active {
-    /* Border color will be set by JavaScript */
+  /* Border color will be set by JavaScript */
 }
 
 .color-btn[data-selected-color] .icon {
-    opacity: 0.8;
+  opacity: 0.8;
 }
 
 /* Initially hide replace container */
 #search-replace-container {
-    display: none;
+  display: none;
 }

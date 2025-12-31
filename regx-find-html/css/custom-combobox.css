@@ -126,7 +126,7 @@
 /* Font preview specific styling */
 .custom-combobox[data-type="font"] .combobox-option {
     font-size: 14px;
-    padding: 10px 12px;
+    padding: 4px 8px;
 }
 
 .custom-combobox[data-type="font"] .combobox-input {

@@ -4,42 +4,45 @@ function createColorPicker() {
     const state = {
         currentColorTarget: null,
         colorPickerOverlay: null,
-        colorPicker: null
+        colorPicker: null,
+        recentColors: [] // Store recent colors (max 10)
     };
 
-    // Theme Colors - reversed order with Gray added as 9th (one before last)
+    const MAX_RECENT_COLORS = 10;
+    const RECENT_COLORS_KEY = 'colorPickerRecentColors';
+
+    // Theme Colors - order matches Word's theme color picker (RTL: first in array = rightmost)
+    // NOTE: decimals use 0xD prefix to match Word's Font.Color property
     const themeColors = {
-        // Base theme colors - 10 colors in the complete reversed order
+        // Base theme colors - 10 colors, ordered so first = rightmost in RTL display
         base: [
-            { name: 'Blue', hex: '#4472C4', themeIndex: 4, decimal: -738131969 },     // 1st - Blue
-            { name: 'Blue-Gray', hex: '#44546A', themeIndex: 2, decimal: -553582593 }, // 2nd - Blue-Gray
-            { name: 'Light Gray', hex: '#E7E6E6', themeIndex: 3, decimal: -570359809 }, // 3rd - Light Gray
-            { name: 'Black', hex: '#000000', themeIndex: 0, decimal: -587137025 },     // 4th - Black
-            { name: 'White', hex: '#FFFFFF', themeIndex: 1, decimal: -603914241 },     // 5th - White
-            { name: 'Green', hex: '#70AD47', themeIndex: 6, decimal: -654245889 },    // 6th - Green
-            { name: 'Light Blue', hex: '#5B9BD5', themeIndex: 8, decimal: -671023105 }, // 7th - Light Blue
-            { name: 'Light Orange', hex: '#FFC000', themeIndex: 7, decimal: -687800321 }, // 8th - Light Orange (yellow/golden)
-            { name: 'Gray', hex: '#A5A5A5', themeIndex: 9, decimal: -704577537 },    // 9th - Gray (one before last)
-            { name: 'Orange', hex: '#ED7D31', themeIndex: 5, decimal: -721354753 }    // 10th - Orange (last)
+            { name: 'White', hex: '#FFFFFF', themeIndex: 1, decimal: -603914241 },
+            { name: 'Black', hex: '#000000', themeIndex: 0, decimal: -587137025 },
+            { name: 'Light Gray', hex: '#E7E6E6', themeIndex: 3, decimal: -570359809 },
+            { name: 'Blue-Gray', hex: '#44546A', themeIndex: 2, decimal: -553582593 },
+            { name: 'Blue', hex: '#4472C4', themeIndex: 4, decimal: -738131969 },
+            { name: 'Orange', hex: '#ED7D31', themeIndex: 5, decimal: -721354753 },
+            { name: 'Gray', hex: '#A5A5A5', themeIndex: 9, decimal: -704577537 },
+            { name: 'Gold', hex: '#FFC000', themeIndex: 7, decimal: -687800321 },
+            { name: 'Light Blue', hex: '#5B9BD5', themeIndex: 8, decimal: -671023105 },
+            { name: 'Green', hex: '#70AD47', themeIndex: 6, decimal: -654245889 }
         ],
-        // Remove tint/shade variations to match SimpleColorsDialog (only base colors)
         variations: []
     };
 
-    // Standard Office Colors - exact colors and order from C# dialog image (2x5 grid)
+    // Standard Colors - single row, ordered so first = rightmost in RTL display
+    // Visual order RTL: Dark Red, Red, Orange, Yellow, Light Green, Green, Light Blue, Blue, Dark Blue, Purple
     const standardColors = [
-        // Top row (left to right)
-        { name: 'Light Green', hex: '#92D050', decimal: null },
-        { name: 'Yellow', hex: '#FFFF00', decimal: null },
-        { name: 'Orange', hex: '#FFC000', decimal: null },
-        { name: 'Red', hex: '#FF0000', decimal: null },
-        { name: 'Dark Red', hex: '#C00000', decimal: null },
-        // Bottom row (left to right)  
-        { name: 'Purple', hex: '#7030A0', decimal: null },
-        { name: 'Dark Blue', hex: '#002060', decimal: null },
-        { name: 'Blue', hex: '#0070C0', decimal: null },
-        { name: 'Light Blue', hex: '#00B0F0', decimal: null },
-        { name: 'Green', hex: '#00B050', decimal: null }
+        { name: 'Dark Red', hex: '#C00000', decimal: 192 },
+        { name: 'Red', hex: '#FF0000', decimal: 255 },
+        { name: 'Orange', hex: '#FFC000', decimal: 49407 },
+        { name: 'Yellow', hex: '#FFFF00', decimal: 65535 },
+        { name: 'Light Green', hex: '#92D050', decimal: 5296274 },
+        { name: 'Green', hex: '#00B050', decimal: 5287936 },
+        { name: 'Light Blue', hex: '#00B0F0', decimal: 15773696 },
+        { name: 'Blue', hex: '#0070C0', decimal: 12611584 },
+        { name: 'Dark Blue', hex: '#002060', decimal: 6299648 },
+        { name: 'Purple', hex: '#7030A0', decimal: 10498160 }
     ];
 
     // Convert hex color to Word decimal format (BGR byte order)
@@ -75,8 +78,9 @@ function createColorPicker() {
     }
 
     // Resolve theme color to actual hex value
+    // Word uses different prefixes: 0xD for Font.Color, 0xF for Find.TextColor
+    // Format: 0x[D|F][ThemeIndex][00][Shade][Tint]
     function resolveThemeColor(decimal) {
-        // Handle negative theme color values by decoding the format
         if (decimal < 0) {
             // Convert to unsigned 32-bit for bit manipulation
             const unsigned = decimal >>> 0;
@@ -86,11 +90,12 @@ function createColorPicker() {
             const shadeByte = (unsigned >> 8) & 0xFF;
             const tintByte = unsigned & 0xFF;
 
-            // Check if this is actually a theme color (0xF0-0xFF range)
-            if ((themeColorByte & 0xF0) === 0xF0) {
-                const themeIndex = themeColorByte & 0x0F;
+            // Check if this is a theme color (0xD0-0xDF or 0xF0-0xFF range)
+            const prefix = themeColorByte & 0xF0;
+            if (prefix === 0xD0 || prefix === 0xF0) {
+                const wdThemeIndex = themeColorByte & 0x0F;
 
-                // Calculate tint/shade adjustment
+                // Calculate tint/shade adjustment per Word Articles formulas
                 let tintShade = 0;
                 const unchanged = 0xFF;
 
@@ -104,38 +109,54 @@ function createColorPicker() {
                     tintShade = Math.round((1 - tintByte / 255) * 100) / 100;
                 }
 
-                // Find base color for this theme index
-                const baseColor = getBaseThemeColor(themeIndex);
+                // Find base color for this wdThemeColorIndex
+                const baseColor = getBaseThemeColorByWdIndex(wdThemeIndex);
                 if (baseColor) {
                     return applyTintShade(baseColor, tintShade);
                 }
             }
         }
 
-        // Fallback to hard-coded mapping for safety
+        // Fallback to hard-coded mapping for base theme colors (0xD prefix for Font.Color)
         const themeColorMap = {
-            '-603914241': '#000000', // Text 1
-            '-587137025': '#FFFFFF', // Background 1
-            '-570359809': '#44546A', // Text 2
-            '-553582593': '#E7E6E6', // Background 2
-            '-738131969': '#4472C4', // Accent 1
-            '-721354753': '#E15759', // Accent 2
-            '-704577537': '#70AD47', // Accent 3
-            '-687800321': '#FFC000', // Accent 4
-            '-671023105': '#5B9BD5', // Accent 5
-            '-654245889': '#A5A5A5'  // Accent 6
+            '-587137025': '#000000', // wdThemeColorText1 (13 -> 0xDD)
+            '-603914241': '#FFFFFF', // wdThemeColorBackground1 (12 -> 0xDC)
+            '-553582593': '#44546A', // wdThemeColorText2 (15 -> 0xDF)
+            '-570359809': '#E7E6E6', // wdThemeColorBackground2 (14 -> 0xDE)
+            '-738131969': '#4472C4', // wdThemeColorAccent1 (4 -> 0xD4)
+            '-721354753': '#ED7D31', // wdThemeColorAccent2 (5 -> 0xD5)
+            '-704577537': '#A5A5A5', // wdThemeColorAccent3 (6 -> 0xD6)
+            '-687800321': '#FFC000', // wdThemeColorAccent4 (7 -> 0xD7)
+            '-671023105': '#5B9BD5', // wdThemeColorAccent5 (8 -> 0xD8)
+            '-654245889': '#70AD47'  // wdThemeColorAccent6 (9 -> 0xD9)
         };
 
         return themeColorMap[decimal.toString()] || '#000000';
     }
 
-    // Get base theme color by index (for dynamic resolution)
-    function getBaseThemeColor(themeIndex) {
-        const baseColor = themeColors.base.find(color => color.themeIndex === themeIndex);
-        return baseColor ? baseColor.hex : null;
+    // Get base theme color by Word's wdThemeColorIndex (the lower nibble of theme byte)
+    function getBaseThemeColorByWdIndex(wdThemeIndex) {
+        // Map wdThemeColorIndex to our themeColors.base array index
+        const wdIndexToArrayIndex = {
+            5: 4,   // wdThemeColorAccent2 -> Orange
+            6: 3,   // wdThemeColorAccent3 -> Gray
+            7: 2,   // wdThemeColorAccent4 -> Gold
+            8: 1,   // wdThemeColorAccent5 -> Light Blue
+            9: 0,   // wdThemeColorAccent6 -> Green
+            12: 7,  // wdThemeColorBackground1 -> White
+            13: 6,  // wdThemeColorText1 -> Black
+            15: 5   // wdThemeColorText2 -> Blue-Gray
+        };
+        
+        const arrayIndex = wdIndexToArrayIndex[wdThemeIndex];
+        if (arrayIndex !== undefined) {
+            return themeColors.base[arrayIndex]?.hex;
+        }
+        return null;
     }
 
     // Decode Word theme color decimal to components (for debugging/analysis)
+    // Handles both 0xD prefix (Font.Color) and 0xF prefix (Find.TextColor)
     function decodeThemeColor(decimal) {
         if (decimal >= 0) return null; // Not a theme color
 
@@ -147,27 +168,31 @@ function createColorPicker() {
         const shadeByte = (unsigned >> 8) & 0xFF;
         const tintByte = unsigned & 0xFF;
 
-        // Check if this is a theme color
-        if ((themeColorByte & 0xF0) !== 0xF0) return null;
+        // Check if this is a theme color (0xD0-0xDF or 0xF0-0xFF range)
+        const prefix = themeColorByte & 0xF0;
+        if (prefix !== 0xD0 && prefix !== 0xF0) return null;
 
-        const themeIndex = themeColorByte & 0x0F;
+        const wdThemeIndex = themeColorByte & 0x0F;
 
-        // Calculate tint/shade
+        // Calculate tint/shade per Word Articles formulas
         let tintShade = 0;
         const unchanged = 0xFF;
 
         if (shadeByte !== unchanged) {
+            // Shade: Round(-1 + DarknessByte / 255, 2)
             tintShade = Math.round((-1 + shadeByte / 255) * 100) / 100;
         }
 
         if (tintByte !== unchanged) {
+            // Tint: Round(1 - LightnessByte / 255, 2)
             tintShade = Math.round((1 - tintByte / 255) * 100) / 100;
         }
 
         return {
             isThemeColor: true,
-            themeIndex: themeIndex,
+            wdThemeIndex: wdThemeIndex,
             tintShade: tintShade,
+            prefix: prefix === 0xF0 ? 'F' : 'D',
             rawBytes: {
                 themeColorByte: themeColorByte.toString(16).toUpperCase(),
                 shadeByte: shadeByte.toString(16).toUpperCase(),
@@ -228,8 +253,13 @@ function createColorPicker() {
         return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
     }
 
-    // Apply tint/shade to a color
+    // Apply tint/shade to a color using Word's formula from Word Articles
+    // VBA formula: L = (L * Abs(TintAndShade)) + (Abs(TintAndShade > 0) * (1 - TintAndShade))
+    // Tint (positive, e.g. 0.4): newL = L * 0.4 + 0.6 (40% of color + 60% white)
+    // Shade (negative, e.g. -0.4): newL = L * 0.4 (40% of color toward black)
     function applyTintShade(hexColor, tintShade) {
+        if (tintShade === 0) return hexColor;
+        
         const cleanedHex = hexColor.replace('#', '');
         const r = parseInt(cleanedHex.substring(0, 2), 16);
         const g = parseInt(cleanedHex.substring(2, 4), 16);
@@ -237,15 +267,11 @@ function createColorPicker() {
 
         const [h, s, l] = rgbToHsl(r, g, b);
 
-        // Apply tint (lighter) or shade (darker)
-        let newL;
-        if (tintShade > 0) {
-            // Tint - make lighter
-            newL = l + (1 - l) * tintShade;
-        } else {
-            // Shade - make darker
-            newL = l * (1 + tintShade);
-        }
+        // Apply Word Articles formula:
+        // L = (L * Abs(TintAndShade)) + (isTint * (1 - TintAndShade))
+        const absTS = Math.abs(tintShade);
+        const isTint = tintShade > 0 ? 1 : 0;
+        let newL = (l * absTS) + (isTint * (1 - tintShade));
 
         newL = Math.max(0, Math.min(1, newL));
 
@@ -254,38 +280,30 @@ function createColorPicker() {
         return `#${newR.toString(16).padStart(2, '0')}${newG.toString(16).padStart(2, '0')}${newB.toString(16).padStart(2, '0')}`.toUpperCase();
     }
 
+    // Word theme index to byte mapping (reverse-engineered from actual Word values)
+    // Format: 0x[WordByte][00][Shade][Tint] as signed 32-bit
+    const themeIndexToWordByte = [0xDD, 0xDC, 0xDF, 0xDE, 0xD4, 0xD5, 0xD9, 0xD7, 0xD8, 0xD6];
+
     // Generate theme color with tint/shade decimal value for Word
     function generateThemeColorDecimal(themeIndex, tintShade) {
-        // Word 2007+ theme color format: 0xF[I][00][SS][TT] where:
-        // F = Theme color indicator (0xF0)
-        // I = Theme color index (0-15, lower 4 bits)
-        // 00 = Reserved byte (always 0x00)
-        // SS = Shade value (255 = unchanged, lower = darker)
-        // TT = Tint value (255 = unchanged, lower = lighter)
+        if (themeIndex < 0 || themeIndex > 9) return null;
 
         let shadeValue = 0xFF; // 255 = unchanged
         let tintValue = 0xFF;  // 255 = unchanged
 
         if (tintShade < 0) {
-            // Shade (darker) - calculate darkness byte
-            // Formula from Word Articles: Round(-1 + DarknessByte / 255, 2)
-            // Solving for DarknessByte: (tintShade + 1) * 255
+            // Shade (darker)
             shadeValue = Math.round((tintShade + 1) * 255);
             shadeValue = Math.max(0, Math.min(255, shadeValue));
         } else if (tintShade > 0) {
-            // Tint (lighter) - calculate lightness byte
-            // Formula from Word Articles: Round(1 - LightnessByte / 255, 2)
-            // Solving for LightnessByte: (1 - tintShade) * 255
+            // Tint (lighter)
             tintValue = Math.round((1 - tintShade) * 255);
             tintValue = Math.max(0, Math.min(255, tintValue));
         }
 
-        // Construct the theme color decimal value
-        // Format: 0xF[themeIndex][00][shade][tint]
-        const themeColorByte = 0xF0 | (themeIndex & 0x0F);
-
-        // Create the 32-bit value
-        const result = (themeColorByte << 24) | (0x00 << 16) | (shadeValue << 8) | tintValue;
+        // Use Word's actual byte mapping for theme index
+        const wordByte = themeIndexToWordByte[themeIndex];
+        const result = (wordByte << 24) | (0x00 << 16) | (shadeValue << 8) | tintValue;
 
         // Convert to signed 32-bit integer (as Word expects)
         return result > 0x7FFFFFFF ? result - 0x100000000 : result;
@@ -293,7 +311,7 @@ function createColorPicker() {
 
     // Initialize decimal values for theme and standard colors
     function initializeColorDecimals() {
-        // Initialize theme colors with decimal values
+        // Initialize theme colors with decimal values (calculation now matches Word)
         themeColors.base.forEach(color => {
             color.decimal = generateThemeColorDecimal(color.themeIndex, 0);
         });
@@ -318,11 +336,23 @@ function createColorPicker() {
 
     // Populate color grids
     function populateColorGrids() {
-        // Populate theme colors - first row (base colors)
-        const themeColorsGrid = document.getElementById('theme-colors-grid');
-        themeColorsGrid.innerHTML = ''; // Clear existing
+        // Populate standard colors (top section)
+        const standardColorsGrid = document.getElementById('standard-colors-grid');
+        standardColorsGrid.innerHTML = '';
 
-        // Add base theme colors (first row)
+        standardColors.forEach(color => {
+            const swatch = createColorSwatch(color.hex, {
+                type: 'standard',
+                name: color.name,
+                decimal: color.decimal
+            });
+            standardColorsGrid.appendChild(swatch);
+        });
+
+        // Populate theme colors (bottom section)
+        const themeColorsGrid = document.getElementById('theme-colors-grid');
+        themeColorsGrid.innerHTML = '';
+
         themeColors.base.forEach(color => {
             const swatch = createColorSwatch(color.hex, {
                 type: 'theme',
@@ -334,43 +364,12 @@ function createColorPicker() {
             themeColorsGrid.appendChild(swatch);
         });
 
-        // Add theme color variations (tint/shade rows)
-        themeColors.variations.forEach(variation => {
-            themeColors.base.forEach(baseColor => {
-                const tintShade = variation.tint ? variation.tint : -variation.shade;
-                const adjustedHex = applyTintShade(baseColor.hex, tintShade);
-                const adjustedDecimal = generateThemeColorDecimal(baseColor.themeIndex, tintShade);
-
-                const swatch = createColorSwatch(adjustedHex, {
-                    type: 'theme',
-                    name: `${baseColor.name} ${variation.label}`,
-                    themeIndex: baseColor.themeIndex,
-                    decimal: adjustedDecimal,
-                    tintShade: tintShade
-                });
-                themeColorsGrid.appendChild(swatch);
-            });
-        });
-
-        // Populate standard colors
-        const standardColorsGrid = document.getElementById('standard-colors-grid');
-        standardColorsGrid.innerHTML = ''; // Clear existing
-
-        standardColors.forEach(color => {
-            const swatch = createColorSwatch(color.hex, {
-                type: 'standard',
-                name: color.name,
-                decimal: color.decimal
-            });
-            standardColorsGrid.appendChild(swatch);
-        });
-
-        // Auto and No Color buttons
+        // Setup auto and no-color buttons
         document.querySelector('.auto-color').addEventListener('click', () => {
             selectColor('#000000', {
                 type: 'auto',
                 name: 'Automatic',
-                decimal: -16777216 // Word's automatic color value
+                decimal: -16777216
             });
         });
 
@@ -380,6 +379,76 @@ function createColorPicker() {
                 name: 'No Color',
                 decimal: null
             });
+        });
+
+        // Load and display recent colors
+        loadRecentColors();
+        updateRecentColorsGrid();
+    }
+
+    // Load recent colors from localStorage
+    function loadRecentColors() {
+        try {
+            const stored = localStorage.getItem(RECENT_COLORS_KEY);
+            if (stored) {
+                state.recentColors = JSON.parse(stored);
+            }
+        } catch (e) {
+            state.recentColors = [];
+        }
+    }
+
+    // Save recent colors to localStorage
+    function saveRecentColors() {
+        try {
+            localStorage.setItem(RECENT_COLORS_KEY, JSON.stringify(state.recentColors));
+        } catch (e) {
+            // localStorage not available
+        }
+    }
+
+    // Add color to recent colors
+    function addToRecentColors(color, colorData) {
+        if (!color || colorData.type === 'auto' || colorData.type === 'none') return;
+
+        // Remove if already exists
+        state.recentColors = state.recentColors.filter(c => c.hex !== color);
+
+        // Add to beginning
+        state.recentColors.unshift({ hex: color, ...colorData });
+
+        // Keep only MAX_RECENT_COLORS
+        if (state.recentColors.length > MAX_RECENT_COLORS) {
+            state.recentColors = state.recentColors.slice(0, MAX_RECENT_COLORS);
+        }
+
+        saveRecentColors();
+        updateRecentColorsGrid();
+    }
+
+    // Update recent colors grid display
+    function updateRecentColorsGrid() {
+        const recentSection = document.getElementById('recent-colors-section');
+        const recentGrid = document.getElementById('recent-colors-grid');
+
+        if (!recentGrid || !recentSection) return;
+
+        recentGrid.innerHTML = '';
+
+        if (state.recentColors.length === 0) {
+            recentSection.style.display = 'none';
+            return;
+        }
+
+        recentSection.style.display = 'block';
+
+        state.recentColors.forEach(colorData => {
+            const swatch = createColorSwatch(colorData.hex, {
+                type: colorData.type || 'custom',
+                name: colorData.name || 'Recent Color',
+                decimal: colorData.decimal
+            });
+            recentGrid.appendChild(swatch);
         });
     }
 
@@ -514,15 +583,16 @@ function createColorPicker() {
 
             // Trigger any additional logic based on the button
             if (state.currentColorTarget.id === 'find-color-button') {
-                // Here you would send the colorData.decimal value to C# VSTO
                 notifyColorChange('find', colorData);
-
             } else if (state.currentColorTarget.id === 'replace-color-toggle') {
-                // Here you would send the colorData.decimal value to C# VSTO
                 notifyColorChange('replace', colorData);
             }
         }
 
+        // Add to recent colors (not for auto/none)
+        addToRecentColors(color, colorData);
+
+        // Close the dialog
         hide();
     }
 

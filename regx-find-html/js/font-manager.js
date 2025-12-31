@@ -52,7 +52,7 @@ function createFontManager() {
 
             // Send request to C#
             if (window.webViewBridge) {
-                window.webViewBridge.handleGetFontList();
+                window.webViewBridge.getFontList();
             } else if (window.chrome && window.chrome.webview) {
                 // Use correct KleiKodeshWebView format - no Args for GetFontList
                 window.chrome.webview.postMessage(JSON.stringify({

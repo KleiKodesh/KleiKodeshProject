@@ -35,7 +35,7 @@ body {
 }
 
 input {
-    background: none;
+    background: var(--primary-background-color);
     border: var(--border-color) 1px solid;
     border-radius: var(--border-radius);
     padding: 5px;
@@ -46,6 +46,11 @@ input {
 input[type="number"] {
     width: 6ch;
     text-align: center;
+}
+
+/* Hide about button until it's properly implemented */
+#about-button {
+    display: none;
 }
 
 input[list] {
@@ -121,7 +126,7 @@ datalist option:hover {
     display: flex;
     flex-direction: column;
     gap: 5px;
-    padding: 10px;
+    padding: 5px 10px;
 }
 
 #title-bar {
@@ -155,7 +160,6 @@ datalist option:hover {
 #content {
     display: flex;
     flex-direction: column;
-    gap: 5px;
     flex: 1;
     overflow: hidden;
 }
@@ -167,7 +171,13 @@ datalist option:hover {
 #search-replace-container {
      background: var(--secondary-background-color);
      border-top: 0.5px solid var(--border-color);
-     border-bottom: 0.5px solid var(--border-color);
+     padding-top: 8px;
+     padding-bottom: 8px;
+}
+
+#search-find-container {
+     padding-top: 8px;
+     padding-bottom: 8px;
 }
 
 .search-replace-button img {
@@ -189,7 +199,6 @@ datalist option:hover {
     flex-direction: column;
     overflow: hidden;
     background: var(--secondary-background-color);
-    border-top: 0.5px solid var(--border-color);
 }
 
 .regex-grid {
@@ -255,7 +264,6 @@ datalist option:hover {
     flex-direction: column;
     overflow: hidden;
     background: var(--secondary-background-color);
-    border-top: 0.5px solid var(--border-color);
 }
 
 .results-list {
@@ -293,15 +301,16 @@ datalist option:hover {
 }
 
 .result-text {
-    font-size: 14px;
-    line-height: 1.2;
-    margin-bottom: 2px;
+    font-size: 0.85em;
+    line-height: 1.4;
     word-wrap: break-word;
     color: var(--text-color);
+    text-align: justify;
+    text-align-last: right;
 }
 
-.search-highlight {
-    font-weight: bold;
+.result-text b {
+    color: var(--accent-color);
 }
 
 .result-location {

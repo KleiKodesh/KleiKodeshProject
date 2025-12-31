@@ -62,7 +62,7 @@ namespace KleiKodesh.Ribbon
                     //WpfTaskPane.Show(new DocSeferLib.DocSeferLibView(Globals.ThisAddIn.Application, Globals.Factory), LocaleDictionary.Translate(id), 510);
                     break;
                 case "RegexFind":
-                    taskPaneManager.Show(new KleiKodesh.RegexFind.RegexFindHost(), "חיפוש רגקס", 600);
+                    taskPaneManager.Show(new KleiKodesh.RegexSearch.RegexFindHost(), "חיפוש רגקס", 600);
                     break;
                 case "Settings":
                     taskPaneManager.Show(new RibbonSettingsControl(ribbon), "הגדרות כלי קודש", 400);

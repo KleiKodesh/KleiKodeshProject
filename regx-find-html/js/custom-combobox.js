@@ -12,8 +12,19 @@ class CustomCombobox extends HTMLElement {
             options: []
         };
 
+        // Debounce timer
+        this._debounceTimer = null;
+
         // Create shadow DOM for encapsulation
         this.attachShadow({ mode: 'open' });
+    }
+
+    // Debounce utility - delays execution until after wait ms have elapsed since last call
+    _debounce(func, wait) {
+        return (...args) => {
+            clearTimeout(this._debounceTimer);
+            this._debounceTimer = setTimeout(() => func.apply(this, args), wait);
+        };
     }
 
     // Define observed attributes
@@ -26,6 +37,17 @@ class CustomCombobox extends HTMLElement {
         this.render();
         this.setupEventListeners();
         this.loadInitialOptions();
+    }
+
+    // Called when element is removed from DOM
+    disconnectedCallback() {
+        // Clean up debounce timer
+        if (this._debounceTimer) {
+            clearTimeout(this._debounceTimer);
+            this._debounceTimer = null;
+        }
+        // Remove document click listener
+        document.removeEventListener('click', this._boundOutsideClick);
     }
 
     // Called when attributes change
@@ -157,28 +179,28 @@ class CustomCombobox extends HTMLElement {
 
                 /* Font preview specific styling */
                 :host([type="font"]) .combobox-option {
-                    padding: 8px 12px;
-                    min-height: 50px;
+                    padding: 2px 8px;
+                    min-height: 24px;
                     display: flex;
-                    flex-direction: column;
-                    align-items: flex-start;
-                    justify-content: center;
-                    gap: 2px;
+                    flex-direction: row;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 8px;
                 }
 
                 .font-name-line {
-                    font-size: 14px;
+                    font-size: 13px;
                     font-weight: 500;
                     color: var(--text-color, #000000);
                     font-family: inherit;
-                    line-height: 1.2;
+                    line-height: 1;
                 }
 
                 .font-preview-line {
                     font-size: 12px;
                     color: var(--text-secondary, #666666);
-                    line-height: 1.2;
-                    opacity: 0.8;
+                    line-height: 1;
+                    opacity: 0.7;
                 }
 
                 .combobox-options::-webkit-scrollbar {
@@ -215,14 +237,24 @@ class CustomCombobox extends HTMLElement {
         const input = this.shadowRoot.querySelector('.combobox-input');
         const toggle = this.shadowRoot.querySelector('.combobox-toggle');
 
+        // Create debounced handler for filtering (150ms delay)
+        this._debouncedFilter = this._debounce((value) => {
+            this.filterOptions(value);
+            
+            if (this.getAttribute('type') === 'font' && value.trim()) {
+                this.applyFontPreview(value);
+            }
+        }, 150);
+
         input.addEventListener('input', (e) => this.handleInput(e));
         input.addEventListener('focus', () => this.handleFocus());
         input.addEventListener('blur', () => this.handleBlur());
         input.addEventListener('keydown', (e) => this.handleKeydown(e));
         toggle.addEventListener('click', (e) => this.handleToggleClick(e));
 
-        // Click outside to close
-        document.addEventListener('click', (e) => this.handleOutsideClick(e));
+        // Click outside to close (store bound reference for cleanup)
+        this._boundOutsideClick = (e) => this.handleOutsideClick(e);
+        document.addEventListener('click', this._boundOutsideClick);
     }
 
     // Load initial options
@@ -248,18 +280,15 @@ class CustomCombobox extends HTMLElement {
         const value = event.target.value;
         this.state.selectedValue = value;
 
-        // Only filter when typing (not when clicking arrow)
-        this.filterOptions(value);
-
-        if (this.getAttribute('type') === 'font' && value.trim()) {
-            this.applyFontPreview(value);
-        }
-
+        // Open dropdown immediately for responsiveness
         if (!this.state.isOpen) {
             this.openDropdown();
         }
 
-        // Dispatch change event
+        // Debounce the expensive filtering and font preview operations
+        this._debouncedFilter(value);
+
+        // Dispatch change event immediately (not debounced)
         this.dispatchEvent(new CustomEvent('change', {
             detail: { value },
             bubbles: true
@@ -486,7 +515,9 @@ class CustomCombobox extends HTMLElement {
     }
 
     getValue() {
-        return this.state.selectedValue;
+        // Always read from the actual input to ensure we get the current value
+        const input = this.shadowRoot?.querySelector('.combobox-input');
+        return input ? input.value : this.state.selectedValue;
     }
 
     setValue(value) {
