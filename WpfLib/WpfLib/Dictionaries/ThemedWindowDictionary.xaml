@@ -1,0 +1,287 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:local="clr-namespace:System.Windows.Controls;assembly=PresentationFramework"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:helpers="clr-namespace:WpfLib.Helpers"
+                    xmlns:converters="clr-namespace:WpfLib.Converters"
+                    xmlns:controls="clr-namespace:WpfLib.Controls"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+
+    <SolidColorBrush x:Key="TitleBarButton.MouseOverColor" Color="LightGray" Opacity="0.2"/>
+    <SolidColorBrush x:Key="TitleBarButton.IsPressedColor" Color="LightGray" Opacity="0.2"/>
+    <SolidColorBrush x:Key="WindowBorder.ColorBrush" Color="#7F7F7F"/>
+
+    <Style x:Key="TitleBarButtonBase" TargetType="Button">
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}"/>
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="MinWidth" Value="{Binding ActualHeight, RelativeSource={RelativeSource Mode=Self}}"/>
+    </Style>
+
+    <Style x:Key="TitleBarButtonStyle" BasedOn="{StaticResource TitleBarButtonBase}" TargetType="Button">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Button}">
+                    <Border x:Name="border"
+                   Background="Transparent"
+                   BorderThickness="0"
+                   SnapsToDevicePixels="True">
+                        <ContentPresenter x:Name="contentPresenter"
+                   Margin="0"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   Focusable="False" RecognizesAccessKey="True" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="true">
+                            <Setter Property="Background" Value="{StaticResource TitleBarButton.MouseOverColor}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="true">
+                            <Setter Property="Background" Value="{StaticResource TitleBarButton.MouseOverColor}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Resources>
+            <Style TargetType="Path">
+                <Setter Property="MaxHeight" Value="10"/>
+                <Setter Property="MaxWidth" Value="10"/>
+                <Setter Property="Fill" Value="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"/>
+                <Setter Property="Stretch" Value="Uniform"/>
+                <Setter Property="Stroke" Value="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"/>
+                <Setter Property="StrokeThickness" Value="1"/>
+            </Style>
+        </Style.Resources>
+    </Style>
+
+    <Style x:Key="TitleBarMaximizeButtonStyle" BasedOn="{StaticResource TitleBarButtonStyle}" TargetType="Button">
+        <Style.Resources>
+            <Style TargetType="Path">
+                <Setter Property="MaxHeight" Value="10"/>
+                <Setter Property="MaxWidth" Value="10"/>
+                <Setter Property="Stretch" Value="Uniform"/>
+                <Setter Property="Stroke" Value="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"/>
+                <Setter Property="StrokeThickness" Value="1"/>
+                <Style.Triggers>
+                    <!-- Trigger when Window is Maximized -->
+                    <DataTrigger Binding="{Binding WindowState, RelativeSource={RelativeSource AncestorType=Window}}" 
+                     Value="Maximized">
+                        <Setter Property="Data" Value="M 13.5,12.5 H 20.5 V 19.5 H 13.5 Z M 15.5,12.5 V 10.5 H 22.5 V 17.5 H 20.5"/>
+                        <Setter Property="ToolTip" Value="Restore"/>
+                    </DataTrigger>
+
+                    <!-- Trigger when Window is Normal (Not Maximized) -->
+                    <DataTrigger Binding="{Binding WindowState, RelativeSource={RelativeSource AncestorType=Window}}" 
+                     Value="Normal">
+                        <Setter Property="Data" Value="M 13.5,10.5 H 22.5 V 19.5 H 13.5 Z"/>
+                        <Setter Property="ToolTip" Value="Maximize"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </Style.Resources>
+    </Style>
+
+    <Style x:Key="TitleBarXButtonStyle" BasedOn="{StaticResource TitleBarButtonBase}"  TargetType="Button">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Button}">
+                    <Border x:Name="border"
+                           Background="Transparent"
+                           BorderThickness="0"
+                           SnapsToDevicePixels="True">
+                        <ContentPresenter x:Name="contentPresenter"
+                           Margin="0"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Focusable="False" RecognizesAccessKey="True" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="true">
+                            <Setter  Property="Background" Value="#FFE81123" />
+                            <Setter Property="Foreground" Value="White" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="true">
+                            <Setter Property="Background" Value="#FFE81123" />
+                            <Setter Property="Foreground" Value="White" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Resources>
+            <Style TargetType="Path">
+                <Setter Property="MaxHeight" Value="10"/>
+                <Setter Property="MaxWidth" Value="10"/>
+                <Setter Property="Fill" Value="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"/>
+                <Setter Property="Stretch" Value="Uniform"/>
+                <Setter Property="Stroke" Value="{Binding Path=Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"/>
+                <Setter Property="StrokeThickness" Value="1"/>
+            </Style>
+        </Style.Resources>
+    </Style>
+
+    <Style TargetType="Window" x:Key="ThemedWindowStyle">
+        <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}"/>
+        <Setter Property="Background" Value="{Binding Background, RelativeSource={RelativeSource AncestorType=ContentControl}}"/>
+        <Setter Property="WindowChrome.WindowChrome">
+            <Setter.Value>
+                <WindowChrome
+                    CornerRadius="{x:Static SystemParameters.WindowCornerRadius}"
+                    UseAeroCaptionButtons="False"
+                    CaptionHeight="30"
+                    NonClientFrameEdges="Bottom"/>
+            </Setter.Value>
+        </Setter>
+
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Window">
+                    <Border Background="{Binding Background, RelativeSource={RelativeSource AncestorType=ContentControl}}"
+                            BorderBrush="{StaticResource WindowBorder.ColorBrush}" BorderThickness="0.5"
+                            Padding="0,0,0,3">
+                        <Grid x:Name="RootGrid">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="30"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Orientation="Horizontal" Grid.Column="0">
+                                    <Image Source="{Binding Icon, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" 
+                                        Margin="5,0,5,0" VerticalAlignment="Center"
+                                        Height="{Binding ActualHeight, ElementName=WindowTitleBox}"/>
+                                    <TextBlock x:Name="WindowTitleBox" Text="{Binding Title, RelativeSource={RelativeSource TemplatedParent}}"
+                                           VerticalAlignment="Center"
+                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}"/>
+                                </StackPanel>
+
+                                <StackPanel x:Name="TitleBarButtonsPanel" Orientation="Horizontal" Grid.Column="2">
+                                    <Grid Background="{Binding Background, ElementName=MinimizeButton}">
+                                        <Button x:Name="MinimizeButton"
+                                            Margin="2"
+                                            Command="{Binding Path=(controls:WindowButtons.MinimizeCommand)}"
+                                            CommandParameter="{Binding RelativeSource={RelativeSource Mode=Self}}"
+                                            Style="{StaticResource TitleBarButtonStyle}"
+                                            ToolTip="{Binding MinimizeButtonTooltip, RelativeSource={RelativeSource TemplatedParent}}">
+                                            <Path Data="M 13,15 H 23"/>
+                                        </Button>
+                                    </Grid>
+
+                                    <Grid Background="{Binding Background, ElementName=MaximizeRestoreButton}">
+                                        <Button x:Name="MaximizeRestoreButton"
+                                            Margin="2"
+                                            Style="{StaticResource TitleBarMaximizeButtonStyle}"
+                                            Command="{Binding Path=(controls:WindowButtons.MaximizeRestoreCommand)}"
+                                            CommandParameter="{Binding RelativeSource={RelativeSource Mode=Self}}"
+                                            ToolTip="{Binding MaximizeButtonTooltip, RelativeSource={RelativeSource TemplatedParent}}">
+                                            <Path x:Name="maximizeIcon"/>
+                                        </Button>
+                                    </Grid>
+
+                                    <Grid Background="{Binding Background, ElementName=CloseButton}">
+                                        <Button x:Name="CloseButton" Style="{StaticResource TitleBarXButtonStyle}"
+                                            Margin="2"
+                                            Command="{Binding Path=(controls:WindowButtons.CloseCommand)}"
+                                            CommandParameter="{Binding RelativeSource={RelativeSource Mode=Self}}"
+                                            ToolTip="{Binding XButtonTooltip, RelativeSource={RelativeSource TemplatedParent}}">
+                                            <Path Data="M 13,11 22,20 M 13,20 22,11"/>
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
+
+                            </Grid>
+
+                            <ContentPresenter x:Name="PART_MainContentPresenter"  Grid.Row="1"/>
+                        </Grid>
+                    </Border>
+
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="WindowState" Value="Maximized">
+                            <Setter TargetName="RootGrid" Property="Margin" Value="7.5"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="Window" x:Key="ThemedToolWindowStyle">
+        <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}"/>
+        <Setter Property="Background" Value="{Binding Background, RelativeSource={RelativeSource AncestorType=ContentControl}}"/>
+        <Setter Property="ResizeMode" Value="NoResize"/>
+        
+        <Setter Property="WindowChrome.WindowChrome">
+            <Setter.Value>
+                <WindowChrome
+                CornerRadius="{x:Static SystemParameters.WindowCornerRadius}"
+                UseAeroCaptionButtons="False"
+                CaptionHeight="30"
+                NonClientFrameEdges="Bottom"/>
+            </Setter.Value>
+        </Setter>
+
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Window">
+                    <Border Background="{Binding Background, RelativeSource={RelativeSource AncestorType=ContentControl}}"
+                    BorderBrush="{StaticResource WindowBorder.ColorBrush}" BorderThickness="0.5"
+                        Padding="0,0,0,3">
+                        <Grid x:Name="RootGrid">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="30"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Orientation="Horizontal" Grid.Column="0">
+                                    <Image Source="{Binding Icon, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" 
+                                    Margin="5,0,5,0" VerticalAlignment="Center"
+                                    Height="{Binding ActualHeight, ElementName=WindowTitleBox}"/>
+                                    <TextBlock x:Name="WindowTitleBox" Text="{Binding Title, RelativeSource={RelativeSource TemplatedParent}}"
+                                       VerticalAlignment="Center"
+                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}"/>
+                                </StackPanel>
+
+                                <StackPanel x:Name="TitleBarButtonsPanel" Orientation="Horizontal" Grid.Column="2">
+                                    <Grid Background="{Binding Background, ElementName=CloseButton}">
+                                        <Button x:Name="CloseButton" Style="{StaticResource TitleBarXButtonStyle}"
+                                                Margin="2"
+                                                Command="{Binding Path=(controls:WindowButtons.CloseCommand)}"
+                                                CommandParameter="{Binding RelativeSource={RelativeSource Mode=Self}}"
+                                                ToolTip="{Binding XButtonTooltip, RelativeSource={RelativeSource TemplatedParent}}">
+                                            <Path Data="M 13,11 22,20 M 13,20 22,11"/>
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
+
+                            </Grid>
+
+                            <ContentPresenter x:Name="PART_MainContentPresenter"  Grid.Row="1"/>
+                        </Grid>
+                    </Border>
+
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="WindowState" Value="Maximized">
+                            <Setter TargetName="RootGrid" Property="Margin" Value="7.5"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

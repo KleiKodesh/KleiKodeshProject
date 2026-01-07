@@ -1,0 +1,55 @@
+/* Text & Typography Utilities */
+
+.center-text {
+  text-align: center;
+}
+
+.bold {
+  font-weight: 600;
+}
+
+.smaller-em {
+  font-size: 0.85em;
+}
+
+.smaller-rem {
+  font-size: 0.85rem;
+}
+
+.text-secondary {
+  color: var(--text-secondary);
+}
+
+.ellipsis {
+  white-space: nowrap; /* Prevents text from wrapping to the next line */
+  overflow: hidden; /* Hides any overflowing content */
+  text-overflow: ellipsis; /* Displays an ellipsis (...) for truncated text */
+}
+
+.selectable {
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
+}
+
+.selectable *,
+.selectable [v-html] *,
+.selectable .link-item * {
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
+}
+
+.line-1\.4 {
+  line-height: 1.4;
+}
+
+.line-1\.6 {
+  line-height: 1.6;
+}
+
+.justify {
+ text-align: justify;
+}

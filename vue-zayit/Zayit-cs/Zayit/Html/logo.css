@@ -1,0 +1,12 @@
+     /* Title inside logo container */
+    .logo h1 {
+      font-size: clamp(1.8rem, 5vw, 2.8rem);
+      color: #333;
+      font-weight: 600;
+    }
+
+    /* Logo image */
+    .logo img {
+      width: clamp(140px, 22vw, 190px);
+      pointer-events: none;
+    }

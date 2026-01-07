@@ -1,0 +1,83 @@
+/* Theme CSS Variables */
+
+/* Light mode (default) - Windows 11 Fluent Design + VS Code style */
+:root { 
+  /* Background colors - VS Code Light */
+  --bg-primary: #ffffff;        /* Main background */
+  --bg-secondary: #f3f3f3;      /* Secondary background (headers, sidebars) */
+  
+  /* Border colors - Fluent subtle borders */
+  --border-color: #e5e5e5;      /* Borders and dividers */
+  
+  /* Text colors - Fluent text hierarchy */
+  --text-primary: #1f1f1f;      /* Main text color (Fluent primary) */
+  --text-secondary: #5a5a5a;    /* Secondary text (balanced visibility) */
+  
+  /* Interactive states - Fluent hover/press */
+  --hover-bg: rgba(0, 0, 0, 0.06);   /* Background on hover (Fluent subtle) */
+  --active-bg: rgba(0, 0, 0, 0.09);  /* Background when clicked (Fluent rest) */
+  
+  /* Accent colors - Windows 11 default blue */
+  --accent-color: #0078d4;           /* Primary accent (Fluent blue) */
+  --accent-bg: rgba(0, 120, 212, 0.1);  /* Light accent background */
+  --accent-bg-light: rgba(0, 120, 212, 0.05);  /* Extra light accent background */
+  
+  /* Font families - customizable via settings */
+  --header-font: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  --text-font: 'Times New Roman', Times, serif;
+}
+
+/* Dark mode - Windows 11 Fluent Dark + VS Code Dark */
+:root.dark {
+  /* Background colors - VS Code Dark */
+  --bg-primary: #1e1e1e;        /* Main background (VS Code dark) */
+  --bg-secondary: #252526;      /* Secondary background (VS Code sidebar) */
+  
+  /* Border colors - Fluent dark borders */
+  --border-color: #3b3b3b;      /* Borders (Fluent dark divider) */
+  
+  /* Text colors - Fluent dark text */
+  --text-primary: #ffffff;      /* Main text (Fluent primary on dark) */
+  --text-secondary: #a6a6a6;    /* Secondary text (balanced visibility on dark) */
+  
+  /* Interactive states - Fluent dark hover/press */
+  --hover-bg: rgba(255, 255, 255, 0.08);   /* Light overlay on hover */
+  --active-bg: rgba(255, 255, 255, 0.12);  /* Light overlay when clicked */
+  
+  /* Accent colors - Windows 11 blue on dark */
+  --accent-color: #60cdff;                 /* Lighter blue for dark mode */
+  --accent-bg: rgba(96, 205, 255, 0.15);   /* Light blue background */
+  --accent-bg-light: rgba(96, 205, 255, 0.08);  /* Extra light accent background */
+  
+  /* Font families inherit from light mode */
+}
+
+/* Icon theming for dark mode */
+
+/* For image files (PNG, SVG as <img>) - use class="themed-icon" */
+/* :root.dark .themed-icon {
+  filter: invert(1) brightness(1.2); /* Invert colors and brighten slightly */
+/* } */ 
+
+/* For inline SVGs - only apply fill to SVGs that explicitly use it */
+/* Don't apply global fill rule as it breaks stroke-based icons */
+
+/* Scrollbar theming */
+* {
+  scrollbar-color: rgba(0, 0, 0, 0.3) rgba(0, 0, 0, 0.05);
+}
+
+:root.dark * {
+  scrollbar-color: rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.05);
+}
+
+/* Dark mode: invert button icons automatically */
+:root.dark button img {
+  filter: invert(1) brightness(1.2);
+  /* Invert colors and brighten slightly */
+}
+
+/* Global SVG color */
+svg {
+  color: var(--text-secondary);
+}

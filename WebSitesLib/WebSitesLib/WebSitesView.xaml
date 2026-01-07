@@ -1,0 +1,102 @@
+﻿<UserControl x:Class="WebSitesLib.WebSitesView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:WebSitesLib"
+             xmlns:ap="clr-namespace:WpfLib.AttachedProperties;assembly=WpfLib"
+             xmlns:c="clr-namespace:WpfLib.Controls;assembly=WpfLib"
+
+             xmlns:sys="clr-namespace:System.Windows.Controls;assembly=PresentationFramework"
+             xmlns:wv="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+             xmlns:wvlib="clr-namespace:WebViewLib;assembly=WebViewLib"
+             xmlns:hlp="clr-namespace:WpfLib.Helpers;assembly=WpfLib"
+             xmlns:conv="clr-namespace:WpfLib.Converters;assembly=WpfLib"
+             mc:Ignorable="d" 
+             d:DesignHeight="450" MinWidth="350"
+             FontSize="14"
+             FontFamily="Tahoma">
+    
+    <UserControl.DataContext>
+        <local:WebSitesViewModel x:Name="vm"/>
+    </UserControl.DataContext>
+    
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <conv:BoolToFlowDirectionConverter x:Key="BoolToFlowConverter"/>
+            <sys:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/WpfLib;component/Dictionaries/BaseDictionary.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    
+    <Grid ap:GridSetup.Columns="auto * auto"
+          ap:GridSetup.Rows="auto auto *">
+       
+        
+        <StackPanel Orientation="Horizontal" Margin="5">
+
+            <Button x:Name="GoForwardButton" Style="{StaticResource FlatButton}"
+                    ToolTip="קדימה"
+                    Click="GoForwardButton_Click">
+                <Path Data="M20,11V13H8L13.5,18.5L12.08,19.92L4.16,12L12.08,4.08L13.5,5.5L8,11H20Z"/>
+            </Button>
+            
+            <Button x:Name="GobackButton" Style="{StaticResource FlatButton}"
+                    ToolTip="חזור אחורה"
+                    Click="GobackButton_Click">
+                <Path Data="M4,11V13H16L10.5,18.5L11.92,19.92L19.84,12L11.92,4.08L10.5,5.5L16,11H4Z"/>
+            </Button>
+            
+            
+            
+            <Button x:Name="RefreshButton" Style="{StaticResource FlatButton}"
+                    ToolTip="ריענון"
+                    Click="RefreshButton_Click">
+                <Path Data="M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z"/>
+            </Button>
+        </StackPanel>
+
+        <Border Grid.Column="1" Margin="5"
+                BorderThickness="1" BorderBrush="LightGray">
+            <ComboBox x:Name="AdressBar"
+                      IsEditable="True" 
+                      FlowDirection="RightToLeft"
+                      ItemsSource="{Binding Adresses}"
+                      SelectedValuePath="Url"
+                      BorderThickness="0"
+                      SelectedIndex="-1"
+                      SelectionChanged="AdressBar_SelectionChanged"
+                      HorizontalContentAlignment="Left">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Margin="3">
+                            <TextBlock Text="{Binding Name}"/>
+                            <TextBlock Text="{Binding Description}"
+                                       Opacity="0.5" FontSize="10"/>
+                        </StackPanel>
+                        <DataTemplate.Triggers>
+                            <DataTrigger Binding="{Binding IsVisible}" Value="false">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                        </DataTemplate.Triggers>
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+        </Border>
+
+        <Button x:Name="EditWhitListButton" Grid.Column="2" 
+                ToolTip="ערוך"
+                Margin="5"
+                Style="{StaticResource FlatButton}"
+                Click="EditWhitListButton_Click">
+            <Path Data="M2,6V8H14V6H2M2,10V12H14V10H2M20.04,10.13C19.9,10.13 19.76,10.19 19.65,10.3L18.65,11.3L20.7,13.35L21.7,12.35C21.92,12.14 21.92,11.79 21.7,11.58L20.42,10.3C20.31,10.19 20.18,10.13 20.04,10.13M18.07,11.88L12,17.94V20H14.06L20.12,13.93L18.07,11.88M2,14V16H10V14H2Z"/>
+        </Button>
+        
+        <!--<Separator Grid.Row="1" Grid.ColumnSpan="10" Height="2"/>-->
+        <wvlib:WebViewHost  x:Name="browser" 
+            Grid.Row="2"  Grid.ColumnSpan="10"
+            Source="{Binding SelectedValue, ElementName=AdressBar}"/>
+    </Grid>
+</UserControl>

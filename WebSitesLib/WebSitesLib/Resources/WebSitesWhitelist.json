@@ -1,0 +1,165 @@
+[
+  {
+    "Name": "פרוייקט כלי קודש",
+    "Description": "ארגז כלים לעורך התורני",
+    "Url": "https://kleikodesh.github.io/",
+    "IsVisible": true
+  },
+  {
+    "Name": "דיקטה",
+    "Description": "כלים לעיבוד העברית ואוסף טקסטים.",
+    "Url": "https://dicta.org.il/tools",
+    "IsVisible": true
+  },
+  {
+    "Name": "אוצר החכמה",
+    "Description": "ספריית אוצר החכמה - אוצר הספרים הדיגיטלי הגדול ביותר.",
+    "Url": "https://tablet.otzar.org/",
+    "IsVisible": true
+  },
+  {
+    "Name": "גניזת FJMS - פרוייקט פרידברג",
+    "Description": "השוואת נוסחאות חז\"ל ותצלומי כתב יד מהגניזה.",
+    "Url": "https://fjms.genizah.org/",
+    "IsVisible": true
+  },
+  {
+    "Name": "היברו בוקס",
+    "Description": "היברו בוקס עם עיון לפי נושא.",
+    "Url": "https://m.hebrewbooks.org/sites/mobile/index.html#browsebysubject",
+    "IsVisible": true
+  },
+  {
+    "Name": "המכלול",
+    "Description": "האינצקלופדיה היהודית",
+    "Url": "https://www.hamichlol.org.il/",
+    "IsVisible": true
+  },
+  {
+    "Name": "פורום לתורה",
+    "Description": "פורום דיונים תורניים.",
+    "Url": "https://tora-forum.co.il/",
+    "IsVisible": true
+  },
+  {
+    "Name": "ספריית הלכה ברורה",
+    "Description": "גישה מקוונת לפרויקט הלכה ברורה.",
+    "Url": "http://www.halachabrura.org/library/library8a.htm",
+    "IsVisible": true
+  },
+  {
+    "Name": "ויקי ספרים יהודיים",
+    "Description": "ויקי המתמקד בטקסטים ומקורות יהודיים.",
+    "Url": "https://wiki.jewishbooks.org.il/",
+    "IsVisible": true
+  },
+  {
+    "Name": "תורת אמת און-ליין",
+    "Description": "טקסטים ותוכנות יהודיים להורדה.",
+    "Url": "http://www.toratemetfreeware.com/",
+    "IsVisible": true
+  },
+  {
+    "Name": "ספריית על התורה",
+    "Description": "ספריית תורה רחבה עם כלים שימושיים.",
+    "Url": "https://library.alhatorah.org/",
+    "IsVisible": true
+  },
+  {
+    "Name": "פרויקט כתר",
+    "Description": "גישה לטקסטים יהודיים קלאסיים.",
+    "Url": "https://www.mgketer.org/",
+    "IsVisible": true
+  },
+  {
+    "Name": "ויקיטקסט - ארון הספרים היהודי",
+    "Description": "טקסטים יהודיים על ויקיטקסט העברי.",
+    "Url": "https://he.wikisource.org/wiki/ויקיטקסט:ארון_הספרים_היהודי",
+    "IsVisible": true
+  },
+  {
+    "Name": "ספריית דיקטה",
+    "Description": "אוסף של ספרים סרוקים מוקלדים",
+    "Url": "https://library.dicta.org.il/",
+    "IsVisible": true
+  },
+  {
+    "Name": "שיתופתא",
+    "Description": "פרויקט שיתופי למחקר טקסטים יהודיים.",
+    "Url": "https://shitufta.org.il/",
+    "IsVisible": true
+  },
+  {
+    "Name": "תא שמע",
+    "Description": "פלטפורמה ללימוד טקסטים יהודיים.",
+    "Url": "https://tashma.jewishoffice.co.il/",
+    "IsVisible": true
+  },
+  {
+    "Name": "המרכבה",
+    "Description": "פלטפורמת לימוד תורה אינטראקטיבית.",
+    "Url": "https://www.themercava.com/",
+    "IsVisible": true
+  },
+  {
+    "Name": "דף יומי",
+    "Description": "משאבים ללימוד יומי של התלמוד.",
+    "Url": "https://daf-yomi.com/",
+    "IsVisible": true
+  },
+  {
+    "Name": "בייס הספר",
+    "Description": "מאגר ניתוח לשונות ומילים בתנ\"ך.",
+    "Url": "http://www.basehasefer.com/",
+    "IsVisible": true
+  },
+  {
+    "Name": "אספקלריה",
+    "Description": "אנציקלופדיה למושגים יהודיים.",
+    "Url": "http://www.aspaklaria.info/",
+    "IsVisible": true
+  },
+
+  {
+    "Name": "נתיבות הש״ס",
+    "Description": "אינדקסים וכלים תלמודיים.",
+    "Url": "http://www.netivothashas.org.il/",
+    "IsVisible": true
+  },
+  {
+    "Name": "תורה Anytime",
+    "Description": "ספריית וידאו של שיעורי תורה.",
+    "Url": "https://www.torahanytime.com/",
+    "IsVisible": false
+  },
+  {
+    "Name": "קול הלשון",
+    "Description": "מאגר שיעורי תורה.",
+    "Url": "https://www2.kolhalashon.com/#/regularSite/home",
+    "IsVisible": false
+  },
+  {
+    "Name": "תורה זום",
+    "Description": "פלטפורמה לתוכן וידאו תורני.",
+    "Url": "https://torazoom.com/",
+    "IsVisible": false
+  },
+  {
+    "Name": "דרשו",
+    "Description": "ארגון ללימוד תורה ובחינות.",
+    "Url": "https://www.dirshu.co.il/",
+    "IsVisible": false
+  },
+  {
+    "Name": "בינינו",
+    "Description": "מערכת שיעורי תורה לצפיה.",
+    "Url": "http://beinenu.com/",
+    "IsVisible": false
+  },
+  {
+    "Name": "צ'אט גי פי טי'",
+    "Description": "בינה מלאכותית.",
+    "Url": "https://auth.openai.com/log-in",
+    "IsVisible": false
+  }
+]

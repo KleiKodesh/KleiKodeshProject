@@ -1,0 +1,19 @@
+/* Component Utilities */
+
+.bar {
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  padding: 0.5rem;
+}
+
+.tree-node {
+  gap: 12px;
+  padding: 12px 20px;
+}
+
+
+/* Small icon utility for compact UI elements */
+.small-icon {
+  width: 12px !important;
+  height: 12px !important;
+}

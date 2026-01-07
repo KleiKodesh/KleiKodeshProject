@@ -1,0 +1,79 @@
+/* Global button styles - VS Code style */
+
+button {
+  width: 2rem;
+  /* Button width (matches vue-tabs) */
+  height: 2rem;
+  /* Button height (matches vue-tabs) */
+  padding: 0.375rem;
+  /* Internal padding (matches vue-tabs) */
+  background: transparent;
+  /* Transparent background by default */
+  border: none;
+  /* No border */
+  border-radius: 0.25rem;
+  /* Slightly rounded corners (matches vue-tabs) */
+  font-size: 1.25rem;
+  /* Icon/text size (matches vue-tabs) */
+  color: var(--text-primary);
+  /* Secondary text color */
+  cursor: pointer;
+  /* Show hand cursor */
+  display: flex;
+  /* Flex layout */
+  align-items: center;
+  /* Vertically center content */
+  justify-content: center;
+  /* Horizontally center content */
+  flex-shrink: 0;
+  /* Prevent button from shrinking */
+  opacity: 0.8;
+}
+
+/* Button hover effect */
+button:hover {
+  background: var(--hover-bg);
+  /* Light background on hover */
+  /* transform: scale(1.01); */
+  /* Slightly grow on hover (matches vue-tabs) */
+  color: var(--text-primary);
+  /* primary text color on hover */
+  opacity: 0.9;
+}
+
+/* Button active/pressed effect */
+button:active {
+  background: var(--active-bg);
+  /* Darker background when pressed */
+  transform: scale(0.99);
+  /* Slightly shrink for press effect */
+}
+
+/* Images and SVGs inside buttons */
+button img,
+button svg {
+  width: 1.25rem;
+  /* Icon size (matches vue-tabs) */
+  height: 1.25rem;
+  /* Icon size (matches vue-tabs) */
+  pointer-events: none;
+  /* Prevent icon from blocking clicks */
+}
+
+/* Iconify icons inside buttons - inherit color */
+button .iconify {
+  color: inherit !important;
+}
+
+button .iconify svg,
+button .iconify svg * {
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+/* Icon/Text Button */
+.text-icon-button {
+  padding: 0.5rem;
+  /* color: var(--text-primary); */
+  font-size: 1.2rem;
+}

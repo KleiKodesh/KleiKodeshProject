@@ -1,0 +1,112 @@
+﻿<Window x:Class="WebSitesLib.WhiteListDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+         xmlns:local="clr-namespace:WebSitesLib"
+        xmlns:helpers="clr-namespace:WpfLib.Helpers;assembly=WpfLib"
+        xmlns:ap="clr-namespace:WpfLib.AttachedProperties;assembly=WpfLib"
+        xmlns:dd="urn:gong-wpf-dragdrop"
+        mc:Ignorable="d"
+        WindowStartupLocation="CenterOwner"
+        SizeToContent="WidthAndHeight"
+        Title="רשימת אתרים מותרים"
+        MaxHeight="350"
+        PreviewKeyDown="Window_PreviewKeyDown"
+        WindowStyle="None"
+        MouseDown="Window_MouseDown"
+        TouchDown="Window_TouchDown"
+        FlowDirection="RightToLeft">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/WpfLib;component/Dictionaries/BaseDictionary.xaml"/>
+                <ResourceDictionary Source="pack://application:,,,/WpfLib;component/Dictionaries/ThemedWindowDictionary.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <!--<Window.Style>
+        <Style TargetType="Window" BasedOn="{StaticResource ThemedToolWindowStyle}"/>
+    </Window.Style>-->
+
+    <Grid ap:GridSetup.Rows="auto * auto">
+        <Grid ap:GridSetup.Columns="auto * auto">
+            <Button Grid.Column="2" x:Name="CloseButton" Style="{StaticResource FlatButton}"
+
+                    Click="CloseButton_Click">
+                <Path Height="10" Data="M10.9393 12L6.9696 15.9697L8.03026 17.0304L12 13.0607L15.9697 17.0304L17.0304 15.9697L13.0607 12L17.0303 8.03039L15.9696 6.96973L12 10.9393L8.03038 6.96973L6.96972 8.03039L10.9393 12Z"/>
+            </Button>
+
+            <TextBlock Margin="5" Text="רשימת אתרים מותרים"/>
+        </Grid>
+        
+        <ListBox x:Name="Whitelist" Grid.Row="1" x:FieldModifier="public" 
+                 BorderBrush="LightGray"
+                 Background="Transparent"
+                 ItemsSource="{Binding Adresses}"
+                 dd:DragDrop.IsDragSource="True"
+                 dd:DragDrop.IsDropTarget="True">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <StackPanel Orientation="Horizontal">
+                        <CheckBox x:Name="checkBox" IsChecked="{Binding IsVisible}" 
+                                  Margin="5"/>
+                        <StackPanel x:Name="stackPanel">
+                            <TextBlock Text="{Binding Name}"
+                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                            <TextBlock Text="{Binding Description}"
+                                Opacity="0.5" 
+                                FontSize="10"
+                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                        </StackPanel>
+                    </StackPanel>
+                    <DataTemplate.Triggers>
+                        <DataTrigger Binding="{Binding IsVisible}" Value="false">
+                            <Setter TargetName="stackPanel" Property="Opacity" Value="0.5"/>
+                        </DataTrigger>
+                    </DataTemplate.Triggers>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <Grid Grid.Row="2"
+              ap:GridSetup.Columns="* auto *">
+
+            <Button x:Name="OK_Button" Grid.Column="2"
+                  Style="{StaticResource FlatButton}"
+                  Content="אישור"
+                  VerticalContentAlignment="Center"
+                  VerticalAlignment="Center"
+                  Width="100"
+                  Padding="5"
+                  Margin="5"
+                  BorderThickness="1"
+                  BorderBrush="LightGray"
+                  Click="OK_Button_Click"/>
+            
+            <StackPanel Orientation="Horizontal" Grid.Column="1"
+                        Margin="5">
+                <Button x:Name="MoveUpButton" Click="MoveUpButton_Click"
+                        ToolTip="הזז למעלה"
+                    Style="{StaticResource FlatButton}">
+                    <Path Data="M13,20H11V8L5.5,13.5L4.08,12.08L12,4.16L19.92,12.08L18.5,13.5L13,8V20Z"/>
+                </Button>
+
+                <Button x:Name="MoveDownButton" Click="MoveDownButton_Click"
+                        ToolTip="הזז למטה"
+                    Style="{StaticResource FlatButton}">
+                    <Path Data="M11,4H13V16L18.5,10.5L19.92,11.92L12,19.84L4.08,11.92L5.5,10.5L11,16V4Z"/>
+                </Button>
+            </StackPanel>
+
+            <CheckBox x:Name="CheckAllBox"
+                Margin="5"
+                VerticalAlignment="Center"
+                Content="סמן הכל"  
+                Checked="CheckAllBox_CheckChanged"
+                Unchecked="CheckAllBox_CheckChanged"/>
+        </Grid>
+    </Grid>
+</Window>

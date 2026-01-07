@@ -1,0 +1,30 @@
+/* Interactive States */
+
+.focus-accent:focus {
+  outline: none;
+  background: var(--accent-bg-light);
+}
+
+.reactive-icon:focus > svg {
+    color: var(--accent-color);
+    opacity: 1;
+}
+
+.reactive-icon:hover > svg {
+    color: var(--accent-color);
+    opacity: 1;
+}
+
+.hover-bg:hover {
+  background: var(--hover-bg);
+}
+
+.keyboard-active {
+    transform: scale(0.98);
+    background: var(--active-bg);
+}
+
+.click-effect:active {
+  transform: scale(0.99);
+  background: var(--active-bg);
+}

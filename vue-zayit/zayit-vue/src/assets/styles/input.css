@@ -1,0 +1,22 @@
+/* Input & Search Styles */
+
+input[type="text"] {
+  font-size: 1rem; 
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  outline: none;
+  padding: 6px 12px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+/* Focus state - softer accent highlight */
+input[type="text"]:focus {
+  box-shadow: 0 0 0 1px rgba(0, 130, 220, 0.75);
+}
+
+/* Placeholder text - muted and semi-transparent */
+input[type="text"]::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.6;
+}

@@ -1,0 +1,248 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:local="clr-namespace:System.Windows.Controls;assembly=PresentationFramework"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:helpers="clr-namespace:WpfLib.Helpers"
+                    xmlns:controls="clr-namespace:WpfLib.Controls"
+                    xmlns:converters="clr-namespace:WpfLib.Converters"
+                    xmlns:ap="clr-namespace:WpfLib.AttachedProperties">
+
+    <Style TargetType="ToggleButton" x:Key="FlatTabStyle">
+        <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="border"
+                     BorderThickness="0,0,0,1.5"
+                     Background="Transparent" BorderBrush="Transparent"
+                     Margin="0">
+                        <ContentPresenter
+                             Content="{TemplateBinding Content}"
+                             RecognizesAccessKey="True"
+                             HorizontalAlignment="Center"
+                             VerticalAlignment="Center"
+                             Margin="4" />
+                    </Border>
+
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="False">
+                            <Setter TargetName="border" Property="Opacity" Value="0.4"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="border" Property="BorderBrush" Value="#FF1E66ED"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="border" Property="Opacity" Value="0.9"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    
+    <Style TargetType="TabItem" x:Key="FlatTabItemStyle">
+        <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabItem">
+                    <Border x:Name="border"
+                        BorderThickness="0,0,0,1.5"
+                        Background="Transparent" BorderBrush="Transparent"
+                        Margin="0">
+                        <ContentPresenter
+                            ContentSource="Header"
+                            RecognizesAccessKey="True"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Margin="4" />
+                    </Border>
+
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsSelected" Value="False">
+                            <Setter TargetName="border" Property="Opacity" Value="0.4"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="border" Property="BorderBrush" Value="#FF1E66ED"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="border" Property="Opacity" Value="0.9"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    
+    <Style TargetType="TabItem" x:Key="X_ButtonTabStyle">
+        <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabItem">
+                    <Border x:Name="border"
+                            BorderThickness="0,0,0,1.5"
+                            Background="Transparent" BorderBrush="Transparent"
+                            Margin="0">
+                        <ContentPresenter
+                            ContentSource="Header"
+                            RecognizesAccessKey="True"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Margin="4" />
+                    </Border>
+
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsSelected" Value="False">
+                            <Setter TargetName="border" Property="Opacity" Value="0.4"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="border" Property="BorderBrush" Value="#FF1E66ED"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="border" Property="Opacity" Value="0.9"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+
+            </Setter.Value>
+        </Setter>
+        
+        <Setter Property="HeaderTemplate">
+            <Setter.Value>
+                <DataTemplate>
+                    <StackPanel x:Name="panel" Orientation="Horizontal" ToolTip="{Binding}" Background="Transparent">
+                        
+                        <TextBlock Text="{Binding}" MaxWidth="80"
+                             VerticalAlignment="Center"
+                             Padding="2,1,2,1" 
+                             Background="Transparent"
+                             Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}"/>
+                        
+                        <controls:TabItem_X_Button Background="Transparent" BorderThickness="0" 
+                                Margin="5,0,0,0" Padding="5,3,5,3"  VerticalAlignment="Center">
+                            <controls:TabItem_X_Button.Resources>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="3"/>
+                                </Style>
+                            </controls:TabItem_X_Button.Resources>
+                            <TextBlock Text="x" FontFamily="Segoe UI" Background="Transparent"
+                                       VerticalAlignment="Center" 
+                                       LineStackingStrategy="BlockLineHeight"
+                                       LineHeight="{Binding FontSize, RelativeSource={RelativeSource Mode=Self}}"
+                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}"/>
+                        </controls:TabItem_X_Button>
+                        
+                    </StackPanel>
+                    <!--<DataTemplate.Triggers>
+                        <DataTrigger Binding="{Binding ElementName=panel, Path=IsMouseOver}"
+                    </DataTemplate.Triggers>-->
+                </DataTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <converters:ReverseBoolConverter x:Key="ReverseBool"/>
+    <Style x:Key="ListStripTabControl" TargetType="{x:Type TabControl}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type TabControl}">
+                    <Grid x:Name="templateRoot" ClipToBounds="true" SnapsToDevicePixels="true" KeyboardNavigation.TabNavigation="Local">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition x:Name="ColumnDefinition0"/>
+                            <ColumnDefinition x:Name="ColumnDefinition1" Width="0"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition x:Name="RowDefinition0" Height="Auto"/>
+                            <RowDefinition x:Name="RowDefinition1" Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="auto"/>
+                            </Grid.ColumnDefinitions>
+                            <ToggleButton x:Name="popUpToggle" Grid.Column="1"
+                                          Padding="5"
+                                          IsEnabled="{Binding IsOpen, ElementName=popup, Converter={StaticResource ReverseBool}}"
+                                          VerticalContentAlignment="Center"
+                                          HorizontalContentAlignment="Center">
+                                <ToggleButton.Resources>
+                                </ToggleButton.Resources>
+                                <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}"
+                                      VerticalAlignment="Center"
+                                      HorizontalAlignment="Center"
+                                      Stretch="Uniform"
+                                    Data="M16.59,5.59L18,7L12,13L6,7L7.41,5.59L12,10.17L16.59,5.59M16.59,11.59L18,13L12,19L6,13L7.41,11.59L12,16.17L16.59,11.59Z"/>
+                            </ToggleButton>
+                            <!--<ScrollViewer HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">-->
+                                <StackPanel Orientation="Horizontal" x:Name="headerPanel" Background="Transparent" Grid.Column="0"  IsItemsHost="true" Margin="2,2,2,0" Grid.Row="0" KeyboardNavigation.TabIndex="1" Panel.ZIndex="1"/>
+                            <!--</ScrollViewer>-->
+                        </Grid>
+                       
+                        <Border x:Name="contentPanel" Background="Transparent" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Grid.Column="0" KeyboardNavigation.DirectionalNavigation="Contained" Grid.Row="1" KeyboardNavigation.TabIndex="2" KeyboardNavigation.TabNavigation="Local">
+                            <ContentPresenter x:Name="PART_SelectedContentHost" ContentSource="SelectedContent" Margin="{TemplateBinding Padding}" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                        </Border>
+
+                        <Popup x:Name="popup"
+                                IsOpen="{Binding IsChecked, ElementName=popUpToggle}" 
+                               PlacementTarget="{Binding ElementName=popUpToggle}"
+                               Placement="Bottom"
+                               StaysOpen="False">
+                            <ListBox ItemsSource="{Binding Items, Mode=OneWay, RelativeSource={RelativeSource AncestorType=TabControl}}" 
+                                     Background="{Binding Background, RelativeSource={RelativeSource AncestorType=ContentControl}}"
+                                     Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}"
+                                     MaxHeight="200"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                     ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                     ap:ListPopupBehaviour.ListPopupEnable="True">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Header}"/>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Popup>
+
+                    </Grid>
+                    <ControlTemplate.Triggers>
+
+                        <!--<Trigger Property="TabStripPlacement" Value="Bottom">
+                            <Setter Property="Grid.Row" TargetName="headerPanel" Value="1"/>
+                            <Setter Property="Grid.Row" TargetName="contentPanel" Value="0"/>
+                            <Setter Property="Height" TargetName="RowDefinition0" Value="*"/>
+                            <Setter Property="Height" TargetName="RowDefinition1" Value="Auto"/>
+                            <Setter Property="Margin" TargetName="headerPanel" Value="2,0,2,2"/>
+                        </Trigger>
+
+                        <Trigger Property="TabStripPlacement" Value="Left">
+                            <Setter Property="Grid.Row" TargetName="headerPanel" Value="0"/>
+                            <Setter Property="Grid.Row" TargetName="contentPanel" Value="0"/>
+                            <Setter Property="Grid.Column" TargetName="headerPanel" Value="0"/>
+                            <Setter Property="Grid.Column" TargetName="contentPanel" Value="1"/>
+                            <Setter Property="Width" TargetName="ColumnDefinition0" Value="Auto"/>
+                            <Setter Property="Width" TargetName="ColumnDefinition1" Value="*"/>
+                            <Setter Property="Height" TargetName="RowDefinition0" Value="*"/>
+                            <Setter Property="Height" TargetName="RowDefinition1" Value="0"/>
+                            <Setter Property="Margin" TargetName="headerPanel" Value="2,2,0,2"/>
+                        </Trigger>
+
+                        <Trigger Property="TabStripPlacement" Value="Right">
+                            <Setter Property="Grid.Row" TargetName="headerPanel" Value="0"/>
+                            <Setter Property="Grid.Row" TargetName="contentPanel" Value="0"/>
+                            <Setter Property="Grid.Column" TargetName="headerPanel" Value="1"/>
+                            <Setter Property="Grid.Column" TargetName="contentPanel" Value="0"/>
+                            <Setter Property="Width" TargetName="ColumnDefinition0" Value="*"/>
+                            <Setter Property="Width" TargetName="ColumnDefinition1" Value="Auto"/>
+                            <Setter Property="Height" TargetName="RowDefinition0" Value="*"/>
+                            <Setter Property="Height" TargetName="RowDefinition1" Value="0"/>
+                            <Setter Property="Margin" TargetName="headerPanel" Value="0,2,2,2"/>
+                        </Trigger>-->
+
+                        <Trigger Property="IsEnabled" Value="false">
+                            <Setter Property="TextElement.Foreground" TargetName="templateRoot" Value="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>
