@@ -1,4 +1,4 @@
-using KleiKodesh.Helpers;
+﻿using KleiKodesh.Helpers;
 using System;
 using System.Drawing;
 using System.Windows.Forms;
@@ -67,7 +67,7 @@ namespace KleiKodesh.Ribbon
             
             var checkBoxes = new[] {
                 CreateCheckBox("כזית", "Kezayit_Visible"),
-                CreateCheckBox("היברו בוקס", "HebrewBooks_Visible"),
+                //CreateCheckBox("היברו בוקס", "HebrewBooks_Visible"),
                 CreateCheckBox("דרך האתרים", "WebSites_Visible"),
                 CreateCheckBox("עיצוב תורני", "KleiKodesh_Visible"),
                 CreateCheckBox("חיפוש רגקס", "RegexFind_Visible")
@@ -90,7 +90,7 @@ namespace KleiKodesh.Ribbon
             
             var radioButtons = new[] {
                 CreateRadioButton("כזית", "Kezayit_Option"),
-                CreateRadioButton("היברו בוקס", "HebrewBooks_Option"),
+                //CreateRadioButton("היברו בוקס", "HebrewBooks_Option"),
                 CreateRadioButton("דרך האתרים", "WebSites_Option"),
                 CreateRadioButton("עיצוב תורני", "KleiKodesh_Option"),
                 CreateRadioButton("חיפוש רגקס", "RegexFind_Option"),

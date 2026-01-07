@@ -4,6 +4,7 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using Zayit.Viewer;
 using Office = Microsoft.Office.Core;
 
 namespace KleiKodesh.Ribbon
@@ -12,7 +13,6 @@ namespace KleiKodesh.Ribbon
     public class KeliKodeshRibbon : Office.IRibbonExtensibility
     {
         private Office.IRibbonUI ribbon;
-        readonly TaskPaneManager taskPaneManager = new TaskPaneManager();
 
         public KeliKodeshRibbon()
         {
@@ -47,26 +47,37 @@ namespace KleiKodesh.Ribbon
 
         void Execute(string id)
         {
-            switch (id)
+            try
             {
-                case "KeZayit":
-                    //taskPaneManager.Show(new Zayit.Viewer.ZayitViewerHost(), LocaleDictionary.Translate(id), 600, enablePopout: true);
-                    break;
-                case "WebSites":
-                    //WpfTaskPane.Show(new WebSitesView(), LocaleDictionary.Translate(id), 500);
-                    break;
-                case "HebrewBooks":
-                    //WpfTaskPane.Show(new HebrewBooksLib.HebrewBooksView(), LocaleDictionary.Translate(id), 600);
-                    break;
-                case "KleiKodesh":
-                    //WpfTaskPane.Show(new DocSeferLib.DocSeferLibView(Globals.ThisAddIn.Application, Globals.Factory), LocaleDictionary.Translate(id), 510);
-                    break;
-                case "RegexFind":
-                    taskPaneManager.Show(new KleiKodesh.RegexSearch.RegexFindHost(), "חיפוש רגקס", 600);
-                    break;
-                case "Settings":
-                    taskPaneManager.Show(new RibbonSettingsControl(ribbon), "הגדרות כלי קודש", 400);
-                    break;
+                switch (id)
+                {
+                    case "Kezayit":
+                        TaskPaneManager.Show(new Zayit.Viewer.ZayitViewerHost(), "כזית", popOutBehavior: true);
+                        break;
+                    case "WebSites":
+                        WpfTaskPane.Show(new WebSitesLib.WebSitesView(), "דרך האתרים", 510);
+                        break;
+                    // case "HebrewBooks":
+                    //     //WpfTaskPane.Show(new HebrewBooksLib.HebrewBooksView(), LocaleDictionary.Translate(id), 600);
+                    //     break;
+                    case "KleiKodesh":
+                        var control = new DocSeferLib.DocSeferLibView(Globals.ThisAddIn.Application, Globals.Factory);
+                        WpfTaskPane.Show(control, "עיצוב תורני", 520);
+                        break;
+                    case "RegexFind":
+                        TaskPaneManager.Show(new KleiKodesh.RegexSearch.RegexFindHost(), "חיפוש רגקס", 600);
+                        break;
+                    case "Settings":
+                        TaskPaneManager.Show(new RibbonSettingsControl(ribbon), "הגדרות כלי קודש", 400);
+                        break;
+                    default:
+                        MessageBox.Show($"אירעה שגיאה במהלך טעינת {id}");
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message);
             }
         }
 

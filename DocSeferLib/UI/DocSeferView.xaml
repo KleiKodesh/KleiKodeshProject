@@ -1,0 +1,264 @@
+﻿<UserControl x:Class="DocSeferLib.DocSeferLibView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:controls="clr-namespace:WpfLib.Controls;assembly=WpfLib"
+             xmlns:helpers="clr-namespace:WpfLib.Helpers;assembly=WpfLib"
+             xmlns:ap="clr-namespace:WpfLib.AttachedProperties;assembly=WpfLib"
+             xmlns:local="clr-namespace:DocSeferLib.UI"
+             mc:Ignorable="d" 
+             MinHeight="450" MinWidth="335"
+             FlowDirection="RightToLeft"
+             FontSize="13"
+             FontFamily="Tahoma">
+    <UserControl.Resources>
+        <ResourceDictionary Source="/DocSeferLib;component/UI/DocSeferDictionary.xaml"/>
+    </UserControl.Resources>
+
+    <UserControl.DataContext>
+        <local:DocseferViewModel/>
+    </UserControl.DataContext>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel>
+
+            <Expander Header="עיצוב פסקה" IsExpanded="True">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="FirstWordStyle" ToolTip="סגנון מילה ראשונה"
+                                Command="{Binding ParagraphsViewModel.ApplyFirstWordStyleCommand}">
+                            <Path Data="M21 19v2H3V19H21m0-4v2H3V15H21m0-4v2H3V11H21m0-4V9H3V7H21M11 3V5H3V3h8m4 0V5H13V3h2m3 0V5H16V3h2m3 0V5H19V3h2"/>
+                        </Button>
+
+                        <Button x:Name="FirstWordHanging" ToolTip="עיצוב חלון"
+                                Command="{Binding ParagraphsViewModel.ApplyFirstWordHangingCommand}">
+                            <Path Data="M3 3H21V5H3V3M3 7H17V9H3V7M3 11H21V13H3V11M3 15H21V17H3V15M9 19H21V21H3V19Z"/>
+                        </Button>
+
+                        <Button x:Name="DoubleFirstWordHanging" ToolTip="עיצוב חלון כפול"
+                                Command="{Binding ParagraphsViewModel.ApplyDoubleFirstWordHangingCommand}">
+                            <Path Data="M3 3H21V5H3V3M3 7H17V9H3V7M3 11H17V13H3V11M3 15H21V17H3V15M9 19H21V21H3V19Z"/>
+                        </Button>
+
+                        <Button x:Name="CenterLastLine" ToolTip="מירכוז שורה אחרונה"
+                                Command="{Binding ParagraphsViewModel.ApplyCenterLastLineCommand}">
+                            <Path Data="M3 3H21V5H3V3M3 7H21V9H3V7M3 11H21V13H3V11M3 15H21V17H3V15M9 19H17V21H7V19Z"/>
+                        </Button>
+
+                        <Button x:Name="RemoveFirstWordStyle" ToolTip="הסר סגנון מילה ראשונה"
+                                Command="{Binding ParagraphsViewModel.RemoveFirstWordStyleCommand}">
+                            <Grid>
+                                <Path Opacity="0.5" Data="M21 19v2H11V19H21m0-4v2H11V15H21m0-4v2H3V11H21m0-4V9H3V7H21M11 3V5H3V3h8m4 0V5H13V3h2m3 0V5H16V3h2m3 0V5H19V3h2"/>
+                                <Path Style="{StaticResource DeleteIconStyle}"/>
+                            </Grid>
+                        </Button>
+
+                        <Button x:Name="RemoveFirstWordHanging" ToolTip="הסר עיצוב חלון"
+                                Command="{Binding ParagraphsViewModel.RemoveFirstWordHangingCommand}">
+                            <Grid>
+                                <Path Opacity="0.5" Data="M3 3H21V5H3V3M3 7H17V9H3V7M3 11H21V13H3V11M11 15H21V17H11V15M11 19H21V21H11V19Z"/>
+                                <Path Style="{StaticResource DeleteIconStyle}"/>
+                            </Grid>
+                        </Button>
+
+                        <Button x:Name="RemoveCenterLastLine" ToolTip="הסר מירכוז שורה אחרונה"
+                                Command="{Binding ParagraphsViewModel.RemoveCenterLastLineCommand}">
+                            <Grid>
+                                <Path Opacity="0.5" Data="M3 3H21V5H3V3M3 7H21V9H3V7M3 11H21V13H3V11M11 15H21V17H11V15M11 19H17V21H11V19Z"/>
+                                <Path Style="{StaticResource DeleteIconStyle}"/>
+                            </Grid>
+                        </Button>
+                    </StackPanel>
+
+
+                    <ToggleButton x:Name="ChooseStylesToggle"
+               Content="החל עיצובים על ⏷"
+               Padding="3"
+               HorizontalAlignment="Left"
+               IsHitTestVisible="{Binding IsOpen, ElementName=ChooseStylesPopup, Converter={StaticResource ReverseBoolConverter}}"
+               IsChecked="{Binding RefreshStyles}"/>
+
+                    <Popup x:Name="ChooseStylesPopup" StaysOpen="False"
+                            PlacementTarget="{Binding ElementName=ChooseStylesToggle}"
+                            IsOpen="{Binding IsChecked, ElementName=ChooseStylesToggle}"
+                            MaxHeight="240">
+                        <Border BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="1">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <CheckBox Content="סמן הכל" IsChecked="{Binding ParagraphsViewModel.CheckAllStyles}"/>
+                                <ScrollViewer Grid.Row="1"
+                                      HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{Binding ParagraphsViewModel.ActiveStyles}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <CheckBox Content="{Binding Name}" IsChecked="{Binding Apply}"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </Grid>
+                        </Border>
+                    </Popup>
+
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="מינימום שורות"/>
+                        <controls:UpDownTextBox Value="{Binding ParagraphsViewModel.MinLineCount}"
+                                    FontSize="11"/>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" ToolTip="בחר סגנון עבור מילה ראשונה (סגנון תו בלבד)">
+                        <TextBlock Text="סגנון מילה ראשונה"/>
+                        <ComboBox x:Name="FirstWordStyleCombo"
+                                   VirtualizingPanel.IsVirtualizing="True"
+                                   ItemsSource="{Binding ParagraphsViewModel.FirstWordStyle.Styles}"
+                                   Text="{Binding ParagraphsViewModel.FirstWordStyle.SelectedStyle}"
+                                   Margin="5"
+                                   MinWidth="100"
+                                   IsEditable="True">
+                        </ComboBox>
+                    </StackPanel>
+                </StackPanel>
+            </Expander>
+
+            
+            <Separator/>
+            <Expander Header="איזון טורים">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="AlignColumnsButton" ToolTip="יישור טורים"
+                                Command="{Binding ColumnsViewModel.AlignColumnsCommand}">
+                            <Path Data="M3,3H11V5H3V3M13,3H21V5H13V3M3,7H11V9H3V7M13,7H21V9H13V7M3,11H11V13H3V11M13,11H21V13H13V11M3,15H11V17H3V15M13,15H21V17H13V15M3,19H11V21H3V19M13,19H21V21H13V19Z"/>
+                        </Button>
+
+                        <Button x:Name="ColumnsDialogButton" ToolTip="הגדרות טורים"
+                                Command="{Binding ColumnsViewModel.OpenColumnsDialogCommand}">
+                            <Path Data="M0 3H9V5H0V3M11 3H19V5H11V3M0 7H6V9H0V7M13 7H19V9H13V7M0 11H5V13H0V11M15 11H19V13H15V11M0 15H6V17H0V15M14 15H19V17H14V15M0 19H9V21H0V19M11 19H19V21H11V19M9 13A1.3 1.3 0 1111 12 1.3 1.3 0 019 13M12.35 12.63l1.06 0v-1.53l-1.06 0-.12 0c-.22 0-.28-.18-.28-.4 0-.11.04-.21.11-.28l.75-.75-.98-.98-.75.75c-.07.07-.17.11-.28.11-.22 0-.4-.18-.4-.4v-1.06h-1.53v1.06h0c0 .22-.18.4-.4.4-.11 0-.21-.04-.28-.11l-.75-.75-.98.98.75.75s0 .01 0 .01c.07.07.11.17.11.28 0 .22-.06.4-.28.4h-1.04v1.53l1.06 0v0c.22 0 .4.18.4.4 0 .11-.04.21-.11.28l-.75.75.98.98.75-.75s.01 0 .01 0c.07.07.17.11.28.11.22 0 .4.06.4.28v1.06h1.53v-1.06h0c.22 0 .4-.18.4-.4 0-.11.04-.21.11-.28l.75.75.98-.98-.75-.75c-.07-.07-.11-.17-.11-.28 0-.22.06-.4.28-.4z"/>
+                        </Button>
+                        
+                        <Button x:Name="Columns" ToolTip="חפש טורים שאינם מאוזנים"
+                                Command="{Binding ColumnsViewModel.FindNextUnevenColumnsCommand}">
+                            <Path Stroke="{Binding Fill, RelativeSource={RelativeSource Mode=Self}}" StrokeThickness="2.5" 
+                                  Data="M11 4M15 8H22M5 12H9M5 16H8M5 20H10M16.4729 17.4525C17.046 16.8743 17.4 16.0785 17.4 15.2 17.4 13.4327 15.9673 12 14.2 12 12.4327 12 11 13.4327 11 15.2 11 16.9673 12.4327 18.4 14.2 18.4 15.0888 18.4 15.893 18.0376 16.4729 17.4525ZM16.4729 17.4525 19 20M15 4H22M19 12H22M5 8H12M5 4H12M16.4729 17.4525C17.046 16.8743 17.4 16.0785 17.4 15.2 17.4 13.4327 15.9673 12 14.2 12 12.4327 12 11 13.4327 11 15.2 11 16.9673 12.4327 18.4 14.2 18.4 15.0888 18.4 15.893 18.0376 16.4729 17.4525ZM20 16 22 16"/>
+                        </Button>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="מרווח מקסימלי אחרי פיסקאות"/>
+                        <controls:UpDownTextBox Value="{Binding ColumnsViewModel.AlignColumns.MaxSpaceAfter}"
+                   FontSize="11"/>
+                    </StackPanel>
+                </StackPanel>
+            </Expander>
+
+
+            <Separator/>
+            <Expander Header="מרווחים">
+                <StackPanel>
+                    <Grid ap:GridSetup.Columns="auto auto auto auto auto *"
+              ap:GridSetup.Rows="auto 5 auto 5 auto 5 auto 5 auto 5 auto"
+              Margin="5">
+                        <Grid.Resources>
+                            <Style TargetType="Button" BasedOn="{StaticResource ResetButton}"/>
+                        </Grid.Resources>
+
+                        <Button Command="{Binding SpacingViewModel.SetSpaceAfterCommand}" CommandParameter="=">
+                            <Path/>
+                        </Button>
+                        <TextBlock Text="מרווח אחרי פסקה"  Grid.Column="1"/>
+                        <RepeatButton Style="{StaticResource DecreaseButton}" Grid.Column="3" 
+                          Command="{Binding SpacingViewModel.SetSpaceAfterCommand}" CommandParameter="-">
+                            <Path/>
+                        </RepeatButton>
+                        <RepeatButton Style="{StaticResource IncreaseButton}" Grid.Column="4" 
+                          Command="{Binding SpacingViewModel.SetSpaceAfterCommand}" CommandParameter="+">
+                            <Path/>
+                        </RepeatButton>
+                        <controls:UpDownFloatTextBox Grid.Column="2"
+                Step="{Binding SpacingViewModel.StepSize}"
+                Value="{Binding SpacingViewModel.SpaceAfter}" />
+
+                        <Button Grid.Row="2" 
+                    Command="{Binding SpacingViewModel.SetSpaceBeforeCommand}" CommandParameter="=">
+                            <Path/>
+                        </Button>
+                        <TextBlock Text="מרווח לפני פסקה" Grid.Row="2" Grid.Column="1"/>
+                        <RepeatButton Style="{StaticResource DecreaseButton}" Grid.Row="2" Grid.Column="3" 
+                          Command="{Binding SpacingViewModel.SetSpaceBeforeCommand}" CommandParameter="-">
+                            <Path/>
+                        </RepeatButton>
+                        <RepeatButton Style="{StaticResource IncreaseButton}" Grid.Row="2" Grid.Column="4" 
+                          Command="{Binding SpacingViewModel.SetSpaceBeforeCommand}" CommandParameter="+">
+                            <Path/>
+                        </RepeatButton>
+                        <controls:UpDownFloatTextBox Grid.Row="2" Grid.Column="2"
+                    Step="{Binding SpacingViewModel.StepSize}"
+                    Value="{Binding SpacingViewModel.SpaceBefore}" />
+
+                        <Button Grid.Row="4"
+                    Command="{Binding SpacingViewModel.SetLineSpacingCommand}" CommandParameter="=">
+                            <Path/>
+                        </Button>
+                        <TextBlock Text="מרווח בין שורות" Grid.Row="4" Grid.Column="1"/>
+                        <RepeatButton Style="{StaticResource DecreaseButton}" Grid.Row="4" Grid.Column="3" 
+                          Command="{Binding SpacingViewModel.SetLineSpacingCommand}" CommandParameter="-">
+                            <Path/>
+                        </RepeatButton>
+                        <RepeatButton Style="{StaticResource IncreaseButton}" Grid.Row="4" Grid.Column="4" 
+                          Command="{Binding SpacingViewModel.SetLineSpacingCommand}" CommandParameter="+">
+                            <Path/>
+                        </RepeatButton>
+                        <controls:UpDownFloatTextBox Grid.Row="4" Grid.Column="2"
+                         Step="{Binding SpacingViewModel.StepSize}"
+                         Value="{Binding SpacingViewModel.LineSpacing}" />
+
+                        <Button Grid.Row="6"
+                    Command="{Binding SpacingViewModel.SetWordSpacingCommand}" CommandParameter="=">
+                            <Path/>
+                        </Button>
+                        <TextBlock Text="מרווח בין מילים" Grid.Row="6" Grid.Column="1"/>
+                        <RepeatButton Style="{StaticResource DecreaseButton}" Grid.Row="6" Grid.Column="3" 
+                          Command="{Binding SpacingViewModel.SetWordSpacingCommand}" CommandParameter="-">
+                            <Path/>
+                        </RepeatButton>
+                        <RepeatButton Style="{StaticResource IncreaseButton}" Grid.Row="6" Grid.Column="4" 
+                          Command="{Binding SpacingViewModel.SetWordSpacingCommand}" CommandParameter="+">
+                            <Path/>
+                        </RepeatButton>
+                        <controls:UpDownFloatTextBox Grid.Row="6" Grid.Column="2"
+                      Step="{Binding SpacingViewModel.StepSize}"
+                      Value="{Binding SpacingViewModel.WordSpacing}" />
+
+                        <Button Grid.Row="8"
+                    Command="{Binding SpacingViewModel.SetCharacterStretchCommand}" CommandParameter="=">
+                            <Path/>
+                        </Button>
+                        <TextBlock Text="מתיחת אותיות" Grid.Row="8" Grid.Column="1"/>
+                        <RepeatButton Style="{StaticResource DecreaseButton}" Grid.Row="8" Grid.Column="3" 
+                          Command="{Binding SpacingViewModel.SetCharacterStretchCommand}" CommandParameter="-">
+                            <Path/>
+                        </RepeatButton>
+                        <RepeatButton Style="{StaticResource IncreaseButton}" Grid.Row="8" Grid.Column="4" 
+                          Command="{Binding SpacingViewModel.SetCharacterStretchCommand}" CommandParameter="+">
+                            <Path/>
+                        </RepeatButton>
+                        <controls:UpDownFloatTextBox Grid.Row="8" Grid.Column="2"
+                   Step="{Binding SpacingViewModel.StepSize}"
+                   Value="{Binding SpacingViewModel.CharacterStretch}" />
+
+                    </Grid>
+
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="גודל הצעד:"/>
+                        <controls:UpDownFloatTextBox  Step="0.5" Value="{Binding SpacingViewModel.StepSize}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Expander>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

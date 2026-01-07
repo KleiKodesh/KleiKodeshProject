@@ -79,7 +79,7 @@
                     </GroupBox.Header>
                     <StackPanel x:Name="VisibleSettingsPanel">
                         <CheckBox x:Name="Kezayit_Visible"  Content="כזית"/>
-                        <CheckBox x:Name="HebrewBooks_Visible"  Content="היברו בוקס"/>
+                        <!--<CheckBox x:Name="HebrewBooks_Visible"  Content="היברו בוקס"/>-->
                         <CheckBox x:Name="WebSites_Visible"  Content="דרך האתרים"/>
                         <CheckBox x:Name="KleiKodesh_Visible"  Content="עיצוב תורני"/>
                         <CheckBox x:Name="RegexFind_Visible"  Content="חיפוש רגקס בוורד"/>
@@ -94,7 +94,7 @@
                     </GroupBox.Header>
                     <StackPanel x:Name="OptionsSettingsPanel">
                         <RadioButton x:Name="Kezayit_Option" Content="כזית"/>
-                        <RadioButton x:Name="HebrewBooks_Option" Content="היברו בוקס"/>
+                        <!--<RadioButton x:Name="HebrewBooks_Option" Content="היברו בוקס"/>-->
                         <RadioButton x:Name="WebSites_Option" Content="דרך האתרים"/>
                         <RadioButton x:Name="KleiKodesh_Option" Content="עיצוב תורני"/>
                         <RadioButton x:Name="RegexFind_Option" Content="חיפוש רגקס בוורד"/>

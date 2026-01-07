@@ -20,11 +20,10 @@ namespace KleiKodesh.RegexSearch
         {
             Range searchRange = GetSearchRange(find.Mode);
             int startPos = searchRange.Start;
-            var matches = Regex.Matches(searchRange.Text, find.Text).Cast<Match>().ToArray();
-            var list = new List<SearchResult>();
-            var docStart = Document.Range().Start;
-            var docEnd = Document.Range().End;
 
+            var matches = Regex.Matches(searchRange.Text, find.Text, RegexOptions.Multiline).Cast<Match>().ToArray();
+
+            var list = new List<SearchResult>();
             foreach (var match in matches)
             {
                 Range matchRange = Document.Range(startPos + match.Index, startPos + match.Index + match.Length);

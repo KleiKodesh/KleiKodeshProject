@@ -25,13 +25,16 @@
 									onAction="button_Click"
 									getVisible="getVisible"/>
 
-							<button id="HebrewBooks"
-									label="היברו-בוקס"
-									screentip="היברו-בוקס"
-									supertip="גישה נוחה לספריית היברו-בוקס (דרוש חיבור לאינטרנט)"
-									getImage="getImage"
-									onAction="button_Click"
-									getVisible="getVisible"/>
+							<!--
+<button id="HebrewBooks"
+        label="היברו-בוקס"
+        screentip="היברו-בוקס"
+        supertip="גישה נוחה לספריית היברו-בוקס (דרוש חיבור לאינטרנט)"
+        getImage="getImage"
+        onAction="button_Click"
+        getVisible="getVisible"/>
+-->
+
 
 							<button id="WebSites"
 									label="דרך האתרים"

@@ -31,7 +31,7 @@ namespace KleiKodeshVstoInstallerWpf
 
         public InstallProgressWindow(Window mainWindow, 
             string defaultButton,
-            bool KeZayit,
+            bool Kezayit,
             bool hebrewbooks,
             bool websites,
             bool KleiKodesh)
@@ -39,7 +39,7 @@ namespace KleiKodeshVstoInstallerWpf
             InitializeComponent();
             _progress = new Progress<double>(UpdateProgress);
             mainWindow?.Close();
-            Install(defaultButton, KeZayit, hebrewbooks, websites, KleiKodesh);
+            Install(defaultButton, Kezayit, hebrewbooks, websites, KleiKodesh);
         }
 
         public void UpdateProgress(double progress)
@@ -58,7 +58,7 @@ namespace KleiKodeshVstoInstallerWpf
         }
 
         async void Install(string defaultButton,
-            bool KeZayit,
+            bool Kezayit,
             bool hebrewbooks,
             bool websites,
             bool KleiKodesh)

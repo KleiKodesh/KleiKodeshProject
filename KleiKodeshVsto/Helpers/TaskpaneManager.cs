@@ -1,20 +1,16 @@
-﻿using Microsoft.Office.Interop.Word;
-using Microsoft.Office.Tools;
+﻿using Microsoft.Office.Tools;
 using System;
-using System.Diagnostics;
-using System.IO;
 using System.Linq;
 using System.Windows.Forms;
-using KleiKodesh.Helpers;
 using DockPosition = Microsoft.Office.Core.MsoCTPDockPosition;
 
 namespace KleiKodesh.Helpers
 {
-    public class TaskPaneManager
+    public static class TaskPaneManager
     {
         private static bool _updateCheckDone = false;
         
-        public CustomTaskPane Show(
+        public static CustomTaskPane Show(
             UserControl userControl,
             string title,
             int width = 600,
@@ -38,11 +34,32 @@ namespace KleiKodesh.Helpers
                 var type = userControl.GetType();
 
                 var pane = panes.Cast<CustomTaskPane>()
-                    .FirstOrDefault(p => p.Control.GetType() == type && p.Window == window);
+                    .FirstOrDefault(p => p.Control.GetType() == type && p.Window == window) ??
+                     CreateNew(userControl, title, width, matchOfficeTheme); 
 
-                if (pane == null)
-                {
-                    pane = panes.Add(userControl, title);
+                pane.Visible = true;
+                return pane;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.ToString(), "Error");
+                return null;
+            }
+        }
+
+        public static CustomTaskPane CreateNew(
+           UserControl userControl,
+           string title,
+           int width = 600,
+           bool matchOfficeTheme = true,
+           bool popOutBehavior = false)
+        {
+            try
+            {
+                var panes = Globals.ThisAddIn.CustomTaskPanes;
+                var window = Globals.ThisAddIn.Application.ActiveWindow;
+                var type = userControl.GetType();
+                    var pane = panes.Add(userControl, title);
 
                     RestoreDockPosition(pane, type.Name);
                     RestoreWidth(pane, userControl, type.Name, width);
@@ -58,9 +75,7 @@ namespace KleiKodesh.Helpers
 
                     if (matchOfficeTheme)
                         OfficeThemeWatcher.Attach(userControl);
-                }
 
-                pane.Visible = true;
                 return pane;
             }
             catch (Exception ex)
@@ -70,7 +85,7 @@ namespace KleiKodesh.Helpers
             }
         }
 
-        void RestoreDockPosition(CustomTaskPane pane, string type)
+        static void RestoreDockPosition(CustomTaskPane pane, string type)
         {
             try
             {
@@ -91,7 +106,7 @@ namespace KleiKodesh.Helpers
             }
         }
 
-        DockPosition GetDefaultDockPosition()
+        static DockPosition GetDefaultDockPosition()
         {
             int uiLang = Globals.ThisAddIn.Application
                 .LanguageSettings
@@ -118,7 +133,7 @@ namespace KleiKodesh.Helpers
             catch { /* Swallow errors silently */ }
         }
 
-        private static void AttachRemoveOnClose(CustomTaskPane pane, UserControl userControl)
+        static void AttachRemoveOnClose(CustomTaskPane pane, UserControl userControl)
         {
             try
             {

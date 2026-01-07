@@ -8,6 +8,7 @@ using Office = Microsoft.Office.Core;
 using Microsoft.Office.Tools.Word;
 using KleiKodesh.Ribbon;
 using KleiKodesh.Helpers;
+using Microsoft.Office.Interop.Word;
 
 namespace KleiKodesh
 {
