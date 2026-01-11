@@ -1,5 +1,4 @@
 ﻿using KleiKodesh.Helpers;
-using System;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -39,7 +38,7 @@ namespace KleiKodesh.Ribbon
                 Text = title,
                 AutoSize = true,
                 Margin = new Padding(0, 0, 0, 15),
-                Padding = new Padding(15,10,15,10),
+                Padding = new Padding(15, 10, 15, 10),
                 FlatStyle = FlatStyle.Flat
             };
 
@@ -64,7 +63,7 @@ namespace KleiKodesh.Ribbon
             // Available components
             var availableGroup = CreateGroup("רכיבים זמינים");
             var availableFlow = CreateFlow();
-            
+
             var checkBoxes = new[] {
                 CreateCheckBox("כזית", "Kezayit_Visible"),
                 //CreateCheckBox("היברו בוקס", "HebrewBooks_Visible"),
@@ -87,14 +86,14 @@ namespace KleiKodesh.Ribbon
             // Primary button
             var primaryGroup = CreateGroup("לחצן ראשי");
             var primaryFlow = CreateFlow();
-            
+
             var radioButtons = new[] {
                 CreateRadioButton("כזית", "Kezayit_Option"),
                 //CreateRadioButton("היברו בוקס", "HebrewBooks_Option"),
                 CreateRadioButton("דרך האתרים", "WebSites_Option"),
                 CreateRadioButton("עיצוב תורני", "KleiKodesh_Option"),
                 CreateRadioButton("חיפוש רגקס", "RegexFind_Option"),
-                CreateRadioButton("הגדרות", "Settings_Option"),              
+                CreateRadioButton("הגדרות", "Settings_Option"),
             };
 
             foreach (var rb in radioButtons)
@@ -107,6 +106,18 @@ namespace KleiKodesh.Ribbon
                 primaryFlow.Controls.Add(rb);
             }
             primaryGroup.Controls.Add(primaryFlow);
+
+
+            var turnOffUpdatesCheckBox = new CheckBox
+            {
+                Text = "כבה בדיקת עדכונים אוטומטית",
+                Checked = SettingsManager.GetBool("UpdateChecker", "TurnOffUpdates", false),
+                AutoSize = true,
+                Margin = new Padding(0, 10, 0, 4),
+            };
+
+            turnOffUpdatesCheckBox.CheckedChanged += (_, __) =>
+                SettingsManager.Save("UpdateChecker", "TurnOffUpdates", turnOffUpdatesCheckBox.Checked);
 
             var resetButton = new Button
             {
@@ -134,7 +145,13 @@ namespace KleiKodesh.Ribbon
                 WrapContents = false,
                 AutoSize = true,
                 Padding = new Padding(12),
-                Controls = { availableGroup, primaryGroup, resetButton }
+                Controls =
+                {
+                    availableGroup,
+                    primaryGroup,
+                    resetButton,
+                    turnOffUpdatesCheckBox,
+                }
             });
 
             ResumeLayout(true);

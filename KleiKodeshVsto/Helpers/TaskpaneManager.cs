@@ -10,7 +10,7 @@ namespace KleiKodesh.Helpers
 {
     public static class TaskPaneManager
     {
-        private static bool _updateCheckDone = false;
+        private static bool _updateCheckDone = SettingsManager.GetBool("UpdateChecker", "TurnOffUpdates", false);
 
         public static CustomTaskPane Show(
             UserControl userControl,
@@ -129,9 +129,9 @@ namespace KleiKodesh.Helpers
                         // Use the first child control as the content (typically the WebView)
                         contentControl = userControl.Controls[0];
                     }
-                    
+
                     popOutHandler = new TaskPanePopOut(userControl, contentControl, pane);
-                    
+
                     // If the userControl has a method to set the popout toggle action, call it
                     var setPopOutMethod = userControl.GetType().GetMethod("SetPopOutToggleAction");
                     if (setPopOutMethod != null)

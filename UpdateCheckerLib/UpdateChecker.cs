@@ -2,7 +2,6 @@ using Microsoft.Win32;
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Net;
 using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -149,7 +148,7 @@ namespace UpdateCheckerLib
         {
             DownloadProgressWindow progressWindow = null;
             Thread staThread = null;
-            
+
             try
             {
                 // Construct installer download URL - matches build script output filename
@@ -158,25 +157,25 @@ namespace UpdateCheckerLib
 
                 // Create WPF progress window on STA thread
                 var windowCreated = new ManualResetEventSlim(false);
-                
+
                 staThread = new Thread(() =>
                 {
                     progressWindow = new DownloadProgressWindow();
                     progressWindow.SetVersion(version);
                     progressWindow.Show();
-                    
+
                     windowCreated.Set();
-                    
+
                     // Start WPF message pump
                     System.Windows.Threading.Dispatcher.Run();
                 });
-                
+
                 staThread.SetApartmentState(ApartmentState.STA);
                 staThread.Start();
-                
+
                 // Wait for window to be created
                 windowCreated.Wait();
-                
+
                 // Use HttpClient with proper async/await and IProgress
                 await DownloadFileAsync(installerUrl, tempPath, progressWindow, progressWindow.Cancellation.Token);
 
@@ -249,17 +248,17 @@ namespace UpdateCheckerLib
             {
                 client.Timeout = TimeSpan.FromMinutes(5);
                 client.DefaultRequestHeaders.Add("User-Agent", "KleiKodesh-UpdateChecker");
-                
+
                 // Start with indeterminate progress
                 progressWindow.SetIndeterminate("מתחבר לשרת...");
-                
+
                 using (var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken))
                 {
                     response.EnsureSuccessStatusCode();
-                    
+
                     var totalBytes = response.Content.Headers.ContentLength;
                     var canReportProgress = totalBytes.HasValue;
-                    
+
                     // Create IProgress for reporting progress
                     var progress = new Progress<(long bytesRead, long totalBytes)>(data =>
                     {
@@ -275,7 +274,7 @@ namespace UpdateCheckerLib
                             progressWindow.UpdateProgress(0, status);
                         }
                     });
-                    
+
                     using (var contentStream = await response.Content.ReadAsStreamAsync())
                     using (var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true))
                     {
@@ -287,7 +286,7 @@ namespace UpdateCheckerLib
                         do
                         {
                             cancellationToken.ThrowIfCancellationRequested();
-                            
+
                             var bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
                             if (bytesRead == 0)
                             {
@@ -301,13 +300,13 @@ namespace UpdateCheckerLib
                             if (canReportProgress)
                             {
                                 var progressPercentage = (int)((totalBytesRead * 100L) / totalBytes.Value);
-                                
+
                                 // Only update every 5% or at completion
-                                if (progressPercentage % 5 == 0 && progressPercentage != lastReportedPercentage || progressPercentage >= 100)
-                                {
-                                    lastReportedPercentage = progressPercentage;
-                                    ((IProgress<(long, long)>)progress).Report((totalBytesRead, totalBytes.Value));
-                                }
+                                //if (progressPercentage % 5 == 0 && progressPercentage != lastReportedPercentage || progressPercentage >= 100)
+                                //{
+                                lastReportedPercentage = progressPercentage;
+                                ((IProgress<(long, long)>)progress).Report((totalBytesRead, totalBytes.Value));
+                                //}
                             }
                             else
                             {

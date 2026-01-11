@@ -44,10 +44,10 @@ Write-Host "Selected: $Configuration|$Platform" -ForegroundColor Cyan
 
 # Increment version first, before building
 Write-Host "Incrementing version..." -ForegroundColor Yellow
-$progressWindowPath = "..\KleiKodeshVstoInstallerWpf\InstallProgressWindow.xaml.cs"
+$progressWindowPath = "KleiKodeshVstoInstallerWpf\InstallProgressWindow.xaml.cs"
 
 # Run UpdateVersion.ps1 to increment the version
-powershell -ExecutionPolicy Bypass -File "..\KleiKodeshVstoInstallerWpf\UpdateVersion.ps1" -FilePath $progressWindowPath
+powershell -ExecutionPolicy Bypass -File "KleiKodeshVstoInstallerWpf\UpdateVersion.ps1" -FilePath $progressWindowPath
 
 # Now get the updated version from the file
 $versionMatch = Select-String -Path $progressWindowPath -Pattern 'const string Version = "([^"]+)"'
@@ -91,7 +91,7 @@ if (-not $msbuildPath) {
 }
 
 Write-Host "Using MSBuild: $msbuildPath" -ForegroundColor Cyan
-$vstoBuildResult = & $msbuildPath "..\KleiKodeshVsto\KleiKodeshVsto.csproj" -p:Configuration=$Configuration -p:Platform=$Platform
+$vstoBuildResult = & $msbuildPath "KleiKodeshVsto\KleiKodeshVsto.csproj" -p:Configuration=$Configuration -p:Platform=$Platform
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: Failed to build VSTO project" -ForegroundColor Red
@@ -101,7 +101,20 @@ if ($LASTEXITCODE -ne 0) {
 
 # Build WPF installer with VSTO configuration parameters
 Write-Host "Building WPF installer in Release mode..." -ForegroundColor Yellow
-$buildResult = dotnet build "..\KleiKodeshVstoInstallerWpf\KleiKodeshVstoInstallerWpf.csproj" -c Release -p:VstoConfiguration=$Configuration -p:VstoPlatform=$Platform
+
+# Determine dotnet build architecture parameter
+$dotnetArch = ""
+if ($Platform -eq "x64") {
+    $dotnetArch = "--arch x64"
+    Write-Host "Using dotnet build with x64 architecture" -ForegroundColor Cyan
+} else {
+    Write-Host "Using dotnet build with default architecture (AnyCPU)" -ForegroundColor Cyan
+}
+
+# Use dotnet build for modern .NET project
+$buildCommand = "dotnet build `"KleiKodeshVstoInstallerWpf\KleiKodeshVstoInstallerWpf.csproj`" -c Release $dotnetArch -p:VstoConfiguration=$Configuration -p:VstoPlatform=$Platform"
+Write-Host "Build command: $buildCommand" -ForegroundColor Gray
+Invoke-Expression $buildCommand
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: Failed to build WPF installer" -ForegroundColor Red
@@ -123,7 +136,7 @@ if (-not (Test-Path $nsisPath)) {
 
 # Build NSIS wrapper with version parameter
 Write-Host "Building NSIS wrapper with version $version..." -ForegroundColor Yellow
-& $nsisPath "/DPRODUCT_VERSION=$version" "KleiKodeshWrapper.nsi"
+& $nsisPath "/DPRODUCT_VERSION=$version" "Build\KleiKodeshWrapper.nsi"
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: NSIS build failed" -ForegroundColor Red
@@ -131,7 +144,7 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-$installerPath = "KleiKodeshSetup-$version.exe"
+$installerPath = "Build\KleiKodeshSetup-$version.exe"
 if (-not (Test-Path $installerPath)) {
     Write-Host "ERROR: Installer not created at $installerPath" -ForegroundColor Red
     if (-not $NoWait) { Read-Host "Press Enter to continue" }
@@ -167,9 +180,24 @@ if (-not $NoRelease) {
             
             # Create new release with installer
             Write-Host "Creating release $version..." -ForegroundColor Yellow
+            
+            # Create release notes with compilation details
+            $releaseNotes = @"
+Automated release for KleiKodesh $version
+
+**Build Configuration:**
+- VSTO Project: $Configuration|$Platform (MSBuild)
+- WPF Installer: Release|$(if ($Platform -eq "x64") { "x64" } else { "AnyCPU" }) (dotnet build)
+
+**Changes:**
+- Updated installer with latest features
+- Bug fixes and improvements
+- Built with modern .NET 8 tooling
+"@
+            
             gh release create $version $installerPath `
                 --title "KleiKodesh $version" `
-                --notes "Automated release for KleiKodesh $version`n`nChanges:`n- Updated installer with latest features`n- Bug fixes and improvements"
+                --notes $releaseNotes
             
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "SUCCESS: GitHub release $version created!" -ForegroundColor Green
