@@ -5,12 +5,18 @@ param(
 
 Write-Host "Building KleiKodesh Installer..." -ForegroundColor Green
 
-# Get version from InstallProgressWindow.xaml.cs first
-$progressWindowPath = "KleiKodeshVstoInstallerWpf\InstallProgressWindow.xaml.cs"
+# Increment version first, before building
+Write-Host "Incrementing version..." -ForegroundColor Yellow
+$progressWindowPath = "..\KleiKodeshVstoInstallerWpf\InstallProgressWindow.xaml.cs"
+
+# Run UpdateVersion.ps1 to increment the version
+powershell -ExecutionPolicy Bypass -File "..\KleiKodeshVstoInstallerWpf\UpdateVersion.ps1" -FilePath $progressWindowPath
+
+# Now get the updated version from the file
 $versionMatch = Select-String -Path $progressWindowPath -Pattern 'const string Version = "([^"]+)"'
 if ($versionMatch) {
     $version = $versionMatch.Matches[0].Groups[1].Value
-    Write-Host "Detected version: $version" -ForegroundColor Cyan
+    Write-Host "Using version: $version" -ForegroundColor Cyan
 } else {
     Write-Host "ERROR: Could not detect version from InstallProgressWindow.xaml.cs" -ForegroundColor Red
     if (-not $NoWait) { Read-Host "Press Enter to continue" }
@@ -19,7 +25,7 @@ if ($versionMatch) {
 
 # Build WPF installer first
 Write-Host "Building WPF installer in Release mode..." -ForegroundColor Yellow
-$buildResult = dotnet build "KleiKodeshVstoInstallerWpf\KleiKodeshVstoInstallerWpf.csproj" -c Release
+$buildResult = dotnet build "..\KleiKodeshVstoInstallerWpf\KleiKodeshVstoInstallerWpf.csproj" -c Release
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: Failed to build WPF installer" -ForegroundColor Red
@@ -41,7 +47,7 @@ if (-not (Test-Path $nsisPath)) {
 
 # Build NSIS wrapper with version parameter
 Write-Host "Building NSIS wrapper with version $version..." -ForegroundColor Yellow
-& $nsisPath "/DPRODUCT_VERSION=$version" "Build\KleiKodeshWrapper.nsi"
+& $nsisPath "/DPRODUCT_VERSION=$version" "KleiKodeshWrapper.nsi"
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: NSIS build failed" -ForegroundColor Red
@@ -49,7 +55,7 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-$installerPath = "Build\KleiKodeshSetup-$version.exe"
+$installerPath = "KleiKodeshSetup-$version.exe"
 if (-not (Test-Path $installerPath)) {
     Write-Host "ERROR: Installer not created at $installerPath" -ForegroundColor Red
     if (-not $NoWait) { Read-Host "Press Enter to continue" }

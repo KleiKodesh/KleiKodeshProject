@@ -8,6 +8,7 @@
     <UseWPF>true</UseWPF>
     <ApplicationIcon>KleiKodesh_Main.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
 
   <ItemGroup>
@@ -36,20 +37,15 @@
       <InstallProgressFile>$(MSBuildProjectDirectory)\InstallProgressWindow.xaml.cs</InstallProgressFile>
     </PropertyGroup>
     
-    <Message Text="Getting latest version from GitHub..." Importance="high" />
-    
-    <!-- Get latest version from GitHub and update InstallProgressWindow.xaml.cs -->
-    <Exec Command="powershell -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\UpdateVersion.ps1&quot; -FilePath &quot;$(InstallProgressFile)&quot;" 
-          ContinueOnError="false" />
+    <!-- Version increment is handled by build-installer.ps1, not during prebuild -->
     
     <!-- Delete existing zip to force rebuild -->
     <Delete Files="$(ZipOutputPath)" Condition="Exists('$(ZipOutputPath)')" />
     
     <Message Text="Building KleiKodeshVsto VSTO in Release mode..." Importance="high" />
     
-    <!-- Build the VSTO project in Release mode using Exec command -->
-    <Exec Command="&quot;C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe&quot; &quot;$(KleiKodeshProject)&quot; /p:Configuration=Release /p:Platform=AnyCPU" 
-          ContinueOnError="false" />
+    <!-- Build the VSTO project in Release mode using MSBuild (VSTO projects require Visual Studio MSBuild) -->
+    <Exec Command="&quot;C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe&quot; &quot;$(KleiKodeshProject)&quot; /p:Configuration=Release /p:Platform=AnyCPU" ContinueOnError="false" />
     
     <!-- Create output directory for the zip -->
     <MakeDir Directories="$(TempPackageDir)" />
@@ -59,8 +55,7 @@
       <VstoFiles Include="$(VstoOutputPath)\**\*.*" />
     </ItemGroup>
     
-    <Copy SourceFiles="@(VstoFiles)" 
-          DestinationFolder="$(TempPackageDir)\%(RecursiveDir)" />
+    <Copy SourceFiles="@(VstoFiles)" DestinationFolder="$(TempPackageDir)\%(RecursiveDir)" />
     
     <!-- Create zip package in project directory -->
     <Message Text="Creating VSTO zip package..." Importance="high" />

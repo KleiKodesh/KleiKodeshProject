@@ -27,6 +27,13 @@ inclusion: always
 
 **RULE**: If a file looks unreadable or minified, find the original source file instead.
 
+## Development Commands
+
+### Vue Projects
+- **NEVER run `npm run dev`** unless explicitly requested by user
+- **ALWAYS run `npm run build`** for testing and deployment
+- Only use dev server when user specifically asks for live development
+
 ## Documentation Policy
 - **Do not create markdown files** to summarize work or document processes unless explicitly requested
 - Focus on creating functional code and configuration files only

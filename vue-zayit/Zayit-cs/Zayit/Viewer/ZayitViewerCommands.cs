@@ -17,11 +17,20 @@ namespace Zayit.Viewer
         readonly WebView2 _webView;
         private HebrewBooksDownloadManager _hebrewBooksDownloadManager;
         private ZayitViewerDbCommands _dbCommands;
+        private Action _popOutToggleAction;
 
         public ZayitViewerCommands(WebView2 webView)
         {
             this._webView = webView;
             _dbCommands = new ZayitViewerDbCommands(webView);
+        }
+
+        /// <summary>
+        /// Set the popout toggle action - called by ZayitViewerHost when popout functionality is available
+        /// </summary>
+        public void SetPopOutToggleAction(Action popOutToggleAction)
+        {
+            _popOutToggleAction = popOutToggleAction;
         }
 
         // Database commands delegation
@@ -190,6 +199,32 @@ namespace Zayit.Viewer
             else
             {
                 Console.WriteLine("[HebrewBooks] Download manager not initialized");
+            }
+        }
+
+        /// <summary>
+        /// Toggle popout mode for the task pane
+        /// </summary>
+        private async void TogglePopOut()
+        {
+            try
+            {
+                if (_popOutToggleAction != null)
+                {
+                    _popOutToggleAction.Invoke();
+                    Debug.WriteLine("TogglePopOut: Successfully invoked popout toggle action");
+                }
+                else
+                {
+                    Debug.WriteLine("TogglePopOut: No popout toggle action available");
+                    // Send message back to Vue indicating popout is not available
+                    string js = "window.postMessage(JSON.stringify({type: 'popout-unavailable', message: 'Popout not available in this context'}), '*');";
+                    await _webView.ExecuteScriptAsync(js);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"TogglePopOut error: {ex}");
             }
         }
 

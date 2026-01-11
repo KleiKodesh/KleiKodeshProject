@@ -4,7 +4,6 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
-using Zayit.Viewer;
 using Office = Microsoft.Office.Core;
 
 namespace KleiKodesh.Ribbon
@@ -38,10 +37,10 @@ namespace KleiKodesh.Ribbon
 
         public void button_Click(Office.IRibbonControl control)
         {
-            string id = control.Id == "KleiKodesh_Main" 
+            string id = control.Id == "KleiKodesh_Main"
                 ? SettingsManager.Get("Ribbon", "DefaultButton", "Settings")
                 : control.Id;
-          
+
             Execute(id);
         }
 
@@ -66,6 +65,9 @@ namespace KleiKodesh.Ribbon
                         break;
                     case "RegexFind":
                         TaskPaneManager.Show(new KleiKodesh.RegexSearch.RegexFindHost(), "חיפוש רגקס", 600);
+                        break;
+                    case "DuplicatePane":
+                        try { TaskPaneManager.DuplicateCurrent(); } catch { }
                         break;
                     case "Settings":
                         TaskPaneManager.Show(new RibbonSettingsControl(ribbon), "הגדרות כלי קודש", 400);

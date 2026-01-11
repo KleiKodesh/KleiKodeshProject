@@ -1,6 +1,7 @@
 ﻿using Microsoft.Office.Tools;
 using System;
 using System.Linq;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Forms.Integration;
 using System.Windows.Media;
@@ -8,6 +9,7 @@ using WinForms = System.Windows.Forms;
 
 namespace KleiKodesh.Helpers
 {
+    public class WpfHostControl : WinForms.UserControl { }
     public static class WpfTaskPane
     {
         public static CustomTaskPane Show(UserControl userControl, string title, int width = 600)
@@ -30,8 +32,48 @@ namespace KleiKodesh.Helpers
                     return pane;
                 }
 
+                return CreateNew(userControl, title, width);
+            }
+            catch (Exception ex)
+            {
+                WinForms.MessageBox.Show(ex.ToString(), "Error");
+                return null;
+            }
+        }
 
-                var hostControl = new WinForms.UserControl();
+        public static CustomTaskPane DuplicateCurrent(WpfHostControl wpfHostControl, CustomTaskPane current)
+        {
+            var elementHost = wpfHostControl.Controls
+                        .OfType<ElementHost>()
+                        .FirstOrDefault();
+
+            if (elementHost?.Child is UserControl wpfControl)
+            {
+                var wpfType = wpfControl.GetType();
+                var newWpfControl = (UserControl)Activator.CreateInstance(wpfType);
+                var newWpfPane = CreateNew(
+                  newWpfControl,
+                  current.Title,
+                  current.Width
+                );
+
+                newWpfPane.Visible = true;
+                return newWpfPane;
+            }
+
+            return null;
+        }
+
+
+        public static CustomTaskPane CreateNew(
+           UserControl userControl,
+           string title,
+           int width = 600)
+        {
+            try
+            {
+
+                var hostControl = new WpfHostControl();
                 var host = new ElementHost { Dock = WinForms.DockStyle.Fill, Child = userControl };
                 hostControl.Controls.Add(host);
 
@@ -46,9 +88,9 @@ namespace KleiKodesh.Helpers
                     userControl.Background = new SolidColorBrush(Color.FromArgb(adjustedBackColor.A, adjustedBackColor.R, adjustedBackColor.G, adjustedBackColor.B));
                 }
 
-                pane = TaskPaneManager.CreateNew(hostControl, title, width);
+                var pane = TaskPaneManager.CreateNew(hostControl, title, width);
                 pane.Visible = true;
-                
+
                 setColor();
                 hostControl.ForeColorChanged += (_, __) => setColor();
 
@@ -56,7 +98,7 @@ namespace KleiKodesh.Helpers
             }
             catch (Exception ex)
             {
-                WinForms.MessageBox.Show(ex.ToString(), "Error");
+                MessageBox.Show(ex.ToString(), "Error");
                 return null;
             }
         }

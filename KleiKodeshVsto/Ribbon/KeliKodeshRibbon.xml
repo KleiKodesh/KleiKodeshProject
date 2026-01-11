@@ -60,6 +60,13 @@
 									onAction="button_Click"
 									getVisible="getVisible"/>
 
+							<button id="DuplicatePane"
+								label="שכפל חלונית צד"
+								screentip="שכפל חלונית צד"
+								supertip="מאפשר פתיחה של חלונית צד נוספת המשכפלת את חלונית הצד הנוכחית"
+								imageMso="ReviewReviewingPaneVertical"
+								onAction="button_Click"/>
+
 							<button id="Settings"
 									label="הגדרות"
 									imageMso="ComAddInsDialog"

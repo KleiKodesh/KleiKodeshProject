@@ -253,7 +253,9 @@
     <Compile Include="Common\KleiKodeshWebView.cs">
       <SubType>Component</SubType>
     </Compile>
-    <Compile Include="Helpers\WpfTaskPane.cs" />
+    <Compile Include="Helpers\WpfTaskPane.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
     <Compile Include="Helpers\JsonExtensions.cs" />
     <Compile Include="Helpers\MsgBox.cs" />
     <Compile Include="Helpers\TaskPanePopOut.cs" />
@@ -377,6 +379,22 @@
   </PropertyGroup>
   <PropertyGroup>
     <ManifestCertificateThumbprint>248FB7586402B5FEA4B6FEFF20723CFBB6437082</ManifestCertificateThumbprint>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>bin\x64\Debug\</OutputPath>
+    <DefineConstants>VSTO40;DEBUG;TRACE</DefineConstants>
+    <DebugType>full</DebugType>
+    <PlatformTarget>x64</PlatformTarget>
+    <LangVersion>7.3</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
+    <OutputPath>bin\x64\Release\</OutputPath>
+    <DefineConstants>VSTO40;TRACE</DefineConstants>
+    <Optimize>true</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>x64</PlatformTarget>
+    <LangVersion>7.3</LangVersion>
   </PropertyGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- Include additional build rules for an Office application add-in. -->

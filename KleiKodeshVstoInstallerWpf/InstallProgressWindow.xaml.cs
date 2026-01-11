@@ -1,11 +1,7 @@
-using KleiKodesh.Helpers;
 using Microsoft.Win32;
-using System;
-using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Reflection;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -19,27 +15,22 @@ namespace KleiKodeshVstoInstallerWpf
     {
         const string AppName = "KleiKodesh";
         const string AppDisplayName = "כלי קודש";
-        const string Version = "v1.0.15";
+        const string Version = "v1.0.80";
         const string InstallFolderName = "KleiKodesh";
         const string ZipResourceName = "KleiKodesh.zip";
         const string VstoFileName = "KleiKodesh.vsto";
         readonly IProgress<double> _progress;
 
-        static string InstallPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), InstallFolderName);
+        static string InstallPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), InstallFolderName);
         static string AddinRegistryPath => $@"Software\Microsoft\Office\Word\Addins\{AppName}";
-        
 
-        public InstallProgressWindow(Window mainWindow, 
-            string defaultButton,
-            bool Kezayit,
-            bool hebrewbooks,
-            bool websites,
-            bool KleiKodesh)
+
+        public InstallProgressWindow(Window mainWindow)
         {
             InitializeComponent();
             _progress = new Progress<double>(UpdateProgress);
             mainWindow?.Close();
-            Install(defaultButton, Kezayit, hebrewbooks, websites, KleiKodesh);
+            Install();
         }
 
         public void UpdateProgress(double progress)
@@ -57,14 +48,12 @@ namespace KleiKodeshVstoInstallerWpf
             this.DragMove();
         }
 
-        async void Install(string defaultButton,
-            bool Kezayit,
-            bool hebrewbooks,
-            bool websites,
-            bool KleiKodesh)
+        async void Install()
         {
             try
             {
+                await OldInstallationCleaner.CheckAndRemoveOldInstallations();
+
                 if (!Directory.Exists(InstallPath))
                     Directory.CreateDirectory(InstallPath);
 
@@ -77,12 +66,11 @@ namespace KleiKodeshVstoInstallerWpf
                     await Task.Delay(10);
                 }
 
-                MessageBox.Show("ההתקנה הסתיימה");
-                
                 // Save version to registry after successful installation
                 SaveVersionToRegistry(Version);
-                
+
                 // Installation completed successfully - exit with code 0
+                await Task.Delay(300);
                 Environment.Exit(0);
             }
             catch (Exception ex)
@@ -133,42 +121,21 @@ namespace KleiKodeshVstoInstallerWpf
             }
         }
 
-       
+
 
         async Task RegisterAddIn()
         {
             try
             {
-                // 64-bit
-                using (RegistryKey key64 = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64))
+                // Register add-in for current user only (HKCU)
+                using (RegistryKey addinKey = Registry.CurrentUser.CreateSubKey(AddinRegistryPath))
                 {
-                    using (RegistryKey addinKey = key64.CreateSubKey(AddinRegistryPath))
-                    {
-                        addinKey.SetValue("FriendlyName", AppDisplayName);
-                        _progress.Report(103);
-                        addinKey.SetValue("Manifest", $"file:///{InstallPath}\\{VstoFileName}|vstolocal");
-                        _progress.Report(106);
-                        addinKey.SetValue("LoadBehavior", 3, RegistryValueKind.DWord);
-                        _progress.Report(109);
-                    }
-                }
-            }
-            catch { }
-
-            try
-            {
-                // 32-bit
-                using (RegistryKey key32 = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32))
-                {
-                    using (RegistryKey addinKey = key32.CreateSubKey(AddinRegistryPath))
-                    {
-                        addinKey.SetValue("FriendlyName", AppDisplayName);
-                        _progress.Report(112);
-                        addinKey.SetValue("Manifest", $"file:///{InstallPath}\\{VstoFileName}|vstolocal");
-                        _progress.Report(115);
-                        addinKey.SetValue("LoadBehavior", 3, RegistryValueKind.DWord);
-                        _progress.Report(118);
-                    }
+                    addinKey.SetValue("FriendlyName", AppDisplayName);
+                    _progress.Report(103);
+                    addinKey.SetValue("Manifest", $"file:///{InstallPath}\\{VstoFileName}|vstolocal");
+                    _progress.Report(106);
+                    addinKey.SetValue("LoadBehavior", 3, RegistryValueKind.DWord);
+                    _progress.Report(109);
                 }
             }
             catch { }

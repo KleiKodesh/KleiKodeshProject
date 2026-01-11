@@ -17,10 +17,14 @@ fileMatchPattern: '**/KleiKodeshVstoInstallerWpf/**'
 4. **GitHub Release Creation** - Auto-create release with installer asset
 
 ## Version Management
+- **Auto-Increment System**: `build-installer.ps1` calls `UpdateVersion.ps1` to increment patch version before building
+- **GitHub Integration**: Fetches latest release version from GitHub API, increments patch number
+- **File Update**: Updates `const string Version` in `InstallProgressWindow.xaml.cs` before build starts
 - **Storage**: Registry `HKEY_CURRENT_USER\SOFTWARE\KleiKodesh\Version`
 - **Format**: GitHub tag format (e.g., "v1.0.31")
 - **Sync**: Both WPF and NSIS use same version number
 - **Dynamic Passing**: Build script passes version to NSIS via `/DPRODUCT_VERSION=$version`
+- **Single Source**: Version increment only happens in build script, NOT in MSBuild prebuild targets
 
 ## Silent Installation
 - **Arguments**: `--silent` or `/silent`

@@ -19,7 +19,7 @@ namespace WpfLib.Helpers
             StaticPropertyChanged?.Invoke(null, new PropertyChangedEventArgs(propertyName));
         }
 
-        static string updateQuestion = "Updates_were_found_Would_you_like_to_download_them?";
+        static string updateQuestion = "גרסה חדשה זמינה. האם ברצונך להוריד אותה?";
 
         static int updateInterval = 0;
         static string _currentVersion = "v0";
@@ -59,10 +59,25 @@ namespace WpfLib.Helpers
 
                         if (result.IsUpdateAvailable)
                         {
-                            var dialogResult = MsgBox.Question(updateQuestion, repoName);
+                            var hebrewMessage = $"גרסה חדשה זמינה: {result.NewVersionId}\n" +
+                                              $"הגרסה הנוכחית: {currentVersion}\n\n" +
+                                              updateQuestion;
+                            
+                            var dialogResult = MessageBox.Show(
+                                hebrewMessage,
+                                $"עדכון זמין - {repoName}",
+                                MessageBoxButton.YesNo,
+                                MessageBoxImage.Question,
+                                MessageBoxResult.Yes,
+                                MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign
+                            );
 
                             if (dialogResult == MessageBoxResult.Yes)
-                                Process.Start(result.UpdateUrl);
+                                Process.Start(new ProcessStartInfo
+                                {
+                                    FileName = result.UpdateUrl,
+                                    UseShellExecute = true
+                                });
                         }
                     }
                 });
@@ -121,7 +136,9 @@ namespace WpfLib.Helpers
                 string latestVersion = root.GetProperty("tag_name").GetString();
                 string downloadUrl = root.GetProperty("html_url").GetString();
 
-                if (string.Compare(latestVersion, currentVersion, StringComparison.OrdinalIgnoreCase) > 0)
+                var comparison = CompareVersions(latestVersion, currentVersion);
+                
+                if (comparison > 0)
                 {
                     return new UpdateItemModel
                     {
@@ -137,6 +154,23 @@ namespace WpfLib.Helpers
                     Message = "You are using the latest version."
                 };
             }             
+        }
+
+        private static int CompareVersions(string githubVersion, string currentVersion)
+        {
+            // Normalize versions by removing 'v' prefix if present
+            var normalizedGithub = githubVersion?.TrimStart('v') ?? "";
+            var normalizedCurrent = currentVersion?.TrimStart('v') ?? "";
+
+            // Try to parse as semantic versions (e.g., "1.0.31")
+            if (Version.TryParse(normalizedGithub, out var githubVer) && 
+                Version.TryParse(normalizedCurrent, out var currentVer))
+            {
+                return githubVer.CompareTo(currentVer);
+            }
+
+            // Fallback to string comparison if not valid semantic versions
+            return string.Compare(normalizedGithub, normalizedCurrent, StringComparison.OrdinalIgnoreCase);
         }
 
         private static UpdateItemModel CreateErrorModel(string message)

@@ -1,6 +1,7 @@
 ﻿using Microsoft.Office.Tools;
 using System;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using DockPosition = Microsoft.Office.Core.MsoCTPDockPosition;
 
@@ -9,33 +10,43 @@ namespace KleiKodesh.Helpers
     public static class TaskPaneManager
     {
         private static bool _updateCheckDone = false;
-        
+
         public static CustomTaskPane Show(
             UserControl userControl,
             string title,
             int width = 600,
             bool matchOfficeTheme = true,
-            bool popOutBehavior = false)
+            bool popOutBehavior = true)
         {
             try
             {
-                // // Check for updates on first taskpane open - DISABLED for now to prevent crashes
-                // if (!_updateCheckDone)
-                // {
-                //     _updateCheckDone = true;
-                //     Debug.WriteLine("[TaskPaneManager] First taskpane open - update check disabled for stability");
-                    
-                //     // TODO: Re-enable update check once we find a safer approach
-                //     // The PowerShell script launch is causing Word crashes
-                // }
-                
+                // Check for updates on first taskpane open with Hebrew prompt
+                if (!_updateCheckDone)
+                {
+                    _updateCheckDone = true;
+
+                    // Run update check asynchronously without blocking UI
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var updateChecker = new GitHubUpdateChecker();
+                            await updateChecker.CheckAndPromptForUpdateAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[TaskPaneManager] Update check failed: {ex.Message}");
+                        }
+                    });
+                }
+
                 var panes = Globals.ThisAddIn.CustomTaskPanes;
                 var window = Globals.ThisAddIn.Application.ActiveWindow;
                 var type = userControl.GetType();
 
                 var pane = panes.Cast<CustomTaskPane>()
                     .FirstOrDefault(p => p.Control.GetType() == type && p.Window == window) ??
-                     CreateNew(userControl, title, width, matchOfficeTheme); 
+                     CreateNew(userControl, title, width, matchOfficeTheme);
 
                 pane.Visible = true;
                 return pane;
@@ -47,34 +58,89 @@ namespace KleiKodesh.Helpers
             }
         }
 
+        public static CustomTaskPane GetCurrentlyVisiblePane() =>
+            Globals.ThisAddIn.CustomTaskPanes.Cast<CustomTaskPane>()
+                 .FirstOrDefault(p => p.Window == Globals.ThisAddIn.Application.ActiveWindow && p.Visible);
+
+
+        public static CustomTaskPane DuplicateCurrent()
+        {
+            try
+            {
+                var current = GetCurrentlyVisiblePane();
+                if (current == null)
+                    return null;
+
+                if (current.Control is WpfHostControl wpfHostControl)
+                    return WpfTaskPane.DuplicateCurrent(wpfHostControl, current);
+
+                var type = current.Control.GetType();
+                var newControl = (UserControl)Activator.CreateInstance(type);
+
+                // Reuse CreateNew instead of duplicating logic
+                var newPane = CreateNew(
+                    newControl,
+                    current.Title,
+                    current.Width
+                );
+
+                newPane.Visible = true;
+                return newPane;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.ToString(), "Duplicate TaskPane Error");
+                return null;
+            }
+        }
+
+
         public static CustomTaskPane CreateNew(
            UserControl userControl,
            string title,
            int width = 600,
            bool matchOfficeTheme = true,
-           bool popOutBehavior = false)
+           bool popOutBehavior = true)
         {
             try
             {
                 var panes = Globals.ThisAddIn.CustomTaskPanes;
                 var window = Globals.ThisAddIn.Application.ActiveWindow;
                 var type = userControl.GetType();
-                    var pane = panes.Add(userControl, title);
+                var pane = panes.Add(userControl, title);
 
-                    RestoreDockPosition(pane, type.Name);
-                    RestoreWidth(pane, userControl, type.Name, width);
-                    AttachRemoveOnClose(pane, userControl);
-                    //Globals.ThisAddIn.Application.DocumentChange += () =>
-                    //{
-                    //    panes.Remove(pane);
-                    //    panes.Add(userControl, title);
-                    //};
+                RestoreDockPosition(pane, type.Name);
+                RestoreWidth(pane, userControl, type.Name, width);
+                AttachRemoveOnClose(pane, userControl);
+                //Globals.ThisAddIn.Application.DocumentChange += () =>
+                //{
+                //    panes.Remove(pane);
+                //    panes.Add(userControl, title);
+                //};
 
-                    if (popOutBehavior)
-                        new TaskPanePopOut(userControl, userControl, pane);
+                TaskPanePopOut popOutHandler = null;
+                if (popOutBehavior)
+                {
+                    // For ZayitViewerHost, we need to get the actual WebView content, not the host itself
+                    Control contentControl = userControl;
+                    if (userControl.Controls.Count > 0)
+                    {
+                        // Use the first child control as the content (typically the WebView)
+                        contentControl = userControl.Controls[0];
+                    }
+                    
+                    popOutHandler = new TaskPanePopOut(userControl, contentControl, pane);
+                    
+                    // If the userControl has a method to set the popout toggle action, call it
+                    var setPopOutMethod = userControl.GetType().GetMethod("SetPopOutToggleAction");
+                    if (setPopOutMethod != null)
+                    {
+                        setPopOutMethod.Invoke(userControl, new object[] { new Action(popOutHandler.Toggle) });
+                    }
+                }
 
-                    if (matchOfficeTheme)
-                        OfficeThemeWatcher.Attach(userControl);
+                if (matchOfficeTheme)
+                    OfficeThemeWatcher.Attach(userControl);
 
                 return pane;
             }

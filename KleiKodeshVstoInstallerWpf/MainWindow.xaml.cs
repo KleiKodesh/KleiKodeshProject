@@ -1,17 +1,9 @@
 ﻿using KleiKodesh.Helpers;
-using System;
 using System.Diagnostics;
-using System.Text;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
 using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
-using System.Windows.Shapes;
-using System.Xml.Linq;
 
 namespace KleiKodeshVstoInstallerWpf
 {
@@ -41,7 +33,7 @@ namespace KleiKodeshVstoInstallerWpf
                     SettingsManager.Save("Ribbon", "DefaultButton", radioButton.Name.Replace("_Option", ""));
 
                 if (radioButton.Name.Contains(defaultButtonId))
-                    radioButton.IsChecked = true; 
+                    radioButton.IsChecked = true;
             }
         }
 
@@ -84,19 +76,20 @@ namespace KleiKodeshVstoInstallerWpf
 
         void Install()
         {
-            try 
+            try
             {
                 if (Process.GetProcessesByName("WINWORD").Length > 0)
                 {
                     MessageBox.Show("אנא סגור את וורד לפני ההתקנה");
                     return;
                 }
-                new InstallProgressWindow(this, "Install", true, true, true, true).Show();               
-            } 
+
+                new InstallProgressWindow(this).Show();
+            }
             catch (Exception ex)
             {
                 MessageBox.Show($"שגיאה בהתקנה: {ex.Message}");
-            }        
+            }
         }
 
         void Abort()

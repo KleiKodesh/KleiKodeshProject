@@ -5,7 +5,7 @@ using System.Windows.Forms;
 
 namespace KleiKodesh.Helpers
 {
-    internal sealed class TaskPanePopOut
+    public sealed class TaskPanePopOut
     {
         readonly UserControl _host;
         readonly Control _content;

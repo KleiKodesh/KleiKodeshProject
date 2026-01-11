@@ -21,11 +21,18 @@
 ; MUI Settings
 !define MUI_ABORTWARNING
 
+; Uninstaller window customization for Hebrew
+!define MUI_UNINSTALLER
+!define MUI_UNPAGE_INSTFILES_COLORS "0x000000 0xFFFFFF"
+
+; Hebrew text for uninstaller window
+!define MUI_UNINSTALLER_TITLE "הסרת כלי קודש"
+!define MUI_UNINSTALLER_SUBTITLE "אנא המתן בזמן שכלי קודש מוסר מהמחשב שלך."
+
 ; Pages (required for MUI)
 !insertmacro MUI_PAGE_INSTFILES
 
 ; Uninstaller pages
-!insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 
 ; Language support (must be after pages)
@@ -52,7 +59,7 @@ UninstallIcon "..\KleiKodeshVstoInstallerWpf\KleiKodesh_Main.ico"
 
 Name "מתקין ${PRODUCT_NAME}"
 OutFile "KleiKodeshSetup-${PRODUCT_VERSION}.exe"
-InstallDir "$PROGRAMFILES32\KleiKodesh"
+InstallDir "$LOCALAPPDATA\KleiKodesh"
 RequestExecutionLevel admin
 SilentInstall silent
 AutoCloseWindow true
@@ -153,34 +160,22 @@ Section "Main"
 SectionEnd
 
 Function un.onInit
-  ; Detect system language for uninstaller
-  Call un.DetectSystemLanguage
-  
   ; Check if Word is running and offer to close it
   Call un.HandleWordRunning
   
-  ; Confirmation dialog with appropriate RTL setting
-  ${If} $LANGUAGE == ${LANG_HEBREW}
-    MessageBox MB_ICONQUESTION|MB_YESNO|MB_DEFBUTTON2|MB_RTLREADING "$(MSG_UNINSTALL_CONFIRM)" IDYES +2
-  ${Else}
-    MessageBox MB_ICONQUESTION|MB_YESNO|MB_DEFBUTTON2 "$(MSG_UNINSTALL_CONFIRM)" IDYES +2
-  ${EndIf}
-  Abort
+  ; Skip confirmation dialog - proceed directly to uninstall
 FunctionEnd
 
 Function un.HandleWordRunning
   ; Check if Word is running and handle it
   Call un.CheckWordRunning
   ${If} $R9 == "1"
-    ; Word is running, ask user if they want to close it
-    ${If} $LANGUAGE == ${LANG_HEBREW}
-      MessageBox MB_ICONQUESTION|MB_YESNO|MB_RTLREADING "$(MSG_WORD_RUNNING)" IDYES CloseWord IDNO AbortUninstall
-    ${Else}
-      MessageBox MB_ICONQUESTION|MB_YESNO "$(MSG_WORD_RUNNING)" IDYES CloseWord IDNO AbortUninstall
-    ${EndIf}
+    ; Word is running, ask user if they want to close it with hardcoded Hebrew message
+    MessageBox MB_ICONQUESTION|MB_YESNO|MB_RTLREADING "Microsoft Word פועל כעת.$\r$\n$\r$\nהאם ברצונך לסגור את Word ולהמשיך בהסרה?" IDYES CloseWord IDNO AbortUninstall
     
     CloseWord:
       ; Try to close Word gracefully
+      DetailPrint "סוגר את Microsoft Word..."
       Call un.CloseWord
       
       ; Wait a moment for Word to close
@@ -189,14 +184,11 @@ Function un.HandleWordRunning
       ; Check again if Word is still running
       Call un.CheckWordRunning
       ${If} $R9 == "1"
-        ; Word is still running, show error and abort
-        ${If} $LANGUAGE == ${LANG_HEBREW}
-          MessageBox MB_OK|MB_ICONSTOP|MB_RTLREADING "$(MSG_WORD_CLOSE_FAILED)"
-        ${Else}
-          MessageBox MB_OK|MB_ICONSTOP "$(MSG_WORD_CLOSE_FAILED)"
-        ${EndIf}
+        ; Word is still running, show error and abort with hardcoded Hebrew message
+        MessageBox MB_OK|MB_ICONSTOP|MB_RTLREADING "לא ניתן לסגור את Word אוטומטית.$\r$\n$\r$\nאנא סגור את Word באופן ידני ונסה שוב."
         Abort
       ${EndIf}
+      DetailPrint "Microsoft Word נסגר בהצלחה."
       Goto WordHandled
     
     AbortUninstall:
@@ -228,19 +220,6 @@ Function un.CloseWord
   ${EndIf}
 FunctionEnd
 
-Function un.DetectSystemLanguage
-  ; Get system default language ID for uninstaller
-  System::Call 'kernel32::GetSystemDefaultLangID() i .r0'
-  
-  ; Hebrew language ID is 1037 (0x040D)
-  ${If} $0 == 1037
-    ; System is Hebrew, use Hebrew language
-    StrCpy $LANGUAGE ${LANG_HEBREW}
-  ${Else}
-    ; System is not Hebrew, use English as fallback
-    StrCpy $LANGUAGE ${LANG_ENGLISH}
-  ${EndIf}
-FunctionEnd
 
 Function un.CheckWordRunning
   ; Check if Word is running using a more reliable method
@@ -270,24 +249,29 @@ Function un.CheckWordRunning
 FunctionEnd
 
 Section Uninstall
+  ; Show progress with hardcoded Hebrew messages
+  DetailPrint "מתחיל הסרת כלי קודש..."
+  
   ; Remove exact files and directories created by WPF installer
-  ; WPF installer extracts to $PROGRAMFILES32\KleiKodesh
-  RMDir /r "$PROGRAMFILES32\KleiKodesh"
+  ; WPF installer extracts to $LOCALAPPDATA\KleiKodesh
+  DetailPrint "מסיר קבצי התוכנה..."
+  RMDir /r "$LOCALAPPDATA\KleiKodesh"
   
   ; Remove exact registry entries created by WPF installer
-  ; Office Add-in registry cleanup (Word only, both 32-bit and 64-bit views)
-  ; The WPF installer creates these in HKLM with both registry views
-  SetRegView 64
-  DeleteRegKey HKLM "Software\Microsoft\Office\Word\Addins\KleiKodesh"
-  SetRegView 32
-  DeleteRegKey HKLM "Software\Microsoft\Office\Word\Addins\KleiKodesh"
-  SetRegView default
+  ; Office Add-in registry cleanup (Word only, current user registry)
+  ; The WPF installer creates these in HKCU
+  DetailPrint "מנקה רישומי רישום של Office..."
+  DeleteRegKey HKCU "Software\Microsoft\Office\Word\Addins\KleiKodesh"
   
   ; Version registry cleanup (created by SaveVersionToRegistry in HKCU)
+  DetailPrint "מנקה הגדרות תוכנה..."
   DeleteRegKey HKCU "SOFTWARE\KleiKodesh"
   
   ; Remove uninstaller registry entries (created by NSIS)
+  DetailPrint "מסיר רישומי הסרה..."
   DeleteRegKey ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}"
+  
+  DetailPrint "הסרת כלי קודש הושלמה בהצלחה!"
   
   ; Close silently when completed
   SetAutoClose true

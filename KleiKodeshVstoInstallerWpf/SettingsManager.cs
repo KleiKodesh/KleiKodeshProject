@@ -1,6 +1,5 @@
 ﻿using Microsoft.VisualBasic;
 using Microsoft.Win32;
-using System;
 
 namespace KleiKodesh.Helpers
 {

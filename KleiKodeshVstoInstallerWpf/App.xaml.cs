@@ -1,6 +1,4 @@
-﻿using System.Configuration;
-using System.Data;
-using System.Windows;
+﻿using System.Windows;
 
 namespace KleiKodeshVstoInstallerWpf
 {
@@ -17,7 +15,7 @@ namespace KleiKodeshVstoInstallerWpf
             bool silentMode = false;
             foreach (string arg in e.Args)
             {
-                if (arg.Equals("--silent", StringComparison.OrdinalIgnoreCase) || 
+                if (arg.Equals("--silent", StringComparison.OrdinalIgnoreCase) ||
                     arg.Equals("/silent", StringComparison.OrdinalIgnoreCase))
                 {
                     silentMode = true;
@@ -28,7 +26,7 @@ namespace KleiKodeshVstoInstallerWpf
             if (silentMode)
             {
                 // Silent mode: go directly to installation
-                var progressWindow = new InstallProgressWindow(null, "Install", true, true, true, true);
+                var progressWindow = new InstallProgressWindow(null);
                 progressWindow.Show();
             }
             else
