@@ -1,9 +1,46 @@
 param(
     [switch]$NoWait,
-    [switch]$NoRelease
+    [switch]$NoRelease,
+    [ValidateSet("AnyCPU", "x64")]
+    [string]$Platform
 )
 
 Write-Host "Building KleiKodesh Installer..." -ForegroundColor Green
+
+# Check if platform was provided as parameter
+if ($Platform) {
+    $Configuration = "Release"
+    Write-Host "Using command line parameter: Release|$Platform" -ForegroundColor Cyan
+} else {
+    # Show platform selection menu
+    Write-Host ""
+    Write-Host "Select VSTO build configuration:" -ForegroundColor Yellow
+    Write-Host "1. Release|AnyCPU (Recommended)" -ForegroundColor White
+    Write-Host "2. Release|x64" -ForegroundColor White
+    Write-Host ""
+
+    do {
+        $choice = Read-Host "Enter your choice (1-2)"
+        switch ($choice) {
+            "1" { 
+                $Configuration = "Release"
+                $Platform = "AnyCPU"
+                $valid = $true
+            }
+            "2" { 
+                $Configuration = "Release"
+                $Platform = "x64"
+                $valid = $true
+            }
+            default { 
+                Write-Host "Invalid choice. Please enter 1 or 2." -ForegroundColor Red
+                $valid = $false
+            }
+        }
+    } while (-not $valid)
+}
+
+Write-Host "Selected: $Configuration|$Platform" -ForegroundColor Cyan
 
 # Increment version first, before building
 Write-Host "Incrementing version..." -ForegroundColor Yellow
@@ -23,9 +60,48 @@ if ($versionMatch) {
     exit 1
 }
 
-# Build WPF installer first
+# Build VSTO project first
+Write-Host "Building VSTO project in $Configuration|$Platform mode..." -ForegroundColor Yellow
+
+# Find MSBuild
+$msbuildPaths = @(
+    "C:\Program Files\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe",
+    "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe",
+    "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe",
+    "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe",
+    "C:\Program Files\Microsoft Visual Studio\18\Professional\MSBuild\Current\Bin\MSBuild.exe",
+    "C:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe",
+    "C:\Program Files (x86)\Microsoft Visual Studio\2019\Professional\MSBuild\Current\Bin\MSBuild.exe",
+    "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin\MSBuild.exe",
+    "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\MSBuild\Current\Bin\MSBuild.exe"
+)
+
+$msbuildPath = $null
+foreach ($path in $msbuildPaths) {
+    if (Test-Path $path) {
+        $msbuildPath = $path
+        break
+    }
+}
+
+if (-not $msbuildPath) {
+    Write-Host "ERROR: MSBuild not found. Install Visual Studio with VSTO tools." -ForegroundColor Red
+    if (-not $NoWait) { Read-Host "Press Enter to continue" }
+    exit 1
+}
+
+Write-Host "Using MSBuild: $msbuildPath" -ForegroundColor Cyan
+$vstoBuildResult = & $msbuildPath "..\KleiKodeshVsto\KleiKodeshVsto.csproj" -p:Configuration=$Configuration -p:Platform=$Platform
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: Failed to build VSTO project" -ForegroundColor Red
+    if (-not $NoWait) { Read-Host "Press Enter to continue" }
+    exit 1
+}
+
+# Build WPF installer with VSTO configuration parameters
 Write-Host "Building WPF installer in Release mode..." -ForegroundColor Yellow
-$buildResult = dotnet build "..\KleiKodeshVstoInstallerWpf\KleiKodeshVstoInstallerWpf.csproj" -c Release
+$buildResult = dotnet build "..\KleiKodeshVstoInstallerWpf\KleiKodeshVstoInstallerWpf.csproj" -c Release -p:VstoConfiguration=$Configuration -p:VstoPlatform=$Platform
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: Failed to build WPF installer" -ForegroundColor Red
@@ -65,6 +141,7 @@ if (-not (Test-Path $installerPath)) {
 Write-Host ""
 Write-Host "SUCCESS: KleiKodeshSetup-$version.exe created!" -ForegroundColor Green
 Write-Host "This wrapper checks .NET and runs your WPF installer." -ForegroundColor Cyan
+Write-Host "VSTO Configuration: $Configuration|$Platform" -ForegroundColor Cyan
 Write-Host "Using version: $version" -ForegroundColor Cyan
 
 # Create GitHub release if authenticated with gh CLI and not skipped

@@ -15,7 +15,7 @@ namespace KleiKodeshVstoInstallerWpf
     {
         const string AppName = "KleiKodesh";
         const string AppDisplayName = "כלי קודש";
-        const string Version = "v1.0.80";
+        const string Version = "v1.0.81";
         const string InstallFolderName = "KleiKodesh";
         const string ZipResourceName = "KleiKodesh.zip";
         const string VstoFileName = "KleiKodesh.vsto";

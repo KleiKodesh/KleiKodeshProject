@@ -82,7 +82,7 @@
                  @click.stop="handlePopoutClick"
                  class="flex-row flex-center-start hover-bg c-pointer dropdown-item">
               <Icon icon="fluent:open-28-regular" />
-              <span class="dropdown-label">{{ popoutLabel }}</span>
+              <span class="dropdown-label">הצג בחלונית</span>
             </div>
           </div>
         </transition>
@@ -153,7 +153,6 @@ import { dbManager } from '../data/dbManager';
 const tabStore = useTabStore();
 const settingsStore = useSettingsStore();
 const isDropdownOpen = ref(false);
-const isPopoutMode = ref(false);
 
 // Theme state - reactive to theme changes
 const currentTheme = ref(isDarkTheme());
@@ -190,10 +189,6 @@ const isSplitPaneOpen = computed(() => {
   const bookState = tabStore.activeTab?.bookState;
   if (!bookState) return false;
   return bookState.showBottomPane || false;
-});
-
-const popoutLabel = computed(() => {
-  return isPopoutMode.value ? 'פאנל צד' : 'חלון נפרד';
 });
 
 // Theme toggle computed properties
@@ -342,8 +337,6 @@ const handlePopoutClick = () => {
       command: 'TogglePopOut',
       args: []
     });
-    // Toggle the local state
-    isPopoutMode.value = !isPopoutMode.value;
   }
   isDropdownOpen.value = false;
 };

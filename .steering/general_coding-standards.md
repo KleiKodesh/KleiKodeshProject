@@ -10,6 +10,11 @@ inclusion: always
 - **Expression-bodied members**: Use `=>` for simple methods and properties
 - **Pattern matching**: Use `is` patterns and switch expressions where appropriate
 
+## JSON Serialization
+- **Prefer System.Text.Json**: Use `System.Text.Json` over `Newtonsoft.Json` for all new code
+- **JsonPropertyName**: Use `[JsonPropertyName("property_name")]` for property mapping
+- **JsonSerializer**: Use `JsonSerializer.Deserialize<T>()` and `JsonSerializer.Serialize()`
+
 ## Code Organization
 - **Single Responsibility**: Each class should have one clear purpose
 - **Minimal Classes**: Only include necessary properties and methods, remove unused code

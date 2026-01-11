@@ -262,7 +262,6 @@
     <Compile Include="Helpers\OfficeThemeWatcher.cs" />
     <Compile Include="Helpers\SettingsManager.cs" />
     <Compile Include="Helpers\TaskpaneManager.cs" />
-    <Compile Include="Helpers\GitHubUpdateChecker.cs" />
     <Compile Include="Helpers\WdActionManager.cs" />
     <Compile Include="Properties\AssemblyInfo.cs">
       <SubType>Code</SubType>
@@ -356,6 +355,10 @@
     <ProjectReference Include="..\DocSeferLib\DocSeferLib.csproj">
       <Project>{74e59bc0-41e5-475a-85cb-eacdc2ef6415}</Project>
       <Name>DocSeferLib</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\UpdateCheckerLib\UpdateCheckerLib.csproj">
+      <Project>{B8F3E2A1-4C5D-4E6F-8A9B-1C2D3E4F5A6B}</Project>
+      <Name>UpdateCheckerLib</Name>
     </ProjectReference>
     <ProjectReference Include="..\vue-zayit\Zayit-cs\Zayit\Zayit.csproj">
       <Project>{a67fd876-cc61-4029-b5f6-27c4f1505776}</Project>

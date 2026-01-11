@@ -31,7 +31,12 @@
   <Target Name="BuildVstoAndPack" BeforeTargets="BeforeBuild" Condition="'$(Configuration)' == 'Release'">
     <PropertyGroup>
       <KleiKodeshProject>$(MSBuildProjectDirectory)\..\KleiKodeshVsto\KleiKodeshVsto.csproj</KleiKodeshProject>
-      <VstoOutputPath>$(MSBuildProjectDirectory)\..\KleiKodeshVsto\bin\Release</VstoOutputPath>
+      <!-- Use parameters passed from build script, default to Release|AnyCPU if not specified -->
+      <VstoConfig Condition="'$(VstoConfiguration)' == ''">Release</VstoConfig>
+      <VstoConfig Condition="'$(VstoConfiguration)' != ''">$(VstoConfiguration)</VstoConfig>
+      <VstoPlatformParam Condition="'$(VstoPlatform)' == ''">AnyCPU</VstoPlatformParam>
+      <VstoPlatformParam Condition="'$(VstoPlatform)' != ''">$(VstoPlatform)</VstoPlatformParam>
+      <VstoOutputPath>$(MSBuildProjectDirectory)\..\KleiKodeshVsto\bin\$(VstoConfig)</VstoOutputPath>
       <TempPackageDir>$(OutputPath)VstoPackage</TempPackageDir>
       <ZipOutputPath>$(MSBuildProjectDirectory)\KleiKodesh.zip</ZipOutputPath>
       <InstallProgressFile>$(MSBuildProjectDirectory)\InstallProgressWindow.xaml.cs</InstallProgressFile>
@@ -42,10 +47,18 @@
     <!-- Delete existing zip to force rebuild -->
     <Delete Files="$(ZipOutputPath)" Condition="Exists('$(ZipOutputPath)')" />
     
-    <Message Text="Building KleiKodeshVsto VSTO in Release mode..." Importance="high" />
+    <Message Text="Building KleiKodeshVsto VSTO in $(VstoConfig)|$(VstoPlatformParam) mode..." Importance="high" />
     
-    <!-- Build the VSTO project in Release mode using MSBuild (VSTO projects require Visual Studio MSBuild) -->
-    <Exec Command="&quot;C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe&quot; &quot;$(KleiKodeshProject)&quot; /p:Configuration=Release /p:Platform=AnyCPU" ContinueOnError="false" />
+    <!-- Try to find MSBuild in common Visual Studio locations -->
+    <PropertyGroup>
+      <MSBuildPath Condition="Exists('C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe')">C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe</MSBuildPath>
+      <MSBuildPath Condition="'$(MSBuildPath)' == '' AND Exists('C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe')">C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe</MSBuildPath>
+      <MSBuildPath Condition="'$(MSBuildPath)' == '' AND Exists('C:\Program Files\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe')">C:\Program Files\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe</MSBuildPath>
+      <MSBuildPath Condition="'$(MSBuildPath)' == '' AND Exists('C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe')">C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe</MSBuildPath>
+    </PropertyGroup>
+    
+    <!-- Build the VSTO project using the selected configuration and platform -->
+    <Exec Command="&quot;$(MSBuildPath)&quot; &quot;$(KleiKodeshProject)&quot; /p:Configuration=$(VstoConfig) /p:Platform=$(VstoPlatformParam)" ContinueOnError="false" />
     
     <!-- Create output directory for the zip -->
     <MakeDir Directories="$(TempPackageDir)" />
