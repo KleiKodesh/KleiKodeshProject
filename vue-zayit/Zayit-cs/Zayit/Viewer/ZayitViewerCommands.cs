@@ -70,7 +70,7 @@ namespace Zayit.Viewer
         }
 
         /// <summary>
-        /// Open PDF file picker dialog
+        /// Open PDF file picker dialog (DEPRECATED - Vue now uses browser file picker)
         /// </summary>
         private async void OpenPdfFilePicker()
         {
@@ -138,7 +138,7 @@ namespace Zayit.Viewer
         }
 
         /// <summary>
-        /// Load PDF from file path and convert to data URL
+        /// Load PDF using WebView2 virtual host mapping (DEPRECATED - Vue now uses browser file picker)
         /// </summary>
         private async void LoadPdfFromPath(string filePath)
         {
@@ -146,35 +146,74 @@ namespace Zayit.Viewer
             {
                 Debug.WriteLine($"LoadPdfFromPath called: {filePath}");
 
-                string dataUrl = null;
-
                 if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath))
                 {
                     try
                     {
-                        // Read PDF file and convert to base64
-                        byte[] pdfBytes = File.ReadAllBytes(filePath);
-                        string base64 = Convert.ToBase64String(pdfBytes);
-                        dataUrl = base64; // Just the base64 string
-                        Debug.WriteLine($"PDF loaded from path, size: {pdfBytes.Length} bytes");
+                        // Get the folder containing the PDF
+                        string pdfFolder = Path.GetDirectoryName(filePath);
+                        string pdfFileName = Path.GetFileName(filePath);
+                        
+                        Debug.WriteLine($"PDF folder: {pdfFolder}");
+                        Debug.WriteLine($"PDF filename: {pdfFileName}");
+
+                        // Ensure WebView2 is initialized
+                        if (_webView.CoreWebView2 == null)
+                        {
+                            Debug.WriteLine("WebView2 not initialized, waiting...");
+                            await _webView.EnsureCoreWebView2Async();
+                        }
+
+                        // Clear any existing virtual host mapping for pdf.local
+                        try
+                        {
+                            _webView.CoreWebView2.ClearVirtualHostNameToFolderMapping("pdf.local");
+                        }
+                        catch (Exception clearEx)
+                        {
+                            Debug.WriteLine($"Note: Could not clear existing mapping: {clearEx.Message}");
+                        }
+
+                        // Map the PDF's folder to a virtual host
+                        _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                            "pdf.local",
+                            pdfFolder,
+                            Microsoft.Web.WebView2.Core.CoreWebView2HostResourceAccessKind.Allow
+                        );
+
+                        Debug.WriteLine($"Mapped pdf.local to folder: {pdfFolder}");
+
+                        // Create the virtual URL for the PDF
+                        string virtualUrl = $"https://pdf.local/{Uri.EscapeDataString(pdfFileName)}";
+                        
+                        Debug.WriteLine($"Virtual PDF URL: {virtualUrl}");
+
+                        // Send the virtual URL to JavaScript
+                        string filePathJson = JsonSerializer.Serialize(filePath);
+                        string virtualUrlJson = JsonSerializer.Serialize(virtualUrl);
+                        string js = $"window.receivePdfVirtualUrl({filePathJson}, {virtualUrlJson});";
+                        
+                        await _webView.ExecuteScriptAsync(js);
+
+                        Debug.WriteLine($"PDF virtual URL sent: filePath={filePath}, virtualUrl={virtualUrl}");
                     }
                     catch (Exception fileEx)
                     {
-                        Debug.WriteLine($"Failed to read PDF file: {fileEx.Message}");
+                        Debug.WriteLine($"Failed to map PDF folder: {fileEx.Message}");
+                        
+                        // Fallback to base64 for compatibility
+                        await LoadPdfAsBase64Fallback(filePath);
                     }
                 }
                 else
                 {
                     Debug.WriteLine($"PDF file not found: {filePath}");
+                    
+                    // Send null result
+                    string filePathJson = JsonSerializer.Serialize(filePath);
+                    string js = $"window.receivePdfVirtualUrl({filePathJson}, null);";
+                    await _webView.ExecuteScriptAsync(js);
                 }
-
-                // Send result back to Vue
-                string filePathJson = JsonSerializer.Serialize(filePath);
-                string dataUrlJson = JsonSerializer.Serialize(dataUrl);
-                string js = $"window.receivePdfDataUrl({filePathJson}, {dataUrlJson});";
-                await _webView.ExecuteScriptAsync(js);
-
-                Debug.WriteLine($"PDF load result sent: filePath={filePath}, hasDataUrl={dataUrl != null}");
             }
             catch (Exception ex)
             {
@@ -182,8 +221,38 @@ namespace Zayit.Viewer
 
                 // Send null result on error
                 string filePathJson = JsonSerializer.Serialize(filePath);
-                string js = $"window.receivePdfDataUrl({filePathJson}, null);";
+                string js = $"window.receivePdfVirtualUrl({filePathJson}, null);";
                 await _webView.ExecuteScriptAsync(js);
+            }
+        }
+
+        /// <summary>
+        /// Fallback method for base64 loading when virtual mapping fails
+        /// </summary>
+        private async Task LoadPdfAsBase64Fallback(string filePath)
+        {
+            try
+            {
+                Debug.WriteLine($"Using base64 fallback for: {filePath}");
+                
+                // Read PDF file and convert to base64
+                byte[] pdfBytes = File.ReadAllBytes(filePath);
+                string base64 = Convert.ToBase64String(pdfBytes);
+                
+                Debug.WriteLine($"PDF loaded as base64, size: {pdfBytes.Length} bytes");
+
+                // Send base64 data URL to JavaScript
+                string filePathJson = JsonSerializer.Serialize(filePath);
+                string dataUrlJson = JsonSerializer.Serialize(base64);
+                string js = $"window.receivePdfDataUrl({filePathJson}, {dataUrlJson});";
+                
+                await _webView.ExecuteScriptAsync(js);
+                
+                Debug.WriteLine($"PDF base64 fallback sent: filePath={filePath}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Base64 fallback failed: {ex}");
             }
         }
 

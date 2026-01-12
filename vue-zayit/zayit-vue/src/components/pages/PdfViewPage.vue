@@ -25,10 +25,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useTabStore } from '../../stores/tabStore';
-import { dbManager } from '../../data/dbManager';
 
 const tabStore = useTabStore();
 const fileInput = ref<HTMLInputElement>();
@@ -68,41 +67,17 @@ const placeholderMessage = computed(() => {
 
 // Open file picker - use C# if available, otherwise browser
 const openFilePicker = async () => {
-  try {
-    const result = await dbManager.openPdfFilePicker();
-
-    if (result.filePath && result.fileName) {
-      // C# file picker succeeded - use file path for persistence
-      const tab = tabStore.activeTab;
-      if (tab) {
-        tab.pdfState = {
-          fileName: result.fileName,
-          fileUrl: '', // Not needed when using file path
-          filePath: result.filePath
-        };
-
-        // Update tab title if it's generic
-        if (tab.title === 'תצוגת PDF') {
-          tab.title = result.fileName;
-        }
-      }
-    } else {
-      // Fallback to browser file picker
-      fileInput.value?.click();
-    }
-  } catch (error) {
-    console.error('Failed to open C# file picker, falling back to browser:', error);
-    fileInput.value?.click();
-  }
+  // Always use browser file picker - same method as PDF.js built-in picker
+  fileInput.value?.click();
 };
 
-// Handle file selection
+// Handle file selection - same as PDF.js built-in picker
 const handleFileSelect = (event: Event) => {
   const target = event.target as HTMLInputElement;
   const file = target.files?.[0];
 
   if (file && file.type === 'application/pdf') {
-    const fileUrl = URL.createObjectURL(file);
+    const fileUrl = URL.createObjectURL(file);  // Blob URL - same as PDF.js!
     const fileName = file.name;
 
     // Update current tab's PDF state
@@ -110,7 +85,8 @@ const handleFileSelect = (event: Event) => {
     if (tab) {
       tab.pdfState = {
         fileName,
-        fileUrl
+        fileUrl,
+        filePath: file.name  // Store filename for tab restoration reference
       };
 
       // Update tab title if it's generic
@@ -124,32 +100,11 @@ const handleFileSelect = (event: Event) => {
   target.value = '';
 };
 
-// Auto-load PDF from file path when blob URL is missing (after app restart)
-watch(() => tabStore.activeTab?.pdfState, async (pdfState) => {
-  if (pdfState?.filePath && !pdfState.fileUrl) {
-    try {
-      console.log('Reloading PDF from file path:', pdfState.filePath);
-      const dataUrl = await dbManager.loadPdfFromPath(pdfState.filePath);
-      if (dataUrl && tabStore.activeTab?.pdfState) {
-        // Convert base64 string to blob URL for PDF.js
-        const binaryString = atob(dataUrl);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-        const blob = new Blob([bytes], { type: 'application/pdf' });
-        const blobUrl = URL.createObjectURL(blob);
+// Note: Blob URLs don't persist across app restarts (same as PDF.js built-in picker)
+// User will need to reselect files after restart - this is normal browser behavior
 
-        console.log('Reloaded PDF as blob URL:', blobUrl);
-
-        // Update the tab's PDF state with the loaded blob URL
-        tabStore.activeTab.pdfState.fileUrl = blobUrl;
-      }
-    } catch (error) {
-      console.error('Failed to load PDF from file path:', error);
-    }
-  }
-}, { immediate: true });
+// Note: Blob URLs don't persist across app restarts (same as PDF.js built-in picker)
+// User will need to reselect files after restart - this is normal browser behavior
 </script>
 
 <style scoped>
