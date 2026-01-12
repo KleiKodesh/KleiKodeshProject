@@ -53,7 +53,7 @@ namespace KleiKodesh.Helpers
                 var newWpfControl = (UserControl)Activator.CreateInstance(wpfType);
                 var newWpfPane = CreateNew(
                   newWpfControl,
-                  current.Title,
+                  "@" + current.Title,
                   current.Width
                 );
 

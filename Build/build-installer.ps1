@@ -44,10 +44,18 @@ Write-Host "Selected: $Configuration|$Platform" -ForegroundColor Cyan
 
 # Increment version first, before building
 Write-Host "Incrementing version..." -ForegroundColor Yellow
-$progressWindowPath = "KleiKodeshVstoInstallerWpf\InstallProgressWindow.xaml.cs"
+
+# Get absolute paths
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$projectRoot = Split-Path -Parent $scriptDir
+$progressWindowPath = Join-Path $projectRoot "KleiKodeshVstoInstallerWpf\InstallProgressWindow.xaml.cs"
+$updateVersionScript = Join-Path $projectRoot "KleiKodeshVstoInstallerWpf\UpdateVersion.ps1"
+
+Write-Host "Project root: $projectRoot" -ForegroundColor Gray
+Write-Host "Progress window path: $progressWindowPath" -ForegroundColor Gray
 
 # Run UpdateVersion.ps1 to increment the version
-powershell -ExecutionPolicy Bypass -File "KleiKodeshVstoInstallerWpf\UpdateVersion.ps1" -FilePath $progressWindowPath
+& powershell -ExecutionPolicy Bypass -File $updateVersionScript -FilePath $progressWindowPath
 
 # Now get the updated version from the file
 $versionMatch = Select-String -Path $progressWindowPath -Pattern 'const string Version = "([^"]+)"'
@@ -60,47 +68,10 @@ if ($versionMatch) {
     exit 1
 }
 
-# Build VSTO project first
-Write-Host "Building VSTO project in $Configuration|$Platform mode..." -ForegroundColor Yellow
-
-# Find MSBuild
-$msbuildPaths = @(
-    "C:\Program Files\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe",
-    "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe",
-    "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe",
-    "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe",
-    "C:\Program Files\Microsoft Visual Studio\18\Professional\MSBuild\Current\Bin\MSBuild.exe",
-    "C:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe",
-    "C:\Program Files (x86)\Microsoft Visual Studio\2019\Professional\MSBuild\Current\Bin\MSBuild.exe",
-    "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin\MSBuild.exe",
-    "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\MSBuild\Current\Bin\MSBuild.exe"
-)
-
-$msbuildPath = $null
-foreach ($path in $msbuildPaths) {
-    if (Test-Path $path) {
-        $msbuildPath = $path
-        break
-    }
-}
-
-if (-not $msbuildPath) {
-    Write-Host "ERROR: MSBuild not found. Install Visual Studio with VSTO tools." -ForegroundColor Red
-    if (-not $NoWait) { Read-Host "Press Enter to continue" }
-    exit 1
-}
-
-Write-Host "Using MSBuild: $msbuildPath" -ForegroundColor Cyan
-$vstoBuildResult = & $msbuildPath "KleiKodeshVsto\KleiKodeshVsto.csproj" -p:Configuration=$Configuration -p:Platform=$Platform
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "ERROR: Failed to build VSTO project" -ForegroundColor Red
-    if (-not $NoWait) { Read-Host "Press Enter to continue" }
-    exit 1
-}
-
 # Build WPF installer with VSTO configuration parameters
+# The WPF installer prebuild event will automatically build the VSTO project
 Write-Host "Building WPF installer in Release mode..." -ForegroundColor Yellow
+Write-Host "Note: VSTO project will be built automatically by WPF installer prebuild event" -ForegroundColor Cyan
 
 # Determine dotnet build architecture parameter
 $dotnetArch = ""
@@ -112,12 +83,14 @@ if ($Platform -eq "x64") {
 }
 
 # Use dotnet build for modern .NET project
-$buildCommand = "dotnet build `"KleiKodeshVstoInstallerWpf\KleiKodeshVstoInstallerWpf.csproj`" -c Release $dotnetArch -p:VstoConfiguration=$Configuration -p:VstoPlatform=$Platform"
+$wpfProjectPath = Join-Path $projectRoot "KleiKodeshVstoInstallerWpf\KleiKodeshVstoInstallerWpf.csproj"
+$buildCommand = "dotnet build `"$wpfProjectPath`" -c Release $dotnetArch -p:VstoConfiguration=$Configuration -p:VstoPlatform=$Platform --verbosity normal"
 Write-Host "Build command: $buildCommand" -ForegroundColor Gray
+Write-Host "Starting WPF build..." -ForegroundColor Yellow
 Invoke-Expression $buildCommand
 
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "ERROR: Failed to build WPF installer" -ForegroundColor Red
+    Write-Host "ERROR: Failed to build WPF installer (VSTO build is handled by prebuild event)" -ForegroundColor Red
     if (-not $NoWait) { Read-Host "Press Enter to continue" }
     exit 1
 }
@@ -136,7 +109,8 @@ if (-not (Test-Path $nsisPath)) {
 
 # Build NSIS wrapper with version parameter
 Write-Host "Building NSIS wrapper with version $version..." -ForegroundColor Yellow
-& $nsisPath "/DPRODUCT_VERSION=$version" "Build\KleiKodeshWrapper.nsi"
+$nsisScriptPath = Join-Path $scriptDir "KleiKodeshWrapper.nsi"
+& $nsisPath "/DPRODUCT_VERSION=$version" $nsisScriptPath
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: NSIS build failed" -ForegroundColor Red
@@ -144,7 +118,7 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-$installerPath = "Build\KleiKodeshSetup-$version.exe"
+$installerPath = Join-Path $scriptDir "KleiKodeshSetup-$version.exe"
 if (-not (Test-Path $installerPath)) {
     Write-Host "ERROR: Installer not created at $installerPath" -ForegroundColor Red
     if (-not $NoWait) { Read-Host "Press Enter to continue" }
@@ -190,9 +164,7 @@ Automated release for KleiKodesh $version
 - WPF Installer: Release|$(if ($Platform -eq "x64") { "x64" } else { "AnyCPU" }) (dotnet build)
 
 **Changes:**
-- Updated installer with latest features
 - Bug fixes and improvements
-- Built with modern .NET 8 tooling
 "@
             
             gh release create $version $installerPath `

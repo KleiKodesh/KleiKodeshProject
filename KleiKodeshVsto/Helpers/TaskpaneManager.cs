@@ -59,29 +59,42 @@ namespace KleiKodesh.Helpers
             }
         }
 
-        public static CustomTaskPane GetCurrentlyVisiblePane() =>
-            Globals.ThisAddIn.CustomTaskPanes.Cast<CustomTaskPane>()
-                 .FirstOrDefault(p => p.Window == Globals.ThisAddIn.Application.ActiveWindow && p.Visible);
-
-
         public static CustomTaskPane DuplicateCurrent()
         {
             try
             {
-                var current = GetCurrentlyVisiblePane();
+                var panes = Globals.ThisAddIn.CustomTaskPanes
+                    .Cast<CustomTaskPane>()
+                    .ToList();
+
+                var current = panes.FirstOrDefault(p =>
+                    p.Window == Globals.ThisAddIn.Application.ActiveWindow &&
+                    p.Visible);
+
                 if (current == null)
                     return null;
 
-                if (current.Control is WpfHostControl wpfHostControl)
-                    return WpfTaskPane.DuplicateCurrent(wpfHostControl, current);
+                string baseTitle = current.Title.TrimStart('@');
 
-                var type = current.Control.GetType();
-                var newControl = (UserControl)Activator.CreateInstance(type);
+                var existing = panes.FirstOrDefault(p =>
+                    p != current &&
+                    p.Title.TrimStart('@') == baseTitle);
 
-                // Reuse CreateNew instead of duplicating logic
+                if (existing != null)
+                {
+                    existing.Visible = true;
+                    return existing;
+                }
+
+                if (current.Control is WpfHostControl wpfHost)
+                    return WpfTaskPane.DuplicateCurrent(wpfHost, current);
+
+                var controlType = current.Control.GetType();
+                var newControl = (UserControl)Activator.CreateInstance(controlType);
+
                 var newPane = CreateNew(
                     newControl,
-                    current.Title,
+                    "@" + baseTitle,
                     current.Width
                 );
 
@@ -94,7 +107,6 @@ namespace KleiKodesh.Helpers
                 return null;
             }
         }
-
 
         public static CustomTaskPane CreateNew(
            UserControl userControl,
