@@ -180,6 +180,17 @@ export const useTabStore = defineStore('tabs', () => {
     const activeTab = computed(() => tabs.value.find(tab => tab.isActive));
 
     const addTab = async () => {
+        // Check if a homepage tab already exists (either 'homepage' or 'kezayit-landing')
+        const existingHomepageTab = tabs.value.find(t => 
+            t.currentPage === 'homepage' || t.currentPage === 'kezayit-landing'
+        );
+        
+        if (existingHomepageTab) {
+            // Switch to existing homepage tab instead of creating a new one
+            setActiveTab(existingHomepageTab.id);
+            return;
+        }
+
         tabs.value.forEach(tab => tab.isActive = false);
 
         // Find the lowest available ID
@@ -228,7 +239,19 @@ export const useTabStore = defineStore('tabs', () => {
     const resetTab = async () => {
         const tab = tabs.value.find(t => t.isActive);
         if (tab) {
-            // Reset to appropriate page using centralized homepage logic
+            // Check if there's already another homepage tab
+            const existingHomepageTab = tabs.value.find(t => 
+                t.id !== tab.id && (t.currentPage === 'homepage' || t.currentPage === 'kezayit-landing')
+            );
+            
+            if (existingHomepageTab) {
+                // Switch to existing homepage tab and close current tab
+                setActiveTab(existingHomepageTab.id);
+                closeTabById(tab.id);
+                return;
+            }
+
+            // Reset current tab to appropriate page using centralized homepage logic
             const { pageType, title } = await navigateToHomepage();
 
             tab.currentPage = pageType;

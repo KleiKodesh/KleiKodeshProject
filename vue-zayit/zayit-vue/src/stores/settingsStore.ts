@@ -12,6 +12,7 @@ export interface Settings {
     appZoom: number
     enableVirtualization: boolean
     useOfflineHomepage: boolean
+    readingBackgroundColor: string
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -22,7 +23,8 @@ const DEFAULT_SETTINGS: Settings = {
     censorDivineNames: false,
     appZoom: 0.95,
     enableVirtualization: false,
-    useOfflineHomepage: true
+    useOfflineHomepage: true,
+    readingBackgroundColor: ''
 }
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -34,6 +36,7 @@ export const useSettingsStore = defineStore('settings', () => {
     const appZoom = ref(DEFAULT_SETTINGS.appZoom)
     const enableVirtualization = ref(DEFAULT_SETTINGS.enableVirtualization)
     const useOfflineHomepage = ref(DEFAULT_SETTINGS.useOfflineHomepage)
+    const readingBackgroundColor = ref(DEFAULT_SETTINGS.readingBackgroundColor)
 
     const loadFromStorage = () => {
         try {
@@ -48,6 +51,7 @@ export const useSettingsStore = defineStore('settings', () => {
                 appZoom.value = settings.appZoom || DEFAULT_SETTINGS.appZoom
                 enableVirtualization.value = settings.enableVirtualization ?? DEFAULT_SETTINGS.enableVirtualization
                 useOfflineHomepage.value = settings.useOfflineHomepage ?? DEFAULT_SETTINGS.useOfflineHomepage
+                readingBackgroundColor.value = settings.readingBackgroundColor || DEFAULT_SETTINGS.readingBackgroundColor
             }
         } catch (e) {
             console.error('Failed to load settings:', e)
@@ -64,7 +68,8 @@ export const useSettingsStore = defineStore('settings', () => {
                 censorDivineNames: censorDivineNames.value,
                 appZoom: appZoom.value,
                 enableVirtualization: enableVirtualization.value,
-                useOfflineHomepage: useOfflineHomepage.value
+                useOfflineHomepage: useOfflineHomepage.value,
+                readingBackgroundColor: readingBackgroundColor.value
             }))
         } catch (e) {
             console.error('Failed to save settings:', e)
@@ -76,6 +81,7 @@ export const useSettingsStore = defineStore('settings', () => {
         document.documentElement.style.setProperty('--text-font', textFont.value)
         document.documentElement.style.setProperty('--font-size', `${fontSize.value}%`)
         document.documentElement.style.setProperty('--line-height', linePadding.value.toString())
+        document.documentElement.style.setProperty('--reading-bg-color', readingBackgroundColor.value)
 
         // Apply zoom to the app element
         const appElement = document.getElementById('app')
@@ -93,6 +99,7 @@ export const useSettingsStore = defineStore('settings', () => {
         appZoom.value = DEFAULT_SETTINGS.appZoom
         enableVirtualization.value = DEFAULT_SETTINGS.enableVirtualization
         useOfflineHomepage.value = DEFAULT_SETTINGS.useOfflineHomepage
+        readingBackgroundColor.value = DEFAULT_SETTINGS.readingBackgroundColor
         localStorage.removeItem(STORAGE_KEY)
         applyCSSVariables()
     }
@@ -102,7 +109,7 @@ export const useSettingsStore = defineStore('settings', () => {
     applyCSSVariables()
 
     // Watch for changes and persist
-    watch([headerFont, textFont, fontSize, linePadding, censorDivineNames, appZoom, enableVirtualization, useOfflineHomepage], () => {
+    watch([headerFont, textFont, fontSize, linePadding, censorDivineNames, appZoom, enableVirtualization, useOfflineHomepage, readingBackgroundColor], () => {
         saveToStorage()
         applyCSSVariables()
     })
@@ -116,6 +123,7 @@ export const useSettingsStore = defineStore('settings', () => {
         appZoom,
         enableVirtualization,
         useOfflineHomepage,
+        readingBackgroundColor,
         reset
     }
 })

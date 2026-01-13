@@ -10,6 +10,7 @@
 
         <div ref="containerRef"
              class="overflow-y height-fill justify line-viewer"
+             :style="{ backgroundColor: settingsStore.readingBackgroundColor || 'var(--bg-primary)' }"
              tabindex="0"
              @keydown="handleKeyDown"
              @click="() => containerRef?.focus()"

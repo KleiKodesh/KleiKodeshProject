@@ -131,6 +131,35 @@
                 </div>
             </div>
 
+            <!-- Reading Background Color -->
+            <div class="setting-group">
+                <label class="flex-row bold setting-label">רקע קריאה</label>
+                <div class="flex-column">
+                    <div class="color-palette">
+                        <button v-for="color in readingBackgroundColors"
+                                :key="color.value"
+                                :class="['color-swatch', { active: readingBackgroundColor === color.value }]"
+                                :style="{ backgroundColor: color.value || 'var(--bg-primary)' }"
+                                :title="color.name"
+                                @click="readingBackgroundColor = color.value">
+                            <span v-if="!color.value" class="default-indicator">ברירת מחדל</span>
+                        </button>
+                    </div>
+                    <div class="flex-row flex-center custom-color-row">
+                        <input type="color"
+                               v-model="readingBackgroundColor"
+                               class="color-picker" />
+                        <span class="custom-color-label">צבע מותאם אישית</span>
+                        <button v-if="readingBackgroundColor && !isPresetColor(readingBackgroundColor, readingBackgroundColors)"
+                                @click="readingBackgroundColor = ''"
+                                class="c-pointer clear-color-btn"
+                                title="נקה צבע">
+                            ✕
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Reset Button -->
             <div class="setting-group">
                 <button @click="resetSettings"
@@ -150,12 +179,30 @@ import { hebrewFonts } from '../../data/hebrewFonts'
 import { useConnectivity } from '../../utils/connectivity'
 
 const settingsStore = useSettingsStore()
-const { headerFont, textFont, fontSize, linePadding, censorDivineNames, appZoom, useOfflineHomepage } = storeToRefs(settingsStore)
+const { headerFont, textFont, fontSize, linePadding, censorDivineNames, appZoom, useOfflineHomepage, readingBackgroundColor } = storeToRefs(settingsStore)
 const { isOnline } = useConnectivity()
 
 const availableFonts = ref<string[]>([])
 const isHeaderDropdownOpen = ref(false)
 const isTextDropdownOpen = ref(false)
+
+// Reading background colors palette - based on research for optimal reading comfort
+const readingBackgroundColors = [
+    { name: 'ברירת מחדל', value: '' },
+    { name: 'קרם חם', value: '#FDF6E3' }, // Warm cream - reduces eye strain
+    { name: 'בז\' רך', value: '#F5F5DC' }, // Soft beige - classic reading background
+    { name: 'נייר ישן', value: '#FAF0E6' }, // Old paper - vintage feel
+    { name: 'ירוק רך', value: '#F0F8F0' }, // Soft green - calming for eyes
+    { name: 'כחול רך', value: '#F0F8FF' }, // Soft blue - reduces glare
+    { name: 'אפור בהיר', value: '#F8F8F8' }, // Light gray - neutral
+    { name: 'ורוד רך', value: '#FFF0F5' }, // Soft pink - warm and gentle
+    { name: 'צהוב עדין', value: '#FFFACD' }, // Light yellow - bright but soft
+]
+
+// Helper function to check if a color is in the preset palette
+const isPresetColor = (color: string, palette: typeof readingBackgroundColors) => {
+    return palette.some(preset => preset.value === color)
+}
 
 // Use imported font list
 const fontsToCheck = hebrewFonts
@@ -387,5 +434,93 @@ onMounted(() => {
 .reset-button:hover {
     background: var(--hover-bg);
     border-color: var(--accent-color);
+}
+
+/* Color palette styles */
+.color-palette {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.color-swatch {
+    width: 40px;
+    height: 40px;
+    border: 2px solid var(--border-color);
+    border-radius: 6px;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+}
+
+.color-swatch:hover {
+    border-color: var(--accent-color);
+    transform: scale(1.05);
+}
+
+.color-swatch.active {
+    border-color: var(--accent-color);
+    border-width: 3px;
+    box-shadow: 0 0 0 2px var(--accent-bg);
+}
+
+.default-indicator {
+    font-size: 10px;
+    color: var(--text-secondary);
+    text-align: center;
+    line-height: 1.2;
+    font-weight: bold;
+}
+
+.custom-color-row {
+    gap: 8px;
+    align-items: center;
+    margin-top: 8px;
+}
+
+.custom-color-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    flex: 1;
+}
+
+/* Color picker styles */
+.color-picker {
+    width: 40px;
+    height: 40px;
+    border: 2px solid var(--border-color);
+    border-radius: 6px;
+    cursor: pointer;
+    background: none;
+    padding: 0;
+}
+
+.color-picker:hover {
+    border-color: var(--accent-color);
+}
+
+.clear-color-btn {
+    width: 24px;
+    height: 24px;
+    border: 1px solid var(--border-color);
+    border-radius: 50%;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+}
+
+.clear-color-btn:hover {
+    background: var(--hover-bg);
+    border-color: var(--accent-color);
+    color: var(--text-primary);
 }
 </style>

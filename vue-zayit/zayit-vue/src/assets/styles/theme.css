@@ -25,6 +25,9 @@
   /* Font families - customizable via settings */
   --header-font: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
   --text-font: 'Times New Roman', Times, serif;
+  
+  /* Reading background color - customizable via settings */
+  --reading-bg-color: '';
 }
 
 /* Dark mode - Windows 11 Fluent Dark + VS Code Dark */

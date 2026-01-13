@@ -51,6 +51,7 @@
         </div>
 
         <div class="overflow-y flex-110 selectable commentary-content"
+             :style="{ backgroundColor: settingsStore.readingBackgroundColor || 'var(--bg-primary)' }"
              ref="commentaryContentRef"
              tabindex="0"
              @keydown="handleKeyDown">
@@ -96,6 +97,7 @@ import { Icon } from '@iconify/vue'
 import { useContentSearch } from '../composables/useContentSearch'
 import { commentaryManager, type CommentaryLinkGroup } from '../data/commentaryManager'
 import { useTabStore } from '../stores/tabStore'
+import { useSettingsStore } from '../stores/settingsStore'
 
 const props = withDefaults(defineProps<{
     bookId?: number
@@ -110,6 +112,7 @@ const emit = defineEmits<{
 }>()
 
 const tabStore = useTabStore()
+const settingsStore = useSettingsStore()
 
 // Commentary state
 const linkGroups = ref<CommentaryLinkGroup[]>([])
