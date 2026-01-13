@@ -87,6 +87,7 @@ All steering files use prefix naming for easy handling:
 
 **Zayit Project** - `**/vue-zayit/**`
 - `project_zayit-bridge.md` - Zayit C# ↔ Vue bridge patterns, PDF manager integration
+- `project_zayit-reading-backgrounds.md` - Reading background color system, theme integration
 
 **Installer Project** - `**/KleiKodeshVstoInstallerWpf/**`
 - `project_installer-details.md` - Installer-specific implementation details

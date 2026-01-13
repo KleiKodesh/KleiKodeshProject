@@ -2386,7 +2386,7 @@
   --secondaryToolbarButton-spreadOdd-icon:url(images/secondaryToolbarButton-spreadOdd.svg);
   --secondaryToolbarButton-spreadEven-icon:url(images/secondaryToolbarButton-spreadEven.svg);
   --secondaryToolbarButton-documentProperties-icon:url(images/secondaryToolbarButton-documentProperties.svg);
-  --editorParams-stampAddImage-icon:url(images/toolbarButton-zoomIn.svg);
+  --editorParams-stampAddImage-icon:url(images/toolbarButton-editorStamp.svg);
 }
 
 [dir="rtl"]:root{

@@ -4,6 +4,7 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using Zayit.Viewer;
 using Office = Microsoft.Office.Core;
 
 namespace KleiKodesh.Ribbon

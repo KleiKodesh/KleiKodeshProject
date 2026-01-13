@@ -299,6 +299,7 @@
       <DependentUpon>Resources.resx</DependentUpon>
       <DesignTime>True</DesignTime>
     </Compile>
+    <None Include="app.config" />
     <None Include="KleiKodesh_TemporaryKey.pfx" />
     <None Include="packages.config" />
     <None Include="Properties\Settings.settings">
@@ -383,9 +384,9 @@
       <Project>{B8F3E2A1-4C5D-4E6F-8A9B-1C2D3E4F5A6B}</Project>
       <Name>UpdateCheckerLib</Name>
     </ProjectReference>
-    <ProjectReference Include="..\vue-zayit\Zayit-cs\Zayit\Zayit.csproj">
-      <Project>{a67fd876-cc61-4029-b5f6-27c4f1505776}</Project>
-      <Name>Zayit</Name>
+    <ProjectReference Include="..\vue-zayit\Zayit-cs\ZayitLib\ZayitLib.csproj">
+      <Project>{8c17c575-1cb3-4677-bf4c-dafeb5419377}</Project>
+      <Name>ZayitLib</Name>
     </ProjectReference>
     <ProjectReference Include="..\WebSitesLib\WebSitesLib\WebSitesLib.csproj">
       <Project>{861b62fc-9107-4e39-925c-794f2438891d}</Project>

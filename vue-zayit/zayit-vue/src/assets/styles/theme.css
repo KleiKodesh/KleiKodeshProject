@@ -4,7 +4,7 @@
 :root { 
   /* Background colors - VS Code Light */
   --bg-primary: #ffffff;        /* Main background */
-  --bg-secondary: #f3f3f3;      /* Secondary background (headers, sidebars) */
+  --bg-secondary: #f8f8f8;      /* More neutral secondary background (was #f3f3f3) */
   
   /* Border colors - Fluent subtle borders */
   --border-color: #e5e5e5;      /* Borders and dividers */
@@ -26,15 +26,16 @@
   --header-font: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
   --text-font: 'Times New Roman', Times, serif;
   
-  /* Reading background color - customizable via settings */
+  /* Reading background and text colors - customizable via settings */
   --reading-bg-color: '';
+  --reading-text-color: var(--text-primary);
 }
 
 /* Dark mode - Windows 11 Fluent Dark + VS Code Dark */
 :root.dark {
   /* Background colors - VS Code Dark */
   --bg-primary: #1e1e1e;        /* Main background (VS Code dark) */
-  --bg-secondary: #252526;      /* Secondary background (VS Code sidebar) */
+  --bg-secondary: #2d2d2d;      /* More neutral secondary background (was #252526) */
   
   /* Border colors - Fluent dark borders */
   --border-color: #3b3b3b;      /* Borders (Fluent dark divider) */

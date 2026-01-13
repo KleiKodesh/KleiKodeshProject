@@ -78,17 +78,59 @@ namespace KleiKodeshVstoInstallerWpf
         {
             try
             {
-                if (Process.GetProcessesByName("WINWORD").Length > 0)
+                var wordProcesses = Process.GetProcessesByName("WINWORD");
+
+                if (wordProcesses.Length > 0)
                 {
-                    MessageBox.Show("אנא סגור את וורד לפני ההתקנה");
-                    return;
+                    var result = MessageBox.Show(
+                        "וורד פתוח כעת.\nהאם לסגור את וורד כדי להמשיך בהתקנה?",
+                        "וורד פתוח",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question
+                    );
+
+                    if (result == MessageBoxResult.No)
+                    {
+                        MessageBox.Show(
+                            "ההתקנה בוטלה. אנא סגור את וורד ונסה שוב.",
+                            "התקנה בוטלה",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Information
+                        );
+                        return;
+                    }
+
+                    // User approved → close Word
+                    foreach (var proc in wordProcesses)
+                    {
+                        try
+                        {
+                            proc.Kill();        // force close
+                            proc.WaitForExit();
+                        }
+                        catch
+                        {
+                            MessageBox.Show(
+                                "לא ניתן לסגור את וורד. נסה לסגור אותו ידנית.",
+                                "שגיאה",
+                                MessageBoxButton.OK,
+                                MessageBoxImage.Error
+                            );
+                            return;
+                        }
+                    }
                 }
 
                 new InstallProgressWindow(this).Show();
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"שגיאה בהתקנה: {ex.Message}");
+                MessageBox.Show(
+                    $"שגיאה בהתקנה: {ex.Message}",
+                    "שגיאה",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error
+                );
             }
         }
 

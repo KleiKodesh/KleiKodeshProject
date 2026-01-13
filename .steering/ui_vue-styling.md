@@ -144,7 +144,47 @@ if (spaceBelow < dropdownHeight && spaceAbove > spaceBelow) {
 }
 ```
 
-### Common RTL Dropdown Issues
+### RTL Dropdown Issues
 - **Arrow too close to edge**: Add `margin-right` to dropdown trigger
 - **Dropdown escapes viewport**: Use `max-height` and `overflow-y: auto`
 - **Wrong anchor point**: Use `right: 0` instead of `left: 0` for RTL
+
+## Reading Background Pattern (Zayit Project)
+
+### Theme-Aware Component Styling
+For components that support reading backgrounds, use this pattern:
+
+```typescript
+// Reactive dark mode detection
+const isDarkMode = ref(false)
+
+const updateDarkMode = () => {
+    isDarkMode.value = document.documentElement.classList.contains('dark')
+}
+
+onMounted(() => {
+    updateDarkMode()
+    const observer = new MutationObserver(updateDarkMode)
+    observer.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['class']
+    })
+    onUnmounted(() => observer.disconnect())
+})
+
+// Computed styles that respect dark mode
+const containerStyles = computed(() => ({
+    backgroundColor: !isDarkMode.value && settingsStore.readingBackgroundColor 
+        ? settingsStore.readingBackgroundColor 
+        : 'var(--bg-primary)',
+    color: !isDarkMode.value && settingsStore.readingBackgroundColor 
+        ? 'var(--reading-text-color)' 
+        : 'var(--text-primary)'
+}))
+```
+
+### Reading Background Rules
+1. **Light mode only**: Reading backgrounds ignored in dark mode
+2. **Automatic contrast**: Text color calculated automatically
+3. **Theme switching**: Colors update instantly on theme change
+4. **Fallback behavior**: Always fall back to theme defaults

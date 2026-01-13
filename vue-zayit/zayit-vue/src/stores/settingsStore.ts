@@ -82,12 +82,36 @@ export const useSettingsStore = defineStore('settings', () => {
         document.documentElement.style.setProperty('--font-size', `${fontSize.value}%`)
         document.documentElement.style.setProperty('--line-height', linePadding.value.toString())
         document.documentElement.style.setProperty('--reading-bg-color', readingBackgroundColor.value)
+        
+        // Auto-adjust text color based on reading background brightness
+        if (readingBackgroundColor.value) {
+            const textColor = getContrastingTextColor(readingBackgroundColor.value)
+            document.documentElement.style.setProperty('--reading-text-color', textColor)
+        } else {
+            // Use default theme text color when no custom background
+            document.documentElement.style.setProperty('--reading-text-color', 'var(--text-primary)')
+        }
 
         // Apply zoom to the app element
         const appElement = document.getElementById('app')
         if (appElement) {
             appElement.style.zoom = appZoom.value.toString()
         }
+    }
+
+    // Helper function to determine contrasting text color based on background brightness
+    const getContrastingTextColor = (backgroundColor: string): string => {
+        // Convert hex to RGB
+        const hex = backgroundColor.replace('#', '')
+        const r = parseInt(hex.substr(0, 2), 16)
+        const g = parseInt(hex.substr(2, 2), 16)
+        const b = parseInt(hex.substr(4, 2), 16)
+        
+        // Calculate relative luminance using WCAG formula
+        const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+        
+        // Return dark text for light backgrounds, light text for dark backgrounds
+        return luminance > 0.5 ? '#1f1f1f' : '#ffffff'
     }
 
     const reset = () => {

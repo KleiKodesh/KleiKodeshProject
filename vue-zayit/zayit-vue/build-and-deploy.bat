@@ -24,7 +24,7 @@ echo Build complete!
 echo.
 
 echo [2/3] Copying to C# project...
-set "DEST_HTML=..\Zayit-cs\Zayit\Html\index.html"
+set "DEST_HTML=..\Zayit-cs\ZayitLib\Html\index.html"
 copy /Y dist\index.html "%DEST_HTML%"
 if errorlevel 1 (
     echo ERROR: HTML copy failed! Check if destination path exists.

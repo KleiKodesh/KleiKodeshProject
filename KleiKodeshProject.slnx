@@ -8,7 +8,8 @@
   <Project Path="KleiKodeshVstoInstallerWpf/KleiKodeshVstoInstallerWpf.csproj" Id="2444948f-973d-4cdd-a5be-3596a400b7ba" />
   <Project Path="TestUpdateCheck/TestUpdateCheck.csproj" Id="c1d2e3f4-5a6b-7c8d-9e0f-1a2b3c4d5e6f" />
   <Project Path="UpdateCheckerLib/UpdateCheckerLib.csproj" Id="b8f3e2a1-4c5d-4e6f-8a9b-1c2d3e4f5a6b" />
-  <Project Path="vue-zayit/Zayit-cs/Zayit/Zayit.csproj" Id="a67fd876-cc61-4029-b5f6-27c4f1505776" />
+  <Project Path="vue-zayit/Zayit-cs/ZayitLib/ZayitLib.csproj" Id="8c17c575-1cb3-4677-bf4c-dafeb5419377" />
+  <Project Path="vue-zayit/Zayit-cs/ZayitWrapper/ZayitWrapper.csproj" Id="b8f3e2a1-4c5d-4e7f-8a9b-1c2d3e4f5a6b" />
   <Project Path="WebSitesLib/WebSitesLib/WebSitesLib.csproj" Id="861b62fc-9107-4e39-925c-794f2438891d" />
   <Project Path="WebViewLib/WebViewLib/WebViewLib.csproj" Id="a50d2909-20e5-4142-9392-3546812c916a" />
   <Project Path="WpfLib/WpfLib/WpfLib.csproj" Id="494b02c1-54f2-4244-9a90-23c9984970e7" />

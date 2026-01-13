@@ -51,7 +51,7 @@
         </div>
 
         <div class="overflow-y flex-110 selectable commentary-content"
-             :style="{ backgroundColor: settingsStore.readingBackgroundColor || 'var(--bg-primary)' }"
+             :style="commentaryStyles"
              ref="commentaryContentRef"
              tabindex="0"
              @keydown="handleKeyDown">
@@ -89,7 +89,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, type ComponentPublicInstance } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, type ComponentPublicInstance } from 'vue'
 import Combobox, { type ComboboxOption } from './common/Combobox.vue'
 import GenericSearch from './common/GenericSearch.vue'
 import { Icon } from '@iconify/vue'
@@ -113,6 +113,36 @@ const emit = defineEmits<{
 
 const tabStore = useTabStore()
 const settingsStore = useSettingsStore()
+
+// Reactive dark mode detection
+const isDarkMode = ref(false)
+
+const updateDarkMode = () => {
+    isDarkMode.value = document.documentElement.classList.contains('dark')
+}
+
+onMounted(() => {
+    updateDarkMode()
+    // Watch for theme changes
+    const observer = new MutationObserver(updateDarkMode)
+    observer.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['class']
+    })
+    
+    // Cleanup observer on unmount
+    onUnmounted(() => observer.disconnect())
+})
+
+// Computed styles that respect dark mode
+const commentaryStyles = computed(() => ({
+    backgroundColor: !isDarkMode.value && settingsStore.readingBackgroundColor 
+        ? settingsStore.readingBackgroundColor 
+        : 'var(--bg-primary)',
+    color: !isDarkMode.value && settingsStore.readingBackgroundColor 
+        ? 'var(--reading-text-color)' 
+        : 'var(--text-primary)'
+}))
 
 // Commentary state
 const linkGroups = ref<CommentaryLinkGroup[]>([])

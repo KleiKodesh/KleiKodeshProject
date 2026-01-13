@@ -10,7 +10,7 @@
 
         <div ref="containerRef"
              class="overflow-y height-fill justify line-viewer"
-             :style="{ backgroundColor: settingsStore.readingBackgroundColor || 'var(--bg-primary)' }"
+             :style="containerStyles"
              tabindex="0"
              @keydown="handleKeyDown"
              @click="() => containerRef?.focus()"
@@ -49,6 +49,36 @@ const MEMORY_BUFFER_SIZE_INLINE = 1000  // Lines to keep in memory around visibl
 
 const tabStore = useTabStore()
 const settingsStore = useSettingsStore()
+
+// Reactive dark mode detection
+const isDarkMode = ref(false)
+
+const updateDarkMode = () => {
+    isDarkMode.value = document.documentElement.classList.contains('dark')
+}
+
+onMounted(() => {
+    updateDarkMode()
+    // Watch for theme changes
+    const observer = new MutationObserver(updateDarkMode)
+    observer.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['class']
+    })
+    
+    // Cleanup observer on unmount
+    onUnmounted(() => observer.disconnect())
+})
+
+// Computed styles that respect dark mode
+const containerStyles = computed(() => ({
+    backgroundColor: !isDarkMode.value && settingsStore.readingBackgroundColor 
+        ? settingsStore.readingBackgroundColor 
+        : 'var(--bg-primary)',
+    color: !isDarkMode.value && settingsStore.readingBackgroundColor 
+        ? 'var(--reading-text-color)' 
+        : 'var(--text-primary)'
+}))
 
 const props = defineProps<{
     tabId?: number
