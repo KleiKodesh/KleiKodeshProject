@@ -88,6 +88,9 @@ All steering files use prefix naming for easy handling:
 **Installer Project** - `**/KleiKodeshVstoInstallerWpf/**`
 - `project_installer-details.md` - Installer-specific implementation details
 
+**Update System** - `**/UpdateChecker*`, `**/TaskpaneManager*`, `**/ThisAddIn*`
+- `project_update-system.md` - Update flow, TLS configuration, deferred installation
+
 ## Updating Steering for New Projects
 
 When adding steering for a new project:

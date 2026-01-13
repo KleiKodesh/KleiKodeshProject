@@ -19,11 +19,11 @@ namespace Zayit.Viewer
         public HebrewBooksDownloadManager(CoreWebView2 webView)
         {
             _webView = webView;
-            // Download directly to PDF.js web directory so files are immediately accessible
-            _cacheDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Html", "pdfjs", "web");
+            // Download to hebrewbooks subfolder within PDF.js web directory
+            _cacheDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Html", "pdfjs", "web", "hebrewbooks");
             // Ensure cache directory exists
             Directory.CreateDirectory(_cacheDirectory);
-            Console.WriteLine($"[HebrewBooks] Cache directory (PDF.js web): {_cacheDirectory}");
+            Console.WriteLine($"[HebrewBooks] Cache directory (hebrewbooks subfolder): {_cacheDirectory}");
         }
 
         public async Task PrepareHebrewBookDownload(string bookId, string title, string action)
@@ -33,11 +33,11 @@ namespace Zayit.Viewer
             // Only use cache for view action
             if (action == "view")
             {
-                // Check if file exists in PDF.js web directory with hebrewbooks prefix
+                // Check if file exists in hebrewbooks subfolder with hebrewbooks prefix
                 string pdfFilePath = Path.Combine(_cacheDirectory, $"hebrewbooks-{bookId}.pdf");
                 if (File.Exists(pdfFilePath))
                 {
-                    Console.WriteLine($"[HebrewBooks] Found in PDF.js web directory: {pdfFilePath}");
+                    Console.WriteLine($"[HebrewBooks] Found in hebrewbooks subfolder: {pdfFilePath}");
                     // Send download complete signal - Vue will construct URL using bookId
                     await SendDownloadComplete(bookId);
                     return;
@@ -104,7 +104,7 @@ namespace Zayit.Viewer
 
             if (action == "view")
             {
-                // Save to PDF.js web directory with hebrewbooks prefix
+                // Save to hebrewbooks subfolder with hebrewbooks prefix
                 string pdfFilePath = Path.Combine(_cacheDirectory, $"hebrewbooks-{bookId}.pdf");
                 e.ResultFilePath = pdfFilePath;
 
@@ -114,7 +114,7 @@ namespace Zayit.Viewer
                     {
                         try
                         {
-                            Console.WriteLine($"[HebrewBooks] Download completed to PDF.js web directory: {pdfFilePath}");
+                            Console.WriteLine($"[HebrewBooks] Download completed to hebrewbooks subfolder: {pdfFilePath}");
                             
                             // Close the download dialog for view action (to show PDF immediately)
                             _webView.CloseDefaultDownloadDialog();

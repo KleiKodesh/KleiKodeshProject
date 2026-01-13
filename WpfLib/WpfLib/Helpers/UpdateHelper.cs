@@ -2,7 +2,7 @@
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -24,15 +24,21 @@ namespace WpfLib.Helpers
         static int updateInterval = 0;
         static string _currentVersion = "v0";
 
-        public static string CurrentVersion 
+        static UpdateHelper()
         {
-            get => _currentVersion; 
-            set 
+            // Force TLS 1.2 or higher for GitHub API compatibility
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+        }
+
+        public static string CurrentVersion
+        {
+            get => _currentVersion;
+            set
             {
-                if (value != _currentVersion) 
+                if (value != _currentVersion)
                 {
                     _currentVersion = value;
-                    OnStaticPropertyChanged(nameof(CurrentVersion)); 
+                    OnStaticPropertyChanged(nameof(CurrentVersion));
                 }
             }
         }
@@ -50,7 +56,7 @@ namespace WpfLib.Helpers
 
             try
             {
-                await Task.Run( async () =>
+                await Task.Run(async () =>
                 {
                     await Task.Delay(5000);
                     if (IsUpdateTime())
@@ -62,7 +68,7 @@ namespace WpfLib.Helpers
                             var hebrewMessage = $"גרסה חדשה זמינה: {result.NewVersionId}\n" +
                                               $"הגרסה הנוכחית: {currentVersion}\n\n" +
                                               updateQuestion;
-                            
+
                             var dialogResult = MessageBox.Show(
                                 hebrewMessage,
                                 $"עדכון זמין - {repoName}",
@@ -82,7 +88,7 @@ namespace WpfLib.Helpers
                     }
                 });
             }
-            catch {}
+            catch { }
         }
 
         static bool IsUpdateTime()
@@ -105,11 +111,11 @@ namespace WpfLib.Helpers
                 return ParseAndCompareRelease(jsonResponse, currentVersion);
             }
             catch (HttpRequestException ex)
-                { return CreateErrorModel($"Network error: {ex.Message}"); }
+            { return CreateErrorModel($"Network error: {ex.Message}"); }
             catch (JsonException ex)
-                { return CreateErrorModel($"Error parsing response: {ex.Message}"); }
+            { return CreateErrorModel($"Error parsing response: {ex.Message}"); }
             catch (Exception ex)
-                { return CreateErrorModel($"Unexpected error: {ex.Message}");}
+            { return CreateErrorModel($"Unexpected error: {ex.Message}"); }
         }
 
         private static async Task<string> FetchLatestReleaseJson(string repoOwner, string repoName)
@@ -117,6 +123,8 @@ namespace WpfLib.Helpers
             string url = $"https://api.github.com/repos/{repoOwner}/{repoName}/releases/latest";
             using (var client = new HttpClient())
             {
+                // Ensure TLS 1.2+ for this client as well
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
                 client.DefaultRequestHeaders.UserAgent.ParseAdd("MyApp");
                 HttpResponseMessage response = await client.GetAsync(url);
 
@@ -137,7 +145,7 @@ namespace WpfLib.Helpers
                 string downloadUrl = root.GetProperty("html_url").GetString();
 
                 var comparison = CompareVersions(latestVersion, currentVersion);
-                
+
                 if (comparison > 0)
                 {
                     return new UpdateItemModel
@@ -153,7 +161,7 @@ namespace WpfLib.Helpers
                 {
                     Message = "You are using the latest version."
                 };
-            }             
+            }
         }
 
         private static int CompareVersions(string githubVersion, string currentVersion)
@@ -163,7 +171,7 @@ namespace WpfLib.Helpers
             var normalizedCurrent = currentVersion?.TrimStart('v') ?? "";
 
             // Try to parse as semantic versions (e.g., "1.0.31")
-            if (Version.TryParse(normalizedGithub, out var githubVer) && 
+            if (Version.TryParse(normalizedGithub, out var githubVer) &&
                 Version.TryParse(normalizedCurrent, out var currentVer))
             {
                 return githubVer.CompareTo(currentVer);
@@ -188,7 +196,7 @@ namespace WpfLib.Helpers
         public bool IsUpdateAvailable { get; set; }
         public bool Error { get; set; }
         public string Message { get; set; }
-        public string UpdateUrl {get; set;}
+        public string UpdateUrl { get; set; }
         public string NewVersionId { get; set; }
     }
 }

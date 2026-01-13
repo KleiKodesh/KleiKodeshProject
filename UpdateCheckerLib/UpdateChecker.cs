@@ -2,6 +2,7 @@ using Microsoft.Win32;
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Net;
 using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -17,9 +18,108 @@ namespace UpdateCheckerLib
         private const string REGISTRY_KEY = @"SOFTWARE\KleiKodesh";
         private const string API_URL = "https://api.github.com/repos/KleiKodesh/KleiKodeshProject/releases/latest";
 
+        // Static property to store pending installer path
+        public static string PendingInstallerPath { get; private set; }
+
         static UpdateChecker()
         {
+            // Force TLS 1.2 or higher for GitHub API compatibility
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13;
             httpClient.DefaultRequestHeaders.Add("User-Agent", "KleiKodesh-UpdateChecker");
+        }
+
+        /// <summary>
+        /// Runs any pending installer that was deferred during update process
+        /// Call this during application shutdown
+        /// </summary>
+        public static void RunPendingInstaller()
+        {
+            if (!string.IsNullOrEmpty(PendingInstallerPath) && File.Exists(PendingInstallerPath))
+            {
+                try
+                {
+                    // Create cleanup script to delete installer after completion
+                    // This is only for deferred updates, not manual installations
+                    var cleanupScript = CreateCleanupScript(PendingInstallerPath);
+
+                    // Run installer in silent mode for automatic updates
+                    var installerProcess = Process.Start(new ProcessStartInfo
+                    {
+                        FileName = PendingInstallerPath,
+                        Arguments = "--silent",
+                        UseShellExecute = true,
+                        Verb = "runas"
+                    });
+
+                    // Run cleanup script to delete installer after it completes
+                    // Only for automatic updates - manual installs should leave the file
+                    if (!string.IsNullOrEmpty(cleanupScript))
+                    {
+                        Process.Start(new ProcessStartInfo
+                        {
+                            FileName = "cmd.exe",
+                            Arguments = $"/c \"{cleanupScript}\"",
+                            UseShellExecute = false,
+                            CreateNoWindow = true,
+                            WindowStyle = ProcessWindowStyle.Hidden
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Log error but don't show UI during shutdown
+                    System.Diagnostics.Debug.WriteLine($"Failed to run pending installer: {ex.Message}");
+                }
+                finally
+                {
+                    PendingInstallerPath = null;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Creates a cleanup script that waits for installer to finish then deletes it
+        /// This is only used for automatic deferred updates, not manual installations
+        /// </summary>
+        private static string CreateCleanupScript(string installerPath)
+        {
+            try
+            {
+                var installerName = Path.GetFileNameWithoutExtension(installerPath);
+                var scriptPath = Path.Combine(Path.GetTempPath(), $"cleanup_{installerName}_{DateTime.Now.Ticks}.bat");
+
+                var scriptContent = $@"@echo off
+REM Cleanup script for automatic update - deletes installer after completion
+REM This only runs for deferred updates, not manual installations
+
+REM Wait for installer process to finish
+:wait
+tasklist /FI ""IMAGENAME eq {Path.GetFileName(installerPath)}"" 2>NUL | find /I ""{Path.GetFileName(installerPath)}"" >NUL
+if ""%%ERRORLEVEL""==""0"" (
+    timeout /t 2 /nobreak >NUL
+    goto wait
+)
+
+REM Wait a bit more to ensure installer is completely done
+timeout /t 5 /nobreak >NUL
+
+REM Delete the installer file (only for automatic updates)
+if exist ""{installerPath}"" (
+    del /f /q ""{installerPath}""
+)
+
+REM Self-delete this script (this command deletes the currently running batch file)
+(goto) 2>nul & del ""%~f0""
+";
+
+                File.WriteAllText(scriptPath, scriptContent);
+                return scriptPath;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to create cleanup script: {ex.Message}");
+                return null;
+            }
         }
 
         public string GetCurrentVersionFromRegistry()
@@ -70,7 +170,7 @@ namespace UpdateCheckerLib
 
         /// <summary>
         /// Checks for updates and prompts the user in Hebrew if a new version is available.
-        /// If user confirms, downloads and runs the installer directly.
+        /// If user confirms, downloads the installer and schedules it to run on application shutdown.
         /// </summary>
         /// <param name="closeApplicationAction">Action to close the current application (optional)</param>
         /// <returns>Task that completes when update check and user interaction is finished</returns>
@@ -105,7 +205,7 @@ namespace UpdateCheckerLib
 
                 if (result == DialogResult.Yes)
                 {
-                    await DownloadAndRunInstallerAsync(release.TagName, closeApplicationAction);
+                    await DownloadAndRunInstallerAsync(release.TagName);
                 }
             }
             catch (Exception ex)
@@ -144,7 +244,7 @@ namespace UpdateCheckerLib
             }
         }
 
-        private async Task DownloadAndRunInstallerAsync(string version, Action closeApplicationAction = null)
+        private async Task DownloadAndRunInstallerAsync(string version)
         {
             DownloadProgressWindow progressWindow = null;
             Thread staThread = null;
@@ -193,22 +293,48 @@ namespace UpdateCheckerLib
                     throw new InvalidOperationException("הורדת הקובץ נכשלה");
                 }
 
-                // Close progress window
-                progressWindow?.Dispatcher.Invoke(() => progressWindow.Close());
-
-                // Run installer with admin privileges
-                Process.Start(new ProcessStartInfo
+                // Close progress window and wait for it to actually close
+                var windowClosed = new ManualResetEventSlim(false);
+                progressWindow?.Dispatcher.Invoke(() =>
                 {
-                    FileName = tempPath,
-                    UseShellExecute = true,
-                    Verb = "runas"
+                    progressWindow.Close();
+                    windowClosed.Set();
                 });
+                windowClosed.Wait();
 
-                // Close current application using provided action or default
-                if (closeApplicationAction != null)
-                    closeApplicationAction();
-                else
-                    Environment.Exit(0);
+                // Store installer for execution on app shutdown
+                PendingInstallerPath = tempPath;
+
+                // Ask user if they want to proceed with deferred installation
+                var notificationMessage = $"העדכון לגרסה {version} הורד בהצלחה!\n\n" +
+                                        "ההתקנה תתבצע כאשר תסגור את התוכנה.";
+
+                var result = MessageBox.Show(
+                    notificationMessage,
+                    "עדכון מוכן להתקנה - כלי קודש",
+                    MessageBoxButtons.OKCancel,
+                    MessageBoxIcon.Question,
+                    MessageBoxDefaultButton.Button1,
+                    MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign
+                );
+
+                if (result == DialogResult.Cancel)
+                {
+                    // User cancelled - clear pending installer and delete file
+                    PendingInstallerPath = null;
+                    MessageBox.Show("ההתקנה בוטלה!");
+                    if (File.Exists(tempPath))
+                    {
+                        try
+                        {
+                            File.Delete(tempPath);
+                        }
+                        catch
+                        {
+                            // Ignore deletion errors
+                        }
+                    }
+                }
             }
             catch (OperationCanceledException)
             {
@@ -246,6 +372,8 @@ namespace UpdateCheckerLib
         {
             using (var client = new HttpClient())
             {
+                // Ensure TLS 1.2+ for this client as well
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13;
                 client.Timeout = TimeSpan.FromMinutes(5);
                 client.DefaultRequestHeaders.Add("User-Agent", "KleiKodesh-UpdateChecker");
 

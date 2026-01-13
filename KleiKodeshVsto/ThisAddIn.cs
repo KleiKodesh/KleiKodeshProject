@@ -9,6 +9,7 @@ using Microsoft.Office.Tools.Word;
 using KleiKodesh.Ribbon;
 using KleiKodesh.Helpers;
 using Microsoft.Office.Interop.Word;
+using UpdateCheckerLib;
 
 namespace KleiKodesh
 {
@@ -27,6 +28,9 @@ namespace KleiKodesh
 
         private void ThisAddIn_Shutdown(object sender, System.EventArgs e)
         {
+            // Run any pending installer that was deferred during update process
+            UpdateChecker.RunPendingInstaller();
+            
             // Add-in shutdown cleanup
         }
 

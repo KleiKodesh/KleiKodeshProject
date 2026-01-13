@@ -76,9 +76,9 @@ namespace TestUpdateCheck
                 {
                     Console.WriteLine("5. Testing full update check with Hebrew prompt...");
                     Console.WriteLine("   (This will show Hebrew dialog if update is available)");
-                    
+
                     // Custom close action for testing
-                    await updateChecker.CheckAndPromptForUpdateAsync(() => 
+                    await updateChecker.CheckAndPromptForUpdateAsync(() =>
                     {
                         Console.WriteLine("   Test app would close here (but we won't actually close)");
                     });

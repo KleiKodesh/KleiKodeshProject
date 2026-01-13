@@ -21,26 +21,6 @@ namespace KleiKodesh.Helpers
         {
             try
             {
-                // Check for updates on first taskpane open with Hebrew prompt
-                if (!_updateCheckDone)
-                {
-                    _updateCheckDone = true;
-
-                    // Run update check asynchronously without blocking UI
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            var updateChecker = new UpdateChecker();
-                            await updateChecker.CheckAndPromptForUpdateAsync(() => Globals.ThisAddIn.Application.Quit());
-                        }
-                        catch (Exception ex)
-                        {
-                            System.Diagnostics.Debug.WriteLine($"[TaskPaneManager] Update check failed: {ex.Message}");
-                        }
-                    });
-                }
-
                 var panes = Globals.ThisAddIn.CustomTaskPanes;
                 var window = Globals.ThisAddIn.Application.ActiveWindow;
                 var type = userControl.GetType();
@@ -117,6 +97,8 @@ namespace KleiKodesh.Helpers
         {
             try
             {
+                CheckForUpdates();
+
                 var panes = Globals.ThisAddIn.CustomTaskPanes;
                 var window = Globals.ThisAddIn.Application.ActiveWindow;
                 var type = userControl.GetType();
@@ -161,6 +143,36 @@ namespace KleiKodesh.Helpers
             {
                 MessageBox.Show(ex.ToString(), "Error");
                 return null;
+            }
+        }
+
+        static void CheckForUpdates()
+        {
+            try
+            {
+                // Check for updates on first taskpane open with Hebrew prompt
+                if (!_updateCheckDone)
+                {
+                    _updateCheckDone = true;
+
+                    // Run update check asynchronously without blocking UI
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var updateChecker = new UpdateChecker();
+                            await updateChecker.CheckAndPromptForUpdateAsync(() => Globals.ThisAddIn.Application.Quit());
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show($"[TaskPaneManager] Update check failed: {ex.Message}");
+                        }
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"[TaskPaneManager] Update check failed: {ex.Message}");
             }
         }
 

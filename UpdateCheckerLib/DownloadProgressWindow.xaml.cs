@@ -30,6 +30,7 @@ namespace UpdateCheckerLib
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
             ResizeMode = ResizeMode.NoResize;
             FlowDirection = FlowDirection.RightToLeft;
+            WindowStyle = WindowStyle.ToolWindow;
 
             // Create main grid
             var grid = new Grid();
