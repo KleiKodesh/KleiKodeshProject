@@ -131,6 +131,7 @@
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Viewer\HebrewBooksDownloadManager.cs" />
+    <Compile Include="Viewer\CSharpPdfManager.cs" />
     <Compile Include="Viewer\ZayitViewer.cs">
       <SubType>Component</SubType>
     </Compile>

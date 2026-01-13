@@ -1,7 +1,17 @@
 <template>
   <div class="pdf-page">
+    <!-- Show loading state when recreating virtual URL -->
+    <div v-if="isLoadingPdf"
+         class="flex-center height-fill">
+      <div class="loading-container flex-column">
+        <Icon icon="fluent:spinner-ios-20-filled" 
+              class="loading-spinner" />
+        <span>טוען PDF...</span>
+      </div>
+    </div>
+
     <!-- Show placeholder when no PDF source available -->
-    <div v-if="!hasPdfSource"
+    <div v-else-if="!hasPdfSource"
          class="flex-center height-fill">
       <input ref="fileInput"
              type="file"
@@ -28,6 +38,7 @@
 import { computed, ref } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useTabStore } from '../../stores/tabStore';
+import { pdfService } from '../../services/pdfService';
 
 const tabStore = useTabStore();
 const fileInput = ref<HTMLInputElement>();
@@ -37,10 +48,20 @@ const selectedPdfUrl = computed(() => {
   return tabStore.activeTab?.pdfState?.fileUrl || '';
 });
 
-// Check if we have any PDF source (file path or blob URL)
+// Check if we have any PDF source (file path or blob URL) and not loading
 const hasPdfSource = computed(() => {
   const tab = tabStore.activeTab;
-  return !!(tab?.pdfState?.filePath || tab?.pdfState?.fileUrl);
+  if (!tab?.pdfState) return false;
+  
+  // Don't show PDF viewer if still loading virtual URL
+  if (tab.pdfState.isLoading) return false;
+  
+  return !!(tab.pdfState.filePath || tab.pdfState.fileUrl);
+});
+
+// Show loading state
+const isLoadingPdf = computed(() => {
+  return tabStore.activeTab?.pdfState?.isLoading || false;
 });
 
 // PDF.js viewer URL with file parameter
@@ -51,9 +72,14 @@ const pdfViewerUrl = computed(() => {
   // Use blob URL (works for both C# and browser)
   const fileSource = selectedPdfUrl.value;
 
-  return fileSource
+  const finalUrl = fileSource
     ? `${baseUrl}?file=${encodeURIComponent(fileSource)}`
     : baseUrl;
+    
+  console.log('[PdfViewPage] PDF viewer URL:', finalUrl);
+  console.log('[PdfViewPage] File source:', fileSource);
+  
+  return finalUrl;
 });
 
 // Placeholder message based on whether this is a restored tab
@@ -65,10 +91,40 @@ const placeholderMessage = computed(() => {
   return 'בחר קובץ PDF לצפייה';
 });
 
-// Open file picker - use C# if available, otherwise browser
+// Open file picker - use C# PDF service via existing bridge
 const openFilePicker = async () => {
-  // Always use browser file picker - same method as PDF.js built-in picker
-  fileInput.value?.click();
+  try {
+    if (pdfService.isAvailable()) {
+      // Use C# PDF service via existing bridge system
+      const result = await pdfService.showFilePicker();
+      
+      if (result.fileName && result.dataUrl) {
+        // Update current tab's PDF state with virtual URL
+        const tab = tabStore.activeTab;
+        if (tab) {
+          tab.pdfState = {
+            fileName: result.fileName,
+            fileUrl: result.dataUrl,  // Virtual HTTPS URL from C#
+            filePath: result.fileName  // Store filename for tab restoration reference
+          };
+
+          // Update tab title if it's generic
+          if (tab.title === 'תצוגת PDF') {
+            tab.title = result.fileName;
+          }
+        }
+        
+        console.log('[Vue] PDF loaded via C# bridge:', result.fileName, result.dataUrl);
+      }
+    } else {
+      // Fallback to browser file picker if not in WebView2
+      fileInput.value?.click();
+    }
+  } catch (error) {
+    console.error('[Vue] Error opening PDF file picker:', error);
+    // Fallback to browser file picker on error
+    fileInput.value?.click();
+  }
 };
 
 // Handle file selection - same as PDF.js built-in picker
@@ -126,5 +182,21 @@ const handleFileSelect = (event: Event) => {
   width: 100%;
   height: 100%;
   border: none;
+}
+
+.loading-container {
+  gap: 16px;
+  align-items: center;
+  color: var(--text-secondary);
+}
+
+.loading-spinner {
+  font-size: 32px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 </style>

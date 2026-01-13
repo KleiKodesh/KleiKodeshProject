@@ -297,10 +297,9 @@ async function loadCommentaryLinks(bookId: number, lineIndex: number) {
 
 function handleGroupClick(group: CommentaryLinkGroup) {
     if (group.targetBookId !== undefined && group.targetLineIndex !== undefined) {
-        // Create a new tab first
-        tabStore.addTab()
-        // Then open the book in the new tab with the initial line index
-        tabStore.openBook(group.groupName, group.targetBookId, undefined, group.targetLineIndex)
+        // Use the new method to create a tab directly with book state
+        tabStore.openBookInNewTab(group.groupName, group.targetBookId, undefined, group.targetLineIndex)
+        console.log(`[Commentary] Created new tab for book: ${group.groupName} (ID: ${group.targetBookId}) at line ${group.targetLineIndex}`)
     }
 }
 

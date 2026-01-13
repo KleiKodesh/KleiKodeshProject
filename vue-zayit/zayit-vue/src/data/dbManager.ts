@@ -18,7 +18,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 export type { LineLoadResult }
 
 class DatabaseManager {
-    private csharp = new CSharpBridge()
+    private csharp = CSharpBridge.getInstance()
 
     private isWebViewAvailable(): boolean {
         return this.csharp.isAvailable()
@@ -33,15 +33,22 @@ class DatabaseManager {
     // --------------------------------------------------------------------------
 
     async getTree(): Promise<{ categoriesFlat: Category[], booksFlat: Book[] }> {
+        console.log('[DbManager] getTree called')
         if (this.isWebViewAvailable()) {
+            console.log('[DbManager] Using WebView bridge')
             const promise = this.csharp.createRequest<{ categoriesFlat: Category[], booksFlat: Book[] }>('GetTree')
             this.csharp.send('GetTree', [])
-            return promise
+            console.log('[DbManager] Waiting for GetTree response...')
+            const result = await promise
+            console.log('[DbManager] GetTree response received:', result)
+            return result
         } else if (this.isDevServerAvailable()) {
+            console.log('[DbManager] Using dev server fallback')
             const categoriesFlat = await sqliteDb.getAllCategories()
             const booksFlat = await sqliteDb.getBooks()
             return { categoriesFlat, booksFlat }
         } else {
+            console.error('[DbManager] No database source available')
             throw new Error('No database source available')
         }
     }

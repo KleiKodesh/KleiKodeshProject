@@ -23,7 +23,7 @@ export const useTabStore = defineStore('tabs', () => {
     const tabs = ref<Tab[]>([]);
     const nextId = ref<number>(2);
 
-    const loadFromStorage = () => {
+    const loadFromStorage = async () => {
         try {
             const stored = localStorage.getItem(STORAGE_KEY);
             if (stored) {
@@ -39,12 +39,38 @@ export const useTabStore = defineStore('tabs', () => {
                     }
                 });
 
-                // Clear blob URLs on page reload (they become invalid)
-                tabs.value.forEach(tab => {
-                    if (tab.pdfState?.fileUrl?.startsWith('blob:')) {
+                // Handle PDF tabs with stored file paths
+                for (const tab of tabs.value) {
+                    if (tab.pdfState && tab.pdfState.filePath) {
+                        // Always recreate virtual URL from file path (virtual URLs don't persist)
+                        // Clear any existing URL since it's invalid after restart
                         tab.pdfState.fileUrl = '';
+                        
+                        try {
+                            // Import pdfService dynamically to avoid circular dependency
+                            const { pdfService } = await import('../services/pdfService');
+                            if (pdfService.isAvailable()) {
+                                // Wait for PDF manager to be ready before recreating URLs
+                                console.log('[TabStore] Waiting for PDF manager to be ready...');
+                                const isReady = await pdfService.checkManagerReady();
+                                
+                                if (isReady) {
+                                    const virtualUrl = await pdfService.recreateVirtualUrl(tab.pdfState.filePath);
+                                    if (virtualUrl) {
+                                        tab.pdfState.fileUrl = virtualUrl;
+                                        console.log('[TabStore] Recreated virtual URL for PDF tab:', tab.title, virtualUrl);
+                                    } else {
+                                        console.warn('[TabStore] Failed to recreate virtual URL for PDF tab:', tab.title);
+                                    }
+                                } else {
+                                    console.warn('[TabStore] PDF manager not ready, cannot recreate virtual URL for:', tab.title);
+                                }
+                            }
+                        } catch (error) {
+                            console.warn('[TabStore] Failed to recreate virtual URL for PDF tab:', tab.title, error);
+                        }
                     }
-                });
+                }
 
                 // Ensure at least one tab is active
                 const hasActiveTab = tabs.value.some(tab => tab.isActive);
@@ -71,8 +97,24 @@ export const useTabStore = defineStore('tabs', () => {
                 tab.currentPage === 'hebrewbooks-view'
             );
 
+            // Clean up PDF tabs before saving - don't persist virtual URLs
+            const cleanedTabs = contentTabs.map(tab => {
+                if (tab.pdfState && tab.pdfState.filePath) {
+                    // Only persist the original file path, not the virtual URL
+                    return {
+                        ...tab,
+                        pdfState: {
+                            fileName: tab.pdfState.fileName,
+                            filePath: tab.pdfState.filePath
+                            // Don't save fileUrl - it will be recreated on load
+                        }
+                    };
+                }
+                return tab;
+            });
+
             localStorage.setItem(STORAGE_KEY, JSON.stringify({
-                tabs: contentTabs,
+                tabs: cleanedTabs,
                 nextId: nextId.value
             }));
         } catch (e) {
@@ -80,11 +122,14 @@ export const useTabStore = defineStore('tabs', () => {
         }
     };
 
-    loadFromStorage();
-    if (tabs.value.length === 0) {
-        // Create initial tab using centralized homepage logic
-        createDefaultTab();
-    }
+    // Initialize store
+    (async () => {
+        await loadFromStorage();
+        if (tabs.value.length === 0) {
+            // Create initial tab using centralized homepage logic
+            await createDefaultTab();
+        }
+    })();
 
     // Centralized function to determine appropriate homepage based on user preference and connectivity
     async function navigateToHomepage(): Promise<{ pageType: PageType, title: string }> {
@@ -486,8 +531,8 @@ export const useTabStore = defineStore('tabs', () => {
             currentPage: 'pdfview',
             pdfState: {
                 fileName: displayName,
-                fileUrl: blobUrl, // Use blob URL for PDF.js viewing
-                filePath // Store file path for persistence
+                fileUrl: blobUrl, // Use virtual URL for current session viewing
+                filePath // Store file path for persistence (virtual URL will be recreated on restart)
             }
         };
 
@@ -557,6 +602,36 @@ export const useTabStore = defineStore('tabs', () => {
         nextId.value = Math.max(newId + 1, nextId.value);
     };
 
+    const openBookInNewTab = (bookTitle: string, bookId: number, hasConnections?: boolean, initialLineIndex?: number) => {
+        // Deactivate all current tabs
+        tabs.value.forEach(tab => tab.isActive = false)
+
+        // Find the lowest available ID
+        const existingIds = new Set(tabs.value.map(t => t.id))
+        let newId = 1
+        while (existingIds.has(newId)) {
+            newId++
+        }
+
+        // Create new tab directly with book state to avoid homepage flash
+        const newTab: Tab = {
+            id: newId,
+            title: bookTitle,
+            isActive: true,
+            currentPage: 'bookview',
+            bookState: {
+                bookId,
+                bookTitle,
+                hasConnections,
+                initialLineIndex,
+                isLineDisplayInline: false
+            }
+        }
+
+        tabs.value.push(newTab)
+        nextId.value = Math.max(newId + 1, nextId.value)
+    };
+
     const openKezayitSearch = () => {
         tabs.value.forEach(tab => tab.isActive = false);
 
@@ -590,6 +665,7 @@ export const useTabStore = defineStore('tabs', () => {
         openBookToc,
         closeToc,
         openBook,
+        openBookInNewTab,
         toggleSplitPane,
         toggleDiacritics,
         toggleLineDisplay,

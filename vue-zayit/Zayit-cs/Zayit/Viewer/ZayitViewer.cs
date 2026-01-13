@@ -129,6 +129,10 @@ namespace Zayit.Viewer
                 var commands = _commandHandler as ZayitViewerCommands;
                 commands?.InitializeHebrewBooksDownloadManager(CoreWebView2);
 
+                // Initialize PDF manager
+                Console.WriteLine($"[ZayitViewer#{_instanceId}] Initializing PDF manager");
+                _ = commands?.InitializePdfManager(); // Fire-and-forget async
+
                 // Navigate
                 Console.WriteLine($"[ZayitViewer#{_instanceId}] Navigating to zayitHost/index.html");
                 Source = new Uri("https://zayitHost/index.html");

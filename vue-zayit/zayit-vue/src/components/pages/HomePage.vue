@@ -28,6 +28,7 @@
 
 <script setup lang="ts">
 import { useTabStore } from '../../stores/tabStore';
+import { pdfService } from '../../services/pdfService';
 import UniformGrid from '../UniformGrid.vue';
 import AppTile from '../AppTile.vue';
 
@@ -38,21 +39,54 @@ const openKezayit = () => {
 };
 
 const openPdf = async () => {
-    // Always use browser file picker - same method as PDF.js built-in picker
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.pdf';
-    input.onchange = (e: Event) => {
-        const target = e.target as HTMLInputElement;
-        const file = target.files?.[0];
-        if (file && file.type === 'application/pdf') {
-            const fileUrl = URL.createObjectURL(file);  // Blob URL - same as PDF.js!
-            console.log('Created blob URL for PDF:', fileUrl);
-            // Open PDF viewer with blob URL (efficient streaming, no memory loading)
-            tabStore.openPdfWithFile(file.name, fileUrl);
+    try {
+        if (pdfService.isAvailable()) {
+            // Use C# PDF service via existing bridge system
+            const result = await pdfService.showFilePicker();
+            
+            if (result.fileName && result.dataUrl) {
+                if (result.originalPath) {
+                    // Use method that stores both virtual URL and original path for persistence
+                    tabStore.openPdfWithFilePathAndBlobUrl(result.fileName, result.originalPath, result.dataUrl);
+                    console.log('[HomePage] PDF loaded via C# bridge with persistence:', result.fileName, result.dataUrl, 'original:', result.originalPath);
+                } else {
+                    // Fallback to virtual URL only
+                    tabStore.openPdfWithFile(result.fileName, result.dataUrl);
+                    console.log('[HomePage] PDF loaded via C# bridge:', result.fileName, result.dataUrl);
+                }
+            }
+        } else {
+            // Fallback to browser file picker if not in WebView2
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.pdf';
+            input.onchange = (e: Event) => {
+                const target = e.target as HTMLInputElement;
+                const file = target.files?.[0];
+                if (file && file.type === 'application/pdf') {
+                    const fileUrl = URL.createObjectURL(file);  // Blob URL fallback
+                    console.log('[HomePage] Created blob URL for PDF:', fileUrl);
+                    tabStore.openPdfWithFile(file.name, fileUrl);
+                }
+            };
+            input.click();
         }
-    };
-    input.click();
+    } catch (error) {
+        console.error('[HomePage] Error opening PDF file picker:', error);
+        // Fallback to browser file picker on error
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.pdf';
+        input.onchange = (e: Event) => {
+            const target = e.target as HTMLInputElement;
+            const file = target.files?.[0];
+            if (file && file.type === 'application/pdf') {
+                const fileUrl = URL.createObjectURL(file);
+                tabStore.openPdfWithFile(file.name, fileUrl);
+            }
+        };
+        input.click();
+    }
 };
 
 const openSettings = () => {

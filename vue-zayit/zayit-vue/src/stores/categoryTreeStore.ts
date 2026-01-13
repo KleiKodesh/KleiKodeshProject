@@ -18,60 +18,68 @@ export const useCategoryTreeStore = defineStore('categoryTree', () => {
     }
 
     async function buildTree() {
-        const { categoriesFlat: categories, booksFlat: books } = await dbManager.getTree()
+        try {
+            console.log('[CategoryTreeStore] Starting buildTree...')
+            const { categoriesFlat: categories, booksFlat: books } = await dbManager.getTree()
+            console.log('[CategoryTreeStore] Received data:', { categoriesCount: categories?.length, booksCount: books?.length })
 
-        // Group books by categoryId
-        const booksByCategory = new Map<number, Book[]>()
-        for (const book of books) {
-            const categoryBooks = booksByCategory.get(book.categoryId)
-            if (categoryBooks) {
-                categoryBooks.push(book)
-            } else {
-                booksByCategory.set(book.categoryId, [book])
-            }
-        }
-
-        // Single pass: initialize categories and build hierarchy
-        const categoryMap = new Map<number, Category>()
-        const roots: Category[] = []
-
-        for (const cat of categories) {
-            cat.children = []
-            cat.books = booksByCategory.get(cat.id) || []
-            categoryMap.set(cat.id, cat)
-
-            if (!cat.parentId || cat.parentId === 0) {
-                roots.push(cat)
-            } else {
-                const parent = categoryMap.get(cat.parentId)
-                if (parent) {
-                    parent.children.push(cat)
+            // Group books by categoryId
+            const booksByCategory = new Map<number, Book[]>()
+            for (const book of books) {
+                const categoryBooks = booksByCategory.get(book.categoryId)
+                if (categoryBooks) {
+                    categoryBooks.push(book)
+                } else {
+                    booksByCategory.set(book.categoryId, [book])
                 }
             }
-        }
 
-        // Build paths for categories and books
-        function buildPaths(category: Category, parentPath: string = '') {
-            const currentPath = parentPath ? `${parentPath} > ${category.title}` : category.title
+            // Single pass: initialize categories and build hierarchy
+            const categoryMap = new Map<number, Category>()
+            const roots: Category[] = []
 
-            // Assign path to all books in this category
-            for (const book of category.books) {
-                book.path = currentPath
+            for (const cat of categories) {
+                cat.children = []
+                cat.books = booksByCategory.get(cat.id) || []
+                categoryMap.set(cat.id, cat)
+
+                if (!cat.parentId || cat.parentId === 0) {
+                    roots.push(cat)
+                } else {
+                    const parent = categoryMap.get(cat.parentId)
+                    if (parent) {
+                        parent.children.push(cat)
+                    }
+                }
             }
 
-            // Recursively build paths for children
-            for (const child of category.children) {
-                buildPaths(child, currentPath)
+            // Build paths for categories and books
+            function buildPaths(category: Category, parentPath: string = '') {
+                const currentPath = parentPath ? `${parentPath} > ${category.title}` : category.title
+
+                // Assign path to all books in this category
+                for (const book of category.books) {
+                    book.path = currentPath
+                }
+
+                // Recursively build paths for children
+                for (const child of category.children) {
+                    buildPaths(child, currentPath)
+                }
             }
-        }
 
-        for (const root of roots) {
-            buildPaths(root)
-        }
+            for (const root of roots) {
+                buildPaths(root)
+            }
 
-        allBooks.value = books
-        categoryTree.value = roots
-        isLoading.value = false;
+            allBooks.value = books
+            categoryTree.value = roots
+            isLoading.value = false;
+            console.log('[CategoryTreeStore] buildTree completed successfully')
+        } catch (error) {
+            console.error('[CategoryTreeStore] Error in buildTree:', error)
+            isLoading.value = false;
+        }
     }
 
     return {

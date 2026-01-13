@@ -19,74 +19,85 @@ namespace Zayit.Viewer
         public HebrewBooksDownloadManager(CoreWebView2 webView)
         {
             _webView = webView;
-            // Download to hebrewbooks subfolder within PDF.js web directory
-            _cacheDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Html", "pdfjs", "web", "hebrewbooks");
+            // Download to hebrewbookscache subfolder within PDF.js web directory
+            _cacheDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Html", "pdfjs", "web", "hebrewbookscache");
             // Ensure cache directory exists
             Directory.CreateDirectory(_cacheDirectory);
-            Console.WriteLine($"[HebrewBooks] Cache directory (hebrewbooks subfolder): {_cacheDirectory}");
+            Console.WriteLine($"[HebrewBooks] Cache directory: {_cacheDirectory}");
         }
 
         public async Task PrepareHebrewBookDownload(string bookId, string title, string action)
         {
-            Console.WriteLine($"[HebrewBooks] Preparing {action} for {bookId}: {title}");
-
-            // Only use cache for view action
-            if (action == "view")
+            try
             {
-                // Check if file exists in hebrewbooks subfolder with hebrewbooks prefix
-                string pdfFilePath = Path.Combine(_cacheDirectory, $"hebrewbooks-{bookId}.pdf");
-                if (File.Exists(pdfFilePath))
+                Console.WriteLine($"[HebrewBooks] Preparing {action} for {bookId}: {title}");
+
+                // Only use cache for view action
+                if (action == "view")
                 {
-                    Console.WriteLine($"[HebrewBooks] Found in hebrewbooks subfolder: {pdfFilePath}");
-                    // Send download complete signal - Vue will construct URL using bookId
-                    await SendDownloadComplete(bookId);
-                    return;
+                    // Check if file exists in cache with title_id pattern
+                    string sanitizedTitle = SanitizeFileName(title);
+                    string fileName = $"{sanitizedTitle}_{bookId}";
+                    string pdfFilePath = Path.Combine(_cacheDirectory, $"{fileName}.pdf");
+                    if (File.Exists(pdfFilePath))
+                    {
+                        Console.WriteLine($"[HebrewBooks] Found in cache: {pdfFilePath}");
+                        // Send download complete signal - Vue will construct URL using fileName
+                        await SendDownloadComplete(bookId, fileName);
+                        return;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[HebrewBooks] Not found in cache, will download: {pdfFilePath}");
+                    }
+                }
+
+                // Show save dialog for download action
+                if (action == "download")
+                {
+                    Console.WriteLine($"[HebrewBooks] Showing save dialog for download");
+                    using (var dialog = new SaveFileDialog())
+                    {
+                        dialog.Filter = "PDF Files (*.pdf)|*.pdf";
+                        dialog.FileName = $"{title}.pdf";
+                        dialog.InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                        
+                        if (dialog.ShowDialog() != DialogResult.OK)
+                        {
+                            Console.WriteLine($"[HebrewBooks] Save dialog cancelled");
+                            await SendDownloadComplete(bookId, null, true);
+                            return;
+                        }
+
+                        Console.WriteLine($"[HebrewBooks] User selected save path: {dialog.FileName}");
+                        _pendingDownload = new HebrewBookDownloadInfo
+                        {
+                            BookId = bookId,
+                            Title = title,
+                            Action = action,
+                            SavePath = dialog.FileName
+                        };
+                    }
                 }
                 else
                 {
-                    Console.WriteLine($"[HebrewBooks] Not found in cache, will download: {pdfFilePath}");
-                }
-            }
-
-            // Show save dialog for download action
-            if (action == "download")
-            {
-                Console.WriteLine($"[HebrewBooks] Showing save dialog for download");
-                using (var dialog = new SaveFileDialog())
-                {
-                    dialog.Filter = "PDF Files (*.pdf)|*.pdf";
-                    dialog.FileName = $"{title}.pdf";
-                    dialog.InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                    
-                    if (dialog.ShowDialog() != DialogResult.OK)
-                    {
-                        Console.WriteLine($"[HebrewBooks] Save dialog cancelled");
-                        await SendDownloadComplete(bookId, null);
-                        return;
-                    }
-
-                    Console.WriteLine($"[HebrewBooks] User selected save path: {dialog.FileName}");
                     _pendingDownload = new HebrewBookDownloadInfo
                     {
                         BookId = bookId,
                         Title = title,
-                        Action = action,
-                        SavePath = dialog.FileName
+                        Action = action
                     };
                 }
-            }
-            else
-            {
-                _pendingDownload = new HebrewBookDownloadInfo
-                {
-                    BookId = bookId,
-                    Title = title,
-                    Action = action
-                };
-            }
 
-            Console.WriteLine($"[HebrewBooks] Sending ready signal for {action}");
-            await SendReady(bookId, action);
+                Console.WriteLine($"[HebrewBooks] Sending ready signal for {action}");
+                await SendReady(bookId, action);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[HebrewBooks] Error in PrepareHebrewBookDownload: {ex}");
+                // Always send an error response
+                await SendDownloadComplete(bookId, null, false);
+            }
         }
 
         public void HandleDownloadStarting(CoreWebView2DownloadStartingEventArgs e)
@@ -104,8 +115,10 @@ namespace Zayit.Viewer
 
             if (action == "view")
             {
-                // Save to hebrewbooks subfolder with hebrewbooks prefix
-                string pdfFilePath = Path.Combine(_cacheDirectory, $"hebrewbooks-{bookId}.pdf");
+                // Save to cache with title_id pattern
+                string sanitizedTitle = SanitizeFileName(title);
+                string fileName = $"{sanitizedTitle}_{bookId}";
+                string pdfFilePath = Path.Combine(_cacheDirectory, $"{fileName}.pdf");
                 e.ResultFilePath = pdfFilePath;
 
                 e.DownloadOperation.StateChanged += async (sender, args) =>
@@ -114,7 +127,7 @@ namespace Zayit.Viewer
                     {
                         try
                         {
-                            Console.WriteLine($"[HebrewBooks] Download completed to hebrewbooks subfolder: {pdfFilePath}");
+                            Console.WriteLine($"[HebrewBooks] Download completed to cache: {pdfFilePath}");
                             
                             // Close the download dialog for view action (to show PDF immediately)
                             _webView.CloseDefaultDownloadDialog();
@@ -122,13 +135,13 @@ namespace Zayit.Viewer
                             // Simple cache management - just delete oldest files if we have too many
                             ManageCache();
                             
-                            // Send download complete signal - Vue will construct URL using bookId
-                            await SendDownloadComplete(bookId);
+                            // Send download complete signal - Vue will construct URL using fileName
+                            await SendDownloadComplete(bookId, fileName);
                         }
                         catch (Exception ex)
                         {
                             Console.WriteLine($"[HebrewBooks] Error processing downloaded file: {ex.Message}");
-                            await SendDownloadComplete(bookId, null);
+                            await SendDownloadComplete(bookId, null, false);
                         }
                     }
                 };
@@ -147,12 +160,12 @@ namespace Zayit.Viewer
                         if (download.State == CoreWebView2DownloadState.Completed)
                         {
                             Console.WriteLine($"[HebrewBooks] Download completed successfully to: {download.ResultFilePath}");
-                            await SendDownloadComplete(bookId, download.ResultFilePath);
+                            await SendDownloadComplete(bookId, download.ResultFilePath, true);
                         }
                         else if (download.State == CoreWebView2DownloadState.Interrupted)
                         {
                             Console.WriteLine($"[HebrewBooks] Download was interrupted");
-                            await SendDownloadComplete(bookId, null);
+                            await SendDownloadComplete(bookId, null, true);
                         }
                     }
                 };
@@ -177,13 +190,13 @@ namespace Zayit.Viewer
             await _webView.ExecuteScriptAsync(js);
         }
 
-        private async Task SendDownloadComplete(string bookId)
+        private async Task SendDownloadComplete(string bookId, string fileName)
         {
-            string js = $"window.receiveHebrewBookDownloadComplete({JsonSerializer.Serialize(bookId)}, true);";
+            string js = $"window.receiveHebrewBookDownloadComplete({JsonSerializer.Serialize(bookId)}, {JsonSerializer.Serialize(fileName)});";
             await _webView.ExecuteScriptAsync(js);
         }
 
-        private async Task SendDownloadComplete(string bookId, string filePath)
+        private async Task SendDownloadComplete(string bookId, string filePath, bool isDownload)
         {
             string js = $"window.receiveHebrewBookDownloadComplete({JsonSerializer.Serialize(bookId)}, {JsonSerializer.Serialize(filePath)});";
             await _webView.ExecuteScriptAsync(js);
@@ -193,24 +206,50 @@ namespace Zayit.Viewer
         {
             try
             {
-                // Only manage Hebrew book PDF files (files with "hebrewbooks-" prefix)
-                var hebrewBookFiles = Directory.GetFiles(_cacheDirectory, "hebrewbooks-*.pdf")
+                // Manage all PDF files in cache directory
+                var cacheFiles = Directory.GetFiles(_cacheDirectory, "*.pdf")
                     .Select(f => new FileInfo(f))
                     .OrderBy(f => f.LastAccessTime)
                     .ToArray();
 
-                // Delete oldest Hebrew book files if we have more than MAX_CACHE_SIZE
-                while (hebrewBookFiles.Length > MAX_CACHE_SIZE)
+                // Delete oldest files if we have more than MAX_CACHE_SIZE
+                while (cacheFiles.Length > MAX_CACHE_SIZE)
                 {
-                    hebrewBookFiles[0].Delete();
-                    Console.WriteLine($"[HebrewBooks] Deleted old cache file: {hebrewBookFiles[0].Name}");
-                    hebrewBookFiles = hebrewBookFiles.Skip(1).ToArray();
+                    cacheFiles[0].Delete();
+                    Console.WriteLine($"[HebrewBooks] Deleted old cache file: {cacheFiles[0].Name}");
+                    cacheFiles = cacheFiles.Skip(1).ToArray();
                 }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[HebrewBooks] Error managing cache: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Sanitize filename by removing invalid characters and limiting length
+        /// </summary>
+        private string SanitizeFileName(string fileName)
+        {
+            if (string.IsNullOrEmpty(fileName))
+                return "unknown";
+
+            // Remove invalid filename characters
+            char[] invalidChars = Path.GetInvalidFileNameChars();
+            string sanitized = new string(fileName.Where(c => !invalidChars.Contains(c)).ToArray());
+            
+            // Replace spaces with underscores for better URL compatibility
+            sanitized = sanitized.Replace(' ', '_');
+            
+            // Limit length to avoid filesystem issues
+            if (sanitized.Length > 100)
+                sanitized = sanitized.Substring(0, 100);
+            
+            // Ensure we have a valid filename
+            if (string.IsNullOrEmpty(sanitized))
+                sanitized = "unknown";
+                
+            return sanitized;
         }
     }
 

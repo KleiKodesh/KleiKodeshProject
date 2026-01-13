@@ -13,11 +13,7 @@ namespace Zayit.Viewer
     /// - Caching Hebrew books in PDF.js web directory
     /// - Managing Hebrew book download states
     /// 
-    /// DO NOT CONFUSE WITH LocalPdfCommands:
-    /// - HebrewBooksCommands = Downloads from hebrewbooks.org website
-    /// - LocalPdfCommands = Opens local PDF files from user's computer
-    /// 
-    /// Files are saved with "hebrewbooks-{bookId}.pdf" naming pattern
+    /// Files are saved with book title as filename (sanitized)
     /// </summary>
     public class HebrewBooksCommands
     {
@@ -31,7 +27,7 @@ namespace Zayit.Viewer
 
         /// <summary>
         /// Initialize Hebrew Books download manager
-        /// ONLY for hebrewbooks.org downloads, NOT local PDF files
+        /// ONLY for hebrewbooks.org downloads
         /// </summary>
         public void Initialize(CoreWebView2 coreWebView)
         {

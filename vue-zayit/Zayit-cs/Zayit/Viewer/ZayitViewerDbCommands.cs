@@ -36,10 +36,20 @@ namespace Zayit.Viewer
                     PropertyNamingPolicy = JsonNamingPolicy.CamelCase
                 });
 
-                string js = $"window.receiveTreeData({json});";
-                await _webView.ExecuteScriptAsync(js);
+                // Check if the handler exists before calling it
+                string checkJs = @"
+                    (function() {
+                        if (typeof window.receiveTreeData === 'function') {
+                            window.receiveTreeData(" + json + @");
+                            return 'Handler called successfully';
+                        } else {
+                            return 'Handler not found: ' + typeof window.receiveTreeData;
+                        }
+                    })()
+                ";
 
-                Debug.WriteLine("Tree data sent successfully");
+                string result = await _webView.ExecuteScriptAsync(checkJs);
+                Debug.WriteLine($"Tree data execution result: {result}");
             }
             catch (Exception ex)
             {

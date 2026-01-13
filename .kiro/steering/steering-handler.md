@@ -85,6 +85,9 @@ All steering files use prefix naming for easy handling:
 - `project_regexfind-build.md` - RegexFind build process, data structures
 - `project_regexfind-color.md` - Color picker system, Word compatibility
 
+**Zayit Project** - `**/vue-zayit/**`
+- `project_zayit-bridge.md` - Zayit C# ↔ Vue bridge patterns, PDF manager integration
+
 **Installer Project** - `**/KleiKodeshVstoInstallerWpf/**`
 - `project_installer-details.md` - Installer-specific implementation details
 

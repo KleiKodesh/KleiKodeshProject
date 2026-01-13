@@ -5,11 +5,31 @@
  * Uses promise-based request/response pattern.
  */
 
+// Singleton instance
+let bridgeInstance: CSharpBridge | null = null;
+
 export class CSharpBridge {
     private pendingRequests = new Map<string, { resolve: Function, reject: Function }>()
 
     constructor() {
-        this.setupGlobalHandlers()
+        // Ensure only one instance sets up global handlers
+        if (!bridgeInstance) {
+            this.setupGlobalHandlers()
+            bridgeInstance = this;
+        } else {
+            // Return existing instance to share pendingRequests
+            return bridgeInstance;
+        }
+    }
+
+    /**
+     * Get the singleton instance
+     */
+    static getInstance(): CSharpBridge {
+        if (!bridgeInstance) {
+            bridgeInstance = new CSharpBridge();
+        }
+        return bridgeInstance;
     }
 
     /**
@@ -61,10 +81,15 @@ export class CSharpBridge {
 
         // Tree data response
         win.receiveTreeData = (data: any) => {
+            console.log('[CSharpBridge] receiveTreeData called with data:', data)
             const request = this.pendingRequests.get('GetTree')
             if (request) {
+                console.log('[CSharpBridge] Resolving GetTree request')
                 request.resolve(data)
                 this.pendingRequests.delete('GetTree')
+            } else {
+                console.warn('[CSharpBridge] No pending request found for GetTree')
+                console.log('[CSharpBridge] Current pending requests:', Array.from(this.pendingRequests.keys()))
             }
         }
 
@@ -123,24 +148,40 @@ export class CSharpBridge {
         }
 
         // PDF file picker response
-        win.receivePdfFilePath = (filePath: string | null, fileName: string | null, dataUrl: string | null) => {
-            console.log('receivePdfFilePath called:', { filePath, fileName, dataUrlLength: dataUrl?.length });
+        win.receivePdfFilePath = (virtualUrl: string | null, fileName: string | null, originalPath: string | null) => {
+            console.log('receivePdfFilePath called:', { virtualUrl, fileName, originalPath });
+            console.log('Current pending requests:', Array.from(this.pendingRequests.keys()));
             const request = this.pendingRequests.get('OpenPdfFilePicker')
             if (request) {
                 console.log('Resolving PDF picker request');
-                request.resolve({ filePath, fileName, dataUrl })
+                // Return both virtual URL (for current session) and original path (for persistence)
+                request.resolve({ 
+                    fileName, 
+                    dataUrl: virtualUrl,  // Virtual URL for PDF.js viewing
+                    originalPath         // Original file path for persistence
+                })
                 this.pendingRequests.delete('OpenPdfFilePicker')
             } else {
                 console.log('No pending request found for OpenPdfFilePicker');
+                console.log('Available requests:', Array.from(this.pendingRequests.keys()));
             }
         }
 
-        // PDF load from path response
-        win.receivePdfDataUrl = (filePath: string, dataUrl: string | null) => {
-            const request = this.pendingRequests.get(`LoadPdfFromPath:${filePath}`)
+        // PDF manager readiness response
+        win.receivePdfManagerReady = (isReady: boolean) => {
+            const request = this.pendingRequests.get('CheckPdfManagerReady')
             if (request) {
-                request.resolve(dataUrl)
-                this.pendingRequests.delete(`LoadPdfFromPath:${filePath}`)
+                request.resolve(isReady)
+                this.pendingRequests.delete('CheckPdfManagerReady')
+            }
+        }
+
+        // PDF virtual URL recreation response
+        win.receivePdfVirtualUrl = (originalPath: string, virtualUrl: string | null) => {
+            const request = this.pendingRequests.get(`RecreateVirtualUrlFromPath:${originalPath}`)
+            if (request) {
+                request.resolve(virtualUrl)
+                this.pendingRequests.delete(`RecreateVirtualUrlFromPath:${originalPath}`)
             }
         }
 
@@ -171,8 +212,8 @@ export class CSharpBridge {
         }
 
         // Hebrew book download complete response (for both viewing and downloading)
-        win.receiveHebrewBookDownloadComplete = (bookId: string, success: boolean | string | null) => {
-            console.log(`[CSharpBridge] receiveHebrewBookDownloadComplete called - bookId: ${bookId}, success: ${success}`)
+        win.receiveHebrewBookDownloadComplete = (bookId: string, result: boolean | string | null) => {
+            console.log(`[CSharpBridge] receiveHebrewBookDownloadComplete called - bookId: ${bookId}, result: ${result}`)
 
             // Handle both view and download completion
             const viewRequestId = `HebrewBookDownloadComplete:${bookId}`
@@ -186,12 +227,19 @@ export class CSharpBridge {
 
             if (request) {
                 console.log(`[CSharpBridge] Resolving download complete request: ${requestId}`)
-                if (typeof success === 'boolean') {
-                    // For view action - success is boolean
-                    request.resolve({ success })
+                
+                if (viewRequest && typeof result === 'string' && result !== null) {
+                    // For view action - result is sanitized title
+                    request.resolve({ success: result })
+                } else if (downloadRequest) {
+                    // For download action - result is file path or null
+                    request.resolve({ success: !!result, filePath: result })
+                } else if (typeof result === 'boolean') {
+                    // Legacy boolean response
+                    request.resolve({ success: result })
                 } else {
-                    // For download action - success is file path or null
-                    request.resolve({ success: !!success, filePath: success })
+                    // Error case
+                    request.resolve({ success: false })
                 }
                 this.pendingRequests.delete(requestId)
             } else {

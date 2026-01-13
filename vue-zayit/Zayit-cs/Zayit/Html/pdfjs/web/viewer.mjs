@@ -3478,6 +3478,12 @@ const PDFViewerApplication = {
         return;
       }
       const fileOrigin = new URL(file, window.location.href).origin;
+      
+      // Allow virtual host origins for C# PDF manager (*.app.local)
+      if (fileOrigin.endsWith('.app.local')) {
+        return;
+      }
+      
       if (fileOrigin !== viewerOrigin) {
         throw new Error("file origin does not match viewer's");
       }

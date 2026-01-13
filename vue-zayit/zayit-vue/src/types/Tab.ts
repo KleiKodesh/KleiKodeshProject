@@ -24,6 +24,7 @@ export interface PdfState {
     source?: string; // Source of the PDF (e.g., 'hebrewbook', 'file')
     bookId?: string; // Hebrew book ID for session restoration
     bookTitle?: string; // Hebrew book title for display
+    isLoading?: boolean; // Loading state for virtual URL recreation
 }
 
 export interface Tab {

@@ -22,8 +22,8 @@ export const useHebrewBooksStore = defineStore('hebrewBooks', () => {
   const currentView = ref<'list' | 'viewer'>('list')
   const selectedBookId = ref<string | null>(null)
 
-  // C# Bridge instance
-  const csharp = new CSharpBridge()
+  // C# Bridge instance (singleton)
+  const csharp = CSharpBridge.getInstance()
 
   // Getters
   const hasBooks = computed(() => books.value.length > 0)
@@ -159,11 +159,12 @@ export const useHebrewBooksStore = defineStore('hebrewBooks', () => {
           console.log('[HebrewBooks] Waiting for download completion from C#...')
           // Now wait for the download completion
           const downloadResult = await downloadCompletePromise
-          console.log('[HebrewBooks] Received download completion response:', { success: downloadResult.success })
+          console.log('[HebrewBooks] Received download completion response:', downloadResult)
 
-          if (downloadResult.success) {
-            // Construct PDF.js URL using bookId with hebrewbooks prefix in subfolder
-            const fileUrl = `https://zayitHost/pdfjs/web/hebrewbooks/hebrewbooks-${bookId}.pdf`
+          if (downloadResult.success && typeof downloadResult.success === 'string') {
+            // downloadResult.success contains the fileName (title_id)
+            const fileName = downloadResult.success
+            const fileUrl = `https://zayitHost/pdfjs/web/hebrewbookscache/${fileName}.pdf`
             console.log('[HebrewBooks] Created PDF.js URL:', fileUrl)
 
             // Set the PDF state directly on the active tab
@@ -186,11 +187,12 @@ export const useHebrewBooksStore = defineStore('hebrewBooks', () => {
           }
         } else if (result.type === 'complete') {
           // Cached file - download complete received immediately
-          console.log('[HebrewBooks] Received cached file completion from C#:', { success: result.data.success })
+          console.log('[HebrewBooks] Received cached file completion from C#:', result.data)
 
-          if (result.data.success) {
-            // Construct PDF.js URL using bookId with hebrewbooks prefix in subfolder
-            const fileUrl = `https://zayitHost/pdfjs/web/hebrewbooks/hebrewbooks-${bookId}.pdf`
+          if (result.data.success && typeof result.data.success === 'string') {
+            // result.data.success contains the fileName (title_id)
+            const fileName = result.data.success
+            const fileUrl = `https://zayitHost/pdfjs/web/hebrewbookscache/${fileName}.pdf`
             console.log('[HebrewBooks] Created PDF.js URL:', fileUrl)
 
             // Set the PDF state directly on the active tab
