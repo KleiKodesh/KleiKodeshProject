@@ -20,7 +20,7 @@ namespace Zayit.Viewer
 
         private object _commandHandler;
         private ZayitViewerCommands _commands;
-        private readonly string HtmlPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Html");
+        private readonly string HtmlPath;
 
         private bool _coreInitialized;
 
@@ -28,6 +28,10 @@ namespace Zayit.Viewer
         {
             _instanceId = ++_instanceCounter;
             Console.WriteLine($"[ZayitViewer] Creating instance #{_instanceId}");
+            
+            // Get Html path - handle both regular and ClickOnce deployments
+            HtmlPath = GetHtmlPath();
+            Console.WriteLine($"[ZayitViewer#{_instanceId}] Html path: {HtmlPath}");
             
             this.Dock = DockStyle.Fill;
 
@@ -83,6 +87,36 @@ namespace Zayit.Viewer
             }
 
             return _sharedEnvironment;
+        }
+
+        private static string GetHtmlPath()
+        {
+            // Try multiple paths to handle different deployment scenarios
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            
+            // 1. Standard deployment: Html folder in base directory
+            string standardPath = Path.Combine(baseDir, "Html");
+            if (Directory.Exists(standardPath) && File.Exists(Path.Combine(standardPath, "index.html")))
+            {
+                Console.WriteLine($"[ZayitViewer] Using standard Html path: {standardPath}");
+                return standardPath;
+            }
+            
+            // 2. ClickOnce deployment: Check assembly location
+            string assemblyPath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            string clickOncePath = Path.Combine(assemblyPath, "Html");
+            if (Directory.Exists(clickOncePath) && File.Exists(Path.Combine(clickOncePath, "index.html")))
+            {
+                Console.WriteLine($"[ZayitViewer] Using ClickOnce Html path: {clickOncePath}");
+                return clickOncePath;
+            }
+            
+            // 3. Fallback: Return standard path even if it doesn't exist (will fail later with clear error)
+            Console.WriteLine($"[ZayitViewer] WARNING: Html folder not found! Tried:");
+            Console.WriteLine($"  - {standardPath}");
+            Console.WriteLine($"  - {clickOncePath}");
+            Console.WriteLine($"[ZayitViewer] Falling back to standard path: {standardPath}");
+            return standardPath;
         }
 
 

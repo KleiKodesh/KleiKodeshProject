@@ -2918,6 +2918,10 @@ body{
 #editorStampAddImage::before{
   -webkit-mask-image:var(--editorParams-stampAddImage-icon);
           mask-image:var(--editorParams-stampAddImage-icon);
+  -webkit-mask-size: cover;
+          mask-size: cover;
+  -webkit-mask-repeat: no-repeat;
+          mask-repeat: no-repeat;
 }
 
 .doorHanger,
@@ -3259,8 +3263,20 @@ body{
 }
 
 #editorStamp::before{
+  content: "📷";
+  font-size: 16px;
+  color: red;
+  background-image: url(images/toolbarButton-editorStamp.svg);
+  background-size: 16px 16px;
+  background-repeat: no-repeat;
+  background-position: center;
   -webkit-mask-image:var(--toolbarButton-editorStamp-icon);
           mask-image:var(--toolbarButton-editorStamp-icon);
+}
+
+#editorStamp[disabled]::before{
+  opacity: 0.5;
+  background-color: var(--toolbar-icon-bg-color);
 }
 
 :is(#print, #secondaryPrint)::before{

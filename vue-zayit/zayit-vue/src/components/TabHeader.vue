@@ -147,7 +147,7 @@ import { Icon } from '@iconify/vue';
 import DiacriticsDropdown from './TabHeaderDiacriticsDropdown.vue';
 import { useTabStore } from '../stores/tabStore';
 import { useSettingsStore } from '../stores/settingsStore';
-import { toggleTheme, isDarkTheme } from '../utils/theme';
+import { toggleTheme, isDarkTheme, syncPdfViewerTheme } from '../utils/theme';
 import { pdfService } from '../services/pdfService';
 
 const tabStore = useTabStore();
@@ -259,6 +259,12 @@ const handleThemeClick = () => {
   toggleTheme();
   // Update reactive state after theme toggle
   currentTheme.value = isDarkTheme();
+  
+  // Sync theme with any open PDF.js viewers
+  // Small delay to ensure theme classes are applied first
+  setTimeout(() => {
+    syncPdfViewerTheme();
+  }, 50);
 };
 
 

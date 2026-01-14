@@ -20,6 +20,7 @@
 
 ; MUI Settings
 !define MUI_ABORTWARNING
+!define MUI_UNICON "..\KleiKodeshVstoInstallerWpf\KleiKodesh_Main.ico"
 
 ; Uninstaller window customization for Hebrew
 !define MUI_UNINSTALLER
@@ -33,6 +34,7 @@
 !insertmacro MUI_PAGE_INSTFILES
 
 ; Uninstaller pages
+!insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 
 ; Language support (must be after pages)
@@ -160,10 +162,8 @@ Section "Main"
 SectionEnd
 
 Function un.onInit
-  ; Check if Word is running and offer to close it
-  Call un.HandleWordRunning
-  
-  ; Skip confirmation dialog - proceed directly to uninstall
+  ; MUI_UNPAGE_CONFIRM will show the confirmation page
+  ; No need for manual MessageBox here
 FunctionEnd
 
 Function un.HandleWordRunning
@@ -178,8 +178,8 @@ Function un.HandleWordRunning
       DetailPrint "סוגר את Microsoft Word..."
       Call un.CloseWord
       
-      ; Wait a moment for Word to close
-      Sleep 2000
+      ; Wait briefly for Word to close
+      Sleep 500
       
       ; Check again if Word is still running
       Call un.CheckWordRunning
@@ -204,8 +204,8 @@ Function un.CloseWord
   Pop $0 ; Exit code
   Pop $1 ; Output (not used)
   
-  ; Wait a moment for graceful close
-  Sleep 2000
+  ; Wait briefly for graceful close
+  Sleep 500
   
   ; Check if Word is still running
   Call un.CheckWordRunning
@@ -215,40 +215,30 @@ Function un.CloseWord
     Pop $0 ; Exit code
     Pop $1 ; Output (not used)
     
-    ; Wait a moment for force close
-    Sleep 1000
+    ; Wait briefly for force close
+    Sleep 300
   ${EndIf}
 FunctionEnd
 
 
 Function un.CheckWordRunning
-  ; Check if Word is running using a more reliable method
-  nsExec::ExecToStack 'tasklist /FI "IMAGENAME eq WINWORD.EXE" /NH'
+  ; Use faster process check with findstr for immediate response
+  nsExec::ExecToStack 'cmd /c "tasklist /NH /FI "IMAGENAME eq WINWORD.EXE" | findstr /I WINWORD.EXE"'
   Pop $0 ; Exit code
-  Pop $1 ; Output
+  Pop $1 ; Output (not used)
   
-  ; If exit code is 0, check the output content
+  ; Exit code 0 means Word was found, 1 means not found
   ${If} $0 == 0
-    ; Check if output starts with "INFO:" which means no processes found
-    StrCpy $2 $1 5  ; Get first 5 characters
-    ${If} $2 == "INFO:"
-      StrCpy $R9 "0"  ; Word is not running
-    ${Else}
-      ; Check if output is empty or very short (also means no processes)
-      StrLen $3 $1
-      ${If} $3 < 10
-        StrCpy $R9 "0"  ; Word is not running
-      ${Else}
-        StrCpy $R9 "1"  ; Word is running
-      ${EndIf}
-    ${EndIf}
+    StrCpy $R9 "1"  ; Word is running
   ${Else}
-    ; If tasklist failed, assume Word is not running
-    StrCpy $R9 "0"
+    StrCpy $R9 "0"  ; Word is not running
   ${EndIf}
 FunctionEnd
 
 Section Uninstall
+  ; Check if Word is running after user confirms uninstall
+  Call un.HandleWordRunning
+  
   ; Show progress with hardcoded Hebrew messages
   DetailPrint "מתחיל הסרת כלי קודש..."
   

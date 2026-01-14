@@ -11,9 +11,11 @@
 
     <!-- Show Hebrew book viewer when ready -->
     <iframe v-else-if="hebrewBookUrl"
+            ref="hebrewBookIframe"
             :src="hebrewBookUrl"
             class="hebrew-book-iframe"
-            title="Hebrew Book Viewer">
+            title="Hebrew Book Viewer"
+            @load="onHebrewBookIframeLoad">
     </iframe>
 
     <!-- Show error state if something went wrong -->
@@ -46,19 +48,34 @@
 import { computed, ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useTabStore } from '../../stores/tabStore';
+import { syncPdfViewerTheme } from '../../utils/theme';
 
 const tabStore = useTabStore();
 const isLoading = ref(false);
 const hasError = ref(false);
+const hebrewBookIframe = ref<HTMLIFrameElement>();
 
-// Get Hebrew book URL from active tab
+// Get Hebrew book URL from active tab with Hebrew locale
 const hebrewBookUrl = computed(() => {
   const tab = tabStore.activeTab;
   if (tab?.pdfState?.source === 'hebrewbook' && tab.pdfState.fileUrl) {
-    return `/pdfjs/web/viewer.html?file=${encodeURIComponent(tab.pdfState.fileUrl)}`;
+    // Build URL with file parameter and Hebrew locale
+    const params = new URLSearchParams();
+    params.set('file', tab.pdfState.fileUrl);
+    params.set('locale', 'he'); // Force Hebrew locale for tooltips
+    
+    return `/pdfjs/web/viewer.html?${params.toString()}`;
   }
   return '';
 });
+
+// Sync theme when Hebrew book iframe loads
+const onHebrewBookIframeLoad = () => {
+  // Small delay to ensure PDF.js is fully initialized
+  setTimeout(() => {
+    syncPdfViewerTheme();
+  }, 100);
+};
 
 // Check if we have a Hebrew book source
 const hasHebrewBookSource = computed(() => {

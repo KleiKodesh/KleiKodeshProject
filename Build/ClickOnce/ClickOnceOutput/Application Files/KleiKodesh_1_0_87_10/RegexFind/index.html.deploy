@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="he">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <script type="module" crossorigin>(function(){const e=document.createElement("link").relList;if(e&&e.supports&&e.supports("modulepreload"))return;for(const c of document.querySelectorAll('link[rel="modulepreload"]'))n(c);new MutationObserver(c=>{for(const h of c)if(h.type==="childList")for(const w of h.addedNodes)w.tagName==="LINK"&&w.rel==="modulepreload"&&n(w)}).observe(document,{childList:!0,subtree:!0});function t(c){const h={};return c.integrity&&(h.integrity=c.integrity),c.referrerPolicy&&(h.referrerPolicy=c.referrerPolicy),c.crossOrigin==="use-credentials"?h.credentials="include":c.crossOrigin==="anonymous"?h.credentials="omit":h.credentials="same-origin",h}function n(c){if(c.ep)return;c.ep=!0;const h=t(c);fetch(c.href,h)}})();function G(){function i(o){if(o==null)return null;if(o===-16777216||o<0)return"#000000";const a=o>>16&255,u=o>>8&255;return`#${(o&255).toString(16).padStart(2,"0")}${u.toString(16).padStart(2,"0")}${a.toString(16).padStart(2,"0")}`.toUpperCase()}function e(o,a=null){const u={Command:o,Args:a!==null?[a]:[]};window.chrome?.webview?window.chrome.webview.postMessage(JSON.stringify(u)):console.warn("WebView2 API not available. Command:",o)}function t(o){const a=document.getElementById(o);return a?a.classList.contains("toggled-true")?!0:a.classList.contains("toggled-false")?!1:null:null}function n(){const o=document.getElementById("find-text-input"),a=document.getElementById("replace-text-input");return{searchText:o?.getValue?o.getValue():o?.value||"",replaceText:a?.getValue?a.getValue():a?.value||"",searchMode:document.getElementById("search-mode-select")?.value||"All",slop:parseInt(document.getElementById("slop-input")?.value)||0,useRegex:document.getElementById("regex-toggle-button")?.classList.contains("active")||!1,findOptions:c("find"),replaceOptions:c("replace")}}function c(o){const a=o==="find"?"find":"replace",u=o==="find"?"find-color-button":"replace-color-toggle",d=document.getElementById(`${a}-style-input`),f=document.getElementById(`${a}-font-input`);let v=null;const y=document.getElementById(u);if(y?.dataset.colorData)try{v=JSON.parse(y.dataset.colorData).decimal??null}catch{v=null}return{fontSize:parseInt(document.getElementById(`${a}-font-size-input`)?.value)||null,bold:t(`${a}-bold-toggle`),italic:t(`${a}-italic-toggle`),underline:t(`${a}-underline-toggle`),subscript:t(`${a}-subscript-toggle`),superscript:t(`${a}-superscript-toggle`),textColor:v,style:d?.getValue?d.getValue():d?.value||"",font:f?.getValue?f.getValue():f?.value||""}}const h={search:()=>e("Search",n()),replace:()=>e("Replace",n()),replaceAll:()=>e("ReplaceAll",n()),selectResult:o=>e("SelectResult",{Index:o}),getFontList:()=>e("GetFontList"),getStyleList:()=>e("GetStyleList"),copyFormatting:o=>e("CopyFormatting",{target:o})};function w(){window.chrome?.webview&&window.chrome.webview.addEventListener("message",o=>{S(JSON.parse(o.data))})}function S(o){const u={searchResults:I,replaceComplete:()=>{},formattingCopied:s,fontList:m,styleList:x,success:()=>{},error:()=>{}}[o.command];u?u(o.data):console.warn("Unknown command from C#:",o.command)}function I(o){const a=document.getElementById("results-list-content");o?.length>0?(a.innerHTML=o.map((u,d)=>`
+                <div class="result-item" data-index="${d}" tabindex="0">
+                    <div class="result-text">${u}</div>
+                </div>
+            `).join(""),B()):a.innerHTML='<div class="no-results">לא נמצאו תוצאות התואמות לחיפוש</div>'}function B(){const o=document.querySelectorAll(".result-item");o.forEach((d,f)=>{d.addEventListener("click",()=>u(f)),d.addEventListener("keydown",v=>{const y=o.length;switch(v.key){case"ArrowDown":v.preventDefault(),a(Math.min(f+1,y-1));break;case"ArrowUp":v.preventDefault(),a(Math.max(f-1,0));break;case"Enter":v.preventDefault(),u(f);break}})});function a(d){o.forEach(f=>f.classList.remove("focused")),o[d]&&(o[d].classList.add("focused"),o[d].focus(),o[d].scrollIntoView({block:"nearest",behavior:"smooth"}))}function u(d){o.forEach(f=>f.classList.remove("selected")),o[d]&&(o[d].classList.add("selected"),h.selectResult(d))}}function s(o){const a=o.target,u=o.formatting;r(u,a)}function r(o,a){const u=a==="find"?"find":"replace";if(l(`${u}-bold-toggle`,o.bold),l(`${u}-italic-toggle`,o.italic),l(`${u}-underline-toggle`,o.underline),o.superscript===!0&&o.subscript===!0?(l(`${u}-superscript-toggle`,!0),l(`${u}-subscript-toggle`,null)):(l(`${u}-superscript-toggle`,o.superscript),l(`${u}-subscript-toggle`,o.subscript)),o.fontSize){const d=document.getElementById(`${u}-font-size-input`);d&&(d.value=o.fontSize)}if(o.font){const d=document.getElementById(`${u}-font-input`);d?.setValue&&d.setValue(o.font)}if(o.style){const d=document.getElementById(`${u}-style-input`);d?.setValue&&d.setValue(o.style)}if(o.textColor!==null&&o.textColor!==void 0){console.log("COLOR DEBUG - applyFormattingToUI:"),console.log("  formatting.textColor:",o.textColor),console.log("  typeof formatting.textColor:",typeof o.textColor);const d=document.getElementById(a==="find"?"find-color-button":"replace-color-toggle");if(d){const f=i(o.textColor)||"#000000";console.log("  Converted hexColor:",f),console.log("  Using local wordDecimalToHex function"),d.style.borderBottom=`3px solid ${f}`,d.setAttribute("data-selected-color",f),d.setAttribute("data-color-data",JSON.stringify({hex:f,decimal:o.textColor,type:o.textColor<0?"theme":"standard"})),d.classList.add("active"),console.log("  Final border style:",d.style.borderBottom),console.log("  data-color-data:",d.getAttribute("data-color-data"))}else console.log("  Color button not found for target:",a)}else console.log("COLOR DEBUG - textColor is null/undefined:",o.textColor)}function l(o,a){const u=document.getElementById(o);u&&(u.classList.remove("toggled-true","toggled-false"),a===!0?u.classList.add("toggled-true"):a===!1&&u.classList.add("toggled-false"))}function m(o){const a=document.getElementById("find-font-input"),u=document.getElementById("replace-font-input");if(a?.updateOptions&&u?.updateOptions&&o){const v=o.slice(0,20);if(a.updateOptions(v),u.updateOptions(v),o.length>20){let F=function(){if(C>=o.length)return;const R=o.slice(C,C+20);y=y.concat(R),C+=20,a.updateOptions(y),u.updateOptions(y),C<o.length&&requestAnimationFrame(F)};var d=F;let y=[...v],C=20;requestAnimationFrame(F)}}}function x(o){const a=document.getElementById("find-style-input"),u=document.getElementById("replace-style-input");a?.updateOptions&&u?.updateOptions&&o&&(a.updateOptions(o),u.updateOptions(o))}return{...h,getSearchParameters:n,getFormattingOptions:c,setupMessageListener:w}}window.createWebViewBridge=G;function _(){const i={fonts:[],isLoaded:!1,callbacks:[]};function e(){return"queryLocalFonts"in window&&typeof window.queryLocalFonts=="function"}async function t(){try{if((await navigator.permissions.query({name:"local-fonts"})).state==="denied")return null;const r=await window.queryLocalFonts();return r&&r.length>0?[...new Set(r.map(m=>m.family))].sort():null}catch{return null}}async function n(){return new Promise(s=>{const r=l=>{l.data&&l.data.command==="fontList"&&(window.removeEventListener("message",r),s(l.data.data))};window.addEventListener("message",r),window.webViewBridge?window.webViewBridge.getFontList():window.chrome&&window.chrome.webview?window.chrome.webview.postMessage(JSON.stringify({Command:"GetFontList",Args:[]})):(window.removeEventListener("message",r),s([]))})}async function c(){if(i.isLoaded)return i.fonts;let s=null;return e()&&(s=await t()),(!s||s.length===0)&&(s=await n()),(!s||s.length===0)&&(s=[]),i.fonts=s,i.isLoaded=!0,i.callbacks.forEach(r=>{try{r(s)}catch(l){console.error("Font callback error:",l)}}),s}async function h(){return i.isLoaded?i.fonts:await c()}function w(s){i.isLoaded?s(i.fonts):i.callbacks.push(s)}function S(s){return i.fonts.includes(s)}function I(s,r=10){if(!s||!i.isLoaded)return i.fonts.slice(0,r);const l=s.toLowerCase();return i.fonts.filter(x=>x.toLowerCase().includes(l)).slice(0,r)}function B(){c().catch(s=>{console.error("Font loading failed:",s),i.fonts=[],i.isLoaded=!0})}return{initialize:B,getFonts:h,onFontsLoaded:w,isFontAvailable:S,getFontSuggestions:I,isFontAccessAPISupported:e()}}window.createFontManager=_;class q extends HTMLElement{constructor(){super(),this.state={isOpen:!1,selectedValue:"",filteredOptions:[],focusedIndex:-1,options:[]},this._debounceTimer=null,this.attachShadow({mode:"open"})}_debounce(e,t){return(...n)=>{clearTimeout(this._debounceTimer),this._debounceTimer=setTimeout(()=>e.apply(this,n),t)}}static get observedAttributes(){return["type","placeholder","value","options"]}connectedCallback(){this.render(),this.setupEventListeners(),this.loadInitialOptions()}disconnectedCallback(){this._debounceTimer&&(clearTimeout(this._debounceTimer),this._debounceTimer=null),document.removeEventListener("click",this._boundOutsideClick)}attributeChangedCallback(e,t,n){if(t!==n)switch(e){case"options":this.updateOptions(this.parseOptions(n));break;case"value":this.setValue(n);break;default:this.shadowRoot&&this.render()}}render(){const e=this.getAttribute("placeholder")||"";this.shadowRoot.innerHTML=`
+            <style>
+                :host {
+                    position: relative;
+                    display: flex;
+                    align-items: center;
+                    flex: 1;
+                    min-width: 80px;
+                    max-width: 100%;
+                }
+
+                .combobox-input {
+                    flex: 1;
+                    background: var(--primary-background-color, #ffffff);
+                    color: var(--text-color, #000000);
+                    border: 1px solid var(--border-color, #cccccc);
+                    border-radius: var(--border-radius, 4px);
+                    padding: 5px 5px 5px 30px;
+                    font-size: 14px;
+                    transition: font-family 0.2s ease, border-color 0.2s ease;
+                    min-width: 0;
+                    font-family: inherit;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+
+                .combobox-input:focus {
+                    border-color: var(--accent-color, #0066cc);
+                    outline: none;
+                }
+
+                .combobox-toggle {
+                    position: absolute;
+                    left: 5px;
+                    background: none;
+                    border: none;
+                    color: var(--text-color, #000000);
+                    cursor: pointer;
+                    padding: 2px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    border-radius: 2px;
+                    transition: background-color 0.2s ease, transform 0.2s ease;
+                }
+
+                .combobox-toggle:hover {
+                    background: var(--hover-background-color, rgba(0, 0, 0, 0.1));
+                }
+
+                :host([open]) .combobox-toggle {
+                    transform: rotate(180deg);
+                }
+
+                .combobox-dropdown {
+                    position: absolute;
+                    top: 100%;
+                    left: 0;
+                    right: 0;
+                    z-index: 1000;
+                    background: var(--primary-background-color, #ffffff);
+                    border: 2px solid var(--border-color, #cccccc);
+                    border-radius: var(--border-radius, 4px);
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+                    max-height: 200px;
+                    overflow: hidden;
+                    margin-top: 2px;
+                    display: none;
+                }
+
+                :host([open]) .combobox-dropdown {
+                    display: block;
+                }
+
+                .combobox-options {
+                    max-height: 200px;
+                    overflow-y: auto;
+                    padding: 2px 0;
+                }
+
+                .combobox-option {
+                    padding: 8px 12px;
+                    cursor: pointer;
+                    color: var(--text-color, #000000);
+                    background: var(--primary-background-color, #ffffff);
+                    transition: background-color 0.1s ease;
+                    font-size: 14px;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+
+                .combobox-option:hover,
+                .combobox-option.focused {
+                    background: var(--hover-background-color, rgba(0, 0, 0, 0.1));
+                }
+
+                .combobox-no-options {
+                    padding: 8px 12px;
+                    color: var(--text-secondary, #666666);
+                    font-style: italic;
+                    text-align: center;
+                }
+
+                /* Font preview specific styling */
+                :host([type="font"]) .combobox-option {
+                    padding: 2px 8px;
+                    min-height: 24px;
+                    display: flex;
+                    flex-direction: row;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 8px;
+                }
+
+                .font-name-line {
+                    font-size: 13px;
+                    font-weight: 500;
+                    color: var(--text-color, #000000);
+                    font-family: inherit;
+                    line-height: 1;
+                }
+
+                .font-preview-line {
+                    font-size: 12px;
+                    color: var(--text-secondary, #666666);
+                    line-height: 1;
+                    opacity: 0.7;
+                }
+
+                .combobox-options::-webkit-scrollbar {
+                    width: 6px;
+                }
+
+                .combobox-options::-webkit-scrollbar-track {
+                    background: var(--bg-secondary, #f5f5f5);
+                }
+
+                .combobox-options::-webkit-scrollbar-thumb {
+                    background: var(--border-color, #cccccc);
+                    border-radius: 3px;
+                }
+            </style>
+
+            <input type="text"
+                   class="combobox-input"
+                   placeholder="${e}"
+                   autocomplete="off">
+            <button type="button" class="combobox-toggle" aria-label="Toggle dropdown">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M6 9l6 6 6-6"/>
+                </svg>
+            </button>
+            <div class="combobox-dropdown" dir="auto">
+                <div class="combobox-options"></div>
+            </div>
+        `}setupEventListeners(){const e=this.shadowRoot.querySelector(".combobox-input"),t=this.shadowRoot.querySelector(".combobox-toggle");this._debouncedFilter=this._debounce(n=>{this.filterOptions(n),this.getAttribute("type")==="font"&&n.trim()&&this.applyFontPreview(n)},150),e.addEventListener("input",n=>this.handleInput(n)),e.addEventListener("focus",()=>this.handleFocus()),e.addEventListener("blur",()=>this.handleBlur()),e.addEventListener("keydown",n=>this.handleKeydown(n)),t.addEventListener("click",n=>this.handleToggleClick(n)),this._boundOutsideClick=n=>this.handleOutsideClick(n),document.addEventListener("click",this._boundOutsideClick)}loadInitialOptions(){const e=this.getAttribute("options");e&&this.updateOptions(this.parseOptions(e))}parseOptions(e){if(!e)return[];try{return JSON.parse(e)}catch{return e.split(",").map(t=>t.trim())}}handleInput(e){const t=e.target.value;this.state.selectedValue=t,this.state.isOpen||this.openDropdown(),this._debouncedFilter(t),this.dispatchEvent(new CustomEvent("change",{detail:{value:t},bubbles:!0}))}handleFocus(){const e=this.shadowRoot.querySelector(".combobox-input");setTimeout(()=>e.select(),0)}handleBlur(){setTimeout(()=>{!this.shadowRoot.activeElement&&!this.contains(document.activeElement)&&this.closeDropdown()},200)}handleKeydown(e){switch(e.key){case"ArrowDown":e.preventDefault(),this.state.isOpen?this.focusNextOption():this.openDropdown();break;case"ArrowUp":e.preventDefault(),this.state.isOpen&&this.focusPreviousOption();break;case"Enter":e.preventDefault(),this.state.isOpen&&this.state.focusedIndex>=0&&this.selectOption(this.state.filteredOptions[this.state.focusedIndex]);break;case"Escape":e.preventDefault(),this.state.isOpen?this.closeDropdown():this.clearValue();break}}handleToggleClick(e){e.preventDefault(),this.state.isOpen?this.closeDropdown():(this.showAllOptions(),this.shadowRoot.querySelector(".combobox-input").focus())}handleOutsideClick(e){this.contains(e.target)||this.closeDropdown()}filterOptions(e){const t=e.toLowerCase();this.state.filteredOptions=this.state.options.filter(n=>(typeof n=="string"?n:n.name).toLowerCase().includes(t)),this.state.focusedIndex=-1,this.renderOptions()}renderOptions(){const e=this.shadowRoot.querySelector(".combobox-options");if(e.innerHTML="",this.state.filteredOptions.length===0){e.innerHTML='<div class="combobox-no-options">No options found</div>';return}this.state.filteredOptions.forEach((t,n)=>{const c=this.createOptionElement(t,n);e.appendChild(c)})}createOptionElement(e,t){const n=document.createElement("div");if(n.className="combobox-option",n.setAttribute("dir","auto"),n.dataset.index=t,this.getAttribute("type")==="font"){const c=typeof e=="string"?e:e.name,h=document.createElement("div");h.className="font-name-line",h.textContent=c;const w=document.createElement("div");w.className="font-preview-line",w.textContent="ABC abc אבג",w.style.fontFamily=`"${c}", sans-serif`,n.appendChild(h),n.appendChild(w)}else n.textContent=typeof e=="string"?e:e.name;return t===this.state.focusedIndex&&n.classList.add("focused"),n.addEventListener("click",c=>{c.preventDefault(),c.stopPropagation();const h=typeof e=="string"?e:e.name;this.setValue(h),this.closeDropdown(),this.dispatchEvent(new CustomEvent("select",{detail:{value:h,option:e},bubbles:!0})),this.dispatchEvent(new CustomEvent("change",{detail:{value:h},bubbles:!0}))}),n}applyFontPreview(e){const t=this.shadowRoot.querySelector(".combobox-input");e&&e.trim()?t.style.fontFamily=`"${e}", sans-serif`:t.style.fontFamily=""}focusNextOption(){this.state.focusedIndex<this.state.filteredOptions.length-1&&(this.state.focusedIndex++,this.renderOptions(),this.scrollToFocusedOption())}focusPreviousOption(){this.state.focusedIndex>0&&(this.state.focusedIndex--,this.renderOptions(),this.scrollToFocusedOption())}scrollToFocusedOption(){if(this.state.focusedIndex>=0){const t=this.shadowRoot.querySelector(".combobox-options").children[this.state.focusedIndex];t&&t.scrollIntoView({block:"nearest"})}}openDropdown(){this.state.isOpen=!0,this.setAttribute("open",""),this.filterOptions(this.shadowRoot.querySelector(".combobox-input").value)}showAllOptions(){this.state.isOpen=!0,this.setAttribute("open",""),this.state.filteredOptions=[...this.state.options];const e=this.shadowRoot.querySelector(".combobox-input").value;this.state.focusedIndex=this.state.filteredOptions.findIndex(t=>(typeof t=="string"?t:t.name)===e),this.renderOptions(),this.scrollToFocusedOption()}closeDropdown(){this.state.isOpen=!1,this.removeAttribute("open"),this.state.focusedIndex=-1}updateOptions(e){this.state.options=e||[],this.state.isOpen&&this.filterOptions(this.shadowRoot.querySelector(".combobox-input").value)}getValue(){const e=this.shadowRoot?.querySelector(".combobox-input");return e?e.value:this.state.selectedValue}setValue(e){this.state.selectedValue=e;const t=this.shadowRoot.querySelector(".combobox-input");t&&(t.value=e,this.getAttribute("type")==="font"&&this.applyFontPreview(e)),this.setAttribute("value",e)}clearValue(){this.setValue(""),this.dispatchEvent(new CustomEvent("clear",{bubbles:!0}))}}customElements.define("custom-combobox",q);window.CustomCombobox=q;let W=class{constructor(){this.maxHistorySize=10,this.storageKeys={find:"regexfind_recent_searches",replace:"regexfind_recent_replacements"}}getRecentSearches(e){try{const t=this.storageKeys[e],n=localStorage.getItem(t);return n?JSON.parse(n):[]}catch(t){return console.warn("Failed to load recent searches:",t),[]}}addToHistory(e,t){if(!(!t||!t.trim()))try{const n=this.storageKeys[e];let c=this.getRecentSearches(e);c=c.filter(h=>h!==t.trim()),c.unshift(t.trim()),c.length>this.maxHistorySize&&(c=c.slice(0,this.maxHistorySize)),localStorage.setItem(n,JSON.stringify(c))}catch(n){console.warn("Failed to save search to history:",n)}}clearHistory(e){try{const t=this.storageKeys[e];localStorage.removeItem(t)}catch(t){console.warn("Failed to clear search history:",t)}}clearAllHistory(){this.clearHistory("find"),this.clearHistory("replace")}};window.RecentSearches=W;class N extends HTMLElement{constructor(){super(),this.recentSearches=new RecentSearches,this.attachShadow({mode:"open"}),this.state={isOpen:!1,selectedValue:"",filteredOptions:[],focusedIndex:-1,searchType:"find"}}static get observedAttributes(){return["type","placeholder","value","search-type"]}connectedCallback(){this.state.searchType=this.getAttribute("search-type")||"find",this.render(),this.setupEventListeners(),this.loadRecentSearches()}attributeChangedCallback(e,t,n){t!==n&&this.shadowRoot&&(e==="search-type"?(this.state.searchType=n||"find",this.loadRecentSearches()):e==="value"?this.setValue(n):this.render())}render(){const e=this.getAttribute("placeholder")||"";this.shadowRoot.innerHTML=`
+            <style>
+                :host {
+                    position: relative;
+                    display: flex;
+                    align-items: center;
+                    flex: 1;
+                }
+
+                .search-input {
+                    flex: 1;
+                    background: var(--primary-background-color, #ffffff);
+                    color: var(--text-color, #000000);
+                    border: none;
+                    border-radius: 0;
+                    padding: 6px 8px 6px 30px;
+                    font-size: 14px;
+                    min-width: 0;
+                    font-family: inherit;
+                }
+
+                .search-input:focus {
+                    outline: none;
+                }
+
+                .dropdown-toggle {
+                    position: absolute;
+                    left: 5px;
+                    background: none;
+                    border: none;
+                    color: var(--text-color, #000000);
+                    cursor: pointer;
+                    padding: 4px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    border-radius: 2px;
+                    transition: background-color 0.2s ease, transform 0.2s ease;
+                    opacity: 0.7;
+                }
+
+                .dropdown-toggle:hover {
+                    background: var(--hover-background-color, rgba(0, 0, 0, 0.1));
+                    opacity: 1;
+                }
+
+                :host([open]) .dropdown-toggle {
+                    transform: rotate(180deg);
+                    opacity: 1;
+                }
+
+                .search-dropdown {
+                    position: absolute;
+                    top: 100%;
+                    left: 0;
+                    right: 0;
+                    z-index: 1000;
+                    background: var(--primary-background-color, #ffffff);
+                    border: 2px solid var(--border-color, #cccccc);
+                    border-radius: var(--border-radius, 4px);
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+                    max-height: 200px;
+                    overflow: hidden;
+                    margin-top: 2px;
+                    display: none;
+                }
+
+                :host([open]) .search-dropdown {
+                    display: block;
+                }
+
+                .dropdown-options {
+                    max-height: 200px;
+                    overflow-y: auto;
+                    padding: 2px 0;
+                }
+
+                .search-option {
+                    padding: 6px 12px;
+                    cursor: pointer;
+                    color: var(--text-color, #000000);
+                    background: var(--primary-background-color, #ffffff);
+                    transition: background-color 0.1s ease;
+                    font-size: 14px;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                }
+
+                .search-option:hover,
+                .search-option.focused {
+                    background: var(--hover-background-color, rgba(0, 0, 0, 0.1));
+                }
+
+                .search-text {
+                    flex: 1;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+
+                .remove-btn {
+                    background: none;
+                    border: none;
+                    color: var(--text-secondary, #666666);
+                    cursor: pointer;
+                    padding: 2px 4px;
+                    margin-left: 8px;
+                    border-radius: 2px;
+                    font-size: 12px;
+                    opacity: 0;
+                    transition: opacity 0.2s ease, background-color 0.2s ease;
+                }
+
+                .search-option:hover .remove-btn {
+                    opacity: 1;
+                }
+
+                .remove-btn:hover {
+                    background: var(--error-color, #ff4444);
+                    color: white;
+                }
+
+                .no-recent {
+                    padding: 8px 12px;
+                    color: var(--text-secondary, #666666);
+                    font-style: italic;
+                    text-align: center;
+                }
+
+                .clear-all-btn {
+                    padding: 6px 12px;
+                    background: var(--bg-secondary, #f5f5f5);
+                    border: none;
+                    border-top: 1px solid var(--border-color, #cccccc);
+                    color: var(--text-secondary, #666666);
+                    cursor: pointer;
+                    font-size: 12px;
+                    width: 100%;
+                    transition: background-color 0.2s ease;
+                }
+
+                .clear-all-btn:hover {
+                    background: var(--hover-background-color, rgba(0, 0, 0, 0.1));
+                }
+
+                .dropdown-options::-webkit-scrollbar {
+                    width: 6px;
+                }
+
+                .dropdown-options::-webkit-scrollbar-track {
+                    background: var(--bg-secondary, #f5f5f5);
+                }
+
+                .dropdown-options::-webkit-scrollbar-thumb {
+                    background: var(--border-color, #cccccc);
+                    border-radius: 3px;
+                }
+            </style>
+
+            <input type="text"
+                   class="search-input"
+                   placeholder="${e}"
+                   autocomplete="off">
+            <button type="button" class="dropdown-toggle" aria-label="Show recent searches">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M6 9l6 6 6-6"/>
+                </svg>
+            </button>
+            <div class="search-dropdown">
+                <div class="dropdown-options"></div>
+            </div>
+        `}setupEventListeners(){const e=this.shadowRoot.querySelector(".search-input"),t=this.shadowRoot.querySelector(".dropdown-toggle");e.addEventListener("input",n=>this.handleInput(n)),e.addEventListener("focus",()=>this.handleFocus()),e.addEventListener("blur",()=>this.handleBlur()),e.addEventListener("keydown",n=>this.handleKeydown(n)),t.addEventListener("click",n=>this.handleToggleClick(n)),document.addEventListener("click",n=>this.handleOutsideClick(n))}loadRecentSearches(){const e=this.recentSearches.getRecentSearches(this.state.searchType);this.state.filteredOptions=e,this.state.isOpen&&this.renderOptions()}handleInput(e){const t=e.target.value;this.state.selectedValue=t;const n=this.recentSearches.getRecentSearches(this.state.searchType),c=t.toLowerCase();this.state.filteredOptions=n.filter(h=>h.toLowerCase().includes(c)),!this.state.isOpen&&t.length>0&&this.openDropdown(),this.state.focusedIndex=-1,this.renderOptions(),this.dispatchEvent(new CustomEvent("input",{detail:{value:t},bubbles:!0}))}handleFocus(){}handleBlur(){setTimeout(()=>{!this.shadowRoot.activeElement&&!this.contains(document.activeElement)&&this.closeDropdown()},200)}handleKeydown(e){switch(e.key){case"ArrowDown":e.preventDefault(),this.state.isOpen?this.focusNextOption():this.showAllRecent();break;case"ArrowUp":e.preventDefault(),this.state.isOpen&&this.focusPreviousOption();break;case"Enter":if(e.preventDefault(),this.state.isOpen&&this.state.focusedIndex>=0)this.selectOption(this.state.filteredOptions[this.state.focusedIndex]);else{const t=this.shadowRoot.querySelector(".search-input").value;t.trim()&&this.recentSearches.addToHistory(this.state.searchType,t),this.closeDropdown(),this.dispatchEvent(new CustomEvent("enter",{detail:{value:t},bubbles:!0}))}break;case"Escape":e.preventDefault(),this.state.isOpen?this.closeDropdown():this.clearValue();break}}handleToggleClick(e){e.preventDefault(),this.state.isOpen?this.closeDropdown():(this.showAllRecent(),this.shadowRoot.querySelector(".search-input").focus())}handleOutsideClick(e){this.contains(e.target)||this.closeDropdown()}showAllRecent(){this.loadRecentSearches(),this.openDropdown()}renderOptions(){const e=this.shadowRoot.querySelector(".dropdown-options");if(e.innerHTML="",this.state.filteredOptions.length===0){const t=this.state.searchType==="find"?"אין חיפושים אחרונים":"אין החלפות אחרונות";e.innerHTML=`<div class="no-recent">${t}</div>`;return}if(this.state.filteredOptions.forEach((t,n)=>{const c=this.createOptionElement(t,n);e.appendChild(c)}),this.state.filteredOptions.length>0){const t=document.createElement("button");t.className="clear-all-btn",t.textContent="נקה הכל",t.addEventListener("click",n=>{n.preventDefault(),n.stopPropagation(),this.clearAllHistory()}),e.appendChild(t)}}createOptionElement(e,t){const n=document.createElement("div");n.className="search-option",n.dataset.index=t;const c=document.createElement("span");c.className="search-text",c.textContent=e;const h=document.createElement("button");return h.className="remove-btn",h.textContent="×",h.title="הסר מההיסטוריה",n.appendChild(c),n.appendChild(h),t===this.state.focusedIndex&&n.classList.add("focused"),c.addEventListener("click",w=>{w.preventDefault(),w.stopPropagation(),this.selectOption(e)}),h.addEventListener("click",w=>{w.preventDefault(),w.stopPropagation(),this.removeFromHistory(e)}),n}selectOption(e){this.setValue(e),this.closeDropdown(),this.dispatchEvent(new CustomEvent("select",{detail:{value:e},bubbles:!0}))}removeFromHistory(e){const n=this.recentSearches.getRecentSearches(this.state.searchType).filter(c=>c!==e);try{const c=this.recentSearches.storageKeys[this.state.searchType];localStorage.setItem(c,JSON.stringify(n)),this.loadRecentSearches(),this.renderOptions()}catch(c){console.warn("Failed to remove from history:",c)}}clearAllHistory(){this.recentSearches.clearHistory(this.state.searchType),this.loadRecentSearches(),this.renderOptions()}focusNextOption(){this.state.focusedIndex<this.state.filteredOptions.length-1&&(this.state.focusedIndex++,this.renderOptions(),this.scrollToFocusedOption())}focusPreviousOption(){this.state.focusedIndex>0&&(this.state.focusedIndex--,this.renderOptions(),this.scrollToFocusedOption())}scrollToFocusedOption(){if(this.state.focusedIndex>=0){const t=this.shadowRoot.querySelector(".dropdown-options").children[this.state.focusedIndex];t&&t.scrollIntoView({block:"nearest"})}}openDropdown(){this.state.isOpen=!0,this.setAttribute("open",""),this.renderOptions()}closeDropdown(){this.state.isOpen=!1,this.removeAttribute("open"),this.state.focusedIndex=-1}getValue(){return this.shadowRoot.querySelector(".search-input").value}setValue(e){this.state.selectedValue=e;const t=this.shadowRoot.querySelector(".search-input");t&&(t.value=e),this.setAttribute("value",e)}clearValue(){this.setValue(""),this.dispatchEvent(new CustomEvent("clear",{bubbles:!0}))}addCurrentToHistory(){const e=this.getValue();e.trim()&&this.recentSearches.addToHistory(this.state.searchType,e)}}customElements.define("search-combobox",N);window.SearchCombobox=N;function U(){const i={regexTips:[],isVisible:!1,lastFocusedInput:"find"};async function e(){window.regexTipsData?(i.regexTips=window.regexTipsData,t()):console.error("Regex tips data not available - window.regexTipsData is missing")}function t(){const s=document.getElementById("find-text-input"),r=document.getElementById("replace-text-input");if(s){const l=s.shadowRoot?.querySelector(".search-input");l&&l.addEventListener("focus",()=>{i.lastFocusedInput="find"}),s.addEventListener("focus",()=>{i.lastFocusedInput="find"},!0)}if(r){const l=r.shadowRoot?.querySelector(".search-input");l&&l.addEventListener("focus",()=>{i.lastFocusedInput="replace"}),r.addEventListener("focus",()=>{i.lastFocusedInput="replace"},!0)}}function n(){document.getElementById("regex-palette")&&(i.isVisible=!i.isVisible,i.isVisible?c():h())}function c(){const s=document.getElementById("regex-palette"),r=document.getElementById("search-results"),l=document.getElementById("help-toggle-button");s&&(s.style.display="flex",console.log("Regex palette display set to flex, computed style:",window.getComputedStyle(s).display),console.log("Regex palette height:",window.getComputedStyle(s).height),w()),r&&(r.style.display="none",console.log("Search results hidden, display:",window.getComputedStyle(r).display)),l&&l.classList.add("active"),i.isVisible=!0}function h(){const s=document.getElementById("regex-palette"),r=document.getElementById("search-results"),l=document.getElementById("help-toggle-button");s&&(s.style.display="none",console.log("Regex palette hidden")),r&&(r.style.display="flex",console.log("Search results shown, display:",window.getComputedStyle(r).display)),l&&l.classList.remove("active"),i.isVisible=!1}function w(){const s=document.getElementById("regex-grid");if(!s||i.regexTips.length===0){console.log("populateRegexGrid failed:",{regexGrid:!!s,tipsLength:i.regexTips.length});return}console.log("Populating regex grid with",i.regexTips.length,"tips"),s.innerHTML="",i.regexTips.forEach(r=>{const l=document.createElement("div");l.className="regex-tip",l.innerHTML=`
+                <div class="regex-symbol-meaning">
+                    <span class="regex-symbol">${I(r.Symbol)}</span>
+                    <span class="regex-meaning">${I(r.Meaning)}</span>
+                </div>
+                <div class="regex-example">${I(r.Example)}</div>
+            `,l.addEventListener("click",()=>{S(r.Symbol)}),s.appendChild(l)}),console.log("Regex grid populated, grid height:",window.getComputedStyle(s).height),console.log("Regex grid flex:",window.getComputedStyle(s).flex)}function S(s){const r=document.getElementById("find-text-input"),l=document.getElementById("replace-text-input"),m=r?.shadowRoot?.querySelector(".search-input"),x=l?.shadowRoot?.querySelector(".search-input"),o=i.lastFocusedInput==="replace"?x:m;if(o){const a=o.selectionStart||o.value.length,u=o.value.substring(0,a),d=o.value.substring(o.selectionEnd||a);o.value=u+s+d;const f=a+s.length;setTimeout(()=>{o.focus(),o.setSelectionRange(f,f)},0)}}function I(s){const r=document.createElement("div");return r.textContent=s,r.innerHTML}function B(){const s=document.getElementById("regex-palette"),r=document.getElementById("search-results"),l=document.getElementById("help-toggle-button");s&&(s.style.display="none"),r&&(r.style.display="flex"),l&&l.classList.remove("active"),i.isVisible=!1}return{initialize:e,toggle:n,show:c,hide:h,hideForSearch:B,insertSymbol:S}}window.createRegexPalette=U;function J(){document.querySelectorAll(".toggle-button").forEach(e=>{const t=e.classList.contains("format-btn");e.addEventListener("click",function(){t?this.classList.contains("toggled-true")?(this.classList.remove("toggled-true"),this.classList.add("toggled-false")):this.classList.contains("toggled-false")?this.classList.remove("toggled-false"):(this.classList.add("toggled-true"),K(this)):this.classList.toggle("active")})})}function K(i){const e=i.id;if(e.includes("subscript")&&!e.includes("superscript")){const t=e.replace("-subscript-toggle",""),n=document.getElementById(`${t}-superscript-toggle`);n?.classList.contains("toggled-true")&&n.classList.remove("toggled-true")}if(e.includes("superscript")){const t=e.replace("-superscript-toggle",""),n=document.getElementById(`${t}-subscript-toggle`);n?.classList.contains("toggled-true")&&n.classList.remove("toggled-true")}}function j(i){return i.classList.contains("toggled-true")?!0:i.classList.contains("toggled-false")?!1:null}function Z(i,e){i.classList.remove("toggled-true","toggled-false"),e===!0?i.classList.add("toggled-true"):e===!1&&i.classList.add("toggled-false")}document.addEventListener("DOMContentLoaded",J);window.getThreeStateValue=j;window.setThreeStateValue=Z;function Y(){function i(s){if(!s||s==="null")return null;const r=s.replace("#","");if(r.length!==6)return null;const l=parseInt(r.substring(0,2),16),m=parseInt(r.substring(2,4),16);return parseInt(r.substring(4,6),16)<<16|m<<8|l}function e(s){if(s==null)return null;if(s===-16777216)return"#000000";if(s<0)return t(s);const r=s>>16&255,l=s>>8&255;return`#${(s&255).toString(16).padStart(2,"0")}${l.toString(16).padStart(2,"0")}${r.toString(16).padStart(2,"0")}`.toUpperCase()}function t(s){if(s<0){const l=s>>>0,m=l>>24&255,x=l>>8&255,o=l&255,a=m&240;if(a===208||a===240){const u=m&15;let d=0;const f=255;x!==f&&(d=Math.round((-1+x/255)*100)/100),o!==f&&(d=Math.round((1-o/255)*100)/100);const v=n(u);if(v)return S(v,d)}}return{"-587137025":"#000000","-603914241":"#FFFFFF","-553582593":"#44546A","-570359809":"#E7E6E6","-738131969":"#4472C4","-721354753":"#ED7D31","-704577537":"#A5A5A5","-687800321":"#FFC000","-671023105":"#5B9BD5","-654245889":"#70AD47"}[s.toString()]||"#000000"}function n(s){const r={5:4,6:3,7:2,8:1,9:0,12:7,13:6,15:5},l=[{name:"White",hex:"#FFFFFF",themeIndex:1,decimal:-603914241},{name:"Black",hex:"#000000",themeIndex:0,decimal:-587137025},{name:"Light Gray",hex:"#E7E6E6",themeIndex:3,decimal:-570359809},{name:"Blue-Gray",hex:"#44546A",themeIndex:2,decimal:-553582593},{name:"Blue",hex:"#4472C4",themeIndex:4,decimal:-738131969},{name:"Orange",hex:"#ED7D31",themeIndex:5,decimal:-721354753},{name:"Gray",hex:"#A5A5A5",themeIndex:9,decimal:-704577537},{name:"Gold",hex:"#FFC000",themeIndex:7,decimal:-687800321},{name:"Light Blue",hex:"#5B9BD5",themeIndex:8,decimal:-671023105},{name:"Green",hex:"#70AD47",themeIndex:6,decimal:-654245889}],m=r[s];return m!==void 0?l[m]?.hex:null}function c(s){if(s>=0)return null;const r=s>>>0,l=r>>24&255,m=r>>8&255,x=r&255,o=l&240;if(o!==208&&o!==240)return null;const a=l&15;let u=0;const d=255;return m!==d&&(u=Math.round((-1+m/255)*100)/100),x!==d&&(u=Math.round((1-x/255)*100)/100),{isThemeColor:!0,wdThemeIndex:a,tintShade:u,prefix:o===240?"F":"D",rawBytes:{themeColorByte:l.toString(16).toUpperCase(),shadeByte:m.toString(16).toUpperCase(),tintByte:x.toString(16).toUpperCase()}}}function h(s,r,l){s/=255,r/=255,l/=255;const m=Math.max(s,r,l),x=Math.min(s,r,l);let o,a,u=(m+x)/2;if(m===x)o=a=0;else{const d=m-x;switch(a=u>.5?d/(2-m-x):d/(m+x),m){case s:o=(r-l)/d+(r<l?6:0);break;case r:o=(l-s)/d+2;break;case l:o=(s-r)/d+4;break}o/=6}return[o,a,u]}function w(s,r,l){let m,x,o;if(r===0)m=x=o=l;else{const a=(f,v,y)=>(y<0&&(y+=1),y>1&&(y-=1),y<.16666666666666666?f+(v-f)*6*y:y<.5?v:y<.6666666666666666?f+(v-f)*(.6666666666666666-y)*6:f),u=l<.5?l*(1+r):l+r-l*r,d=2*l-u;m=a(d,u,s+1/3),x=a(d,u,s),o=a(d,u,s-1/3)}return[Math.round(m*255),Math.round(x*255),Math.round(o*255)]}function S(s,r){if(r===0)return s;const l=s.replace("#",""),m=parseInt(l.substring(0,2),16),x=parseInt(l.substring(2,4),16),o=parseInt(l.substring(4,6),16),[a,u,d]=h(m,x,o),f=Math.abs(r),v=r>0?1:0;let y=d*f+v*(1-r);y=Math.max(0,Math.min(1,y));const[C,F,R]=w(a,u,y);return`#${C.toString(16).padStart(2,"0")}${F.toString(16).padStart(2,"0")}${R.toString(16).padStart(2,"0")}`.toUpperCase()}const I=[221,220,223,222,212,213,217,215,216,214];function B(s,r){if(s<0||s>9)return null;let l=255,m=255;r<0?(l=Math.round((r+1)*255),l=Math.max(0,Math.min(255,l))):r>0&&(m=Math.round((1-r)*255),m=Math.max(0,Math.min(255,m)));const o=I[s]<<24|0|l<<8|m;return o>2147483647?o-4294967296:o}return{hexToWordDecimal:i,wordDecimalToHex:e,resolveThemeColor:t,getBaseThemeColorByWdIndex:n,decodeThemeColor:c,rgbToHsl:h,hslToRgb:w,applyTintShade:S,generateThemeColorDecimal:B}}window.createColorCalculations=Y;function X(){const i=window.createColorCalculations(),e={currentColorTarget:null,colorPickerOverlay:null,colorPicker:null,recentColors:[]},t=10,n="colorPickerRecentColors",c={base:[{name:"White",hex:"#FFFFFF",themeIndex:1,decimal:-603914241},{name:"Black",hex:"#000000",themeIndex:0,decimal:-587137025},{name:"Light Gray",hex:"#E7E6E6",themeIndex:3,decimal:-570359809},{name:"Blue-Gray",hex:"#44546A",themeIndex:2,decimal:-553582593},{name:"Blue",hex:"#4472C4",themeIndex:4,decimal:-738131969},{name:"Orange",hex:"#ED7D31",themeIndex:5,decimal:-721354753},{name:"Gray",hex:"#A5A5A5",themeIndex:9,decimal:-704577537},{name:"Gold",hex:"#FFC000",themeIndex:7,decimal:-687800321},{name:"Light Blue",hex:"#5B9BD5",themeIndex:8,decimal:-671023105},{name:"Green",hex:"#70AD47",themeIndex:6,decimal:-654245889}]},h=[{name:"Dark Red",hex:"#C00000",decimal:192},{name:"Red",hex:"#FF0000",decimal:255},{name:"Orange",hex:"#FFC000",decimal:49407},{name:"Yellow",hex:"#FFFF00",decimal:65535},{name:"Light Green",hex:"#92D050",decimal:5296274},{name:"Green",hex:"#00B050",decimal:5287936},{name:"Light Blue",hex:"#00B0F0",decimal:15773696},{name:"Blue",hex:"#0070C0",decimal:12611584},{name:"Dark Blue",hex:"#002060",decimal:6299648},{name:"Purple",hex:"#7030A0",decimal:10498160}];function w(p){return i.hexToWordDecimal(p)}function S(p){return i.wordDecimalToHex(p)}function I(p,g){return i.generateThemeColorDecimal(p,g)}function B(){c.base.forEach(p=>{p.decimal=I(p.themeIndex,0)}),h.forEach(p=>{p.decimal=w(p.hex)})}function s(){e.colorPickerOverlay=document.getElementById("color-picker-overlay"),e.colorPicker=document.getElementById("color-picker"),B(),r(),u()}function r(){const p=document.getElementById("standard-colors-grid");p.innerHTML="",h.forEach(b=>{const k=a(b.hex,{type:"standard",name:b.name,decimal:b.decimal});p.appendChild(k)});const g=document.getElementById("theme-colors-grid");g.innerHTML="",c.base.forEach(b=>{const k=a(b.hex,{type:"theme",name:b.name,themeIndex:b.themeIndex,decimal:b.decimal,tintShade:0});g.appendChild(k)}),document.querySelector(".auto-color").addEventListener("click",()=>{y("#000000",{type:"auto",name:"Automatic",decimal:-16777216})}),document.querySelector(".no-color").addEventListener("click",()=>{y(null,{type:"none",name:"No Color",decimal:null})}),l(),o()}function l(){try{const p=localStorage.getItem(n);p&&(e.recentColors=JSON.parse(p))}catch{e.recentColors=[]}}function m(){try{localStorage.setItem(n,JSON.stringify(e.recentColors))}catch{}}function x(p,g){!p||g.type==="auto"||g.type==="none"||g.type==="custom"&&(e.recentColors=e.recentColors.filter(b=>b.hex!==p),e.recentColors.unshift({hex:p,...g}),e.recentColors.length>t&&(e.recentColors=e.recentColors.slice(0,t)),m(),o())}function o(){const p=document.getElementById("recent-colors-section"),g=document.getElementById("recent-colors-grid");if(!(!g||!p)){if(g.innerHTML="",e.recentColors.length===0){p.style.display="none";return}p.style.display="block",e.recentColors.forEach(b=>{const k=a(b.hex,{type:b.type||"custom",name:b.name||"Recent Color",decimal:b.decimal});g.appendChild(k)})}}function a(p,g){const b=document.createElement("button");return b.className="color-swatch",b.style.backgroundColor=p,b.setAttribute("data-color",p),b.setAttribute("data-color-info",JSON.stringify(g)),b.title=g.name||p,b.addEventListener("click",()=>y(p,g)),b}function u(){document.getElementById("color-picker-close").addEventListener("click",()=>f()),e.colorPickerOverlay.addEventListener("click",b=>{b.target===e.colorPickerOverlay&&f()}),document.getElementById("more-colors-btn").addEventListener("click",b=>{b.preventDefault(),v()}),document.addEventListener("keydown",b=>{b.key==="Escape"&&e.colorPickerOverlay.style.display==="flex"&&f()})}function d(p){e.currentColorTarget=p,e.colorPickerOverlay.style.display="flex";const g=p.getBoundingClientRect();e.colorPicker.classList.remove("position-top"),g.bottom+400>window.innerHeight&&e.colorPicker.classList.add("position-top")}function f(){e.colorPickerOverlay.style.display="none",e.currentColorTarget=null}function v(){const p=e.currentColorTarget;f();const g=document.createElement("input");g.type="color",g.style.position="absolute",g.style.left="-9999px",g.style.opacity="0",p&&p.getAttribute("data-selected-color")&&(g.value=p.getAttribute("data-selected-color")),document.body.appendChild(g),g.addEventListener("change",b=>{const k=b.target.value;e.currentColorTarget=p,y(k,{type:"custom",name:"Custom Color",decimal:w(k)}),document.body.removeChild(g)}),g.addEventListener("blur",()=>{setTimeout(()=>{document.body.contains(g)&&document.body.removeChild(g)},100)}),g.click()}function y(p,g){e.currentColorTarget&&(p?(e.currentColorTarget.style.borderBottom=`3px solid ${p}`,e.currentColorTarget.setAttribute("data-selected-color",p),e.currentColorTarget.setAttribute("data-color-data",JSON.stringify(g)),e.currentColorTarget.classList.add("active")):(e.currentColorTarget.style.borderBottom="",e.currentColorTarget.removeAttribute("data-selected-color"),e.currentColorTarget.removeAttribute("data-color-data"),e.currentColorTarget.classList.remove("active")),e.currentColorTarget.id==="find-color-button"?C("find",g):e.currentColorTarget.id==="replace-color-toggle"&&C("replace",g)),x(p,g),f()}function C(p,g){console.log("Color selected for",p,":",g)}function F(p){const g=document.getElementById(p);if(!g)return null;const b=g.getAttribute("data-color-data");if(!b)return null;try{return JSON.parse(b)}catch{return null}}function R(){if(window.createWebViewBridge){const p=window.createWebViewBridge();return{findOptions:p.getFindOptions(),replaceOptions:p.getReplaceOptions(),searchParameters:p.getSearchParameters()}}return null}return{initialize:s,show:d,hide:f,selectColor:y,getCurrentColorData:F,getAllFormattingState:R,hexToWordDecimal:w,wordDecimalToHex:S}}window.createColorPicker=X;let M=document.getElementById("show-replace-button"),Q=document.getElementById("theme-toggle-button"),$=document.getElementById("help-toggle-button"),ee=document.getElementById("find-button");document.getElementById("regex-toggle-button");let te=document.getElementById("find-bold-toggle"),oe=document.getElementById("find-italic-toggle"),ne=document.getElementById("find-underline-toggle"),se=document.getElementById("find-subscript-toggle"),ie=document.getElementById("find-superscript-toggle"),T=document.getElementById("find-color-button"),re=document.getElementById("find-clear-button"),le=document.getElementById("find-dipper-button"),ae=document.getElementById("replace-button"),ce=document.getElementById("replace-all-button"),de=document.getElementById("replace-bold-toggle"),ue=document.getElementById("replace-italic-toggle"),pe=document.getElementById("replace-underline-toggle"),he=document.getElementById("replace-subscript-toggle"),ge=document.getElementById("replace-superscript-toggle"),O=document.getElementById("replace-color-toggle"),me=document.getElementById("replace-options-clear-button"),fe=document.getElementById("replace-options-dipper-button");document.getElementById("search-mode-select");document.getElementById("slop-input");let be=document.getElementById("find-font-size-input"),ye=document.getElementById("replace-font-size-input");document.getElementById("find-text-input");document.getElementById("replace-text-input");let V=document.getElementById("find-style-input"),xe=document.getElementById("find-font-input"),P=document.getElementById("replace-style-input"),we=document.getElementById("replace-font-input"),A,E,L,H,z=!1;function D(i,e){if(E)switch(i){case"Search":E.search();break;case"Replace":E.replace();break;case"ReplaceAll":E.replaceAll();break;case"GetFontList":E.getFontList();break;case"GetStyleList":E.getStyleList();break;case"CopyFormatting":E.copyFormatting(e.target);break;default:console.warn("Unknown command:",i)}else console.warn("WebView bridge not available. Command:",i)}function ve(){T.addEventListener("click",i=>{i.preventDefault(),A.show(T)}),O.addEventListener("click",i=>{i.preventDefault(),A.show(O)}),M.addEventListener("click",i=>{i.preventDefault();const e=document.getElementById("search-replace-container");window.getComputedStyle(e).display==="none"?(e.style.display="flex",e.style.flexDirection="column",e.style.gap="5px",M.classList.add("active")):(e.style.display="none",M.classList.remove("active"))})}function Ee(){ee.addEventListener("click",t=>{t.preventDefault();const n=document.getElementById("find-text-input");n?.addCurrentToHistory&&n.addCurrentToHistory(),L&&L.hideForSearch&&L.hideForSearch(),D("Search"),setTimeout(()=>{n?.shadowRoot?n.shadowRoot.querySelector(".search-input")?.focus():n?.focus()},50)}),ae.addEventListener("click",t=>{t.preventDefault();const n=document.getElementById("replace-text-input");n?.addCurrentToHistory&&n.addCurrentToHistory(),D("Replace")}),ce.addEventListener("click",t=>{t.preventDefault();const n=document.getElementById("replace-text-input");n?.addCurrentToHistory&&n.addCurrentToHistory(),D("ReplaceAll")}),Q.addEventListener("click",t=>{t.preventDefault(),document.documentElement.classList.toggle("dark")}),$&&$.addEventListener("click",t=>{t.preventDefault(),console.log("Help button clicked, regexPalette:",L),L?L.toggle():console.error("regexPalette is not initialized")}),re.addEventListener("click",t=>{t.preventDefault(),te.classList.remove("active","toggled-true","toggled-false"),oe.classList.remove("active","toggled-true","toggled-false"),ne.classList.remove("active","toggled-true","toggled-false"),se.classList.remove("active","toggled-true","toggled-false"),ie.classList.remove("active","toggled-true","toggled-false"),T.removeAttribute("data-selected-color"),T.removeAttribute("data-color-data"),T.classList.remove("active"),T.style.borderBottom="",be.value="",V.setValue(""),xe.setValue("")}),me.addEventListener("click",t=>{t.preventDefault(),de.classList.remove("active","toggled-true","toggled-false"),ue.classList.remove("active","toggled-true","toggled-false"),pe.classList.remove("active","toggled-true","toggled-false"),he.classList.remove("active","toggled-true","toggled-false"),ge.classList.remove("active","toggled-true","toggled-false"),O.removeAttribute("data-selected-color"),O.removeAttribute("data-color-data"),O.classList.remove("active"),O.style.borderBottom="",ye.value="",P.setValue(""),we.setValue("")}),le.addEventListener("click",t=>{t.preventDefault(),E&&E.copyFormatting("find")}),fe.addEventListener("click",t=>{t.preventDefault(),E&&E.copyFormatting("replace")});const i=document.getElementById("find-text-input"),e=document.getElementById("replace-text-input");i&&(i.addEventListener("enter",t=>{L&&L.hideForSearch&&L.hideForSearch(),D("Search"),setTimeout(()=>{i.shadowRoot&&i.shadowRoot.querySelector(".search-input")?.focus()},50)}),i.addEventListener("keydown",t=>{t.key==="Escape"&&!i.hasAttribute("open")&&(t.preventDefault(),i.clearValue(),i.shadowRoot&&i.shadowRoot.querySelector(".search-input")?.focus())})),e&&(e.addEventListener("enter",t=>{D("Replace")}),e.addEventListener("keydown",t=>{t.key==="Escape"&&!e.hasAttribute("open")&&(t.preventDefault(),e.clearValue(),e.shadowRoot&&e.shadowRoot.querySelector(".search-input")?.focus())})),V&&V.addEventListener("focus",()=>{E&&E.getStyleList()}),P&&P.addEventListener("focus",()=>{E&&E.getStyleList()})}document.addEventListener("DOMContentLoaded",()=>{typeof createColorPicker<"u"&&(A=createColorPicker(),A.initialize()),typeof createWebViewBridge<"u"&&(E=createWebViewBridge(),E.setupMessageListener(),z||setTimeout(()=>{console.log("Requesting font list on page load..."),E.getFontList(),z=!0},100)),typeof createRegexPalette<"u"&&(L=createRegexPalette(),L.initialize()),typeof createFontManager<"u"&&(H=createFontManager(),H.initialize()),document.getElementById("find-text-input"),document.getElementById("replace-text-input"),ve(),Ee()});const Ce=[{Symbol:".",Meaning:"כל תו בודד",Example:"a.b → acb, a1b"},{Symbol:"*",Meaning:"אפס או יותר מהאלמנט הקודם",Example:"a* → '', a, aa"},{Symbol:"+",Meaning:"אחד או יותר מהאלמנט הקודם",Example:"a+ → a, aa"},{Symbol:"?",Meaning:"אפס או אחד מהאלמנט הקודם",Example:"a? → '', a"},{Symbol:"\\d",Meaning:"ספרה",Example:"\\d → 0-9"},{Symbol:"\\w",Meaning:"תו מילה",Example:"\\w → a-z, 0-9, ＿"},{Symbol:"\\s",Meaning:"רווח לבן",Example:"\\s → רווח, טאבים, שורות חדשות"},{Symbol:"[abc]",Meaning:"כל אחד מ-א', ב', או ג'",Example:"[אבג] → או א' או ב' או ג'"},{Symbol:"[0-9]",Meaning:"כל ספרה",Example:"[0-9] → ספרה כלשהי"},{Symbol:"[a-z]",Meaning:"טווח a עד z",Example:"[a-z] → לאותיות קטנות"},{Symbol:"[A-Z]",Meaning:"טווח A עד Z",Example:"[A-Z] → לאותיות גדולות"},{Symbol:"^",Meaning:"תחילת מחרוזת או שורה",Example:"^אבג → המחרוזת אבג בתחילה"},{Symbol:"$",Meaning:"סיום מחרוזת או שורה",Example:"אבג$ → המחרוזת אבג בסוף"},{Symbol:"\\",Meaning:"תו בריחה (מגדיר תו מיוחד כתו רגיל)",Example:"\\* → כוכבית ממש"},{Symbol:"|",Meaning:"אלטרנטיבה (או)",Example:"שור|כבש → או שור או כבש"},{Symbol:"(...)",Meaning:"קבוצת לכידה",Example:"(אב)+ → תואם אב, אבאב"},{Symbol:"\\b",Meaning:"גבול מילה",Example:"\\bכבש\\b → כבש אבל לא כבשה"},{Symbol:"\\D",Meaning:"כל תו שאינו ספרה",Example:"\\D → למשל: או a או '!'"},{Symbol:"\\W",Meaning:"כל תו שאינו תו מילה",Example:"\\W → ' ', '!'"},{Symbol:"\\S",Meaning:"כל תו שאינו רווח לבן",Example:"\\S → כל תו שאיננו רווח, טאב או שורה חדשה"},{Symbol:"[^abc]",Meaning:"(הגדרה בשלילה) לא א' או ב' או ג'",Example:"[^אבג] → כל תו שאיננו בטווח זה"},{Symbol:".*?",Meaning:"התאמה עצלה",Example:"(ב.*?) או (ב+?)→ בב מתוך בבבב"},{Symbol:"{n}",Meaning:"בדיוק n חזרות",Example:"a{3} → aaa"},{Symbol:"{n,}",Meaning:"לפחות n חזרות",Example:"a{2,} → aa, aaa"},{Symbol:"{n,m}",Meaning:"בין n ל-m חזרות",Example:"a{2,4} → aa, aaa, aaaa"},{Symbol:"$1",Meaning:"התייחסות לקבוצה",Example:"$1 → קבוצה מספר 1"},{Symbol:"$0",Meaning:"כל הטקסט שנמצא",Example:"$0 → כל הטקסט שהתאים לחיפוש"},{Symbol:"$1, $2, $3",Meaning:"קבוצות לכידה מרובות",Example:"(\\w+) (\\w+) → $2 $1 (החלפת סדר מילים)"},{Symbol:"(.+) → $1$1",Meaning:"כפילת הטקסט שנמצא",Example:"שלום → שלוםשלום"},{Symbol:"(\\d+) → מספר: $1",Meaning:"הוספת טקסט לפני/אחרי הקבוצה",Example:"123 → מספר: 123"},{Symbol:"\\b.*?",Meaning:"תחיליות",Example:"\\b.*?חר\\b → תואם אחר או מחר"},{Symbol:".*?\\b",Meaning:"סופיות",Example:"\\bאח.*?\\b → תואם אח או אחר"},{Symbol:"\\B",Meaning:"לא גבול מילה",Example:"\\Bכבש\\B → בתוך קטלוג"},{Symbol:"\\A",Meaning:"תחילת מחרוזת (לא שורה)",Example:"\\Aאבג → רק בתחילת מחרוזת"},{Symbol:"\\Z",Meaning:"סיום לפני שורת סיום אופציונלית",Example:"אבג\\Z → בסיום מחרוזת"},{Symbol:"\\z",Meaning:"סיום מוחלט של מחרוזת",Example:"אבג\\z → לסיום מוחלט"},{Symbol:"(?:...)",Meaning:"קבוצה לא לוכדת",Example:"(?:ab)+ → ללא לכידה"},{Symbol:"(?=...)",Meaning:"ציפייה חיובית",Example:"א(?=ב) → תואם א לפני ב"},{Symbol:"(?!...)",Meaning:"ציפייה שלילית",Example:"א(?!ב) → תואם א לא לפני ב"},{Symbol:"(?<=...)",Meaning:"ציפייה לאחור חיובית",Example:"(?<=א)ב → תואם ב אחרי א"},{Symbol:"(?<!...)",Meaning:"ציפייה לאחור שלילית",Example:"(?<!א)ב → האות ב לא אחרי א"}];window.regexTipsData=Ce;document.addEventListener("DOMContentLoaded",async()=>{if(console.log("Initializing Regex Find Tool..."),typeof RegexPalette<"u"){const i=new RegexPalette;await i.initialize(),window.regexPalette=i}if(typeof ColorPicker<"u"){const i=new ColorPicker;i.initialize(),window.colorPicker=i}if(typeof WebViewBridge<"u"){const i=new WebViewBridge;i.setupMessageListener(),window.webViewBridge=i}console.log("Regex Find Tool initialized successfully")});</script>
+    <style rel="stylesheet" crossorigin>:root{--icon-size: 20px;--app-zoom: 1;--border-radius: 6px;--primary-background-color: #ffffff;--secondary-background-color: #f9f9f9;--border-color: rgba(0, 0, 0, .0578);--focus-color: rgba(0, 95, 184, .3);--focus-offset: 3px;--text-color: rgba(0, 0, 0, .8956);--text-secondary: rgba(0, 0, 0, .6063);--icon-color: rgba(0, 0, 0, .6063);--icon-color-filter: none;--accent-color: #005fb8;--hover-background-color: rgba(0, 0, 0, .0373);--active-background-color: rgba(0, 0, 0, .0578);--scrollbar-thumb: rgba(0, 0, 0, .3);--scrollbar-track: rgba(0, 0, 0, .05);--bg-primary: var(--primary-background-color);--bg-secondary: var(--secondary-background-color);--text-primary: var(--text-color);--hover-bg: var(--hover-background-color);--active-bg: var(--active-background-color)}:root.dark{--primary-background-color: #202020;--secondary-background-color: #1c1c1c;--border-color: rgba(255, 255, 255, .0578);--text-color: rgba(255, 255, 255, 1);--text-secondary: rgba(255, 255, 255, .786);--icon-color: rgba(255, 255, 255, .786);--icon-color-filter: brightness(0) saturate(100%) invert(79%) sepia(6%) saturate(346%) hue-rotate(202deg) brightness(95%) contrast(87%);--hover-background-color: rgba(255, 255, 255, .0605);--active-background-color: rgba(255, 255, 255, .0837);--scrollbar-thumb: rgba(255, 255, 255, .3);--scrollbar-track: var(--secondary-background-color);--bg-primary: var(--primary-background-color);--bg-secondary: var(--secondary-background-color);--text-primary: var(--text-color);--hover-bg: var(--hover-background-color);--active-bg: var(--active-background-color)}input,select{background-color:var(--primary-background-color);color:var(--text-color);border:1px solid var(--border-color)}input:focus,select:focus{border-color:var(--accent-color);outline:none}*{scrollbar-color:var(--scrollbar-thumb) var(--scrollbar-track)}button{background:transparent;border:none;cursor:pointer;border-radius:2px;padding:4px;align-items:center;justify-content:center;display:flex;gap:5px;border-radius:var(--border-radius)}button:hover{background-color:var(--hover-background-color)}button:active{opacity:.9;transform:scale(.95)}button img{width:var(--icon-size);aspect-ratio:1 / 1;filter:var(--icon-color-filter)}.toggle-button{position:relative}.toggle-button{background-color:transparent}.toggle-button.toggled-true{background-color:var(--active-bg)}.toggle-button.toggled-false{background-color:var(--error-light, #f8d7da)}.toggle-button.toggled-false:after{content:"";position:absolute;inset:0;background-image:linear-gradient(45deg,transparent 47%,var(--error-line-color, #dc3545) 47%,var(--error-line-color, #dc3545) 53%,transparent 53%);background-size:100% 100%;background-repeat:no-repeat;pointer-events:none;opacity:.9}:root.dark .toggle-button.toggled-false{background-color:var(--error-dark-bg, #5a1e1e)}:root.dark .toggle-button.toggled-false:after{background-image:linear-gradient(45deg,transparent 47%,var(--error-line-color-dark, #ff6b6b) 47%,var(--error-line-color-dark, #ff6b6b) 53%,transparent 53%)}.toggle-button.active{background-color:var(--active-bg)}*{margin:0;padding:0;color:var(--text-primary);box-sizing:border-box;user-select:none;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;transition:none!important;animation:none!important}html,body{height:100%;overflow:hidden}body{height:100%;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Oxygen,Ubuntu,Cantarell,Open Sans,Helvetica Neue,sans-serif;font-size:14px;background-color:var(--bg-primary);color:var(--text-primary);zoom:var(--app-zoom);direction:rtl;display:flex;flex-direction:column}:focus{outline:none}input{background:var(--primary-background-color);border:var(--border-color) 1px solid;border-radius:var(--border-radius);padding:5px;min-width:0}input[type=number]{width:6ch;text-align:center}#about-button{display:none}input[list]{flex:1}select{background:var(--primary-background-color);color:var(--text-color);border:var(--border-color) 1px solid;border-radius:var(--border-radius);padding:5px 2px}select:focus{border-color:var(--accent-color);outline:none}select option{background:var(--primary-background-color);color:var(--text-color)}select option:hover{background:var(--hover-background-color)}select option:checked{background:var(--accent-color);color:var(--primary-background-color)}datalist{background:var(--primary-background-color);border:var(--border-color) 1px solid;border-radius:var(--border-radius)}datalist option{background:var(--primary-background-color);color:var(--text-color);padding:5px}datalist option:hover{background:var(--hover-background-color)}#find-font-input,#replace-font-input{transition:font-family .2s ease}#find-style-input,#replace-style-input{font-family:inherit}.flex-row{display:flex;flex-direction:row;justify-content:space-between;align-items:center;gap:5px;flex-wrap:wrap}.container{display:flex;flex-direction:column;gap:5px;padding:5px 10px}#title-bar{display:flex;flex-wrap:wrap;gap:5px;justify-content:space-between;padding:5px 10px;border-bottom:.5px solid var(--border-color);background:var(--secondary-background-color)}#title-bar label{margin-right:5px;font-size:.9em}#title-bar button img{padding:2px}#show-replace-button{padding:0 6px 0 10px;border:var(--border-color) 1px solid}#show-replace-button img{padding:4px!important}#content{display:flex;flex-direction:column;flex:1;overflow:hidden}.search-button img{padding:1px}#search-replace-container{background:var(--secondary-background-color);border-top:.5px solid var(--border-color);padding-top:8px;padding-bottom:8px}#search-find-container{padding-top:8px;padding-bottom:8px}.search-replace-button img{padding:3px}#results-container{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0}.regex-palette{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--secondary-background-color)}.regex-grid{flex:1;overflow-y:auto;background:var(--primary-background-color);padding:5px;display:flex;flex-direction:column;gap:2px}.regex-tip{padding:4px 8px;cursor:pointer;transition:background-color .1s ease;width:100%;border-radius:var(--border-radius, 4px);flex-shrink:0;min-height:auto}.regex-tip:hover{background:var(--hover-background-color)}.regex-symbol-meaning{display:flex;gap:10px;align-items:baseline;margin-bottom:2px}.regex-symbol{font-weight:700;font-family:Courier New,monospace;font-size:1em;color:var(--accent-color);min-width:60px;flex-shrink:0}.regex-meaning{font-weight:400;flex:1;line-height:1.2;font-size:.9em}.regex-example{font-size:.8em;opacity:.7;font-family:Courier New,monospace;margin-right:60px;line-height:1.1;color:var(--text-secondary, var(--text-color))}.search-results{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--secondary-background-color)}.results-list{flex:1;overflow-y:auto;background:var(--primary-background-color);padding:5px;display:flex;flex-direction:column}.result-item{padding:4px 8px;cursor:pointer;width:100%;flex-shrink:0;min-height:auto;outline:none}.result-item:hover,.result-item.focused{background:var(--hover-background-color)}.result-item.selected{background:var(--active-background-color)}.result-item.selected .result-location{opacity:.7}.result-text{font-size:.85em;line-height:1.4;word-wrap:break-word;color:var(--text-color);text-align:justify;text-align-last:right}.result-text b{color:var(--accent-color)}.result-location{font-size:.8em;color:var(--text-secondary, var(--text-color));opacity:.7;line-height:1.1}.no-results{padding:20px;text-align:center;color:var(--text-secondary);font-style:italic}.results-list::-webkit-scrollbar{width:6px}.results-list::-webkit-scrollbar-track{background:var(--bg-secondary)}.results-list::-webkit-scrollbar-thumb{background:var(--border-color);border-radius:3px}.results-list::-webkit-scrollbar-thumb:hover{background:var(--text-secondary)}.color-picker-overlay{position:fixed;inset:0;background:#0000001a;z-index:1000;display:flex;align-items:center;justify-content:center;padding:12px}.color-picker{background:var(--primary-background-color, #ffffff);border:1px solid var(--border-color, #d1d1d1);box-shadow:0 2px 8px #00000026;width:auto;min-width:200px;max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);direction:rtl;font-family:Segoe UI,Tahoma,Geneva,Verdana,sans-serif;overflow:hidden;display:flex;flex-direction:column;position:relative}.color-picker.position-top{align-self:flex-start;margin-top:12px}.color-picker-title-bar{background:var(--secondary-background-color, #f5f5f5);border-bottom:1px solid var(--border-color, #d1d1d1);padding:8px 12px;display:flex;align-items:center;justify-content:flex-start;flex-shrink:0;position:relative;direction:ltr}.close-btn{background:transparent;border:none;font-size:14px;cursor:pointer;padding:0;width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:var(--text-color, #666);transition:background-color .15s ease;flex-shrink:0}.close-btn:hover{background:var(--hover-background-color, #e8e8e8);color:var(--text-color, #333)}.auto-no-colors{display:flex;gap:6px;flex-direction:row-reverse;margin-left:auto;direction:rtl}.color-picker-content{padding:12px;overflow-y:auto;flex:1;min-height:0}.color-option{display:flex;align-items:center;gap:5px;padding:4px 8px;background:transparent;border:1px solid var(--border-color, #d1d1d1);border-radius:3px;cursor:pointer;font-size:12px;text-align:right;transition:background-color .15s ease;white-space:nowrap}.color-option:hover{background:var(--secondary-background-color, #f3f2f1)}.color-preview{width:14px;height:14px;flex-shrink:0}.no-color-preview{border:1px solid var(--border-color, #c8c6c4);background:var(--primary-background-color, #ffffff);position:relative}.no-color-preview:after{content:"";position:absolute;top:50%;left:-1px;right:-1px;height:1px;background:#c00;transform:rotate(-45deg)}.color-section{margin-bottom:6px}.color-section:first-child{margin-top:0}.section-title{font-size:13px;font-weight:600;margin-bottom:6px;color:var(--text-color, #333);text-align:right}.color-row{display:flex;flex-wrap:wrap;gap:3px;direction:rtl}.color-swatch{width:24px;height:24px;border:none;border-radius:2px;cursor:pointer;transition:transform .1s ease,box-shadow .1s ease;outline:none;padding:0;flex-shrink:0}.color-swatch:hover{transform:scale(1.1);box-shadow:0 2px 6px #00000040;z-index:1}.color-swatch:focus{outline:2px solid var(--accent-color, #0078d4);outline-offset:1px}.color-swatch[data-color="#FFFFFF"],.color-swatch[data-color="#E7E6E6"]{border:1px solid #d1d1d1}.separator{height:1px;background:var(--border-color, #e1e1e1);margin:8px 0}.more-colors-btn{display:flex;align-items:center;gap:6px;width:100%;padding:6px 0;background:transparent;border:none;cursor:pointer;text-align:right;transition:color .15s ease;color:var(--accent-color, #0078d4);font-size:13px;justify-content:flex-end;flex-direction:row-reverse}.more-colors-btn:hover{text-decoration:underline}.color-wheel-icon{width:18px;height:18px;flex-shrink:0}.color-btn{border-bottom:3px solid transparent;transition:border-bottom-color .2s ease}.color-btn.active{position:relative}.color-btn[data-selected-color] .icon{opacity:.8}#search-replace-container{display:none}.input-wrapper{display:flex;flex-direction:row;align-items:center;border:var(--border-color) 1px solid;border-radius:4px;background:var(--primary-background-color)}.input-wrapper:focus-within{border-bottom:var(--accent-color) solid 2px}.input-wrapper>input[type=text]{flex:1;border:none;padding:0 7px}.input-wrapper>search-combobox{flex:1;border:none}.input-wrapper>search-combobox .search-input{border:none;border-radius:0;padding:6px 7px 6px 30px}.input-wrapper>search-combobox .search-input:focus{border:none;outline:none}.input-wrapper>button{background:transparent;border:none;border-radius:0}.input-wrapper>button:hover{background:var(--hover-background-color)}.input-wrapper>button>img{width:18px}.custom-combobox{position:relative;display:flex;align-items:center;flex:1}.combobox-input{flex:1;background:var(--primary-background-color);color:var(--text-color);border:var(--border-color) 1px solid;border-radius:var(--border-radius);padding:5px 30px 5px 5px;font-size:14px;transition:font-family .2s ease,border-color .2s ease;min-width:0}.combobox-input:focus{border-color:var(--accent-color);outline:none}.combobox-toggle{position:absolute;right:5px;background:none;border:none;color:var(--text-color);cursor:pointer;padding:2px;display:flex;align-items:center;justify-content:center;border-radius:2px;transition:background-color .2s ease}.combobox-toggle:hover{background:var(--hover-background-color)}.combobox-toggle:focus{outline:none;background:var(--hover-background-color)}.custom-combobox.open .combobox-toggle svg{transform:rotate(180deg)}.combobox-dropdown{position:absolute;top:100%;left:0;right:0;z-index:1000;background:var(--primary-background-color);border:var(--border-color) 1px solid;border-radius:var(--border-radius);box-shadow:0 4px 12px #00000026;max-height:200px;overflow:hidden;margin-top:2px}.combobox-options{max-height:200px;overflow-y:auto;padding:2px 0}.combobox-option{padding:8px 12px;cursor:pointer;color:var(--text-color);background:var(--primary-background-color);transition:background-color .1s ease;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.combobox-option:hover,.combobox-option.focused{background:var(--hover-background-color)}.combobox-option:active{background:var(--active-bg)}.combobox-no-options{padding:8px 12px;color:var(--text-secondary);font-style:italic;text-align:center}.dark .combobox-dropdown{box-shadow:0 4px 12px #0000004d}.combobox-options::-webkit-scrollbar{width:6px}.combobox-options::-webkit-scrollbar-track{background:var(--bg-secondary)}.combobox-options::-webkit-scrollbar-thumb{background:var(--border-color);border-radius:3px}.combobox-options::-webkit-scrollbar-thumb:hover{background:var(--text-secondary)}.custom-combobox[data-type=font] .combobox-option{font-size:14px;padding:4px 8px}.custom-combobox[data-type=font] .combobox-input{transition:font-family .2s ease,border-color .2s ease}.custom-combobox[data-type=style] .combobox-option{font-family:inherit}@media (max-width: 600px){.combobox-dropdown,.combobox-options{max-height:150px}}</style>
+  </head>
+  <body>
+      <div id="title-bar">
+        <button id="show-replace-button" class="toggle-button" title="החלף">
+          <img src="data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='16'%20viewBox='0%200%2052%2052'%20fill='currentColor'%3e%3cpath%20d='M%2020%2037.5%20c%200%20-0.8%20-0.7%20-1.5%20-1.5%20-1.5%20h%20-15%20C%202.7%2036%202%2036.7%202%2037.5%20v%2011%20C%202%2049.3%202.7%2050%203.5%2050%20h%2015%20c%200.8%200%201.5%20-0.7%201.5%20-1.5%20V%2037.5%20z%20M%208.1%2022%20H%203.2%20c%20-1%200%20-1.5%200.9%20-0.9%201.4%20l%208%208.3%20c%200.4%200.3%201%200.3%201.4%200%20l%208%20-8.3%20c%200.6%20-0.6%200.1%20-1.4%20-0.9%20-1.4%20h%20-4.7%20c%200%20-5%204.9%20-10%209.9%20-10%20V%206%20C%2015%206%208.1%2013%208.1%2022%20z%20M%2041.8%2020.3%20c%20-0.4%20-0.3%20-1%20-0.3%20-1.4%200%20l%20-8%208.3%20c%20-0.6%200.6%20-0.1%201.4%200.9%201.4%20h%204.8%20c%200%206%20-4.1%2010%20-10.1%2010%20v%206%20c%209%200%2016.1%20-7%2016.1%20-16%20H%2049%20c%201%200%201.5%20-0.9%200.9%20-1.4%20L%2041.8%2020.3%20z%20M%2050%203.5%20C%2050%202.7%2049.3%202%2048.5%202%20h%20-15%20C%2032.7%202%2032%202.7%2032%203.5%20v%2011%20c%200%200.8%200.7%201.5%201.5%201.5%20h%2015%20c%200.8%200%201.5%20-0.7%201.5%20-1.5%20V%203.5%20z'/%3e%3c/svg%3e" class="icon" />
+          <span>החלפה</span>
+        </button>
+
+        <div id="search-options-group" class="flex-row">
+          <select id="search-mode-select" title="כיוון החיפוש">
+            <option value="All">הכל</option>
+            <option value="Forward">כלפי מטה</option>
+            <option value="Back">כלפי מעלה</option>
+            <option value="Selection">לפי בחירה</option>
+          </select>
+
+          <label id="slop-input-label" for="slop-input">מרחק:</label>
+          <input type="number" id="slop-input" min="0" value="0" class="slop-input" title="מרחק בין מילים" />
+        </div>
+
+        <div id="help-buttons-group" class="flex-row">
+          <button id="theme-toggle-button" class="icon-button" title="החלף ערכת נושא">
+            <img src="data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20width='20'%20height='20'%20viewBox='0%200%2020%2020'%20fill='none'%3e%3ccircle%20cx='10'%20cy='10'%20r='8'%20stroke='currentColor'%20stroke-width='1.5'%20/%3e%3cpath%20d='M10%202%20A8%208%200%200%201%2010%2018%20Z'%20fill='currentColor'%20/%3e%3c/svg%3e" class="icon" />
+          </button>
+
+          <button id="help-toggle-button" class="icon-button toggle-button" title="לוח תווי רג'קס">
+            <img src="data:image/svg+xml,%3c?xml%20version='1.0'%20encoding='UTF-8'?%3e%3csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20width='16'%20height='16'%20fill='currentColor'%3e%3cpath%20d='M16,16.92C15.67,16.97%2015.34,17%2015,17C14.66,17%2014.33,16.97%2014,16.92V13.41L11.5,15.89C11,15.5%2010.5,15%2010.11,14.5L12.59,12H9.08C9.03,11.67%209,11.34%209,11C9,10.66%209.03,10.33%209.08,10H12.59L10.11,7.5C10.3,7.25%2010.5,7%2010.76,6.76V6.76C11,6.5%2011.25,6.3%2011.5,6.11L14,8.59V5.08C14.33,5.03%2014.66,5%2015,5C15.34,5%2015.67,5.03%2016,5.08V8.59L18.5,6.11C19,6.5%2019.5,7%2019.89,7.5L17.41,10H20.92C20.97,10.33%2021,10.66%2021,11C21,11.34%2020.97,11.67%2020.92,12H17.41L19.89,14.5C19.7,14.75%2019.5,15%2019.24,15.24V15.24C19,15.5%2018.75,15.7%2018.5,15.89L16,13.41V16.92H16V16.92M5,19A2,2%200%200,1%207,17A2,2%200%200,1%209,19A2,2%200%200,1%207,21A2,2%200%200,1%205,19H5Z'/%3e%3c/svg%3e" class="icon" />
+          </button>
+
+          <button id="about-button" class="icon-button" title="אודות">
+            <img src="data:image/svg+xml,%3csvg%20width='24'%20height='24'%20fill='none'%20viewBox='0%200%2024%2024'%20xmlns='http://www.w3.org/2000/svg'%3e%3cpath%20d='M12%201.999c5.524%200%2010.002%204.478%2010.002%2010.002%200%205.523-4.478%2010.001-10.002%2010.001-5.524%200-10.002-4.478-10.002-10.001C1.998%206.477%206.476%201.999%2012%201.999Zm0%201.5a8.502%208.502%200%201%200%200%2017.003A8.502%208.502%200%200%200%2012%203.5Zm-.004%207a.75.75%200%200%201%20.744.648l.007.102.003%205.502a.75.75%200%200%201-1.493.102l-.007-.101-.003-5.502a.75.75%200%200%201%20.75-.75ZM12%207.003a.999.999%200%201%201%200%201.997.999.999%200%200%201%200-1.997Z'%20fill='%23000000'/%3e%3c/svg%3e" class="icon" />
+          </button>
+        </div>
+      </div>
+
+      <div id="content">
+        <!-- find area -->
+        <div id="search-find-container" class="container">
+          <div class="input-wrapper">
+            <search-combobox 
+                id="find-text-input" 
+                search-type="find"
+                placeholder="חיפוש..." 
+                title="חיפוש">
+            </search-combobox>
+            <button id="find-button" class="search-button" title="חיפוש">
+              <img src="data:image/svg+xml,%3csvg%20width='24'%20height='24'%20fill='none'%20viewBox='0%200%2024%2024'%20xmlns='http://www.w3.org/2000/svg'%3e%3cpath%20d='M10%202.75a7.25%207.25%200%200%201%205.63%2011.819l4.9%204.9a.75.75%200%200%201-.976%201.134l-.084-.073-4.901-4.9A7.25%207.25%200%201%201%2010%202.75Zm0%201.5a5.75%205.75%200%201%200%200%2011.5%205.75%205.75%200%200%200%200-11.5Z'%20fill='%23212121'/%3e%3c/svg%3e" class="icon" />
+            </button>
+            <button id="regex-toggle-button" class="toggle-button search-button" title="השתמש בתווים כלליים">
+              <img src="data:image/svg+xml,%3c?xml%20version='1.0'%20encoding='UTF-8'?%3e%3csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20width='16'%20height='16'%20fill='currentColor'%3e%3cpath%20d='M16,16.92C15.67,16.97%2015.34,17%2015,17C14.66,17%2014.33,16.97%2014,16.92V13.41L11.5,15.89C11,15.5%2010.5,15%2010.11,14.5L12.59,12H9.08C9.03,11.67%209,11.34%209,11C9,10.66%209.03,10.33%209.08,10H12.59L10.11,7.5C10.3,7.25%2010.5,7%2010.76,6.76V6.76C11,6.5%2011.25,6.3%2011.5,6.11L14,8.59V5.08C14.33,5.03%2014.66,5%2015,5C15.34,5%2015.67,5.03%2016,5.08V8.59L18.5,6.11C19,6.5%2019.5,7%2019.89,7.5L17.41,10H20.92C20.97,10.33%2021,10.66%2021,11C21,11.34%2020.97,11.67%2020.92,12H17.41L19.89,14.5C19.7,14.75%2019.5,15%2019.24,15.24V15.24C19,15.5%2018.75,15.7%2018.5,15.89L16,13.41V16.92H16V16.92M5,19A2,2%200%200,1%207,17A2,2%200%200,1%209,19A2,2%200%200,1%207,21A2,2%200%200,1%205,19H5Z'/%3e%3c/svg%3e" class="icon" />
+            </button>
+          </div>
+
+          <div id="find-options-wrapper" class="flex-row">
+            <input
+              type="number"
+              id="find-font-size-input"
+              min="8"
+              max="72"
+              class="font-size-input"
+              title="גודל גופן"
+            />
+
+            <button id="find-bold-toggle" class="format-btn toggle-button" title="מודגש">
+              <img src="data:image/svg+xml,%3csvg%20width='24'%20height='24'%20fill='none'%20viewBox='0%200%2024%2024'%20xmlns='http://www.w3.org/2000/svg'%3e%3cpath%20d='M6.935%204.44A1.5%201.5%200%200%201%207.996%204h4.383C15.017%204%2017%206.182%2017%208.625a4.63%204.63%200%200%201-.865%202.682c1.077.827%201.866%202.12%201.866%203.813C18%2018.232%2015.3%2020%2013.12%2020H8a1.5%201.5%200%200%201-1.5-1.5l-.004-13c0-.397.158-.779.44-1.06ZM9.5%2010.25h2.88c.903%200%201.62-.76%201.62-1.625S13.281%207%2012.38%207H9.498l.002%203.25Zm0%203V17h3.62c.874%200%201.88-.754%201.88-1.88%200-1.13-.974-1.87-1.88-1.87H9.5Z'%20fill='%23000000'/%3e%3c/svg%3e" class="icon" />
+            </button>
+            <button id="find-italic-toggle" class="format-btn toggle-button" title="נטוי">
+              <img src="data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='16'%20viewBox='0%200%2024%2024'%20fill='currentColor'%3e%3cpath%20d='M10,4V7H12.21L8.79,15H6V18H14V15H11.79L15.21,7H18V4H10Z'/%3e%3c/svg%3e" class="icon" />
+            </button>
+            <button id="find-underline-toggle" class="format-btn toggle-button" title="קו תחתון">
+              <img src="data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='16'%20viewBox='0%200%2024%2024'%20fill='currentColor'%3e%3cpath%20d='M5,21H19V19H5V21M12,17A6,6%200%200,0%2018,11V3H15.5V11A3.5,3.5%200%200,1%2012,14.5A3.5,3.5%200%200,1%208.5,11V3H6V11A6,6%200%200,0%2012,17Z'/%3e%3c/svg%3e" class="icon" />
+            </button>
+            <button id="find-subscript-toggle" class="format-btn toggle-button" title="כתב תחתי">
+              <img src="data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='16'%20viewBox='0%200%2024%2024'%20fill='currentColor'%3e%3cpath%20d='M16,7.41L11.41,12L16,16.59L14.59,18L10,13.41L5.41,18L4,16.59L8.59,12L4,7.41L5.41,6L10,10.59L14.59,6L16,7.41M21.85,21.03H16.97V20.03L17.86,19.23C18.62,18.58%2019.18,18.04%2019.56,17.6C19.93,17.16%2020.12,16.75%2020.13,16.36C20.14,16.08%2020.05,15.85%2019.86,15.66C19.68,15.5%2019.39,15.38%2019,15.38C18.69,15.38%2018.42,15.44%2018.16,15.56L17.5,15.94L17.05,14.77C17.32,14.56%2017.64,14.38%2018.03,14.24C18.42,14.1%2018.85,14%2019.32,14C20.1,14.04%2020.7,14.25%2021.1,14.66C21.5,15.07%2021.72,15.59%2021.72,16.23C21.71,16.79%2021.53,17.31%2021.18,17.78C20.84,18.25%2020.42,18.7%2019.91,19.14L19.27,19.66V19.68H21.85V21.03Z'/%3e%3c/svg%3e" class="icon" />
+            </button>
+            <button id="find-superscript-toggle" class="format-btn toggle-button" title="כתב עילי">
+              <img src="data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='16'%20viewBox='0%200%2024%2024'%20fill='currentColor'%3e%3cpath%20d='M16,7.41L11.41,12L16,16.59L14.59,18L10,13.41L5.41,18L4,16.59L8.59,12L4,7.41L5.41,6L10,10.59L14.59,6L16,7.41M21.85,9H16.97V8L17.86,7.18C18.62,6.54%2019.18,6%2019.56,5.55C19.93,5.11%2020.12,4.7%2020.13,4.32C20.14,4.04%2020.05,3.8%2019.86,3.62C19.68,3.43%2019.39,3.34%2019,3.33C18.69,3.34%2018.42,3.4%2018.16,3.5L17.5,3.89L17.05,2.72C17.32,2.5%2017.64,2.33%2018.03,2.19C18.42,2.05%2018.85,2%2019.32,2C20.1,2%2020.7,2.2%2021.1,2.61C21.5,3%2021.72,3.54%2021.72,4.18C21.71,4.74%2021.53,5.26%2021.18,5.73C20.84,6.21%2020.42,6.66%2019.91,7.09L19.27,7.61V7.63H21.85V9Z'/%3e%3c/svg%3e" class="icon" />
+            </button>
+            <button id="find-color-button" class="format-btn color-btn" title="צבע גופן">
+              <img src="data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='16'%20viewBox='0%200%2024%2024'%20fill='currentColor'%3e%3cpath%20d='M3.839%205.858c2.94-3.916%209.03-5.055%2013.364-2.36%204.28%202.66%205.854%207.777%204.1%2012.577-1.655%204.533-6.016%206.328-9.159%204.048-1.177-.854-1.634-1.925-1.854-3.664l-.106-.987-.045-.398c-.123-.934-.311-1.352-.705-1.572-.535-.298-.892-.305-1.595-.033l-.351.146-.179.078c-1.014.44-1.688.595-2.541.416l-.2-.047-.164-.047c-2.789-.864-3.202-4.647-.565-8.157Zm.984%206.716.123.037.134.03c.439.087.814.015%201.437-.242l.602-.257c1.202-.493%201.985-.54%203.046.05.917.512%201.275%201.298%201.457%202.66l.053.459.055.532.047.422c.172%201.361.485%202.09%201.248%202.644%202.275%201.65%205.534.309%206.87-3.349%201.516-4.152.174-8.514-3.484-10.789-3.675-2.284-8.899-1.306-11.373%201.987-2.075%202.763-1.82%205.28-.215%205.816Zm11.225-1.994a1.25%201.25%200%201%201%202.414-.647%201.25%201.25%200%200%201-2.414.647Zm.494%203.488a1.25%201.25%200%201%201%202.415-.647%201.25%201.25%200%200%201-2.415.647ZM14.07%207.577a1.25%201.25%200%201%201%202.415-.647%201.25%201.25%200%200%201-2.415.647Zm-.028%208.998a1.25%201.25%200%201%201%202.414-.647%201.25%201.25%200%200%201-2.414.647Zm-3.497-9.97a1.25%201.25%200%201%201%202.415-.646%201.25%201.25%200%200%201-2.415.646Z'/%3e%3c/svg%3e" class="icon" />
+            </button>
+            <button id="find-clear-button" class="format-btn" title="נקה הגדרות עיצוב">
+              <img src="data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='16'%20viewBox='0%200%2024%2024'%20fill='currentColor'%3e%3cpath%20d='M16.24,3.56L21.19,8.5C21.97,9.29%2021.97,10.55%2021.19,11.34L12,20.53C10.44,22.09%207.91,22.09%206.34,20.53L2.81,17C2.03,16.21%202.03,14.95%202.81,14.16L13.41,3.56C14.2,2.78%2015.46,2.78%2016.24,3.56M4.22,15.58L7.76,19.11C8.54,19.9%209.8,19.9%2010.59,19.11L14.12,15.58L9.17,10.63L4.22,15.58Z'/%3e%3c/svg%3e" class="icon" />
+            </button>
+            <button id="find-dipper-button" class="format-btn" title="שאב הגדרות עיצוב">
+              <img src="data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='16'%20viewBox='0%200%2024%2024'%20fill='currentColor'%3e%3cpath%20d='M19.35,11.72L17.22,13.85L15.81,12.43L8.1,20.14L3.5,22L2,20.5L3.86,15.9L11.57,8.19L10.15,6.78L12.28,4.65L19.35,11.72M16.76,3C17.93,1.83%2019.83,1.83%2021,3C22.17,4.17%2022.17,6.07%2021,7.24L19.08,9.16L14.84,4.92L16.76,3M5.56,17.03L4.5,19.5L6.97,18.44L14.4,11L13,9.6L5.56,17.03Z'/%3e%3c/svg%3e" class="icon" />
+            </button>
+          </div>
+
+          <div id="find-font-style-wrapper" class="flex-row">
+            <custom-combobox 
+                id="find-style-input" 
+                type="style" 
+                placeholder="בחר סגנון">
+            </custom-combobox>
+
+            <custom-combobox 
+                id="find-font-input" 
+                type="font" 
+                placeholder="בחר גופן">
+            </custom-combobox>
+          </div>
+        </div>
+
+        <!-- replace area -->
+        <div id="search-replace-container" class="container">
+          <div class="input-wrapper">
+            <search-combobox 
+                id="replace-text-input" 
+                search-type="replace"
+                placeholder="החלף ב.." 
+                title="החלף ב..">
+            </search-combobox>
+            <button id="replace-button" class="search-replace-button" title="החלף">
+              <img src="data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='16'%20viewBox='2%202%2020%2020'%20fill='currentColor'%3e%3cpath%20d='M11,6C12.38,6%2013.63,6.56%2014.54,7.46L12,10H18V4L15.95,6.05C14.68,4.78%2012.93,4%2011,4C7.47,4%204.57,6.61%204.08,10H6.1C6.56,7.72%208.58,6%2011,6M16.64,15.14C17.3,14.24%2017.76,13.17%2017.92,12H15.9C15.44,14.28%2013.42,16%2011,16C9.62,16%208.37,15.44%207.46,14.54L10,12H4V18L6.05,15.95C7.32,17.22%209.07,18%2011,18C12.55,18%2014,17.5%2015.14,16.64L20,21.5L21.5,20L16.64,15.14Z'/%3e%3c/svg%3e" class="icon" />
+            </button>
+            <button id="replace-all-button" class="search-replace-button" title="החלף הכל">
+              <img src="data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='16'%20viewBox='0%200%2052%2052'%20fill='currentColor'%3e%3cpath%20d='M%2020%2037.5%20c%200%20-0.8%20-0.7%20-1.5%20-1.5%20-1.5%20h%20-15%20C%202.7%2036%202%2036.7%202%2037.5%20v%2011%20C%202%2049.3%202.7%2050%203.5%2050%20h%2015%20c%200.8%200%201.5%20-0.7%201.5%20-1.5%20V%2037.5%20z%20M%208.1%2022%20H%203.2%20c%20-1%200%20-1.5%200.9%20-0.9%201.4%20l%208%208.3%20c%200.4%200.3%201%200.3%201.4%200%20l%208%20-8.3%20c%200.6%20-0.6%200.1%20-1.4%20-0.9%20-1.4%20h%20-4.7%20c%200%20-5%204.9%20-10%209.9%20-10%20V%206%20C%2015%206%208.1%2013%208.1%2022%20z%20M%2041.8%2020.3%20c%20-0.4%20-0.3%20-1%20-0.3%20-1.4%200%20l%20-8%208.3%20c%20-0.6%200.6%20-0.1%201.4%200.9%201.4%20h%204.8%20c%200%206%20-4.1%2010%20-10.1%2010%20v%206%20c%209%200%2016.1%20-7%2016.1%20-16%20H%2049%20c%201%200%201.5%20-0.9%200.9%20-1.4%20L%2041.8%2020.3%20z%20M%2050%203.5%20C%2050%202.7%2049.3%202%2048.5%202%20h%20-15%20C%2032.7%202%2032%202.7%2032%203.5%20v%2011%20c%200%200.8%200.7%201.5%201.5%201.5%20h%2015%20c%200.8%200%201.5%20-0.7%201.5%20-1.5%20V%203.5%20z'/%3e%3c/svg%3e" class="icon" />
+            </button>
+          </div>
+
+          <div id="replace-options-wrapper" class="flex-row">
+            <input
+              type="number"
+              id="replace-font-size-input"
+              min="8"
+              max="72"
+              class="font-size-input"
+              title="גודל גופן"
+            />
+
+            <button id="replace-bold-toggle" class="format-btn toggle-button" title="מודגש">
+              <img src="data:image/svg+xml,%3csvg%20width='24'%20height='24'%20fill='none'%20viewBox='0%200%2024%2024'%20xmlns='http://www.w3.org/2000/svg'%3e%3cpath%20d='M6.935%204.44A1.5%201.5%200%200%201%207.996%204h4.383C15.017%204%2017%206.182%2017%208.625a4.63%204.63%200%200%201-.865%202.682c1.077.827%201.866%202.12%201.866%203.813C18%2018.232%2015.3%2020%2013.12%2020H8a1.5%201.5%200%200%201-1.5-1.5l-.004-13c0-.397.158-.779.44-1.06ZM9.5%2010.25h2.88c.903%200%201.62-.76%201.62-1.625S13.281%207%2012.38%207H9.498l.002%203.25Zm0%203V17h3.62c.874%200%201.88-.754%201.88-1.88%200-1.13-.974-1.87-1.88-1.87H9.5Z'%20fill='%23000000'/%3e%3c/svg%3e" class="icon" />
+            </button>
+            <button id="replace-italic-toggle" class="format-btn toggle-button" title="נטוי">
+              <img src="data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='16'%20viewBox='0%200%2024%2024'%20fill='currentColor'%3e%3cpath%20d='M10,4V7H12.21L8.79,15H6V18H14V15H11.79L15.21,7H18V4H10Z'/%3e%3c/svg%3e" class="icon" />
+            </button>
+            <button id="replace-underline-toggle" class="format-btn toggle-button" title="קו תחתון">
+              <img src="data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='16'%20viewBox='0%200%2024%2024'%20fill='currentColor'%3e%3cpath%20d='M5,21H19V19H5V21M12,17A6,6%200%200,0%2018,11V3H15.5V11A3.5,3.5%200%200,1%2012,14.5A3.5,3.5%200%200,1%208.5,11V3H6V11A6,6%200%200,0%2012,17Z'/%3e%3c/svg%3e" class="icon" />
+            </button>
+            <button id="replace-subscript-toggle" class="format-btn toggle-button" title="כתב תחתי">
+              <img src="data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='16'%20viewBox='0%200%2024%2024'%20fill='currentColor'%3e%3cpath%20d='M16,7.41L11.41,12L16,16.59L14.59,18L10,13.41L5.41,18L4,16.59L8.59,12L4,7.41L5.41,6L10,10.59L14.59,6L16,7.41M21.85,21.03H16.97V20.03L17.86,19.23C18.62,18.58%2019.18,18.04%2019.56,17.6C19.93,17.16%2020.12,16.75%2020.13,16.36C20.14,16.08%2020.05,15.85%2019.86,15.66C19.68,15.5%2019.39,15.38%2019,15.38C18.69,15.38%2018.42,15.44%2018.16,15.56L17.5,15.94L17.05,14.77C17.32,14.56%2017.64,14.38%2018.03,14.24C18.42,14.1%2018.85,14%2019.32,14C20.1,14.04%2020.7,14.25%2021.1,14.66C21.5,15.07%2021.72,15.59%2021.72,16.23C21.71,16.79%2021.53,17.31%2021.18,17.78C20.84,18.25%2020.42,18.7%2019.91,19.14L19.27,19.66V19.68H21.85V21.03Z'/%3e%3c/svg%3e" class="icon" />
+            </button>
+            <button id="replace-superscript-toggle" class="format-btn toggle-button" title="כתב עילי">
+              <img src="data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='16'%20viewBox='0%200%2024%2024'%20fill='currentColor'%3e%3cpath%20d='M16,7.41L11.41,12L16,16.59L14.59,18L10,13.41L5.41,18L4,16.59L8.59,12L4,7.41L5.41,6L10,10.59L14.59,6L16,7.41M21.85,9H16.97V8L17.86,7.18C18.62,6.54%2019.18,6%2019.56,5.55C19.93,5.11%2020.12,4.7%2020.13,4.32C20.14,4.04%2020.05,3.8%2019.86,3.62C19.68,3.43%2019.39,3.34%2019,3.33C18.69,3.34%2018.42,3.4%2018.16,3.5L17.5,3.89L17.05,2.72C17.32,2.5%2017.64,2.33%2018.03,2.19C18.42,2.05%2018.85,2%2019.32,2C20.1,2%2020.7,2.2%2021.1,2.61C21.5,3%2021.72,3.54%2021.72,4.18C21.71,4.74%2021.53,5.26%2021.18,5.73C20.84,6.21%2020.42,6.66%2019.91,7.09L19.27,7.61V7.63H21.85V9Z'/%3e%3c/svg%3e" class="icon" />
+            </button>
+            <button id="replace-color-toggle" class="format-btn color-btn" title="צבע גופן">
+              <img src="data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='16'%20viewBox='0%200%2024%2024'%20fill='currentColor'%3e%3cpath%20d='M3.839%205.858c2.94-3.916%209.03-5.055%2013.364-2.36%204.28%202.66%205.854%207.777%204.1%2012.577-1.655%204.533-6.016%206.328-9.159%204.048-1.177-.854-1.634-1.925-1.854-3.664l-.106-.987-.045-.398c-.123-.934-.311-1.352-.705-1.572-.535-.298-.892-.305-1.595-.033l-.351.146-.179.078c-1.014.44-1.688.595-2.541.416l-.2-.047-.164-.047c-2.789-.864-3.202-4.647-.565-8.157Zm.984%206.716.123.037.134.03c.439.087.814.015%201.437-.242l.602-.257c1.202-.493%201.985-.54%203.046.05.917.512%201.275%201.298%201.457%202.66l.053.459.055.532.047.422c.172%201.361.485%202.09%201.248%202.644%202.275%201.65%205.534.309%206.87-3.349%201.516-4.152.174-8.514-3.484-10.789-3.675-2.284-8.899-1.306-11.373%201.987-2.075%202.763-1.82%205.28-.215%205.816Zm11.225-1.994a1.25%201.25%200%201%201%202.414-.647%201.25%201.25%200%200%201-2.414.647Zm.494%203.488a1.25%201.25%200%201%201%202.415-.647%201.25%201.25%200%200%201-2.415.647ZM14.07%207.577a1.25%201.25%200%201%201%202.415-.647%201.25%201.25%200%200%201-2.415.647Zm-.028%208.998a1.25%201.25%200%201%201%202.414-.647%201.25%201.25%200%200%201-2.414.647Zm-3.497-9.97a1.25%201.25%200%201%201%202.415-.646%201.25%201.25%200%200%201-2.415.646Z'/%3e%3c/svg%3e" class="icon" />
+            </button>
+            <button id="replace-options-clear-button" class="format-btn" title="נקה הגדרות עיצוב">
+              <img src="data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='16'%20viewBox='0%200%2024%2024'%20fill='currentColor'%3e%3cpath%20d='M16.24,3.56L21.19,8.5C21.97,9.29%2021.97,10.55%2021.19,11.34L12,20.53C10.44,22.09%207.91,22.09%206.34,20.53L2.81,17C2.03,16.21%202.03,14.95%202.81,14.16L13.41,3.56C14.2,2.78%2015.46,2.78%2016.24,3.56M4.22,15.58L7.76,19.11C8.54,19.9%209.8,19.9%2010.59,19.11L14.12,15.58L9.17,10.63L4.22,15.58Z'/%3e%3c/svg%3e" class="icon" />
+            </button>
+            <button id="replace-options-dipper-button" class="format-btn" title="שאב הגדרות עיצוב">
+              <img src="data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='16'%20viewBox='0%200%2024%2024'%20fill='currentColor'%3e%3cpath%20d='M19.35,11.72L17.22,13.85L15.81,12.43L8.1,20.14L3.5,22L2,20.5L3.86,15.9L11.57,8.19L10.15,6.78L12.28,4.65L19.35,11.72M16.76,3C17.93,1.83%2019.83,1.83%2021,3C22.17,4.17%2022.17,6.07%2021,7.24L19.08,9.16L14.84,4.92L16.76,3M5.56,17.03L4.5,19.5L6.97,18.44L14.4,11L13,9.6L5.56,17.03Z'/%3e%3c/svg%3e" class="icon" />
+            </button>
+          </div>
+
+          <div id="replace-font-style-wrapper" class="flex-row">
+            <custom-combobox 
+                id="replace-style-input" 
+                type="style" 
+                placeholder="בחר סגנון">
+            </custom-combobox>
+
+            <custom-combobox 
+                id="replace-font-input" 
+                type="font" 
+                placeholder="בחר גופן">
+            </custom-combobox>
+          </div>
+        </div>
+
+        <div id="results-container">
+          <!-- Regex Palette (hidden by default) -->
+          <div id="regex-palette" class="regex-palette" style="display: none">
+            <div class="regex-grid" id="regex-grid">
+              <!-- Regex tips will be populated by JavaScript -->
+            </div>
+          </div>
+
+          <!-- Search Results -->
+          <div id="search-results" class="search-results">
+            <div class="results-list" id="results-list-content"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Color Picker Dialog -->
+    <div id="color-picker-overlay" class="color-picker-overlay" style="display: none">
+      <div id="color-picker" class="color-picker">
+        <!-- Title Bar -->
+        <div class="color-picker-title-bar">
+          <button class="close-btn" id="color-picker-close">×</button>
+          
+          <!-- Auto and No Color buttons -->
+          <div class="auto-no-colors">
+            <button class="color-option auto-color" data-color="#000000">
+              <div class="color-preview" style="background-color: #000000"></div>
+              <span>אוטומטי</span>
+            </button>
+            <button class="color-option no-color" data-color="null">
+              <div class="color-preview no-color-preview"></div>
+              <span>ללא צבע</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Scrollable Content -->
+        <div class="color-picker-content">
+          <!-- Theme Colors - First -->
+          <div class="color-section">
+            <div class="section-title">צבעי ערכת נושא</div>
+            <div class="color-row" id="theme-colors-grid">
+              <!-- Theme colors will be populated by JavaScript -->
+            </div>
+          </div>
+
+          <div class="separator"></div>
+
+          <!-- Standard Colors - Second -->
+          <div class="color-section">
+            <div class="section-title">צבעים רגילים</div>
+            <div class="color-row" id="standard-colors-grid">
+              <!-- Standard colors will be populated by JavaScript -->
+            </div>
+          </div>
+
+          <div class="separator"></div>
+
+          <!-- More Colors Link -->
+          <button class="more-colors-btn" id="more-colors-btn">
+            <img src="data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20width='24'%20height='24'%3e%3ccircle%20cx='12'%20cy='12'%20r='10'%20fill='none'%20stroke='%23ccc'%20stroke-width='0.5'/%3e%3cpath%20d='M12%202%20A10%2010%200%200%201%2022%2012%20L12%2012%20Z'%20fill='%23FF0000'/%3e%3cpath%20d='M22%2012%20A10%2010%200%200%201%2012%2022%20L12%2012%20Z'%20fill='%2300FF00'/%3e%3cpath%20d='M12%2022%20A10%2010%200%200%201%202%2012%20L12%2012%20Z'%20fill='%230000FF'/%3e%3cpath%20d='M2%2012%20A10%2010%200%200%201%2012%202%20L12%2012%20Z'%20fill='%23FFFF00'/%3e%3cpath%20d='M12%202%20A10%2010%200%200%201%2017%203.8%20L12%2012%20Z'%20fill='%23FF8000'/%3e%3cpath%20d='M17%203.8%20A10%2010%200%200%201%2022%2012%20L12%2012%20Z'%20fill='%23FF00FF'/%3e%3cpath%20d='M22%2012%20A10%2010%200%200%201%2017%2020.2%20L12%2012%20Z'%20fill='%2300FFFF'/%3e%3cpath%20d='M17%2020.2%20A10%2010%200%200%201%2012%2022%20L12%2012%20Z'%20fill='%2300FF80'/%3e%3c/svg%3e" class="color-wheel-icon" />
+            <span>צבעים נוספים...</span>
+          </button>
+
+          <!-- Recent Colors (hidden until colors are used) -->
+          <div class="color-section" id="recent-colors-section" style="display: none">
+            <div class="separator"></div>
+            <div class="section-title">צבעים שהיו בשימוש לאחרונה</div>
+            <div class="color-row" id="recent-colors-grid">
+              <!-- Recent colors will be populated by JavaScript -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </body>
+</html>

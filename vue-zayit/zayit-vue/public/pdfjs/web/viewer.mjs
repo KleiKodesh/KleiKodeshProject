@@ -4542,7 +4542,7 @@ const defaultOptions = {
     kind: OptionKind.VIEWER
   };
   defaultOptions.locale = {
-    value: navigator.language || "en-US",
+    value: "he",
     kind: OptionKind.VIEWER
   };
 }

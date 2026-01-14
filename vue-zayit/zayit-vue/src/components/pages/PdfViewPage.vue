@@ -27,9 +27,11 @@
 
     <!-- Show PDF viewer when URL is available -->
     <iframe v-else
+            ref="pdfIframe"
             :src="pdfViewerUrl"
             class="pdf-iframe"
-            title="PDF Viewer">
+            title="PDF Viewer"
+            @load="onPdfIframeLoad">
     </iframe>
   </div>
 </template>
@@ -39,9 +41,11 @@ import { computed, ref } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useTabStore } from '../../stores/tabStore';
 import { pdfService } from '../../services/pdfService';
+import { syncPdfViewerTheme, isDarkTheme } from '../../utils/theme';
 
 const tabStore = useTabStore();
 const fileInput = ref<HTMLInputElement>();
+const pdfIframe = ref<HTMLIFrameElement>();
 
 // Get PDF URL from active tab (blob URL for browser file picker)
 const selectedPdfUrl = computed(() => {
@@ -64,7 +68,7 @@ const isLoadingPdf = computed(() => {
   return tabStore.activeTab?.pdfState?.isLoading || false;
 });
 
-// PDF.js viewer URL with file parameter
+// PDF.js viewer URL with file parameter and Hebrew locale
 const pdfViewerUrl = computed(() => {
   const baseUrl = '/pdfjs/web/viewer.html';
   const tab = tabStore.activeTab;
@@ -72,9 +76,15 @@ const pdfViewerUrl = computed(() => {
   // Use blob URL (works for both C# and browser)
   const fileSource = selectedPdfUrl.value;
 
-  const finalUrl = fileSource
-    ? `${baseUrl}?file=${encodeURIComponent(fileSource)}`
-    : baseUrl;
+  // Build URL with file parameter and Hebrew locale
+  const params = new URLSearchParams();
+  if (fileSource) {
+    params.set('file', fileSource);
+  }
+  // Force Hebrew locale for tooltips
+  params.set('locale', 'he');
+
+  const finalUrl = `${baseUrl}?${params.toString()}`;
     
   console.log('[PdfViewPage] PDF viewer URL:', finalUrl);
   console.log('[PdfViewPage] File source:', fileSource);
@@ -90,6 +100,14 @@ const placeholderMessage = computed(() => {
   }
   return 'בחר קובץ PDF לצפייה';
 });
+
+// Sync theme when PDF iframe loads
+const onPdfIframeLoad = () => {
+  // Small delay to ensure PDF.js is fully initialized
+  setTimeout(() => {
+    syncPdfViewerTheme();
+  }, 100);
+};
 
 // Open file picker - use C# PDF service via existing bridge
 const openFilePicker = async () => {

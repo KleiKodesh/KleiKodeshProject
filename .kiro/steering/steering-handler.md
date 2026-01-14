@@ -20,10 +20,10 @@ inclusion: always
 ### File Pattern Triggers
 When working with these patterns, steering MUST be checked first:
 
-- **WebView/Communication issues** → `integration_communication.md`
-- **RegexFind problems** → `project_regexfind-build.md` 
-- **Build issues** → `build_*.md` files
-- **UI problems** → `ui_*.md` files
+- **WebView/Communication issues** → `webview_integration.md`, `core_communication.md`
+- **RegexFind problems** → `regexfind_architecture.md` 
+- **Build issues** → `core_build.md`, `installer_system.md`
+- **Vue/UI problems** → `vue_development.md`, `vue_theming.md`
 
 ### Emergency Steering Check
 If you encounter ANY of these symptoms, STOP and check steering:
@@ -34,7 +34,7 @@ If you encounter ANY of these symptoms, STOP and check steering:
 
 ## New Steering System Architecture
 
-The steering system has been reorganized into a centralized, targeted approach located in `C:\Users\Admin\source\KleiKodeshProject\.steering\` with component-specific files that load only when relevant.
+The steering system has been reorganized into a centralized, targeted approach located in `.steering/` with component-specific files that load only when relevant.
 
 ## How to Use This System
 
@@ -48,60 +48,140 @@ Kiro automatically loads relevant steering files based on their frontmatter incl
 **HOWEVER**: If automatic loading fails or you miss context, MANUALLY check steering files!
 
 ### File Naming Convention
-All steering files use prefix naming for easy handling:
-- `general_` - Always loaded core principles
-- `build_` - Build system and processes  
-- `ui_` - User interface and styling
-- `integration_` - Component integration patterns
-- `project_` - Project-specific guidance
+All steering files use prefix naming for easy categorization:
+
+**Core Principles** (always loaded):
+- `core_` - Fundamental development principles and rules
+
+**Technology-Specific** (loaded by file patterns):
+- `csharp_` - C# language patterns and best practices
+- `vue_` - Vue.js development standards and patterns
+- `javascript_` - JavaScript/TypeScript patterns
+- `css_` - CSS and styling guidelines
+
+**Component-Specific** (loaded by file patterns):
+- `webview_` - WebView2 integration patterns
+- `regexfind_` - RegexFind module guidance
+- `zayit_` - Zayit project patterns
+- `[component]_` - Other specific components
+
+**System-Specific** (loaded by file patterns):
+- `installer_` - Installation and deployment
+- `update_` - Update system patterns
+- `build_` - Build processes and automation
+- `[system]_` - Other infrastructure concerns
 
 ## Steering File Mapping
 
-### Always Load (General Knowledge)
-- `general_guidelines.md` - Core development principles, documentation policy
-- `general_build-requirements.md` - Build system requirements (dotnet build, etc.)
-- `general_coding-standards.md` - Code style, modern C# features
+### Always Load (Core Knowledge)
+- `core_development.md` - Essential development principles and rules
+- `core_build.md` - Build system requirements and processes
+- `core_communication.md` - C# ↔ JavaScript communication patterns
 
-### Build System (Load when working with build files)
-**File Patterns**: `**/build*`, `**/*.csproj`, `**/*.targets`, `**/package.json`, `**/vite.config.*`
-- `build_installer-system.md` - NSIS wrapper, WPF installer, version management
-- `build_vsto-automation.md` - VSTO build automation, MSBuild targets
-- `build_vue-config.md` - Vue/Vite single-file output configuration
+### C# Development
+**File Patterns**: `**/*.cs`
+- `csharp_patterns.md` - Modern C# features, JSON handling, async patterns
 
-### UI Development (Load when working with UI files)
-**File Patterns**: `**/*.vue`, `**/*.css`, `**/*.html`, `**/style*`, `**/theme*`
-- `ui_vue-styling.md` - Vue component styling, design system
-- `ui_theming-system.md` - CSS variables, theme toggle implementation
-- `ui_javascript-standards.md` - Function-based JS, data flow, UI patterns
-- `ui_html-principles.md` - HTML/CSS standards (applies to Vue projects too)
+### Vue Development
+**File Patterns**: `**/*.vue`, `**/vite.config.*`, `**/package.json`
+- `vue_development.md` - Vue standards, single-file output, component patterns
+- `vue_theming.md` - CSS variables, theme system, flat list design
 
-### Integration Patterns (Load when working with integration)
-**File Patterns**: `**/WebView*`, `**/UserControl*`, `**/*Host*`
-- `integration_vsto-webview.md` - WebView2 integration, component structure
-- `integration_communication.md` - C# ↔ JavaScript communication patterns
+### WebView2 Integration
+**File Patterns**: `**/WebView*`, `**/UserControl*`, `**/*Host*`, `**/*Dialog*`
+- `webview_integration.md` - Component structure, command dispatch, virtual hosts
+- `webview_dialogs.md` - Dialog freezing prevention, WebViewDialogHelper
 
-### Project-Specific (Load when working on specific projects)
-**RegexFind Project** - `**/regx-find-html/**`, `**/RegexFind/**`
-- `project_regexfind-build.md` - RegexFind build process, data structures
-- `project_regexfind-color.md` - Color picker system, Word compatibility
+### RegexFind Module
+**File Patterns**: `**/regx-find-html/**`, `**/RegexFind/**`, `**/color-picker*`
+- `regexfind_architecture.md` - Module structure, communication protocol, Hebrew/Arabic support
+- `regexfind_color-system.md` - Color data structure, Word compatibility, theme colors
 
-**Zayit Project** - `**/vue-zayit/**`
-- `project_zayit-bridge.md` - Zayit C# ↔ Vue bridge patterns, PDF manager integration
-- `project_zayit-reading-backgrounds.md` - Reading background color system, theme integration
+### Zayit Project
+**File Patterns**: `**/vue-zayit/**`, `**/Zayit*`, `**/HebrewBooks*`, `**/PdfView*`
+- `zayit_architecture.md` - Component overview, bridge patterns, key features
+- `zayit_pdf-system.md` - Local PDF and Hebrew Books systems, virtual hosts, cache
+- `zayit_reading-backgrounds.md` - Reading background colors, dark mode detection
 
-**Installer Project** - `**/KleiKodeshVstoInstallerWpf/**`
-- `project_installer-details.md` - Installer-specific implementation details
+### Installer System
+**File Patterns**: `**/KleiKodeshVstoInstallerWpf/**`, `**/Build/**`
+- `installer_system.md` - Two-tier architecture, version management, cleanup
 
-**Update System** - `**/UpdateChecker*`, `**/TaskpaneManager*`, `**/ThisAddIn*`
-- `project_update-system.md` - Update flow, TLS configuration, deferred installation
+### Update System
+**File Patterns**: `**/UpdateChecker*`, `**/TaskpaneManager*`, `**/ThisAddIn*`
+- `update_system.md` - TLS configuration, non-disruptive updates, deferred installation
 
-## Updating Steering for New Projects
+## Adding New Steering Files
 
-When adding steering for a new project:
-1. **Update this mapping section** with new project name and file patterns
-2. **Create project-specific files** with `project_[name]-` prefix
-3. **Add file patterns** that trigger loading of the new steering
-4. **Keep files small and focused** - prefer multiple small files over large ones
+### Step-by-Step Process
+
+1. **Identify the Category**
+   - **Core**: Always-loaded fundamental principles → `core_[topic].md`
+   - **Technology**: Language/framework specific → `[tech]_[aspect].md` (e.g., `vue_`, `csharp_`)
+   - **Component**: Specific modules/features → `[component]_[aspect].md` (e.g., `regexfind_`, `zayit_`)
+   - **System**: Infrastructure concerns → `[system]_[aspect].md` (e.g., `installer_`, `update_`)
+
+2. **Create the File**
+   ```
+   Location: .steering/[prefix]_[descriptive-name].md
+   Examples:
+   - .steering/vue_components.md
+   - .steering/zayit_database.md  
+   - .steering/webview_security.md
+   - .steering/build_automation.md
+   ```
+
+3. **Add Frontmatter**
+   ```yaml
+   ---
+   inclusion: fileMatch
+   fileMatchPattern: '**/pattern/**|**/*keyword*'
+   ---
+   ```
+   
+   **Common Patterns:**
+   - Vue files: `**/*.vue|**/vite.config.*`
+   - C# files: `**/*.cs`
+   - Specific folders: `**/ComponentName/**`
+   - File types: `**/*Dialog*|**/*Manager*`
+
+4. **Update This Handler**
+   Add the new file to the appropriate mapping section below with:
+   - File patterns that trigger it
+   - Brief description of what it covers
+
+5. **Test the Pattern**
+   - Open a file that should trigger the steering
+   - Verify the steering loads automatically
+   - Adjust fileMatchPattern if needed
+
+### Content Guidelines
+
+**Structure Each File:**
+```markdown
+---
+inclusion: fileMatch
+fileMatchPattern: 'your/pattern/here'
+---
+
+# [Component/Technology] [Aspect]
+
+## CRITICAL: [Most Important Thing]
+[Key issue or pattern that causes problems]
+
+## [Section 1]
+[Actionable guidance with code examples]
+
+## [Section 2]  
+[More specific patterns or solutions]
+```
+
+**Writing Principles:**
+- **Lead with problems** - Start with what goes wrong
+- **Provide solutions** - Show the correct way immediately
+- **Use code examples** - Concrete patterns over abstract descriptions
+- **Keep it short** - 50-100 lines max per file
+- **Focus on "how"** - Not "why" or background theory
 
 ## Key Principles
 
