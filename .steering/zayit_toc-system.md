@@ -184,6 +184,91 @@ interface TocEntry {
 }
 ```
 
+## TOC Overlay Pattern (BookViewPage)
+
+### CRITICAL: Overlay Architecture for Instant Navigation
+
+The TOC uses an **overlay pattern** to enable instant navigation even in very long books:
+
+```vue
+<template>
+  <div class="book-view-wrapper">
+    <!-- TOC as overlay with keep-alive -->
+    <keep-alive>
+      <BookTocTreeView v-if="isTocOpen"
+                       class="toc-overlay"
+                       @select-line="handleTocSelection" />
+    </keep-alive>
+
+    <!-- BookLineViewer stays mounted underneath -->
+    <SplitPane>
+      <template #top>
+        <BookLineViewer ref="lineViewerRef" />
+      </template>
+    </SplitPane>
+  </div>
+</template>
+
+<style scoped>
+.book-view-wrapper {
+  position: relative;
+}
+
+.toc-overlay {
+  position: absolute;
+  height: 100%;
+  width: 100%;
+  z-index: 100;
+}
+</style>
+```
+
+**Why This Pattern Works**:
+1. **BookLineViewer stays mounted** - All placeholders render immediately, virtualization starts loading
+2. **TOC appears as overlay** - BookLineViewer continues working underneath
+3. **Instant navigation** - When user clicks TOC entry, BookLineViewer is already there and ready
+4. **State preservation** - `<keep-alive>` preserves TOC search input and expanded nodes
+
+**Navigation Flow**:
+```typescript
+// BookTocTreeView emits selectLine
+handleSelectLine(lineIndex: number) {
+  emit('selectLine', lineIndex)
+  tabStore.closeToc()  // Close overlay
+}
+
+// BookViewPage forwards to BookLineViewer
+handleTocSelection(lineIndex: number) {
+  lineViewerRef.value?.handleTocSelection(lineIndex)
+}
+
+// BookLineViewer navigates immediately (already mounted with placeholders)
+async handleTocSelection(lineIndex: number) {
+  await viewerState.handleTocSelection(lineIndex)
+  // Scroll immediately, load visible lines with priority
+}
+```
+
+**Common Mistakes**:
+
+❌ **WRONG**: Using `<component :is>` to switch between views
+```vue
+<!-- This unmounts BookLineViewer, breaking virtualization -->
+<component :is="isTocOpen ? BookTocTreeView : BookLineViewer" />
+```
+
+❌ **WRONG**: Conditional rendering of BookLineViewer
+```vue
+<!-- This destroys all loaded content when TOC opens -->
+<BookLineViewer v-if="!isTocOpen" />
+```
+
+✅ **CORRECT**: Overlay pattern with both components mounted
+```vue
+<BookTocTreeView v-if="isTocOpen" class="toc-overlay" />
+<BookLineViewer /> <!-- Always mounted -->
+```
+
 ## Alt TOC Line Display System
 
 ### Efficient Lookup Map
