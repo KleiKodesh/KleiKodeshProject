@@ -164,15 +164,15 @@ if (-not $NoRelease) {
             $commitHistory = ""
             if ($previousTag -and $LASTEXITCODE -eq 0) {
                 Write-Host "Previous release: $previousTag" -ForegroundColor Gray
-                # Get commits since the previous tag
-                $commits = git log "$previousTag..HEAD" --pretty=format:"- %s (%h)" 2>$null
+                # Get commits since the previous tag - use %n for explicit newlines
+                $commits = git log "$previousTag..HEAD" --pretty=format:"- %s (%h)%n" 2>$null
                 if ($commits) {
                     $commitHistory = "`n`n**Commits since ${previousTag}:**`n$commits"
                 }
             } else {
                 Write-Host "No previous release found, including recent commits" -ForegroundColor Gray
                 # Get last 10 commits if no previous release
-                $commits = git log -10 --pretty=format:"- %s (%h)" 2>$null
+                $commits = git log -10 --pretty=format:"- %s (%h)%n" 2>$null
                 if ($commits) {
                     $commitHistory = "`n`n**Recent Commits:**`n$commits"
                 }

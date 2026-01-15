@@ -15,6 +15,8 @@
         // From TocText table
         public string Text { get; set; }
 
+        public int? IsAltToc { get; set; }
+
         public string Path { get; set; }
 
         public TocEntry[] Children { get; set; }
