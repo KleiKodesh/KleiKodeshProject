@@ -1,12 +1,13 @@
 <template>
   <div class="flex-column height-fill book-view-wrapper">
-
-    <BookTocTreeView v-if="myTab?.bookState?.isTocOpen && myTab?.bookState?.bookId"
-                     ref="tocTreeViewRef"
-                     :toc-entries="tocEntries"
-                     :is-loading="isTocLoading"
-                     class="toc-overlay"
-                     @select-line="handleTocSelection" />
+    <keep-alive>
+      <BookTocTreeView v-if="myTab?.bookState?.isTocOpen && myTab?.bookState?.bookId"
+                       ref="tocTreeViewRef"
+                       :toc-entries="tocEntries"
+                       :is-loading="isTocLoading"
+                       class="toc-overlay"
+                       @select-line="handleTocSelection" />
+    </keep-alive>
 
     <SplitPane v-if="myTab?.bookState?.bookId"
                :show-bottom="myTab.bookState.showBottomPane || false">
@@ -28,7 +29,7 @@
 import { ref, computed, watch } from 'vue'
 import { useTabStore } from '../../stores/tabStore'
 
-import BookTocTreeView from '../BookTocTreeView.vue' // This line is already correct
+import BookTocTreeView from '../BookTocTreeView.vue'
 import BookLineViewer from '../BookLineViewer.vue'
 import SplitPane from '../common/SplitPane.vue'
 import BookCommentaryView from '../BookCommentaryView.vue'
