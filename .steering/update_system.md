@@ -40,7 +40,7 @@ static UpdateChecker()
 ```csharp
 private void ThisAddIn_Shutdown(object sender, System.EventArgs e)
 {
-    // Run any pending installer that was deferred during update process
+    // Create launcher script that waits for Word to fully close before running installer
     UpdateChecker.RunPendingInstaller();
 }
 ```
@@ -49,15 +49,21 @@ private void ThisAddIn_Shutdown(object sender, System.EventArgs e)
 - Triggers update check when user opens taskpanes (not on startup)
 - Uses Word-specific quit: `Globals.ThisAddIn.Application.Quit()`
 
-## Silent Installation Integration
-```csharp
-Process.Start(new ProcessStartInfo
-{
-    FileName = PendingInstallerPath,
-    Arguments = "--silent",
-    UseShellExecute = true,
-    Verb = "runas"
-});
+## Deferred Installation with Process Monitoring
+The system creates a launcher script that:
+1. **Waits for Word to fully close** - Monitors WINWORD.EXE process
+2. **Releases all resources** - Additional delay after process ends
+3. **Runs installer silently** - Uses PowerShell with elevated privileges
+4. **Cleans up** - Removes installer file and self-deletes script
+
+```batch
+# Launcher script waits for Word process to end
+:waitForWord
+tasklist /FI "IMAGENAME eq WINWORD.EXE" | find /I "WINWORD.EXE"
+if ERRORLEVEL 0 (timeout /t 2 & goto waitForWord)
+
+# Then runs installer with elevation
+powershell Start-Process -FilePath 'installer.exe' -ArgumentList '--silent' -Verb RunAs
 ```
 
 ## GitHub Integration

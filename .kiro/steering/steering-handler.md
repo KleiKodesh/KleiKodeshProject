@@ -77,10 +77,12 @@ All steering files use prefix naming for easy categorization:
 - `core_development.md` - Essential development principles and rules
 - `core_build.md` - Build system requirements and processes
 - `core_communication.md` - C# ↔ JavaScript communication patterns
+- `core_offline.md` - Offline-first architecture, 100% offline capability requirement
 
 ### C# Development
 **File Patterns**: `**/*.cs`
 - `csharp_patterns.md` - Modern C# features, JSON handling, async patterns
+- `Word-Theme-Colors-CSharp-Guide.md` - Word theme color integration, ThemeColor enum usage
 
 ### Vue Development
 **File Patterns**: `**/*.vue`, `**/vite.config.*`, `**/package.json`
@@ -102,6 +104,9 @@ All steering files use prefix naming for easy categorization:
 - `zayit_architecture.md` - Component overview, bridge patterns, key features
 - `zayit_pdf-system.md` - Local PDF and Hebrew Books systems, virtual hosts, cache
 - `zayit_reading-backgrounds.md` - Reading background colors, dark mode detection
+- `zayit_vue-csharp-bridge.md` - Bridge communication patterns, command dispatch, state management
+- `zayit_offline-icons.md` - Offline icon system, bundled assets, no CDN dependencies
+- `PDFJS-MODIFICATIONS.md` - PDF.js customizations and modifications for Zayit
 
 ### Installer System
 **File Patterns**: `**/KleiKodeshVstoInstallerWpf/**`, `**/Build/**`
@@ -110,6 +115,10 @@ All steering files use prefix naming for easy categorization:
 ### Update System
 **File Patterns**: `**/UpdateChecker*`, `**/TaskpaneManager*`, `**/ThisAddIn*`
 - `update_system.md` - TLS configuration, non-disruptive updates, deferred installation
+
+### Documentation & Reference
+**File Patterns**: `**/README.md`, `**/.steering/**`
+- `README.md` - Steering system overview and quick reference
 
 ## Adding New Steering Files
 

@@ -160,8 +160,7 @@ namespace KleiKodesh.Helpers
                     {
                         try
                         {
-                            var updateChecker = new UpdateChecker();
-                            await updateChecker.CheckAndPromptForUpdateAsync(() => Globals.ThisAddIn.Application.Quit());
+                            await UpdateChecker.CheckAndPromptForUpdateAsync(() => Globals.ThisAddIn.Application.Quit());
                         }
                         catch (Exception ex)
                         {

@@ -22,7 +22,10 @@
             <polyline points="6 9 12 15 18 9"></polyline>
         </svg>
         <div v-if="showDropdown && filteredOptions.length > 0"
-             class="combobox-dropdown">
+             class="combobox-dropdown"
+             @mousedown="isMouseDownOnDropdown = true"
+             @mouseup="isMouseDownOnDropdown = false"
+             @mouseleave="isMouseDownOnDropdown = false">
             <div v-for="(option, index) in filteredOptions"
                  :key="option.value"
                  class="c-pointer combobox-option"
@@ -77,6 +80,7 @@ const searchText = ref('')
 const debouncedSearchText = ref('')
 const showDropdown = ref(false)
 const highlightedIndex = ref(-1)
+const isMouseDownOnDropdown = ref(false)
 
 const currentLabel = computed(() => {
     const option = props.options.find(opt => opt.value === props.modelValue)
@@ -116,7 +120,14 @@ const onFocus = (event: FocusEvent) => {
     }
 }
 
-const onBlur = () => {
+const onBlur = (event: FocusEvent) => {
+    // If mouse is down on dropdown (including scrollbar), don't close
+    if (isMouseDownOnDropdown.value) {
+        // Refocus the input to keep dropdown open
+        setTimeout(() => inputRef.value?.focus(), 0)
+        return
+    }
+    
     setTimeout(() => {
         showDropdown.value = false
         searchText.value = ''

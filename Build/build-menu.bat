@@ -21,9 +21,10 @@ echo 6. Clean Build (Delete old installers first)
 echo 7. ClickOnce Build Menu (NSIS Auto-Extractor)
 echo 8. View Build Logs
 echo 9. Open Build Folder
+echo 10. Clear All Releases
 echo 0. Exit
 echo.
-set /p choice="Enter your choice (0-9): "
+set /p choice="Enter your choice (0-10): "
 
 if "%choice%"=="1" goto RELEASE_ANYCPU
 if "%choice%"=="2" goto RELEASE_X64
@@ -34,6 +35,7 @@ if "%choice%"=="6" goto CLEAN_BUILD
 if "%choice%"=="7" goto CLICKONCE_MENU
 if "%choice%"=="8" goto VIEW_LOGS
 if "%choice%"=="9" goto OPEN_FOLDER
+if "%choice%"=="10" goto CLEAR_RELEASES
 if "%choice%"=="0" goto EXIT
 
 echo Invalid choice. Please try again.
@@ -222,6 +224,43 @@ goto MAIN_MENU
 cls
 echo Opening Build folder...
 explorer "%~dp0"
+goto MAIN_MENU
+
+:CLEAR_RELEASES
+cls
+echo.
+echo ===============================================
+echo      Clear All GitHub Releases
+echo ===============================================
+echo.
+echo WARNING: This will permanently delete ALL releases from GitHub!
+echo This action cannot be undone.
+echo.
+echo This will:
+echo - Fetch all releases from the GitHub repository
+echo - Delete each release and its associated tag
+echo.
+set /p confirm="Are you sure you want to delete ALL GitHub releases? (Y/N): "
+if /i not "%confirm%"=="Y" goto MAIN_MENU
+
+echo.
+set /p doubleconfirm="Type 'DELETE' to confirm: "
+if /i not "%doubleconfirm%"=="DELETE" (
+    echo Cancelled.
+    pause
+    goto MAIN_MENU
+)
+
+echo.
+echo Deleting all GitHub releases...
+powershell -ExecutionPolicy Bypass -Command "& { $releases = gh release list --limit 1000 --json tagName | ConvertFrom-Json; if ($releases.Count -eq 0) { Write-Host 'No releases found.'; exit 0 }; Write-Host \"Found $($releases.Count) releases. Deleting...\"; foreach ($release in $releases) { Write-Host \"Deleting release: $($release.tagName)\"; gh release delete $($release.tagName) --yes --cleanup-tag }; Write-Host 'All releases deleted successfully.' }"
+
+echo.
+echo ===============================================
+echo    All GitHub Releases Cleared
+echo ===============================================
+echo.
+pause
 goto MAIN_MENU
 
 :BUILD_COMPLETE

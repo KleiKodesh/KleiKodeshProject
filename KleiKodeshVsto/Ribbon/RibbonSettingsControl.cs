@@ -133,6 +133,7 @@ namespace KleiKodesh.Ribbon
                 foreach (var cb in checkBoxes) cb.Checked = true;
                 foreach (var rb in radioButtons)
                     if (rb.Name == "Settings_Option") rb.Checked = true;
+                turnOffUpdatesCheckBox.Checked = false;
 
                 SettingsManager.ClearAll();
                 MessageBox.Show("התוכנה אופסה בהצלחה - אנא התחל את וורד מחדש");

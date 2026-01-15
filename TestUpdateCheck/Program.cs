@@ -13,11 +13,9 @@ namespace TestUpdateCheck
 
             try
             {
-                var updateChecker = new UpdateChecker();
-
                 // Test 1: Get current version from registry
                 Console.WriteLine("1. Testing registry version retrieval...");
-                var currentVersion = updateChecker.GetCurrentVersionFromRegistry();
+                var currentVersion = UpdateChecker.GetCurrentVersionFromRegistry();
                 Console.WriteLine($"   Current version from registry: {currentVersion ?? "Not found"}");
                 Console.WriteLine();
 
@@ -26,7 +24,7 @@ namespace TestUpdateCheck
                 GitHubRelease latestRelease = null;
                 try
                 {
-                    latestRelease = await updateChecker.GetLatestReleaseAsync();
+                    latestRelease = await UpdateChecker.GetLatestReleaseAsync();
                     if (latestRelease != null)
                     {
                         Console.WriteLine($"   Latest version from GitHub: {latestRelease.TagName}");
@@ -54,7 +52,7 @@ namespace TestUpdateCheck
                 if (!string.IsNullOrEmpty(currentVersion) && latestRelease?.TagName != null)
                 {
                     Console.WriteLine("3. Testing version comparison...");
-                    var comparison = updateChecker.CompareVersions(latestRelease.TagName, currentVersion);
+                    var comparison = UpdateChecker.CompareVersions(latestRelease.TagName, currentVersion);
                     Console.WriteLine($"   Comparison result: {comparison}");
                     if (comparison > 0)
                         Console.WriteLine("   → Update available!");
@@ -67,7 +65,7 @@ namespace TestUpdateCheck
 
                 // Test 4: Check if update is available
                 Console.WriteLine("4. Testing update availability check...");
-                var isUpdateAvailable = await updateChecker.IsUpdateAvailableAsync();
+                var isUpdateAvailable = await UpdateChecker.IsUpdateAvailableAsync();
                 Console.WriteLine($"   Update available: {isUpdateAvailable}");
                 Console.WriteLine();
 
@@ -78,7 +76,7 @@ namespace TestUpdateCheck
                     Console.WriteLine("   (This will show Hebrew dialog if update is available)");
 
                     // Custom close action for testing
-                    await updateChecker.CheckAndPromptForUpdateAsync(() =>
+                    await UpdateChecker.CheckAndPromptForUpdateAsync(() =>
                     {
                         Console.WriteLine("   Test app would close here (but we won't actually close)");
                     });

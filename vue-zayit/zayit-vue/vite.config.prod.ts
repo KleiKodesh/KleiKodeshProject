@@ -25,4 +25,8 @@ export default defineConfig({
             },
         },
     },
+    define: {
+        // Disable Iconify API - force offline mode
+        'import.meta.env.VITE_ICONIFY_API': JSON.stringify(''),
+    },
 })

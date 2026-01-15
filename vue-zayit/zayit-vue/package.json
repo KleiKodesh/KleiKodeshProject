@@ -20,6 +20,8 @@
     "vue": "^3.5.22"
   },
   "devDependencies": {
+    "@iconify-json/fluent": "^1.2.36",
+    "@iconify/json": "^2.2.428",
     "@tsconfig/node22": "^22.0.2",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.18.11",
@@ -29,6 +31,7 @@
     "better-sqlite3": "^12.5.0",
     "npm-run-all2": "^8.0.4",
     "typescript": "~5.9.0",
+    "unplugin-icons": "^23.0.1",
     "vite": "^7.1.11",
     "vite-plugin-singlefile": "^2.3.0",
     "vite-plugin-vue-devtools": "^8.0.5",
