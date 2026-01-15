@@ -9,6 +9,7 @@ export interface TocEntry {
     isLastChild: boolean
     hasChildren: boolean
     text: string
+    isAltToc?: number
     path?: string
     children?: TocEntry[]
     isExpanded?: boolean

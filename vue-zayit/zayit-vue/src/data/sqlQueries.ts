@@ -28,7 +28,6 @@ export const SqlQueries = {
   getToc: (docId: number) => `
     SELECT DISTINCT
       te.id,
-      te.bookId,
       te.parentId,
       te.textId,
       te.level,
@@ -36,11 +35,29 @@ export const SqlQueries = {
       te.isLastChild,
       te.hasChildren,
       tt.text,
-      l.lineIndex
+      l.lineIndex,
+      0 as isAltToc
     FROM tocEntry AS te
     LEFT JOIN tocText AS tt ON te.textId = tt.id
     LEFT JOIN line AS l ON l.id = te.lineId
     WHERE te.bookId = ${docId}
+    UNION ALL
+    SELECT DISTINCT
+      ate.id,
+      ate.parentId,
+      ate.textId,
+      ate.level,
+      ate.lineId,
+      ate.isLastChild,
+      ate.hasChildren,
+      tt.text,
+      l.lineIndex,
+      1 as isAltToc
+    FROM alt_toc_entry AS ate
+    JOIN alt_toc_structure AS ats ON ats.id = ate.structureId
+    LEFT JOIN tocText AS tt ON ate.textId = tt.id
+    LEFT JOIN line AS l ON l.id = ate.lineId
+    WHERE ats.bookId = ${docId}
   `,
 
   getLinks: (lineId: number) => `

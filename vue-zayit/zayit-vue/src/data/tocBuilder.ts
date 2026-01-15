@@ -21,12 +21,33 @@ export function buildTocFromFlat(tocEntriesFlat: TocEntry[]): {
     children: []
   }))
 
-  // Build tree structure
-  const tree = buildTocChildren(undefined, allEntries)
+  // Separate regular and alt TOC entries
+  const regularEntries = allEntries.filter(e => !e.isAltToc)
+  const altEntries = allEntries.filter(e => e.isAltToc)
 
-  // Automatically expand the first root item
-  if (tree.length > 0 && tree[0] && tree[0].hasChildren) {
-    tree[0].isExpanded = true
+  // Build separate trees
+  const regularTree = buildTocChildren(undefined, regularEntries)
+  const altTree = buildTocChildren(undefined, altEntries)
+
+  // Wrap alt TOC in a synthetic root node if it exists
+  const tree = [...regularTree]
+  if (altTree.length > 0) {
+    const altRootNode: TocEntry = {
+      id: -1,
+      bookId: altEntries[0]?.bookId || 0,
+      parentId: undefined,
+      level: 0,
+      lineId: 0,
+      lineIndex: 0,
+      isLastChild: true,
+      hasChildren: true,
+      text: 'כותרות נוספות',
+      isAltToc: 1,
+      path: '',
+      children: altTree,
+      isExpanded: false
+    }
+    tree.push(altRootNode)
   }
 
   return { tree, allTocs: allEntries }

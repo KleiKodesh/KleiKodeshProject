@@ -2,7 +2,7 @@
     <div role="treeitem">
         <div class="flex-row hover-bg focus-accent click-effect c-pointer tree-node"
              tabindex="0"
-             :style="{ paddingInlineStart: `${20 + entry.level * 20}px` }"
+             :style="{ paddingInlineStart: `${20 + depth * 20}px` }"
              @click="toggleExpand"
              @keydown.enter.stop="handleSelect"
              @keydown.space.stop.prevent="toggleExpand">
@@ -19,6 +19,7 @@
                              :key="child.id"
                              :ref="(el: any) => { if (el) childRefs[index] = el }"
                              :entry="child"
+                             :depth="depth + 1"
                              @select-line="emit('selectLine', $event)" />
         </template>
     </div>
@@ -36,9 +37,12 @@ type BookTocTreeNodeInstance = {
     reset: () => void
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
     entry: TocEntry
-}>()
+    depth?: number
+}>(), {
+    depth: 0
+})
 
 const emit = defineEmits<{
     selectLine: [lineIndex: number]
