@@ -155,17 +155,36 @@ if (-not $NoRelease) {
             # Create new release with installer
             Write-Host "Creating release $version..." -ForegroundColor Yellow
             
-            # Create release notes with compilation details
-            $releaseNotes = @"
-Automated release for KleiKodesh $version
-
-**Build Configuration:**
-- VSTO Project: $Configuration|$Platform (MSBuild)
-- WPF Installer: Release|$(if ($Platform -eq "x64") { "x64" } else { "AnyCPU" }) (dotnet build)
-
-**Changes:**
-- Bug fixes and improvements
-"@
+            # Get git commit history since last release
+            Write-Host "Gathering git commit history..." -ForegroundColor Cyan
+            
+            # Get the previous release tag
+            $previousTag = gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>$null
+            
+            $commitHistory = ""
+            if ($previousTag -and $LASTEXITCODE -eq 0) {
+                Write-Host "Previous release: $previousTag" -ForegroundColor Gray
+                # Get commits since the previous tag
+                $commits = git log "$previousTag..HEAD" --pretty=format:"- %s (%h)" 2>$null
+                if ($commits) {
+                    $commitHistory = "`n`n**Commits since ${previousTag}:**`n$commits"
+                }
+            } else {
+                Write-Host "No previous release found, including recent commits" -ForegroundColor Gray
+                # Get last 10 commits if no previous release
+                $commits = git log -10 --pretty=format:"- %s (%h)" 2>$null
+                if ($commits) {
+                    $commitHistory = "`n`n**Recent Commits:**`n$commits"
+                }
+            }
+            
+            # Create release notes with compilation details and commit history
+            $platformInfo = if ($Platform -eq "x64") { "x64" } else { "AnyCPU" }
+            $releaseNotes = "Automated release for KleiKodesh $version`n`n"
+            $releaseNotes += "**Build Configuration:**`n"
+            $releaseNotes += "- VSTO Project: $Configuration|$Platform (MSBuild)`n"
+            $releaseNotes += "- WPF Installer: Release|$platformInfo (dotnet build)"
+            $releaseNotes += $commitHistory
             
             gh release create $version $installerPath `
                 --title "KleiKodesh $version" `
