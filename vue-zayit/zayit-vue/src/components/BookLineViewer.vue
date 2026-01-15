@@ -23,6 +23,8 @@
                       :line-index="index - 1"
                       :is-selected="selectedLineIndex === (index - 1)"
                       :inline-mode="myTab?.bookState?.isLineDisplayInline || false"
+                      :alt-toc-entries="props.altTocByLineIndex?.get(index - 1)"
+                      :show-alt-toc="myTab?.bookState?.showAltToc"
                       :class="{
                         'show-selection': myTab?.bookState?.showBottomPane
                     }"
@@ -82,6 +84,7 @@ const containerStyles = computed(() => ({
 
 const props = defineProps<{
     tabId?: number
+    altTocByLineIndex?: Map<number, import('../data/tocBuilder').AltTocLineEntry[]>
 }>()
 
 const emit = defineEmits<{
@@ -416,13 +419,6 @@ function selectAllInContainer() {
     emit('clearOtherSelections')
 }
 
-function clearSelection() {
-    const selection = window.getSelection()
-    if (selection) {
-        selection.removeAllRanges()
-    }
-}
-
 // Helper function to apply diacritics filtering to HTML content
 function applyDiacriticsFilter(htmlContent: string, state: number): string {
     if (!htmlContent || state === 0) return htmlContent
@@ -544,8 +540,6 @@ function setupObserver() {
         // Expand range to include buffer around visible area
         const start = Math.max(0, minLine - LOAD_BUFFER_SIZE)
         const end = Math.min(viewerState.totalLines.value - 1, maxLine + LOAD_BUFFER_SIZE)
-
-        console.log(`📚 Batch loading lines ${start}-${end} for ${lineIndices.length} newly visible lines`)
 
         // Load the entire range in one efficient call
         await viewerState.loadLinesAround(Math.floor((start + end) / 2), Math.max(LOAD_BUFFER_SIZE, (end - start) / 2))

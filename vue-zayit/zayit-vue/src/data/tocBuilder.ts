@@ -8,11 +8,21 @@
 import type { TocEntry } from '../types/BookToc'
 
 /**
- * Build TOC tree from flat data
+ * Alt TOC entry for line display
+ */
+export interface AltTocLineEntry {
+  text: string
+  level: number
+  lineIndex: number
+}
+
+/**
+ * Build TOC tree from flat data and create alt TOC lookup map
  */
 export function buildTocFromFlat(tocEntriesFlat: TocEntry[]): {
   tree: TocEntry[]
   allTocs: TocEntry[]
+  altTocByLineIndex: Map<number, AltTocLineEntry[]>
 } {
   // Convert flat entries to TocEntry objects with tree properties
   const allEntries: TocEntry[] = tocEntriesFlat.map(flat => ({
@@ -28,6 +38,24 @@ export function buildTocFromFlat(tocEntriesFlat: TocEntry[]): {
   // Build separate trees
   const regularTree = buildTocChildren(undefined, regularEntries)
   const altTree = buildTocChildren(undefined, altEntries)
+
+  // Create alt TOC lookup map for efficient line display - supporting multiple entries per line
+  const altTocByLineIndex = new Map<number, AltTocLineEntry[]>()
+  altEntries.forEach(entry => {
+    if (entry.lineIndex !== undefined && entry.text) {
+      const lineIndex = entry.lineIndex
+      const altTocEntry: AltTocLineEntry = {
+        text: entry.text,
+        level: entry.level,
+        lineIndex: entry.lineIndex
+      }
+      
+      if (!altTocByLineIndex.has(lineIndex)) {
+        altTocByLineIndex.set(lineIndex, [])
+      }
+      altTocByLineIndex.get(lineIndex)!.push(altTocEntry)
+    }
+  })
 
   // Wrap alt TOC in a synthetic root node if it exists
   const tree = [...regularTree]
@@ -50,7 +78,7 @@ export function buildTocFromFlat(tocEntriesFlat: TocEntry[]): {
     tree.push(altRootNode)
   }
 
-  return { tree, allTocs: allEntries }
+  return { tree, allTocs: allEntries, altTocByLineIndex }
 }
 
 function buildTocChildren(parentId: number | undefined | null, items: TocEntry[]): TocEntry[] {

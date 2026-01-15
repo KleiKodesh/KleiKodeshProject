@@ -4,25 +4,47 @@
           class="selectable line-1.6 justify book-line"
           :class="{ selected: isSelected }"
           :data-line-index="lineIndex"
-          @click="handleClick"
-          v-html="content + ' '">
+          @click="handleClick">
+        <!-- Alt TOC entries as proper HTML headings -->
+        <template v-if="altTocEntries && altTocEntries.length > 0 && props.showAltToc !== false">
+            <component v-for="(entry, index) in altTocEntries"
+                       :key="`alt-toc-${lineIndex}-${index}`"
+                       :is="getHeadingTag(entry.level)"
+                       class="alt-toc-entry"
+                       v-html="entry.text">
+            </component>
+        </template>
+        <span v-html="content + ' '"></span>
     </span>
     <div v-else
          dir="rtl"
          class="selectable line-1.6 justify book-line"
          :class="{ selected: isSelected }"
          :data-line-index="lineIndex"
-         @click="handleClick"
-         v-html="content + ' '">
+         @click="handleClick">
+        <!-- Alt TOC entries as proper HTML headings -->
+        <template v-if="altTocEntries && altTocEntries.length > 0 && props.showAltToc !== false">
+            <component v-for="(entry, index) in altTocEntries"
+                       :key="`alt-toc-${lineIndex}-${index}`"
+                       :is="getHeadingTag(entry.level)"
+                       class="alt-toc-entry"
+                       v-html="entry.text">
+            </component>
+        </template>
+        <div v-html="content + ' '"></div>
     </div>
 </template>
 
 <script setup lang="ts">
+import type { AltTocLineEntry } from '../data/tocBuilder'
+
 const props = defineProps<{
     content: string
     lineIndex: number
     isSelected: boolean
     inlineMode: boolean
+    altTocEntries?: AltTocLineEntry[]
+    showAltToc?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -31,6 +53,14 @@ const emit = defineEmits<{
 
 const handleClick = () => {
     emit('lineClick', props.lineIndex)
+}
+
+// Map TOC level to appropriate HTML heading tag with offset of 1
+const getHeadingTag = (level: number): string => {
+    // Add 1 to level so: level 1 → h2, level 2 → h3, etc.
+    // Clamp to valid heading range (h2-h6, since h1 is reserved)
+    const headingLevel = Math.max(2, Math.min(6, level + 2))
+    return `h${headingLevel}`
 }
 </script>
 
@@ -93,5 +123,10 @@ div.book-line.selected.show-selection::after {
 
 .book-line.selected.show-selection {
     background-color: var(--hover-bg);
+}
+
+/* Alt TOC entries - subtle opacity to distinguish from main content */
+.alt-toc-entry {
+    opacity: 0.7;
 }
 </style>

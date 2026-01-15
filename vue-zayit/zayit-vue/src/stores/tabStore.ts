@@ -585,6 +585,17 @@ export const useTabStore = defineStore('tabs', () => {
         }
     };
 
+    const toggleAltTocDisplay = () => {
+        const tab = tabs.value.find(t => t.isActive);
+        if (tab?.bookState) {
+            // Initialize to true if undefined, then toggle
+            if (tab.bookState.showAltToc === undefined) {
+                tab.bookState.showAltToc = true;
+            }
+            tab.bookState.showAltToc = !tab.bookState.showAltToc;
+        }
+    };
+
     const openKezayitLanding = () => {
         tabs.value.forEach(tab => tab.isActive = false);
 
@@ -700,6 +711,7 @@ export const useTabStore = defineStore('tabs', () => {
         openPdfWithFilePath,
         openPdfWithFilePathAndBlobUrl,
         toggleBookSearch,
+        toggleAltTocDisplay,
         openKezayitLanding,
         openHebrewBooks,
         openKezayitSearch

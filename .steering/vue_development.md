@@ -86,4 +86,54 @@ class Component { /* ... */ }
 - Always run `npm install` immediately after project creation
 - Use TypeScript, Router, Pinia, Vitest, ESLint, Prettier as standard
 - Remove template content - create clean projects
+- **NEVER run the app directly** - Use `npm run build` to check for issues or ask user to run the app
 - Test with `npm run dev` immediately after setup
+
+## Alt TOC Implementation Pattern
+For displaying alternative TOC entries inline with content:
+
+### Data Flow Architecture
+```typescript
+// 1. Parent loads TOC data and creates lookup map
+const { tree, altTocByLineIndex } = buildTocFromFlat(tocEntriesFlat)
+
+// 2. Pass tree to TOC component, map to line viewer
+<BookTocTreeView :toc-entries="tree" />
+<BookLineViewer :alt-toc-by-line-index="altTocByLineIndex" />
+
+// 3. Line viewer passes entries to individual lines
+<BookLine :alt-toc-entries="altTocByLineIndex?.get(lineIndex)" />
+```
+
+### Semantic HTML Headings
+Use proper heading hierarchy with level offset:
+```vue
+<!-- Map TOC level to HTML heading with +1 offset -->
+<component :is="getHeadingTag(entry.level)"
+           class="alt-toc-entry"
+           v-html="entry.text">
+</component>
+
+<script>
+const getHeadingTag = (level: number): string => {
+  // level 1 → h2, level 2 → h3, etc. (h1 reserved for main titles)
+  const headingLevel = Math.max(2, Math.min(6, level + 2))
+  return `h${headingLevel}`
+}
+</script>
+```
+
+### Styling Guidelines
+```css
+/* Use existing heading styles, add opacity for distinction */
+.alt-toc-entry {
+  opacity: 0.7; /* Subtle appearance */
+}
+
+/* Leverage existing heading CSS */
+.book-line :deep(h2),
+.book-line :deep(h3),
+.book-line :deep(h4) {
+  font-family: var(--header-font);
+}
+```

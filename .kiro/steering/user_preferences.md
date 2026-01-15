@@ -22,8 +22,9 @@ This document defines **HOW** to implement, not **WHAT** to implement.
 1. **Preserve working code** — never break existing behavior  
 2. **Match the user's style and intent** — write code the user feels confident reading, maintaining, and modifying  
 3. **Professional quality** — follow established coding conventions, best practices, and quality standards, and platform specific architecture
-4. **Clarity first** — understandable at a glance  
-5. **User-visible performance** — fast, responsive UI  
+4. **Platform-specific conventions** — respect .NET/C#, Vue.js, TypeScript, and Windows development patterns
+5. **Clarity first** — understandable at a glance  
+6. **User-visible performance** — fast, responsive UI  
 
 ---
 
@@ -99,11 +100,44 @@ This document defines **HOW** to implement, not **WHAT** to implement.
 
 ---
 
+## Platform-Specific Architecture & Conventions
+
+### .NET/C# Conventions
+- Follow Microsoft C# coding standards and naming conventions
+- Use PascalCase for public members, camelCase for private fields
+- Leverage modern C# features (async/await, LINQ, nullable reference types)
+- Respect VSTO and Office Add-in architectural patterns
+- Use proper dependency injection and service patterns where established
+
+### Vue.js/TypeScript Conventions  
+- Follow Vue 3 Composition API patterns consistently
+- Use TypeScript strict mode and proper type definitions
+- Maintain single-file component structure with clear separation
+- Follow established component naming and prop patterns
+- Respect Vue reactivity system and lifecycle patterns
+
+### Windows Development Patterns
+- Follow Windows UI/UX guidelines and accessibility standards
+- Respect Windows file system conventions and security models
+- Use appropriate Windows-specific APIs and integration patterns
+- Follow established patterns for WebView2 and WPF integration
+
+### Code Organization Principles
+- **Consistent file structure** — follow established folder hierarchies
+- **Clear separation of concerns** — UI, business logic, data access layers
+- **Predictable naming** — files, classes, methods follow project conventions
+- **Logical grouping** — related functionality stays together
+- **Platform boundaries** — respect C#/Vue communication patterns
+
+---
+
 ## AI Behavior Rules
 
 - Start simple — complexity must be affirmed by user **for new features**
 - Do not over-engineer **implementations**
 - **Ask before any breaking or architectural change**
 - **Respect existing functionality** - it's there for a reason
+- **Follow platform conventions** - .NET, Vue.js, TypeScript, Windows patterns
+- **Maintain code organization** - respect established file structure and naming
 - Focus on **how** code is written, not **whether** features should exist
 - **Clean as you go** - remove garbage and repetitions with every change

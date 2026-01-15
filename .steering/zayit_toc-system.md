@@ -183,3 +183,65 @@ interface TocEntry {
   isExpanded?: boolean
 }
 ```
+
+## Alt TOC Line Display System
+
+### Efficient Lookup Map
+Create Map-based lookup for O(1) line-to-TOC access:
+
+```typescript
+// Build alt TOC lookup map supporting multiple entries per line
+const altTocByLineIndex = new Map<number, AltTocLineEntry[]>()
+altEntries.forEach(entry => {
+  if (entry.lineIndex !== undefined && entry.text) {
+    const lineIndex = entry.lineIndex
+    const altTocEntry: AltTocLineEntry = {
+      text: entry.text,
+      level: entry.level,
+      lineIndex: entry.lineIndex
+    }
+    
+    if (!altTocByLineIndex.has(lineIndex)) {
+      altTocByLineIndex.set(lineIndex, [])
+    }
+    altTocByLineIndex.get(lineIndex)!.push(altTocEntry)
+  }
+})
+```
+
+### Component Integration Pattern
+```vue
+<!-- BookViewPage: Load TOC data once, distribute to components -->
+<BookTocTreeView :toc-entries="tocEntries" />
+<BookLineViewer :alt-toc-by-line-index="altTocByLineIndex" />
+
+<!-- BookLineViewer: Pass entries to individual lines -->
+<BookLine :alt-toc-entries="altTocByLineIndex?.get(lineIndex)" />
+
+<!-- BookLine: Render as semantic HTML headings -->
+<component v-for="entry in altTocEntries"
+           :is="getHeadingTag(entry.level)"
+           class="alt-toc-entry"
+           v-html="entry.text">
+</component>
+```
+
+### Toggle Functionality
+Store toggle state in tab store for persistence:
+
+```typescript
+// Tab.ts
+interface BookState {
+  showAltToc?: boolean  // Default: true
+}
+
+// TabHeader.vue dropdown
+<button @click="toggleAltToc">
+  {{ myTab?.bookState?.showAltToc !== false ? 'הסתר' : 'הצג' }} כותרות נוספות
+</button>
+```
+
+**Key Points**:
+- Default to showing alt TOC entries (`!== false` check)
+- State persists per tab, not globally
+- Toggle affects all lines simultaneously

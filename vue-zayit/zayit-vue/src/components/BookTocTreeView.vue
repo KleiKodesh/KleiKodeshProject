@@ -4,13 +4,13 @@
             <div class="overflow-y flex-110">
                 <BookTocTreeSearch v-if="searchInput"
                                    ref="searchRef"
-                                   :toc-entries="tocEntries"
+                                   :toc-entries="props.tocEntries"
                                    :search-query="searchInput"
                                    @select-line="handleSelectLine" />
 
                 <BookTocTree v-else
-                             :toc-entries="tocEntries"
-                             :is-loading="isLoading"
+                             :toc-entries="props.tocEntries"
+                             :is-loading="props.isLoading"
                              ref="treeRef"
                              @select-line="handleSelectLine" />
             </div>
@@ -48,11 +48,10 @@ import { Icon } from '@iconify/vue';
 
 import type { TocEntry } from '../types/BookToc';
 import { useTabStore } from '../stores/tabStore';
-import { dbManager } from '../data/dbManager';
-import { buildTocFromFlat } from '../data/tocBuilder';
 
 const props = defineProps<{
-    bookId: number
+    tocEntries: TocEntry[]
+    isLoading?: boolean
 }>();
 
 const emit = defineEmits<{
@@ -65,31 +64,6 @@ const searchInput = ref('');
 const searchInputRef = ref<HTMLInputElement | null>(null);
 const treeRef = ref<InstanceType<typeof BookTocTree> | null>(null);
 const searchRef = ref<InstanceType<typeof BookTocTreeSearch> | null>(null);
-
-// TOC state
-const tocEntries = ref<TocEntry[]>([]);
-const isLoading = ref(false);
-
-// Load TOC when bookId changes
-watch(() => props.bookId, async (bookId) => {
-    if (bookId) {
-        await loadToc(bookId);
-    }
-}, { immediate: true });
-
-async function loadToc(bookId: number) {
-    isLoading.value = true;
-    try {
-        const { tocEntriesFlat } = await dbManager.getToc(bookId);
-        const { tree } = buildTocFromFlat(tocEntriesFlat);
-        tocEntries.value = tree;
-    } catch (error) {
-        console.error('❌ Failed to load TOC:', error);
-        tocEntries.value = [];
-    } finally {
-        isLoading.value = false;
-    }
-}
 
 // Handle TOC line selection
 const handleSelectLine = (lineIndex: number) => {

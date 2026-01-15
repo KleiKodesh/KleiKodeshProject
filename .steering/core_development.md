@@ -12,6 +12,12 @@ inclusion: always
 
 **WHY**: Built files are minified/compiled and unreadable.
 
+### NEVER Run Applications Directly
+❌ **WRONG**: `npm run dev`, `yarn start`, running executables
+✅ **CORRECT**: Use `npm run build` to check for issues, or ask user to run the app
+
+**WHY**: Long-running processes block execution and cause issues.
+
 ## Modern C# Standards
 - Use `new()` instead of `new Type()`
 - Use `using var` for automatic disposal

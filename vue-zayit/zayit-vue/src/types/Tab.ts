@@ -15,6 +15,7 @@ export interface BookState {
     isLineDisplayInline?: boolean; // false = block display, true = inline display
     originalHtml?: string; // Store original HTML for diacritics restoration
     isSearchOpen?: boolean; // Whether search overlay is open
+    showAltToc?: boolean; // Whether to display alt TOC entries (default: true)
 }
 
 export interface PdfState {
