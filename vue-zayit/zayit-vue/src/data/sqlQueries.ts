@@ -4,9 +4,9 @@ export const SqlQueries = {
       Id,
       ParentId,
       Title,
-      Level
+      Level,
+      OrderIndex
     FROM category
-    ORDER BY Level, Id
   `,
 
   getAllBooks: `
@@ -23,7 +23,6 @@ export const SqlQueries = {
       HasOtherConnection,
       HasSourceConnection
     FROM book
-    ORDER BY CategoryId
   `,
 
   getToc: (docId: number) => `

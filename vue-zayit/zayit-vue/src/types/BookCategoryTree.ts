@@ -6,6 +6,7 @@ export interface Category {
     title: string
     path?: string
     level: number
+    orderIndex: number
     books: Book[]
     children: Category[]
 }

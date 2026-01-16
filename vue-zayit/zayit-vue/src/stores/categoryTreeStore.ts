@@ -19,11 +19,9 @@ export const useCategoryTreeStore = defineStore('categoryTree', () => {
 
     async function buildTree() {
         try {
-            console.log('[CategoryTreeStore] Starting buildTree...')
             const { categoriesFlat: categories, booksFlat: books } = await dbManager.getTree()
-            console.log('[CategoryTreeStore] Received data:', { categoriesCount: categories?.length, booksCount: books?.length })
 
-            // Group books by categoryId
+            // Group books by categoryId and sort them by orderIndex
             const booksByCategory = new Map<number, Book[]>()
             for (const book of books) {
                 const categoryBooks = booksByCategory.get(book.categoryId)
@@ -40,7 +38,10 @@ export const useCategoryTreeStore = defineStore('categoryTree', () => {
 
             for (const cat of categories) {
                 cat.children = []
-                cat.books = booksByCategory.get(cat.id) || []
+                // Get books for this category and sort by orderIndex
+                const categoryBooks = booksByCategory.get(cat.id) || []
+                categoryBooks.sort((a, b) => a.orderIndex - b.orderIndex)
+                cat.books = categoryBooks
                 categoryMap.set(cat.id, cat)
 
                 if (!cat.parentId || cat.parentId === 0) {
@@ -51,6 +52,20 @@ export const useCategoryTreeStore = defineStore('categoryTree', () => {
                         parent.children.push(cat)
                     }
                 }
+            }
+
+            // Sort children within each category by orderIndex
+            function sortChildren(category: Category) {
+                category.children.sort((a, b) => a.orderIndex - b.orderIndex)
+                for (const child of category.children) {
+                    sortChildren(child)
+                }
+            }
+
+            // Sort root categories and recursively sort all children
+            roots.sort((a, b) => a.orderIndex - b.orderIndex)
+            for (const root of roots) {
+                sortChildren(root)
             }
 
             // Build paths for categories and books
@@ -75,9 +90,7 @@ export const useCategoryTreeStore = defineStore('categoryTree', () => {
             allBooks.value = books
             categoryTree.value = roots
             isLoading.value = false;
-            console.log('[CategoryTreeStore] buildTree completed successfully')
         } catch (error) {
-            console.error('[CategoryTreeStore] Error in buildTree:', error)
             isLoading.value = false;
         }
     }
