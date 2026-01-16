@@ -14,7 +14,6 @@ import PdfViewPage from './pages/PdfViewPage.vue';
 import HebrewBooksViewPage from './pages/HebrewBooksViewPage.vue';
 import SearchPage from './pages/SearchPage.vue';
 import SettingsPage from './pages/SettingsPage.vue';
-import AboutPage from './pages/AboutPage.vue';
 import HebrewbooksPage from './pages/HebrewbooksPage.vue';
 import KezayitSearchPage from './pages/KezayitSearchPage.vue';
 import type { PageType } from '../types/Tab';
@@ -29,7 +28,6 @@ const pageComponents: Record<PageType, any> = {
   'hebrewbooks-view': HebrewBooksViewPage,
   'search': SearchPage,
   'settings': SettingsPage,
-  'about': AboutPage,
   'hebrewbooks': HebrewbooksPage,
   'kezayit-search': KezayitSearchPage
 };

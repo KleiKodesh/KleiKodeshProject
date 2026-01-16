@@ -14,7 +14,6 @@ const PAGE_TITLES: Record<PageType, string> = {
     'hebrewbooks-view': 'ספר עברי',
     'search': 'חיפוש',
     'settings': 'הגדרות',
-    'about': 'אודות',
     'hebrewbooks': 'HebrewBooks',
     'kezayit-search': 'חיפוש כזית'
 };
@@ -388,34 +387,6 @@ export const useTabStore = defineStore('tabs', () => {
         nextId.value = Math.max(newId + 1, nextId.value);
     };
 
-    const openAbout = () => {
-        // Check if about tab already exists
-        const existingAboutTab = tabs.value.find(t => t.currentPage === 'about');
-        if (existingAboutTab) {
-            // Switch to existing about tab
-            setActiveTab(existingAboutTab.id);
-            return;
-        }
-
-        // Create new about tab
-        tabs.value.forEach(tab => tab.isActive = false);
-
-        const existingIds = new Set(tabs.value.map(t => t.id));
-        let newId = 1;
-        while (existingIds.has(newId)) {
-            newId++;
-        }
-
-        const newTab: Tab = {
-            id: newId,
-            title: PAGE_TITLES.about,
-            isActive: true,
-            currentPage: 'about'
-        };
-        tabs.value.push(newTab);
-        nextId.value = Math.max(newId + 1, nextId.value);
-    };
-
     const openPdf = (fileName: string, fileUrl: string) => {
         // Create new PDF tab
         tabs.value.forEach(tab => tab.isActive = false);
@@ -704,7 +675,6 @@ export const useTabStore = defineStore('tabs', () => {
         toggleDiacritics,
         toggleLineDisplay,
         openSettings,
-        openAbout,
         openPdf,
         openPdfViewer,
         openPdfWithFile,

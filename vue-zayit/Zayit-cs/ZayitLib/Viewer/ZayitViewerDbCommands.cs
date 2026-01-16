@@ -21,15 +21,15 @@ namespace Zayit.Viewer
         /// <summary>
         /// Get Category / Book Tree
         /// </summary>
-        public async void GetTree()
+        public async void GetTree(string getAllCategoriesQuery, string getAllBooksQuery)
         {
             try
             {
                 Debug.WriteLine("GetTree called");
 
                 var treeData = new {
-                    categoriesFlat = _db.ExecuteQuery(SeforimDb.SqlQueries.GetAllCategories),
-                    booksFlat = _db.ExecuteQuery(SeforimDb.SqlQueries.GetAllBooks)
+                    categoriesFlat = _db.ExecuteQuery(getAllCategoriesQuery),
+                    booksFlat = _db.ExecuteQuery(getAllBooksQuery)
                 };
 
                 string json = JsonSerializer.Serialize(treeData, new JsonSerializerOptions  {
@@ -60,13 +60,13 @@ namespace Zayit.Viewer
         /// <summary>
         /// Get table of contents for a book
         /// </summary>
-        public async void GetToc(int bookId)
+        public async void GetToc(int bookId, string sqlQuery)
         {
             try
             {
                 Debug.WriteLine($"GetToc called: bookId={bookId}");
 
-                var tocEntries = _db.ExecuteQuery(SeforimDb.SqlQueries.GetToc(bookId));
+                var tocEntries = _db.ExecuteQuery(sqlQuery);
                 var tocData = new { tocEntriesFlat = tocEntries };
 
                 string json = JsonSerializer.Serialize(tocData, new JsonSerializerOptions {
@@ -87,13 +87,13 @@ namespace Zayit.Viewer
         /// <summary>
         /// Get links/commentary for a line
         /// </summary>
-        public async void GetLinks(int lineId, string tabId, int bookId)
+        public async void GetLinks(int lineId, string tabId, int bookId, string sqlQuery)
         {
             try
             {
                 Debug.WriteLine($"GetLinks called: lineId={lineId}, tabId={tabId}, bookId={bookId}");
 
-                var links = _db.ExecuteQuery(SeforimDb.SqlQueries.GetLinks(lineId));
+                var links = _db.ExecuteQuery(sqlQuery);
 
                 string json = JsonSerializer.Serialize(links, new JsonSerializerOptions {
                     PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -113,13 +113,13 @@ namespace Zayit.Viewer
         /// <summary>
         /// Get total line count for a book
         /// </summary>
-        public async void GetTotalLines(int bookId)
+        public async void GetTotalLines(int bookId, string sqlQuery)
         {
             try
             {
                 Debug.WriteLine($"GetTotalLines called: bookId={bookId}");
 
-                var result = _db.ExecuteQuery(SeforimDb.SqlQueries.GetBookLineCount(bookId));
+                var result = _db.ExecuteQuery(sqlQuery);
 
                 Debug.WriteLine($"Query result type: {result?.GetType()}");
 
@@ -178,13 +178,13 @@ namespace Zayit.Viewer
         /// <summary>
         /// Get single line content
         /// </summary>
-        public async void GetLineContent(int bookId, int lineIndex)
+        public async void GetLineContent(int bookId, int lineIndex, string sqlQuery)
         {
             try
             {
                 Debug.WriteLine($"GetLineContent called: bookId={bookId}, lineIndex={lineIndex}");
 
-                var result = _db.ExecuteQuery(SeforimDb.SqlQueries.GetLineContent(bookId, lineIndex));
+                var result = _db.ExecuteQuery(sqlQuery);
 
                 string content = null;
                 var resultArray = result as Array;
@@ -223,13 +223,13 @@ namespace Zayit.Viewer
         /// <summary>
         /// Get line ID by bookId and lineIndex
         /// </summary>
-        public async void GetLineId(int bookId, int lineIndex)
+        public async void GetLineId(int bookId, int lineIndex, string sqlQuery)
         {
             try
             {
                 Debug.WriteLine($"GetLineId called: bookId={bookId}, lineIndex={lineIndex}");
 
-                var result = _db.ExecuteQuery(SeforimDb.SqlQueries.GetLineId(bookId, lineIndex));
+                var result = _db.ExecuteQuery(sqlQuery);
 
                 int? lineId = null;
                 var resultArray = result as Array;
@@ -272,13 +272,13 @@ namespace Zayit.Viewer
         /// <summary>
         /// Get range of lines
         /// </summary>
-        public async void GetLineRange(int bookId, int start, int end)
+        public async void GetLineRange(int bookId, int start, int end, string sqlQuery)
         {
             try
             {
                 Debug.WriteLine($"GetLineRange called: bookId={bookId}, start={start}, end={end}");
 
-                var lines = _db.ExecuteQuery(SeforimDb.SqlQueries.GetLineRange(bookId, start, end));
+                var lines = _db.ExecuteQuery(sqlQuery);
 
                 string json = JsonSerializer.Serialize(lines, new JsonSerializerOptions
                 {
@@ -299,13 +299,13 @@ namespace Zayit.Viewer
         /// <summary>
         /// Search for lines containing a search term
         /// </summary>
-        public async void SearchLines(int bookId, string searchTerm)
+        public async void SearchLines(int bookId, string searchTerm, string sqlQuery)
         {
             try
             {
                 Debug.WriteLine($"SearchLines called: bookId={bookId}, searchTerm={searchTerm}");
 
-                var lines = _db.ExecuteQuery(SeforimDb.SqlQueries.SearchLines(bookId, searchTerm));
+                var lines = _db.ExecuteQuery(sqlQuery);
 
                 string json = JsonSerializer.Serialize(lines, new JsonSerializerOptions
                 {

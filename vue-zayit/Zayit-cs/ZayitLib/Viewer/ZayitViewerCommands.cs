@@ -39,14 +39,14 @@ namespace Zayit.Viewer
         public ZayitViewerDbCommands DbCommands => _dbCommands;
 
         // Database command delegation methods for reflection-based dispatching
-        private async void GetTree() => _dbCommands.GetTree();
-        private async void GetToc(int bookId) => _dbCommands.GetToc(bookId);
-        private async void GetLinks(int lineId, string tabId, int bookId) => _dbCommands.GetLinks(lineId, tabId, bookId);
-        private async void GetTotalLines(int bookId) => _dbCommands.GetTotalLines(bookId);
-        private async void GetLineContent(int bookId, int lineIndex) => _dbCommands.GetLineContent(bookId, lineIndex);
-        private async void GetLineId(int bookId, int lineIndex) => _dbCommands.GetLineId(bookId, lineIndex);
-        private async void GetLineRange(int bookId, int start, int end) => _dbCommands.GetLineRange(bookId, start, end);
-        private async void SearchLines(int bookId, string searchTerm) => _dbCommands.SearchLines(bookId, searchTerm);
+        private async void GetTree(string getAllCategoriesQuery, string getAllBooksQuery) => _dbCommands.GetTree(getAllCategoriesQuery, getAllBooksQuery);
+        private async void GetToc(int bookId, string sqlQuery) => _dbCommands.GetToc(bookId, sqlQuery);
+        private async void GetLinks(int lineId, string tabId, int bookId, string sqlQuery) => _dbCommands.GetLinks(lineId, tabId, bookId, sqlQuery);
+        private async void GetTotalLines(int bookId, string sqlQuery) => _dbCommands.GetTotalLines(bookId, sqlQuery);
+        private async void GetLineContent(int bookId, int lineIndex, string sqlQuery) => _dbCommands.GetLineContent(bookId, lineIndex, sqlQuery);
+        private async void GetLineId(int bookId, int lineIndex, string sqlQuery) => _dbCommands.GetLineId(bookId, lineIndex, sqlQuery);
+        private async void GetLineRange(int bookId, int start, int end, string sqlQuery) => _dbCommands.GetLineRange(bookId, start, end, sqlQuery);
+        private async void SearchLines(int bookId, string searchTerm, string sqlQuery) => _dbCommands.SearchLines(bookId, searchTerm, sqlQuery);
 
         public void InitializeHebrewBooksDownloadManager(CoreWebView2 coreWebView)
         {

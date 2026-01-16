@@ -73,6 +73,9 @@ namespace KleiKodesh.Ribbon
                     case "Settings":
                         TaskPaneManager.Show(new RibbonSettingsControl(ribbon), "הגדרות כלי קודש", 400);
                         break;
+                    case "About":
+                        OpenAboutDocument();
+                        break;
                     default:
                         MessageBox.Show($"אירעה שגיאה במהלך טעינת {id}");
                         break;
@@ -100,6 +103,39 @@ namespace KleiKodesh.Ribbon
 
         public bool getVisible(Office.IRibbonControl control) =>
             SettingsManager.GetBool("Ribbon", control.Id + "_Visible", true);
+
+        /// <summary>
+        /// Open the About document template
+        /// </summary>
+        private void OpenAboutDocument()
+        {
+            try
+            {
+                string templatePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "About.dotx");
+                
+                if (!File.Exists(templatePath))
+                {
+                    MessageBox.Show(
+                        $"קובץ אודות לא נמצא:\n{templatePath}",
+                        "שגיאה",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+                    return;
+                }
+
+                // Open the template as a new document (not the template itself)
+                var doc = Globals.ThisAddIn.Application.Documents.Add(templatePath);
+                doc.Activate();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"שגיאה בפתיחת מסמך אודות:\n{ex.Message}",
+                    "שגיאה",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+        }
 
         #endregion
 

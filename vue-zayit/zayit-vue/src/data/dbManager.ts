@@ -14,6 +14,7 @@ import type { LineLoadResult } from './sqliteDb'
 import { CSharpBridge } from './csharpBridge'
 import { censorDivineNames } from '../utils/censorDivineNames'
 import { useSettingsStore } from '../stores/settingsStore'
+import { SqlQueries } from './sqlQueries'
 
 export type { LineLoadResult }
 
@@ -37,7 +38,7 @@ class DatabaseManager {
         if (this.isWebViewAvailable()) {
             console.log('[DbManager] Using WebView bridge')
             const promise = this.csharp.createRequest<{ categoriesFlat: Category[], booksFlat: Book[] }>('GetTree')
-            this.csharp.send('GetTree', [])
+            this.csharp.send('GetTree', [SqlQueries.getAllCategories, SqlQueries.getAllBooks])
             console.log('[DbManager] Waiting for GetTree response...')
             const result = await promise
             console.log('[DbManager] GetTree response received:', result)
@@ -60,7 +61,7 @@ class DatabaseManager {
     async getToc(bookId: number): Promise<{ tocEntriesFlat: TocEntry[] }> {
         if (this.isWebViewAvailable()) {
             const promise = this.csharp.createRequest<{ tocEntriesFlat: TocEntry[] }>(`GetToc:${bookId}`)
-            this.csharp.send('GetToc', [bookId])
+            this.csharp.send('GetToc', [bookId, SqlQueries.getToc(bookId)])
             return promise
         } else if (this.isDevServerAvailable()) {
             return await sqliteDb.getToc(bookId)
@@ -76,7 +77,7 @@ class DatabaseManager {
     async getLinks(lineId: number, tabId: string, bookId: number): Promise<Link[]> {
         if (this.isWebViewAvailable()) {
             const promise = this.csharp.createRequest<Link[]>(`GetLinks:${tabId}:${bookId}`)
-            this.csharp.send('GetLinks', [lineId, tabId, bookId])
+            this.csharp.send('GetLinks', [lineId, tabId, bookId, SqlQueries.getLinks(lineId)])
             return promise
         } else if (this.isDevServerAvailable()) {
             return await sqliteDb.getLinks(lineId)
@@ -92,7 +93,7 @@ class DatabaseManager {
     async getTotalLines(bookId: number): Promise<number> {
         if (this.isWebViewAvailable()) {
             const promise = this.csharp.createRequest<number>(`GetTotalLines:${bookId}`)
-            this.csharp.send('GetTotalLines', [bookId])
+            this.csharp.send('GetTotalLines', [bookId, SqlQueries.getBookLineCount(bookId)])
             return promise
         } else if (this.isDevServerAvailable()) {
             return await sqliteDb.getTotalLines(bookId)
@@ -106,7 +107,7 @@ class DatabaseManager {
 
         if (this.isWebViewAvailable()) {
             const promise = this.csharp.createRequest<string | null>(`GetLineContent:${bookId}:${lineIndex}`)
-            this.csharp.send('GetLineContent', [bookId, lineIndex])
+            this.csharp.send('GetLineContent', [bookId, lineIndex, SqlQueries.getLineContent(bookId, lineIndex)])
             content = await promise
         } else if (this.isDevServerAvailable()) {
             content = await sqliteDb.getLineContent(bookId, lineIndex)
@@ -125,7 +126,7 @@ class DatabaseManager {
     async getLineId(bookId: number, lineIndex: number): Promise<number | null> {
         if (this.isWebViewAvailable()) {
             const promise = this.csharp.createRequest<number | null>(`GetLineId:${bookId}:${lineIndex}`)
-            this.csharp.send('GetLineId', [bookId, lineIndex])
+            this.csharp.send('GetLineId', [bookId, lineIndex, SqlQueries.getLineId(bookId, lineIndex)])
             return promise
         } else if (this.isDevServerAvailable()) {
             return await sqliteDb.getLineId(bookId, lineIndex)
@@ -139,7 +140,7 @@ class DatabaseManager {
 
         if (this.isWebViewAvailable()) {
             const promise = this.csharp.createRequest<LineLoadResult[]>(`GetLineRange:${bookId}:${start}:${end}`)
-            this.csharp.send('GetLineRange', [bookId, start, end])
+            this.csharp.send('GetLineRange', [bookId, start, end, SqlQueries.getLineRange(bookId, start, end)])
             lines = await promise
         } else if (this.isDevServerAvailable()) {
             lines = await sqliteDb.loadLineRange(bookId, start, end)
@@ -167,7 +168,7 @@ class DatabaseManager {
 
         if (this.isWebViewAvailable()) {
             const promise = this.csharp.createRequest<LineLoadResult[]>(`SearchLines:${bookId}:${searchTerm}`)
-            this.csharp.send('SearchLines', [bookId, searchTerm])
+            this.csharp.send('SearchLines', [bookId, searchTerm, SqlQueries.searchLines(bookId, searchTerm)])
             lines = await promise
         } else if (this.isDevServerAvailable()) {
             lines = await sqliteDb.searchLines(bookId, searchTerm)

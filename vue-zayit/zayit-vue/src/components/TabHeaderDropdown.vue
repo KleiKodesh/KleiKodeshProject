@@ -60,12 +60,6 @@
             <span class="dropdown-label">הגדרות</span>
           </div>
 
-          <div @click.stop="handleAboutClick"
-               class="flex-row flex-center-start hover-bg c-pointer dropdown-item">
-            <Icon icon="fluent:info-28-regular" />
-            <span class="dropdown-label">אודות</span>
-          </div>
-
           <!-- Hebrew Books - only show on Zayit landing page, not homepage -->
           <div v-if="!isHomepage"
                @click.stop="handleHebrewBooksClick"
@@ -157,11 +151,6 @@ const closeDropdown = () => {
 
 const handleSettingsClick = () => {
   tabStore.openSettings();
-  closeDropdown();
-};
-
-const handleAboutClick = () => {
-  tabStore.openAbout();
   closeDropdown();
 };
 

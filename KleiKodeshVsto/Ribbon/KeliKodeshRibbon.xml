@@ -72,6 +72,11 @@
 									imageMso="ComAddInsDialog"
 									onAction="button_Click"/>
 
+							<button id="About"
+									label="אודות"
+									imageMso="Info"
+									onAction="button_Click"/>
+
 						</menu>
 					</splitButton>
 				</group>

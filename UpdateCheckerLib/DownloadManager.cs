@@ -34,10 +34,10 @@ namespace UpdateCheckerLib
 
                 CloseProgressWindow(progressWindow);
 
-                if (ConfirmInstallation(version))
-                    PendingInstallerPath = tempPath;
-                else
-                    TryDeleteFile(tempPath);
+                //if (ConfirmInstallation(version))
+                PendingInstallerPath = tempPath;
+                //else
+                //    TryDeleteFile(tempPath);
             }
             catch (OperationCanceledException)
             {
@@ -172,7 +172,7 @@ namespace UpdateCheckerLib
             try
             {
                 var scriptPath = Path.Combine(Path.GetTempPath(), $"KleiKodesh_Updater_{DateTime.Now.Ticks}.bat");
-                
+
                 // Script that waits for Word to fully close, then runs installer, then cleans up
                 var script = $@"@echo off
 REM Wait for Word to fully close (check for WINWORD.EXE process)
@@ -184,7 +184,7 @@ if ""%%ERRORLEVEL""==""0"" (
 )
 
 REM Additional delay to ensure all resources are released
-timeout /t 3 /nobreak >NUL
+timeout /t 1 /nobreak >NUL
 
 REM Run the installer with silent flag and elevated privileges
 if exist ""{installerPath}"" (
@@ -209,7 +209,7 @@ REM Self-delete this script
 (goto) 2>nul & del ""%~f0""";
 
                 File.WriteAllText(scriptPath, script);
-                
+
                 // Start the launcher script in background
                 Process.Start(new ProcessStartInfo
                 {
@@ -219,7 +219,7 @@ REM Self-delete this script
                     CreateNoWindow = true,
                     WindowStyle = ProcessWindowStyle.Hidden
                 });
-                
+
                 Debug.WriteLine($"Installer launcher script created: {scriptPath}");
             }
             catch (Exception ex)

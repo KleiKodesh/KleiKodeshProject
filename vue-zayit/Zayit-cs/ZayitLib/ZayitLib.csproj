@@ -97,7 +97,6 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SeforimDb\DbManager.cs" />
     <Compile Include="SeforimDb\DbQueries.cs" />
-    <Compile Include="SeforimDb\SqlQueries.cs" />
     <Compile Include="Viewer\CSharpPdfManager.cs" />
     <Compile Include="Viewer\HebrewBooksDownloadManager.cs" />
     <Compile Include="Viewer\ZayitViewer.cs">
@@ -1897,5 +1896,4 @@
   <PropertyGroup>
     <PreBuildEvent>call "$(ProjectDir)..\..\..\vue-zayit\zayit-vue\build-and-deploy.bat"</PreBuildEvent>
   </PropertyGroup>
-  <Import Project="..\packages\Stub.System.Data.SQLite.Core.NetFramework.1.0.119.0\build\net46\Stub.System.Data.SQLite.Core.NetFramework.targets" Condition="Exists('..\packages\Stub.System.Data.SQLite.Core.NetFramework.1.0.119.0\build\net46\Stub.System.Data.SQLite.Core.NetFramework.targets')" />
 </Project>
