@@ -10,13 +10,15 @@ export interface Book {
     hasReferenceConnection: number
     hasCommentaryConnection: number
     hasOtherConnection: number
+    hasSourceConnection: number
 }
 
 export function hasConnections(book: Book): boolean {
     return book.hasTargumConnection > 0 ||
         book.hasReferenceConnection > 0 ||
         book.hasCommentaryConnection > 0 ||
-        book.hasOtherConnection > 0;
+        book.hasOtherConnection > 0 ||
+        book.hasSourceConnection > 0;
 }
 
 export interface SearchResult {

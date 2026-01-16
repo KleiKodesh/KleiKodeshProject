@@ -15,6 +15,7 @@
 import { ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import type { Book } from '../types/Book'
+import { hasConnections } from '../types/Book'
 import { useTabStore } from '../stores/tabStore';
 
 const props = withDefaults(defineProps<{
@@ -30,8 +31,7 @@ const nodeRef = ref<HTMLElement>()
 const isKeyboardActive = ref(false)
 
 const selectBook = () => {
-    const hasConnections = !!(props.book.hasTargumConnection || props.book.hasReferenceConnection || props.book.hasCommentaryConnection || props.book.hasOtherConnection)
-    tabStore.openBookToc(props.book.title, props.book.id, hasConnections)
+    tabStore.openBookToc(props.book.title, props.book.id, hasConnections(props.book))
 }
 
 const handleKeyboardSelect = () => {

@@ -20,7 +20,8 @@ export const SqlQueries = {
       HasTargumConnection,
       HasReferenceConnection,
       HasCommentaryConnection,
-      HasOtherConnection
+      HasOtherConnection,
+      HasSourceConnection
     FROM book
     ORDER BY CategoryId
   `,

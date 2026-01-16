@@ -23,6 +23,8 @@
         public int HasCommentaryConnection { get; set; }
 
         public int HasOtherConnection { get; set; }
+
+        public int HasSourceConnection { get; set; }
     }
 
 }

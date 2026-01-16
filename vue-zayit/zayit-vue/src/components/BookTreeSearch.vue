@@ -27,6 +27,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import type { Book } from '../types/Book'
+import { hasConnections } from '../types/Book'
 import { Icon } from '@iconify/vue'
 import { KeyboardNavigator } from '../utils/KeyboardNavigator'
 import { useTabStore } from '../stores/tabStore'
@@ -75,8 +76,7 @@ const filteredBooks = computed(() => {
 })
 
 const selectBook = (book: Book) => {
-    const hasConnections = !!(book.hasTargumConnection || book.hasReferenceConnection || book.hasCommentaryConnection || book.hasOtherConnection)
-    tabStore.openBookToc(book.title, book.id, hasConnections)
+    tabStore.openBookToc(book.title, book.id, hasConnections(book))
 }
 
 onMounted(() => {
