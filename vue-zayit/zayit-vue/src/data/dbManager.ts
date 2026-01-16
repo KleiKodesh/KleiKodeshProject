@@ -75,15 +75,27 @@ class DatabaseManager {
     // --------------------------------------------------------------------------
 
     async getLinks(lineId: number, tabId: string, bookId: number): Promise<Link[]> {
+        let links: Link[]
+
         if (this.isWebViewAvailable()) {
             const promise = this.csharp.createRequest<Link[]>(`GetLinks:${tabId}:${bookId}`)
             this.csharp.send('GetLinks', [lineId, tabId, bookId, SqlQueries.getLinks(lineId)])
-            return promise
+            links = await promise
         } else if (this.isDevServerAvailable()) {
-            return await sqliteDb.getLinks(lineId)
+            links = await sqliteDb.getLinks(lineId)
         } else {
             throw new Error('No database source available')
         }
+
+        // Apply censoring if enabled
+        if (useSettingsStore().censorDivineNames) {
+            links = links.map(link => ({
+                ...link,
+                content: link.content ? censorDivineNames(link.content) : link.content
+            }))
+        }
+
+        return links
     }
 
     // --------------------------------------------------------------------------
