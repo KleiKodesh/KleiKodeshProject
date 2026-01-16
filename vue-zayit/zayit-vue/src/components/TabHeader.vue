@@ -1,8 +1,8 @@
 <template>
   <div class="bar c-pointer tab-header">
     <div class="flex-row">
-      <!-- Dropdown menu -->
-      <TabHeaderDropdown @close="handleDropdownClose" />
+      <!-- Settings menu -->
+      <TabHeaderMenu @close="handleDropdownClose" />
 
       <button v-if="tabStore.activeTab?.currentPage === 'bookview'"
               @click.stop="handleButtonClick(goToToc)"
@@ -31,7 +31,9 @@
 
 
     </div>
-    <span class="center-text ellipsis activetab-title">{{ tabStore.activeTab?.title
+    <span class="center-text ellipsis activetab-title c-pointer"
+          @click.stop="handleTitleClick"
+          title="הצג רשימת טאבים">{{ tabStore.activeTab?.title
       }}</span>
     <div class="flex-row justify-end">
       <button @click.stop="handleButtonClick(resetTab)"
@@ -60,12 +62,13 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { Icon } from '@iconify/vue';
-import TabHeaderDropdown from './TabHeaderDropdown.vue';
+import TabHeaderMenu from './TabHeaderMenu.vue';
 import { useTabStore } from '../stores/tabStore';
 
 const tabStore = useTabStore();
 
 const emit = defineEmits<{
+  'click': []
   'close-tab-dropdown': []
 }>();
 
@@ -86,6 +89,10 @@ const isSplitPaneOpen = computed(() => {
   if (!bookState) return false;
   return bookState.showBottomPane || false;
 });
+
+const handleTitleClick = () => {
+  emit('click');
+};
 
 const goToToc = () => {
   const tab = tabStore.activeTab;

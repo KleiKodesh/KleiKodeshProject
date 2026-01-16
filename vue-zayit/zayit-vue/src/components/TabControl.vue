@@ -4,7 +4,7 @@
       <TabHeader @click="toggleDropdown"
                  @close-tab-dropdown="closeDropdown"
                  :is-dropdown-open="dropdownRef?.isVisible || false" />
-      <TabDropdown ref="dropdownRef" />
+      <TabListDropdown ref="dropdownRef" />
     </div>
     <TabContent class="flex-110"
                 @click="closeDropdown" />
@@ -14,10 +14,10 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import TabHeader from './TabHeader.vue';
-import TabDropdown from './TabDropdown.vue';
+import TabListDropdown from './TabListDropdown.vue';
 import TabContent from './TabContent.vue';
 
-const dropdownRef = ref<InstanceType<typeof TabDropdown>>();
+const dropdownRef = ref<InstanceType<typeof TabListDropdown>>();
 
 const toggleDropdown = () => {
   dropdownRef.value?.toggle();

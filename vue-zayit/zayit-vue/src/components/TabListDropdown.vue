@@ -1,6 +1,6 @@
 <template>
   <transition name="slide">
-    <div v-if="isVisible"
+    <div v-if="isVisible && tabStore.tabs.length > 0"
          class="tab-dropdown">
       <template v-for="tab in tabStore.tabs"
                 :key="tab.id">

@@ -186,29 +186,18 @@ const handleAltTocToggleClick = () => {
 };
 
 const handleOpenPdfClick = async () => {
-  console.log('[TabHeaderDropdown] PDF button clicked - starting file picker');
-  
   try {
     if (pdfService.isAvailable()) {
-      console.log('[TabHeaderDropdown] C# PDF service available, using bridge');
-      // Use C# PDF service via existing bridge system
       const result = await pdfService.showFilePicker();
-      
-      console.log('[TabHeaderDropdown] PDF service result:', result);
       
       if (result.fileName && result.dataUrl) {
         if (result.originalPath) {
-          // Use method that stores both virtual URL and original path for persistence
           tabStore.openPdfWithFilePathAndBlobUrl(result.fileName, result.originalPath, result.dataUrl);
-          console.log('[TabHeaderDropdown] PDF loaded via C# bridge with persistence:', result.fileName, result.dataUrl, 'original:', result.originalPath);
         } else {
-          // Fallback to virtual URL only
           tabStore.openPdfWithFile(result.fileName, result.dataUrl);
-          console.log('[TabHeaderDropdown] PDF loaded via C# bridge:', result.fileName, result.dataUrl);
         }
       }
     } else {
-      console.log('[TabHeaderDropdown] C# PDF service not available, using browser fallback');
       // Fallback to browser file picker if not in WebView2
       const input = document.createElement('input');
       input.type = 'file';
@@ -224,7 +213,6 @@ const handleOpenPdfClick = async () => {
       input.click();
     }
   } catch (error) {
-    console.error('[TabHeaderDropdown] Error opening PDF file picker:', error);
     // Fallback to browser file picker on error
     const input = document.createElement('input');
     input.type = 'file';
