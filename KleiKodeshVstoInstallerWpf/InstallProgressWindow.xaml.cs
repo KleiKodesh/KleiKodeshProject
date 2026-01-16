@@ -15,7 +15,7 @@ namespace KleiKodeshVstoInstallerWpf
     {
         const string AppName = "KleiKodesh";
         const string AppDisplayName = "כלי קודש";
-        const string Version = "v1.0.21";
+        const string Version = "v1.0.22";
         const string InstallFolderName = "KleiKodesh";
         const string ZipResourceName = "KleiKodesh.zip";
         const string VstoFileName = "KleiKodesh.vsto";
@@ -127,6 +127,9 @@ namespace KleiKodeshVstoInstallerWpf
         {
             try
             {
+                // First, clean up any old registry entries that might point to old installation paths
+                CleanupOldAddinRegistryEntries();
+
                 // Register add-in for current user only (HKCU)
                 using (RegistryKey addinKey = Registry.CurrentUser.CreateSubKey(AddinRegistryPath))
                 {
@@ -139,6 +142,20 @@ namespace KleiKodeshVstoInstallerWpf
                 }
             }
             catch { }
+        }
+
+        void CleanupOldAddinRegistryEntries()
+        {
+            try
+            {
+                // Delete the entire add-in registry key to remove any old Manifest paths
+                // This ensures we start fresh with the new installation path
+                Registry.CurrentUser.DeleteSubKey(AddinRegistryPath, throwOnMissingSubKey: false);
+            }
+            catch
+            {
+                // Ignore cleanup errors - we'll try to register anyway
+            }
         }
 
         private void SaveVersionToRegistry(string version)

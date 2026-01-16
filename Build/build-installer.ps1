@@ -68,6 +68,17 @@ if ($versionMatch) {
     exit 1
 }
 
+# Clean the solution first
+Write-Host "Cleaning solution..." -ForegroundColor Yellow
+$solutionPath = Join-Path $projectRoot "KleiKodeshProject.slnx"
+$cleanCommand = "dotnet clean `"$solutionPath`" -c Release --verbosity normal"
+Write-Host "Clean command: $cleanCommand" -ForegroundColor Gray
+Invoke-Expression $cleanCommand
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "WARNING: Clean operation had issues, continuing with build..." -ForegroundColor Yellow
+}
+
 # Build WPF installer with VSTO configuration parameters
 # The WPF installer prebuild event will automatically build the VSTO project
 Write-Host "Building WPF installer in Release mode..." -ForegroundColor Yellow
