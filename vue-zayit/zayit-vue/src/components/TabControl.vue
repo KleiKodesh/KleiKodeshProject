@@ -28,3 +28,9 @@ const closeDropdown = () => {
 };
 
 </script>
+
+<style scoped>
+.header-container {
+  position: relative;
+}
+</style>

@@ -1,5 +1,6 @@
 <template>
-  <div class="bar c-pointer tab-header">
+  <div class="bar c-pointer tab-header"
+       @click.stop="handleHeaderClick">
     <div class="flex-row">
       <!-- Settings menu -->
       <TabHeaderMenu @close="handleDropdownClose" />
@@ -31,8 +32,7 @@
 
 
     </div>
-    <span class="center-text ellipsis activetab-title c-pointer"
-          @click.stop="handleTitleClick"
+    <span class="center-text ellipsis activetab-title"
           title="הצג רשימת טאבים">{{ tabStore.activeTab?.title
       }}</span>
     <div class="flex-row justify-end">
@@ -90,7 +90,7 @@ const isSplitPaneOpen = computed(() => {
   return bookState.showBottomPane || false;
 });
 
-const handleTitleClick = () => {
+const handleHeaderClick = () => {
   emit('click');
 };
 

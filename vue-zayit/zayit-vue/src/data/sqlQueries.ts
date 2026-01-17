@@ -72,7 +72,7 @@ export const SqlQueries = {
     JOIN line ln ON ln.id = l.targetLineId
     JOIN book bk ON bk.id = l.targetBookId
     WHERE l.sourceLineId = ${lineId}
-    ORDER BY l.connectionTypeId, bk.title
+    ORDER BY bk.title
   `,
 
   getLineContent: (bookId: number, lineIndex: number) => `

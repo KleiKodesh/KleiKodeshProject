@@ -148,6 +148,12 @@ const commentaryStyles = computed(() => ({
 const linkGroups = ref<CommentaryLinkGroup[]>([])
 const isLoading = ref(false)
 
+// Internal state
+const currentGroupIndex = ref(0)
+const savedScrollPosition = ref(0)
+const commentaryContentRef = ref<HTMLElement | null>(null)
+const groupRefs = ref<Map<number, HTMLElement>>(new Map())
+
 // Search state
 const searchRef = ref<InstanceType<typeof GenericSearch> | null>(null)
 const isSearchOpen = ref(false)
@@ -309,17 +315,55 @@ watch([() => props.bookId, () => props.selectedLineIndex], async ([bookId, lineI
 async function loadCommentaryLinks(bookId: number, lineIndex: number) {
     isLoading.value = true
     try {
+        // Get the current commentary's targetBookId before loading new ones
+        const currentTargetBookId = linkGroups.value[currentGroupIndex.value]?.targetBookId
+
         linkGroups.value = await commentaryManager.loadCommentaryLinks(
             bookId,
             lineIndex,
             tabStore.activeTab?.id?.toString() || ''
         )
 
-        // Restore saved group index if valid
+
+
+        // Try to find the same commentary (by targetBookId) in the new set
+        if (currentTargetBookId !== undefined) {
+            const matchingIndex = linkGroups.value.findIndex(
+                group => group.targetBookId === currentTargetBookId
+            )
+            if (matchingIndex !== -1) {
+                // Found the same commentary, stay on it
+                currentGroupIndex.value = matchingIndex
+                saveGroupIndexToTab()
+                setTimeout(() => scrollToGroup(matchingIndex), 100)
+                return
+            }
+        }
+
+        // If no match found, try to restore from saved targetBookId (for session restoration)
+        const savedTargetBookId = tabStore.activeTab?.bookState?.commentaryTargetBookId
+        if (savedTargetBookId !== undefined) {
+            const matchingIndex = linkGroups.value.findIndex(
+                group => group.targetBookId === savedTargetBookId
+            )
+            if (matchingIndex !== -1) {
+                currentGroupIndex.value = matchingIndex
+                saveGroupIndexToTab()
+                // Scroll to the restored group after a short delay to ensure DOM is updated
+                setTimeout(() => scrollToGroup(matchingIndex), 100)
+                return
+            }
+        }
+
+        // If still no match, try saved group index if valid
         const savedGroupIndex = tabStore.activeTab?.bookState?.commentaryGroupIndex
         if (savedGroupIndex !== undefined && savedGroupIndex < linkGroups.value.length) {
             currentGroupIndex.value = savedGroupIndex
+        } else {
+            // Default to first group
+            currentGroupIndex.value = 0
         }
+        saveGroupIndexToTab()
     } catch (error) {
         console.error('❌ Failed to load commentary links:', error)
         linkGroups.value = []
@@ -343,12 +387,6 @@ function handleClose() {
         activeTab.bookState.showBottomPane = false
     }
 }
-
-// Internal state
-const currentGroupIndex = ref(0)
-const savedScrollPosition = ref(0)
-const commentaryContentRef = ref<HTMLElement | null>(null)
-const groupRefs = ref<Map<number, HTMLElement>>(new Map())
 
 // Computed property for current group name
 const currentGroupName = computed(() => {
@@ -462,19 +500,19 @@ onMounted(() => {
     }
 })
 
-// Save group index to tab state
+// Save group index and targetBookId to tab state
 function saveGroupIndexToTab() {
     const activeTab = tabStore.activeTab
     if (activeTab?.bookState) {
         activeTab.bookState.commentaryGroupIndex = currentGroupIndex.value
+        // Also save the targetBookId for reliable session restoration
+        const currentGroup = linkGroups.value[currentGroupIndex.value]
+        activeTab.bookState.commentaryTargetBookId = currentGroup?.targetBookId
     }
 }
 
-// Reset group index when new commentary loads
-watch(() => linkGroups.value, () => {
-    currentGroupIndex.value = 0
-    saveGroupIndexToTab()
-}, { immediate: true })
+// Note: Group index is now managed in loadCommentaryLinks based on targetBookId matching
+// No need to reset to 0 on every linkGroups change
 
 watch(currentGroupIndex, (newIndex) => {
     saveGroupIndexToTab()

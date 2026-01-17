@@ -107,6 +107,8 @@ All steering files use prefix naming for easy categorization:
 - `zayit_vue-csharp-bridge.md` - Bridge communication patterns, command dispatch, state management
 - `zayit_offline-icons.md` - Offline icon system, bundled assets, no CDN dependencies
 - `zayit_toc-system.md` - Dual TOC architecture, database schema, tree building patterns
+- `zayit_commentary-system.md` - Commentary persistence by targetBookId, state management
+- `zayit_database.md` - Database schema and query patterns
 - `PDFJS-MODIFICATIONS.md` - PDF.js customizations and modifications for Zayit
 
 ### Installer System

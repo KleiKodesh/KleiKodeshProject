@@ -59,7 +59,6 @@ export class CommentaryManager {
                 links: data.links
             }))
 
-            console.log(`✅ Loaded ${linkGroups.length} link groups with ${links.length} total links`)
             return linkGroups
         } catch (error) {
             console.error('❌ Failed to load commentary links:', error)
