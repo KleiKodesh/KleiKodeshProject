@@ -107,11 +107,11 @@ namespace KleiKodesh.Helpers
                 RestoreDockPosition(pane, type.Name);
                 RestoreWidth(pane, userControl, type.Name, width);
                 AttachRemoveOnClose(pane, userControl);
-                //Globals.ThisAddIn.Application.DocumentChange += () =>
-                //{
-                //    panes.Remove(pane);
-                //    panes.Add(userControl, title);
-                //};
+
+                Globals.ThisAddIn.Application.DocumentChange += () =>
+                {
+                    panes.Remove(pane);
+                };
 
                 TaskPanePopOut popOutHandler = null;
                 if (popOutBehavior)

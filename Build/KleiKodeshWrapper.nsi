@@ -15,8 +15,8 @@
 !define PRODUCT_PUBLISHER "צוות כלי קודש"
 !define PRODUCT_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\KleiKodesh"
 !define PRODUCT_UNINST_ROOT_KEY "HKLM"
-!define DOTNET_VERSION "4.8"
-!define DOTNET_REGKEY "SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full"
+!define DOTNET_VERSION "8.0"
+!define DOTNET_REGKEY "SOFTWARE\dotnet\Setup\InstalledVersions\x64\sharedhost"
 
 ; MUI Settings
 !define MUI_ABORTWARNING
@@ -42,15 +42,15 @@
 !insertmacro MUI_LANGUAGE "English"
 
 ; Language strings for Hebrew
-LangString MSG_DOTNET_REQUIRED ${LANG_HEBREW} "נדרש .NET Framework ${DOTNET_VERSION} או גרסה חדשה יותר.$\r$\n$\r$\nאנא התקן את .NET Framework ונסה שוב.$\r$\n$\r$\nהורדה: https://dotnet.microsoft.com/download/dotnet-framework"
-LangString MSG_DOTNET_OLD_VERSION ${LANG_HEBREW} "נדרש .NET Framework ${DOTNET_VERSION} או גרסה חדשה יותר.$\r$\n$\r$\nהגרסה הנוכחית ישנה מהנדרש.$\r$\n$\r$\nאנא התקן את .NET Framework ${DOTNET_VERSION} ונסה שוב.$\r$\n$\r$\nהורדה: https://dotnet.microsoft.com/download/dotnet-framework"
+LangString MSG_DOTNET_REQUIRED ${LANG_HEBREW} "נדרש .NET ${DOTNET_VERSION} Desktop Runtime או גרסה חדשה יותר.$\r$\n$\r$\nאנא התקן את .NET Desktop Runtime ונסה שוב.$\r$\n$\r$\nהורדה: https://dotnet.microsoft.com/download/dotnet/${DOTNET_VERSION}"
+LangString MSG_DOTNET_OLD_VERSION ${LANG_HEBREW} "נדרש .NET ${DOTNET_VERSION} Desktop Runtime או גרסה חדשה יותר.$\r$\n$\r$\nהגרסה הנוכחית ישנה מהנדרש.$\r$\n$\r$\nאנא התקן את .NET ${DOTNET_VERSION} Desktop Runtime ונסה שוב.$\r$\n$\r$\nהורדה: https://dotnet.microsoft.com/download/dotnet/${DOTNET_VERSION}"
 LangString MSG_WORD_RUNNING ${LANG_HEBREW} "Microsoft Word פועל כעת.$\r$\n$\r$\nהאם ברצונך לסגור את Word ולהמשיך בהסרה?"
 LangString MSG_WORD_CLOSE_FAILED ${LANG_HEBREW} "לא ניתן לסגור את Word אוטומטית.$\r$\n$\r$\nאנא סגור את Word באופן ידני ונסה שוב."
 LangString MSG_UNINSTALL_CONFIRM ${LANG_HEBREW} "האם אתה בטוח שברצונך להסיר לחלוטין את ${PRODUCT_NAME} ואת כל הרכיבים שלו?"
 
 ; Language strings for English (fallback)
-LangString MSG_DOTNET_REQUIRED ${LANG_ENGLISH} ".NET Framework ${DOTNET_VERSION} or higher is required.$\r$\n$\r$\nPlease install .NET Framework and try again.$\r$\n$\r$\nDownload: https://dotnet.microsoft.com/download/dotnet-framework"
-LangString MSG_DOTNET_OLD_VERSION ${LANG_ENGLISH} ".NET Framework ${DOTNET_VERSION} or higher is required.$\r$\n$\r$\nThe current version is older than required.$\r$\n$\r$\nPlease install .NET Framework ${DOTNET_VERSION} and try again.$\r$\n$\r$\nDownload: https://dotnet.microsoft.com/download/dotnet-framework"
+LangString MSG_DOTNET_REQUIRED ${LANG_ENGLISH} ".NET ${DOTNET_VERSION} Desktop Runtime or higher is required.$\r$\n$\r$\nPlease install .NET Desktop Runtime and try again.$\r$\n$\r$\nDownload: https://dotnet.microsoft.com/download/dotnet/${DOTNET_VERSION}"
+LangString MSG_DOTNET_OLD_VERSION ${LANG_ENGLISH} ".NET ${DOTNET_VERSION} Desktop Runtime or higher is required.$\r$\n$\r$\nThe current version is older than required.$\r$\n$\r$\nPlease install .NET ${DOTNET_VERSION} Desktop Runtime and try again.$\r$\n$\r$\nDownload: https://dotnet.microsoft.com/download/dotnet/${DOTNET_VERSION}"
 LangString MSG_WORD_RUNNING ${LANG_ENGLISH} "Microsoft Word is currently running.$\r$\n$\r$\nWould you like to close Word and continue with uninstallation?"
 LangString MSG_WORD_CLOSE_FAILED ${LANG_ENGLISH} "Could not close Word automatically.$\r$\n$\r$\nPlease close Word manually and try again."
 LangString MSG_UNINSTALL_CONFIRM ${LANG_ENGLISH} "Are you sure you want to completely remove ${PRODUCT_NAME} and all of its components?"
@@ -89,10 +89,81 @@ Function DetectSystemLanguage
 FunctionEnd
 
 Function CheckDotNetFramework
-  ; Check if .NET Framework 4.8 or higher is installed
-  ReadRegDWORD $0 HKLM "${DOTNET_REGKEY}" "Release"
-  ${If} $0 == ""
-    ; Use appropriate RTL reading for Hebrew, normal for English
+  ; Check if .NET 8.0 Desktop Runtime is installed
+  ; Method 1: Check for dotnet.exe and query runtimes
+  StrCpy $R0 "0"  ; Flag for .NET 8 Desktop Runtime found
+  
+  ${If} ${FileExists} "$PROGRAMFILES\dotnet\dotnet.exe"
+    ; Try to list runtimes and check for Microsoft.WindowsDesktop.App 8.x
+    nsExec::ExecToStack '"$PROGRAMFILES\dotnet\dotnet.exe" --list-runtimes'
+    Pop $0 ; Exit code
+    Pop $1 ; Output
+    ${If} $0 == 0
+      ; Simple check: if output contains "Microsoft.WindowsDesktop.App 8."
+      ; We'll use a simple string search approach
+      StrLen $2 $1
+      ${If} $2 > 30  ; Output should be substantial if runtimes are listed
+        ; Look for the pattern in the output
+        StrCpy $3 0
+        ${Do}
+          StrCpy $4 $1 30 $3  ; Get 30 chars starting at position $3
+          StrCmp $4 "" done  ; End of string
+          StrCpy $5 $4 26  ; Get first 26 chars: "Microsoft.WindowsDesktop.App 8"
+          StrCmp $5 "Microsoft.WindowsDesktop.A" 0 +3
+            StrCpy $6 $4 28  ; Get 28 chars to include version
+            StrCpy $7 $6 27  ; "Microsoft.WindowsDesktop.App 8"
+            StrCmp $7 "Microsoft.WindowsDesktop.App 8" found_runtime
+          IntOp $3 $3 + 1
+        ${Loop}
+        done:
+      ${EndIf}
+    ${EndIf}
+  ${EndIf}
+  
+  ; Method 2: Try 32-bit dotnet if 64-bit not found
+  ${If} $R0 == "0"
+    ${If} ${FileExists} "$PROGRAMFILES32\dotnet\dotnet.exe"
+      nsExec::ExecToStack '"$PROGRAMFILES32\dotnet\dotnet.exe" --list-runtimes'
+      Pop $0 ; Exit code
+      Pop $1 ; Output
+      ${If} $0 == 0
+        StrLen $2 $1
+        ${If} $2 > 30
+          StrCpy $3 0
+          ${Do}
+            StrCpy $4 $1 30 $3
+            StrCmp $4 "" done2
+            StrCpy $5 $4 26
+            StrCmp $5 "Microsoft.WindowsDesktop.A" 0 +3
+              StrCpy $6 $4 28
+              StrCpy $7 $6 27
+              StrCmp $7 "Microsoft.WindowsDesktop.App 8" found_runtime
+            IntOp $3 $3 + 1
+          ${Loop}
+          done2:
+        ${EndIf}
+      ${EndIf}
+    ${EndIf}
+  ${EndIf}
+  
+  ; Method 3: Check registry as fallback
+  ${If} $R0 == "0"
+    ; Check for .NET 8 in registry
+    ReadRegStr $0 HKLM "SOFTWARE\dotnet\Setup\InstalledVersions\x64\Microsoft.WindowsDesktop.App" ""
+    ${If} $0 != ""
+      ; Check if any 8.x version exists
+      EnumRegValue $1 HKLM "SOFTWARE\dotnet\Setup\InstalledVersions\x64\Microsoft.WindowsDesktop.App" 0
+      ${If} $1 != ""
+        StrCpy $2 $1 1  ; Get first character
+        ${If} $2 == "8"
+          StrCpy $R0 "1"
+        ${EndIf}
+      ${EndIf}
+    ${EndIf}
+  ${EndIf}
+  
+  ; If no .NET 8 Desktop Runtime found, show error
+  ${If} $R0 == "0"
     ${If} $LANGUAGE == ${LANG_HEBREW}
       MessageBox MB_OK|MB_ICONSTOP|MB_RTLREADING "$(MSG_DOTNET_REQUIRED)"
     ${Else}
@@ -101,25 +172,24 @@ Function CheckDotNetFramework
     Abort
   ${EndIf}
   
-  ; Check version (Release value for .NET 4.8 is 528040 or higher)
-  ${If} $0 < 528040
-    ${If} $LANGUAGE == ${LANG_HEBREW}
-      MessageBox MB_OK|MB_ICONSTOP|MB_RTLREADING "$(MSG_DOTNET_OLD_VERSION)"
-    ${Else}
-      MessageBox MB_OK|MB_ICONSTOP "$(MSG_DOTNET_OLD_VERSION)"
-    ${EndIf}
-    Abort
-  ${EndIf}
+  Goto end_check
+  
+  found_runtime:
+    StrCpy $R0 "1"
+    Goto end_check
+  
+  end_check:
 FunctionEnd
 
 Section "Main"
   ; Extract WPF installer to temp directory
   SetOutPath "$TEMP\KleiKodeshInstaller"
   
-  ; Copy WPF installer files
+  ; Copy WPF installer files (built for .NET 8.0)
   File "..\KleiKodeshVstoInstallerWpf\bin\Release\net8.0-windows\KleiKodeshVstoInstallerWpf.exe"
   File /nonfatal "..\KleiKodeshVstoInstallerWpf\bin\Release\net8.0-windows\*.dll"
   File /nonfatal "..\KleiKodeshVstoInstallerWpf\bin\Release\net8.0-windows\*.json"
+  File /nonfatal "..\KleiKodeshVstoInstallerWpf\bin\Release\net8.0-windows\*.runtimeconfig.json"
   File "..\KleiKodeshVstoInstallerWpf\KleiKodesh.zip"
   
   ; Check if silent mode was requested

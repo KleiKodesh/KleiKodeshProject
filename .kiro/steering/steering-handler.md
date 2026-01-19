@@ -194,6 +194,10 @@ fileMatchPattern: 'your/pattern/here'
 - **Use code examples** - Concrete patterns over abstract descriptions
 - **Keep it short** - 50-100 lines max per file
 - **Focus on "how"** - Not "why" or background theory
+- **ARCHITECTURAL FOCUS** - Document structural changes, patterns, and core logic only
+- **NO DETAILED TROUBLESHOOTING** - Avoid step-by-step debugging or minor implementation details
+- **NO EXCESSIVE LOGGING** - Don't document every console.log or debug statement
+- **ESSENTIAL PATTERNS ONLY** - Focus on reusable patterns and architectural decisions
 
 ## Key Principles
 

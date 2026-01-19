@@ -60,20 +60,24 @@ export const SqlQueries = {
     WHERE ats.bookId = ${docId}
   `,
 
-  getLinks: (lineId: number) => `
-    SELECT
-      l.targetLineId,
-      l.targetBookId,
-      l.connectionTypeId,
-      bk.title,
-      ln.content,
-      ln.lineIndex AS lineIndex
-    FROM link l
-    JOIN line ln ON ln.id = l.targetLineId
-    JOIN book bk ON bk.id = l.targetBookId
-    WHERE l.sourceLineId = ${lineId}
-    ORDER BY bk.title
-  `,
+  getLinks: (lineId: number, connectionTypeId?: number) => ({
+    query: `
+      SELECT
+        l.targetLineId,
+        l.targetBookId,
+        l.connectionTypeId,
+        bk.title,
+        ln.content,
+        ln.lineIndex AS lineIndex
+      FROM link l
+      JOIN line ln ON ln.id = l.targetLineId
+      JOIN book bk ON bk.id = l.targetBookId
+      WHERE l.sourceLineId = ?
+      ${connectionTypeId !== undefined ? 'AND l.connectionTypeId = ?' : ''}
+      ORDER BY bk.title
+    `,
+    params: connectionTypeId !== undefined ? [lineId, connectionTypeId] : [lineId]
+  }),
 
   getLineContent: (bookId: number, lineIndex: number) => `
     SELECT content 
@@ -108,5 +112,13 @@ export const SqlQueries = {
     WHERE bookId = ${bookId} 
       AND content LIKE '%${searchTerm}%'
     ORDER BY lineIndex
+  `,
+
+  getConnectionTypes: `
+    SELECT 
+      id,
+      name
+    FROM connection_type
+    ORDER BY name
   `
 }

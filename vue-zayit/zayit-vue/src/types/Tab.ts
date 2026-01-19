@@ -10,8 +10,8 @@ export interface BookState {
     showBottomPane?: boolean; // Whether bottom pane of split view is visible
     hasConnections?: boolean; // Whether book has any connections (targum, reference, commentary, or other)
     selectedLineIndex?: number; // Currently selected line index for commentary
-    commentaryGroupIndex?: number; // Currently selected commentary group index
-    commentaryTargetBookId?: number; // targetBookId of currently selected commentary for persistence
+    commentaryFilterConnectionTypeId?: number; // Selected connection type filter for commentary (undefined = show all)
+    commentaryPositionsByFilter?: Record<string, { groupIndex: number; targetBookId?: number; scrollPosition: number }>; // Position per filter for persistence when switching
     diacriticsState?: number; // 0 = show all, 1 = hide cantillation, 2 = hide nikkud too
     isLineDisplayInline?: boolean; // false = block display, true = inline display
     originalHtml?: string; // Store original HTML for diacritics restoration

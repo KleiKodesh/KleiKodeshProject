@@ -1,6 +1,7 @@
 param(
     [switch]$NoWait,
     [switch]$NoRelease,
+    [switch]$NoClean,
     [ValidateSet("AnyCPU", "x64")]
     [string]$Platform
 )
@@ -68,15 +69,39 @@ if ($versionMatch) {
     exit 1
 }
 
-# Clean the solution first
-Write-Host "Cleaning solution..." -ForegroundColor Yellow
-$solutionPath = Join-Path $projectRoot "KleiKodeshProject.slnx"
-$cleanCommand = "dotnet clean `"$solutionPath`" -c Release --verbosity normal"
-Write-Host "Clean command: $cleanCommand" -ForegroundColor Gray
-Invoke-Expression $cleanCommand
+# Clean the solution first (unless skipped)
+if (-not $NoClean) {
+    Write-Host "Cleaning solution..." -ForegroundColor Yellow
+    $solutionPath = Join-Path $projectRoot "KleiKodeshProject.slnx"
 
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "WARNING: Clean operation had issues, continuing with build..." -ForegroundColor Yellow
+    # Try MSBuild first (works with VSTO), fallback to dotnet clean
+    $msbuildPath = "${env:ProgramFiles}\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe"
+    if (-not (Test-Path $msbuildPath)) {
+        $msbuildPath = "${env:ProgramFiles}\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"
+    }
+    if (-not (Test-Path $msbuildPath)) {
+        $msbuildPath = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2019\Professional\MSBuild\Current\Bin\MSBuild.exe"
+    }
+    if (-not (Test-Path $msbuildPath)) {
+        $msbuildPath = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin\MSBuild.exe"
+    }
+
+    if (Test-Path $msbuildPath) {
+        $cleanCommand = "`"$msbuildPath`" `"$solutionPath`" /t:Clean /p:Configuration=Release /p:Platform=`"Any CPU`" /verbosity:minimal"
+        Write-Host "Clean command (MSBuild): $cleanCommand" -ForegroundColor Gray
+        Invoke-Expression $cleanCommand
+    } else {
+        Write-Host "MSBuild not found, using dotnet clean (may show VSTO warnings)..." -ForegroundColor Yellow
+        $cleanCommand = "dotnet clean `"$solutionPath`" -c Release --verbosity normal"
+        Write-Host "Clean command (dotnet): $cleanCommand" -ForegroundColor Gray
+        Invoke-Expression $cleanCommand
+    }
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "WARNING: Clean operation had issues, continuing with build..." -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "Skipping clean step (-NoClean specified)" -ForegroundColor Yellow
 }
 
 # Build WPF installer with VSTO configuration parameters

@@ -9,6 +9,7 @@ import type { Category } from '../types/BookCategoryTree'
 import type { Book } from '../types/Book'
 import type { TocEntry } from '../types/BookToc'
 import type { Link } from '../types/Link'
+import type { ConnectionType } from '../types/ConnectionType'
 import * as sqliteDb from './sqliteDb'
 import type { LineLoadResult } from './sqliteDb'
 import { CSharpBridge } from './csharpBridge'
@@ -74,15 +75,28 @@ class DatabaseManager {
     // Public API - Links
     // --------------------------------------------------------------------------
 
-    async getLinks(lineId: number, tabId: string, bookId: number): Promise<Link[]> {
+    async getConnectionTypes(): Promise<ConnectionType[]> {
+        if (this.isWebViewAvailable()) {
+            const promise = this.csharp.createRequest<ConnectionType[]>('GetConnectionTypes')
+            this.csharp.send('GetConnectionTypes', [SqlQueries.getConnectionTypes])
+            return promise
+        } else if (this.isDevServerAvailable()) {
+            return await sqliteDb.getConnectionTypes()
+        } else {
+            throw new Error('No database source available')
+        }
+    }
+
+    async getLinks(lineId: number, tabId: string, bookId: number, connectionTypeId?: number): Promise<Link[]> {
         let links: Link[]
 
         if (this.isWebViewAvailable()) {
+            const queryObj = SqlQueries.getLinks(lineId, connectionTypeId)
             const promise = this.csharp.createRequest<Link[]>(`GetLinks:${tabId}:${bookId}`)
-            this.csharp.send('GetLinks', [lineId, tabId, bookId, SqlQueries.getLinks(lineId)])
+            this.csharp.send('GetLinks', [lineId, tabId, bookId, queryObj.query])
             links = await promise
         } else if (this.isDevServerAvailable()) {
-            links = await sqliteDb.getLinks(lineId)
+            links = await sqliteDb.getLinks(lineId, connectionTypeId)
         } else {
             throw new Error('No database source available')
         }

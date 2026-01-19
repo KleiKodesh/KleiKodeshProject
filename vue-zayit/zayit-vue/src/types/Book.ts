@@ -6,11 +6,11 @@ export interface Book {
     path?: string
     orderIndex: number
     totalLines: number
-    hasTargumConnection: number
-    hasReferenceConnection: number
-    hasCommentaryConnection: number
-    hasOtherConnection: number
     hasSourceConnection: number
+    hasTargumConnection: number
+    hasCommentaryConnection: number
+    hasReferenceConnection: number    
+    hasOtherConnection: number 
 }
 
 export function hasConnections(book: Book): boolean {

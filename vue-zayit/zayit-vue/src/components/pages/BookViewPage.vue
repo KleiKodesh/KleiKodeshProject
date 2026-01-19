@@ -19,7 +19,8 @@
       </template>
       <template #bottom>
         <BookCommentaryView :book-id="myTab.bookState.bookId"
-                            :selected-line-index="myTab.bookState.selectedLineIndex" />
+                            :selected-line-index="myTab.bookState.selectedLineIndex"
+                            :book="currentBook" />
       </template>
     </SplitPane>
   </div>
@@ -28,6 +29,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useTabStore } from '../../stores/tabStore'
+import { useCategoryTreeStore } from '../../stores/categoryTreeStore'
 
 import BookTocTreeView from '../BookTocTreeView.vue'
 import BookLineViewer from '../BookLineViewer.vue'
@@ -37,8 +39,10 @@ import { dbManager } from '../../data/dbManager'
 import { buildTocFromFlat } from '../../data/tocBuilder'
 import type { AltTocLineEntry } from '../../data/tocBuilder'
 import type { TocEntry } from '../../types/BookToc'
+import type { Book } from '../../types/Book'
 
 const tabStore = useTabStore()
+const categoryTreeStore = useCategoryTreeStore()
 const myTabId = ref<number | undefined>(tabStore.activeTab?.id)
 const myTab = computed(() => tabStore.tabs.find(t => t.id === myTabId.value))
 
@@ -46,6 +50,13 @@ const lineViewerRef = ref<InstanceType<typeof BookLineViewer> | null>(null)
 const altTocByLineIndex = ref<Map<number, AltTocLineEntry[]>>(new Map())
 const tocEntries = ref<TocEntry[]>([])
 const isTocLoading = ref(false)
+
+// Get current book from the category tree store
+const currentBook = computed(() => {
+    const bookId = myTab.value?.bookState?.bookId
+    if (!bookId) return undefined
+    return categoryTreeStore.allBooks.find(book => book.id === bookId)
+})
 
 // Load TOC data when book changes
 watch(() => myTab.value?.bookState?.bookId, async (bookId) => {

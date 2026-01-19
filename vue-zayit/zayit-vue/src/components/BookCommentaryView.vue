@@ -20,6 +20,11 @@
                           class="small-icon" />
                 </button>
 
+                <CommentaryConnectionTypeFilter 
+                    :book="book"
+                    :selected-connection-type-id="selectedConnectionTypeId"
+                    @filter-change="handleFilterChange" />
+
                 <Combobox v-model="currentGroupIndex"
                           :options="groupOptions"
                           :placeholder="currentGroupName"
@@ -92,19 +97,25 @@
 import { ref, computed, onMounted, onUnmounted, watch, type ComponentPublicInstance } from 'vue'
 import Combobox, { type ComboboxOption } from './common/Combobox.vue'
 import GenericSearch from './common/GenericSearch.vue'
+import CommentaryConnectionTypeFilter from './CommentaryConnectionTypeFilter.vue'
 import { Icon } from '@iconify/vue'
 
 import { useContentSearch } from '../composables/useContentSearch'
-import { commentaryManager, type CommentaryLinkGroup } from '../data/commentaryManager'
+import { commentaryService, type CommentaryLinkGroup } from '../services/commentaryService'
 import { useTabStore } from '../stores/tabStore'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useCategoryTreeStore } from '../stores/categoryTreeStore'
+import type { Book } from '../types/Book'
+import { hasConnections } from '../types/Book'
 
 const props = withDefaults(defineProps<{
     bookId?: number
     selectedLineIndex?: number
+    book?: Book
 }>(), {
     bookId: undefined,
-    selectedLineIndex: undefined
+    selectedLineIndex: undefined,
+    book: undefined
 })
 
 const emit = defineEmits<{
@@ -113,6 +124,7 @@ const emit = defineEmits<{
 
 const tabStore = useTabStore()
 const settingsStore = useSettingsStore()
+const categoryTreeStore = useCategoryTreeStore()
 
 // Reactive dark mode detection
 const isDarkMode = ref(false)
@@ -148,11 +160,43 @@ const commentaryStyles = computed(() => ({
 const linkGroups = ref<CommentaryLinkGroup[]>([])
 const isLoading = ref(false)
 
+// Get filter state from tab store, with smart default
+const selectedConnectionTypeId = computed({
+    get: () => {
+        const activeTab = tabStore.activeTab
+        if (!activeTab?.bookState) return undefined
+        
+        const saved = activeTab.bookState.commentaryFilterConnectionTypeId
+        
+        // Check if this is the first time loading (no filter has been explicitly set)
+        const hasExplicitFilter = activeTab.bookState.hasOwnProperty('commentaryFilterConnectionTypeId')
+        
+        // If no explicit filter has been set and we have a book, use the default filter
+        if (!hasExplicitFilter && props.book) {
+            const defaultFilter = commentaryService.getDefaultFilter(props.book)
+            if (defaultFilter !== undefined) {
+                // Set the default filter in the tab state
+                activeTab.bookState.commentaryFilterConnectionTypeId = defaultFilter
+                return defaultFilter
+            }
+        }
+        
+        // Return the saved value (including undefined for "הצג הכל")
+        return saved
+    },
+    set: (value: number | undefined) => {
+        const activeTab = tabStore.activeTab
+        if (activeTab?.bookState) {
+            activeTab.bookState.commentaryFilterConnectionTypeId = value
+        }
+    }
+})
+
 // Internal state
 const currentGroupIndex = ref(0)
-const savedScrollPosition = ref(0)
 const commentaryContentRef = ref<HTMLElement | null>(null)
 const groupRefs = ref<Map<number, HTMLElement>>(new Map())
+const scrollSaveTimeout = ref<ReturnType<typeof setTimeout> | null>(null)
 
 // Search state
 const searchRef = ref<InstanceType<typeof GenericSearch> | null>(null)
@@ -305,65 +349,59 @@ function applyDiacriticsFilter(htmlContent: string, state: number): string {
     return tempDiv.innerHTML
 }
 
-// Load commentary when props change
+// Load commentary when props change (line navigation)
 watch([() => props.bookId, () => props.selectedLineIndex], async ([bookId, lineIndex]) => {
     if (bookId !== undefined && lineIndex !== undefined) {
         await loadCommentaryLinks(bookId, lineIndex)
     }
 }, { immediate: true })
 
+// Handle connection type filter change
+const handleFilterChange = async (connectionTypeId: number | undefined) => {
+    console.log(`🔄 [Filter] Changing from ${selectedConnectionTypeId.value} to ${connectionTypeId}`)
+    
+    // Don't save here - let the natural save happen when user navigates
+    selectedConnectionTypeId.value = connectionTypeId
+    
+    if (props.bookId !== undefined && props.selectedLineIndex !== undefined) {
+        await loadCommentaryLinks(props.bookId, props.selectedLineIndex)
+    }
+}
+
+// Helper to get current position for debugging
+function getCurrentPosition() {
+    return {
+        groupIndex: currentGroupIndex.value,
+        targetBookId: linkGroups.value[currentGroupIndex.value]?.targetBookId,
+        scrollPosition: commentaryContentRef.value?.scrollTop || 0,
+        groupName: linkGroups.value[currentGroupIndex.value]?.groupName
+    }
+}
+
 async function loadCommentaryLinks(bookId: number, lineIndex: number) {
     isLoading.value = true
     try {
-        // Get the current commentary's targetBookId before loading new ones
-        const currentTargetBookId = linkGroups.value[currentGroupIndex.value]?.targetBookId
+        console.log(`📚 [Commentary] Loading for book ${bookId}, line ${lineIndex}, filter ${selectedConnectionTypeId.value}`)
 
-        linkGroups.value = await commentaryManager.loadCommentaryLinks(
+        linkGroups.value = await commentaryService.loadCommentaryLinks(
             bookId,
             lineIndex,
-            tabStore.activeTab?.id?.toString() || ''
+            tabStore.activeTab?.id?.toString() || '',
+            { connectionTypeId: selectedConnectionTypeId.value }
         )
 
+        console.log(`📚 [Commentary] Loaded ${linkGroups.value.length} groups`)
 
-
-        // Try to find the same commentary (by targetBookId) in the new set
-        if (currentTargetBookId !== undefined) {
-            const matchingIndex = linkGroups.value.findIndex(
-                group => group.targetBookId === currentTargetBookId
-            )
-            if (matchingIndex !== -1) {
-                // Found the same commentary, stay on it
-                currentGroupIndex.value = matchingIndex
-                saveGroupIndexToTab()
-                setTimeout(() => scrollToGroup(matchingIndex), 100)
-                return
-            }
+        // Try to restore by saved targetBookId
+        const restored = restoreByTargetBookId()
+        if (restored) {
+            console.log('✅ [Position] Restored by targetBookId')
+            return
         }
 
-        // If no match found, try to restore from saved targetBookId (for session restoration)
-        const savedTargetBookId = tabStore.activeTab?.bookState?.commentaryTargetBookId
-        if (savedTargetBookId !== undefined) {
-            const matchingIndex = linkGroups.value.findIndex(
-                group => group.targetBookId === savedTargetBookId
-            )
-            if (matchingIndex !== -1) {
-                currentGroupIndex.value = matchingIndex
-                saveGroupIndexToTab()
-                // Scroll to the restored group after a short delay to ensure DOM is updated
-                setTimeout(() => scrollToGroup(matchingIndex), 100)
-                return
-            }
-        }
-
-        // If still no match, try saved group index if valid
-        const savedGroupIndex = tabStore.activeTab?.bookState?.commentaryGroupIndex
-        if (savedGroupIndex !== undefined && savedGroupIndex < linkGroups.value.length) {
-            currentGroupIndex.value = savedGroupIndex
-        } else {
-            // Default to first group
-            currentGroupIndex.value = 0
-        }
-        saveGroupIndexToTab()
+        // Default to first group
+        console.log('⚠️ [Commentary] No saved targetBookId, defaulting to first group')
+        currentGroupIndex.value = 0
     } catch (error) {
         console.error('❌ Failed to load commentary links:', error)
         linkGroups.value = []
@@ -374,9 +412,13 @@ async function loadCommentaryLinks(bookId: number, lineIndex: number) {
 
 function handleGroupClick(group: CommentaryLinkGroup) {
     if (group.targetBookId !== undefined && group.targetLineIndex !== undefined) {
+        // Look up the target book to determine if it has connections
+        const targetBook = categoryTreeStore.allBooks.find(book => book.id === group.targetBookId)
+        const targetHasConnections = targetBook ? hasConnections(targetBook) : false
+        
         // Use the new method to create a tab directly with book state
-        tabStore.openBookInNewTab(group.groupName, group.targetBookId, undefined, group.targetLineIndex)
-        console.log(`[Commentary] Created new tab for book: ${group.groupName} (ID: ${group.targetBookId}) at line ${group.targetLineIndex}`)
+        tabStore.openBookInNewTab(group.groupName, group.targetBookId, targetHasConnections, group.targetLineIndex)
+        console.log(`[Commentary] Created new tab for book: ${group.groupName} (ID: ${group.targetBookId}) at line ${group.targetLineIndex}, hasConnections: ${targetHasConnections}`)
     }
 }
 
@@ -390,7 +432,9 @@ function handleClose() {
 
 // Computed property for current group name
 const currentGroupName = computed(() => {
-    if (processedLinkGroups.value.length > 0 && currentGroupIndex.value < processedLinkGroups.value.length) {
+    if (processedLinkGroups.value.length > 0 && 
+        currentGroupIndex.value >= 0 && 
+        currentGroupIndex.value < processedLinkGroups.value.length) {
         const group = processedLinkGroups.value[currentGroupIndex.value]
         return group ? group.groupName : ''
     }
@@ -428,7 +472,7 @@ const scrollToGroup = (index: number) => {
 
 // Handle commentary scroll to update dropdown
 const handleCommentaryScroll = () => {
-    if (!commentaryContentRef.value || linkGroups.value.length === 0 || groupRefs.value.size === 0) return
+    if (!commentaryContentRef.value || processedLinkGroups.value.length === 0 || groupRefs.value.size === 0) return
 
     const containerRect = commentaryContentRef.value.getBoundingClientRect()
     const containerTop = containerRect.top + 50
@@ -441,25 +485,35 @@ const handleCommentaryScroll = () => {
         }
     })
 
+    // Ensure activeIndex is within bounds of processedLinkGroups
+    if (activeIndex >= processedLinkGroups.value.length) {
+        activeIndex = Math.max(0, processedLinkGroups.value.length - 1)
+    }
+
     if (currentGroupIndex.value !== activeIndex) {
         currentGroupIndex.value = activeIndex
-        saveGroupIndexToTab()
     }
+
+    // Throttle targetBookId saving to avoid excessive saves during scroll
+    if (scrollSaveTimeout.value) {
+        clearTimeout(scrollSaveTimeout.value)
+    }
+    scrollSaveTimeout.value = setTimeout(() => {
+        saveCurrentTargetBookId()
+    }, 100)
 }
 
 // Navigation functions
 const previousGroup = () => {
     if (currentGroupIndex.value > 0) {
         currentGroupIndex.value--
-        saveGroupIndexToTab()
         scrollToGroup(currentGroupIndex.value)
     }
 }
 
 const nextGroup = () => {
-    if (currentGroupIndex.value < linkGroups.value.length - 1) {
+    if (currentGroupIndex.value < processedLinkGroups.value.length - 1) {
         currentGroupIndex.value++
-        saveGroupIndexToTab()
         scrollToGroup(currentGroupIndex.value)
     }
 }
@@ -479,43 +533,91 @@ function selectAllInContainer() {
     emit('clearOtherSelections')
 }
 
-function clearSelection() {
-    const selection = window.getSelection()
-    if (selection) {
-        selection.removeAllRanges()
-    }
-}
-
 
 
 
 
 onMounted(() => {
-    if (commentaryContentRef.value) {
-        commentaryContentRef.value.addEventListener('scroll', () => {
-            if (commentaryContentRef.value) {
-                savedScrollPosition.value = commentaryContentRef.value.scrollTop
-            }
-        })
-    }
+    // Component mounted - no additional setup needed
 })
 
-// Save group index and targetBookId to tab state
-function saveGroupIndexToTab() {
+// Save current targetBookId for the current filter
+function saveCurrentTargetBookId() {
     const activeTab = tabStore.activeTab
-    if (activeTab?.bookState) {
-        activeTab.bookState.commentaryGroupIndex = currentGroupIndex.value
-        // Also save the targetBookId for reliable session restoration
-        const currentGroup = linkGroups.value[currentGroupIndex.value]
-        activeTab.bookState.commentaryTargetBookId = currentGroup?.targetBookId
+    if (!activeTab?.bookState || linkGroups.value.length === 0) return
+
+    const filterKey = getFilterKey(selectedConnectionTypeId.value)
+    const currentGroup = linkGroups.value[currentGroupIndex.value]
+    
+    // Initialize commentaryPositionsByFilter if it doesn't exist
+    if (!activeTab.bookState.commentaryPositionsByFilter) {
+        activeTab.bookState.commentaryPositionsByFilter = {}
     }
+
+    // Simple: just save the targetBookId for this filter
+    if (currentGroup?.targetBookId) {
+        activeTab.bookState.commentaryPositionsByFilter[filterKey] = {
+            targetBookId: currentGroup.targetBookId
+        }
+        console.log(`💾 [Save] ${filterKey} → targetBookId: ${currentGroup.targetBookId} (${currentGroup.groupName})`)
+        console.log(`💾 [Save] All saved:`, Object.keys(activeTab.bookState.commentaryPositionsByFilter))
+    }
+}
+
+// Restore position by finding the saved targetBookId
+function restoreByTargetBookId(): boolean {
+    const activeTab = tabStore.activeTab
+    if (!activeTab?.bookState?.commentaryPositionsByFilter) {
+        console.log('❌ [Restore] No commentaryPositionsByFilter in tab state')
+        return false
+    }
+
+    const filterKey = getFilterKey(selectedConnectionTypeId.value)
+    const savedData = activeTab.bookState.commentaryPositionsByFilter[filterKey]
+    
+    console.log(`🔍 [Restore] Looking for ${filterKey}:`, savedData)
+    console.log(`🔍 [Restore] Available keys:`, Object.keys(activeTab.bookState.commentaryPositionsByFilter))
+    
+    if (!savedData?.targetBookId) {
+        console.log('❌ [Restore] No saved targetBookId found')
+        return false
+    }
+
+    // Find the group with the saved targetBookId
+    const matchingIndex = linkGroups.value.findIndex(
+        group => group.targetBookId === savedData.targetBookId
+    )
+    
+    console.log(`🔍 [Restore] Looking for targetBookId ${savedData.targetBookId}, found at index: ${matchingIndex}`)
+    
+    if (matchingIndex !== -1) {
+        const matchedGroup = linkGroups.value[matchingIndex]
+        console.log(`✅ [Restore] Found group: ${matchedGroup.groupName}`)
+        
+        currentGroupIndex.value = matchingIndex
+        
+        // Wait for DOM to update before scrolling
+        setTimeout(() => {
+            scrollToGroup(matchingIndex)
+        }, 100)
+        return true
+    }
+
+    console.log('❌ [Restore] targetBookId not found in current groups')
+    return false
+}
+
+// Get filter key for position storage
+function getFilterKey(connectionTypeId: number | undefined): string {
+    return connectionTypeId !== undefined ? `filter_${connectionTypeId}` : 'show_all'
 }
 
 // Note: Group index is now managed in loadCommentaryLinks based on targetBookId matching
 // No need to reset to 0 on every linkGroups change
 
 watch(currentGroupIndex, (newIndex) => {
-    saveGroupIndexToTab()
+    // Save targetBookId immediately when group changes
+    saveCurrentTargetBookId()
     scrollToGroup(newIndex)
 })
 

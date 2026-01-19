@@ -4,13 +4,22 @@ This document tracks all modifications made to PDF.js and its viewer for the Zay
 
 ## Overview
 
-PDF.js is used in this project to display PDF files within the Vue application. Several customizations have been made to integrate it properly with the Vue app's theming system and to force Hebrew localization.
+PDF.js is used in this project to display PDF files within both the Vue application and C# application. Several customizations have been made to integrate it properly with the Vue app's theming system and to force Hebrew localization.
+
+**IMPORTANT**: As of January 2026, PDF.js uses a **shared architecture**. Both the Vue and C# projects reference the same PDF.js files via Windows junction points, ensuring all modifications are automatically synchronized between projects.
 
 ## File Locations
 
-- **PDF.js Directory**: `vue-zayit/zayit-vue/public/pdfjs/`
-- **Viewer Files**: `vue-zayit/zayit-vue/public/pdfjs/web/`
-- **Locale Files**: `vue-zayit/zayit-vue/public/pdfjs/web/locale/`
+**SHARED PDF.js LOCATION (Single Source of Truth):**
+- **PDF.js Directory**: `vue-zayit/shared-pdfjs/`
+- **Viewer Files**: `vue-zayit/shared-pdfjs/web/`
+- **Locale Files**: `vue-zayit/shared-pdfjs/web/locale/`
+
+**PROJECT REFERENCES (Junction Points):**
+- **Vue Project**: `vue-zayit/zayit-vue/public/pdfjs/` → `vue-zayit/shared-pdfjs/`
+- **C# Project**: `vue-zayit/Zayit-cs/ZayitLib/Html/pdfjs/` → `vue-zayit/shared-pdfjs/`
+
+Both projects now reference the same shared PDF.js files via Windows junction points, ensuring modifications are automatically synchronized.
 
 ## Modifications Made
 
@@ -284,9 +293,36 @@ PDF.js locale is configured in two ways:
 - **Hard refresh** (Ctrl+F5) may be needed
 - **Restart dev server** if running in development
 
+## Shared Architecture Maintenance
+
+### Junction Points
+Both projects use Windows junction points to reference the shared PDF.js location:
+- Vue: `vue-zayit/zayit-vue/public/pdfjs/` → `vue-zayit/shared-pdfjs/`
+- C#: `vue-zayit/Zayit-cs/ZayitLib/Html/pdfjs/` → `vue-zayit/shared-pdfjs/`
+
+### Recreating Junction Points
+If junction points are broken or deleted:
+```powershell
+# From project root directory
+$currentDir = Get-Location
+$sharedPath = Join-Path $currentDir "vue-zayit\shared-pdfjs"
+
+# Vue project junction
+New-Item -ItemType Junction -Path "vue-zayit\zayit-vue\public\pdfjs" -Target $sharedPath
+
+# C# project junction  
+New-Item -ItemType Junction -Path "vue-zayit\Zayit-cs\ZayitLib\Html\pdfjs" -Target $sharedPath
+```
+
+### Updating PDF.js
+When updating PDF.js:
+1. **Replace files in shared location**: `vue-zayit/shared-pdfjs/`
+2. **Reapply modifications** (see sections below)
+3. **Test both projects** to ensure compatibility
+
 ## Notes
 
-- **PDF.js Version**: Check `vue-zayit/zayit-vue/public/pdfjs/build/pdf.mjs` for version info
+- **PDF.js Version**: Check `vue-zayit/shared-pdfjs/build/pdf.mjs` for version info
 - **Backup**: Keep original viewer.mjs backup before modifications
 - **Updates**: When updating PDF.js, reapply these modifications
 - **Cross-Origin**: Theme sync only works when PDF.js is served from same origin

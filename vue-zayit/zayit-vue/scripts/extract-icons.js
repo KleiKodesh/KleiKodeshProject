@@ -40,7 +40,8 @@ const usedIcons = [
   'add-16-filled',
   'arrow-download-20-regular',
   'error-circle-20-regular',
-  'fluent:eye-lines-28-regular'
+  'filter-28-regular',
+  'eye-lines-28-regular'
 ];
 
 // Extract only the icons we need

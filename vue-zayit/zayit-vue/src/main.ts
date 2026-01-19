@@ -18,6 +18,12 @@ app.use(pinia)
 
 // Initialize settings before mounting
 import { useSettingsStore } from './stores/settingsStore'
+import { useConnectionTypesStore } from './stores/connectionTypesStore'
+
 useSettingsStore()
+
+// Initialize connection types on app startup
+const connectionTypesStore = useConnectionTypesStore()
+connectionTypesStore.loadConnectionTypes()
 
 app.mount('#app')

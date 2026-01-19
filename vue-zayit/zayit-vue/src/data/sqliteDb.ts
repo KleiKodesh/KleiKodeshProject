@@ -9,6 +9,7 @@ import type { Category } from '../types/BookCategoryTree'
 import type { Book } from '../types/Book'
 import type { TocEntry } from '../types/BookToc'
 import type { Link } from '../types/Link'
+import type { ConnectionType } from '../types/ConnectionType'
 import { SqlQueries } from './sqlQueries'
 
 /**
@@ -81,8 +82,16 @@ export async function getLineId(bookId: number, lineIndex: number): Promise<numb
 /**
  * Get links for a line
  */
-export async function getLinks(lineId: number): Promise<Link[]> {
-  return await query<Link>(SqlQueries.getLinks(lineId))
+export async function getLinks(lineId: number, connectionTypeId?: number): Promise<Link[]> {
+  const queryObj = SqlQueries.getLinks(lineId, connectionTypeId)
+  return await query<Link>(queryObj.query, queryObj.params)
+}
+
+/**
+ * Get all connection types
+ */
+export async function getConnectionTypes(): Promise<ConnectionType[]> {
+  return await query<ConnectionType>(SqlQueries.getConnectionTypes)
 }
 
 /**
