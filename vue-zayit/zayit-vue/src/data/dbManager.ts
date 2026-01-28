@@ -12,7 +12,7 @@ import type { Link } from '../types/Link'
 import type { ConnectionType } from '../types/ConnectionType'
 import * as sqliteDb from './sqliteDb'
 import type { LineLoadResult } from './sqliteDb'
-import { CSharpBridge } from './csharpBridge'
+import { getCSharpBridge } from './csharpBridge'
 import { censorDivineNames } from '../utils/censorDivineNames'
 import { useSettingsStore } from '../stores/settingsStore'
 import { SqlQueries } from './sqlQueries'
@@ -20,7 +20,7 @@ import { SqlQueries } from './sqlQueries'
 export type { LineLoadResult }
 
 class DatabaseManager {
-    private csharp = CSharpBridge.getInstance()
+    private csharp = getCSharpBridge()
 
     private isWebViewAvailable(): boolean {
         return this.csharp.isAvailable()

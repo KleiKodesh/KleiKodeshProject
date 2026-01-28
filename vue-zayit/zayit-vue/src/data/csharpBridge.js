@@ -1,154 +1,187 @@
-/**
- * C# WebView2 Bridge (function-based, class-equivalent)
- */
+// /**
+//  * C# WebView2 Bridge (function-based, class-equivalent)
+//  */
 
-let bridgeInstance = null;
-export const getCSharpBridge = () => bridgeInstance || (bridgeInstance = createBridge());
-const webViewAvailable = () => !!window.chrome?.webview;
-
-function createBridge() {
-    if (!webViewAvailable()) return null;
-    const pendingRequests = new Map();
-
-    window.chrome.webview.addEventListener("message", (event) => {
-        const msg = event.data;
-        if (!msg || !msg.requestId) {
-            console.warn("[CSharpBridge] Received invalid message:", msg);
-            return;
-        }
-
-        // reject if data is missing
-        if (!("data" in msg)) {
-            console.warn("[CSharpBridge] Received message without data:", msg);
-
-            if (msg && msg.requestId) {
-                const pending = pendingRequests.get(msg.requestId);
-                if (pending) {
-                    pending.reject(new Error("No data returned"));
-                    pendingRequests.delete(msg.requestId);
-                }
-            }
-            return;
-        }
-
-        const { requestId, data } = msg;
-        const pending = pendingRequests.get(requestId);
-        if (pending) {
-            pending.resolve(data);
-            pendingRequests.delete(requestId);
-        }
-    });
-
-    function sendRequest(requestId, args = []) {
-        if (!webViewAvailable) {
-            return Promise.reject(new Error("WebView not available"));
-        }
-
-        const promise = new Promise((resolve, reject) => {
-            pendingRequests.set(requestId, { resolve, reject });
-        });
-
-        window.chrome.webview.postMessage({ requestId, args });
-
-        return promise;
-    }
-
-    return { createRequest };
-}
-
+// let bridgeInstance = null;
+// export const getCSharpBridge = () => bridgeInstance || (bridgeInstance = createBridge());
+// const webViewAvailable = () => !!window.chrome?.webview;
 
 // function createBridge() {
-//     if (!webViewAvailable) return;
-//     const pendingRequests = new Map<string, PendingRequest>();
+//     if (!webViewAvailable()) return null;
+//     const pendingRequests = new Map();
 
-//     function setupGlobalHandlers(): void {
+//     window.chrome.webview.addEventListener("message", (event) => {
+//         const msg = event.data;
+//         if (!msg || !msg.requestId) {
+//             console.warn("[CSharpBridge] Received invalid message:", msg);
+//             return;
+//         }
 
+//         // reject if data is missing
+//         if (!("data" in msg)) {
+//             console.warn("[CSharpBridge] Received message without data:", msg);
 
-//         const win = window as any;
-
-//         win.receiveTreeData = (data: any) => {
-//             const r = pendingRequests.get("GetTree");
-//             if (r) {
-//                 r.resolve(data);
-//                 pendingRequests.delete("GetTree");
+//             if (msg && msg.requestId) {
+//                 const pending = pendingRequests.get(msg.requestId);
+//                 if (pending) {
+//                     pending.reject(new Error("No data returned"));
+//                     pendingRequests.delete(msg.requestId);
+//                 }
 //             }
-//         };
+//             return;
+//         }
 
-//         win.receiveTocData = (bookId: number, data: any) => {
-//             const key = `GetToc:${bookId}`;
-//             const r = pendingRequests.get(key);
-//             if (r) {
-//                 r.resolve(data);
-//                 pendingRequests.delete(key);
-//             }
-//         };
+//         const { requestId, data } = msg;
+//         const pending = pendingRequests.get(requestId);
+//         if (pending) {
+//             pending.resolve(data);
+//             pendingRequests.delete(requestId);
+//         }
+//     });
 
-//         win.receiveLinks = (tabId: string, bookId: number, links: any) => {
-//             const key = `GetLinks:${tabId}:${bookId}`;
-//             const r = pendingRequests.get(key);
-//             if (r) {
-//                 r.resolve(links);
-//                 pendingRequests.delete(key);
-//             }
-//         };
+//     function sendRequest(requestId, args = []) {
+//         if (!webViewAvailable) {
+//             return Promise.reject(new Error("WebView not available"));
+//         }
 
-//         win.receiveTotalLines = (bookId: number, totalLines: number) => {
-//             const key = `GetTotalLines:${bookId}`;
-//             const r = pendingRequests.get(key);
-//             if (r) {
-//                 r.resolve(totalLines);
-//                 pendingRequests.delete(key);
-//             }
-//         };
-
-//         win.receiveLineContent = (
-//             bookId: number,
-//             lineIndex: number,
-//             content: string | null
-//         ) => {
-//             const key = `GetLineContent:${bookId}:${lineIndex}`;
-//             const r = pendingRequests.get(key);
-//             if (r) {
-//                 r.resolve(content);
-//                 pendingRequests.delete(key);
-//             }
-//         };
-
-//         win.receivePdfFilePath = (
-//             virtualUrl: string | null,
-//             fileName: string | null,
-//             originalPath: string | null
-//         ) => {
-//             const r = pendingRequests.get("OpenPdfFilePicker");
-//             if (r) {
-//                 r.resolve({ fileName, dataUrl: virtualUrl, originalPath });
-//                 pendingRequests.delete("OpenPdfFilePicker");
-//             }
-//         };
-//     }
-//     /* ---------------- public API ---------------- */
-
-//     function send(command: string, args: any[]): void {
-//         setupGlobalHandlers();
-
-//         if (!webViewAvailable) return;
-
-//         (window as any).chrome.webview.postMessage({ command, args });
-//     }
-
-//     function createRequest<T>(requestId: string): Promise<T> {
-//         setupGlobalHandlers();
-
-//         return new Promise((resolve, reject) => {
+//         const promise = new Promise((resolve, reject) => {
 //             pendingRequests.set(requestId, { resolve, reject });
 //         });
+
+//         window.chrome.webview.postMessage({ requestId, args });
+
+//         return promise;
 //     }
+// C# WebView2 Bridge - runtime JS implementation
 
-//     /* ---------------- exposed object ---------------- */
+let bridgeInstance = null
 
-//     return {
-//         send,
-//         createRequest,
-//     };
-// }
+export const getCSharpBridge = () => bridgeInstance || (bridgeInstance = createBridge())
+
+function createBridge() {
+    const pendingRequests = new Map()
+    let initialized = false
+
+    function isAvailable() {
+        return typeof window !== 'undefined' && window.chrome?.webview !== undefined
+    }
+
+    function setupGlobalHandlers() {
+        if (initialized || typeof window === 'undefined') return
+        initialized = true
+
+        const win = window
+
+        win.receiveTreeData = (data) => {
+            const r = pendingRequests.get('GetTree')
+            if (r) {
+                r.resolve(data)
+                pendingRequests.delete('GetTree')
+            }
+        }
+
+        win.receiveTocData = (bookId, data) => {
+            const key = `GetToc:${bookId}`
+            const r = pendingRequests.get(key)
+            if (r) {
+                r.resolve(data)
+                pendingRequests.delete(key)
+            }
+        }
+
+        win.receiveLinks = (tabId, bookId, links) => {
+            const key = `GetLinks:${tabId}:${bookId}`
+            const r = pendingRequests.get(key)
+            if (r) {
+                r.resolve(links)
+                pendingRequests.delete(key)
+            }
+        }
+
+        win.receiveTotalLines = (bookId, totalLines) => {
+            const key = `GetTotalLines:${bookId}`
+            const r = pendingRequests.get(key)
+            if (r) {
+                r.resolve(totalLines)
+                pendingRequests.delete(key)
+            }
+        }
+
+        win.receiveLineContent = (bookId, lineIndex, content) => {
+            const key = `GetLineContent:${bookId}:${lineIndex}`
+            const r = pendingRequests.get(key)
+            if (r) {
+                r.resolve(content)
+                pendingRequests.delete(key)
+            }
+        }
+
+        win.receivePdfFilePath = (virtualUrl, fileName, originalPath) => {
+            const r = pendingRequests.get('OpenPdfFilePicker')
+            if (r) {
+                r.resolve({ fileName, dataUrl: virtualUrl, originalPath })
+                pendingRequests.delete('OpenPdfFilePicker')
+            }
+        }
+
+        win.receivePdfVirtualUrl = (requestPath, virtualUrl) => {
+            const key = `RecreateVirtualUrlFromPath:${requestPath}`
+            const r = pendingRequests.get(key)
+            if (r) {
+                r.resolve(virtualUrl)
+                pendingRequests.delete(key)
+            }
+        }
+
+        win.receiveSearchResults = (bookId, searchTerm, results) => {
+            const key = `SearchLines:${bookId}:${searchTerm}`
+            const r = pendingRequests.get(key)
+            if (r) {
+                r.resolve(results)
+                pendingRequests.delete(key)
+            }
+        }
+
+        win.receiveHebrewBookDownloadReady = (bookId, action) => {
+            const key = `PrepareHebrewBookDownload:${bookId}:${action}`
+            const r = pendingRequests.get(key)
+            if (r) {
+                r.resolve({ success: true })
+                pendingRequests.delete(key)
+            }
+        }
+
+        win.receiveHebrewBookDownloadComplete = (bookId, result) => {
+            const s = `HebrewBookDownloadComplete:${bookId}`
+            const r = pendingRequests.get(s) || pendingRequests.get(`PrepareHebrewBookDownload:${bookId}:download`)
+            if (r) {
+                r.resolve(result)
+                pendingRequests.delete(s)
+                pendingRequests.delete(`PrepareHebrewBookDownload:${bookId}:download`)
+            }
+        }
+    }
+
+    function send(command, args) {
+        setupGlobalHandlers()
+
+        if (!isAvailable()) return
+
+        window.chrome.webview.postMessage({ command, args })
+    }
+
+    function createRequest(requestId) {
+        setupGlobalHandlers()
+
+        return new Promise((resolve, reject) => {
+            pendingRequests.set(requestId, { resolve, reject })
+        })
+    }
+
+    return {
+        send,
+        createRequest,
+        isAvailable
+    }
+}
 

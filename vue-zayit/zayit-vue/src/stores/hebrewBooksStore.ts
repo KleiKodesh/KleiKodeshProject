@@ -4,7 +4,7 @@ import type { HebrewBook } from '../types/HebrewBook'
 import { CsvLoader } from '../services/hebrewBooksCsvLoader'
 import { PopularityManager } from '../services/hebrewBooksPopularityManager'
 import { HebrewBooksSearchService } from '../services/hebrewBooksSearchService'
-import { CSharpBridge } from '../data/csharpBridge'
+import { getCSharpBridge } from '../data/csharpBridge'
 
 // Create debounced search function outside store to persist across instances
 let globalDebouncedSearch: ((value: string) => void) | null = null
@@ -23,7 +23,7 @@ export const useHebrewBooksStore = defineStore('hebrewBooks', () => {
   const selectedBookId = ref<string | null>(null)
 
   // C# Bridge instance (singleton)
-  const csharp = CSharpBridge.getInstance()
+  const csharp = getCSharpBridge()
 
   // Getters
   const hasBooks = computed(() => books.value.length > 0)

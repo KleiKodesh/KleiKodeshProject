@@ -5,7 +5,7 @@
  * Integrates with the virtual host mapping PDF manager in C#.
  */
 
-import { CSharpBridge } from '../data/csharpBridge'
+import { getCSharpBridge } from '../data/csharpBridge'
 
 export interface PdfFileResult {
     fileName: string | null
@@ -14,10 +14,10 @@ export interface PdfFileResult {
 }
 
 export class PdfService {
-    private bridge: CSharpBridge
+    private bridge: ReturnType<typeof getCSharpBridge>
 
     constructor() {
-        this.bridge = CSharpBridge.getInstance()
+        this.bridge = getCSharpBridge()
     }
 
     /**
@@ -37,7 +37,7 @@ export class PdfService {
         // Wait for C# response via bridge
         console.log('[PdfService] Waiting for C# response...')
         const result = await promise
-        
+
         console.log('[PdfService] Received file picker result:', result)
         return result
     }
@@ -56,7 +56,7 @@ export class PdfService {
 
         // Wait for C# response
         const isReady = await promise
-        
+
         console.log('[PdfService] PDF manager ready:', isReady)
         return isReady
     }
@@ -75,7 +75,7 @@ export class PdfService {
 
         // Wait for C# response
         const virtualUrl = await promise
-        
+
         console.log('[PdfService] Recreated virtual URL:', virtualUrl)
         return virtualUrl
     }

@@ -24,7 +24,7 @@ export interface CommentaryFilterOptions {
 
 export class CommentaryService {
     private static instance: CommentaryService
-    
+
     static getInstance(): CommentaryService {
         if (!CommentaryService.instance) {
             CommentaryService.instance = new CommentaryService()
@@ -35,17 +35,15 @@ export class CommentaryService {
     /**
      * Get available filter options for a book based on its connection flags
      */
-    getAvailableFilterOptions(book: Book): Array<{ label: string; value: number | undefined; isDefault?: boolean }> {
+    getAvailableFilterOptions(book: Book): Array<{ label: string; value: number; isDefault?: boolean }> {
         const connectionTypesStore = useConnectionTypesStore()
-        
+
         if (!connectionTypesStore.isLoaded) {
             console.warn('Connection types not loaded yet')
             return []
         }
 
-        const options: Array<{ label: string; value: number | undefined; isDefault?: boolean }> = [
-            { label: 'הצג הכל', value: undefined }
-        ]
+        const options: Array<{ label: string; value: number; isDefault?: boolean }> = []
 
         // Add available connection types based on book flags
         const connectionTypeMap = [
@@ -77,17 +75,18 @@ export class CommentaryService {
      */
     getDefaultFilter(book: Book): number | undefined {
         const options = this.getAvailableFilterOptions(book)
+        if (options.length === 0) return undefined
         const defaultOption = options.find(opt => opt.isDefault && opt.value !== undefined)
-        return defaultOption?.value
+        return defaultOption ? defaultOption.value : options[0]!.value
     }
 
     /**
      * Load and group commentary links for a specific book line with filtering
      */
     async loadCommentaryLinks(
-        bookId: number, 
-        lineIndex: number, 
-        tabId: string, 
+        bookId: number,
+        lineIndex: number,
+        tabId: string,
         filterOptions?: CommentaryFilterOptions
     ): Promise<CommentaryLinkGroup[]> {
         try {

@@ -10,8 +10,23 @@
                            @navigate-to-match="handleNavigateToMatch" />
             <span class="bold smaller-em commentary-title">קשרים</span>
 
-            <div class="flex-row flex-center commentary-navigation"
-                 v-if="linkGroups.length > 0">
+            <div class="flex-row flex-center commentary-navigation">
+
+                <button class="flex-center c-pointer nav-btn"
+                        @click="previousLine"
+                        :disabled="props.selectedLineIndex === undefined || props.selectedLineIndex <= 0"
+                        title="שורה קודמת">
+                    <Icon icon="fluent:chevron-right-28-regular"
+                          class="small-icon" />
+                </button>
+
+                <button class="flex-center c-pointer nav-btn"
+                        @click="nextLine"
+                        :disabled="props.selectedLineIndex === undefined"
+                        title="שורה הבאה">
+                    <Icon icon="fluent:chevron-left-28-regular"
+                          class="small-icon" />
+                </button>
 
                 <button class="flex-center c-pointer nav-btn"
                         @click="openSearch"
@@ -20,10 +35,10 @@
                           class="small-icon" />
                 </button>
 
-                <CommentaryConnectionTypeFilter 
-                    :book="book"
-                    :selected-connection-type-id="selectedConnectionTypeId"
-                    @filter-change="handleFilterChange" />
+                <CommentaryConnectionTypeFilter :book="book"
+                                                :selected-connection-type-id="selectedConnectionTypeId"
+                                                :available-options="availableFilterOptions"
+                                                @filter-change="handleFilterChange" />
 
                 <Combobox v-model="currentGroupIndex"
                           :options="groupOptions"
@@ -34,7 +49,7 @@
                         @click="previousGroup"
                         :disabled="currentGroupIndex === 0"
                         title="קבוצה קודמת">
-                    <Icon icon="fluent:chevron-right-28-regular"
+                    <Icon icon="fluent:chevron-up-28-regular"
                           class="small-icon" />
                 </button>
 
@@ -42,7 +57,7 @@
                         @click="nextGroup"
                         :disabled="currentGroupIndex === linkGroups.length - 1"
                         title="קבוצה הבאה">
-                    <Icon icon="fluent:chevron-left-28-regular"
+                    <Icon icon="fluent:chevron-down-28-regular"
                           class="small-icon" />
                 </button>
             </div>
@@ -69,7 +84,7 @@
 
             <div v-else-if="linkGroups.length === 0"
                  class="flex-column flex-center height-fill text-secondary commentary-placeholder">
-                <div class="bold placeholder-text">בחר שורה לצפייה בקשרים</div>
+                <div class="bold placeholder-text">לא נמצרו קשרים בקטגוריה זו</div>
             </div>
 
             <div v-else
@@ -119,7 +134,8 @@ const props = withDefaults(defineProps<{
 })
 
 const emit = defineEmits<{
-    clearOtherSelections: []
+    (e: 'clearOtherSelections'): void
+    (e: 'update:selectedLineIndex', newIndex: number): void
 }>()
 
 const tabStore = useTabStore()
@@ -141,18 +157,18 @@ onMounted(() => {
         attributes: true,
         attributeFilter: ['class']
     })
-    
+
     // Cleanup observer on unmount
     onUnmounted(() => observer.disconnect())
 })
 
 // Computed styles that respect dark mode
 const commentaryStyles = computed(() => ({
-    backgroundColor: !isDarkMode.value && settingsStore.readingBackgroundColor 
-        ? settingsStore.readingBackgroundColor 
+    backgroundColor: !isDarkMode.value && settingsStore.readingBackgroundColor
+        ? settingsStore.readingBackgroundColor
         : 'var(--bg-primary)',
-    color: !isDarkMode.value && settingsStore.readingBackgroundColor 
-        ? 'var(--reading-text-color)' 
+    color: !isDarkMode.value && settingsStore.readingBackgroundColor
+        ? 'var(--reading-text-color)'
         : 'var(--text-primary)'
 }))
 
@@ -165,12 +181,12 @@ const selectedConnectionTypeId = computed({
     get: () => {
         const activeTab = tabStore.activeTab
         if (!activeTab?.bookState) return undefined
-        
+
         const saved = activeTab.bookState.commentaryFilterConnectionTypeId
-        
+
         // Check if this is the first time loading (no filter has been explicitly set)
         const hasExplicitFilter = activeTab.bookState.hasOwnProperty('commentaryFilterConnectionTypeId')
-        
+
         // If no explicit filter has been set and we have a book, use the default filter
         if (!hasExplicitFilter && props.book) {
             const defaultFilter = commentaryService.getDefaultFilter(props.book)
@@ -180,7 +196,7 @@ const selectedConnectionTypeId = computed({
                 return defaultFilter
             }
         }
-        
+
         // Return the saved value (including undefined for "הצג הכל")
         return saved
     },
@@ -195,16 +211,60 @@ const selectedConnectionTypeId = computed({
 // Internal state
 const currentGroupIndex = ref(0)
 const commentaryContentRef = ref<HTMLElement | null>(null)
+const suppressNextSave = ref(false)
 const groupRefs = ref<Map<number, HTMLElement>>(new Map())
+// Timeout handle for a scheduled delayed save and a token to detect stale saves
 const scrollSaveTimeout = ref<ReturnType<typeof setTimeout> | null>(null)
+const pendingSaveToken = ref(0)
 
 // Search state
 const searchRef = ref<InstanceType<typeof GenericSearch> | null>(null)
 const isSearchOpen = ref(false)
 const search = useContentSearch()
 
+// Available filter options for the current line (only filters that have entries)
+const availableFilterOptions = ref<Array<{ label: string; value: number }>>([])
+
+async function computeAvailableFilterOptions(bookId: number, lineIndex: number) {
+    availableFilterOptions.value = []
+    if (!props.book) return
+
+    const baseOptions = commentaryService.getAvailableFilterOptions(props.book)
+    if (!baseOptions || baseOptions.length === 0) return
+
+    const tabId = tabStore.activeTab?.id?.toString() || ''
+    const results: Array<{ label: string; value: number }> = []
+    for (const opt of baseOptions) {
+        try {
+            const groups = await commentaryService.loadCommentaryLinks(bookId, lineIndex, tabId, { connectionTypeId: opt.value })
+            if (groups && groups.length > 0) {
+                results.push({ label: opt.label, value: opt.value })
+            }
+        } catch (e) {
+            // ignore errors for individual filters
+        }
+    }
+
+    availableFilterOptions.value = results
+}
+
 function openSearch() {
     isSearchOpen.value = true
+}
+
+// Navigate to previous/next line in the parent lines view. Emits update:selectedLineIndex.
+function previousLine() {
+    const idx = props.selectedLineIndex
+    if (idx === undefined) return
+    const newIndex = Math.max(0, idx - 1)
+    emit('update:selectedLineIndex', newIndex)
+}
+
+function nextLine() {
+    const idx = props.selectedLineIndex
+    if (idx === undefined) return
+    const newIndex = idx + 1
+    emit('update:selectedLineIndex', newIndex)
 }
 
 function handleKeyDown(e: KeyboardEvent) {
@@ -357,12 +417,25 @@ watch([() => props.bookId, () => props.selectedLineIndex], async ([bookId, lineI
 }, { immediate: true })
 
 // Handle connection type filter change
-const handleFilterChange = async (connectionTypeId: number | undefined) => {
-    console.log(`🔄 [Filter] Changing from ${selectedConnectionTypeId.value} to ${connectionTypeId}`)
-    
-    // Don't save here - let the natural save happen when user navigates
+const handleFilterChange = async (connectionTypeId: number) => {
+
+
+    // Save current filter's position (so each filter keeps its own pointer)
+    try {
+        // Cancel any pending delayed save to avoid it firing after we switch filters
+        if (scrollSaveTimeout.value) {
+            clearTimeout(scrollSaveTimeout.value)
+            scrollSaveTimeout.value = null
+        }
+        pendingSaveToken.value++
+        saveCurrentTargetBookId()
+    } catch (e) {
+        console.warn('[Commentary] Failed to save current targetBookId before switching filter', e)
+    }
+
+    // Apply the new filter and reload commentary for the current line
     selectedConnectionTypeId.value = connectionTypeId
-    
+
     if (props.bookId !== undefined && props.selectedLineIndex !== undefined) {
         await loadCommentaryLinks(props.bookId, props.selectedLineIndex)
     }
@@ -381,7 +454,20 @@ function getCurrentPosition() {
 async function loadCommentaryLinks(bookId: number, lineIndex: number) {
     isLoading.value = true
     try {
-        console.log(`📚 [Commentary] Loading for book ${bookId}, line ${lineIndex}, filter ${selectedConnectionTypeId.value}`)
+        // Cancel any pending delayed save since we're reloading commentary for a new line/filter
+        if (scrollSaveTimeout.value) {
+            clearTimeout(scrollSaveTimeout.value)
+            scrollSaveTimeout.value = null
+        }
+        pendingSaveToken.value++
+        // Suppress autosaves while we load and perform programmatic restores
+        suppressNextSave.value = true
+
+
+
+        // Preserve previously-selected commentator by targetBookId so switching lines
+        // keeps the same commentator if possible.
+        const prevSelectedTargetBookId = linkGroups.value[currentGroupIndex.value]?.targetBookId
 
         linkGroups.value = await commentaryService.loadCommentaryLinks(
             bookId,
@@ -390,23 +476,41 @@ async function loadCommentaryLinks(bookId: number, lineIndex: number) {
             { connectionTypeId: selectedConnectionTypeId.value }
         )
 
-        console.log(`📚 [Commentary] Loaded ${linkGroups.value.length} groups`)
+        // Update available filter options for this line so filters with no entries are hidden
+        computeAvailableFilterOptions(bookId, lineIndex).catch(() => { })
 
-        // Try to restore by saved targetBookId
+
+
+        // First, try to restore to the previously-selected commentator (if any)
+        if (prevSelectedTargetBookId !== undefined && prevSelectedTargetBookId !== null) {
+            const matchingIndex = linkGroups.value.findIndex(g => g.targetBookId === prevSelectedTargetBookId)
+            if (matchingIndex !== -1) {
+                currentGroupIndex.value = matchingIndex
+                setTimeout(() => scrollToGroup(matchingIndex), 100)
+                return
+            }
+        }
+
+        // Fallback: try to restore by saved targetBookId from tab state
         const restored = restoreByTargetBookId()
         if (restored) {
-            console.log('✅ [Position] Restored by targetBookId')
             return
         }
 
         // Default to first group
-        console.log('⚠️ [Commentary] No saved targetBookId, defaulting to first group')
+
         currentGroupIndex.value = 0
     } catch (error) {
         console.error('❌ Failed to load commentary links:', error)
         linkGroups.value = []
     } finally {
         isLoading.value = false
+        // Allow programmatic restore/scroll to settle before re-enabling saves
+        setTimeout(() => {
+            suppressNextSave.value = false
+            // Invalidate any previously-scheduled delayed saves
+            pendingSaveToken.value++
+        }, 250)
     }
 }
 
@@ -415,10 +519,10 @@ function handleGroupClick(group: CommentaryLinkGroup) {
         // Look up the target book to determine if it has connections
         const targetBook = categoryTreeStore.allBooks.find(book => book.id === group.targetBookId)
         const targetHasConnections = targetBook ? hasConnections(targetBook) : false
-        
+
         // Use the new method to create a tab directly with book state
         tabStore.openBookInNewTab(group.groupName, group.targetBookId, targetHasConnections, group.targetLineIndex)
-        console.log(`[Commentary] Created new tab for book: ${group.groupName} (ID: ${group.targetBookId}) at line ${group.targetLineIndex}, hasConnections: ${targetHasConnections}`)
+
     }
 }
 
@@ -432,8 +536,8 @@ function handleClose() {
 
 // Computed property for current group name
 const currentGroupName = computed(() => {
-    if (processedLinkGroups.value.length > 0 && 
-        currentGroupIndex.value >= 0 && 
+    if (processedLinkGroups.value.length > 0 &&
+        currentGroupIndex.value >= 0 &&
         currentGroupIndex.value < processedLinkGroups.value.length) {
         const group = processedLinkGroups.value[currentGroupIndex.value]
         return group ? group.groupName : ''
@@ -478,12 +582,15 @@ const handleCommentaryScroll = () => {
     const containerTop = containerRect.top + 50
 
     let activeIndex = 0
+    const headerPositions: Array<{ index: number; top: number }> = []
     groupRefs.value.forEach((groupElement, index) => {
         const headerRect = groupElement.getBoundingClientRect()
+        headerPositions.push({ index, top: headerRect.top })
         if (headerRect.top <= containerTop) {
             activeIndex = index
         }
     })
+
 
     // Ensure activeIndex is within bounds of processedLinkGroups
     if (activeIndex >= processedLinkGroups.value.length) {
@@ -494,12 +601,32 @@ const handleCommentaryScroll = () => {
         currentGroupIndex.value = activeIndex
     }
 
-    // Throttle targetBookId saving to avoid excessive saves during scroll
+    // Throttle targetBookId saving to avoid excessive saves during scroll.
+    // Capture current filter+line to avoid a delayed save overwriting after a quick switch.
     if (scrollSaveTimeout.value) {
         clearTimeout(scrollSaveTimeout.value)
+        scrollSaveTimeout.value = null
     }
+
+    // Bump token to invalidate any previously-scheduled saves and capture this token
+    pendingSaveToken.value++
+    const myToken = pendingSaveToken.value
+
+    const _capturedConnectionTypeId = selectedConnectionTypeId.value
+    const _capturedLineIndex = props.selectedLineIndex
+
     scrollSaveTimeout.value = setTimeout(() => {
-        saveCurrentTargetBookId()
+        // If token has changed, this save is stale — ignore it
+        if (myToken !== pendingSaveToken.value) {
+            return
+        }
+        // Clear the timeout handle now that it's executing
+        if (scrollSaveTimeout.value) {
+            clearTimeout(scrollSaveTimeout.value)
+            scrollSaveTimeout.value = null
+        }
+
+        saveCurrentTargetBookId(_capturedConnectionTypeId, _capturedLineIndex)
     }, 100)
 }
 
@@ -541,26 +668,48 @@ onMounted(() => {
     // Component mounted - no additional setup needed
 })
 
-// Save current targetBookId for the current filter
-function saveCurrentTargetBookId() {
+// Cleanup old 'show_all' stored positions and undefined filter values
+onMounted(() => {
+    const activeTab = tabStore.activeTab
+    if (activeTab?.bookState?.commentaryPositionsByFilter) {
+        if (activeTab.bookState.commentaryPositionsByFilter['show_all']) {
+            delete activeTab.bookState.commentaryPositionsByFilter['show_all']
+
+        }
+    }
+    // If an explicit filter is stored as undefined, remove it to force default
+    if (activeTab?.bookState && Object.prototype.hasOwnProperty.call(activeTab.bookState, 'commentaryFilterConnectionTypeId')) {
+        if (activeTab.bookState.commentaryFilterConnectionTypeId === undefined) {
+            delete activeTab.bookState.commentaryFilterConnectionTypeId
+
+        }
+    }
+})
+
+// Save current targetBookId for the current filter+line
+function saveCurrentTargetBookId(capturedConnectionTypeId?: number | undefined, capturedLineIndex?: number | undefined) {
     const activeTab = tabStore.activeTab
     if (!activeTab?.bookState || linkGroups.value.length === 0) return
+    const effectiveConnectionTypeId = capturedConnectionTypeId !== undefined ? capturedConnectionTypeId : selectedConnectionTypeId.value
+    const effectiveLineIndex = capturedLineIndex !== undefined ? capturedLineIndex : props.selectedLineIndex
+    const filterKey = getFilterKey(effectiveConnectionTypeId, effectiveLineIndex)
 
-    const filterKey = getFilterKey(selectedConnectionTypeId.value)
     const currentGroup = linkGroups.value[currentGroupIndex.value]
-    
+
     // Initialize commentaryPositionsByFilter if it doesn't exist
     if (!activeTab.bookState.commentaryPositionsByFilter) {
         activeTab.bookState.commentaryPositionsByFilter = {}
     }
 
-    // Simple: just save the targetBookId for this filter
-    if (currentGroup?.targetBookId) {
+    // Save detailed position (group index + scroll position + optional targetBookId)
+    if (currentGroup) {
+        const scrollPosition = commentaryContentRef.value?.scrollTop || 0
         activeTab.bookState.commentaryPositionsByFilter[filterKey] = {
-            targetBookId: currentGroup.targetBookId
+            groupIndex: currentGroupIndex.value,
+            targetBookId: currentGroup.targetBookId,
+            scrollPosition
         }
-        console.log(`💾 [Save] ${filterKey} → targetBookId: ${currentGroup.targetBookId} (${currentGroup.groupName})`)
-        console.log(`💾 [Save] All saved:`, Object.keys(activeTab.bookState.commentaryPositionsByFilter))
+
     }
 }
 
@@ -568,18 +717,17 @@ function saveCurrentTargetBookId() {
 function restoreByTargetBookId(): boolean {
     const activeTab = tabStore.activeTab
     if (!activeTab?.bookState?.commentaryPositionsByFilter) {
-        console.log('❌ [Restore] No commentaryPositionsByFilter in tab state')
+
         return false
     }
 
-    const filterKey = getFilterKey(selectedConnectionTypeId.value)
+    const filterKey = getFilterKey(selectedConnectionTypeId.value, props.selectedLineIndex)
     const savedData = activeTab.bookState.commentaryPositionsByFilter[filterKey]
-    
-    console.log(`🔍 [Restore] Looking for ${filterKey}:`, savedData)
-    console.log(`🔍 [Restore] Available keys:`, Object.keys(activeTab.bookState.commentaryPositionsByFilter))
-    
+
+
+
     if (!savedData?.targetBookId) {
-        console.log('❌ [Restore] No saved targetBookId found')
+
         return false
     }
 
@@ -587,37 +735,60 @@ function restoreByTargetBookId(): boolean {
     const matchingIndex = linkGroups.value.findIndex(
         group => group.targetBookId === savedData.targetBookId
     )
-    
-    console.log(`🔍 [Restore] Looking for targetBookId ${savedData.targetBookId}, found at index: ${matchingIndex}`)
-    
+
+
+
     if (matchingIndex !== -1) {
         const matchedGroup = linkGroups.value[matchingIndex]
-        console.log(`✅ [Restore] Found group: ${matchedGroup.groupName}`)
-        
-        currentGroupIndex.value = matchingIndex
-        
-        // Wait for DOM to update before scrolling
-        setTimeout(() => {
-            scrollToGroup(matchingIndex)
-        }, 100)
-        return true
+        if (matchedGroup) {
+
+
+            suppressNextSave.value = true
+            currentGroupIndex.value = matchingIndex
+
+            // Wait for DOM to update before scrolling
+            setTimeout(() => {
+                scrollToGroup(matchingIndex)
+            }, 100)
+            return true
+        }
     }
 
-    console.log('❌ [Restore] targetBookId not found in current groups')
+    // If targetBookId wasn't found, but we have a saved groupIndex, use it as a fallback
+    if (savedData?.groupIndex !== undefined && Number.isInteger(savedData.groupIndex)) {
+        const gi = savedData.groupIndex
+        if (gi >= 0 && gi < linkGroups.value.length) {
+
+            suppressNextSave.value = true
+            currentGroupIndex.value = gi
+            setTimeout(() => {
+                scrollToGroup(gi)
+            }, 100)
+            return true
+        }
+    }
+
+
     return false
 }
 
 // Get filter key for position storage
-function getFilterKey(connectionTypeId: number | undefined): string {
-    return connectionTypeId !== undefined ? `filter_${connectionTypeId}` : 'show_all'
+function getFilterKey(connectionTypeId: number | undefined, lineIndex?: number | undefined): string {
+    const linePart = lineIndex !== undefined && lineIndex !== null ? `line_${lineIndex}` : 'line_none'
+    return connectionTypeId !== undefined ? `filter_${connectionTypeId}_${linePart}` : `filter_none_${linePart}`
 }
 
 // Note: Group index is now managed in loadCommentaryLinks based on targetBookId matching
 // No need to reset to 0 on every linkGroups change
 
 watch(currentGroupIndex, (newIndex) => {
-    // Save targetBookId immediately when group changes
-    saveCurrentTargetBookId()
+    // Save targetBookId immediately when group changes, unless this change was programmatic during restore
+
+    if (suppressNextSave.value) {
+        suppressNextSave.value = false
+    } else {
+        saveCurrentTargetBookId()
+    }
     scrollToGroup(newIndex)
 })
 

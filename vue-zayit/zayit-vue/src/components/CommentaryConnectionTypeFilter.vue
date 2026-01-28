@@ -1,19 +1,21 @@
 <template>
-    <div class="connection-type-filter" v-if="shouldShowFilter">
+    <div class="connection-type-filter"
+         v-if="shouldShowFilter">
         <button class="filter-toggle-btn"
                 @click="toggleDropdown"
                 :title="selectedLabel"
                 ref="toggleButton">
-            <Icon icon="fluent:filter-28-regular" class="filter-icon" />
+            <Icon icon="fluent:filter-28-regular"
+                  class="filter-icon" />
         </button>
-        
-        <div v-if="isOpen" 
+
+        <div v-if="isOpen"
              class="filter-dropdown"
              @click.stop>
             <div v-for="option in availableOptions"
-                 :key="option.value || 'all'"
+                 :key="option.value"
                  class="filter-option"
-                 :class="{ 'selected': (option.value === undefined && selectedConnectionTypeId === undefined) || (option.value !== undefined && option.value === selectedConnectionTypeId) }"
+                 :class="{ 'selected': option.value === selectedConnectionTypeId }"
                  @click="selectOption(option.value)">
                 {{ option.label }}
             </div>
@@ -25,52 +27,54 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import type { Book } from '../types/Book'
-import { SHOW_ALL_LABEL } from '../types/ConnectionType'
+// import { SHOW_ALL_LABEL } from '../types/ConnectionType'
 import { commentaryService } from '../services/commentaryService'
 
 interface FilterOption {
     label: string
-    value: number | undefined
+    value: number
 }
 
 const props = defineProps<{
     book?: Book
     selectedConnectionTypeId?: number
+    // Optional: parent can provide precomputed available options (per-line)
+    availableOptions?: Array<{ label: string; value: number }>
 }>()
 
 const emit = defineEmits<{
-    filterChange: [connectionTypeId: number | undefined]
+    filterChange: [connectionTypeId: number]
 }>()
 
 const isOpen = ref(false)
 const toggleButton = ref<HTMLElement>()
 
-// Compute available options based on book flags using the service
+// Compute available options based on provided prop or book flags using the service
 const availableOptions = computed<FilterOption[]>(() => {
+    if (props.availableOptions && Array.isArray(props.availableOptions)) {
+        return props.availableOptions as FilterOption[]
+    }
     if (!props.book) return []
     return commentaryService.getAvailableFilterOptions(props.book)
 })
 
 // Check if filter should be shown (only if multiple connection types exist)
+// Show the filter only if we have more than one available option for the current context
 const shouldShowFilter = computed(() => {
-    if (!props.book) return false
-    return commentaryService.shouldShowFilter(props.book)
+    return availableOptions.value.length > 1
 })
 
 // Get selected label for display
 const selectedLabel = computed(() => {
-    if (props.selectedConnectionTypeId === undefined) {
-        return SHOW_ALL_LABEL
-    }
     const option = availableOptions.value.find(opt => opt.value === props.selectedConnectionTypeId)
-    return option?.label || SHOW_ALL_LABEL
+    return option?.label || ''
 })
 
 const toggleDropdown = () => {
     isOpen.value = !isOpen.value
 }
 
-const selectOption = (connectionTypeId: number | undefined) => {
+const selectOption = (connectionTypeId: number) => {
     emit('filterChange', connectionTypeId)
     isOpen.value = false
 }
