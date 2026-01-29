@@ -1,9 +1,9 @@
 <template>
-    <div class="connection-type-filter"
-         v-if="shouldShowFilter">
+    <div class="connection-type-filter">
         <button class="filter-toggle-btn"
                 @click="toggleDropdown"
                 :title="selectedLabel"
+                :disabled="availableOptions.length <= 1"
                 ref="toggleButton">
             <Icon icon="fluent:filter-28-regular"
                   class="filter-icon" />
@@ -56,12 +56,6 @@ const availableOptions = computed<FilterOption[]>(() => {
     }
     if (!props.book) return []
     return commentaryService.getAvailableFilterOptions(props.book)
-})
-
-// Check if filter should be shown (only if multiple connection types exist)
-// Show the filter only if we have more than one available option for the current context
-const shouldShowFilter = computed(() => {
-    return availableOptions.value.length > 1
 })
 
 // Get selected label for display
@@ -120,6 +114,16 @@ onUnmounted(() => {
 .filter-toggle-btn:hover {
     background: var(--hover-bg);
     border-color: var(--accent-color);
+}
+
+.filter-toggle-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.filter-toggle-btn:disabled:hover {
+    background: transparent;
+    border-color: var(--border-color);
 }
 
 .filter-icon {

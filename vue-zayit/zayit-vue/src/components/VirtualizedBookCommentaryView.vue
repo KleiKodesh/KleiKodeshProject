@@ -8,7 +8,7 @@
                            @close="isSearchOpen = false"
                            @search-query-change="handleSearchQueryChange"
                            @navigate-to-match="handleNavigateToMatch" />
-            <span class="bold smaller-em commentary-title">קשרים</span>
+            <span class="bold smaller-em commentary-title">{{ commentaryTitle }}</span>
 
             <div class="flex-row flex-center commentary-navigation">
 
@@ -74,6 +74,7 @@
              :style="commentaryStyles"
              ref="commentaryContentRef"
              tabindex="0"
+             @scroll.passive="handleCommentaryScroll"
              @keydown="handleKeyDown">
             <div v-if="isLoading"
                  class="flex-column flex-center height-fill text-secondary commentary-loading">
@@ -89,16 +90,17 @@
 
             <div v-else
                  class="flex-column commentary-links">
-                <div v-for="(group, groupIndex) in processedLinkGroups"
-                     :key="groupIndex"
+                <!-- Temporarily disable virtualization: render all groups to ensure accurate measurements -->
+                <div v-for="index in processedLinkGroups.length > 0 ? Array.from({ length: processedLinkGroups.length }, (_, i) => i) : []"
+                     :key="index"
                      class="flex-column commentary-group"
-                     :ref="el => setGroupRef(el, groupIndex)">
+                     :ref="el => setGroupRef(el, index)">
                     <div class="bold group-header"
-                         :class="{ 'c-pointer': group.targetBookId !== undefined }"
-                         @click="handleGroupClick(group)">
-                        {{ group.groupName }}
+                         :class="{ 'c-pointer': processedLinkGroups[index]?.targetBookId !== undefined }"
+                         @click="() => { const g = processedLinkGroups[index]; if (g) handleGroupClick(g) }">
+                        {{ processedLinkGroups[index]?.groupName }}
                     </div>
-                    <div v-for="(link, linkIndex) in group.links"
+                    <div v-for="(link, linkIndex) in processedLinkGroups[index]?.links || []"
                          :key="linkIndex"
                          class="selectable line-1.6 justify link-item"
                          v-html="link.html"></div>
@@ -109,7 +111,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, type ComponentPublicInstance } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick, type ComponentPublicInstance } from 'vue'
 import Combobox, { type ComboboxOption } from './common/Combobox.vue'
 import GenericSearch from './common/GenericSearch.vue'
 import CommentaryConnectionTypeFilter from './CommentaryConnectionTypeFilter.vue'
@@ -213,6 +215,7 @@ const selectedConnectionTypeId = computed({
 const currentGroupIndex = ref(0)
 const commentaryContentRef = ref<HTMLElement | null>(null)
 const suppressNextSave = ref(false)
+const suppressScrollUpdate = ref(false) // Prevent scroll updates during programmatic scrolling
 const groupRefs = ref<Map<number, HTMLElement>>(new Map())
 // Timeout handle for a scheduled delayed save and a token to detect stale saves
 const scrollSaveTimeout = ref<ReturnType<typeof setTimeout> | null>(null)
@@ -225,6 +228,45 @@ const search = useContentSearch()
 
 // Available filter options for the current line (only filters that have entries)
 const availableFilterOptions = ref<Array<{ label: string; value: number }>>([])
+
+// Virtualization state
+const ESTIMATED_GROUP_HEIGHT = 120
+const OVERSCAN = 4
+const scrollTop = ref(0)
+const groupHeights = ref<Record<number, number>>({})
+
+import { cumulativeOffsetsFromHeights, findIndexForScroll } from '../utils/virtualizationHelpers'
+
+const cumulativeOffsets = computed(() => cumulativeOffsetsFromHeights(groupHeights.value, linkGroups.value.length, ESTIMATED_GROUP_HEIGHT))
+
+const totalHeight = computed(() => {
+    const n = linkGroups.value.length
+    if (n === 0) return 0
+    const offsets = cumulativeOffsets.value
+    const lastIndex = n - 1
+    const lastOffset = offsets[lastIndex] ?? 0
+    const lastHeight = groupHeights.value[lastIndex] ?? ESTIMATED_GROUP_HEIGHT
+    return lastOffset + lastHeight
+})
+
+const startIndex = computed(() => Math.max(0, findIndexForScroll(cumulativeOffsets.value, scrollTop.value) - OVERSCAN))
+const endIndex = computed(() => {
+    const n = linkGroups.value.length
+    if (n === 0) return -1
+    const ch = commentaryContentRef.value?.clientHeight || 0
+    let end = findIndexForScroll(cumulativeOffsets.value, scrollTop.value + ch + OVERSCAN * ESTIMATED_GROUP_HEIGHT)
+    end = Math.min(n - 1, end + OVERSCAN)
+    return end
+})
+
+const visibleIndexes = computed(() => {
+    const arr: number[] = []
+    if (endIndex.value < startIndex.value) return arr
+    for (let i = startIndex.value; i <= endIndex.value; i++) arr.push(i)
+    return arr
+})
+
+const topPadding = computed(() => cumulativeOffsets.value[startIndex.value] || 0)
 
 async function computeAvailableFilterOptions(bookId: number, lineIndex: number) {
     availableFilterOptions.value = []
@@ -519,7 +561,9 @@ async function loadCommentaryLinks(bookId: number, lineIndex: number) {
         // Suppress autosaves while we load and perform programmatic restores
         suppressNextSave.value = true
 
-
+        // Clear heights when loading new groups
+        groupHeights.value = {}
+        groupRefs.value.clear()
 
         // Preserve previously-selected commentator by targetBookId so switching lines
         // keeps the same commentator if possible.
@@ -535,7 +579,20 @@ async function loadCommentaryLinks(bookId: number, lineIndex: number) {
         // Update available filter options for this line so filters with no entries are hidden
         computeAvailableFilterOptions(bookId, lineIndex).catch(() => { })
 
+        // Wait for DOM to render groups, then measure them all
+        await nextTick()
 
+        // Force render all groups temporarily to measure heights
+        const tempHeights: Record<number, number> = {}
+        groupRefs.value.forEach((el, index) => {
+            const h = el.offsetHeight
+            if (h > 0) {
+                tempHeights[index] = h
+            }
+        })
+        if (Object.keys(tempHeights).length > 0) {
+            groupHeights.value = tempHeights
+        }
 
         // First, try to restore to the previously-selected commentator (if any)
         if (prevSelectedTargetBookId !== undefined && prevSelectedTargetBookId !== null) {
@@ -601,6 +658,17 @@ const currentGroupName = computed(() => {
     return ''
 })
 
+// Computed property for current filter label
+const currentFilterLabel = computed(() => {
+    const option = availableFilterOptions.value.find(opt => opt.value === selectedConnectionTypeId.value)
+    return option?.label || ''
+})
+
+// Computed property for title with filter name
+const commentaryTitle = computed(() => {
+    return currentFilterLabel.value ? `${currentFilterLabel.value}` : 'קשרים'
+})
+
 // Computed property for combobox options
 const groupOptions = computed<ComboboxOption[]>(() => {
     return processedLinkGroups.value.map((group, index) => ({
@@ -609,10 +677,36 @@ const groupOptions = computed<ComboboxOption[]>(() => {
     }))
 })
 
-// Set group ref for scrolling
+// Set group ref for scrolling and measure heights for virtualization
 const setGroupRef = (el: Element | ComponentPublicInstance | null, index: number) => {
-    if (el && el instanceof HTMLElement) {
-        groupRefs.value.set(index, el)
+    if (!el) {
+        groupRefs.value.delete(index)
+        return
+    }
+    const elh = el instanceof HTMLElement ? el : (el as any).$el
+    if (elh) {
+        groupRefs.value.set(index, elh as HTMLElement)
+        // Measure height for virtualization (synchronously - don't wait for nextTick)
+        const h = (elh as HTMLElement).offsetHeight
+        if ((groupHeights.value[index] || 0) !== h) {
+            groupHeights.value = { ...groupHeights.value, [index]: h }
+        }
+    }
+}
+
+// Measure all currently visible groups heights to ensure accurate virtualization
+const measureVisibleGroups = () => {
+    const newHeights = { ...groupHeights.value }
+    let changed = false
+    groupRefs.value.forEach((el, index) => {
+        const h = el.offsetHeight
+        if ((newHeights[index] || 0) !== h) {
+            newHeights[index] = h
+            changed = true
+        }
+    })
+    if (changed) {
+        groupHeights.value = newHeights
     }
 }
 
@@ -620,19 +714,28 @@ const setGroupRef = (el: Element | ComponentPublicInstance | null, index: number
 const scrollToGroup = (index: number) => {
     const groupElement = groupRefs.value.get(index)
     if (groupElement && commentaryContentRef.value) {
-        commentaryContentRef.value.removeEventListener('scroll', handleCommentaryScroll)
-        groupElement.scrollIntoView({ behavior: 'auto', block: 'center' })
+        suppressScrollUpdate.value = true
+        groupElement.scrollIntoView({ behavior: 'auto', block: 'start' })
         setTimeout(() => {
-            if (commentaryContentRef.value) {
-                commentaryContentRef.value.addEventListener('scroll', handleCommentaryScroll)
-            }
+            suppressScrollUpdate.value = false
         }, 50)
     }
 }
 
-// Handle commentary scroll to update dropdown
+// Handle commentary scroll to update dropdown and track virtualization
 const handleCommentaryScroll = () => {
-    if (!commentaryContentRef.value || processedLinkGroups.value.length === 0 || groupRefs.value.size === 0) return
+    if (!commentaryContentRef.value) return
+
+    // Skip scroll updates during programmatic scrolling to prevent snap-back
+    if (suppressScrollUpdate.value) return
+
+    // Track scroll position for virtualization
+    scrollTop.value = commentaryContentRef.value.scrollTop
+
+    // Measure newly visible groups during scroll
+    measureVisibleGroups()
+
+    if (processedLinkGroups.value.length === 0 || groupRefs.value.size === 0) return
 
     const containerRect = commentaryContentRef.value.getBoundingClientRect()
     const containerTop = containerRect.top + 50
@@ -646,7 +749,6 @@ const handleCommentaryScroll = () => {
             activeIndex = index
         }
     })
-
 
     // Ensure activeIndex is within bounds of processedLinkGroups
     if (activeIndex >= processedLinkGroups.value.length) {
@@ -846,6 +948,13 @@ watch(currentGroupIndex, (newIndex) => {
         saveCurrentTargetBookId()
     }
     scrollToGroup(newIndex)
+})
+
+// Re-measure visible groups when the visible set changes (virtualization)
+watch(visibleIndexes, () => {
+    nextTick(() => {
+        measureVisibleGroups()
+    })
 })
 
 watch(commentaryContentRef, (newVal, oldVal) => {

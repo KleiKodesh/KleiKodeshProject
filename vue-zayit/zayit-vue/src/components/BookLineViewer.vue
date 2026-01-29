@@ -67,18 +67,18 @@ onMounted(() => {
         attributes: true,
         attributeFilter: ['class']
     })
-    
+
     // Cleanup observer on unmount
     onUnmounted(() => observer.disconnect())
 })
 
 // Computed styles that respect dark mode
 const containerStyles = computed(() => ({
-    backgroundColor: !isDarkMode.value && settingsStore.readingBackgroundColor 
-        ? settingsStore.readingBackgroundColor 
+    backgroundColor: !isDarkMode.value && settingsStore.readingBackgroundColor
+        ? settingsStore.readingBackgroundColor
         : 'var(--bg-primary)',
-    color: !isDarkMode.value && settingsStore.readingBackgroundColor 
-        ? 'var(--reading-text-color)' 
+    color: !isDarkMode.value && settingsStore.readingBackgroundColor
+        ? 'var(--reading-text-color)'
         : 'var(--text-primary)'
 }))
 
@@ -142,6 +142,10 @@ watch(() => myTab.value?.bookState?.selectedLineIndex, (newIndex) => {
         selectedLineIndex.value = newIndex
     }
 }, { immediate: true })
+// Note: Do NOT auto-scroll on every selectedLineIndex change here.
+// Scrolling will be triggered explicitly when navigation is requested
+// (e.g. via commentary pane buttons) by calling the exposed
+// `scrollToLineIndex` method on this component.
 
 function handleLineClick(lineIndex: number) {
     selectedLineIndex.value = lineIndex
@@ -392,7 +396,7 @@ async function scrollToLine(lineIndex: number) {
     const lineElement = lineRef?.$el
 
     if (lineElement) {
-        lineElement.scrollIntoView({ behavior: 'instant', block: 'start' })
+        lineElement.scrollIntoView({ behavior: 'auto', block: 'center' })
     }
 }
 
@@ -578,7 +582,14 @@ onUnmounted(() => {
 })
 
 defineExpose({
-    handleTocSelection
+    handleTocSelection,
+    // Expose a method so parent can request an explicit scroll to a line.
+    // This prevents auto-scrolling when the user clicks a line.
+    async scrollToLineIndex(index?: number | null) {
+        const target = index !== undefined && index !== null ? index : selectedLineIndex.value
+        if (target === undefined || target === null) return
+        await scrollToLine(target)
+    }
 })
 </script>
 

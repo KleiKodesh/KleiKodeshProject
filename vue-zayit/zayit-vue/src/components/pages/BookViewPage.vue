@@ -1,5 +1,6 @@
 <template>
   <div class="flex-column height-fill book-view-wrapper">
+    <!-- Virtualized viewer is now always enabled -->
     <keep-alive>
       <BookTocTreeView v-if="myTab?.bookState?.isTocOpen && myTab?.bookState?.bookId"
                        ref="tocTreeViewRef"
@@ -12,15 +13,16 @@
     <SplitPane v-if="myTab?.bookState?.bookId"
                :show-bottom="myTab.bookState.showBottomPane || false">
       <template #top>
-        <BookLineViewer ref="lineViewerRef"
-                        :tab-id="myTabId"
-                        :alt-toc-by-line-index="altTocByLineIndex"
-                        class="flex-110" />
+        <VirtualizedBookLineViewer ref="lineViewerRef"
+                                   :tab-id="myTabId"
+                                   :alt-toc-by-line-index="altTocByLineIndex"
+                                   class="flex-110" />
       </template>
       <template #bottom>
-        <BookCommentaryView :book-id="myTab.bookState.bookId"
-                            :selected-line-index="myTab.bookState.selectedLineIndex"
-                            :book="currentBook" />
+        <VirtualizedBookCommentaryView :book-id="myTab.bookState.bookId"
+                                       :selected-line-index="myTab.bookState.selectedLineIndex"
+                                       :book="currentBook"
+                                       @navigate-line="handleNavigateLine" />
       </template>
     </SplitPane>
   </div>
@@ -33,8 +35,10 @@ import { useCategoryTreeStore } from '../../stores/categoryTreeStore'
 
 import BookTocTreeView from '../BookTocTreeView.vue'
 import BookLineViewer from '../BookLineViewer.vue'
+import VirtualizedBookLineViewer from '../VirtualizedBookLineViewer.vue'
 import SplitPane from '../common/SplitPane.vue'
 import BookCommentaryView from '../BookCommentaryView.vue'
+import VirtualizedBookCommentaryView from '../VirtualizedBookCommentaryView.vue'
 import { dbManager } from '../../data/dbManager'
 import { buildTocFromFlat } from '../../data/tocBuilder'
 import type { AltTocLineEntry } from '../../data/tocBuilder'
@@ -46,45 +50,61 @@ const categoryTreeStore = useCategoryTreeStore()
 const myTabId = ref<number | undefined>(tabStore.activeTab?.id)
 const myTab = computed(() => tabStore.tabs.find(t => t.id === myTabId.value))
 
-const lineViewerRef = ref<InstanceType<typeof BookLineViewer> | null>(null)
+const lineViewerRef = ref<InstanceType<typeof BookLineViewer> | InstanceType<typeof VirtualizedBookLineViewer> | null>(null)
 const altTocByLineIndex = ref<Map<number, AltTocLineEntry[]>>(new Map())
 const tocEntries = ref<TocEntry[]>([])
 const isTocLoading = ref(false)
 
 // Get current book from the category tree store
 const currentBook = computed(() => {
-    const bookId = myTab.value?.bookState?.bookId
-    if (!bookId) return undefined
-    return categoryTreeStore.allBooks.find(book => book.id === bookId)
+  const bookId = myTab.value?.bookState?.bookId
+  if (!bookId) return undefined
+  return categoryTreeStore.allBooks.find(book => book.id === bookId)
 })
 
 // Load TOC data when book changes
 watch(() => myTab.value?.bookState?.bookId, async (bookId) => {
-    if (bookId) {
-        await loadTocData(bookId)
-    }
+  if (bookId) {
+    await loadTocData(bookId)
+  }
 }, { immediate: true })
 
 async function loadTocData(bookId: number) {
-    isTocLoading.value = true
-    try {
-        const { tocEntriesFlat } = await dbManager.getToc(bookId)
-        const { tree, altTocByLineIndex: altTocMap } = buildTocFromFlat(tocEntriesFlat)
-        
-        // Store both the tree and the alt TOC map
-        tocEntries.value = tree
-        altTocByLineIndex.value = altTocMap
-    } catch (error) {
-        console.error('❌ Failed to load TOC data:', error)
-        tocEntries.value = []
-        altTocByLineIndex.value = new Map()
-    } finally {
-        isTocLoading.value = false
-    }
+  isTocLoading.value = true
+  try {
+    const { tocEntriesFlat } = await dbManager.getToc(bookId)
+    const { tree, altTocByLineIndex: altTocMap } = buildTocFromFlat(tocEntriesFlat)
+
+    // Store both the tree and the alt TOC map
+    tocEntries.value = tree
+    altTocByLineIndex.value = altTocMap
+  } catch (error) {
+    console.error('❌ Failed to load TOC data:', error)
+    tocEntries.value = []
+    altTocByLineIndex.value = new Map()
+  } finally {
+    isTocLoading.value = false
+  }
 }
 
 function handleTocSelection(lineIndex: number) {
-  lineViewerRef.value?.handleTocSelection(lineIndex)
+  const viewer: any = lineViewerRef.value
+  if (viewer?.handleTocSelection) {
+    viewer.handleTocSelection(lineIndex)
+  } else if (viewer?.scrollToLine) {
+    // virtualized viewer doesn't have toc helper - just scroll
+    viewer.scrollToLine(lineIndex)
+  }
+}
+
+function handleNavigateLine(newIndex: number) {
+  // Scroll the line viewer explicitly for navigation requests coming from the commentary pane
+  const viewer: any = lineViewerRef.value
+  if (viewer?.scrollToLineIndex) {
+    viewer.scrollToLineIndex(newIndex)
+  } else if (viewer?.scrollToLine) {
+    viewer.scrollToLine(newIndex)
+  }
 }
 
 </script>

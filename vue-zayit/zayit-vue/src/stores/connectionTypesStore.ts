@@ -20,7 +20,7 @@ export const useConnectionTypesStore = defineStore('connectionTypes', () => {
     // These map the database 'name' field to Hebrew UI labels
     const hebrewLabels: Record<string, string> = {
         'SOURCE': 'מקור',
-        'OTHER': 'אחר',
+        'OTHER': 'שונות',
         'COMMENTARY': 'מפרשים',
         'TARGUM': 'תרגומים',
         'REFERENCE': 'קשרים'
@@ -88,21 +88,21 @@ export const useConnectionTypesStore = defineStore('connectionTypes', () => {
         connectionTypes,
         isLoaded,
         isLoading,
-        
+
         // Computed
         connectionTypeById,
         connectionTypeByName,
         connectionTypesWithLabels,
-        
+
         // Actions
         loadConnectionTypes,
-        
+
         // Helpers
         getHebrewLabel,
         getConnectionTypeId,
         getConnectionTypeName,
         getDefaultConnectionTypeId,
-        
+
         // Constants
         defaultConnectionType
     }

@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using static MinimalIndexer.BloomFilterCollectionReader;
+
 namespace MinimalIndexer
 {
     internal class BloomFilterCollectionWriter : IDisposable
@@ -126,6 +126,15 @@ namespace MinimalIndexer
             }
 
             filterBuffer?.Dispose();
+        }
+
+        private struct MetaDataModel
+        {
+            internal int Length { get; set; }
+            internal int BitCount { get; set; }
+            internal int HashFunctions { get; set; }
+            internal int Id { get; set; }
+            internal int Grouping { get; set; }
         }
     }
 }
