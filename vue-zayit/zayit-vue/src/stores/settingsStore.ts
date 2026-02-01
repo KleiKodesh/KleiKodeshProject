@@ -10,7 +10,6 @@ export interface Settings {
     linePadding: number
     censorDivineNames: boolean
     appZoom: number
-    enableVirtualization: boolean
     useOfflineHomepage: boolean
     readingBackgroundColor: string
 }
@@ -22,7 +21,6 @@ const DEFAULT_SETTINGS: Settings = {
     linePadding: 1.6,
     censorDivineNames: false,
     appZoom: 0.95,
-    enableVirtualization: false,
     useOfflineHomepage: true,
     readingBackgroundColor: ''
 }
@@ -34,7 +32,6 @@ export const useSettingsStore = defineStore('settings', () => {
     const linePadding = ref(DEFAULT_SETTINGS.linePadding)
     const censorDivineNames = ref(DEFAULT_SETTINGS.censorDivineNames)
     const appZoom = ref(DEFAULT_SETTINGS.appZoom)
-    const enableVirtualization = ref(DEFAULT_SETTINGS.enableVirtualization)
     const useOfflineHomepage = ref(DEFAULT_SETTINGS.useOfflineHomepage)
     const readingBackgroundColor = ref(DEFAULT_SETTINGS.readingBackgroundColor)
 
@@ -49,7 +46,6 @@ export const useSettingsStore = defineStore('settings', () => {
                 linePadding.value = settings.linePadding || DEFAULT_SETTINGS.linePadding
                 censorDivineNames.value = settings.censorDivineNames || DEFAULT_SETTINGS.censorDivineNames
                 appZoom.value = settings.appZoom || DEFAULT_SETTINGS.appZoom
-                enableVirtualization.value = settings.enableVirtualization ?? DEFAULT_SETTINGS.enableVirtualization
                 useOfflineHomepage.value = settings.useOfflineHomepage ?? DEFAULT_SETTINGS.useOfflineHomepage
                 readingBackgroundColor.value = settings.readingBackgroundColor || DEFAULT_SETTINGS.readingBackgroundColor
             }
@@ -67,7 +63,6 @@ export const useSettingsStore = defineStore('settings', () => {
                 linePadding: linePadding.value,
                 censorDivineNames: censorDivineNames.value,
                 appZoom: appZoom.value,
-                enableVirtualization: enableVirtualization.value,
                 useOfflineHomepage: useOfflineHomepage.value,
                 readingBackgroundColor: readingBackgroundColor.value
             }))
@@ -82,7 +77,7 @@ export const useSettingsStore = defineStore('settings', () => {
         document.documentElement.style.setProperty('--font-size', `${fontSize.value}%`)
         document.documentElement.style.setProperty('--line-height', linePadding.value.toString())
         document.documentElement.style.setProperty('--reading-bg-color', readingBackgroundColor.value)
-        
+
         // Auto-adjust text color based on reading background brightness
         if (readingBackgroundColor.value) {
             const textColor = getContrastingTextColor(readingBackgroundColor.value)
@@ -106,10 +101,10 @@ export const useSettingsStore = defineStore('settings', () => {
         const r = parseInt(hex.substr(0, 2), 16)
         const g = parseInt(hex.substr(2, 2), 16)
         const b = parseInt(hex.substr(4, 2), 16)
-        
+
         // Calculate relative luminance using WCAG formula
         const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-        
+
         // Return dark text for light backgrounds, light text for dark backgrounds
         return luminance > 0.5 ? '#1f1f1f' : '#ffffff'
     }
@@ -121,7 +116,6 @@ export const useSettingsStore = defineStore('settings', () => {
         linePadding.value = DEFAULT_SETTINGS.linePadding
         censorDivineNames.value = DEFAULT_SETTINGS.censorDivineNames
         appZoom.value = DEFAULT_SETTINGS.appZoom
-        enableVirtualization.value = DEFAULT_SETTINGS.enableVirtualization
         useOfflineHomepage.value = DEFAULT_SETTINGS.useOfflineHomepage
         readingBackgroundColor.value = DEFAULT_SETTINGS.readingBackgroundColor
         localStorage.removeItem(STORAGE_KEY)
@@ -133,7 +127,7 @@ export const useSettingsStore = defineStore('settings', () => {
     applyCSSVariables()
 
     // Watch for changes and persist
-    watch([headerFont, textFont, fontSize, linePadding, censorDivineNames, appZoom, enableVirtualization, useOfflineHomepage, readingBackgroundColor], () => {
+    watch([headerFont, textFont, fontSize, linePadding, censorDivineNames, appZoom, useOfflineHomepage, readingBackgroundColor], () => {
         saveToStorage()
         applyCSSVariables()
     })
@@ -145,7 +139,6 @@ export const useSettingsStore = defineStore('settings', () => {
         linePadding,
         censorDivineNames,
         appZoom,
-        enableVirtualization,
         useOfflineHomepage,
         readingBackgroundColor,
         reset

@@ -1,16 +1,18 @@
 <template>
     <div role="treeitem">
         <div class="flex-row hover-bg focus-accent click-effect c-pointer tree-node"
+             :class="{ 'compact': isCompactMode }"
              tabindex="0"
-             :style="{ paddingInlineStart: `${20 + depth * 20}px` }"
+             :style="{ paddingInlineStart: `${(isCompactMode ? 12 : 20) + depth * (isCompactMode ? 16 : 20)}px` }"
              @click="toggleExpand"
              @keydown.enter.stop="handleSelect"
              @keydown.space.stop.prevent="toggleExpand">
 
             <Icon icon="fluent:chevron-left-28-regular"
                   v-if="entry.hasChildren"
-                  :class="{ 'rotate-90': isExpanded }" />
-            <div class="flex-110 line-1.4 node-title"
+                  :class="{ 'rotate-90': isExpanded, 'compact-icon': isCompactMode }" />
+            <div class="flex-110 node-title"
+                 :class="{ 'compact-text': isCompactMode }"
                  @click="handleSelect">{{ entry.text }}</div>
         </div>
 
@@ -20,6 +22,7 @@
                              :ref="(el: any) => { if (el) childRefs[index] = el }"
                              :entry="child"
                              :depth="depth + 1"
+                             :is-compact-mode="isCompactMode"
                              @select-line="emit('selectLine', $event)" />
         </template>
     </div>
@@ -40,8 +43,10 @@ type BookTocTreeNodeInstance = {
 const props = withDefaults(defineProps<{
     entry: TocEntry
     depth?: number
+    isCompactMode?: boolean
 }>(), {
-    depth: 0
+    depth: 0,
+    isCompactMode: false
 })
 
 const emit = defineEmits<{
@@ -84,5 +89,23 @@ defineExpose({
 .node-title {
     margin: -12px 0px;
     padding: 12px 0px;
+    line-height: 1.4;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.tree-node.compact {
+    min-height: 32px;
+}
+
+.compact-text {
+    font-size: 0.9em;
+    margin: -8px 0px;
+    padding: 8px 0px;
+    line-height: 1.3;
+}
+
+.compact-icon {
+    font-size: 0.9em;
 }
 </style>

@@ -15,8 +15,18 @@
     opacity: 1;
 }
 
-.hover-bg:hover {
-  background: var(--hover-bg);
+/* Only apply hover effects on devices that support hover */
+@media (hover: hover) {
+  .hover-bg:hover {
+    background: var(--hover-bg);
+  }
+}
+
+/* Use active states for touch devices */
+@media (hover: none) and (pointer: coarse) {
+  .hover-bg:active {
+    background: var(--active-bg);
+  }
 }
 
 .keyboard-active {
@@ -25,6 +35,17 @@
 }
 
 .click-effect:active {
-  transform: scale(0.99);
+  transform: scale(0.98);
+  background: var(--active-bg);
+}
+
+/* Touch-specific interactive class */
+.touch-interactive {
+  touch-action: manipulation;
+  transition: transform 0.1s ease, background-color 0.1s ease;
+}
+
+.touch-interactive:active {
+  transform: scale(0.98);
   background: var(--active-bg);
 }

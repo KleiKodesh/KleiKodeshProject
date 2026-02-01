@@ -5,6 +5,10 @@ import './main.css'
 import { initTheme } from './utils/theme'
 import { initializeOfflineIcons } from './utils/iconify-offline'
 
+// Import vue3-virtual-scroller components
+import { DynamicScroller, DynamicScrollerItem } from 'vue3-virtual-scroller'
+import 'vue3-virtual-scroller/dist/vue3-virtual-scroller.css'
+
 // Initialize offline icons for WebView2 environment
 initializeOfflineIcons()
 
@@ -15,6 +19,10 @@ const pinia = createPinia()
 const app = createApp(App)
 
 app.use(pinia)
+
+// Register vue3-virtual-scroller components globally
+app.component('DynamicScroller', DynamicScroller)
+app.component('DynamicScrollerItem', DynamicScrollerItem)
 
 // Initialize settings before mounting
 import { useSettingsStore } from './stores/settingsStore'

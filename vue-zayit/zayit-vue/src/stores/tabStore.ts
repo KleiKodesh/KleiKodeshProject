@@ -44,7 +44,7 @@ export const useTabStore = defineStore('tabs', () => {
                         // Always recreate virtual URL from file path (virtual URLs don't persist)
                         // Clear any existing URL since it's invalid after restart
                         tab.pdfState.fileUrl = '';
-                        
+
                         try {
                             // Import pdfService dynamically to avoid circular dependency
                             const { pdfService } = await import('../services/pdfService');
@@ -52,7 +52,7 @@ export const useTabStore = defineStore('tabs', () => {
                                 // Wait for PDF manager to be ready before recreating URLs
                                 console.log('[TabStore] Waiting for PDF manager to be ready...');
                                 const isReady = await pdfService.checkManagerReady();
-                                
+
                                 if (isReady) {
                                     const virtualUrl = await pdfService.recreateVirtualUrl(tab.pdfState.filePath);
                                     if (virtualUrl) {
@@ -96,20 +96,29 @@ export const useTabStore = defineStore('tabs', () => {
                 tab.currentPage === 'hebrewbooks-view'
             );
 
-            // Clean up PDF tabs before saving - don't persist virtual URLs
+            // Clean up tabs before saving
             const cleanedTabs = contentTabs.map(tab => {
+                let cleanedTab = { ...tab };
+
+                // Clean up PDF state - don't persist virtual URLs
                 if (tab.pdfState && tab.pdfState.filePath) {
-                    // Only persist the original file path, not the virtual URL
-                    return {
-                        ...tab,
-                        pdfState: {
-                            fileName: tab.pdfState.fileName,
-                            filePath: tab.pdfState.filePath
-                            // Don't save fileUrl - it will be recreated on load
-                        }
+                    cleanedTab.pdfState = {
+                        fileName: tab.pdfState.fileName,
+                        fileUrl: '', // Will be recreated on load
+                        filePath: tab.pdfState.filePath
+                        // Don't save actual fileUrl - it will be recreated on load
                     };
                 }
-                return tab;
+
+                // Clean up book state - don't persist search state
+                if (tab.bookState) {
+                    cleanedTab.bookState = {
+                        ...tab.bookState,
+                        isSearchOpen: undefined // Don't persist search bar state
+                    };
+                }
+
+                return cleanedTab;
             });
 
             localStorage.setItem(STORAGE_KEY, JSON.stringify({
@@ -180,10 +189,10 @@ export const useTabStore = defineStore('tabs', () => {
 
     const addTab = async () => {
         // Check if a homepage tab already exists (either 'homepage' or 'kezayit-landing')
-        const existingHomepageTab = tabs.value.find(t => 
+        const existingHomepageTab = tabs.value.find(t =>
             t.currentPage === 'homepage' || t.currentPage === 'kezayit-landing'
         );
-        
+
         if (existingHomepageTab) {
             // Switch to existing homepage tab instead of creating a new one
             setActiveTab(existingHomepageTab.id);
@@ -239,10 +248,10 @@ export const useTabStore = defineStore('tabs', () => {
         const tab = tabs.value.find(t => t.isActive);
         if (tab) {
             // Check if there's already another homepage tab
-            const existingHomepageTab = tabs.value.find(t => 
+            const existingHomepageTab = tabs.value.find(t =>
                 t.id !== tab.id && (t.currentPage === 'homepage' || t.currentPage === 'kezayit-landing')
             );
-            
+
             if (existingHomepageTab) {
                 // Switch to existing homepage tab and close current tab
                 setActiveTab(existingHomepageTab.id);
@@ -276,6 +285,10 @@ export const useTabStore = defineStore('tabs', () => {
             }
             // Open TOC overlay
             if (tab.bookState) {
+                // Track if this is the first time opening TOC for this book session
+                if (tab.bookState.isFirstTocOpen === undefined) {
+                    tab.bookState.isFirstTocOpen = true;
+                }
                 tab.bookState.isTocOpen = true;
             }
         }
@@ -285,6 +298,10 @@ export const useTabStore = defineStore('tabs', () => {
         const tab = tabs.value.find(t => t.isActive);
         if (tab?.bookState) {
             tab.bookState.isTocOpen = false;
+            // Mark that TOC has been opened before (no longer first time)
+            if (tab.bookState.isFirstTocOpen === true) {
+                tab.bookState.isFirstTocOpen = false;
+            }
         }
     };
 

@@ -40,9 +40,9 @@
                                                 :available-options="availableFilterOptions"
                                                 @filter-change="handleFilterChange" />
 
-                <Combobox v-model="currentGroupIndex"
+                <Combobox v-model="comboboxSelectedValue"
                           :options="groupOptions"
-                          :placeholder="currentGroupName"
+                          placeholder="בחר פרשן..."
                           dir="rtl" />
 
                 <button class="flex-center c-pointer nav-btn"
@@ -70,9 +70,9 @@
             </button>
         </div>
 
-        <div class="overflow-y flex-110 selectable commentary-content"
-             :style="commentaryStyles"
+        <div class="commentary-content-container"
              ref="commentaryContentRef"
+             :style="commentaryStyles"
              tabindex="0"
              @keydown="handleKeyDown">
             <div v-if="isLoading"
@@ -87,29 +87,55 @@
                 <div class="bold placeholder-text">לא נמצרו קשרים בקטגוריה זו</div>
             </div>
 
-            <div v-else
-                 class="flex-column commentary-links">
-                <div v-for="(group, groupIndex) in processedLinkGroups"
-                     :key="groupIndex"
-                     class="flex-column commentary-group"
-                     :ref="el => setGroupRef(el, groupIndex)">
-                    <div class="bold group-header"
-                         :class="{ 'c-pointer': group.targetBookId !== undefined }"
-                         @click="handleGroupClick(group)">
-                        {{ group.groupName }}
-                    </div>
-                    <div v-for="(link, linkIndex) in group.links"
-                         :key="linkIndex"
-                         class="selectable line-1.6 justify link-item"
-                         v-html="link.html"></div>
-                </div>
-            </div>
+            <DynamicScroller v-else
+                             ref="commentaryScrollerRef"
+                             class="commentary-scroller"
+                             :items="virtualCommentaryItems"
+                             :min-item-size="commentaryMinItemSize"
+                             :buffer="100"
+                             key-field="id"
+                             @scroll.passive="() => { }">
+
+                <template #default="{ item, index, active }">
+                    <DynamicScrollerItem :item="item"
+                                         :active="active"
+                                         :size-dependencies="[
+                                            item.groupName,
+                                            item.links.length,
+                                            item.links.map((l: any) => l.html).join('')
+                                        ]"
+                                         :data-index="index"
+                                         :data-commentary-item-observer="item.id">
+
+                        <!-- Complete Commentary Section: Header + All Links -->
+                        <section v-if="item.type === 'group-with-links'"
+                                 class="commentary-section"
+                                 :data-group-index="item.groupIndex">
+
+                            <!-- Group Header -->
+                            <div class="bold group-header"
+                                 :class="{ 'c-pointer': item.targetBookId !== undefined }"
+                                 @click="handleGroupClick(item)">
+                                {{ item.groupName }}
+                            </div>
+
+                            <!-- All Commentary Links for this Group -->
+                            <div v-for="(link, linkIndex) in item.links"
+                                 :key="`link-${linkIndex}`"
+                                 class="selectable line-1.6 justify link-item"
+                                 v-html="link.html">
+                            </div>
+                        </section>
+                    </DynamicScrollerItem>
+                </template>
+            </DynamicScroller>
         </div>
     </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, type ComponentPublicInstance } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { DynamicScroller, DynamicScrollerItem } from 'vue3-virtual-scroller'
 import Combobox, { type ComboboxOption } from './common/Combobox.vue'
 import GenericSearch from './common/GenericSearch.vue'
 import CommentaryConnectionTypeFilter from './CommentaryConnectionTypeFilter.vue'
@@ -152,14 +178,11 @@ const updateDarkMode = () => {
 
 onMounted(() => {
     updateDarkMode()
-    // Watch for theme changes
     const observer = new MutationObserver(updateDarkMode)
     observer.observe(document.documentElement, {
         attributes: true,
         attributeFilter: ['class']
     })
-
-    // Cleanup observer on unmount
     onUnmounted(() => observer.disconnect())
 })
 
@@ -184,21 +207,16 @@ const selectedConnectionTypeId = computed({
         if (!activeTab?.bookState) return undefined
 
         const saved = activeTab.bookState.commentaryFilterConnectionTypeId
-
-        // Check if this is the first time loading (no filter has been explicitly set)
         const hasExplicitFilter = activeTab.bookState.hasOwnProperty('commentaryFilterConnectionTypeId')
 
-        // If no explicit filter has been set and we have a book, use the default filter
         if (!hasExplicitFilter && props.book) {
             const defaultFilter = commentaryService.getDefaultFilter(props.book)
             if (defaultFilter !== undefined) {
-                // Set the default filter in the tab state
                 activeTab.bookState.commentaryFilterConnectionTypeId = defaultFilter
                 return defaultFilter
             }
         }
 
-        // Return the saved value (including undefined for "הצג הכל")
         return saved
     },
     set: (value: number | undefined) => {
@@ -209,21 +227,55 @@ const selectedConnectionTypeId = computed({
     }
 })
 
-// Internal state
-const currentGroupIndex = ref(0)
+// SIMPLIFIED STATE - Two separate variables for scroll tracking vs combobox editing
+const currentGroupIndex = ref(0) // Tracks current scroll position (updated by intersection observer)
+const comboboxSelectedValue = ref<string | number>(0) // Separate value for combobox display/editing
+
+const commentaryScrollerRef = ref<InstanceType<typeof DynamicScroller> | null>(null)
 const commentaryContentRef = ref<HTMLElement | null>(null)
-const suppressNextSave = ref(false)
-const groupRefs = ref<Map<number, HTMLElement>>(new Map())
-// Timeout handle for a scheduled delayed save and a token to detect stale saves
-const scrollSaveTimeout = ref<ReturnType<typeof setTimeout> | null>(null)
-const pendingSaveToken = ref(0)
+
+// Navigation flags
+const isNavigating = ref(false) // Flag to prevent scroll tracking during programmatic navigation
+const lastScrollTop = ref(0) // Track last scroll position to determine direction
+const scrollDirection = ref<'up' | 'down' | 'none'>('none') // Current scroll direction
+const pendingNavigationTargetBookId = ref<number | undefined>(undefined) // Track target book ID for navigation
+
+// Virtual scroller configuration
+const commentaryMinItemSize = computed(() => 80)
+
+// Virtual items for commentary scroller - GROUP ITEMS TOGETHER
+const virtualCommentaryItems = computed(() => {
+    const items: Array<{
+        id: string
+        type: 'group-with-links'
+        groupIndex: number
+        groupName: string
+        targetBookId?: number
+        targetLineIndex?: number
+        links: Array<{ html: string }>
+    }> = []
+
+    processedLinkGroups.value.forEach((group, groupIndex) => {
+        items.push({
+            id: `group-${groupIndex}`,
+            type: 'group-with-links',
+            groupIndex: groupIndex,
+            groupName: group.groupName,
+            targetBookId: group.targetBookId,
+            targetLineIndex: group.targetLineIndex,
+            links: group.links
+        })
+    })
+
+    return items
+})
 
 // Search state
 const searchRef = ref<InstanceType<typeof GenericSearch> | null>(null)
 const isSearchOpen = ref(false)
 const search = useContentSearch()
 
-// Available filter options for the current line (only filters that have entries)
+// Available filter options for the current line
 const availableFilterOptions = ref<Array<{ label: string; value: number }>>([])
 
 async function computeAvailableFilterOptions(bookId: number, lineIndex: number) {
@@ -253,8 +305,6 @@ function openSearch() {
     isSearchOpen.value = true
 }
 
-// Helper: scan forward/backward up to `maxRange` lines to find a line
-// that has a commentary group with the same `targetBookId`.
 async function findLineWithTarget(startIndex: number, direction: 1 | -1, targetBookId: number | undefined, maxRange = 50): Promise<number | null> {
     if (targetBookId === undefined || targetBookId === null) return null
     if (props.bookId === undefined) return null
@@ -277,20 +327,35 @@ async function findLineWithTarget(startIndex: number, direction: 1 | -1, targetB
     return null
 }
 
-// Navigate to previous line; if possible, skip to the nearest line within
-// `maxRange` that contains the same commentator (targetBookId). Otherwise
-// fallback to the immediate previous line.
 async function previousLine() {
     const idx = props.selectedLineIndex
     if (idx === undefined) return
 
     const currentTarget = linkGroups.value[currentGroupIndex.value]?.targetBookId
-    const found = await findLineWithTarget(idx, -1, currentTarget, 50)
-    const newIndex = found !== null ? found : Math.max(0, idx - 1)
 
+    // If we have a target commentary, try to find the previous line with it
+    if (currentTarget !== undefined) {
+        const found = await findLineWithTarget(idx, -1, currentTarget, 20)
+        if (found !== null) {
+            pendingNavigationTargetBookId.value = currentTarget // Set target for next load
+            emit('update:selectedLineIndex', found)
+            emit('navigate-line', found)
+            try {
+                const activeTab = tabStore.activeTab
+                if (activeTab?.bookState) {
+                    activeTab.bookState.selectedLineIndex = found
+                }
+            } catch (e) {
+                console.warn('[Commentary] failed to write selectedLineIndex to tabState', e)
+            }
+            return
+        }
+    }
+
+    // Fallback: just go to previous line
+    const newIndex = Math.max(0, idx - 1)
     emit('update:selectedLineIndex', newIndex)
     emit('navigate-line', newIndex)
-    // Fallback: write directly to tab state so BookLineViewer sees the change
     try {
         const activeTab = tabStore.activeTab
         if (activeTab?.bookState) {
@@ -301,18 +366,35 @@ async function previousLine() {
     }
 }
 
-// Navigate to next line; similar to `previousLine` but scanning forward.
 async function nextLine() {
     const idx = props.selectedLineIndex
     if (idx === undefined) return
 
     const currentTarget = linkGroups.value[currentGroupIndex.value]?.targetBookId
-    const found = await findLineWithTarget(idx, 1, currentTarget, 50)
-    const newIndex = found !== null ? found : idx + 1
 
+    // If we have a target commentary, try to find the next line with it
+    if (currentTarget !== undefined) {
+        const found = await findLineWithTarget(idx, 1, currentTarget, 20)
+        if (found !== null) {
+            pendingNavigationTargetBookId.value = currentTarget // Set target for next load
+            emit('update:selectedLineIndex', found)
+            emit('navigate-line', found)
+            try {
+                const activeTab = tabStore.activeTab
+                if (activeTab?.bookState) {
+                    activeTab.bookState.selectedLineIndex = found
+                }
+            } catch (e) {
+                console.warn('[Commentary] failed to write selectedLineIndex to tabState', e)
+            }
+            return
+        }
+    }
+
+    // Fallback: just go to next line
+    const newIndex = idx + 1
     emit('update:selectedLineIndex', newIndex)
     emit('navigate-line', newIndex)
-    // Fallback: write directly to tab state so BookLineViewer sees the change
     try {
         const activeTab = tabStore.activeTab
         if (activeTab?.bookState) {
@@ -339,12 +421,16 @@ function handleKeyDown(e: KeyboardEvent) {
 }
 
 function handleSearchQueryChange(query: string) {
-    // Build searchable items from all commentary links
     const items: Array<{ index: number; content: string }> = []
-    linkGroups.value.forEach((group, groupIndex) => {
-        group.links.forEach((link, linkIndex) => {
+    virtualCommentaryItems.value.forEach((item, index) => {
+        items.push({
+            index: index,
+            content: item.groupName
+        })
+
+        item.links.forEach(link => {
             items.push({
-                index: groupIndex * 1000 + linkIndex, // Unique index
+                index: index,
                 content: link.html
             })
         })
@@ -357,36 +443,28 @@ function handleSearchQueryChange(query: string) {
 function handleNavigateToMatch(matchIndex: number) {
     search.navigateToMatch(matchIndex)
     const match = search.currentMatch.value
-    if (match) {
-        // Calculate group index from combined index
-        const groupIndex = Math.floor(match.itemIndex / 1000)
+    if (match && commentaryScrollerRef.value) {
+        // Set flag to prevent scroll tracking interference
+        isNavigating.value = true
 
-        // Navigate to the group
-        currentGroupIndex.value = groupIndex
-        scrollToGroup(groupIndex)
+        // First, scroll to the item in the virtual scroller
+        commentaryScrollerRef.value.scrollToItem(match.itemIndex)
 
-        // Wait for render, then fine-tune scroll position to center the mark
+        // Wait for virtualization to render the item, then fine-tune scroll position
         setTimeout(() => {
-            const currentMark = document.querySelector('.commentary-content mark.current')
-            if (currentMark && commentaryContentRef.value) {
-                const markRect = currentMark.getBoundingClientRect()
-                const contentRect = commentaryContentRef.value.getBoundingClientRect()
-
-                // Account for search bar height (approximately 60px)
-                const searchBarOffset = 60
-                const effectiveTop = contentRect.top + searchBarOffset
-
-                // Check if mark is visible below search bar
-                const isVisible = markRect.top >= effectiveTop &&
-                    markRect.bottom <= contentRect.bottom
-
-                // If not visible, adjust scroll to center it
-                if (!isVisible) {
-                    const offset = markRect.top - contentRect.top - (contentRect.height / 2) + (markRect.height / 2)
-                    commentaryContentRef.value.scrollTop += offset
-                }
+            // Query within the commentary scroller element to ensure we get the right mark
+            const scrollerEl = commentaryScrollerRef.value?.$el
+            const currentMark = scrollerEl?.querySelector('mark.current')
+            if (currentMark) {
+                // Fine-tune scroll to center the highlighted text
+                currentMark.scrollIntoView({ behavior: 'auto', block: 'center' })
             }
-        }, 50)
+
+            // Re-enable scroll tracking after navigation completes
+            setTimeout(() => {
+                isNavigating.value = false
+            }, 100)
+        }, 150) // Longer timeout to ensure virtualization has rendered
     }
 }
 
@@ -402,15 +480,13 @@ const processedLinkGroups = computed(() => {
         links: group.links.map((link, linkIndex) => {
             let html = link.html
 
-            // Apply diacritics filtering
             if (diacriticsState && diacriticsState > 0) {
                 html = applyDiacriticsFilter(html, diacriticsState)
             }
 
-            // Apply search highlighting
             if (query) {
-                const itemIndex = groupIndex * 1000 + linkIndex
-                const currentOccurrence = currentMatch?.itemIndex === itemIndex ? currentMatch.occurrence : -1
+                const virtualItemIndex = groupIndex
+                const currentOccurrence = currentMatch?.itemIndex === virtualItemIndex ? currentMatch.occurrence : -1
                 html = search.highlightMatches(html, query, currentOccurrence)
             }
 
@@ -422,11 +498,9 @@ const processedLinkGroups = computed(() => {
     }))
 })
 
-// Helper function to apply diacritics filtering to HTML content
 function applyDiacriticsFilter(htmlContent: string, state: number): string {
     if (!htmlContent || state === 0) return htmlContent
 
-    // Create a temporary div to parse HTML
     const tempDiv = document.createElement('div')
     tempDiv.innerHTML = htmlContent
 
@@ -447,15 +521,12 @@ function applyDiacriticsFilter(htmlContent: string, state: number): string {
 
         let text = textNode.nodeValue || ''
 
-        // State 1: Remove cantillations only (U+0591-U+05AF)
         if (state >= 1) {
             text = text.replace(/[\u0591-\u05AF]/g, '')
         }
 
-        // State 2: Remove nikkud as well (U+05B0-U+05BD, U+05C1, U+05C2, U+05C4, U+05C5)
         if (state >= 2) {
             text = text.replace(/[\u05B0-\u05BD\u05C1\u05C2\u05C4\u05C5]/g, '')
-            // Replace ? and ! with . and remove em dash (—)
             text = text.replace(/[?!]/g, '.').replace(/—/g, '')
         }
 
@@ -465,66 +536,27 @@ function applyDiacriticsFilter(htmlContent: string, state: number): string {
     return tempDiv.innerHTML
 }
 
-// Load commentary when props change (line navigation)
+// Load commentary when props change
 watch([() => props.bookId, () => props.selectedLineIndex], async ([bookId, lineIndex]) => {
     if (bookId !== undefined && lineIndex !== undefined) {
-        await loadCommentaryLinks(bookId, lineIndex)
+        const targetBookId = pendingNavigationTargetBookId.value
+        pendingNavigationTargetBookId.value = undefined // Clear after use
+        await loadCommentaryLinks(bookId, lineIndex, targetBookId)
     }
 }, { immediate: true })
 
 // Handle connection type filter change
 const handleFilterChange = async (connectionTypeId: number) => {
-
-
-    // Save current filter's position (so each filter keeps its own pointer)
-    try {
-        // Cancel any pending delayed save to avoid it firing after we switch filters
-        if (scrollSaveTimeout.value) {
-            clearTimeout(scrollSaveTimeout.value)
-            scrollSaveTimeout.value = null
-        }
-        pendingSaveToken.value++
-        saveCurrentTargetBookId()
-    } catch (e) {
-        console.warn('[Commentary] Failed to save current targetBookId before switching filter', e)
-    }
-
-    // Apply the new filter and reload commentary for the current line
     selectedConnectionTypeId.value = connectionTypeId
 
     if (props.bookId !== undefined && props.selectedLineIndex !== undefined) {
-        await loadCommentaryLinks(props.bookId, props.selectedLineIndex)
+        await loadCommentaryLinks(props.bookId, props.selectedLineIndex, undefined)
     }
 }
 
-// Helper to get current position for debugging
-function getCurrentPosition() {
-    return {
-        groupIndex: currentGroupIndex.value,
-        targetBookId: linkGroups.value[currentGroupIndex.value]?.targetBookId,
-        scrollPosition: commentaryContentRef.value?.scrollTop || 0,
-        groupName: linkGroups.value[currentGroupIndex.value]?.groupName
-    }
-}
-
-async function loadCommentaryLinks(bookId: number, lineIndex: number) {
+async function loadCommentaryLinks(bookId: number, lineIndex: number, scrollToTargetBookId?: number) {
     isLoading.value = true
     try {
-        // Cancel any pending delayed save since we're reloading commentary for a new line/filter
-        if (scrollSaveTimeout.value) {
-            clearTimeout(scrollSaveTimeout.value)
-            scrollSaveTimeout.value = null
-        }
-        pendingSaveToken.value++
-        // Suppress autosaves while we load and perform programmatic restores
-        suppressNextSave.value = true
-
-
-
-        // Preserve previously-selected commentator by targetBookId so switching lines
-        // keeps the same commentator if possible.
-        const prevSelectedTargetBookId = linkGroups.value[currentGroupIndex.value]?.targetBookId
-
         linkGroups.value = await commentaryService.loadCommentaryLinks(
             bookId,
             lineIndex,
@@ -532,58 +564,67 @@ async function loadCommentaryLinks(bookId: number, lineIndex: number) {
             { connectionTypeId: selectedConnectionTypeId.value }
         )
 
-        // Update available filter options for this line so filters with no entries are hidden
         computeAvailableFilterOptions(bookId, lineIndex).catch(() => { })
 
+        // Restore saved position for this filter, or default to 0
+        const activeTab = tabStore.activeTab
+        const filterKey = selectedConnectionTypeId.value?.toString() || 'all'
+        const savedPosition = activeTab?.bookState?.commentaryPositionsByFilter?.[filterKey]
 
+        // If we have a target book ID to scroll to (from navigation), find and scroll to it
+        if (scrollToTargetBookId !== undefined) {
+            const targetGroupIndex = linkGroups.value.findIndex(g => g.targetBookId === scrollToTargetBookId)
+            if (targetGroupIndex >= 0) {
+                currentGroupIndex.value = targetGroupIndex
+                comboboxSelectedValue.value = targetGroupIndex
 
-        // First, try to restore to the previously-selected commentator (if any)
-        if (prevSelectedTargetBookId !== undefined && prevSelectedTargetBookId !== null) {
-            const matchingIndex = linkGroups.value.findIndex(g => g.targetBookId === prevSelectedTargetBookId)
-            if (matchingIndex !== -1) {
-                currentGroupIndex.value = matchingIndex
-                setTimeout(() => scrollToGroup(matchingIndex), 100)
-                return
+                setTimeout(() => {
+                    scrollToGroup(targetGroupIndex)
+                }, 150)
+            } else {
+                // Target not found, use default
+                currentGroupIndex.value = 0
+                comboboxSelectedValue.value = 0
             }
+        } else if (savedPosition && savedPosition.groupIndex < linkGroups.value.length) {
+            // Restore saved position
+            currentGroupIndex.value = savedPosition.groupIndex
+            comboboxSelectedValue.value = savedPosition.groupIndex
+
+            setTimeout(() => {
+                scrollToGroup(savedPosition.groupIndex)
+                if (savedPosition.scrollPosition && commentaryScrollerRef.value?.$el) {
+                    commentaryScrollerRef.value.$el.scrollTop = savedPosition.scrollPosition
+                }
+            }, 150)
+        } else {
+            // Default to first group
+            currentGroupIndex.value = 0
+            comboboxSelectedValue.value = 0
         }
 
-        // Fallback: try to restore by saved targetBookId from tab state
-        const restored = restoreByTargetBookId()
-        if (restored) {
-            return
-        }
+        setTimeout(() => {
+            setupScrollTracking()
+        }, 200)
 
-        // Default to first group
-
-        currentGroupIndex.value = 0
     } catch (error) {
         console.error('❌ Failed to load commentary links:', error)
         linkGroups.value = []
     } finally {
         isLoading.value = false
-        // Allow programmatic restore/scroll to settle before re-enabling saves
-        setTimeout(() => {
-            suppressNextSave.value = false
-            // Invalidate any previously-scheduled delayed saves
-            pendingSaveToken.value++
-        }, 250)
     }
 }
 
-function handleGroupClick(group: CommentaryLinkGroup) {
-    if (group.targetBookId !== undefined && group.targetLineIndex !== undefined) {
-        // Look up the target book to determine if it has connections
-        const targetBook = categoryTreeStore.allBooks.find(book => book.id === group.targetBookId)
+function handleGroupClick(item: any) {
+    if (item.targetBookId !== undefined && item.targetLineIndex !== undefined) {
+        const targetBook = categoryTreeStore.allBooks.find(book => book.id === item.targetBookId)
         const targetHasConnections = targetBook ? hasConnections(targetBook) : false
 
-        // Use the new method to create a tab directly with book state
-        tabStore.openBookInNewTab(group.groupName, group.targetBookId, targetHasConnections, group.targetLineIndex)
-
+        tabStore.openBookInNewTab(item.groupName, item.targetBookId, targetHasConnections, item.targetLineIndex)
     }
 }
 
 function handleClose() {
-    // Close the bottom pane by updating tab state directly
     const activeTab = tabStore.activeTab
     if (activeTab?.bookState) {
         activeTab.bookState.showBottomPane = false
@@ -609,253 +650,278 @@ const groupOptions = computed<ComboboxOption[]>(() => {
     }))
 })
 
-// Set group ref for scrolling
-const setGroupRef = (el: Element | ComponentPublicInstance | null, index: number) => {
-    if (el && el instanceof HTMLElement) {
-        groupRefs.value.set(index, el)
+// Watch combobox changes and update scroll position accordingly
+watch(comboboxSelectedValue, (newValue) => {
+    if (typeof newValue === 'number') {
+        if (newValue !== currentGroupIndex.value) {
+            currentGroupIndex.value = newValue
+            scrollToGroup(newValue)
+        }
+    } else if (typeof newValue === 'string') {
+        const searchText = newValue.toLowerCase().trim()
+        if (searchText) {
+            const matchingGroup = processedLinkGroups.value.find(group =>
+                group.groupName.toLowerCase().includes(searchText)
+            )
+            if (matchingGroup) {
+                const matchingIndex = processedLinkGroups.value.indexOf(matchingGroup)
+                if (matchingIndex !== -1 && matchingIndex !== currentGroupIndex.value) {
+                    currentGroupIndex.value = matchingIndex
+                    scrollToGroup(matchingIndex)
+                }
+            }
+        }
     }
-}
+})
 
-// Scroll to specific group
+// Watch currentGroupIndex changes to update combobox AND persist to tab state
+watch(currentGroupIndex, (newIndex) => {
+    if (typeof comboboxSelectedValue.value === 'number' && comboboxSelectedValue.value !== newIndex) {
+        comboboxSelectedValue.value = newIndex
+    }
+
+    // Persist to tab state for session/filter restoration
+    const activeTab = tabStore.activeTab
+    if (activeTab?.bookState && props.bookId !== undefined) {
+        const filterKey = selectedConnectionTypeId.value?.toString() || 'all'
+
+        if (!activeTab.bookState.commentaryPositionsByFilter) {
+            activeTab.bookState.commentaryPositionsByFilter = {}
+        }
+
+        const currentGroup = linkGroups.value[newIndex]
+        activeTab.bookState.commentaryPositionsByFilter[filterKey] = {
+            groupIndex: newIndex,
+            targetBookId: currentGroup?.targetBookId,
+            scrollPosition: commentaryScrollerRef.value?.$el?.scrollTop || 0
+        }
+    }
+})
+
+// Scroll to specific group (virtualized)
 const scrollToGroup = (index: number) => {
-    const groupElement = groupRefs.value.get(index)
-    if (groupElement && commentaryContentRef.value) {
-        commentaryContentRef.value.removeEventListener('scroll', handleCommentaryScroll)
-        groupElement.scrollIntoView({ behavior: 'auto', block: 'center' })
+    if (!commentaryScrollerRef.value) return
+
+    const groupItemId = `group-${index}`
+    const itemIndex = virtualCommentaryItems.value.findIndex(item => item.id === groupItemId)
+
+    if (itemIndex !== -1) {
+        isNavigating.value = true
+
+        const scrollerEl = commentaryScrollerRef.value.$el
+        if (scrollerEl) {
+            scrollerEl.style.overflow = 'hidden'
+            scrollerEl.style.pointerEvents = 'none'
+        }
+
+        commentaryScrollerRef.value.scrollToItem(itemIndex)
+
         setTimeout(() => {
-            if (commentaryContentRef.value) {
-                commentaryContentRef.value.addEventListener('scroll', handleCommentaryScroll)
+            if (commentaryScrollerRef.value) {
+                commentaryScrollerRef.value.scrollToItem(itemIndex)
+
+                setTimeout(() => {
+                    if (scrollerEl) {
+                        scrollerEl.style.overflow = ''
+                        scrollerEl.style.pointerEvents = ''
+                    }
+                    setTimeout(() => {
+                        isNavigating.value = false
+                    }, 50)
+                }, 10)
             }
         }, 50)
     }
 }
 
-// Handle commentary scroll to update dropdown
-const handleCommentaryScroll = () => {
-    if (!commentaryContentRef.value || processedLinkGroups.value.length === 0 || groupRefs.value.size === 0) return
-
-    const containerRect = commentaryContentRef.value.getBoundingClientRect()
-    const containerTop = containerRect.top + 50
-
-    let activeIndex = 0
-    const headerPositions: Array<{ index: number; top: number }> = []
-    groupRefs.value.forEach((groupElement, index) => {
-        const headerRect = groupElement.getBoundingClientRect()
-        headerPositions.push({ index, top: headerRect.top })
-        if (headerRect.top <= containerTop) {
-            activeIndex = index
-        }
-    })
-
-
-    // Ensure activeIndex is within bounds of processedLinkGroups
-    if (activeIndex >= processedLinkGroups.value.length) {
-        activeIndex = Math.max(0, processedLinkGroups.value.length - 1)
-    }
-
-    if (currentGroupIndex.value !== activeIndex) {
-        currentGroupIndex.value = activeIndex
-    }
-
-    // Throttle targetBookId saving to avoid excessive saves during scroll.
-    // Capture current filter+line to avoid a delayed save overwriting after a quick switch.
-    if (scrollSaveTimeout.value) {
-        clearTimeout(scrollSaveTimeout.value)
-        scrollSaveTimeout.value = null
-    }
-
-    // Bump token to invalidate any previously-scheduled saves and capture this token
-    pendingSaveToken.value++
-    const myToken = pendingSaveToken.value
-
-    const _capturedConnectionTypeId = selectedConnectionTypeId.value
-    const _capturedLineIndex = props.selectedLineIndex
-
-    scrollSaveTimeout.value = setTimeout(() => {
-        // If token has changed, this save is stale — ignore it
-        if (myToken !== pendingSaveToken.value) {
-            return
-        }
-        // Clear the timeout handle now that it's executing
-        if (scrollSaveTimeout.value) {
-            clearTimeout(scrollSaveTimeout.value)
-            scrollSaveTimeout.value = null
-        }
-
-        saveCurrentTargetBookId(_capturedConnectionTypeId, _capturedLineIndex)
-    }, 100)
-}
-
 // Navigation functions
 const previousGroup = () => {
     if (currentGroupIndex.value > 0) {
-        currentGroupIndex.value--
-        scrollToGroup(currentGroupIndex.value)
+        const newIndex = currentGroupIndex.value - 1
+        currentGroupIndex.value = newIndex
+        scrollToGroup(newIndex)
     }
 }
 
 const nextGroup = () => {
     if (currentGroupIndex.value < processedLinkGroups.value.length - 1) {
-        currentGroupIndex.value++
-        scrollToGroup(currentGroupIndex.value)
+        const newIndex = currentGroupIndex.value + 1
+        currentGroupIndex.value = newIndex
+        scrollToGroup(newIndex)
     }
 }
 
-// Handle selection directly
 function selectAllInContainer() {
-    if (!commentaryContentRef.value) return
+    const scrollerEl = commentaryScrollerRef.value?.$el
+    if (!scrollerEl) return
 
     const selection = window.getSelection()
     if (!selection) return
 
     const range = document.createRange()
-    range.selectNodeContents(commentaryContentRef.value)
+    range.selectNodeContents(scrollerEl)
     selection.removeAllRanges()
     selection.addRange(range)
 
     emit('clearOtherSelections')
 }
 
+// Scroll tracking with direct position checking
+let scrollTrackingCleanup: (() => void) | null = null
 
+function setupScrollTracking() {
+    if (!commentaryScrollerRef.value?.$el) return
 
+    if (scrollTrackingCleanup) {
+        scrollTrackingCleanup()
+    }
 
+    const scrollerEl = commentaryScrollerRef.value.$el
+    let scrollTimeout: number | undefined
 
-onMounted(() => {
-    // Component mounted - no additional setup needed
-})
+    const updateCurrentSection = () => {
+        if (isNavigating.value) return
 
-// Cleanup old 'show_all' stored positions and undefined filter values
-onMounted(() => {
-    const activeTab = tabStore.activeTab
-    if (activeTab?.bookState?.commentaryPositionsByFilter) {
-        if (activeTab.bookState.commentaryPositionsByFilter['show_all']) {
-            delete activeTab.bookState.commentaryPositionsByFilter['show_all']
+        const sections = scrollerEl.querySelectorAll('section.commentary-section')
+        if (sections.length === 0) return
 
+        const scrollerRect = scrollerEl.getBoundingClientRect()
+        const scrollerTop = scrollerRect.top
+        const scrollerBottom = scrollerRect.bottom
+
+        let targetSection: number | undefined = undefined
+
+        if (scrollDirection.value === 'up') {
+            // Scrolling UP: Find the first section whose top is visible or just above viewport top
+            let bestSection: number | undefined = undefined
+            let bestDistance = Infinity
+
+            sections.forEach((section: Element) => {
+                const rect = section.getBoundingClientRect()
+                const sectionIndex = parseInt(section.getAttribute('data-group-index') || '-1')
+                if (sectionIndex < 0) return
+
+                // Check if section is visible (any part in viewport)
+                const isVisible = rect.bottom > scrollerTop && rect.top < scrollerBottom
+
+                if (isVisible) {
+                    // Distance from section top to viewport top (prefer sections at top)
+                    const distance = Math.abs(rect.top - scrollerTop)
+                    if (distance < bestDistance) {
+                        bestDistance = distance
+                        bestSection = sectionIndex
+                    }
+                }
+            })
+
+            targetSection = bestSection
+        } else if (scrollDirection.value === 'down') {
+            // Scrolling DOWN: Find the last section that's visible
+            let bestSection: number | undefined = undefined
+            let bestTop = -Infinity
+
+            sections.forEach((section: Element) => {
+                const rect = section.getBoundingClientRect()
+                const sectionIndex = parseInt(section.getAttribute('data-group-index') || '-1')
+                if (sectionIndex < 0) return
+
+                // Check if section is visible (any part in viewport)
+                const isVisible = rect.bottom > scrollerTop && rect.top < scrollerBottom
+
+                if (isVisible && rect.top > bestTop) {
+                    bestTop = rect.top
+                    bestSection = sectionIndex
+                }
+            })
+
+            targetSection = bestSection
+        } else {
+            // No direction: Find section closest to top of viewport
+            let bestSection: number | undefined = undefined
+            let bestDistance = Infinity
+
+            sections.forEach((section: Element) => {
+                const rect = section.getBoundingClientRect()
+                const sectionIndex = parseInt(section.getAttribute('data-group-index') || '-1')
+                if (sectionIndex < 0) return
+
+                const isVisible = rect.bottom > scrollerTop && rect.top < scrollerBottom
+                if (isVisible) {
+                    const distance = Math.abs(rect.top - scrollerTop)
+                    if (distance < bestDistance) {
+                        bestDistance = distance
+                        bestSection = sectionIndex
+                    }
+                }
+            })
+
+            targetSection = bestSection
+        }
+
+        if (targetSection !== undefined && targetSection >= 0 && targetSection !== currentGroupIndex.value) {
+            currentGroupIndex.value = targetSection
         }
     }
-    // If an explicit filter is stored as undefined, remove it to force default
-    if (activeTab?.bookState && Object.prototype.hasOwnProperty.call(activeTab.bookState, 'commentaryFilterConnectionTypeId')) {
-        if (activeTab.bookState.commentaryFilterConnectionTypeId === undefined) {
-            delete activeTab.bookState.commentaryFilterConnectionTypeId
 
+    // Track scroll direction and update current section
+    const handleScroll = () => {
+        if (isNavigating.value) return
+
+        const currentScrollTop = scrollerEl.scrollTop
+
+        // Update scroll direction
+        if (currentScrollTop > lastScrollTop.value) {
+            scrollDirection.value = 'down'
+        } else if (currentScrollTop < lastScrollTop.value) {
+            scrollDirection.value = 'up'
         }
+        lastScrollTop.value = currentScrollTop
+
+        // Debounce the section detection (short delay for responsiveness)
+        clearTimeout(scrollTimeout)
+        scrollTimeout = window.setTimeout(() => {
+            updateCurrentSection()
+
+            // Also update scroll position in persistence
+            const activeTab = tabStore.activeTab
+            if (activeTab?.bookState && props.bookId !== undefined) {
+                const filterKey = selectedConnectionTypeId.value?.toString() || 'all'
+                if (activeTab.bookState.commentaryPositionsByFilter?.[filterKey]) {
+                    activeTab.bookState.commentaryPositionsByFilter[filterKey].scrollPosition = currentScrollTop
+                }
+            }
+        }, 16) // ~1 frame at 60fps for smooth updates
     }
-})
 
-// Save current targetBookId for the current filter+line
-function saveCurrentTargetBookId(capturedConnectionTypeId?: number | undefined, capturedLineIndex?: number | undefined) {
-    const activeTab = tabStore.activeTab
-    if (!activeTab?.bookState || linkGroups.value.length === 0) return
-    const effectiveConnectionTypeId = capturedConnectionTypeId !== undefined ? capturedConnectionTypeId : selectedConnectionTypeId.value
-    const effectiveLineIndex = capturedLineIndex !== undefined ? capturedLineIndex : props.selectedLineIndex
-    const filterKey = getFilterKey(effectiveConnectionTypeId, effectiveLineIndex)
+    scrollerEl.addEventListener('scroll', handleScroll, { passive: true })
 
-    const currentGroup = linkGroups.value[currentGroupIndex.value]
+    // Initial update
+    setTimeout(() => {
+        updateCurrentSection()
+    }, 100)
 
-    // Initialize commentaryPositionsByFilter if it doesn't exist
-    if (!activeTab.bookState.commentaryPositionsByFilter) {
-        activeTab.bookState.commentaryPositionsByFilter = {}
+    scrollTrackingCleanup = () => {
+        scrollerEl.removeEventListener('scroll', handleScroll)
+        clearTimeout(scrollTimeout)
     }
 
-    // Save detailed position (group index + scroll position + optional targetBookId)
-    if (currentGroup) {
-        const scrollPosition = commentaryContentRef.value?.scrollTop || 0
-        activeTab.bookState.commentaryPositionsByFilter[filterKey] = {
-            groupIndex: currentGroupIndex.value,
-            targetBookId: currentGroup.targetBookId,
-            scrollPosition
+    onUnmounted(() => {
+        if (scrollTrackingCleanup) {
+            scrollTrackingCleanup()
         }
-
-    }
+    })
 }
 
-// Restore position by finding the saved targetBookId
-function restoreByTargetBookId(): boolean {
-    const activeTab = tabStore.activeTab
-    if (!activeTab?.bookState?.commentaryPositionsByFilter) {
-
-        return false
+// Watch for linkGroups changes to refresh scroll tracking
+watch(linkGroups, (newGroups) => {
+    if (currentGroupIndex.value >= newGroups.length) {
+        currentGroupIndex.value = 0
     }
 
-    const filterKey = getFilterKey(selectedConnectionTypeId.value, props.selectedLineIndex)
-    const savedData = activeTab.bookState.commentaryPositionsByFilter[filterKey]
-
-
-
-    if (!savedData?.targetBookId) {
-
-        return false
-    }
-
-    // Find the group with the saved targetBookId
-    const matchingIndex = linkGroups.value.findIndex(
-        group => group.targetBookId === savedData.targetBookId
-    )
-
-
-
-    if (matchingIndex !== -1) {
-        const matchedGroup = linkGroups.value[matchingIndex]
-        if (matchedGroup) {
-
-
-            suppressNextSave.value = true
-            currentGroupIndex.value = matchingIndex
-
-            // Wait for DOM to update before scrolling
-            setTimeout(() => {
-                scrollToGroup(matchingIndex)
-            }, 100)
-            return true
-        }
-    }
-
-    // If targetBookId wasn't found, but we have a saved groupIndex, use it as a fallback
-    if (savedData?.groupIndex !== undefined && Number.isInteger(savedData.groupIndex)) {
-        const gi = savedData.groupIndex
-        if (gi >= 0 && gi < linkGroups.value.length) {
-
-            suppressNextSave.value = true
-            currentGroupIndex.value = gi
-            setTimeout(() => {
-                scrollToGroup(gi)
-            }, 100)
-            return true
-        }
-    }
-
-
-    return false
-}
-
-// Get filter key for position storage
-function getFilterKey(connectionTypeId: number | undefined, lineIndex?: number | undefined): string {
-    const linePart = lineIndex !== undefined && lineIndex !== null ? `line_${lineIndex}` : 'line_none'
-    return connectionTypeId !== undefined ? `filter_${connectionTypeId}_${linePart}` : `filter_none_${linePart}`
-}
-
-// Note: Group index is now managed in loadCommentaryLinks based on targetBookId matching
-// No need to reset to 0 on every linkGroups change
-
-watch(currentGroupIndex, (newIndex) => {
-    // Save targetBookId immediately when group changes, unless this change was programmatic during restore
-
-    if (suppressNextSave.value) {
-        suppressNextSave.value = false
-    } else {
-        saveCurrentTargetBookId()
-    }
-    scrollToGroup(newIndex)
-})
-
-watch(commentaryContentRef, (newVal, oldVal) => {
-    if (oldVal) {
-        oldVal.removeEventListener('scroll', handleCommentaryScroll)
-    }
-    if (newVal) {
-        newVal.addEventListener('scroll', handleCommentaryScroll)
-    }
-})
+    nextTick(() => {
+        setupScrollTracking()
+    })
+}, { flush: 'post' })
 </script>
 
 <style scoped>
@@ -888,7 +954,17 @@ watch(commentaryContentRef, (newVal, oldVal) => {
     opacity: 0.3;
 }
 
-.commentary-content {
+.commentary-content-container {
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.commentary-scroller {
+    flex: 1 1 0;
+    min-height: 0;
     padding: 16px;
     direction: rtl;
     font-size: var(--font-size, 100%);
@@ -926,17 +1002,6 @@ watch(commentaryContentRef, (newVal, oldVal) => {
     direction: rtl;
 }
 
-.commentary-links {
-    gap: 32px;
-    padding-bottom: 32px;
-    direction: rtl;
-}
-
-.commentary-group {
-    gap: 8px;
-    direction: rtl;
-}
-
 .group-header {
     font-size: 1.125em;
     color: var(--text-primary);
@@ -954,6 +1019,7 @@ watch(commentaryContentRef, (newVal, oldVal) => {
 .link-item {
     color: var(--text-primary);
     font-family: var(--text-font);
+    line-height: var(--line-height, 1.6);
     direction: rtl;
     padding-block-start: 0.15em;
     padding-block-end: 0.15em;
@@ -961,36 +1027,19 @@ watch(commentaryContentRef, (newVal, oldVal) => {
     display: block;
 }
 
-.link-item :deep(h1),
-.link-item :deep(h2),
-.link-item :deep(h3),
-.link-item :deep(h4),
-.link-item :deep(h5),
-.link-item :deep(h6) {
-    font-family: var(--header-font);
-    color: var(--text-primary);
-    margin: 0;
-    text-align: right;
+.commentary-section {
+    padding-bottom: 24px;
+    position: relative;
+    width: 100%;
+    box-sizing: border-box;
 }
 
-.link-item :deep(h1) {
-    font-size: 2em;
-    padding: 0.8em 0 0.4em 0;
-    margin-bottom: 0.5em;
-    border-bottom: 1px solid var(--border-color);
+/* Ensure DynamicScrollerItem doesn't have positioning issues */
+.commentary-scroller :deep(.vue-recycle-scroller__item-wrapper) {
+    position: relative;
 }
 
-.link-item :deep(h2) {
-    font-size: 1.6em;
-    font-weight: 700;
-    padding: 0.7em 0 0.3em 0;
-    margin-bottom: 0.4em;
-}
-
-.link-item :deep(h3) {
-    font-size: 1.4em;
-    font-weight: 600;
-    padding: 0.6em 0 0.2em 0;
-    margin-bottom: 0.3em;
+.commentary-scroller :deep(.vue-recycle-scroller__item-view) {
+    width: 100%;
 }
 </style>

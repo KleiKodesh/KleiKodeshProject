@@ -7,7 +7,7 @@
 
       <button v-if="tabStore.activeTab?.currentPage === 'bookview'"
               @click.stop="handleButtonClick(goToToc)"
-              class="flex-center c-pointer"
+              class="flex-center c-pointer touch-interactive"
               title="תוכן עניינים">
         <Icon icon="fluent:text-bullet-list-tree-24-regular"
               class="rtl-flip" />
@@ -15,14 +15,14 @@
 
       <button v-if="tabStore.activeTab?.currentPage === 'bookview' && !isTocVisible"
               @click.stop="handleButtonClick(openSearch)"
-              class="flex-center c-pointer"
+              class="flex-center c-pointer touch-interactive"
               title="חיפוש (Ctrl+F)">
         <Icon icon="fluent:search-28-filled" />
       </button>
 
       <button v-if="tabStore.activeTab?.currentPage === 'bookview' && hasConnections && !isTocVisible"
               @click.stop="handleButtonClick(toggleSplitPane)"
-              class="flex-center c-pointer"
+              class="flex-center c-pointer touch-interactive"
               :title="isSplitPaneOpen ? 'הסתר קשרים' : 'הצג קשרים'">
         <Icon
               :icon="isSplitPaneOpen ? 'fluent:panel-bottom-expand-20-filled' : 'fluent:panel-bottom-contract-20-filled'" />
@@ -34,23 +34,23 @@
     </div>
     <span class="center-text ellipsis activetab-title"
           title="הצג רשימת טאבים">{{ tabStore.activeTab?.title
-      }}</span>
+          }}</span>
     <div class="flex-row justify-end">
       <button @click.stop="handleButtonClick(resetTab)"
-              class="flex-center c-pointer"
+              class="flex-center c-pointer touch-interactive"
               title="דף הבית">
         <Icon icon="fluent:home-28-regular" />
       </button>
 
       <button @click.stop="handleButtonClick(newTab)"
-              class="flex-center c-pointer"
+              class="flex-center c-pointer touch-interactive"
               title="פתח טאב חדש">
         <Icon icon="fluent:add-16-filled"
               class="small-icon" />
       </button>
 
       <button @click.stop="handleButtonClick(closeTab)"
-              class="flex-center c-pointer"
+              class="flex-center c-pointer touch-interactive"
               title="סגור">
         <Icon icon="fluent:dismiss-16-filled"
               class="small-icon" />

@@ -18,6 +18,7 @@
                              :key="entry.id"
                              :ref="el => { if (el) nodeRefs[index] = el as InstanceType<typeof BookTocTreeNode> }"
                              :entry="entry"
+                             :is-compact-mode="$props.isCompactMode"
                              @select-line="emit('selectLine', $event)" />
         </template>
     </div>
@@ -33,6 +34,7 @@ import type { TocEntry } from '../types/BookToc';
 defineProps<{
     tocEntries: TocEntry[]
     isLoading?: boolean
+    isCompactMode?: boolean
 }>();
 
 const emit = defineEmits<{

@@ -7,11 +7,13 @@ export interface BookState {
     bookTitle: string;
     initialLineIndex?: number; // Line index (0 to totalLines-1) representing which line should be at the top of the viewport. Set by TOC selection or saved from scroll position
     isTocOpen?: boolean; // Whether TOC overlay is open
+    isFirstTocOpen?: boolean; // Whether this is the first time opening TOC (for full-width vs compact display)
     showBottomPane?: boolean; // Whether bottom pane of split view is visible
     hasConnections?: boolean; // Whether book has any connections (targum, reference, commentary, or other)
     selectedLineIndex?: number; // Currently selected line index for commentary
     commentaryFilterConnectionTypeId?: number; // Selected connection type filter for commentary (undefined = show all)
     commentaryPositionsByFilter?: Record<string, { groupIndex: number; targetBookId?: number; scrollPosition: number }>; // Position per filter for persistence when switching
+    commentaryPositions?: Record<string, { groupIndex: number; targetBookId?: number }>; // Legacy position storage (simple format)
     diacriticsState?: number; // 0 = show all, 1 = hide cantillation, 2 = hide nikkud too
     isLineDisplayInline?: boolean; // false = block display, true = inline display
     originalHtml?: string; // Store original HTML for diacritics restoration

@@ -1,11 +1,13 @@
 <template>
-  <div class="flex-column height-fill book-view-wrapper">
+  <div class="flex-column height-fill book-view-wrapper"
+       @click="handleBackgroundClick">
     <!-- Virtualized viewer is now always enabled -->
     <keep-alive>
       <BookTocTreeView v-if="myTab?.bookState?.isTocOpen && myTab?.bookState?.bookId"
                        ref="tocTreeViewRef"
                        :toc-entries="tocEntries"
                        :is-loading="isTocLoading"
+                       :is-compact-mode="!myTab.bookState.isFirstTocOpen"
                        class="toc-overlay"
                        @select-line="handleTocSelection" />
     </keep-alive>
@@ -13,16 +15,16 @@
     <SplitPane v-if="myTab?.bookState?.bookId"
                :show-bottom="myTab.bookState.showBottomPane || false">
       <template #top>
-        <VirtualizedBookLineViewer ref="lineViewerRef"
-                                   :tab-id="myTabId"
-                                   :alt-toc-by-line-index="altTocByLineIndex"
-                                   class="flex-110" />
+        <BookLineViewer ref="lineViewerRef"
+                        :tab-id="myTabId"
+                        :alt-toc-by-line-index="altTocByLineIndex"
+                        class="flex-110" />
       </template>
       <template #bottom>
-        <VirtualizedBookCommentaryView :book-id="myTab.bookState.bookId"
-                                       :selected-line-index="myTab.bookState.selectedLineIndex"
-                                       :book="currentBook"
-                                       @navigate-line="handleNavigateLine" />
+        <BookCommentaryView :book-id="myTab.bookState.bookId"
+                            :selected-line-index="myTab.bookState.selectedLineIndex"
+                            :book="currentBook"
+                            @navigate-line="handleNavigateLine" />
       </template>
     </SplitPane>
   </div>
@@ -35,10 +37,8 @@ import { useCategoryTreeStore } from '../../stores/categoryTreeStore'
 
 import BookTocTreeView from '../BookTocTreeView.vue'
 import BookLineViewer from '../BookLineViewer.vue'
-import VirtualizedBookLineViewer from '../VirtualizedBookLineViewer.vue'
 import SplitPane from '../common/SplitPane.vue'
 import BookCommentaryView from '../BookCommentaryView.vue'
-import VirtualizedBookCommentaryView from '../VirtualizedBookCommentaryView.vue'
 import { dbManager } from '../../data/dbManager'
 import { buildTocFromFlat } from '../../data/tocBuilder'
 import type { AltTocLineEntry } from '../../data/tocBuilder'
@@ -50,7 +50,7 @@ const categoryTreeStore = useCategoryTreeStore()
 const myTabId = ref<number | undefined>(tabStore.activeTab?.id)
 const myTab = computed(() => tabStore.tabs.find(t => t.id === myTabId.value))
 
-const lineViewerRef = ref<InstanceType<typeof BookLineViewer> | InstanceType<typeof VirtualizedBookLineViewer> | null>(null)
+const lineViewerRef = ref<InstanceType<typeof BookLineViewer> | null>(null)
 const altTocByLineIndex = ref<Map<number, AltTocLineEntry[]>>(new Map())
 const tocEntries = ref<TocEntry[]>([])
 const isTocLoading = ref(false)
@@ -92,7 +92,7 @@ function handleTocSelection(lineIndex: number) {
   if (viewer?.handleTocSelection) {
     viewer.handleTocSelection(lineIndex)
   } else if (viewer?.scrollToLine) {
-    // virtualized viewer doesn't have toc helper - just scroll
+    // Fallback to direct scroll
     viewer.scrollToLine(lineIndex)
   }
 }
@@ -104,6 +104,13 @@ function handleNavigateLine(newIndex: number) {
     viewer.scrollToLineIndex(newIndex)
   } else if (viewer?.scrollToLine) {
     viewer.scrollToLine(newIndex)
+  }
+}
+
+function handleBackgroundClick(event: MouseEvent) {
+  // Close TOC if clicking outside of it (only in compact mode)
+  if (myTab.value?.bookState?.isTocOpen && !myTab.value.bookState.isFirstTocOpen) {
+    tabStore.closeToc()
   }
 }
 
@@ -120,4 +127,6 @@ function handleNavigateLine(newIndex: number) {
   width: 100%;
   z-index: 100;
 }
+
+/* For compact mode, the TOC is now fixed positioned, so no special overlay styling needed */
 </style>

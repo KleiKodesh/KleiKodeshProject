@@ -1,10 +1,8 @@
 <template>
-    <div 
-        class="height-fill app-container" 
-        tabindex="0" 
-        @keydown="handleKeydown"
-        ref="appContainer"
-    >
+    <div class="height-fill app-container"
+         tabindex="0"
+         @keydown="handleKeydown"
+         ref="appContainer">
         <TabControl class="height-fill" />
     </div>
 </template>
@@ -18,13 +16,21 @@ const tabStore = useTabStore();
 const appContainer = ref<HTMLElement>();
 
 const handleKeydown = (event: KeyboardEvent) => {
+    // Ctrl+F: Prevent browser search (components handle their own search)
+    if ((event.ctrlKey || event.metaKey) && event.key === 'f') {
+        event.preventDefault();
+        // BookLineViewer and BookCommentaryView handle this in their own keydown handlers
+        // For other pages, just prevent the browser search
+        return;
+    }
+
     // Ctrl+W: Close current tab
     if (event.ctrlKey && event.key === 'w') {
         event.preventDefault();
         tabStore.closeTab();
         return;
     }
-    
+
     // Ctrl+X: Close all tabs
     if (event.ctrlKey && event.key === 'x') {
         event.preventDefault();
@@ -38,20 +44,20 @@ const handleGlobalKeydown = (event: KeyboardEvent) => {
     // Only handle if no input/textarea is focused
     const activeElement = document.activeElement;
     if (activeElement && (
-        activeElement.tagName === 'INPUT' || 
+        activeElement.tagName === 'INPUT' ||
         activeElement.tagName === 'TEXTAREA' ||
         (activeElement as HTMLElement).contentEditable === 'true'
     )) {
         return;
     }
-    
+
     handleKeydown(event);
 };
 
 onMounted(() => {
     // Focus the app container to ensure keyboard events are captured
     appContainer.value?.focus();
-    
+
     // Add global keyboard listener
     document.addEventListener('keydown', handleGlobalKeydown);
 });
@@ -63,6 +69,7 @@ onUnmounted(() => {
 
 <style scoped>
 .app-container {
-    outline: none; /* Remove focus outline */
+    outline: none;
+    /* Remove focus outline */
 }
 </style>

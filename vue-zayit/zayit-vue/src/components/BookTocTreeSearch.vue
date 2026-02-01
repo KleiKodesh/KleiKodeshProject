@@ -12,14 +12,17 @@
         <div v-for="entry in filteredEntries"
              :key="entry.id"
              class="flex-row hover-bg focus-accent click-effect c-pointer tree-node"
+             :class="{ 'compact': isCompactMode }"
              tabindex="0"
-             :style="{ paddingInlineStart: `${20}px` }"
+             :style="{ paddingInlineStart: `${isCompactMode ? 12 : 20}px` }"
              @click="selectEntry(entry)"
              @keydown.enter.prevent="selectEntry(entry)">
             <div class="flex-column flex-110 smaller-rem">
-                <span class="bold">{{ entry.text }}</span>
+                <span class="bold"
+                      :class="{ 'compact-text': isCompactMode }">{{ entry.text }}</span>
                 <span v-if="entry.path"
-                      class="text-secondary smaller-em">{{ entry.path }}</span>
+                      class="text-secondary smaller-em"
+                      :class="{ 'compact-path': isCompactMode }">{{ entry.path }}</span>
             </div>
         </div>
     </div>
@@ -34,6 +37,7 @@ import { KeyboardNavigator } from '../utils/KeyboardNavigator'
 const props = defineProps<{
     tocEntries: TocEntry[]
     searchQuery: string
+    isCompactMode?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -124,3 +128,17 @@ watch(filteredEntries, () => {
     }
 })
 </script>
+
+<style scoped>
+.tree-node.compact {
+    min-height: 32px;
+}
+
+.compact-text {
+    font-size: 0.9em;
+}
+
+.compact-path {
+    font-size: 0.8em;
+}
+</style>

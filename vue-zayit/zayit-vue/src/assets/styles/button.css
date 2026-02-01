@@ -1,4 +1,4 @@
-/* Global button styles - VS Code style */
+/* Global button styles - VS Code style with touch support */
 
 button {
   width: 2rem;
@@ -28,25 +28,38 @@ button {
   flex-shrink: 0;
   /* Prevent button from shrinking */
   opacity: 0.8;
+  /* Touch-friendly properties */
+  touch-action: manipulation;
+  /* Prevent double-tap zoom */
+  transition: transform 0.1s ease, background-color 0.1s ease;
+  /* Smooth transitions */
 }
 
-/* Button hover effect */
-button:hover {
-  background: var(--hover-bg);
-  /* Light background on hover */
-  /* transform: scale(1.01); */
-  /* Slightly grow on hover (matches vue-tabs) */
-  color: var(--text-primary);
-  /* primary text color on hover */
-  opacity: 0.9;
+/* Button hover effect - only on devices that support hover */
+@media (hover: hover) {
+  button:hover {
+    background: var(--hover-bg);
+    /* Light background on hover */
+    color: var(--text-primary);
+    /* primary text color on hover */
+    opacity: 0.9;
+  }
 }
 
-/* Button active/pressed effect */
+/* Button active/pressed effect - works on both mouse and touch */
 button:active {
   background: var(--active-bg);
   /* Darker background when pressed */
-  transform: scale(0.99);
-  /* Slightly shrink for press effect */
+  transform: scale(0.95);
+  /* Touch-friendly scale effect */
+}
+
+/* Ensure minimum touch target size on touch devices */
+@media (hover: none) and (pointer: coarse) {
+  button {
+    min-width: 44px;
+    min-height: 44px;
+  }
 }
 
 /* Images and SVGs inside buttons */

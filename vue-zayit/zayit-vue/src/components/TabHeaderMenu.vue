@@ -1,5 +1,6 @@
 <template>
-  <div class="dropdown-container">
+  <div ref="dropdownContainer"
+       class="dropdown-container">
     <button @click.stop="toggleDropdown"
             class="flex-center c-pointer dropdown-toggle"
             title="אפשרויות">
@@ -10,16 +11,16 @@
       <div v-if="isOpen"
            class="dropdown-menu">
         <div class="dropdown-content">
-          <!-- Diacritics toggle dropdown item -->
-          <DiacriticsDropdown />
-
-          <!-- Alt TOC toggle dropdown item -->
+          <!-- Alt TOC toggle dropdown item - moved to top -->
           <div v-if="tabStore.activeTab?.currentPage === 'bookview'"
                @click.stop="handleAltTocToggleClick"
                class="flex-row flex-center-start hover-bg c-pointer dropdown-item">
-            <Icon icon="fluent:eye-lines-28-regular"/>
+            <Icon icon="fluent:eye-lines-28-regular" />
             <span class="dropdown-label">{{ isAltTocVisible ? 'הסתר כותרות נוספות' : 'הצג כותרות נוספות' }}</span>
           </div>
+
+          <!-- Diacritics toggle dropdown item -->
+          <DiacriticsDropdown />
 
           <!-- Line display toggle dropdown item -->
           <div v-if="tabStore.activeTab?.currentPage === 'bookview'"
@@ -32,20 +33,7 @@
             <span class="dropdown-label">{{ isLineDisplayInline ? 'תצוגת בלוק' : 'תצוגת שורה' }}</span>
           </div>
 
-          <!-- Virtualization toggle dropdown item -->
-          <div v-if="tabStore.activeTab?.currentPage === 'bookview'"
-               @click.stop="handleVirtualizationClick"
-               class="flex-row flex-center-start hover-bg c-pointer dropdown-item"
-               :title="settingsStore.enableVirtualization
-                ? 'כל השורות נטענות'
-                : 'רק חלק מהשורות נטענות'">
-            <Icon icon="fluent:flash-28-regular"
-                  v-if="settingsStore.enableVirtualization" />
-            <Icon icon="fluent:leaf-24-regular"
-                  v-else />
-            <span class="dropdown-label">{{ settingsStore.enableVirtualization
-              ? 'בטל טעינת שורות דינמית' : 'הפעל טעינת שורות דינמית' }}</span>
-          </div>
+
 
           <div @click.stop="handleThemeClick"
                class="flex-row flex-center-start hover-bg c-pointer dropdown-item">
@@ -97,10 +85,19 @@ import { useTabStore } from '../stores/tabStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { toggleTheme, isDarkTheme, syncPdfViewerTheme } from '../utils/theme';
 import { pdfService } from '../services/pdfService';
+import { useClickOutside } from '../composables/useClickOutside';
 
 const tabStore = useTabStore();
 const settingsStore = useSettingsStore();
 const isOpen = ref(false);
+const dropdownContainer = ref<HTMLElement>();
+
+// Use touch-friendly click outside composable
+useClickOutside(dropdownContainer, () => {
+  if (isOpen.value) {
+    closeDropdown();
+  }
+});
 
 // Theme state - reactive to theme changes
 const currentTheme = ref(isDarkTheme());
@@ -163,7 +160,7 @@ const handleThemeClick = () => {
   toggleTheme();
   // Update reactive state after theme toggle
   currentTheme.value = isDarkTheme();
-  
+
   // Sync theme with any open PDF.js viewers
   // Small delay to ensure theme classes are applied first
   setTimeout(() => {
@@ -175,11 +172,6 @@ const handleLineDisplayClick = () => {
   tabStore.toggleLineDisplay();
 };
 
-const handleVirtualizationClick = () => {
-  settingsStore.enableVirtualization = !settingsStore.enableVirtualization;
-  closeDropdown();
-};
-
 const handleAltTocToggleClick = () => {
   tabStore.toggleAltTocDisplay();
   closeDropdown();
@@ -189,7 +181,7 @@ const handleOpenPdfClick = async () => {
   try {
     if (pdfService.isAvailable()) {
       const result = await pdfService.showFilePicker();
-      
+
       if (result.fileName && result.dataUrl) {
         if (result.originalPath) {
           tabStore.openPdfWithFilePathAndBlobUrl(result.fileName, result.originalPath, result.dataUrl);
@@ -241,13 +233,6 @@ const handlePopoutClick = () => {
   closeDropdown();
 };
 
-const handleClickOutside = (event: MouseEvent) => {
-  const target = event.target as HTMLElement;
-  if (!target.closest('.dropdown-container')) {
-    closeDropdown();
-  }
-};
-
 const handleWindowBlur = () => {
   if (isOpen.value) {
     closeDropdown();
@@ -261,13 +246,11 @@ const handleVisibilityChange = () => {
 };
 
 onMounted(() => {
-  document.addEventListener('click', handleClickOutside);
   window.addEventListener('blur', handleWindowBlur);
   document.addEventListener('visibilitychange', handleVisibilityChange);
 });
 
 onUnmounted(() => {
-  document.removeEventListener('click', handleClickOutside);
   window.removeEventListener('blur', handleWindowBlur);
   document.removeEventListener('visibilitychange', handleVisibilityChange);
 });

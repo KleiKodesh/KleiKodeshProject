@@ -9,8 +9,9 @@
 .tree-node {
   gap: 12px;
   padding: 12px 20px;
+  min-height: 44px; /* Touch-friendly minimum height */
+  touch-action: manipulation;
 }
-
 
 /* Small icon utility for compact UI elements */
 .small-icon {

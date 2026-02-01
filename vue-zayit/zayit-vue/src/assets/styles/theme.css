@@ -4,7 +4,9 @@
 :root { 
   /* Background colors - VS Code Light */
   --bg-primary: #ffffff;        /* Main background */
+  --bg-primary-rgb: 255, 255, 255; /* RGB values for transparency */
   --bg-secondary: #f8f8f8;      /* More neutral secondary background (was #f3f3f3) */
+  --bg-secondary-rgb: 248, 248, 248; /* RGB values for transparency */
   
   /* Border colors - Fluent subtle borders */
   --border-color: #e5e5e5;      /* Borders and dividers */
@@ -35,7 +37,9 @@
 :root.dark {
   /* Background colors - VS Code Dark */
   --bg-primary: #1e1e1e;        /* Main background (VS Code dark) */
+  --bg-primary-rgb: 30, 30, 30; /* RGB values for transparency */
   --bg-secondary: #2d2d2d;      /* More neutral secondary background (was #252526) */
+  --bg-secondary-rgb: 45, 45, 45; /* RGB values for transparency */
   
   /* Border colors - Fluent dark borders */
   --border-color: #3b3b3b;      /* Borders (Fluent dark divider) */

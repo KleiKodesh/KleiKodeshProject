@@ -1,106 +1,57 @@
 /**
  * BookLineViewerState
  * 
- * Manages line loading state and strategy for a single BookLineViewer instance.
+ * Manages line loading with smart streaming prioritization.
  * 
  * Architecture:
- * - Virtualization ON: DB is source of truth, no buffer, load only visible content
- * - Virtualization OFF: Buffer is source of truth, progressive loading, search buffer
+ * 1. Immediate scaffolding: Fill lines.value with placeholders for instant navigation
+ * 2. Smart streaming: Load batches with priority queue (user needs first)
  */
 
 import { ref, type Ref } from 'vue'
-import { bookLinesLoader, type LineLoadResult } from './bookLinesManager'
-import { dbManager } from './dbManager'
+import { dbManager, type LineLoadResult } from './dbManager'
 
 const PADDING_LINES = 200
+const BATCH_SIZE = 200
 
 export class BookLineViewerState {
-    // Public reactive state
+    // Public reactive state - single source of truth
     lines: Ref<Record<number, string>> = ref({})
     totalLines: Ref<number> = ref(0)
-    bufferUpdateCount: Ref<number> = ref(0) // Reactive counter for buffer updates
     isInitialLoad = true
 
-    // Private state
-    private lineBuffer: Record<number, string> = {}
-    private backgroundAbort: (() => void) | null = null
+    // Private streaming state
     private bookId: number | null = null
-    private virtualizationEnabled = false
+    private streamingAbort: (() => void) | null = null
+    private pendingBatches: Set<number> = new Set()
+    private priorityQueue: number[] = []
 
     /**
-     * Set virtualization mode
-     * When enabled, DB becomes source of truth and buffer is cleared
-     * When disabled, buffer becomes source of truth
-     */
-    setVirtualizationMode(enabled: boolean) {
-        const wasEnabled = this.virtualizationEnabled
-        this.virtualizationEnabled = enabled
-
-        if (enabled && !wasEnabled) {
-            // Switching to virtualization mode: Clear buffer, DB becomes source of truth
-            this.lineBuffer = {}
-            this.bufferUpdateCount.value++
-            console.log('📚 Virtualization enabled: Buffer cleared, DB is source of truth')
-        } else if (!enabled && wasEnabled) {
-            // Switching from virtualization mode: Buffer will become source of truth
-            // Don't clear anything here - let startProgressiveLoading handle the transition
-            console.log('📚 Virtualization disabled: Buffer will become source of truth')
-        }
-    }
-
-    /**
-     * Clean up non-visible lines to free memory
-     * Removes from UI but keeps in buffer (buffer is always complete)
-     */
-    cleanupNonVisibleLines(visibleLines: Set<number>, bufferSize = PADDING_LINES) {
-        const linesToKeep = new Set<number>()
-
-        // Calculate which lines to keep in UI (visible + buffer)
-        visibleLines.forEach(lineIndex => {
-            for (let i = Math.max(0, lineIndex - bufferSize);
-                i <= Math.min(this.totalLines.value - 1, lineIndex + bufferSize);
-                i++) {
-                linesToKeep.add(i)
-            }
-        })
-
-        // Remove non-visible lines from UI (but keep in buffer)
-        Object.keys(this.lines.value).forEach(indexStr => {
-            const lineIndex = Number(indexStr)
-            if (!linesToKeep.has(lineIndex)) {
-                const content = this.lines.value[lineIndex]
-                if (content && content !== '\u00A0') {
-                    // Content already in buffer, just remove from UI
-                    delete this.lines.value[lineIndex]
-                }
-            }
-        })
-    }
-
-    /**
-     * Load a new book
+     * Load a new book - immediate scaffolding + start streaming
      */
     async loadBook(bookId: number, isRestore: boolean, initialLineIndex?: number): Promise<void> {
-        console.log('📚 Loading book:', bookId, 'isRestore:', isRestore, 'initialLineIndex:', initialLineIndex, 'virtualization:', this.virtualizationEnabled)
+        console.log('📚 Loading book:', bookId, 'isRestore:', isRestore, 'initialLineIndex:', initialLineIndex)
 
         this.cleanup()
-
         this.bookId = bookId
         this.isInitialLoad = true
-        this.totalLines.value = 0
-        this.lines.value = {}
 
         try {
-            this.totalLines.value = await bookLinesLoader.getTotalLines(bookId)
+            this.totalLines.value = await dbManager.getTotalLines(bookId)
 
-            // Only start background loading if virtualization is OFF
-            if (!this.virtualizationEnabled) {
-                this.startBackgroundLoading()
+            // Stage 1: Immediate scaffolding with placeholders
+            const placeholders: Record<number, string> = {}
+            for (let i = 0; i < this.totalLines.value; i++) {
+                placeholders[i] = '\u00A0' // Hard space placeholder
             }
+            this.lines.value = placeholders
 
-            // Only load initial content if restoring
+            // Stage 2: Start smart streaming
+            this.startSmartStreaming()
+
+            // Load initial content if restoring
             if (isRestore && initialLineIndex !== undefined) {
-                await this.loadLinesAround(initialLineIndex)
+                await this.prioritizeLines(initialLineIndex)
             }
 
             this.isInitialLoad = false
@@ -112,256 +63,296 @@ export class BookLineViewerState {
     }
 
     /**
-     * Load lines around a center point
-     * Virtualization ON: Efficient batched loading directly to UI
-     * Virtualization OFF: Load to both UI and buffer
+     * Prioritize loading lines around a specific point (TOC navigation, scroll-to-line)
      */
-    async loadLinesAround(centerLine: number, padding = PADDING_LINES): Promise<void> {
+    async prioritizeLines(centerLine: number, padding = PADDING_LINES): Promise<void> {
         const start = Math.max(0, centerLine - padding)
         const end = Math.min(this.totalLines.value - 1, centerLine + padding)
 
-        if (this.virtualizationEnabled) {
-            // Virtualization ON: Efficient batched loading
-            await this.loadRangeEfficiently(start, end)
-        } else {
-            // Virtualization OFF: Use buffer-first approach
-            // First check buffer for already loaded lines
-            for (let i = start; i <= end; i++) {
-                const bufferedLine = this.lineBuffer[i]
-                if (this.lines.value[i] === undefined && bufferedLine !== undefined) {
-                    this.lines.value[i] = bufferedLine
-                    // Keep in buffer too - don't delete
-                }
-            }
+        // Calculate which batches contain these lines
+        const neededBatches = new Set<number>()
+        for (let i = start; i <= end; i++) {
+            const batchIndex = Math.floor(i / BATCH_SIZE)
+            neededBatches.add(batchIndex)
+        }
 
-            // Then load missing lines from DB
-            const needsLoading: number[] = []
-            for (let i = start; i <= end; i++) {
-                if (this.lines.value[i] === undefined && this.lineBuffer[i] === undefined) {
-                    needsLoading.push(i)
-                }
-            }
+        // Move needed batches to front of priority queue
+        const batchArray = Array.from(neededBatches).sort((a, b) => {
+            // Sort by distance from center batch
+            const centerBatch = Math.floor(centerLine / BATCH_SIZE)
+            return Math.abs(a - centerBatch) - Math.abs(b - centerBatch)
+        })
 
-            if (needsLoading.length > 0 && this.bookId !== null) {
-                const firstLine = needsLoading[0]!
-                const lastLine = needsLoading[needsLoading.length - 1]!
-                const loadedLines = await bookLinesLoader.loadLineRange(this.bookId, firstLine, lastLine)
-                loadedLines.forEach(line => {
-                    // Add to both UI and buffer
-                    this.lines.value[line.lineIndex] = line.content
-                    this.lineBuffer[line.lineIndex] = line.content
-                })
-            }
+        // Remove from existing queue and add to front
+        this.priorityQueue = this.priorityQueue.filter(batch => !neededBatches.has(batch))
+        this.priorityQueue.unshift(...batchArray)
+
+        // Load the most critical batch immediately
+        if (batchArray.length > 0) {
+            await this.loadBatch(batchArray[0]!)
         }
     }
 
     /**
-     * Efficiently load a range of lines in virtualization mode
-     * Batches requests to minimize DB calls and avoid loading already loaded lines
+     * Handle TOC selection - prioritize the selected area
      */
-    private async loadRangeEfficiently(start: number, end: number): Promise<void> {
-        if (!this.bookId) return
+    async handleTocSelection(lineIndex: number): Promise<void> {
+        await this.prioritizeLines(lineIndex, PADDING_LINES)
+    }
 
-        // Find continuous ranges that need loading
-        const rangesToLoad: Array<{ start: number, end: number }> = []
-        let rangeStart: number | null = null
+    /**
+     * Start smart streaming - loads batches in priority order
+     */
+    private startSmartStreaming() {
+        if (!this.bookId || this.totalLines.value === 0) return
 
-        for (let i = start; i <= end; i++) {
-            const needsLoading = this.lines.value[i] === undefined
+        // Initialize priority queue with all batches (default order)
+        const totalBatches = Math.ceil(this.totalLines.value / BATCH_SIZE)
+        this.priorityQueue = Array.from({ length: totalBatches }, (_, i) => i)
+        this.pendingBatches.clear()
 
-            if (needsLoading) {
-                if (rangeStart === null) {
-                    rangeStart = i
-                }
-            } else {
-                if (rangeStart !== null) {
-                    rangesToLoad.push({ start: rangeStart, end: i - 1 })
-                    rangeStart = null
-                }
-            }
+        // Start streaming
+        this.processQueue()
+    }
+
+    /**
+     * Process the priority queue - loads next batch
+     */
+    private async processQueue() {
+        if (!this.bookId || this.priorityQueue.length === 0) return
+
+        const nextBatch = this.priorityQueue.shift()!
+        if (this.pendingBatches.has(nextBatch)) {
+            // Skip if already loading
+            setTimeout(() => this.processQueue(), 10)
+            return
         }
 
-        // Handle final range if it extends to the end
-        if (rangeStart !== null) {
-            rangesToLoad.push({ start: rangeStart, end })
-        }
+        await this.loadBatch(nextBatch)
 
-        // Load all ranges in parallel for maximum efficiency
-        if (rangesToLoad.length > 0) {
-            console.log(`📚 Loading ${rangesToLoad.length} ranges in virtualization mode:`, rangesToLoad)
+        // Continue with next batch after short delay
+        setTimeout(() => this.processQueue(), 50)
+    }
 
-            const loadPromises = rangesToLoad.map(async (range) => {
-                try {
-                    const loadedLines = await dbManager.loadLineRange(this.bookId!, range.start, range.end)
-                    return loadedLines
-                } catch (error) {
-                    console.error(`❌ Failed to load range ${range.start}-${range.end}:`, error)
-                    return []
-                }
-            })
+    /**
+     * Load a specific batch of lines
+     */
+    private async loadBatch(batchIndex: number): Promise<void> {
+        if (!this.bookId || this.pendingBatches.has(batchIndex)) return
 
-            const results = await Promise.all(loadPromises)
+        this.pendingBatches.add(batchIndex)
 
-            // Apply all loaded lines to UI
-            results.flat().forEach(line => {
+        try {
+            const start = batchIndex * BATCH_SIZE
+            const end = Math.min(start + BATCH_SIZE - 1, this.totalLines.value - 1)
+
+            const loadedLines = await dbManager.loadLineRange(this.bookId, start, end)
+
+            // Update lines directly
+            loadedLines.forEach(line => {
                 this.lines.value[line.lineIndex] = line.content
             })
 
-            console.log(`✅ Loaded ${results.flat().length} lines in ${rangesToLoad.length} batched requests`)
+
+        } catch (error) {
+            console.error(`❌ Failed to load batch ${batchIndex}:`, error)
+        } finally {
+            this.pendingBatches.delete(batchIndex)
         }
     }
 
     /**
-     * Handle TOC selection - stop background loading, load selected area, apply buffer
-     */
-    async handleTocSelection(lineIndex: number): Promise<void> {
-        // Stop background loading
-        this.stopBackgroundLoading()
-
-        // Load selected ± padding (from buffer if available, else DB)
-        await this.loadLinesAround(lineIndex, PADDING_LINES)
-
-        // Apply remaining buffer to UI (non-blocking)
-        setTimeout(() => {
-            Object.assign(this.lines.value, this.lineBuffer)
-            this.lineBuffer = {}
-        }, 0)
-    }
-
-    /**
-     * Start background loading of all lines (only when virtualization is OFF)
-     */
-    private startBackgroundLoading() {
-        if (this.bookId === null || this.totalLines.value === 0 || this.virtualizationEnabled) return
-
-        // Delay start to let UI render first
-        setTimeout(() => {
-            if (this.bookId === null || this.virtualizationEnabled) return
-
-            this.backgroundAbort = bookLinesLoader.startBackgroundLoad(
-                this.bookId,
-                this.totalLines.value,
-                (loadedLines: LineLoadResult[]) => {
-                    // In buffer mode (virtualization OFF), update both buffer and visible lines
-                    let hasNewContent = false
-                    loadedLines.forEach(line => {
-                        if (this.lineBuffer[line.lineIndex] === undefined) {
-                            // Add to buffer (source of truth for buffer mode)
-                            this.lineBuffer[line.lineIndex] = line.content
-                            hasNewContent = true
-                        }
-
-                        // Also update visible lines if not already loaded
-                        if (this.lines.value[line.lineIndex] === undefined) {
-                            this.lines.value[line.lineIndex] = line.content
-                        }
-                    })
-
-                    // Trigger reactive update for search
-                    if (hasNewContent) {
-                        this.bufferUpdateCount.value++
-                    }
-                }
-            )
-        }, 100)
-    }
-
-    /**
-     * Stop background loading
-     */
-    private stopBackgroundLoading() {
-        if (this.backgroundAbort) {
-            this.backgroundAbort()
-            this.backgroundAbort = null
-        }
-    }
-
-    /**
-     * Get search data based on virtualization mode
-     * Virtualization ON: Search DB directly
-     * Virtualization OFF: Search buffer (source of truth)
+     * Get search data - search loaded lines
      */
     async getSearchData(): Promise<Array<{ index: number, content: string }>> {
-        if (this.virtualizationEnabled) {
-            // Virtualization ON: Search DB directly
-            if (!this.bookId) return []
+        const allLines: Array<{ index: number, content: string }> = []
 
-            console.log('🔍 Searching DB directly (virtualization mode)')
-            // For now, return empty array - search will be handled by DB search
-            return []
-        } else {
-            // Virtualization OFF: Search buffer
-            const allLines: Array<{ index: number, content: string }> = []
-
-            console.log('Buffer size for search:', Object.keys(this.lineBuffer).length)
-
-            Object.entries(this.lineBuffer).forEach(([indexStr, content]) => {
-                if (content && content !== '\u00A0') {
-                    allLines.push({
-                        index: Number(indexStr),
-                        content
-                    })
-                }
-            })
-
-            console.log('Search lines found:', allLines.length)
-            return allLines.sort((a, b) => a.index - b.index)
-        }
-    }
-
-    /**
-     * Search lines in DB (for virtualization mode)
-     */
-    async searchInDB(searchTerm: string): Promise<Array<{ index: number, content: string }>> {
-        if (!this.bookId || !this.virtualizationEnabled) return []
-
-        try {
-            console.log('🔍 Searching DB for term:', searchTerm)
-            const results = await dbManager.searchLines(this.bookId, searchTerm)
-            return results.map(result => ({
-                index: result.lineIndex,
-                content: result.content
-            }))
-        } catch (error) {
-            console.error('❌ DB search failed:', error)
-            return []
-        }
-    }
-
-    /**
-     * Move all buffer content to UI (for non-virtualized mode)
-     */
-    moveBufferToUI(): void {
-        Object.assign(this.lines.value, this.lineBuffer)
-    }
-
-    /**
-     * Start progressive loading when switching from virtualization ON to OFF
-     * Preserves currently loaded lines and starts background loading
-     */
-    async startProgressiveLoading(): Promise<void> {
-        if (!this.bookId || this.virtualizationEnabled) return
-
-        console.log('📚 Starting progressive loading after virtualization switch')
-
-        // Copy currently loaded UI lines to buffer to preserve them
         Object.entries(this.lines.value).forEach(([indexStr, content]) => {
             if (content && content !== '\u00A0') {
-                this.lineBuffer[Number(indexStr)] = content
+                allLines.push({
+                    index: Number(indexStr),
+                    content
+                })
             }
         })
 
-        // Start background loading to fill the rest
-        this.startBackgroundLoading()
+        return allLines.sort((a, b) => a.index - b.index)
+    }
 
-        console.log('✅ Progressive loading started, preserved', Object.keys(this.lineBuffer).length, 'lines')
+    /**
+     * Progressive search - loads and searches content in batches
+     * Returns a promise that resolves with search results as they become available
+     */
+    async searchProgressively(
+        query: string,
+        onProgressUpdate: (matches: Array<{ itemIndex: number, occurrence: number, totalInItem: number }>) => void
+    ): Promise<Array<{ itemIndex: number, occurrence: number, totalInItem: number }>> {
+        if (!this.bookId || !query.trim()) {
+            return []
+        }
+
+        const allMatches: Array<{ itemIndex: number, occurrence: number, totalInItem: number }> = []
+        const normalizedQuery = this.removeDiacritics(query.toLowerCase())
+
+        // First, search already loaded lines for immediate results
+        const loadedMatches = this.searchInLoadedLines(query)
+        if (loadedMatches.length > 0) {
+            allMatches.push(...loadedMatches)
+            onProgressUpdate([...allMatches])
+        }
+
+        // Then search remaining batches progressively
+        const totalBatches = Math.ceil(this.totalLines.value / BATCH_SIZE)
+        const searchedBatches = new Set<number>()
+
+        // Mark already loaded batches as searched
+        Object.keys(this.lines.value).forEach(indexStr => {
+            const lineIndex = Number(indexStr)
+            if (this.lines.value[lineIndex] !== '\u00A0') {
+                const batchIndex = Math.floor(lineIndex / BATCH_SIZE)
+                searchedBatches.add(batchIndex)
+            }
+        })
+
+        // Search remaining batches
+        for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+            if (searchedBatches.has(batchIndex)) continue
+
+            try {
+                // Load the batch if not already loaded
+                await this.loadBatch(batchIndex)
+
+                // Search the newly loaded batch
+                const batchMatches = this.searchBatch(batchIndex, normalizedQuery)
+                if (batchMatches.length > 0) {
+                    allMatches.push(...batchMatches)
+                    // Update occurrence counts for all matches
+                    this.updateOccurrenceCounts(allMatches)
+                    onProgressUpdate([...allMatches])
+                }
+
+                searchedBatches.add(batchIndex)
+
+                // Small delay to prevent blocking the UI
+                await new Promise(resolve => setTimeout(resolve, 10))
+
+            } catch (error) {
+                console.error(`Failed to search batch ${batchIndex}:`, error)
+            }
+        }
+
+        return allMatches
+    }
+
+    /**
+     * Search in currently loaded lines
+     */
+    private searchInLoadedLines(query: string): Array<{ itemIndex: number, occurrence: number, totalInItem: number }> {
+        const matches: Array<{ itemIndex: number, occurrence: number, totalInItem: number }> = []
+        const normalizedQuery = this.removeDiacritics(query.toLowerCase())
+
+        Object.entries(this.lines.value).forEach(([indexStr, content]) => {
+            if (content && content !== '\u00A0') {
+                const lineIndex = Number(indexStr)
+                const lineMatches = this.searchInLine(lineIndex, content, normalizedQuery)
+                matches.push(...lineMatches)
+            }
+        })
+
+        this.updateOccurrenceCounts(matches)
+        return matches
+    }
+
+    /**
+     * Search a specific batch
+     */
+    private searchBatch(batchIndex: number, normalizedQuery: string): Array<{ itemIndex: number, occurrence: number, totalInItem: number }> {
+        const matches: Array<{ itemIndex: number, occurrence: number, totalInItem: number }> = []
+        const start = batchIndex * BATCH_SIZE
+        const end = Math.min(start + BATCH_SIZE - 1, this.totalLines.value - 1)
+
+        for (let lineIndex = start; lineIndex <= end; lineIndex++) {
+            const content = this.lines.value[lineIndex]
+            if (content && content !== '\u00A0') {
+                const lineMatches = this.searchInLine(lineIndex, content, normalizedQuery)
+                matches.push(...lineMatches)
+            }
+        }
+
+        return matches
+    }
+
+    /**
+     * Search within a single line
+     */
+    private searchInLine(lineIndex: number, content: string, normalizedQuery: string): Array<{ itemIndex: number, occurrence: number, totalInItem: number }> {
+        const matches: Array<{ itemIndex: number, occurrence: number, totalInItem: number }> = []
+        const normalizedContent = this.removeDiacritics(this.stripHtml(content).toLowerCase())
+
+        let startIndex = 0
+        let occurrence = 0
+
+        while (true) {
+            const index = normalizedContent.indexOf(normalizedQuery, startIndex)
+            if (index === -1) break
+
+            matches.push({
+                itemIndex: lineIndex,
+                occurrence,
+                totalInItem: 0 // Will be updated later
+            })
+
+            occurrence++
+            startIndex = index + 1
+        }
+
+        return matches
+    }
+
+    /**
+     * Update occurrence counts for matches in the same line
+     */
+    private updateOccurrenceCounts(matches: Array<{ itemIndex: number, occurrence: number, totalInItem: number }>) {
+        const lineGroups = new Map<number, Array<{ itemIndex: number, occurrence: number, totalInItem: number }>>()
+
+        matches.forEach(match => {
+            if (!lineGroups.has(match.itemIndex)) {
+                lineGroups.set(match.itemIndex, [])
+            }
+            lineGroups.get(match.itemIndex)!.push(match)
+        })
+
+        lineGroups.forEach(lineMatches => {
+            const totalInLine = lineMatches.length
+            lineMatches.forEach(match => {
+                match.totalInItem = totalInLine
+            })
+        })
+    }
+
+    /**
+     * Helper methods for search
+     */
+    private stripHtml(html: string): string {
+        const tempDiv = document.createElement('div')
+        tempDiv.innerHTML = html
+        return tempDiv.textContent || ''
+    }
+
+    private removeDiacritics(text: string): string {
+        // Remove Hebrew diacritics (nikkud and cantillation marks)
+        return text.replace(/[\u0591-\u05C7]/g, '')
     }
 
     /**
      * Cleanup resources
      */
     cleanup() {
-        this.stopBackgroundLoading()
-        this.lineBuffer = {}
+        if (this.streamingAbort) {
+            this.streamingAbort()
+            this.streamingAbort = null
+        }
+        this.pendingBatches.clear()
+        this.priorityQueue = []
     }
 }

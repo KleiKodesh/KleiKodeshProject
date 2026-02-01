@@ -3,7 +3,7 @@
          ref="comboboxRef">
         <input type="text"
                class="combobox-input"
-               v-model="searchText"
+               v-model="displayText"
                @input="onInput"
                @focus="onFocus"
                @blur="onBlur"
@@ -81,10 +81,26 @@ const debouncedSearchText = ref('')
 const showDropdown = ref(false)
 const highlightedIndex = ref(-1)
 const isMouseDownOnDropdown = ref(false)
+const isFocused = ref(false) // Track if input is focused
 
 const currentLabel = computed(() => {
     const option = props.options.find(opt => opt.value === props.modelValue)
     return option ? option.label : ''
+})
+
+// Display text in the input - shows current selection when not searching
+const displayText = computed({
+    get: () => {
+        // If input is focused, always show search text (even if empty) to allow editing
+        if (isFocused.value) {
+            return searchText.value
+        }
+        // Otherwise show the current selection label (when not focused)
+        return currentLabel.value
+    },
+    set: (value: string) => {
+        searchText.value = value
+    }
 })
 
 const filteredOptions = computed(() => {
@@ -113,10 +129,14 @@ const onInput = () => {
 }
 
 const onFocus = (event: FocusEvent) => {
+    isFocused.value = true
     showDropdown.value = true
     const input = event.target as HTMLInputElement
     if (input) {
-        input.select()
+        // Only clear search text if it's empty, otherwise keep user's input
+        if (searchText.value === '') {
+            input.select()
+        }
     }
 }
 
@@ -127,8 +147,9 @@ const onBlur = (event: FocusEvent) => {
         setTimeout(() => inputRef.value?.focus(), 0)
         return
     }
-    
+
     setTimeout(() => {
+        isFocused.value = false
         showDropdown.value = false
         searchText.value = ''
         debouncedSearchText.value = ''
@@ -138,6 +159,7 @@ const onBlur = (event: FocusEvent) => {
 
 const toggleDropdown = () => {
     if (showDropdown.value) {
+        isFocused.value = false
         showDropdown.value = false
         searchText.value = ''
         debouncedSearchText.value = ''
@@ -197,6 +219,7 @@ const onKeyDown = (event: KeyboardEvent) => {
 
         case 'Escape':
             event.preventDefault()
+            isFocused.value = false
             showDropdown.value = false
             searchText.value = ''
             debouncedSearchText.value = ''
@@ -225,9 +248,13 @@ const scrollToHighlighted = () => {
     }, 0)
 }
 
-watch(() => props.modelValue, () => {
-    searchText.value = ''
-    debouncedSearchText.value = ''
+// Only clear search text when modelValue changes from external source (not from user input)
+watch(() => props.modelValue, (newValue, oldValue) => {
+    // Only clear if this wasn't triggered by user selection
+    if (newValue !== oldValue && !showDropdown.value) {
+        searchText.value = ''
+        debouncedSearchText.value = ''
+    }
 })
 </script>
 

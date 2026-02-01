@@ -49,7 +49,7 @@ export function buildTocFromFlat(tocEntriesFlat: TocEntry[]): {
         level: entry.level,
         lineIndex: entry.lineIndex
       }
-      
+
       if (!altTocByLineIndex.has(lineIndex)) {
         altTocByLineIndex.set(lineIndex, [])
       }
@@ -59,6 +59,12 @@ export function buildTocFromFlat(tocEntriesFlat: TocEntry[]): {
 
   // Wrap alt TOC in a synthetic root node if it exists
   const tree = [...regularTree]
+
+  // Set first regular root item to be expanded by default
+  if (regularTree.length > 0 && regularTree[0]) {
+    regularTree[0].isExpanded = true
+  }
+
   if (altTree.length > 0) {
     const altRootNode: TocEntry = {
       id: -1,
@@ -69,13 +75,13 @@ export function buildTocFromFlat(tocEntriesFlat: TocEntry[]): {
       lineIndex: 0,
       isLastChild: true,
       hasChildren: true,
-      text: 'כותרות נוספות',
+      text: 'חלוקה נוספת',
       isAltToc: 1,
       path: '',
       children: altTree,
       isExpanded: false
     }
-    tree.push(altRootNode)
+    tree.unshift(altRootNode) // Add to beginning instead of end
   }
 
   return { tree, allTocs: allEntries, altTocByLineIndex }

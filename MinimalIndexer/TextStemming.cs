@@ -55,28 +55,28 @@ namespace MinimalIndexer
                 if (cur.Length < MinStemLength) return;
             }
 
-            //// 3. Infinitive
-            //var inf = StemmerCore.RemoveInfinitiveVowel(cur);
-            //if (inf != null)
-            //{
-            //    cur = inf;
-            //    set.Add(cur);
-            //    if (cur.Length < MinStemLength) return;
-            //}
+            // 3. Infinitive
+            var inf = StemmerCore.RemoveInfinitiveVowel(cur);
+            if (inf != null)
+            {
+                cur = inf;
+                set.Add(cur);
+                if (cur.Length < MinStemLength) return;
+            }
 
-            //// 4. Ktiv Haser
-            //var haser = StemmerCore.RemoveKtivHaser(cur);
-            //if (haser != null)
-            //{
-            //    cur = haser;
-            //    set.Add(cur);
-            //    if (cur.Length < MinStemLength) return;
-            //}
+            // 4. Ktiv Haser
+            var haser = StemmerCore.RemoveKtivHaser(cur);
+            if (haser != null)
+            {
+                cur = haser;
+                set.Add(cur);
+                if (cur.Length < MinStemLength) return;
+            }
 
-            //// 5. Smichut
-            //var sm = StemmerCore.RemoveSmichutYod(cur);
-            //if (sm != null)
-            //    set.Add(sm);
+            // 5. Smichut
+            var sm = StemmerCore.RemoveSmichutYod(cur);
+            if (sm != null)
+                set.Add(sm);
         }
     }
 

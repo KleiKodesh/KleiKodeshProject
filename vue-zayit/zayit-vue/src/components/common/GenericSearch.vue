@@ -14,21 +14,21 @@
             <span class="search-count">{{ currentMatchIndex + 1 }}/{{
                 totalMatches }}</span>
             <button @click.stop="findPrevious"
-                    class="flex-center c-pointer search-btn"
+                    class="flex-center c-pointer search-btn touch-interactive"
                     title="הקודם (Shift+Enter)">
                 <Icon icon="fluent:chevron-left-28-regular"
                       class="search-icon"
                       style="transform: rotate(90deg);" />
             </button>
             <button @click.stop="findNext"
-                    class="flex-center c-pointer search-btn"
+                    class="flex-center c-pointer search-btn touch-interactive"
                     title="הבא (Enter)">
                 <Icon icon="fluent:chevron-left-28-regular"
                       class="search-icon"
                       style="transform: rotate(-90deg);" />
             </button>
             <button @click.stop="close"
-                    class="flex-center c-pointer search-btn close-btn"
+                    class="flex-center c-pointer search-btn close-btn touch-interactive"
                     title="סגור (Esc)">✕</button>
         </div>
     </div>

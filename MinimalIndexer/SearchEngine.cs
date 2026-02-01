@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace MinimalIndexer
 {
@@ -62,26 +64,37 @@ namespace MinimalIndexer
             //}
         }
 
-        List<LineWithMetadata> ProcessCandidateBlocks(
+        IEnumerable<LineWithMetadata> ProcessCandidateBlocks(
      short chunkSize,
      (int BookId, int ChunkId)[] candidateBlocks,
      string[] queryTerms)
         {
-            var results = new List<LineWithMetadata>(256);
 
-            foreach (var line in _db.GetLinesForBlocks(candidateBlocks, chunkSize))
+            var results = new List<LineWithMetadata>();
+            var lines = _db.GetLinesForBlocks(candidateBlocks, chunkSize);
+            var chunkCount = Environment.ProcessorCount;
+            var chunks = Helpers.Chunk(lines, chunkCount);
+            Parallel.ForEach(chunks, chunk =>
             {
-                string normalized = TextNormalizer.Normalize(line.Content);
-                var match = SearchEngineMatcher.Match(normalized, queryTerms);
-                if (match == null)
-                    continue;
+                var chunkResults = new List<LineWithMetadata>();
+                foreach (var line in chunk)
+                {
+                    string normalized = TextNormalizer.Normalize(line.Content);
+                    var match = SearchEngineMatcher.Match(normalized, queryTerms);
+                    if (match == null)
+                        continue;
 
-                var modified = line;
-                modified.Content = match.Snippet(normalized);
-                results.Add(modified);
-            }
+                    var modified = line;
+                    modified.Content = match.Snippet(normalized);
+                    results.Add(modified);
+                }
+                lock (results)
+                {
+                    results.AddRange(chunk);
+                }
+            });
 
-            return results;
+            return results.OrderBy(l => l.Id);
         }
     }
 }

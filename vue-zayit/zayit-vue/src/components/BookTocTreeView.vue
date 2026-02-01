@@ -1,47 +1,47 @@
 <template>
     <Transition name="slide">
-        <div class="flex-column height-fill book-toc-tree-view">
+        <div class="flex-column height-fill book-toc-tree-view"
+             :class="{ 'compact-mode': isCompactMode }"
+             @click.stop>
             <div class="overflow-y flex-110">
                 <BookTocTreeSearch v-if="searchInput"
                                    ref="searchRef"
                                    :toc-entries="props.tocEntries"
                                    :search-query="searchInput"
+                                   :is-compact-mode="isCompactMode"
                                    @select-line="handleSelectLine" />
 
                 <BookTocTree v-else
                              :toc-entries="props.tocEntries"
                              :is-loading="props.isLoading"
+                             :is-compact-mode="isCompactMode"
                              ref="treeRef"
                              @select-line="handleSelectLine" />
             </div>
 
             <div class="bar flex-row search-bar">
-                <button @click="resetTree"
-                        class="flex-center c-pointer"
-                        title="אפס עץ">
-                    <Icon icon="fluent:text-bullet-list-tree-24-regular"
-                          class="rtl-flip" />
-                </button>
-                <input ref="searchInputRef"
-                       v-model="searchInput"
-                       type="text"
-                       class="flex-110"
-                       placeholder="חיפוש..."
-                       @keydown="handleKeyDown"
-                       autofocus />
-                <button @click="skipToDocument"
-                        class="flex-center c-pointer"
-                        title="דלג לתצוגת מסמך">
-                    <Icon icon="fluent:chevron-left-28-regular" />
-                </button>
-
+                <div class="search-input-container flex-110">
+                    <input ref="searchInputRef"
+                           v-model="searchInput"
+                           type="text"
+                           class="search-input-field"
+                           placeholder="חיפוש..."
+                           @keydown="handleKeyDown"
+                           autofocus />
+                    <button @click="resetTree"
+                            class="reset-button flex-center c-pointer"
+                            title="אפס עץ">
+                        <Icon icon="fluent:text-bullet-list-tree-24-regular"
+                              class="rtl-flip" />
+                    </button>
+                </div>
             </div>
         </div>
     </Transition>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, watch } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import BookTocTree from './BookTocTree.vue';
 import BookTocTreeSearch from './BookTocTreeSearch.vue';
 import { Icon } from '@iconify/vue';
@@ -52,6 +52,7 @@ import { useTabStore } from '../stores/tabStore';
 const props = defineProps<{
     tocEntries: TocEntry[]
     isLoading?: boolean
+    isCompactMode?: boolean
 }>();
 
 const emit = defineEmits<{
@@ -68,18 +69,17 @@ const searchRef = ref<InstanceType<typeof BookTocTreeSearch> | null>(null);
 // Handle TOC line selection
 const handleSelectLine = (lineIndex: number) => {
     emit('selectLine', lineIndex);
-    tabStore.closeToc();
+    // Only close TOC automatically in full-width mode (first time open)
+    // In compact mode, keep it open for easier navigation
+    if (!props.isCompactMode) {
+        tabStore.closeToc();
+    }
 };
 
 // Reset tree: clear search and collapse all
 const resetTree = () => {
     searchInput.value = '';
     treeRef.value?.resetTree();
-};
-
-// Skip to document view (close TOC)
-const skipToDocument = () => {
-    tabStore.closeToc();
 };
 
 // Focus first item in tree or search results
@@ -94,9 +94,15 @@ const focusFirstItem = () => {
 
 // Handle keyboard shortcuts on search input
 const handleKeyDown = (e: KeyboardEvent) => {
-    // Escape key - reset tree
+    // Escape key - close TOC or reset tree
     if (e.key === 'Escape') {
-        resetTree();
+        if (searchInput.value) {
+            // If there's search text, clear it first
+            resetTree();
+        } else {
+            // If no search text, close the TOC
+            tabStore.closeToc();
+        }
         return;
     }
 
@@ -112,7 +118,31 @@ onMounted(() => {
     nextTick(() => {
         searchInputRef.value?.focus();
     });
+
+    // Add global escape key listener
+    document.addEventListener('keydown', handleGlobalKeyDown);
 });
+
+onUnmounted(() => {
+    // Remove global escape key listener
+    document.removeEventListener('keydown', handleGlobalKeyDown);
+});
+
+// Watch for TOC visibility changes and focus search input
+watch(() => tabStore.activeTab?.bookState?.isTocOpen, (isOpen) => {
+    if (isOpen) {
+        nextTick(() => {
+            searchInputRef.value?.focus();
+        });
+    }
+});
+
+// Global keydown handler for escape key
+const handleGlobalKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+        tabStore.closeToc();
+    }
+};
 
 
 </script>
@@ -122,8 +152,59 @@ onMounted(() => {
     background-color: var(--bg-primary);
 }
 
+.book-toc-tree-view.compact-mode {
+    background-color: rgba(var(--bg-primary-rgb), 0.95);
+    width: max-content;
+    min-width: 200px;
+    max-width: 500px;
+    border-left: 1px solid rgba(0, 0, 0, 0.1);
+    height: 100%;
+    position: absolute;
+    right: 0;
+    top: 0;
+    z-index: 100;
+}
+
 .search-bar {
     gap: 8px;
     padding: 6px 12px;
+    flex-shrink: 0;
+}
+
+.compact-mode .search-bar {
+    padding: 4px 8px;
+}
+
+.search-input-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.search-input-field {
+    width: 100%;
+    min-width: 150px;
+    padding-right: 32px;
+    /* Make room for the reset button */
+}
+
+.compact-mode .search-input-field {
+    min-width: 150px;
+}
+
+.reset-button {
+    position: absolute;
+    right: 4px;
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: 6px;
+}
+
+.reset-button:hover {
+    background: var(--hover-bg);
+    color: var(--text-primary);
 }
 </style>

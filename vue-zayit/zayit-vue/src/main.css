@@ -9,6 +9,7 @@
 @import './assets/styles/button.css';
 @import './assets/styles/input.css';
 @import './assets/styles/cursor.css';
+@import './assets/styles/touch.css';
 
 
 * {
@@ -20,6 +21,9 @@
   -moz-user-select: none;
   -ms-user-select: none;
   user-select: none;
+  /* Touch-friendly defaults */
+  -webkit-tap-highlight-color: transparent; /* Remove iOS tap highlight */
+  touch-action: manipulation; /* Prevent double-tap zoom by default */
 }
 
 html, body {

@@ -59,6 +59,20 @@ export function useContentSearch() {
         })
     }
 
+    function updateMatches(newMatches: SearchMatch[]) {
+        matches.value = [...newMatches].sort((a, b) => {
+            if (a.itemIndex !== b.itemIndex) {
+                return a.itemIndex - b.itemIndex
+            }
+            return a.occurrence - b.occurrence
+        })
+
+        // Reset current match index if it's out of bounds
+        if (currentMatchIndex.value >= matches.value.length) {
+            currentMatchIndex.value = -1
+        }
+    }
+
     function navigateToMatch(matchIndex: number) {
         if (matchIndex >= 0 && matchIndex < matches.value.length) {
             currentMatchIndex.value = matchIndex
@@ -181,6 +195,7 @@ export function useContentSearch() {
         totalMatches,
         currentMatch,
         searchInItems,
+        updateMatches,
         navigateToMatch,
         highlightMatches
     }

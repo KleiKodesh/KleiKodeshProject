@@ -12,8 +12,8 @@ namespace MinimalIndexer
         ZayitDbManager _db;
         string _tier1Id;
         string _tier2Id;
-        const short _tier1ChunkSize = 200;
-        const short _tier2ChunkSize = 10;
+        const short _tier1ChunkSize = 500;
+        const short _tier2ChunkSize = 25;
 
         internal BloomFilterManager(ZayitDbManager zayitDbManager)
         {
@@ -54,7 +54,7 @@ namespace MinimalIndexer
                     }
                 }
 
-                void createTier2Filter(int currentGlobalTier1ChunkId, int subChunkId)
+                void createTier2Filter(int currentGlobalTier1ChunkId, int bookRelativeTier2Chunk)
                 {
                     if (tier2Sb.Length > 0)
                     {
@@ -65,8 +65,10 @@ namespace MinimalIndexer
                             var bloom = new BloomFilter(tokens.Count, ErrorRate);
                             foreach (var token in tokens)
                                 bloom.Add(token);
-                            // Tier 2: Id = sub-chunk within tier1 (0-49), Grouping = GLOBAL tier1 chunk id
-                            tier2Writer.Commit(bloom, subChunkId, currentGlobalTier1ChunkId);
+                            // CRITICAL: Store BOOK-RELATIVE tier2 chunk as ID
+                            // Id = book-relative tier2 chunk (0, 1, 2, 3... within THIS book)
+                            // Grouping = GLOBAL tier1 chunk id (for lookup during search)
+                            tier2Writer.Commit(bloom, bookRelativeTier2Chunk, currentGlobalTier1ChunkId);
                         }
                     }
                 }
@@ -76,7 +78,8 @@ namespace MinimalIndexer
                     int linesInTier1Chunk = 0;
                     int linesInTier2Chunk = 0;
                     int currentTier1ChunkId = globalTier1ChunkId;  // Capture ID at start of tier1 chunk
-                    int tier2SubChunkId = 0;  // Reset for each tier1 chunk
+                    int tier2SubChunkId = 0;  // Sub-chunk within current tier1 chunk (0-49)
+                    int bookRelativeTier2Chunk = 0;  // BOOK-RELATIVE tier2 chunk counter (resets per book)
 
                     foreach (var line in _db.GetLinesByBook(bookId))
                     {
@@ -90,8 +93,9 @@ namespace MinimalIndexer
                         // Check tier 2 first (smaller chunks)
                         if (linesInTier2Chunk >= _tier2ChunkSize)
                         {
-                            createTier2Filter(currentTier1ChunkId, tier2SubChunkId);
+                            createTier2Filter(currentTier1ChunkId, bookRelativeTier2Chunk);
                             tier2SubChunkId++;
+                            bookRelativeTier2Chunk++;  // Increment book-relative counter
                             linesInTier2Chunk = 0;
                         }
 
@@ -107,7 +111,7 @@ namespace MinimalIndexer
 
                     // Process remaining lines
                     if (tier2Sb.Length > 0)
-                        createTier2Filter(currentTier1ChunkId, tier2SubChunkId);
+                        createTier2Filter(currentTier1ChunkId, bookRelativeTier2Chunk);
                     if (tier1Sb.Length > 0)
                         createTier1Filter(bookId);
 
@@ -254,9 +258,8 @@ namespace MinimalIndexer
                     int c = list.Count;
                     int j = 0;
 
-                    // Calculate the absolute chunk ID for tier 2
-                    // tier2 absolute chunk = globalTier1ChunkId * (tier1ChunkSize / tier2ChunkSize) + subChunkId
-                    int tier2BaseChunk = globalTier1ChunkId * (_tier1ChunkSize / _tier2ChunkSize);
+                    // CRITICAL FIX: f.Id is now BOOK-RELATIVE tier2 chunk
+                    // No calculation needed - just use it directly!
 
                     // Batch of 4
                     for (; j + 3 < c; j += 4)
@@ -266,11 +269,11 @@ namespace MinimalIndexer
                         var f2 = list[j + 2];
                         var f3 = list[j + 3];
 
-                        // f.Id is the sub-chunk ID (0-49), add to base to get absolute chunk
-                        if (f0.Filter.ContainsAll(terms)) local.Add((bookId, tier2BaseChunk + f0.Id));
-                        if (f1.Filter.ContainsAll(terms)) local.Add((bookId, tier2BaseChunk + f1.Id));
-                        if (f2.Filter.ContainsAll(terms)) local.Add((bookId, tier2BaseChunk + f2.Id));
-                        if (f3.Filter.ContainsAll(terms)) local.Add((bookId, tier2BaseChunk + f3.Id));
+                        // f.Id is already the book-relative tier2 chunk - use directly
+                        if (f0.Filter.ContainsAll(terms)) local.Add((bookId, f0.Id));
+                        if (f1.Filter.ContainsAll(terms)) local.Add((bookId, f1.Id));
+                        if (f2.Filter.ContainsAll(terms)) local.Add((bookId, f2.Id));
+                        if (f3.Filter.ContainsAll(terms)) local.Add((bookId, f3.Id));
                     }
 
                     // Tail
@@ -278,7 +281,7 @@ namespace MinimalIndexer
                     {
                         var f = list[j];
                         if (f.Filter.ContainsAll(terms))
-                            local.Add((bookId, tier2BaseChunk + f.Id));
+                            local.Add((bookId, f.Id));
                     }
                 }
 

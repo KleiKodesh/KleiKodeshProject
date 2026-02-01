@@ -1,5 +1,6 @@
 <template>
-    <div class="connection-type-filter">
+    <div ref="filterContainer"
+         class="connection-type-filter">
         <button class="filter-toggle-btn"
                 @click="toggleDropdown"
                 :title="selectedLabel"
@@ -29,6 +30,7 @@ import { Icon } from '@iconify/vue'
 import type { Book } from '../types/Book'
 // import { SHOW_ALL_LABEL } from '../types/ConnectionType'
 import { commentaryService } from '../services/commentaryService'
+import { useClickOutside } from '../composables/useClickOutside'
 
 interface FilterOption {
     label: string
@@ -48,6 +50,14 @@ const emit = defineEmits<{
 
 const isOpen = ref(false)
 const toggleButton = ref<HTMLElement>()
+const filterContainer = ref<HTMLElement>()
+
+// Use touch-friendly click outside composable
+useClickOutside(filterContainer, () => {
+    if (isOpen.value) {
+        isOpen.value = false
+    }
+})
 
 // Compute available options based on provided prop or book flags using the service
 const availableOptions = computed<FilterOption[]>(() => {
@@ -72,21 +82,6 @@ const selectOption = (connectionTypeId: number) => {
     emit('filterChange', connectionTypeId)
     isOpen.value = false
 }
-
-// Close dropdown when clicking outside
-const handleClickOutside = (event: MouseEvent) => {
-    if (toggleButton.value && !toggleButton.value.contains(event.target as Node)) {
-        isOpen.value = false
-    }
-}
-
-onMounted(() => {
-    document.addEventListener('click', handleClickOutside)
-})
-
-onUnmounted(() => {
-    document.removeEventListener('click', handleClickOutside)
-})
 </script>
 
 <style scoped>

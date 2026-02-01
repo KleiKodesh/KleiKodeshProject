@@ -1,6 +1,6 @@
 <template>
     <div ref="nodeRef"
-         class="flex-row hover-bg focus-accent click-effect c-pointer bold tree-node reactive-icon"
+         class="flex-row hover-bg focus-accent click-effect c-pointer bold tree-node reactive-icon touch-interactive"
          :class="{ 'keyboard-active': isKeyboardActive }"
          tabindex="0"
          :style="{ paddingInlineStart: `${20 + depth * 20}px` }"
