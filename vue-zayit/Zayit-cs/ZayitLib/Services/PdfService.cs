@@ -226,19 +226,27 @@ namespace Zayit.Services
         {
             // Get Html path - handle both regular and ClickOnce deployments
             var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            var htmlPath = Path.Combine(baseDir, "Html");
             
-            if (!Directory.Exists(htmlPath))
+            // 1. Standard deployment: zayit-vue-app folder in base directory
+            var standardPath = Path.Combine(baseDir, "zayit-vue-app");
+            if (Directory.Exists(standardPath))
             {
-                // Try alternative paths for different deployment scenarios
-                htmlPath = Path.Combine(baseDir, "..", "..", "..", "zayit-vue", "dist");
-                if (!Directory.Exists(htmlPath))
-                {
-                    htmlPath = Path.Combine(baseDir, "dist");
-                }
+                return Path.GetFullPath(standardPath);
             }
             
-            return Path.GetFullPath(htmlPath);
+            // 2. ClickOnce deployment: Check assembly location
+            var assemblyPath = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+            var clickOncePath = Path.Combine(assemblyPath, "zayit-vue-app");
+            if (Directory.Exists(clickOncePath))
+            {
+                return Path.GetFullPath(clickOncePath);
+            }
+            
+            // 3. Fallback: Return standard path even if it doesn't exist
+            Console.WriteLine($"[PdfService] WARNING: zayit-vue-app folder not found! Tried:");
+            Console.WriteLine($"  - {standardPath}");
+            Console.WriteLine($"  - {clickOncePath}");
+            return Path.GetFullPath(standardPath);
         }
     }
 }

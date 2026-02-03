@@ -1,13 +1,11 @@
-﻿using Microsoft.Web.WebView2.Core;
-using Microsoft.Web.WebView2.WinForms;
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Reflection;
-using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using Microsoft.Web.WebView2.WinForms;
+using Microsoft.Web.WebView2.Core;
 using Zayit.Services;
 
 namespace Zayit.Viewer
@@ -29,11 +27,11 @@ namespace Zayit.Viewer
         {
             _instanceId = ++_instanceCounter;
             Console.WriteLine($"[ZayitViewer] Creating instance #{_instanceId}");
-            
+
             // Get Html path - handle both regular and ClickOnce deployments
             HtmlPath = GetHtmlPath();
             Console.WriteLine($"[ZayitViewer#{_instanceId}] Html path: {HtmlPath}");
-            
+
             this.Dock = DockStyle.Fill;
 
             // Initialize services directly
@@ -51,11 +49,11 @@ namespace Zayit.Viewer
             try
             {
                 Console.WriteLine($"[ZayitViewer#{_instanceId}] Initializing services...");
-                
+
                 var dbQueries = new DbQueries();
                 _services = new ServiceProvider(this, dbQueries);
                 _bridge = new WebViewBridgeService(this, _services);
-                
+
                 Console.WriteLine($"[ZayitViewer#{_instanceId}] Services initialized successfully");
             }
             catch (Exception ex)
@@ -101,7 +99,7 @@ namespace Zayit.Viewer
                     return _sharedEnvironment; // double-check after lock
             }
 
-            string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Html",
+            string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "zayit-vue-app",
                                        "ZayitWebView2SharedCache");
 
             var env = await CoreWebView2Environment.CreateAsync(userDataFolder: path);
@@ -118,24 +116,24 @@ namespace Zayit.Viewer
         {
             // Try multiple paths to handle different deployment scenarios
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            
+
             // 1. Standard deployment: Html folder in base directory
-            string standardPath = Path.Combine(baseDir, "Html");
+            string standardPath = Path.Combine(baseDir, "zayit-vue-app");
             if (Directory.Exists(standardPath) && File.Exists(Path.Combine(standardPath, "index.html")))
             {
                 Console.WriteLine($"[ZayitViewer] Using standard Html path: {standardPath}");
                 return standardPath;
             }
-            
+
             // 2. ClickOnce deployment: Check assembly location
             string assemblyPath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-            string clickOncePath = Path.Combine(assemblyPath, "Html");
+            string clickOncePath = Path.Combine(assemblyPath, "zayit-vue-app");
             if (Directory.Exists(clickOncePath) && File.Exists(Path.Combine(clickOncePath, "index.html")))
             {
                 Console.WriteLine($"[ZayitViewer] Using ClickOnce Html path: {clickOncePath}");
                 return clickOncePath;
             }
-            
+
             // 3. Fallback: Return standard path even if it doesn't exist (will fail later with clear error)
             Console.WriteLine($"[ZayitViewer] WARNING: Html folder not found! Tried:");
             Console.WriteLine($"  - {standardPath}");
@@ -148,8 +146,8 @@ namespace Zayit.Viewer
         private void ZayitViewer_CoreWebView2InitializationCompleted(object sender, CoreWebView2InitializationCompletedEventArgs e)
         {
             Console.WriteLine($"[ZayitViewer#{_instanceId}] CoreWebView2InitializationCompleted called, _coreInitialized: {_coreInitialized}");
-            
-            if (_coreInitialized) 
+
+            if (_coreInitialized)
             {
                 Console.WriteLine($"[ZayitViewer#{_instanceId}] Already initialized, returning");
                 return; // prevent double initialization
@@ -165,10 +163,26 @@ namespace Zayit.Viewer
             try
             {
                 Console.WriteLine($"[ZayitViewer#{_instanceId}] Setting up WebView2...");
-                
+
                 // Map local HTML files with DenyCors to avoid CORS issues
+                Console.WriteLine($"[ZayitViewer#{_instanceId}] Mapping virtual host 'zayitHost' to path: {HtmlPath}");
                 this.CoreWebView2.SetVirtualHostNameToFolderMapping("zayitHost", HtmlPath,
                     CoreWebView2HostResourceAccessKind.DenyCors);
+
+                // Add navigation error handling
+                CoreWebView2.NavigationCompleted += (navSender, navArgs) =>
+                {
+                    Console.WriteLine($"[ZayitViewer#{_instanceId}] Navigation completed. Success: {navArgs.IsSuccess}");
+                    if (!navArgs.IsSuccess)
+                    {
+                        Console.WriteLine($"[ZayitViewer#{_instanceId}] Navigation failed with WebErrorStatus: {navArgs.WebErrorStatus}");
+                    }
+                };
+
+                CoreWebView2.DOMContentLoaded += (domSender, domArgs) =>
+                {
+                    Console.WriteLine($"[ZayitViewer#{_instanceId}] DOM content loaded");
+                };
 
                 // Unregister existing handlers to prevent duplicates
                 Console.WriteLine($"[ZayitViewer#{_instanceId}] Unregistering existing event handlers");
@@ -194,7 +208,7 @@ namespace Zayit.Viewer
 
                 // Optional: wait until page is fully loaded before sending messages
                 CoreWebView2.NavigationCompleted += OnNavigationCompleted;
-                
+
                 Console.WriteLine($"[ZayitViewer#{_instanceId}] WebView2 setup completed");
             }
             catch (Exception ex)
@@ -206,7 +220,7 @@ namespace Zayit.Viewer
         private void OnNavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
         {
             Console.WriteLine($"[ZayitViewer#{_instanceId}] WebView navigation completed, JS safe to call now");
-            
+
             // Unregister to prevent multiple calls
             CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
         }
@@ -217,7 +231,7 @@ namespace Zayit.Viewer
             {
                 if (e == null || string.IsNullOrWhiteSpace(e.WebMessageAsJson) || _bridge == null)
                     return;
-                
+
                 _bridge.HandleMessage(e.WebMessageAsJson);
             }
             catch (Exception ex)

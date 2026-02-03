@@ -64,6 +64,7 @@
     <ProjectReference Include="..\ZayitLib\ZayitLib.csproj">
       <Project>{8C17C575-1CB3-4677-BF4C-DAFEB5419377}</Project>
       <Name>ZayitLib</Name>
+      <AdditionalProperties>BuildVueApp=true</AdditionalProperties>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
@@ -91,6 +92,7 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Project="..\packages\Stub.System.Data.SQLite.Core.NetFramework.1.0.119.0\build\net46\Stub.System.Data.SQLite.Core.NetFramework.targets" Condition="Exists('..\packages\Stub.System.Data.SQLite.Core.NetFramework.1.0.119.0\build\net46\Stub.System.Data.SQLite.Core.NetFramework.targets')" />
+  <Import Project="..\ZayitVue.targets" />
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
     <PropertyGroup>
       <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>

@@ -15,6 +15,7 @@ export default defineConfig({
         },
     },
     build: {
+        outDir: 'dist', // Output to standard dist folder
         target: 'esnext',
         assetsInlineLimit: 100000000, // Inline all assets
         chunkSizeWarningLimit: 100000000,
