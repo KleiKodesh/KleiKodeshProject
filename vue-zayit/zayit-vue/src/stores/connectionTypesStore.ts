@@ -7,7 +7,7 @@
 
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { dbManager } from '../data/dbManager'
+import { dbService } from '../services/dbService'
 import type { ConnectionType } from '../types/ConnectionType'
 
 export const useConnectionTypesStore = defineStore('connectionTypes', () => {
@@ -56,7 +56,7 @@ export const useConnectionTypesStore = defineStore('connectionTypes', () => {
 
         isLoading.value = true
         try {
-            connectionTypes.value = await dbManager.getConnectionTypes()
+            connectionTypes.value = await dbService.getConnectionTypes()
             isLoaded.value = true
             console.log('✅ Connection types loaded:', connectionTypes.value.map(ct => `${ct.id}: ${ct.name} (${hebrewLabels[ct.name]})`))
         } catch (error) {

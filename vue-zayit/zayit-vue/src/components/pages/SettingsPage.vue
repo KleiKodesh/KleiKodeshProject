@@ -175,7 +175,7 @@
 import { ref, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '../../stores/settingsStore'
-import { hebrewFonts } from '../../data/hebrewFonts'
+import { hebrewFonts } from '../../services/hebrewFontsService'
 import { useConnectivity } from '../../utils/connectivity'
 
 const settingsStore = useSettingsStore()

@@ -1,45 +1,41 @@
 /**
- * PDF Service
+ * PDF Service - Unified PDF Operations
  * 
- * Handles PDF file operations using the existing C# bridge system.
- * Integrates with the virtual host mapping PDF manager in C#.
+ * Handles all PDF file operations using C# WebView bridge with SetVirtualHostNameToFolderMapping.
+ * Provides session persistence by storing original file paths and recreating virtual URLs.
+ * 
+ * Pipeline: Vue → webviewBridge → C# ServiceProvider → PdfService → SetVirtualHostNameToFolderMapping
  */
 
-import { getCSharpBridge } from '../data/csharpBridge'
+import { webviewBridge } from '../services/webviewBridge'
 
 export interface PdfFileResult {
     fileName: string | null
-    dataUrl: string | null  // This will be the virtual HTTPS URL
-    originalPath?: string | null  // Original file path for persistence
+    dataUrl: string | null  // Virtual HTTPS URL from SetVirtualHostNameToFolderMapping
+    originalPath?: string | null  // Original file path for session persistence
 }
 
 export class PdfService {
-    private bridge: ReturnType<typeof getCSharpBridge>
-
-    constructor() {
-        this.bridge = getCSharpBridge()
-    }
-
     /**
-     * Show C# file picker and get virtual PDF URL
-     * Uses the existing bridge system with OpenPdfFilePicker command
+     * Show C# file picker dialog and get virtual PDF URL
+     * Uses SetVirtualHostNameToFolderMapping for secure file access
      */
     async showFilePicker(): Promise<PdfFileResult> {
-        console.log('[PdfService] Opening file picker via C# bridge')
+        console.log('[PdfService] Opening file picker via webview bridge')
 
-        // Create promise that will be resolved by receivePdfFilePath
-        const promise = this.bridge.createRequest<PdfFileResult>('OpenPdfFilePicker')
+        try {
+            const result = await webviewBridge.call<PdfFileResult>('OpenPdfFilePicker')
+            console.log('[PdfService] Received file picker result:', result)
 
-        // Send command to C# (uses existing bridge pattern)
-        console.log('[PdfService] Sending OpenPdfFilePicker command to C#')
-        this.bridge.send('OpenPdfFilePicker', [])
+            if (!result.fileName || !result.dataUrl) {
+                return { fileName: null, dataUrl: null, originalPath: null }
+            }
 
-        // Wait for C# response via bridge
-        console.log('[PdfService] Waiting for C# response...')
-        const result = await promise
-
-        console.log('[PdfService] Received file picker result:', result)
-        return result
+            return result
+        } catch (error) {
+            console.error('[PdfService] File picker failed:', error)
+            return { fileName: null, dataUrl: null, originalPath: null }
+        }
     }
 
     /**
@@ -48,43 +44,61 @@ export class PdfService {
     async checkManagerReady(): Promise<boolean> {
         console.log('[PdfService] Checking PDF manager readiness')
 
-        // Create promise that will be resolved by receivePdfManagerReady
-        const promise = this.bridge.createRequest<boolean>('CheckPdfManagerReady')
+        try {
+            const isReady = await webviewBridge.call<boolean>('CheckPdfManagerReady')
+            console.log('[PdfService] PDF manager ready:', isReady)
+            return isReady
+        } catch (error) {
+            console.error('[PdfService] PDF manager check failed:', error)
+            return false
+        }
+    }
 
-        // Send command to C# 
-        this.bridge.send('CheckPdfManagerReady', [])
+    /**
+     * Initialize PDF manager with SetVirtualHostNameToFolderMapping
+     */
+    async initializeManager(): Promise<boolean> {
+        console.log('[PdfService] Initializing PDF manager')
 
-        // Wait for C# response
-        const isReady = await promise
-
-        console.log('[PdfService] PDF manager ready:', isReady)
-        return isReady
+        try {
+            const result = await webviewBridge.call<boolean>('InitializePdfManager')
+            console.log('[PdfService] PDF manager initialized:', result)
+            return result
+        } catch (error) {
+            console.error('[PdfService] PDF manager initialization failed:', error)
+            return false
+        }
     }
 
     /**
      * Recreate virtual URL from stored file path (for session persistence)
+     * Uses SetVirtualHostNameToFolderMapping to recreate secure access
      */
     async recreateVirtualUrl(originalPath: string): Promise<string | null> {
         console.log('[PdfService] Recreating virtual URL for:', originalPath)
 
-        // Create promise that will be resolved by receivePdfVirtualUrl
-        const promise = this.bridge.createRequest<string | null>(`RecreateVirtualUrlFromPath:${originalPath}`)
-
-        // Send command to C# 
-        this.bridge.send('RecreateVirtualUrlFromPath', [originalPath])
-
-        // Wait for C# response
-        const virtualUrl = await promise
-
-        console.log('[PdfService] Recreated virtual URL:', virtualUrl)
-        return virtualUrl
+        try {
+            const virtualUrl = await webviewBridge.call<string | null>('RecreateVirtualUrlFromPath', originalPath)
+            console.log('[PdfService] Recreated virtual URL:', virtualUrl)
+            return virtualUrl
+        } catch (error) {
+            console.error('[PdfService] Virtual URL recreation failed:', error)
+            return null
+        }
     }
 
     /**
-     * Check if C# bridge is available
+     * Load PDF from file path (alias for recreateVirtualUrl for compatibility)
+     */
+    async loadFromPath(originalPath: string): Promise<string | null> {
+        return await this.recreateVirtualUrl(originalPath)
+    }
+
+    /**
+     * Check if webview bridge is available
      */
     isAvailable(): boolean {
-        return this.bridge.isAvailable()
+        return webviewBridge.isAvailable()
     }
 }
 

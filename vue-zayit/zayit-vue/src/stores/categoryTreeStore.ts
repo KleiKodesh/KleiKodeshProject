@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { Category } from '../types/BookCategoryTree'
 import type { Book } from '../types/Book'
-import { dbManager } from '../data/dbManager'
+import { dbService } from '../services/dbService'
 
 export const useCategoryTreeStore = defineStore('categoryTree', () => {
     const isLoading = ref(true);
@@ -19,7 +19,7 @@ export const useCategoryTreeStore = defineStore('categoryTree', () => {
 
     async function buildTree() {
         try {
-            const { categoriesFlat: categories, booksFlat: books } = await dbManager.getTree()
+            const { categoriesFlat: categories, booksFlat: books } = await dbService.getTree()
 
             // Group books by categoryId and sort them by orderIndex
             const booksByCategory = new Map<number, Book[]>()

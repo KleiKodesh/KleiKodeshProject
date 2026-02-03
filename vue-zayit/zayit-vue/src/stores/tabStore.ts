@@ -15,7 +15,8 @@ const PAGE_TITLES: Record<PageType, string> = {
     'search': 'חיפוש',
     'settings': 'הגדרות',
     'hebrewbooks': 'HebrewBooks',
-    'kezayit-search': 'חיפוש כזית'
+    'kezayit-search': 'חיפוש כזית',
+    'workspaces': 'סביבות עבודה'
 };
 
 export const useTabStore = defineStore('tabs', () => {

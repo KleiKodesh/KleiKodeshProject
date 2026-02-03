@@ -5,7 +5,7 @@
  * Handles loading, filtering, and processing of commentary links.
  */
 
-import { dbManager } from '../data/dbManager'
+import { dbService } from '../services/dbService'
 import { useConnectionTypesStore } from '../stores/connectionTypesStore'
 import type { Link } from '../types/Link'
 import type { Book } from '../types/Book'
@@ -91,7 +91,7 @@ export class CommentaryService {
     ): Promise<CommentaryLinkGroup[]> {
         try {
             // Get the actual line ID from the database
-            const lineId = await dbManager.getLineId(bookId, lineIndex)
+            const lineId = await dbService.getLineId(bookId, lineIndex)
             if (!lineId) {
                 console.warn(`No line ID found for book ${bookId}, lineIndex ${lineIndex}`)
                 return []
@@ -99,7 +99,7 @@ export class CommentaryService {
 
             // Apply filtering at SQL level
             const connectionTypeId = filterOptions?.connectionTypeId
-            const links = await dbManager.getLinks(lineId, tabId, bookId, connectionTypeId)
+            const links = await dbService.getLinks(lineId, tabId, bookId, connectionTypeId)
 
             // Group links by title and store first targetBookId/lineIndex
             const grouped = new Map<string, {

@@ -1,12 +1,25 @@
 # Quick Start Guide
 
+## ✅ PROJECT STATUS: COMMUNICATION PIPELINE VERIFIED
+
+All communication pipelines between Vue and C# have been verified and are fully functional:
+
+- **Category Tree Loading** ✅ Working
+- **TOC Loading** ✅ Working
+- **Book Lines Loading** ✅ Working (virtualized with smart batching)
+- **Commentary Loading** ✅ Working
+- **PDF Files** ✅ Working (SetVirtualHostNameToFolderMapping + session persistence)
+- **Hebrew Books** ✅ Working (download capture + cache management)
+
 ## Project Structure
 
 ```
 /
-├── zayit-vue/         # Vue 3 frontend (PRIMARY)
-├── Zayit-cs/          # C# desktop application
-└── vue-tabs/          # Legacy (deprecated)
+├── zayit-vue/         # Vue 3 frontend (PRIMARY) - Clean services architecture
+├── Zayit-cs/          # C# desktop application - Modern services architecture
+│   └── ZayitLib/
+│       └── Services/  # ✅ NEW: Clean service layer
+└── shared-pdfjs/      # PDF.js distribution
 ```
 
 ## Development
@@ -37,24 +50,52 @@ build-and-deploy.bat
 ### C# Backend (Zayit-cs/)
 
 ```bash
-# Build
-build.bat
+# Build with dotnet
+dotnet build "Zayit-cs/ZayitSolution.sln" --configuration Debug
 
-# Build and run
-build.bat run
-
-# Clean and rebuild
-build.bat rebuild
-
-# Build release
-build.bat release
+# Or use MSBuild if available
+msbuild "Zayit-cs/ZayitSolution.sln" /p:Configuration=Debug
 ```
 
-## Architecture
+## ✅ VERIFIED ARCHITECTURE
 
-### SQL Queries
+### Modern Services Architecture (C#)
 
-- **Defined in**: `zayit-vue/src/data/sqlQueries.ts`
+```
+Vue Component → webviewBridge → WebViewBridgeService → ServiceProvider → Specialized Services
+                                                                        ├── DbService
+                                                                        ├── PdfService
+                                                                        └── HebrewBooksService
+```
+
+### Communication Protocol
+
+**Vue → C# (JSON Messages)**:
+
+```typescript
+// Modern bridge with lazy-loaded message listener
+await webviewBridge.call(
+  "GetTree",
+  SqlQueries.getAllCategories,
+  SqlQueries.getAllBooks,
+);
+await webviewBridge.call("OpenPdfFilePicker");
+await webviewBridge.call("PrepareHebrewBookDownload", bookId, title, "view");
+```
+
+**C# → Vue (JSON Responses)**:
+
+```csharp
+// ServiceProvider delegates to specialized services
+public object GetTree(string cq, string bq) => _db.GetTree(cq, bq);
+public object OpenPdfFilePicker() => _pdf.OpenPdfFilePicker();
+public object PrepareHebrewBookDownload(string id, string title, string action) =>
+    _hebrewBooks.PrepareDownload(id, title, action).GetAwaiter().GetResult();
+```
+
+### SQL Queries - Single Source of Truth
+
+- **Defined in**: `zayit-vue/src/services/sqlQueries.ts`
 - **Used by**: Both development (Vite) and production (C#)
 - **Rule**: Never define SQL elsewhere
 
@@ -63,148 +104,167 @@ build.bat release
 **Development Mode**:
 
 ```
-Component → dbManager → sqliteDb → Vite Plugin → SQLite
+Component → dbService → devQuery → Vite Plugin → SQLite
 ```
 
 **Production Mode**:
 
 ```
-Component → dbManager → csharpBridge → WebView2 → C# → SQLite
+Component → dbService → webviewBridge → C# ServiceProvider → DbService → SQLite
 ```
 
-### Communication
+## ✅ VERIFIED FILE OPERATIONS
 
-**Vue → C#**:
-
-```typescript
-window.chrome.webview.postMessage({
-  command: "GetTree",
-  args: [],
-});
-```
-
-**C# → Vue**:
+### PDF Files with SetVirtualHostNameToFolderMapping
 
 ```csharp
-await ExecuteScriptAsync("window.receiveTreeData({json});");
+// C# creates secure virtual URLs
+webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+    "zayitHost", htmlPath, CoreWebView2HostResourceAccessKind.Allow);
+// Returns: https://zayitHost/temp/uniqueId_filename.pdf
+```
+
+### Hebrew Books with Download Capture
+
+```csharp
+// Captures downloads and manages cache
+webView.CoreWebView2.DownloadStarting += (sender, e) => {
+    // Redirect to cache directory
+    e.ResultFilePath = Path.Combine(cacheDir, fileName);
+};
+// Auto-closes download dialog: webView.CoreWebView2.CloseDefaultDownloadDialog()
 ```
 
 ## Common Tasks
 
-### Add New Database Query
+### Add New Database Operation
 
-1. Add SQL to `zayit-vue/src/data/sqlQueries.ts`:
+1. **Add SQL** to `zayit-vue/src/services/sqlQueries.ts`:
 
 ```typescript
 export const SqlQueries = {
-  getMyData: (id: number) => `
-    SELECT * FROM myTable WHERE id = ${id}
-  `,
+  getMyData: (id: number) => `SELECT * FROM myTable WHERE id = ${id}`,
 };
 ```
 
-2. Add to `zayit-vue/src/data/sqliteDb.ts`:
-
-```typescript
-export async function getMyData(id: number) {
-  return await query(SqlQueries.getMyData(id));
-}
-```
-
-3. Add handler to `zayit-vue/src/data/csharpBridge.ts`:
-
-```typescript
-win.receiveMyData = (id: number, data: any) => {
-  const request = this.pendingRequests.get(`GetMyData:${id}`);
-  if (request) {
-    request.resolve(data);
-    this.pendingRequests.delete(`GetMyData:${id}`);
-  }
-};
-```
-
-4. Add to `zayit-vue/src/data/dbManager.ts`:
+2. **Add Vue service method** to `zayit-vue/src/services/dbService.ts`:
 
 ```typescript
 async getMyData(id: number) {
   if (this.isWebViewAvailable()) {
-    const promise = this.csharp.createRequest(`GetMyData:${id}`)
-    this.csharp.send('GetMyData', [id])
-    return promise
+    return await webviewBridge.call('GetMyData', id, SqlQueries.getMyData(id))
   } else {
-    return await sqliteDb.getMyData(id)
+    return await devQuery(SqlQueries.getMyData(id))
   }
 }
 ```
 
-5. Add C# handler to `Zayit-cs/Zayit/Viewer/ZayitViewer.cs`:
+3. **Add C# service method** to `Zayit-cs/ZayitLib/Services/DbService.cs`:
 
 ```csharp
-private async void GetMyData(int id)
+public object GetMyData(int id, string query)
 {
-    // Copy SQL from sqlQueries.ts
-    var result = SeforimDb.DbQueries.ExecuteQuery($@"
-        SELECT * FROM myTable WHERE id = {id}
-    ");
-
-    string json = JsonSerializer.Serialize(result, new JsonSerializerOptions
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    });
-
-    await ExecuteScriptAsync($"window.receiveMyData({id}, {json});");
+    return _dbQueries.ExecuteQuery(query);
 }
 ```
 
-### Update Styles
+4. **Expose in ServiceProvider** `Zayit-cs/ZayitLib/Services/ServiceProvider.cs`:
 
-Edit `zayit-vue/src/main.css` or component-specific styles.
-
-### Add New Component
-
-Create in `zayit-vue/src/components/` using:
-
-```vue
-<script setup lang="ts">
-// Component logic
-</script>
-
-<template>
-  <!-- Template -->
-</template>
-
-<style scoped>
-/* Styles */
-</style>
+```csharp
+public object GetMyData(int id, string q) => _db.GetMyData(id, q);
 ```
+
+### Add New PDF Operation
+
+1. **Add to PdfService.cs**:
+
+```csharp
+public object MyPdfOperation() {
+    // Use SetVirtualHostNameToFolderMapping for file access
+    return new { success = true, virtualUrl = "https://zayitHost/..." };
+}
+```
+
+2. **Expose in ServiceProvider**:
+
+```csharp
+public object MyPdfOperation() => _pdf.MyPdfOperation();
+```
+
+3. **Add Vue service call**:
+
+```typescript
+await webviewBridge.call("MyPdfOperation");
+```
+
+### Add New Hebrew Books Operation
+
+1. **Add to HebrewBooksService.cs**:
+
+```csharp
+public async Task<object> MyHebrewBooksOperation() {
+    // Use download capture and cache management
+    return new { success = true };
+}
+```
+
+2. **Expose in ServiceProvider with proper async handling**:
+
+```csharp
+public object MyHebrewBooksOperation() =>
+    _hebrewBooks.MyHebrewBooksOperation().GetAwaiter().GetResult();
+```
+
+## ✅ VERIFIED SERVICES
+
+### Vue Services (Clean Architecture)
+
+- `webviewBridge.ts` - Singleton bridge with lazy message listener
+- `dbService.ts` - Database operations (cleaned of legacy PDF/Hebrew Books methods)
+- `pdfService.ts` - Unified PDF operations with session persistence
+- `webviewHebrewBooks.ts` - Clean Hebrew Books operations
+- `hebrewBooksHandlers.ts` - Event handlers using unified service
+
+### C# Services (Modern Architecture)
+
+- `ServiceProvider.cs` - Central hub with all Vue-required methods
+- `WebViewBridgeService.cs` - JSON message parsing and method invocation
+- `DbService.cs` - Database operations via DbQueries
+- `PdfService.cs` - SetVirtualHostNameToFolderMapping operations
+- `HebrewBooksService.cs` - Download capture and cache management
 
 ## Troubleshooting
 
-### Build fails
+### Build Fails
 
 ```bash
+# Vue build
 cd zayit-vue
 npm install
 npm run build
+
+# C# build
+dotnet build "Zayit-cs/ZayitSolution.sln" --configuration Debug
 ```
 
-### C# can't find HTML
+### Communication Issues
 
-1. Check `Zayit-cs/Zayit/Html/index.html` exists
-2. Run `cd zayit-vue && build-and-deploy.bat`
-3. Rebuild C# project
+1. Check browser DevTools Console for Vue errors
+2. Check Visual Studio Output window for C# errors
+3. Verify WebView2 Runtime is installed
+4. Test `webviewBridge.isAvailable()` in Vue
 
-### Database queries fail
+### File Operations Not Working
 
-1. Check SQL in `sqlQueries.ts`
-2. Verify C# copied SQL correctly
-3. Check database path in `vite.config.ts`
+1. Verify `SetVirtualHostNameToFolderMapping` is set up
+2. Check file permissions and paths
+3. Ensure virtual URLs use correct host name (`zayitHost`)
 
-### WebView2 not working
+### Hebrew Books Cache Issues
 
-1. Install WebView2 Runtime
-2. Check `app.manifest` in C# project
-3. Verify `CoreWebView2InitializationCompleted` event
+1. Check cache directory exists: `Html/pdfjs/web/hebrewbookscache/`
+2. Verify download event handlers are registered
+3. Test cache stats: `GetHebrewBooksCacheStats`
 
 ## Resources
 

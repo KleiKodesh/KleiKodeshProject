@@ -1,0 +1,130 @@
+using Microsoft.Web.WebView2.WinForms;
+using System;
+
+namespace Zayit.Services
+{
+    public class ServiceProvider
+    {
+        private readonly DbService _db;
+        private readonly HebrewBooksService _hebrewBooks;
+        private readonly PdfService _pdf;
+        private Action _popOutAction;
+
+        public ServiceProvider(WebView2 webView, DbQueries db)
+        {
+            try
+            {
+                Console.WriteLine("[ServiceProvider] Initializing services...");
+                
+                _db = new DbService(db);
+                Console.WriteLine("[ServiceProvider] DbService initialized");
+                
+                _hebrewBooks = new HebrewBooksService(webView);
+                Console.WriteLine("[ServiceProvider] HebrewBooksService initialized");
+                
+                _pdf = new PdfService(webView);
+                Console.WriteLine("[ServiceProvider] PdfService initialized");
+                
+                // Initialize services
+                _pdf.InitializePdfManager();
+                Console.WriteLine("[ServiceProvider] PDF manager initialized");
+                
+                _hebrewBooks.Initialize();
+                Console.WriteLine("[ServiceProvider] Hebrew books service initialized");
+                
+                Console.WriteLine("[ServiceProvider] All services initialized successfully");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ServiceProvider] ERROR during initialization: {ex}");
+                throw;
+            }
+        }
+
+        public void SetPopOutToggleAction(Action action) => _popOutAction = action;
+
+        // Database Operations - Core Vue Communication Pipeline
+        public object GetConnectionTypes(string q) => _db.GetConnectionTypes(q);
+        public object GetTree(string cq, string bq) => _db.GetTree(cq, bq);
+        public object GetToc(int bookId, string q) => _db.GetToc(bookId, q);
+        public int GetTotalLines(int bookId, string q) => _db.GetTotalLines(bookId, q);
+        public object GetLineId(int bookId, int idx, string q) => _db.GetLineId(bookId, idx, q);
+        public object GetLineContent(int bookId, int idx, string q) => _db.GetLineContent(bookId, idx, q);
+        public object GetLineRange(int bookId, int s, int e, string q) => _db.GetLineRange(bookId, s, e, q);
+        public object GetLinks(int lineId, string tabId, int bookId, string q, object[] p = null) 
+        {
+            try 
+            {
+                Console.WriteLine($"[ServiceProvider] GetLinks called: lineId={lineId}, tabId={tabId}, bookId={bookId}, params={p?.Length ?? 0}");
+                var result = _db.GetLinks(lineId, tabId, bookId, q, p);
+                Console.WriteLine($"[ServiceProvider] GetLinks result type: {result?.GetType().Name ?? "null"}");
+                return result;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ServiceProvider] GetLinks error: {ex.Message}");
+                throw;
+            }
+        }
+        public object SearchLines(int bookId, string term, string q) => _db.SearchLines(bookId, term, q);
+        public object DiagnoseDatabaseContent() => _db.DiagnoseDatabaseContent();
+
+        // PDF Operations - File Dialog & Virtual Host Mapping
+        public object OpenPdfFilePicker() => _pdf.OpenPdfFilePicker();
+        public string CreateVirtualUrl(string path) => _pdf.CreateVirtualUrl(path);
+        public string RecreateVirtualUrlFromPath(string path) => _pdf.RecreateVirtualUrlFromPath(path);
+        public string LoadPdfFromPath(string path) => _pdf.CreateVirtualUrl(path); // Alias for CreateVirtualUrl
+        public bool CheckPdfManagerReady() => _pdf.CheckPdfManagerReady();
+        public bool IsPdfManagerReady() => _pdf.CheckPdfManagerReady(); // Alias for CheckPdfManagerReady
+        public bool InitializePdfManager() => _pdf.InitializePdfManager();
+        public void CleanupTempFile(string fileName) => _pdf.CleanupTempFile(fileName);
+        public object GetTempFileStats() => _pdf.GetTempFileStats();
+        public void ClearTempFiles() => _pdf.ClearTempFiles();
+
+        // Hebrew Books Operations - Download Capture & Cache Management
+        public object PrepareHebrewBookDownload(string id, string title, string action) => 
+            _hebrewBooks.PrepareDownload(id, title, action).GetAwaiter().GetResult();
+        
+        public object GetHebrewBooksCacheStats() => _hebrewBooks.GetCacheStats();
+        public void ClearHebrewBooksCache() => _hebrewBooks.ClearCache();
+        
+        // Legacy method names for backward compatibility
+        public void DownloadHebrewBook(string url, string title) => 
+            _hebrewBooks.PrepareDownload(ExtractBookIdFromUrl(url), title, "view").GetAwaiter().GetResult();
+        
+        public void HandleHebrewBookDownloadCompleted(string path, string name) { /* Handled by service internally */ }
+        public void HandleHebrewBookTabClosed(string name) => _hebrewBooks.HandleTabClosed(name);
+
+        // Popout functionality
+        public void TogglePopOut() => _popOutAction?.Invoke();
+
+        /// <summary>
+        /// Extract book ID from Hebrew books URL for legacy compatibility
+        /// </summary>
+        private string ExtractBookIdFromUrl(string url)
+        {
+            try
+            {
+                var uri = new Uri(url);
+                var query = uri.Query;
+                if (query.StartsWith("?"))
+                    query = query.Substring(1);
+                
+                var pairs = query.Split('&');
+                foreach (var pair in pairs)
+                {
+                    var keyValue = pair.Split('=');
+                    if (keyValue.Length == 2 && keyValue[0] == "req")
+                    {
+                        return Uri.UnescapeDataString(keyValue[1]);
+                    }
+                }
+                return "unknown";
+            }
+            catch
+            {
+                return "unknown";
+            }
+        }
+    }
+}

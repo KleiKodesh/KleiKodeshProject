@@ -6,15 +6,12 @@ namespace Zayit.Viewer
     public class ZayitViewerHost : UserControl
     {
         private ZayitViewer _zayitViewer;
-        private ZayitViewerCommands _commands;
 
         public ZayitViewerHost()
         {
             AutoScaleMode = AutoScaleMode.Dpi;
             this.Dock = DockStyle.Fill;
             _zayitViewer = new ZayitViewer();
-            _commands = new ZayitViewerCommands(_zayitViewer);
-            _zayitViewer.SetCommandHandler(_commands);
             Controls.Add(_zayitViewer);
         }
 
@@ -23,7 +20,7 @@ namespace Zayit.Viewer
         /// </summary>
         public void SetPopOutToggleAction(Action popOutToggleAction)
         {
-            _commands?.SetPopOutToggleAction(popOutToggleAction);
+            _zayitViewer?.SetPopOutToggleAction(popOutToggleAction);
         }
     }
 }

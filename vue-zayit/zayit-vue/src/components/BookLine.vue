@@ -36,7 +36,7 @@
 </template>
 
 <script setup lang="ts">
-import type { AltTocLineEntry } from '../data/tocBuilder'
+import type { AltTocLineEntry } from '../services/bookTocService'
 
 const props = defineProps<{
     content: string

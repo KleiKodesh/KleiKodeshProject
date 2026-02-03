@@ -39,9 +39,9 @@ import BookTocTreeView from '../BookTocTreeView.vue'
 import BookLineViewer from '../BookLineViewer.vue'
 import SplitPane from '../common/SplitPane.vue'
 import BookCommentaryView from '../BookCommentaryView.vue'
-import { dbManager } from '../../data/dbManager'
-import { buildTocFromFlat } from '../../data/tocBuilder'
-import type { AltTocLineEntry } from '../../data/tocBuilder'
+import { dbService } from '../../services/dbService'
+import { buildTocFromFlat } from '../../services/bookTocService'
+import type { AltTocLineEntry } from '../../services/bookTocService'
 import type { TocEntry } from '../../types/BookToc'
 import type { Book } from '../../types/Book'
 
@@ -72,7 +72,7 @@ watch(() => myTab.value?.bookState?.bookId, async (bookId) => {
 async function loadTocData(bookId: number) {
   isTocLoading.value = true
   try {
-    const { tocEntriesFlat } = await dbManager.getToc(bookId)
+    const { tocEntriesFlat } = await dbService.getToc(bookId)
     const { tree, altTocByLineIndex: altTocMap } = buildTocFromFlat(tocEntriesFlat)
 
     // Store both the tree and the alt TOC map

@@ -52,7 +52,7 @@ import { ref, watch, nextTick, onMounted, onUnmounted, computed } from 'vue'
 import { DynamicScroller, DynamicScrollerItem } from 'vue3-virtual-scroller'
 import BookLine from './BookLine.vue'
 import GenericSearch from './common/GenericSearch.vue'
-import { BookLineViewerState } from '../data/bookLineViewerState'
+import { BookLineViewerService } from '../services/bookLineViewerService'
 
 import { useContentSearch } from '../composables/useContentSearch'
 import { useTabStore } from '../stores/tabStore'
@@ -93,7 +93,7 @@ const containerStyles = computed(() => ({
 
 const props = defineProps<{
     tabId?: number
-    altTocByLineIndex?: Map<number, import('../data/tocBuilder').AltTocLineEntry[]>
+    altTocByLineIndex?: Map<number, import('../services/bookTocService').AltTocLineEntry[]>
 }>()
 
 const emit = defineEmits<{
@@ -107,7 +107,7 @@ const myTab = computed(() => tabStore.tabs.find(t => t.id === props.tabId))
 const selectedLineIndex = ref<number | null>(null)
 const isInitialLoading = ref(false)
 
-const viewerState = new BookLineViewerState()
+const viewerState = new BookLineViewerService()
 const scrollerRef = ref<InstanceType<typeof DynamicScroller> | null>(null)
 const searchRef = ref<InstanceType<typeof GenericSearch> | null>(null)
 
@@ -237,7 +237,7 @@ async function performSearch() {
     try {
         const allMatches = await viewerState.searchProgressively(
             query,
-            (progressiveMatches) => {
+            (progressiveMatches: any) => {
                 // Update search results as they come in
                 search.updateMatches(progressiveMatches)
                 searchRef.value?.setMatches(search.totalMatches.value)
