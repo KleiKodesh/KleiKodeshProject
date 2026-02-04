@@ -142,7 +142,8 @@
                                 :style="{ backgroundColor: color.value || 'var(--bg-primary)' }"
                                 :title="color.name"
                                 @click="readingBackgroundColor = color.value">
-                            <span v-if="!color.value" class="default-indicator">ברירת מחדל</span>
+                            <span v-if="!color.value"
+                                  class="default-indicator">ברירת מחדל</span>
                         </button>
                     </div>
                     <div class="flex-row flex-center custom-color-row">
@@ -155,6 +156,26 @@
                                 class="c-pointer clear-color-btn"
                                 title="נקה צבע">
                             ✕
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Database Path - only show in C# WebView mode -->
+            <div v-if="webviewBridge.isAvailable()"
+                 class="setting-group">
+                <label class="flex-row bold setting-label">מיקום מסד הנתונים</label>
+                <div class="flex-column">
+                    <div class="flex-row database-path-row">
+                        <input type="text"
+                               v-model="databasePath"
+                               placeholder="בחר מיקום מסד הנתונים (seforim.db)"
+                               class="database-path-input"
+                               readonly />
+                        <button @click="selectDatabaseFile"
+                                class="c-pointer database-browse-btn"
+                                title="בחר קובץ מסד נתונים">
+                            📁
                         </button>
                     </div>
                 </div>
@@ -177,9 +198,10 @@ import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { hebrewFonts } from '../../services/hebrewFontsService'
 import { useConnectivity } from '../../utils/connectivity'
+import { webviewBridge } from '../../services/webviewBridge'
 
 const settingsStore = useSettingsStore()
-const { headerFont, textFont, fontSize, linePadding, censorDivineNames, appZoom, useOfflineHomepage, readingBackgroundColor } = storeToRefs(settingsStore)
+const { headerFont, textFont, fontSize, linePadding, censorDivineNames, appZoom, useOfflineHomepage, readingBackgroundColor, databasePath } = storeToRefs(settingsStore)
 const { isOnline } = useConnectivity()
 
 const availableFonts = ref<string[]>([])
@@ -265,8 +287,25 @@ const getDisplayName = (fontValue: string): string => {
     return match && match[1] ? match[1] : fontValue
 }
 
-const resetSettings = () => {
+const resetSettings = async () => {
     settingsStore.reset()
+
+    // Also reset database path to default in C# mode
+    if (webviewBridge.isAvailable()) {
+        try {
+            // Clear the custom database path (this will revert to default)
+            const success = await webviewBridge.setDatabasePath('')
+            if (success) {
+                // Reload the page to use the default database and apply all reset settings
+                window.location.reload()
+                return
+            }
+        } catch (error) {
+            console.error('Failed to reset database path:', error)
+        }
+    }
+
+    // If not in C# mode or database reset failed, still reload to apply other settings
     window.location.reload()
 }
 
@@ -280,8 +319,43 @@ const setUseOfflineHomepage = (useOffline: boolean) => {
     useOfflineHomepage.value = useOffline
 }
 
+const selectDatabaseFile = async () => {
+    try {
+        const result = await webviewBridge.openDatabaseFilePicker()
+        if (result.filePath) {
+            databasePath.value = result.filePath
+            // Notify the C# backend about the new database path
+            const success = await webviewBridge.setDatabasePath(result.filePath)
+            if (success) {
+                // Reload the page to use the new database
+                window.location.reload()
+            }
+        }
+    } catch (error) {
+        console.error('Failed to select database file:', error)
+    }
+}
+
+const loadCurrentDatabasePath = async () => {
+    try {
+        if (webviewBridge.isAvailable()) {
+            // C# mode - get path from backend
+            const currentPath = await webviewBridge.getCurrentDatabasePath()
+            if (currentPath && !databasePath.value) {
+                databasePath.value = currentPath
+            }
+        }
+    } catch (error) {
+        console.error('Failed to load current database path:', error)
+    }
+}
+
 onMounted(() => {
     detectFonts()
+    // Load database path only in C# WebView mode
+    if (webviewBridge.isAvailable()) {
+        loadCurrentDatabasePath()
+    }
 })
 </script>
 
@@ -522,5 +596,47 @@ onMounted(() => {
     background: var(--hover-bg);
     border-color: var(--accent-color);
     color: var(--text-primary);
+}
+
+/* Database path styles - only visible in C# mode */
+.database-path-row {
+    gap: 8px;
+    align-items: center;
+}
+
+.database-path-input {
+    flex: 1;
+    padding: 8px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 14px;
+    direction: ltr;
+    text-align: left;
+    cursor: pointer;
+}
+
+.database-path-input:hover {
+    border-color: var(--accent-color);
+}
+
+.database-browse-btn {
+    width: 38px;
+    height: 38px;
+    background: var(--accent-color);
+    border: none;
+    border-radius: 4px;
+    color: white;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.database-browse-btn:hover {
+    background: var(--accent-hover);
+    transform: scale(1.05);
 }
 </style>

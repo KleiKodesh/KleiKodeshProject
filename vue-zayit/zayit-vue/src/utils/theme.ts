@@ -6,6 +6,8 @@
 export function toggleTheme(): void {
     const isDark = document.documentElement.classList.contains('dark')
 
+    console.log('[Theme] Toggling theme from:', isDark ? 'dark' : 'light', 'to:', isDark ? 'light' : 'dark')
+
     if (isDark) {
         document.documentElement.classList.remove('dark')
         localStorage.setItem('theme', 'light')
@@ -13,9 +15,15 @@ export function toggleTheme(): void {
         document.documentElement.classList.add('dark')
         localStorage.setItem('theme', 'dark')
     }
-    
-    // Sync with PDF.js viewer
+
+    // Sync with PDF.js viewer immediately and with retry
     syncPdfViewerTheme()
+
+    // Retry sync after a short delay to catch any iframes that weren't ready
+    setTimeout(() => {
+        console.log('[Theme] Retrying PDF theme sync after delay')
+        syncPdfViewerTheme()
+    }, 100)
 }
 
 export function initTheme(): void {
@@ -23,12 +31,22 @@ export function initTheme(): void {
     if (savedTheme === 'dark') {
         document.documentElement.classList.add('dark')
     }
-    
+
     // Sync with PDF.js viewer on init
     syncPdfViewerTheme()
-    
+
     // Set up observer to automatically sync theme with new PDF iframes
     setupPdfViewerThemeObserver()
+
+    // Make theme functions available globally for debugging
+    if (typeof window !== 'undefined') {
+        (window as any).zayitTheme = {
+            toggle: toggleTheme,
+            sync: forceSyncAllPdfViewers,
+            isDark: isDarkTheme,
+            current: () => isDarkTheme() ? 'dark' : 'light'
+        }
+    }
 }
 
 export function isDarkTheme(): boolean {
@@ -36,34 +54,64 @@ export function isDarkTheme(): boolean {
 }
 
 /**
+ * Force sync theme with all PDF.js viewers (useful for debugging)
+ */
+export function forceSyncAllPdfViewers(): void {
+    console.log('[Theme] Force syncing all PDF viewers...')
+    syncPdfViewerTheme()
+
+    // Also try to sync after a delay
+    setTimeout(() => {
+        syncPdfViewerTheme()
+    }, 500)
+}
+
+/**
  * Syncs the current Vue app theme with PDF.js viewer iframes
- * PDF.js uses .is-dark class on html element to override system theme
+ * Uses PDF.js's native theme system via AppOptions.set('viewerCssTheme')
  */
 export function syncPdfViewerTheme(): void {
     const isDark = isDarkTheme()
-    
+
+    console.log('[Theme] Syncing PDF viewer theme:', isDark ? 'dark' : 'light')
+
     // Find all PDF.js viewer iframes
     const pdfIframes = document.querySelectorAll('iframe[src*="/pdfjs/web/viewer.html"]')
-    
-    pdfIframes.forEach((iframe) => {
+
+    console.log('[Theme] Found PDF iframes:', pdfIframes.length)
+
+    pdfIframes.forEach((iframe, index) => {
+        console.log(`[Theme] Processing iframe ${index + 1}:`, iframe.getAttribute('src'))
+
         try {
-            const iframeDoc = (iframe as HTMLIFrameElement).contentDocument
-            if (iframeDoc?.documentElement) {
-                if (isDark) {
-                    // Force dark mode in PDF.js
-                    iframeDoc.documentElement.classList.add('is-dark')
-                    iframeDoc.documentElement.classList.remove('is-light')
-                } else {
-                    // Force light mode in PDF.js
-                    iframeDoc.documentElement.classList.add('is-light')
-                    iframeDoc.documentElement.classList.remove('is-dark')
+            const iframeWindow = (iframe as HTMLIFrameElement).contentWindow
+            if (iframeWindow && (iframeWindow as any).PDFViewerApplicationOptions) {
+                const AppOptions = (iframeWindow as any).PDFViewerApplicationOptions
+
+                // Set PDF.js theme: 1 = light, 2 = dark
+                const themeValue = isDark ? 2 : 1
+                AppOptions.set('viewerCssTheme', themeValue)
+
+                console.log(`[Theme] Set PDF.js viewerCssTheme to ${themeValue} (${isDark ? 'dark' : 'light'}) for iframe ${index + 1}`)
+
+                // Also set color-scheme directly like PDF.js does
+                const iframeDoc = iframeWindow.document
+                if (iframeDoc?.documentElement) {
+                    const docStyle = iframeDoc.documentElement.style
+                    docStyle.setProperty("color-scheme", isDark ? "dark" : "light")
+                    console.log(`[Theme] Set color-scheme to ${isDark ? 'dark' : 'light'} for iframe ${index + 1}`)
                 }
+            } else {
+                console.warn(`[Theme] Iframe ${index + 1} PDFViewerApplicationOptions not available yet`)
             }
         } catch (error) {
-            // Ignore cross-origin errors - iframe might not be loaded yet
-            console.debug('[Theme] Could not access PDF iframe:', error)
+            console.warn(`[Theme] Could not access PDF iframe ${index + 1}:`, error)
         }
     })
+
+    if (pdfIframes.length === 0) {
+        console.log('[Theme] No PDF iframes found to sync')
+    }
 }
 
 /**
@@ -73,26 +121,44 @@ export function syncPdfViewerTheme(): void {
 function setupPdfViewerThemeObserver(): void {
     // Only set up once
     if ((window as any).__pdfThemeObserverSetup) return
-    ;(window as any).__pdfThemeObserverSetup = true
-    
+        ; (window as any).__pdfThemeObserverSetup = true
+
     const observer = new MutationObserver((mutations) => {
         mutations.forEach((mutation) => {
             mutation.addedNodes.forEach((node) => {
                 if (node.nodeType === Node.ELEMENT_NODE) {
                     const element = node as Element
-                    
+
                     // Check if the added node is a PDF iframe
-                    if (element.tagName === 'IFRAME' && 
+                    if (element.tagName === 'IFRAME' &&
                         element.getAttribute('src')?.includes('/pdfjs/web/viewer.html')) {
-                        // Wait a bit for the iframe to load, then sync theme
+                        // Set up load event listener for the iframe
+                        const iframe = element as HTMLIFrameElement
+                        iframe.addEventListener('load', () => {
+                            // Wait a bit more for PDF.js to fully initialize
+                            setTimeout(() => {
+                                syncPdfViewerTheme()
+                            }, 500)
+                        })
+
+                        // Also try immediate sync in case iframe is already loaded
                         setTimeout(() => {
                             syncPdfViewerTheme()
                         }, 200)
                     }
-                    
+
                     // Also check for PDF iframes within the added node
                     const pdfIframes = element.querySelectorAll?.('iframe[src*="/pdfjs/web/viewer.html"]')
                     if (pdfIframes?.length) {
+                        pdfIframes.forEach((iframe) => {
+                            const iframeElement = iframe as HTMLIFrameElement
+                            iframeElement.addEventListener('load', () => {
+                                setTimeout(() => {
+                                    syncPdfViewerTheme()
+                                }, 500)
+                            })
+                        })
+
                         setTimeout(() => {
                             syncPdfViewerTheme()
                         }, 200)
@@ -101,7 +167,7 @@ function setupPdfViewerThemeObserver(): void {
             })
         })
     })
-    
+
     // Observe the entire document for new PDF iframes
     observer.observe(document.body, {
         childList: true,

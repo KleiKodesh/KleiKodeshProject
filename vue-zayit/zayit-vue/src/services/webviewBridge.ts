@@ -283,6 +283,43 @@ class WebViewBridge {
             return null
         }
     }
+
+    // Database WebView Methods
+    async openDatabaseFilePicker(): Promise<{ filePath: string | null; fileName: string | null }> {
+        console.log('[WebViewBridge] Opening database file picker')
+        try {
+            const result = await this.call<{ filePath: string | null; fileName: string | null }>('OpenDatabaseFilePicker')
+            console.log('[WebViewBridge] Database file picker result:', result)
+            return result || { filePath: null, fileName: null }
+        } catch (error) {
+            console.error('[WebViewBridge] Database file picker failed:', error)
+            return { filePath: null, fileName: null }
+        }
+    }
+
+    async setDatabasePath(path: string): Promise<boolean> {
+        console.log('[WebViewBridge] Setting database path:', path)
+        try {
+            const result = await this.call<boolean>('SetDatabasePath', path)
+            console.log('[WebViewBridge] Database path set result:', result)
+            return result
+        } catch (error) {
+            console.error('[WebViewBridge] Failed to set database path:', error)
+            return false
+        }
+    }
+
+    async getCurrentDatabasePath(): Promise<string> {
+        console.log('[WebViewBridge] Getting current database path')
+        try {
+            const result = await this.call<string>('GetCurrentDatabasePath')
+            console.log('[WebViewBridge] Current database path:', result)
+            return result || ''
+        } catch (error) {
+            console.error('[WebViewBridge] Failed to get current database path:', error)
+            return ''
+        }
+    }
 }
 
 // Export singleton instance

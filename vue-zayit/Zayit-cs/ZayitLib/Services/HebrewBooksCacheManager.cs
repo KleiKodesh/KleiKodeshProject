@@ -59,7 +59,7 @@ namespace Zayit.Services
                 {
                     var files = Directory.GetFiles(_cacheDir, "*.pdf");
                     var totalSize = files.Sum(f => new FileInfo(f).Length);
-                    
+
                     return new
                     {
                         totalFiles = files.Length,
@@ -86,7 +86,7 @@ namespace Zayit.Services
                 try
                 {
                     _activeFiles.Clear();
-                    
+
                     var files = Directory.GetFiles(_cacheDir, "*.pdf");
                     foreach (var file in files)
                     {
@@ -99,7 +99,7 @@ namespace Zayit.Services
                             Console.WriteLine($"[HebrewBooksCacheManager] Error deleting file {file}: {ex.Message}");
                         }
                     }
-                    
+
                     Console.WriteLine($"[HebrewBooksCacheManager] Cleared {files.Length} Hebrew book files");
                 }
                 catch (Exception ex)
@@ -147,7 +147,7 @@ namespace Zayit.Services
         }
 
         /// <summary>
-        /// Try to delete a file if it's not active
+        /// Try to delete a file if tab was closed
         /// </summary>
         private void TryDeleteFile(string fileName)
         {

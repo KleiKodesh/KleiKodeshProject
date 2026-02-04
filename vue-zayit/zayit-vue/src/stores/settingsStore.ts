@@ -12,6 +12,7 @@ export interface Settings {
     appZoom: number
     useOfflineHomepage: boolean
     readingBackgroundColor: string
+    databasePath: string
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -22,7 +23,8 @@ const DEFAULT_SETTINGS: Settings = {
     censorDivineNames: false,
     appZoom: 0.95,
     useOfflineHomepage: true,
-    readingBackgroundColor: ''
+    readingBackgroundColor: '',
+    databasePath: ''
 }
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -34,6 +36,7 @@ export const useSettingsStore = defineStore('settings', () => {
     const appZoom = ref(DEFAULT_SETTINGS.appZoom)
     const useOfflineHomepage = ref(DEFAULT_SETTINGS.useOfflineHomepage)
     const readingBackgroundColor = ref(DEFAULT_SETTINGS.readingBackgroundColor)
+    const databasePath = ref(DEFAULT_SETTINGS.databasePath)
 
     const loadFromStorage = () => {
         try {
@@ -48,6 +51,7 @@ export const useSettingsStore = defineStore('settings', () => {
                 appZoom.value = settings.appZoom || DEFAULT_SETTINGS.appZoom
                 useOfflineHomepage.value = settings.useOfflineHomepage ?? DEFAULT_SETTINGS.useOfflineHomepage
                 readingBackgroundColor.value = settings.readingBackgroundColor || DEFAULT_SETTINGS.readingBackgroundColor
+                databasePath.value = settings.databasePath || DEFAULT_SETTINGS.databasePath
             }
         } catch (e) {
             console.error('Failed to load settings:', e)
@@ -64,7 +68,8 @@ export const useSettingsStore = defineStore('settings', () => {
                 censorDivineNames: censorDivineNames.value,
                 appZoom: appZoom.value,
                 useOfflineHomepage: useOfflineHomepage.value,
-                readingBackgroundColor: readingBackgroundColor.value
+                readingBackgroundColor: readingBackgroundColor.value,
+                databasePath: databasePath.value
             }))
         } catch (e) {
             console.error('Failed to save settings:', e)
@@ -118,6 +123,7 @@ export const useSettingsStore = defineStore('settings', () => {
         appZoom.value = DEFAULT_SETTINGS.appZoom
         useOfflineHomepage.value = DEFAULT_SETTINGS.useOfflineHomepage
         readingBackgroundColor.value = DEFAULT_SETTINGS.readingBackgroundColor
+        databasePath.value = DEFAULT_SETTINGS.databasePath
         localStorage.removeItem(STORAGE_KEY)
         applyCSSVariables()
     }
@@ -127,7 +133,7 @@ export const useSettingsStore = defineStore('settings', () => {
     applyCSSVariables()
 
     // Watch for changes and persist
-    watch([headerFont, textFont, fontSize, linePadding, censorDivineNames, appZoom, useOfflineHomepage, readingBackgroundColor], () => {
+    watch([headerFont, textFont, fontSize, linePadding, censorDivineNames, appZoom, useOfflineHomepage, readingBackgroundColor, databasePath], () => {
         saveToStorage()
         applyCSSVariables()
     })
@@ -141,6 +147,7 @@ export const useSettingsStore = defineStore('settings', () => {
         appZoom,
         useOfflineHomepage,
         readingBackgroundColor,
+        databasePath,
         reset
     }
 })

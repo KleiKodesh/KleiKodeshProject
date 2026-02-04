@@ -25,6 +25,12 @@ The following files are loaded automatically based on context:
 - **File patterns**: `*sqlQueries*`, `*dbManager*`, `*sqlite*`
 - **Loads**: #[[file:custom-steering/db.md]]
 
+### Database Configuration
+
+- **Keywords**: database path, database config, settings, reset settings
+- **File patterns**: `*SettingsPage*`, `*DbQueries*`, `*ServiceProvider*`
+- **Loads**: #[[file:custom-steering/database-configuration.md]]
+
 ### C# Integration
 
 - **File patterns**: `*.cs`, `*.csproj`, `*.sln`
@@ -78,6 +84,7 @@ You can manually load specific guidance using these context keys:
 - `#app` - Application architecture guidelines
 - `#css` - CSS and styling guidelines
 - `#db` - Database layer architecture
+- `#database-config` - Database configuration and path management
 - `#csharp` - C# integration guide
 - `#virtualization` - BookLineViewer virtualization
 - `#hebrew-books` - Hebrew book downloads

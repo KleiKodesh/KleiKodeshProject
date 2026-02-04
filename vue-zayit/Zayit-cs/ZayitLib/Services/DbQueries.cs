@@ -1,52 +1,90 @@
 using Dapper;
+using Microsoft.VisualBasic;
 using System;
+using System.Configuration;
 using System.Data;
 using System.Data.SQLite;
 using System.IO;
 using System.Linq;
+using System.Windows.Forms;
+using Zayit.Viewer;
 
 namespace Zayit.Services
 {
     public class DbQueries
     {
         private readonly IDbConnection _connection;
+        private static string _customDatabasePath = null;
 
         public DbQueries()
         {
             try
             {
-                var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-                var databasePath = Path.Combine(
-                    appData,
-                    "io.github.kdroidfilter.seforimapp",
-                    "databases",
-                    "seforim.db"
-                );
-
-                Console.WriteLine($"[DbQueries] Looking for database at: {databasePath}");
-                Console.WriteLine($"[DbQueries] AppData folder: {appData}");
-                Console.WriteLine($"[DbQueries] Database exists: {File.Exists(databasePath)}");
-
-                if (!File.Exists(databasePath))
+                string databasePath;
+                
+                // Load custom path from VB.NET settings if not already in memory
+                if (string.IsNullOrEmpty(_customDatabasePath))
                 {
-                    // Try alternative locations
-                    var alternativePaths = new[]
+                    try
                     {
-                        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "seforim.db"),
-                        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "databases", "seforim.db"),
-                        Path.Combine(Environment.CurrentDirectory, "seforim.db"),
-                        Path.Combine(Environment.CurrentDirectory, "databases", "seforim.db")
-                    };
-
-                    Console.WriteLine($"[DbQueries] Database not found at primary location, checking alternatives:");
-                    foreach (var altPath in alternativePaths)
-                    {
-                        Console.WriteLine($"[DbQueries] Checking: {altPath} - Exists: {File.Exists(altPath)}");
-                        if (File.Exists(altPath))
+                        var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                        var defaultPath = Path.Combine(appDataPath, "io.github.kdroidfilter.seforimapp", "databases", "seforim.db");
+                        
+                        var settingsPath = Interaction.GetSetting("ZayitApp", "Database", "Path", defaultPath);
+                        if (!string.IsNullOrEmpty(settingsPath) && File.Exists(settingsPath))
                         {
-                            databasePath = altPath;
-                            Console.WriteLine($"[DbQueries] Using alternative database path: {databasePath}");
-                            break;
+                            _customDatabasePath = settingsPath;
+                            Console.WriteLine($"[DbQueries] Loaded database path from VB settings: {settingsPath}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[DbQueries] Failed to load database path from VB settings: {ex.Message}");
+                    }
+                }
+                
+                // Use custom path if set, otherwise use default logic
+                if (!string.IsNullOrEmpty(_customDatabasePath) && File.Exists(_customDatabasePath))
+                {
+                    databasePath = _customDatabasePath;
+                    Console.WriteLine($"[DbQueries] Using custom database path: {databasePath}");
+                }
+                else
+                {
+                    // Default path resolution logic
+                    var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                    databasePath = Path.Combine(
+                        appData,
+                        "io.github.kdroidfilter.seforimapp",
+                        "databases",
+                        "seforim.db"
+                    );
+
+                    Console.WriteLine($"[DbQueries] Looking for database at: {databasePath}");
+                    Console.WriteLine($"[DbQueries] AppData folder: {appData}");
+                    Console.WriteLine($"[DbQueries] Database exists: {File.Exists(databasePath)}");
+
+                    if (!File.Exists(databasePath))
+                    {
+                        // Try alternative locations
+                        var alternativePaths = new[]
+                        {
+                            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "seforim.db"),
+                            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "databases", "seforim.db"),
+                            Path.Combine(Environment.CurrentDirectory, "seforim.db"),
+                            Path.Combine(Environment.CurrentDirectory, "databases", "seforim.db")
+                        };
+
+                        Console.WriteLine($"[DbQueries] Database not found at primary location, checking alternatives:");
+                        foreach (var altPath in alternativePaths)
+                        {
+                            Console.WriteLine($"[DbQueries] Checking: {altPath} - Exists: {File.Exists(altPath)}");
+                            if (File.Exists(altPath))
+                            {
+                                databasePath = altPath;
+                                Console.WriteLine($"[DbQueries] Using alternative database path: {databasePath}");
+                                break;
+                            }
                         }
                     }
 
@@ -54,7 +92,20 @@ namespace Zayit.Services
                     {
                         var error = $"Database not found at any location. Primary: {databasePath}";
                         Console.WriteLine($"[DbQueries] ERROR: {error}");
-                        throw new FileNotFoundException(error);
+                        
+                        // Show dialog to user for database not found
+                        ShowDatabaseNotFoundDialog();
+                        
+                        // After dialog, check if custom path was set
+                        if (!string.IsNullOrEmpty(_customDatabasePath) && File.Exists(_customDatabasePath))
+                        {
+                            databasePath = _customDatabasePath;
+                            Console.WriteLine($"[DbQueries] Using database path from dialog: {databasePath}");
+                        }
+                        else
+                        {
+                            throw new FileNotFoundException(error);
+                        }
                     }
                 }
 
@@ -172,6 +223,143 @@ namespace Zayit.Services
         public void Dispose()
         {
             _connection?.Dispose();
+        }
+
+        /// <summary>
+        /// Set custom database path - will be used by new DbQueries instances
+        /// </summary>
+        public static void SetCustomDatabasePath(string path)
+        {
+            // If path is empty or null, clear the custom path
+            if (string.IsNullOrEmpty(path))
+            {
+                ClearCustomDatabasePath();
+                return;
+            }
+            
+            _customDatabasePath = path;
+            Console.WriteLine($"[DbQueries] Custom database path set: {path}");
+            
+            // Persist to VB.NET settings
+            try
+            {
+                Interaction.SaveSetting("ZayitApp", "Database", "Path", path);
+                Console.WriteLine($"[DbQueries] Database path persisted to VB settings");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[DbQueries] Failed to persist database path to VB settings: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Get current database path (custom or default)
+        /// </summary>
+        public static string GetCurrentDatabasePath()
+        {
+            // First check memory cache
+            if (!string.IsNullOrEmpty(_customDatabasePath) && File.Exists(_customDatabasePath))
+            {
+                return _customDatabasePath;
+            }
+
+            // Try to load from VB.NET settings
+            try
+            {
+                var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                var defaultPath = Path.Combine(appDataPath, "io.github.kdroidfilter.seforimapp", "databases", "seforim.db");
+                
+                var settingsPath = Interaction.GetSetting("ZayitApp", "Database", "Path", "");
+                
+                // If settings path is empty or doesn't exist, use default
+                if (string.IsNullOrEmpty(settingsPath))
+                {
+                    Console.WriteLine($"[DbQueries] No custom database path set, using default: {defaultPath}");
+                    return defaultPath;
+                }
+                
+                if (File.Exists(settingsPath))
+                {
+                    _customDatabasePath = settingsPath;
+                    Console.WriteLine($"[DbQueries] Loaded database path from VB settings: {settingsPath}");
+                    return settingsPath;
+                }
+                else
+                {
+                    Console.WriteLine($"[DbQueries] Custom database path doesn't exist, using default: {defaultPath}");
+                    return defaultPath;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[DbQueries] Failed to load database path from VB settings: {ex.Message}");
+            }
+
+            // Return default path
+            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            return Path.Combine(appData, "io.github.kdroidfilter.seforimapp", "databases", "seforim.db");
+        }
+
+        /// <summary>
+        /// Clear custom database path - will revert to default logic
+        /// </summary>
+        public static void ClearCustomDatabasePath()
+        {
+            _customDatabasePath = null;
+            Console.WriteLine("[DbQueries] Custom database path cleared");
+            
+            // Also clear from VB.NET settings by deleting the setting entirely
+            try
+            {
+                Interaction.DeleteSetting("ZayitApp", "Database", "Path");
+                Console.WriteLine("[DbQueries] Database path setting deleted from VB settings");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[DbQueries] Failed to delete database path from VB settings: {ex.Message}");
+                // Fallback: try to save empty string
+                try
+                {
+                    Interaction.SaveSetting("ZayitApp", "Database", "Path", "");
+                    Console.WriteLine("[DbQueries] Database path cleared from VB settings (fallback)");
+                }
+                catch (Exception ex2)
+                {
+                    Console.WriteLine($"[DbQueries] Fallback also failed: {ex2.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Show dialog when database is not found
+        /// </summary>
+        private static void ShowDatabaseNotFoundDialog()
+        {
+            try
+            {
+                using (var dialog = new Zayit.Viewer.DatabaseNotFoundDialog())
+                {
+                    var result = dialog.ShowDialog();
+                    if (result == DialogResult.OK)
+                    {
+                        if (!string.IsNullOrEmpty(dialog.SelectedDatabasePath))
+                        {
+                            SetCustomDatabasePath(dialog.SelectedDatabasePath);
+                        }
+                        // If ShouldDownloadZayit is true, the dialog already opened the download page
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[DbQueries] Error showing database not found dialog: {ex}");
+                // Fallback to simple message box
+                MessageBox.Show(
+                    "מסד הנתונים לא נמצא. אנא הורד את אפליקציית Zayit או בחר קובץ מסד נתונים מהמחשב.",
+                    "מסד נתונים לא נמצא",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
         }
     }
 }

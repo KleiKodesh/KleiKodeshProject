@@ -41,6 +41,7 @@
     <Reference Include="Microsoft.Bcl.AsyncInterfaces, Version=10.0.0.1, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
       <HintPath>..\packages\Microsoft.Bcl.AsyncInterfaces.10.0.1\lib\net462\Microsoft.Bcl.AsyncInterfaces.dll</HintPath>
     </Reference>
+    <Reference Include="Microsoft.VisualBasic" />
     <Reference Include="Microsoft.Web.WebView2.Core, Version=1.0.3650.58, Culture=neutral, PublicKeyToken=2a8ab48044d2601e, processorArchitecture=MSIL">
       <HintPath>..\packages\Microsoft.Web.WebView2.1.0.3650.58\lib\net462\Microsoft.Web.WebView2.Core.dll</HintPath>
     </Reference>
@@ -55,6 +56,7 @@
       <HintPath>..\packages\System.Buffers.4.6.1\lib\net462\System.Buffers.dll</HintPath>
     </Reference>
     <Reference Include="System.Core" />
+    <Reference Include="System.Drawing" />
     <Reference Include="System.Data.SQLite, Version=1.0.119.0, Culture=neutral, PublicKeyToken=db937bc2d44ff139, processorArchitecture=MSIL">
       <HintPath>..\packages\Stub.System.Data.SQLite.Core.NetStandard.1.0.119.0\lib\netstandard2.0\System.Data.SQLite.dll</HintPath>
     </Reference>
@@ -102,6 +104,9 @@
     <Compile Include="Services\PdfService.cs" />
     <Compile Include="Services\ServiceProvider.cs" />
     <Compile Include="Services\WebViewBridgeService.cs" />
+    <Compile Include="Viewer\DatabaseNotFoundDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Viewer\ZayitViewer.cs">
       <SubType>Component</SubType>
     </Compile>

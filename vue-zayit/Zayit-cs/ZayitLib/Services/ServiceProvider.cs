@@ -1,5 +1,6 @@
 using Microsoft.Web.WebView2.WinForms;
 using System;
+using System.Windows.Forms;
 
 namespace Zayit.Services
 {
@@ -97,6 +98,91 @@ namespace Zayit.Services
 
         // Popout functionality
         public void TogglePopOut() => _popOutAction?.Invoke();
+
+        // Database Configuration Operations
+        public object OpenDatabaseFilePicker()
+        {
+            try
+            {
+                using (var dialog = new OpenFileDialog())
+                {
+                    dialog.Filter = "SQLite Database files (*.db)|*.db|All files (*.*)|*.*";
+                    dialog.Title = "Select Database File";
+                    dialog.CheckFileExists = true;
+                    
+                    if (dialog.ShowDialog() != DialogResult.OK)
+                    {
+                        return new { filePath = (string)null, fileName = (string)null };
+                    }
+
+                    var fileName = System.IO.Path.GetFileName(dialog.FileName);
+                    Console.WriteLine($"[ServiceProvider] Database file selected: {fileName} -> {dialog.FileName}");
+
+                    return new { 
+                        filePath = dialog.FileName, 
+                        fileName = fileName 
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ServiceProvider] Database file picker failed: {ex}");
+                return new { filePath = (string)null, fileName = (string)null };
+            }
+        }
+
+        public bool SetDatabasePath(string path)
+        {
+            try
+            {
+                Console.WriteLine($"[ServiceProvider] Setting database path: {path}");
+                
+                // Validate the file exists and is accessible
+                if (!System.IO.File.Exists(path))
+                {
+                    Console.WriteLine($"[ServiceProvider] Database file does not exist: {path}");
+                    return false;
+                }
+
+                // Test if it's a valid SQLite database by trying to open it
+                try
+                {
+                    using (var testConnection = new System.Data.SQLite.SQLiteConnection($"Data Source={path};Version=3;"))
+                    {
+                        testConnection.Open();
+                        testConnection.Close();
+                    }
+                    
+                    // Set the custom database path
+                    DbQueries.SetCustomDatabasePath(path);
+                    Console.WriteLine($"[ServiceProvider] Database path set successfully: {path}");
+                    return true;
+                }
+                catch (Exception dbEx)
+                {
+                    Console.WriteLine($"[ServiceProvider] Invalid database file: {dbEx.Message}");
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ServiceProvider] Failed to set database path: {ex}");
+                return false;
+            }
+        }
+
+        public string GetCurrentDatabasePath()
+        {
+            try
+            {
+                return DbQueries.GetCurrentDatabasePath();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ServiceProvider] Failed to get current database path: {ex}");
+                return "";
+            }
+        }
 
         /// <summary>
         /// Extract book ID from Hebrew books URL for legacy compatibility
