@@ -1,6 +1,7 @@
 using Microsoft.Web.WebView2.WinForms;
 using System;
-using System.Windows.Forms;
+using System.Threading.Tasks;
+using Zayit.Viewer;
 
 namespace Zayit.Services
 {
@@ -9,6 +10,7 @@ namespace Zayit.Services
         private readonly DbService _db;
         private readonly HebrewBooksService _hebrewBooks;
         private readonly PdfService _pdf;
+        private readonly WebView2 _webView;
         private Action _popOutAction;
 
         public ServiceProvider(WebView2 webView, DbQueries db)
@@ -16,23 +18,24 @@ namespace Zayit.Services
             try
             {
                 Console.WriteLine("[ServiceProvider] Initializing services...");
-                
+
+                _webView = webView;
                 _db = new DbService(db);
                 Console.WriteLine("[ServiceProvider] DbService initialized");
-                
+
                 _hebrewBooks = new HebrewBooksService(webView);
                 Console.WriteLine("[ServiceProvider] HebrewBooksService initialized");
-                
+
                 _pdf = new PdfService(webView);
                 Console.WriteLine("[ServiceProvider] PdfService initialized");
-                
+
                 // Initialize services
                 _pdf.InitializePdfManager();
                 Console.WriteLine("[ServiceProvider] PDF manager initialized");
-                
+
                 _hebrewBooks.Initialize();
                 Console.WriteLine("[ServiceProvider] Hebrew books service initialized");
-                
+
                 Console.WriteLine("[ServiceProvider] All services initialized successfully");
             }
             catch (Exception ex)
@@ -52,9 +55,9 @@ namespace Zayit.Services
         public object GetLineId(int bookId, int idx, string q) => _db.GetLineId(bookId, idx, q);
         public object GetLineContent(int bookId, int idx, string q) => _db.GetLineContent(bookId, idx, q);
         public object GetLineRange(int bookId, int s, int e, string q) => _db.GetLineRange(bookId, s, e, q);
-        public object GetLinks(int lineId, string tabId, int bookId, string q, object[] p = null) 
+        public object GetLinks(int lineId, string tabId, int bookId, string q, object[] p = null)
         {
-            try 
+            try
             {
                 Console.WriteLine($"[ServiceProvider] GetLinks called: lineId={lineId}, tabId={tabId}, bookId={bookId}, params={p?.Length ?? 0}");
                 var result = _db.GetLinks(lineId, tabId, bookId, q, p);
@@ -83,15 +86,15 @@ namespace Zayit.Services
         public void ClearTempFiles() => _pdf.ClearTempFiles();
 
         // Hebrew Books Operations - Two distinct flows
-        
+
         // Flow 1: Prepare book for viewing (cache if needed, no SaveAs dialog)
-        public object PrepareHebrewBookForViewing(string bookId, string title) => 
+        public object PrepareHebrewBookForViewing(string bookId, string title) =>
             _hebrewBooks.PrepareForViewing(bookId, title).GetAwaiter().GetResult();
-        
+
         // Flow 2: Download book with SaveAs dialog (user chooses location)
-        public object PrepareHebrewBookForDownload(string bookId, string title) => 
+        public object PrepareHebrewBookForDownload(string bookId, string title) =>
             _hebrewBooks.PrepareForDownload(bookId, title).GetAwaiter().GetResult();
-        
+
         public object GetHebrewBooksCacheStats() => _hebrewBooks.GetCacheStats();
         public void ClearHebrewBooksCache() => _hebrewBooks.ClearCache();
         public void HandleHebrewBookTabClosed(string name) => _hebrewBooks.HandleTabClosed(name);
@@ -104,25 +107,7 @@ namespace Zayit.Services
         {
             try
             {
-                using (var dialog = new OpenFileDialog())
-                {
-                    dialog.Filter = "SQLite Database files (*.db)|*.db|All files (*.*)|*.*";
-                    dialog.Title = "Select Database File";
-                    dialog.CheckFileExists = true;
-                    
-                    if (dialog.ShowDialog() != DialogResult.OK)
-                    {
-                        return new { filePath = (string)null, fileName = (string)null };
-                    }
-
-                    var fileName = System.IO.Path.GetFileName(dialog.FileName);
-                    Console.WriteLine($"[ServiceProvider] Database file selected: {fileName} -> {dialog.FileName}");
-
-                    return new { 
-                        filePath = dialog.FileName, 
-                        fileName = fileName 
-                    };
-                }
+                return OpenDatabaseFilePickerAsync().GetAwaiter().GetResult();
             }
             catch (Exception ex)
             {
@@ -131,38 +116,53 @@ namespace Zayit.Services
             }
         }
 
+        private async Task<object> OpenDatabaseFilePickerAsync()
+        {
+            var filePath = await WebViewDialogHelper.ShowOpenFileDialogAsync(
+                _webView,
+                "SQLite Database files (*.db)|*.db|All files (*.*)|*.*",
+                "Select Database File"
+            );
+
+            if (string.IsNullOrEmpty(filePath))
+            {
+                return new { filePath = (string)null, fileName = (string)null };
+            }
+
+            var fileName = System.IO.Path.GetFileName(filePath);
+            Console.WriteLine($"[ServiceProvider] Database file selected: {fileName} -> {filePath}");
+
+            return new
+            {
+                filePath = filePath,
+                fileName = fileName
+            };
+        }
+
         public bool SetDatabasePath(string path)
         {
             try
             {
                 Console.WriteLine($"[ServiceProvider] Setting database path: {path}");
-                
-                // Validate the file exists and is accessible
-                if (!System.IO.File.Exists(path))
+
+                // If path is empty or null, clear the database path (revert to default)
+                if (string.IsNullOrWhiteSpace(path))
                 {
-                    Console.WriteLine($"[ServiceProvider] Database file does not exist: {path}");
+                    Console.WriteLine("[ServiceProvider] Empty path provided, clearing database path");
+                    return ClearDatabasePath();
+                }
+
+                // Use the validation method from DbQueries
+                if (!DbQueries.ValidateDatabasePath(path))
+                {
+                    Console.WriteLine($"[ServiceProvider] Invalid database path: {path}");
                     return false;
                 }
 
-                // Test if it's a valid SQLite database by trying to open it
-                try
-                {
-                    using (var testConnection = new System.Data.SQLite.SQLiteConnection($"Data Source={path};Version=3;"))
-                    {
-                        testConnection.Open();
-                        testConnection.Close();
-                    }
-                    
-                    // Set the custom database path
-                    DbQueries.SetCustomDatabasePath(path);
-                    Console.WriteLine($"[ServiceProvider] Database path set successfully: {path}");
-                    return true;
-                }
-                catch (Exception dbEx)
-                {
-                    Console.WriteLine($"[ServiceProvider] Invalid database file: {dbEx.Message}");
-                    return false;
-                }
+                // Set the database path using DbQueries method
+                DbQueries.SetDatabasePath(path);
+                Console.WriteLine($"[ServiceProvider] Database path set successfully: {path}");
+                return true;
             }
             catch (Exception ex)
             {
@@ -175,12 +175,44 @@ namespace Zayit.Services
         {
             try
             {
-                return DbQueries.GetCurrentDatabasePath();
+                return DbQueries.CurrentDbPath;
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[ServiceProvider] Failed to get current database path: {ex}");
                 return "";
+            }
+        }
+
+        public bool ClearDatabasePath()
+        {
+            try
+            {
+                Console.WriteLine("[ServiceProvider] Clearing database path (reverting to default)");
+                DbQueries.ClearDatabasePath();
+                Console.WriteLine("[ServiceProvider] Database path cleared successfully");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ServiceProvider] Failed to clear database path: {ex}");
+                return false;
+            }
+        }
+
+        public bool ValidateDatabasePath(string path)
+        {
+            try
+            {
+                Console.WriteLine($"[ServiceProvider] Validating database path: {path}");
+                bool isValid = DbQueries.ValidateDatabasePath(path);
+                Console.WriteLine($"[ServiceProvider] Database path validation result: {isValid}");
+                return isValid;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ServiceProvider] Failed to validate database path: {ex}");
+                return false;
             }
         }
 
@@ -195,7 +227,7 @@ namespace Zayit.Services
                 var query = uri.Query;
                 if (query.StartsWith("?"))
                     query = query.Substring(1);
-                
+
                 var pairs = query.Split('&');
                 foreach (var pair in pairs)
                 {

@@ -5,6 +5,7 @@ using System.IO;
 using System.Net.Http;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using Zayit.Viewer;
 
 namespace Zayit.Services
 {
@@ -250,30 +251,30 @@ namespace Zayit.Services
                 // File not cached - show SaveAs dialog first, then download
                 Console.WriteLine($"[HebrewBooksService] File not cached, showing SaveAs dialog first");
 
-                using (var dialog = new SaveFileDialog())
+                var filePath = await WebViewDialogHelper.ShowSaveFileDialogAsync(
+                    _webView,
+                    "PDF files (*.pdf)|*.pdf",
+                    "Save Hebrew Book",
+                    $"{title}.pdf"
+                );
+
+                if (string.IsNullOrEmpty(filePath))
                 {
-                    dialog.Filter = "PDF files (*.pdf)|*.pdf";
-                    dialog.FileName = $"{title}.pdf";
-                    dialog.Title = "Save Hebrew Book";
-
-                    if (dialog.ShowDialog() != DialogResult.OK)
-                    {
-                        Console.WriteLine($"[HebrewBooksService] SaveAs dialog cancelled");
-                        return new { success = false, cancelled = true };
-                    }
-
-                    // Store the target path for when download completes
-                    _pendingDownloadContext = new DownloadContext
-                    {
-                        BookId = bookId,
-                        Title = title,
-                        TargetPath = dialog.FileName,
-                        FileName = fileName
-                    };
-
-                    Console.WriteLine($"[HebrewBooksService] SaveAs dialog completed, target: {dialog.FileName}");
-                    return new { success = true, cached = false, targetPath = dialog.FileName };
+                    Console.WriteLine($"[HebrewBooksService] SaveAs dialog cancelled");
+                    return new { success = false, cancelled = true };
                 }
+
+                // Store the target path for when download completes
+                _pendingDownloadContext = new DownloadContext
+                {
+                    BookId = bookId,
+                    Title = title,
+                    TargetPath = filePath,
+                    FileName = fileName
+                };
+
+                Console.WriteLine($"[HebrewBooksService] SaveAs dialog completed, target: {filePath}");
+                return new { success = true, cached = false, targetPath = filePath };
             }
             catch (Exception ex)
             {
@@ -392,22 +393,22 @@ namespace Zayit.Services
         {
             try
             {
-                using (var dialog = new SaveFileDialog())
+                var filePath = await WebViewDialogHelper.ShowSaveFileDialogAsync(
+                    _webView,
+                    "PDF files (*.pdf)|*.pdf",
+                    "Save Hebrew Book",
+                    $"{title}.pdf"
+                );
+
+                if (string.IsNullOrEmpty(filePath))
                 {
-                    dialog.Filter = "PDF files (*.pdf)|*.pdf";
-                    dialog.FileName = $"{title}.pdf";
-                    dialog.Title = "Save Hebrew Book";
-
-                    if (dialog.ShowDialog() != DialogResult.OK)
-                    {
-                        return new { success = false, cancelled = true };
-                    }
-
-                    // Copy cached file to user's chosen location
-                    File.Copy(cachedPath, dialog.FileName, true);
-
-                    return new { success = true, filePath = dialog.FileName };
+                    return new { success = false, cancelled = true };
                 }
+
+                // Copy cached file to user's chosen location
+                File.Copy(cachedPath, filePath, true);
+
+                return new { success = true, filePath = filePath };
             }
             catch (Exception ex)
             {

@@ -1,17 +1,21 @@
+using Microsoft.Web.WebView2.WinForms;
 using System;
 using System.Drawing;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace Zayit.Viewer
 {
     public partial class DatabaseNotFoundDialog : Form
     {
+        private readonly WebView2 _webView;
         public string SelectedDatabasePath { get; private set; }
         public bool ShouldDownloadZayit { get; private set; }
 
-        public DatabaseNotFoundDialog()
+        public DatabaseNotFoundDialog(WebView2 webView = null)
         {
+            _webView = webView;
             InitializeComponent();
             this.RightToLeft = RightToLeft.Yes;
             this.RightToLeftLayout = true;
@@ -197,20 +201,45 @@ namespace Zayit.Viewer
             }
         }
 
-        private void BrowseButton_Click(object sender, EventArgs e)
+        private async void BrowseButton_Click(object sender, EventArgs e)
         {
-            using (var dialog = new OpenFileDialog())
+            try
             {
-                dialog.Filter = "SQLite Database files (*.db)|*.db|All files (*.*)|*.*";
-                dialog.Title = "בחר קובץ מסד נתונים";
-                dialog.CheckFileExists = true;
-
-                if (dialog.ShowDialog() == DialogResult.OK)
+                string filePath;
+                
+                if (_webView != null)
                 {
-                    SelectedDatabasePath = dialog.FileName;
+                    // Use WebViewDialogHelper for async dialog handling
+                    filePath = await WebViewDialogHelper.ShowOpenFileDialogAsync(
+                        _webView,
+                        "SQLite Database files (*.db)|*.db|All files (*.*)|*.*",
+                        "בחר קובץ מסד נתונים"
+                    );
+                }
+                else
+                {
+                    // Fallback to traditional dialog if WebView2 not available
+                    using (var dialog = new OpenFileDialog())
+                    {
+                        dialog.Filter = "SQLite Database files (*.db)|*.db|All files (*.*)|*.*";
+                        dialog.Title = "בחר קובץ מסד נתונים";
+                        dialog.CheckFileExists = true;
+
+                        filePath = dialog.ShowDialog() == DialogResult.OK ? dialog.FileName : null;
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(filePath))
+                {
+                    SelectedDatabasePath = filePath;
                     this.DialogResult = DialogResult.OK;
                     this.Close();
                 }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"שגיאה בבחירת קובץ: {ex.Message}", "שגיאה", 
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
     }

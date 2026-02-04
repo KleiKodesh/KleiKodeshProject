@@ -320,6 +320,30 @@ class WebViewBridge {
             return ''
         }
     }
+
+    async clearDatabasePath(): Promise<boolean> {
+        console.log('[WebViewBridge] Clearing database path (reverting to default)')
+        try {
+            const result = await this.call<boolean>('ClearDatabasePath')
+            console.log('[WebViewBridge] Database path cleared result:', result)
+            return result
+        } catch (error) {
+            console.error('[WebViewBridge] Failed to clear database path:', error)
+            return false
+        }
+    }
+
+    async validateDatabasePath(path: string): Promise<boolean> {
+        console.log('[WebViewBridge] Validating database path:', path)
+        try {
+            const result = await this.call<boolean>('ValidateDatabasePath', path)
+            console.log('[WebViewBridge] Database path validation result:', result)
+            return result
+        } catch (error) {
+            console.error('[WebViewBridge] Failed to validate database path:', error)
+            return false
+        }
+    }
 }
 
 // Export singleton instance

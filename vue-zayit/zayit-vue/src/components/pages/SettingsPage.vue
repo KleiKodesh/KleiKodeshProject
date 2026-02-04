@@ -1,6 +1,27 @@
 <template>
     <div class="flex-column width-fill height-fill settings-page">
         <div class="flex-110 overflow-y settings-content">
+
+            <!-- Database Path - only show in C# WebView mode -->
+            <div v-if="webviewBridge.isAvailable()"
+                 class="setting-group">
+                <label class="flex-row bold setting-label">מיקום מסד הנתונים</label>
+                <div class="flex-column">
+                    <div class="flex-row database-path-row">
+                        <input type="text"
+                               v-model="databasePath"
+                               placeholder="בחר מיקום מסד הנתונים (seforim.db)"
+                               class="database-path-input"
+                               readonly />
+                        <button @click="selectDatabaseFile"
+                                class="c-pointer database-browse-btn"
+                                title="בחר קובץ מסד נתונים">
+                            📁
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Header Font -->
             <div class="setting-group">
                 <label class="flex-row bold setting-label">גופן
@@ -21,6 +42,26 @@
                              @click="selectHeaderFont(font)">
                             {{ font }}
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Database Path - only show in C# WebView mode -->
+            <div v-if="webviewBridge.isAvailable()"
+                 class="setting-group">
+                <label class="flex-row bold setting-label">מיקום מסד הנתונים</label>
+                <div class="flex-column">
+                    <div class="flex-row database-path-row">
+                        <input type="text"
+                               v-model="databasePath"
+                               placeholder="בחר מיקום מסד הנתונים (seforim.db)"
+                               class="database-path-input"
+                               readonly />
+                        <button @click="selectDatabaseFile"
+                                class="c-pointer database-browse-btn"
+                                title="בחר קובץ מסד נתונים">
+                            📁
+                        </button>
                     </div>
                 </div>
             </div>
@@ -161,26 +202,6 @@
                 </div>
             </div>
 
-            <!-- Database Path - only show in C# WebView mode -->
-            <div v-if="webviewBridge.isAvailable()"
-                 class="setting-group">
-                <label class="flex-row bold setting-label">מיקום מסד הנתונים</label>
-                <div class="flex-column">
-                    <div class="flex-row database-path-row">
-                        <input type="text"
-                               v-model="databasePath"
-                               placeholder="בחר מיקום מסד הנתונים (seforim.db)"
-                               class="database-path-input"
-                               readonly />
-                        <button @click="selectDatabaseFile"
-                                class="c-pointer database-browse-btn"
-                                title="בחר קובץ מסד נתונים">
-                            📁
-                        </button>
-                    </div>
-                </div>
-            </div>
-
             <!-- Reset Button -->
             <div class="setting-group">
                 <button @click="resetSettings"
@@ -189,6 +210,25 @@
                 </button>
             </div>
         </div>
+
+        <!-- Custom Dialog -->
+        <CustomDialog ref="dialogRef"
+                      :title="dialogOptions.title"
+                      :message="dialogOptions.message"
+                      :icon="dialogOptions.icon"
+                      :icon-type="dialogOptions.iconType"
+                      :confirm-text="dialogOptions.confirmText"
+                      :cancel-text="dialogOptions.cancelText"
+                      :confirm-variant="dialogOptions.confirmVariant"
+                      :show-confirm="dialogOptions.showConfirm"
+                      :show-cancel="dialogOptions.showCancel"
+                      :show-close-button="dialogOptions.showCloseButton"
+                      :show-actions="dialogOptions.showActions"
+                      :size="dialogOptions.size"
+                      :close-on-overlay="dialogOptions.closeOnOverlay"
+                      @confirm="handleConfirm"
+                      @cancel="handleCancel"
+                      @close="handleClose" />
     </div>
 </template>
 
@@ -199,10 +239,13 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import { hebrewFonts } from '../../services/hebrewFontsService'
 import { useConnectivity } from '../../utils/connectivity'
 import { webviewBridge } from '../../services/webviewBridge'
+import { useDialog } from '../../composables/useDialog'
+import CustomDialog from '../common/CustomDialog.vue'
 
 const settingsStore = useSettingsStore()
 const { headerFont, textFont, fontSize, linePadding, censorDivineNames, appZoom, useOfflineHomepage, readingBackgroundColor, databasePath } = storeToRefs(settingsStore)
 const { isOnline } = useConnectivity()
+const { dialogRef, dialogOptions, confirm, error, handleConfirm, handleCancel, handleClose } = useDialog()
 
 const availableFonts = ref<string[]>([])
 const isHeaderDropdownOpen = ref(false)
@@ -288,17 +331,31 @@ const getDisplayName = (fontValue: string): string => {
 }
 
 const resetSettings = async () => {
+    const confirmed = await confirm(
+        'האם אתה בטוח שברצונך לאפס את כל ההגדרות? פעולה זו תחזיר את האפליקציה למצב ברירת המחדל.',
+        {
+            title: 'איפוס הגדרות',
+            confirmVariant: 'danger'
+        }
+    )
+
+    if (!confirmed) {
+        return
+    }
+
     settingsStore.reset()
 
     // Also reset database path to default in C# mode
     if (webviewBridge.isAvailable()) {
         try {
             // Clear the custom database path (this will revert to default)
-            const success = await webviewBridge.setDatabasePath('')
+            const success = await webviewBridge.clearDatabasePath()
             if (success) {
                 // Reload the page to use the default database and apply all reset settings
                 window.location.reload()
                 return
+            } else {
+                console.error('Failed to reset database path, but continuing with other settings reset')
             }
         } catch (error) {
             console.error('Failed to reset database path:', error)
@@ -323,16 +380,27 @@ const selectDatabaseFile = async () => {
     try {
         const result = await webviewBridge.openDatabaseFilePicker()
         if (result.filePath) {
+            // First validate the selected database file
+            const isValid = await webviewBridge.validateDatabasePath(result.filePath)
+            if (!isValid) {
+                await error('הקובץ שנבחר אינו מסד נתונים תקין של SQLite. אנא בחר קובץ seforim.db תקין.')
+                return
+            }
+
             databasePath.value = result.filePath
             // Notify the C# backend about the new database path
             const success = await webviewBridge.setDatabasePath(result.filePath)
             if (success) {
                 // Reload the page to use the new database
                 window.location.reload()
+            } else {
+                await error('שגיאה בהגדרת מיקום מסד הנתונים. אנא נסה שוב.')
+                databasePath.value = '' // Reset on failure
             }
         }
     } catch (error) {
         console.error('Failed to select database file:', error)
+        await error('שגיאה בבחירת קובץ מסד הנתונים. אנא נסה שוב.')
     }
 }
 

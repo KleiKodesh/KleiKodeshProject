@@ -1,7 +1,9 @@
 using Microsoft.Web.WebView2.WinForms;
 using System;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows.Forms;
+using Zayit.Viewer;
 
 namespace Zayit.Services
 {
@@ -54,34 +56,39 @@ namespace Zayit.Services
         {
             try
             {
-                using (var dialog = new OpenFileDialog())
-                {
-                    dialog.Filter = "PDF files (*.pdf)|*.pdf";
-                    dialog.Title = "Select PDF File";
-                    
-                    if (dialog.ShowDialog() != DialogResult.OK)
-                    {
-                        return new { fileName = (string)null, dataUrl = (string)null, originalPath = (string)null };
-                    }
-
-                    // Create virtual URL for the selected file
-                    var virtualUrl = CreateVirtualUrl(dialog.FileName);
-                    var fileName = Path.GetFileName(dialog.FileName);
-
-                    Console.WriteLine($"[PdfService] File selected: {fileName} -> {virtualUrl}");
-
-                    return new { 
-                        fileName = fileName, 
-                        dataUrl = virtualUrl, 
-                        originalPath = dialog.FileName 
-                    };
-                }
+                return OpenPdfFilePickerAsync().GetAwaiter().GetResult();
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[PdfService] Error in file picker: {ex}");
                 return new { fileName = (string)null, dataUrl = (string)null, originalPath = (string)null };
             }
+        }
+
+        private async Task<object> OpenPdfFilePickerAsync()
+        {
+            var filePath = await WebViewDialogHelper.ShowOpenFileDialogAsync(
+                _webView,
+                "PDF files (*.pdf)|*.pdf",
+                "Select PDF File"
+            );
+
+            if (string.IsNullOrEmpty(filePath))
+            {
+                return new { fileName = (string)null, dataUrl = (string)null, originalPath = (string)null };
+            }
+
+            // Create virtual URL for the selected file
+            var virtualUrl = CreateVirtualUrl(filePath);
+            var fileName = Path.GetFileName(filePath);
+
+            Console.WriteLine($"[PdfService] File selected: {fileName} -> {virtualUrl}");
+
+            return new { 
+                fileName = fileName, 
+                dataUrl = virtualUrl, 
+                originalPath = filePath 
+            };
         }
 
         /// <summary>

@@ -100,3 +100,67 @@ You can manually load specific guidance using these context keys:
 2. **Smart Detection**: Automatically detect context from files and keywords
 3. **Manual Override**: Use context keys when automatic detection isn't enough
 4. **Single Source**: Each topic has one authoritative guide
+
+## Clean Code Principles
+
+Based on analysis of problematic code patterns in this project, follow these essential practices:
+
+### 1. Keep Constructors Simple
+
+- Constructors should only initialize object state, not perform complex operations
+- Avoid file I/O, network calls, or heavy computation in constructors
+- Use factory methods or dependency injection for complex initialization
+
+### 2. Eliminate Debug Pollution
+
+- Remove excessive logging and debug statements from production code
+- Use proper logging frameworks with configurable levels instead of Console.WriteLine
+- Debug code should never make it to production
+
+### 3. Single Responsibility Principle
+
+- Each class should have one reason to change
+- Separate concerns: database logic ≠ UI logic ≠ configuration management
+- If a class is doing multiple unrelated things, split it
+
+### 4. Proper Error Handling
+
+- Don't catch exceptions just to log and continue - handle them meaningfully
+- Fail fast when encountering unrecoverable errors
+- Use specific exception types, not generic Exception catching
+
+### 5. Manage State Appropriately
+
+- Use static state only when it represents truly shared application state
+- Ensure thread safety when using static fields in multi-threaded scenarios
+- Consider the lifecycle and scope of your data when choosing between static and instance state
+
+### 6. Eliminate Code Duplication
+
+- Extract repeated logic into reusable methods
+- Use the DRY principle (Don't Repeat Yourself)
+- Common patterns should be abstracted into utilities
+
+### 7. Separation of Concerns
+
+- Keep UI logic separate from business logic
+- Database access should be isolated in dedicated layers
+- Configuration management should be its own responsibility
+
+### 8. Simplify Complex Methods
+
+- Long methods with multiple responsibilities should be broken down
+- Each method should do one thing well
+- Use early returns to reduce nesting and improve readability
+
+### 9. Proper Resource Management
+
+- Use `using` statements or proper disposal patterns for resources
+- Don't leave connections or files open indefinitely
+- Handle resource cleanup in finally blocks or disposal methods
+
+### 10. Clear and Consistent APIs
+
+- Method signatures should be predictable and consistent
+- Avoid methods that sometimes return different types based on conditions
+- Use meaningful parameter names and return types
