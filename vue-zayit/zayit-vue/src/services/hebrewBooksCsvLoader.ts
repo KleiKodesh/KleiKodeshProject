@@ -12,19 +12,20 @@ export class CsvLoader {
           complete: (results) => {
             try {
               const books = results.data
-                .filter((row: any) => row.length >= 7) // Now we have 7 columns
+                .filter((row: any) => row.length >= 7) // We have 7 columns including tags
                 .map((row: any) => ({
-                  ID_Book: row[0],
-                  Title: row[1],
-                  Author: row[2],
-                  Printing_Place: row[3],
-                  Printing_Year: row[4],
-                  Pages: row[5], // Now column 5 instead of 7
-                  Tags: row[6]?.replace(/;/g, ' \\ ') || '', // Now column 6 instead of 10
+                  id: row[0],
+                  title: row[1],
+                  author: row[2],
+                  printingPlace: row[3],
+                  printingYear: row[4],
+                  pages: row[5],
+                  // Don't store tags in the object, just use them for search/display
                   userScore: 0,
                   lastAccessed: undefined,
+                  _csvTags: row[6] || '', // Store raw CSV tags for search/display
                 }))
-                .filter((book: HebrewBook) => book.Title && book.Title.trim() !== '')
+                .filter((book: HebrewBook) => book.title && book.title.trim() !== '')
 
               resolve(books)
             } catch (error) {

@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue';
 import type { Tab, PageType } from '../types/Tab';
 import { checkConnectivity } from '../utils/connectivity';
 import { useSettingsStore } from './settingsStore';
+import { webviewBridge } from '../services/webviewBridge';
 
 const STORAGE_KEY = 'tabStore';
 
@@ -606,6 +607,12 @@ export const useTabStore = defineStore('tabs', () => {
     };
 
     const openHebrewBooks = () => {
+        // Hebrew Books page is only available when running inside C# WebView host
+        if (!webviewBridge.isAvailable()) {
+            console.warn('[TabStore] Hebrew Books page is only available when running inside C# WebView host')
+            return
+        }
+
         tabs.value.forEach(tab => tab.isActive = false);
 
         const existingIds = new Set(tabs.value.map(t => t.id));

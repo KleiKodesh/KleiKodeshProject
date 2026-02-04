@@ -3,6 +3,8 @@
  * 
  * Handles Hebrew Books events and tab lifecycle using the unified webviewHebrewBooks service.
  * Provides cache management and cleanup functionality.
+ * 
+ * Note: Initialization is handled by the WebView bridge on first call.
  */
 
 import { useTabStore } from '../stores/tabStore'
@@ -14,6 +16,7 @@ const activeHebrewBookFiles = new Set<string>()
 // Global handlers for Hebrew Books events
 declare global {
     interface Window {
+        handleHebrewBookViewingReady?: (notification: any) => void
         handleHebrewBookDownloadComplete?: (notification: any) => void
         handleHebrewBookError?: (notification: any) => void
     }
@@ -26,10 +29,10 @@ declare global {
 export function initializeHebrewBooksHandlers() {
     console.log('[HebrewBooksHandlers] Initializing Hebrew books handlers with unified service')
 
-    // Handler for when Hebrew book download completes successfully
-    window.handleHebrewBookDownloadComplete = (notification: any) => {
+    // Flow 1: Handler for when Hebrew book is ready for viewing (cached or downloaded to cache)
+    window.handleHebrewBookViewingReady = (notification: any) => {
         try {
-            console.log('[HebrewBooksHandlers] Hebrew book download complete:', notification)
+            console.log('[HebrewBooksHandlers] Hebrew book viewing ready:', notification)
 
             const tabStore = useTabStore()
             const activeTab = tabStore.tabs.find(t => t.isActive && t.currentPage === 'hebrewbooks-view')
@@ -39,15 +42,50 @@ export function initializeHebrewBooksHandlers() {
                 activeTab.pdfState = {
                     fileName: notification.fileName,
                     fileUrl: notification.url,
-                    source: 'hebrewbook'
+                    source: 'hebrewbook',
+                    bookId: notification.bookId,
+                    bookTitle: notification.bookTitle
                 }
 
                 // Track the file for cleanup
                 activeHebrewBookFiles.add(notification.fileName)
-                console.log('[HebrewBooksHandlers] Updated tab PDF state for Hebrew book')
+                console.log('[HebrewBooksHandlers] Updated tab PDF state for Hebrew book viewing:', {
+                    fileName: notification.fileName,
+                    url: notification.url,
+                    bookId: notification.bookId,
+                    bookTitle: notification.bookTitle,
+                    tabTitle: activeTab.title,
+                    currentPage: activeTab.currentPage
+                })
+
+                // Force a reactive update by triggering a state change
+                // This ensures the HebrewBooksViewPage component detects the new PDF state
+                const currentPdfState = activeTab.pdfState
+                activeTab.pdfState = undefined
+                setTimeout(() => {
+                    activeTab.pdfState = currentPdfState
+                    console.log('[HebrewBooksHandlers] PDF state reactive update completed for viewing')
+                }, 10)
             } else {
-                console.warn('[HebrewBooksHandlers] No active Hebrew books view tab found or missing notification data')
+                console.warn('[HebrewBooksHandlers] No active Hebrew books view tab found or missing notification data', {
+                    hasActiveTab: !!activeTab,
+                    activeTabPage: activeTab?.currentPage,
+                    hasFileName: !!notification.fileName,
+                    hasUrl: !!notification.url,
+                    notification
+                })
             }
+        } catch (error) {
+            console.error('[HebrewBooksHandlers] Error handling Hebrew book viewing ready:', error)
+        }
+    }
+
+    // Flow 2: Handler for when Hebrew book download completes (SaveAs flow)
+    window.handleHebrewBookDownloadComplete = (notification: any) => {
+        try {
+            console.log('[HebrewBooksHandlers] Hebrew book download complete (SaveAs):', notification)
+            // For download flow, we just log completion - no further action needed in Vue
+            // The file has been saved to the user's chosen location
         } catch (error) {
             console.error('[HebrewBooksHandlers] Error handling Hebrew book download complete:', error)
         }
@@ -147,6 +185,3 @@ export async function clearHebrewBooksCache() {
         console.error('[HebrewBooksHandlers] Error clearing cache:', error)
     }
 }
-
-// Auto-initialize when module is imported
-initializeHebrewBooksHandlers()

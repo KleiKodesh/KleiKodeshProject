@@ -1,5 +1,5 @@
-using Microsoft.Web.WebView2.WinForms;
 using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.WinForms;
 using System;
 using System.IO;
 using System.Net.Http;
@@ -10,56 +10,94 @@ namespace Zayit.Services
 {
     /// <summary>
     /// Hebrew Books Service - Handles ONLY Hebrew books specific operations
-    /// Does NOT handle general PDF operations - that's in PdfService
+    /// Uses the same origin as PDF.js viewer to avoid cross-origin restrictions
     /// </summary>
     public class HebrewBooksService
     {
         private readonly WebView2 _webView;
         private readonly HttpClient _http = new HttpClient();
         private readonly HebrewBooksCacheManager _cache;
-        private const string HEBREW_BOOKS_HOST = "zayitHost";
-        private static bool _virtualHostMappingSet = false;
 
         public HebrewBooksService(WebView2 webView)
         {
             _webView = webView;
             _cache = new HebrewBooksCacheManager(GetHtmlPath());
-            
-            // Set up download event handler
-            if (_webView?.CoreWebView2 != null)
-            {
-                SetupDownloadHandler();
-            }
         }
 
         /// <summary>
-        /// Initialize Hebrew books service and set up virtual host mapping (static/global)
+        /// Initialize Hebrew books service - no separate virtual host needed
+        /// Hebrew books will use the same origin as PDF.js viewer
         /// </summary>
         public void Initialize()
         {
-            if (_virtualHostMappingSet || _webView?.CoreWebView2 == null) return;
-
             try
             {
                 var htmlPath = GetHtmlPath();
-                var cacheDir = Path.Combine(htmlPath, "pdfjs", "web", "hebrewbookscache");
+                var pdfJsWebPath = Path.Combine(htmlPath, "pdfjs", "web");
+                var cacheDir = Path.Combine(pdfJsWebPath, "hebrewbookscache");
+
+                // Ensure PDF.js web directory exists
+                if (!Directory.Exists(pdfJsWebPath))
+                {
+                    Console.WriteLine($"[HebrewBooksService] ERROR: PDF.js web directory not found: {pdfJsWebPath}");
+                    throw new DirectoryNotFoundException($"PDF.js web directory not found: {pdfJsWebPath}");
+                }
+
+                // Create Hebrew books cache directory within PDF.js web folder
                 Directory.CreateDirectory(cacheDir);
 
-                // Set up static virtual host mapping for all Hebrew books
-                _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
-                    HEBREW_BOOKS_HOST,
-                    htmlPath,
-                    CoreWebView2HostResourceAccessKind.Allow
-                );
+                // Verify the cache directory was created successfully
+                if (!Directory.Exists(cacheDir))
+                {
+                    Console.WriteLine($"[HebrewBooksService] ERROR: Failed to create Hebrew books cache directory: {cacheDir}");
+                    throw new DirectoryNotFoundException($"Failed to create Hebrew books cache directory: {cacheDir}");
+                }
 
-                _virtualHostMappingSet = true;
-                Console.WriteLine($"[HebrewBooksService] Static virtual host mapping set: {HEBREW_BOOKS_HOST} -> {htmlPath}");
-                
+                Console.WriteLine($"[HebrewBooksService] Hebrew books cache directory created/verified: {cacheDir}");
+                Console.WriteLine($"[HebrewBooksService] Using same origin as PDF.js viewer to avoid cross-origin restrictions");
+                Console.WriteLine($"[HebrewBooksService] Cache directory relative to PDF.js viewer: hebrewbookscache/");
+
                 SetupDownloadHandler();
+
+                // Log directory structure for debugging
+                LogDirectoryStructure(pdfJsWebPath);
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[HebrewBooksService] Failed to initialize: {ex}");
+                throw; // Re-throw to ensure initialization failures are noticed
+            }
+        }
+
+        /// <summary>
+        /// Log the PDF.js web directory structure for debugging
+        /// </summary>
+        private void LogDirectoryStructure(string pdfJsWebPath)
+        {
+            try
+            {
+                Console.WriteLine($"[HebrewBooksService] PDF.js web directory structure:");
+                Console.WriteLine($"  Base: {pdfJsWebPath}");
+
+                if (Directory.Exists(pdfJsWebPath))
+                {
+                    var subdirs = Directory.GetDirectories(pdfJsWebPath);
+                    foreach (var subdir in subdirs)
+                    {
+                        var dirName = Path.GetFileName(subdir);
+                        Console.WriteLine($"  - {dirName}/");
+                    }
+
+                    // Check for key files
+                    var viewerHtml = Path.Combine(pdfJsWebPath, "viewer.html");
+                    var viewerMjs = Path.Combine(pdfJsWebPath, "viewer.mjs");
+                    Console.WriteLine($"  viewer.html exists: {File.Exists(viewerHtml)}");
+                    Console.WriteLine($"  viewer.mjs exists: {File.Exists(viewerMjs)}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[HebrewBooksService] Error logging directory structure: {ex.Message}");
             }
         }
 
@@ -75,34 +113,53 @@ namespace Zayit.Services
                 try
                 {
                     Console.WriteLine($"[HebrewBooksService] Download starting: {e.DownloadOperation.Uri}");
-                    
+
                     // Check if this is a Hebrew books download
-                    if (e.DownloadOperation.Uri.Contains("hebrewbooks.org") || 
+                    if (e.DownloadOperation.Uri.Contains("hebrewbooks.org") ||
                         e.DownloadOperation.Uri.Contains("download.hebrewbooks.org"))
                     {
-                        // Set download to our cache directory
-                        var htmlPath = GetHtmlPath();
-                        var cacheDir = Path.Combine(htmlPath, "pdfjs", "web", "hebrewbookscache");
-                        Directory.CreateDirectory(cacheDir);
-                        
-                        // Generate filename from URL or use suggested name
-                        var fileName = GetFileNameFromUrl(e.DownloadOperation.Uri) ?? 
-                                     e.DownloadOperation.ResultFilePath ?? 
+                        // Set download to our cache directory within PDF.js web folder
+                        var cacheDir = GetCacheDirectory();
+
+                        // Generate filename - use pending context if available, otherwise extract from URL
+                        var fileName = GetExpectedFileName() ??
+                                     GetFileNameFromUrl(e.DownloadOperation.Uri) ??
+                                     e.DownloadOperation.ResultFilePath ??
                                      $"hebrewbook_{DateTime.Now:yyyyMMdd_HHmmss}.pdf";
-                        
+
                         var filePath = Path.Combine(cacheDir, fileName);
                         e.ResultFilePath = filePath;
-                        
-                        Console.WriteLine($"[HebrewBooksService] Hebrew book download redirected to: {filePath}");
-                        
-                        // Handle download completion
-                        e.DownloadOperation.StateChanged += (s, args) =>
+
+                        Console.WriteLine($"[HebrewBooksService] Hebrew book download redirected to cache: {filePath}");
+
+                        // Handle download completion - attach handler immediately
+                        var downloadOperation = e.DownloadOperation;
+
+                        // Create a handler that will be called when state changes
+                        EventHandler<object> stateChangedHandler = null;
+                        stateChangedHandler = (s, args) =>
                         {
-                            if (e.DownloadOperation.State == CoreWebView2DownloadState.Completed)
+                            Console.WriteLine($"[HebrewBooksService] Download state changed to: {downloadOperation.State}");
+
+                            if (downloadOperation.State == CoreWebView2DownloadState.Completed)
                             {
+                                Console.WriteLine($"[HebrewBooksService] Download completed, calling HandleDownloadCompleted");
                                 HandleDownloadCompleted(filePath, fileName);
+
+                                // Unsubscribe from the event to prevent memory leaks
+                                downloadOperation.StateChanged -= stateChangedHandler;
+                            }
+                            else if (downloadOperation.State == CoreWebView2DownloadState.Interrupted)
+                            {
+                                Console.WriteLine($"[HebrewBooksService] Download was interrupted");
+                                // Unsubscribe from the event
+                                downloadOperation.StateChanged -= stateChangedHandler;
                             }
                         };
+
+                        // Subscribe to state changes
+                        downloadOperation.StateChanged += stateChangedHandler;
+                        Console.WriteLine($"[HebrewBooksService] StateChanged handler attached for download");
                     }
                 }
                 catch (Exception ex)
@@ -113,72 +170,136 @@ namespace Zayit.Services
         }
 
         /// <summary>
-        /// Prepare Hebrew book for download or viewing
+        /// Flow 1: Prepare Hebrew book for viewing (cache if needed, no SaveAs dialog)
         /// </summary>
-        public async Task<object> PrepareDownload(string bookId, string title, string action)
+        public async Task<object> PrepareForViewing(string bookId, string title)
         {
             try
             {
-                Console.WriteLine($"[HebrewBooksService] Preparing Hebrew book - ID: {bookId}, Title: {title}, Action: {action}");
-                
+                Console.WriteLine($"[HebrewBooksService] Preparing Hebrew book for viewing - ID: {bookId}, Title: {title}");
+
                 // Initialize if not already done
                 Initialize();
-                
+
                 // Check if book is already cached
                 var fileName = SanitizeFileName($"{title}_{bookId}") + ".pdf";
-                var htmlPath = GetHtmlPath();
-                var cacheDir = Path.Combine(htmlPath, "pdfjs", "web", "hebrewbookscache");
-                var cachedPath = Path.Combine(cacheDir, fileName);
-                
+                var cachedPath = GetCachedFilePath(fileName);
+
+                Console.WriteLine($"[HebrewBooksService] Checking cache for viewing - fileName: {fileName}");
+                Console.WriteLine($"[HebrewBooksService] Cache path: {cachedPath}");
+                Console.WriteLine($"[HebrewBooksService] Cached file exists: {File.Exists(cachedPath)}");
+
                 if (File.Exists(cachedPath))
                 {
-                    Console.WriteLine($"[HebrewBooksService] Book already cached: {fileName}");
-                    
-                    if (action == "view")
-                    {
-                        // Return virtual URL for immediate viewing
-                        var virtualUrl = $"https://{HEBREW_BOOKS_HOST}/pdfjs/web/hebrewbookscache/{fileName}";
-                        return new { success = true, cached = true, fileName = fileName, url = virtualUrl };
-                    }
-                    else if (action == "download")
-                    {
-                        // Show save dialog for cached file
-                        return await ShowSaveDialogForCachedFile(cachedPath, title);
-                    }
+                    Console.WriteLine($"[HebrewBooksService] Book already cached for viewing: {fileName}");
+
+                    // Return relative path from PDF.js viewer's perspective (viewer.html is in /pdfjs/web/)
+                    var relativeUrl = $"hebrewbookscache/{fileName}";
+                    Console.WriteLine($"[HebrewBooksService] Returning cached relative URL: {relativeUrl}");
+                    return new { success = true, cached = true, fileName = fileName, url = relativeUrl };
                 }
-                
-                // File not cached - need to download
-                if (action == "download")
+
+                // File not cached - need to download to cache
+                Console.WriteLine($"[HebrewBooksService] File not cached, will download to cache for viewing");
+
+                // Store context for download completion handler
+                _pendingViewingContext = new ViewingContext
                 {
-                    // Show save dialog first
-                    using (var dialog = new SaveFileDialog())
-                    {
-                        dialog.Filter = "PDF files (*.pdf)|*.pdf";
-                        dialog.FileName = $"{title}.pdf";
-                        dialog.Title = "Save Hebrew Book";
-                        
-                        if (dialog.ShowDialog() != DialogResult.OK)
-                        {
-                            return new { success = false, cancelled = true };
-                        }
-                        
-                        // Store the target path for when download completes
-                        _pendingDownloadPath = dialog.FileName;
-                        return new { success = true, cached = false, targetPath = dialog.FileName };
-                    }
-                }
-                
-                // For viewing, just return success - download will be handled by browser
+                    BookId = bookId,
+                    Title = title,
+                    FileName = fileName
+                };
+
                 return new { success = true, cached = false };
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[HebrewBooksService] Error preparing download: {ex}");
+                Console.WriteLine($"[HebrewBooksService] Error preparing for viewing: {ex}");
                 return new { success = false, error = ex.Message };
             }
         }
 
-        private string _pendingDownloadPath;
+        /// <summary>
+        /// Flow 2: Download Hebrew book with SaveAs dialog (user chooses location)
+        /// </summary>
+        public async Task<object> PrepareForDownload(string bookId, string title)
+        {
+            try
+            {
+                Console.WriteLine($"[HebrewBooksService] Preparing Hebrew book for download - ID: {bookId}, Title: {title}");
+
+                // Initialize if not already done
+                Initialize();
+
+                // Check if book is already cached
+                var fileName = SanitizeFileName($"{title}_{bookId}") + ".pdf";
+                var cachedPath = GetCachedFilePath(fileName);
+
+                Console.WriteLine($"[HebrewBooksService] Checking cache for download - fileName: {fileName}");
+                Console.WriteLine($"[HebrewBooksService] Cache path: {cachedPath}");
+                Console.WriteLine($"[HebrewBooksService] Cached file exists: {File.Exists(cachedPath)}");
+
+                if (File.Exists(cachedPath))
+                {
+                    Console.WriteLine($"[HebrewBooksService] Book already cached, showing SaveAs dialog");
+
+                    // Show save dialog for cached file
+                    return await ShowSaveDialogForCachedFile(cachedPath, title);
+                }
+
+                // File not cached - show SaveAs dialog first, then download
+                Console.WriteLine($"[HebrewBooksService] File not cached, showing SaveAs dialog first");
+
+                using (var dialog = new SaveFileDialog())
+                {
+                    dialog.Filter = "PDF files (*.pdf)|*.pdf";
+                    dialog.FileName = $"{title}.pdf";
+                    dialog.Title = "Save Hebrew Book";
+
+                    if (dialog.ShowDialog() != DialogResult.OK)
+                    {
+                        Console.WriteLine($"[HebrewBooksService] SaveAs dialog cancelled");
+                        return new { success = false, cancelled = true };
+                    }
+
+                    // Store the target path for when download completes
+                    _pendingDownloadContext = new DownloadContext
+                    {
+                        BookId = bookId,
+                        Title = title,
+                        TargetPath = dialog.FileName,
+                        FileName = fileName
+                    };
+
+                    Console.WriteLine($"[HebrewBooksService] SaveAs dialog completed, target: {dialog.FileName}");
+                    return new { success = true, cached = false, targetPath = dialog.FileName };
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[HebrewBooksService] Error preparing for download: {ex}");
+                return new { success = false, error = ex.Message };
+            }
+        }
+
+        // Context classes for tracking pending operations
+        private class ViewingContext
+        {
+            public string BookId { get; set; }
+            public string Title { get; set; }
+            public string FileName { get; set; }
+        }
+
+        private class DownloadContext
+        {
+            public string BookId { get; set; }
+            public string Title { get; set; }
+            public string TargetPath { get; set; }
+            public string FileName { get; set; }
+        }
+
+        private ViewingContext _pendingViewingContext;
+        private DownloadContext _pendingDownloadContext;
 
         /// <summary>
         /// Handle download completion
@@ -187,24 +308,76 @@ namespace Zayit.Services
         {
             try
             {
-                Console.WriteLine($"[HebrewBooksService] Download completed: {fileName}");
-                
-                // Close the default download dialog
-                _webView?.CoreWebView2?.CloseDefaultDownloadDialog();
-                
-                // If this was a user download (not cache), copy to user's chosen location
-                if (!string.IsNullOrEmpty(_pendingDownloadPath))
+                Console.WriteLine($"[HebrewBooksService] Download completed - filePath: {filePath}, fileName: {fileName}");
+
+                // Verify file exists and get details
+                if (!File.Exists(filePath))
                 {
-                    File.Copy(filePath, _pendingDownloadPath, true);
-                    Console.WriteLine($"[HebrewBooksService] File copied to user location: {_pendingDownloadPath}");
-                    _pendingDownloadPath = null;
+                    Console.WriteLine($"[HebrewBooksService] ERROR: Downloaded file does not exist at {filePath}");
+                    return;
                 }
-                
-                // Create virtual URL for viewing
-                var virtualUrl = $"https://{HEBREW_BOOKS_HOST}/pdfjs/web/hebrewbookscache/{fileName}";
-                
-                // Notify Vue about completion
-                NotifyDownloadComplete(fileName, virtualUrl);
+
+                var fileInfo = new FileInfo(filePath);
+                Console.WriteLine($"[HebrewBooksService] Downloaded file verified - size: {fileInfo.Length} bytes, created: {fileInfo.CreationTime}");
+
+                // Verify the file is a valid PDF by checking header
+                try
+                {
+                    var header = new byte[4];
+                    using (var fs = File.OpenRead(filePath))
+                    {
+                        fs.Read(header, 0, 4);
+                    }
+                    var headerString = System.Text.Encoding.ASCII.GetString(header);
+                    Console.WriteLine($"[HebrewBooksService] File header: {headerString} (should be '%PDF')");
+
+                    if (!headerString.StartsWith("%PDF"))
+                    {
+                        Console.WriteLine($"[HebrewBooksService] WARNING: File does not appear to be a valid PDF");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[HebrewBooksService] Error checking file header: {ex.Message}");
+                }
+
+                // Close the default download dialog
+                try
+                {
+                    _webView?.CoreWebView2?.CloseDefaultDownloadDialog();
+                    Console.WriteLine($"[HebrewBooksService] Default download dialog closed");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[HebrewBooksService] Error closing download dialog: {ex}");
+                }
+
+                // Handle based on the type of operation
+                if (_pendingDownloadContext != null)
+                {
+                    // This was a download operation - copy to user's chosen location
+                    Console.WriteLine($"[HebrewBooksService] Handling download completion - copying to: {_pendingDownloadContext.TargetPath}");
+                    File.Copy(filePath, _pendingDownloadContext.TargetPath, true);
+                    Console.WriteLine($"[HebrewBooksService] File copied to user location: {_pendingDownloadContext.TargetPath}");
+
+                    // Notify Vue about download completion
+                    NotifyDownloadComplete(_pendingDownloadContext.TargetPath, true);
+                    _pendingDownloadContext = null;
+                }
+                else if (_pendingViewingContext != null)
+                {
+                    // This was a viewing operation - notify Vue with relative URL from PDF.js viewer's perspective
+                    var relativeUrl = $"hebrewbookscache/{fileName}";
+                    Console.WriteLine($"[HebrewBooksService] Handling viewing completion - relative URL: {relativeUrl}");
+
+                    // Notify Vue about viewing readiness
+                    NotifyViewingReady(_pendingViewingContext.FileName, relativeUrl, _pendingViewingContext.BookId, _pendingViewingContext.Title);
+                    _pendingViewingContext = null;
+                }
+                else
+                {
+                    Console.WriteLine($"[HebrewBooksService] No pending context found - this might be an unexpected download");
+                }
             }
             catch (Exception ex)
             {
@@ -224,15 +397,15 @@ namespace Zayit.Services
                     dialog.Filter = "PDF files (*.pdf)|*.pdf";
                     dialog.FileName = $"{title}.pdf";
                     dialog.Title = "Save Hebrew Book";
-                    
+
                     if (dialog.ShowDialog() != DialogResult.OK)
                     {
                         return new { success = false, cancelled = true };
                     }
-                    
+
                     // Copy cached file to user's chosen location
                     File.Copy(cachedPath, dialog.FileName, true);
-                    
+
                     return new { success = true, filePath = dialog.FileName };
                 }
             }
@@ -244,28 +417,100 @@ namespace Zayit.Services
         }
 
         /// <summary>
-        /// Notify Vue about download completion
+        /// Notify Vue about download completion (Flow 2: SaveAs download)
         /// </summary>
-        private async void NotifyDownloadComplete(string fileName, string virtualUrl)
+        private async void NotifyDownloadComplete(string filePath, bool success)
         {
             try
             {
+                Console.WriteLine($"[HebrewBooksService] Notifying Vue about download completion - filePath: {filePath}, success: {success}");
+
                 var script = $@"
-                    if (window.handleHebrewBookDownloadComplete) {{
-                        window.handleHebrewBookDownloadComplete({{
-                            fileName: '{fileName}',
-                            url: '{virtualUrl}',
-                            success: true
-                        }});
-                    }}
+                    console.log('[HebrewBooksService] Download completed notification - filePath: {filePath}, success: {success}');
+                    // For download flow, we just log completion - no further action needed in Vue
                 ";
-                
+
                 await _webView.ExecuteScriptAsync(script);
+                Console.WriteLine($"[HebrewBooksService] Download completion notification sent");
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[HebrewBooksService] Error notifying download complete: {ex}");
             }
+        }
+
+        /// <summary>
+        /// Notify Vue about viewing readiness (Flow 1: Cache and view)
+        /// </summary>
+        private async void NotifyViewingReady(string fileName, string relativeUrl, string bookId, string title)
+        {
+            try
+            {
+                Console.WriteLine($"[HebrewBooksService] Notifying Vue about viewing readiness - fileName: {fileName}, relativeUrl: {relativeUrl}");
+
+                var script = $@"
+                    console.log('[HebrewBooksService] Executing viewing ready notification for:', '{fileName}', '{relativeUrl}');
+                    if (window.handleHebrewBookViewingReady) {{
+                        console.log('[HebrewBooksService] Calling handleHebrewBookViewingReady');
+                        window.handleHebrewBookViewingReady({{
+                            fileName: '{fileName}',
+                            url: '{relativeUrl}',
+                            bookId: '{bookId}',
+                            bookTitle: '{title}',
+                            success: true
+                        }});
+                    }} else {{
+                        console.error('[HebrewBooksService] handleHebrewBookViewingReady not found on window');
+                        console.log('[HebrewBooksService] Available window properties:', Object.keys(window));
+                    }}
+                ";
+
+                await _webView.ExecuteScriptAsync(script);
+                Console.WriteLine($"[HebrewBooksService] Viewing ready notification script executed successfully");
+
+                // Add a small delay and try again if the handler wasn't available
+                await Task.Delay(500);
+
+                var retryScript = $@"
+                    if (window.handleHebrewBookViewingReady) {{
+                        console.log('[HebrewBooksService] Retry: Calling handleHebrewBookViewingReady');
+                        window.handleHebrewBookViewingReady({{
+                            fileName: '{fileName}',
+                            url: '{relativeUrl}',
+                            bookId: '{bookId}',
+                            bookTitle: '{title}',
+                            success: true
+                        }});
+                    }} else {{
+                        console.warn('[HebrewBooksService] Retry: handleHebrewBookViewingReady still not available');
+                    }}
+                ";
+
+                await _webView.ExecuteScriptAsync(retryScript);
+                Console.WriteLine($"[HebrewBooksService] Retry viewing ready notification script executed");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[HebrewBooksService] Error notifying viewing ready: {ex}");
+            }
+        }
+
+        /// <summary>
+        /// Get expected filename from pending context
+        /// </summary>
+        private string GetExpectedFileName()
+        {
+            if (_pendingViewingContext != null)
+            {
+                return _pendingViewingContext.FileName;
+            }
+
+            if (_pendingDownloadContext != null)
+            {
+                return _pendingDownloadContext.FileName;
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -279,7 +524,7 @@ namespace Zayit.Services
                 var query = uri.Query;
                 if (query.StartsWith("?"))
                     query = query.Substring(1);
-                
+
                 var pairs = query.Split('&');
                 foreach (var pair in pairs)
                 {
@@ -290,7 +535,7 @@ namespace Zayit.Services
                         return $"hebrewbook_{req}.pdf";
                     }
                 }
-                
+
                 return null;
             }
             catch
@@ -312,20 +557,33 @@ namespace Zayit.Services
             return fileName;
         }
 
+        /// <summary>
+        /// Get the Hebrew books cache directory path within PDF.js web folder
+        /// </summary>
+        private string GetCacheDirectory()
+        {
+            var htmlPath = GetHtmlPath();
+            var pdfJsWebPath = Path.Combine(htmlPath, "pdfjs", "web");
+            var cacheDir = Path.Combine(pdfJsWebPath, "hebrewbookscache");
+
+            // Ensure cache directory exists
+            Directory.CreateDirectory(cacheDir);
+
+            return cacheDir;
+        }
+
+        /// <summary>
+        /// Get the full path for a cached Hebrew book file
+        /// </summary>
+        private string GetCachedFilePath(string fileName)
+        {
+            return Path.Combine(GetCacheDirectory(), fileName);
+        }
+
         private string GetHtmlPath()
         {
             var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            var htmlPath = Path.Combine(baseDir, "Html");
-            
-            if (!Directory.Exists(htmlPath))
-            {
-                htmlPath = Path.Combine(baseDir, "..", "..", "..", "zayit-vue", "dist");
-                if (!Directory.Exists(htmlPath))
-                {
-                    htmlPath = Path.Combine(baseDir, "dist");
-                }
-            }
-            
+            var htmlPath = Path.Combine(baseDir, "zayit-vue-app");
             return Path.GetFullPath(htmlPath);
         }
 

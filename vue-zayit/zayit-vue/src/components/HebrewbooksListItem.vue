@@ -6,12 +6,12 @@
         <div class="flex-between book-header">
             <div class="flex-row title-author-line">
                 <h3 class="book-title ellipsis"
-                    :title="book.Title">{{ book.Title }}</h3>
-                <span v-if="book.Author"
-                      class="book-author text-secondary smaller-em">{{ book.Author }}</span>
+                    :title="book.title">{{ book.title }}</h3>
+                <span v-if="book.author"
+                      class="book-author text-secondary smaller-em">{{ book.author }}</span>
             </div>
             <button class="flex-center c-pointer download-btn hover-bg reactive-icon"
-                    :title="'הורד את ' + book.Title"
+                    :title="'הורד את ' + book.title"
                     @click.stop="trackDownload(book)">
                 <Icon icon="fluent:arrow-download-20-regular" />
             </button>
@@ -19,12 +19,12 @@
 
         <!-- Details: Tags on left (RTL), Other info on right (RTL) -->
         <div class="flex-between book-details">
-            <!-- Left side in RTL (visually right): Tags -->
-            <div v-if="book.Tags"
+            <!-- Left side in RTL (visually right): Dynamic Tags -->
+            <div v-if="getBookTags(book).length > 0"
                  class="tags-section ellipsis">
                 <span class="detail-icon">🏷️</span>
                 <div class="tags-container ellipsis">
-                    <span v-for="tag in getTagsArray(book.Tags)"
+                    <span v-for="tag in getBookTags(book)"
                           :key="tag"
                           class="tag">{{ tag }}</span>
                 </div>
@@ -32,22 +32,22 @@
 
             <!-- Right side in RTL (visually left): Pages, Year, Place -->
             <div class="detail-items ellipsis">
-                <span v-if="book.Pages"
+                <span v-if="book.pages"
                       class="detail-item">
                     <span class="detail-icon">📄</span>
-                    {{ book.Pages }} עמודים
+                    {{ book.pages }} עמודים
                 </span>
 
-                <span v-if="book.Printing_Year"
+                <span v-if="book.printingYear"
                       class="detail-item">
                     <span class="detail-icon">📅</span>
-                    {{ book.Printing_Year }}
+                    {{ book.printingYear }}
                 </span>
 
-                <span v-if="book.Printing_Place"
+                <span v-if="book.printingPlace"
                       class="detail-item">
                     <span class="detail-icon">📍</span>
-                    {{ book.Printing_Place }}
+                    {{ book.printingPlace }}
                 </span>
             </div>
         </div>
@@ -58,6 +58,7 @@
 import type { HebrewBook } from '../types/HebrewBook'
 import { useHebrewBooksStore } from '../stores/hebrewBooksStore'
 import { Icon } from '@iconify/vue'
+import { parseTagsFromCsv } from '../utils/hebrewBookTags'
 
 defineProps<{
     book: HebrewBook
@@ -72,22 +73,19 @@ const store = useHebrewBooksStore()
 const handleBookClick = (book: HebrewBook) => {
     emit('bookClicked', book)
     // Navigate to PDF view with Hebrew book
-    store.openHebrewBookViewer(book.ID_Book, book.Title)
+    store.openHebrewBookViewer(book.id, book.title)
 }
 
 const trackDownload = async (book: HebrewBook) => {
     // Track the interaction
-    await store.trackBookInteraction(book.ID_Book)
+    await store.trackBookInteraction(book.id)
 
     // Trigger download with save dialog
-    store.downloadHebrewBook(book.ID_Book, book.Title)
+    store.downloadHebrewBook(book.id, book.title)
 }
 
-const getTagsArray = (tags: string): string[] => {
-    return tags
-        .split('\\')
-        .map((tag) => tag.trim())
-        .filter((tag) => tag.length > 0)
+const getBookTags = (book: HebrewBook): string[] => {
+    return parseTagsFromCsv(book._csvTags || '')
 }
 </script>
 

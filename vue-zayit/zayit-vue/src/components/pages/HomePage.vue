@@ -14,7 +14,8 @@
                          icon="fluent-color:settings-24"
                          @click="openSettings" />
 
-                <AppTile label="היברו-בוקס"
+                <AppTile v-if="isWebViewAvailable"
+                         label="היברו-בוקס"
                          image-src="/Hebrewbooks.png"
                          @click="openHebrewBooks" />
 
@@ -27,12 +28,19 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useTabStore } from '../../stores/tabStore';
 import { pdfService } from '../../services/pdfService';
+import { webviewBridge } from '../../services/webviewBridge';
 import UniformGrid from '../UniformGrid.vue';
 import AppTile from '../AppTile.vue';
 
 const tabStore = useTabStore();
+
+// Check if WebView is available for Hebrew Books functionality
+const isWebViewAvailable = computed(() => {
+    return webviewBridge.isAvailable();
+});
 
 const openKezayit = () => {
     tabStore.openKezayitLanding();

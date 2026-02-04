@@ -5,9 +5,9 @@ export class PopularityManager {
   // Calculate combined popularity score using IndexedDB history
   static async calculateCombinedScore(book: HebrewBook): Promise<number> {
     try {
-      const historyEntry = await HistoryService.getBookHistory(book.ID_Book)
+      const historyEntry = await HistoryService.getBookHistory(book.id)
       if (!historyEntry) return 0
-      
+
       return HistoryService.calculatePopularityScore(historyEntry)
     } catch (error) {
       console.error('Error calculating combined score:', error)
@@ -20,21 +20,21 @@ export class PopularityManager {
     try {
       // Get all history entries
       const historyEntries = await HistoryService.getAllHistory()
-      
+
       // If no history, return empty array (no books to show)
       if (historyEntries.length === 0) {
         return []
       }
-      
+
       const historyMap = new Map(historyEntries.map(entry => [entry.id, entry]))
 
       // Only include books that have history entries
       const booksWithHistory = books
-        .filter(book => historyMap.has(book.ID_Book))
+        .filter(book => historyMap.has(book.id))
         .map(book => {
-          const historyEntry = historyMap.get(book.ID_Book)!
+          const historyEntry = historyMap.get(book.id)!
           const popularityScore = HistoryService.calculatePopularityScore(historyEntry)
-          
+
           return {
             ...book,
             userScore: historyEntry.accessCount,
@@ -48,7 +48,7 @@ export class PopularityManager {
         if (b.combinedScore !== a.combinedScore) {
           return b.combinedScore - a.combinedScore
         }
-        return a.Title.localeCompare(b.Title)
+        return a.title.localeCompare(b.title)
       })
 
       // Apply limit if provided
@@ -63,33 +63,33 @@ export class PopularityManager {
   // Track user interaction with a book using IndexedDB
   static async trackBookInteraction(books: HebrewBook[], bookId: string): Promise<HebrewBook[]> {
     try {
-      const book = books.find(b => b.ID_Book === bookId)
+      const book = books.find(b => b.id === bookId)
       if (!book) return books
 
       // Track in IndexedDB
-      await HistoryService.trackBookInteraction(bookId, book.Title, book.Author)
+      await HistoryService.trackBookInteraction(bookId, book.title, book.author)
 
       // Update the book in the array with new interaction data
       const updatedBooks = [...books]
-      const bookIndex = updatedBooks.findIndex(b => b.ID_Book === bookId)
-      
+      const bookIndex = updatedBooks.findIndex(b => b.id === bookId)
+
       if (bookIndex !== -1) {
         const currentBook = updatedBooks[bookIndex]
         if (currentBook) {
           updatedBooks[bookIndex] = {
-            ID_Book: currentBook.ID_Book,
-            Title: currentBook.Title,
-            Author: currentBook.Author,
-            Printing_Place: currentBook.Printing_Place,
-            Printing_Year: currentBook.Printing_Year,
-            Pages: currentBook.Pages,
-            Tags: currentBook.Tags,
+            id: currentBook.id,
+            title: currentBook.title,
+            author: currentBook.author,
+            printingPlace: currentBook.printingPlace,
+            printingYear: currentBook.printingYear,
+            pages: currentBook.pages,
+            _csvTags: currentBook._csvTags,
             userScore: (currentBook.userScore || 0) + 1,
             lastAccessed: Date.now()
           }
         }
       }
-      
+
       return updatedBooks
     } catch (error) {
       console.error('Error tracking book interaction:', error)
@@ -102,9 +102,9 @@ export class PopularityManager {
     try {
       const historyEntries = await HistoryService.getAllHistory()
       const historyMap = new Map(historyEntries.map(entry => [entry.id, entry]))
-      
+
       return books.map(book => {
-        const historyEntry = historyMap.get(book.ID_Book)
+        const historyEntry = historyMap.get(book.id)
         if (historyEntry) {
           return {
             ...book,

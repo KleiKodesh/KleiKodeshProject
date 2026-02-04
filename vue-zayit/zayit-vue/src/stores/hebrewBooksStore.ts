@@ -1,9 +1,11 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import type { HebrewBook } from '../types/HebrewBook'
 import { CsvLoader } from '../services/hebrewBooksCsvLoader'
 import { PopularityManager } from '../services/hebrewBooksPopularityManager'
 import { HebrewBooksSearchService } from '../services/hebrewBooksSearchService'
+import { useTabStore } from './tabStore'
+import { webviewHebrewBooks } from '../services/webviewHebrewBooks'
 
 // Create debounced search function outside store to persist across instances
 let globalDebouncedSearch: ((value: string) => void) | null = null
@@ -25,7 +27,7 @@ export const useHebrewBooksStore = defineStore('hebrewBooks', () => {
   const hasBooks = computed(() => books.value.length > 0)
   const selectedBook = computed(() => {
     if (!selectedBookId.value) return null
-    return books.value.find(book => book.ID_Book === selectedBookId.value) || null
+    return books.value.find(book => book.id === selectedBookId.value) || null
   })
 
   // Actions
@@ -73,10 +75,10 @@ export const useHebrewBooksStore = defineStore('hebrewBooks', () => {
 
   // Create debounced search function once globally
   if (!globalDebouncedSearch) {
-    globalDebouncedSearch = HebrewBooksSearchService.createDebouncedSearch((value: string) => {
+    globalDebouncedSearch = HebrewBooksSearchService.createDebouncedSearch(async (value: string) => {
       debouncedSearchTerm.value = value
-      updateFilteredBooks() // Remove await since callback should return void
-    }, 300)
+      await updateFilteredBooks()
+    }, 150)
   }
 
   const performDebouncedSearch = (term: string) => {
@@ -98,12 +100,18 @@ export const useHebrewBooksStore = defineStore('hebrewBooks', () => {
   }
 
   // Hebrew Books PDF actions
+
+  // Flow 1: Open Hebrew Book for viewing (may cache if needed, no SaveAs dialog)
   const openHebrewBookViewer = async (bookId: string, title: string) => {
     console.log(`[HebrewBooks] Starting openHebrewBookViewer - bookId: ${bookId}, title: ${title}`)
 
-    // Import services dynamically to avoid circular dependencies
-    const { useTabStore } = await import('../stores/tabStore')
-    const { webviewHebrewBooks } = await import('../services/webviewHebrewBooks')
+    // Check WebView availability first - don't create tab if it won't work
+    if (!webviewHebrewBooks.isAvailable()) {
+      console.error('[HebrewBooks] WebView bridge not available - Hebrew Books viewing requires C# host')
+      return { success: false }
+    }
+
+    // WebView is available, proceed with tab creation and viewing flow
     const tabStore = useTabStore()
 
     // Navigate to Hebrew books view page and set title immediately
@@ -117,90 +125,101 @@ export const useHebrewBooksStore = defineStore('hebrewBooks', () => {
       console.log('[HebrewBooks] Set tab title to:', title)
     }
 
-    // Use unified Hebrew Books service
-    if (webviewHebrewBooks.isAvailable()) {
-      console.log('[HebrewBooks] WebView bridge available, starting Hebrew book viewing flow')
-      try {
-        const result = await webviewHebrewBooks.prepareForViewing(bookId, title)
+    // Use C# to prepare book for viewing (will cache if needed)
+    console.log('[HebrewBooks] Preparing Hebrew book for viewing through C#')
+    try {
+      const result = await webviewHebrewBooks.prepareForViewing(bookId, title)
 
-        if (result.success) {
-          if (result.cached && result.url) {
-            // File was cached, set PDF state immediately
-            console.log('[HebrewBooks] File was cached, setting PDF state:', result.url)
-            if (tab) {
-              tab.pdfState = {
-                fileName: `${title}.pdf`,
-                fileUrl: result.url,
-                source: 'hebrewbook',
-                bookId: bookId,
-                bookTitle: title
-              }
+      if (result.success) {
+        if (result.cached && result.url) {
+          // File was already cached, set PDF state immediately
+          console.log('[HebrewBooks] File was cached, setting PDF state:', result.url)
+          if (tab) {
+            tab.pdfState = {
+              fileName: `${title}.pdf`,
+              fileUrl: result.url,
+              source: 'hebrewbook',
+              bookId: bookId,
+              bookTitle: title
             }
-          } else {
-            // File not cached, trigger download and wait for completion
-            console.log('[HebrewBooks] File not cached, triggering download')
-            webviewHebrewBooks.triggerBrowserDownload(bookId, title)
-
-            // Note: C# will handle download completion and notify via postMessage
-            // The HebrewBooksService will automatically set up the virtual URL
           }
-
-          console.log('[HebrewBooks] Hebrew book preparation completed successfully')
-          return { success: true }
         } else {
-          console.error('[HebrewBooks] Hebrew book preparation failed')
-          return { success: false }
+          // File not cached, trigger browser download that C# will capture
+          console.log('[HebrewBooks] File not cached, triggering browser download for viewing')
+          const downloadUrl = `https://download.hebrewbooks.org/downloadhandler.ashx?req=${bookId}`
+          console.log('[HebrewBooks] Creating browser download trigger for viewing:', downloadUrl)
+
+          // Create a hidden link and trigger download - C# will capture this
+          const link = document.createElement('a')
+          link.href = downloadUrl
+          link.style.display = 'none'
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+
+          console.log('[HebrewBooks] Browser download triggered for viewing - C# will capture and cache')
+          // Note: C# will capture the download, cache it, and notify Vue when ready
+          // The HebrewBooksService will automatically set up the virtual URL and call handleHebrewBookViewingReady
         }
-      } catch (error) {
-        console.error('[HebrewBooks] Failed to prepare Hebrew book for viewing:', error)
+
+        console.log('[HebrewBooks] Hebrew book viewing preparation completed successfully')
+        return { success: true }
+      } else {
+        console.error('[HebrewBooks] Hebrew book viewing preparation failed')
         return { success: false }
       }
-    } else {
-      console.log('[HebrewBooks] WebView bridge not available, using development mode fallback')
-      // Development mode fallback - open in new tab
-      const url = `https://download.hebrewbooks.org/downloadhandler.ashx?req=${bookId}`
-      window.open(url, '_blank')
-      return { success: true }
+    } catch (error) {
+      console.error('[HebrewBooks] Failed to prepare Hebrew book for viewing:', error)
+      return { success: false }
     }
   }
 
+  // Flow 2: Download Hebrew Book with SaveAs dialog (user chooses location)
   const downloadHebrewBook = async (bookId: string, title: string) => {
     console.log(`[HebrewBooks] Starting downloadHebrewBook - bookId: ${bookId}, title: ${title}`)
 
-    // Import service dynamically to avoid circular dependencies
-    const { webviewHebrewBooks } = await import('../services/webviewHebrewBooks')
+    // Hebrew Books download only works through C# WebView
+    if (!webviewHebrewBooks.isAvailable()) {
+      console.error('[HebrewBooks] WebView bridge not available - Hebrew Books download requires C# host')
+      return
+    }
 
-    // Use unified Hebrew Books service
-    if (webviewHebrewBooks.isAvailable()) {
-      console.log('[HebrewBooks] WebView bridge available, starting Hebrew book download flow')
-      try {
-        const result = await webviewHebrewBooks.prepareForDownload(bookId, title)
+    console.log('[HebrewBooks] Starting Hebrew book download with SaveAs dialog through C#')
+    try {
+      // Use C# SaveAs dialog and handle the entire download process in C#
+      const result = await webviewHebrewBooks.prepareForDownload(bookId, title)
 
-        if (result.success && !result.cancelled) {
-          console.log('[HebrewBooks] Download preparation successful, triggering browser download')
-          webviewHebrewBooks.triggerBrowserDownload(bookId, title)
-
-          // Note: C# will handle download capture and save to user's chosen location
-          console.log('[HebrewBooks] Hebrew book download initiated successfully')
-        } else if (result.cancelled) {
-          console.log('[HebrewBooks] Hebrew book download was cancelled by user')
+      if (result.success && !result.cancelled) {
+        // Check if file was already cached
+        if (result.filePath) {
+          // File was already cached and copied to user location
+          console.log('[HebrewBooks] Hebrew book download completed successfully (from cache)')
+          console.log('[HebrewBooks] File saved to:', result.filePath)
         } else {
-          console.error('[HebrewBooks] Hebrew book download preparation failed')
+          // File not cached, trigger browser download that C# will capture
+          console.log('[HebrewBooks] File not cached, triggering browser download for SaveAs')
+          const downloadUrl = `https://download.hebrewbooks.org/downloadhandler.ashx?req=${bookId}`
+          console.log('[HebrewBooks] Creating browser download trigger for SaveAs:', downloadUrl)
+
+          // Create a hidden link and trigger download - C# will capture this
+          const link = document.createElement('a')
+          link.href = downloadUrl
+          link.style.display = 'none'
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+
+          console.log('[HebrewBooks] Browser download triggered for SaveAs - C# will capture and copy to user location')
+          // Note: C# will capture the download, copy to user's chosen location, and notify Vue when complete
+          // The HebrewBooksService will call handleHebrewBookDownloadComplete when done
         }
-      } catch (error) {
-        console.error('[HebrewBooks] Failed to prepare Hebrew book for download:', error)
+      } else if (result.cancelled) {
+        console.log('[HebrewBooks] Hebrew book download was cancelled by user')
+      } else {
+        console.error('[HebrewBooks] Hebrew book download failed')
       }
-    } else {
-      console.log('[HebrewBooks] WebView bridge not available, using development mode fallback')
-      // Development mode fallback - trigger browser download directly
-      const url = `https://download.hebrewbooks.org/downloadhandler.ashx?req=${bookId}`
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `${title}.pdf`
-      link.style.display = 'none'
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
+    } catch (error) {
+      console.error('[HebrewBooks] Failed to download Hebrew book:', error)
     }
   }
 

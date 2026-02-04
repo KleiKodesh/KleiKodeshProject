@@ -15,7 +15,8 @@
             :src="hebrewBookUrl"
             class="hebrew-book-iframe"
             title="Hebrew Book Viewer"
-            @load="onHebrewBookIframeLoad">
+            @load="onHebrewBookIframeLoad"
+            @error="onHebrewBookIframeError">
     </iframe>
 
     <!-- Show error state if something went wrong -->
@@ -64,17 +65,48 @@ const hebrewBookUrl = computed(() => {
     params.set('file', tab.pdfState.fileUrl);
     params.set('locale', 'he'); // Force Hebrew locale for tooltips
     
-    return `/pdfjs/web/viewer.html?${params.toString()}`;
+    const finalUrl = `/pdfjs/web/viewer.html?${params.toString()}`;
+    console.log('[HebrewBooksViewPage] Constructed PDF viewer URL:', {
+      fileUrl: tab.pdfState.fileUrl,
+      finalUrl: finalUrl,
+      tabTitle: tab.title,
+      pdfState: tab.pdfState
+    });
+    
+    // Also log the individual components for debugging
+    console.log('[HebrewBooksViewPage] URL components:', {
+      baseViewer: '/pdfjs/web/viewer.html',
+      fileParam: tab.pdfState.fileUrl,
+      localeParam: 'he',
+      fullParams: params.toString()
+    });
+    
+    return finalUrl;
   }
+  console.log('[HebrewBooksViewPage] No Hebrew book URL available:', {
+    hasTab: !!tab,
+    hasPdfState: !!tab?.pdfState,
+    pdfSource: tab?.pdfState?.source,
+    hasFileUrl: !!tab?.pdfState?.fileUrl,
+    currentPage: tab?.currentPage
+  });
   return '';
 });
 
 // Sync theme when Hebrew book iframe loads
 const onHebrewBookIframeLoad = () => {
+  console.log('[HebrewBooksViewPage] Hebrew book iframe loaded successfully');
   // Small delay to ensure PDF.js is fully initialized
   setTimeout(() => {
     syncPdfViewerTheme();
   }, 100);
+};
+
+// Handle iframe loading errors
+const onHebrewBookIframeError = (event: Event) => {
+  console.error('[HebrewBooksViewPage] Hebrew book iframe failed to load:', event);
+  hasError.value = true;
+  isLoading.value = false;
 };
 
 // Check if we have a Hebrew book source
@@ -91,9 +123,16 @@ const showPlaceholder = computed(() => {
 
 // Watch for changes in tab state to manage loading states and auto-reload Hebrew books
 watch(() => tabStore.activeTab?.pdfState, async (pdfState, oldPdfState) => {
+  console.log('[HebrewBooksViewPage] PDF state changed:', {
+    newState: pdfState,
+    oldState: oldPdfState,
+    currentPage: tabStore.activeTab?.currentPage
+  });
+
   if (pdfState?.source === 'hebrewbook') {
     if (pdfState.fileUrl) {
       // Hebrew book is ready
+      console.log('[HebrewBooksViewPage] Hebrew book is ready with URL:', pdfState.fileUrl);
       isLoading.value = false;
       hasError.value = false;
     } else if (pdfState.bookId && pdfState.bookTitle && !isLoading.value) {
@@ -124,6 +163,7 @@ watch(() => tabStore.activeTab?.pdfState, async (pdfState, oldPdfState) => {
       }
     } else {
       // Hebrew book is being prepared
+      console.log('[HebrewBooksViewPage] Hebrew book is being prepared...');
       isLoading.value = true;
       hasError.value = false;
     }
@@ -132,9 +172,11 @@ watch(() => tabStore.activeTab?.pdfState, async (pdfState, oldPdfState) => {
     const tab = tabStore.activeTab;
     if (tab?.currentPage === 'hebrewbooks-view') {
       // We're on Hebrew books page but no Hebrew book is being loaded
+      console.log('[HebrewBooksViewPage] On Hebrew books page but no Hebrew book loading');
       isLoading.value = true;
       hasError.value = false;
     } else {
+      console.log('[HebrewBooksViewPage] Not on Hebrew books page or no Hebrew book');
       isLoading.value = false;
       hasError.value = false;
     }

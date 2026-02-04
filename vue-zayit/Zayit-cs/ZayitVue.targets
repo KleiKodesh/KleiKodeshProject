@@ -33,10 +33,12 @@
     
     <Message Text="[3/4] Syncing Vue dist to $(MSBuildProjectName) output..." Importance="high" />
     <RemoveDir Directories="$(OutDir)zayit-vue-app" Condition="Exists('$(OutDir)zayit-vue-app')" />
-    <Message Text="Copying complete Vue dist output to: $(OutDir)zayit-vue-app\" Importance="high" />
-    <Exec Command="xcopy /E /I /Y &quot;$(MSBuildThisFileDirectory)..\zayit-vue\dist\*&quot; &quot;$(OutDir)zayit-vue-app\&quot;" 
-          ContinueOnError="false" />
-    <Message Text="Vue dist synced to $(MSBuildProjectName) output!" Importance="high" />
+    <MakeDir Directories="$(OutDir)zayit-vue-app" Condition="!Exists('$(OutDir)zayit-vue-app')" />
+    <Message Text="Copying Vue dist contents to: $(OutDir)zayit-vue-app\" Importance="high" />
+    <Exec Command="robocopy &quot;$(MSBuildThisFileDirectory)..\zayit-vue\dist&quot; &quot;$(OutDir)zayit-vue-app&quot; /E /NFL /NDL /NJH /NJS /NC /NS /NP" 
+          ContinueOnError="true" 
+          IgnoreExitCode="true" />
+    <Message Text="Vue dist contents synced to $(MSBuildProjectName) output!" Importance="high" />
     
     <Message Text="[4/4] Verifying deployment..." Importance="high" />
     <Error Text="ERROR: Vue index.html not found in output!" 

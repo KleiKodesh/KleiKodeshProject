@@ -48,8 +48,8 @@
             <span class="dropdown-label">הגדרות</span>
           </div>
 
-          <!-- Hebrew Books - only show on Zayit landing page, not homepage -->
-          <div v-if="!isHomepage"
+          <!-- Hebrew Books - only show on Zayit landing page, not homepage, and only in WebView -->
+          <div v-if="!isHomepage && isWebViewAvailable"
                @click.stop="handleHebrewBooksClick"
                class="flex-row flex-center-start hover-bg c-pointer dropdown-item">
             <Icon icon="fluent:library-28-regular" />

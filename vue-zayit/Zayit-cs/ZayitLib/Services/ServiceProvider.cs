@@ -81,18 +81,18 @@ namespace Zayit.Services
         public object GetTempFileStats() => _pdf.GetTempFileStats();
         public void ClearTempFiles() => _pdf.ClearTempFiles();
 
-        // Hebrew Books Operations - Download Capture & Cache Management
-        public object PrepareHebrewBookDownload(string id, string title, string action) => 
-            _hebrewBooks.PrepareDownload(id, title, action).GetAwaiter().GetResult();
+        // Hebrew Books Operations - Two distinct flows
+        
+        // Flow 1: Prepare book for viewing (cache if needed, no SaveAs dialog)
+        public object PrepareHebrewBookForViewing(string bookId, string title) => 
+            _hebrewBooks.PrepareForViewing(bookId, title).GetAwaiter().GetResult();
+        
+        // Flow 2: Download book with SaveAs dialog (user chooses location)
+        public object PrepareHebrewBookForDownload(string bookId, string title) => 
+            _hebrewBooks.PrepareForDownload(bookId, title).GetAwaiter().GetResult();
         
         public object GetHebrewBooksCacheStats() => _hebrewBooks.GetCacheStats();
         public void ClearHebrewBooksCache() => _hebrewBooks.ClearCache();
-        
-        // Legacy method names for backward compatibility
-        public void DownloadHebrewBook(string url, string title) => 
-            _hebrewBooks.PrepareDownload(ExtractBookIdFromUrl(url), title, "view").GetAwaiter().GetResult();
-        
-        public void HandleHebrewBookDownloadCompleted(string path, string name) { /* Handled by service internally */ }
         public void HandleHebrewBookTabClosed(string name) => _hebrewBooks.HandleTabClosed(name);
 
         // Popout functionality

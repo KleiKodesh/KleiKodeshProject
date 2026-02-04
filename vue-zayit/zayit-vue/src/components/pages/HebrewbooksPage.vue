@@ -23,15 +23,26 @@
                 </div>
             </div>
 
-            <!-- Book list -->
+            <!-- Book list with virtualization -->
             <template v-else>
-                <HebrewbooksListItem v-for="book in store.filteredBooks"
-                                     :key="book.ID_Book"
-                                     :book="book"
-                                     @book-clicked="trackBookInteraction" />
+                <DynamicScroller v-if="store.filteredBooks.length > 0"
+                                 :items="store.filteredBooks"
+                                 :min-item-size="80"
+                                 :buffer="200"
+                                 key-field="id"
+                                 class="scroller">
+                    <template #default="{ item, index, active }">
+                        <DynamicScrollerItem :item="item"
+                                             :active="active"
+                                             :data-index="index">
+                            <HebrewbooksListItem :book="item"
+                                                 @book-clicked="trackBookInteraction" />
+                        </DynamicScrollerItem>
+                    </template>
+                </DynamicScroller>
 
                 <!-- Empty state -->
-                <div v-if="store.filteredBooks.length === 0"
+                <div v-else
                      class="flex-center height-fill">
                     <div class="flex-column flex-center">
                         <div class="empty-icon">📚</div>
@@ -62,6 +73,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
+import { DynamicScroller, DynamicScrollerItem } from 'vue3-virtual-scroller'
 import HebrewbooksListItem from '../HebrewbooksListItem.vue'
 import type { HebrewBook } from '../../types/HebrewBook'
 import { useHebrewBooksStore } from '../../stores/hebrewBooksStore'
@@ -71,7 +83,7 @@ const store = useHebrewBooksStore()
 
 // Track user interactions
 const trackBookInteraction = async (book: HebrewBook) => {
-    await store.trackBookInteraction(book.ID_Book)
+    await store.trackBookInteraction(book.id)
 }
 
 // Handle search input changes
@@ -87,6 +99,10 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.scroller {
+    height: 100%;
+}
+
 .loading-container {
     display: flex;
     flex-direction: column;
