@@ -48,6 +48,12 @@
             <span class="dropdown-label">הגדרות</span>
           </div>
 
+          <div @click.stop="handleWorkspaceManagerClick"
+               class="flex-row flex-center-start hover-bg c-pointer dropdown-item">
+            <Icon icon="fluent:apps-28-regular" />
+            <span class="dropdown-label">ניהול סביבות עבודה</span>
+          </div>
+
           <!-- Hebrew Books - only show on Zayit landing page, not homepage, and only in WebView -->
           <div v-if="!isHomepage && isWebViewAvailable"
                @click.stop="handleHebrewBooksClick"
@@ -148,6 +154,11 @@ const closeDropdown = () => {
 
 const handleSettingsClick = () => {
   tabStore.openSettings();
+  closeDropdown();
+};
+
+const handleWorkspaceManagerClick = () => {
+  tabStore.openWorkspaceManager();
   closeDropdown();
 };
 

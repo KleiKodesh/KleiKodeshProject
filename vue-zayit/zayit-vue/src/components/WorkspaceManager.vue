@@ -12,84 +12,59 @@
              type="text" />
       <button @click="createNew"
               :disabled="!newWorkspaceName.trim()"
-              class="btn-primary btn-icon-only"
-              title="צור סביבת עבודה חדשה">
+              class="btn-primary">
         <Icon icon="fluent:add-24-regular" />
+        צור
       </button>
     </div>
 
     <div class="workspace-list">
-      <div v-for="workspace in sortedWorkspaces"
-           :key="workspace.id"
+      <div v-for="workspaceId in tabStore.workspaces"
+           :key="workspaceId"
            class="workspace-item"
-           :class="{ 'active': workspace.id === workspaceStore.currentWorkspaceId }"
-           @click="switchTo(workspace.id)">
-        <div class="workspace-info">
-          <div v-if="editingId === workspace.id"
-               class="workspace-edit"
-               @click.stop>
-            <input v-model="editingName"
-                   @keydown.enter="saveEdit"
-                   @keydown.esc="cancelEdit"
-                   ref="editInput"
-                   class="workspace-name-input"
-                   type="text" />
-            <button @click="saveEdit"
-                    class="btn-icon"
-                    title="שמור">
-              <Icon icon="fluent:checkmark-24-regular" />
-            </button>
-            <button @click="cancelEdit"
-                    class="btn-icon"
-                    title="בטל">
-              <Icon icon="fluent:dismiss-24-regular" />
-            </button>
-          </div>
-          <div v-else
-               class="workspace-details">
-            <h3 class="workspace-name">{{ workspace.name }}</h3>
-            <div class="workspace-meta">
-              <span v-if="workspace.id === workspaceStore.currentWorkspaceId"
-                    class="current-badge">פעיל</span>
-              <span class="workspace-date">{{ formatDate(workspace.lastAccessedAt) }}</span>
-            </div>
-          </div>
-        </div>
+           :class="{ 'active': workspaceId === tabStore.currentWorkspaceId }"
+           @click="switchTo(workspaceId)">
 
-        <div class="workspace-actions"
+        <div v-if="editingId === workspaceId"
+             class="workspace-edit"
              @click.stop>
-          <button @click="startEdit(workspace)"
+          <input v-model="editingName"
+                 @keydown.enter="saveEdit"
+                 @keydown.esc="cancelEdit"
+                 ref="editInput"
+                 class="workspace-name-input small"
+                 type="text" />
+          <button @click="saveEdit"
                   class="btn-icon"
-                  title="שנה שם">
-            <Icon icon="fluent:edit-24-regular" />
+                  title="שמור">
+            <Icon icon="fluent:checkmark-24-regular" />
           </button>
-          <button v-if="workspace.id !== 'default'"
-                  @click="confirmDelete(workspace)"
-                  class="btn-icon btn-danger"
-                  title="מחק">
-            <Icon icon="fluent:delete-24-regular" />
+          <button @click="cancelEdit"
+                  class="btn-icon"
+                  title="בטל">
+            <Icon icon="fluent:dismiss-24-regular" />
           </button>
         </div>
-      </div>
-    </div>
 
-    <!-- Delete confirmation dialog -->
-    <div v-if="deleteConfirm"
-         class="modal-overlay"
-         @click.self="cancelDelete">
-      <div class="modal-content">
-        <h3>מחיקת סביבת עבודה</h3>
-        <p>האם אתה בטוח שברצונך למחוק את סביבת העבודה "{{ deleteConfirm.name }}"?</p>
-        <p class="warning">כל הטאבים והנתונים בסביבה זו יימחקו לצמיתות.</p>
-        <div class="modal-actions">
-          <button @click="executeDelete"
-                  class="btn-danger">
-            מחק
-          </button>
-          <button @click="cancelDelete"
-                  class="btn-secondary">
-            בטל
-          </button>
+        <div v-else
+             class="workspace-info">
+          <div class="workspace-name">{{ tabStore.getWorkspaceName(workspaceId) }}</div>
+          <div class="workspace-meta">{{ getWorkspaceTabCount(workspaceId) }} פריטים</div>
+
+          <div class="workspace-actions"
+               @click.stop>
+            <button @click="startEdit(workspaceId)"
+                    class="btn-icon"
+                    title="שנה שם">
+              <Icon icon="fluent:edit-24-regular" />
+            </button>
+            <button v-if="workspaceId !== 'default'"
+                    @click="deleteWorkspace(workspaceId)"
+                    class="btn-icon btn-danger"
+                    title="מחק">
+              <Icon icon="fluent:delete-24-regular" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -97,64 +72,46 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue';
+import { ref, nextTick } from 'vue';
 import { Icon } from '@iconify/vue';
-import { useWorkspaceStore, type Workspace } from '../stores/workspaceStore';
 import { useTabStore } from '../stores/tabStore';
 
-const workspaceStore = useWorkspaceStore();
 const tabStore = useTabStore();
 
 const newWorkspaceName = ref('');
 const editingId = ref<string | null>(null);
 const editingName = ref('');
 const editInput = ref<HTMLInputElement>();
-const deleteConfirm = ref<Workspace | null>(null);
 
-const sortedWorkspaces = computed(() => {
-  return [...workspaceStore.workspaces].sort((a, b) => {
-    // Default workspace always first
-    if (a.id === 'default') return -1;
-    if (b.id === 'default') return 1;
-    // Then by last accessed (most recent first)
-    return b.lastAccessedAt - a.lastAccessedAt;
-  });
-});
+const getWorkspaceTabCount = (workspaceId: string): number => {
+  if (workspaceId === tabStore.currentWorkspaceId) {
+    return tabStore.tabs.filter(tab => tab.currentPage !== 'workspaces').length;
+  }
 
-const formatDate = (timestamp: number): string => {
-  const date = new Date(timestamp);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return 'עכשיו';
-  if (diffMins < 60) return `לפני ${diffMins} דקות`;
-  if (diffHours < 24) return `לפני ${diffHours} שעות`;
-  if (diffDays < 7) return `לפני ${diffDays} ימים`;
-
-  return date.toLocaleDateString('he-IL', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  });
+  const storageKey = `tabStore_${workspaceId}`;
+  const stored = localStorage.getItem(storageKey);
+  if (stored) {
+    try {
+      const data = JSON.parse(stored);
+      return data.tabs?.length || 0;
+    } catch {
+      return 0;
+    }
+  }
+  return 0;
 };
 
 const createNew = () => {
   const name = newWorkspaceName.value.trim();
   if (!name) return;
 
-  const newId = workspaceStore.createWorkspace(name);
+  tabStore.createWorkspace(name);
   newWorkspaceName.value = '';
-
-  // Optionally switch to the new workspace
-  // workspaceStore.switchWorkspace(newId);
 };
 
-const startEdit = (workspace: Workspace) => {
-  editingId.value = workspace.id;
-  editingName.value = workspace.name;
+const startEdit = (workspaceId: string) => {
+  editingId.value = workspaceId;
+  editingName.value = tabStore.getWorkspaceName(workspaceId);
   nextTick(() => {
     editInput.value?.focus();
     editInput.value?.select();
@@ -163,7 +120,7 @@ const startEdit = (workspace: Workspace) => {
 
 const saveEdit = () => {
   if (editingId.value && editingName.value.trim()) {
-    workspaceStore.renameWorkspace(editingId.value, editingName.value.trim());
+    tabStore.renameWorkspace(editingId.value, editingName.value.trim());
   }
   cancelEdit();
 };
@@ -174,36 +131,27 @@ const cancelEdit = () => {
 };
 
 const switchTo = (workspaceId: string) => {
-  // Just switch workspace, stay on workspace manager page
-  workspaceStore.switchWorkspace(workspaceId);
-};
-
-const confirmDelete = (workspace: Workspace) => {
-  deleteConfirm.value = workspace;
-};
-
-const executeDelete = () => {
-  if (deleteConfirm.value) {
-    workspaceStore.deleteWorkspace(deleteConfirm.value.id);
+  if (workspaceId !== tabStore.currentWorkspaceId) {
+    tabStore.switchWorkspace(workspaceId);
   }
-  cancelDelete();
 };
 
-const cancelDelete = () => {
-  deleteConfirm.value = null;
+const deleteWorkspace = (workspaceId: string) => {
+  tabStore.deleteWorkspace(workspaceId);
 };
 </script>
 
 <style scoped>
 .workspace-manager {
-  max-width: 700px;
+  max-width: 600px;
   margin: 0 auto;
   padding: 20px 16px;
   direction: rtl;
 }
 
 .workspace-header {
-  margin-bottom: 16px;
+  margin-bottom: 20px;
+  text-align: center;
 }
 
 .workspace-header h2 {
@@ -213,101 +161,19 @@ const cancelDelete = () => {
   color: var(--text-primary);
 }
 
-.workspace-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.workspace-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  transition: all 0.2s ease;
-  cursor: pointer;
-}
-
-.workspace-item.active {
-  border-color: var(--accent-color);
-  background: var(--bg-tertiary);
-}
-
-.workspace-item:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  transform: translateY(-1px);
-}
-
-.workspace-item.active:hover {
-  transform: none;
-  cursor: default;
-}
-
-.workspace-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.workspace-edit {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.workspace-details {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.workspace-name {
-  font-size: 16px;
-  font-weight: 500;
-  margin: 0;
-  color: var(--text-primary);
-}
-
-.workspace-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.current-badge {
-  display: inline-block;
-  padding: 1px 6px;
-  background: var(--accent-color);
-  color: white;
-  border-radius: 3px;
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.workspace-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
 .workspace-create {
   display: flex;
   gap: 8px;
+  margin-bottom: 20px;
   padding: 12px;
   background: var(--bg-secondary);
   border: 2px dashed var(--border-color);
-  border-radius: 6px;
-  margin-bottom: 16px;
+  border-radius: 8px;
 }
 
 .workspace-name-input {
   flex: 1;
-  padding: 10px 12px;
+  padding: 8px 12px;
   border: 1px solid var(--border-color);
   border-radius: 6px;
   background: var(--bg-primary);
@@ -321,11 +187,16 @@ const cancelDelete = () => {
   border-color: var(--accent-color);
 }
 
+.workspace-name-input.small {
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
 .btn-primary {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 10px 16px;
+  padding: 8px 16px;
   background: var(--accent-color);
   color: white;
   border: none;
@@ -346,42 +217,77 @@ const cancelDelete = () => {
   cursor: not-allowed;
 }
 
-.btn-icon-only {
-  height: 38px;
-  width: 38px;
-  min-width: 38px;
-  padding: 0;
-  flex-shrink: 0;
+.workspace-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.btn-secondary {
-  padding: 10px 16px;
+.workspace-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
   background: var(--bg-secondary);
-  color: var(--text-primary);
   border: 1px solid var(--border-color);
   border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
   transition: all 0.2s ease;
+  cursor: pointer;
 }
 
-.btn-secondary:hover {
+.workspace-item.active {
+  border-color: var(--accent-color);
+  background: var(--bg-tertiary);
+  box-shadow: 0 0 0 1px var(--accent-color);
+}
+
+.workspace-item:hover:not(.active) {
   background: var(--hover-bg);
+}
+
+.workspace-edit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.workspace-info {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 12px;
+}
+
+.workspace-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.workspace-meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.workspace-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: auto;
 }
 
 .btn-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 32px;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   background: transparent;
   color: var(--text-primary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s ease;
   flex-shrink: 0;
@@ -398,75 +304,5 @@ const cancelDelete = () => {
 
 .btn-danger:hover {
   background: rgba(239, 68, 68, 0.1);
-}
-
-/* Modal styles */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10000;
-}
-
-.modal-content {
-  background: var(--bg-primary);
-  border-radius: 12px;
-  padding: 24px;
-  max-width: 400px;
-  width: 90%;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-}
-
-.modal-content h3 {
-  margin: 0 0 16px 0;
-  font-size: 20px;
-  color: var(--text-primary);
-}
-
-.modal-content p {
-  margin: 0 0 12px 0;
-  color: var(--text-secondary);
-  line-height: 1.5;
-}
-
-.modal-content .warning {
-  color: #ef4444;
-  font-weight: 500;
-}
-
-.modal-actions {
-  display: flex;
-  gap: 12px;
-  margin-top: 24px;
-  justify-content: flex-end;
-}
-
-.modal-actions button {
-  min-width: 70px;
-}
-
-.modal-actions .btn-danger {
-  background: #ef4444;
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  white-space: nowrap;
-  font-size: 14px;
-}
-
-.modal-actions .btn-danger:hover {
-  background: #dc2626;
-}
-
-.modal-actions .btn-secondary {
-  white-space: nowrap;
-  font-size: 14px;
-  padding: 8px 16px;
 }
 </style>

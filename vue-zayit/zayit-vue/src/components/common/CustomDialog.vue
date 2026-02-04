@@ -1,10 +1,18 @@
 <template>
-    <div v-if="isVisible" class="dialog-overlay" @click="handleOverlayClick">
-        <div class="dialog-container" @click.stop :class="dialogSizeClass">
+    <div v-if="isVisible"
+         class="dialog-overlay"
+         @click="handleOverlayClick">
+        <div class="dialog-container"
+             @click.stop
+             :class="dialogSizeClass">
             <!-- Header -->
-            <div v-if="title || showCloseButton" class="dialog-header">
-                <h3 v-if="title" class="dialog-title">{{ title }}</h3>
-                <button v-if="showCloseButton" @click="handleClose" class="dialog-close-btn">
+            <div v-if="title || showCloseButton"
+                 class="dialog-header">
+                <h3 v-if="title"
+                    class="dialog-title">{{ title }}</h3>
+                <button v-if="showCloseButton"
+                        @click="handleClose"
+                        class="dialog-close-btn">
                     ✕
                 </button>
             </div>
@@ -14,8 +22,11 @@
                 <!-- Slot for custom content -->
                 <slot>
                     <!-- Default content for simple dialogs -->
-                    <div v-if="message" class="dialog-message">
-                        <div v-if="icon" class="dialog-icon" :class="iconClass">
+                    <div v-if="message"
+                         class="dialog-message">
+                        <div v-if="icon"
+                             class="dialog-icon"
+                             :class="iconClass">
                             {{ icon }}
                         </div>
                         <p>{{ message }}</p>
@@ -24,14 +35,18 @@
             </div>
 
             <!-- Actions -->
-            <div v-if="showActions" class="dialog-actions">
+            <div v-if="showActions"
+                 class="dialog-actions">
                 <slot name="actions">
                     <!-- Default actions -->
-                    <button v-if="showCancel" @click="handleCancel" class="dialog-btn dialog-btn-cancel">
+                    <button v-if="showCancel"
+                            @click="handleCancel"
+                            class="dialog-btn dialog-btn-cancel">
                         {{ cancelText }}
                     </button>
-                    <button v-if="showConfirm" @click="handleConfirm" 
-                            class="dialog-btn dialog-btn-confirm" 
+                    <button v-if="showConfirm"
+                            @click="handleConfirm"
+                            class="dialog-btn dialog-btn-confirm"
                             :class="confirmVariantClass">
                         {{ confirmText }}
                     </button>
@@ -171,8 +186,13 @@ defineExpose({
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
 }
 
 .dialog-container {
@@ -187,11 +207,12 @@ defineExpose({
 }
 
 @keyframes slideIn {
-    from { 
+    from {
         opacity: 0;
         transform: translateY(-20px) scale(0.95);
     }
-    to { 
+
+    to {
         opacity: 1;
         transform: translateY(0) scale(1);
     }

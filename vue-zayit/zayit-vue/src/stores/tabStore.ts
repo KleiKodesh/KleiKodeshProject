@@ -6,6 +6,8 @@ import { useSettingsStore } from './settingsStore';
 import { webviewBridge } from '../services/webviewBridge';
 
 const STORAGE_KEY = 'tabStore';
+const CURRENT_WORKSPACE_KEY = 'zayit_current_workspace';
+const DEFAULT_WORKSPACE_ID = 'default';
 
 const PAGE_TITLES: Record<PageType, string> = {
     'homepage': 'דף הבית',
@@ -23,10 +25,28 @@ const PAGE_TITLES: Record<PageType, string> = {
 export const useTabStore = defineStore('tabs', () => {
     const tabs = ref<Tab[]>([]);
     const nextId = ref<number>(2);
+    const currentWorkspaceId = ref<string>(DEFAULT_WORKSPACE_ID);
+    const workspaces = ref<string[]>([DEFAULT_WORKSPACE_ID]);
+
+    const getStorageKey = (workspaceId: string) => `${STORAGE_KEY}_${workspaceId}`;
 
     const loadFromStorage = async () => {
         try {
-            const stored = localStorage.getItem(STORAGE_KEY);
+            // Load current workspace ID
+            const storedWorkspaceId = localStorage.getItem(CURRENT_WORKSPACE_KEY);
+            if (storedWorkspaceId) {
+                currentWorkspaceId.value = storedWorkspaceId;
+            }
+
+            // Load workspaces list
+            const workspacesData = localStorage.getItem('zayit_workspaces_list');
+            if (workspacesData) {
+                workspaces.value = JSON.parse(workspacesData);
+            }
+
+            // Load tabs for current workspace
+            const storageKey = getStorageKey(currentWorkspaceId.value);
+            const stored = localStorage.getItem(storageKey);
             if (stored) {
                 const data = JSON.parse(stored);
                 tabs.value = data.tabs || [];
@@ -91,6 +111,12 @@ export const useTabStore = defineStore('tabs', () => {
 
     const saveToStorage = () => {
         try {
+            // Save current workspace ID
+            localStorage.setItem(CURRENT_WORKSPACE_KEY, currentWorkspaceId.value);
+
+            // Save workspaces list
+            localStorage.setItem('zayit_workspaces_list', JSON.stringify(workspaces.value));
+
             // Only persist content tabs (bookview, pdfview, and hebrewbooks-view)
             const contentTabs = tabs.value.filter(tab =>
                 tab.currentPage === 'bookview' ||
@@ -123,7 +149,8 @@ export const useTabStore = defineStore('tabs', () => {
                 return cleanedTab;
             });
 
-            localStorage.setItem(STORAGE_KEY, JSON.stringify({
+            const storageKey = getStorageKey(currentWorkspaceId.value);
+            localStorage.setItem(storageKey, JSON.stringify({
                 tabs: cleanedTabs,
                 nextId: nextId.value
             }));
@@ -682,9 +709,142 @@ export const useTabStore = defineStore('tabs', () => {
         nextId.value = Math.max(newId + 1, nextId.value);
     };
 
+    // Workspace management functions
+    const createWorkspace = (name: string): string => {
+        const workspaceId = `workspace_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        workspaces.value.push(workspaceId);
+
+        // Save workspace name
+        localStorage.setItem(`zayit_workspace_name_${workspaceId}`, name);
+        localStorage.setItem(`zayit_workspace_created_${workspaceId}`, Date.now().toString());
+
+        return workspaceId;
+    };
+
+    const deleteWorkspace = (workspaceId: string) => {
+        if (workspaceId === DEFAULT_WORKSPACE_ID) {
+            throw new Error('Cannot delete default workspace');
+        }
+
+        // Remove from workspaces list
+        workspaces.value = workspaces.value.filter(id => id !== workspaceId);
+
+        // Clean up storage
+        localStorage.removeItem(getStorageKey(workspaceId));
+        localStorage.removeItem(`zayit_workspace_name_${workspaceId}`);
+        localStorage.removeItem(`zayit_workspace_created_${workspaceId}`);
+
+        // Switch to default if current workspace is being deleted
+        if (currentWorkspaceId.value === workspaceId) {
+            switchWorkspace(DEFAULT_WORKSPACE_ID);
+        }
+    };
+
+    const switchWorkspace = async (workspaceId: string) => {
+        if (!workspaces.value.includes(workspaceId)) {
+            throw new Error('Workspace not found');
+        }
+
+        // Check if workspace manager is currently active
+        const isWorkspaceManagerActive = tabs.value.some(tab => tab.isActive && tab.currentPage === 'workspaces');
+
+        // Save current workspace data
+        saveToStorage();
+
+        // Switch to new workspace
+        currentWorkspaceId.value = workspaceId;
+
+        // Load new workspace data
+        const storageKey = getStorageKey(workspaceId);
+        const stored = localStorage.getItem(storageKey);
+
+        if (stored) {
+            const data = JSON.parse(stored);
+            tabs.value = data.tabs || [];
+            nextId.value = data.nextId || 2;
+        } else {
+            // Create default tab for new workspace
+            tabs.value = [];
+            nextId.value = 2;
+            await createDefaultTab();
+        }
+
+        // If workspace manager was active, keep it active in the new workspace
+        if (isWorkspaceManagerActive) {
+            // Deactivate all loaded tabs
+            tabs.value.forEach(tab => tab.isActive = false);
+
+            // Add workspace manager tab to new workspace
+            const existingIds = new Set(tabs.value.map(t => t.id));
+            let newId = 1;
+            while (existingIds.has(newId)) {
+                newId++;
+            }
+
+            const workspaceManagerTab: Tab = {
+                id: newId,
+                title: PAGE_TITLES.workspaces,
+                isActive: true,
+                currentPage: 'workspaces'
+            };
+            tabs.value.push(workspaceManagerTab);
+            nextId.value = Math.max(newId + 1, nextId.value);
+        } else {
+            // Ensure at least one tab is active
+            const hasActiveTab = tabs.value.some(tab => tab.isActive);
+            if (tabs.value.length > 0 && !hasActiveTab) {
+                const firstTab = tabs.value[0];
+                if (firstTab) {
+                    firstTab.isActive = true;
+                }
+            }
+        }
+    };
+
+    const getWorkspaceName = (workspaceId: string): string => {
+        if (workspaceId === DEFAULT_WORKSPACE_ID) {
+            return 'ברירת מחדל';
+        }
+        return localStorage.getItem(`zayit_workspace_name_${workspaceId}`) || `סביבת עבודה ${workspaceId.slice(-4)}`;
+    };
+
+    const renameWorkspace = (workspaceId: string, newName: string) => {
+        localStorage.setItem(`zayit_workspace_name_${workspaceId}`, newName);
+    };
+
+    const openWorkspaceManager = () => {
+        // Check if workspace manager tab already exists
+        const existingWorkspaceTab = tabs.value.find(t => t.currentPage === 'workspaces');
+        if (existingWorkspaceTab) {
+            // Switch to existing workspace manager tab
+            setActiveTab(existingWorkspaceTab.id);
+            return;
+        }
+
+        // Create new workspace manager tab
+        tabs.value.forEach(tab => tab.isActive = false);
+
+        const existingIds = new Set(tabs.value.map(t => t.id));
+        let newId = 1;
+        while (existingIds.has(newId)) {
+            newId++;
+        }
+
+        const newTab: Tab = {
+            id: newId,
+            title: PAGE_TITLES.workspaces,
+            isActive: true,
+            currentPage: 'workspaces'
+        };
+        tabs.value.push(newTab);
+        nextId.value = Math.max(newId + 1, nextId.value);
+    };
+
     return {
         tabs,
         activeTab,
+        currentWorkspaceId,
+        workspaces,
         addTab,
         closeTab,
         closeTabById,
@@ -709,6 +869,12 @@ export const useTabStore = defineStore('tabs', () => {
         toggleAltTocDisplay,
         openKezayitLanding,
         openHebrewBooks,
-        openKezayitSearch
+        openKezayitSearch,
+        createWorkspace,
+        deleteWorkspace,
+        switchWorkspace,
+        getWorkspaceName,
+        renameWorkspace,
+        openWorkspaceManager
     };
 });
