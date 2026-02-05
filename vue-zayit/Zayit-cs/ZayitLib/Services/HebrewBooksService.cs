@@ -342,6 +342,9 @@ namespace Zayit.Services
                     Console.WriteLine($"[HebrewBooksService] Error checking file header: {ex.Message}");
                 }
 
+                // Enforce cache file limit after adding new file
+                _cache.EnforceFileLimit();
+
                 // Close the default download dialog
                 try
                 {
@@ -595,12 +598,20 @@ namespace Zayit.Services
         {
             try
             {
-                _cache.UnregisterActive(fileName);
-                Console.WriteLine($"[HebrewBooksService] Hebrew book tab closed: {fileName}");
+                var filePath = Path.Combine(GetCacheDirectory(), fileName);
+                if (File.Exists(filePath))
+                {
+                    File.Delete(filePath);
+                    Console.WriteLine($"[HebrewBooksService] Deleted Hebrew book from cache: {fileName}");
+                }
+                else
+                {
+                    Console.WriteLine($"[HebrewBooksService] Hebrew book file not found in cache: {fileName}");
+                }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[HebrewBooksService] Error handling tab closure: {ex}");
+                Console.WriteLine($"[HebrewBooksService] Error deleting Hebrew book from cache: {ex}");
             }
         }
 

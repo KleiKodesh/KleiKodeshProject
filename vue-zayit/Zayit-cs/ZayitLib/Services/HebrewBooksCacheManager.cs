@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
@@ -13,7 +12,6 @@ namespace Zayit.Services
     {
         private const int MAX_FILES = 10;
         private readonly string _cacheDir;
-        private readonly HashSet<string> _activeFiles = new HashSet<string>();
         private readonly object _lock = new object();
 
         public HebrewBooksCacheManager(string htmlPath)
@@ -23,27 +21,39 @@ namespace Zayit.Services
         }
 
         /// <summary>
-        /// Register a Hebrew book file as active (prevents deletion)
+        /// Enforce the maximum file limit using LRU eviction
+        /// Called when a new file is added to cache
         /// </summary>
-        public void RegisterActive(string fileName)
+        public void EnforceFileLimit()
         {
             lock (_lock)
             {
-                _activeFiles.Add(fileName);
-                EnforceFileLimit();
-            }
-        }
-
-        /// <summary>
-        /// Unregister a Hebrew book file as active (allows deletion)
-        /// </summary>
-        public void UnregisterActive(string fileName)
-        {
-            lock (_lock)
-            {
-                if (_activeFiles.Remove(fileName))
+                try
                 {
-                    TryDeleteFile(fileName);
+                    var files = Directory.GetFiles(_cacheDir, "*.pdf")
+                        .Select(f => new FileInfo(f))
+                        .OrderBy(f => f.LastAccessTime)
+                        .ToList();
+
+                    // Remove oldest files if we exceed the limit
+                    while (files.Count >= MAX_FILES)
+                    {
+                        var oldest = files.First();
+                        try
+                        {
+                            oldest.Delete();
+                            Console.WriteLine($"[HebrewBooksCacheManager] Evicted old file: {oldest.Name}");
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[HebrewBooksCacheManager] Error evicting file {oldest.Name}: {ex.Message}");
+                        }
+                        files.RemoveAt(0);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[HebrewBooksCacheManager] Error enforcing file limit: {ex.Message}");
                 }
             }
         }
@@ -63,7 +73,6 @@ namespace Zayit.Services
                     return new
                     {
                         totalFiles = files.Length,
-                        activeFiles = _activeFiles.Count,
                         totalSizeMB = Math.Round(totalSize / (1024.0 * 1024.0), 1),
                         maxFiles = MAX_FILES
                     };
@@ -71,7 +80,7 @@ namespace Zayit.Services
                 catch (Exception ex)
                 {
                     Console.WriteLine($"[HebrewBooksCacheManager] Error getting stats: {ex.Message}");
-                    return new { totalFiles = 0, activeFiles = 0, totalSizeMB = 0.0, maxFiles = MAX_FILES };
+                    return new { totalFiles = 0, totalSizeMB = 0.0, maxFiles = MAX_FILES };
                 }
             }
         }
@@ -85,8 +94,6 @@ namespace Zayit.Services
             {
                 try
                 {
-                    _activeFiles.Clear();
-
                     var files = Directory.GetFiles(_cacheDir, "*.pdf");
                     foreach (var file in files)
                     {
@@ -106,63 +113,6 @@ namespace Zayit.Services
                 {
                     Console.WriteLine($"[HebrewBooksCacheManager] Error clearing cache: {ex.Message}");
                 }
-            }
-        }
-
-        /// <summary>
-        /// Enforce the maximum file limit using LRU eviction
-        /// </summary>
-        private void EnforceFileLimit()
-        {
-            try
-            {
-                var files = Directory.GetFiles(_cacheDir, "*.pdf")
-                    .Select(f => new FileInfo(f))
-                    .OrderBy(f => f.LastAccessTime)
-                    .ToList();
-
-                // Remove oldest files that are not active
-                while (files.Count >= MAX_FILES)
-                {
-                    var oldest = files.First();
-                    if (!_activeFiles.Contains(oldest.Name))
-                    {
-                        try
-                        {
-                            oldest.Delete();
-                            Console.WriteLine($"[HebrewBooksCacheManager] Evicted old file: {oldest.Name}");
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine($"[HebrewBooksCacheManager] Error evicting file {oldest.Name}: {ex.Message}");
-                        }
-                    }
-                    files.RemoveAt(0);
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[HebrewBooksCacheManager] Error enforcing file limit: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Try to delete a file if tab was closed
-        /// </summary>
-        private void TryDeleteFile(string fileName)
-        {
-            try
-            {
-                var filePath = Path.Combine(_cacheDir, fileName);
-                if (File.Exists(filePath) && !_activeFiles.Contains(fileName))
-                {
-                    File.Delete(filePath);
-                    Console.WriteLine($"[HebrewBooksCacheManager] Deleted inactive file: {fileName}");
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[HebrewBooksCacheManager] Error deleting file {fileName}: {ex.Message}");
             }
         }
     }
