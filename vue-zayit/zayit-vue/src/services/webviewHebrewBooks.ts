@@ -30,6 +30,11 @@ export class WebviewHebrewBooksService {
         return await webviewBridge.prepareHebrewBookForDownload(bookId, title)
     }
 
+    // Check if Hebrew book file exists in cache
+    async checkInCache(bookId: string, title: string): Promise<{ exists: boolean; fileName?: string; url?: string }> {
+        return await webviewBridge.checkHebrewBookInCache(bookId, title)
+    }
+
     async notifyTabClosed(fileName: string): Promise<void> {
         return await webviewBridge.notifyHebrewBookTabClosed(fileName)
     }

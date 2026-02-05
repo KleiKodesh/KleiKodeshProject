@@ -207,6 +207,19 @@ class WebViewBridge {
         }
     }
 
+    // Check if Hebrew book file exists in cache
+    async checkHebrewBookInCache(bookId: string, title: string): Promise<{ exists: boolean; fileName?: string; url?: string }> {
+        console.log('[WebViewBridge] Checking Hebrew book in cache:', bookId, title)
+        try {
+            const result = await this.call<{ exists: boolean; fileName?: string; url?: string }>('CheckHebrewBookInCache', bookId, title)
+            console.log('[WebViewBridge] Hebrew book cache check result:', result)
+            return result
+        } catch (error) {
+            console.error('[WebViewBridge] Failed to check Hebrew book in cache:', error)
+            return { exists: false }
+        }
+    }
+
     async notifyHebrewBookTabClosed(fileName: string): Promise<void> {
         try {
             await this.call('HandleHebrewBookTabClosed', fileName)

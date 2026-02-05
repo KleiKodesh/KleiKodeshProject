@@ -95,6 +95,10 @@ namespace Zayit.Services
         public object PrepareHebrewBookForDownload(string bookId, string title) =>
             _hebrewBooks.PrepareForDownload(bookId, title).GetAwaiter().GetResult();
 
+        // Check if Hebrew book file exists in cache
+        public object CheckHebrewBookInCache(string bookId, string title) =>
+            _hebrewBooks.CheckFileInCache(bookId, title);
+
         public object GetHebrewBooksCacheStats() => _hebrewBooks.GetCacheStats();
         public void ClearHebrewBooksCache() => _hebrewBooks.ClearCache();
         public void HandleHebrewBookTabClosed(string name) => _hebrewBooks.HandleTabClosed(name);

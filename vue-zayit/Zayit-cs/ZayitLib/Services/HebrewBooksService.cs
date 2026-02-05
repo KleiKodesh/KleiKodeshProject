@@ -221,6 +221,36 @@ namespace Zayit.Services
         }
 
         /// <summary>
+        /// Check if a Hebrew book file exists in cache
+        /// </summary>
+        public object CheckFileInCache(string bookId, string title)
+        {
+            try
+            {
+                Console.WriteLine($"[HebrewBooksService] Checking if file exists in cache - ID: {bookId}, Title: {title}");
+
+                var fileName = SanitizeFileName($"{title}_{bookId}") + ".pdf";
+                var cachedPath = GetCachedFilePath(fileName);
+                var exists = File.Exists(cachedPath);
+
+                Console.WriteLine($"[HebrewBooksService] File exists in cache: {exists}");
+
+                if (exists)
+                {
+                    var relativeUrl = $"hebrewbookscache/{fileName}";
+                    return new { exists = true, fileName = fileName, url = relativeUrl };
+                }
+
+                return new { exists = false, fileName = fileName };
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[HebrewBooksService] Error checking file in cache: {ex}");
+                return new { exists = false, error = ex.Message };
+            }
+        }
+
+        /// <summary>
         /// Flow 2: Download Hebrew book with SaveAs dialog (user chooses location)
         /// </summary>
         public async Task<object> PrepareForDownload(string bookId, string title)

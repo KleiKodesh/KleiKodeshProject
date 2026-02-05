@@ -156,7 +156,31 @@ watch(() => tabStore.activeTab?.pdfState, async (pdfState, oldPdfState) => {
         hasError.value = false;
 
         try {
-          // Import hebrewBooksStore dynamically to avoid circular dependencies
+          // Import webviewHebrewBooks to check cache first
+          const { webviewHebrewBooks } = await import('../services/webviewHebrewBooks');
+          
+          if (webviewHebrewBooks.isAvailable()) {
+            // Check if file exists in cache first
+            const cacheResult = await webviewHebrewBooks.checkInCache(pdfState.bookId, pdfState.bookTitle);
+            
+            if (cacheResult.exists && cacheResult.url) {
+              // File exists in cache, update tab state directly
+              console.log('[HebrewBooksViewPage] File found in cache, updating tab state:', cacheResult.url);
+              const tab = tabStore.activeTab;
+              if (tab) {
+                tab.pdfState = {
+                  ...pdfState,
+                  fileUrl: cacheResult.url,
+                  fileName: cacheResult.fileName || `${pdfState.bookTitle}.pdf`
+                };
+              }
+              isLoading.value = false;
+              hasError.value = false;
+              return;
+            }
+          }
+
+          // File not in cache or webview not available, use store method to re-download
           const { useHebrewBooksStore } = await import('../../stores/hebrewBooksStore');
           const hebrewBooksStore = useHebrewBooksStore();
 
@@ -215,7 +239,30 @@ const retryLoad = async () => {
     try {
       console.log('[HebrewBooksViewPage] Retrying Hebrew book load:', pdfState.bookId, pdfState.bookTitle);
 
-      // Import hebrewBooksStore dynamically to avoid circular dependencies
+      // Import webviewHebrewBooks to check cache first
+      const { webviewHebrewBooks } = await import('../services/webviewHebrewBooks');
+      
+      if (webviewHebrewBooks.isAvailable()) {
+        // Check if file exists in cache first
+        const cacheResult = await webviewHebrewBooks.checkInCache(pdfState.bookId, pdfState.bookTitle);
+        
+        if (cacheResult.exists && cacheResult.url) {
+          // File exists in cache, update tab state directly
+          console.log('[HebrewBooksViewPage] File found in cache during retry, updating tab state:', cacheResult.url);
+          if (tab) {
+            tab.pdfState = {
+              ...pdfState,
+              fileUrl: cacheResult.url,
+              fileName: cacheResult.fileName || `${pdfState.bookTitle}.pdf`
+            };
+          }
+          isLoading.value = false;
+          hasError.value = false;
+          return;
+        }
+      }
+
+      // File not in cache or webview not available, use store method to re-download
       const { useHebrewBooksStore } = await import('../../stores/hebrewBooksStore');
       const hebrewBooksStore = useHebrewBooksStore();
 
