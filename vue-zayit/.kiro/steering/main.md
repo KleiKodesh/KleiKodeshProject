@@ -72,6 +72,12 @@ The following files are loaded automatically based on context:
 - **File patterns**: `*Dropdown*`, `*Touch*`, `*Mobile*`
 - **Loads**: #[[file:custom-steering/touch-guidelines.md]]
 
+### Workspace Management
+
+- **Keywords**: workspace, session, tabs, switch, manage, פריטים
+- **File patterns**: `*WorkspaceManager*`, `*workspace*`
+- **Loads**: #[[file:custom-steering/workspace-management.md]]
+
 ### Git Operations
 
 - **Keywords**: git, commit, revert, reset
@@ -93,6 +99,7 @@ You can manually load specific guidance using these context keys:
 - `#docs` - Documentation guidelines
 - `#git` - Git safety rules
 - `#touch` - Touch interaction guidelines and best practices
+- `#workspace` - Workspace management guidelines and implementation
 
 ## Core Principles
 

@@ -2,9 +2,7 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
+    <TargetFramework>net48</TargetFramework>
     <UseWPF>true</UseWPF>
     <ApplicationIcon>KleiKodesh_Main.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -19,6 +17,12 @@
       <VersionMajor>6</VersionMajor>
       <Guid>000204ef-0000-0000-c000-000000000046</Guid>
     </COMReference>-->
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
+    <Reference Include="Microsoft.VisualBasic" />
   </ItemGroup>
 
   <ItemGroup>

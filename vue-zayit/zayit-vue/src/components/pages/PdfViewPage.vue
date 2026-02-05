@@ -83,6 +83,13 @@ const pdfViewerUrl = computed(() => {
   }
   // Force Hebrew locale for tooltips
   params.set('locale', 'he');
+  
+  // Performance optimizations for large files
+  params.set('disableAutoFetch', 'false'); // Enable auto-fetch for better performance
+  params.set('disableStream', 'false'); // Enable streaming for faster loading
+  params.set('disableRange', 'false'); // Enable range requests for partial loading
+  params.set('enableHWA', 'true'); // Enable hardware acceleration
+  params.set('cMapPacked', 'true'); // Use packed CMaps for faster font loading
 
   const finalUrl = `${baseUrl}?${params.toString()}`;
     

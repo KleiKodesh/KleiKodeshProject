@@ -46,26 +46,6 @@
                 </div>
             </div>
 
-            <!-- Database Path - only show in C# WebView mode -->
-            <div v-if="webviewBridge.isAvailable()"
-                 class="setting-group">
-                <label class="flex-row bold setting-label">מיקום מסד הנתונים</label>
-                <div class="flex-column">
-                    <div class="flex-row database-path-row">
-                        <input type="text"
-                               v-model="databasePath"
-                               placeholder="בחר מיקום מסד הנתונים (seforim.db)"
-                               class="database-path-input"
-                               readonly />
-                        <button @click="selectDatabaseFile"
-                                class="c-pointer database-browse-btn"
-                                title="בחר קובץ מסד נתונים">
-                            📁
-                        </button>
-                    </div>
-                </div>
-            </div>
-
             <!-- Text Font -->
             <div class="setting-group">
                 <label class="flex-row bold setting-label">גופן
@@ -398,8 +378,8 @@ const selectDatabaseFile = async () => {
                 databasePath.value = '' // Reset on failure
             }
         }
-    } catch (error) {
-        console.error('Failed to select database file:', error)
+    } catch (err) {
+        console.error('Failed to select database file:', err)
         await error('שגיאה בבחירת קובץ מסד הנתונים. אנא נסה שוב.')
     }
 }

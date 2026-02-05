@@ -65,6 +65,13 @@ const hebrewBookUrl = computed(() => {
     params.set('file', tab.pdfState.fileUrl);
     params.set('locale', 'he'); // Force Hebrew locale for tooltips
     
+    // Performance optimizations for large files
+    params.set('disableAutoFetch', 'false'); // Enable auto-fetch for better performance
+    params.set('disableStream', 'false'); // Enable streaming for faster loading
+    params.set('disableRange', 'false'); // Enable range requests for partial loading
+    params.set('enableHWA', 'true'); // Enable hardware acceleration
+    params.set('cMapPacked', 'true'); // Use packed CMaps for faster font loading
+    
     const finalUrl = `/pdfjs/web/viewer.html?${params.toString()}`;
     console.log('[HebrewBooksViewPage] Constructed PDF viewer URL:', {
       fileUrl: tab.pdfState.fileUrl,

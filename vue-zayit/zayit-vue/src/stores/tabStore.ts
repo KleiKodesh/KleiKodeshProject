@@ -4,6 +4,7 @@ import type { Tab, PageType } from '../types/Tab';
 import { checkConnectivity } from '../utils/connectivity';
 import { useSettingsStore } from './settingsStore';
 import { webviewBridge } from '../services/webviewBridge';
+import { handleHebrewBookTabClosed } from '../services/hebrewBooksHandlers';
 
 const STORAGE_KEY = 'tabStore';
 const CURRENT_WORKSPACE_KEY = 'zayit_current_workspace';
@@ -216,6 +217,19 @@ export const useTabStore = defineStore('tabs', () => {
 
     const activeTab = computed(() => tabs.value.find(tab => tab.isActive));
 
+    // Helper function to handle tab cleanup (Hebrew books cache cleanup)
+    const handleTabCleanup = async (tab: Tab) => {
+        try {
+            // Check if this is a Hebrew book tab that needs cleanup
+            if (tab.pdfState?.source === 'hebrewbook' && tab.pdfState.fileName) {
+                console.log('[TabStore] Cleaning up Hebrew book tab:', tab.pdfState.fileName);
+                handleHebrewBookTabClosed(tab);
+            }
+        } catch (error) {
+            console.error('[TabStore] Error during tab cleanup:', error);
+        }
+    };
+
     const addTab = async () => {
         // Check if a homepage tab already exists (either 'homepage' or 'kezayit-landing')
         const existingHomepageTab = tabs.value.find(t =>
@@ -254,6 +268,13 @@ export const useTabStore = defineStore('tabs', () => {
 
     const closeTab = async () => {
         const currentIndex = tabs.value.findIndex(tab => tab.isActive);
+        const tabToClose = tabs.value.find(tab => tab.isActive);
+
+        // Handle Hebrew book cleanup before closing tab
+        if (tabToClose) {
+            await handleTabCleanup(tabToClose);
+        }
+
         tabs.value = tabs.value.filter(tab => !tab.isActive);
 
         if (tabs.value.length === 0) {
@@ -361,14 +382,19 @@ export const useTabStore = defineStore('tabs', () => {
         }
     };
 
-    const closeTabById = (id: number) => {
+    const closeTabById = async (id: number) => {
         const tab = tabs.value.find(t => t.id === id);
-        if (tab?.isActive) {
-            closeTab();
+        if (!tab) return;
+
+        // Handle Hebrew book cleanup before closing tab
+        await handleTabCleanup(tab);
+
+        if (tab.isActive) {
+            await closeTab();
         } else {
             const currentActiveId = activeTab.value?.id;
             setActiveTab(id);
-            closeTab();
+            await closeTab();
             if (currentActiveId && tabs.value.find(t => t.id === currentActiveId)) {
                 setActiveTab(currentActiveId);
             }

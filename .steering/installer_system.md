@@ -11,9 +11,9 @@ fileMatchPattern: '**/KleiKodeshVstoInstallerWpf/**|**/Build/**'
 
 ## Build Pipeline
 1. **Version Increment** - `UpdateVersion.ps1` fetches from GitHub API, increments patch
-2. **WPF Installer Build** - `dotnet build` with architecture support
+2. **WPF Installer Build** - `dotnet build` with architecture support (outputs to `net48` subdirectory)
 3. **VSTO Build** - Automatic via WPF installer prebuild event using MSBuild
-4. **NSIS Compilation** - Creates final installer with dynamic version
+4. **NSIS Compilation** - Creates final installer with dynamic version (uses `net48` path)
 5. **GitHub Release** - Optional auto-create release with installer asset
 
 ## Version Management
@@ -51,10 +51,14 @@ await OldInstallationCleaner.CheckAndRemoveOldInstallations();
 - **User-Specific**: Per-user installation without admin rights
 
 ## .NET Runtime Requirements
-- **WPF Installer**: Requires .NET 8.0 Desktop Runtime (not .NET Framework)
-- **NSIS Wrapper**: Checks for Microsoft.WindowsDesktop.App 8.x runtime
+- **WPF Installer**: Requires .NET Framework 4.8 (same as VSTO)
+- **VSTO Add-in**: Requires .NET Framework 4.8 + VSTO Runtime 2010
+- **NSIS Wrapper**: Checks for .NET Framework 4.8 and VSTO Runtime only
 - **Detection Methods**: 
-  1. `dotnet --list-runtimes` command execution
-  2. Registry check for installed versions
-  3. Fallback to dotnet.exe existence check
-- **Error Messages**: Provide correct download links for .NET 8.0 Desktop Runtime
+  1. Registry check for .NET Framework 4.8 release number (528040)
+  2. WOW6432Node registry check for 32-bit on 64-bit systems
+  3. VSTO Runtime detection via multiple registry locations and GAC
+  4. Fallback error message with download links
+- **Error Messages**: Provide correct download links for prerequisites in Hebrew
+- **Recovery Options**: Offers to open download pages for missing prerequisites
+- **Office Installation**: Not checked - assumes Office is available when VSTO add-in runs

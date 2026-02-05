@@ -20,7 +20,10 @@ namespace Zayit.Services
 
             string dbPath = CurrentDbPath;
             if (!File.Exists(dbPath))
+            {
                 ShowDatabaseNotFoundDialog();
+                return;
+            }
 
             InitializeConnection(dbPath);
         }
@@ -120,6 +123,12 @@ namespace Zayit.Services
         /// </summary>
         public object ExecuteQuery(string sql, object[] parameters = null)
         {
+            if (_connection == null)
+            {
+                Console.WriteLine("[DbQueries] ERROR: No database connection available.");
+                return new object[0];
+            }
+
             try
             {
                 object result;

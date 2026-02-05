@@ -15,8 +15,8 @@
 !define PRODUCT_PUBLISHER "צוות כלי קודש"
 !define PRODUCT_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\KleiKodesh"
 !define PRODUCT_UNINST_ROOT_KEY "HKLM"
-!define DOTNET_VERSION "8.0"
-!define DOTNET_REGKEY "SOFTWARE\dotnet\Setup\InstalledVersions\x64\sharedhost"
+!define DOTNET_FRAMEWORK_VERSION "4.8"
+!define VSTO_RUNTIME_VERSION "2010"
 
 ; MUI Settings
 !define MUI_ABORTWARNING
@@ -42,15 +42,21 @@
 !insertmacro MUI_LANGUAGE "English"
 
 ; Language strings for Hebrew
-LangString MSG_DOTNET_REQUIRED ${LANG_HEBREW} "נדרש .NET ${DOTNET_VERSION} Desktop Runtime או גרסה חדשה יותר.$\r$\n$\r$\nאנא התקן את .NET Desktop Runtime ונסה שוב.$\r$\n$\r$\nהורדה: https://dotnet.microsoft.com/download/dotnet/${DOTNET_VERSION}"
-LangString MSG_DOTNET_OLD_VERSION ${LANG_HEBREW} "נדרש .NET ${DOTNET_VERSION} Desktop Runtime או גרסה חדשה יותר.$\r$\n$\r$\nהגרסה הנוכחית ישנה מהנדרש.$\r$\n$\r$\nאנא התקן את .NET ${DOTNET_VERSION} Desktop Runtime ונסה שוב.$\r$\n$\r$\nהורדה: https://dotnet.microsoft.com/download/dotnet/${DOTNET_VERSION}"
+LangString MSG_DOTNET_FRAMEWORK_REQUIRED ${LANG_HEBREW} "נדרש .NET Framework ${DOTNET_FRAMEWORK_VERSION} או גרסה חדשה יותר.$\r$\n$\r$\nאנא התקן את .NET Framework ${DOTNET_FRAMEWORK_VERSION} ונסה שוב.$\r$\n$\r$\nהורדה: https://dotnet.microsoft.com/download/dotnet-framework/${DOTNET_FRAMEWORK_VERSION}"
+LangString MSG_VSTO_RUNTIME_REQUIRED ${LANG_HEBREW} "נדרש Microsoft Visual Studio ${VSTO_RUNTIME_VERSION} Tools for Office Runtime.$\r$\n$\r$\nרכיב זה נדרש להפעלת תוספי Office.$\r$\n$\r$\nהאם ברצונך להוריד ולהתקין אותו כעת?$\r$\n$\r$\nהורדה: https://www.microsoft.com/download/details.aspx?id=48217"
+LangString MSG_PREREQUISITES_FAILED ${LANG_HEBREW} "התקנת הדרישות המוקדמות נכשלה.$\r$\n$\r$\nאנא התקן ידנית:$\r$\n• .NET Framework ${DOTNET_FRAMEWORK_VERSION}$\r$\n• VSTO Runtime ${VSTO_RUNTIME_VERSION}$\r$\n$\r$\nלאחר מכן נסה שוב."
+LangString MSG_DOWNLOAD_VSTO ${LANG_HEBREW} "מוריד VSTO Runtime..."
+LangString MSG_INSTALL_VSTO ${LANG_HEBREW} "מתקין VSTO Runtime..."
 LangString MSG_WORD_RUNNING ${LANG_HEBREW} "Microsoft Word פועל כעת.$\r$\n$\r$\nהאם ברצונך לסגור את Word ולהמשיך בהסרה?"
 LangString MSG_WORD_CLOSE_FAILED ${LANG_HEBREW} "לא ניתן לסגור את Word אוטומטית.$\r$\n$\r$\nאנא סגור את Word באופן ידני ונסה שוב."
 LangString MSG_UNINSTALL_CONFIRM ${LANG_HEBREW} "האם אתה בטוח שברצונך להסיר לחלוטין את ${PRODUCT_NAME} ואת כל הרכיבים שלו?"
 
 ; Language strings for English (fallback)
-LangString MSG_DOTNET_REQUIRED ${LANG_ENGLISH} ".NET ${DOTNET_VERSION} Desktop Runtime or higher is required.$\r$\n$\r$\nPlease install .NET Desktop Runtime and try again.$\r$\n$\r$\nDownload: https://dotnet.microsoft.com/download/dotnet/${DOTNET_VERSION}"
-LangString MSG_DOTNET_OLD_VERSION ${LANG_ENGLISH} ".NET ${DOTNET_VERSION} Desktop Runtime or higher is required.$\r$\n$\r$\nThe current version is older than required.$\r$\n$\r$\nPlease install .NET ${DOTNET_VERSION} Desktop Runtime and try again.$\r$\n$\r$\nDownload: https://dotnet.microsoft.com/download/dotnet/${DOTNET_VERSION}"
+LangString MSG_DOTNET_FRAMEWORK_REQUIRED ${LANG_ENGLISH} ".NET Framework ${DOTNET_FRAMEWORK_VERSION} or higher is required.$\r$\n$\r$\nPlease install .NET Framework ${DOTNET_FRAMEWORK_VERSION} and try again.$\r$\n$\r$\nDownload: https://dotnet.microsoft.com/download/dotnet-framework/${DOTNET_FRAMEWORK_VERSION}"
+LangString MSG_VSTO_RUNTIME_REQUIRED ${LANG_ENGLISH} "Microsoft Visual Studio ${VSTO_RUNTIME_VERSION} Tools for Office Runtime is required.$\r$\n$\r$\nThis component is needed to run Office add-ins.$\r$\n$\r$\nWould you like to download and install it now?$\r$\n$\r$\nDownload: https://www.microsoft.com/download/details.aspx?id=48217"
+LangString MSG_PREREQUISITES_FAILED ${LANG_ENGLISH} "Prerequisites installation failed.$\r$\n$\r$\nPlease install manually:$\r$\n• .NET Framework ${DOTNET_FRAMEWORK_VERSION}$\r$\n• VSTO Runtime ${VSTO_RUNTIME_VERSION}$\r$\n$\r$\nThen try again."
+LangString MSG_DOWNLOAD_VSTO ${LANG_ENGLISH} "Downloading VSTO Runtime..."
+LangString MSG_INSTALL_VSTO ${LANG_ENGLISH} "Installing VSTO Runtime..."
 LangString MSG_WORD_RUNNING ${LANG_ENGLISH} "Microsoft Word is currently running.$\r$\n$\r$\nWould you like to close Word and continue with uninstallation?"
 LangString MSG_WORD_CLOSE_FAILED ${LANG_ENGLISH} "Could not close Word automatically.$\r$\n$\r$\nPlease close Word manually and try again."
 LangString MSG_UNINSTALL_CONFIRM ${LANG_ENGLISH} "Are you sure you want to completely remove ${PRODUCT_NAME} and all of its components?"
@@ -70,8 +76,9 @@ Function .onInit
   ; Detect system language and set appropriate language
   Call DetectSystemLanguage
   
-  ; Check for .NET Framework
-  Call CheckDotNetFramework
+  ; Check prerequisites in order
+  Call CheckDotNetFramework48
+  Call CheckVSTORuntime
 FunctionEnd
 
 Function DetectSystemLanguage
@@ -88,108 +95,127 @@ Function DetectSystemLanguage
   ${EndIf}
 FunctionEnd
 
-Function CheckDotNetFramework
-  ; Check if .NET 8.0 Desktop Runtime is installed
-  ; Method 1: Check for dotnet.exe and query runtimes
-  StrCpy $R0 "0"  ; Flag for .NET 8 Desktop Runtime found
+Function CheckDotNetFramework48
+  ; Check if .NET Framework 4.8 or higher is installed (required for both VSTO and installer)
+  StrCpy $R0 "0"  ; Flag for .NET Framework 4.8+ found
   
-  ${If} ${FileExists} "$PROGRAMFILES\dotnet\dotnet.exe"
-    ; Try to list runtimes and check for Microsoft.WindowsDesktop.App 8.x
-    nsExec::ExecToStack '"$PROGRAMFILES\dotnet\dotnet.exe" --list-runtimes'
-    Pop $0 ; Exit code
-    Pop $1 ; Output
-    ${If} $0 == 0
-      ; Simple check: if output contains "Microsoft.WindowsDesktop.App 8."
-      ; We'll use a simple string search approach
-      StrLen $2 $1
-      ${If} $2 > 30  ; Output should be substantial if runtimes are listed
-        ; Look for the pattern in the output
-        StrCpy $3 0
-        ${Do}
-          StrCpy $4 $1 30 $3  ; Get 30 chars starting at position $3
-          StrCmp $4 "" done  ; End of string
-          StrCpy $5 $4 26  ; Get first 26 chars: "Microsoft.WindowsDesktop.App 8"
-          StrCmp $5 "Microsoft.WindowsDesktop.A" 0 +3
-            StrCpy $6 $4 28  ; Get 28 chars to include version
-            StrCpy $7 $6 27  ; "Microsoft.WindowsDesktop.App 8"
-            StrCmp $7 "Microsoft.WindowsDesktop.App 8" found_runtime
-          IntOp $3 $3 + 1
-        ${Loop}
-        done:
-      ${EndIf}
-    ${EndIf}
+  ; Method 1: Check registry for .NET Framework 4.8
+  ReadRegDWORD $0 HKLM "SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full" "Release"
+  ${If} $0 >= 528040  ; .NET Framework 4.8 release number
+    StrCpy $R0 "1"
+    Goto framework_check_done
   ${EndIf}
   
-  ; Method 2: Try 32-bit dotnet if 64-bit not found
-  ${If} $R0 == "0"
-    ${If} ${FileExists} "$PROGRAMFILES32\dotnet\dotnet.exe"
-      nsExec::ExecToStack '"$PROGRAMFILES32\dotnet\dotnet.exe" --list-runtimes'
-      Pop $0 ; Exit code
-      Pop $1 ; Output
-      ${If} $0 == 0
-        StrLen $2 $1
-        ${If} $2 > 30
-          StrCpy $3 0
-          ${Do}
-            StrCpy $4 $1 30 $3
-            StrCmp $4 "" done2
-            StrCpy $5 $4 26
-            StrCmp $5 "Microsoft.WindowsDesktop.A" 0 +3
-              StrCpy $6 $4 28
-              StrCpy $7 $6 27
-              StrCmp $7 "Microsoft.WindowsDesktop.App 8" found_runtime
-            IntOp $3 $3 + 1
-          ${Loop}
-          done2:
-        ${EndIf}
-      ${EndIf}
-    ${EndIf}
+  ; Method 2: Check WOW6432Node for 32-bit registry on 64-bit systems
+  ReadRegDWORD $0 HKLM "SOFTWARE\WOW6432Node\Microsoft\NET Framework Setup\NDP\v4\Full" "Release"
+  ${If} $0 >= 528040  ; .NET Framework 4.8 release number
+    StrCpy $R0 "1"
+    Goto framework_check_done
   ${EndIf}
   
-  ; Method 3: Check registry as fallback
-  ${If} $R0 == "0"
-    ; Check for .NET 8 in registry
-    ReadRegStr $0 HKLM "SOFTWARE\dotnet\Setup\InstalledVersions\x64\Microsoft.WindowsDesktop.App" ""
-    ${If} $0 != ""
-      ; Check if any 8.x version exists
-      EnumRegValue $1 HKLM "SOFTWARE\dotnet\Setup\InstalledVersions\x64\Microsoft.WindowsDesktop.App" 0
-      ${If} $1 != ""
-        StrCpy $2 $1 1  ; Get first character
-        ${If} $2 == "8"
-          StrCpy $R0 "1"
-        ${EndIf}
-      ${EndIf}
-    ${EndIf}
-  ${EndIf}
-  
-  ; If no .NET 8 Desktop Runtime found, show error
+  ; If no .NET Framework 4.8+ found, show error
   ${If} $R0 == "0"
     ${If} $LANGUAGE == ${LANG_HEBREW}
-      MessageBox MB_OK|MB_ICONSTOP|MB_RTLREADING "$(MSG_DOTNET_REQUIRED)"
+      MessageBox MB_OK|MB_ICONSTOP|MB_RTLREADING "$(MSG_DOTNET_FRAMEWORK_REQUIRED)"
     ${Else}
-      MessageBox MB_OK|MB_ICONSTOP "$(MSG_DOTNET_REQUIRED)"
+      MessageBox MB_OK|MB_ICONSTOP "$(MSG_DOTNET_FRAMEWORK_REQUIRED)"
     ${EndIf}
     Abort
   ${EndIf}
   
-  Goto end_check
+  framework_check_done:
+FunctionEnd
+
+
+
+Function CheckVSTORuntime
+  ; Check if VSTO Runtime is installed
+  StrCpy $R0 "0"  ; Flag for VSTO Runtime found
   
-  found_runtime:
+  ; Method 1: Check for VSTO 2010 Runtime (most common)
+  ReadRegStr $0 HKLM "SOFTWARE\Microsoft\VSTO Runtime Setup\v4R" "Version"
+  ${If} $0 != ""
     StrCpy $R0 "1"
-    Goto end_check
+    Goto vsto_check_done
+  ${EndIf}
   
-  end_check:
+  ; Method 2: Check WOW6432Node for 32-bit registry on 64-bit systems
+  ReadRegStr $0 HKLM "SOFTWARE\WOW6432Node\Microsoft\VSTO Runtime Setup\v4R" "Version"
+  ${If} $0 != ""
+    StrCpy $R0 "1"
+    Goto vsto_check_done
+  ${EndIf}
+  
+  ; Method 3: Check alternative registry locations
+  ReadRegStr $0 HKLM "SOFTWARE\Microsoft\VSTO Runtime Setup\v4" "Version"
+  ${If} $0 != ""
+    StrCpy $R0 "1"
+    Goto vsto_check_done
+  ${EndIf}
+  
+  ; Method 4: Check for VSTO files in GAC
+  ${If} ${FileExists} "$WINDIR\Microsoft.NET\assembly\GAC_MSIL\Microsoft.Office.Tools.v4.0.Framework"
+    StrCpy $R0 "1"
+    Goto vsto_check_done
+  ${EndIf}
+  
+  ; If no VSTO Runtime found, offer to download and install
+  ${If} $R0 == "0"
+    ${If} $LANGUAGE == ${LANG_HEBREW}
+      MessageBox MB_YESNO|MB_ICONQUESTION|MB_RTLREADING "$(MSG_VSTO_RUNTIME_REQUIRED)" IDYES DownloadVSTO IDNO AbortInstall
+    ${Else}
+      MessageBox MB_YESNO|MB_ICONQUESTION "$(MSG_VSTO_RUNTIME_REQUIRED)" IDYES DownloadVSTO IDNO AbortInstall
+    ${EndIf}
+    
+    DownloadVSTO:
+      Call DownloadAndInstallVSTO
+      Goto vsto_check_done
+      
+    AbortInstall:
+      Abort
+  ${EndIf}
+  
+  vsto_check_done:
+FunctionEnd
+
+Function DownloadAndInstallVSTO
+  ; Download and install VSTO Runtime
+  StrCpy $R1 "$TEMP\vstor_redist.exe"
+  
+  ; Show download progress message
+  ${If} $LANGUAGE == ${LANG_HEBREW}
+    DetailPrint "$(MSG_DOWNLOAD_VSTO)"
+  ${Else}
+    DetailPrint "$(MSG_DOWNLOAD_VSTO)"
+  ${EndIf}
+  
+  ; Try to download VSTO Runtime (using inetc plugin if available)
+  ; Note: This requires the NSIS inetc plugin to be installed
+  ; Alternative: Use NSISdl plugin or direct Windows API calls
+  
+  ; For now, we'll open the download page and ask user to install manually
+  ${If} $LANGUAGE == ${LANG_HEBREW}
+    MessageBox MB_OK|MB_ICONINFORMATION|MB_RTLREADING "אנא הורד והתקן את VSTO Runtime מהקישור שייפתח.$\r$\n$\r$\nלאחר ההתקנה, הפעל שוב את המתקין."
+  ${Else}
+    MessageBox MB_OK|MB_ICONINFORMATION "Please download and install VSTO Runtime from the link that will open.$\r$\n$\r$\nAfter installation, run this installer again."
+  ${EndIf}
+  
+  ; Open download page
+  ExecShell "open" "https://www.microsoft.com/download/details.aspx?id=48217"
+  
+  ; Exit installer so user can install VSTO Runtime first
+  Quit
 FunctionEnd
 
 Section "Main"
   ; Extract WPF installer to temp directory
   SetOutPath "$TEMP\KleiKodeshInstaller"
   
-  ; Copy WPF installer files (built for .NET 8.0)
-  File "..\KleiKodeshVstoInstallerWpf\bin\Release\net8.0-windows\KleiKodeshVstoInstallerWpf.exe"
-  File /nonfatal "..\KleiKodeshVstoInstallerWpf\bin\Release\net8.0-windows\*.dll"
-  File /nonfatal "..\KleiKodeshVstoInstallerWpf\bin\Release\net8.0-windows\*.json"
-  File /nonfatal "..\KleiKodeshVstoInstallerWpf\bin\Release\net8.0-windows\*.runtimeconfig.json"
+  ; Copy WPF installer files (built for .NET Framework 4.8)
+  File "..\KleiKodeshVstoInstallerWpf\bin\Release\net48\KleiKodeshVstoInstallerWpf.exe"
+  File /nonfatal "..\KleiKodeshVstoInstallerWpf\bin\Release\net48\*.dll"
+  File /nonfatal "..\KleiKodeshVstoInstallerWpf\bin\Release\net48\*.json"
+  File /nonfatal "..\KleiKodeshVstoInstallerWpf\bin\Release\net48\*.config"
   File "..\KleiKodeshVstoInstallerWpf\KleiKodesh.zip"
   
   ; Check if silent mode was requested

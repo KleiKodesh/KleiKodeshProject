@@ -1,5 +1,6 @@
 ﻿using Microsoft.VisualBasic;
 using Microsoft.Win32;
+using System;
 
 namespace KleiKodesh.Helpers
 {
@@ -28,7 +29,7 @@ namespace KleiKodesh.Helpers
                 AppName,
                 section,
                 key,
-                value.ToString());
+                value?.ToString() ?? "");
         }
 
         public static bool GetBool(
