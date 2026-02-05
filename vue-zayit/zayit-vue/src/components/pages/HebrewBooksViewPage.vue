@@ -50,6 +50,7 @@ import { computed, ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useTabStore } from '../../stores/tabStore';
 import { syncPdfViewerTheme } from '../../utils/theme';
+import { webviewHebrewBooks } from '../../services/webviewHebrewBooks';
 
 const tabStore = useTabStore();
 const isLoading = ref(false);
@@ -156,9 +157,7 @@ watch(() => tabStore.activeTab?.pdfState, async (pdfState, oldPdfState) => {
         hasError.value = false;
 
         try {
-          // Import webviewHebrewBooks to check cache first
-          const { webviewHebrewBooks } = await import('../services/webviewHebrewBooks');
-          
+          // Check cache first using webviewHebrewBooks
           if (webviewHebrewBooks.isAvailable()) {
             // Check if file exists in cache first
             const cacheResult = await webviewHebrewBooks.checkInCache(pdfState.bookId, pdfState.bookTitle);
@@ -239,9 +238,7 @@ const retryLoad = async () => {
     try {
       console.log('[HebrewBooksViewPage] Retrying Hebrew book load:', pdfState.bookId, pdfState.bookTitle);
 
-      // Import webviewHebrewBooks to check cache first
-      const { webviewHebrewBooks } = await import('../services/webviewHebrewBooks');
-      
+      // Check cache first using webviewHebrewBooks
       if (webviewHebrewBooks.isAvailable()) {
         // Check if file exists in cache first
         const cacheResult = await webviewHebrewBooks.checkInCache(pdfState.bookId, pdfState.bookTitle);

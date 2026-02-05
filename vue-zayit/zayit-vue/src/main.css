@@ -27,6 +27,13 @@
   /* Touch-friendly defaults */
   -webkit-tap-highlight-color: transparent; /* Remove iOS tap highlight */
   touch-action: manipulation; /* Prevent double-tap zoom by default */
+  
+  /* Ensure crisp rendering on all elements */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
 }
 
 html, body {
@@ -37,10 +44,17 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   color: var(--text-primary);
   background-color: var(--bg-primary);
   direction: rtl;
   overflow: hidden;
+  
+  /* Additional crisp rendering settings */
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
 }
 
 #app {

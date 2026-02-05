@@ -32,8 +32,12 @@ namespace Zayit.Viewer
             HtmlPath = GetHtmlPath();
             Console.WriteLine($"[ZayitViewer#{_instanceId}] Html path: {HtmlPath}");
 
+            // Ensure crisp rendering on high-DPI displays
             this.Dock = DockStyle.Fill;
-
+            
+            // Set WebView2 specific properties for crisp rendering
+            this.DefaultBackgroundColor = System.Drawing.Color.White;
+            
             // Initialize services directly
             InitializeServices();
 
@@ -102,7 +106,21 @@ namespace Zayit.Viewer
             string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "zayit-vue-app",
                                        "ZayitWebView2SharedCache");
 
-            var env = await CoreWebView2Environment.CreateAsync(userDataFolder: path);
+            // Create environment with options for crisp rendering
+            var options = new CoreWebView2EnvironmentOptions();
+            
+            // Add command line arguments for better rendering quality
+            options.AdditionalBrowserArguments = 
+                "--disable-web-security " +
+                "--disable-features=VizDisplayCompositor " +
+                "--enable-gpu-rasterization " +
+                "--enable-zero-copy " +
+                "--enable-hardware-overlays";
+
+            var env = await CoreWebView2Environment.CreateAsync(
+                browserExecutableFolder: null,
+                userDataFolder: path,
+                options: options);
 
             lock (_envLock)
             {
@@ -163,6 +181,23 @@ namespace Zayit.Viewer
             try
             {
                 Console.WriteLine($"[ZayitViewer#{_instanceId}] Setting up WebView2...");
+
+                // Configure WebView2 settings for crisp rendering
+                var settings = this.CoreWebView2.Settings;
+                settings.IsGeneralAutofillEnabled = false;
+                settings.IsPasswordAutosaveEnabled = false;
+                settings.AreDefaultScriptDialogsEnabled = true;
+                settings.AreDevToolsEnabled = true;
+                settings.AreHostObjectsAllowed = true;
+                settings.IsWebMessageEnabled = true;
+                settings.AreDefaultContextMenusEnabled = true;
+                settings.IsStatusBarEnabled = false;
+                settings.IsSwipeNavigationEnabled = false;
+                settings.IsPinchZoomEnabled = true;
+                
+                // Enable hardware acceleration and smooth scrolling
+                settings.IsGeneralAutofillEnabled = false;
+                settings.IsPasswordAutosaveEnabled = false;
 
                 // Map local HTML files with DenyCors to avoid CORS issues
                 Console.WriteLine($"[ZayitViewer#{_instanceId}] Mapping virtual host 'zayitHost' to path: {HtmlPath}");

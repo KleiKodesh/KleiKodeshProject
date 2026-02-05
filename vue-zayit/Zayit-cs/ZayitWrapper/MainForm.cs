@@ -16,6 +16,12 @@ namespace ZayitWrapper
             this.AutoScaleMode = AutoScaleMode.Dpi;
             this.AutoScaleDimensions = new System.Drawing.SizeF(96F, 96F);
             
+            // Additional settings for crisp rendering
+            SetStyle(ControlStyles.OptimizedDoubleBuffer | 
+                     ControlStyles.AllPaintingInWmPaint | 
+                     ControlStyles.UserPaint | 
+                     ControlStyles.ResizeRedraw, true);
+            
             InitializeZayitViewer();
         }
 
