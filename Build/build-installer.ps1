@@ -3,10 +3,89 @@ param(
     [switch]$NoRelease,
     [switch]$NoClean,
     [ValidateSet("AnyCPU", "x64")]
-    [string]$Platform
+    [string]$Platform,
+    [ValidateSet("major", "minor", "patch")]
+    [string]$VersionIncrement,
+    [ValidateSet("commits", "file", "both")]
+    [string]$ReleaseNotesSource
 )
 
 Write-Host "Building KleiKodesh Installer..." -ForegroundColor Green
+
+# Check if version increment type was provided as parameter
+if ($VersionIncrement) {
+    Write-Host "Using command line parameter for version increment: $VersionIncrement" -ForegroundColor Cyan
+} else {
+    # Show version increment selection menu
+    Write-Host ""
+    Write-Host "Select version increment type (Semantic Versioning):" -ForegroundColor Yellow
+    Write-Host "1. Patch (Bug fixes) - e.g., 1.2.3 -> 1.2.4" -ForegroundColor White
+    Write-Host "2. Minor (New features) - e.g., 1.2.3 -> 1.3.0" -ForegroundColor White
+    Write-Host "3. Major (Breaking changes) - e.g., 1.2.3 -> 2.0.0" -ForegroundColor White
+    Write-Host ""
+
+    do {
+        $versionChoice = Read-Host "Enter your choice (1-3)"
+        switch ($versionChoice) {
+            "1" { 
+                $VersionIncrement = "patch"
+                $valid = $true
+            }
+            "2" { 
+                $VersionIncrement = "minor"
+                $valid = $true
+            }
+            "3" { 
+                $VersionIncrement = "major"
+                $valid = $true
+            }
+            default { 
+                Write-Host "Invalid choice. Please enter 1, 2, or 3." -ForegroundColor Red
+                $valid = $false
+            }
+        }
+    } while (-not $valid)
+}
+
+Write-Host "Version increment type: $VersionIncrement" -ForegroundColor Cyan
+Write-Host ""
+
+# Check if release notes source was provided as parameter
+if ($ReleaseNotesSource) {
+    Write-Host "Using command line parameter for release notes: $ReleaseNotesSource" -ForegroundColor Cyan
+} else {
+    # Show release notes source selection menu
+    Write-Host "Select release notes source:" -ForegroundColor Yellow
+    Write-Host "1. Git commits only" -ForegroundColor White
+    Write-Host "2. RELEASE_NOTES.txt file only" -ForegroundColor White
+    Write-Host "3. Both (file + commits)" -ForegroundColor White
+    Write-Host ""
+
+    do {
+        $notesChoice = Read-Host "Enter your choice (1-3)"
+        switch ($notesChoice) {
+            "1" { 
+                $ReleaseNotesSource = "commits"
+                $valid = $true
+            }
+            "2" { 
+                $ReleaseNotesSource = "file"
+                $valid = $true
+            }
+            "3" { 
+                $ReleaseNotesSource = "both"
+                $valid = $true
+            }
+            default { 
+                Write-Host "Invalid choice. Please enter 1, 2, or 3." -ForegroundColor Red
+                $valid = $false
+            }
+        }
+    } while (-not $valid)
+}
+
+Write-Host "Release notes source: $ReleaseNotesSource" -ForegroundColor Cyan
+Write-Host ""
 
 # Check if platform was provided as parameter
 if ($Platform) {
@@ -14,7 +93,6 @@ if ($Platform) {
     Write-Host "Using command line parameter: Release|$Platform" -ForegroundColor Cyan
 } else {
     # Show platform selection menu
-    Write-Host ""
     Write-Host "Select VSTO build configuration:" -ForegroundColor Yellow
     Write-Host "1. Release|AnyCPU (Recommended)" -ForegroundColor White
     Write-Host "2. Release|x64" -ForegroundColor White
@@ -55,8 +133,18 @@ $updateVersionScript = Join-Path $projectRoot "KleiKodeshVstoInstallerWpf\Update
 Write-Host "Project root: $projectRoot" -ForegroundColor Gray
 Write-Host "Progress window path: $progressWindowPath" -ForegroundColor Gray
 
+# Delete VSTO Release folder first to ensure clean build
+Write-Host "Deleting VSTO Release folder..." -ForegroundColor Yellow
+$vstoReleasePath = Join-Path $projectRoot "KleiKodeshVsto\bin\Release"
+if (Test-Path $vstoReleasePath) {
+    Remove-Item -Path $vstoReleasePath -Recurse -Force
+    Write-Host "VSTO Release folder deleted: $vstoReleasePath" -ForegroundColor Cyan
+} else {
+    Write-Host "VSTO Release folder not found (already clean)" -ForegroundColor Gray
+}
+
 # Run UpdateVersion.ps1 to increment the version
-& powershell -ExecutionPolicy Bypass -File $updateVersionScript -FilePath $progressWindowPath
+& powershell -ExecutionPolicy Bypass -File $updateVersionScript -FilePath $progressWindowPath -IncrementType $VersionIncrement
 
 # Now get the updated version from the file
 $versionMatch = Select-String -Path $progressWindowPath -Pattern 'const string Version = "([^"]+)"'
@@ -73,32 +161,55 @@ if ($versionMatch) {
 if (-not $NoClean) {
     Write-Host "Cleaning solution..." -ForegroundColor Yellow
     $solutionPath = Join-Path $projectRoot "KleiKodeshProject.slnx"
+    $wpfProjectPath = Join-Path $projectRoot "KleiKodeshVstoInstallerWpf\KleiKodeshVstoInstallerWpf.csproj"
 
-    # Try MSBuild first (works with VSTO), fallback to dotnet clean
-    $msbuildPath = "${env:ProgramFiles}\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe"
-    if (-not (Test-Path $msbuildPath)) {
-        $msbuildPath = "${env:ProgramFiles}\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"
-    }
-    if (-not (Test-Path $msbuildPath)) {
-        $msbuildPath = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2019\Professional\MSBuild\Current\Bin\MSBuild.exe"
-    }
-    if (-not (Test-Path $msbuildPath)) {
-        $msbuildPath = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin\MSBuild.exe"
-    }
-
-    if (Test-Path $msbuildPath) {
-        $cleanCommand = "`"$msbuildPath`" `"$solutionPath`" /t:Clean /p:Configuration=Release /p:Platform=`"Any CPU`" /verbosity:minimal"
-        Write-Host "Clean command (MSBuild): $cleanCommand" -ForegroundColor Gray
-        Invoke-Expression $cleanCommand
+    # Try to find MSBuild - first check PATH, then check common install locations
+    $msbuildPath = $null
+    
+    # Check if MSBuild is in PATH
+    $msbuildInPath = Get-Command msbuild -ErrorAction SilentlyContinue
+    if ($msbuildInPath) {
+        $msbuildPath = $msbuildInPath.Source
+        Write-Host "Found MSBuild in PATH: $msbuildPath" -ForegroundColor Cyan
     } else {
-        Write-Host "MSBuild not found, using dotnet clean (may show VSTO warnings)..." -ForegroundColor Yellow
-        $cleanCommand = "dotnet clean `"$solutionPath`" -c Release --verbosity normal"
-        Write-Host "Clean command (dotnet): $cleanCommand" -ForegroundColor Gray
-        Invoke-Expression $cleanCommand
+        # Check common Visual Studio install locations
+        $commonPaths = @(
+            "${env:ProgramFiles}\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe",
+            "${env:ProgramFiles}\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe",
+            "${env:ProgramFiles}\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe",
+            "${env:ProgramFiles}\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe",
+            "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2019\Professional\MSBuild\Current\Bin\MSBuild.exe",
+            "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin\MSBuild.exe"
+        )
+        
+        foreach ($path in $commonPaths) {
+            if (Test-Path $path) {
+                $msbuildPath = $path
+                Write-Host "Found MSBuild at: $msbuildPath" -ForegroundColor Cyan
+                break
+            }
+        }
     }
 
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "WARNING: Clean operation had issues, continuing with build..." -ForegroundColor Yellow
+    if ($msbuildPath) {
+        # MSBuild found - clean entire solution including VSTO
+        Write-Host "Clean command (MSBuild): $msbuildPath" -ForegroundColor Gray
+        & $msbuildPath $solutionPath /t:Clean /p:Configuration=Release /p:Platform="Any CPU" /verbosity:minimal
+        
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "WARNING: Clean operation had issues, continuing with build..." -ForegroundColor Yellow
+        }
+    } else {
+        # MSBuild not found - only clean WPF project with dotnet (VSTO requires MSBuild)
+        Write-Host "MSBuild not found in PATH or common locations, cleaning WPF project only (VSTO requires Visual Studio MSBuild)..." -ForegroundColor Yellow
+        Write-Host "Clean command (dotnet): dotnet clean" -ForegroundColor Gray
+        dotnet clean $wpfProjectPath -c Release --verbosity minimal
+        
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "WARNING: Clean operation had issues, continuing with build..." -ForegroundColor Yellow
+        } else {
+            Write-Host "WPF project cleaned. VSTO project will be cleaned by prebuild event if needed." -ForegroundColor Cyan
+        }
     }
 } else {
     Write-Host "Skipping clean step (-NoClean specified)" -ForegroundColor Yellow
@@ -120,10 +231,14 @@ if ($Platform -eq "x64") {
 
 # Use dotnet build for modern .NET project
 $wpfProjectPath = Join-Path $projectRoot "KleiKodeshVstoInstallerWpf\KleiKodeshVstoInstallerWpf.csproj"
-$buildCommand = "dotnet build `"$wpfProjectPath`" -c Release $dotnetArch -p:VstoConfiguration=$Configuration -p:VstoPlatform=$Platform --verbosity normal"
-Write-Host "Build command: $buildCommand" -ForegroundColor Gray
+Write-Host "Build command: dotnet build" -ForegroundColor Gray
 Write-Host "Starting WPF build..." -ForegroundColor Yellow
-Invoke-Expression $buildCommand
+
+if ($Platform -eq "x64") {
+    dotnet build $wpfProjectPath -c Release --arch x64 -p:VstoConfiguration=$Configuration -p:VstoPlatform=$Platform --verbosity normal
+} else {
+    dotnet build $wpfProjectPath -c Release -p:VstoConfiguration=$Configuration -p:VstoPlatform=$Platform --verbosity normal
+}
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: Failed to build WPF installer (VSTO build is handled by prebuild event)" -ForegroundColor Red
@@ -191,36 +306,77 @@ if (-not $NoRelease) {
             # Create new release with installer
             Write-Host "Creating release $version..." -ForegroundColor Yellow
             
-            # Get git commit history since last release
-            Write-Host "Gathering git commit history..." -ForegroundColor Cyan
+            # Build release notes based on user selection
+            $platformInfo = if ($Platform -eq "x64") { "x64" } else { "AnyCPU" }
+            $releaseNotes = ""
             
-            # Get the previous release tag
+            # Check for RELEASE_NOTES.txt file
+            $releaseNotesFile = Join-Path $projectRoot "RELEASE_NOTES.txt"
+            $fileContent = ""
+            if (Test-Path $releaseNotesFile) {
+                $fileContent = Get-Content $releaseNotesFile -Raw
+                Write-Host "Found RELEASE_NOTES.txt file" -ForegroundColor Cyan
+            }
+            
+            # Get git commit history
+            Write-Host "Gathering git commit history..." -ForegroundColor Cyan
             $previousTag = gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>$null
             
             $commitHistory = ""
             if ($previousTag -and $LASTEXITCODE -eq 0) {
                 Write-Host "Previous release: $previousTag" -ForegroundColor Gray
-                # Get commits since the previous tag - use %n for explicit newlines
                 $commits = git log "$previousTag..HEAD" --pretty=format:"- %s (%h)%n" 2>$null
                 if ($commits) {
-                    $commitHistory = "`n`n**Commits since ${previousTag}:**`n$commits"
+                    $commitHistory = "**Commits since ${previousTag}:**`n$commits"
                 }
             } else {
                 Write-Host "No previous release found, including recent commits" -ForegroundColor Gray
-                # Get last 10 commits if no previous release
                 $commits = git log -10 --pretty=format:"- %s (%h)%n" 2>$null
                 if ($commits) {
-                    $commitHistory = "`n`n**Recent Commits:**`n$commits"
+                    $commitHistory = "**Recent Commits:**`n$commits"
                 }
             }
             
-            # Create release notes with compilation details and commit history
-            $platformInfo = if ($Platform -eq "x64") { "x64" } else { "AnyCPU" }
-            $releaseNotes = "Automated release for KleiKodesh $version`n`n"
-            $releaseNotes += "**Build Configuration:**`n"
-            $releaseNotes += "- VSTO Project: $Configuration|$Platform (MSBuild)`n"
-            $releaseNotes += "- WPF Installer: Release|$platformInfo (dotnet build)"
-            $releaseNotes += $commitHistory
+            # Build release notes based on source selection
+            switch ($ReleaseNotesSource) {
+                "commits" {
+                    Write-Host "Using git commits for release notes" -ForegroundColor Cyan
+                    $releaseNotes = "Release $version`n`n"
+                    $releaseNotes += "**Build Configuration:**`n"
+                    $releaseNotes += "- VSTO Project: $Configuration|$Platform (MSBuild)`n"
+                    $releaseNotes += "- WPF Installer: Release|$platformInfo (dotnet build)`n`n"
+                    if ($commitHistory) {
+                        $releaseNotes += $commitHistory
+                    }
+                }
+                "file" {
+                    Write-Host "Using RELEASE_NOTES.txt for release notes" -ForegroundColor Cyan
+                    if ($fileContent) {
+                        $releaseNotes = $fileContent
+                    } else {
+                        Write-Host "WARNING: RELEASE_NOTES.txt not found, using default notes" -ForegroundColor Yellow
+                        $releaseNotes = "Release $version`n`n"
+                        $releaseNotes += "**Build Configuration:**`n"
+                        $releaseNotes += "- VSTO Project: $Configuration|$Platform (MSBuild)`n"
+                        $releaseNotes += "- WPF Installer: Release|$platformInfo (dotnet build)"
+                    }
+                }
+                "both" {
+                    Write-Host "Using both RELEASE_NOTES.txt and git commits" -ForegroundColor Cyan
+                    if ($fileContent) {
+                        $releaseNotes = $fileContent
+                        $releaseNotes += "`n`n---`n`n"
+                    } else {
+                        $releaseNotes = "Release $version`n`n"
+                    }
+                    $releaseNotes += "**Build Configuration:**`n"
+                    $releaseNotes += "- VSTO Project: $Configuration|$Platform (MSBuild)`n"
+                    $releaseNotes += "- WPF Installer: Release|$platformInfo (dotnet build)`n`n"
+                    if ($commitHistory) {
+                        $releaseNotes += $commitHistory
+                    }
+                }
+            }
             
             gh release create $version $installerPath `
                 --title "KleiKodesh $version" `

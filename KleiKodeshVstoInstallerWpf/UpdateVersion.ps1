@@ -1,5 +1,7 @@
 param(
-    [string]$FilePath
+    [string]$FilePath,
+    [ValidateSet("major", "minor", "patch")]
+    [string]$IncrementType = "patch"
 )
 
 try {
@@ -8,11 +10,30 @@ try {
     # Get the latest release version
     $latestVersion = (Invoke-RestMethod -Uri 'https://api.github.com/repos/KleiKodesh/KleiKodeshProject/releases/latest' -Headers @{'User-Agent'='KleiKodesh-BuildScript'}).tag_name
     
-    # Parse version and increment patch number for new release
+    # Parse version and increment based on type
     if ($latestVersion -match '^v(\d+)\.(\d+)\.(\d+)$') {
         $major = [int]$matches[1]
         $minor = [int]$matches[2] 
-        $patch = [int]$matches[3] + 1
+        $patch = [int]$matches[3]
+        
+        switch ($IncrementType) {
+            "major" {
+                $major++
+                $minor = 0
+                $patch = 0
+                Write-Host "Incrementing MAJOR version (breaking changes)"
+            }
+            "minor" {
+                $minor++
+                $patch = 0
+                Write-Host "Incrementing MINOR version (new features)"
+            }
+            "patch" {
+                $patch++
+                Write-Host "Incrementing PATCH version (bug fixes)"
+            }
+        }
+        
         $newVersion = "v$major.$minor.$patch"
     } else {
         # Fallback if version format is unexpected

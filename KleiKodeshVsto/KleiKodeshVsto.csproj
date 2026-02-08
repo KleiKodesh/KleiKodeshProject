@@ -465,7 +465,7 @@
   <Import Project="..\packages\Microsoft.Web.WebView2.1.0.3650.58\build\Microsoft.Web.WebView2.targets" Condition="Exists('..\packages\Microsoft.Web.WebView2.1.0.3650.58\build\Microsoft.Web.WebView2.targets')" />
   <Import Project="..\packages\Stub.System.Data.SQLite.Core.NetFramework.1.0.119.0\build\net46\Stub.System.Data.SQLite.Core.NetFramework.targets" Condition="Exists('..\packages\Stub.System.Data.SQLite.Core.NetFramework.1.0.119.0\build\net46\Stub.System.Data.SQLite.Core.NetFramework.targets')" />
   <!-- Import ZayitVue.targets for automatic Vue build and deployment -->
-  <Import Project="ZayitVue.targets" Condition="Exists('ZayitVue.targets')" />
+  <Import Project="..\vue-zayit\Zayit-cs\ZayitVue.targets" Condition="Exists('..\vue-zayit\Zayit-cs\ZayitVue.targets')" />
   <!-- Prebuild event to build HTML app and copy to RegexFind folder -->
   <Target Name="BuildHtmlApp" BeforeTargets="Build">
     <PropertyGroup>

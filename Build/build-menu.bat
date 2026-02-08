@@ -49,18 +49,55 @@ echo ===============================================
 echo    Building Release (AnyCPU) + GitHub Release
 echo ===============================================
 echo.
+echo Select version increment type:
+echo 1. Patch (Bug fixes) - e.g., 1.2.3 -^> 1.2.4
+echo 2. Minor (New features) - e.g., 1.2.3 -^> 1.3.0
+echo 3. Major (Breaking changes) - e.g., 1.2.3 -^> 2.0.0
+echo.
+set /p verchoice="Enter version increment (1-3): "
+
+if "%verchoice%"=="1" set INCREMENT=patch
+if "%verchoice%"=="2" set INCREMENT=minor
+if "%verchoice%"=="3" set INCREMENT=major
+
+if not defined INCREMENT (
+    echo Invalid choice. Returning to menu.
+    pause
+    goto MAIN_MENU
+)
+
+echo.
+echo Select release notes source:
+echo 1. Git commits only
+echo 2. RELEASE_NOTES.txt file only
+echo 3. Both (file + commits)
+echo.
+set /p noteschoice="Enter release notes source (1-3): "
+
+if "%noteschoice%"=="1" set NOTESSOURCE=commits
+if "%noteschoice%"=="2" set NOTESSOURCE=file
+if "%noteschoice%"=="3" set NOTESSOURCE=both
+
+if not defined NOTESSOURCE (
+    echo Invalid choice. Returning to menu.
+    pause
+    goto MAIN_MENU
+)
+
+echo.
 echo This will:
+echo - Increment %INCREMENT% version
 echo - Build VSTO project in Release^|AnyCPU
 echo - Build WPF installer
 echo - Create NSIS wrapper
-echo - Create GitHub release
+echo - Create GitHub release with %NOTESSOURCE% notes
 echo.
 set /p confirm="Continue? (Y/N): "
 if /i not "%confirm%"=="Y" goto MAIN_MENU
 
 echo.
 echo Starting build...
-powershell -ExecutionPolicy Bypass -File "%~dp0build-installer.ps1" -Platform AnyCPU
+powershell -ExecutionPolicy Bypass -File "%~dp0build-installer.ps1" -Platform AnyCPU -VersionIncrement %INCREMENT% -ReleaseNotesSource %NOTESSOURCE%
 goto BUILD_COMPLETE
 
 :RELEASE_X64
@@ -70,18 +107,55 @@ echo ===============================================
 echo     Building Release (x64) + GitHub Release
 echo ===============================================
 echo.
+echo Select version increment type:
+echo 1. Patch (Bug fixes) - e.g., 1.2.3 -^> 1.2.4
+echo 2. Minor (New features) - e.g., 1.2.3 -^> 1.3.0
+echo 3. Major (Breaking changes) - e.g., 1.2.3 -^> 2.0.0
+echo.
+set /p verchoice="Enter version increment (1-3): "
+
+if "%verchoice%"=="1" set INCREMENT=patch
+if "%verchoice%"=="2" set INCREMENT=minor
+if "%verchoice%"=="3" set INCREMENT=major
+
+if not defined INCREMENT (
+    echo Invalid choice. Returning to menu.
+    pause
+    goto MAIN_MENU
+)
+
+echo.
+echo Select release notes source:
+echo 1. Git commits only
+echo 2. RELEASE_NOTES.txt file only
+echo 3. Both (file + commits)
+echo.
+set /p noteschoice="Enter release notes source (1-3): "
+
+if "%noteschoice%"=="1" set NOTESSOURCE=commits
+if "%noteschoice%"=="2" set NOTESSOURCE=file
+if "%noteschoice%"=="3" set NOTESSOURCE=both
+
+if not defined NOTESSOURCE (
+    echo Invalid choice. Returning to menu.
+    pause
+    goto MAIN_MENU
+)
+
+echo.
 echo This will:
+echo - Increment %INCREMENT% version
 echo - Build VSTO project in Release^|x64
 echo - Build WPF installer
 echo - Create NSIS wrapper
-echo - Create GitHub release
+echo - Create GitHub release with %NOTESSOURCE% notes
 echo.
 set /p confirm="Continue? (Y/N): "
 if /i not "%confirm%"=="Y" goto MAIN_MENU
 
 echo.
 echo Starting build...
-powershell -ExecutionPolicy Bypass -File "%~dp0build-installer.ps1" -Platform x64
+powershell -ExecutionPolicy Bypass -File "%~dp0build-installer.ps1" -Platform x64 -VersionIncrement %INCREMENT% -ReleaseNotesSource %NOTESSOURCE%
 goto BUILD_COMPLETE
 
 :BUILD_ONLY_ANYCPU
@@ -91,7 +165,26 @@ echo ===============================================
 echo   Building Release (AnyCPU) - No GitHub Release
 echo ===============================================
 echo.
+echo Select version increment type:
+echo 1. Patch (Bug fixes) - e.g., 1.2.3 -^> 1.2.4
+echo 2. Minor (New features) - e.g., 1.2.3 -^> 1.3.0
+echo 3. Major (Breaking changes) - e.g., 1.2.3 -^> 2.0.0
+echo.
+set /p verchoice="Enter version increment (1-3): "
+
+if "%verchoice%"=="1" set INCREMENT=patch
+if "%verchoice%"=="2" set INCREMENT=minor
+if "%verchoice%"=="3" set INCREMENT=major
+
+if not defined INCREMENT (
+    echo Invalid choice. Returning to menu.
+    pause
+    goto MAIN_MENU
+)
+
+echo.
 echo This will:
+echo - Increment %INCREMENT% version
 echo - Build VSTO project in Release^|AnyCPU
 echo - Build WPF installer
 echo - Create NSIS wrapper
@@ -102,7 +195,7 @@ if /i not "%confirm%"=="Y" goto MAIN_MENU
 
 echo.
 echo Starting build...
-powershell -ExecutionPolicy Bypass -File "%~dp0build-installer.ps1" -Platform AnyCPU -NoRelease
+powershell -ExecutionPolicy Bypass -File "%~dp0build-installer.ps1" -Platform AnyCPU -NoRelease -VersionIncrement %INCREMENT%
 goto BUILD_COMPLETE
 
 :BUILD_ONLY_X64
@@ -112,7 +205,26 @@ echo ===============================================
 echo    Building Release (x64) - No GitHub Release
 echo ===============================================
 echo.
+echo Select version increment type:
+echo 1. Patch (Bug fixes) - e.g., 1.2.3 -^> 1.2.4
+echo 2. Minor (New features) - e.g., 1.2.3 -^> 1.3.0
+echo 3. Major (Breaking changes) - e.g., 1.2.3 -^> 2.0.0
+echo.
+set /p verchoice="Enter version increment (1-3): "
+
+if "%verchoice%"=="1" set INCREMENT=patch
+if "%verchoice%"=="2" set INCREMENT=minor
+if "%verchoice%"=="3" set INCREMENT=major
+
+if not defined INCREMENT (
+    echo Invalid choice. Returning to menu.
+    pause
+    goto MAIN_MENU
+)
+
+echo.
 echo This will:
+echo - Increment %INCREMENT% version
 echo - Build VSTO project in Release^|x64
 echo - Build WPF installer
 echo - Create NSIS wrapper
@@ -123,7 +235,7 @@ if /i not "%confirm%"=="Y" goto MAIN_MENU
 
 echo.
 echo Starting build...
-powershell -ExecutionPolicy Bypass -File "%~dp0build-installer.ps1" -Platform x64 -NoRelease
+powershell -ExecutionPolicy Bypass -File "%~dp0build-installer.ps1" -Platform x64 -NoRelease -VersionIncrement %INCREMENT%
 goto BUILD_COMPLETE
 
 :QUICK_BUILD

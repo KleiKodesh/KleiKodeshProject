@@ -1,6 +1,9 @@
 ﻿using KleiKodesh.Helpers;
+using Microsoft.VisualBasic;
+using Microsoft.Win32;
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -72,6 +75,44 @@ namespace KleiKodeshVstoInstallerWpf
             Clipboard.SetText(email);
             MessageBox.Show($"כתובת האימייל הועתקה ללוח: {email}");
             e.Handled = true;
+        }
+
+        private void ZayitDbButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var dialog = new OpenFileDialog
+                {
+                    Title = "בחר קובץ מסד נתונים לכזית",
+                    Filter = "SQLite Database (*.db)|*.db|All Files (*.*)|*.*",
+                    CheckFileExists = true
+                };
+
+                // Get current database path if set
+                string currentPath = Interaction.GetSetting("ZayitApp", "Database", "Path", "");
+                if (!string.IsNullOrEmpty(currentPath) && File.Exists(currentPath))
+                {
+                    dialog.InitialDirectory = Path.GetDirectoryName(currentPath);
+                    dialog.FileName = Path.GetFileName(currentPath);
+                }
+
+                if (dialog.ShowDialog() != true)
+                    return;
+
+                string selectedPath = dialog.FileName;
+
+                // Save the database path using the same pattern as ZayitLib
+                Interaction.SaveSetting("ZayitApp", "Database", "Path", selectedPath);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"שגיאה בהגדרת מסד הנתונים: {ex.Message}",
+                    "שגיאה",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error
+                );
+            }
         }
 
 

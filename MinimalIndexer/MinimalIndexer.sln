@@ -9,6 +9,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LuceneIndexer", "..\LuceneI
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LuceneIndexerTest", "..\LuceneIndexerTest\LuceneIndexerTest.csproj", "{028F1CD7-C847-4387-B6CF-DB0142727F55}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BloomSearchEngineLib", "..\BloomSearchEngineLib\BloomSearchEngineLib.csproj", "{0F7C9226-2C18-4CB8-8F39-A3A539B7122A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BloomSearchEngineTest", "..\BloomSearchEngineTest\BloomSearchEngineTest.csproj", "{E676B25F-F221-45F5-86D2-593855D382DE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +31,14 @@ Global
 		{028F1CD7-C847-4387-B6CF-DB0142727F55}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{028F1CD7-C847-4387-B6CF-DB0142727F55}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{028F1CD7-C847-4387-B6CF-DB0142727F55}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0F7C9226-2C18-4CB8-8F39-A3A539B7122A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0F7C9226-2C18-4CB8-8F39-A3A539B7122A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0F7C9226-2C18-4CB8-8F39-A3A539B7122A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0F7C9226-2C18-4CB8-8F39-A3A539B7122A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E676B25F-F221-45F5-86D2-593855D382DE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E676B25F-F221-45F5-86D2-593855D382DE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E676B25F-F221-45F5-86D2-593855D382DE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E676B25F-F221-45F5-86D2-593855D382DE}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
