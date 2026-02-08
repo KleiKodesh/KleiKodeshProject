@@ -3,17 +3,17 @@ using System.IO;
 
 namespace MinimalIndexer
 {
-    internal sealed class BloomFilterCollectionWriter : IDisposable
+    public sealed class BloomFilterCollectionWriter : IDisposable
     {
-        private const int FlushThreshold = 10 * 1024 * 1024; // 10 MB
+        private const int FlushThreshold = 10 * 1024 * 1024;
 
         private readonly FileStream fileStream;
         private readonly MemoryStream buffer;
         private readonly BinaryWriter writer;
 
-        internal int Count { get; private set; }
+        public int Count { get; private set; }
 
-        internal BloomFilterCollectionWriter(string id, short chunkSize)
+        public BloomFilterCollectionWriter(string id, short chunkSize)
         {
             string dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BloomFilters");
             Directory.CreateDirectory(dir);
@@ -26,47 +26,48 @@ namespace MinimalIndexer
                 65536,
                 FileOptions.SequentialScan);
 
+            using (var bw = new BinaryWriter(fileStream, System.Text.Encoding.Default, true))
+            {
+                bw.Write(0);          // filter count (patched on dispose)
+                bw.Write(chunkSize);  // authoritative chunk size
+            }
+
             buffer = new MemoryStream();
             writer = new BinaryWriter(buffer);
-
-            // Header (count patched later)
-            writer.Write(0);
-            writer.Write(chunkSize);
         }
 
-        internal void Commit(BloomFilter filter)
+        public void Commit(BloomFilter filter)
         {
             writer.Write(filter.Size);
             writer.Write(filter.HashFunctions);
 
-            byte[] bytes = filter.GetBytes();
+            var bytes = filter.GetBytes();
             writer.Write(bytes, 0, filter.GetByteSize());
 
             Count++;
 
             if (buffer.Length >= FlushThreshold)
-                FlushBuffer();
+                Flush();
         }
 
-        private void FlushBuffer()
+        private void Flush()
         {
-            buffer.Seek(0, SeekOrigin.Begin);
+            buffer.Position = 0;
             buffer.CopyTo(fileStream);
             buffer.SetLength(0);
         }
 
         public void Dispose()
         {
-            FlushBuffer();
+            Flush();
 
-            // Patch count in header
             fileStream.Seek(0, SeekOrigin.Begin);
-            using (var bw = new BinaryWriter(fileStream, System.Text.Encoding.Default, leaveOpen: true))
+            using (var bw = new BinaryWriter(fileStream, System.Text.Encoding.Default, true))
                 bw.Write(Count);
 
-            fileStream.Dispose();
             writer.Dispose();
             buffer.Dispose();
+            fileStream.Dispose();
         }
     }
 }

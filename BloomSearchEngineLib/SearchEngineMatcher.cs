@@ -7,36 +7,48 @@ namespace BloomSearchEngineLib
     {
         private const double MIN_PROXIMITY_SCORE = 0.2;
 
-        internal static MatchInfo Match(string text, string[] words)
+        /// <summary>
+        /// Matches text against search words, requiring at least minRequiredWords to match.
+        /// </summary>
+        /// <param name="text">The text to search in</param>
+        /// <param name="words">The words to search for</param>
+        /// <param name="minRequiredWords">Minimum number of words that must be found (from Bloom filter score)</param>
+        /// <returns>MatchInfo if at least minRequiredWords are found and proximity is acceptable, null otherwise</returns>
+        internal static MatchInfo Match(string text, string[] words, int minRequiredWords)
         {
             var matchInfo = new MatchInfo { Words = words };
-            var firstPositions = new int[words.Length];
+            var foundWords = new List<string>();
+            var foundPositions = new List<List<int>>();
 
-            // Phase 1: Find first occurrence of each word
+            // Phase 1: Find which words exist and their first occurrence
             for (int i = 0; i < words.Length; i++)
             {
                 int pos = text.IndexOf(words[i], StringComparison.Ordinal);
-                if (pos == -1)
-                    return null; // Early exit
-
-                firstPositions[i] = pos;
+                if (pos != -1)
+                {
+                    foundWords.Add(words[i]);
+                    foundPositions.Add(new List<int> { pos });
+                }
             }
 
-            // Phase 2: Collect all positions for each word
-            matchInfo.AllPositions = new List<int>[words.Length];
-            for (int i = 0; i < words.Length; i++)
-            {
-                var positions = new List<int> { firstPositions[i] };
-                int index = firstPositions[i] + 1;
+            // Check if we have enough matches
+            if (foundWords.Count < minRequiredWords)
+                return null; // Not enough words found
 
-                while ((index = text.IndexOf(words[i], index, StringComparison.Ordinal)) != -1)
+            // Phase 2: Collect all positions for each found word
+            for (int i = 0; i < foundWords.Count; i++)
+            {
+                int index = foundPositions[i][0] + 1;
+                while ((index = text.IndexOf(foundWords[i], index, StringComparison.Ordinal)) != -1)
                 {
-                    positions.Add(index);
+                    foundPositions[i].Add(index);
                     index++;
                 }
-
-                matchInfo.AllPositions[i] = positions;
             }
+
+            // Store the found words and their positions
+            matchInfo.Words = foundWords.ToArray();
+            matchInfo.AllPositions = foundPositions.ToArray();
 
             // Phase 3: Calculate proximity score
             CalculateProximityScore(matchInfo);
@@ -140,18 +152,26 @@ namespace BloomSearchEngineLib
         internal static string ExtractSnippetFromCluster(
             string text, int clusterStart, int clusterEnd, int maxSnippetLength = 200)
         {
+            if (string.IsNullOrEmpty(text))
+                return string.Empty;
+
             if (clusterStart == -1 || clusterEnd == -1)
                 return text.Length <= maxSnippetLength
                     ? text
                     : text.Substring(0, maxSnippetLength) + "...";
 
+            // Ensure cluster positions are within text bounds
+            clusterStart = Math.Max(0, Math.Min(clusterStart, text.Length - 1));
+            clusterEnd = Math.Max(0, Math.Min(clusterEnd, text.Length - 1));
+
             int snippetStart = Math.Max(0, clusterStart - 50);
             int snippetEnd = Math.Min(text.Length, clusterEnd + 50);
 
-            if (snippetStart > 0)
+            // Only search for word boundary if snippetStart > 0 AND < text.Length
+            if (snippetStart > 0 && snippetStart < text.Length)
             {
                 int wordBoundary = text.LastIndexOf(' ', snippetStart);
-                if (wordBoundary > snippetStart - 20)
+                if (wordBoundary > snippetStart - 20 && wordBoundary != -1)
                     snippetStart = wordBoundary + 1;
             }
 
@@ -161,6 +181,12 @@ namespace BloomSearchEngineLib
                 if (wordBoundary != -1 && wordBoundary < snippetEnd + 20)
                     snippetEnd = wordBoundary;
             }
+
+            // Ensure valid substring range
+            if (snippetStart >= text.Length)
+                snippetStart = Math.Max(0, text.Length - 1);
+            if (snippetEnd <= snippetStart)
+                snippetEnd = Math.Min(snippetStart + 1, text.Length);
 
             string snippet = text.Substring(snippetStart, snippetEnd - snippetStart);
 

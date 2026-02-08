@@ -6,11 +6,12 @@ namespace MinimalIndexer
 {
     internal sealed class BloomFilterCollectionReader : IDisposable
     {
-        private const int ChunkTargetBytes = 10 * 1024 * 1024; // ~10 MB
+        private const int ChunkTargetBytes = 10 * 1024 * 1024;
+
         private readonly FileStream stream;
         private readonly BinaryReader reader;
         private readonly int filterCount;
-        private readonly short chunkSize;
+        internal short ChunkSize { get; }
 
         internal BloomFilterCollectionReader(string id)
         {
@@ -24,86 +25,114 @@ namespace MinimalIndexer
                 FileOptions.SequentialScan);
             reader = new BinaryReader(stream);
             filterCount = reader.ReadInt32();
-            chunkSize = reader.ReadInt16();
+            ChunkSize = reader.ReadInt16();
         }
 
-        /// <summary>
-        /// Search Bloom filters and yield results as an enumerable.
-        /// If fewer than 100 max-scoring chunks are found, yields up to 100 best chunks.
-        /// If 100+ max-scoring chunks are found, yields only those.
-        /// </summary>
-        internal IEnumerable<SearchResult> Search(string[] searchTerms)
+        internal SearchResult[] Search(string[] searchTerms)
         {
-            var allResults = new List<SearchResult>();
-            int bestScore = 0;
-            int filtersRead = 0;
-            int maxScoreCount = 0;
+            stream.Seek(6, SeekOrigin.Begin);
 
-            while (filtersRead < filterCount)
+            int maxScore = searchTerms.Length;
+
+            // Pre-allocate for worst case (avoid resizing)
+            var perfectMatches = new List<SearchResult>(filterCount / 10);
+            var partialMatches = new List<SearchResult>(100);
+
+            int read = 0;
+            int lowestPartialScore = 0; // Track minimum score we're keeping in partials
+
+            while (read < filterCount)
             {
                 long chunkStart = stream.Position;
 
-                while (filtersRead < filterCount &&
-                       stream.Position - chunkStart < ChunkTargetBytes)
+                while (read < filterCount && stream.Position - chunkStart < ChunkTargetBytes)
                 {
-                    int bitCount = reader.ReadInt32();
-                    int hashFunctions = reader.ReadInt32();
-                    int byteLen = (bitCount + 7) / 8;
-                    byte[] bytes = reader.ReadBytes(byteLen);
+                    int bits = reader.ReadInt32();
+                    int hashes = reader.ReadInt32();
+                    int bytesLen = (bits + 7) / 8;
+                    var bytes = reader.ReadBytes(bytesLen);
+                    var filter = new BloomFilter(bytes, bits, hashes);
 
-                    var filter = new BloomFilter(bytes, bitCount, hashFunctions);
+                    // Fast score calculation - inline and optimized
                     int score = 0;
-
                     for (int i = 0; i < searchTerms.Length; i++)
+                    {
                         if (filter.Contains(searchTerms[i]))
                             score++;
+                    }
 
-                    if (score > 0)
+                    if (score == maxScore)
                     {
-                        allResults.Add(new SearchResult
+                        // Perfect match - always keep
+                        perfectMatches.Add(new SearchResult { Id = read, Score = score });
+                    }
+                    else if (score > 0)
+                    {
+                        // Partial match - only keep if good enough
+                        if (partialMatches.Count < 100)
                         {
-                            Id = filtersRead,
-                            Score = score
-                        });
+                            partialMatches.Add(new SearchResult { Id = read, Score = score });
 
-                        // Track best score and count
-                        if (score > bestScore)
-                        {
-                            bestScore = score;
-                            maxScoreCount = 1;
+                            // Update lowest score if we just filled to 100
+                            if (partialMatches.Count == 100)
+                            {
+                                lowestPartialScore = int.MaxValue;
+                                for (int i = 0; i < partialMatches.Count; i++)
+                                {
+                                    if (partialMatches[i].Score < lowestPartialScore)
+                                        lowestPartialScore = partialMatches[i].Score;
+                                }
+                            }
                         }
-                        else if (score == bestScore)
+                        else if (score > lowestPartialScore)
                         {
-                            maxScoreCount++;
+                            // Replace the worst partial match
+                            int worstIdx = 0;
+                            int worstScore = partialMatches[0].Score;
+
+                            for (int i = 1; i < partialMatches.Count; i++)
+                            {
+                                if (partialMatches[i].Score < worstScore)
+                                {
+                                    worstScore = partialMatches[i].Score;
+                                    worstIdx = i;
+                                }
+                            }
+
+                            partialMatches[worstIdx] = new SearchResult { Id = read, Score = score };
+                            lowestPartialScore = score; // Update lowest
                         }
                     }
 
-                    filtersRead++;
+                    read++;
                 }
             }
 
-            if (allResults.Count == 0)
-                yield break;
+            // Sort partial matches by score (descending)
+            partialMatches.Sort((a, b) => b.Score.CompareTo(a.Score));
 
-            // Sort by score descending
-            allResults.Sort((a, b) => b.Score.CompareTo(a.Score));
+            // Build final result: all perfect + needed partials
+            int neededPartials = perfectMatches.Count < 100
+                ? Math.Min(100 - perfectMatches.Count, partialMatches.Count)
+                : 0;
 
-            // If we found fewer than 100 max-scoring chunks, return up to 100 best overall
-            // If we found 100+ max-scoring chunks, return only those
-            int take = maxScoreCount >= 100
-                ? maxScoreCount
-                : Math.Min(100, allResults.Count);
+            var finalResults = new SearchResult[perfectMatches.Count + neededPartials];
 
-            for (int i = 0; i < take; i++)
-            {
-                yield return allResults[i];
-            }
+            // Copy perfect matches
+            for (int i = 0; i < perfectMatches.Count; i++)
+                finalResults[i] = perfectMatches[i];
+
+            // Copy needed partial matches
+            for (int i = 0; i < neededPartials; i++)
+                finalResults[perfectMatches.Count + i] = partialMatches[i];
+
+            return finalResults;
         }
 
         public void Dispose()
         {
-            reader?.Dispose();
-            stream?.Dispose();
+            reader.Dispose();
+            stream.Dispose();
         }
     }
 

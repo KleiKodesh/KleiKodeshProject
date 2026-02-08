@@ -4,12 +4,12 @@ using System.Data;
 using System.Data.SQLite;
 using System.IO;
 
-internal sealed class ZayitDbManager : IDisposable
+public sealed class ZayitDbManager : IDisposable
 {
     readonly SQLiteConnection _connection;
-    internal IDbConnection Connection => _connection;
+    public IDbConnection Connection => _connection;
 
-    internal ZayitDbManager()
+    public ZayitDbManager()
     {
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         string dbPath = Path.Combine(
@@ -26,7 +26,7 @@ internal sealed class ZayitDbManager : IDisposable
     /// <summary>
     /// Gets the current chunk size stored in the database, or null if not initialized.
     /// </summary>
-    internal int? GetCurrentChunkSize()
+    public int? GetCurrentChunkSize()
     {
         using (var cmd = _connection.CreateCommand())
         {
@@ -48,7 +48,7 @@ internal sealed class ZayitDbManager : IDisposable
     /// <summary>
     /// Checks if chunk_id column exists and matches the desired chunk size.
     /// </summary>
-    internal bool NeedsChunkIndexUpdate(int desiredChunkSize)
+    public bool NeedsChunkIndexUpdate(int desiredChunkSize)
     {
         var currentChunkSize = GetCurrentChunkSize();
         return currentChunkSize == null || currentChunkSize.Value != desiredChunkSize;
@@ -58,7 +58,7 @@ internal sealed class ZayitDbManager : IDisposable
     /// One-time/update setup: adds/updates chunk_id column and index for fast chunk retrieval.
     /// Recreates the index if chunk size has changed.
     /// </summary>
-    internal void InitializeChunkIndex(int chunkSize, Action<int, int> progressCallback = null)
+    public void InitializeChunkIndex(int chunkSize, Action<int, int> progressCallback = null)
     {
         using (var transaction = _connection.BeginTransaction())
         {
@@ -143,7 +143,7 @@ internal sealed class ZayitDbManager : IDisposable
         }
     }
 
-    internal int GetLineCount()
+    public int GetLineCount()
     {
         using (var cmd = _connection.CreateCommand())
         {
@@ -152,7 +152,7 @@ internal sealed class ZayitDbManager : IDisposable
         }
     }
 
-    internal IEnumerable<string> GetAllLineContents()
+    public IEnumerable<string> GetAllLineContents()
     {
         using (var cmd = _connection.CreateCommand())
         {
@@ -167,7 +167,7 @@ internal sealed class ZayitDbManager : IDisposable
     /// Gets lines for a specific chunk using indexed chunk_id (fast!).
     /// chunkNumber is zero-based: chunk 0 → rows 0–24, chunk 50 → rows 1250–1274
     /// </summary>
-    internal IEnumerable<string> GetLineContentsChunk(int chunkNumber, int chunkSize)
+    public IEnumerable<string> GetLineContentsChunk(int chunkNumber, int chunkSize)
     {
         var cmd = _connection.CreateCommand();
         cmd.CommandText =

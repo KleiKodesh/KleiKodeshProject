@@ -1,29 +1,45 @@
 ﻿using System;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace BloomSearchEngineLib
 {
     public static class TextNormalizer
     {
+        [ThreadStatic] private static char[] _buffer;
         [ThreadStatic] private static StringBuilder _sb;
 
-        public static string Normalize(this string text)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static string NormalizeText(this string text)
         {
             if (string.IsNullOrWhiteSpace(text)) return "";
 
-            if (_sb == null)
-                _sb = new StringBuilder(text.Length);
+            // Initialize thread-local buffers
+            if (_buffer == null)
+            {
+                _buffer = new char[1024];
+                _sb = new StringBuilder(1024);
+            }
             else
+            {
                 _sb.Clear();
+            }
 
+            // Ensure buffer is large enough
+            if (_buffer.Length < text.Length)
+                _buffer = new char[text.Length * 2]; // Extra space to avoid frequent resizing
+
+            int writePos = 0;
             bool inTag = false;
             bool isLineBreakTag = false;
             int tagNamePos = 0;
 
+            // Process each character
             for (int i = 0; i < text.Length; i++)
             {
                 char c = text[i];
 
+                // === TAG START ===
                 if (c == '<')
                 {
                     inTag = true;
@@ -32,12 +48,13 @@ namespace BloomSearchEngineLib
                     continue;
                 }
 
+                // === INSIDE TAG ===
                 if (inTag)
                 {
                     if (c == '>')
                     {
                         if (isLineBreakTag)
-                            _sb.Append(' ');
+                            _buffer[writePos++] = ' ';
                         inTag = false;
                     }
                     else if (tagNamePos < 4)
@@ -46,16 +63,11 @@ namespace BloomSearchEngineLib
 
                         // Skip '/' for closing tags
                         if (c == '/' && tagNamePos == 0)
-                        {
-                            continue; // Don't increment tagNamePos
-                        }
+                            continue;
 
                         if (tagNamePos == 0)
                         {
-                            if (lc == 'b' || lc == 'p' || lc == 'd')
-                                isLineBreakTag = true;
-                            else
-                                isLineBreakTag = false;
+                            isLineBreakTag = (lc == 'b' || lc == 'p' || lc == 'd');
                         }
                         else if (tagNamePos == 1 && isLineBreakTag)
                         {
@@ -76,34 +88,39 @@ namespace BloomSearchEngineLib
                     continue;
                 }
 
+                // === CHARACTER PROCESSING ===
+                // Write directly to char array (MUCH faster than individual StringBuilder.Append calls)
 
                 // Hebrew maqaf and underscore → space
                 if (c == '\u05BE' || c == '_')
                 {
-                    _sb.Append(' ');
+                    _buffer[writePos++] = ' ';
                 }
                 // Hebrew alphabet (U+05D0 to U+05EA)
                 else if (c >= '\u05D0' && c <= '\u05EA')
                 {
-                    _sb.Append(c);
+                    _buffer[writePos++] = c;
                 }
                 // Common whitespace
                 else if (c == ' ' || c == '\t' || c == '\n' || c == '\r')
                 {
-                    _sb.Append(' ');
+                    _buffer[writePos++] = ' ';
                 }
-                // Latin alphabet → lowercase
+                // Latin uppercase → lowercase
                 else if (c >= 'A' && c <= 'Z')
                 {
-                    _sb.Append((char)(c | 32));
+                    _buffer[writePos++] = (char)(c | 32);
                 }
+                // Latin lowercase
                 else if (c >= 'a' && c <= 'z')
                 {
-                    _sb.Append(c);
+                    _buffer[writePos++] = c;
                 }
                 // All else stripped
             }
 
+            // Single append operation instead of hundreds/thousands
+            _sb.Append(_buffer, 0, writePos);
             return _sb.ToString();
         }
     }
