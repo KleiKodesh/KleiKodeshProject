@@ -57,7 +57,6 @@ public sealed class ZayitDbManager : IDisposable
     /// <summary>
     /// One-time/update setup: adds/updates chunk_id column and index for fast chunk retrieval.
     /// Recreates the index if chunk size has changed.
-    /// Uses temp table with ROW_NUMBER to assign chunk IDs based on (bookId, id) ordering.
     /// </summary>
     public void InitializeChunkIndex(int chunkSize, Action<int, int> progressCallback = null)
     {
@@ -101,42 +100,28 @@ public sealed class ZayitDbManager : IDisposable
                     cmd.CommandText = "SELECT COUNT(*) FROM line";
                     int totalRows = (int)(long)cmd.ExecuteScalar();
 
-                    // Report initial progress
-                    progressCallback?.Invoke(0, totalRows);
+                    // Update chunk_id in batches with progress reporting
+                    const int batchSize = 50000;
+                    int processedRows = 0;
 
-                    // Create temp table with ordered row numbers and chunk assignments
-                    cmd.CommandText = $@"
-                        CREATE TEMP TABLE temp_chunks AS
-                        SELECT id, 
-                               (ROW_NUMBER() OVER (ORDER BY bookId, id) - 1) / {chunkSize} as new_chunk_id
-                        FROM line";
-                    cmd.ExecuteNonQuery();
+                    while (processedRows < totalRows)
+                    {
+                        cmd.CommandText = $@"
+                            UPDATE line 
+                            SET chunk_id = (id / {chunkSize})
+                            WHERE id >= {processedRows} AND id < {processedRows + batchSize}";
+                        cmd.ExecuteNonQuery();
 
-                    // Report progress after temp table creation (about 50% done)
-                    progressCallback?.Invoke(totalRows / 2, totalRows);
-
-                    // Create index on temp table for faster updates
-                    cmd.CommandText = "CREATE INDEX idx_temp_chunks_id ON temp_chunks(id)";
-                    cmd.ExecuteNonQuery();
-
-                    // Update chunk_id based on temp table
-                    cmd.CommandText = @"
-                        UPDATE line 
-                        SET chunk_id = (SELECT new_chunk_id FROM temp_chunks WHERE temp_chunks.id = line.id)";
-                    cmd.ExecuteNonQuery();
-
-                    // Report progress after update (about 75% done)
-                    progressCallback?.Invoke(totalRows * 3 / 4, totalRows);
-
-                    // Clean up temp table
-                    cmd.CommandText = "DROP TABLE temp_chunks";
-                    cmd.ExecuteNonQuery();
+                        processedRows += batchSize;
+                        int actualProcessed = Math.Min(processedRows, totalRows);
+                        progressCallback?.Invoke(actualProcessed, totalRows);
+                    }
 
                     // Drop old index if it exists
                     cmd.CommandText = "DROP INDEX IF EXISTS idx_line_chunk_id";
                     cmd.ExecuteNonQuery();
 
-                    // Create new index on chunk_id
+                    // Create new index
                     cmd.CommandText = "CREATE INDEX idx_line_chunk_id ON line(chunk_id)";
                     cmd.ExecuteNonQuery();
 
@@ -146,9 +131,6 @@ public sealed class ZayitDbManager : IDisposable
                         VALUES (1, @chunkSize)";
                     cmd.Parameters.AddWithValue("@chunkSize", chunkSize);
                     cmd.ExecuteNonQuery();
-
-                    // Report completion
-                    progressCallback?.Invoke(totalRows, totalRows);
                 }
 
                 transaction.Commit();
@@ -174,7 +156,7 @@ public sealed class ZayitDbManager : IDisposable
     {
         using (var cmd = _connection.CreateCommand())
         {
-            cmd.CommandText = "SELECT content FROM line ORDER BY bookId, id";
+            cmd.CommandText = "SELECT content FROM line ORDER BY id";
             using (var reader = cmd.ExecuteReader())
                 while (reader.Read())
                     yield return reader.GetString(0);
@@ -183,15 +165,13 @@ public sealed class ZayitDbManager : IDisposable
 
     /// <summary>
     /// Gets lines for a specific chunk using indexed chunk_id (fast!).
-    /// chunkNumber is zero-based: chunk 0 → first 'chunkSize' rows (ordered by bookId, id),
-    /// chunk 1 → next 'chunkSize' rows, etc.
-    /// Returns lines in the same order as GetAllLineContents (bookId, id).
+    /// chunkNumber is zero-based: chunk 0 → rows 0–24, chunk 50 → rows 1250–1274
     /// </summary>
     public IEnumerable<string> GetLineContentsChunk(int chunkNumber, int chunkSize)
     {
         var cmd = _connection.CreateCommand();
         cmd.CommandText =
-            "SELECT content FROM line WHERE chunk_id = @chunkId ORDER BY bookId, id";
+            "SELECT content FROM line WHERE chunk_id = @chunkId ORDER BY id";
         cmd.Parameters.AddWithValue("@chunkId", chunkNumber);
 
         SQLiteDataReader reader = null;

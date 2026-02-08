@@ -19,7 +19,7 @@ namespace BloomSearchEngineLib
 
         public BloomFilterIndexer(
             string id = "lines",
-            short chunkSize = 50,
+            short chunkSize = 25,
             double falsePositiveRate = 0.01)
         {
             _id = id;

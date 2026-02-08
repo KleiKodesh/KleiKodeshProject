@@ -239,6 +239,7 @@ const isNavigating = ref(false) // Flag to prevent scroll tracking during progra
 const lastScrollTop = ref(0) // Track last scroll position to determine direction
 const scrollDirection = ref<'up' | 'down' | 'none'>('none') // Current scroll direction
 const pendingNavigationTargetBookId = ref<number | undefined>(undefined) // Track target book ID for navigation
+const isLoadingFromNavigation = ref(false) // Flag to indicate we're loading from next/previous line buttons
 
 // Virtual scroller configuration
 const commentaryMinItemSize = computed(() => 80)
@@ -335,8 +336,9 @@ async function previousLine() {
 
     // If we have a target commentary, try to find the previous line with it
     if (currentTarget !== undefined) {
-        const found = await findLineWithTarget(idx, -1, currentTarget, 20)
+        const found = await findLineWithTarget(idx, -1, currentTarget, 100)
         if (found !== null) {
+            isLoadingFromNavigation.value = true // Set flag before navigation
             pendingNavigationTargetBookId.value = currentTarget // Set target for next load
             emit('update:selectedLineIndex', found)
             emit('navigate-line', found)
@@ -353,6 +355,7 @@ async function previousLine() {
     }
 
     // Fallback: just go to previous line
+    isLoadingFromNavigation.value = true // Set flag even for fallback
     const newIndex = Math.max(0, idx - 1)
     emit('update:selectedLineIndex', newIndex)
     emit('navigate-line', newIndex)
@@ -374,8 +377,9 @@ async function nextLine() {
 
     // If we have a target commentary, try to find the next line with it
     if (currentTarget !== undefined) {
-        const found = await findLineWithTarget(idx, 1, currentTarget, 20)
+        const found = await findLineWithTarget(idx, 1, currentTarget, 100)
         if (found !== null) {
+            isLoadingFromNavigation.value = true // Set flag before navigation
             pendingNavigationTargetBookId.value = currentTarget // Set target for next load
             emit('update:selectedLineIndex', found)
             emit('navigate-line', found)
@@ -392,6 +396,7 @@ async function nextLine() {
     }
 
     // Fallback: just go to next line
+    isLoadingFromNavigation.value = true // Set flag even for fallback
     const newIndex = idx + 1
     emit('update:selectedLineIndex', newIndex)
     emit('navigate-line', newIndex)
@@ -556,6 +561,8 @@ const handleFilterChange = async (connectionTypeId: number) => {
 
 async function loadCommentaryLinks(bookId: number, lineIndex: number, scrollToTargetBookId?: number) {
     isLoading.value = true
+    const wasNavigating = isLoadingFromNavigation.value // Capture the flag
+    
     try {
         linkGroups.value = await commentaryService.loadCommentaryLinks(
             bookId,
@@ -580,11 +587,34 @@ async function loadCommentaryLinks(bookId: number, lineIndex: number, scrollToTa
 
                 setTimeout(() => {
                     scrollToGroup(targetGroupIndex)
+                    // Clear the navigation flag after scrolling completes
+                    setTimeout(() => {
+                        isLoadingFromNavigation.value = false
+                    }, 300)
                 }, 150)
             } else {
                 // Target not found, use default
                 currentGroupIndex.value = 0
                 comboboxSelectedValue.value = 0
+                isLoadingFromNavigation.value = false
+            }
+        } else if (wasNavigating) {
+            // Navigation button was used but no specific target - keep current selection if possible
+            const currentTarget = linkGroups.value[currentGroupIndex.value]?.targetBookId
+            if (currentTarget !== undefined) {
+                // Current index is still valid, keep it
+                comboboxSelectedValue.value = currentGroupIndex.value
+                setTimeout(() => {
+                    scrollToGroup(currentGroupIndex.value)
+                    setTimeout(() => {
+                        isLoadingFromNavigation.value = false
+                    }, 300)
+                }, 150)
+            } else {
+                // Current index not valid, reset
+                currentGroupIndex.value = 0
+                comboboxSelectedValue.value = 0
+                isLoadingFromNavigation.value = false
             }
         } else if (savedPosition && savedPosition.groupIndex < linkGroups.value.length) {
             // Restore saved position
@@ -610,6 +640,7 @@ async function loadCommentaryLinks(bookId: number, lineIndex: number, scrollToTa
     } catch (error) {
         console.error('❌ Failed to load commentary links:', error)
         linkGroups.value = []
+        isLoadingFromNavigation.value = false
     } finally {
         isLoading.value = false
     }
@@ -780,7 +811,7 @@ function setupScrollTracking() {
     let scrollTimeout: number | undefined
 
     const updateCurrentSection = () => {
-        if (isNavigating.value) return
+        if (isNavigating.value || isLoadingFromNavigation.value) return
 
         const sections = scrollerEl.querySelectorAll('section.commentary-section')
         if (sections.length === 0) return
@@ -865,7 +896,7 @@ function setupScrollTracking() {
 
     // Track scroll direction and update current section
     const handleScroll = () => {
-        if (isNavigating.value) return
+        if (isNavigating.value || isLoadingFromNavigation.value) return
 
         const currentScrollTop = scrollerEl.scrollTop
 
