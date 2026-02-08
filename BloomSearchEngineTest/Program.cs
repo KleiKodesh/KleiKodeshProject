@@ -1,5 +1,6 @@
 ﻿using BloomSearchEngineLib;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace BloomSearchEngineTest
@@ -8,7 +9,8 @@ namespace BloomSearchEngineTest
     {
         static void Main(string[] args)
         {
-            var engine = new BloomSearchEngineLib.BloomFilterIndexer();
+            var engine = new BloomFilterIndexer();
+
             engine.DatabaseInitProgressChanged += (s, e) =>
             {
                 Console.WriteLine(
@@ -16,6 +18,7 @@ namespace BloomSearchEngineTest
                     $"{e.ProcessedRows}/{e.TotalRows} rows | " +
                     $"Elapsed: {e.Elapsed:mm\\:ss} | ETA: {e.Eta:mm\\:ss}");
             };
+
             engine.IndexProgressChanged += (s, e) =>
             {
                 Console.WriteLine(
@@ -23,19 +26,20 @@ namespace BloomSearchEngineTest
                     $"{e.ProcessedChunks}/{e.TotalChunks} chunks | " +
                     $"Elapsed: {e.Elapsed:mm\\:ss} | ETA: {e.Eta:mm\\:ss}");
             };
+
             while (true)
             {
                 Console.WriteLine();
                 Console.WriteLine("Choose action:");
                 Console.WriteLine("1 - Create index");
-                Console.WriteLine("2 - Search");
                 Console.WriteLine("3 - Search and save to HTML");
-                Console.WriteLine("4 - Test text normalizer");
                 Console.WriteLine("0 - Exit");
                 Console.Write("> ");
+
                 var choice = Console.ReadLine();
                 if (choice == "0")
                     break;
+
                 switch (choice)
                 {
                     case "1":
@@ -47,11 +51,7 @@ namespace BloomSearchEngineTest
                             Console.WriteLine($"Indexing completed in {sw.Elapsed.TotalSeconds:0.000} s");
                             break;
                         }
-                    case "2":
-                        {
 
-                            break;
-                        }
                     case "3":
                         {
                             Console.Write("Search query: ");
@@ -64,40 +64,46 @@ namespace BloomSearchEngineTest
                             }
 
                             var swTotal = Stopwatch.StartNew();
-                            var swFirst = new Stopwatch();
-                            int count = 0;
-                            double firstResultMs = -1;
-                            var results = new System.Collections.Generic.List<SearchResultItem>();
+                            var swFirst = Stopwatch.StartNew();
 
-                            swFirst.Start();
-                            var searchEngine = new BloomSearchEngineLib.BloomFilterSearcher();
-                            foreach (var result in searchEngine.Search(query))
+                            int count = 0;
+                            double firstResultSec = -1;
+                            var results = new List<SearchResultItem>();
+
+                            var searcher = new BloomFilterSearcher();
+                            foreach (var result in searcher.Search(query))
                             {
                                 if (count == 0)
                                 {
                                     swFirst.Stop();
-                                    firstResultMs = swFirst.Elapsed.TotalSeconds;
+                                    firstResultSec = swFirst.Elapsed.TotalSeconds;
                                 }
+
                                 results.Add(result);
                                 count++;
                             }
+
                             swTotal.Stop();
 
                             Console.WriteLine();
                             Console.WriteLine($"Results: {count}");
                             if (count > 0)
                             {
-                                Console.WriteLine($"Time to first result: {firstResultMs:0.000} s");
+                                Console.WriteLine($"Time to first result: {firstResultSec:0.000} s");
                                 Console.WriteLine($"Average per result: {swTotal.Elapsed.TotalSeconds / count:0.000} s");
                             }
                             Console.WriteLine($"Total search time: {swTotal.Elapsed.TotalSeconds:0.000} s");
 
                             if (count > 0)
                             {
-                                string htmlPath = SearchIndexHelper.GenerateHtmlReport(query, results, swTotal.Elapsed, firstResultMs);
+                                var htmlPath = SearchIndexHelper.GenerateHtmlReport(
+                                    query,
+                                    results,
+                                    swTotal.Elapsed,
+                                    firstResultSec);
+
                                 Console.WriteLine($"HTML report saved to: {htmlPath}");
 
-                                // Open the HTML file in default browser
                                 try
                                 {
                                     Process.Start(new ProcessStartInfo
@@ -118,17 +124,13 @@ namespace BloomSearchEngineTest
                             }
                             break;
                         }
-                    case "4":
-                        {
-                            TextNormalizerTest.RunAll();
-                            break;
-                        }
 
                     default:
                         Console.WriteLine("Invalid choice.");
                         break;
                 }
             }
+
             Console.WriteLine("Goodbye 👋");
         }
     }

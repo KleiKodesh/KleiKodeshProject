@@ -1,6 +1,89 @@
 # PDF.js Customizations
 
-This PDF.js installation includes several customizations for optimal performance and visual quality in the Zayit Vue app.
+This PDF.js installation includes several customizations for optimal performance, visual quality, and Hebrew localization in the Zayit Vue app.
+
+## Hebrew Localization
+
+### Problem
+
+PDF.js by default uses the browser's language setting (`navigator.language`), which may not be Hebrew. The viewer needs to be hardcoded to Hebrew locale for consistent RTL layout and Hebrew UI text.
+
+### Solution
+
+Modified PDF.js's internal locale detection to read from URL parameter with Hebrew as default.
+
+### Implementation
+
+**File**: `public/pdfjs/web/viewer.mjs` (line ~652)
+
+Modified the `localeProperties` configuration:
+
+```javascript
+localeProperties: {
+  value: {
+    lang: new URLSearchParams(window.location.search).get("locale") || "he"
+  },
+  kind: OptionKind.BROWSER
+},
+```
+
+**Original code:**
+
+```javascript
+localeProperties: {
+  value: {
+    lang: navigator.language || "en-US"
+  },
+  kind: OptionKind.BROWSER
+},
+```
+
+### How It Works
+
+1. PDF.js reads the `locale` URL parameter (e.g., `viewer.html?locale=he`)
+2. Falls back to `"he"` if no parameter is provided
+3. Loads Hebrew translations from `locale/he/viewer.ftl`
+4. Automatically sets `dir="rtl"` because Hebrew is in PDF.js's RTL languages list: `["ar", "he", "fa", "ps", "ur"]`
+5. Applies Hebrew locale to all UI elements (tooltips, buttons, menus)
+
+### Vue App Integration
+
+Both PDF viewer components pass the locale parameter:
+
+**Files:**
+
+- `src/components/pages/PdfViewPage.vue`
+- `src/components/pages/HebrewBooksViewPage.vue`
+
+```javascript
+params.set("locale", "he");
+```
+
+### Benefits
+
+- **Consistent Hebrew UI** - All tooltips and buttons display in Hebrew
+- **Automatic RTL layout** - PDF.js detects Hebrew and applies right-to-left layout
+- **Proper page spreading** - Pages spread right-to-left for Hebrew books
+- **URL parameter support** - Can override locale if needed (e.g., `?locale=en-US`)
+- **Uses PDF.js internal methods** - No external scripts or hacks required
+- **Complete sidebar translations** - Added missing "views-manager" translations for the newer sidebar interface
+
+### Missing Translations Fixed
+
+The original Hebrew locale file (`locale/he/viewer.ftl`) was missing translations for the newer "views-manager" sidebar interface introduced in recent PDF.js versions. We added the following translations:
+
+- Sidebar toggle button labels
+- View selector (Pages, Outline, Attachments, Layers)
+- Page management actions (Copy, Cut, Delete, Save as)
+- Status messages for undo operations
+- Warning messages for failed operations
+
+**Translation style:** Used declarative "חלונית צד" (side panel) instead of action-oriented phrases for better Hebrew UX.
+
+### References
+
+- [PDF.js Issue #11829](https://github.com/mozilla/pdf.js/issues/11829) - Setting locale doesn't work
+- [StackOverflow Solution](https://stackoverflow.com/questions/64915575/how-to-force-set-locale-in-pdf-js) - How to force locale in PDF.js
 
 ## Theme Synchronization
 
@@ -156,6 +239,13 @@ params.set("cMapPacked", "true"); // Use packed CMaps for faster font loading
 - **Improved font performance** - Especially important for Hebrew text
 
 ## Files Modified
+
+### Hebrew Localization
+
+- **viewer.mjs** (line ~652) - Modified `localeProperties` to read from URL parameter with Hebrew default
+- **locale/he/viewer.ftl** - Added missing "views-manager" translations for sidebar interface
+- **PdfViewPage.vue** - Passes `locale=he` parameter
+- **HebrewBooksViewPage.vue** - Passes `locale=he` parameter
 
 ### Theme System
 
