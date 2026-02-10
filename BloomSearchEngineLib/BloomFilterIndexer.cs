@@ -12,14 +12,13 @@ namespace BloomSearchEngineLib
         private readonly double _falsePositiveRate;
 
         // Timer-based progress reporting interval
-        private const int ProgressReportIntervalMs = 1000; // Report every ---ms
+        private const int ProgressReportIntervalMs = 1000; // Report every 1000ms
 
         public event EventHandler<IndexProgressChangedEventArgs> IndexProgressChanged;
-        public event EventHandler<DatabaseInitProgressEventArgs> DatabaseInitProgressChanged;
 
         public BloomFilterIndexer(
             string id = "lines",
-            short chunkSize = 25,
+            short chunkSize = 100,
             double falsePositiveRate = 0.01)
         {
             _id = id;
@@ -29,8 +28,6 @@ namespace BloomSearchEngineLib
 
         public void CreateBloomFilters()
         {
-            InitializeDatabase();
-
             using (var db = new ZayitDbManager())
             using (var writer = new BloomFilterCollectionWriter(_id, _chunkSize))
             {
@@ -63,7 +60,7 @@ namespace BloomSearchEngineLib
                     var currentTime = sw.Elapsed;
                     if ((currentTime - lastReportTime).TotalMilliseconds >= ProgressReportIntervalMs)
                     {
-                        // FIX: Guard against division by zero
+                        // Guard against division by zero
                         var eta = (processedChunks > 0 && processedChunks < totalChunks)
                             ? TimeSpan.FromMilliseconds(
                                 sw.Elapsed.TotalMilliseconds / processedChunks *
@@ -95,45 +92,6 @@ namespace BloomSearchEngineLib
                     this,
                     new IndexProgressChangedEventArgs(
                         processedChunks, totalChunks, sw.Elapsed, finalEta));
-            }
-        }
-
-        private void InitializeDatabase()
-        {
-            using (var db = new ZayitDbManager())
-            {
-                if (!db.NeedsChunkIndexUpdate(_chunkSize))
-                {
-                    DatabaseInitProgressChanged?.Invoke(
-                        this,
-                        new DatabaseInitProgressEventArgs(1, 1, TimeSpan.Zero, TimeSpan.Zero));
-                    return;
-                }
-
-                var sw = Stopwatch.StartNew();
-                var lastReportTime = sw.Elapsed;
-
-                db.InitializeChunkIndex(_chunkSize, (processed, total) =>
-                {
-                    // TIMER-BASED REPORTING for database init too
-                    var currentTime = sw.Elapsed;
-                    if ((currentTime - lastReportTime).TotalMilliseconds >= ProgressReportIntervalMs ||
-                        processed == total) // Always report completion
-                    {
-                        // FIX: Guard against division by zero
-                        var eta = (processed > 0 && processed < total)
-                            ? TimeSpan.FromMilliseconds(
-                                sw.Elapsed.TotalMilliseconds / processed * (total - processed))
-                            : TimeSpan.Zero;
-
-                        DatabaseInitProgressChanged?.Invoke(
-                            this,
-                            new DatabaseInitProgressEventArgs(
-                                processed, total, sw.Elapsed, eta));
-
-                        lastReportTime = currentTime;
-                    }
-                });
             }
         }
     }

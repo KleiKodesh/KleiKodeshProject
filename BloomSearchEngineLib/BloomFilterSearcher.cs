@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -43,65 +44,74 @@ namespace BloomSearchEngineLib
                 if (hits.Length == 0)
                     yield break;
 
-                // Process hits in parallel
+                // Start processing hits in parallel - results stream in as they're found
                 stopwatch.Restart();
-                var results = ProcessHitsParallel(hits, terms, chunkSize, maxScore);
-                stopwatch.Stop();
-                Console.WriteLine(
-                    "Verification completed in {0:F3} seconds, found {1} results",
-                    stopwatch.Elapsed.TotalSeconds,
-                    results.Count
-                );
 
-                // Yield results: perfect matches first, then best partial matches (max 100 total)
+                var perfectMatches = new ConcurrentQueue<SearchResultItem>();
+                var partialMatches = new ConcurrentBag<SearchResultItem>();
                 int perfectCount = 0;
-                var partialMatches = new List<SearchResultItem>(results.Count);
+                int totalProcessed = 0;
 
-                foreach (var item in results)
+                var processingComplete = new ManualResetEventSlim(false);
+
+                // Start parallel processing in background
+                Task.Run(() =>
                 {
-                    if (item.Score == maxScore)
+                    ProcessHitsParallel(hits, terms, chunkSize, maxScore, perfectMatches, partialMatches);
+                    processingComplete.Set();
+                });
+
+                // Yield perfect matches as they arrive
+                while (!processingComplete.IsSet || !perfectMatches.IsEmpty)
+                {
+                    if (perfectMatches.TryDequeue(out var result))
                     {
                         perfectCount++;
-                        yield return item;
+                        totalProcessed++;
+                        yield return result;
                     }
-                    else
+                    else if (!processingComplete.IsSet)
                     {
-                        partialMatches.Add(item);
+                        // Wait a bit for more results
+                        Thread.Sleep(1);
                     }
                 }
 
-                // Fill remaining slots with best partial matches
-                if (perfectCount < 100 && partialMatches.Count > 0)
+                stopwatch.Stop();
+                Console.WriteLine(
+                    "Verification completed in {0:F3} seconds, found {1} perfect + {2} partial results",
+                    stopwatch.Elapsed.TotalSeconds,
+                    perfectCount,
+                    partialMatches.Count
+                );
+
+                // After all perfect matches, yield best partial matches up to 100 total
+                if (totalProcessed < 100 && partialMatches.Count > 0)
                 {
-                    int remaining = Math.Min(100 - perfectCount, partialMatches.Count);
+                    int remaining = Math.Min(100 - totalProcessed, partialMatches.Count);
 
                     // Sort partial matches
-                    partialMatches.Sort((a, b) =>
+                    var sortedPartials = partialMatches.OrderByDescending(x => x.Score)
+                                                      .ThenByDescending(x => x.ProximityScore)
+                                                      .ThenBy(x => x.LineId)
+                                                      .Take(remaining);
+
+                    foreach (var result in sortedPartials)
                     {
-                        int scoreComp = b.Score.CompareTo(a.Score);
-                        if (scoreComp != 0) return scoreComp;
-
-                        int proxComp = b.ProximityScore.CompareTo(a.ProximityScore);
-                        if (proxComp != 0) return proxComp;
-
-                        return a.LineId.CompareTo(b.LineId);
-                    });
-
-                    for (int i = 0; i < remaining; i++)
-                    {
-                        yield return partialMatches[i];
+                        yield return result;
                     }
                 }
             }
         }
 
-        private List<SearchResultItem> ProcessHitsParallel(
+        private void ProcessHitsParallel(
             SearchResult[] hits,
             string[] terms,
             short chunkSize,
-            int maxScore)
+            int maxScore,
+            ConcurrentQueue<SearchResultItem> perfectMatches,
+            ConcurrentBag<SearchResultItem> partialMatches)
         {
-            var allResults = new ConcurrentBag<SearchResultItem>();
             int threadCount = Environment.ProcessorCount;
 
             // Create one DB connection per thread to avoid contention
@@ -115,7 +125,7 @@ namespace BloomSearchEngineLib
                 Parallel.ForEach(
                     hits,
                     new ParallelOptions { MaxDegreeOfParallelism = threadCount },
-                    () => new List<SearchResultItem>(100), // Thread-local result list
+                    () => new { Perfect = new List<SearchResultItem>(10), Partial = new List<SearchResultItem>(10) },
                     (hit, loopState, localResults) =>
                     {
                         var db = threadLocalDbs.Value;
@@ -131,13 +141,18 @@ namespace BloomSearchEngineLib
 
                             if (match != null)
                             {
-                                localResults.Add(new SearchResultItem
+                                var result = new SearchResultItem
                                 {
                                     LineId = hit.Id * chunkSize + i,
                                     Score = match.Words.Length,
                                     ProximityScore = match.ProximityScore,
                                     Snippet = match.Snippet(normalizedLine)
-                                });
+                                };
+
+                                if (result.Score == maxScore)
+                                    localResults.Perfect.Add(result);
+                                else
+                                    localResults.Partial.Add(result);
                             }
 
                             i++;
@@ -147,15 +162,19 @@ namespace BloomSearchEngineLib
                     },
                     (localResults) =>
                     {
-                        // Merge thread-local results into global collection
-                        foreach (var result in localResults)
+                        // Stream perfect matches immediately
+                        foreach (var result in localResults.Perfect)
                         {
-                            allResults.Add(result);
+                            perfectMatches.Enqueue(result);
+                        }
+
+                        // Collect partial matches for later sorting
+                        foreach (var result in localResults.Partial)
+                        {
+                            partialMatches.Add(result);
                         }
                     }
                 );
-
-                return new List<SearchResultItem>(allResults);
             }
             finally
             {

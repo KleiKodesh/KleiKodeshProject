@@ -11,14 +11,6 @@ namespace BloomSearchEngineTest
         {
             var engine = new BloomFilterIndexer();
 
-            engine.DatabaseInitProgressChanged += (s, e) =>
-            {
-                Console.WriteLine(
-                    $"[DB {e.Percentage:0.0}%] " +
-                    $"{e.ProcessedRows}/{e.TotalRows} rows | " +
-                    $"Elapsed: {e.Elapsed:mm\\:ss} | ETA: {e.Eta:mm\\:ss}");
-            };
-
             engine.IndexProgressChanged += (s, e) =>
             {
                 Console.WriteLine(
@@ -32,7 +24,7 @@ namespace BloomSearchEngineTest
                 Console.WriteLine();
                 Console.WriteLine("Choose action:");
                 Console.WriteLine("1 - Create index");
-                Console.WriteLine("2 - Search and save to HTML");
+                Console.WriteLine("2 - Search");
                 Console.WriteLine("0 - Exit");
                 Console.Write("> ");
 
