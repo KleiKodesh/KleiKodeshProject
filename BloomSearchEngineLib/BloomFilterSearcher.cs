@@ -2,7 +2,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace BloomSearchEngineLib
@@ -21,108 +21,153 @@ namespace BloomSearchEngineLib
             if (string.IsNullOrWhiteSpace(query))
                 yield break;
 
-            // Normalize query ONCE, same as text
-            string normalizedQuery = query.NormalizeText();
-            var terms = normalizedQuery
-                .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-
+            var terms = query.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             if (terms.Length == 0)
                 yield break;
 
             int maxScore = terms.Length;
-            var allMatches = new ConcurrentBag<SearchResultItem>();
 
             using (var reader = new BloomFilterCollectionReader(_id))
             {
                 short chunkSize = reader.ChunkSize;
-                var hits = reader.Search(terms);
 
-                // ONLY parallelize if we have enough chunks to make it worthwhile
-                if (hits.Length < 10)
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                var hits = reader.Search(terms);
+                stopwatch.Stop();
+                Console.WriteLine(
+                    "Bloom completed in {0:F3} seconds, found {1} hits",
+                    stopwatch.Elapsed.TotalSeconds,
+                    hits.Length
+                );
+
+                if (hits.Length == 0)
+                    yield break;
+
+                // Process hits in parallel
+                stopwatch.Restart();
+                var results = ProcessHitsParallel(hits, terms, chunkSize, maxScore);
+                stopwatch.Stop();
+                Console.WriteLine(
+                    "Verification completed in {0:F3} seconds, found {1} results",
+                    stopwatch.Elapsed.TotalSeconds,
+                    results.Count
+                );
+
+                // Yield results: perfect matches first, then best partial matches (max 100 total)
+                int perfectCount = 0;
+                var partialMatches = new List<SearchResultItem>(results.Count);
+
+                foreach (var item in results)
                 {
-                    // Small result set - just process sequentially
-                    using (var db = new ZayitDbManager())
+                    if (item.Score == maxScore)
                     {
-                        foreach (var hit in hits)
-                        {
-                            ProcessChunk(hit, db, chunkSize, terms, allMatches);
-                        }
+                        perfectCount++;
+                        yield return item;
+                    }
+                    else
+                    {
+                        partialMatches.Add(item);
                     }
                 }
-                else
+
+                // Fill remaining slots with best partial matches
+                if (perfectCount < 100 && partialMatches.Count > 0)
                 {
-                    // Large result set - parallelize chunk processing
-                    // Each thread gets its own database connection
-                    Parallel.ForEach(hits,
-                        new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
-                        () => new ZayitDbManager(), // Thread-local DB connection
-                        (hit, loopState, db) =>
-                        {
-                            ProcessChunk(hit, db, chunkSize, terms, allMatches);
-                            return db;
-                        },
-                        (db) => db.Dispose() // Cleanup thread-local DB
-                    );
-                }
-            }
+                    int remaining = Math.Min(100 - perfectCount, partialMatches.Count);
 
-            // Separate perfect matches from partial matches
-            var allMatchesList = allMatches.ToList();
-            var perfectMatches = allMatchesList.Where(x => x.Score == maxScore).ToList();
-            var partialMatches = allMatchesList.Where(x => x.Score < maxScore).ToList();
+                    // Sort partial matches
+                    partialMatches.Sort((a, b) =>
+                    {
+                        int scoreComp = b.Score.CompareTo(a.Score);
+                        if (scoreComp != 0) return scoreComp;
 
-            // Sort perfect matches by proximity (best first), then by line ID
-            var sortedPerfect = perfectMatches
-                .OrderByDescending(x => x.ProximityScore)
-                .ThenBy(x => x.LineId);
+                        int proxComp = b.ProximityScore.CompareTo(a.ProximityScore);
+                        if (proxComp != 0) return proxComp;
 
-            // Return ALL perfect matches (even if more than 100)
-            foreach (var item in sortedPerfect)
-                yield return item;
+                        return a.LineId.CompareTo(b.LineId);
+                    });
 
-            // If we have fewer than 100 perfect matches, fill up to 100 with partial matches
-            if (perfectMatches.Count < 100)
-            {
-                int remaining = 100 - perfectMatches.Count;
-                foreach (var item in partialMatches
-                    .OrderByDescending(x => x.Score)           // Higher score first
-                    .ThenByDescending(x => x.ProximityScore)   // Better proximity within same score
-                    .ThenBy(x => x.LineId)                     // Consistent ordering
-                    .Take(remaining))
-                {
-                    yield return item;
+                    for (int i = 0; i < remaining; i++)
+                    {
+                        yield return partialMatches[i];
+                    }
                 }
             }
         }
 
-        private void ProcessChunk(
-            SearchResult hit,
-            ZayitDbManager db,
-            short chunkSize,
+        private List<SearchResultItem> ProcessHitsParallel(
+            SearchResult[] hits,
             string[] terms,
-            ConcurrentBag<SearchResultItem> results)
+            short chunkSize,
+            int maxScore)
         {
-            int minRequiredWords = hit.Score;
-            var lines = db.GetLineContentsChunk(hit.Id, chunkSize);
-            int i = 0;
+            var allResults = new ConcurrentBag<SearchResultItem>();
+            int threadCount = Environment.ProcessorCount;
 
-            foreach (var line in lines)
+            // Create one DB connection per thread to avoid contention
+            var threadLocalDbs = new ThreadLocal<ZayitDbManager>(
+                () => new ZayitDbManager(),
+                trackAllValues: true);
+
+            try
             {
-                string normalizedLine = line.NormalizeText();
-                var match = SearchEngineMatcher.Match(normalizedLine, terms, minRequiredWords);
-
-                if (match != null)
-                {
-                    var item = new SearchResultItem
+                // Process hits in parallel
+                Parallel.ForEach(
+                    hits,
+                    new ParallelOptions { MaxDegreeOfParallelism = threadCount },
+                    () => new List<SearchResultItem>(100), // Thread-local result list
+                    (hit, loopState, localResults) =>
                     {
-                        LineId = hit.Id * chunkSize + i,
-                        Score = match.Words.Length,
-                        ProximityScore = match.ProximityScore,
-                        Snippet = match.Snippet(normalizedLine)
-                    };
-                    results.Add(item);
+                        var db = threadLocalDbs.Value;
+                        int minRequiredWords = hit.Score;
+
+                        var lines = db.GetLineContentsChunk(hit.Id, chunkSize);
+                        int i = 0;
+
+                        foreach (var line in lines)
+                        {
+                            string normalizedLine = line.NormalizeText();
+                            var match = SearchEngineMatcher.Match(normalizedLine, terms, minRequiredWords);
+
+                            if (match != null)
+                            {
+                                localResults.Add(new SearchResultItem
+                                {
+                                    LineId = hit.Id * chunkSize + i,
+                                    Score = match.Words.Length,
+                                    ProximityScore = match.ProximityScore,
+                                    Snippet = match.Snippet(normalizedLine)
+                                });
+                            }
+
+                            i++;
+                        }
+
+                        return localResults;
+                    },
+                    (localResults) =>
+                    {
+                        // Merge thread-local results into global collection
+                        foreach (var result in localResults)
+                        {
+                            allResults.Add(result);
+                        }
+                    }
+                );
+
+                return new List<SearchResultItem>(allResults);
+            }
+            finally
+            {
+                // Dispose all thread-local DB connections
+                if (threadLocalDbs.IsValueCreated)
+                {
+                    foreach (var db in threadLocalDbs.Values)
+                    {
+                        db?.Dispose();
+                    }
                 }
-                i++;
+                threadLocalDbs.Dispose();
             }
         }
     }

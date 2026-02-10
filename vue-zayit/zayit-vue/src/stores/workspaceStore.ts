@@ -21,7 +21,7 @@ const DEFAULT_WORKSPACE_ID = 'default';
 
 const PAGE_TITLES: Record<PageType, string> = {
     'homepage': 'דף הבית',
-    'kezayit-landing': 'איתור',
+    'openfile': 'פתיחת קובץ',
     'bookview': 'תצוגת ספר',
     'pdfview': 'תצוגת PDF',
     'hebrewbooks-view': 'ספר עברי',
@@ -67,14 +67,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
                     const oldData = JSON.parse(oldTabStore);
 
                     // Migrate tabs, preserving all state
-                    const migratedTabs = (oldData.tabs || []).map((tab: any) => {
-                        // Migrate old 'landing' page type
-                        if ((tab.currentPage as string) === 'landing') {
-                            tab.currentPage = 'kezayit-landing';
-                            tab.title = PAGE_TITLES['kezayit-landing'];
-                        }
-                        return tab;
-                    });
+                    const migratedTabs = (oldData.tabs || []).map((tab: any) => tab);
 
                     workspaces.value = [{
                         id: DEFAULT_WORKSPACE_ID,
@@ -98,9 +91,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
                         data: {
                             tabs: [{
                                 id: 1,
-                                title: PAGE_TITLES['kezayit-landing'],
+                                title: PAGE_TITLES['openfile'],
                                 isActive: true,
-                                currentPage: 'kezayit-landing'
+                                currentPage: 'openfile'
                             }],
                             nextId: 2
                         }
@@ -150,9 +143,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
                 data: {
                     tabs: [{
                         id: 1,
-                        title: PAGE_TITLES['kezayit-landing'],
+                        title: PAGE_TITLES['openfile'],
                         isActive: true,
-                        currentPage: 'kezayit-landing'
+                        currentPage: 'openfile'
                     }],
                     nextId: 2
                 }
@@ -234,9 +227,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     if (current && current.data.tabs.length === 0) {
         current.data.tabs.push({
             id: 1,
-            title: PAGE_TITLES['kezayit-landing'],
+            title: PAGE_TITLES['openfile'],
             isActive: true,
-            currentPage: 'kezayit-landing'
+            currentPage: 'openfile'
         });
         current.data.nextId = 2;
     }
@@ -284,9 +277,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
             data: {
                 tabs: [{
                     id: 1,
-                    title: PAGE_TITLES['kezayit-landing'],
+                    title: PAGE_TITLES['openfile'],
                     isActive: true,
-                    currentPage: 'kezayit-landing'
+                    currentPage: 'openfile'
                 }],
                 nextId: 2
             }

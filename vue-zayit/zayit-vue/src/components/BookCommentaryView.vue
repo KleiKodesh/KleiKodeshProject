@@ -183,7 +183,14 @@ onMounted(() => {
         attributes: true,
         attributeFilter: ['class']
     })
-    onUnmounted(() => observer.disconnect())
+    
+    // Add global keyboard listener for Ctrl+F
+    document.addEventListener('keydown', handleGlobalKeyDown)
+    
+    onUnmounted(() => {
+        observer.disconnect()
+        document.removeEventListener('keydown', handleGlobalKeyDown)
+    })
 })
 
 // Computed styles that respect dark mode
@@ -425,6 +432,31 @@ function handleKeyDown(e: KeyboardEvent) {
     }
 }
 
+// Global keyboard handler for Ctrl+F (works even when component doesn't have focus)
+const handleGlobalKeyDown = (e: KeyboardEvent) => {
+    // Only handle if we have a book and line selected, and commentary is visible
+    if (props.bookId === undefined || props.selectedLineIndex === undefined) return
+    
+    // Also check if the active tab is showing bookview page
+    const activeTab = tabStore.activeTab
+    if (!activeTab || activeTab.currentPage !== 'bookview') return
+    
+    // Don't interfere if user is typing in an input
+    const activeElement = document.activeElement
+    if (activeElement && (
+        activeElement.tagName === 'INPUT' ||
+        activeElement.tagName === 'TEXTAREA' ||
+        (activeElement as HTMLElement).contentEditable === 'true'
+    )) {
+        return
+    }
+
+    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault()
+        isSearchOpen.value = true
+    }
+}
+
 function handleSearchQueryChange(query: string) {
     const items: Array<{ index: number; content: string }> = []
     virtualCommentaryItems.value.forEach((item, index) => {
@@ -452,24 +484,43 @@ function handleNavigateToMatch(matchIndex: number) {
         // Set flag to prevent scroll tracking interference
         isNavigating.value = true
 
-        // First, scroll to the item in the virtual scroller
+        const scrollerEl = commentaryScrollerRef.value.$el
+        if (scrollerEl) {
+            // Temporarily disable scroll events and hide overflow to prevent flickering
+            scrollerEl.style.overflow = 'hidden'
+            scrollerEl.style.pointerEvents = 'none'
+        }
+
+        // First call to scrollToItem
         commentaryScrollerRef.value.scrollToItem(match.itemIndex)
 
-        // Wait for virtualization to render the item, then fine-tune scroll position
+        // Wait a bit and call it again (the hack for vue3-virtual-scroller)
         setTimeout(() => {
-            // Query within the commentary scroller element to ensure we get the right mark
-            const scrollerEl = commentaryScrollerRef.value?.$el
-            const currentMark = scrollerEl?.querySelector('mark.current')
-            if (currentMark) {
-                // Fine-tune scroll to center the highlighted text
-                currentMark.scrollIntoView({ behavior: 'auto', block: 'center' })
-            }
+            if (commentaryScrollerRef.value) {
+                commentaryScrollerRef.value.scrollToItem(match.itemIndex)
 
-            // Re-enable scroll tracking after navigation completes
-            setTimeout(() => {
-                isNavigating.value = false
-            }, 100)
-        }, 150) // Longer timeout to ensure virtualization has rendered
+                // Re-enable scrolling after the second call
+                setTimeout(() => {
+                    if (scrollerEl) {
+                        scrollerEl.style.overflow = ''
+                        scrollerEl.style.pointerEvents = ''
+                    }
+                    
+                    // Now find and scroll to the actual mark element
+                    setTimeout(() => {
+                        const currentMark = scrollerEl?.querySelector('mark.current')
+                        if (currentMark) {
+                            currentMark.scrollIntoView({ behavior: 'auto', block: 'center' })
+                        }
+                        
+                        // Re-enable scroll tracking after a longer delay to prevent jump-back
+                        setTimeout(() => {
+                            isNavigating.value = false
+                        }, 500)
+                    }, 50)
+                }, 10)
+            }
+        }, 50)
     }
 }
 

@@ -1,6 +1,6 @@
 import type { Book } from './Book'
 
-export type PageType = 'homepage' | 'kezayit-landing' | 'bookview' | 'pdfview' | 'hebrewbooks-view' | 'search' | 'settings' | 'hebrewbooks' | 'kezayit-search' | 'workspaces';
+export type PageType = 'homepage' | 'openfile' | 'bookview' | 'pdfview' | 'hebrewbooks-view' | 'search' | 'settings' | 'hebrewbooks' | 'kezayit-search' | 'workspaces';
 
 export interface BookState {
     bookId: number;

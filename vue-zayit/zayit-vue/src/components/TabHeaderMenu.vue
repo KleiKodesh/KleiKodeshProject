@@ -54,7 +54,7 @@
             <span class="dropdown-label">ניהול סביבות עבודה</span>
           </div>
 
-          <!-- Hebrew Books - only show on Zayit landing page, not homepage, and only in WebView -->
+          <!-- Hebrew Books - only show on open file page, not homepage, and only in WebView -->
           <div v-if="!isHomepage && isWebViewAvailable"
                @click.stop="handleHebrewBooksClick"
                class="flex-row flex-center-start hover-bg c-pointer dropdown-item">
@@ -62,7 +62,7 @@
             <span class="dropdown-label">היברו-בוקס</span>
           </div>
 
-          <!-- PDF viewer - only show on Zayit landing page, not homepage -->
+          <!-- PDF viewer - only show on open file page, not homepage -->
           <div v-if="!isHomepage"
                @click.stop="handleOpenPdfClick"
                class="flex-row flex-center-start hover-bg c-pointer dropdown-item">
@@ -117,7 +117,7 @@ const isWebViewAvailable = computed(() => {
   return (window as any).chrome?.webview?.postMessage !== undefined;
 });
 
-// Check if current page is homepage (not Zayit landing page)
+// Check if current page is homepage (not open file page)
 const isHomepage = computed(() => {
   return tabStore.activeTab?.currentPage === 'homepage';
 });

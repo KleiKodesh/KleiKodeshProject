@@ -9,6 +9,15 @@ import { initializeOfflineIcons } from './utils/iconify-offline'
 import { DynamicScroller, DynamicScrollerItem } from 'vue3-virtual-scroller'
 import 'vue3-virtual-scroller/dist/vue3-virtual-scroller.css'
 
+// CRITICAL: Disable Ctrl+F immediately before anything else loads
+// This prevents browser search and allows components to handle it
+document.addEventListener('keydown', (event: KeyboardEvent) => {
+    if ((event.ctrlKey || event.metaKey) && event.key === 'f') {
+        event.preventDefault()
+        // Don't use stopPropagation - let components handle it
+    }
+}, { capture: true })
+
 // Initialize offline icons for WebView2 environment
 initializeOfflineIcons()
 

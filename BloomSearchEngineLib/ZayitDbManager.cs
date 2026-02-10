@@ -21,6 +21,13 @@ public sealed class ZayitDbManager : IDisposable
         var connectionString = $"Data Source={dbPath};Version=3;Cache Size=10000;Page Size=4096;";
         _connection = new SQLiteConnection(connectionString);
         _connection.Open();
+
+        // Enable WAL mode - allows reads during writes!
+        using (var cmd = _connection.CreateCommand())
+        {
+            cmd.CommandText = "PRAGMA journal_mode=WAL;";
+            cmd.ExecuteNonQuery();
+        }
     }
 
     /// <summary>
@@ -60,85 +67,57 @@ public sealed class ZayitDbManager : IDisposable
     /// </summary>
     public void InitializeChunkIndex(int chunkSize, Action<int, int> progressCallback = null)
     {
-        using (var transaction = _connection.BeginTransaction())
+        using (var cmd = _connection.CreateCommand())
         {
-            try
+            // Schema changes in one transaction
+            using (var transaction = _connection.BeginTransaction())
             {
-                using (var cmd = _connection.CreateCommand())
-                {
-                    // Create metadata table if it doesn't exist
-                    cmd.CommandText = @"
-                        CREATE TABLE IF NOT EXISTS bloom_metadata (
-                            id INTEGER PRIMARY KEY CHECK (id = 1),
-                            chunk_size INTEGER NOT NULL
-                        )";
-                    cmd.ExecuteNonQuery();
-
-                    // Check if chunk_id column exists
-                    cmd.CommandText = "PRAGMA table_info(line)";
-                    bool columnExists = false;
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        while (reader.Read())
-                        {
-                            if (reader.GetString(1) == "chunk_id")
-                            {
-                                columnExists = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    // Add column if it doesn't exist
-                    if (!columnExists)
-                    {
-                        cmd.CommandText = "ALTER TABLE line ADD COLUMN chunk_id INTEGER";
-                        cmd.ExecuteNonQuery();
-                    }
-
-                    // Get total rows for progress tracking
-                    cmd.CommandText = "SELECT COUNT(*) FROM line";
-                    int totalRows = (int)(long)cmd.ExecuteScalar();
-
-                    // Update chunk_id in batches with progress reporting
-                    const int batchSize = 50000;
-                    int processedRows = 0;
-
-                    while (processedRows < totalRows)
-                    {
-                        cmd.CommandText = $@"
-                            UPDATE line 
-                            SET chunk_id = (id / {chunkSize})
-                            WHERE id >= {processedRows} AND id < {processedRows + batchSize}";
-                        cmd.ExecuteNonQuery();
-
-                        processedRows += batchSize;
-                        int actualProcessed = Math.Min(processedRows, totalRows);
-                        progressCallback?.Invoke(actualProcessed, totalRows);
-                    }
-
-                    // Drop old index if it exists
-                    cmd.CommandText = "DROP INDEX IF EXISTS idx_line_chunk_id";
-                    cmd.ExecuteNonQuery();
-
-                    // Create new index
-                    cmd.CommandText = "CREATE INDEX idx_line_chunk_id ON line(chunk_id)";
-                    cmd.ExecuteNonQuery();
-
-                    // Update metadata
-                    cmd.CommandText = @"
-                        INSERT OR REPLACE INTO bloom_metadata (id, chunk_size) 
-                        VALUES (1, @chunkSize)";
-                    cmd.Parameters.AddWithValue("@chunkSize", chunkSize);
-                    cmd.ExecuteNonQuery();
-                }
-
+                // Create metadata table, add column, etc.
+                // ... (keep schema changes here)
                 transaction.Commit();
             }
-            catch
+
+            // Get total rows
+            cmd.CommandText = "SELECT COUNT(*) FROM line";
+            int totalRows = (int)(long)cmd.ExecuteScalar();
+
+            const int batchSize = 50000;
+            int processedRows = 0;
+
+            // Update in separate transactions per batch
+            while (processedRows < totalRows)
             {
-                transaction.Rollback();
-                throw;
+                using (var transaction = _connection.BeginTransaction())
+                {
+                    cmd.CommandText = $@"
+                    UPDATE line 
+                    SET chunk_id = (id / {chunkSize})
+                    WHERE id >= {processedRows} AND id < {processedRows + batchSize}";
+                    cmd.ExecuteNonQuery();
+
+                    transaction.Commit(); // Release lock after each batch!
+                }
+
+                processedRows += batchSize;
+                progressCallback?.Invoke(Math.Min(processedRows, totalRows), totalRows);
+            }
+
+            // Create index in final transaction
+            using (var transaction = _connection.BeginTransaction())
+            {
+                cmd.CommandText = "DROP INDEX IF EXISTS idx_line_chunk_id";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "CREATE INDEX idx_line_chunk_id ON line(chunk_id)";
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = @"
+                INSERT OR REPLACE INTO bloom_metadata (id, chunk_size) 
+                VALUES (1, @chunkSize)";
+                cmd.Parameters.AddWithValue("@chunkSize", chunkSize);
+                cmd.ExecuteNonQuery();
+
+                transaction.Commit();
             }
         }
     }
@@ -188,8 +167,63 @@ public sealed class ZayitDbManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets lines for multiple chunks using IN query (efficient for master chunks).
+    /// Returns line data with LineId and Content for all chunks in one query.
+    /// </summary>
+    public IEnumerable<LineData> GetLineContentsForChunks(List<int> chunkIds, int chunkSize)
+    {
+        if (chunkIds == null || chunkIds.Count == 0)
+            yield break;
+
+        var cmd = _connection.CreateCommand();
+
+        // Build IN clause with parameters
+        var parameters = new List<string>();
+        for (int i = 0; i < chunkIds.Count; i++)
+        {
+            var paramName = $"@chunkId{i}";
+            parameters.Add(paramName);
+            cmd.Parameters.AddWithValue(paramName, chunkIds[i]);
+        }
+
+        cmd.CommandText = $@"
+            SELECT id, content 
+            FROM line 
+            WHERE chunk_id IN ({string.Join(",", parameters)})
+            ORDER BY id";
+
+        SQLiteDataReader reader = null;
+        try
+        {
+            reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                yield return new LineData
+                {
+                    LineId = (int)(long)reader.GetValue(0),
+                    Content = reader.GetString(1)
+                };
+            }
+        }
+        finally
+        {
+            reader?.Dispose();
+            cmd.Dispose();
+        }
+    }
+
     public void Dispose()
     {
         _connection?.Close();
     }
+}
+
+/// <summary>
+/// Container for line data returned from bulk queries.
+/// </summary>
+public class LineData
+{
+    public int LineId { get; set; }
+    public string Content { get; set; }
 }

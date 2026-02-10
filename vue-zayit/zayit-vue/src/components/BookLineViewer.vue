@@ -77,8 +77,14 @@ onMounted(() => {
         attributeFilter: ['class']
     })
 
+    // Add global keyboard listener for Ctrl+F
+    document.addEventListener('keydown', handleGlobalKeyDown)
+
     // Cleanup observer on unmount
-    onUnmounted(() => observer.disconnect())
+    onUnmounted(() => {
+        observer.disconnect()
+        document.removeEventListener('keydown', handleGlobalKeyDown)
+    })
 })
 
 // Computed styles that respect dark mode and reading background
@@ -215,6 +221,27 @@ function handleKeyDown(e: KeyboardEvent) {
     }
 }
 
+// Global keyboard handler for Ctrl+F (works even when component doesn't have focus)
+const handleGlobalKeyDown = (e: KeyboardEvent) => {
+    // Only handle if this is the active tab
+    if (tabStore.activeTab?.id !== props.tabId) return
+    
+    // Don't interfere if user is typing in an input
+    const activeElement = document.activeElement
+    if (activeElement && (
+        activeElement.tagName === 'INPUT' ||
+        activeElement.tagName === 'TEXTAREA' ||
+        (activeElement as HTMLElement).contentEditable === 'true'
+    )) {
+        return
+    }
+
+    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault()
+        isSearchOpen.value = true
+    }
+}
+
 // Current search query for reactive updates
 const currentSearchQuery = ref('')
 
@@ -230,6 +257,9 @@ async function performSearch() {
         searchRef.value?.setMatches(0)
         return
     }
+
+    // Set the search query immediately so highlights can be applied
+    search.searchQuery.value = query
 
     // Start progressive search with immediate feedback
     searchRef.value?.setMatches(0) // Reset count
@@ -272,24 +302,22 @@ function handleNavigateToMatch(matchIndex: number) {
         // Set flag to prevent scroll tracking interference
         isNavigating.value = true
 
-        // Use the same reliable scroll mechanism as TOC navigation
-        // This will scroll the line to center and handle virtualization properly
+        // Scroll to the line containing the match
         scrollToLine(match.itemIndex)
 
-        // After the line is in view, wait a bit for the highlight to render
-        // then fine-tune the scroll to center the highlighted text
+        // After scrolling, find and scroll to the actual mark element
         setTimeout(() => {
-            const currentMark = document.querySelector('.line-viewer mark.current')
+            const scrollerEl = scrollerRef.value?.$el
+            const currentMark = scrollerEl?.querySelector('.line-viewer mark.current')
             if (currentMark) {
-                // Fine-tune scroll to center the highlighted text within the line
                 currentMark.scrollIntoView({ behavior: 'auto', block: 'center' })
             }
-
-            // Re-enable scroll tracking after navigation completes
+            
+            // Re-enable scroll tracking after a longer delay to prevent jump-back
             setTimeout(() => {
                 isNavigating.value = false
-            }, 100)
-        }, 150) // Shorter timeout since scrollToLine handles the main positioning
+            }, 500)
+        }, 200) // Wait for scrollToLine to complete (it has internal delays)
     }
 }
 

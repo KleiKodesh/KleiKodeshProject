@@ -8,7 +8,7 @@
 import { computed } from 'vue';
 import { useTabStore } from '../stores/tabStore';
 import HomePage from './pages/HomePage.vue';
-import KezayitLandingPage from './pages/KezayitLandingPage.vue';
+import KezayitOpenFilePage from './pages/KezayitOpenFilePage.vue';
 import BookViewPage from './pages/BookViewPage.vue';
 import PdfViewPage from './pages/PdfViewPage.vue';
 import HebrewBooksViewPage from './pages/HebrewBooksViewPage.vue';
@@ -23,7 +23,7 @@ const tabStore = useTabStore();
 
 const pageComponents: Record<PageType, any> = {
   'homepage': HomePage,
-  'kezayit-landing': KezayitLandingPage,
+  'openfile': KezayitOpenFilePage,
   'bookview': BookViewPage,
   'pdfview': PdfViewPage,
   'hebrewbooks-view': HebrewBooksViewPage,
@@ -35,10 +35,8 @@ const pageComponents: Record<PageType, any> = {
 };
 
 const currentPageComponent = computed(() => {
-  const pageType = tabStore.activeTab?.currentPage || 'kezayit-landing';
-  // Handle legacy 'landing' page type
-  const normalizedPageType = (pageType as string) === 'landing' ? 'kezayit-landing' : pageType;
-  return pageComponents[normalizedPageType as PageType] || pageComponents['kezayit-landing'];
+  const pageType = tabStore.activeTab?.currentPage || 'openfile';
+  return pageComponents[pageType] || pageComponents['openfile'];
 });
 
 </script>

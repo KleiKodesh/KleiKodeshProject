@@ -43,7 +43,7 @@ const isWebViewAvailable = computed(() => {
 });
 
 const openKezayit = () => {
-    tabStore.openKezayitLanding();
+    tabStore.openKezayitOpenFilePage();
 };
 
 const openPdf = async () => {

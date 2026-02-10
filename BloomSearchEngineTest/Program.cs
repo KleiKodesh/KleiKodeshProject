@@ -32,7 +32,7 @@ namespace BloomSearchEngineTest
                 Console.WriteLine();
                 Console.WriteLine("Choose action:");
                 Console.WriteLine("1 - Create index");
-                Console.WriteLine("3 - Search and save to HTML");
+                Console.WriteLine("2 - Search and save to HTML");
                 Console.WriteLine("0 - Exit");
                 Console.Write("> ");
 
@@ -52,7 +52,7 @@ namespace BloomSearchEngineTest
                             break;
                         }
 
-                    case "3":
+                    case "2":
                         {
                             Console.Write("Search query: ");
                             var query = Console.ReadLine();
@@ -94,34 +94,9 @@ namespace BloomSearchEngineTest
                             }
                             Console.WriteLine($"Total search time: {swTotal.Elapsed.TotalSeconds:0.000} s");
 
-                            if (count > 0)
-                            {
-                                var htmlPath = SearchIndexHelper.GenerateHtmlReport(
-                                    query,
-                                    results,
-                                    swTotal.Elapsed,
-                                    firstResultSec);
-
-                                Console.WriteLine($"HTML report saved to: {htmlPath}");
-
-                                try
-                                {
-                                    Process.Start(new ProcessStartInfo
-                                    {
-                                        FileName = htmlPath,
-                                        UseShellExecute = true
-                                    });
-                                    Console.WriteLine("Opening in browser...");
-                                }
-                                catch (Exception ex)
-                                {
-                                    Console.WriteLine($"Could not open browser: {ex.Message}");
-                                }
-                            }
-                            else
-                            {
+                            if (count == 0)
                                 Console.WriteLine("No results to display.");
-                            }
+
                             break;
                         }
 

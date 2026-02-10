@@ -12,7 +12,7 @@ const DEFAULT_WORKSPACE_ID = 'default';
 
 const PAGE_TITLES: Record<PageType, string> = {
     'homepage': 'דף הבית',
-    'kezayit-landing': 'איתור',
+    'openfile': 'פתיחת קובץ',
     'bookview': 'תצוגת ספר',
     'pdfview': 'תצוגת PDF',
     'hebrewbooks-view': 'ספר עברי',
@@ -52,14 +52,6 @@ export const useTabStore = defineStore('tabs', () => {
                 const data = JSON.parse(stored);
                 tabs.value = data.tabs || [];
                 nextId.value = data.nextId || 2;
-
-                // Migrate old 'landing' page type to 'kezayit-landing'
-                tabs.value.forEach(tab => {
-                    if ((tab.currentPage as string) === 'landing') {
-                        tab.currentPage = 'kezayit-landing';
-                        tab.title = PAGE_TITLES['kezayit-landing'];
-                    }
-                });
 
                 // Handle PDF tabs with stored file paths
                 for (const tab of tabs.value) {
@@ -176,20 +168,20 @@ export const useTabStore = defineStore('tabs', () => {
         // Check connectivity first
         const isOnline = await checkConnectivity();
 
-        // If offline, always use kezayit-landing regardless of user preference
+        // If offline, always use openfile regardless of user preference
         if (!isOnline) {
             return {
-                pageType: 'kezayit-landing',
-                title: PAGE_TITLES['kezayit-landing']
+                pageType: 'openfile',
+                title: PAGE_TITLES['openfile']
             };
         }
 
         // If online, use user preference
         if (settingsStore.useOfflineHomepage) {
-            // User prefers kezayit-landing page even when online
+            // User prefers openfile page even when online
             return {
-                pageType: 'kezayit-landing',
-                title: PAGE_TITLES['kezayit-landing']
+                pageType: 'openfile',
+                title: PAGE_TITLES['openfile']
             };
         } else {
             // User prefers regular homepage when online
@@ -231,9 +223,9 @@ export const useTabStore = defineStore('tabs', () => {
     };
 
     const addTab = async () => {
-        // Check if a homepage tab already exists (either 'homepage' or 'kezayit-landing')
+        // Check if a homepage tab already exists (either 'homepage' or 'openfile')
         const existingHomepageTab = tabs.value.find(t =>
-            t.currentPage === 'homepage' || t.currentPage === 'kezayit-landing'
+            t.currentPage === 'homepage' || t.currentPage === 'openfile'
         );
 
         if (existingHomepageTab) {
@@ -299,7 +291,7 @@ export const useTabStore = defineStore('tabs', () => {
         if (tab) {
             // Check if there's already another homepage tab
             const existingHomepageTab = tabs.value.find(t =>
-                t.id !== tab.id && (t.currentPage === 'homepage' || t.currentPage === 'kezayit-landing')
+                t.id !== tab.id && (t.currentPage === 'homepage' || t.currentPage === 'openfile')
             );
 
             if (existingHomepageTab) {
@@ -639,7 +631,7 @@ export const useTabStore = defineStore('tabs', () => {
         }
     };
 
-    const openKezayitLanding = () => {
+    const openKezayitOpenFilePage = () => {
         tabs.value.forEach(tab => tab.isActive = false);
 
         const existingIds = new Set(tabs.value.map(t => t.id));
@@ -650,9 +642,9 @@ export const useTabStore = defineStore('tabs', () => {
 
         const newTab: Tab = {
             id: newId,
-            title: PAGE_TITLES['kezayit-landing'],
+            title: PAGE_TITLES['openfile'],
             isActive: true,
-            currentPage: 'kezayit-landing'
+            currentPage: 'openfile'
         };
 
         tabs.value.push(newTab);
@@ -893,7 +885,7 @@ export const useTabStore = defineStore('tabs', () => {
         openPdfWithFilePathAndBlobUrl,
         toggleBookSearch,
         toggleAltTocDisplay,
-        openKezayitLanding,
+        openKezayitOpenFilePage,
         openHebrewBooks,
         openKezayitSearch,
         createWorkspace,

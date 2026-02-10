@@ -8,6 +8,7 @@
                    type="text"
                    class="flex-110"
                    placeholder="חיפוש..."
+                   tabindex="0"
                    @keydown.enter="handleEnter"
                    @keydown.shift.enter.prevent="findPrevious"
                    @keydown.esc="close" />
@@ -135,6 +136,7 @@ defineExpose({
     min-width: 320px;
     font-size: 13px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    opacity: 0.95;
 }
 
 .search-bar input {

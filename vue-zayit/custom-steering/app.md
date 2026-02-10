@@ -181,7 +181,7 @@ async function navigateToHomepage(): Promise<{
   title: string;
 }> {
   const isOnline = await checkConnectivity();
-  const pageType: PageType = isOnline ? "homepage" : "kezayit-landing";
+  const pageType: PageType = isOnline ? "homepage" : "openfile";
   return { pageType, title: PAGE_TITLES[pageType] };
 }
 
@@ -194,7 +194,7 @@ const addTab = async () => {
 // Bad: Duplicating connectivity logic
 const addTab = async () => {
   const isOnline = await checkConnectivity();
-  const pageType = isOnline ? "homepage" : "kezayit-landing";
+  const pageType = isOnline ? "homepage" : "openfile";
   // ... duplicated logic
 };
 ```
