@@ -34,6 +34,7 @@ const usedIcons = [
   'open-28-regular',
   'search-28-filled',
   'search-28-regular',
+  'search-sparkle-24-filled',
   'panel-bottom-expand-20-filled',
   'panel-bottom-contract-20-filled',
   'home-28-regular',
@@ -41,7 +42,8 @@ const usedIcons = [
   'arrow-download-20-regular',
   'error-circle-20-regular',
   'filter-28-regular',
-  'eye-lines-28-regular'
+  'eye-lines-28-regular',
+  'apps-28-regular'
 ];
 
 // Extract only the icons we need

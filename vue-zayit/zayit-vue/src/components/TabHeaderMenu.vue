@@ -54,21 +54,21 @@
             <span class="dropdown-label">ניהול סביבות עבודה</span>
           </div>
 
-          <!-- Hebrew Books - only show on open file page, not homepage, and only in WebView -->
+          <!-- Hebrew Books - only show on open file page, not homepage, and only in WebView
           <div v-if="!isHomepage && isWebViewAvailable"
                @click.stop="handleHebrewBooksClick"
                class="flex-row flex-center-start hover-bg c-pointer dropdown-item">
             <Icon icon="fluent:library-28-regular" />
             <span class="dropdown-label">היברו-בוקס</span>
-          </div>
+          </div> -->
 
-          <!-- PDF viewer - only show on open file page, not homepage -->
+          <!-- PDF viewer - only show on open file page, not homepage
           <div v-if="!isHomepage"
                @click.stop="handleOpenPdfClick"
                class="flex-row flex-center-start hover-bg c-pointer dropdown-item">
             <Icon icon="fluent:document-pdf-28-regular" />
             <span class="dropdown-label">פתח PDF</span>
-          </div>
+          </div> -->
 
           <!-- Popout toggle - only available in C# WebView -->
           <div v-if="isWebViewAvailable"

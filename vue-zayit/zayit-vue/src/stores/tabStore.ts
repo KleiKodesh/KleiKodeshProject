@@ -1,8 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed, watch } from 'vue';
 import type { Tab, PageType } from '../types/Tab';
-import { checkConnectivity } from '../utils/connectivity';
-import { useSettingsStore } from './settingsStore';
 import { webviewBridge } from '../services/webviewBridge';
 import { handleHebrewBookTabClosed } from '../services/hebrewBooksHandlers';
 
@@ -161,35 +159,12 @@ export const useTabStore = defineStore('tabs', () => {
         }
     })();
 
-    // Centralized function to determine appropriate homepage based on user preference and connectivity
+    // Centralized function to determine appropriate homepage - always returns homepage
     async function navigateToHomepage(): Promise<{ pageType: PageType, title: string }> {
-        const settingsStore = useSettingsStore();
-
-        // Check connectivity first
-        const isOnline = await checkConnectivity();
-
-        // If offline, always use openfile regardless of user preference
-        if (!isOnline) {
-            return {
-                pageType: 'openfile',
-                title: PAGE_TITLES['openfile']
-            };
-        }
-
-        // If online, use user preference
-        if (settingsStore.useOfflineHomepage) {
-            // User prefers openfile page even when online
-            return {
-                pageType: 'openfile',
-                title: PAGE_TITLES['openfile']
-            };
-        } else {
-            // User prefers regular homepage when online
-            return {
-                pageType: 'homepage',
-                title: PAGE_TITLES['homepage']
-            };
-        }
+        return {
+            pageType: 'homepage',
+            title: PAGE_TITLES['homepage']
+        };
     }
 
     // Helper function to create default tab based on connectivity

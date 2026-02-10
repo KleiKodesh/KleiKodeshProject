@@ -1,4 +1,10 @@
-﻿public sealed class ZayitDbManager : IDisposable
+﻿using System;
+using System.Collections.Generic;
+using System.Data.SQLite;
+using System.IO;
+using Microsoft.VisualBasic;
+
+public sealed class ZayitDbManager : IDisposable
 {
     readonly SQLiteConnection _connection;
 
@@ -74,6 +80,65 @@
             reader?.Dispose();
             cmd.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Gets enriched line data including book and TOC information for a specific line ID.
+    /// </summary>
+    public (int bookId, string bookTitle, string tocText) GetLineMetadata(int lineId)
+    {
+        using (var cmd = _connection.CreateCommand())
+        {
+            cmd.CommandText = @"
+                SELECT 
+                    l.bookId,
+                    b.title,
+                    COALESCE(tt.text, '') as tocText
+                FROM line l
+                INNER JOIN book b ON l.bookId = b.id
+                LEFT JOIN line_toc lt ON l.id = lt.lineId
+                LEFT JOIN tocEntry te ON lt.tocEntryId = te.id
+                LEFT JOIN tocText tt ON te.textId = tt.id
+                WHERE l.id = @lineId
+                LIMIT 1";
+            cmd.Parameters.AddWithValue("@lineId", lineId);
+
+            using (var reader = cmd.ExecuteReader())
+            {
+                if (reader.Read())
+                {
+                    return (
+                        reader.GetInt32(0),
+                        reader.GetString(1),
+                        reader.IsDBNull(2) ? "" : reader.GetString(2)
+                    );
+                }
+            }
+        }
+
+        return (0, "", "");
+    }
+
+    /// <summary>
+    /// Gets line index and book ID for a specific line ID.
+    /// </summary>
+    public (int lineIndex, int bookId) GetLineIndexFromLineId(int lineId)
+    {
+        using (var cmd = _connection.CreateCommand())
+        {
+            cmd.CommandText = "SELECT lineIndex, bookId FROM line WHERE id = @lineId";
+            cmd.Parameters.AddWithValue("@lineId", lineId);
+
+            using (var reader = cmd.ExecuteReader())
+            {
+                if (reader.Read())
+                {
+                    return (reader.GetInt32(0), reader.GetInt32(1));
+                }
+            }
+        }
+
+        return (-1, -1);
     }
 
     public void Dispose()

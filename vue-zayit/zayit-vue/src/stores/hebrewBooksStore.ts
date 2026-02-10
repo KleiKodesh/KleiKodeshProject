@@ -3,7 +3,7 @@ import { ref, computed, nextTick } from 'vue'
 import type { HebrewBook } from '../types/HebrewBook'
 import { CsvLoader } from '../services/hebrewBooksCsvLoader'
 import { PopularityManager } from '../services/hebrewBooksPopularityManager'
-import { HebrewBooksSearchService } from '../services/hebrewBooksSearchService'
+import { hebrewBooksSearchService } from '../services/hebrewBooksSearchService'
 import { useTabStore } from './tabStore'
 import { webviewHebrewBooks } from '../services/webviewHebrewBooks'
 
@@ -70,12 +70,12 @@ export const useHebrewBooksStore = defineStore('hebrewBooks', () => {
 
   // Update filtered books based on current search term
   const updateFilteredBooks = async () => {
-    filteredBooks.value = await HebrewBooksSearchService.getFilteredBooks(books.value, debouncedSearchTerm.value)
+    filteredBooks.value = await hebrewBooksSearchService.getFilteredBooks(books.value, debouncedSearchTerm.value)
   }
 
   // Create debounced search function once globally
   if (!globalDebouncedSearch) {
-    globalDebouncedSearch = HebrewBooksSearchService.createDebouncedSearch(async (value: string) => {
+    globalDebouncedSearch = hebrewBooksSearchService.createDebouncedSearch(async (value: string) => {
       debouncedSearchTerm.value = value
       await updateFilteredBooks()
     }, 150)

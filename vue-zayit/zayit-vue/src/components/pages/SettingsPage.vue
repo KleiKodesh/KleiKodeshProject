@@ -134,24 +134,6 @@
                 </div>
             </div>
 
-            <!-- Homepage Preference - only show when online -->
-            <div v-if="isOnline"
-                 class="setting-group">
-                <label class="flex-row bold setting-label">דף בית מועדף</label>
-                <div class="flex-row theme-toggle">
-                    <button :class="{ active: !useOfflineHomepage }"
-                            @click="setUseOfflineHomepage(false)"
-                            class="flex-110 c-pointer theme-option">
-                        דף בית רגיל
-                    </button>
-                    <button :class="{ active: useOfflineHomepage }"
-                            @click="setUseOfflineHomepage(true)"
-                            class="flex-110 c-pointer theme-option">
-                        איתור - כזית
-                    </button>
-                </div>
-            </div>
-
             <!-- Reading Background Color -->
             <div class="setting-group">
                 <label class="flex-row bold setting-label">רקע קריאה</label>
@@ -217,14 +199,12 @@ import { ref, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { hebrewFonts } from '../../services/hebrewFontsService'
-import { useConnectivity } from '../../utils/connectivity'
 import { webviewBridge } from '../../services/webviewBridge'
 import { useDialog } from '../../composables/useDialog'
 import CustomDialog from '../common/CustomDialog.vue'
 
 const settingsStore = useSettingsStore()
-const { headerFont, textFont, fontSize, linePadding, censorDivineNames, appZoom, useOfflineHomepage, readingBackgroundColor, databasePath } = storeToRefs(settingsStore)
-const { isOnline } = useConnectivity()
+const { headerFont, textFont, fontSize, linePadding, censorDivineNames, appZoom, readingBackgroundColor, databasePath } = storeToRefs(settingsStore)
 const { dialogRef, dialogOptions, confirm, error, handleConfirm, handleCancel, handleClose } = useDialog()
 
 const availableFonts = ref<string[]>([])
@@ -350,10 +330,6 @@ const setCensorDivineNames = (censor: boolean) => {
     censorDivineNames.value = censor
     // Reload to apply censoring from data layer
     window.location.reload()
-}
-
-const setUseOfflineHomepage = (useOffline: boolean) => {
-    useOfflineHomepage.value = useOffline
 }
 
 const selectDatabaseFile = async () => {

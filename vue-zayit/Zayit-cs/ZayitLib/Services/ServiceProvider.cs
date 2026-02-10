@@ -1,5 +1,6 @@
 using Microsoft.Web.WebView2.WinForms;
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Zayit.Viewer;
 
@@ -10,6 +11,7 @@ namespace Zayit.Services
         private readonly DbService _db;
         private readonly HebrewBooksService _hebrewBooks;
         private readonly PdfService _pdf;
+        private readonly BloomSearchService _bloomSearch;
         private readonly WebView2 _webView;
         private Action _popOutAction;
 
@@ -35,6 +37,21 @@ namespace Zayit.Services
 
                 _hebrewBooks.Initialize();
                 Console.WriteLine("[ServiceProvider] Hebrew books service initialized");
+
+                _bloomSearch = new BloomSearchService();
+                Console.WriteLine("[ServiceProvider] BloomSearchService created");
+
+                // Set up search streaming callbacks
+                _bloomSearch.SetSearchCallbacks(
+                    onBatch: (searchId, results) => SendSearchBatch(searchId, results),
+                    onComplete: (searchId) => SendSearchComplete(searchId),
+                    onCancelled: (searchId) => SendSearchCancelled(searchId),
+                    onError: (searchId, error) => SendSearchError(searchId, error)
+                );
+                Console.WriteLine("[ServiceProvider] BloomSearch callbacks configured");
+
+                _bloomSearch.Initialize();
+                Console.WriteLine("[ServiceProvider] BloomSearchService initialized");
 
                 Console.WriteLine("[ServiceProvider] All services initialized successfully");
             }
@@ -102,6 +119,175 @@ namespace Zayit.Services
         public object GetHebrewBooksCacheStats() => _hebrewBooks.GetCacheStats();
         public void ClearHebrewBooksCache() => _hebrewBooks.ClearCache();
         public void HandleHebrewBookTabClosed(string name) => _hebrewBooks.HandleTabClosed(name);
+
+        // Bloom Search Operations
+        public bool IsBloomSearchReady() => _bloomSearch.IsReady();
+        public object GetBloomIndexingProgress() => _bloomSearch.GetIndexingProgress();
+        
+        // Start a new search and return search ID
+        public string BloomSearchStart(string query)
+        {
+            return _bloomSearch.StartSearch(query);
+        }
+        
+        // Cancel an ongoing search
+        public void BloomSearchCancel(string searchId)
+        {
+            _bloomSearch.CancelSearch(searchId);
+        }
+
+        // Send search batch to Vue
+        private void SendSearchBatch(string searchId, System.Collections.Generic.List<BloomSearchEngineLib.SearchResultItem> results)
+        {
+            try
+            {
+                var message = new
+                {
+                    type = "searchBatch",
+                    searchId = searchId,
+                    results = results.Select(r => new
+                    {
+                        lineId = r.LineId,
+                        bookId = r.BookId,
+                        bookTitle = r.BookTitle,
+                        tocText = r.TocText,
+                        score = r.Score,
+                        proximityScore = r.ProximityScore,
+                        snippet = r.Snippet
+                    }).ToArray()
+                };
+
+                var json = System.Text.Json.JsonSerializer.Serialize(message);
+                
+                // Must invoke on UI thread
+                if (_webView.InvokeRequired)
+                {
+                    _webView.Invoke(new Action(() =>
+                    {
+                        _webView.CoreWebView2.PostWebMessageAsString(json);
+                    }));
+                }
+                else
+                {
+                    _webView.CoreWebView2.PostWebMessageAsString(json);
+                }
+                
+                Console.WriteLine($"[ServiceProvider] Sent batch for {searchId}: {results.Count} results");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ServiceProvider] Error sending search batch: {ex}");
+            }
+        }
+
+        // Send search complete to Vue
+        private void SendSearchComplete(string searchId)
+        {
+            try
+            {
+                var message = new
+                {
+                    type = "searchComplete",
+                    searchId = searchId
+                };
+
+                var json = System.Text.Json.JsonSerializer.Serialize(message);
+                
+                // Must invoke on UI thread
+                if (_webView.InvokeRequired)
+                {
+                    _webView.Invoke(new Action(() =>
+                    {
+                        _webView.CoreWebView2.PostWebMessageAsString(json);
+                    }));
+                }
+                else
+                {
+                    _webView.CoreWebView2.PostWebMessageAsString(json);
+                }
+                
+                Console.WriteLine($"[ServiceProvider] Sent complete for {searchId}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ServiceProvider] Error sending search complete: {ex}");
+            }
+        }
+
+        // Send search cancelled to Vue
+        private void SendSearchCancelled(string searchId)
+        {
+            try
+            {
+                var message = new
+                {
+                    type = "searchCancelled",
+                    searchId = searchId
+                };
+
+                var json = System.Text.Json.JsonSerializer.Serialize(message);
+                
+                // Must invoke on UI thread
+                if (_webView.InvokeRequired)
+                {
+                    _webView.Invoke(new Action(() =>
+                    {
+                        _webView.CoreWebView2.PostWebMessageAsString(json);
+                    }));
+                }
+                else
+                {
+                    _webView.CoreWebView2.PostWebMessageAsString(json);
+                }
+                
+                Console.WriteLine($"[ServiceProvider] Sent cancelled for {searchId}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ServiceProvider] Error sending search cancelled: {ex}");
+            }
+        }
+
+        // Send search error to Vue
+        private void SendSearchError(string searchId, string error)
+        {
+            try
+            {
+                var message = new
+                {
+                    type = "searchError",
+                    searchId = searchId,
+                    error = error
+                };
+
+                var json = System.Text.Json.JsonSerializer.Serialize(message);
+                
+                // Must invoke on UI thread
+                if (_webView.InvokeRequired)
+                {
+                    _webView.Invoke(new Action(() =>
+                    {
+                        _webView.CoreWebView2.PostWebMessageAsString(json);
+                    }));
+                }
+                else
+                {
+                    _webView.CoreWebView2.PostWebMessageAsString(json);
+                }
+                
+                Console.WriteLine($"[ServiceProvider] Sent error for {searchId}: {error}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ServiceProvider] Error sending search error: {ex}");
+            }
+        }
+        
+        public object GetLineIndexFromLineId(int lineId)
+        {
+            var (lineIndex, bookId) = _bloomSearch.GetLineIndexFromLineId(lineId);
+            return new { lineIndex, bookId };
+        }
 
         // Popout functionality
         public void TogglePopOut() => _popOutAction?.Invoke();

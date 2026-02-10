@@ -1,13 +1,16 @@
 <template>
     <div class="app-tile"
-         @click="$emit('click')">
+         :class="[customClass, { disabled }]"
+         @click="!disabled && $emit('click')">
         <div class="tile-icon">
-            <img v-if="imageSrc"
-                 :src="imageSrc"
-                 :alt="label"
-                 class="tile-image" />
-            <Icon v-else-if="icon"
-                  :icon="icon" />
+            <slot name="icon">
+                <img v-if="imageSrc"
+                     :src="imageSrc"
+                     :alt="label"
+                     class="tile-image" />
+                <Icon v-else-if="icon"
+                      :icon="icon" />
+            </slot>
         </div>
         <span class="tile-label">{{ label }}</span>
     </div>
@@ -19,7 +22,10 @@ import { Icon } from '@iconify/vue';
 interface Props {
     label: string;
     icon?: string;
+    icons?: string[];
     imageSrc?: string;
+    customClass?: string;
+    disabled?: boolean;
 }
 
 defineProps<Props>();
@@ -56,9 +62,19 @@ defineEmits<{
     transform: scale(0.98);
 }
 
+.app-tile.disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
 .tile-icon {
-    margin-bottom: 0.25rem;
+    margin-bottom: 0.75rem;
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
 }
 
 .tile-icon svg {

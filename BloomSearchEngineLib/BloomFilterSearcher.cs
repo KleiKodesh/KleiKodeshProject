@@ -22,11 +22,53 @@ namespace BloomSearchEngineLib
             if (string.IsNullOrWhiteSpace(query))
                 yield break;
 
-            var terms = query.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            if (terms.Length == 0)
+            var queryWords = query.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            if (queryWords.Length == 0)
                 yield break;
 
-            int maxScore = terms.Length;
+            // Convert query words to n-grams (same logic as indexing)
+            var ngramSet = new HashSet<string>();
+            foreach (var word in queryWords)
+            {
+                int len = word.Length;
+
+                if (len >= 7)
+                {
+                    // Long words: add first 3, variable-length middle, and last 3 chars
+                    // Middle takes whatever is left after prefix and suffix
+                    ngramSet.Add(word.Substring(0, 3));                    // prefix: first 3
+                    ngramSet.Add(word.Substring(3, len - 6));              // middle: everything between prefix and suffix
+                    ngramSet.Add(word.Substring(len - 3, 3));              // suffix: last 3
+                }
+                else if (len == 6)
+                {
+                    // 6-char words: add first 3, middle 3, and last 3
+                    ngramSet.Add(word.Substring(0, 3));      // prefix (0-2)
+                    ngramSet.Add(word.Substring(2, 3));      // middle (2-4)
+                    ngramSet.Add(word.Substring(3, 3));      // suffix (3-5)
+                }
+                else if (len == 5)
+                {
+                    // 5-char words: add first 3, middle 3, and last 3
+                    ngramSet.Add(word.Substring(0, 3));      // prefix (0-2)
+                    ngramSet.Add(word.Substring(1, 3));      // middle (1-3)
+                    ngramSet.Add(word.Substring(2, 3));      // suffix (2-4)
+                }
+                else if (len == 4)
+                {
+                    // 4-char words: add first 3 and last 3
+                    ngramSet.Add(word.Substring(0, 3));      // prefix
+                    ngramSet.Add(word.Substring(1, 3));      // suffix
+                }
+                else
+                {
+                    // 3 chars or less - use as-is
+                    ngramSet.Add(word);
+                }
+            }
+
+            var terms = ngramSet.ToArray();
+            int maxScore = queryWords.Length;
 
             using (var reader = new BloomFilterCollectionReader(_id))
             {
@@ -57,7 +99,7 @@ namespace BloomSearchEngineLib
                 // Start parallel processing in background
                 Task.Run(() =>
                 {
-                    ProcessHitsParallel(hits, terms, chunkSize, maxScore, perfectMatches, partialMatches);
+                    ProcessHitsParallel(hits, queryWords, chunkSize, maxScore, perfectMatches, partialMatches);
                     processingComplete.Set();
                 });
 

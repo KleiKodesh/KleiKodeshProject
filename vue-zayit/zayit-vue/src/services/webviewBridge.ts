@@ -91,6 +91,12 @@ class WebViewBridge {
                         return
                     }
 
+                    // Check if this is a search streaming message
+                    if (message.type && message.searchId) {
+                        this.handleSearchMessage(message)
+                        return
+                    }
+
                     if (message.id && (message.result !== undefined || message.error !== undefined)) {
                         // This is a response to our request
                         ; (window as any).handleBridgeResponse(message)
@@ -107,6 +113,61 @@ class WebViewBridge {
         } else {
             console.warn('[WebViewBridge] WebView not available for message listener setup')
         }
+    }
+
+    private searchListeners = new Map<string, {
+        onBatch: (results: any[]) => void
+        onComplete: () => void
+        onCancelled: () => void
+        onError: (error: string) => void
+    }>()
+
+    private handleSearchMessage(message: any): void {
+        const { type, searchId } = message
+        const listener = this.searchListeners.get(searchId)
+
+        if (!listener) {
+            console.warn('[WebViewBridge] No listener for search:', searchId)
+            return
+        }
+
+        switch (type) {
+            case 'searchBatch':
+                console.log('[WebViewBridge] Received search batch:', searchId, message.results?.length)
+                listener.onBatch(message.results || [])
+                break
+            case 'searchComplete':
+                console.log('[WebViewBridge] Search complete:', searchId)
+                listener.onComplete()
+                this.searchListeners.delete(searchId)
+                break
+            case 'searchCancelled':
+                console.log('[WebViewBridge] Search cancelled:', searchId)
+                listener.onCancelled()
+                this.searchListeners.delete(searchId)
+                break
+            case 'searchError':
+                console.log('[WebViewBridge] Search error:', searchId, message.error)
+                listener.onError(message.error || 'Unknown error')
+                this.searchListeners.delete(searchId)
+                break
+        }
+    }
+
+    registerSearchListener(
+        searchId: string,
+        onBatch: (results: any[]) => void,
+        onComplete: () => void,
+        onCancelled: () => void,
+        onError: (error: string) => void
+    ): void {
+        this.searchListeners.set(searchId, { onBatch, onComplete, onCancelled, onError })
+        console.log('[WebViewBridge] Registered listener for search:', searchId)
+    }
+
+    unregisterSearchListener(searchId: string): void {
+        this.searchListeners.delete(searchId)
+        console.log('[WebViewBridge] Unregistered listener for search:', searchId)
     }
 
     private async initializeHandlers(): Promise<void> {
@@ -355,6 +416,77 @@ class WebViewBridge {
         } catch (error) {
             console.error('[WebViewBridge] Failed to validate database path:', error)
             return false
+        }
+    }
+
+    // Bloom Search WebView Methods
+    async isBloomSearchReady(): Promise<boolean> {
+        console.log('[WebViewBridge] Checking if Bloom search is ready')
+        try {
+            const result = await this.call<boolean>('IsBloomSearchReady')
+            console.log('[WebViewBridge] Bloom search ready:', result)
+            return result
+        } catch (error) {
+            console.error('[WebViewBridge] Failed to check Bloom search ready:', error)
+            return false
+        }
+    }
+
+    async getBloomIndexingProgress(): Promise<{ isReady: boolean; isIndexing: boolean; processedChunks?: number; totalChunks?: number; percentage?: number; eta?: string }> {
+        console.log('[WebViewBridge] Getting Bloom indexing progress')
+        try {
+            const result = await this.call<{ isReady: boolean; isIndexing: boolean; processedChunks?: number; totalChunks?: number; percentage?: number; eta?: string }>('GetBloomIndexingProgress')
+            console.log('[WebViewBridge] Bloom indexing progress:', result)
+            return result
+        } catch (error) {
+            console.error('[WebViewBridge] Failed to get Bloom indexing progress:', error)
+            return { isReady: false, isIndexing: false }
+        }
+    }
+
+    async bloomSearchStart(query: string): Promise<string> {
+        console.log('[WebViewBridge] Starting Bloom search:', query)
+        try {
+            const searchId = await this.call<string>('BloomSearchStart', query)
+            console.log('[WebViewBridge] Bloom search started with ID:', searchId)
+            return searchId
+        } catch (error) {
+            console.error('[WebViewBridge] Bloom search start failed:', error)
+            throw error
+        }
+    }
+
+    async bloomSearchCancel(searchId: string): Promise<void> {
+        console.log('[WebViewBridge] Cancelling Bloom search:', searchId)
+        try {
+            await this.call('BloomSearchCancel', searchId)
+            console.log('[WebViewBridge] Bloom search cancelled:', searchId)
+        } catch (error) {
+            console.error('[WebViewBridge] Bloom search cancel failed:', error)
+        }
+    }
+
+    async bloomSearch(query: string): Promise<Array<{ lineId: number; bookId: number; bookTitle: string; tocText: string; score: number; proximityScore: number; snippet: string }>> {
+        console.log('[WebViewBridge] Executing Bloom search (legacy):', query)
+        try {
+            const results = await this.call<Array<{ lineId: number; bookId: number; bookTitle: string; tocText: string; score: number; proximityScore: number; snippet: string }>>('BloomSearch', query)
+            console.log('[WebViewBridge] Bloom search results:', results?.length ?? 0)
+            return results || []
+        } catch (error) {
+            console.error('[WebViewBridge] Bloom search failed:', error)
+            return []
+        }
+    }
+
+    async getLineIndexFromLineId(lineId: number): Promise<{ lineIndex: number; bookId: number }> {
+        console.log('[WebViewBridge] Getting line index from line ID:', lineId)
+        try {
+            const result = await this.call<{ lineIndex: number; bookId: number }>('GetLineIndexFromLineId', lineId)
+            console.log('[WebViewBridge] Line index result:', result)
+            return result || { lineIndex: -1, bookId: -1 }
+        } catch (error) {
+            console.error('[WebViewBridge] Failed to get line index:', error)
+            return { lineIndex: -1, bookId: -1 }
         }
     }
 }

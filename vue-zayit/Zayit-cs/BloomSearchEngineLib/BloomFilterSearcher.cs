@@ -44,7 +44,7 @@ namespace BloomSearchEngineLib
                 if (hits.Length == 0)
                     yield break;
 
-                // Start processing hits in parallel - results stream in as they're found
+                // Start processing hits with producer-consumer pattern
                 stopwatch.Restart();
 
                 var perfectMatches = new ConcurrentQueue<SearchResultItem>();
@@ -54,14 +54,14 @@ namespace BloomSearchEngineLib
 
                 var processingComplete = new ManualResetEventSlim(false);
 
-                // Start parallel processing in background
+                // Start producer thread in background
                 Task.Run(() =>
                 {
-                    ProcessHitsParallel(hits, terms, chunkSize, maxScore, perfectMatches, partialMatches);
+                    ProcessHitsProducerConsumer(hits, terms, chunkSize, maxScore, perfectMatches, partialMatches);
                     processingComplete.Set();
                 });
 
-                // Yield perfect matches as they arrive
+                // Main thread consumes perfect matches as they arrive
                 while (!processingComplete.IsSet || !perfectMatches.IsEmpty)
                 {
                     if (perfectMatches.TryDequeue(out var result))
@@ -104,7 +104,7 @@ namespace BloomSearchEngineLib
             }
         }
 
-        private void ProcessHitsParallel(
+        private void ProcessHitsProducerConsumer(
             SearchResult[] hits,
             string[] terms,
             short chunkSize,
@@ -112,82 +112,100 @@ namespace BloomSearchEngineLib
             ConcurrentQueue<SearchResultItem> perfectMatches,
             ConcurrentBag<SearchResultItem> partialMatches)
         {
-            int threadCount = Environment.ProcessorCount;
+            // Queue for passing chunks from producer to consumers
+            var chunkQueue = new BlockingCollection<ChunkWork>(boundedCapacity: 50);
 
-            // Create one DB connection per thread to avoid contention
-            var threadLocalDbs = new ThreadLocal<ZayitDbManager>(
-                () => new ZayitDbManager(),
-                trackAllValues: true);
+            int consumerCount = Environment.ProcessorCount;
+            var consumers = new Task[consumerCount];
 
-            try
+            // Start consumer threads
+            for (int i = 0; i < consumerCount; i++)
             {
-                // Process hits in parallel
-                Parallel.ForEach(
-                    hits,
-                    new ParallelOptions { MaxDegreeOfParallelism = threadCount },
-                    () => new { Perfect = new List<SearchResultItem>(10), Partial = new List<SearchResultItem>(10) },
-                    (hit, loopState, localResults) =>
-                    {
-                        var db = threadLocalDbs.Value;
-                        int minRequiredWords = hit.Score;
-
-                        var lines = db.GetLineContentsChunk(hit.Id, chunkSize);
-                        int i = 0;
-
-                        foreach (var line in lines)
-                        {
-                            string normalizedLine = line.NormalizeText();
-                            var match = SearchEngineMatcher.Match(normalizedLine, terms, minRequiredWords);
-
-                            if (match != null)
-                            {
-                                var result = new SearchResultItem
-                                {
-                                    LineId = hit.Id * chunkSize + i,
-                                    Score = match.Words.Length,
-                                    ProximityScore = match.ProximityScore,
-                                    Snippet = match.Snippet(normalizedLine)
-                                };
-
-                                if (result.Score == maxScore)
-                                    localResults.Perfect.Add(result);
-                                else
-                                    localResults.Partial.Add(result);
-                            }
-
-                            i++;
-                        }
-
-                        return localResults;
-                    },
-                    (localResults) =>
-                    {
-                        // Stream perfect matches immediately
-                        foreach (var result in localResults.Perfect)
-                        {
-                            perfectMatches.Enqueue(result);
-                        }
-
-                        // Collect partial matches for later sorting
-                        foreach (var result in localResults.Partial)
-                        {
-                            partialMatches.Add(result);
-                        }
-                    }
-                );
+                consumers[i] = Task.Run(() =>
+                    ConsumerThread(chunkQueue, terms, chunkSize, maxScore, perfectMatches, partialMatches));
             }
-            finally
+
+            // Producer thread (runs on this thread)
+            ProducerThread(hits, chunkSize, chunkQueue);
+
+            // Wait for all consumers to finish
+            Task.WaitAll(consumers);
+        }
+
+        private void ProducerThread(SearchResult[] hits, short chunkSize, BlockingCollection<ChunkWork> chunkQueue)
+        {
+            using (var db = new ZayitDbManager())
             {
-                // Dispose all thread-local DB connections
-                if (threadLocalDbs.IsValueCreated)
+                foreach (var hit in hits)
                 {
-                    foreach (var db in threadLocalDbs.Values)
+                    var lines = db.GetLineContentsChunk(hit.Id, chunkSize).ToArray();
+
+                    var work = new ChunkWork
                     {
-                        db?.Dispose();
+                        Hit = hit,
+                        Lines = lines
+                    };
+
+                    chunkQueue.Add(work);
+                }
+            }
+
+            // Signal that production is complete
+            chunkQueue.CompleteAdding();
+        }
+
+        private void ConsumerThread(
+            BlockingCollection<ChunkWork> chunkQueue,
+            string[] terms,
+            short chunkSize,
+            int maxScore,
+            ConcurrentQueue<SearchResultItem> perfectMatches,
+            ConcurrentBag<SearchResultItem> partialMatches)
+        {
+            using (var db = new ZayitDbManager())
+            {
+                foreach (var work in chunkQueue.GetConsumingEnumerable())
+                {
+                    int minRequiredWords = work.Hit.Score;
+                    int i = 0;
+
+                    foreach (var line in work.Lines)
+                    {
+                        string normalizedLine = line.NormalizeText();
+                        var match = SearchEngineMatcher.Match(normalizedLine, terms, minRequiredWords);
+
+                        if (match != null)
+                        {
+                            int lineId = work.Hit.Id * chunkSize + i;
+                            var metadata = db.GetLineMetadata(lineId);
+
+                            var result = new SearchResultItem
+                            {
+                                LineId = lineId,
+                                BookId = metadata.bookId,
+                                BookTitle = metadata.bookTitle,
+                                TocText = metadata.tocText,
+                                Score = match.Words.Length,
+                                ProximityScore = match.ProximityScore,
+                                Snippet = match.Snippet(normalizedLine)
+                            };
+
+                            if (result.Score == maxScore)
+                                perfectMatches.Enqueue(result);
+                            else
+                                partialMatches.Add(result);
+                        }
+
+                        i++;
                     }
                 }
-                threadLocalDbs.Dispose();
             }
+        }
+
+        private class ChunkWork
+        {
+            public SearchResult Hit { get; set; }
+            public string[] Lines { get; set; }
         }
     }
 }

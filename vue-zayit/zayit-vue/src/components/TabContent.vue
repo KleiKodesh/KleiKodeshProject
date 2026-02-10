@@ -15,7 +15,6 @@ import HebrewBooksViewPage from './pages/HebrewBooksViewPage.vue';
 import SearchPage from './pages/SearchPage.vue';
 import SettingsPage from './pages/SettingsPage.vue';
 import HebrewbooksPage from './pages/HebrewbooksPage.vue';
-import KezayitSearchPage from './pages/KezayitSearchPage.vue';
 import WorkspacesPage from './pages/WorkspacesPage.vue';
 import type { PageType } from '../types/Tab';
 
@@ -30,7 +29,7 @@ const pageComponents: Record<PageType, any> = {
   'search': SearchPage,
   'settings': SettingsPage,
   'hebrewbooks': HebrewbooksPage,
-  'kezayit-search': KezayitSearchPage,
+  'kezayit-search': SearchPage, // Use new Bloom search page
   'workspaces': WorkspacesPage
 };
 
