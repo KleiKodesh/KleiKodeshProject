@@ -593,19 +593,130 @@ async function scrollToLine(lineIndex: number, pixelOffset?: number) {
     }
 }
 
-// Scroll to line and highlight it temporarily
-async function scrollToLineAndHighlight(lineIndex: number) {
+// Scroll to line and highlight search terms
+async function scrollToLineAndHighlight(lineIndex: number, searchTerms?: string) {
     await scrollToLine(lineIndex)
 
-    // Set highlight after scroll completes
-    setTimeout(() => {
-        highlightedLineIndex.value = lineIndex
-
-        // Remove highlight after 3 seconds
+    // If search terms provided, highlight them in the line
+    if (searchTerms && searchTerms.trim()) {
         setTimeout(() => {
-            highlightedLineIndex.value = null
-        }, 3000)
-    }, 300) // Wait for scroll animation to complete
+            highlightSearchTermsInLine(lineIndex, searchTerms)
+        }, 300)
+    }
+}
+
+// Highlight search terms in a specific line (for search result navigation)
+function highlightSearchTermsInLine(lineIndex: number, searchTerms: string) {
+    const scrollerEl = scrollerRef.value?.$el
+    if (!scrollerEl) return
+
+    // Find the line element
+    const lineElement = scrollerEl.querySelector(`[data-line-index="${lineIndex}"]`)
+    if (!lineElement) return
+
+    const content = viewerState.lines.value[lineIndex]
+    if (!content) return
+
+    // Use the same highlighting logic as useContentSearch
+    const highlightedContent = highlightTermsInHtml(content, searchTerms)
+    
+    // Update the line content with highlights
+    const contentContainer = lineElement.querySelector('.book-line > div, .book-line > span')
+    if (contentContainer) {
+        contentContainer.innerHTML = highlightedContent
+    }
+}
+
+// Helper to highlight terms in HTML content (handles diacritics)
+function highlightTermsInHtml(htmlContent: string, query: string): string {
+    const tempDiv = document.createElement('div')
+    tempDiv.innerHTML = htmlContent
+
+    const terms = query.trim().split(/\s+/)
+    const walker = document.createTreeWalker(tempDiv, NodeFilter.SHOW_TEXT, null)
+    const textNodes: Text[] = []
+    
+    let node: Node | null
+    while ((node = walker.nextNode())) {
+        textNodes.push(node as Text)
+    }
+
+    textNodes.forEach(textNode => {
+        const text = textNode.nodeValue || ''
+        const lowerText = text.toLowerCase()
+        
+        // Build position map for diacritics
+        const positionMap: number[] = []
+        let normalizedIndex = 0
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i]
+            if (char && !isDiacritic(char)) {
+                positionMap[normalizedIndex] = i
+                normalizedIndex++
+            }
+        }
+        positionMap[normalizedIndex] = text.length
+
+        const normalizedText = removeDiacritics(lowerText)
+        const parts: Array<{ text: string; isMatch: boolean }> = []
+        let lastIndex = 0
+
+        // Find all term matches
+        terms.forEach(term => {
+            if (!term) return
+            const normalizedTerm = removeDiacritics(term.toLowerCase())
+            
+            let searchStart = 0
+            while (true) {
+                const matchIndex = normalizedText.indexOf(normalizedTerm, searchStart)
+                if (matchIndex === -1) break
+
+                const originalStart = positionMap[matchIndex] || 0
+                const originalEnd = positionMap[matchIndex + normalizedTerm.length] || text.length
+
+                // Add text before match
+                if (originalStart > lastIndex) {
+                    parts.push({ text: text.substring(lastIndex, originalStart), isMatch: false })
+                }
+
+                // Add match
+                parts.push({ text: text.substring(originalStart, originalEnd), isMatch: true })
+
+                lastIndex = originalEnd
+                searchStart = matchIndex + 1
+            }
+        })
+
+        // Add remaining text
+        if (lastIndex < text.length) {
+            parts.push({ text: text.substring(lastIndex), isMatch: false })
+        }
+
+        if (parts.length > 0) {
+            const fragment = document.createDocumentFragment()
+            parts.forEach(part => {
+                if (part.isMatch) {
+                    const mark = document.createElement('mark')
+                    mark.textContent = part.text
+                    fragment.appendChild(mark)
+                } else {
+                    fragment.appendChild(document.createTextNode(part.text))
+                }
+            })
+            textNode.parentNode?.replaceChild(fragment, textNode)
+        }
+    })
+
+    return tempDiv.innerHTML
+}
+
+function removeDiacritics(text: string): string {
+    return text.replace(/[\u0591-\u05C7]/g, '')
+}
+
+function isDiacritic(char: string): boolean {
+    const code = char.charCodeAt(0)
+    return code >= 0x0591 && code <= 0x05C7
 }
 
 async function handleTocSelection(lineIndex: number) {
@@ -707,8 +818,8 @@ defineExpose({
         await scrollToLine(target)
     },
     // Expose method to scroll and highlight a line (for search results)
-    async scrollToLineAndHighlight(index: number) {
-        await scrollToLineAndHighlight(index)
+    async scrollToLineAndHighlight(index: number, searchTerms?: string) {
+        await scrollToLineAndHighlight(index, searchTerms)
     }
 })
 </script>

@@ -126,41 +126,16 @@ div.book-line.selected.show-selection::after {
     background-color: var(--hover-bg);
 }
 
-/* Highlight animation for search result navigation */
-.book-line.highlighted {
-    animation: highlight-pulse 3s ease-out;
+/* Removed highlight animation - using search term highlighting instead */
+
+/* Search term highlighting (just color the text) */
+.book-line :deep(mark) {
+    background-color: transparent;
+    color: var(--accent-color, #f59e0b);
 }
 
-@keyframes highlight-pulse {
-    0% {
-        background-color: rgba(245, 158, 11, 0.4);
-    }
-
-    50% {
-        background-color: rgba(245, 158, 11, 0.2);
-    }
-
-    100% {
-        background-color: transparent;
-    }
-}
-
-:root.dark .book-line.highlighted {
-    animation: highlight-pulse-dark 3s ease-out;
-}
-
-@keyframes highlight-pulse-dark {
-    0% {
-        background-color: rgba(251, 191, 36, 0.3);
-    }
-
-    50% {
-        background-color: rgba(251, 191, 36, 0.15);
-    }
-
-    100% {
-        background-color: transparent;
-    }
+:root.dark .book-line :deep(mark) {
+    color: #fbbf24;
 }
 
 /* Alt TOC entries - subtle opacity to distinguish from main content */

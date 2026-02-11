@@ -4,10 +4,8 @@
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
 !include "FileFunc.nsh"
-!include "StrFunc.nsh"
 
 !insertmacro GetParameters
-${StrContains}
 
 !define PRODUCT_NAME "כלי קודש"
 ; Version is now passed as a parameter from build script
@@ -215,8 +213,6 @@ Section "Main"
   
   ; Copy WPF installer files (built for .NET Framework 4.8)
   File "..\KleiKodeshVstoInstallerWpf\bin\Release\net48\KleiKodeshVstoInstallerWpf.exe"
-  File /nonfatal "..\KleiKodeshVstoInstallerWpf\bin\Release\net48\*.dll"
-  File /nonfatal "..\KleiKodeshVstoInstallerWpf\bin\Release\net48\*.json"
   File /nonfatal "..\KleiKodeshVstoInstallerWpf\bin\Release\net48\*.config"
   File "..\KleiKodeshVstoInstallerWpf\KleiKodesh.zip"
   
@@ -397,8 +393,11 @@ Function un.CleanupVSTOSecurityEntries
     ; Read the Url value to check if it's related to KleiKodesh
     ReadRegStr $2 HKCU "SOFTWARE\Microsoft\VSTO\Security\Inclusion\$1" "Url"
     
-    ; Check if URL contains KleiKodesh
-    ${StrContains} $3 "KleiKodesh" $2
+    ; Check if URL contains KleiKodesh using StrStr
+    Push $2
+    Push "KleiKodesh"
+    Call un.StrStr
+    Pop $3
     StrCmp $3 "" InclusionNext
     
     ; Delete this key if it contains KleiKodesh
@@ -420,8 +419,11 @@ Function un.CleanupVSTOSecurityEntries
     ; Read the Path value to check if it's related to KleiKodesh
     ReadRegStr $2 HKCU "SOFTWARE\Microsoft\VSTO\Security\TrustedPaths\$1" "Path"
     
-    ; Check if Path contains KleiKodesh
-    ${StrContains} $3 "KleiKodesh" $2
+    ; Check if Path contains KleiKodesh using StrStr
+    Push $2
+    Push "KleiKodesh"
+    Call un.StrStr
+    Pop $3
     StrCmp $3 "" TrustedNext
     
     ; Delete this key if it contains KleiKodesh
@@ -438,4 +440,32 @@ Function un.CleanupVSTOSecurityEntries
   Pop $2
   Pop $1
   Pop $0
+FunctionEnd
+
+
+; StrStr function for uninstaller - finds substring in string
+; Input: Push string, Push substring
+; Output: Pop result (empty if not found, remainder of string starting with substring if found)
+Function un.StrStr
+  Exch $R1 ; substring
+  Exch
+  Exch $R2 ; string
+  Push $R3
+  Push $R4
+  Push $R5
+  StrLen $R3 $R1
+  StrCpy $R4 0
+  loop:
+    StrCpy $R5 $R2 $R3 $R4
+    StrCmp $R5 $R1 done
+    StrCmp $R5 "" done
+    IntOp $R4 $R4 + 1
+    Goto loop
+  done:
+    StrCpy $R1 $R5
+    Pop $R5
+    Pop $R4
+    Pop $R3
+    Pop $R2
+    Exch $R1
 FunctionEnd

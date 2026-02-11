@@ -73,10 +73,14 @@ watch(() => myTab.value?.bookState?.bookId, async (bookId) => {
       setTimeout(() => {
         const viewer: any = lineViewerRef.value
         if (viewer?.scrollToLineAndHighlight) {
-          viewer.scrollToLineAndHighlight(myTab.value!.bookState!.initialLineIndex!)
-          // Clear the flag so it doesn't highlight again
+          const highlightTerms = myTab.value?.searchState?.highlightTerms
+          viewer.scrollToLineAndHighlight(myTab.value!.bookState!.initialLineIndex!, highlightTerms)
+          // Clear the flags so they don't highlight again
           if (myTab.value?.bookState) {
             myTab.value.bookState.shouldHighlight = false
+          }
+          if (myTab.value?.searchState) {
+            myTab.value.searchState.highlightTerms = undefined
           }
         }
       }, 500) // Wait for book to load

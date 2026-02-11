@@ -573,7 +573,8 @@ const handleResultClick = async (result: BloomSearchResult) => {
       result.bookId,
       hasConnections,
       lineInfo.lineIndex,
-      true // shouldHighlight = true for search results
+      true, // shouldHighlight = true for search results
+      executedQuery.value // Pass search terms for highlighting
     )
   } catch (error) {
     console.error('[SearchPage] Error opening book:', error)

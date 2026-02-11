@@ -37,6 +37,7 @@ export interface SearchState {
     searchQuery: string; // Current search text
     scrollPosition: number; // Scroll position in results list
     hasSearched: boolean; // Whether a search has been executed
+    highlightTerms?: string; // Terms to highlight when navigating from search results to book
 }
 
 export interface Tab {
