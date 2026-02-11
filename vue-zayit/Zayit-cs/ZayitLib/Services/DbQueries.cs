@@ -21,7 +21,7 @@ namespace Zayit.Services
             string dbPath = CurrentDbPath;
             if (!File.Exists(dbPath))
             {
-                ShowDatabaseNotFoundDialog();
+                // Don't show dialog - let Vue handle UI
                 return;
             }
 
@@ -105,15 +105,36 @@ namespace Zayit.Services
             }
         }
 
-        private static void ShowDatabaseNotFoundDialog()
+        public static bool IsDatabaseAvailable()
         {
-            using (var dialog = new Zayit.Viewer.DatabaseNotFoundDialog())
+            string dbPath = CurrentDbPath;
+            bool exists = File.Exists(dbPath);
+            Console.WriteLine($"[DbQueries] IsDatabaseAvailable check - Path: {dbPath}, Exists: {exists}");
+            
+            if (!exists)
+                return false;
+            
+            // Also check if the database is valid by checking for required tables
+            try
             {
-                var result = dialog.ShowDialog();
-                if (result == DialogResult.OK)
-                    if (!string.IsNullOrEmpty(dialog.SelectedDatabasePath))
-                        SetDatabasePath(dialog.SelectedDatabasePath);
-                // If ShouldDownloadZayit is true, the dialog already opened the download page
+                using (var testConnection = new SQLiteConnection($"Data Source={dbPath};Version=3;Read Only=True;"))
+                {
+                    testConnection.Open();
+                    using (var cmd = testConnection.CreateCommand())
+                    {
+                        // Check if the 'book' table exists (a core table that should always be present)
+                        cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name='book'";
+                        var result = cmd.ExecuteScalar();
+                        bool isValid = result != null;
+                        Console.WriteLine($"[DbQueries] Database validation - Has 'book' table: {isValid}");
+                        return isValid;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[DbQueries] Database validation failed: {ex.Message}");
+                return false;
             }
         }
 

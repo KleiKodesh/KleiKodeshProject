@@ -12,6 +12,12 @@
     "IsVisible": true
   },
   {
+  "Name": "איתוריא",
+  "Description": "כלי בינה מלאכותית לחיפוש ועיון בטקסטים תורניים.",
+  "Url": "https://huggingface.co/spaces/sivan22/Ituria",
+  "IsVisible": true
+},
+  {
     "Name": "אוצר החכמה",
     "Description": "ספריית אוצר החכמה - אוצר הספרים הדיגיטלי הגדול ביותר.",
     "Url": "https://tablet.otzar.org/",

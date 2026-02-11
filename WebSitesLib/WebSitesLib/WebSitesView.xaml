@@ -63,7 +63,7 @@
             <ComboBox x:Name="AdressBar"
                       IsEditable="True" 
                       FlowDirection="RightToLeft"
-                      ItemsSource="{Binding Adresses}"
+                      ItemsSource="{Binding VisibleAdresses}"
                       SelectedValuePath="Url"
                       BorderThickness="0"
                       SelectedIndex="-1"
@@ -76,11 +76,6 @@
                             <TextBlock Text="{Binding Description}"
                                        Opacity="0.5" FontSize="10"/>
                         </StackPanel>
-                        <DataTemplate.Triggers>
-                            <DataTrigger Binding="{Binding IsVisible}" Value="false">
-                                <Setter Property="Visibility" Value="Collapsed"/>
-                            </DataTrigger>
-                        </DataTemplate.Triggers>
                     </DataTemplate>
                 </ComboBox.ItemTemplate>
             </ComboBox>

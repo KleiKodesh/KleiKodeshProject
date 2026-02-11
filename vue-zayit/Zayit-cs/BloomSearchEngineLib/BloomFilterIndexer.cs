@@ -31,6 +31,12 @@ namespace BloomSearchEngineLib
             using (var db = new ZayitDbManager())
             using (var writer = new BloomFilterCollectionWriter(_id, _chunkSize))
             {
+                if (db._connection == null || db._connection.IsCanceled())
+                {
+                    Console.WriteLine("Bloom Index Creation aborted! No db found");
+                    return;
+                }
+
                 int totalLines = db.GetLineCount();
                 int totalChunks = (totalLines + _chunkSize - 1) / _chunkSize;
 

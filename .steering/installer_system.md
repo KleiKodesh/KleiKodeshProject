@@ -6,8 +6,14 @@ fileMatchPattern: '**/KleiKodeshVstoInstallerWpf/**|**/Build/**'
 # Installer System
 
 ## Two-Tier Architecture
-- **NSIS Wrapper**: .NET 8.0 Desktop Runtime dependency checking, system compatibility, uninstaller registry
-- **WPF Installer**: Application-specific installation logic, UI, settings, file operations (.NET 8.0)
+- **NSIS Wrapper**: .NET Framework 4.8 dependency checking, system compatibility, per-user uninstaller registry
+- **WPF Installer**: Application-specific installation logic, UI, settings, file operations (.NET Framework 4.8)
+
+## Per-User Installation (No Admin Required)
+- **Execution Level**: `user` (no admin rights needed)
+- **Install Location**: `%LOCALAPPDATA%\KleiKodesh` (per-user)
+- **Registry**: All entries in `HKCU` (current user)
+- **Uninstaller Registry**: `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\KleiKodesh`
 
 ## Build Pipeline
 1. **Version Increment** - `UpdateVersion.ps1` fetches from GitHub API, increments patch
@@ -23,14 +29,47 @@ fileMatchPattern: '**/KleiKodeshVstoInstallerWpf/**|**/Build/**'
 - **Registry Storage**: `HKEY_CURRENT_USER\SOFTWARE\KleiKodesh\Version`
 
 ## Installation Paths
-- **New Location**: `%LOCALAPPDATA%\KleiKodesh` (per-user)
-- **Old Location**: `%ProgramFiles(x86)%\KleiKodesh` (deprecated)
-- **Registry**: `HKEY_CURRENT_USER\Software\Microsoft\Office\Word\Addins\KleiKodesh`
+- **Current Location**: `%LOCALAPPDATA%\KleiKodesh` (per-user, no admin required)
+- **Old Locations**: Cleaned by uninstaller only (not during install)
+  - `%ProgramFiles(x86)%\KleiKodesh` (deprecated)
+  - `%ProgramFiles%\KleiKodesh` (deprecated x64)
+
+## Registry Entries Created by WPF Installer
+- **Add-in Registration**: `HKCU\Software\Microsoft\Office\Word\Addins\KleiKodesh`
+- **Add-in Metadata**: `HKCU\Software\Microsoft\Office\Word\AddinsData\KleiKodesh`
+- **Version Info**: `HKCU\SOFTWARE\KleiKodesh\Version`
+- **VSTO Inclusion List**: `HKCU\SOFTWARE\Microsoft\VSTO\Security\Inclusion\[base64-key]`
+- **VSTO Trusted Paths**: `HKCU\SOFTWARE\Microsoft\VSTO\Security\TrustedPaths\[base64-key]`
 
 ## Old Installation Cleanup
+**Removed from installer** - Old installations are now cleaned only by the uninstaller to avoid requiring admin rights during installation.
+
 ```csharp
-// Automatic cleanup of old Program Files installations
-await OldInstallationCleaner.CheckAndRemoveOldInstallations();
+// OLD CODE (removed to eliminate admin requirement):
+// await OldInstallationCleaner.CheckAndRemoveOldInstallations();
+```
+
+## Uninstaller Cleanup (NSIS)
+The NSIS uninstaller removes ALL files, folders, and registry entries:
+
+**Files & Folders:**
+- `$LOCALAPPDATA\KleiKodesh` (current installation)
+- `$PROGRAMFILES\KleiKodesh` (old x64 installations)
+- `$PROGRAMFILES32\KleiKodesh` (old x86 installations)
+
+**Registry Entries:**
+- `HKCU\Software\Microsoft\Office\Word\Addins\KleiKodesh`
+- `HKCU\Software\Microsoft\Office\Word\AddinsData\KleiKodesh`
+- `HKCU\SOFTWARE\KleiKodesh`
+- `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\KleiKodesh` (uninstaller entry)
+- `HKLM\Software\Microsoft\Office\Word\Addins\KleiKodesh` (old machine-wide)
+- `HKLM\Software\WOW6432Node\Microsoft\Office\Word\Addins\KleiKodesh` (old 32-bit)
+- All VSTO security entries containing "KleiKodesh" (enumerated dynamically)
+
+**VSTO Security Cleanup:**
+```nsis
+; Enumerates and removes base64-encoded VSTO security entries
+Call un.CleanupVSTOSecurityEntries
 ```
 
 ## Silent Installation

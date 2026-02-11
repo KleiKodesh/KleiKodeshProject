@@ -2,11 +2,13 @@
     <div class="homepage flex-column height-fill">
         <div class="grid-container">
             <UniformGrid>
-                <AppTile label="כזית"
+                <AppTile v-if="isDatabaseAvailable"
+                         label="כזית"
                          image-src="/Kezayit.png"
                          @click="openKezayit" />
 
-                <AppTile :label="searchTileLabel"
+                <AppTile v-if="isDatabaseAvailable"
+                         :label="searchTileLabel"
                          :icon="searchTileIcon"
                          custom-class="search-tile"
                          :disabled="!isDev && (isSearchIndexing || !isSearchReady)"
@@ -27,6 +29,18 @@
                         </svg>
                     </template>
                 </AppTile>
+
+                <AppTile v-if="!isDatabaseAvailable"
+                         label="התקן את זית"
+                         image-src="/Kezayit.png"
+                         custom-class="warning-tile"
+                         @click="downloadZayit" />
+
+                <AppTile v-if="!isDatabaseAvailable"
+                         label="בחר קובץ מסד נתונים"
+                         icon="fluent:database-24-regular"
+                         custom-class="db-select-tile warning-tile"
+                         @click="selectDatabaseFile" />
 
                 <AppTile label="ניהול סביבות עבודה"
                          icon="fluent:apps-28-regular"
@@ -66,6 +80,7 @@ const isSearchIndexing = ref(false);
 const isSearchReady = ref(false);
 const indexingPercentage = ref(0);
 const isOnline = ref(navigator.onLine);
+const isDatabaseAvailable = ref(true);
 const isDev = import.meta.env.DEV;
 const searchTileLabel = computed(() =>
     isSearchIndexing.value
@@ -76,7 +91,11 @@ const searchTileIcon = computed(() => isSearchIndexing.value ? '' : 'fluent:sear
 
 // Check search indexing status on mount
 onMounted(async () => {
-    if (webviewBridge.isAvailable()) {
+    // Check database availability (works in both dev and production)
+    isDatabaseAvailable.value = await webviewBridge.isDatabaseAvailable();
+    console.log('[HomePage] Database available:', isDatabaseAvailable.value);
+
+    if (webviewBridge.isAvailable() && isDatabaseAvailable.value) {
         await checkSearchStatus();
 
         // Poll for indexing progress if indexing or not ready
@@ -197,6 +216,42 @@ const openKezayitSearch = () => {
 const openWorkspaceManager = () => {
     tabStore.openWorkspaceManager();
 };
+
+const selectDatabaseFile = async () => {
+    // In dev mode without C# bridge, show a message
+    if (!webviewBridge.isAvailable()) {
+        console.log('[HomePage] Database file selection not available in dev mode');
+        alert('בחירת קובץ מסד נתונים זמינה רק במצב ייצור עם C#');
+        return;
+    }
+
+    try {
+        const result = await webviewBridge.openDatabaseFilePicker();
+        if (result.filePath) {
+            const isValid = await webviewBridge.validateDatabasePath(result.filePath);
+            if (!isValid) {
+                console.error('[HomePage] Invalid database file selected');
+                return;
+            }
+
+            const success = await webviewBridge.setDatabasePath(result.filePath);
+            if (success) {
+                await webviewBridge.reloadPage();
+            }
+        }
+    } catch (error) {
+        console.error('[HomePage] Error selecting database file:', error);
+    }
+};
+
+const downloadZayit = async () => {
+    try {
+        // This works in both dev and production modes
+        await webviewBridge.openUrlInBrowser('https://zayitapp.com/#/download');
+    } catch (error) {
+        console.error('[HomePage] Error opening download page:', error);
+    }
+};
 </script>
 
 <style scoped>
@@ -280,5 +335,37 @@ const openWorkspaceManager = () => {
 :root.dark :deep(.workspace-tile .tile-icon svg) {
     color: #818cf8;
     filter: drop-shadow(0 0 8px rgba(129, 140, 248, 0.3));
+}
+
+/* Database select tile blue styling */
+:deep(.db-select-tile .tile-icon svg) {
+    color: #3b82f6;
+    filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.3));
+}
+
+:root.dark :deep(.db-select-tile .tile-icon svg) {
+    color: #60a5fa;
+    filter: drop-shadow(0 0 8px rgba(96, 165, 250, 0.3));
+}
+
+/* Warning tiles - subtle background to indicate action needed */
+:deep(.warning-tile) {
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.08) 0%, rgba(245, 158, 11, 0.05) 100%);
+    border: 2px dashed rgba(251, 191, 36, 0.3);
+}
+
+:deep(.warning-tile:hover) {
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.12) 0%, rgba(245, 158, 11, 0.08) 100%);
+    border-color: rgba(251, 191, 36, 0.4);
+}
+
+:root.dark :deep(.warning-tile) {
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.12) 0%, rgba(245, 158, 11, 0.08) 100%);
+    border: 2px dashed rgba(251, 191, 36, 0.35);
+}
+
+:root.dark :deep(.warning-tile:hover) {
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.16) 0%, rgba(245, 158, 11, 0.12) 100%);
+    border-color: rgba(251, 191, 36, 0.45);
 }
 </style>

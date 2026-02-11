@@ -406,6 +406,71 @@ namespace Zayit.Services
             }
         }
 
+        public bool IsDatabaseAvailable()
+        {
+            try
+            {
+                bool isAvailable = DbQueries.IsDatabaseAvailable();
+                Console.WriteLine($"[ServiceProvider] Database available: {isAvailable}");
+                return isAvailable;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ServiceProvider] Failed to check database availability: {ex}");
+                return false;
+            }
+        }
+
+        public void OpenUrlInBrowser(string url)
+        {
+            try
+            {
+                Console.WriteLine($"[ServiceProvider] Opening URL in browser: {url}");
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = url,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ServiceProvider] Failed to open URL in browser: {ex}");
+            }
+        }
+
+        public void ReloadPage()
+        {
+            try
+            {
+                Console.WriteLine("[ServiceProvider] Reloading page");
+                
+                // Dispose and reinitialize database connection
+                DbQueries.DisposeConnection();
+                Console.WriteLine("[ServiceProvider] Database connection disposed");
+                
+                // Reinitialize BloomSearchService to trigger indexing if needed
+                _bloomSearch.Initialize();
+                Console.WriteLine("[ServiceProvider] BloomSearchService reinitialized");
+                
+                // Reload the WebView2 page
+                if (_webView.InvokeRequired)
+                {
+                    _webView.Invoke(new Action(() =>
+                    {
+                        _webView.CoreWebView2.Reload();
+                    }));
+                }
+                else
+                {
+                    _webView.CoreWebView2.Reload();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ServiceProvider] Failed to reload page: {ex}");
+            }
+        }
+
         /// <summary>
         /// Extract book ID from Hebrew books URL for legacy compatibility
         /// </summary>

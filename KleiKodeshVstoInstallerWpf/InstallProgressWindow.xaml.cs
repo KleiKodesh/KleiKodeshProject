@@ -90,7 +90,8 @@ namespace KleiKodeshVstoInstallerWpf
         {
             try
             {
-                await OldInstallationCleaner.CheckAndRemoveOldInstallations();
+                // Old installation cleanup removed - uninstaller now handles all cleanup
+                // await OldInstallationCleaner.CheckAndRemoveOldInstallations();
 
                 if (!Directory.Exists(InstallPath))
                     Directory.CreateDirectory(InstallPath);

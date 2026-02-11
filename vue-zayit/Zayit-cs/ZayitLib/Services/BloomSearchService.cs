@@ -71,6 +71,20 @@ namespace Zayit.Services
             {
                 Console.WriteLine("[BloomSearchService] Initializing...");
 
+                // Check if database is available first
+                if (!DbQueries.IsDatabaseAvailable())
+                {
+                    Console.WriteLine("[BloomSearchService] Database not available - skipping initialization");
+                    lock (_lock)
+                    {
+                        _isReady = false;
+                        _isIndexing = false;
+                        _progress.IsReady = false;
+                        _progress.IsIndexing = false;
+                    }
+                    return;
+                }
+
                 // Check if indexing is in progress (lock file exists)
                 if (IsIndexingInProgress())
                 {

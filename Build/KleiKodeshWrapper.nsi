@@ -4,8 +4,10 @@
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
 !include "FileFunc.nsh"
+!include "StrFunc.nsh"
 
 !insertmacro GetParameters
+${StrContains}
 
 !define PRODUCT_NAME "כלי קודש"
 ; Version is now passed as a parameter from build script
@@ -14,7 +16,7 @@
 !endif
 !define PRODUCT_PUBLISHER "צוות כלי קודש"
 !define PRODUCT_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\KleiKodesh"
-!define PRODUCT_UNINST_ROOT_KEY "HKLM"
+!define PRODUCT_UNINST_ROOT_KEY "HKCU"
 !define DOTNET_FRAMEWORK_VERSION "4.8"
 !define VSTO_RUNTIME_VERSION "2010"
 
@@ -68,7 +70,7 @@ UninstallIcon "..\KleiKodeshVstoInstallerWpf\KleiKodesh_Main.ico"
 Name "מתקין ${PRODUCT_NAME}"
 OutFile "KleiKodeshSetup-${PRODUCT_VERSION}.exe"
 InstallDir "$LOCALAPPDATA\KleiKodesh"
-RequestExecutionLevel admin
+RequestExecutionLevel user
 SilentInstall silent
 AutoCloseWindow true
 
@@ -343,15 +345,30 @@ Section Uninstall
   DetailPrint "מסיר קבצי התוכנה..."
   RMDir /r "$LOCALAPPDATA\KleiKodesh"
   
+  ; Remove old installation paths (Program Files)
+  DetailPrint "מסיר התקנות ישנות..."
+  RMDir /r "$PROGRAMFILES\KleiKodesh"
+  RMDir /r "$PROGRAMFILES32\KleiKodesh"
+  
   ; Remove exact registry entries created by WPF installer
   ; Office Add-in registry cleanup (Word only, current user registry)
   ; The WPF installer creates these in HKCU
   DetailPrint "מנקה רישומי רישום של Office..."
   DeleteRegKey HKCU "Software\Microsoft\Office\Word\Addins\KleiKodesh"
+  DeleteRegKey HKCU "Software\Microsoft\Office\Word\AddinsData\KleiKodesh"
+  
+  ; Clean up old HKLM registry entries (from old installations)
+  DeleteRegKey HKLM "Software\Microsoft\Office\Word\Addins\KleiKodesh"
+  DeleteRegKey HKLM "Software\WOW6432Node\Microsoft\Office\Word\Addins\KleiKodesh"
   
   ; Version registry cleanup (created by SaveVersionToRegistry in HKCU)
   DetailPrint "מנקה הגדרות תוכנה..."
   DeleteRegKey HKCU "SOFTWARE\KleiKodesh"
+  
+  ; Remove VSTO security registry entries
+  ; These are created with base64-encoded keys, so we need to enumerate and remove them
+  DetailPrint "מנקה הגדרות אבטחה של VSTO..."
+  Call un.CleanupVSTOSecurityEntries
   
   ; Remove uninstaller registry entries (created by NSIS)
   DetailPrint "מסיר רישומי הסרה..."
@@ -362,3 +379,63 @@ Section Uninstall
   ; Close silently when completed
   SetAutoClose true
 SectionEnd
+
+Function un.CleanupVSTOSecurityEntries
+  ; Remove VSTO Security Inclusion entries
+  ; These contain base64-encoded manifest URLs, so we enumerate and remove all KleiKodesh-related entries
+  Push $0
+  Push $1
+  Push $2
+  Push $3
+  
+  ; Clean up Inclusion list entries
+  StrCpy $0 0
+  EnumInclusionLoop:
+    EnumRegKey $1 HKCU "SOFTWARE\Microsoft\VSTO\Security\Inclusion" $0
+    StrCmp $1 "" InclusionDone
+    
+    ; Read the Url value to check if it's related to KleiKodesh
+    ReadRegStr $2 HKCU "SOFTWARE\Microsoft\VSTO\Security\Inclusion\$1" "Url"
+    
+    ; Check if URL contains KleiKodesh
+    ${StrContains} $3 "KleiKodesh" $2
+    StrCmp $3 "" InclusionNext
+    
+    ; Delete this key if it contains KleiKodesh
+    DeleteRegKey HKCU "SOFTWARE\Microsoft\VSTO\Security\Inclusion\$1"
+    Goto EnumInclusionLoop  ; Don't increment counter since we deleted an entry
+    
+    InclusionNext:
+      IntOp $0 $0 + 1
+      Goto EnumInclusionLoop
+  
+  InclusionDone:
+  
+  ; Clean up TrustedPaths entries
+  StrCpy $0 0
+  EnumTrustedLoop:
+    EnumRegKey $1 HKCU "SOFTWARE\Microsoft\VSTO\Security\TrustedPaths" $0
+    StrCmp $1 "" TrustedDone
+    
+    ; Read the Path value to check if it's related to KleiKodesh
+    ReadRegStr $2 HKCU "SOFTWARE\Microsoft\VSTO\Security\TrustedPaths\$1" "Path"
+    
+    ; Check if Path contains KleiKodesh
+    ${StrContains} $3 "KleiKodesh" $2
+    StrCmp $3 "" TrustedNext
+    
+    ; Delete this key if it contains KleiKodesh
+    DeleteRegKey HKCU "SOFTWARE\Microsoft\VSTO\Security\TrustedPaths\$1"
+    Goto EnumTrustedLoop  ; Don't increment counter since we deleted an entry
+    
+    TrustedNext:
+      IntOp $0 $0 + 1
+      Goto EnumTrustedLoop
+  
+  TrustedDone:
+  
+  Pop $3
+  Pop $2
+  Pop $1
+  Pop $0
+FunctionEnd

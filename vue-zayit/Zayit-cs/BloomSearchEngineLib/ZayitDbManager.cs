@@ -6,7 +6,7 @@ using System.IO;
 
 public sealed class ZayitDbManager : IDisposable
 {
-    readonly SQLiteConnection _connection;
+    public readonly SQLiteConnection _connection;
 
     public ZayitDbManager()
     {
@@ -18,6 +18,9 @@ public sealed class ZayitDbManager : IDisposable
             "seforim.db"
         );
         string dbPath = Interaction.GetSetting("ZayitApp", "Database", "Path", defaultPath);
+        if (!File.Exists(dbPath))
+            return; // No database 
+
         var connectionString = $"Data Source={dbPath};Version=3;Cache Size=10000;Page Size=4096;";
         _connection = new SQLiteConnection(connectionString);
         _connection.Open();

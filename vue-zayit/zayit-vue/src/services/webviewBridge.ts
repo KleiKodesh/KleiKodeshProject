@@ -427,6 +427,63 @@ class WebViewBridge {
         }
     }
 
+    async isDatabaseAvailable(): Promise<boolean> {
+        console.log('[WebViewBridge] Checking if database is available')
+
+        // In dev mode without C# bridge, return false to show setup tiles
+        if (!this.isAvailable()) {
+            console.log('[WebViewBridge] C# bridge not available (dev mode), database not available')
+            return false
+        }
+
+        try {
+            console.log('[WebViewBridge] Calling C# IsDatabaseAvailable method...')
+            const result = await this.call<boolean>('IsDatabaseAvailable')
+            console.log('[WebViewBridge] Database available result from C#:', result)
+            return result
+        } catch (error) {
+            console.error('[WebViewBridge] Failed to check database availability:', error)
+            // On error, return false to show setup tiles
+            return false
+        }
+    }
+
+    async openUrlInBrowser(url: string): Promise<void> {
+        console.log('[WebViewBridge] Opening URL in browser:', url)
+
+        // In dev mode without C# bridge, open in new tab
+        if (!this.isAvailable()) {
+            console.log('[WebViewBridge] C# bridge not available (dev mode), opening in new tab')
+            window.open(url, '_blank')
+            return
+        }
+
+        try {
+            await this.call<void>('OpenUrlInBrowser', url)
+        } catch (error) {
+            console.error('[WebViewBridge] Failed to open URL in browser, falling back to window.open:', error)
+            window.open(url, '_blank')
+        }
+    }
+
+    async reloadPage(): Promise<void> {
+        console.log('[WebViewBridge] Reloading page')
+
+        // In dev mode without C# bridge, use window.location.reload
+        if (!this.isAvailable()) {
+            console.log('[WebViewBridge] C# bridge not available (dev mode), using window.location.reload')
+            window.location.reload()
+            return
+        }
+
+        try {
+            await this.call<void>('ReloadPage')
+        } catch (error) {
+            console.error('[WebViewBridge] Failed to reload page via C#, falling back to window.location.reload:', error)
+            window.location.reload()
+        }
+    }
+
     // Bloom Search WebView Methods
     async isBloomSearchReady(): Promise<boolean> {
         console.log('[WebViewBridge] Checking if Bloom search is ready')
