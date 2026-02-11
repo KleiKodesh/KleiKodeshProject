@@ -4,6 +4,7 @@ using Microsoft.Win32;
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -16,9 +17,23 @@ namespace KleiKodeshVstoInstallerWpf
     /// </summary>
     public partial class MainWindow : Window
     {
+        void WaitForWordToClose()
+        {
+            var stopwatch = Stopwatch.StartNew();
+            while (stopwatch.ElapsedMilliseconds < 3000)
+            {
+                var wordProcesses = Process.GetProcessesByName("WINWORD");
+                if (wordProcesses.Length == 0)
+                    return;
+
+                Thread.Sleep(100);
+            }
+        }
+
         public MainWindow()
         {
             InitializeComponent();
+            WaitForWordToClose();
             foreach (CheckBox checkBox in VisibleSettingsPanel.Children)
             {
                 checkBox.Checked += (s, e) =>

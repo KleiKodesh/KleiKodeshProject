@@ -94,7 +94,7 @@ namespace KleiKodesh.Helpers
                 _pane.Visible = false;
                 _form.Show();
             }
-            catch (Exception ex { Console.WriteLine(ex.Message); }
+            catch (Exception ex) { Console.WriteLine(ex.Message); }
         }
 
         void PopIn()
