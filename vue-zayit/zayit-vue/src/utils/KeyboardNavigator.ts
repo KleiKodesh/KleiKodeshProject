@@ -3,21 +3,38 @@
  * 
  * Usage:
  * 1. Add tabindex="0" to all focusable items
- * 2. Create navigator: const nav = new KeyboardNavigator(containerElement)
+ * 2. Create navigator: const nav = new KeyboardNavigator(containerElement, options)
  * 3. Attach to container: @keydown="nav.handleKeyDown"
  * 4. Cleanup on unmount: nav.destroy()
  */
 export class KeyboardNavigator {
     private container: HTMLElement
+    private onEscape?: () => void
 
-    constructor(container: HTMLElement) {
+    constructor(container: HTMLElement, options?: { onEscape?: () => void }) {
         this.container = container
+        this.onEscape = options?.onEscape
     }
 
     /**
      * Handle keydown events - call this from @keydown on your container
      */
     handleKeyDown = (e: KeyboardEvent) => {
+        // Handle Tab key - return focus to search input
+        if (e.key === 'Tab') {
+            e.preventDefault()
+            e.stopPropagation()
+            this.onEscape?.()
+            return
+        }
+
+        // Handle Escape key
+        if (e.key === 'Escape' && this.onEscape) {
+            e.preventDefault()
+            this.onEscape()
+            return
+        }
+
         if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') {
             return
         }

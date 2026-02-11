@@ -24,6 +24,10 @@ import BookTreeCategoryNode from './BookTreeCategoryNode.vue';
 import { KeyboardNavigator } from '../utils/KeyboardNavigator';
 import { Icon } from '@iconify/vue';
 
+const emit = defineEmits<{
+    returnFocus: []
+}>()
+
 const categoryTreeStore = useCategoryTreeStore();
 const nodeRefs = ref<InstanceType<typeof BookTreeCategoryNode>[]>([]);
 const treeContainerRef = ref<HTMLElement>();
@@ -31,7 +35,9 @@ const navigator = ref<KeyboardNavigator>();
 
 onMounted(() => {
     if (treeContainerRef.value) {
-        navigator.value = new KeyboardNavigator(treeContainerRef.value);
+        navigator.value = new KeyboardNavigator(treeContainerRef.value, {
+            onEscape: () => emit('returnFocus')
+        });
     }
 });
 

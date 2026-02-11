@@ -73,7 +73,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
-import { DynamicScroller, DynamicScrollerItem } from 'vue3-virtual-scroller'
+import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import HebrewbooksListItem from '../HebrewbooksListItem.vue'
 import type { HebrewBook } from '../../types/HebrewBook'
 import { useHebrewBooksStore } from '../../stores/hebrewBooksStore'

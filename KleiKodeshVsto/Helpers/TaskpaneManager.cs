@@ -116,15 +116,7 @@ namespace KleiKodesh.Helpers
                 TaskPanePopOut popOutHandler = null;
                 if (popOutBehavior)
                 {
-                    // For ZayitViewerHost, we need to get the actual WebView content, not the host itself
-                    Control contentControl = userControl;
-                    if (userControl.Controls.Count > 0)
-                    {
-                        // Use the first child control as the content (typically the WebView)
-                        contentControl = userControl.Controls[0];
-                    }
-
-                    popOutHandler = new TaskPanePopOut(userControl, contentControl, pane);
+                    popOutHandler = new TaskPanePopOut(userControl, pane);
 
                     // If the userControl has a method to set the popout toggle action, call it
                     var setPopOutMethod = userControl.GetType().GetMethod("SetPopOutToggleAction");
@@ -230,8 +222,8 @@ namespace KleiKodesh.Helpers
                 Globals.Factory.GetVstoObject(Globals.ThisAddIn.Application.ActiveDocument)
                     .CloseEvent += () =>
                     {
-                        Globals.ThisAddIn.CustomTaskPanes.Remove(pane);
-                        userControl.Dispose();
+                        try { Globals.ThisAddIn.CustomTaskPanes.Remove(pane); } catch { }
+                        userControl?.Dispose();
                     };
             }
             catch { /* Swallow errors silently */ }

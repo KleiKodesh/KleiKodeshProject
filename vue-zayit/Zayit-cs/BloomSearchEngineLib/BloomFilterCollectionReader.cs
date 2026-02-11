@@ -5,14 +5,14 @@ using System.Threading.Tasks;
 
 namespace MinimalIndexer
 {
-    internal sealed class BloomFilterCollectionReader : IDisposable
+    public sealed class BloomFilterCollectionReader : IDisposable
     {
         private const int CacheLineSize = 64;
         private readonly int filterCount;
-        internal short ChunkSize { get; }
+        public short ChunkSize { get; }
         private readonly BloomFilterData[] filters;
 
-        internal BloomFilterCollectionReader(string id)
+        public BloomFilterCollectionReader(string id)
         {
             string dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BloomFilters");
             string filePath = Path.Combine(dir, $"{id}.dat");
@@ -56,7 +56,7 @@ namespace MinimalIndexer
             return remainder == 0 ? 0 : (int)(CacheLineSize - remainder);
         }
 
-        internal SearchResult[] Search(string[] searchTerms)
+        public SearchResult[] Search(string[] searchTerms)
         {
             int maxScore = searchTerms.Length;
             int threadCount = Environment.ProcessorCount;
@@ -193,21 +193,21 @@ namespace MinimalIndexer
         }
     }
 
-    internal struct BloomFilterData
+    public struct BloomFilterData
     {
-        internal BloomFilter Filter;
-        internal int Id;
+        public BloomFilter Filter;
+        public int Id;
     }
 
-    internal class ThreadSearchResults
+    public class ThreadSearchResults
     {
-        internal List<SearchResult> PerfectMatches;
-        internal List<SearchResult> PartialMatches;
+        public List<SearchResult> PerfectMatches;
+        public List<SearchResult> PartialMatches;
     }
 
-    internal struct SearchResult
+    public struct SearchResult
     {
-        internal int Id;
-        internal int Score;
+        public int Id;
+        public int Score;
     }
 }

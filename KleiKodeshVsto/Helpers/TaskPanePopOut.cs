@@ -1,5 +1,7 @@
 ﻿using Microsoft.Office.Tools;
 using System;
+using System.Drawing;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
@@ -8,15 +10,47 @@ namespace KleiKodesh.Helpers
     public sealed class TaskPanePopOut
     {
         readonly UserControl _host;
-        readonly Control _content;
         readonly CustomTaskPane _pane;
+        Control _content;
         Form _form;
 
-        public TaskPanePopOut(UserControl host, Control content, CustomTaskPane pane)
+        public TaskPanePopOut(UserControl host, CustomTaskPane pane)
         {
             _host = host;
-            _content = content;
             _pane = pane;
+
+            // Listen to host visibility changes to trigger popout/pop-in
+            _host.VisibleChanged += OnHostVisibilityChanged;
+        }
+
+        Control GetContent()
+        {
+            // If content was provided in constructor and is valid, use it
+            if (_content != null && !_content.IsDisposed)
+                return _content;
+
+            // Otherwise, get the first child control from host (for ZayitViewerHost case)
+            if (_host.Controls.Count > 0)
+            {
+                _content = _host.Controls[0];
+                return _content;
+            }
+
+            return null;
+        }
+
+        void OnHostVisibilityChanged(object sender, EventArgs e)
+        {
+            // When host becomes invisible, pop out
+            if (!_host.Visible && (_form == null || _form.IsDisposed))
+            {
+                PopOut();
+            }
+            // When host becomes visible while popped out, pop in
+            else if (_host.Visible && _form != null && !_form.IsDisposed)
+            {
+                PopIn();
+            }
         }
 
         public void Toggle()
@@ -29,42 +63,98 @@ namespace KleiKodesh.Helpers
 
         void PopOut()
         {
-            _form = CreateForm();
-            _form.Controls.Add(_content);
+            try
+            {
+                if (_form != null && !_form.IsDisposed)
+                    return; // Already popped out
 
-            SetOwner(_form.Handle);
+                var content = GetContent();
+                if (content == null)
+                {
+                    Console.WriteLine("[TaskPanePopOut] No content to pop out");
+                    return;
+                }
 
-            _form.FormClosing += (_, __) => PopIn();
-            _pane.VisibleChanged += PaneVisibleChanged;
+                Console.WriteLine("[TaskPanePopOut] Popping out");
 
-            _pane.Visible = false;
-            _form.Show();
+                // Remove content from host
+                if (_host.Controls.Contains(content))
+                    _host.Controls.Remove(content);
+
+                // Create popout window
+                _form = CreateForm();
+                content.Dock = DockStyle.Fill;
+                _form.Controls.Add(content);
+
+                SetOwner(_form.Handle);
+
+                _form.FormClosing += OnFormClosing;
+                _pane.VisibleChanged += OnPaneVisibilityChanged;
+
+                _pane.Visible = false;
+                _form.Show();
+            }
+            catch (Exception ex { Console.WriteLine(ex.Message); }
         }
 
         void PopIn()
         {
-            _pane.VisibleChanged -= PaneVisibleChanged;
+            if (_form == null || _form.IsDisposed)
+                return; // Already popped in
 
+            var content = GetContent();
+            if (content == null)
+            {
+                Console.WriteLine("[TaskPanePopOut] No content to pop in");
+                return;
+            }
+
+            Console.WriteLine("[TaskPanePopOut] Popping in");
+
+            _pane.VisibleChanged -= OnPaneVisibilityChanged;
+            _form.FormClosing -= OnFormClosing;
+
+            // Remove content from form
+            if (_form.Controls.Contains(content))
+                _form.Controls.Remove(content);
+
+            // Add content back to host
             if (!_host.IsDisposed)
-                _host.Controls.Add(_content);
-
-            _host.BeginInvoke(new Action(() => _pane.Visible = true));
+            {
+                content.Dock = DockStyle.Fill;
+                _host.Controls.Add(content);
+            }
 
             if (!_form.IsDisposed)
                 _form.Close();
+
+            _form = null;
+
+            _host.BeginInvoke(new Action(() => _pane.Visible = true));
         }
 
-        void PaneVisibleChanged(object _, EventArgs __)
+        void OnFormClosing(object sender, FormClosingEventArgs e)
         {
-            if (_pane.Visible && _form != null && !_form.IsDisposed)
-                _host.BeginInvoke(new Action(() => _form.Close()));
+            // When user closes popout window, make host visible (which triggers pop-in)
+            if (!_host.IsDisposed)
+                _host.Invoke(new Action(() => _host.Visible = true));
+        }
+
+        void OnPaneVisibilityChanged(object sender, EventArgs e)
+        {
+            // When taskpane becomes visible while popped out, make host visible (which triggers pop-in)
+            if (_pane.Visible && !_host.IsDisposed)
+                _host.Invoke(new Action(() => _host.Visible = true));
         }
 
         static Form CreateForm() => new Form
         {
-            Width = 1200,
-            Height = 800,
-            StartPosition = FormStartPosition.CenterScreen
+            Width = 570,
+            Height = 850,
+            StartPosition = FormStartPosition.CenterParent,
+            Icon = File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KleiKodesh_Main.ico"))
+        ? new Icon(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KleiKodesh_Main.ico"))
+        : null
         };
 
         void SetOwner(IntPtr formHandle)

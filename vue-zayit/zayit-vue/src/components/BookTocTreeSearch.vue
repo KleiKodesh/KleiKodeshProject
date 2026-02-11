@@ -42,6 +42,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
     selectLine: [lineIndex: number]
+    returnFocus: []
 }>()
 
 const containerRef = ref<HTMLElement>()
@@ -109,7 +110,9 @@ const selectEntry = (entry: TocEntry) => {
 
 onMounted(() => {
     if (containerRef.value) {
-        navigator.value = new KeyboardNavigator(containerRef.value)
+        navigator.value = new KeyboardNavigator(containerRef.value, {
+            onEscape: () => emit('returnFocus')
+        })
     }
 })
 
@@ -122,11 +125,15 @@ onUnmounted(() => {
 
 // Reinitialize navigator when search results change
 watch(filteredEntries, () => {
-    if (containerRef.value && navigator.value) {
-        navigator.value.destroy()
-        navigator.value = new KeyboardNavigator(containerRef.value)
+    if (containerRef.value) {
+        if (navigator.value) {
+            navigator.value.destroy()
+        }
+        navigator.value = new KeyboardNavigator(containerRef.value, {
+            onEscape: () => emit('returnFocus')
+        })
     }
-})
+}, { flush: 'post' })
 </script>
 
 <style scoped>

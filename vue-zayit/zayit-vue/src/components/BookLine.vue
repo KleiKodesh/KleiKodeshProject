@@ -2,7 +2,7 @@
     <span v-if="inlineMode"
           dir="rtl"
           class="selectable line-1.6 justify book-line"
-          :class="{ selected: isSelected }"
+          :class="{ selected: isSelected, highlighted: isHighlighted }"
           :data-line-index="lineIndex"
           @click="handleClick">
         <!-- Alt TOC entries as proper HTML headings -->
@@ -19,7 +19,7 @@
     <div v-else
          dir="rtl"
          class="selectable line-1.6 justify book-line"
-         :class="{ selected: isSelected }"
+         :class="{ selected: isSelected, highlighted: isHighlighted }"
          :data-line-index="lineIndex"
          @click="handleClick">
         <!-- Alt TOC entries as proper HTML headings -->
@@ -42,6 +42,7 @@ const props = defineProps<{
     content: string
     lineIndex: number
     isSelected: boolean
+    isHighlighted: boolean
     inlineMode: boolean
     altTocEntries?: AltTocLineEntry[]
     showAltToc?: boolean
@@ -123,6 +124,43 @@ div.book-line.selected.show-selection::after {
 
 .book-line.selected.show-selection {
     background-color: var(--hover-bg);
+}
+
+/* Highlight animation for search result navigation */
+.book-line.highlighted {
+    animation: highlight-pulse 3s ease-out;
+}
+
+@keyframes highlight-pulse {
+    0% {
+        background-color: rgba(245, 158, 11, 0.4);
+    }
+
+    50% {
+        background-color: rgba(245, 158, 11, 0.2);
+    }
+
+    100% {
+        background-color: transparent;
+    }
+}
+
+:root.dark .book-line.highlighted {
+    animation: highlight-pulse-dark 3s ease-out;
+}
+
+@keyframes highlight-pulse-dark {
+    0% {
+        background-color: rgba(251, 191, 36, 0.3);
+    }
+
+    50% {
+        background-color: rgba(251, 191, 36, 0.15);
+    }
+
+    100% {
+        background-color: transparent;
+    }
 }
 
 /* Alt TOC entries - subtle opacity to distinguish from main content */

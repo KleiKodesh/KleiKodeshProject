@@ -18,7 +18,7 @@ namespace BloomSearchEngineLib
 
         public BloomFilterIndexer(
             string id = "lines",
-            short chunkSize = 25,
+            short chunkSize = 100,
             double falsePositiveRate = 0.01)
         {
             _id = id;
@@ -36,7 +36,6 @@ namespace BloomSearchEngineLib
 
                 var sw = Stopwatch.StartNew();
                 var lastReportTime = sw.Elapsed;
-
                 var chunk = new List<string>(_chunkSize);
                 int processedChunks = 0;
 
@@ -51,7 +50,6 @@ namespace BloomSearchEngineLib
                         var filter = new BloomFilter(terms.Count, _falsePositiveRate);
                         foreach (var t in terms)
                             filter.Add(t);
-
                         writer.Commit(filter);
                     }
 

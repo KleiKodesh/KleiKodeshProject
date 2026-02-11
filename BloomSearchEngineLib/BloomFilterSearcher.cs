@@ -22,53 +22,11 @@ namespace BloomSearchEngineLib
             if (string.IsNullOrWhiteSpace(query))
                 yield break;
 
-            var queryWords = query.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            if (queryWords.Length == 0)
+            var terms = query.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            if (terms.Length == 0)
                 yield break;
 
-            // Convert query words to n-grams (same logic as indexing)
-            var ngramSet = new HashSet<string>();
-            foreach (var word in queryWords)
-            {
-                int len = word.Length;
-
-                if (len >= 7)
-                {
-                    // Long words: add first 3, variable-length middle, and last 3 chars
-                    // Middle takes whatever is left after prefix and suffix
-                    ngramSet.Add(word.Substring(0, 3));                    // prefix: first 3
-                    ngramSet.Add(word.Substring(3, len - 6));              // middle: everything between prefix and suffix
-                    ngramSet.Add(word.Substring(len - 3, 3));              // suffix: last 3
-                }
-                else if (len == 6)
-                {
-                    // 6-char words: add first 3, middle 3, and last 3
-                    ngramSet.Add(word.Substring(0, 3));      // prefix (0-2)
-                    ngramSet.Add(word.Substring(2, 3));      // middle (2-4)
-                    ngramSet.Add(word.Substring(3, 3));      // suffix (3-5)
-                }
-                else if (len == 5)
-                {
-                    // 5-char words: add first 3, middle 3, and last 3
-                    ngramSet.Add(word.Substring(0, 3));      // prefix (0-2)
-                    ngramSet.Add(word.Substring(1, 3));      // middle (1-3)
-                    ngramSet.Add(word.Substring(2, 3));      // suffix (2-4)
-                }
-                else if (len == 4)
-                {
-                    // 4-char words: add first 3 and last 3
-                    ngramSet.Add(word.Substring(0, 3));      // prefix
-                    ngramSet.Add(word.Substring(1, 3));      // suffix
-                }
-                else
-                {
-                    // 3 chars or less - use as-is
-                    ngramSet.Add(word);
-                }
-            }
-
-            var terms = ngramSet.ToArray();
-            int maxScore = queryWords.Length;
+            int maxScore = terms.Length;
 
             using (var reader = new BloomFilterCollectionReader(_id))
             {
@@ -86,30 +44,29 @@ namespace BloomSearchEngineLib
                 if (hits.Length == 0)
                     yield break;
 
-                // Start processing hits in parallel - results stream in as they're found
+                // Start processing hits with producer-consumer pattern
                 stopwatch.Restart();
 
                 var perfectMatches = new ConcurrentQueue<SearchResultItem>();
-                var partialMatches = new ConcurrentBag<SearchResultItem>();
+                // Store only minimal data for partial matches - much less RAM!
+                var partialMatches = new ConcurrentBag<PartialMatchData>();
                 int perfectCount = 0;
-                int totalProcessed = 0;
 
                 var processingComplete = new ManualResetEventSlim(false);
 
-                // Start parallel processing in background
+                // Start producer thread in background
                 Task.Run(() =>
                 {
-                    ProcessHitsParallel(hits, queryWords, chunkSize, maxScore, perfectMatches, partialMatches);
+                    ProcessHitsProducerConsumer(hits, terms, chunkSize, maxScore, perfectMatches, partialMatches);
                     processingComplete.Set();
                 });
 
-                // Yield perfect matches as they arrive
+                // Main thread consumes perfect matches as they arrive
                 while (!processingComplete.IsSet || !perfectMatches.IsEmpty)
                 {
                     if (perfectMatches.TryDequeue(out var result))
                     {
                         perfectCount++;
-                        totalProcessed++;
                         yield return result;
                     }
                     else if (!processingComplete.IsSet)
@@ -128,108 +85,179 @@ namespace BloomSearchEngineLib
                 );
 
                 // After all perfect matches, yield best partial matches up to 100 total
-                if (totalProcessed < 100 && partialMatches.Count > 0)
+                if (perfectCount < 100 && partialMatches.Count > 0)
                 {
-                    int remaining = Math.Min(100 - totalProcessed, partialMatches.Count);
+                    int remaining = Math.Min(100 - perfectCount, partialMatches.Count);
 
-                    // Sort partial matches
-                    var sortedPartials = partialMatches.OrderByDescending(x => x.Score)
-                                                      .ThenByDescending(x => x.ProximityScore)
-                                                      .ThenBy(x => x.LineId)
-                                                      .Take(remaining);
+                    // Sort partial matches by lightweight data
+                    var topPartials = partialMatches
+                        .OrderByDescending(x => x.Score)
+                        .ThenByDescending(x => x.ProximityScore)
+                        .ThenBy(x => x.LineId)
+                        .Take(remaining)
+                        .ToArray();
 
-                    foreach (var result in sortedPartials)
+                    // Now hydrate only the top partial matches with full metadata AND snippets
+                    using (var db = new ZayitDbManager())
                     {
-                        yield return result;
+                        foreach (var partial in topPartials)
+                        {
+                            var metadata = db.GetLineMetadata(partial.LineId);
+
+                            // Fetch line content to generate snippet on-demand
+                            var lineContent = db.GetLineContent(partial.LineId);
+                            var normalizedContent = lineContent.NormalizeText();
+                            var snippet = SearchEngineMatcher.ExtractSnippetFromCluster(
+                                normalizedContent,
+                                partial.ClusterStart,
+                                partial.ClusterEnd);
+
+                            yield return new SearchResultItem
+                            {
+                                LineId = partial.LineId,
+                                BookId = metadata.bookId,
+                                BookTitle = metadata.bookTitle,
+                                TocText = metadata.tocText,
+                                Score = partial.Score,
+                                ProximityScore = partial.ProximityScore,
+                                Snippet = snippet  // Generated only for top results
+                            };
+                        }
                     }
                 }
             }
         }
 
-        private void ProcessHitsParallel(
+        private void ProcessHitsProducerConsumer(
             SearchResult[] hits,
             string[] terms,
             short chunkSize,
             int maxScore,
             ConcurrentQueue<SearchResultItem> perfectMatches,
-            ConcurrentBag<SearchResultItem> partialMatches)
+            ConcurrentBag<PartialMatchData> partialMatches)
         {
-            int threadCount = Environment.ProcessorCount;
+            // Queue for passing chunks from producer to consumers
+            var chunkQueue = new BlockingCollection<ChunkWork>(boundedCapacity: 3);
 
-            // Create one DB connection per thread to avoid contention
-            var threadLocalDbs = new ThreadLocal<ZayitDbManager>(
-                () => new ZayitDbManager(),
-                trackAllValues: true);
+            int consumerCount = Environment.ProcessorCount;
+            var consumers = new Task[consumerCount];
 
-            try
+            // Start consumer threads
+            for (int i = 0; i < consumerCount; i++)
             {
-                // Process hits in parallel
-                Parallel.ForEach(
-                    hits,
-                    new ParallelOptions { MaxDegreeOfParallelism = threadCount },
-                    () => new { Perfect = new List<SearchResultItem>(10), Partial = new List<SearchResultItem>(10) },
-                    (hit, loopState, localResults) =>
+                consumers[i] = Task.Run(() =>
+                    ConsumerThread(chunkQueue, terms, chunkSize, maxScore, perfectMatches, partialMatches));
+            }
+
+            // Producer thread (runs on this thread)
+            ProducerThread(hits, chunkSize, chunkQueue);
+
+            // Wait for all consumers to finish
+            Task.WaitAll(consumers);
+        }
+
+        private void ProducerThread(SearchResult[] hits, short chunkSize, BlockingCollection<ChunkWork> chunkQueue)
+        {
+            using (var db = new ZayitDbManager())
+            {
+                foreach (var hit in hits)
+                {
+                    var lines = db.GetLineContentsChunk(hit.Id, chunkSize).ToArray();
+
+                    var work = new ChunkWork
                     {
-                        var db = threadLocalDbs.Value;
-                        int minRequiredWords = hit.Score;
+                        Hit = hit,
+                        Lines = lines
+                    };
 
-                        var lines = db.GetLineContentsChunk(hit.Id, chunkSize);
-                        int i = 0;
+                    chunkQueue.Add(work);
+                }
+            }
 
-                        foreach (var line in lines)
+            // Signal that production is complete
+            chunkQueue.CompleteAdding();
+        }
+
+        private void ConsumerThread(
+            BlockingCollection<ChunkWork> chunkQueue,
+            string[] terms,
+            short chunkSize,
+            int maxScore,
+            ConcurrentQueue<SearchResultItem> perfectMatches,
+            ConcurrentBag<PartialMatchData> partialMatches)
+        {
+            using (var db = new ZayitDbManager())
+            {
+                foreach (var work in chunkQueue.GetConsumingEnumerable())
+                {
+                    int minRequiredWords = work.Hit.Score;
+                    int i = 0;
+
+                    foreach (var line in work.Lines)
+                    {
+                        string normalizedLine = line.NormalizeText();
+                        var match = SearchEngineMatcher.Match(normalizedLine, terms, minRequiredWords);
+
+                        if (match != null)
                         {
-                            string normalizedLine = line.NormalizeText();
-                            var match = SearchEngineMatcher.Match(normalizedLine, terms, minRequiredWords);
+                            int lineId = work.Hit.Id * chunkSize + i;
 
-                            if (match != null)
+                            if (match.Words.Length == maxScore)
                             {
+                                // Perfect match - get full metadata immediately
+                                var metadata = db.GetLineMetadata(lineId);
+
                                 var result = new SearchResultItem
                                 {
-                                    LineId = hit.Id * chunkSize + i,
+                                    LineId = lineId,
+                                    BookId = metadata.bookId,
+                                    BookTitle = metadata.bookTitle,
+                                    TocText = metadata.tocText,
                                     Score = match.Words.Length,
                                     ProximityScore = match.ProximityScore,
                                     Snippet = match.Snippet(normalizedLine)
                                 };
 
-                                if (result.Score == maxScore)
-                                    localResults.Perfect.Add(result);
-                                else
-                                    localResults.Partial.Add(result);
+                                perfectMatches.Enqueue(result);
                             }
-
-                            i++;
+                            else
+                            {
+                                // Partial match - store only minimal data, NO SNIPPET
+                                partialMatches.Add(new PartialMatchData
+                                {
+                                    LineId = lineId,
+                                    Score = match.Words.Length,
+                                    ProximityScore = match.ProximityScore,
+                                    ClusterStart = match.ClusterStart,
+                                    ClusterEnd = match.ClusterEnd
+                                    // No snippet - will generate later if needed
+                                });
+                            }
                         }
 
-                        return localResults;
-                    },
-                    (localResults) =>
-                    {
-                        // Stream perfect matches immediately
-                        foreach (var result in localResults.Perfect)
-                        {
-                            perfectMatches.Enqueue(result);
-                        }
-
-                        // Collect partial matches for later sorting
-                        foreach (var result in localResults.Partial)
-                        {
-                            partialMatches.Add(result);
-                        }
+                        i++;
                     }
-                );
-            }
-            finally
-            {
-                // Dispose all thread-local DB connections
-                if (threadLocalDbs.IsValueCreated)
-                {
-                    foreach (var db in threadLocalDbs.Values)
-                    {
-                        db?.Dispose();
-                    }
+
+                    // Clear the lines array after processing to help GC
+                    work.Lines = null;
                 }
-                threadLocalDbs.Dispose();
             }
+        }
+
+        // Lightweight struct for partial matches - saves RAM!
+        private struct PartialMatchData
+        {
+            public int LineId;
+            public int Score;
+            public double ProximityScore;
+            public int ClusterStart;  // Store position instead of snippet
+            public int ClusterEnd;    // Store position instead of snippet
+        }
+
+        private class ChunkWork
+        {
+            public SearchResult Hit { get; set; }
+            public string[] Lines { get; set; }
         }
     }
 }

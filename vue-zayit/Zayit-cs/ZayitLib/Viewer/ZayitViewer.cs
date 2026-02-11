@@ -34,10 +34,10 @@ namespace Zayit.Viewer
 
             // Ensure crisp rendering on high-DPI displays
             this.Dock = DockStyle.Fill;
-            
+
             // Set WebView2 specific properties for crisp rendering
             this.DefaultBackgroundColor = System.Drawing.Color.White;
-            
+
             // Initialize services directly
             InitializeServices();
 
@@ -108,9 +108,9 @@ namespace Zayit.Viewer
 
             // Create environment with options for crisp rendering
             var options = new CoreWebView2EnvironmentOptions();
-            
+
             // Add command line arguments for better rendering quality
-            options.AdditionalBrowserArguments = 
+            options.AdditionalBrowserArguments =
                 "--disable-web-security " +
                 "--disable-features=VizDisplayCompositor " +
                 "--enable-gpu-rasterization " +
@@ -153,9 +153,7 @@ namespace Zayit.Viewer
             }
 
             // 3. Fallback: Return standard path even if it doesn't exist (will fail later with clear error)
-            Console.WriteLine($"[ZayitViewer] WARNING: Html folder not found! Tried:");
-            Console.WriteLine($"  - {standardPath}");
-            Console.WriteLine($"  - {clickOncePath}");
+            MessageBox.Show($"[ZayitViewer] WARNING: Html folder not found! Tried: {standardPath} and {clickOncePath}");
             Console.WriteLine($"[ZayitViewer] Falling back to standard path: {standardPath}");
             return standardPath;
         }
@@ -194,7 +192,7 @@ namespace Zayit.Viewer
                 settings.IsStatusBarEnabled = false;
                 settings.IsSwipeNavigationEnabled = false;
                 settings.IsPinchZoomEnabled = true;
-                
+
                 // Enable hardware acceleration and smooth scrolling
                 settings.IsGeneralAutofillEnabled = false;
                 settings.IsPasswordAutosaveEnabled = false;

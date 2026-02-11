@@ -1,8 +1,8 @@
-﻿using System;
+﻿using Microsoft.VisualBasic;
+using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
 using System.IO;
-using Microsoft.VisualBasic;
 
 public sealed class ZayitDbManager : IDisposable
 {
@@ -80,6 +80,28 @@ public sealed class ZayitDbManager : IDisposable
             reader?.Dispose();
             cmd.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Gets content for a specific line ID.
+    /// </summary>
+    public string GetLineContent(int lineId)
+    {
+        using (var cmd = _connection.CreateCommand())
+        {
+            cmd.CommandText = "SELECT content FROM line WHERE id = @lineId LIMIT 1";
+            cmd.Parameters.AddWithValue("@lineId", lineId);
+
+            using (var reader = cmd.ExecuteReader())
+            {
+                if (reader.Read())
+                {
+                    return reader.GetString(0);
+                }
+            }
+        }
+
+        return string.Empty;
     }
 
     /// <summary>

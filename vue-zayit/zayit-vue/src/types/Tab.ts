@@ -6,6 +6,8 @@ export interface BookState {
     bookId: number;
     bookTitle: string;
     initialLineIndex?: number; // Line index (0 to totalLines-1) representing which line should be at the top of the viewport. Set by TOC selection or saved from scroll position
+    lineOffset?: number; // Pixel offset of the line from viewport top - for accurate restoration (negative = line is scrolled up)
+    shouldHighlight?: boolean; // Whether to highlight the initial line (for search result navigation)
     isTocOpen?: boolean; // Whether TOC overlay is open
     isFirstTocOpen?: boolean; // Whether this is the first time opening TOC (for full-width vs compact display)
     showBottomPane?: boolean; // Whether bottom pane of split view is visible
@@ -31,6 +33,12 @@ export interface PdfState {
     isLoading?: boolean; // Loading state for virtual URL recreation
 }
 
+export interface SearchState {
+    searchQuery: string; // Current search text
+    scrollPosition: number; // Scroll position in results list
+    hasSearched: boolean; // Whether a search has been executed
+}
+
 export interface Tab {
     id: number;
     title: string;
@@ -38,4 +46,5 @@ export interface Tab {
     currentPage: PageType;
     bookState?: BookState;
     pdfState?: PdfState;
+    searchState?: SearchState;
 }

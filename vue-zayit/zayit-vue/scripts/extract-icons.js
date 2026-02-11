@@ -13,6 +13,7 @@ const usedIcons = [
   'spinner-ios-20-filled',
   'dismiss-16-regular',
   'dismiss-16-filled',
+  'dismiss-24-regular',
   'chevron-left-28-regular',
   'chevron-left-24-regular',
   'chevron-right-28-regular',
@@ -34,16 +35,22 @@ const usedIcons = [
   'open-28-regular',
   'search-28-filled',
   'search-28-regular',
+  'search-24-regular',
   'search-sparkle-24-filled',
   'panel-bottom-expand-20-filled',
   'panel-bottom-contract-20-filled',
   'home-28-regular',
   'add-16-filled',
+  'add-24-regular',
   'arrow-download-20-regular',
   'error-circle-20-regular',
   'filter-28-regular',
+  'filter-24-regular',
   'eye-lines-28-regular',
-  'apps-28-regular'
+  'apps-28-regular',
+  'checkmark-24-regular',
+  'edit-24-regular',
+  'delete-24-regular'
 ];
 
 // Extract only the icons we need

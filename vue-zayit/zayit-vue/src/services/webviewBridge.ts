@@ -127,7 +127,7 @@ class WebViewBridge {
         const listener = this.searchListeners.get(searchId)
 
         if (!listener) {
-            console.warn('[WebViewBridge] No listener for search:', searchId)
+            // Silently ignore messages for unregistered searches (they were cancelled)
             return
         }
 
@@ -161,13 +161,21 @@ class WebViewBridge {
         onCancelled: () => void,
         onError: (error: string) => void
     ): void {
+        // Remove any existing listener for this searchId first (shouldn't happen, but be safe)
+        if (this.searchListeners.has(searchId)) {
+            console.warn('[WebViewBridge] Replacing existing listener for search:', searchId)
+            this.searchListeners.delete(searchId)
+        }
+
         this.searchListeners.set(searchId, { onBatch, onComplete, onCancelled, onError })
         console.log('[WebViewBridge] Registered listener for search:', searchId)
     }
 
     unregisterSearchListener(searchId: string): void {
-        this.searchListeners.delete(searchId)
-        console.log('[WebViewBridge] Unregistered listener for search:', searchId)
+        const existed = this.searchListeners.delete(searchId)
+        if (existed) {
+            console.log('[WebViewBridge] Unregistered listener for search:', searchId)
+        }
     }
 
     private async initializeHandlers(): Promise<void> {

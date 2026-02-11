@@ -234,12 +234,14 @@ const handleOpenPdfClick = async () => {
   closeDropdown();
 };
 
-const handlePopoutClick = () => {
+const handlePopoutClick = async () => {
   if (isWebViewAvailable.value) {
-    (window as any).chrome.webview.postMessage({
-      command: 'TogglePopOut',
-      args: []
-    });
+    try {
+      const { webviewBridge } = await import('../services/webviewBridge');
+      await webviewBridge.call('TogglePopOut');
+    } catch (error) {
+      console.error('[TabHeaderMenu] Failed to toggle popout:', error);
+    }
   }
   closeDropdown();
 };

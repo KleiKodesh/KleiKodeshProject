@@ -5,9 +5,9 @@ import './main.css'
 import { initTheme } from './utils/theme'
 import { initializeOfflineIcons } from './utils/iconify-offline'
 
-// Import vue3-virtual-scroller components
-import { DynamicScroller, DynamicScrollerItem } from 'vue3-virtual-scroller'
-import 'vue3-virtual-scroller/dist/vue3-virtual-scroller.css'
+// Import vue-virtual-scroller components
+import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
+import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 
 // CRITICAL: Disable Ctrl+F immediately before anything else loads
 // This prevents browser search and allows components to handle it

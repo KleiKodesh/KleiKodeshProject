@@ -222,7 +222,7 @@ namespace Zayit.Services
                 var fileInfo = new FileInfo(dbPath);
                 // Combine file size and last write time (rounded to seconds) for a simple but effective hash
                 var lastWrite = fileInfo.LastWriteTimeUtc;
-                var roundedTime = new DateTime(lastWrite.Year, lastWrite.Month, lastWrite.Day, 
+                var roundedTime = new DateTime(lastWrite.Year, lastWrite.Month, lastWrite.Day,
                                               lastWrite.Hour, lastWrite.Minute, lastWrite.Second, DateTimeKind.Utc);
                 return $"{fileInfo.Length}_{roundedTime:yyyyMMddHHmmss}";
             }
@@ -402,7 +402,7 @@ namespace Zayit.Services
                     Percentage = _progress.Percentage,
                     Eta = _progress.Eta
                 };
-                
+
                 Console.WriteLine($"[BloomSearchService] GetIndexingProgress - IsReady: {progress.IsReady}, IsIndexing: {progress.IsIndexing}, Progress: {progress.Percentage:F1}%");
                 return progress;
             }
@@ -424,6 +424,25 @@ namespace Zayit.Services
                 return null;
             }
 
+            // Cancel and dispose ALL existing searches before starting new one
+            var existingSessions = _activeSessions.Keys.ToList();
+            if (existingSessions.Count > 0)
+            {
+                Console.WriteLine($"[BloomSearchService] Cancelling {existingSessions.Count} existing search(es) before starting new search");
+                foreach (var existingId in existingSessions)
+                {
+                    if (_activeSessions.TryRemove(existingId, out var existingSession))
+                    {
+                        existingSession.CancellationToken?.Cancel();
+                        existingSession.Dispose();
+                        Console.WriteLine($"[BloomSearchService] Cancelled and disposed search: {existingId}");
+                    }
+                }
+
+                // Force GC after cancelling previous searches
+                GC.Collect(1, GCCollectionMode.Optimized, false);
+            }
+
             var searchId = Guid.NewGuid().ToString();
             Console.WriteLine($"[BloomSearchService] Starting search session {searchId}: {query}");
 
@@ -432,7 +451,6 @@ namespace Zayit.Services
             {
                 SearchId = searchId,
                 Query = query,
-                Results = new List<SearchResultItem>(),
                 CurrentIndex = 0,
                 IsComplete = false,
                 CancellationToken = new CancellationTokenSource()
@@ -451,10 +469,13 @@ namespace Zayit.Services
         /// </summary>
         private void ExecuteSearchWithStreaming(SearchSession session)
         {
+            BloomFilterSearcher searcher = null;
+            IEnumerable<SearchResultItem> results = null;
+
             try
             {
-                var searcher = new BloomFilterSearcher("lines");
-                var results = searcher.Search(session.Query);
+                searcher = new BloomFilterSearcher("lines");
+                results = searcher.Search(session.Query);
 
                 var batch = new List<SearchResultItem>();
                 const int batchSize = 100;
@@ -464,9 +485,20 @@ namespace Zayit.Services
                 {
                     if (session.CancellationToken.IsCancellationRequested)
                     {
-                        Console.WriteLine($"[BloomSearchService] Search {session.SearchId} cancelled");
-                        SendSearchCancelled(session.SearchId);
+                        Console.WriteLine($"[BloomSearchService] Search {session.SearchId} cancelled during execution");
+                        // Don't send cancellation message here - CancelSearch() already sent it
                         _activeSessions.TryRemove(session.SearchId, out _);
+                        session.Dispose();
+
+                        // Force GC on cancellation
+                        batch?.Clear();
+                        batch = null;
+                        results = null;
+                        searcher = null;
+                        GC.Collect(2, GCCollectionMode.Forced, true, true);
+                        GC.WaitForPendingFinalizers();
+                        GC.Collect(2, GCCollectionMode.Forced, true, true);
+
                         return;
                     }
 
@@ -478,30 +510,58 @@ namespace Zayit.Services
                         SendSearchBatch(session.SearchId, batch);
                         totalSent += batch.Count;
                         Console.WriteLine($"[BloomSearchService] Sent batch {totalSent / batchSize}, total results sent: {totalSent}");
+
+                        // Clear batch immediately after sending to allow GC
+                        batch.Clear();
+                        batch = null;
+
+                        // Force GC every 3 batches (300 results)
+                        if (totalSent % 300 == 0)
+                        {
+                            GC.Collect(1, GCCollectionMode.Optimized, false);
+                        }
+
                         batch = new List<SearchResultItem>();
                     }
                 }
 
                 // Send remaining results
-                if (batch.Count > 0)
+                if (batch != null && batch.Count > 0)
                 {
                     SendSearchBatch(session.SearchId, batch);
                     totalSent += batch.Count;
                     Console.WriteLine($"[BloomSearchService] Sent final batch, total results: {totalSent}");
+                    batch.Clear();
+                    batch = null;
                 }
 
                 // Send completion message
                 session.IsComplete = true;
                 SendSearchComplete(session.SearchId);
                 _activeSessions.TryRemove(session.SearchId, out _);
+                session.Dispose();
 
                 Console.WriteLine($"[BloomSearchService] Search {session.SearchId} completed with {totalSent} results");
+
+                // Force aggressive GC after search completes
+                results = null;
+                searcher = null;
+                GC.Collect(2, GCCollectionMode.Forced, true, true);
+                GC.WaitForPendingFinalizers();
+                GC.Collect(2, GCCollectionMode.Forced, true, true);
+                Console.WriteLine($"[BloomSearchService] Forced GC after search completion");
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[BloomSearchService] Search {session.SearchId} error: {ex}");
                 SendSearchError(session.SearchId, ex.Message);
                 _activeSessions.TryRemove(session.SearchId, out _);
+                session.Dispose();
+
+                // Force GC on error
+                results = null;
+                searcher = null;
+                GC.Collect(2, GCCollectionMode.Forced, true, true);
             }
         }
 
@@ -556,8 +616,19 @@ namespace Zayit.Services
         {
             if (_activeSessions.TryRemove(searchId, out var session))
             {
-                session.CancellationToken.Cancel();
-                Console.WriteLine($"[BloomSearchService] Search session {searchId} cancelled");
+                session.CancellationToken?.Cancel();
+
+                // Send cancellation message to Vue
+                SendSearchCancelled(searchId);
+
+                // Dispose session
+                session.Dispose();
+
+                Console.WriteLine($"[BloomSearchService] Search session {searchId} cancelled and disposed");
+            }
+            else
+            {
+                Console.WriteLine($"[BloomSearchService] Search session {searchId} not found (may have already completed)");
             }
         }
 
@@ -598,14 +669,18 @@ namespace Zayit.Services
     /// <summary>
     /// Active search session
     /// </summary>
-    internal class SearchSession
+    internal class SearchSession : IDisposable
     {
         public string SearchId { get; set; }
         public string Query { get; set; }
-        public List<SearchResultItem> Results { get; set; }
         public int CurrentIndex { get; set; }
         public bool IsComplete { get; set; }
         public CancellationTokenSource CancellationToken { get; set; }
+
+        public void Dispose()
+        {
+            CancellationToken?.Dispose();
+        }
     }
 
     /// <summary>

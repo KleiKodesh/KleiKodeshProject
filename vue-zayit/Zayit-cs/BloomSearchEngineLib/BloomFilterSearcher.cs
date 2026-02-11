@@ -48,13 +48,12 @@ namespace BloomSearchEngineLib
                 stopwatch.Restart();
 
                 var perfectMatches = new ConcurrentQueue<SearchResultItem>();
-                var partialMatches = new ConcurrentBag<SearchResultItem>();
+                var partialMatches = new TopNPartialMatches(100);
                 int perfectCount = 0;
-                int totalProcessed = 0;
 
                 var processingComplete = new ManualResetEventSlim(false);
 
-                // Start producer thread in background
+                // Start background processing (producer + consumer)
                 Task.Run(() =>
                 {
                     ProcessHitsProducerConsumer(hits, terms, chunkSize, maxScore, perfectMatches, partialMatches);
@@ -67,7 +66,6 @@ namespace BloomSearchEngineLib
                     if (perfectMatches.TryDequeue(out var result))
                     {
                         perfectCount++;
-                        totalProcessed++;
                         yield return result;
                     }
                     else if (!processingComplete.IsSet)
@@ -86,21 +84,41 @@ namespace BloomSearchEngineLib
                 );
 
                 // After all perfect matches, yield best partial matches up to 100 total
-                if (totalProcessed < 100 && partialMatches.Count > 0)
+                if (perfectCount < 100)
                 {
-                    int remaining = Math.Min(100 - totalProcessed, partialMatches.Count);
+                    int remaining = Math.Min(100 - perfectCount, partialMatches.Count);
+                    var topPartials = partialMatches.GetTop(remaining);
 
-                    // Sort partial matches
-                    var sortedPartials = partialMatches.OrderByDescending(x => x.Score)
-                                                      .ThenByDescending(x => x.ProximityScore)
-                                                      .ThenBy(x => x.LineId)
-                                                      .Take(remaining);
-
-                    foreach (var result in sortedPartials)
+                    // Now hydrate only the top partial matches with full metadata AND snippets
+                    using (var db = new ZayitDbManager())
                     {
-                        yield return result;
+                        foreach (var partial in topPartials)
+                        {
+                            var metadata = db.GetLineMetadata(partial.LineId);
+
+                            // Fetch line content to generate snippet on-demand
+                            var lineContent = db.GetLineContent(partial.LineId);
+                            var normalizedContent = lineContent.NormalizeText();
+                            var snippet = SearchEngineMatcher.ExtractSnippetFromCluster(
+                                normalizedContent,
+                                partial.ClusterStart,
+                                partial.ClusterEnd);
+
+                            yield return new SearchResultItem
+                            {
+                                LineId = partial.LineId,
+                                BookId = metadata.bookId,
+                                BookTitle = metadata.bookTitle,
+                                TocText = metadata.tocText,
+                                Score = partial.Score,
+                                ProximityScore = partial.ProximityScore,
+                                Snippet = snippet
+                            };
+                        }
                     }
                 }
+
+                LogMemoryUsage("Search completed");
             }
         }
 
@@ -110,26 +128,20 @@ namespace BloomSearchEngineLib
             short chunkSize,
             int maxScore,
             ConcurrentQueue<SearchResultItem> perfectMatches,
-            ConcurrentBag<SearchResultItem> partialMatches)
+            TopNPartialMatches partialMatches)
         {
-            // Queue for passing chunks from producer to consumers
-            var chunkQueue = new BlockingCollection<ChunkWork>(boundedCapacity: 50);
+            // Simple queue for producer-consumer communication
+            var chunkQueue = new BlockingCollection<ChunkWork>(boundedCapacity: 2);
 
-            int consumerCount = Environment.ProcessorCount;
-            var consumers = new Task[consumerCount];
+            // Start single consumer thread
+            var consumerTask = Task.Run(() =>
+                ConsumerThread(chunkQueue, terms, chunkSize, maxScore, perfectMatches, partialMatches));
 
-            // Start consumer threads
-            for (int i = 0; i < consumerCount; i++)
-            {
-                consumers[i] = Task.Run(() =>
-                    ConsumerThread(chunkQueue, terms, chunkSize, maxScore, perfectMatches, partialMatches));
-            }
-
-            // Producer thread (runs on this thread)
+            // Producer runs on this thread
             ProducerThread(hits, chunkSize, chunkQueue);
 
-            // Wait for all consumers to finish
-            Task.WaitAll(consumers);
+            // Wait for consumer to finish
+            consumerTask.Wait();
         }
 
         private void ProducerThread(SearchResult[] hits, short chunkSize, BlockingCollection<ChunkWork> chunkQueue)
@@ -138,15 +150,13 @@ namespace BloomSearchEngineLib
             {
                 foreach (var hit in hits)
                 {
-                    var lines = db.GetLineContentsChunk(hit.Id, chunkSize).ToArray();
-
                     var work = new ChunkWork
                     {
                         Hit = hit,
-                        Lines = lines
+                        ChunkSize = chunkSize
                     };
 
-                    chunkQueue.Add(work);
+                    chunkQueue.Add(work); // Blocks if queue is full
                 }
             }
 
@@ -160,16 +170,19 @@ namespace BloomSearchEngineLib
             short chunkSize,
             int maxScore,
             ConcurrentQueue<SearchResultItem> perfectMatches,
-            ConcurrentBag<SearchResultItem> partialMatches)
+            TopNPartialMatches partialMatches)
         {
             using (var db = new ZayitDbManager())
             {
+                int chunksProcessed = 0;
+
                 foreach (var work in chunkQueue.GetConsumingEnumerable())
                 {
                     int minRequiredWords = work.Hit.Score;
                     int i = 0;
 
-                    foreach (var line in work.Lines)
+                    // Stream lines one at a time instead of loading entire chunk
+                    foreach (var line in db.GetLineContentsChunk(work.Hit.Id, work.ChunkSize))
                     {
                         string normalizedLine = line.NormalizeText();
                         var match = SearchEngineMatcher.Match(normalizedLine, terms, minRequiredWords);
@@ -177,35 +190,135 @@ namespace BloomSearchEngineLib
                         if (match != null)
                         {
                             int lineId = work.Hit.Id * chunkSize + i;
-                            var metadata = db.GetLineMetadata(lineId);
 
-                            var result = new SearchResultItem
+                            if (match.Words.Length == maxScore)
                             {
-                                LineId = lineId,
-                                BookId = metadata.bookId,
-                                BookTitle = metadata.bookTitle,
-                                TocText = metadata.tocText,
-                                Score = match.Words.Length,
-                                ProximityScore = match.ProximityScore,
-                                Snippet = match.Snippet(normalizedLine)
-                            };
+                                // Perfect match - get full metadata immediately
+                                var metadata = db.GetLineMetadata(lineId);
 
-                            if (result.Score == maxScore)
+                                var result = new SearchResultItem
+                                {
+                                    LineId = lineId,
+                                    BookId = metadata.bookId,
+                                    BookTitle = metadata.bookTitle,
+                                    TocText = metadata.tocText,
+                                    Score = match.Words.Length,
+                                    ProximityScore = match.ProximityScore,
+                                    Snippet = match.Snippet(normalizedLine)
+                                };
+
                                 perfectMatches.Enqueue(result);
+                            }
                             else
-                                partialMatches.Add(result);
+                            {
+                                // Partial match - only keep if it's in top 100
+                                partialMatches.TryAdd(new PartialMatchData
+                                {
+                                    LineId = lineId,
+                                    Score = match.Words.Length,
+                                    ProximityScore = match.ProximityScore,
+                                    ClusterStart = match.ClusterStart,
+                                    ClusterEnd = match.ClusterEnd
+                                });
+                            }
                         }
 
                         i++;
+                    }
+
+                    chunksProcessed++;
+
+                    // Periodic cleanup every 50 chunks
+                    if (chunksProcessed % 50 == 0)
+                    {
+                        if (GC.GetTotalMemory(false) > 300_000_000) // 300MB threshold
+                        {
+                            GC.Collect(1, GCCollectionMode.Optimized, false);
+                        }
                     }
                 }
             }
         }
 
+        private void LogMemoryUsage(string location)
+        {
+            var mb = GC.GetTotalMemory(false) / (1024.0 * 1024.0);
+            Console.WriteLine($"[{location}] RAM: {mb:F2} MB");
+        }
+
+        // Lightweight struct for partial matches
+        private struct PartialMatchData
+        {
+            public int LineId;
+            public int Score;
+            public double ProximityScore;
+            public int ClusterStart;
+            public int ClusterEnd;
+        }
+
         private class ChunkWork
         {
             public SearchResult Hit { get; set; }
-            public string[] Lines { get; set; }
+            public int ChunkSize { get; set; }
+        }
+
+        // Thread-safe priority queue that only keeps top N items
+        private class TopNPartialMatches
+        {
+            private readonly object _lock = new object();
+            private readonly SortedSet<PartialMatchData> _topMatches;
+            private readonly int _maxSize;
+
+            public TopNPartialMatches(int maxSize)
+            {
+                _maxSize = maxSize;
+                _topMatches = new SortedSet<PartialMatchData>(
+                    Comparer<PartialMatchData>.Create((a, b) =>
+                    {
+                        int cmp = b.Score.CompareTo(a.Score);
+                        if (cmp != 0) return cmp;
+
+                        cmp = b.ProximityScore.CompareTo(a.ProximityScore);
+                        if (cmp != 0) return cmp;
+
+                        return a.LineId.CompareTo(b.LineId);
+                    }));
+            }
+
+            public void TryAdd(PartialMatchData match)
+            {
+                lock (_lock)
+                {
+                    if (_topMatches.Count < _maxSize)
+                    {
+                        _topMatches.Add(match);
+                    }
+                    else
+                    {
+                        var worst = _topMatches.Max;
+
+                        if (match.Score > worst.Score ||
+                            (match.Score == worst.Score && match.ProximityScore > worst.ProximityScore))
+                        {
+                            _topMatches.Remove(worst);
+                            _topMatches.Add(match);
+                        }
+                    }
+                }
+            }
+
+            public PartialMatchData[] GetTop(int count)
+            {
+                lock (_lock)
+                {
+                    return _topMatches.Take(count).ToArray();
+                }
+            }
+
+            public int Count
+            {
+                get { lock (_lock) return _topMatches.Count; }
+            }
         }
     }
 }

@@ -4,10 +4,12 @@
                         ref="searchRef"
                         :books="allBooks"
                         :search-query="searchInput"
-                        class="flex-110" />
+                        class="flex-110"
+                        @return-focus="returnFocusToSearch" />
         <BookTree v-else
                   ref="treeRef"
-                  class="flex-110" />
+                  class="flex-110"
+                  @return-focus="returnFocusToSearch" />
 
         <div class="bar flex-row search-bar">
             <button @click="resetTree"
@@ -57,11 +59,25 @@ const focusFirstItem = () => {
     }
 };
 
+// Return focus to search input
+const returnFocusToSearch = () => {
+    nextTick(() => {
+        searchInputRef.value?.focus();
+    });
+};
+
 // Handle keyboard shortcuts on search input
 const handleKeyDown = (e: KeyboardEvent) => {
     // Escape key - reset tree
     if (e.key === 'Escape') {
         resetTree();
+        return;
+    }
+
+    // Tab key - focus first tree/search item
+    if (e.key === 'Tab') {
+        e.preventDefault();
+        focusFirstItem();
         return;
     }
 

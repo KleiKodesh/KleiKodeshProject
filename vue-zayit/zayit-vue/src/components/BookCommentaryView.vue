@@ -92,17 +92,17 @@
                              class="commentary-scroller"
                              :items="virtualCommentaryItems"
                              :min-item-size="commentaryMinItemSize"
-                             :buffer="100"
+                             :buffer="400"
                              key-field="id"
-                             @scroll.passive="() => { }">
+                             @scroll.passive="handleScrollerScroll">
 
                 <template #default="{ item, index, active }">
                     <DynamicScrollerItem :item="item"
                                          :active="active"
                                          :size-dependencies="[
-                                            item.groupName,
-                                            item.links.length,
-                                            item.links.map((l: any) => l.html).join('')
+                                            item.estimatedHeight,
+                                            containerWidth,
+                                            item.links.map((l: any) => l.html.length).join(',')
                                         ]"
                                          :data-index="index"
                                          :data-commentary-item-observer="item.id">
@@ -135,7 +135,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import { DynamicScroller, DynamicScrollerItem } from 'vue3-virtual-scroller'
+import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import Combobox, { type ComboboxOption } from './common/Combobox.vue'
 import GenericSearch from './common/GenericSearch.vue'
 import CommentaryConnectionTypeFilter from './CommentaryConnectionTypeFilter.vue'
@@ -183,13 +183,46 @@ onMounted(() => {
         attributes: true,
         attributeFilter: ['class']
     })
-    
+
     // Add global keyboard listener for Ctrl+F
     document.addEventListener('keydown', handleGlobalKeyDown)
-    
+
+    // Track container width for responsive height estimation
+    let resizeObserver: ResizeObserver | null = null
+    nextTick(() => {
+        if (commentaryContentRef.value) {
+            // Set initial width
+            containerWidth.value = commentaryContentRef.value.clientWidth
+
+            // Watch for resize
+            resizeObserver = new ResizeObserver((entries) => {
+                for (const entry of entries) {
+                    const newWidth = entry.contentRect.width
+                    containerWidth.value = newWidth
+
+                    // Force multiple updates when width changes to ensure recalculation
+                    nextTick(() => {
+                        // Trigger resize event immediately
+                        window.dispatchEvent(new Event('resize'))
+                        forceScrollerUpdate()
+                        // Second update after a delay to catch any late renders
+                        setTimeout(() => {
+                            window.dispatchEvent(new Event('resize'))
+                            forceScrollerUpdate()
+                        }, 200)
+                    })
+                }
+            })
+            resizeObserver.observe(commentaryContentRef.value)
+        }
+    })
+
     onUnmounted(() => {
         observer.disconnect()
         document.removeEventListener('keydown', handleGlobalKeyDown)
+        if (resizeObserver) {
+            resizeObserver.disconnect()
+        }
     })
 })
 
@@ -248,8 +281,29 @@ const scrollDirection = ref<'up' | 'down' | 'none'>('none') // Current scroll di
 const pendingNavigationTargetBookId = ref<number | undefined>(undefined) // Track target book ID for navigation
 const isLoadingFromNavigation = ref(false) // Flag to indicate we're loading from next/previous line buttons
 
-// Virtual scroller configuration
-const commentaryMinItemSize = computed(() => 80)
+// Track container width for responsive height estimation
+const containerWidth = ref(0)
+
+// Virtual scroller configuration with dynamic sizing
+const commentaryMinItemSize = computed(() => {
+    // Base calculation on actual font size and line height settings
+    const baseFontSize = 16 // Base font size in pixels
+    const effectiveFontSize = (baseFontSize * settingsStore.fontSize) / 100
+    const effectiveLineHeight = effectiveFontSize * settingsStore.linePadding
+
+    // Check if we have any extremely long paragraphs
+    const hasExtremeParagraphs = processedLinkGroups.value.some(group =>
+        group.links.some(link => {
+            const textLength = link.html.replace(/<[^>]*>/g, '').length
+            return textLength > 10000
+        })
+    )
+
+    // Use much higher minimum for extreme content, scaled by font settings
+    const baseMinSize = hasExtremeParagraphs ? 500 : 150
+    const fontSizeMultiplier = settingsStore.fontSize / 105 // 105 is default
+    return Math.floor(baseMinSize * fontSizeMultiplier)
+})
 
 // Virtual items for commentary scroller - GROUP ITEMS TOGETHER
 const virtualCommentaryItems = computed(() => {
@@ -261,9 +315,65 @@ const virtualCommentaryItems = computed(() => {
         targetBookId?: number
         targetLineIndex?: number
         links: Array<{ html: string }>
+        estimatedHeight: number
     }> = []
 
+    // Get effective width for text wrapping calculation
+    // Account for padding/margins (estimate ~30px total)
+    const effectiveWidth = Math.max(150, containerWidth.value - 30)
+
+    // Calculate actual font size and line height from settings
+    const baseFontSize = 16 // Base font size in pixels
+    const effectiveFontSize = (baseFontSize * settingsStore.fontSize) / 100
+    const effectiveLineHeight = effectiveFontSize * settingsStore.linePadding
+
+    // Estimate characters per line based on width and actual font size
+    // Hebrew characters width varies with font size
+    const charWidth = effectiveFontSize * (effectiveWidth < 250 ? 0.75 : 0.65)
+    const charsPerLine = Math.max(10, Math.floor(effectiveWidth / charWidth))
+
     processedLinkGroups.value.forEach((group, groupIndex) => {
+        // Better height estimation accounting for very long paragraphs
+        // Header height scales with font size
+        const headerHeight = Math.ceil(effectiveFontSize * 2.5)
+        let totalEstimatedHeight = headerHeight
+        let maxLinkHeight = 0
+        let maxLinkTextLength = 0
+
+        group.links.forEach((link, linkIndex) => {
+            // Strip HTML tags to get approximate text length
+            const textLength = link.html.replace(/<[^>]*>/g, '').length
+
+            // Calculate estimated number of lines based on viewport width
+            const estimatedLines = Math.ceil(textLength / charsPerLine)
+
+            // Use actual line height from settings
+            let linkHeight = Math.max(effectiveLineHeight * 2, estimatedLines * effectiveLineHeight)
+
+            // Add buffer based on viewport width (narrower = more unpredictable wrapping)
+            // No arbitrary caps - just trust the calculation with appropriate buffer
+            let bufferMultiplier = 1.0
+            if (effectiveWidth < 250) {
+                bufferMultiplier = 1.5  // 50% buffer for extremely narrow
+            } else if (effectiveWidth < 400) {
+                bufferMultiplier = 1.3  // 30% buffer for narrow
+            } else if (effectiveWidth < 600) {
+                bufferMultiplier = 1.15 // 15% buffer for medium
+            } else {
+                bufferMultiplier = 1.1  // 10% buffer for wide
+            }
+
+            linkHeight = Math.floor(linkHeight * bufferMultiplier)
+
+            // Track max for logging
+            if (linkHeight > maxLinkHeight) {
+                maxLinkHeight = linkHeight
+                maxLinkTextLength = textLength
+            }
+
+            totalEstimatedHeight += linkHeight + 10 // +10 for spacing
+        })
+
         items.push({
             id: `group-${groupIndex}`,
             type: 'group-with-links',
@@ -271,7 +381,8 @@ const virtualCommentaryItems = computed(() => {
             groupName: group.groupName,
             targetBookId: group.targetBookId,
             targetLineIndex: group.targetLineIndex,
-            links: group.links
+            links: group.links,
+            estimatedHeight: totalEstimatedHeight
         })
     })
 
@@ -418,6 +529,12 @@ async function nextLine() {
 }
 
 function handleKeyDown(e: KeyboardEvent) {
+    // Prevent spacebar from scrolling unless in search input
+    if (e.key === ' ' && e.target instanceof HTMLElement && e.target.tagName !== 'INPUT') {
+        e.preventDefault()
+        return
+    }
+
     if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
         e.preventDefault()
         isSearchOpen.value = true
@@ -436,11 +553,11 @@ function handleKeyDown(e: KeyboardEvent) {
 const handleGlobalKeyDown = (e: KeyboardEvent) => {
     // Only handle if we have a book and line selected, and commentary is visible
     if (props.bookId === undefined || props.selectedLineIndex === undefined) return
-    
+
     // Also check if the active tab is showing bookview page
     const activeTab = tabStore.activeTab
     if (!activeTab || activeTab.currentPage !== 'bookview') return
-    
+
     // Don't interfere if user is typing in an input
     const activeElement = document.activeElement
     if (activeElement && (
@@ -505,14 +622,14 @@ function handleNavigateToMatch(matchIndex: number) {
                         scrollerEl.style.overflow = ''
                         scrollerEl.style.pointerEvents = ''
                     }
-                    
+
                     // Now find and scroll to the actual mark element
                     setTimeout(() => {
                         const currentMark = scrollerEl?.querySelector('mark.current')
                         if (currentMark) {
                             currentMark.scrollIntoView({ behavior: 'auto', block: 'center' })
                         }
-                        
+
                         // Re-enable scroll tracking after a longer delay to prevent jump-back
                         setTimeout(() => {
                             isNavigating.value = false
@@ -613,7 +730,7 @@ const handleFilterChange = async (connectionTypeId: number) => {
 async function loadCommentaryLinks(bookId: number, lineIndex: number, scrollToTargetBookId?: number) {
     isLoading.value = true
     const wasNavigating = isLoadingFromNavigation.value // Capture the flag
-    
+
     try {
         linkGroups.value = await commentaryService.loadCommentaryLinks(
             bookId,
@@ -686,6 +803,8 @@ async function loadCommentaryLinks(bookId: number, lineIndex: number, scrollToTa
 
         setTimeout(() => {
             setupScrollTracking()
+            // Force virtual scroller to recalculate all item sizes after content loads
+            forceScrollerUpdate()
         }, 200)
 
     } catch (error) {
@@ -695,6 +814,52 @@ async function loadCommentaryLinks(bookId: number, lineIndex: number, scrollToTa
     } finally {
         isLoading.value = false
     }
+}
+
+// Force the virtual scroller to recalculate item sizes
+function forceScrollerUpdate() {
+    if (!commentaryScrollerRef.value) return
+
+    nextTick(() => {
+        // Access the internal scroller and force update
+        const scroller = commentaryScrollerRef.value as any
+        if (scroller && typeof scroller.forceUpdate === 'function') {
+            scroller.forceUpdate()
+        }
+
+        // Trigger multiple resize events to ensure recalculation
+        setTimeout(() => {
+            window.dispatchEvent(new Event('resize'))
+
+            // Force another update after a delay to catch any late-rendering content
+            setTimeout(() => {
+                if (scroller && typeof scroller.forceUpdate === 'function') {
+                    scroller.forceUpdate()
+                }
+                window.dispatchEvent(new Event('resize'))
+            }, 300)
+        }, 100)
+    })
+}
+
+// Handle scroll events to force recalculation when needed
+let scrollUpdateDebounce: number | undefined
+function handleScrollerScroll() {
+    // Debounce to avoid excessive updates
+    if (scrollUpdateDebounce) {
+        clearTimeout(scrollUpdateDebounce)
+    }
+
+    // Use shorter debounce for narrow viewports where height issues are more common
+    const debounceTime = containerWidth.value < 250 ? 200 : (containerWidth.value < 400 ? 300 : 500)
+
+    scrollUpdateDebounce = window.setTimeout(() => {
+        // Force update periodically during scrolling to fix any height miscalculations
+        const scroller = commentaryScrollerRef.value as any
+        if (scroller && typeof scroller.forceUpdate === 'function') {
+            scroller.forceUpdate()
+        }
+    }, debounceTime)
 }
 
 function handleGroupClick(item: any) {
@@ -851,6 +1016,13 @@ function selectAllInContainer() {
 // Scroll tracking with direct position checking
 let scrollTrackingCleanup: (() => void) | null = null
 
+// Register cleanup at component level (not inside async function)
+onUnmounted(() => {
+    if (scrollTrackingCleanup) {
+        scrollTrackingCleanup()
+    }
+})
+
 function setupScrollTracking() {
     if (!commentaryScrollerRef.value?.$el) return
 
@@ -986,12 +1158,6 @@ function setupScrollTracking() {
         scrollerEl.removeEventListener('scroll', handleScroll)
         clearTimeout(scrollTimeout)
     }
-
-    onUnmounted(() => {
-        if (scrollTrackingCleanup) {
-            scrollTrackingCleanup()
-        }
-    })
 }
 
 // Watch for linkGroups changes to refresh scroll tracking
@@ -1002,8 +1168,28 @@ watch(linkGroups, (newGroups) => {
 
     nextTick(() => {
         setupScrollTracking()
+        // Force scroller to recalculate when content changes
+        forceScrollerUpdate()
     })
 }, { flush: 'post' })
+
+// Watch for significant changes in virtual items and force recalculation
+watch(() => virtualCommentaryItems.value.length, () => {
+    nextTick(() => {
+        forceScrollerUpdate()
+    })
+})
+
+// Watch for font size and line height changes and force recalculation
+watch([() => settingsStore.fontSize, () => settingsStore.linePadding], () => {
+    nextTick(() => {
+        forceScrollerUpdate()
+        // Force multiple updates to ensure proper recalculation
+        setTimeout(() => {
+            forceScrollerUpdate()
+        }, 100)
+    })
+})
 </script>
 
 <style scoped>

@@ -37,6 +37,10 @@ const props = defineProps<{
     searchQuery: string
 }>()
 
+const emit = defineEmits<{
+    returnFocus: []
+}>()
+
 const containerRef = ref<HTMLElement>()
 const navigator = ref<KeyboardNavigator>()
 const tabStore = useTabStore()
@@ -81,7 +85,9 @@ const selectBook = (book: Book) => {
 
 onMounted(() => {
     if (containerRef.value) {
-        navigator.value = new KeyboardNavigator(containerRef.value)
+        navigator.value = new KeyboardNavigator(containerRef.value, {
+            onEscape: () => emit('returnFocus')
+        })
     }
 })
 
@@ -94,10 +100,14 @@ onUnmounted(() => {
 
 // Reinitialize navigator when search results change
 watch(filteredBooks, () => {
-    if (containerRef.value && navigator.value) {
-        navigator.value.destroy()
-        navigator.value = new KeyboardNavigator(containerRef.value)
+    if (containerRef.value) {
+        if (navigator.value) {
+            navigator.value.destroy()
+        }
+        navigator.value = new KeyboardNavigator(containerRef.value, {
+            onEscape: () => emit('returnFocus')
+        })
     }
-})
+}, { flush: 'post' })
 
 </script>

@@ -78,6 +78,7 @@ namespace BloomSearchEngineLib
                 }
 
                 // === CHARACTER PROCESSING ===
+
                 // Whitespace/separators → flush current word
                 if (c == ' ' || c == '\t' || c == '\n' || c == '\r' ||
                     c == '\u05BE' || c == '_')
@@ -110,54 +111,7 @@ namespace BloomSearchEngineLib
         {
             if (_wordBuilder.Length > 0)
             {
-                string word = _wordBuilder.ToString();
-                int len = word.Length;
-
-                // Add up to 3 n-grams based on word length for prefix/middle/suffix search
-                if (len >= 7)
-                {
-                    // Long words: add first 3, variable-length middle, and last 3 chars
-                    // Middle takes whatever is left after prefix and suffix
-                    _terms.Add(word.Substring(0, 3));                    // prefix: first 3
-                    _terms.Add(word.Substring(3, len - 6));              // middle: everything between prefix and suffix
-                    _terms.Add(word.Substring(len - 3, 3));              // suffix: last 3
-                }
-                else if (len == 6)
-                {
-                    // 6-char words: add first 3, middle 3, and last 3
-                    _terms.Add(word.Substring(0, 3));      // prefix (0-2)
-                    _terms.Add(word.Substring(2, 3));      // middle (2-4) - overlaps
-                    _terms.Add(word.Substring(3, 3));      // suffix (3-5)
-                }
-                else if (len == 5)
-                {
-                    // 5-char words: add first 3, middle 3, and last 3
-                    _terms.Add(word.Substring(0, 3));      // prefix (0-2)
-                    _terms.Add(word.Substring(1, 3));      // middle (1-3)
-                    _terms.Add(word.Substring(2, 3));      // suffix (2-4)
-                }
-                else if (len == 4)
-                {
-                    // 4-char words: add first 3 and last 3 (will overlap by 2)
-                    _terms.Add(word.Substring(0, 3));      // prefix
-                    _terms.Add(word.Substring(1, 3));      // suffix
-                }
-                else if (len == 3)
-                {
-                    // 3-char words: just the word itself
-                    _terms.Add(word);
-                }
-                else if (len == 2)
-                {
-                    // 2-char words: just the word itself
-                    _terms.Add(word);
-                }
-                // For 1-char words, add as-is
-                else if (len == 1)
-                {
-                    _terms.Add(word);
-                }
-
+                _terms.Add(_wordBuilder.ToString());
                 _wordBuilder.Clear();
             }
         }

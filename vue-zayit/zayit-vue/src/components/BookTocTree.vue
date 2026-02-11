@@ -39,6 +39,7 @@ defineProps<{
 
 const emit = defineEmits<{
     selectLine: [lineIndex: number]
+    returnFocus: []
 }>();
 
 const nodeRefs = ref<InstanceType<typeof BookTocTreeNode>[]>([]);
@@ -47,7 +48,9 @@ const navigator = ref<KeyboardNavigator>();
 
 onMounted(() => {
     if (containerRef.value) {
-        navigator.value = new KeyboardNavigator(containerRef.value);
+        navigator.value = new KeyboardNavigator(containerRef.value, {
+            onEscape: () => emit('returnFocus')
+        });
     }
 });
 

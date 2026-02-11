@@ -9,14 +9,16 @@
                                    :toc-entries="props.tocEntries"
                                    :search-query="searchInput"
                                    :is-compact-mode="isCompactMode"
-                                   @select-line="handleSelectLine" />
+                                   @select-line="handleSelectLine"
+                                   @return-focus="returnFocusToSearch" />
 
                 <BookTocTree v-else
                              :toc-entries="props.tocEntries"
                              :is-loading="props.isLoading"
                              :is-compact-mode="isCompactMode"
                              ref="treeRef"
-                             @select-line="handleSelectLine" />
+                             @select-line="handleSelectLine"
+                             @return-focus="returnFocusToSearch" />
             </div>
 
             <div class="bar flex-row search-bar">
@@ -92,6 +94,13 @@ const focusFirstItem = () => {
     }
 };
 
+// Return focus to search input
+const returnFocusToSearch = () => {
+    nextTick(() => {
+        searchInputRef.value?.focus();
+    });
+};
+
 // Handle keyboard shortcuts on search input
 const handleKeyDown = (e: KeyboardEvent) => {
     // Escape key - close TOC or reset tree
@@ -103,6 +112,13 @@ const handleKeyDown = (e: KeyboardEvent) => {
             // If no search text, close the TOC
             tabStore.closeToc();
         }
+        return;
+    }
+
+    // Tab key - focus first tree/search item
+    if (e.key === 'Tab') {
+        e.preventDefault();
+        focusFirstItem();
         return;
     }
 

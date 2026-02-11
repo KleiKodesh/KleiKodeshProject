@@ -6,6 +6,9 @@ namespace BloomSearchEngineLib
     public sealed class SearchResultItem
     {
         public int LineId { get; set; }
+        public int BookId { get; set; }
+        public string BookTitle { get; set; }
+        public string TocText { get; set; }
         public int Score { get; set; }
         public double ProximityScore { get; set; }
         public string Snippet { get; set; }

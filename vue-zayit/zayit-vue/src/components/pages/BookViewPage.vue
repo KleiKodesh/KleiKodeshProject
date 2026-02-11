@@ -66,6 +66,21 @@ const currentBook = computed(() => {
 watch(() => myTab.value?.bookState?.bookId, async (bookId) => {
   if (bookId) {
     await loadTocData(bookId)
+
+    // Check if we should highlight the initial line (from search result)
+    if (myTab.value?.bookState?.shouldHighlight && myTab.value?.bookState?.initialLineIndex !== undefined) {
+      // Wait for viewer to be ready, then trigger highlight
+      setTimeout(() => {
+        const viewer: any = lineViewerRef.value
+        if (viewer?.scrollToLineAndHighlight) {
+          viewer.scrollToLineAndHighlight(myTab.value!.bookState!.initialLineIndex!)
+          // Clear the flag so it doesn't highlight again
+          if (myTab.value?.bookState) {
+            myTab.value.bookState.shouldHighlight = false
+          }
+        }
+      }, 500) // Wait for book to load
+    }
   }
 }, { immediate: true })
 

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace BloomSearchEngineLib
 {
-    internal static class SearchEngineMatcher
+    public static class SearchEngineMatcher
     {
         private const double MIN_PROXIMITY_SCORE = 0.2;
 
@@ -14,7 +14,7 @@ namespace BloomSearchEngineLib
         /// <param name="words">The words to search for</param>
         /// <param name="minRequiredWords">Minimum number of words that must be found (from Bloom filter score)</param>
         /// <returns>MatchInfo if at least minRequiredWords are found and proximity is acceptable, null otherwise</returns>
-        internal static MatchInfo Match(string text, string[] words, int minRequiredWords)
+        public static MatchInfo Match(string text, string[] words, int minRequiredWords)
         {
             var matchInfo = new MatchInfo { Words = words };
             var foundWords = new List<string>();
@@ -80,8 +80,8 @@ namespace BloomSearchEngineLib
 
         private struct PositionEntry
         {
-            internal int Position;
-            internal int WordIndex;
+            public int Position;
+            public int WordIndex;
         }
 
         private static (int Span, int MinPos, int MaxPos) FindMinimumSpanWindow(
@@ -149,7 +149,7 @@ namespace BloomSearchEngineLib
             return (minSpan, bestMinPos, bestMaxPos);
         }
 
-        internal static string ExtractSnippetFromCluster(
+        public static string ExtractSnippetFromCluster(
             string text, int clusterStart, int clusterEnd, int maxSnippetLength = 200)
         {
             if (string.IsNullOrEmpty(text))
@@ -199,15 +199,15 @@ namespace BloomSearchEngineLib
         }
     }
 
-    internal class MatchInfo
+    public class MatchInfo
     {
-        internal string[] Words { get; set; }
-        internal List<int>[] AllPositions { get; set; }
-        internal double ProximityScore { get; set; }
-        internal int ClusterStart { get; set; }
-        internal int ClusterEnd { get; set; }
+        public string[] Words { get; set; }
+        public List<int>[] AllPositions { get; set; }
+        public double ProximityScore { get; set; }
+        public int ClusterStart { get; set; }
+        public int ClusterEnd { get; set; }
 
-        internal string Snippet(string text) =>
+        public string Snippet(string text) =>
             SearchEngineMatcher.ExtractSnippetFromCluster(text, ClusterStart, ClusterEnd);
     }
 }

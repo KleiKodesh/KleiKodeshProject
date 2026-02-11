@@ -34,6 +34,7 @@
                     <BookLine :content="item.content || '\u00A0'"
                               :line-index="index"
                               :is-selected="selectedLineIndex === index"
+                              :is-highlighted="highlightedLineIndex === index"
                               :inline-mode="myTab?.bookState?.isLineDisplayInline || false"
                               :alt-toc-entries="item.altTocEntries"
                               :show-alt-toc="myTab?.bookState?.showAltToc"
@@ -49,7 +50,7 @@
 
 <script setup lang="ts">
 import { ref, watch, nextTick, onMounted, onUnmounted, computed } from 'vue'
-import { DynamicScroller, DynamicScrollerItem } from 'vue3-virtual-scroller'
+import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import BookLine from './BookLine.vue'
 import GenericSearch from './common/GenericSearch.vue'
 import { BookLineViewerService } from '../services/bookLineViewerService'
@@ -111,6 +112,7 @@ const emit = defineEmits<{
 
 const myTab = computed(() => tabStore.tabs.find(t => t.id === props.tabId))
 const selectedLineIndex = ref<number | null>(null)
+const highlightedLineIndex = ref<number | null>(null)
 const isInitialLoading = ref(false)
 
 const viewerState = new BookLineViewerService()
@@ -193,6 +195,12 @@ function handleLineClick(lineIndex: number) {
 }
 
 function handleKeyDown(e: KeyboardEvent) {
+    // Prevent spacebar from scrolling unless in search input
+    if (e.key === ' ' && e.target instanceof HTMLElement && e.target.tagName !== 'INPUT') {
+        e.preventDefault()
+        return
+    }
+
     if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
         e.preventDefault()
         isSearchOpen.value = true
@@ -225,7 +233,7 @@ function handleKeyDown(e: KeyboardEvent) {
 const handleGlobalKeyDown = (e: KeyboardEvent) => {
     // Only handle if this is the active tab
     if (tabStore.activeTab?.id !== props.tabId) return
-    
+
     // Don't interfere if user is typing in an input
     const activeElement = document.activeElement
     if (activeElement && (
@@ -312,7 +320,7 @@ function handleNavigateToMatch(matchIndex: number) {
             if (currentMark) {
                 currentMark.scrollIntoView({ behavior: 'auto', block: 'center' })
             }
-            
+
             // Re-enable scroll tracking after a longer delay to prevent jump-back
             setTimeout(() => {
                 isNavigating.value = false
@@ -336,19 +344,20 @@ function handleScrollForPositionTracking() {
         // Skip if currently navigating to avoid interference
         if (isNavigating.value) return
 
-        // Get the actual top visible line ID from DOM, not estimated from scroll position
-        const topVisibleLineIndex = getTopVisibleLineIndex()
+        // Get the actual top visible line and its offset from viewport top
+        const position = getTopVisibleLinePosition()
 
-        if (topVisibleLineIndex !== null && topVisibleLineIndex >= 0 && topVisibleLineIndex < viewerState.totalLines.value) {
-            // Only save to tab state, don't emit events that might cause interference
+        if (position && position.lineIndex >= 0 && position.lineIndex < viewerState.totalLines.value) {
+            // Save both line index and its pixel offset for accurate restoration
             if (myTab.value?.bookState) {
-                myTab.value.bookState.initialLineIndex = topVisibleLineIndex
+                myTab.value.bookState.initialLineIndex = position.lineIndex
+                myTab.value.bookState.lineOffset = position.offset
             }
         }
     }, 500) // Longer delay to avoid interference with navigation
 }
 
-function getTopVisibleLineIndex(): number | null {
+function getTopVisibleLinePosition(): { lineIndex: number; offset: number } | null {
     if (!scrollerRef.value?.$el) return null
 
     const scrollerEl = scrollerRef.value.$el
@@ -378,12 +387,22 @@ function getTopVisibleLineIndex(): number | null {
         }
     }
 
-    // Return the line that's actually at the top, not just any visible line
+    // Return the topmost visible line with its offset from viewport top
     if (topMostLine) {
-        // Only return if the line is actually at or very close to the top
-        const distanceFromTop = topMostLine.top - scrollerRect.top
-        if (distanceFromTop >= -10 && distanceFromTop <= 50) { // Allow small tolerance
-            return topMostLine.lineIndex
+        const offset = topMostLine.top - scrollerRect.top
+        return {
+            lineIndex: topMostLine.lineIndex,
+            offset: offset // Negative if line is scrolled up past viewport top, positive if below
+        }
+    }
+
+    // Fallback: estimate from scroll position if no rendered lines found
+    const scrollTop = scrollerEl.scrollTop || 0
+    const estimatedLine = Math.floor(scrollTop / minItemSize.value)
+    if (estimatedLine >= 0 && estimatedLine < viewerState.totalLines.value) {
+        return {
+            lineIndex: estimatedLine,
+            offset: 0 // No offset information available in fallback
         }
     }
 
@@ -457,7 +476,8 @@ watch(() => myTab.value?.bookState?.bookId, async (bookId, oldBookId) => {
 
             // Wait a bit more for the virtual scroller to initialize
             setTimeout(async () => {
-                await scrollToLine(initialLineIndex)
+                const lineOffset = myTab.value?.bookState?.lineOffset
+                await scrollToLine(initialLineIndex, lineOffset)
                 // Clear loading state after scroll completes
                 isInitialLoading.value = false
 
@@ -484,7 +504,8 @@ watch(() => myTab.value?.isActive, async (isActive, wasActive) => {
 
             // Wait for virtual scroller to be ready
             setTimeout(async () => {
-                await scrollToLine(initialLineIndex)
+                const lineOffset = myTab.value?.bookState?.lineOffset
+                await scrollToLine(initialLineIndex, lineOffset)
 
                 // Re-enable scroll tracking after restoration
                 setTimeout(() => {
@@ -495,7 +516,7 @@ watch(() => myTab.value?.isActive, async (isActive, wasActive) => {
     }
 })
 
-async function scrollToLine(lineIndex: number) {
+async function scrollToLine(lineIndex: number, pixelOffset?: number) {
     if (!scrollerRef.value) return
 
     // Prioritize loading lines around the target for smooth scrolling
@@ -518,8 +539,19 @@ async function scrollToLine(lineIndex: number) {
 
         // Wait a bit and call it again (the hack!) - but hidden
         setTimeout(() => {
-            if (scrollerRef.value) {
+            if (scrollerRef.value && scrollerEl) {
                 scrollerRef.value.scrollToItem(lineIndex)
+
+                // If we have a pixel offset, apply it after the scroll completes
+                if (pixelOffset !== undefined && pixelOffset !== 0) {
+                    setTimeout(() => {
+                        if (scrollerEl) {
+                            // Adjust scroll position by the offset to restore exact position
+                            // Negative offset means the line was scrolled up, so we scroll down more
+                            scrollerEl.scrollTop = scrollerEl.scrollTop - pixelOffset
+                        }
+                    }, 20)
+                }
 
                 // Re-enable scrolling after the second call
                 setTimeout(() => {
@@ -527,7 +559,7 @@ async function scrollToLine(lineIndex: number) {
                         scrollerEl.style.overflow = ''
                         scrollerEl.style.pointerEvents = ''
                     }
-                }, 10) // Very short delay to ensure scroll completes
+                }, pixelOffset !== undefined ? 30 : 10) // Slightly longer delay if applying offset
             }
         }, 50)
 
@@ -540,15 +572,40 @@ async function scrollToLine(lineIndex: number) {
             setTimeout(() => {
                 if (scrollerEl) {
                     scrollerEl.scrollTop = scrollTop
+
+                    // Apply offset in fallback too
+                    if (pixelOffset !== undefined && pixelOffset !== 0) {
+                        setTimeout(() => {
+                            if (scrollerEl) {
+                                scrollerEl.scrollTop = scrollerEl.scrollTop - pixelOffset
+                            }
+                        }, 20)
+                    }
+
                     // Re-enable scrolling after fallback
                     setTimeout(() => {
                         scrollerEl.style.overflow = ''
                         scrollerEl.style.pointerEvents = ''
-                    }, 10)
+                    }, pixelOffset !== undefined ? 30 : 10)
                 }
             }, 50)
         }
     }
+}
+
+// Scroll to line and highlight it temporarily
+async function scrollToLineAndHighlight(lineIndex: number) {
+    await scrollToLine(lineIndex)
+
+    // Set highlight after scroll completes
+    setTimeout(() => {
+        highlightedLineIndex.value = lineIndex
+
+        // Remove highlight after 3 seconds
+        setTimeout(() => {
+            highlightedLineIndex.value = null
+        }, 3000)
+    }, 300) // Wait for scroll animation to complete
 }
 
 async function handleTocSelection(lineIndex: number) {
@@ -631,11 +688,12 @@ onUnmounted(() => {
 
     // Save current scroll position when unmounting for session restoration
     if (myTab.value?.bookState) {
-        const topVisibleLineIndex = getTopVisibleLineIndex()
+        const position = getTopVisibleLinePosition()
 
-        if (topVisibleLineIndex !== null && topVisibleLineIndex >= 0 && topVisibleLineIndex < viewerState.totalLines.value) {
-            myTab.value.bookState.initialLineIndex = topVisibleLineIndex
-            emit('updateScrollPosition', topVisibleLineIndex)
+        if (position && position.lineIndex >= 0 && position.lineIndex < viewerState.totalLines.value) {
+            myTab.value.bookState.initialLineIndex = position.lineIndex
+            myTab.value.bookState.lineOffset = position.offset
+            emit('updateScrollPosition', position.lineIndex)
         }
     }
 })
@@ -647,6 +705,10 @@ defineExpose({
         const target = index !== undefined && index !== null ? index : selectedLineIndex.value
         if (target === undefined || target === null) return
         await scrollToLine(target)
+    },
+    // Expose method to scroll and highlight a line (for search results)
+    async scrollToLineAndHighlight(index: number) {
+        await scrollToLineAndHighlight(index)
     }
 })
 </script>
