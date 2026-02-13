@@ -5,6 +5,7 @@
                 <AppTile v-if="isDatabaseAvailable"
                          label="פתח ספר"
                          icon="fluent:library-28-regular"
+                         custom-class="kezayit-tile"
                          @click="openKezayit" />
 
                 <AppTile v-if="isDatabaseAvailable"
@@ -320,12 +321,10 @@ const downloadZayit = async () => {
 /* Kezayit tile olive green with golden orange styling */
 :deep(.kezayit-tile .tile-icon svg) {
     color: #d4a24a;
-    filter: drop-shadow(0 0 8px rgba(212, 162, 74, 0.4));
 }
 
 :root.dark :deep(.kezayit-tile .tile-icon svg) {
     color: #e5b55f;
-    filter: drop-shadow(0 0 8px rgba(229, 181, 95, 0.4));
 }
 
 /* Warning tiles - subtle background to indicate action needed */
