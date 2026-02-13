@@ -78,7 +78,7 @@
                                    FontWeight="SemiBold"/>
                     </GroupBox.Header>
                     <StackPanel x:Name="VisibleSettingsPanel">
-                        <CheckBox x:Name="Kezayit_Visible"  Content="כזית"/>
+                        <CheckBox x:Name="Kezayit_Visible"  Content="ספריית כזית"/>
                         <!--<CheckBox x:Name="HebrewBooks_Visible"  Content="היברו בוקס"/>-->
                         <CheckBox x:Name="WebSites_Visible"  Content="דרך האתרים"/>
                         <CheckBox x:Name="KleiKodesh_Visible"  Content="עיצוב תורני"/>
@@ -93,7 +93,7 @@
                                    FontWeight="SemiBold"/>
                     </GroupBox.Header>
                     <StackPanel x:Name="OptionsSettingsPanel">
-                        <RadioButton x:Name="Kezayit_Option" Content="כזית"/>
+                        <RadioButton x:Name="Kezayit_Option" Content="ספריית כזית"/>
                         <!--<RadioButton x:Name="HebrewBooks_Option" Content="היברו בוקס"/>-->
                         <RadioButton x:Name="WebSites_Option" Content="דרך האתרים"/>
                         <RadioButton x:Name="KleiKodesh_Option" Content="עיצוב תורני"/>
@@ -130,7 +130,7 @@
                             <StackPanel>
                                 <!-- SuperTip body -->
                                 <TextBlock TextAlignment="Center">
-                                    <Run FontWeight="Bold">בחר מיקום מותאם אישית עבור מסד הנתונים של כזית</Run>
+                                    <Run FontWeight="Bold">בחר מיקום מותאם אישית עבור מסד הנתונים של ספריית כזית</Run>
                                     <LineBreak/>
                                     יש להתעלם מאפשרות זו בכדי להשתמש בברירת המחדל
                                 </TextBlock>

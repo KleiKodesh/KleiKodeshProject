@@ -3,8 +3,8 @@
         <div class="grid-container">
             <UniformGrid>
                 <AppTile v-if="isDatabaseAvailable"
-                         label="כזית"
-                         image-src="/Kezayit.png"
+                         label="פתח ספר"
+                         icon="fluent:library-28-regular"
                          @click="openKezayit" />
 
                 <AppTile v-if="isDatabaseAvailable"
@@ -15,25 +15,14 @@
                          @click="openKezayitSearch">
                     <template v-if="isSearchIndexing"
                               #icon>
-                        <svg class="circular-progress"
-                             viewBox="0 0 36 36">
-                            <path class="circle-bg"
-                                  d="M18 2.0845
-                                     a 15.9155 15.9155 0 0 1 0 31.831
-                                     a 15.9155 15.9155 0 0 1 0 -31.831" />
-                            <path class="circle-progress"
-                                  :stroke-dasharray="`${indexingPercentage}, 100`"
-                                  d="M18 2.0845
-                                     a 15.9155 15.9155 0 0 1 0 31.831
-                                     a 15.9155 15.9155 0 0 1 0 -31.831" />
-                        </svg>
+                        <CircularProgress :percentage="indexingPercentage" />
                     </template>
                 </AppTile>
 
                 <AppTile v-if="!isDatabaseAvailable"
-                         label="התקן את זית"
-                         image-src="/Kezayit.png"
-                         custom-class="warning-tile"
+                         label="התקן את הספרייה"
+                         icon="fluent:library-28-regular"
+                         custom-class="warning-tile kezayit-tile"
                          @click="downloadZayit" />
 
                 <AppTile v-if="!isDatabaseAvailable"
@@ -73,6 +62,7 @@ import { webviewBridge } from '../../services/webviewBridge';
 import { bloomSearchService } from '../../services/bloomSearchService';
 import UniformGrid from '../UniformGrid.vue';
 import AppTile from '../AppTile.vue';
+import CircularProgress from '../ui/CircularProgress.vue';
 
 const tabStore = useTabStore();
 
@@ -85,7 +75,7 @@ const isDev = import.meta.env.DEV;
 const searchTileLabel = computed(() =>
     isSearchIndexing.value
         ? `יוצר אינדקס ${Math.round(indexingPercentage.value)}%`
-        : 'חיפוש כזית'
+        : 'חיפוש בספרייה'
 );
 const searchTileIcon = computed(() => isSearchIndexing.value ? '' : 'fluent:search-sparkle-24-filled');
 
@@ -287,6 +277,14 @@ const downloadZayit = async () => {
 }
 
 /* Search tile warm color styling */
+:deep(.search-tile .tile-icon .circular-progress) {
+    color: #f59e0b;
+}
+
+:root.dark :deep(.search-tile .tile-icon .circular-progress) {
+    color: #fbbf24;
+}
+
 :deep(.search-tile .tile-icon svg) {
     color: #f59e0b;
     filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.3));
@@ -295,35 +293,6 @@ const downloadZayit = async () => {
 :root.dark :deep(.search-tile .tile-icon svg) {
     color: #fbbf24;
     filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.3));
-}
-
-/* Circular progress ring */
-.circular-progress {
-    width: clamp(1.5rem, 25%, 2.5rem);
-    height: clamp(1.5rem, 25%, 2.5rem);
-    transform: rotate(-90deg);
-}
-
-.circle-bg {
-    fill: none;
-    stroke: var(--color-border, #e5e7eb);
-    stroke-width: 3;
-}
-
-.circle-progress {
-    fill: none;
-    stroke: #f59e0b;
-    stroke-width: 3;
-    stroke-linecap: round;
-    transition: stroke-dasharray 0.3s ease;
-}
-
-:root.dark .circle-progress {
-    stroke: #fbbf24;
-}
-
-:root.dark .circle-bg {
-    stroke: #374151;
 }
 
 /* Workspace tile purple-blue styling */
@@ -337,15 +306,26 @@ const downloadZayit = async () => {
     filter: drop-shadow(0 0 8px rgba(129, 140, 248, 0.3));
 }
 
-/* Database select tile blue styling */
+/* Database select tile red styling */
 :deep(.db-select-tile .tile-icon svg) {
-    color: #3b82f6;
-    filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.3));
+    color: #ef4444;
+    filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.3));
 }
 
 :root.dark :deep(.db-select-tile .tile-icon svg) {
-    color: #60a5fa;
-    filter: drop-shadow(0 0 8px rgba(96, 165, 250, 0.3));
+    color: #f87171;
+    filter: drop-shadow(0 0 8px rgba(248, 113, 113, 0.3));
+}
+
+/* Kezayit tile olive green with golden orange styling */
+:deep(.kezayit-tile .tile-icon svg) {
+    color: #d4a24a;
+    filter: drop-shadow(0 0 8px rgba(212, 162, 74, 0.4));
+}
+
+:root.dark :deep(.kezayit-tile .tile-icon svg) {
+    color: #e5b55f;
+    filter: drop-shadow(0 0 8px rgba(229, 181, 95, 0.4));
 }
 
 /* Warning tiles - subtle background to indicate action needed */

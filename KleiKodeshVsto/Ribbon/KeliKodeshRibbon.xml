@@ -18,8 +18,8 @@
 						<menu itemSize="large">
 
 							<button id="Kezayit"
-									label="כזית"
-									screentip="כזית"
+									label="ספריית כזית"
+									screentip="ספריית כזית"
 									supertip="תוסף לוורד עבור מאגר הספרים - זית"
 									getImage="getImage"
 									onAction="button_Click"

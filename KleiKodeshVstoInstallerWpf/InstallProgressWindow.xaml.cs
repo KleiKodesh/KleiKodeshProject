@@ -1,5 +1,8 @@
+using KleiKodesh.Helpers;
+using Microsoft.VisualBasic;
 using Microsoft.Win32;
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Reflection;
@@ -18,7 +21,7 @@ namespace KleiKodeshVstoInstallerWpf
     {
         const string AppName = "KleiKodesh";
         const string AppDisplayName = "כלי קודש";
-        const string Version = "v2.3.0";
+        const string Version = "v2.3.1";
         const string InstallFolderName = "KleiKodesh";
         const string ZipResourceName = "KleiKodesh.zip";
         const string VstoFileName = "KleiKodesh.vsto";
@@ -28,7 +31,6 @@ namespace KleiKodeshVstoInstallerWpf
         static string InstallPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), InstallFolderName);
         static string AddinRegistryPath => $@"Software\Microsoft\Office\Word\Addins\{AppName}";
         static string AddinDataRegistryPath => $@"Software\Microsoft\Office\Word\AddinsData\{AppName}";
-
 
         public InstallProgressWindow(Window mainWindow)
         {
@@ -107,6 +109,7 @@ namespace KleiKodeshVstoInstallerWpf
 
                 // Save version to registry after successful installation
                 SaveVersionToRegistry(Version);
+                await EnsureDbExists();
 
                 // Installation completed successfully - exit with code 0
                 await Task.Delay(300);
@@ -160,7 +163,38 @@ namespace KleiKodeshVstoInstallerWpf
             }
         }
 
+        async Task EnsureDbExists()
+        {
+            // Check if user enabled ספריית כזית
+            bool kezayitEnabled = SettingsManager.GetBool("Ribbon", "Kezayit_Visible", true);
 
+            if (!kezayitEnabled)
+                return; // user disabled it → no need to check DB
+
+            string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            string defaultDbPath = Path.Combine(appDataPath, "io.github.kdroidfilter.seforimapp", "databases", "seforim.db");
+            string currentDbPath = Interaction.GetSetting("ZayitApp", "Database", "Path", defaultDbPath);
+
+            if (!File.Exists(currentDbPath))
+            {
+                var result = MessageBox.Show(
+                    "לא נמצאה ספריית זית במחשב.\n\nהאם ברצונך להוריד ולהתקין כעת?",
+                    "ספריית זית לא נמצאה",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question,
+                    MessageBoxResult.Yes,
+                    MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = "https://zayitapp.com/#/download",
+                        UseShellExecute = true
+                    });
+                }
+            }
+        }
 
         async Task RegisterAddIn()
         {
@@ -208,18 +242,18 @@ namespace KleiKodeshVstoInstallerWpf
                     {
                         // Find the .vsto file in the installation directory
                         string[] vstoFiles = Directory.GetFiles(InstallPath, "*.vsto", SearchOption.AllDirectories);
-                        
+
                         if (vstoFiles.Length > 0)
                         {
                             string vstoPath = vstoFiles[0]; // Use the first .vsto file found
-                            
+
                             // Add to Office inclusion list to trust the solution
                             string inclusionListPath = @"SOFTWARE\Microsoft\VSTO\Security\Inclusion";
                             using (RegistryKey inclusionKey = Registry.CurrentUser.CreateSubKey(inclusionListPath))
                             {
                                 string manifestUrl = $"file:///{vstoPath.Replace('\\', '/')}|vstolocal";
                                 string keyName = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(manifestUrl));
-                                
+
                                 using (RegistryKey entryKey = inclusionKey.CreateSubKey(keyName))
                                 {
                                     entryKey.SetValue("Url", manifestUrl);
@@ -255,7 +289,7 @@ namespace KleiKodeshVstoInstallerWpf
             {
                 // Search for any .vsto file in the installation directory
                 string[] vstoFiles = Directory.GetFiles(InstallPath, "*.vsto", SearchOption.AllDirectories);
-                
+
                 if (vstoFiles.Length == 0)
                 {
                     // No .vsto file found - return fallback key
@@ -265,13 +299,13 @@ namespace KleiKodeshVstoInstallerWpf
                 // Use the first .vsto file found
                 string vstoPath = vstoFiles[0];
                 string manifestContent = File.ReadAllText(vstoPath);
-                
+
                 // Extract publicKeyToken from the manifest XML
                 var match = System.Text.RegularExpressions.Regex.Match(
-                    manifestContent, 
-                    @"publicKeyToken=""([^""]+)""", 
+                    manifestContent,
+                    @"publicKeyToken=""([^""]+)""",
                     System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                
+
                 if (match.Success)
                 {
                     string extractedKey = match.Groups[1].Value;
@@ -286,7 +320,7 @@ namespace KleiKodeshVstoInstallerWpf
             {
                 // If extraction fails, fall back to known key
             }
-            
+
             // Fallback to current known public key if extraction fails
             return "7c40e594188e4b56";
         }
@@ -321,7 +355,7 @@ namespace KleiKodeshVstoInstallerWpf
                 // Delete the entire add-in registry key to remove any old Manifest paths
                 // This ensures we start fresh with the new installation path
                 Registry.CurrentUser.DeleteSubKey(AddinRegistryPath, throwOnMissingSubKey: false);
-                
+
                 // Also cleanup the AddinsData registry path
                 Registry.CurrentUser.DeleteSubKey(AddinDataRegistryPath, throwOnMissingSubKey: false);
             }

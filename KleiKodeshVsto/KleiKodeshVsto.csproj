@@ -46,7 +46,7 @@
     <PublisherName />
     <SupportUrl />
     <FriendlyName>KleiKodesh</FriendlyName>
-    <OfficeApplicationDescription />
+    <OfficeApplicationDescription>ארגז כלים לעורך התורני</OfficeApplicationDescription>
     <LoadBehavior>3</LoadBehavior>
   </PropertyGroup>
   <ItemGroup>
