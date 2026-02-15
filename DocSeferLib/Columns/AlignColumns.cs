@@ -58,7 +58,7 @@ namespace DocSeferLib.Columns
                                 if (!(selectionRange.Start >= Vsto.Selection.Range.Start && selectionRange.End <= Vsto.Selection.Range.End))
                                     return;
                             }
-                                
+
                         }
                     }
                 }
@@ -89,7 +89,7 @@ namespace DocSeferLib.Columns
 
                 for (int i = pageData.FirstPage; i <= pageData.LastPage; i++)
                 {
-                    if (i % 25 == 0) 
+                    if (i % 25 == 0)
                         System.Windows.Forms.Application.DoEvents();
 
                     try
@@ -137,34 +137,103 @@ namespace DocSeferLib.Columns
             };
         }
 
+        //void Align(List<ColumnObject> columns)
+        //{
+        //    int counter = 0;
+        //    while (columns[0].yPos < columns[1].yPos && counter++ < 5)
+        //    {
+        //        float diff = columns[1].yPos - columns[0].yPos;
+        //        var paragraphs = columns[0].Range.Paragraphs.Cast<Paragraph>().ToList();
+
+        //        int usableCount = paragraphs.Count - 1;
+        //        if (usableCount == 0)
+        //            break;
+
+        //        float increment = Math.Min(diff / usableCount, MaxSpaceAfter);
+        //        bool changed = false;
+
+        //        if (increment < 0)
+        //            changed |= IncreaseSpaceAfter(paragraphs[0], Math.Min(diff, MaxSpaceAfter));
+        //        else
+        //            for (int i = 0; i < usableCount; i++)
+        //                changed |= IncreaseSpaceAfter(paragraphs[i], increment);
+
+        //        if (!changed)
+        //            break;
+
+        //        Vsto.Application.ScreenRefresh();
+        //        columns[0].yPos = (float)columns[0].Bottom.Information[WdInformation.wdVerticalPositionRelativeToPage];
+        //        columns[1].yPos = (float)columns[1].Bottom.Information[WdInformation.wdVerticalPositionRelativeToPage];
+        //    }
+        //}
+
         void Align(List<ColumnObject> columns)
         {
             int counter = 0;
+            bool lineHeightTried = false;
+
             while (columns[0].yPos < columns[1].yPos && counter++ < 5)
             {
                 float diff = columns[1].yPos - columns[0].yPos;
                 var paragraphs = columns[0].Range.Paragraphs.Cast<Paragraph>().ToList();
 
                 int usableCount = paragraphs.Count - 1;
-                if (usableCount == 0)
+                if (usableCount <= 0)
                     break;
 
-                float increment = Math.Min(diff / usableCount, MaxSpaceAfter);
-                bool changed = false;
-
-                if (increment < 0)
-                    changed |= IncreaseSpaceAfter(paragraphs[0], Math.Min(diff, MaxSpaceAfter));
+                if (!lineHeightTried && CanSolveByLineHeight(usableCount, diff))
+                {
+                    IncreaseLineHeightOnce(paragraphs, usableCount);
+                    lineHeightTried = true;
+                }
                 else
-                    for (int i = 0; i < usableCount; i++)
-                        changed |= IncreaseSpaceAfter(paragraphs[i], increment);
-
-                if (!changed)
-                    break;
+                {
+                    ApplySpaceAfter(paragraphs, usableCount, diff);
+                }
 
                 Vsto.Application.ScreenRefresh();
-                columns[0].yPos = (float)columns[0].Bottom.Information[WdInformation.wdVerticalPositionRelativeToPage];
-                columns[1].yPos = (float)columns[1].Bottom.Information[WdInformation.wdVerticalPositionRelativeToPage];
+
+                columns[0].yPos = GetBottom(columns[0]);
+                columns[1].yPos = GetBottom(columns[1]);
             }
+        }
+
+        bool CanSolveByLineHeight(int usableCount, float diff)
+        {
+            return usableCount * 1f >= diff;
+        }
+
+        void IncreaseLineHeightOnce(List<Paragraph> paragraphs, int usableCount)
+        {
+            for (int i = 0; i < usableCount; i++)
+                IncreaseLineHeight(paragraphs[i], 1f);
+        }
+
+        bool IncreaseLineHeight(Paragraph paragraph, float points)
+        {
+            if (paragraph == null)
+                return false;
+
+            var format = paragraph.Format;
+
+            float oldValue = format.LineSpacing;
+            format.LineSpacing = oldValue + points;
+
+            return format.LineSpacing != oldValue;
+        }
+
+        void ApplySpaceAfter(List<Paragraph> paragraphs, int usableCount, float diff)
+        {
+            float increment = Math.Min(diff / usableCount, MaxSpaceAfter);
+
+            for (int i = 0; i < usableCount; i++)
+                IncreaseSpaceAfter(paragraphs[i], increment);
+        }
+
+        float GetBottom(ColumnObject column)
+        {
+            return (float)column.Bottom.Information[
+                WdInformation.wdVerticalPositionRelativeToPage];
         }
 
 

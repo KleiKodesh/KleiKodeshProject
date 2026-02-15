@@ -410,8 +410,10 @@ const virtualCommentaryItems = computed(() => {
         // Header height scales with font size
         const headerHeight = Math.ceil(effectiveFontSize * 2.5)
         let totalEstimatedHeight = headerHeight
-        let maxLinkHeight = 0
-        let maxLinkTextLength = 0
+
+        // CRITICAL: Account for actual number of links retrieved from database
+        // Each link in group.links is a separate database row (potentially merged from multiple source lines)
+        const actualLinkCount = group.links.length
 
         group.links.forEach((link, linkIndex) => {
             // Strip HTML tags to get approximate text length
@@ -421,10 +423,11 @@ const virtualCommentaryItems = computed(() => {
             const estimatedLines = Math.ceil(textLength / charsPerLine)
 
             // Use actual line height from settings
-            let linkHeight = Math.max(effectiveLineHeight * 2, estimatedLines * effectiveLineHeight)
+            // Minimum height per link to ensure each database row has adequate space
+            const minHeightPerLink = effectiveLineHeight * 2
+            let linkHeight = Math.max(minHeightPerLink, estimatedLines * effectiveLineHeight)
 
             // Add buffer based on viewport width (narrower = more unpredictable wrapping)
-            // No arbitrary caps - just trust the calculation with appropriate buffer
             let bufferMultiplier = 1.0
             if (effectiveWidth < 250) {
                 bufferMultiplier = 1.5  // 50% buffer for extremely narrow
@@ -438,14 +441,17 @@ const virtualCommentaryItems = computed(() => {
 
             linkHeight = Math.floor(linkHeight * bufferMultiplier)
 
-            // Track max for logging
-            if (linkHeight > maxLinkHeight) {
-                maxLinkHeight = linkHeight
-                maxLinkTextLength = textLength
-            }
-
-            totalEstimatedHeight += linkHeight + 10 // +10 for spacing
+            // Add spacing between individual links (each database row)
+            const spacingBetweenLinks = 10
+            totalEstimatedHeight += linkHeight + spacingBetweenLinks
         })
+
+        // Additional buffer based on total link count from database
+        // Accounts for cumulative rendering overhead when many links are merged
+        if (actualLinkCount > 5) {
+            const extraBuffer = Math.floor(actualLinkCount * effectiveLineHeight * 0.2)
+            totalEstimatedHeight += extraBuffer
+        }
 
         items.push({
             id: `group-${groupIndex}`,
@@ -1176,7 +1182,42 @@ const scrollToLastLine = () => {
     if (virtualCommentaryItems.value.length === 0) return
     const lastIndex = virtualCommentaryItems.value.length - 1
     currentGroupIndex.value = lastIndex
-    scrollToGroup(lastIndex)
+    
+    // First scroll to last item to ensure it's rendered
+    if (!commentaryScrollerRef.value) return
+    
+    const groupItemId = `group-${lastIndex}`
+    const itemIndex = virtualCommentaryItems.value.findIndex(item => item.id === groupItemId)
+    
+    if (itemIndex !== -1) {
+        isNavigating.value = true
+        
+        const scrollerEl = commentaryScrollerRef.value.$el
+        if (scrollerEl) {
+            scrollerEl.style.overflow = 'hidden'
+            scrollerEl.style.pointerEvents = 'none'
+        }
+        
+        commentaryScrollerRef.value.scrollToItem(itemIndex)
+        
+        setTimeout(() => {
+            if (commentaryScrollerRef.value) {
+                commentaryScrollerRef.value.scrollToItem(itemIndex)
+                
+                // After item is in view, scroll to absolute bottom
+                setTimeout(() => {
+                    if (scrollerEl) {
+                        scrollerEl.scrollTop = scrollerEl.scrollHeight
+                        scrollerEl.style.overflow = ''
+                        scrollerEl.style.pointerEvents = ''
+                    }
+                    setTimeout(() => {
+                        isNavigating.value = false
+                    }, 50)
+                }, 10)
+            }
+        }, 50)
+    }
 }
 
 // Navigation functions
