@@ -1341,6 +1341,106 @@ console.log("Search data size:", (await getSearchData()).length);
 
 ## Session Accomplishments
 
+### ✅ Copy Behavior for Virtualized Content
+
+#### Problem: Ctrl+C Copying All Content Regardless of Selection
+
+The virtualized components (BookLineViewer and BookCommentaryView) had custom copy handlers that would copy all source content (including non-virtualized items) on any Ctrl+C, not just after Ctrl+A.
+
+#### Solution: Chained Shortcut Pattern with Selection Tracking
+
+Implemented a flag-based system that mimics normal browser behavior:
+
+```typescript
+// Track if Ctrl+A was pressed and selection is still active
+const selectAllWasPressed = ref(false);
+
+// Reset flag when user interacts in ways that would deselect
+useEventListener(containerRef, "mousedown", () => {
+  selectAllWasPressed.value = false;
+});
+
+useEventListener(document, "selectionchange", () => {
+  if (!hasFocus.value) return;
+
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+    selectAllWasPressed.value = false;
+  }
+});
+
+// Keyboard shortcuts
+useEventListener("keydown", (event: KeyboardEvent) => {
+  if (!hasFocus.value) return;
+  const hasCtrlOrMeta = event.ctrlKey || event.metaKey;
+
+  // Ctrl+A: Set flag and select all
+  if (hasCtrlOrMeta && event.code === "KeyA") {
+    event.preventDefault();
+    selectAllWasPressed.value = true;
+    selectAllInContainer();
+  }
+
+  // Reset flag on actions that would deselect
+  if (!hasCtrlOrMeta && !event.shiftKey) {
+    if (
+      event.code.startsWith("Arrow") ||
+      event.code === "Escape" ||
+      event.code === "Home" ||
+      event.code === "End" ||
+      event.code === "PageUp" ||
+      event.code === "PageDown" ||
+      (event.key.length === 1 && !event.ctrlKey && !event.metaKey)
+    ) {
+      selectAllWasPressed.value = false;
+    }
+  }
+});
+
+// Copy handler checks flag
+function handleCopy(event: ClipboardEvent) {
+  // ... selection validation ...
+
+  // Only copy all content as HTML if Ctrl+A was pressed
+  if (!selectAllWasPressed.value) {
+    console.log("Ctrl+A was not pressed, using default copy behavior");
+    return; // Let browser handle partial selection copy
+  }
+
+  // Reset flag after use
+  selectAllWasPressed.value = false;
+
+  // Copy all source content including non-virtualized items
+  // ... copy implementation ...
+}
+```
+
+#### Behavior Characteristics
+
+**Flag persists as long as selection remains active:**
+
+- Ctrl+A sets the flag
+- Multiple Ctrl+C presses work while selection is active
+- Flag resets only when user does something that would normally deselect:
+  - Clicking anywhere (mousedown)
+  - Pressing arrow keys, Escape, Home, End, PageUp, PageDown
+  - Typing regular characters
+  - Selection becomes empty or collapsed (selectionchange event)
+  - Opening search (Ctrl+F)
+
+**Flag does NOT reset on:**
+
+- Ctrl+C (so you can copy multiple times)
+- Other Ctrl shortcuts that don't affect selection
+- Shift+Arrow (extending selection)
+
+#### Implementation in Both Components
+
+- **BookLineViewer**: Copies all source lines including non-virtualized content
+- **BookCommentaryView**: Copies all commentary groups and links including non-virtualized content
+
+This properly mimics normal browser behavior where Ctrl+A selection stays active until you explicitly do something to change it, while supporting the virtualized architecture where not all content is in the DOM.
+
 ### ✅ Architecture Analysis Complete
 
 #### Line Loading System Understanding

@@ -287,6 +287,25 @@ const containerWidth = ref(0)
 // Track if this component's container has focus
 const { focused: hasFocus } = useFocus(commentaryContentRef)
 
+// Track if Ctrl+A was pressed and selection is still active (for chained Ctrl+A -> Ctrl+C shortcut)
+const selectAllWasPressed = ref(false)
+
+// Reset selectAll flag when selection changes or user interacts
+useEventListener(commentaryContentRef, 'mousedown', () => {
+    selectAllWasPressed.value = false
+})
+
+useEventListener(document, 'selectionchange', () => {
+    // Only check if this component has focus
+    if (!hasFocus.value) return
+    
+    // Check if selection is empty or changed
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+        selectAllWasPressed.value = false
+    }
+})
+
 // Keyboard shortcuts using useEventListener to support any keyboard layout
 useEventListener('keydown', (event: KeyboardEvent) => {
     if (!hasFocus.value) return
@@ -297,12 +316,28 @@ useEventListener('keydown', (event: KeyboardEvent) => {
     if (hasCtrlOrMeta && event.code === 'KeyF') {
         event.preventDefault()
         isSearchOpen.value = true
+        selectAllWasPressed.value = false
     }
 
     // Ctrl+A: Select all (use event.code for keyboard layout independence)
     if (hasCtrlOrMeta && event.code === 'KeyA') {
         event.preventDefault()
+        selectAllWasPressed.value = true
         selectAllInContainer()
+    }
+    
+    // Reset flag on actions that would deselect in normal circumstances
+    // Arrow keys, typing, Escape, etc.
+    if (!hasCtrlOrMeta && !event.shiftKey) {
+        if (event.code.startsWith('Arrow') || 
+            event.code === 'Escape' ||
+            event.code === 'Home' ||
+            event.code === 'End' ||
+            event.code === 'PageUp' ||
+            event.code === 'PageDown' ||
+            (event.key.length === 1 && !event.ctrlKey && !event.metaKey)) {
+            selectAllWasPressed.value = false
+        }
     }
 })
 
@@ -1094,7 +1129,16 @@ function handleCopy(event: ClipboardEvent) {
         return
     }
 
-    console.log('[BookCommentaryView] Copying all source content...')
+    // Only copy all content as HTML if Ctrl+A was pressed (chained shortcut pattern)
+    if (!selectAllWasPressed.value) {
+        console.log('[BookCommentaryView] Ctrl+A was not pressed, using default copy behavior')
+        return // Let browser handle partial selection copy
+    }
+
+    // Reset the flag after use
+    selectAllWasPressed.value = false
+
+    console.log('[BookCommentaryView] Ctrl+A -> Ctrl+C detected, copying all source content...')
 
     // Get all source commentary content as HTML
     let htmlContent = ''

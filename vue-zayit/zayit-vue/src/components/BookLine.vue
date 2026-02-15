@@ -2,7 +2,7 @@
     <span v-if="inlineMode"
           dir="rtl"
           class="selectable line-1.6 justify book-line"
-          :class="{ selected: isSelected, highlighted: isHighlighted }"
+          :class="{ selected: isSelected }"
           :data-line-index="lineIndex"
           @click="handleClick">
         <!-- Alt TOC entries as proper HTML headings -->
@@ -19,7 +19,7 @@
     <div v-else
          dir="rtl"
          class="selectable line-1.6 justify book-line"
-         :class="{ selected: isSelected, highlighted: isHighlighted }"
+         :class="{ selected: isSelected }"
          :data-line-index="lineIndex"
          @click="handleClick">
         <!-- Alt TOC entries as proper HTML headings -->
@@ -42,7 +42,6 @@ const props = defineProps<{
     content: string
     lineIndex: number
     isSelected: boolean
-    isHighlighted: boolean
     inlineMode: boolean
     altTocEntries?: AltTocLineEntry[]
     showAltToc?: boolean
@@ -126,38 +125,7 @@ div.book-line.selected.show-selection::after {
     background-color: var(--hover-bg);
 }
 
-/* Fade-out highlight animation for commentary navigation */
-.book-line.highlighted {
-    animation: fadeHighlight 3s ease-out forwards;
-}
-
-@keyframes fadeHighlight {
-    0% {
-        background-color: rgba(245, 222, 179, 0.6);
-        /* Warm parchment color */
-    }
-
-    100% {
-        background-color: transparent;
-    }
-}
-
-:root.dark .book-line.highlighted {
-    animation: fadeHighlightDark 3s ease-out forwards;
-}
-
-@keyframes fadeHighlightDark {
-    0% {
-        background-color: rgba(139, 115, 85, 0.3);
-        /* Darker warm brown for dark mode */
-    }
-
-    100% {
-        background-color: transparent;
-    }
-}
-
-/* Search term highlighting - use background like commentary view */
+/* In-book search term highlighting - use background */
 .book-line :deep(mark) {
     background-color: rgba(245, 158, 11, 0.3);
     color: inherit;
@@ -176,6 +144,43 @@ div.book-line.selected.show-selection::after {
 :root.dark .book-line :deep(mark.current) {
     background-color: rgba(251, 191, 36, 0.8) !important;
     font-weight: bold;
+}
+
+/* Global search snippet background - same color as in-book search */
+.book-line :deep(.global-search-snippet-bg) {
+    animation: fadeSearchHighlight 3s ease-out forwards;
+}
+
+/* Global search highlighting - foreground color */
+.book-line :deep(.global-search-highlight) {
+    color: var(--accent-color);
+    font-weight: 600;
+}
+
+@keyframes fadeSearchHighlight {
+    0% {
+        background-color: rgba(245, 158, 11, 0.3);
+        /* Orange/amber - same as in-book search */
+    }
+
+    100% {
+        background-color: transparent;
+    }
+}
+
+:root.dark .book-line :deep(.global-search-snippet-bg) {
+    animation: fadeSearchHighlightDark 3s ease-out forwards;
+}
+
+@keyframes fadeSearchHighlightDark {
+    0% {
+        background-color: rgba(251, 191, 36, 0.3);
+        /* Lighter amber for dark mode - same as in-book search */
+    }
+
+    100% {
+        background-color: transparent;
+    }
 }
 
 /* Alt TOC entries - subtle opacity to distinguish from main content */

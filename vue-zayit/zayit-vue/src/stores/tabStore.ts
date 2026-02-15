@@ -673,7 +673,7 @@ export const useTabStore = defineStore('tabs', () => {
         nextId.value = Math.max(newId + 1, nextId.value);
     };
 
-    const openBookInNewTab = (bookTitle: string, bookId: number, hasConnections?: boolean, initialLineIndex?: number, shouldHighlight?: boolean, highlightTerms?: string) => {
+    const openBookInNewTab = (bookTitle: string, bookId: number, hasConnections?: boolean, initialLineIndex?: number, shouldHighlight?: boolean, highlightTerms?: string, highlightSnippet?: string) => {
         // Deactivate all current tabs
         tabs.value.forEach(tab => tab.isActive = false)
 
@@ -702,7 +702,8 @@ export const useTabStore = defineStore('tabs', () => {
                 searchQuery: '',
                 scrollPosition: 0,
                 hasSearched: false,
-                highlightTerms
+                highlightTerms,
+                highlightSnippet
             } : undefined
         }
 

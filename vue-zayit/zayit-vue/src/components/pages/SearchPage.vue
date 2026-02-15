@@ -273,25 +273,33 @@ onMounted(async () => {
     executedQuery.value = currentSearchState.value.searchQuery // Set executed query to match
     hasSearched.value = currentSearchState.value.hasSearched
 
-    if (hasSearched.value && searchQuery.value.trim()) {
+    // Restore results from tab state first (fastest)
+    if (currentSearchState.value.results && currentSearchState.value.results.length > 0) {
+      results.value = currentSearchState.value.results
+
+      // Restore scroll position after virtual scroller is ready
+      await nextTick()
+      if (scrollerRef.value) {
+        restoreScrollPosition()
+        hasRestoredScroll = true
+      }
+    } else if (hasSearched.value && searchQuery.value.trim()) {
+      // Fallback to cache if not in tab state
       const normalizedQuery = searchQuery.value.trim().toLowerCase()
       const cachedResults = await bloomSearchCacheService.get(normalizedQuery)
 
       if (cachedResults !== null) {
-        console.log('[SearchPage] Restored results from cache:', cachedResults.length)
         results.value = cachedResults
+        // Store in tab state for next time
+        currentSearchState.value.results = cachedResults
 
+        // Restore scroll position after virtual scroller is ready
         await nextTick()
-        await nextTick()
-        if (scrollerRef.value && currentSearchState.value.scrollPosition > 0) {
-          const scrollElement = scrollerRef.value.$el as HTMLElement
-          if (scrollElement) {
-            scrollElement.scrollTop = currentSearchState.value.scrollPosition
-            console.log('[SearchPage] Restored scroll position:', currentSearchState.value.scrollPosition)
-          }
+        if (scrollerRef.value) {
+          restoreScrollPosition()
+          hasRestoredScroll = true
         }
       } else {
-        console.log('[SearchPage] Results not in cache, re-running search')
         await executeSearch()
       }
     }
@@ -300,6 +308,78 @@ onMounted(async () => {
   nextTick(() => {
     searchInputRef.value?.focus()
   })
+})
+
+// Helper function to restore scroll position
+const restoreScrollPosition = () => {
+  if (!scrollerRef.value || !currentSearchState.value) return
+
+  // Try to restore using virtual scroll first
+  if (currentSearchState.value.firstVisibleItemIndex !== undefined) {
+    const itemIndex = currentSearchState.value.firstVisibleItemIndex
+
+    if (itemIndex >= 0 && itemIndex < results.value.length) {
+      // Use the double-call hack for vue3-virtual-scroller
+      const scrollerEl = scrollerRef.value.$el as HTMLElement
+      if (scrollerEl) {
+        // Hide scrolling during restoration to prevent flickering
+        scrollerEl.style.overflow = 'hidden'
+        scrollerEl.style.pointerEvents = 'none'
+      }
+
+      try {
+        // First call
+        scrollerRef.value.scrollToItem(itemIndex)
+
+        // Second call after delay (required for vue3-virtual-scroller)
+        setTimeout(() => {
+          if (scrollerRef.value && scrollerEl) {
+            scrollerRef.value.scrollToItem(itemIndex)
+
+            // Re-enable scrolling
+            setTimeout(() => {
+              if (scrollerEl) {
+                scrollerEl.style.overflow = ''
+                scrollerEl.style.pointerEvents = ''
+              }
+            }, 10)
+          }
+        }, 50)
+      } catch (error) {
+        console.warn('[SearchPage] Failed to restore scroll position:', error)
+        if (scrollerEl) {
+          scrollerEl.style.overflow = ''
+          scrollerEl.style.pointerEvents = ''
+        }
+      }
+      return
+    }
+  }
+
+  // Fallback to legacy scrollTop if firstVisibleItemIndex not available
+  if (currentSearchState.value.scrollPosition > 0) {
+    const scrollElement = scrollerRef.value.$el as HTMLElement
+    if (scrollElement) {
+      scrollElement.scrollTop = currentSearchState.value.scrollPosition
+    }
+  }
+}
+
+// Watch for results being loaded during search and restore scroll position
+let hasRestoredScroll = false
+watch(() => results.value.length, (newLength, oldLength) => {
+  // Only restore if results are being added during a search (not on mount)
+  if (newLength > 0 && oldLength === 0 && !hasRestoredScroll && scrollerRef.value && isSearching.value) {
+    nextTick(() => {
+      restoreScrollPosition()
+      hasRestoredScroll = true
+    })
+  }
+
+  // Reset the flag when results are cleared
+  if (newLength === 0 && oldLength > 0) {
+    hasRestoredScroll = false
+  }
 })
 
 onBeforeUnmount(() => {
@@ -317,6 +397,13 @@ watch([searchQuery, hasSearched], () => {
   }
 })
 
+// Watch for results changes and save to tab state
+watch(() => results.value, (newResults) => {
+  if (currentSearchState.value) {
+    currentSearchState.value.results = newResults
+  }
+}, { deep: true })
+
 // Handle scroll events
 const onScroll = () => {
   if (scrollSaveTimeout) {
@@ -327,14 +414,45 @@ const onScroll = () => {
   }, 300)
 }
 
-// Save scroll position
+// Save scroll position - track first visible item for virtual scroll
 const saveScrollPosition = () => {
   if (currentSearchState.value && scrollerRef.value) {
     const scrollElement = scrollerRef.value.$el as HTMLElement
     if (scrollElement) {
+      // Save legacy scrollTop for backwards compatibility
       currentSearchState.value.scrollPosition = scrollElement.scrollTop
+
+      // Find first visible item for virtual scroll
+      const firstVisibleItem = getFirstVisibleItemIndex()
+      if (firstVisibleItem !== null) {
+        currentSearchState.value.firstVisibleItemIndex = firstVisibleItem
+      }
     }
   }
+}
+
+// Get the index of the first visible item in the virtual scroller
+const getFirstVisibleItemIndex = (): number | null => {
+  if (!scrollerRef.value?.$el) return null
+
+  const scrollerEl = scrollerRef.value.$el as HTMLElement
+  const scrollerRect = scrollerEl.getBoundingClientRect()
+
+  // Find all result items
+  const items = scrollerEl.querySelectorAll('[data-index]')
+
+  for (const item of items) {
+    const itemRect = item.getBoundingClientRect()
+    // Check if item is visible (at least partially)
+    if (itemRect.bottom > scrollerRect.top && itemRect.top < scrollerRect.bottom) {
+      const index = parseInt(item.getAttribute('data-index') || '-1')
+      if (index >= 0) {
+        return index
+      }
+    }
+  }
+
+  return null
 }
 
 // Toggle filter panel
@@ -502,6 +620,11 @@ const executeSearch = async () => {
               snippet: r.snippet
             }))
             await bloomSearchCacheService.set(normalizedQuery, cleanResults)
+
+            // Store in tab state
+            if (currentSearchState.value) {
+              currentSearchState.value.results = cleanResults
+            }
           }
 
           currentSearchId = null
@@ -546,6 +669,8 @@ const clearSearch = () => {
   hasSearched.value = false
   if (currentSearchState.value) {
     currentSearchState.value.scrollPosition = 0
+    currentSearchState.value.firstVisibleItemIndex = undefined
+    currentSearchState.value.results = []
   }
   searchInputRef.value?.focus()
 }
@@ -574,7 +699,8 @@ const handleResultClick = async (result: BloomSearchResult) => {
       hasConnections,
       lineInfo.lineIndex,
       true, // shouldHighlight = true for search results
-      executedQuery.value // Pass search terms for highlighting
+      executedQuery.value, // Pass search terms for highlighting
+      result.snippet // Pass snippet for background highlighting
     )
   } catch (error) {
     console.error('[SearchPage] Error opening book:', error)

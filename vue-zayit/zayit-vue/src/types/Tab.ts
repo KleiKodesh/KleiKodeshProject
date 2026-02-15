@@ -35,9 +35,12 @@ export interface PdfState {
 
 export interface SearchState {
     searchQuery: string; // Current search text
-    scrollPosition: number; // Scroll position in results list
+    scrollPosition: number; // Scroll position in results list (legacy - for non-virtual scroll)
+    firstVisibleItemIndex?: number; // First visible item index for virtual scroll restoration
     hasSearched: boolean; // Whether a search has been executed
     highlightTerms?: string; // Terms to highlight when navigating from search results to book
+    highlightSnippet?: string; // Snippet to use for background highlighting
+    results?: any[]; // Search results to persist across tab switches
 }
 
 export interface Tab {

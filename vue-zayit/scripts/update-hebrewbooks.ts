@@ -15,6 +15,7 @@ import * as http from 'http'
 
 // Configuration
 const CSV_PATH = path.join(__dirname, '../zayit-vue/public/HebrewBooks.csv')
+const NEW_DATA_PATH = path.join(__dirname, '../zayit-vue/public/HebrewBooks_new.csv')
 const BACKUP_DIR = path.join(__dirname, '../backups')
 const BASE_URL = 'https://beta.hebrewbooks.org'
 const MAX_CONSECUTIVE_EMPTY = 10
@@ -157,10 +158,33 @@ function createBackup(): string {
     return backupPath
 }
 
-// Append book to CSV
-function appendBookToCsv(book: BookMetadata): void {
+// Append book to new data file
+function appendBookToNewData(book: BookMetadata): void {
     const line = `${book.id},${book.title},${book.author},${book.printingPlace},${book.printingYear},${book.pages},${book.tags}\n`
-    fs.appendFileSync(CSV_PATH, line, 'utf-8')
+    fs.appendFileSync(NEW_DATA_PATH, line, 'utf-8')
+}
+
+// Merge new data with original CSV
+function mergeNewDataWithOriginal(): void {
+    if (!fs.existsSync(NEW_DATA_PATH)) {
+        console.log('No new data to merge')
+        return
+    }
+
+    let originalContent = fs.readFileSync(CSV_PATH, 'utf-8')
+    const newContent = fs.readFileSync(NEW_DATA_PATH, 'utf-8')
+
+    // Ensure original content ends with newline before appending
+    if (originalContent.length > 0 && !originalContent.endsWith('\n')) {
+        originalContent += '\n'
+    }
+
+    // Append new data to original
+    fs.writeFileSync(CSV_PATH, originalContent + newContent, 'utf-8')
+
+    // Remove the temporary new data file
+    fs.unlinkSync(NEW_DATA_PATH)
+    console.log('New data merged with original CSV')
 }
 
 // Delay helper
@@ -171,9 +195,16 @@ function delay(ms: number): Promise<void> {
 // Main update function
 async function updateHebrewBooks(): Promise<void> {
     console.log('Starting HebrewBooks CSV update...')
+    console.log('Original data will be preserved - new entries written to temporary file')
 
     // Create backup
     const backupPath = createBackup()
+
+    // Clean up any existing new data file from previous run
+    if (fs.existsSync(NEW_DATA_PATH)) {
+        fs.unlinkSync(NEW_DATA_PATH)
+        console.log('Cleaned up previous temporary file')
+    }
 
     // Get starting ID
     const lastId = getMaxIdFromCsv()
@@ -191,7 +222,7 @@ async function updateHebrewBooks(): Promise<void> {
             const book = await fetchBookMetadata(currentId)
 
             if (book) {
-                appendBookToCsv(book)
+                appendBookToNewData(book)
                 booksAdded++
                 consecutiveEmpty = 0
                 console.log(`✓ Added: ${book.title} (ID: ${book.id})`)
@@ -206,10 +237,21 @@ async function updateHebrewBooks(): Promise<void> {
             await delay(REQUEST_DELAY_MS)
         }
 
-        console.log('\n=== Update Complete ===')
-        console.log(`Books added: ${booksAdded}`)
+        console.log('\n=== Fetching Complete ===')
+        console.log(`Books fetched: ${booksAdded}`)
         console.log(`Final book ID: ${currentId - 1}`)
-        console.log(`CSV file: ${CSV_PATH}`)
+
+        // Merge new data with original
+        if (booksAdded > 0) {
+            console.log('\nMerging new data with original CSV...')
+            mergeNewDataWithOriginal()
+            console.log('\n=== Update Complete ===')
+            console.log(`CSV file updated: ${CSV_PATH}`)
+            console.log(`Total books added: ${booksAdded}`)
+        } else {
+            console.log('\nNo new books to add')
+        }
+
         if (backupPath) {
             console.log(`Backup: ${backupPath}`)
         }
@@ -218,11 +260,14 @@ async function updateHebrewBooks(): Promise<void> {
         console.error('\n=== Update Failed ===')
         console.error(error)
 
-        if (backupPath && fs.existsSync(backupPath)) {
-            console.log('\nRestoring from backup...')
-            fs.copyFileSync(backupPath, CSV_PATH)
-            console.log('Backup restored successfully')
+        // Clean up temporary file
+        if (fs.existsSync(NEW_DATA_PATH)) {
+            fs.unlinkSync(NEW_DATA_PATH)
+            console.log('Temporary file cleaned up')
         }
+
+        // Note: Original CSV is never modified until merge, so no restore needed
+        console.log('Original CSV file was not modified')
 
         process.exit(1)
     }

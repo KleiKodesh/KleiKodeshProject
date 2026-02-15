@@ -73,13 +73,11 @@ watch(() => myTab.value?.bookState?.bookId, async (bookId) => {
       setTimeout(() => {
         const viewer: any = lineViewerRef.value
         const highlightTerms = myTab.value?.searchState?.highlightTerms
+        const highlightSnippet = myTab.value?.searchState?.highlightSnippet
 
-        if (highlightTerms && viewer?.scrollToLineAndHighlight) {
-          // Search result with terms to highlight
-          viewer.scrollToLineAndHighlight(myTab.value!.bookState!.initialLineIndex!, highlightTerms)
-        } else if (viewer?.scrollToLineWithFadeHighlight) {
-          // Commentary navigation - just fade highlight the line
-          viewer.scrollToLineWithFadeHighlight(myTab.value!.bookState!.initialLineIndex!)
+        if (viewer?.scrollToLineWithFadeHighlight) {
+          // Highlight line with optional search terms and snippet
+          viewer.scrollToLineWithFadeHighlight(myTab.value!.bookState!.initialLineIndex!, highlightTerms, highlightSnippet)
         }
 
         // Clear the flags so they don't highlight again
@@ -88,6 +86,7 @@ watch(() => myTab.value?.bookState?.bookId, async (bookId) => {
         }
         if (myTab.value?.searchState) {
           myTab.value.searchState.highlightTerms = undefined
+          myTab.value.searchState.highlightSnippet = undefined
         }
       }, 500) // Wait for book to load
     }

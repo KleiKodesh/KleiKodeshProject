@@ -10,9 +10,11 @@ Updates the HebrewBooks catalog by fetching metadata from hebrewbooks.org.
 
 - Incremental updates (starts from last book ID in CSV)
 - Automatic backup before updating
+- **Safe append-only approach** - original data never modified until final merge
+- New data written to temporary file first
 - Respectful rate limiting (1 second between requests)
 - Stops after 10 consecutive empty results
-- Automatic rollback on failure
+- Automatic cleanup on failure
 
 ### Setup
 
@@ -32,9 +34,11 @@ npm run update-hebrewbooks
 1. Creates a timestamped backup in `backups/` folder
 2. Reads the current CSV to find the highest book ID
 3. Fetches metadata for each book starting from the next ID
-4. Appends new books to the CSV file
+4. **Writes new books to temporary file** `HebrewBooks_new.csv`
 5. Stops when 10 consecutive books have no data
-6. Restores backup if any error occurs
+6. **Merges temporary file with original CSV** (only if successful)
+7. Cleans up temporary file
+8. Original CSV is never modified until all data is successfully fetched
 
 ### CSV Format
 
@@ -71,3 +75,6 @@ backups/HebrewBooks_2026-02-15T12-30-45.csv
 - If your IP gets blocked, wait before trying again
 - Commas in titles/authors are replaced with " -" to maintain CSV integrity
 - Tags are semicolon-separated within the tags field
+- **Original CSV is never modified during fetching** - only at the final merge step
+- If the script fails or is interrupted, your original data remains intact
+- Temporary file `HebrewBooks_new.csv` is automatically cleaned up

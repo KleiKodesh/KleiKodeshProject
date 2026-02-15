@@ -38,7 +38,6 @@
                     <BookLine :content="item.content || '\u00A0'"
                               :line-index="index"
                               :is-selected="selectedLineIndex === index"
-                              :is-highlighted="highlightedLineIndex === index"
                               :inline-mode="myTab?.bookState?.isLineDisplayInline || false"
                               :alt-toc-entries="item.altTocEntries"
                               :show-alt-toc="myTab?.bookState?.showAltToc"
@@ -113,7 +112,9 @@ const emit = defineEmits<{
 
 const myTab = computed(() => tabStore.tabs.find(t => t.id === props.tabId))
 const selectedLineIndex = ref<number | null>(null)
-const highlightedLineIndex = ref<number | null>(null)
+const globalSearchHighlightLineIndex = ref<number | null>(null)
+const globalSearchTerms = ref<string>('')
+const globalSearchSnippet = ref<string>('')
 const isInitialLoading = ref(false)
 
 const viewerState = new BookLineViewerService()
@@ -122,6 +123,25 @@ const scrollerRef = ref<InstanceType<typeof DynamicScroller> | null>(null)
 // Track if this component's scroller has focus
 const scrollerElRef = computed(() => scrollerRef.value?.$el as HTMLElement | undefined)
 const { focused: hasFocus } = useFocus(scrollerElRef)
+
+// Track if Ctrl+A was pressed and selection is still active (for chained Ctrl+A -> Ctrl+C shortcut)
+const selectAllWasPressed = ref(false)
+
+// Reset selectAll flag when selection changes or user interacts
+useEventListener(scrollerElRef, 'mousedown', () => {
+    selectAllWasPressed.value = false
+})
+
+useEventListener(document, 'selectionchange', () => {
+    // Only check if this component has focus
+    if (!hasFocus.value) return
+    
+    // Check if selection is empty or changed
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+        selectAllWasPressed.value = false
+    }
+})
 
 // Keyboard shortcuts using useEventListener to support any keyboard layout
 useEventListener('keydown', (event: KeyboardEvent) => {
@@ -133,12 +153,28 @@ useEventListener('keydown', (event: KeyboardEvent) => {
     if (hasCtrlOrMeta && event.code === 'KeyF') {
         event.preventDefault()
         isSearchOpen.value = true
+        selectAllWasPressed.value = false
     }
 
     // Ctrl+A: Select all (use event.code for keyboard layout independence)
     if (hasCtrlOrMeta && event.code === 'KeyA') {
         event.preventDefault()
+        selectAllWasPressed.value = true
         selectAllInContainer()
+    }
+    
+    // Reset flag on actions that would deselect in normal circumstances
+    // Arrow keys, typing, Escape, etc.
+    if (!hasCtrlOrMeta && !event.shiftKey) {
+        if (event.code.startsWith('Arrow') || 
+            event.code === 'Escape' ||
+            event.code === 'Home' ||
+            event.code === 'End' ||
+            event.code === 'PageUp' ||
+            event.code === 'PageDown' ||
+            (event.key.length === 1 && !event.ctrlKey && !event.metaKey)) {
+            selectAllWasPressed.value = false
+        }
     }
 })
 
@@ -190,10 +226,18 @@ const virtualItems = computed(() => {
             processedContent = applyDiacriticsFilter(processedContent, diacriticsState)
         }
 
-        // Apply search highlighting only to lines that have matches
+        // Apply in-book search highlighting only to lines that have matches
         if (processedContent !== '\u00A0' && query && linesWithMatches.has(i)) {
             const isCurrentLine = currentMatch?.lineIndex === i
             processedContent = search.highlightInContent(processedContent, isCurrentLine)
+        }
+        // Apply global search highlighting (separate from in-book search) - applied to datasource
+        else if (processedContent !== '\u00A0' && globalSearchTerms.value && i === globalSearchHighlightLineIndex.value) {
+            processedContent = highlightGlobalSearchWithSnippet(
+                processedContent, 
+                globalSearchTerms.value,
+                globalSearchSnippet.value
+            )
         }
 
         items.push({
@@ -656,7 +700,16 @@ function handleCopy(event: ClipboardEvent) {
         return
     }
 
-    console.log('[BookLineViewer] Copying all source content...')
+    // Only copy all content as HTML if Ctrl+A was pressed (chained shortcut pattern)
+    if (!selectAllWasPressed.value) {
+        console.log('[BookLineViewer] Ctrl+A was not pressed, using default copy behavior')
+        return // Let browser handle partial selection copy
+    }
+
+    // Reset the flag after use
+    selectAllWasPressed.value = false
+
+    console.log('[BookLineViewer] Ctrl+A -> Ctrl+C detected, copying all source content...')
 
     // Get all source lines as HTML
     const lines = viewerState.lines.value
@@ -739,6 +792,349 @@ function applyDiacriticsFilter(htmlContent: string, state: number): string {
     return tempDiv.innerHTML
 }
 
+// Helper function to highlight global search with snippet background
+function highlightGlobalSearchWithSnippet(htmlContent: string, searchTerms: string, snippet: string): string {
+    if (!searchTerms || !htmlContent || htmlContent === '\u00A0') {
+        return htmlContent
+    }
+
+    // First, find and wrap the snippet region with background span
+    let contentWithSnippetBg = htmlContent
+    
+    if (snippet) {
+        // Clean snippet - remove "..." from beginning and end
+        const cleanedSnippet = snippet.replace(/^\.\.\./, '').replace(/\.\.\.$/, '').trim()
+        
+        if (cleanedSnippet) {
+            contentWithSnippetBg = findAndWrapSnippet(htmlContent, cleanedSnippet)
+        }
+    }
+
+    // Then apply individual word highlighting on top
+    return highlightGlobalSearchTerms(contentWithSnippetBg, searchTerms)
+}
+
+// Helper function to find snippet in content and wrap it with background span
+function findAndWrapSnippet(htmlContent: string, snippet: string): string {
+    const tempDiv = document.createElement('div')
+    tempDiv.innerHTML = htmlContent
+
+    // Get all text content
+    const fullText = tempDiv.textContent || ''
+    
+    // Normalize both for matching
+    const normalizedFullText = removeDiacriticsForSearch(fullText.toLowerCase())
+    const normalizedSnippet = removeDiacriticsForSearch(snippet.toLowerCase())
+
+    // Find best match position
+    const matchPos = normalizedFullText.indexOf(normalizedSnippet)
+    
+    if (matchPos === -1) {
+        // Snippet not found exactly - try word-by-word proximity matching
+        return wrapBestProximityMatch(htmlContent, snippet)
+    }
+
+    // Build position map to find original positions
+    const positionMap = buildPositionMapForSearch(fullText)
+    const snippetStart = positionMap[matchPos] ?? 0
+    const snippetEnd = positionMap[matchPos + normalizedSnippet.length] ?? fullText.length
+
+    // Wrap the snippet region
+    return wrapTextRange(htmlContent, snippetStart, snippetEnd)
+}
+
+// Helper function to wrap a text range with background span
+function wrapTextRange(htmlContent: string, start: number, end: number): string {
+    const tempDiv = document.createElement('div')
+    tempDiv.innerHTML = htmlContent
+
+    const walker = document.createTreeWalker(
+        tempDiv,
+        NodeFilter.SHOW_TEXT,
+        null
+    )
+
+    const textNodes: Text[] = []
+    let node: Node | null
+    while ((node = walker.nextNode())) {
+        textNodes.push(node as Text)
+    }
+
+    let currentPos = 0
+    const nodesToWrap: Array<{ node: Text; startOffset: number; endOffset: number }> = []
+
+    textNodes.forEach(textNode => {
+        const text = textNode.nodeValue || ''
+        const nodeStart = currentPos
+        const nodeEnd = currentPos + text.length
+
+        // Check if this node overlaps with the range
+        if (nodeEnd > start && nodeStart < end) {
+            const startOffset = Math.max(0, start - nodeStart)
+            const endOffset = Math.min(text.length, end - nodeStart)
+            nodesToWrap.push({ node: textNode, startOffset, endOffset })
+        }
+
+        currentPos = nodeEnd
+    })
+
+    // Wrap the nodes
+    nodesToWrap.forEach(({ node, startOffset, endOffset }) => {
+        const text = node.nodeValue || ''
+        const fragment = document.createDocumentFragment()
+
+        // Before
+        if (startOffset > 0) {
+            fragment.appendChild(document.createTextNode(text.substring(0, startOffset)))
+        }
+
+        // Wrapped part
+        const span = document.createElement('span')
+        span.className = 'global-search-snippet-bg'
+        span.textContent = text.substring(startOffset, endOffset)
+        fragment.appendChild(span)
+
+        // After
+        if (endOffset < text.length) {
+            fragment.appendChild(document.createTextNode(text.substring(endOffset)))
+        }
+
+        node.parentNode?.replaceChild(fragment, node)
+    })
+
+    return tempDiv.innerHTML
+}
+
+// Helper function to find best proximity match when exact snippet not found
+function wrapBestProximityMatch(htmlContent: string, snippet: string): string {
+    // Split snippet into words
+    const snippetWords = snippet.trim().split(/\s+/).filter(w => w.length > 0)
+    if (snippetWords.length === 0) return htmlContent
+
+    const tempDiv = document.createElement('div')
+    tempDiv.innerHTML = htmlContent
+    const fullText = tempDiv.textContent || ''
+    const normalizedFullText = removeDiacriticsForSearch(fullText.toLowerCase())
+
+    // Find all word positions
+    const wordPositions: Array<{ word: string; start: number; end: number }> = []
+    
+    snippetWords.forEach(word => {
+        const normalizedWord = removeDiacriticsForSearch(word.toLowerCase())
+        let searchStart = 0
+        
+        while (true) {
+            const foundAt = normalizedFullText.indexOf(normalizedWord, searchStart)
+            if (foundAt === -1) break
+            
+            const positionMap = buildPositionMapForSearch(fullText)
+            const originalStart = positionMap[foundAt] ?? 0
+            const originalEnd = positionMap[foundAt + normalizedWord.length] ?? fullText.length
+            
+            wordPositions.push({ word, start: originalStart, end: originalEnd })
+            searchStart = foundAt + 1
+        }
+    })
+
+    if (wordPositions.length === 0) return htmlContent
+
+    // Find the cluster with most words in closest proximity
+    let bestStart = wordPositions[0]!.start
+    let bestEnd = wordPositions[0]!.end
+    let bestScore = 1
+
+    for (let i = 0; i < wordPositions.length; i++) {
+        const clusterStart = wordPositions[i]!.start
+        let clusterEnd = wordPositions[i]!.end
+        let wordsInCluster = 1
+
+        // Expand cluster to include nearby words (within 100 chars)
+        for (let j = 0; j < wordPositions.length; j++) {
+            if (i !== j && wordPositions[j]!.start >= clusterStart && wordPositions[j]!.start <= clusterStart + 200) {
+                clusterEnd = Math.max(clusterEnd, wordPositions[j]!.end)
+                wordsInCluster++
+            }
+        }
+
+        // Score: more words = better, shorter span = better
+        const span = clusterEnd - clusterStart
+        const score = wordsInCluster * 1000 - span
+
+        if (score > bestScore) {
+            bestScore = score
+            bestStart = clusterStart
+            bestEnd = clusterEnd
+        }
+    }
+
+    return wrapTextRange(htmlContent, bestStart, bestEnd)
+}
+
+// Helper function to highlight global search terms (foreground color, not background)
+function highlightGlobalSearchTerms(htmlContent: string, searchTerms: string): string {
+    if (!searchTerms || !htmlContent || htmlContent === '\u00A0') {
+        return htmlContent
+    }
+
+    const tempDiv = document.createElement('div')
+    tempDiv.innerHTML = htmlContent
+
+    const walker = document.createTreeWalker(
+        tempDiv,
+        NodeFilter.SHOW_TEXT,
+        null
+    )
+
+    const textNodes: Text[] = []
+    let node: Node | null
+    while ((node = walker.nextNode())) {
+        textNodes.push(node as Text)
+    }
+
+    // Split search terms into individual words
+    const terms = searchTerms.trim().split(/\s+/).filter(term => term.length > 0)
+
+    textNodes.forEach(textNode => {
+        const text = textNode.nodeValue || ''
+        
+        // Collect all matches from all terms with their positions
+        const allMatches: Array<{ start: number; end: number }> = []
+
+        terms.forEach(term => {
+            // Check if term contains spaces or dashes
+            const termHasSpacesOrDashes = /[\s\u002D\u2013\u2014\u05BE]/.test(term)
+
+            // Normalize term - dashes BEFORE diacritics removal
+            let normalizedTerm = term.toLowerCase()
+            if (termHasSpacesOrDashes) {
+                normalizedTerm = normalizeDashesForSearch(normalizedTerm)
+            }
+            normalizedTerm = removeDiacriticsForSearch(normalizedTerm)
+
+            // Normalize text the same way
+            let normalizedText = text.toLowerCase()
+            if (termHasSpacesOrDashes) {
+                normalizedText = normalizeDashesForSearch(normalizedText)
+            }
+            normalizedText = removeDiacriticsForSearch(normalizedText)
+
+            // Build position map for diacritics
+            const positionMap = buildPositionMapForSearch(text)
+
+            let searchStart = 0
+            while (true) {
+                const foundAt = normalizedText.indexOf(normalizedTerm, searchStart)
+                if (foundAt === -1) break
+
+                // Map back to original positions
+                const originalStart = positionMap[foundAt] ?? 0
+                const originalEnd = positionMap[foundAt + normalizedTerm.length] ?? text.length
+
+                allMatches.push({ start: originalStart, end: originalEnd })
+                searchStart = foundAt + 1
+            }
+        })
+
+        // Sort matches by start position and merge overlapping ranges
+        allMatches.sort((a, b) => a.start - b.start)
+        const mergedMatches: Array<{ start: number; end: number }> = []
+        
+        allMatches.forEach(match => {
+            if (mergedMatches.length === 0) {
+                mergedMatches.push(match)
+            } else {
+                const last = mergedMatches[mergedMatches.length - 1]
+                if (last && match.start <= last.end) {
+                    // Overlapping or adjacent - merge
+                    last.end = Math.max(last.end, match.end)
+                } else {
+                    mergedMatches.push(match)
+                }
+            }
+        })
+
+        // Build parts from merged matches
+        if (mergedMatches.length > 0) {
+            const parts: Array<{ text: string; highlight: boolean }> = []
+            let lastIndex = 0
+
+            mergedMatches.forEach(match => {
+                // Add text before match
+                if (match.start > lastIndex) {
+                    parts.push({
+                        text: text.substring(lastIndex, match.start),
+                        highlight: false
+                    })
+                }
+
+                // Add match
+                parts.push({
+                    text: text.substring(match.start, match.end),
+                    highlight: true
+                })
+
+                lastIndex = match.end
+            })
+
+            // Add remaining text
+            if (lastIndex < text.length) {
+                parts.push({
+                    text: text.substring(lastIndex),
+                    highlight: false
+                })
+            }
+
+            // Replace text node with highlighted content
+            const fragment = document.createDocumentFragment()
+            parts.forEach(part => {
+                if (part.highlight) {
+                    const span = document.createElement('span')
+                    span.className = 'global-search-highlight'
+                    span.textContent = part.text
+                    fragment.appendChild(span)
+                } else {
+                    fragment.appendChild(document.createTextNode(part.text))
+                }
+            })
+            textNode.parentNode?.replaceChild(fragment, textNode)
+        }
+    })
+
+    return tempDiv.innerHTML
+}
+
+// Helper functions for global search highlighting
+function removeDiacriticsForSearch(text: string): string {
+    return text.replace(/[\u0591-\u05C7]/g, '')
+}
+
+function normalizeDashesForSearch(text: string): string {
+    // Replace maqaf (־ U+05BE) and all dash types with space
+    return text.replace(/[\u002D\u2013\u2014\u05BE]/g, ' ')
+}
+
+function buildPositionMapForSearch(text: string): number[] {
+    const map: number[] = []
+    let normalizedIndex = 0
+
+    for (let i = 0; i < text.length; i++) {
+        const char = text[i]
+        // Skip diacritics but treat dashes as spaces (they count in position)
+        if (char && !isDiacriticForSearch(char)) {
+            map[normalizedIndex] = i
+            normalizedIndex++
+        }
+    }
+
+    map[normalizedIndex] = text.length
+    return map
+}
+
+function isDiacriticForSearch(char: string): boolean {
+    const code = char.charCodeAt(0)
+    return code >= 0x0591 && code <= 0x05C7
+}
+
 onUnmounted(() => {
     viewerState.cleanup()
 
@@ -762,20 +1158,52 @@ defineExpose({
         if (target === undefined || target === null) return
         await scrollToLine(target)
     },
-    // Scroll to line and apply fade-out highlight effect
-    async scrollToLineWithFadeHighlight(lineIndex: number) {
-        // Scroll to the line first
+    // Scroll to line and highlight search terms (permanent highlighting)
+    async scrollToLineWithFadeHighlight(lineIndex: number, searchTerms?: string, snippet?: string) {
+        // Set global search highlighting first so it's ready when line renders
+        if (searchTerms) {
+            globalSearchHighlightLineIndex.value = lineIndex
+            globalSearchTerms.value = searchTerms
+            globalSearchSnippet.value = snippet || ''
+        }
+
+        // Scroll to the line
         await scrollToLine(lineIndex)
 
-        // Set the highlighted line
-        highlightedLineIndex.value = lineIndex
-
-        // Clear the highlight after animation completes (3 seconds)
-        setTimeout(() => {
-            highlightedLineIndex.value = null
-        }, 3000)
+        // Immediately scroll to the highlighted words after line is in view
+        if (searchTerms) {
+            await nextTick()
+            scrollToFirstHighlightedWord(lineIndex)
+        }
     }
 })
+
+// Helper function to scroll to the first highlighted word in a line
+function scrollToFirstHighlightedWord(lineIndex: number) {
+    const scrollerEl = scrollerRef.value?.$el
+    if (!scrollerEl) return
+
+    // Find the line element
+    const lineEl = scrollerEl.querySelector(`[data-line-index-observer="${lineIndex}"]`)
+    if (!lineEl) return
+
+    // Try to find the snippet background first (preferred)
+    let targetElement = lineEl.querySelector('.global-search-snippet-bg')
+    
+    // Fallback to first highlighted word if no snippet background
+    if (!targetElement) {
+        targetElement = lineEl.querySelector('.global-search-highlight')
+    }
+    
+    if (!targetElement) return
+
+    // Scroll the target into view vertically
+    targetElement.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+        inline: 'nearest'
+    })
+}
 </script>
 
 <style scoped>
