@@ -274,6 +274,71 @@ class DatabaseService {
         loadNextBatch(0)
         return abort
     }
+
+    // ============================================================================
+    // TOC-based Line Loading
+    // ============================================================================
+
+    async getLinesByTocEntry(bookId: number, tocEntryId: number): Promise<LineLoadResult[]> {
+        // First get all line IDs associated with this TOC entry
+        let lineIdResults: { lineId: number }[]
+
+        if (this.isWebViewAvailable()) {
+            lineIdResults = await webviewBridge.call('GetLineIdsByTocEntry', tocEntryId, SqlQueries.getLineIdsByTocEntry(tocEntryId))
+        } else if (this.isDevServerAvailable()) {
+            lineIdResults = await devQuery<{ lineId: number }>(SqlQueries.getLineIdsByTocEntry(tocEntryId))
+        } else {
+            throw new Error('No database source available')
+        }
+
+        if (lineIdResults.length === 0) {
+            return []
+        }
+
+        const lineIds = lineIdResults.map(r => r.lineId)
+
+        // Now get the actual line content
+        let lines: LineLoadResult[]
+
+        if (this.isWebViewAvailable()) {
+            lines = await webviewBridge.call('GetLinesByIds', bookId, lineIds, SqlQueries.getLinesByIds(bookId, lineIds))
+        } else if (this.isDevServerAvailable()) {
+            lines = await devQuery<LineLoadResult>(SqlQueries.getLinesByIds(bookId, lineIds))
+        } else {
+            throw new Error('No database source available')
+        }
+
+        // Apply censoring if enabled
+        if (useSettingsStore().censorDivineNames) {
+            lines = lines.map(line => ({
+                ...line,
+                content: censorDivineNames(line.content)
+            }))
+        }
+
+        return lines
+    }
+
+    async getLineIdsByTocEntry(bookId: number, tocEntryId: number): Promise<{ lineId: number }[]> {
+        if (this.isWebViewAvailable()) {
+            return await webviewBridge.call('GetLineIdsByTocEntry', tocEntryId, SqlQueries.getLineIdsByTocEntry(tocEntryId))
+        } else if (this.isDevServerAvailable()) {
+            return await devQuery<{ lineId: number }>(SqlQueries.getLineIdsByTocEntry(tocEntryId))
+        } else {
+            throw new Error('No database source available')
+        }
+    }
+
+    async getLineIndexFromLineId(lineId: number): Promise<{ lineIndex: number; bookId: number } | null> {
+        if (this.isWebViewAvailable()) {
+            return await webviewBridge.call('GetLineIndexFromLineId', lineId, SqlQueries.getLineIndexFromLineId(lineId))
+        } else if (this.isDevServerAvailable()) {
+            const result = await devQuery<{ lineIndex: number; bookId: number }>(SqlQueries.getLineIndexFromLineId(lineId))
+            return result[0] || null
+        } else {
+            throw new Error('No database source available')
+        }
+    }
 }
 
 // Export singleton instance

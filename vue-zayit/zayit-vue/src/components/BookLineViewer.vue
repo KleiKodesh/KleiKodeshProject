@@ -101,6 +101,7 @@ const containerStyles = computed(() => ({
 const props = defineProps<{
     tabId?: number
     altTocByLineIndex?: Map<number, import('../services/bookTocService').AltTocLineEntry[]>
+    flatTocEntries?: import('../types/BookToc').TocEntry[]
 }>()
 
 const emit = defineEmits<{
@@ -135,7 +136,7 @@ useEventListener(scrollerElRef, 'mousedown', () => {
 useEventListener(document, 'selectionchange', () => {
     // Only check if this component has focus
     if (!hasFocus.value) return
-    
+
     // Check if selection is empty or changed
     const selection = window.getSelection()
     if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
@@ -162,11 +163,11 @@ useEventListener('keydown', (event: KeyboardEvent) => {
         selectAllWasPressed.value = true
         selectAllInContainer()
     }
-    
+
     // Reset flag on actions that would deselect in normal circumstances
     // Arrow keys, typing, Escape, etc.
     if (!hasCtrlOrMeta && !event.shiftKey) {
-        if (event.code.startsWith('Arrow') || 
+        if (event.code.startsWith('Arrow') ||
             event.code === 'Escape' ||
             event.code === 'Home' ||
             event.code === 'End' ||
@@ -234,7 +235,7 @@ const virtualItems = computed(() => {
         // Apply global search highlighting (separate from in-book search) - applied to datasource
         else if (processedContent !== '\u00A0' && globalSearchTerms.value && i === globalSearchHighlightLineIndex.value) {
             processedContent = highlightGlobalSearchWithSnippet(
-                processedContent, 
+                processedContent,
                 globalSearchTerms.value,
                 globalSearchSnippet.value
             )
@@ -272,10 +273,23 @@ watch(() => myTab.value?.bookState?.selectedLineIndex, (newIndex) => {
 
 function handleLineClick(lineIndex: number) {
     selectedLineIndex.value = lineIndex
+
+    // Check if this line is a TOC entry (but NOT an alt TOC entry)
+    const tocEntry = props.flatTocEntries?.find(toc => toc.lineIndex === lineIndex && !toc.isAltToc)
+
     // Save selected line to tab state
     if (myTab.value?.bookState) {
         myTab.value.bookState.selectedLineIndex = lineIndex
+
+        // If it's a regular TOC entry (not alt TOC), store the TOC ID so commentary view can load all related links
+        if (tocEntry) {
+            myTab.value.bookState.selectedTocEntryId = tocEntry.id
+        } else {
+            // Clear TOC ID for regular lines and alt TOC entries
+            myTab.value.bookState.selectedTocEntryId = undefined
+        }
     }
+
     emit('lineClick', lineIndex)
 }
 
@@ -800,11 +814,11 @@ function highlightGlobalSearchWithSnippet(htmlContent: string, searchTerms: stri
 
     // First, find and wrap the snippet region with background span
     let contentWithSnippetBg = htmlContent
-    
+
     if (snippet) {
         // Clean snippet - remove "..." from beginning and end
         const cleanedSnippet = snippet.replace(/^\.\.\./, '').replace(/\.\.\.$/, '').trim()
-        
+
         if (cleanedSnippet) {
             contentWithSnippetBg = findAndWrapSnippet(htmlContent, cleanedSnippet)
         }
@@ -821,14 +835,14 @@ function findAndWrapSnippet(htmlContent: string, snippet: string): string {
 
     // Get all text content
     const fullText = tempDiv.textContent || ''
-    
+
     // Normalize both for matching
     const normalizedFullText = removeDiacriticsForSearch(fullText.toLowerCase())
     const normalizedSnippet = removeDiacriticsForSearch(snippet.toLowerCase())
 
     // Find best match position
     const matchPos = normalizedFullText.indexOf(normalizedSnippet)
-    
+
     if (matchPos === -1) {
         // Snippet not found exactly - try word-by-word proximity matching
         return wrapBestProximityMatch(htmlContent, snippet)
@@ -918,19 +932,19 @@ function wrapBestProximityMatch(htmlContent: string, snippet: string): string {
 
     // Find all word positions
     const wordPositions: Array<{ word: string; start: number; end: number }> = []
-    
+
     snippetWords.forEach(word => {
         const normalizedWord = removeDiacriticsForSearch(word.toLowerCase())
         let searchStart = 0
-        
+
         while (true) {
             const foundAt = normalizedFullText.indexOf(normalizedWord, searchStart)
             if (foundAt === -1) break
-            
+
             const positionMap = buildPositionMapForSearch(fullText)
             const originalStart = positionMap[foundAt] ?? 0
             const originalEnd = positionMap[foundAt + normalizedWord.length] ?? fullText.length
-            
+
             wordPositions.push({ word, start: originalStart, end: originalEnd })
             searchStart = foundAt + 1
         }
@@ -996,7 +1010,7 @@ function highlightGlobalSearchTerms(htmlContent: string, searchTerms: string): s
 
     textNodes.forEach(textNode => {
         const text = textNode.nodeValue || ''
-        
+
         // Collect all matches from all terms with their positions
         const allMatches: Array<{ start: number; end: number }> = []
 
@@ -1038,7 +1052,7 @@ function highlightGlobalSearchTerms(htmlContent: string, searchTerms: string): s
         // Sort matches by start position and merge overlapping ranges
         allMatches.sort((a, b) => a.start - b.start)
         const mergedMatches: Array<{ start: number; end: number }> = []
-        
+
         allMatches.forEach(match => {
             if (mergedMatches.length === 0) {
                 mergedMatches.push(match)
@@ -1189,12 +1203,12 @@ function scrollToFirstHighlightedWord(lineIndex: number) {
 
     // Try to find the snippet background first (preferred)
     let targetElement = lineEl.querySelector('.global-search-snippet-bg')
-    
+
     // Fallback to first highlighted word if no snippet background
     if (!targetElement) {
         targetElement = lineEl.querySelector('.global-search-highlight')
     }
-    
+
     if (!targetElement) return
 
     // Scroll the target into view vertically

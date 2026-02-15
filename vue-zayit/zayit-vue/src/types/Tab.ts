@@ -13,6 +13,7 @@ export interface BookState {
     showBottomPane?: boolean; // Whether bottom pane of split view is visible
     hasConnections?: boolean; // Whether book has any connections (targum, reference, commentary, or other)
     selectedLineIndex?: number; // Currently selected line index for commentary
+    selectedTocEntryId?: number; // If a TOC line was clicked, store the TOC entry ID to load all its lines' links
     commentaryFilterConnectionTypeId?: number; // Selected connection type filter for commentary (undefined = show all)
     commentaryPositionsByFilter?: Record<string, { groupIndex: number; targetBookId?: number; scrollPosition: number }>; // Position per filter for persistence when switching
     commentaryPositions?: Record<string, { groupIndex: number; targetBookId?: number }>; // Legacy position storage (simple format)

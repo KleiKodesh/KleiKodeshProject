@@ -107,6 +107,12 @@ namespace Zayit.Services
 
         public object SearchLines(int bookId, string term, string q) => _db.ExecuteQuery(q);
 
+        public object GetLineIdsByTocEntry(int tocEntryId, string q) => _db.ExecuteQuery(q);
+
+        public object GetLinesByIds(int bookId, object lineIds, string q) => _db.ExecuteQuery(q);
+
+        public object GetLineIndexFromLineId(int lineId, string q) => _db.ExecuteQuery(q);
+
         public object DiagnoseDatabaseContent() => new
         {
             books = _db.ExecuteQuery("SELECT Id, Title, TotalLines FROM book LIMIT 10"),

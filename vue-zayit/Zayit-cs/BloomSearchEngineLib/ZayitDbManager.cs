@@ -166,6 +166,67 @@ public sealed class ZayitDbManager : IDisposable
         return (-1, -1);
     }
 
+    /// <summary>
+    /// Gets all line IDs associated with a TOC entry.
+    /// </summary>
+    public List<int> GetLineIdsByTocEntry(int tocEntryId)
+    {
+        var lineIds = new List<int>();
+        
+        using (var cmd = _connection.CreateCommand())
+        {
+            cmd.CommandText = @"
+                SELECT lineId
+                FROM line_toc
+                WHERE tocEntryId = @tocEntryId
+                ORDER BY lineId";
+            cmd.Parameters.AddWithValue("@tocEntryId", tocEntryId);
+
+            using (var reader = cmd.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    lineIds.Add(reader.GetInt32(0));
+                }
+            }
+        }
+
+        return lineIds;
+    }
+
+    /// <summary>
+    /// Gets line content for multiple line IDs.
+    /// </summary>
+    public List<(int lineIndex, string content)> GetLinesByIds(int bookId, List<int> lineIds)
+    {
+        var lines = new List<(int lineIndex, string content)>();
+        
+        if (lineIds.Count == 0)
+            return lines;
+
+        using (var cmd = _connection.CreateCommand())
+        {
+            var idParams = string.Join(",", lineIds);
+            cmd.CommandText = $@"
+                SELECT lineIndex, content
+                FROM line
+                WHERE bookId = @bookId
+                  AND id IN ({idParams})
+                ORDER BY lineIndex";
+            cmd.Parameters.AddWithValue("@bookId", bookId);
+
+            using (var reader = cmd.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    lines.Add((reader.GetInt32(0), reader.GetString(1)));
+                }
+            }
+        }
+
+        return lines;
+    }
+
     public void Dispose()
     {
         _connection?.Close();

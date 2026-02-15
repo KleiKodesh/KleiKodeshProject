@@ -538,15 +538,15 @@ onMounted(() => {
 .color-palette {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 12px;
+    gap: 6px;
+    margin-bottom: 10px;
 }
 
 .color-swatch {
-    width: 40px;
-    height: 40px;
+    width: 32px;
+    height: 32px;
     border: 2px solid var(--border-color);
-    border-radius: 6px;
+    border-radius: 5px;
     cursor: pointer;
     position: relative;
     transition: all 0.2s ease;
@@ -563,36 +563,36 @@ onMounted(() => {
 
 .color-swatch.active {
     border-color: var(--accent-color);
-    border-width: 3px;
+    border-width: 2.5px;
     box-shadow: 0 0 0 2px var(--accent-bg);
 }
 
 .default-indicator {
-    font-size: 10px;
+    font-size: 9px;
     color: var(--text-secondary);
     text-align: center;
-    line-height: 1.2;
+    line-height: 1.1;
     font-weight: bold;
 }
 
 .custom-color-row {
-    gap: 8px;
+    gap: 6px;
     align-items: center;
-    margin-top: 8px;
+    margin-top: 6px;
 }
 
 .custom-color-label {
-    font-size: 13px;
+    font-size: 12px;
     color: var(--text-secondary);
     flex: 1;
 }
 
 /* Color picker styles */
 .color-picker {
-    width: 40px;
-    height: 40px;
+    width: 32px;
+    height: 32px;
     border: 2px solid var(--border-color);
-    border-radius: 6px;
+    border-radius: 5px;
     cursor: pointer;
     background: none;
     padding: 0;
@@ -603,13 +603,13 @@ onMounted(() => {
 }
 
 .clear-color-btn {
-    width: 24px;
-    height: 24px;
+    width: 22px;
+    height: 22px;
     border: 1px solid var(--border-color);
     border-radius: 50%;
     background: var(--bg-secondary);
     color: var(--text-secondary);
-    font-size: 12px;
+    font-size: 11px;
     display: flex;
     align-items: center;
     justify-content: center;

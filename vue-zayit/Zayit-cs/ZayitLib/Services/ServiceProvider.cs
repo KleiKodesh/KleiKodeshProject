@@ -89,6 +89,11 @@ namespace Zayit.Services
         }
         public object SearchLines(int bookId, string term, string q) => _db.SearchLines(bookId, term, q);
         public object DiagnoseDatabaseContent() => _db.DiagnoseDatabaseContent();
+        
+        // TOC-based Line Loading
+        public object GetLineIdsByTocEntry(int tocEntryId, string q) => _db.GetLineIdsByTocEntry(tocEntryId, q);
+        public object GetLinesByIds(int bookId, object lineIds, string q) => _db.GetLinesByIds(bookId, lineIds, q);
+        public object GetLineIndexFromLineId(int lineId, string q) => _db.GetLineIndexFromLineId(lineId, q);
 
         // PDF Operations - File Dialog & Virtual Host Mapping
         public object OpenPdfFilePicker() => _pdf.OpenPdfFilePicker();
@@ -281,12 +286,6 @@ namespace Zayit.Services
             {
                 Console.WriteLine($"[ServiceProvider] Error sending search error: {ex}");
             }
-        }
-        
-        public object GetLineIndexFromLineId(int lineId)
-        {
-            var (lineIndex, bookId) = _bloomSearch.GetLineIndexFromLineId(lineId);
-            return new { lineIndex, bookId };
         }
 
         // Popout functionality

@@ -147,11 +147,13 @@ import { Icon } from '@iconify/vue'
 
 import { useContentSearch } from '../composables/useContentSearch'
 import { commentaryService, type CommentaryLinkGroup } from '../services/commentaryService'
+import { dbService } from '../services/dbService'
 import { useTabStore } from '../stores/tabStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useCategoryTreeStore } from '../stores/categoryTreeStore'
 import type { Book } from '../types/Book'
 import { hasConnections } from '../types/Book'
+import type { Link } from '../types/Link'
 
 const props = withDefaults(defineProps<{
     bookId?: number
@@ -298,7 +300,7 @@ useEventListener(commentaryContentRef, 'mousedown', () => {
 useEventListener(document, 'selectionchange', () => {
     // Only check if this component has focus
     if (!hasFocus.value) return
-    
+
     // Check if selection is empty or changed
     const selection = window.getSelection()
     if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
@@ -325,11 +327,25 @@ useEventListener('keydown', (event: KeyboardEvent) => {
         selectAllWasPressed.value = true
         selectAllInContainer()
     }
-    
+
+    // Ctrl+Home: Scroll to first line
+    if (hasCtrlOrMeta && event.code === 'Home') {
+        event.preventDefault()
+        scrollToFirstLine()
+        selectAllWasPressed.value = false
+    }
+
+    // Ctrl+End: Scroll to last line
+    if (hasCtrlOrMeta && event.code === 'End') {
+        event.preventDefault()
+        scrollToLastLine()
+        selectAllWasPressed.value = false
+    }
+
     // Reset flag on actions that would deselect in normal circumstances
     // Arrow keys, typing, Escape, etc.
     if (!hasCtrlOrMeta && !event.shiftKey) {
-        if (event.code.startsWith('Arrow') || 
+        if (event.code.startsWith('Arrow') ||
             event.code === 'Escape' ||
             event.code === 'Home' ||
             event.code === 'End' ||
@@ -802,8 +818,8 @@ function applyDiacriticsFilter(htmlContent: string, state: number): string {
     return tempDiv.innerHTML
 }
 
-// Load commentary when props change
-watch([() => props.bookId, () => props.selectedLineIndex], async ([bookId, lineIndex]) => {
+// Load commentary when props change or when TOC mode changes
+watch([() => props.bookId, () => props.selectedLineIndex, () => tabStore.activeTab?.bookState?.selectedTocEntryId], async ([bookId, lineIndex]) => {
     if (bookId !== undefined && lineIndex !== undefined) {
         const targetBookId = pendingNavigationTargetBookId.value
         pendingNavigationTargetBookId.value = undefined // Clear after use
@@ -825,17 +841,91 @@ async function loadCommentaryLinks(bookId: number, lineIndex: number, scrollToTa
     const wasNavigating = isLoadingFromNavigation.value // Capture the flag
 
     try {
-        linkGroups.value = await commentaryService.loadCommentaryLinks(
-            bookId,
-            lineIndex,
-            tabStore.activeTab?.id?.toString() || '',
-            { connectionTypeId: selectedConnectionTypeId.value }
-        )
+        const activeTab = tabStore.activeTab
+        const tocEntryId = activeTab?.bookState?.selectedTocEntryId
 
-        computeAvailableFilterOptions(bookId, lineIndex).catch(() => { })
+        console.log(`🔄 Loading commentary - bookId: ${bookId}, lineIndex: ${lineIndex}, tocEntryId: ${tocEntryId}`)
+
+        // Check if we should load links for a TOC section (multiple lines) or single line
+        if (tocEntryId !== undefined) {
+            console.log(`📖 Loading commentary for TOC section (ID: ${tocEntryId})`)
+
+            // Get all line IDs for this TOC entry
+            const lineIdResults = await dbService.getLineIdsByTocEntry(bookId, tocEntryId)
+            const lineIds = lineIdResults.map(r => r.lineId)
+            console.log(`📚 Found ${lineIds.length} lines for TOC entry ${tocEntryId}:`, lineIds)
+
+            if (lineIds.length > 0) {
+                // Load merged links directly using the line IDs
+                const connectionTypeId = selectedConnectionTypeId.value
+                console.log(`🔗 Loading links with connectionTypeId: ${connectionTypeId}`)
+
+                const linksPromises = lineIds.map(lineId => {
+                    console.log(`  📎 Calling getLinks for lineId: ${lineId}, tabId: ${tabStore.activeTab?.id?.toString()}, bookId: ${bookId}, connectionTypeId: ${connectionTypeId}`)
+                    return dbService.getLinks(lineId, tabStore.activeTab?.id?.toString() || '', bookId, connectionTypeId)
+                })
+                const allLinksArrays = await Promise.all(linksPromises)
+                console.log(`  📦 Received ${allLinksArrays.length} link arrays`)
+                allLinksArrays.forEach((arr, idx) => {
+                    console.log(`    Array ${idx}: ${Array.isArray(arr) ? arr.length : 'not an array'} links`)
+                })
+                const allLinks = allLinksArrays.flat()
+                console.log(`✅ Loaded ${allLinks.length} total links from ${lineIds.length} lines`)
+
+                // Group links by title and merge
+                const grouped = new Map<string, {
+                    links: Array<{ text: string; html: string }>,
+                    targetBookId?: number,
+                    targetLineIndex?: number
+                }>()
+
+                allLinks.forEach(link => {
+                    const groupName = link.title || 'אחר'
+                    if (!grouped.has(groupName)) {
+                        grouped.set(groupName, {
+                            links: [],
+                            targetBookId: link.targetBookId,
+                            targetLineIndex: link.lineIndex
+                        })
+                    }
+                    grouped.get(groupName)!.links.push({
+                        text: link.content || '',
+                        html: link.content || ''
+                    })
+                })
+
+                // Convert to array format
+                linkGroups.value = Array.from(grouped.entries()).map(([groupName, data]) => ({
+                    groupName,
+                    targetBookId: data.targetBookId,
+                    targetLineIndex: data.targetLineIndex,
+                    links: data.links
+                }))
+            } else {
+                linkGroups.value = []
+            }
+        } else {
+            // Regular single-line commentary loading
+            linkGroups.value = await commentaryService.loadCommentaryLinks(
+                bookId,
+                lineIndex,
+                tabStore.activeTab?.id?.toString() || '',
+                { connectionTypeId: selectedConnectionTypeId.value }
+            )
+        }
+
+        // Compute available filter options
+        // For TOC mode, use book-level filters since checking each line would be expensive
+        if (tocEntryId !== undefined) {
+            if (props.book) {
+                availableFilterOptions.value = commentaryService.getAvailableFilterOptions(props.book)
+            }
+        } else {
+            // For single line, check which filters actually have results
+            computeAvailableFilterOptions(bookId, lineIndex).catch(() => { })
+        }
 
         // Restore saved position for this filter, or default to 0
-        const activeTab = tabStore.activeTab
         const filterKey = selectedConnectionTypeId.value?.toString() || 'all'
         const savedPosition = activeTab?.bookState?.commentaryPositionsByFilter?.[filterKey]
 
@@ -1072,6 +1162,21 @@ const scrollToGroup = (index: number) => {
             }
         }, 50)
     }
+}
+
+// Scroll to first line (Ctrl+Home)
+const scrollToFirstLine = () => {
+    if (virtualCommentaryItems.value.length === 0) return
+    currentGroupIndex.value = 0
+    scrollToGroup(0)
+}
+
+// Scroll to last line (Ctrl+End)
+const scrollToLastLine = () => {
+    if (virtualCommentaryItems.value.length === 0) return
+    const lastIndex = virtualCommentaryItems.value.length - 1
+    currentGroupIndex.value = lastIndex
+    scrollToGroup(lastIndex)
 }
 
 // Navigation functions

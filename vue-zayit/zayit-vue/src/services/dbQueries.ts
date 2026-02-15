@@ -117,5 +117,26 @@ export const SqlQueries = {
       name
     FROM connection_type
     ORDER BY name
+  `,
+
+  getLineIdsByTocEntry: (tocEntryId: number) => `
+    SELECT lineId
+    FROM line_toc
+    WHERE tocEntryId = ${tocEntryId}
+    ORDER BY lineId
+  `,
+
+  getLinesByIds: (bookId: number, lineIds: number[]) => `
+    SELECT lineIndex, content
+    FROM line
+    WHERE bookId = ${bookId}
+      AND id IN (${lineIds.join(',')})
+    ORDER BY lineIndex
+  `,
+
+  getLineIndexFromLineId: (lineId: number) => `
+    SELECT lineIndex, bookId
+    FROM line
+    WHERE id = ${lineId}
   `
 }

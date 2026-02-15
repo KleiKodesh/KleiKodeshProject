@@ -101,6 +101,40 @@ export class BookLineViewerService {
     }
 
     /**
+     * Load and merge lines associated with a TOC entry
+     */
+    async loadTocLines(bookId: number, tocEntryId: number): Promise<void> {
+        if (!this.bookId || this.bookId !== bookId) {
+            console.warn('Cannot load TOC lines: book not loaded or mismatch')
+            return
+        }
+
+        try {
+            const tocLines = await dbService.getLinesByTocEntry(bookId, tocEntryId)
+
+            if (tocLines.length === 0) {
+                return
+            }
+
+            console.log(`✅ Loaded ${tocLines.length} lines for TOC section`)
+
+            // Merge loaded lines into existing lines
+            const updatedLines = { ...this.lines.value }
+            tocLines.forEach(line => {
+                updatedLines[line.lineIndex] = line.content
+            })
+            this.lines.value = updatedLines
+
+            // Prioritize the area around the first line of this TOC entry
+            if (tocLines.length > 0) {
+                await this.prioritizeLines(tocLines[0]!.lineIndex, PADDING_LINES)
+            }
+        } catch (error) {
+            console.error('❌ Failed to load TOC lines:', error)
+        }
+    }
+
+    /**
      * Start smart streaming - loads batches in priority order
      */
     private startSmartStreaming() {

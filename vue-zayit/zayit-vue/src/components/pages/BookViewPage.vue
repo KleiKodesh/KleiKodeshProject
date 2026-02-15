@@ -18,6 +18,7 @@
         <BookLineViewer ref="lineViewerRef"
                         :tab-id="myTabId"
                         :alt-toc-by-line-index="altTocByLineIndex"
+                        :flat-toc-entries="flatTocEntries"
                         class="flex-110" />
       </template>
       <template #bottom>
@@ -53,6 +54,7 @@ const myTab = computed(() => tabStore.tabs.find(t => t.id === myTabId.value))
 const lineViewerRef = ref<InstanceType<typeof BookLineViewer> | null>(null)
 const altTocByLineIndex = ref<Map<number, AltTocLineEntry[]>>(new Map())
 const tocEntries = ref<TocEntry[]>([])
+const flatTocEntries = ref<TocEntry[]>([])
 const isTocLoading = ref(false)
 
 // Get current book from the category tree store
@@ -97,15 +99,17 @@ async function loadTocData(bookId: number) {
   isTocLoading.value = true
   try {
     const { tocEntriesFlat } = await dbService.getToc(bookId)
-    const { tree, altTocByLineIndex: altTocMap } = buildTocFromFlat(tocEntriesFlat)
+    const { tree, allTocs, altTocByLineIndex: altTocMap } = buildTocFromFlat(tocEntriesFlat)
 
     // Store both the tree and the alt TOC map
     tocEntries.value = tree
     altTocByLineIndex.value = altTocMap
+    flatTocEntries.value = allTocs // Store flat TOC for line click detection
   } catch (error) {
     console.error('❌ Failed to load TOC data:', error)
     tocEntries.value = []
     altTocByLineIndex.value = new Map()
+    flatTocEntries.value = []
   } finally {
     isTocLoading.value = false
   }
