@@ -1319,6 +1319,10 @@ watch([() => settingsStore.fontSize, () => settingsStore.linePadding], () => {
     padding: 0 15px 5px 5px;
 }
 
+.commentary-title {
+    align-self: center;
+}
+
 .commentary-navigation {
     gap: 5px;
 }

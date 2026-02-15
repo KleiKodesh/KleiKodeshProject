@@ -238,7 +238,60 @@ params.set("cMapPacked", "true"); // Use packed CMaps for faster font loading
 - **Better large file handling** - Only loads what's needed
 - **Improved font performance** - Especially important for Hebrew text
 
+## Rectangle Selection Tool
+
+### Problem
+
+Multi-column PDFs often have OCR issues where text from different columns gets mixed together, making it impossible to select text from a single column using normal text selection.
+
+### Solution
+
+Added a custom rectangle selection tool that allows users to draw a rectangle around a specific area to select only the text within that region.
+
+### Implementation
+
+**Files**:
+
+- `public/pdfjs/web/rectangle-selection.js` - New standalone tool
+- `public/pdfjs/web/viewer.html` - Added script reference
+
+### How It Works
+
+1. **Toggle Button** - Added to the right toolbar with a dashed rectangle icon
+2. **Drawing Mode** - Click the button to activate crosshair cursor
+3. **Rectangle Selection** - Click and drag to draw a selection rectangle
+4. **Text Selection** - Automatically selects all text within the drawn rectangle
+5. **Auto-Deactivate** - Tool deactivates after making a selection
+
+### Features
+
+- **Visual Feedback** - Dashed blue rectangle shows selection area while drawing
+- **Crosshair Cursor** - Clear indication when tool is active
+- **Intersection Detection** - Accurately detects text spans within the rectangle
+- **Scroll-Aware** - Works correctly with scrolled content
+- **Multi-Page Support** - Handles text across multiple visible pages
+- **Hebrew Support** - Works with RTL text and Hebrew content
+
+### Usage
+
+1. Click the rectangle selection button in the toolbar (dashed rectangle icon)
+2. Click and drag to draw a rectangle around the desired text area
+3. Release to select all text within the rectangle
+4. Use Ctrl+C to copy the selected text
+
+### Benefits
+
+- **Column-Specific Selection** - Select text from a single column in multi-column layouts
+- **OCR Problem Workaround** - Bypass OCR text ordering issues
+- **Precise Selection** - Select exactly the text you need
+- **User-Friendly** - Simple click-and-drag interface
+
 ## Files Modified
+
+### Rectangle Selection Tool
+
+- **viewer.html** - Added `rectangle-selection.js` script reference
+- **rectangle-selection.js** - New file with rectangle selection implementation
 
 ### Hebrew Localization
 

@@ -4,7 +4,6 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
-using Zayit.Viewer;
 using Office = Microsoft.Office.Core;
 
 namespace KleiKodesh.Ribbon
@@ -52,7 +51,7 @@ namespace KleiKodesh.Ribbon
                 switch (id)
                 {
                     case "Kezayit":
-                        TaskPaneManager.Show(new Zayit.Viewer.ZayitViewerHost(), "כזית", popOutBehavior: true);
+                        TaskPaneManager.Show(new Zayit.Viewer.ZayitViewerHost(), "כזית", 610, popOutBehavior: true);
                         break;
                     case "WebSites":
                         WpfTaskPane.Show(new WebSitesLib.WebSitesView(), "דרך האתרים", 510);
@@ -112,7 +111,7 @@ namespace KleiKodesh.Ribbon
             try
             {
                 string templatePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "About.dotx");
-                
+
                 if (!File.Exists(templatePath))
                 {
                     MessageBox.Show(
