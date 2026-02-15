@@ -84,6 +84,96 @@ public async void HandleMessage(string json)
 - Automatically closes download dialog with `CloseDefaultDownloadDialog()`
 - Provides tab closure cleanup notifications
 
+#### **BloomSearchService.cs** - Bloom Filter Search Operations
+
+- Manages bloom filter index lifecycle with log-based state tracking
+- Provides streaming search results via callbacks
+- Handles indexing progress with cross-instance coordination
+- Subscribes to `BloomIndexingCoordinator` for global progress events
+
+## Cross-Instance Coordination
+
+### BloomIndexingCoordinator (Static Class)
+
+When multiple VSTO instances (Word documents) are open simultaneously, the `BloomIndexingCoordinator` ensures only one instance indexes at a time:
+
+```csharp
+public static class BloomIndexingCoordinator
+{
+    // Global mutex for cross-process coordination
+    private static Mutex _globalMutex = new Mutex(false, "Global\\ZayitBloomIndexing");
+
+    // Static event for progress broadcasting
+    public static event EventHandler<IndexProgressChangedEventArgs> ProgressChanged;
+
+    // Try to acquire exclusive indexing lock
+    public static bool TryAcquireIndexingLock(int timeoutMs = 0);
+
+    // Release lock when indexing completes
+    public static void ReleaseIndexingLock();
+
+    // Broadcast progress to all instances
+    public static void NotifyProgress(IndexProgressChangedEventArgs progress);
+}
+```
+
+**Key Features**:
+
+- **Global Mutex**: Only one instance can hold the lock across all processes
+- **Static Events**: All instances subscribe to receive progress updates
+- **Thread-Safe**: Proper locking for state management
+- **Crash Recovery**: Automatic recovery from abandoned mutexes
+- **No Duplicate Work**: Prevents multiple instances from indexing simultaneously
+
+**Usage in BloomFilterIndexer**:
+
+```csharp
+public void CreateBloomFilters()
+{
+    // Try to acquire the global indexing lock
+    if (!BloomIndexingCoordinator.TryAcquireIndexingLock(0))
+    {
+        Console.WriteLine("Another instance is already indexing");
+        return;
+    }
+
+    try
+    {
+        // Perform indexing...
+
+        // Broadcast progress to all instances
+        BloomIndexingCoordinator.NotifyProgress(progressArgs);
+    }
+    finally
+    {
+        // Always release the lock
+        BloomIndexingCoordinator.ReleaseIndexingLock();
+    }
+}
+```
+
+**Usage in BloomSearchService**:
+
+```csharp
+public BloomSearchService()
+{
+    // Subscribe to global coordinator progress events
+    BloomIndexingCoordinator.ProgressChanged += OnCoordinatorProgress;
+}
+
+private void OnCoordinatorProgress(object sender, IndexProgressChangedEventArgs e)
+{
+    // Update local progress state from any indexing instance
+    _progress.Percentage = e.Percentage;
+}
+```
+
+**Vue Integration**:
+
+- Vue continues to poll `GetBloomIndexingProgress()` as before
+- All instances show synchronized progress during indexing
+- No changes needed to Vue code - works transparently
+
 ## Communication Protocol
 
 ### Vue → C# (JSON Messages)
@@ -275,12 +365,19 @@ Zayit-cs/ZayitLib/
 │   ├── DbQueries.cs                # SQL execution
 │   ├── PdfService.cs               # PDF file operations
 │   ├── HebrewBooksService.cs       # Hebrew books operations
-│   └── HebrewBooksCacheManager.cs  # Cache management
+│   ├── HebrewBooksCacheManager.cs  # Cache management
+│   └── BloomSearchService.cs       # Bloom filter search operations
 ├── Viewer/
 │   ├── ZayitViewer.cs              # WebView2 host with services
 │   └── ZayitViewerHost.cs          # UserControl wrapper
 └── Html/                           # Vue build output (deployed here)
     └── index.html
+
+Zayit-cs/BloomSearchEngineLib/
+├── BloomIndexingCoordinator.cs     # Cross-instance indexing coordination
+├── BloomFilterIndexer.cs           # Bloom filter index creation
+├── BloomFilterSearcher.cs          # Bloom filter search execution
+└── BloomFilterSearchModels.cs      # Search models and progress events
 ```
 
 ## Adding New Operations
