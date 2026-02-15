@@ -56,6 +56,7 @@
     <Compile Include="BloomFilterIndexer.cs" />
     <Compile Include="BloomFilterSearchModels.cs" />
     <Compile Include="BloomFilterSearcher.cs" />
+    <Compile Include="BloomIndexingCoordinator.cs" />
     <Compile Include="TermExtractor.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SearchEngineMatcher.cs" />

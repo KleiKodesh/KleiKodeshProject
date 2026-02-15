@@ -28,76 +28,96 @@ namespace BloomSearchEngineLib
 
         public void CreateBloomFilters()
         {
-            using (var db = new ZayitDbManager())
-            using (var writer = new BloomFilterCollectionWriter(_id, _chunkSize))
+            // Try to acquire the global indexing lock
+            if (!BloomIndexingCoordinator.TryAcquireIndexingLock(0))
             {
-                if (db._connection == null || db._connection.IsCanceled())
+                Console.WriteLine("[BloomFilterIndexer] Another instance is already indexing");
+                return;
+            }
+
+            try
+            {
+                using (var db = new ZayitDbManager())
+                using (var writer = new BloomFilterCollectionWriter(_id, _chunkSize))
                 {
-                    Console.WriteLine("Bloom Index Creation aborted! No db found");
-                    return;
-                }
-
-                int totalLines = db.GetLineCount();
-                int totalChunks = (totalLines + _chunkSize - 1) / _chunkSize;
-
-                var sw = Stopwatch.StartNew();
-                var lastReportTime = sw.Elapsed;
-                var chunk = new List<string>(_chunkSize);
-                int processedChunks = 0;
-
-                // Reusable term extractor to avoid allocations
-                var termExtractor = new TermExtractor();
-
-                void Commit()
-                {
-                    var terms = termExtractor.ExtractTermsFromLines(chunk);
-                    if (terms.Count > 0)
+                    if (db._connection == null || db._connection.IsCanceled())
                     {
-                        var filter = new BloomFilter(terms.Count, _falsePositiveRate);
-                        foreach (var t in terms)
-                            filter.Add(t);
-                        writer.Commit(filter);
+                        Console.WriteLine("Bloom Index Creation aborted! No db found");
+                        return;
                     }
 
-                    chunk.Clear();
-                    processedChunks++;
+                    int totalLines = db.GetLineCount();
+                    int totalChunks = (totalLines + _chunkSize - 1) / _chunkSize;
 
-                    // TIMER-BASED REPORTING: Only fire event if enough time has passed
-                    var currentTime = sw.Elapsed;
-                    if ((currentTime - lastReportTime).TotalMilliseconds >= ProgressReportIntervalMs)
+                    var sw = Stopwatch.StartNew();
+                    var lastReportTime = sw.Elapsed;
+                    var chunk = new List<string>(_chunkSize);
+                    int processedChunks = 0;
+
+                    // Reusable term extractor to avoid allocations
+                    var termExtractor = new TermExtractor();
+
+                    void Commit()
                     {
-                        // Guard against division by zero
-                        var eta = (processedChunks > 0 && processedChunks < totalChunks)
-                            ? TimeSpan.FromMilliseconds(
-                                sw.Elapsed.TotalMilliseconds / processedChunks *
-                                (totalChunks - processedChunks))
-                            : TimeSpan.Zero;
+                        var terms = termExtractor.ExtractTermsFromLines(chunk);
+                        if (terms.Count > 0)
+                        {
+                            var filter = new BloomFilter(terms.Count, _falsePositiveRate);
+                            foreach (var t in terms)
+                                filter.Add(t);
+                            writer.Commit(filter);
+                        }
 
-                        IndexProgressChanged?.Invoke(
-                            this,
-                            new IndexProgressChangedEventArgs(
-                                processedChunks, totalChunks, sw.Elapsed, eta));
+                        chunk.Clear();
+                        processedChunks++;
 
-                        lastReportTime = currentTime;
+                        // TIMER-BASED REPORTING: Only fire event if enough time has passed
+                        var currentTime = sw.Elapsed;
+                        if ((currentTime - lastReportTime).TotalMilliseconds >= ProgressReportIntervalMs)
+                        {
+                            // Guard against division by zero
+                            var eta = (processedChunks > 0 && processedChunks < totalChunks)
+                                ? TimeSpan.FromMilliseconds(
+                                    sw.Elapsed.TotalMilliseconds / processedChunks *
+                                    (totalChunks - processedChunks))
+                                : TimeSpan.Zero;
+
+                            var progressArgs = new IndexProgressChangedEventArgs(
+                                processedChunks, totalChunks, sw.Elapsed, eta);
+
+                            // Notify local subscribers
+                            IndexProgressChanged?.Invoke(this, progressArgs);
+
+                            // Broadcast to all instances via coordinator
+                            BloomIndexingCoordinator.NotifyProgress(progressArgs);
+
+                            lastReportTime = currentTime;
+                        }
                     }
-                }
 
-                foreach (var line in db.GetAllLineContents())
-                {
-                    chunk.Add(line);
-                    if (chunk.Count == _chunkSize)
+                    foreach (var line in db.GetAllLineContents())
+                    {
+                        chunk.Add(line);
+                        if (chunk.Count == _chunkSize)
+                            Commit();
+                    }
+
+                    if (chunk.Count > 0)
                         Commit();
+
+                    // FINAL REPORT: Always fire at 100% completion
+                    var finalEta = TimeSpan.Zero;
+                    var finalProgressArgs = new IndexProgressChangedEventArgs(
+                        processedChunks, totalChunks, sw.Elapsed, finalEta);
+
+                    IndexProgressChanged?.Invoke(this, finalProgressArgs);
+                    BloomIndexingCoordinator.NotifyProgress(finalProgressArgs);
                 }
-
-                if (chunk.Count > 0)
-                    Commit();
-
-                // FINAL REPORT: Always fire at 100% completion
-                var finalEta = TimeSpan.Zero;
-                IndexProgressChanged?.Invoke(
-                    this,
-                    new IndexProgressChangedEventArgs(
-                        processedChunks, totalChunks, sw.Elapsed, finalEta));
+            }
+            finally
+            {
+                // Always release the lock
+                BloomIndexingCoordinator.ReleaseIndexingLock();
             }
         }
     }

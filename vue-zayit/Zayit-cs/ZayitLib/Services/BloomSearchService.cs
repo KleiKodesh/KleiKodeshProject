@@ -45,6 +45,26 @@ namespace Zayit.Services
                 Percentage = 0,
                 Eta = ""
             };
+
+            // Subscribe to global coordinator progress events
+            BloomIndexingCoordinator.ProgressChanged += OnCoordinatorProgress;
+        }
+
+        /// <summary>
+        /// Handle progress updates from the global coordinator (any instance)
+        /// </summary>
+        private void OnCoordinatorProgress(object sender, IndexProgressChangedEventArgs e)
+        {
+            lock (_lock)
+            {
+                _progress.ProcessedChunks = e.ProcessedChunks;
+                _progress.TotalChunks = e.TotalChunks;
+                _progress.Percentage = e.Percentage;
+                _progress.Eta = FormatTimeSpan(e.Eta);
+                _progress.IsIndexing = e.Percentage < 100;
+            }
+
+            Console.WriteLine($"[BloomSearchService] Coordinator progress: {e.Percentage:F1}% ({e.ProcessedChunks}/{e.TotalChunks})");
         }
 
         /// <summary>
@@ -81,6 +101,22 @@ namespace Zayit.Services
                         _isIndexing = false;
                         _progress.IsReady = false;
                         _progress.IsIndexing = false;
+                    }
+                    return;
+                }
+
+                var coordinator = BloomIndexingCoordinator.IsIndexing;
+
+                // Check if another instance is already indexing
+                if (coordinator)
+                {
+                    Console.WriteLine("[BloomSearchService] Another instance is indexing - will receive progress updates");
+                    lock (_lock)
+                    {
+                        _isIndexing = false; // We're not the one indexing
+                        _isReady = false;
+                        _progress.IsIndexing = true; // But indexing is happening
+                        _progress.IsReady = false;
                     }
                     return;
                 }
@@ -256,6 +292,20 @@ namespace Zayit.Services
         /// </summary>
         private void StartIndexingAsync()
         {
+            // Check if another instance is already indexing
+            if (BloomIndexingCoordinator.IsAnotherInstanceIndexing())
+            {
+                Console.WriteLine("[BloomSearchService] Another instance is already indexing");
+                lock (_lock)
+                {
+                    _isIndexing = false;
+                    _isReady = false;
+                    _progress.IsIndexing = true;
+                    _progress.IsReady = false;
+                }
+                return;
+            }
+
             lock (_lock)
             {
                 if (_isIndexing)
