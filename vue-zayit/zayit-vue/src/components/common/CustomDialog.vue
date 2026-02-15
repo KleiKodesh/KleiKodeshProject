@@ -57,7 +57,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
+import { useEventListener } from '@vueuse/core'
 
 interface Props {
     title?: string
@@ -100,21 +101,34 @@ const emit = defineEmits<{
 const isVisible = ref(false)
 
 const dialogSizeClass = computed(() => `dialog-${props.size}`)
-
 const iconClass = computed(() => `dialog-icon-${props.iconType}`)
-
 const confirmVariantClass = computed(() => `dialog-btn-${props.confirmVariant}`)
+
+// Handle keyboard events when dialog is visible
+useEventListener('keydown', (event: KeyboardEvent) => {
+    if (!isVisible.value) return
+
+    // Escape key - cancel
+    if (event.code === 'Escape') {
+        handleCancel()
+    }
+
+    // Enter key - confirm or cancel
+    if (event.code === 'Enter') {
+        if (props.showConfirm) {
+            handleConfirm()
+        } else {
+            handleCancel()
+        }
+    }
+})
 
 const show = () => {
     isVisible.value = true
-    // Add keyboard event listeners when dialog is shown
-    document.addEventListener('keydown', handleKeydown)
 }
 
 const hide = () => {
     isVisible.value = false
-    // Remove keyboard event listeners when dialog is hidden
-    document.removeEventListener('keydown', handleKeydown)
 }
 
 const handleConfirm = () => {
@@ -137,31 +151,6 @@ const handleOverlayClick = () => {
         handleCancel()
     }
 }
-
-const handleKeydown = (event: KeyboardEvent) => {
-    if (!isVisible.value) return
-
-    switch (event.key) {
-        case 'Escape':
-            event.preventDefault()
-            handleCancel()
-            break
-        case 'Enter':
-            event.preventDefault()
-            // Only trigger confirm if confirm button is shown
-            if (props.showConfirm) {
-                handleConfirm()
-            } else {
-                handleCancel()
-            }
-            break
-    }
-}
-
-// Cleanup on component unmount
-onUnmounted(() => {
-    document.removeEventListener('keydown', handleKeydown)
-})
 
 defineExpose({
     show,

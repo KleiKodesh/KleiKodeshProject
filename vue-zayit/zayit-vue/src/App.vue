@@ -1,43 +1,39 @@
 <template>
     <div class="height-fill app-container"
          tabindex="0"
-         @keydown="handleKeydown"
          ref="appContainer">
         <TabControl class="height-fill" />
     </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import TabControl from './components/TabControl.vue';
-import { useTabStore } from './stores/tabStore';
+import { ref, onMounted } from 'vue'
+import { useEventListener } from '@vueuse/core'
+import TabControl from './components/TabControl.vue'
+import { useTabStore } from './stores/tabStore'
 
-const tabStore = useTabStore();
-const appContainer = ref<HTMLElement>();
+const tabStore = useTabStore()
+const appContainer = ref<HTMLElement>()
 
-const handleKeydown = (event: KeyboardEvent) => {
-    // Ctrl+F is already prevented in main.ts
-    // Components (BookLineViewer, BookCommentaryView) handle opening their search bars
-    
-    // Ctrl+W: Close current tab
-    if (event.ctrlKey && event.key === 'w') {
-        event.preventDefault();
-        tabStore.closeTab();
-        return;
+// Keyboard shortcuts using useEventListener to support any keyboard layout
+useEventListener('keydown', (event: KeyboardEvent) => {
+    const hasCtrlOrMeta = event.ctrlKey || event.metaKey
+
+    // Ctrl+W: Close current tab (use event.code for keyboard layout independence)
+    if (hasCtrlOrMeta && event.code === 'KeyW') {
+        tabStore.closeTab()
     }
 
-    // Ctrl+X: Close all tabs
-    if (event.ctrlKey && event.key === 'x') {
-        event.preventDefault();
-        tabStore.closeAllTabs();
-        return;
+    // Ctrl+X: Close all tabs (use event.code for keyboard layout independence)
+    if (hasCtrlOrMeta && event.code === 'KeyX') {
+        tabStore.closeAllTabs()
     }
-};
+})
 
 onMounted(() => {
     // Focus the app container to ensure keyboard events are captured
-    appContainer.value?.focus();
-});
+    appContainer.value?.focus()
+})
 </script>
 
 <style scoped>

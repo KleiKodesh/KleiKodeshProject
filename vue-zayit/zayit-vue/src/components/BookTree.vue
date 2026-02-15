@@ -1,7 +1,6 @@
 <template>
     <div ref="treeContainerRef"
-         class="overflow-y height-fill"
-         @keydown="navigator?.handleKeyDown">
+         class="overflow-y height-fill">
         <div v-if="categoryTreeStore.isLoading"
              class="height-fill flex-center">
             <Icon icon="fluent:spinner-ios-20-regular"
@@ -17,45 +16,33 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
-
-import { useCategoryTreeStore } from '../stores/categoryTreeStore';
-import BookTreeCategoryNode from './BookTreeCategoryNode.vue';
-import { KeyboardNavigator } from '../utils/KeyboardNavigator';
-import { Icon } from '@iconify/vue';
+import { ref } from 'vue'
+import { useCategoryTreeStore } from '../stores/categoryTreeStore'
+import BookTreeCategoryNode from './BookTreeCategoryNode.vue'
+import { useListKeyboardNavigation } from '../composables/useListKeyboardNavigation'
+import { Icon } from '@iconify/vue'
 
 const emit = defineEmits<{
     returnFocus: []
 }>()
 
-const categoryTreeStore = useCategoryTreeStore();
-const nodeRefs = ref<InstanceType<typeof BookTreeCategoryNode>[]>([]);
-const treeContainerRef = ref<HTMLElement>();
-const navigator = ref<KeyboardNavigator>();
+const categoryTreeStore = useCategoryTreeStore()
+const nodeRefs = ref<InstanceType<typeof BookTreeCategoryNode>[]>([])
+const treeContainerRef = ref<HTMLElement>()
 
-onMounted(() => {
-    if (treeContainerRef.value) {
-        navigator.value = new KeyboardNavigator(treeContainerRef.value, {
-            onEscape: () => emit('returnFocus')
-        });
-    }
-});
-
-onUnmounted(() => {
-    navigator.value?.destroy();
-});
+const { handleKeyDown } = useListKeyboardNavigation(treeContainerRef, {
+    onEscape: () => emit('returnFocus')
+})
 
 const resetTree = () => {
-    // Reset all root nodes (which will recursively reset their children)
     nodeRefs.value.forEach(node => {
         if (node && node.reset) {
-            node.reset();
+            node.reset()
         }
-    });
+    })
 }
 
 defineExpose({
     resetTree
 })
-
 </script>

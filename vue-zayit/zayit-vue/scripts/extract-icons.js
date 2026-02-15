@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fluentIcons from '@iconify-json/fluent/icons.json' with { type: 'json' };
+import fluentColorIcons from '@iconify-json/fluent-color/icons.json' with { type: 'json' };
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -53,6 +54,11 @@ const usedIcons = [
   'delete-24-regular'
 ];
 
+// List of fluent-color icons used in the app
+const usedColorIcons = [
+  'settings-24'
+];
+
 // Extract only the icons we need
 const extractedIcons = {
   prefix: 'fluent',
@@ -71,6 +77,24 @@ usedIcons.forEach(iconName => {
 
 console.log(`Extracted ${Object.keys(extractedIcons.icons).length} icons out of ${usedIcons.length} requested`);
 
+// Extract fluent-color icons
+const extractedColorIcons = {
+  prefix: 'fluent-color',
+  icons: {},
+  width: 24,
+  height: 24
+};
+
+usedColorIcons.forEach(iconName => {
+  if (fluentColorIcons.icons[iconName]) {
+    extractedColorIcons.icons[iconName] = fluentColorIcons.icons[iconName];
+  } else {
+    console.warn(`Warning: Icon "${iconName}" not found in Fluent Color icon set`);
+  }
+});
+
+console.log(`Extracted ${Object.keys(extractedColorIcons.icons).length} color icons out of ${usedColorIcons.length} requested`);
+
 // Write to TypeScript file
 const outputPath = path.join(__dirname, '..', 'src', 'utils', 'iconify-offline.ts');
 const tsContent = `// Offline icon configuration for Iconify
@@ -81,8 +105,11 @@ import { addCollection } from '@iconify/vue'
 
 const fluentIcons = ${JSON.stringify(extractedIcons, null, 2)}
 
+const fluentColorIcons = ${JSON.stringify(extractedColorIcons, null, 2)}
+
 export function initializeOfflineIcons() {
   addCollection(fluentIcons)
+  addCollection(fluentColorIcons)
 }
 `;
 

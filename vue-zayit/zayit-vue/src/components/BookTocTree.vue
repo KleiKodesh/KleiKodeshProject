@@ -1,7 +1,6 @@
 <template>
     <div ref="containerRef"
-         class="overflow-y height-fill"
-         @keydown="navigator?.handleKeyDown">
+         class="overflow-y height-fill">
         <div v-if="isLoading"
              class="flex-center height-fill">
             <Icon icon="fluent:spinner-ios-20-regular"
@@ -25,45 +24,36 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
-import { Icon } from '@iconify/vue';
-import BookTocTreeNode from './BookTocTreeNode.vue';
-import { KeyboardNavigator } from '../utils/KeyboardNavigator';
-import type { TocEntry } from '../types/BookToc';
+import { ref } from 'vue'
+import { Icon } from '@iconify/vue'
+import BookTocTreeNode from './BookTocTreeNode.vue'
+import { useListKeyboardNavigation } from '../composables/useListKeyboardNavigation'
+import type { TocEntry } from '../types/BookToc'
 
 defineProps<{
     tocEntries: TocEntry[]
     isLoading?: boolean
     isCompactMode?: boolean
-}>();
+}>()
 
 const emit = defineEmits<{
     selectLine: [lineIndex: number]
     returnFocus: []
-}>();
+}>()
 
-const nodeRefs = ref<InstanceType<typeof BookTocTreeNode>[]>([]);
-const containerRef = ref<HTMLElement>();
-const navigator = ref<KeyboardNavigator>();
+const nodeRefs = ref<InstanceType<typeof BookTocTreeNode>[]>([])
+const containerRef = ref<HTMLElement>()
 
-onMounted(() => {
-    if (containerRef.value) {
-        navigator.value = new KeyboardNavigator(containerRef.value, {
-            onEscape: () => emit('returnFocus')
-        });
-    }
-});
-
-onUnmounted(() => {
-    navigator.value?.destroy();
-});
+const { handleKeyDown } = useListKeyboardNavigation(containerRef, {
+    onEscape: () => emit('returnFocus')
+})
 
 const resetTree = () => {
     nodeRefs.value.forEach(node => {
         if (node && node.reset) {
-            node.reset();
+            node.reset()
         }
-    });
+    })
 }
 
 defineExpose({

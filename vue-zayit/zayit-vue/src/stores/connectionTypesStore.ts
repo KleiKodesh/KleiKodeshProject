@@ -27,7 +27,8 @@ export const useConnectionTypesStore = defineStore('connectionTypes', () => {
     }
 
     // Default connection type preference (for commentary filtering)
-    const defaultConnectionType = 'COMMENTARY' // מפרשים
+    // Prefer SOURCE (מקור) when available, fallback to COMMENTARY (מפרשים)
+    const defaultConnectionType = 'SOURCE' // מקור
 
     // Computed getters
     const connectionTypeById = computed(() => {

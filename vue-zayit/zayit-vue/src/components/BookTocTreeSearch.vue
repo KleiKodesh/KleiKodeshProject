@@ -6,8 +6,7 @@
     </div>
     <div v-else
          ref="containerRef"
-         class="flex-column overflow-y"
-         @keydown="navigator?.handleKeyDown">
+         class="flex-column overflow-y">
 
         <div v-for="entry in filteredEntries"
              :key="entry.id"
@@ -29,10 +28,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { TocEntry } from '../types/BookToc'
 import { Icon } from '@iconify/vue'
-import { KeyboardNavigator } from '../utils/KeyboardNavigator'
+import { useListKeyboardNavigation } from '../composables/useListKeyboardNavigation'
 
 const props = defineProps<{
     tocEntries: TocEntry[]
@@ -46,11 +45,13 @@ const emit = defineEmits<{
 }>()
 
 const containerRef = ref<HTMLElement>()
-const navigator = ref<KeyboardNavigator>()
 const debouncedQuery = ref('')
 let debounceTimeout: number | null = null
 
-// Debounce the search query
+const { handleKeyDown } = useListKeyboardNavigation(containerRef, {
+    onEscape: () => emit('returnFocus')
+})
+
 watch(() => props.searchQuery, (newValue) => {
     if (debounceTimeout) {
         clearTimeout(debounceTimeout)
@@ -66,12 +67,10 @@ const filteredEntries = computed(() => {
         return []
     }
 
-    // Remove quotation marks from search query
     const cleanQuery = debouncedQuery.value.replace(/"/g, '')
     const searchWords = cleanQuery.trim().toLowerCase().split(/\s+/)
     const results: TocEntry[] = []
 
-    // Flatten all entries including nested children
     const flattenEntries = (entries: TocEntry[]): TocEntry[] => {
         const flat: TocEntry[] = []
         for (const entry of entries) {
@@ -86,10 +85,8 @@ const filteredEntries = computed(() => {
     const allEntries = flattenEntries(props.tocEntries)
 
     for (const entry of allEntries) {
-        // Remove quotation marks from search text
         const searchText = `${entry.path || ''} ${entry.text}`.replace(/"/g, '').toLowerCase()
         if (searchWords.every(word => {
-            // Use word boundaries that include Hebrew characters
             const escapedWord = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
             const regex = new RegExp(`(?<![\\w\u0590-\u05FF])${escapedWord}(?![\\w\u0590-\u05FF])`, 'i')
             return regex.test(searchText)
@@ -107,33 +104,6 @@ const filteredEntries = computed(() => {
 const selectEntry = (entry: TocEntry) => {
     emit('selectLine', entry.lineIndex)
 }
-
-onMounted(() => {
-    if (containerRef.value) {
-        navigator.value = new KeyboardNavigator(containerRef.value, {
-            onEscape: () => emit('returnFocus')
-        })
-    }
-})
-
-onUnmounted(() => {
-    navigator.value?.destroy()
-    if (debounceTimeout) {
-        clearTimeout(debounceTimeout)
-    }
-})
-
-// Reinitialize navigator when search results change
-watch(filteredEntries, () => {
-    if (containerRef.value) {
-        if (navigator.value) {
-            navigator.value.destroy()
-        }
-        navigator.value = new KeyboardNavigator(containerRef.value, {
-            onEscape: () => emit('returnFocus')
-        })
-    }
-}, { flush: 'post' })
 </script>
 
 <style scoped>

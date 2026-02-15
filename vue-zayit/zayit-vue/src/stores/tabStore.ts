@@ -198,9 +198,9 @@ export const useTabStore = defineStore('tabs', () => {
     };
 
     const addTab = async () => {
-        // Check if a homepage tab already exists (either 'homepage' or 'openfile')
+        // Check if a homepage tab already exists
         const existingHomepageTab = tabs.value.find(t =>
-            t.currentPage === 'homepage' || t.currentPage === 'openfile'
+            t.currentPage === 'homepage'
         );
 
         if (existingHomepageTab) {
@@ -266,7 +266,7 @@ export const useTabStore = defineStore('tabs', () => {
         if (tab) {
             // Check if there's already another homepage tab
             const existingHomepageTab = tabs.value.find(t =>
-                t.id !== tab.id && (t.currentPage === 'homepage' || t.currentPage === 'openfile')
+                t.id !== tab.id && t.currentPage === 'homepage'
             );
 
             if (existingHomepageTab) {
@@ -399,6 +399,15 @@ export const useTabStore = defineStore('tabs', () => {
     };
 
     const openSettings = () => {
+        const currentTab = tabs.value.find(t => t.isActive);
+
+        // If current tab is homepage, navigate in same tab
+        if (currentTab?.currentPage === 'homepage') {
+            currentTab.currentPage = 'settings';
+            currentTab.title = PAGE_TITLES.settings;
+            return;
+        }
+
         // Check if settings tab already exists
         const existingSettingsTab = tabs.value.find(t => t.currentPage === 'settings');
         if (existingSettingsTab) {
@@ -607,6 +616,15 @@ export const useTabStore = defineStore('tabs', () => {
     };
 
     const openKezayitOpenFilePage = () => {
+        const currentTab = tabs.value.find(t => t.isActive);
+
+        // If current tab is homepage, navigate in same tab
+        if (currentTab?.currentPage === 'homepage') {
+            currentTab.currentPage = 'openfile';
+            currentTab.title = PAGE_TITLES['openfile'];
+            return;
+        }
+
         tabs.value.forEach(tab => tab.isActive = false);
 
         const existingIds = new Set(tabs.value.map(t => t.id));
@@ -627,10 +645,13 @@ export const useTabStore = defineStore('tabs', () => {
     };
 
     const openHebrewBooks = () => {
-        // Hebrew Books page is only available when running inside C# WebView host
-        if (!webviewBridge.isAvailable()) {
-            console.warn('[TabStore] Hebrew Books page is only available when running inside C# WebView host')
-            return
+        const currentTab = tabs.value.find(t => t.isActive);
+
+        // If current tab is homepage, navigate in same tab
+        if (currentTab?.currentPage === 'homepage') {
+            currentTab.currentPage = 'hebrewbooks';
+            currentTab.title = PAGE_TITLES['hebrewbooks'];
+            return;
         }
 
         tabs.value.forEach(tab => tab.isActive = false);
@@ -690,6 +711,20 @@ export const useTabStore = defineStore('tabs', () => {
     };
 
     const openKezayitSearch = () => {
+        const currentTab = tabs.value.find(t => t.isActive);
+
+        // If current tab is homepage, navigate in same tab
+        if (currentTab?.currentPage === 'homepage') {
+            currentTab.currentPage = 'kezayit-search';
+            currentTab.title = PAGE_TITLES['kezayit-search'];
+            currentTab.searchState = {
+                searchQuery: '',
+                scrollPosition: 0,
+                hasSearched: false
+            };
+            return;
+        }
+
         tabs.value.forEach(tab => tab.isActive = false);
 
         const existingIds = new Set(tabs.value.map(t => t.id));
@@ -818,6 +853,15 @@ export const useTabStore = defineStore('tabs', () => {
     };
 
     const openWorkspaceManager = () => {
+        const currentTab = tabs.value.find(t => t.isActive);
+
+        // If current tab is homepage, navigate in same tab
+        if (currentTab?.currentPage === 'homepage') {
+            currentTab.currentPage = 'workspaces';
+            currentTab.title = PAGE_TITLES.workspaces;
+            return;
+        }
+
         // Check if workspace manager tab already exists
         const existingWorkspaceTab = tabs.value.find(t => t.currentPage === 'workspaces');
         if (existingWorkspaceTab) {

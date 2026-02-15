@@ -70,7 +70,8 @@ mark {
 }
 
 mark.current {
-  background-color: rgba(245, 158, 11, 0.6); /* #f59e0b with higher opacity */
+  background-color: rgba(245, 158, 11, 0.8) !important; /* #f59e0b with higher opacity */
+  font-weight: bold;
 }
 
 :root.dark mark {
@@ -78,5 +79,6 @@ mark.current {
 }
 
 :root.dark mark.current {
-  background-color: rgba(251, 191, 36, 0.6); /* #fbbf24 with higher opacity */
+  background-color: rgba(251, 191, 36, 0.8) !important; /* #fbbf24 with higher opacity */
+  font-weight: bold;
 }

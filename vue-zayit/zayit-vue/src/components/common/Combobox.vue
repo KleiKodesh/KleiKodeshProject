@@ -42,6 +42,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useEventListener } from '@vueuse/core'
 
 // Simple debounce function
 function debounce<T extends (...args: any[]) => any>(
@@ -81,21 +82,18 @@ const debouncedSearchText = ref('')
 const showDropdown = ref(false)
 const highlightedIndex = ref(-1)
 const isMouseDownOnDropdown = ref(false)
-const isFocused = ref(false) // Track if input is focused
+const isFocused = ref(false)
 
 const currentLabel = computed(() => {
     const option = props.options.find(opt => opt.value === props.modelValue)
     return option ? option.label : ''
 })
 
-// Display text in the input - shows current selection when not searching
 const displayText = computed({
     get: () => {
-        // If input is focused, always show search text (even if empty) to allow editing
         if (isFocused.value) {
             return searchText.value
         }
-        // Otherwise show the current selection label (when not focused)
         return currentLabel.value
     },
     set: (value: string) => {
@@ -117,7 +115,52 @@ const filteredOptions = computed(() => {
     })
 })
 
-// Debounced function to update search text
+// Keyboard navigation using useEventListener
+useEventListener('keydown', (event: KeyboardEvent) => {
+    if (!showDropdown.value) return
+
+    // Arrow Down - move highlight down
+    if (event.code === 'ArrowDown') {
+        event.preventDefault()
+        highlightedIndex.value = Math.min(highlightedIndex.value + 1, filteredOptions.value.length - 1)
+        scrollToHighlighted()
+    }
+
+    // Arrow Up - move highlight up
+    if (event.code === 'ArrowUp') {
+        event.preventDefault()
+        highlightedIndex.value = Math.max(highlightedIndex.value - 1, -1)
+        scrollToHighlighted()
+    }
+
+    // Enter - select highlighted option
+    if (event.code === 'Enter') {
+        event.preventDefault()
+        if (highlightedIndex.value >= 0 && highlightedIndex.value < filteredOptions.value.length) {
+            const option = filteredOptions.value[highlightedIndex.value]
+            if (option) {
+                selectOption(option.value)
+            }
+        } else if (filteredOptions.value.length === 1) {
+            const option = filteredOptions.value[0]
+            if (option) {
+                selectOption(option.value)
+            }
+        }
+    }
+
+    // Escape - close dropdown
+    if (event.code === 'Escape') {
+        event.preventDefault()
+        isFocused.value = false
+        showDropdown.value = false
+        searchText.value = ''
+        debouncedSearchText.value = ''
+        highlightedIndex.value = -1
+        inputRef.value?.blur()
+    }
+})
+
 const updateDebouncedSearch = debounce((value: string) => {
     debouncedSearchText.value = value
 }, 150)
@@ -133,7 +176,6 @@ const onFocus = (event: FocusEvent) => {
     showDropdown.value = true
     const input = event.target as HTMLInputElement
     if (input) {
-        // Only clear search text if it's empty, otherwise keep user's input
         if (searchText.value === '') {
             input.select()
         }
@@ -141,9 +183,7 @@ const onFocus = (event: FocusEvent) => {
 }
 
 const onBlur = (event: FocusEvent) => {
-    // If mouse is down on dropdown (including scrollbar), don't close
     if (isMouseDownOnDropdown.value) {
-        // Refocus the input to keep dropdown open
         setTimeout(() => inputRef.value?.focus(), 0)
         return
     }
@@ -181,51 +221,11 @@ const selectOption = (value: string | number) => {
 }
 
 const onKeyDown = (event: KeyboardEvent) => {
-    if (!showDropdown.value && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+    // Open dropdown when pressing arrow keys while closed
+    if (!showDropdown.value && (event.code === 'ArrowDown' || event.code === 'ArrowUp')) {
         showDropdown.value = true
         event.preventDefault()
         return
-    }
-
-    if (!showDropdown.value) return
-
-    switch (event.key) {
-        case 'ArrowDown':
-            event.preventDefault()
-            highlightedIndex.value = Math.min(highlightedIndex.value + 1, filteredOptions.value.length - 1)
-            scrollToHighlighted()
-            break
-
-        case 'ArrowUp':
-            event.preventDefault()
-            highlightedIndex.value = Math.max(highlightedIndex.value - 1, -1)
-            scrollToHighlighted()
-            break
-
-        case 'Enter':
-            event.preventDefault()
-            if (highlightedIndex.value >= 0 && highlightedIndex.value < filteredOptions.value.length) {
-                const option = filteredOptions.value[highlightedIndex.value]
-                if (option) {
-                    selectOption(option.value)
-                }
-            } else if (filteredOptions.value.length === 1) {
-                const option = filteredOptions.value[0]
-                if (option) {
-                    selectOption(option.value)
-                }
-            }
-            break
-
-        case 'Escape':
-            event.preventDefault()
-            isFocused.value = false
-            showDropdown.value = false
-            searchText.value = ''
-            debouncedSearchText.value = ''
-            highlightedIndex.value = -1
-            inputRef.value?.blur()
-            break
     }
 }
 
@@ -248,9 +248,7 @@ const scrollToHighlighted = () => {
     }, 0)
 }
 
-// Only clear search text when modelValue changes from external source (not from user input)
 watch(() => props.modelValue, (newValue, oldValue) => {
-    // Only clear if this wasn't triggered by user selection
     if (newValue !== oldValue && !showDropdown.value) {
         searchText.value = ''
         debouncedSearchText.value = ''

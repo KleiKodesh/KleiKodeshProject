@@ -67,21 +67,27 @@ watch(() => myTab.value?.bookState?.bookId, async (bookId) => {
   if (bookId) {
     await loadTocData(bookId)
 
-    // Check if we should highlight the initial line (from search result)
+    // Check if we should highlight the initial line (from search or commentary navigation)
     if (myTab.value?.bookState?.shouldHighlight && myTab.value?.bookState?.initialLineIndex !== undefined) {
       // Wait for viewer to be ready, then trigger highlight
       setTimeout(() => {
         const viewer: any = lineViewerRef.value
-        if (viewer?.scrollToLineAndHighlight) {
-          const highlightTerms = myTab.value?.searchState?.highlightTerms
+        const highlightTerms = myTab.value?.searchState?.highlightTerms
+
+        if (highlightTerms && viewer?.scrollToLineAndHighlight) {
+          // Search result with terms to highlight
           viewer.scrollToLineAndHighlight(myTab.value!.bookState!.initialLineIndex!, highlightTerms)
-          // Clear the flags so they don't highlight again
-          if (myTab.value?.bookState) {
-            myTab.value.bookState.shouldHighlight = false
-          }
-          if (myTab.value?.searchState) {
-            myTab.value.searchState.highlightTerms = undefined
-          }
+        } else if (viewer?.scrollToLineWithFadeHighlight) {
+          // Commentary navigation - just fade highlight the line
+          viewer.scrollToLineWithFadeHighlight(myTab.value!.bookState!.initialLineIndex!)
+        }
+
+        // Clear the flags so they don't highlight again
+        if (myTab.value?.bookState) {
+          myTab.value.bookState.shouldHighlight = false
+        }
+        if (myTab.value?.searchState) {
+          myTab.value.searchState.highlightTerms = undefined
         }
       }, 500) // Wait for book to load
     }

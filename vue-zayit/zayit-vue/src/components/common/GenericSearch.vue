@@ -9,13 +9,13 @@
                    class="flex-110"
                    placeholder="חיפוש..."
                    tabindex="0"
-                   @keydown.enter="handleEnter"
+                   @keydown.enter.exact="findNext"
                    @keydown.shift.enter.prevent="findPrevious"
                    @keydown.esc="close" />
-            <span class="search-count">{{ currentMatchIndex + 1 }}/{{
-                totalMatches }}</span>
+            <span class="search-count">{{ displayCount }}</span>
             <button @click.stop="findPrevious"
                     class="flex-center c-pointer search-btn touch-interactive"
+                    :disabled="totalMatches === 0"
                     title="הקודם (Shift+Enter)">
                 <Icon icon="fluent:chevron-left-28-regular"
                       class="search-icon"
@@ -23,6 +23,7 @@
             </button>
             <button @click.stop="findNext"
                     class="flex-center c-pointer search-btn touch-interactive"
+                    :disabled="totalMatches === 0"
                     title="הבא (Enter)">
                 <Icon icon="fluent:chevron-left-28-regular"
                       class="search-icon"
@@ -36,27 +37,35 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, computed } from 'vue'
 import { Icon } from '@iconify/vue'
 
 const props = withDefaults(defineProps<{
     isOpen: boolean
     topOffset?: string
+    currentMatchIndex?: number
+    totalMatches?: number
 }>(), {
-    topOffset: '8px'
+    topOffset: '8px',
+    currentMatchIndex: -1,
+    totalMatches: 0
 })
 
 const emit = defineEmits<{
     close: []
-    searchQueryChange: [query: string]
-    navigateToMatch: [index: number]
+    search: [query: string]
+    next: []
+    previous: []
 }>()
 
 const searchQuery = ref('')
 const searchInputRef = ref<HTMLInputElement | null>(null)
-const currentMatchIndex = ref(-1)
-const totalMatches = ref(0)
 let debounceTimeout: number | null = null
+
+const displayCount = computed(() => {
+    if (props.totalMatches === 0) return '0/0'
+    return `${props.currentMatchIndex + 1}/${props.totalMatches}`
+})
 
 watch(() => props.isOpen, async (isOpen) => {
     if (isOpen) {
@@ -65,8 +74,6 @@ watch(() => props.isOpen, async (isOpen) => {
         searchInputRef.value?.select()
     } else {
         searchQuery.value = ''
-        currentMatchIndex.value = -1
-        totalMatches.value = 0
     }
 })
 
@@ -75,48 +82,21 @@ watch(searchQuery, (query) => {
         clearTimeout(debounceTimeout)
     }
     debounceTimeout = window.setTimeout(() => {
-        emit('searchQueryChange', query)
+        emit('search', query)
     }, 300)
 })
 
-function setMatches(count: number) {
-    totalMatches.value = count
-    if (count > 0) {
-        currentMatchIndex.value = 0
-        emit('navigateToMatch', 0)
-    } else {
-        currentMatchIndex.value = -1
-    }
-}
-
 function findNext() {
-    if (totalMatches.value === 0) return
-    currentMatchIndex.value = (currentMatchIndex.value + 1) % totalMatches.value
-    emit('navigateToMatch', currentMatchIndex.value)
-}
-
-function handleEnter(e: KeyboardEvent) {
-    // Only handle regular Enter (not Shift+Enter)
-    if (!e.shiftKey) {
-        findNext()
-    }
+    emit('next')
 }
 
 function findPrevious() {
-    if (totalMatches.value === 0) return
-    currentMatchIndex.value = currentMatchIndex.value <= 0
-        ? totalMatches.value - 1
-        : currentMatchIndex.value - 1
-    emit('navigateToMatch', currentMatchIndex.value)
+    emit('previous')
 }
 
 function close() {
     emit('close')
 }
-
-defineExpose({
-    setMatches
-})
 </script>
 
 <style scoped>
@@ -128,8 +108,8 @@ defineExpose({
 }
 
 .search-bar {
-    gap: 4px;
-    padding: 6px 10px;
+    gap: 5px;
+    padding: 7px 11px;
     background-color: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 4px;
@@ -141,27 +121,30 @@ defineExpose({
 
 .search-bar input {
     font-size: 13px;
-    padding: 4px 6px;
+    padding: 6px 8px;
+    min-height: 28px;
 }
 
 .search-btn {
-    padding: 2px;
-    width: 20px;
-    height: 20px;
+    padding: 3px;
+    min-width: 28px;
+    min-height: 28px;
+    width: 28px;
+    height: 28px;
 }
 
 .search-icon {
-    width: 10px;
-    height: 10px;
+    width: 14px;
+    height: 14px;
 }
 
 .close-btn {
-    font-size: 13px;
+    font-size: 14px;
     line-height: 1;
 }
 
 .search-count {
-    padding: 0 6px;
+    padding: 0 7px;
     color: var(--text-secondary);
     white-space: nowrap;
     font-size: 12px;

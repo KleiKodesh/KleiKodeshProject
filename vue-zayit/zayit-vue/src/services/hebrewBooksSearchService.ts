@@ -6,9 +6,7 @@ interface HistoryEntry {
   id: string
   title: string
   author: string
-  accessCount: number
   lastAccessed: number
-  firstAccessed: number
 }
 
 interface SearchMessage {
@@ -97,22 +95,10 @@ export class HebrewBooksSearchService {
 
       this.pendingRequests.set(currentRequestId, { resolve, reject })
 
-      // Ensure books are cloneable by creating clean copies
-      const cloneableBooks = books.map(book => ({
-        id: book.id,
-        title: book.title,
-        author: book.author,
-        printingPlace: book.printingPlace,
-        printingYear: book.printingYear,
-        pages: book.pages,
-        userScore: book.userScore,
-        lastAccessed: book.lastAccessed,
-        _csvTags: book._csvTags
-      }))
-
+      // Send books directly - structured clone will handle it
       const message: SearchMessage = {
         type: 'search',
-        books: cloneableBooks,
+        books: books,
         searchTerm
       }
 
@@ -137,33 +123,11 @@ export class HebrewBooksSearchService {
 
       this.pendingRequests.set(currentRequestId, { resolve, reject })
 
-      // Ensure books are cloneable by creating clean copies
-      const cloneableBooks = books.map(book => ({
-        id: book.id,
-        title: book.title,
-        author: book.author,
-        printingPlace: book.printingPlace,
-        printingYear: book.printingYear,
-        pages: book.pages,
-        userScore: book.userScore,
-        lastAccessed: book.lastAccessed,
-        _csvTags: book._csvTags
-      }))
-
-      // Ensure history entries are cloneable
-      const cloneableHistoryEntries = historyEntries.map(entry => ({
-        id: entry.id,
-        title: entry.title,
-        author: entry.author,
-        accessCount: entry.accessCount,
-        lastAccessed: entry.lastAccessed,
-        firstAccessed: entry.firstAccessed
-      }))
-
+      // Send data directly - structured clone will handle it
       const message: RecentMessage = {
         type: 'recent',
-        books: cloneableBooks,
-        historyEntries: cloneableHistoryEntries
+        books: books,
+        historyEntries: historyEntries
       }
 
       this.worker!.postMessage(message)
@@ -196,25 +160,20 @@ export class HebrewBooksSearchService {
   }
 
   private fallbackRecent(books: HebrewBook[], historyEntries: HistoryEntry[]): HebrewBook[] {
-    // Simple fallback recent books on main thread (for when worker fails)
+    // Simple LRU fallback on main thread (for when worker fails)
     if (historyEntries.length === 0) {
       return []
     }
 
-    // Sort by most recent and limit to prevent blocking
-    const sortedHistory = historyEntries
-      .sort((a, b) => b.lastAccessed - a.lastAccessed)
-      .slice(0, 50)
-
+    // History is already sorted by LRU (most recent first)
     const bookMap = new Map(books.map(book => [book.id, book]))
     const recentBooks: HebrewBook[] = []
 
-    for (const historyEntry of sortedHistory) {
+    for (const historyEntry of historyEntries) {
       const book = bookMap.get(historyEntry.id)
       if (book) {
         recentBooks.push({
           ...book,
-          userScore: historyEntry.accessCount,
           lastAccessed: historyEntry.lastAccessed
         })
       }
@@ -236,7 +195,7 @@ export class HebrewBooksSearchService {
     const isSearching = searchTerm && searchTerm.trim() !== ''
 
     if (!isSearching) {
-      // Default view: use Web Worker for recent books (simple, fast, no complex scoring)
+      // Default view: show LRU history (already sorted by most recent)
       const historyEntries = await HistoryService.getAllHistory()
       return await this.getRecentBooks(books, historyEntries)
     }

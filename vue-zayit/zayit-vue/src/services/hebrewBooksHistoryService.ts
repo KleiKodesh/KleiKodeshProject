@@ -2,16 +2,14 @@ interface HistoryEntry {
   id: string // Book ID
   title: string
   author: string
-  accessCount: number
-  lastAccessed: number
-  firstAccessed: number
+  lastAccessed: number // Only timestamp matters for LRU
 }
 
 export class HistoryService {
   private static readonly DB_NAME = 'HebrewBooksHistory'
   private static readonly DB_VERSION = 1
   private static readonly STORE_NAME = 'bookHistory'
-  private static readonly MAX_HISTORY_ITEMS = 100 // Cap for history items
+  private static readonly MAX_HISTORY_ITEMS = 100 // LRU cap
 
   private static db: IDBDatabase | null = null
 
@@ -39,13 +37,12 @@ export class HistoryService {
         if (!db.objectStoreNames.contains(this.STORE_NAME)) {
           const store = db.createObjectStore(this.STORE_NAME, { keyPath: 'id' })
           store.createIndex('lastAccessed', 'lastAccessed', { unique: false })
-          store.createIndex('accessCount', 'accessCount', { unique: false })
         }
       }
     })
   }
 
-  // Track book interaction
+  // Track book interaction - simple LRU: update timestamp, jump to top
   static async trackBookInteraction(bookId: string, title: string, author: string): Promise<void> {
     try {
       await this.initDB()
@@ -54,42 +51,24 @@ export class HistoryService {
       const transaction = this.db.transaction([this.STORE_NAME], 'readwrite')
       const store = transaction.objectStore(this.STORE_NAME)
 
-      // Get existing entry
-      const getRequest = store.get(bookId)
-
-      getRequest.onsuccess = async () => {
-        const existingEntry = getRequest.result as HistoryEntry | undefined
-        const now = Date.now()
-
-        const entry: HistoryEntry = existingEntry ? {
-          ...existingEntry,
-          accessCount: existingEntry.accessCount + 1,
-          lastAccessed: now
-        } : {
-          id: bookId,
-          title,
-          author,
-          accessCount: 1,
-          lastAccessed: now,
-          firstAccessed: now
-        }
-
-        // Update the entry
-        store.put(entry)
-
-        // Clean up old entries if we exceed the cap
-        await this.cleanupOldEntries()
+      const entry: HistoryEntry = {
+        id: bookId,
+        title,
+        author,
+        lastAccessed: Date.now()
       }
 
-      getRequest.onerror = () => {
-        console.error('Failed to get history entry:', getRequest.error)
-      }
+      // Put will update if exists, insert if new
+      store.put(entry)
+
+      // Clean up old entries if we exceed the cap
+      await this.cleanupOldEntries()
     } catch (error) {
       console.error('Failed to track book interaction:', error)
     }
   }
 
-  // Get all history entries
+  // Get all history entries sorted by LRU (most recent first)
   static async getAllHistory(): Promise<HistoryEntry[]> {
     try {
       await this.initDB()
@@ -101,7 +80,10 @@ export class HistoryService {
         const request = store.getAll()
 
         request.onsuccess = () => {
-          resolve(request.result as HistoryEntry[])
+          const entries = request.result as HistoryEntry[]
+          // Sort by most recent first (LRU order)
+          entries.sort((a, b) => b.lastAccessed - a.lastAccessed)
+          resolve(entries)
         }
 
         request.onerror = () => {
@@ -141,7 +123,7 @@ export class HistoryService {
     }
   }
 
-  // Clean up old entries to maintain the cap
+  // Clean up old entries to maintain LRU cap
   private static async cleanupOldEntries(): Promise<void> {
     try {
       if (!this.db) return
@@ -162,7 +144,7 @@ export class HistoryService {
             const entries = getAllRequest.result as HistoryEntry[]
             entries.sort((a, b) => a.lastAccessed - b.lastAccessed)
 
-            // Delete the oldest entries to get back under the cap
+            // Delete the oldest entries (LRU eviction)
             const entriesToDelete = entries.slice(0, count - this.MAX_HISTORY_ITEMS)
 
             entriesToDelete.forEach(entry => {
@@ -174,29 +156,6 @@ export class HistoryService {
     } catch (error) {
       console.error('Failed to cleanup old entries:', error)
     }
-  }
-
-  // Calculate popularity score based on access patterns
-  static calculatePopularityScore(entry: HistoryEntry): number {
-    const now = Date.now()
-    const daysSinceLastAccess = (now - entry.lastAccessed) / (1000 * 60 * 60 * 24)
-    const daysSinceFirstAccess = (now - entry.firstAccessed) / (1000 * 60 * 60 * 24)
-
-    // Base score from access count
-    let score = entry.accessCount * 10
-
-    // Recency bonus (more recent = higher score)
-    if (daysSinceLastAccess < 1) score += 50      // Last day
-    else if (daysSinceLastAccess < 7) score += 25 // Last week
-    else if (daysSinceLastAccess < 30) score += 10 // Last month
-
-    // Frequency bonus (more frequent over time = higher score)
-    if (daysSinceFirstAccess > 0) {
-      const accessFrequency = entry.accessCount / daysSinceFirstAccess
-      score += accessFrequency * 20
-    }
-
-    return Math.round(score)
   }
 
   // Clear all history (for privacy/reset purposes)

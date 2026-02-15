@@ -1,3 +1,11 @@
+/**
+ * Content Search Composable
+ * 
+ * Simple search for non-virtualized or already-loaded content.
+ * Used by BookCommentaryView and other components that don't need
+ * to search through large virtualized datasets.
+ */
+
 import { ref, computed } from 'vue'
 
 interface SearchItem {
@@ -25,17 +33,30 @@ export function useContentSearch() {
         return null
     })
 
-    function searchInItems(items: SearchItem[], query: string) {
+    function searchInItems(items: SearchItem[], query: string, currentItemIndex?: number) {
         searchQuery.value = query
         matches.value = []
         currentMatchIndex.value = -1
 
         if (!query) return
 
-        const normalizedQuery = removeDiacritics(query.toLowerCase())
+        // Check if query contains spaces or dashes
+        const queryHasSpacesOrDashes = /[\s\u002D\u2013\u2014\u05BE]/.test(query)
+
+        // Normalize query - dashes BEFORE diacritics removal
+        let normalizedQuery = query.toLowerCase()
+        if (queryHasSpacesOrDashes) {
+            normalizedQuery = normalizeDashes(normalizedQuery)
+        }
+        normalizedQuery = removeDiacritics(normalizedQuery)
 
         items.forEach(item => {
-            const normalizedContent = removeDiacritics(stripHtml(item.content).toLowerCase())
+            // Normalize content the same way as query - dashes BEFORE diacritics removal
+            let normalizedContent = stripHtml(item.content).toLowerCase()
+            if (queryHasSpacesOrDashes) {
+                normalizedContent = normalizeDashes(normalizedContent)
+            }
+            normalizedContent = removeDiacritics(normalizedContent)
             let startIndex = 0
             let occurrence = 0
 
@@ -57,19 +78,22 @@ export function useContentSearch() {
             const itemMatches = matches.value.filter(m => m.itemIndex === item.index)
             itemMatches.forEach(m => m.totalInItem = itemMatches.length)
         })
-    }
 
-    function updateMatches(newMatches: SearchMatch[]) {
-        matches.value = [...newMatches].sort((a, b) => {
-            if (a.itemIndex !== b.itemIndex) {
-                return a.itemIndex - b.itemIndex
+        // Select closest match to current position, or first match if no position given
+        if (matches.value.length > 0) {
+            if (currentItemIndex !== undefined) {
+                // Find the closest match at or after the current item
+                let closestIndex = matches.value.findIndex(m => m.itemIndex >= currentItemIndex)
+
+                // If no match found after current item, wrap to first match
+                if (closestIndex === -1) {
+                    closestIndex = 0
+                }
+
+                currentMatchIndex.value = closestIndex
+            } else {
+                currentMatchIndex.value = 0
             }
-            return a.occurrence - b.occurrence
-        })
-
-        // Reset current match index if it's out of bounds
-        if (currentMatchIndex.value >= matches.value.length) {
-            currentMatchIndex.value = -1
         }
     }
 
@@ -77,6 +101,18 @@ export function useContentSearch() {
         if (matchIndex >= 0 && matchIndex < matches.value.length) {
             currentMatchIndex.value = matchIndex
         }
+    }
+
+    function nextMatch() {
+        if (matches.value.length === 0) return
+        currentMatchIndex.value = (currentMatchIndex.value + 1) % matches.value.length
+    }
+
+    function previousMatch() {
+        if (matches.value.length === 0) return
+        currentMatchIndex.value = currentMatchIndex.value <= 0
+            ? matches.value.length - 1
+            : currentMatchIndex.value - 1
     }
 
     function highlightMatches(htmlContent: string, query: string, currentOccurrence: number = -1): string {
@@ -97,26 +133,31 @@ export function useContentSearch() {
             textNodes.push(node as Text)
         }
 
-        const normalizedQuery = removeDiacritics(query.toLowerCase())
+        // Check if query contains spaces or dashes
+        const queryHasSpacesOrDashes = /[\s\u002D\u2013\u2014\u05BE]/.test(query)
+
+        // Normalize query - dashes BEFORE diacritics removal
+        let normalizedQuery = query.toLowerCase()
+        if (queryHasSpacesOrDashes) {
+            normalizedQuery = normalizeDashes(normalizedQuery)
+        }
+        normalizedQuery = removeDiacritics(normalizedQuery)
+
         let globalOccurrence = 0
 
         textNodes.forEach(textNode => {
             const text = textNode.nodeValue || ''
             const lowerText = text.toLowerCase()
 
-            // Build a map from normalized position to original position
-            const positionMap: number[] = []
-            let normalizedIndex = 0
-            for (let i = 0; i < text.length; i++) {
-                const char = text[i]
-                if (char && !isDiacritic(char)) {
-                    positionMap[normalizedIndex] = i
-                    normalizedIndex++
-                }
-            }
-            positionMap[normalizedIndex] = text.length // End position
+            // Build position map for diacritics
+            const positionMap = buildPositionMap(text)
 
-            const normalizedText = removeDiacritics(lowerText)
+            // Normalize text the same way as query - dashes BEFORE diacritics removal
+            let normalizedText = lowerText
+            if (queryHasSpacesOrDashes) {
+                normalizedText = normalizeDashes(normalizedText)
+            }
+            normalizedText = removeDiacritics(normalizedText)
 
             const parts: Array<{ text: string; isMatch: boolean; isCurrent: boolean }> = []
             let lastIndex = 0
@@ -181,8 +222,30 @@ export function useContentSearch() {
     }
 
     function removeDiacritics(text: string): string {
-        // Remove Hebrew diacritics (nikkud and cantillation marks)
         return text.replace(/[\u0591-\u05C7]/g, '')
+    }
+
+    function normalizeDashes(text: string): string {
+        // Replace maqaf (־ U+05BE) and all dash types with space
+        // Includes: hyphen-minus (-), en dash (–), em dash (—), maqaf (־)
+        return text.replace(/[\u002D\u2013\u2014\u05BE]/g, ' ')
+    }
+
+    function buildPositionMap(text: string): number[] {
+        const map: number[] = []
+        let normalizedIndex = 0
+
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i]
+            // Skip diacritics but treat dashes as spaces (they count in position)
+            if (char && !isDiacritic(char)) {
+                map[normalizedIndex] = i
+                normalizedIndex++
+            }
+        }
+
+        map[normalizedIndex] = text.length
+        return map
     }
 
     function isDiacritic(char: string): boolean {
@@ -192,11 +255,13 @@ export function useContentSearch() {
 
     return {
         searchQuery,
+        currentMatchIndex,
         totalMatches,
         currentMatch,
         searchInItems,
-        updateMatches,
         navigateToMatch,
+        nextMatch,
+        previousMatch,
         highlightMatches
     }
 }

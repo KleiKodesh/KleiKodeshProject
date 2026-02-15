@@ -15,11 +15,8 @@ namespace UpdateCheckerLib
 
         public static async Task DownloadAndScheduleInstallerAsync(string version)
         {
-            var installerUrl =
-                $"https://github.com/KleiKodesh/KleiKodeshProject/releases/download/{version}/KleiKodeshSetup-{version}.exe";
-
-            var tempPath =
-                Path.Combine(Path.GetTempPath(), $"KleiKodeshSetup-{version}.exe");
+            string installerUrl = $"https://github.com/KleiKodesh/KleiKodeshProject/releases/download/{version}/KleiKodeshSetup-{version}.exe";
+            string tempPath = Path.Combine(Path.GetTempPath(), $"KleiKodeshSetup.exe"); // use same path each time
 
             DownloadProgressForm form = null;
 

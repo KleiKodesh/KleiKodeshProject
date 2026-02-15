@@ -6,8 +6,7 @@
     </div>
     <div v-else
          ref="containerRef"
-         class="flex-column overflow-y"
-         @keydown="navigator?.handleKeyDown">
+         class="flex-column overflow-y">
         <div v-for="book in filteredBooks"
              :key="book.id"
              class="flex-row hover-bg focus-accent click-effect c-pointer tree-node search-result reactive-icon"
@@ -25,11 +24,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { Book } from '../types/Book'
 import { hasConnections } from '../types/Book'
 import { Icon } from '@iconify/vue'
-import { KeyboardNavigator } from '../utils/KeyboardNavigator'
+import { useListKeyboardNavigation } from '../composables/useListKeyboardNavigation'
 import { useTabStore } from '../stores/tabStore'
 
 const props = defineProps<{
@@ -42,12 +41,14 @@ const emit = defineEmits<{
 }>()
 
 const containerRef = ref<HTMLElement>()
-const navigator = ref<KeyboardNavigator>()
 const tabStore = useTabStore()
 const debouncedQuery = ref('')
 let debounceTimeout: number | null = null
 
-// Debounce the search query
+const { handleKeyDown } = useListKeyboardNavigation(containerRef, {
+    onEscape: () => emit('returnFocus')
+})
+
 watch(() => props.searchQuery, (newValue) => {
     if (debounceTimeout) {
         clearTimeout(debounceTimeout)
@@ -82,32 +83,4 @@ const filteredBooks = computed(() => {
 const selectBook = (book: Book) => {
     tabStore.openBookToc(book.title, book.id, hasConnections(book))
 }
-
-onMounted(() => {
-    if (containerRef.value) {
-        navigator.value = new KeyboardNavigator(containerRef.value, {
-            onEscape: () => emit('returnFocus')
-        })
-    }
-})
-
-onUnmounted(() => {
-    navigator.value?.destroy()
-    if (debounceTimeout) {
-        clearTimeout(debounceTimeout)
-    }
-})
-
-// Reinitialize navigator when search results change
-watch(filteredBooks, () => {
-    if (containerRef.value) {
-        if (navigator.value) {
-            navigator.value.destroy()
-        }
-        navigator.value = new KeyboardNavigator(containerRef.value, {
-            onEscape: () => emit('returnFocus')
-        })
-    }
-}, { flush: 'post' })
-
 </script>

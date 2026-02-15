@@ -20,6 +20,7 @@ Hebrew book downloads use a unified origin architecture that eliminates cross-or
 - **LRU eviction** - Oldest files removed when cache exceeds 10 files
 - **No active file tracking** - Cache manager works directly with files on disk
 - **Automatic re-download** - Missing files are detected and re-downloaded on tab switch/session reload
+- **Offline history limit** - When offline, Vue displays only 10 most recent history items (aligned with C# cache limit)
 
 ### Cross-Origin Research Findings
 
@@ -136,6 +137,12 @@ Hebrew book downloads use a unified origin architecture that eliminates cross-or
 - Automatically removes oldest files when new files are added
 - No complex state management needed
 
+**Cache Size Limit:**
+
+- C# maintains maximum of 10 cached PDF files (`MAX_FILES = 10`)
+- Vue displays maximum of 10 history items when offline
+- This alignment ensures users can only select books that exist in cache when offline
+
 ### Tab Closure Cleanup
 
 **Direct File Deletion:**
@@ -198,6 +205,27 @@ if (cacheResult.exists && cacheResult.url) {
   await hebrewBooksStore.openHebrewBookViewer(bookId, title);
 }
 ```
+
+### Offline Mode Behavior
+
+**Vue History Filtering** (`HebrewbooksPage.vue`):
+
+```typescript
+const displayedBooks = computed(() => {
+  if (isOnline.value || store.searchTerm) {
+    return store.filteredBooks;
+  }
+  // Offline and no search - show only 10 most recent history items
+  return store.filteredBooks.slice(0, 10);
+});
+```
+
+**Alignment with C# Cache:**
+
+- When offline, Vue limits displayed history to 10 most recent items
+- C# cache maintains maximum of 10 PDF files (LRU eviction)
+- This ensures users can only select books that exist in the C# cache when offline
+- Prevents attempts to open books that aren't cached and can't be downloaded
 
 ## ✅ CRITICAL IMPLEMENTATION DETAILS
 

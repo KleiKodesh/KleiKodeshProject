@@ -2,7 +2,7 @@
     <div class="homepage flex-column height-fill">
         <div class="grid-container">
             <UniformGrid>
-                <AppTile v-if="isDatabaseAvailable"
+                <AppTile v-if="isDatabaseAvailable || isDev"
                          label="פתח ספר"
                          icon="fluent:library-28-regular"
                          custom-class="kezayit-tile"
@@ -41,8 +41,7 @@
                          image-src="/pdf.png"
                          @click="openPdf" />
 
-                <AppTile v-if="isOnline"
-                         label="היברו-בוקס"
+                <AppTile label="היברו-בוקס"
                          image-src="/Hebrewbooks.png"
                          @click="openHebrewBooks" />
 
@@ -70,7 +69,6 @@ const tabStore = useTabStore();
 const isSearchIndexing = ref(false);
 const isSearchReady = ref(false);
 const indexingPercentage = ref(0);
-const isOnline = ref(navigator.onLine);
 const isDatabaseAvailable = ref(true);
 const isDev = import.meta.env.DEV;
 const searchTileLabel = computed(() =>
@@ -94,15 +92,7 @@ onMounted(async () => {
             startProgressPolling();
         }
     }
-
-    // Listen for online/offline events
-    window.addEventListener('online', handleOnlineStatus);
-    window.addEventListener('offline', handleOnlineStatus);
 });
-
-const handleOnlineStatus = () => {
-    isOnline.value = navigator.onLine;
-};
 
 const checkSearchStatus = async () => {
     try {

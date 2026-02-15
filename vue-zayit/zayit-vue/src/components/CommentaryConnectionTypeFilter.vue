@@ -97,18 +97,19 @@ const selectOption = (connectionTypeId: number) => {
     justify-content: center;
     padding: 4px 6px;
     background: transparent;
-    border: 1px solid var(--border-color);
+    border: none;
     border-radius: 3px;
     color: var(--text-primary);
     cursor: pointer;
     font-size: 12px;
-    height: 24px;
-    min-width: 24px;
+    min-height: 28px;
+    min-width: 28px;
+    height: 28px;
+    width: 28px;
 }
 
 .filter-toggle-btn:hover {
     background: var(--hover-bg);
-    border-color: var(--accent-color);
 }
 
 .filter-toggle-btn:disabled {
@@ -118,12 +119,11 @@ const selectOption = (connectionTypeId: number) => {
 
 .filter-toggle-btn:disabled:hover {
     background: transparent;
-    border-color: var(--border-color);
 }
 
 .filter-icon {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     flex-shrink: 0;
 }
 

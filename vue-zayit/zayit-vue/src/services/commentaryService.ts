@@ -46,9 +46,10 @@ export class CommentaryService {
         const options: Array<{ label: string; value: number; isDefault?: boolean }> = []
 
         // Add available connection types based on book flags
+        // Priority: SOURCE (מקור) first, then COMMENTARY (מפרשים) as fallback
         const connectionTypeMap = [
-            { flag: book.hasCommentaryConnection, name: 'COMMENTARY', isDefault: true }, // Default to מפרשים
-            { flag: book.hasSourceConnection, name: 'SOURCE' },
+            { flag: book.hasSourceConnection, name: 'SOURCE', isDefault: true }, // Prefer מקור
+            { flag: book.hasCommentaryConnection, name: 'COMMENTARY', isDefault: true }, // Fallback to מפרשים
             { flag: book.hasTargumConnection, name: 'TARGUM' },
             { flag: book.hasReferenceConnection, name: 'REFERENCE' },
             { flag: book.hasOtherConnection, name: 'OTHER' }

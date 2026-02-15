@@ -4,11 +4,14 @@
              style="position: relative;">
             <GenericSearch ref="searchRef"
                            :is-open="isSearchOpen"
+                           :current-match-index="search.currentMatchIndex.value"
+                           :total-matches="search.totalMatches.value"
                            top-offset="calc(100% + 8px)"
-                           @close="isSearchOpen = false"
-                           @search-query-change="handleSearchQueryChange"
-                           @navigate-to-match="handleNavigateToMatch" />
-            <span class="bold smaller-em commentary-title">קשרים</span>
+                           @close="handleSearchClose"
+                           @search="handleSearch"
+                           @next="handleSearchNext"
+                           @previous="handleSearchPrevious" />
+            <span class="bold smaller-em commentary-title">{{ commentaryTitle }}</span>
 
             <div class="flex-row flex-center commentary-navigation">
 
@@ -113,7 +116,7 @@
                                  :data-group-index="item.groupIndex">
 
                             <!-- Group Header -->
-                            <div class="bold group-header"
+                            <div class="bold group-header selectable"
                                  :class="{ 'c-pointer': item.targetBookId !== undefined }"
                                  @click="handleGroupClick(item)">
                                 {{ item.groupName }}
@@ -135,6 +138,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { useFocus, useEventListener } from '@vueuse/core'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import Combobox, { type ComboboxOption } from './common/Combobox.vue'
 import GenericSearch from './common/GenericSearch.vue'
@@ -184,9 +188,6 @@ onMounted(() => {
         attributeFilter: ['class']
     })
 
-    // Add global keyboard listener for Ctrl+F
-    document.addEventListener('keydown', handleGlobalKeyDown)
-
     // Track container width for responsive height estimation
     let resizeObserver: ResizeObserver | null = null
     nextTick(() => {
@@ -219,7 +220,6 @@ onMounted(() => {
 
     onUnmounted(() => {
         observer.disconnect()
-        document.removeEventListener('keydown', handleGlobalKeyDown)
         if (resizeObserver) {
             resizeObserver.disconnect()
         }
@@ -283,6 +283,28 @@ const isLoadingFromNavigation = ref(false) // Flag to indicate we're loading fro
 
 // Track container width for responsive height estimation
 const containerWidth = ref(0)
+
+// Track if this component's container has focus
+const { focused: hasFocus } = useFocus(commentaryContentRef)
+
+// Keyboard shortcuts using useEventListener to support any keyboard layout
+useEventListener('keydown', (event: KeyboardEvent) => {
+    if (!hasFocus.value) return
+
+    const hasCtrlOrMeta = event.ctrlKey || event.metaKey
+
+    // Ctrl+F: Open search (use event.code for keyboard layout independence)
+    if (hasCtrlOrMeta && event.code === 'KeyF') {
+        event.preventDefault()
+        isSearchOpen.value = true
+    }
+
+    // Ctrl+A: Select all (use event.code for keyboard layout independence)
+    if (hasCtrlOrMeta && event.code === 'KeyA') {
+        event.preventDefault()
+        selectAllInContainer()
+    }
+})
 
 // Virtual scroller configuration with dynamic sizing
 const commentaryMinItemSize = computed(() => {
@@ -396,6 +418,15 @@ const search = useContentSearch()
 
 // Available filter options for the current line
 const availableFilterOptions = ref<Array<{ label: string; value: number }>>([])
+
+// Computed title that shows filter label, but defaults to "קשרים" for "שונות" (OTHER)
+const commentaryTitle = computed(() => {
+    const option = availableFilterOptions.value.find(opt => opt.value === selectedConnectionTypeId.value)
+    if (!option) return 'קשרים'
+    // If the label is "שונות" (OTHER), show "קשרים" instead
+    if (option.label === 'שונות') return 'קשרים'
+    return option.label
+})
 
 async function computeAvailableFilterOptions(bookId: number, lineIndex: number) {
     availableFilterOptions.value = []
@@ -528,53 +559,16 @@ async function nextLine() {
     }
 }
 
+// Handle keydown for Space key prevention (keep in template handler)
 function handleKeyDown(e: KeyboardEvent) {
     // Prevent spacebar from scrolling unless in search input
     if (e.key === ' ' && e.target instanceof HTMLElement && e.target.tagName !== 'INPUT') {
         e.preventDefault()
         return
     }
-
-    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
-        e.preventDefault()
-        isSearchOpen.value = true
-        return
-    }
-
-    if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
-        e.preventDefault()
-        e.stopPropagation()
-        selectAllInContainer()
-        return
-    }
 }
 
-// Global keyboard handler for Ctrl+F (works even when component doesn't have focus)
-const handleGlobalKeyDown = (e: KeyboardEvent) => {
-    // Only handle if we have a book and line selected, and commentary is visible
-    if (props.bookId === undefined || props.selectedLineIndex === undefined) return
-
-    // Also check if the active tab is showing bookview page
-    const activeTab = tabStore.activeTab
-    if (!activeTab || activeTab.currentPage !== 'bookview') return
-
-    // Don't interfere if user is typing in an input
-    const activeElement = document.activeElement
-    if (activeElement && (
-        activeElement.tagName === 'INPUT' ||
-        activeElement.tagName === 'TEXTAREA' ||
-        (activeElement as HTMLElement).contentEditable === 'true'
-    )) {
-        return
-    }
-
-    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
-        e.preventDefault()
-        isSearchOpen.value = true
-    }
-}
-
-function handleSearchQueryChange(query: string) {
+function handleSearch(query: string) {
     const items: Array<{ index: number; content: string }> = []
     virtualCommentaryItems.value.forEach((item, index) => {
         items.push({
@@ -590,12 +584,46 @@ function handleSearchQueryChange(query: string) {
         })
     })
 
-    search.searchInItems(items, query)
-    searchRef.value?.setMatches(search.totalMatches.value)
+    // Get current scroll position to find closest match
+    let currentItemIndex: number | undefined
+
+    if (commentaryScrollerRef.value?.$el) {
+        const scrollerEl = commentaryScrollerRef.value.$el
+        const scrollTop = scrollerEl.scrollTop || 0
+        // Estimate current item from scroll position
+        currentItemIndex = Math.floor(scrollTop / commentaryMinItemSize.value)
+
+        // Clamp to valid range
+        if (currentItemIndex < 0) currentItemIndex = 0
+        if (currentItemIndex >= virtualCommentaryItems.value.length) {
+            currentItemIndex = virtualCommentaryItems.value.length - 1
+        }
+    }
+
+    // Pass current item index to find closest match
+    search.searchInItems(items, query, currentItemIndex)
+
+    // Scroll to the selected match
+    if (search.currentMatch.value) {
+        scrollToCurrentMatch()
+    }
 }
 
-function handleNavigateToMatch(matchIndex: number) {
-    search.navigateToMatch(matchIndex)
+function handleSearchNext() {
+    search.nextMatch()
+    scrollToCurrentMatch()
+}
+
+function handleSearchPrevious() {
+    search.previousMatch()
+    scrollToCurrentMatch()
+}
+
+function handleSearchClose() {
+    isSearchOpen.value = false
+}
+
+function scrollToCurrentMatch() {
     const match = search.currentMatch.value
     if (match && commentaryScrollerRef.value) {
         // Set flag to prevent scroll tracking interference
@@ -638,6 +666,36 @@ function handleNavigateToMatch(matchIndex: number) {
                 }, 10)
             }
         }, 50)
+    }
+}
+
+// Update current mark styling without triggering full re-render
+function updateCurrentMarkStyling() {
+    const scrollerEl = commentaryScrollerRef.value?.$el
+    if (!scrollerEl) return
+
+    const currentMatch = search.currentMatch.value
+    if (!currentMatch) return
+
+    // Remove 'current' class from all marks
+    const allMarks = scrollerEl.querySelectorAll('mark.current')
+    allMarks.forEach((mark: Element) => mark.classList.remove('current'))
+
+    // Find the commentary item element
+    const itemEl = scrollerEl.querySelector(`[data-commentary-item-observer]`)
+    if (!itemEl) return
+
+    // Find all marks in the visible items and add 'current' to the right one
+    const allVisibleMarks = scrollerEl.querySelectorAll('mark')
+    let markCounter = 0
+
+    // Count through marks to find the one matching currentMatch
+    for (const mark of allVisibleMarks) {
+        if (markCounter === currentMatch.itemIndex) {
+            mark.classList.add('current')
+            break
+        }
+        markCounter++
     }
 }
 
@@ -867,7 +925,7 @@ function handleGroupClick(item: any) {
         const targetBook = categoryTreeStore.allBooks.find(book => book.id === item.targetBookId)
         const targetHasConnections = targetBook ? hasConnections(targetBook) : false
 
-        tabStore.openBookInNewTab(item.groupName, item.targetBookId, targetHasConnections, item.targetLineIndex)
+        tabStore.openBookInNewTab(item.groupName, item.targetBookId, targetHasConnections, item.targetLineIndex, true)
     }
 }
 
@@ -1012,6 +1070,69 @@ function selectAllInContainer() {
 
     emit('clearOtherSelections')
 }
+
+// Handle copy event to copy full source content (not just visible virtual items)
+function handleCopy(event: ClipboardEvent) {
+    console.log('[BookCommentaryView] Copy event detected')
+
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) {
+        console.log('[BookCommentaryView] No selection, skipping')
+        return
+    }
+
+    // Check if the selection is within our container
+    const containerEl = commentaryContentRef.value
+    if (!containerEl) {
+        console.log('[BookCommentaryView] No container element, skipping')
+        return
+    }
+
+    const range = selection.getRangeAt(0)
+    if (!containerEl.contains(range.commonAncestorContainer)) {
+        console.log('[BookCommentaryView] Selection not in container, skipping')
+        return
+    }
+
+    console.log('[BookCommentaryView] Copying all source content...')
+
+    // Get all source commentary content as HTML
+    let htmlContent = ''
+    let textContent = ''
+
+    processedLinkGroups.value.forEach((group) => {
+        // Add group header
+        htmlContent += `<div style="font-weight: bold;">${group.groupName}</div>\n`
+        textContent += `${group.groupName}\n`
+
+        // Add all links in the group
+        group.links.forEach((link) => {
+            htmlContent += `<div>${link.html}</div>\n`
+
+            // For plain text, strip HTML tags
+            const tempDiv = document.createElement('div')
+            tempDiv.innerHTML = link.html
+            textContent += (tempDiv.textContent || tempDiv.innerText || '') + '\n'
+        })
+
+        htmlContent += '\n'
+        textContent += '\n'
+    })
+
+    // Set clipboard data
+    event.clipboardData?.setData('text/html', htmlContent)
+    event.clipboardData?.setData('text/plain', textContent)
+    event.preventDefault()
+
+    console.log('[BookCommentaryView] ✅ Copied all content to clipboard:', {
+        totalGroups: processedLinkGroups.value.length,
+        htmlLength: htmlContent.length,
+        textLength: textContent.length
+    })
+}
+
+// Set up copy event listener using useEventListener for automatic cleanup
+useEventListener(commentaryContentRef, 'copy', handleCopy)
 
 // Scroll tracking with direct position checking
 let scrollTrackingCleanup: (() => void) | null = null
@@ -1199,14 +1320,16 @@ watch([() => settingsStore.fontSize, () => settingsStore.linePadding], () => {
 }
 
 .commentary-navigation {
-    gap: 3px;
+    gap: 5px;
 }
 
 .nav-btn {
-    width: 24px;
-    height: 24px;
+    min-width: 28px;
+    min-height: 28px;
+    width: 28px;
+    height: 28px;
     background: transparent;
-    border: 1px solid var(--border-color);
+    border: none;
     border-radius: 3px;
     color: var(--text-primary);
     flex-shrink: 0;
@@ -1215,7 +1338,6 @@ watch([() => settingsStore.fontSize, () => settingsStore.linePadding], () => {
 
 .nav-btn:hover:not(:disabled) {
     background: var(--hover-bg);
-    border-color: var(--accent-color);
 }
 
 .nav-btn:disabled {

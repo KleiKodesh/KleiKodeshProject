@@ -126,16 +126,56 @@ div.book-line.selected.show-selection::after {
     background-color: var(--hover-bg);
 }
 
-/* Removed highlight animation - using search term highlighting instead */
+/* Fade-out highlight animation for commentary navigation */
+.book-line.highlighted {
+    animation: fadeHighlight 3s ease-out forwards;
+}
 
-/* Search term highlighting (just color the text) */
+@keyframes fadeHighlight {
+    0% {
+        background-color: rgba(245, 222, 179, 0.6);
+        /* Warm parchment color */
+    }
+
+    100% {
+        background-color: transparent;
+    }
+}
+
+:root.dark .book-line.highlighted {
+    animation: fadeHighlightDark 3s ease-out forwards;
+}
+
+@keyframes fadeHighlightDark {
+    0% {
+        background-color: rgba(139, 115, 85, 0.3);
+        /* Darker warm brown for dark mode */
+    }
+
+    100% {
+        background-color: transparent;
+    }
+}
+
+/* Search term highlighting - use background like commentary view */
 .book-line :deep(mark) {
-    background-color: transparent;
-    color: var(--accent-color, #f59e0b);
+    background-color: rgba(245, 158, 11, 0.3);
+    color: inherit;
+}
+
+.book-line :deep(mark.current) {
+    background-color: rgba(245, 158, 11, 0.8) !important;
+    font-weight: bold;
 }
 
 :root.dark .book-line :deep(mark) {
-    color: #fbbf24;
+    background-color: rgba(251, 191, 36, 0.3);
+    color: inherit;
+}
+
+:root.dark .book-line :deep(mark.current) {
+    background-color: rgba(251, 191, 36, 0.8) !important;
+    font-weight: bold;
 }
 
 /* Alt TOC entries - subtle opacity to distinguish from main content */

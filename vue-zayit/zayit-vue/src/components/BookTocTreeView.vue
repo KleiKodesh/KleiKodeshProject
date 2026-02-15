@@ -44,6 +44,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
+import { useEventListener } from '@vueuse/core';
 import BookTocTree from './BookTocTree.vue';
 import BookTocTreeSearch from './BookTocTreeSearch.vue';
 import { Icon } from '@iconify/vue';
@@ -134,17 +135,15 @@ onMounted(() => {
     nextTick(() => {
         searchInputRef.value?.focus();
     });
-
-    // Add global escape key listener
-    document.addEventListener('keydown', handleGlobalKeyDown);
 });
 
-onUnmounted(() => {
-    // Remove global escape key listener
-    document.removeEventListener('keydown', handleGlobalKeyDown);
-});
+// Global Escape key handler
+useEventListener('keydown', (event: KeyboardEvent) => {
+    if (event.code === 'Escape') {
+        tabStore.closeToc()
+    }
+})
 
-// Watch for TOC visibility changes and focus search input
 watch(() => tabStore.activeTab?.bookState?.isTocOpen, (isOpen) => {
     if (isOpen) {
         nextTick(() => {
@@ -152,14 +151,6 @@ watch(() => tabStore.activeTab?.bookState?.isTocOpen, (isOpen) => {
         });
     }
 });
-
-// Global keydown handler for escape key
-const handleGlobalKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-        tabStore.closeToc();
-    }
-};
-
 
 </script>
 

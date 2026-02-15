@@ -108,6 +108,63 @@ You can manually load specific guidance using these context keys:
 3. **Manual Override**: Use context keys when automatic detection isn't enough
 4. **Single Source**: Each topic has one authoritative guide
 
+## Vue.js Development Standards
+
+### VueUse Composables
+
+- **ALWAYS prefer VueUse composables** when available instead of implementing from scratch
+- Check [VueUse documentation](https://vueuse.org/) before writing custom utilities
+- VueUse provides battle-tested, reactive, and well-maintained solutions
+- Common use cases: DOM events, browser APIs, state management, sensors, animations
+
+**Examples:**
+
+- Use `useMagicKeys` instead of manual keyboard event listeners
+- Use `useLocalStorage` instead of manual localStorage access
+- Use `useEventListener` instead of `addEventListener`
+- Use `useIntersectionObserver` instead of manual IntersectionObserver setup
+- Use `useResizeObserver` instead of manual ResizeObserver setup
+
+### Keyboard Event Handling
+
+- **ALWAYS use `useEventListener` with `event.code`** for keyboard shortcuts to support any keyboard layout
+- **NEVER use `useMagicKeys`** - it checks `event.key` which varies by keyboard layout (Hebrew, Russian, etc.)
+- **NEVER use `event.key`** for shortcuts - use `event.code` which represents physical key position
+- Use `useFocus` from VueUse to check if component has focus before responding to shortcuts
+- Keep simple element-specific handlers (`@keydown.enter`, `@keydown.space`) in templates
+
+**Example:**
+
+```typescript
+import { useEventListener, useFocus } from "@vueuse/core";
+
+const containerRef = ref<HTMLElement>();
+const { focused: hasFocus } = useFocus(containerRef);
+
+// Keyboard shortcuts that work with any keyboard layout
+useEventListener("keydown", (event: KeyboardEvent) => {
+  if (!hasFocus.value) return;
+
+  const hasCtrlOrMeta = event.ctrlKey || event.metaKey;
+
+  // Use event.code (physical key) not event.key (character produced)
+  if (hasCtrlOrMeta && event.code === "KeyF") {
+    event.preventDefault();
+    openSearch();
+  }
+
+  if (event.code === "ArrowDown") {
+    navigateDown();
+  }
+});
+```
+
+**Why event.code instead of event.key:**
+
+- `event.code`: Physical key position (always 'KeyA' regardless of layout)
+- `event.key`: Character produced (varies: 'a' on English, 'ש' on Hebrew keyboard)
+- Shortcuts must work on any keyboard layout, so use `event.code`
+
 ## Clean Code Principles
 
 Based on analysis of problematic code patterns in this project, follow these essential practices:

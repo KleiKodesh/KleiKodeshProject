@@ -17,9 +17,7 @@ interface HistoryEntry {
     id: string
     title: string
     author: string
-    accessCount: number
     lastAccessed: number
-    firstAccessed: number
 }
 
 interface SearchMessage {
@@ -160,21 +158,18 @@ function getRecentBooks(books: HebrewBook[], historyEntries: HistoryEntry[]): He
         return []
     }
 
-    // Sort history entries by most recent first (no complex scoring needed)
-    const sortedHistory = historyEntries.sort((a, b) => b.lastAccessed - a.lastAccessed)
-
-    // Create a map for quick book lookup (only need to look up the books in history)
+    // History is already sorted by LRU (most recent first) from HistoryService
+    // Create a map for quick book lookup
     const bookMap = new Map(books.map(book => [book.id, book]))
 
     // Map history entries to books (only include books that exist)
     const recentBooks: HebrewBook[] = []
 
-    for (const historyEntry of sortedHistory) {
+    for (const historyEntry of historyEntries) {
         const book = bookMap.get(historyEntry.id)
         if (book) {
             recentBooks.push({
                 ...book,
-                userScore: historyEntry.accessCount,
                 lastAccessed: historyEntry.lastAccessed
             })
         }

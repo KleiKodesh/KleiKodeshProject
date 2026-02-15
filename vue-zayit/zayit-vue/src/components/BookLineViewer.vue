@@ -4,9 +4,13 @@
          style="position: relative;">
         <GenericSearch ref="searchRef"
                        :is-open="isSearchOpen"
-                       @close="isSearchOpen = false"
-                       @search-query-change="handleSearchQueryChange"
-                       @navigate-to-match="handleNavigateToMatch" />
+                       :current-match-index="search.currentMatchIndex.value"
+                       :total-matches="search.totalMatches.value"
+                       top-offset="4px"
+                       @close="handleSearchClose"
+                       @search="handleSearch"
+                       @next="handleSearchNext"
+                       @previous="handleSearchPrevious" />
 
         <DynamicScroller ref="scrollerRef"
                          class="scroller height-fill line-viewer"
@@ -50,12 +54,13 @@
 
 <script setup lang="ts">
 import { ref, watch, nextTick, onMounted, onUnmounted, computed } from 'vue'
+import { useFocus, useEventListener } from '@vueuse/core'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import BookLine from './BookLine.vue'
 import GenericSearch from './common/GenericSearch.vue'
 import { BookLineViewerService } from '../services/bookLineViewerService'
 
-import { useContentSearch } from '../composables/useContentSearch'
+import { useVirtualizedSearch } from '../composables/useVirtualizedSearch'
 import { useTabStore } from '../stores/tabStore'
 import { useSettingsStore } from '../stores/settingsStore'
 
@@ -78,13 +83,9 @@ onMounted(() => {
         attributeFilter: ['class']
     })
 
-    // Add global keyboard listener for Ctrl+F
-    document.addEventListener('keydown', handleGlobalKeyDown)
-
     // Cleanup observer on unmount
     onUnmounted(() => {
         observer.disconnect()
-        document.removeEventListener('keydown', handleGlobalKeyDown)
     })
 })
 
@@ -117,7 +118,38 @@ const isInitialLoading = ref(false)
 
 const viewerState = new BookLineViewerService()
 const scrollerRef = ref<InstanceType<typeof DynamicScroller> | null>(null)
-const searchRef = ref<InstanceType<typeof GenericSearch> | null>(null)
+
+// Track if this component's scroller has focus
+const scrollerElRef = computed(() => scrollerRef.value?.$el as HTMLElement | undefined)
+const { focused: hasFocus } = useFocus(scrollerElRef)
+
+// Keyboard shortcuts using useEventListener to support any keyboard layout
+useEventListener('keydown', (event: KeyboardEvent) => {
+    if (!hasFocus.value) return
+
+    const hasCtrlOrMeta = event.ctrlKey || event.metaKey
+
+    // Ctrl+F: Open search (use event.code for keyboard layout independence)
+    if (hasCtrlOrMeta && event.code === 'KeyF') {
+        event.preventDefault()
+        isSearchOpen.value = true
+    }
+
+    // Ctrl+A: Select all (use event.code for keyboard layout independence)
+    if (hasCtrlOrMeta && event.code === 'KeyA') {
+        event.preventDefault()
+        selectAllInContainer()
+    }
+})
+
+// Handle keydown for Space key prevention (keep in template handler)
+function handleKeyDown(e: KeyboardEvent) {
+    // Prevent spacebar from scrolling unless in search input
+    if (e.key === ' ' && e.target instanceof HTMLElement && e.target.tagName !== 'INPUT') {
+        e.preventDefault()
+        return
+    }
+}
 
 // Minimum item size for the scroller - account for variable heights
 // Minimum item size for the scroller - be more conservative to prevent scroll issues
@@ -133,12 +165,21 @@ const minItemSize = computed(() => {
 })
 
 // Create virtual items array for the scroller
+// Memoize highlighting to prevent unnecessary recalculations
 const virtualItems = computed(() => {
     const items = []
     const lines = viewerState.lines.value
     const diacriticsState = myTab.value?.bookState?.diacriticsState
-    const query = search.searchQuery.value
     const currentMatch = search.currentMatch.value
+    const query = search.searchQuery.value
+
+    // Build a set of line indices that have matches for quick lookup
+    const linesWithMatches = new Set<number>()
+    if (query) {
+        search.allMatches.value.forEach(match => {
+            linesWithMatches.add(match.lineIndex)
+        })
+    }
 
     for (let i = 0; i < viewerState.totalLines.value; i++) {
         const line = lines[i]
@@ -149,10 +190,10 @@ const virtualItems = computed(() => {
             processedContent = applyDiacriticsFilter(processedContent, diacriticsState)
         }
 
-        // Apply search highlighting
-        if (processedContent !== '\u00A0' && query) {
-            const currentOccurrence = currentMatch?.itemIndex === i ? currentMatch.occurrence : -1
-            processedContent = search.highlightMatches(processedContent, query, currentOccurrence)
+        // Apply search highlighting only to lines that have matches
+        if (processedContent !== '\u00A0' && query && linesWithMatches.has(i)) {
+            const isCurrentLine = currentMatch?.lineIndex === i
+            processedContent = search.highlightInContent(processedContent, isCurrentLine)
         }
 
         items.push({
@@ -165,8 +206,8 @@ const virtualItems = computed(() => {
     return items
 })
 
-// Use content search composable
-const search = useContentSearch()
+// Use virtualized search composable
+const search = useVirtualizedSearch()
 
 // Sync search state with tab store
 const isSearchOpen = computed({
@@ -194,138 +235,147 @@ function handleLineClick(lineIndex: number) {
     emit('lineClick', lineIndex)
 }
 
-function handleKeyDown(e: KeyboardEvent) {
-    // Prevent spacebar from scrolling unless in search input
-    if (e.key === ' ' && e.target instanceof HTMLElement && e.target.tagName !== 'INPUT') {
-        e.preventDefault()
-        return
-    }
-
-    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
-        e.preventDefault()
-        isSearchOpen.value = true
-        return
-    }
-
-    if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
-        e.preventDefault()
-        e.stopPropagation()
-        selectAllInContainer()
-        return
-    }
-
-    // Handle Ctrl+Home and Ctrl+End for virtualized content
-    if (e.ctrlKey || e.metaKey) {
-        if (e.key === 'Home') {
-            e.preventDefault()
-            scrollToLine(0)
-        } else if (e.key === 'End') {
-            e.preventDefault()
-            const lastLine = viewerState.totalLines.value - 1
-            if (lastLine >= 0) {
-                scrollToLine(lastLine)
-            }
-        }
-    }
-}
-
-// Global keyboard handler for Ctrl+F (works even when component doesn't have focus)
-const handleGlobalKeyDown = (e: KeyboardEvent) => {
-    // Only handle if this is the active tab
-    if (tabStore.activeTab?.id !== props.tabId) return
-
-    // Don't interfere if user is typing in an input
-    const activeElement = document.activeElement
-    if (activeElement && (
-        activeElement.tagName === 'INPUT' ||
-        activeElement.tagName === 'TEXTAREA' ||
-        (activeElement as HTMLElement).contentEditable === 'true'
-    )) {
-        return
-    }
-
-    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
-        e.preventDefault()
-        isSearchOpen.value = true
-    }
-}
-
-// Current search query for reactive updates
-const currentSearchQuery = ref('')
-
-function handleSearchQueryChange(query: string) {
-    currentSearchQuery.value = query
-    performSearch()
-}
-
-async function performSearch() {
-    const query = currentSearchQuery.value
-    if (!query.trim()) {
-        search.searchInItems([], query)
-        searchRef.value?.setMatches(0)
-        return
-    }
-
-    // Set the search query immediately so highlights can be applied
-    search.searchQuery.value = query
-
-    // Start progressive search with immediate feedback
-    searchRef.value?.setMatches(0) // Reset count
-
-    try {
-        const allMatches = await viewerState.searchProgressively(
-            query,
-            (progressiveMatches: any) => {
-                // Update search results as they come in
-                search.updateMatches(progressiveMatches)
-                searchRef.value?.setMatches(search.totalMatches.value)
-            }
-        )
-
-        // Final update with complete results
-        search.updateMatches(allMatches)
-        searchRef.value?.setMatches(search.totalMatches.value)
-
-    } catch (error) {
-        console.error('Search failed:', error)
-        search.searchInItems([], query)
-        searchRef.value?.setMatches(0)
-    }
-}
-
-// Re-search when new content loads
-watch(() => Object.keys(viewerState.lines.value).length, () => {
-    if (currentSearchQuery.value.trim()) {
-        performSearch()
-    }
-})
-
+// Search handlers
 // Flag to prevent scroll position tracking during programmatic navigation
 const isNavigating = ref(false)
 
-function handleNavigateToMatch(matchIndex: number) {
-    search.navigateToMatch(matchIndex)
-    const match = search.currentMatch.value
-    if (match) {
-        // Set flag to prevent scroll tracking interference
-        isNavigating.value = true
+function handleSearchClose() {
+    isSearchOpen.value = false
+    search.clear()
+}
 
-        // Scroll to the line containing the match
-        scrollToLine(match.itemIndex)
+async function handleSearch(query: string) {
+    if (!query.trim()) {
+        search.clear()
+        return
+    }
 
-        // After scrolling, find and scroll to the actual mark element
-        setTimeout(() => {
-            const scrollerEl = scrollerRef.value?.$el
-            const currentMark = scrollerEl?.querySelector('.line-viewer mark.current')
-            if (currentMark) {
-                currentMark.scrollIntoView({ behavior: 'auto', block: 'center' })
+    // Get current scroll position to find closest match
+    let currentLineIndex: number | undefined
+
+    if (scrollerRef.value?.$el) {
+        const scrollerEl = scrollerRef.value.$el
+        const scrollTop = scrollerEl.scrollTop || 0
+        // Estimate current line from scroll position
+        currentLineIndex = Math.floor(scrollTop / minItemSize.value)
+
+        // Clamp to valid range
+        if (currentLineIndex < 0) currentLineIndex = 0
+        if (currentLineIndex >= viewerState.totalLines.value) {
+            currentLineIndex = viewerState.totalLines.value - 1
+        }
+    }
+
+    await search.search(query, viewerState.lines.value, viewerState.totalLines.value, currentLineIndex)
+
+    // Auto-scroll to closest match
+    if (search.currentMatch.value) {
+        await scrollToMatch(search.currentMatch.value.lineIndex)
+    }
+}
+
+async function handleSearchNext() {
+    search.nextMatch()
+    if (search.currentMatch.value) {
+        await scrollToMatch(search.currentMatch.value.lineIndex)
+    }
+}
+
+async function handleSearchPrevious() {
+    search.previousMatch()
+    if (search.currentMatch.value) {
+        await scrollToMatch(search.currentMatch.value.lineIndex)
+    }
+}
+
+async function scrollToMatch(lineIndex: number) {
+    // Set navigation flag
+    isNavigating.value = true
+
+    // Prioritize loading lines around the match
+    await viewerState.prioritizeLines(lineIndex, 100)
+
+    // Check if the line is already in view
+    await nextTick()
+    const scrollerEl = scrollerRef.value?.$el
+    if (scrollerEl) {
+        const lineEl = scrollerEl.querySelector(`[data-line-index-observer="${lineIndex}"]`)
+
+        if (lineEl) {
+            // Line is rendered, check if it's in viewport
+            const lineRect = lineEl.getBoundingClientRect()
+            const scrollerRect = scrollerEl.getBoundingClientRect()
+            const searchBarOffset = 50
+
+            const isInView = lineRect.top >= (scrollerRect.top + searchBarOffset) &&
+                lineRect.bottom <= scrollerRect.bottom
+
+            if (!isInView) {
+                // Only scroll if not in view
+                await scrollToLine(lineIndex)
+                await nextTick()
             }
+        } else {
+            // Line not rendered, need to scroll to it
+            await scrollToLine(lineIndex)
+            await nextTick()
+        }
+    }
 
-            // Re-enable scroll tracking after a longer delay to prevent jump-back
-            setTimeout(() => {
-                isNavigating.value = false
-            }, 500)
-        }, 200) // Wait for scrollToLine to complete (it has internal delays)
+    // Update current mark styling via DOM (avoid full re-render)
+    setTimeout(() => {
+        updateCurrentMarkStyling()
+
+        // Check if current mark is visible, scroll only if needed
+        const currentMark = scrollerEl?.querySelector('mark.current')
+        if (currentMark && scrollerEl) {
+            const markRect = currentMark.getBoundingClientRect()
+            const scrollerRect = scrollerEl.getBoundingClientRect()
+            const searchBarOffset = 50
+
+            // Check if mark is hidden behind search bar or outside viewport
+            const isMarkInView = markRect.top >= (scrollerRect.top + searchBarOffset) &&
+                markRect.bottom <= scrollerRect.bottom
+
+            if (!isMarkInView) {
+                // Only scroll if mark is not fully visible
+                if (markRect.top < scrollerRect.top + searchBarOffset) {
+                    // Scroll up a bit to clear the search bar
+                    scrollerEl.scrollTop -= (scrollerRect.top + searchBarOffset - markRect.top + 10)
+                } else {
+                    // Use normal scroll behavior
+                    currentMark.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+                }
+            }
+        }
+
+        // Clear navigation flag
+        setTimeout(() => {
+            isNavigating.value = false
+        }, 300)
+    }, 50)
+}
+
+// Update current mark styling without triggering full re-render
+function updateCurrentMarkStyling() {
+    const scrollerEl = scrollerRef.value?.$el
+    if (!scrollerEl) return
+
+    const currentMatch = search.currentMatch.value
+    if (!currentMatch) return
+
+    // Remove 'current' class from all marks
+    const allMarks = scrollerEl.querySelectorAll('mark.current')
+    allMarks.forEach((mark: Element) => mark.classList.remove('current'))
+
+    // Find the line element
+    const lineEl = scrollerEl.querySelector(`[data-line-index-observer="${currentMatch.lineIndex}"]`)
+    if (!lineEl) return
+
+    // Find all marks in this line and add 'current' to the right one
+    const marks = lineEl.querySelectorAll('mark')
+    if (marks[currentMatch.matchIndex]) {
+        marks[currentMatch.matchIndex].classList.add('current')
     }
 }
 
@@ -409,49 +459,7 @@ function getTopVisibleLinePosition(): { lineIndex: number; offset: number } | nu
     return null
 }
 
-function handleScrollDebounced() {
-    // Temporarily disabled to debug jump-back issue
-    // TODO: Re-enable with proper navigation protection
-    return
 
-    if (!scrollerRef.value || viewerState.isInitialLoad || isNavigating.value) return
-
-    if (scrollUpdateTimeout !== null) {
-        clearTimeout(scrollUpdateTimeout)
-        scrollUpdateTimeout = null
-    }
-    scrollUpdateTimeout = window.setTimeout(() => {
-        // Skip if still navigating
-        if (isNavigating.value) return
-
-        // For virtual scroller, we need to estimate the top visible line
-        // based on scroll position and item size
-        const scrollTop = scrollerRef.value?.$el?.scrollTop || 0
-        const estimatedTopLine = Math.floor(scrollTop / minItemSize.value)
-
-        if (estimatedTopLine >= 0 && estimatedTopLine < viewerState.totalLines.value) {
-            // Save scroll position to tab state
-            if (myTab.value?.bookState) {
-                myTab.value.bookState.initialLineIndex = estimatedTopLine
-            }
-            emit('updateScrollPosition', estimatedTopLine)
-        }
-    }, 300)
-}
-
-function handleScrollUpdate(topLineIndex: number) {
-    if (scrollUpdateTimeout !== null) {
-        clearTimeout(scrollUpdateTimeout)
-        scrollUpdateTimeout = null
-    }
-    scrollUpdateTimeout = window.setTimeout(() => {
-        // Save scroll position to tab state
-        if (myTab.value?.bookState) {
-            myTab.value.bookState.initialLineIndex = topLineIndex
-        }
-        emit('updateScrollPosition', topLineIndex)
-    }, 300)
-}
 
 // Load book when bookId changes
 watch(() => myTab.value?.bookState?.bookId, async (bookId, oldBookId) => {
@@ -593,132 +601,6 @@ async function scrollToLine(lineIndex: number, pixelOffset?: number) {
     }
 }
 
-// Scroll to line and highlight search terms
-async function scrollToLineAndHighlight(lineIndex: number, searchTerms?: string) {
-    await scrollToLine(lineIndex)
-
-    // If search terms provided, highlight them in the line
-    if (searchTerms && searchTerms.trim()) {
-        setTimeout(() => {
-            highlightSearchTermsInLine(lineIndex, searchTerms)
-        }, 300)
-    }
-}
-
-// Highlight search terms in a specific line (for search result navigation)
-function highlightSearchTermsInLine(lineIndex: number, searchTerms: string) {
-    const scrollerEl = scrollerRef.value?.$el
-    if (!scrollerEl) return
-
-    // Find the line element
-    const lineElement = scrollerEl.querySelector(`[data-line-index="${lineIndex}"]`)
-    if (!lineElement) return
-
-    const content = viewerState.lines.value[lineIndex]
-    if (!content) return
-
-    // Use the same highlighting logic as useContentSearch
-    const highlightedContent = highlightTermsInHtml(content, searchTerms)
-    
-    // Update the line content with highlights
-    const contentContainer = lineElement.querySelector('.book-line > div, .book-line > span')
-    if (contentContainer) {
-        contentContainer.innerHTML = highlightedContent
-    }
-}
-
-// Helper to highlight terms in HTML content (handles diacritics)
-function highlightTermsInHtml(htmlContent: string, query: string): string {
-    const tempDiv = document.createElement('div')
-    tempDiv.innerHTML = htmlContent
-
-    const terms = query.trim().split(/\s+/)
-    const walker = document.createTreeWalker(tempDiv, NodeFilter.SHOW_TEXT, null)
-    const textNodes: Text[] = []
-    
-    let node: Node | null
-    while ((node = walker.nextNode())) {
-        textNodes.push(node as Text)
-    }
-
-    textNodes.forEach(textNode => {
-        const text = textNode.nodeValue || ''
-        const lowerText = text.toLowerCase()
-        
-        // Build position map for diacritics
-        const positionMap: number[] = []
-        let normalizedIndex = 0
-        for (let i = 0; i < text.length; i++) {
-            const char = text[i]
-            if (char && !isDiacritic(char)) {
-                positionMap[normalizedIndex] = i
-                normalizedIndex++
-            }
-        }
-        positionMap[normalizedIndex] = text.length
-
-        const normalizedText = removeDiacritics(lowerText)
-        const parts: Array<{ text: string; isMatch: boolean }> = []
-        let lastIndex = 0
-
-        // Find all term matches
-        terms.forEach(term => {
-            if (!term) return
-            const normalizedTerm = removeDiacritics(term.toLowerCase())
-            
-            let searchStart = 0
-            while (true) {
-                const matchIndex = normalizedText.indexOf(normalizedTerm, searchStart)
-                if (matchIndex === -1) break
-
-                const originalStart = positionMap[matchIndex] || 0
-                const originalEnd = positionMap[matchIndex + normalizedTerm.length] || text.length
-
-                // Add text before match
-                if (originalStart > lastIndex) {
-                    parts.push({ text: text.substring(lastIndex, originalStart), isMatch: false })
-                }
-
-                // Add match
-                parts.push({ text: text.substring(originalStart, originalEnd), isMatch: true })
-
-                lastIndex = originalEnd
-                searchStart = matchIndex + 1
-            }
-        })
-
-        // Add remaining text
-        if (lastIndex < text.length) {
-            parts.push({ text: text.substring(lastIndex), isMatch: false })
-        }
-
-        if (parts.length > 0) {
-            const fragment = document.createDocumentFragment()
-            parts.forEach(part => {
-                if (part.isMatch) {
-                    const mark = document.createElement('mark')
-                    mark.textContent = part.text
-                    fragment.appendChild(mark)
-                } else {
-                    fragment.appendChild(document.createTextNode(part.text))
-                }
-            })
-            textNode.parentNode?.replaceChild(fragment, textNode)
-        }
-    })
-
-    return tempDiv.innerHTML
-}
-
-function removeDiacritics(text: string): string {
-    return text.replace(/[\u0591-\u05C7]/g, '')
-}
-
-function isDiacritic(char: string): boolean {
-    const code = char.charCodeAt(0)
-    return code >= 0x0591 && code <= 0x05C7
-}
-
 async function handleTocSelection(lineIndex: number) {
     // Set flag to prevent scroll tracking interference
     isNavigating.value = true
@@ -750,6 +632,69 @@ function selectAllInContainer() {
 
     emit('clearOtherSelections')
 }
+
+// Handle copy event to copy full source content (not just visible virtual items)
+function handleCopy(event: ClipboardEvent) {
+    console.log('[BookLineViewer] Copy event detected')
+
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) {
+        console.log('[BookLineViewer] No selection, skipping')
+        return
+    }
+
+    // Check if the selection is within our scroller
+    const scrollerEl = scrollerRef.value?.$el
+    if (!scrollerEl) {
+        console.log('[BookLineViewer] No scroller element, skipping')
+        return
+    }
+
+    const range = selection.getRangeAt(0)
+    if (!scrollerEl.contains(range.commonAncestorContainer)) {
+        console.log('[BookLineViewer] Selection not in scroller, skipping')
+        return
+    }
+
+    console.log('[BookLineViewer] Copying all source content...')
+
+    // Get all source lines as HTML
+    const lines = viewerState.lines.value
+    const diacriticsState = myTab.value?.bookState?.diacriticsState
+
+    let htmlContent = ''
+    let textContent = ''
+
+    for (let i = 0; i < viewerState.totalLines.value; i++) {
+        let line = lines[i] || '\u00A0'
+
+        // Apply diacritics filtering if needed
+        if (line !== '\u00A0' && diacriticsState && diacriticsState > 0) {
+            line = applyDiacriticsFilter(line, diacriticsState)
+        }
+
+        htmlContent += `<div>${line}</div>\n`
+
+        // For plain text, strip HTML tags
+        const tempDiv = document.createElement('div')
+        tempDiv.innerHTML = line
+        textContent += (tempDiv.textContent || tempDiv.innerText || '') + '\n'
+    }
+
+    // Set clipboard data
+    event.clipboardData?.setData('text/html', htmlContent)
+    event.clipboardData?.setData('text/plain', textContent)
+    event.preventDefault()
+
+    console.log('[BookLineViewer] ✅ Copied all content to clipboard:', {
+        totalLines: viewerState.totalLines.value,
+        htmlLength: htmlContent.length,
+        textLength: textContent.length
+    })
+}
+
+// Set up copy event listener using useEventListener for automatic cleanup
+useEventListener(scrollerElRef, 'copy', handleCopy)
 
 // Helper function to apply diacritics filtering to HTML content
 function applyDiacriticsFilter(htmlContent: string, state: number): string {
@@ -817,9 +762,18 @@ defineExpose({
         if (target === undefined || target === null) return
         await scrollToLine(target)
     },
-    // Expose method to scroll and highlight a line (for search results)
-    async scrollToLineAndHighlight(index: number, searchTerms?: string) {
-        await scrollToLineAndHighlight(index, searchTerms)
+    // Scroll to line and apply fade-out highlight effect
+    async scrollToLineWithFadeHighlight(lineIndex: number) {
+        // Scroll to the line first
+        await scrollToLine(lineIndex)
+
+        // Set the highlighted line
+        highlightedLineIndex.value = lineIndex
+
+        // Clear the highlight after animation completes (3 seconds)
+        setTimeout(() => {
+            highlightedLineIndex.value = null
+        }, 3000)
     }
 })
 </script>

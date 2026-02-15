@@ -1,6 +1,7 @@
 <template>
     <div class="hover-bg focus-accent click-effect c-pointer tree-node"
          @click="handleBookClick(book)"
+         @keydown.enter="handleBookClick(book)"
          tabindex="0">
         <!-- Header: Title, Author, and Download Button -->
         <div class="flex-between book-header">
@@ -12,6 +13,7 @@
             </div>
             <button class="flex-center c-pointer download-btn hover-bg reactive-icon"
                     :title="'הורד את ' + book.title"
+                    tabindex="-1"
                     @click.stop="trackDownload(book)">
                 <Icon icon="fluent:arrow-download-20-regular" />
             </button>

@@ -1,0 +1,15 @@
+{
+    "name": "zayit-scripts",
+    "version": "1.0.0",
+    "private": true,
+    "type": "commonjs",
+    "scripts": {
+        "update-hebrewbooks": "ts-node update-hebrewbooks-puppeteer.ts"
+    },
+    "devDependencies": {
+        "@types/node": "^22.18.11",
+        "puppeteer": "^23.11.1",
+        "ts-node": "^10.9.2",
+        "typescript": "~5.9.0"
+    }
+}

@@ -6,60 +6,84 @@ This guide covers the search functionality implementation in the Zayit project, 
 
 ## Search Architecture
 
-### 🎯 **CRITICAL: Source Data Search Architecture**
+### 🎯 **CRITICAL: Two Search Composables Architecture**
 
-#### Search Source Principle
+The search system uses two separate composables for different content types:
 
-**✅ CORRECT**: Search operates on source data (`viewerState.lines.value`)
-**❌ WRONG**: Search operates on rendered DOM elements
+#### useVirtualizedSearch (BookLineViewer)
 
-#### Progressive Search Updates with Line Loading Integration
+**Location**: `src/composables/useVirtualizedSearch.ts`
 
-The search system is designed for the smart streaming line loading architecture:
+**Purpose**: Search for virtualized content where only some lines are rendered in DOM
+
+**Key Features**:
+
+- Searches directly on bond data (all lines), not rendered DOM
+- Simple match tracking: `{ lineIndex, matchIndex }`
+- All matches highlighted, current match extra-highlighted
+- DOM manipulation to update current mark without full re-render
+- Conditional dash normalization (only if query contains spaces/dashes)
+- Normalization order: lowercase → normalize dashes → remove diacritics
+
+**Usage**:
 
 ```typescript
-// Search only loaded lines (source data from streaming system)
-async getSearchData(): Promise<Array<{ index: number, content: string }>> {
-    const allLines: Array<{ index: number, content: string }> = []
+const search = useVirtualizedSearch();
 
-    Object.entries(this.lines.value).forEach(([indexStr, content]) => {
-        if (content && content !== '\u00A0') { // Exclude placeholders from streaming
-            allLines.push({
-                index: Number(indexStr),
-                content // Raw source content, not rendered HTML
-            })
-        }
-    })
+// Search through all lines
+await search.search(query, dataSource, totalLines);
 
-    return allLines.sort((a, b) => a.index - b.index)
-}
+// Navigate matches
+search.nextMatch();
+search.previousMatch();
 
-// Auto-update search results as new content streams in from line loading system
-watch(() => Object.keys(viewerState.lines.value).length, () => {
-    if (currentSearchQuery.value.trim()) {
-        performSearch() // Re-search with newly loaded content
-    }
-})
+// Highlight in HTML content
+const highlighted = search.highlightInContent(htmlContent, isCurrentLine);
 ```
 
-#### Integration with Smart Streaming Line Loading
+#### useContentSearch (BookCommentaryView)
 
-The search system integrates seamlessly with the line loading architecture:
+**Location**: `src/composables/useContentSearch.ts`
 
-1. **Instant Search**: Works immediately with placeholder scaffolding
-2. **Progressive Results**: Expands as content streams in via priority loading
-3. **Source Data Only**: Searches raw content from `BookLineViewerState.lines`
-4. **Virtualization Ready**: Will work with future full virtualization
-5. **Priority Loading**: Search triggers priority loading for result navigation
+**Purpose**: Search for non-virtualized or already-loaded content
 
-#### Why This Architecture Matters
+**Key Features**:
 
-1. **Virtualization Ready**: Works with large books where only visible content is loaded
-2. **Progressive Results**: Search results expand as more content streams in
-3. **Performance**: Searches raw text, not complex DOM structures
-4. **Accuracy**: Searches actual content, not processed/filtered display text
-5. **Future-Proof**: Ready for advanced virtualization and lazy loading
-6. **Memory Efficient**: Only searches loaded content, not entire documents
+- Searches through array of items with content
+- Match tracking: `{ itemIndex, occurrence, totalInItem }`
+- Same highlighting and normalization as virtualized search
+- Simpler API for non-virtualized content
+
+**Usage**:
+
+```typescript
+const search = useContentSearch();
+
+// Search through items
+search.searchInItems(items, query);
+
+// Navigate to specific match
+search.navigateToMatch(matchIndex);
+
+// Highlight matches in HTML
+const highlighted = search.highlightMatches(
+  htmlContent,
+  query,
+  currentOccurrence,
+);
+```
+
+### Search Source Principle
+
+**✅ CORRECT**: Search operates on source data (bond data, items array)
+**❌ WRONG**: Search operates on rendered DOM elements
+
+### Why Two Composables?
+
+1. **Virtualization**: BookLineViewer uses virtual scrolling, only some lines are in DOM
+2. **Performance**: Searching source data is faster than DOM traversal
+3. **Accuracy**: Searches actual content, not processed display text
+4. **Flexibility**: Each composable optimized for its use case
 
 ### Core Components
 
@@ -95,42 +119,98 @@ The search system integrates seamlessly with the line loading architecture:
 - Groups-based navigation for complex content structure
 - Same smooth centering behavior
 
-### Search Result Navigation & Centering
+### Search Result Navigation & Scrolling
 
-#### Integration with Line Loading System
+#### Scroll Optimization: Only Scroll If Not In View
 
-Search result navigation integrates with the priority loading system:
+The search system uses smart scrolling that only scrolls when necessary:
 
-```javascript
-function handleNavigateToMatch(matchIndex: number) {
-    search.navigateToMatch(matchIndex)
-    const match = search.currentMatch.value
-    if (match) {
-        // Priority load content around search result
-        await viewerState.prioritizeLines(match.itemIndex, LOAD_BUFFER_SIZE)
+```typescript
+async function scrollToMatch(lineIndex: number) {
+  // Check if the line is already in view
+  const scrollerEl = scrollerRef.value?.$el;
+  if (scrollerEl) {
+    const lineEl = scrollerEl.querySelector(
+      `[data-line-index-observer="${lineIndex}"]`,
+    );
 
-        // Navigate to the content area first
-        scrollToLine(match.itemIndex) // or scrollToGroup() for commentary
+    if (lineEl) {
+      // Line is rendered, check if it's in viewport
+      const lineRect = lineEl.getBoundingClientRect();
+      const scrollerRect = scrollerEl.getBoundingClientRect();
+      const searchBarOffset = 50;
 
-        // Wait for DOM render, then center the highlighted result
-        setTimeout(() => {
-            const currentMark = document.querySelector('.line-viewer mark.current')
-            if (currentMark) {
-                currentMark.scrollIntoView({ behavior: 'smooth', block: 'center' })
-            }
-        }, 100)
+      const isInView =
+        lineRect.top >= scrollerRect.top + searchBarOffset &&
+        lineRect.bottom <= scrollerRect.bottom;
+
+      if (!isInView) {
+        // Only scroll if not in view
+        await scrollToLine(lineIndex);
+      }
+    } else {
+      // Line not rendered, need to scroll to it
+      await scrollToLine(lineIndex);
     }
+  }
+
+  // Update current mark styling via DOM (avoid full re-render)
+  updateCurrentMarkStyling();
+}
+```
+
+#### DOM Manipulation for Current Mark
+
+To prevent jumping during navigation in virtualized content, we use DOM manipulation instead of triggering full re-renders:
+
+```typescript
+function updateCurrentMarkStyling() {
+  const scrollerEl = scrollerRef.value?.$el;
+  if (!scrollerEl) return;
+
+  const currentMatch = search.currentMatch.value;
+  if (!currentMatch) return;
+
+  // Remove 'current' class from all marks
+  const allMarks = scrollerEl.querySelectorAll("mark.current");
+  allMarks.forEach((mark: Element) => mark.classList.remove("current"));
+
+  // Find the line element
+  const lineEl = scrollerEl.querySelector(
+    `[data-line-index-observer="${currentMatch.lineIndex}"]`,
+  );
+  if (!lineEl) return;
+
+  // Find all marks in this line and add 'current' to the right one
+  const marks = lineEl.querySelectorAll("mark");
+  if (marks[currentMatch.matchIndex]) {
+    marks[currentMatch.matchIndex].classList.add("current");
+  }
+}
+```
+
+#### Search Bar Overlay Handling
+
+The search bar overlays the content, so we account for its height (50px) when scrolling:
+
+```typescript
+const searchBarOffset = 50;
+
+// Check if mark is hidden behind search bar
+if (markRect.top < scrollerRect.top + searchBarOffset) {
+  // Scroll up a bit to clear the search bar
+  scrollerEl.scrollTop -=
+    scrollerRect.top + searchBarOffset - markRect.top + 10;
 }
 ```
 
 #### Implementation Pattern
 
-1. **Priority Loading**: Ensure content around search result is loaded
-2. **Two-Phase Scrolling**: First navigate to content area, then fine-tune to highlight
-3. **DOM Timing**: 100ms delay ensures proper rendering before centering
-4. **Smooth Animation**: Use `behavior: 'smooth'` for better UX
-5. **Perfect Centering**: Use `block: 'center'` for optimal positioning
-6. **Graceful Fallback**: Check element exists before scrolling
+1. **Check Visibility First**: Only scroll if match is not already visible
+2. **Account for Overlay**: Add 50px offset for search bar
+3. **DOM Manipulation**: Update current mark class without re-rendering
+4. **Prevent Jumping**: Use navigation flag to prevent scroll tracking interference
+5. **Priority Loading**: Ensure content around match is loaded before scrolling
 
 ## Search State Management
 
@@ -182,29 +262,117 @@ const isSearchOpen = computed({
 const isSearchOpen = ref(false); // Always starts closed
 ```
 
+## Text Normalization
+
+### Conditional Dash Normalization
+
+The search system treats dashes as spaces, but ONLY if the query contains spaces or dashes:
+
+```typescript
+// Check if query contains spaces or dashes
+const queryHasSpacesOrDashes = /[\s\u002D\u2013\u2014\u05BE]/.test(query);
+
+// Normalize query - dashes BEFORE diacritics removal
+let normalizedQuery = query.toLowerCase();
+if (queryHasSpacesOrDashes) {
+  normalizedQuery = normalizeDashes(normalizedQuery);
+}
+normalizedQuery = removeDiacritics(normalizedQuery);
+```
+
+**Why Conditional?**
+
+- If user searches for "ברא" (no spaces), it should NOT match "בר־א"
+- If user searches for "בר א" (with space), it SHOULD match "בר־א"
+- This allows both exact and flexible searching
+
+### Normalization Order
+
+**CRITICAL**: Normalize dashes BEFORE removing diacritics:
+
+```typescript
+// ✅ CORRECT ORDER
+let normalized = text.toLowerCase();
+if (queryHasSpacesOrDashes) {
+  normalized = normalizeDashes(normalized); // 1. Dashes first
+}
+normalized = removeDiacritics(normalized); // 2. Diacritics second
+
+// ❌ WRONG ORDER
+let normalized = text.toLowerCase();
+normalized = removeDiacritics(normalized); // Wrong: diacritics first
+normalized = normalizeDashes(normalized); // Wrong: dashes second
+```
+
+**Why Order Matters**: Diacritics can be on letters adjacent to dashes. If we remove diacritics first, we might lose important positional information.
+
+### Dash Types Supported
+
+The normalization handles all common dash types:
+
+- Hyphen-minus: `-` (U+002D)
+- En dash: `–` (U+2013)
+- Em dash: `—` (U+2014)
+- Maqaf (Hebrew): `־` (U+05BE)
+
+```typescript
+function normalizeDashes(text: string): string {
+  // Replace all dash types with space
+  return text.replace(/[\u002D\u2013\u2014\u05BE]/g, " ");
+}
+```
+
+### Diacritics Removal
+
+Hebrew diacritics (niqqud and cantillation marks) are removed for flexible searching:
+
+```typescript
+function removeDiacritics(text: string): string {
+  // Remove Hebrew diacritics (U+0591-U+05C7)
+  return text.replace(/[\u0591-\u05C7]/g, "");
+}
+```
+
 ## Search Highlighting
 
 ### CSS Classes
 
-- `.line-viewer mark` - Basic search highlight
-- `.line-viewer mark.current` - Currently selected match
-- `.commentary-content mark.current` - Commentary search highlight
+- `mark` - Basic search highlight (orange/amber background)
+- `mark.current` - Currently selected match (darker orange, bold, higher opacity)
+
+### Highlight Colors
+
+Both BookLineViewer and BookCommentaryView use consistent orange/amber colors:
+
+```css
+mark {
+  background-color: rgba(251, 191, 36, 0.3); /* Amber-400 at 30% */
+  color: inherit;
+}
+
+mark.current {
+  background-color: rgba(251, 191, 36, 0.6); /* Amber-400 at 60% */
+  font-weight: bold;
+}
+```
 
 ### Content Processing
 
 Search highlighting is applied during content processing:
 
 ```typescript
-// Apply search highlighting
-if (query) {
-  const currentOccurrence =
-    currentMatch?.itemIndex === lineIndex ? currentMatch.occurrence : -1;
-  processedLine = search.highlightMatches(
-    processedLine,
-    query,
-    currentOccurrence,
-  );
+// For virtualized content (BookLineViewer)
+if (query && linesWithMatches.has(i)) {
+  const isCurrentLine = currentMatch?.lineIndex === i;
+  processedContent = search.highlightInContent(processedContent, isCurrentLine);
 }
+
+// For non-virtualized content (BookCommentaryView)
+const highlighted = search.highlightMatches(
+  htmlContent,
+  query,
+  currentOccurrence,
+);
 ```
 
 ## Keyboard Shortcuts
@@ -251,11 +419,15 @@ function handleKeyDown(e: KeyboardEvent) {
 
 ### Search Implementation
 
-1. **Always use GenericSearch component** for consistent UI/UX
-2. **Implement two-phase scrolling** for complex content
-3. **Use smooth animations** for better user experience
-4. **Handle DOM timing** with appropriate delays
-5. **Provide keyboard shortcuts** for power users
+1. **Use the right composable**: `useVirtualizedSearch` for virtualized content, `useContentSearch` for non-virtualized
+2. **Search source data**: Always search bond data or items array, never DOM
+3. **DOM manipulation for current mark**: Update styling without triggering re-renders
+4. **Only scroll when needed**: Check if match is already visible before scrolling
+5. **Account for overlays**: Add offset for search bar (50px)
+6. **Conditional dash normalization**: Only normalize dashes if query contains spaces/dashes
+7. **Correct normalization order**: Dashes before diacritics
+8. **Use smooth animations** for better user experience
+9. **Provide keyboard shortcuts** for power users
 
 ### State Management
 
@@ -271,6 +443,7 @@ function handleKeyDown(e: KeyboardEvent) {
 2. **Limit search results** to reasonable numbers (e.g., 100)
 3. **Use efficient selectors** for DOM queries
 4. **Clean up timeouts** in component lifecycle
+5. **Optimize highlighting**: Only highlight lines with matches
 
 ## Troubleshooting
 
@@ -281,11 +454,29 @@ function handleKeyDown(e: KeyboardEvent) {
 - Check tabStore persistence logic
 - Ensure `isSearchOpen` is excluded from saved state
 
-**Search results not centering**:
+**Search results not visible (hidden behind search bar)**:
 
-- Verify `mark.current` selector exists
-- Check DOM timing (increase setTimeout delay)
-- Ensure `scrollIntoView` is called on correct element
+- Verify 50px offset is applied when scrolling
+- Check that scroll calculations account for search bar height
+- Ensure mark is scrolled into view with proper offset
+
+**Search jumping during navigation**:
+
+- Use DOM manipulation to update current mark class
+- Set `isNavigating` flag to prevent scroll tracking interference
+- Avoid triggering full re-renders when changing current match
+
+**Search not working with dashes**:
+
+- Verify conditional dash normalization is implemented
+- Check that query is tested for spaces/dashes before normalizing
+- Ensure normalization order: dashes before diacritics
+
+**Search matching incorrectly with dashes**:
+
+- Confirm query "ברא" (no spaces) does NOT match "בר־א"
+- Confirm query "בר א" (with space) DOES match "בר־א"
+- Check regex pattern: `/[\s\u002D\u2013\u2014\u05BE]/`
 
 **Search not working with new content**:
 
@@ -305,17 +496,23 @@ function handleKeyDown(e: KeyboardEvent) {
 
 - [ ] Search opens with Ctrl+F
 - [ ] Search input is focused and selected when opened
-- [ ] Search results highlight correctly
+- [ ] Search results highlight correctly (orange/amber background)
+- [ ] Current match has darker background and bold text
 - [ ] Navigation between results works (Enter/Shift+Enter)
-- [ ] Results are smoothly centered in view
+- [ ] Results only scroll if not already visible
+- [ ] Search bar overlay doesn't hide results (50px offset)
 - [ ] Search closes with Esc
 - [ ] Search state doesn't persist across sessions
+- [ ] Dash normalization works conditionally (only with spaces in query)
+- [ ] Query "ברא" does NOT match "בר־א"
+- [ ] Query "בר א" DOES match "בר־א"
 
 ### Performance
 
 - [ ] Search input is debounced (no excessive queries)
 - [ ] Large content searches don't freeze UI
-- [ ] Smooth scrolling animations work properly
+- [ ] No jumping during navigation in virtualized content
+- [ ] DOM manipulation updates current mark without re-render
 - [ ] Memory usage is reasonable with many results
 
 ### Edge Cases
@@ -324,7 +521,9 @@ function handleKeyDown(e: KeyboardEvent) {
 - [ ] No results found shows 0/0 counter
 - [ ] Search works with special characters
 - [ ] Search works with Hebrew text and diacritics
+- [ ] Search works with all dash types (-, –, —, ־)
 - [ ] Component cleanup prevents memory leaks
+- [ ] Search works correctly after tab switching
 
 ## Session Accomplishments
 
