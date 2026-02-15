@@ -154,7 +154,6 @@ div.book-line.selected.show-selection::after {
 /* Global search highlighting - foreground color */
 .book-line :deep(.global-search-highlight) {
     color: var(--accent-color);
-    font-weight: 600;
 }
 
 @keyframes fadeSearchHighlight {

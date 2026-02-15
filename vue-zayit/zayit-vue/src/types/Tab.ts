@@ -40,7 +40,7 @@ export interface SearchState {
     hasSearched: boolean; // Whether a search has been executed
     highlightTerms?: string; // Terms to highlight when navigating from search results to book
     highlightSnippet?: string; // Snippet to use for background highlighting
-    results?: any[]; // Search results to persist across tab switches
+    // Note: results are NOT stored here - they're loaded from cache to save memory
 }
 
 export interface Tab {

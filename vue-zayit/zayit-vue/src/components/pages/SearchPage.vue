@@ -273,25 +273,21 @@ onMounted(async () => {
     executedQuery.value = currentSearchState.value.searchQuery // Set executed query to match
     hasSearched.value = currentSearchState.value.hasSearched
 
-    // Restore results from tab state first (fastest)
-    if (currentSearchState.value.results && currentSearchState.value.results.length > 0) {
-      results.value = currentSearchState.value.results
-
-      // Restore scroll position after virtual scroller is ready
-      await nextTick()
-      if (scrollerRef.value) {
-        restoreScrollPosition()
-        hasRestoredScroll = true
+    // Restore tab title if there's a search query
+    if (currentSearchState.value.searchQuery.trim()) {
+      const currentTab = tabStore.tabs.find(t => t.isActive && t.currentPage === 'kezayit-search')
+      if (currentTab) {
+        currentTab.title = `חיפוש: ${currentSearchState.value.searchQuery}`
       }
-    } else if (hasSearched.value && searchQuery.value.trim()) {
-      // Fallback to cache if not in tab state
+    }
+
+    // Load results from cache (not from tab state)
+    if (hasSearched.value && searchQuery.value.trim()) {
       const normalizedQuery = searchQuery.value.trim().toLowerCase()
       const cachedResults = await bloomSearchCacheService.get(normalizedQuery)
 
       if (cachedResults !== null) {
         results.value = cachedResults
-        // Store in tab state for next time
-        currentSearchState.value.results = cachedResults
 
         // Restore scroll position after virtual scroller is ready
         await nextTick()
@@ -300,6 +296,7 @@ onMounted(async () => {
           hasRestoredScroll = true
         }
       } else {
+        // Cache miss - re-execute search
         await executeSearch()
       }
     }
@@ -389,20 +386,13 @@ onBeforeUnmount(() => {
   saveScrollPosition()
 })
 
-// Watch for changes and save to state
+// Watch for changes and save to state (but not results)
 watch([searchQuery, hasSearched], () => {
   if (currentSearchState.value) {
     currentSearchState.value.searchQuery = searchQuery.value
     currentSearchState.value.hasSearched = hasSearched.value
   }
 })
-
-// Watch for results changes and save to tab state
-watch(() => results.value, (newResults) => {
-  if (currentSearchState.value) {
-    currentSearchState.value.results = newResults
-  }
-}, { deep: true })
 
 // Handle scroll events
 const onScroll = () => {
@@ -546,6 +536,12 @@ const executeSearch = async () => {
     return
   }
 
+  // Update tab title with search query
+  const currentTab = tabStore.tabs.find(t => t.isActive && t.currentPage === 'kezayit-search')
+  if (currentTab) {
+    currentTab.title = `חיפוש: ${searchQuery.value}`
+  }
+
   // Cancel previous search completely across all layers
   if (currentSearchId) {
     console.log('[SearchPage] Cancelling previous search:', currentSearchId)
@@ -619,12 +615,8 @@ const executeSearch = async () => {
               proximityScore: r.proximityScore,
               snippet: r.snippet
             }))
+            // Store in cache only (not in tab state)
             await bloomSearchCacheService.set(normalizedQuery, cleanResults)
-
-            // Store in tab state
-            if (currentSearchState.value) {
-              currentSearchState.value.results = cleanResults
-            }
           }
 
           currentSearchId = null
@@ -670,8 +662,14 @@ const clearSearch = () => {
   if (currentSearchState.value) {
     currentSearchState.value.scrollPosition = 0
     currentSearchState.value.firstVisibleItemIndex = undefined
-    currentSearchState.value.results = []
   }
+  
+  // Reset tab title to default
+  const currentTab = tabStore.tabs.find(t => t.isActive && t.currentPage === 'kezayit-search')
+  if (currentTab) {
+    currentTab.title = 'חיפוש'
+  }
+  
   searchInputRef.value?.focus()
 }
 

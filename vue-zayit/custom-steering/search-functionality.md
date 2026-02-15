@@ -2,13 +2,130 @@
 
 ## Overview
 
-This guide covers the search functionality implementation in the Zayit project, including the GenericSearch component, search result navigation, and persistence behavior.
+This guide covers TWO distinct search systems in the Zayit project:
 
-## Search Architecture
+1. **Library-Wide Search (SearchPage)** - Search across all books in the library using Bloom filter
+2. **In-Book Search (BookLineViewer, BookCommentaryView)** - Search within a single book's content
+
+---
+
+## Library-Wide Search (SearchPage)
+
+### Overview
+
+The library-wide search allows users to search across all books in the library simultaneously using a Bloom filter search engine. Results are displayed in a dedicated SearchPage with virtualized scrolling.
+
+### Multiple Search Tabs Support
+
+Users can open multiple library-wide search tabs simultaneously, each with independent search queries and results.
+
+**Key features:**
+
+- Each search tab maintains its own query, results, and scroll position
+- Tab titles display the search query (e.g., "חיפוש: בראשית")
+- Long queries are truncated with CSS ellipsis automatically
+- Search tabs persist across sessions
+- Results loaded from cache (memory-efficient)
+- Uses Bloom filter search engine for fast cross-library searching
+
+### Tab Title Management
+
+Library-wide search tab titles are dynamically updated:
+
+```typescript
+// When search is executed
+const currentTab = tabStore.tabs.find(
+  (t) => t.isActive && t.currentPage === "kezayit-search",
+);
+if (currentTab) {
+  currentTab.title = `חיפוש: ${searchQuery.value}`;
+}
+
+// When search is cleared
+if (currentTab) {
+  currentTab.title = "חיפוש";
+}
+
+// On mount with saved query
+if (currentSearchState.value.searchQuery.trim()) {
+  currentTab.title = `חיפוש: ${currentSearchState.value.searchQuery}`;
+}
+```
+
+### Memory Management
+
+Library-wide search results are NOT stored in tab state to prevent memory bloat:
+
+```typescript
+// ❌ WRONG - Don't store results in tab state
+currentSearchState.value.results = results.value;
+
+// ✅ CORRECT - Load from cache
+const cachedResults = await bloomSearchCacheService.get(normalizedQuery);
+if (cachedResults !== null) {
+  results.value = cachedResults;
+}
+```
+
+**What IS stored in SearchState (library-wide search):**
+
+- `searchQuery` - The search text
+- `scrollPosition` - Legacy scroll position
+- `firstVisibleItemIndex` - Virtual scroll position
+- `hasSearched` - Whether search was executed
+- `highlightTerms` - Terms to highlight when navigating to books
+- `highlightSnippet` - Snippet for background highlighting
+
+**What is NOT stored:**
+
+- `results` - Loaded from cache on demand
+
+### Persistence
+
+Library-wide search tabs are persisted in `saveToStorage()`:
+
+```typescript
+const contentTabs = tabs.value.filter(
+  (tab) =>
+    tab.currentPage === "bookview" ||
+    tab.currentPage === "pdfview" ||
+    tab.currentPage === "hebrewbooks-view" ||
+    tab.currentPage === "kezayit-search", // Library-wide search tabs persisted
+);
+```
+
+On restore, SearchPage loads results from cache:
+
+```typescript
+if (hasSearched.value && searchQuery.value.trim()) {
+  const normalizedQuery = searchQuery.value.trim().toLowerCase();
+  const cachedResults = await bloomSearchCacheService.get(normalizedQuery);
+
+  if (cachedResults !== null) {
+    results.value = cachedResults;
+    // Restore scroll position
+    await nextTick();
+    if (scrollerRef.value) {
+      restoreScrollPosition();
+    }
+  } else {
+    // Cache miss - re-execute search
+    await executeSearch();
+  }
+}
+```
+
+---
+
+## In-Book Search (BookLineViewer, BookCommentaryView)
+
+### Architecture
+
+The in-book search system allows searching within a single book's content using an overlay search bar.
 
 ### 🎯 **CRITICAL: Two Search Composables Architecture**
 
-The search system uses two separate composables for different content types:
+The in-book search system uses two separate composables for different content types:
 
 #### useVirtualizedSearch (BookLineViewer)
 
@@ -87,9 +204,11 @@ const highlighted = search.highlightMatches(
 
 ### Core Components
 
-#### GenericSearch Component
+#### GenericSearch Component (In-Book Search Overlay)
 
 **Location**: `src/components/common/GenericSearch.vue`
+
+**Purpose**: Overlay search bar for searching within a single book
 
 **Features**:
 
@@ -105,17 +224,18 @@ const highlighted = search.highlightMatches(
 - `navigateToMatch` - When user navigates between matches
 - `close` - When search is closed
 
-#### Search Integration Components
+#### In-Book Search Integration Components
 
 **BookLineViewer** (`src/components/BookLineViewer.vue`):
 
-- Searches through book text content
+- Searches through book text content using `useVirtualizedSearch`
 - Highlights matches with `mark` elements
 - Scrolls to search results with smooth centering
+- Search bar opens with Ctrl+F
 
 **BookCommentaryView** (`src/components/BookCommentaryView.vue`):
 
-- Searches through commentary content
+- Searches through commentary content using `useContentSearch`
 - Groups-based navigation for complex content structure
 - Same smooth centering behavior
 
@@ -214,31 +334,116 @@ if (markRect.top < scrollerRect.top + searchBarOffset) {
 
 ## Search State Management
 
+### Multiple Search Tabs Support
+
+Users can open multiple search tabs simultaneously, each maintaining independent state:
+
+- Each tab has its own search query displayed in the tab title
+- Results are loaded from cache (not stored in tab state)
+- Scroll positions are preserved per tab
+- Search tabs persist across sessions
+
 ### Persistence Rules
+
+**DO PERSIST** (in SearchState):
+
+- `searchQuery` - Search text (also shown in tab title)
+- `scrollPosition` - Legacy scroll position
+- `firstVisibleItemIndex` - Virtual scroll position
+- `hasSearched` - Whether search was executed
+- `highlightTerms` - Terms for book navigation highlighting
+- `highlightSnippet` - Snippet for background highlighting
 
 **DO NOT PERSIST**:
 
-- `isSearchOpen` - Search bar visibility state
-- Search query text
+- `isSearchOpen` - Search bar visibility state (in BookLineViewer)
+- Search results - Loaded from cache on demand
 - Current match index
-- Search results
+- Filter state
 
-**PERSIST**:
+### Tab Title Management (Library-Wide Search Only)
 
-- Book content and position
-- User preferences
-- Tab state (excluding search)
-
-### Implementation in TabStore
+Library-wide search tab titles dynamically display the search query:
 
 ```typescript
-// Clean up book state - don't persist search state
-if (tab.bookState) {
-  cleanedTab.bookState = {
-    ...tab.bookState,
-    isSearchOpen: undefined, // Don't persist search bar state
-  };
+// On search execution
+const currentTab = tabStore.tabs.find(
+  (t) => t.isActive && t.currentPage === "kezayit-search",
+);
+if (currentTab) {
+  currentTab.title = `חיפוש: ${searchQuery.value}`;
 }
+
+// On search clear
+if (currentTab) {
+  currentTab.title = "חיפוש";
+}
+
+// On mount with saved query
+if (currentSearchState.value.searchQuery.trim()) {
+  currentTab.title = `חיפוש: ${currentSearchState.value.searchQuery}`;
+}
+```
+
+Long queries are automatically truncated with CSS ellipsis in the TabHeader component.
+
+### Memory-Efficient Result Loading (Library-Wide Search)
+
+Library-wide search results are loaded from cache instead of being stored in tab state:
+
+```typescript
+// On mount or tab switch
+if (hasSearched.value && searchQuery.value.trim()) {
+  const normalizedQuery = searchQuery.value.trim().toLowerCase();
+  const cachedResults = await bloomSearchCacheService.get(normalizedQuery);
+
+  if (cachedResults !== null) {
+    results.value = cachedResults;
+    // Restore scroll position after results load
+    await nextTick();
+    if (scrollerRef.value) {
+      restoreScrollPosition();
+    }
+  } else {
+    // Cache miss - re-execute search
+    await executeSearch();
+  }
+}
+```
+
+**Benefits:**
+
+- Prevents memory bloat with multiple search tabs
+- Fast restoration from cache
+- Automatic re-search on cache miss
+
+### Implementation in TabStore (Library-Wide Search)
+
+Library-wide search tabs are persisted alongside other content tabs:
+
+```typescript
+const contentTabs = tabs.value.filter(
+  (tab) =>
+    tab.currentPage === "bookview" ||
+    tab.currentPage === "pdfview" ||
+    tab.currentPage === "hebrewbooks-view" ||
+    tab.currentPage === "kezayit-search", // Search tabs included
+);
+```
+
+Search state is cleaned before saving (results removed, in-book search state removed):
+
+```typescript
+// Results are NOT saved - only query and position
+const cleanedSearchState = {
+  searchQuery: tab.searchState.searchQuery,
+  scrollPosition: tab.searchState.scrollPosition,
+  firstVisibleItemIndex: tab.searchState.firstVisibleItemIndex,
+  hasSearched: tab.searchState.hasSearched,
+  highlightTerms: tab.searchState.highlightTerms,
+  highlightSnippet: tab.searchState.highlightSnippet,
+  // results field omitted
+};
 ```
 
 ### Component State Patterns

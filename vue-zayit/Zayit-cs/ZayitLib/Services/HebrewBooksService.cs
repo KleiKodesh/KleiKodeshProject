@@ -626,23 +626,26 @@ namespace Zayit.Services
         /// </summary>
         public void HandleTabClosed(string fileName)
         {
-            try
-            {
-                var filePath = Path.Combine(GetCacheDirectory(), fileName);
-                if (File.Exists(filePath))
-                {
-                    File.Delete(filePath);
-                    Console.WriteLine($"[HebrewBooksService] Deleted Hebrew book from cache: {fileName}");
-                }
-                else
-                {
-                    Console.WriteLine($"[HebrewBooksService] Hebrew book file not found in cache: {fileName}");
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[HebrewBooksService] Error deleting Hebrew book from cache: {ex}");
-            }
+            // File deletion disabled - PDFs are kept in cache when tabs are closed
+            // Uncomment the code below to re-enable automatic deletion on tab close
+            
+            //try
+            //{
+            //    var filePath = Path.Combine(GetCacheDirectory(), fileName);
+            //    if (File.Exists(filePath))
+            //    {
+            //        File.Delete(filePath);
+            //        Console.WriteLine($"[HebrewBooksService] Deleted Hebrew book from cache: {fileName}");
+            //    }
+            //    else
+            //    {
+            //        Console.WriteLine($"[HebrewBooksService] Hebrew book file not found in cache: {fileName}");
+            //    }
+            //}
+            //catch (Exception ex)
+            //{
+            //    Console.WriteLine($"[HebrewBooksService] Error deleting Hebrew book from cache: {ex}");
+            //}
         }
 
         /// <summary>

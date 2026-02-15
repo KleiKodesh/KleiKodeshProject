@@ -30,12 +30,55 @@ The workspace system allows users to organize their work into separate sessions,
 
 ## TabStore Integration
 
-### New Properties
+### Navigation Helper Functions
+
+Two helper functions eliminate code duplication across all navigation functions:
+
+#### navigateOrCreateTab(pageType, tabData?)
+
+Handles homepage conversion pattern - if current tab is homepage, converts it to target page type.
+
+**Returns**: `true` if homepage was converted, `false` if caller should create new tab
+
+**Usage**:
 
 ```typescript
-const currentWorkspaceId = ref<string>(DEFAULT_WORKSPACE_ID);
-const workspaces = ref<string[]>([DEFAULT_WORKSPACE_ID]);
+if (navigateOrCreateTab('kezayit-search', { searchState: {...} })) {
+    return; // Homepage was converted
+}
+// Otherwise create new tab
 ```
+
+#### switchToExistingOrCreate(pageType)
+
+Enforces single-instance pages - if page already exists in any tab, switches to it.
+
+**Returns**: `true` if existing tab found and switched, `false` if caller should create new tab
+
+**Usage**:
+
+```typescript
+if (switchToExistingOrCreate("settings")) {
+  return; // Found and switched to existing tab
+}
+// Otherwise create new tab
+```
+
+### Tab Instance Policies
+
+**Single-instance pages** (only one tab allowed):
+
+- Homepage - `resetTab()` switches to existing or converts current
+- Settings - `openSettings()` switches to existing or creates new
+- Workspace manager - `openWorkspaceManager()` switches to existing or creates new
+
+**Multiple-instance pages** (multiple tabs allowed):
+
+- Search - `openKezayitSearch()` always creates new tab
+- Open file dialog - `openKezayitOpenFilePage()` always creates new tab
+- HebrewBooks - `openHebrewBooks()` always creates new tab
+- Book views - each book opens in its own tab
+- PDFs - each PDF opens in its own tab
 
 ### Key Functions
 
@@ -44,7 +87,7 @@ const workspaces = ref<string[]>([DEFAULT_WORKSPACE_ID]);
 - `switchWorkspace(workspaceId: string)` - Switches to different workspace
 - `getWorkspaceName(workspaceId: string): string` - Gets display name
 - `renameWorkspace(workspaceId: string, newName: string)` - Updates name
-- `openWorkspaceManager()` - Opens workspace management page
+- `openWorkspaceManager()` - Opens workspace management page (single instance)
 
 ### Workspace Switching Behavior
 
@@ -85,15 +128,41 @@ const workspaces = ref<string[]>([DEFAULT_WORKSPACE_ID]);
 
 ### What Gets Saved Per Workspace
 
-- Content tabs only: `bookview`, `pdfview`, `hebrewbooks-view`
-- Tab states: book positions, PDF states, etc.
+- Content tabs: `bookview`, `pdfview`, `hebrewbooks-view`, `kezayit-search`
+- Tab states: book positions, PDF states, search queries, scroll positions
 - Next ID counter for tab generation
 
 ### What Doesn't Get Saved
 
 - Temporary tabs: homepage, settings, workspace manager
-- Search states (cleaned on save)
+- Search results (loaded from cache on restore)
 - Virtual URLs (recreated on load)
+- Search bar open/closed state
+
+### Tab Persistence Rules
+
+**Persisted tabs** (survive session restart):
+
+- Book views - with position, TOC state, commentary state
+- PDFs - with file path for recreation
+- Hebrew books - with book state
+- Search tabs - with query, scroll position, hasSearched flag
+
+**Temporary tabs** (not persisted):
+
+- Homepage - always recreated fresh
+- Settings - single instance, not persisted
+- Workspace manager - single instance, not persisted
+- Open file dialog - not persisted
+
+### Search Tab Persistence
+
+Search tabs are fully persisted with:
+
+- Search query text (displayed in tab title)
+- Scroll position (firstVisibleItemIndex for virtual scroll)
+- hasSearched flag
+- Results loaded from cache on restore (memory-efficient)
 
 ### Deletion Behavior
 
@@ -103,12 +172,91 @@ const workspaces = ref<string[]>([DEFAULT_WORKSPACE_ID]);
 
 ## Implementation Guidelines
 
+### Navigation Pattern Examples
+
+#### Single-Instance Page (Settings, Workspaces)
+
+```typescript
+const openSettings = () => {
+  // Try to convert homepage first
+  if (navigateOrCreateTab("settings")) {
+    return;
+  }
+
+  // Check if settings tab already exists (single instance)
+  if (switchToExistingOrCreate("settings")) {
+    return;
+  }
+
+  // Create new settings tab
+  tabs.value.forEach((tab) => (tab.isActive = false));
+  const existingIds = new Set(tabs.value.map((t) => t.id));
+  let newId = 1;
+  while (existingIds.has(newId)) {
+    newId++;
+  }
+
+  const newTab: Tab = {
+    id: newId,
+    title: PAGE_TITLES.settings,
+    isActive: true,
+    currentPage: "settings",
+  };
+  tabs.value.push(newTab);
+  nextId.value = Math.max(newId + 1, nextId.value);
+};
+```
+
+#### Multiple-Instance Page (Search, Books, PDFs)
+
+```typescript
+const openKezayitSearch = () => {
+  // Try to convert homepage first
+  if (
+    navigateOrCreateTab("kezayit-search", {
+      searchState: {
+        searchQuery: "",
+        scrollPosition: 0,
+        hasSearched: false,
+      },
+    })
+  ) {
+    return;
+  }
+
+  // Otherwise create new tab (allow multiple search tabs)
+  tabs.value.forEach((tab) => (tab.isActive = false));
+  const existingIds = new Set(tabs.value.map((t) => t.id));
+  let newId = 1;
+  while (existingIds.has(newId)) {
+    newId++;
+  }
+
+  const newTab: Tab = {
+    id: newId,
+    title: PAGE_TITLES["kezayit-search"],
+    isActive: true,
+    currentPage: "kezayit-search",
+    searchState: {
+      searchQuery: "",
+      scrollPosition: 0,
+      hasSearched: false,
+    },
+  };
+
+  tabs.value.push(newTab);
+  nextId.value = Math.max(newId + 1, nextId.value);
+};
+```
+
 ### Adding Workspace Support to New Features
 
 1. Check if feature needs workspace isolation
 2. If yes, use workspace-specific storage keys
 3. Ensure data loads/saves per workspace
 4. Test workspace switching behavior
+5. Decide if page should be single-instance or multiple-instance
+6. Use appropriate helper functions (`navigateOrCreateTab`, `switchToExistingOrCreate`)
 
 ### Storage Key Patterns
 
@@ -135,9 +283,14 @@ const storageKey = "globalFeatureName";
 - [ ] Delete workspace (non-default)
 - [ ] Workspace manager stays open during operations
 - [ ] Tab data persists per workspace
+- [ ] Search tabs persist with queries
+- [ ] Multiple search tabs can be open
+- [ ] Search results load from cache on restore
 - [ ] Default workspace cannot be deleted
 - [ ] Item counts display correctly
 - [ ] Hebrew text uses "פריטים"
+- [ ] Single-instance pages (settings, workspaces) switch to existing
+- [ ] Multiple-instance pages (search, books, PDFs) create new tabs
 
 ## Common Pitfalls
 

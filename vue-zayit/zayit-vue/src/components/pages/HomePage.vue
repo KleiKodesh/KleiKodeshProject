@@ -182,15 +182,7 @@ const openHebrewBooks = () => {
 };
 
 const openKezayitSearch = () => {
-    // Check if search page already exists
-    const existingSearchTab = tabStore.tabs.find(t => t.currentPage === 'kezayit-search');
-    if (existingSearchTab) {
-        // Switch to existing search tab
-        tabStore.setActiveTab(existingSearchTab.id);
-        return;
-    }
-
-    // Create new search tab
+    // Always create new search tab (allow multiple search pages)
     tabStore.openKezayitSearch();
 };
 

@@ -29,6 +29,36 @@ export const useTabStore = defineStore('tabs', () => {
 
     const getStorageKey = (workspaceId: string) => `${STORAGE_KEY}_${workspaceId}`;
 
+    // Helper function to handle homepage navigation pattern
+    // If current tab is homepage, convert it to the target page type
+    // Otherwise, create a new tab
+    const navigateOrCreateTab = (pageType: PageType, tabData: Partial<Tab> = {}): boolean => {
+        const currentTab = tabs.value.find(t => t.isActive);
+
+        // If current tab is homepage, navigate in same tab
+        if (currentTab?.currentPage === 'homepage') {
+            currentTab.currentPage = pageType;
+            currentTab.title = PAGE_TITLES[pageType];
+            // Apply any additional tab data
+            Object.assign(currentTab, tabData);
+            return true; // Indicates we converted homepage
+        }
+
+        return false; // Indicates caller should create new tab
+    };
+
+    // Helper function for single-instance pages (settings, workspaces, homepage)
+    // If page already exists in any tab, switch to it
+    // Returns true if found and switched, false if caller should create new tab
+    const switchToExistingOrCreate = (pageType: PageType): boolean => {
+        const existingTab = tabs.value.find(t => t.currentPage === pageType);
+        if (existingTab) {
+            setActiveTab(existingTab.id);
+            return true; // Found existing tab
+        }
+        return false; // No existing tab, caller should create
+    };
+
     const loadFromStorage = async () => {
         try {
             // Load current workspace ID
@@ -108,11 +138,12 @@ export const useTabStore = defineStore('tabs', () => {
             // Save workspaces list
             localStorage.setItem('zayit_workspaces_list', JSON.stringify(workspaces.value));
 
-            // Only persist content tabs (bookview, pdfview, and hebrewbooks-view)
+            // Only persist content tabs (bookview, pdfview, hebrewbooks-view, and kezayit-search)
             const contentTabs = tabs.value.filter(tab =>
                 tab.currentPage === 'bookview' ||
                 tab.currentPage === 'pdfview' ||
-                tab.currentPage === 'hebrewbooks-view'
+                tab.currentPage === 'hebrewbooks-view' ||
+                tab.currentPage === 'kezayit-search'
             );
 
             // Clean up tabs before saving
@@ -264,7 +295,7 @@ export const useTabStore = defineStore('tabs', () => {
     const resetTab = async () => {
         const tab = tabs.value.find(t => t.isActive);
         if (tab) {
-            // Check if there's already another homepage tab
+            // Check if there's already another homepage tab (single instance)
             const existingHomepageTab = tabs.value.find(t =>
                 t.id !== tab.id && t.currentPage === 'homepage'
             );
@@ -399,20 +430,13 @@ export const useTabStore = defineStore('tabs', () => {
     };
 
     const openSettings = () => {
-        const currentTab = tabs.value.find(t => t.isActive);
-
-        // If current tab is homepage, navigate in same tab
-        if (currentTab?.currentPage === 'homepage') {
-            currentTab.currentPage = 'settings';
-            currentTab.title = PAGE_TITLES.settings;
+        // Try to convert homepage first
+        if (navigateOrCreateTab('settings')) {
             return;
         }
 
-        // Check if settings tab already exists
-        const existingSettingsTab = tabs.value.find(t => t.currentPage === 'settings');
-        if (existingSettingsTab) {
-            // Switch to existing settings tab
-            setActiveTab(existingSettingsTab.id);
+        // Check if settings tab already exists (single instance)
+        if (switchToExistingOrCreate('settings')) {
             return;
         }
 
@@ -454,34 +478,6 @@ export const useTabStore = defineStore('tabs', () => {
                 fileName,
                 fileUrl
             }
-        };
-        tabs.value.push(newTab);
-        nextId.value = Math.max(newId + 1, nextId.value);
-    };
-
-    const openPdfViewer = () => {
-        // Check if PDF viewer tab already exists
-        const existingPdfTab = tabs.value.find(t => t.currentPage === 'pdfview');
-        if (existingPdfTab) {
-            // Switch to existing PDF viewer tab
-            setActiveTab(existingPdfTab.id);
-            return;
-        }
-
-        // Create new PDF viewer tab
-        tabs.value.forEach(tab => tab.isActive = false);
-
-        const existingIds = new Set(tabs.value.map(t => t.id));
-        let newId = 1;
-        while (existingIds.has(newId)) {
-            newId++;
-        }
-
-        const newTab: Tab = {
-            id: newId,
-            title: PAGE_TITLES.pdfview,
-            isActive: true,
-            currentPage: 'pdfview'
         };
         tabs.value.push(newTab);
         nextId.value = Math.max(newId + 1, nextId.value);
@@ -616,15 +612,12 @@ export const useTabStore = defineStore('tabs', () => {
     };
 
     const openKezayitOpenFilePage = () => {
-        const currentTab = tabs.value.find(t => t.isActive);
-
-        // If current tab is homepage, navigate in same tab
-        if (currentTab?.currentPage === 'homepage') {
-            currentTab.currentPage = 'openfile';
-            currentTab.title = PAGE_TITLES['openfile'];
+        // Try to convert homepage first
+        if (navigateOrCreateTab('openfile')) {
             return;
         }
 
+        // Otherwise create new tab (allow multiple)
         tabs.value.forEach(tab => tab.isActive = false);
 
         const existingIds = new Set(tabs.value.map(t => t.id));
@@ -645,15 +638,12 @@ export const useTabStore = defineStore('tabs', () => {
     };
 
     const openHebrewBooks = () => {
-        const currentTab = tabs.value.find(t => t.isActive);
-
-        // If current tab is homepage, navigate in same tab
-        if (currentTab?.currentPage === 'homepage') {
-            currentTab.currentPage = 'hebrewbooks';
-            currentTab.title = PAGE_TITLES['hebrewbooks'];
+        // Try to convert homepage first
+        if (navigateOrCreateTab('hebrewbooks')) {
             return;
         }
 
+        // Otherwise create new tab (allow multiple)
         tabs.value.forEach(tab => tab.isActive = false);
 
         const existingIds = new Set(tabs.value.map(t => t.id));
@@ -712,20 +702,18 @@ export const useTabStore = defineStore('tabs', () => {
     };
 
     const openKezayitSearch = () => {
-        const currentTab = tabs.value.find(t => t.isActive);
-
-        // If current tab is homepage, navigate in same tab
-        if (currentTab?.currentPage === 'homepage') {
-            currentTab.currentPage = 'kezayit-search';
-            currentTab.title = PAGE_TITLES['kezayit-search'];
-            currentTab.searchState = {
+        // Try to convert homepage first
+        if (navigateOrCreateTab('kezayit-search', {
+            searchState: {
                 searchQuery: '',
                 scrollPosition: 0,
                 hasSearched: false
-            };
+            }
+        })) {
             return;
         }
 
+        // Otherwise create new tab (allow multiple search tabs)
         tabs.value.forEach(tab => tab.isActive = false);
 
         const existingIds = new Set(tabs.value.map(t => t.id));
@@ -854,20 +842,13 @@ export const useTabStore = defineStore('tabs', () => {
     };
 
     const openWorkspaceManager = () => {
-        const currentTab = tabs.value.find(t => t.isActive);
-
-        // If current tab is homepage, navigate in same tab
-        if (currentTab?.currentPage === 'homepage') {
-            currentTab.currentPage = 'workspaces';
-            currentTab.title = PAGE_TITLES.workspaces;
+        // Try to convert homepage first
+        if (navigateOrCreateTab('workspaces')) {
             return;
         }
 
-        // Check if workspace manager tab already exists
-        const existingWorkspaceTab = tabs.value.find(t => t.currentPage === 'workspaces');
-        if (existingWorkspaceTab) {
-            // Switch to existing workspace manager tab
-            setActiveTab(existingWorkspaceTab.id);
+        // Check if workspace manager tab already exists (single instance)
+        if (switchToExistingOrCreate('workspaces')) {
             return;
         }
 
@@ -911,7 +892,6 @@ export const useTabStore = defineStore('tabs', () => {
         toggleLineDisplay,
         openSettings,
         openPdf,
-        openPdfViewer,
         openPdfWithFile,
         openPdfWithFilePath,
         openPdfWithFilePathAndBlobUrl,
