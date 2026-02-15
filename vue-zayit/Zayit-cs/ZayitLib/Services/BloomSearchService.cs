@@ -61,7 +61,20 @@ namespace Zayit.Services
                 _progress.TotalChunks = e.TotalChunks;
                 _progress.Percentage = e.Percentage;
                 _progress.Eta = FormatTimeSpan(e.Eta);
-                _progress.IsIndexing = e.Percentage < 100;
+                
+                // Update indexing state based on progress
+                if (e.Percentage >= 100)
+                {
+                    _progress.IsIndexing = false;
+                    _progress.IsReady = true;
+                    _isReady = true;
+                    _isIndexing = false;
+                }
+                else
+                {
+                    _progress.IsIndexing = true;
+                    _progress.IsReady = false;
+                }
             }
 
             Console.WriteLine($"[BloomSearchService] Coordinator progress: {e.Percentage:F1}% ({e.ProcessedChunks}/{e.TotalChunks})");
