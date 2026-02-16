@@ -12,6 +12,8 @@ export interface Settings {
     appZoom: number
     readingBackgroundColor: string
     databasePath: string
+    globalDiacritics: boolean
+    globalDiacriticsState: number
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -22,7 +24,9 @@ const DEFAULT_SETTINGS: Settings = {
     censorDivineNames: false,
     appZoom: 0.95,
     readingBackgroundColor: '',
-    databasePath: ''
+    databasePath: '',
+    globalDiacritics: false,
+    globalDiacriticsState: 0
 }
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -34,6 +38,8 @@ export const useSettingsStore = defineStore('settings', () => {
     const appZoom = ref(DEFAULT_SETTINGS.appZoom)
     const readingBackgroundColor = ref(DEFAULT_SETTINGS.readingBackgroundColor)
     const databasePath = ref(DEFAULT_SETTINGS.databasePath)
+    const globalDiacritics = ref(DEFAULT_SETTINGS.globalDiacritics)
+    const globalDiacriticsState = ref(DEFAULT_SETTINGS.globalDiacriticsState)
 
     const loadFromStorage = () => {
         try {
@@ -48,6 +54,8 @@ export const useSettingsStore = defineStore('settings', () => {
                 appZoom.value = settings.appZoom || DEFAULT_SETTINGS.appZoom
                 readingBackgroundColor.value = settings.readingBackgroundColor || DEFAULT_SETTINGS.readingBackgroundColor
                 databasePath.value = settings.databasePath || DEFAULT_SETTINGS.databasePath
+                globalDiacritics.value = settings.globalDiacritics ?? DEFAULT_SETTINGS.globalDiacritics
+                globalDiacriticsState.value = settings.globalDiacriticsState ?? DEFAULT_SETTINGS.globalDiacriticsState
             }
         } catch (e) {
             console.error('Failed to load settings:', e)
@@ -64,7 +72,9 @@ export const useSettingsStore = defineStore('settings', () => {
                 censorDivineNames: censorDivineNames.value,
                 appZoom: appZoom.value,
                 readingBackgroundColor: readingBackgroundColor.value,
-                databasePath: databasePath.value
+                databasePath: databasePath.value,
+                globalDiacritics: globalDiacritics.value,
+                globalDiacriticsState: globalDiacriticsState.value
             }))
         } catch (e) {
             console.error('Failed to save settings:', e)
@@ -118,6 +128,8 @@ export const useSettingsStore = defineStore('settings', () => {
         appZoom.value = DEFAULT_SETTINGS.appZoom
         readingBackgroundColor.value = DEFAULT_SETTINGS.readingBackgroundColor
         databasePath.value = DEFAULT_SETTINGS.databasePath
+        globalDiacritics.value = DEFAULT_SETTINGS.globalDiacritics
+        globalDiacriticsState.value = DEFAULT_SETTINGS.globalDiacriticsState
         localStorage.removeItem(STORAGE_KEY)
         applyCSSVariables()
     }
@@ -127,7 +139,7 @@ export const useSettingsStore = defineStore('settings', () => {
     applyCSSVariables()
 
     // Watch for changes and persist
-    watch([headerFont, textFont, fontSize, linePadding, censorDivineNames, appZoom, readingBackgroundColor, databasePath], () => {
+    watch([headerFont, textFont, fontSize, linePadding, censorDivineNames, appZoom, readingBackgroundColor, databasePath, globalDiacritics, globalDiacriticsState], () => {
         saveToStorage()
         applyCSSVariables()
     })
@@ -141,6 +153,8 @@ export const useSettingsStore = defineStore('settings', () => {
         appZoom,
         readingBackgroundColor,
         databasePath,
+        globalDiacritics,
+        globalDiacriticsState,
         reset
     }
 })

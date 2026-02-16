@@ -2,27 +2,74 @@
     <div class="flex-column width-fill height-fill settings-page">
         <div class="flex-110 overflow-y settings-content">
 
-            <!-- Database Path - only show in C# WebView mode -->
-            <div v-if="webviewBridge.isAvailable()"
-                 class="setting-group">
-                <label class="flex-row bold setting-label">מיקום מסד הנתונים</label>
-                <div class="flex-column">
-                    <div class="flex-row database-path-row">
-                        <input type="text"
-                               v-model="databasePath"
-                               placeholder="בחר מיקום מסד הנתונים (seforim.db)"
-                               class="database-path-input"
-                               readonly />
-                        <button @click="selectDatabaseFile"
-                                class="c-pointer database-browse-btn"
-                                title="בחר קובץ מסד נתונים">
-                            📁
-                        </button>
-                    </div>
+            <!-- Theme Toggle - GLOBAL: Affects entire app appearance -->
+            <div class="setting-group">
+                <label class="flex-row bold setting-label">ערכת נושא</label>
+                <div class="flex-row theme-toggle">
+                    <button :class="{ active: !currentTheme }"
+                            @click="setTheme(false)"
+                            class="flex-110 c-pointer theme-option">
+                        מצב בהיר
+                    </button>
+                    <button :class="{ active: currentTheme }"
+                            @click="setTheme(true)"
+                            class="flex-110 c-pointer theme-option">
+                        מצב כהה
+                    </button>
                 </div>
             </div>
 
-            <!-- Header Font -->
+            <!-- App Zoom - GLOBAL: Affects entire app UI scale -->
+            <div class="setting-group">
+                <label class="flex-between bold setting-label">
+                    זום האפליקציה
+                    <span class="text-secondary setting-value">{{
+                        Math.round(appZoom * 100) }}%</span>
+                </label>
+                <input type="range"
+                       v-model.number="appZoom"
+                       min="0.5"
+                       max="1.5"
+                       step="0.05"
+                       class="setting-slider" />
+            </div>
+
+            <!-- Divine Name Censoring - GLOBAL: Affects all text content -->
+            <div class="setting-group">
+                <label class="flex-row bold setting-label">כיסוי שם
+                    ה'</label>
+                <div class="flex-row theme-toggle">
+                    <button :class="{ active: !censorDivineNames }"
+                            @click="setCensorDivineNames(false)"
+                            class="flex-110 c-pointer theme-option">
+                        כתיב מלא
+                    </button>
+                    <button :class="{ active: censorDivineNames }"
+                            @click="setCensorDivineNames(true)"
+                            class="flex-110 c-pointer theme-option">
+                        כיסוי (ה→ק)
+                    </button>
+                </div>
+            </div>
+
+            <!-- Diacritics Mode - READING-SPECIFIC: Controls diacritics behavior -->
+            <div class="setting-group">
+                <label class="flex-row bold setting-label">מצב טעמים וניקוד</label>
+                <div class="flex-row theme-toggle">
+                    <button :class="{ active: !globalDiacritics }"
+                            @click="globalDiacritics = false"
+                            class="flex-110 c-pointer theme-option">
+                        לכל טאב בנפרד
+                    </button>
+                    <button :class="{ active: globalDiacritics }"
+                            @click="globalDiacritics = true"
+                            class="flex-110 c-pointer theme-option">
+                        גלובלי
+                    </button>
+                </div>
+            </div>
+
+            <!-- Header Font - SEMI-GLOBAL: Affects all headers -->
             <div class="setting-group">
                 <label class="flex-row bold setting-label">גופן
                     כותרות</label>
@@ -46,7 +93,7 @@
                 </div>
             </div>
 
-            <!-- Text Font -->
+            <!-- Text Font - SEMI-GLOBAL: Affects all body text -->
             <div class="setting-group">
                 <label class="flex-row bold setting-label">גופן
                     טקסט</label>
@@ -70,13 +117,13 @@
                 </div>
             </div>
 
-            <!-- Font Size -->
+            <!-- Font Size - READING-SPECIFIC: Affects reading content -->
             <div class="setting-group">
                 <label class="flex-between bold setting-label">
                     גודל גופן
                     <span class="text-secondary setting-value">{{
                         fontSize
-                        }}%</span>
+                    }}%</span>
                 </label>
                 <input type="range"
                        v-model.number="fontSize"
@@ -86,12 +133,12 @@
                        class="setting-slider" />
             </div>
 
-            <!-- Line Padding -->
+            <!-- Line Padding - READING-SPECIFIC: Affects reading content -->
             <div class="setting-group">
                 <label class="flex-between bold setting-label">
                     ריווח שורות
                     <span class="text-secondary setting-value">{{ linePadding
-                        }}</span>
+                    }}</span>
                 </label>
                 <input type="range"
                        v-model.number="linePadding"
@@ -101,40 +148,7 @@
                        class="setting-slider" />
             </div>
 
-            <!-- App Zoom -->
-            <div class="setting-group">
-                <label class="flex-between bold setting-label">
-                    זום האפליקציה
-                    <span class="text-secondary setting-value">{{
-                        Math.round(appZoom * 100) }}%</span>
-                </label>
-                <input type="range"
-                       v-model.number="appZoom"
-                       min="0.5"
-                       max="1.5"
-                       step="0.05"
-                       class="setting-slider" />
-            </div>
-
-            <!-- Divine Name Censoring -->
-            <div class="setting-group">
-                <label class="flex-row  bold setting-label">כיסוי שם
-                    ה'</label>
-                <div class="flex-row theme-toggle">
-                    <button :class="{ active: !censorDivineNames }"
-                            @click="setCensorDivineNames(false)"
-                            class="flex-110 c-pointer theme-option">
-                        כתיב מלא
-                    </button>
-                    <button :class="{ active: censorDivineNames }"
-                            @click="setCensorDivineNames(true)"
-                            class="flex-110 c-pointer theme-option">
-                        כיסוי (ה→ק)
-                    </button>
-                </div>
-            </div>
-
-            <!-- Reading Background Color -->
+            <!-- Reading Background Color - READING-SPECIFIC: Affects reading area only -->
             <div class="setting-group">
                 <label class="flex-row bold setting-label">רקע קריאה</label>
                 <div class="flex-column">
@@ -164,7 +178,27 @@
                 </div>
             </div>
 
-            <!-- Reset Button -->
+            <!-- Database Path: Data source for entire app -->
+            <div v-if="webviewBridge.isAvailable()"
+                 class="setting-group">
+                <label class="flex-row bold setting-label">מיקום מסד הנתונים</label>
+                <div class="flex-column">
+                    <div class="flex-row database-path-row">
+                        <input type="text"
+                               v-model="databasePath"
+                               placeholder="בחר מיקום מסד הנתונים (seforim.db)"
+                               class="database-path-input"
+                               readonly />
+                        <button @click="selectDatabaseFile"
+                                class="c-pointer database-browse-btn"
+                                title="בחר קובץ מסד נתונים">
+                            📁
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reset Button - UTILITY: Resets all settings -->
             <div class="setting-group">
                 <button @click="resetSettings"
                         class="width-fill c-pointer bold reset-button">
@@ -201,15 +235,17 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import { hebrewFonts } from '../../services/hebrewFontsService'
 import { webviewBridge } from '../../services/webviewBridge'
 import { useDialog } from '../../composables/useDialog'
+import { toggleTheme, isDarkTheme, syncPdfViewerTheme } from '../../utils/theme'
 import CustomDialog from '../common/CustomDialog.vue'
 
 const settingsStore = useSettingsStore()
-const { headerFont, textFont, fontSize, linePadding, censorDivineNames, appZoom, readingBackgroundColor, databasePath } = storeToRefs(settingsStore)
+const { headerFont, textFont, fontSize, linePadding, censorDivineNames, appZoom, readingBackgroundColor, databasePath, globalDiacritics } = storeToRefs(settingsStore)
 const { dialogRef, dialogOptions, confirm, error, handleConfirm, handleCancel, handleClose } = useDialog()
 
 const availableFonts = ref<string[]>([])
 const isHeaderDropdownOpen = ref(false)
 const isTextDropdownOpen = ref(false)
+const currentTheme = ref(isDarkTheme())
 
 // Reading background colors palette - based on research for optimal reading comfort
 const readingBackgroundColors = [
@@ -330,6 +366,19 @@ const setCensorDivineNames = (censor: boolean) => {
     censorDivineNames.value = censor
     // Reload to apply censoring from data layer
     window.location.reload()
+}
+
+const setTheme = (isDark: boolean) => {
+    const needsToggle = isDark !== currentTheme.value
+    if (needsToggle) {
+        toggleTheme()
+        currentTheme.value = isDarkTheme()
+
+        // Sync theme with any open PDF.js viewers
+        setTimeout(() => {
+            syncPdfViewerTheme()
+        }, 50)
+    }
 }
 
 const selectDatabaseFile = async () => {

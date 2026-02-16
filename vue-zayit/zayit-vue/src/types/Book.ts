@@ -9,8 +9,9 @@ export interface Book {
     hasSourceConnection: number
     hasTargumConnection: number
     hasCommentaryConnection: number
-    hasReferenceConnection: number    
-    hasOtherConnection: number 
+    hasReferenceConnection: number
+    hasOtherConnection: number
+    defaultCommentatorBookId: number | null
 }
 
 export function hasConnections(book: Book): boolean {

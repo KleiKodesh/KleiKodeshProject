@@ -103,32 +103,27 @@
                     <DynamicScrollerItem :item="item"
                                          :active="active"
                                          :size-dependencies="[
-                                            item.estimatedHeight,
-                                            containerWidth,
-                                            item.links.map((l: any) => l.html.length).join(',')
-                                        ]"
+                                            item.html?.length || 0,
+                                            containerWidth
+                                         ]"
                                          :data-index="index"
                                          :data-commentary-item-observer="item.id">
 
-                        <!-- Complete Commentary Section: Header + All Links -->
-                        <section v-if="item.type === 'group-with-links'"
-                                 class="commentary-section"
-                                 :data-group-index="item.groupIndex">
+                        <!-- Group Header -->
+                        <div v-if="item.type === 'group-header'"
+                             class="bold group-header selectable"
+                             :class="{ 'c-pointer': item.targetBookId !== undefined }"
+                             :data-group-index="item.groupIndex"
+                             @click="handleGroupClick(item)">
+                            {{ item.groupName }}
+                        </div>
 
-                            <!-- Group Header -->
-                            <div class="bold group-header selectable"
-                                 :class="{ 'c-pointer': item.targetBookId !== undefined }"
-                                 @click="handleGroupClick(item)">
-                                {{ item.groupName }}
-                            </div>
-
-                            <!-- All Commentary Links for this Group -->
-                            <div v-for="(link, linkIndex) in item.links"
-                                 :key="`link-${linkIndex}`"
-                                 class="selectable line-1.6 justify link-item"
-                                 v-html="link.html">
-                            </div>
-                        </section>
+                        <!-- Individual Commentary Link -->
+                        <div v-else-if="item.type === 'link'"
+                             class="selectable line-1.6 justify link-item"
+                             :data-group-index="item.groupIndex"
+                             v-html="item.html">
+                        </div>
                     </DynamicScrollerItem>
                 </template>
             </DynamicScroller>
@@ -359,109 +354,43 @@ useEventListener('keydown', (event: KeyboardEvent) => {
 
 // Virtual scroller configuration with dynamic sizing
 const commentaryMinItemSize = computed(() => {
-    // Base calculation on actual font size and line height settings
-    const baseFontSize = 16 // Base font size in pixels
+    const baseFontSize = 16
     const effectiveFontSize = (baseFontSize * settingsStore.fontSize) / 100
     const effectiveLineHeight = effectiveFontSize * settingsStore.linePadding
-
-    // Check if we have any extremely long paragraphs
-    const hasExtremeParagraphs = processedLinkGroups.value.some(group =>
-        group.links.some(link => {
-            const textLength = link.html.replace(/<[^>]*>/g, '').length
-            return textLength > 10000
-        })
-    )
-
-    // Use much higher minimum for extreme content, scaled by font settings
-    const baseMinSize = hasExtremeParagraphs ? 500 : 150
-    const fontSizeMultiplier = settingsStore.fontSize / 105 // 105 is default
-    return Math.floor(baseMinSize * fontSizeMultiplier)
+    return Math.floor(effectiveLineHeight * 3)
 })
 
-// Virtual items for commentary scroller - GROUP ITEMS TOGETHER
+// Virtual items for commentary scroller - FLATTEN TO INDIVIDUAL ITEMS
 const virtualCommentaryItems = computed(() => {
     const items: Array<{
         id: string
-        type: 'group-with-links'
+        type: 'group-header' | 'link'
         groupIndex: number
-        groupName: string
+        groupName?: string
         targetBookId?: number
         targetLineIndex?: number
-        links: Array<{ html: string }>
-        estimatedHeight: number
+        html?: string
     }> = []
 
-    // Get effective width for text wrapping calculation
-    // Account for padding/margins (estimate ~30px total)
-    const effectiveWidth = Math.max(150, containerWidth.value - 30)
-
-    // Calculate actual font size and line height from settings
-    const baseFontSize = 16 // Base font size in pixels
-    const effectiveFontSize = (baseFontSize * settingsStore.fontSize) / 100
-    const effectiveLineHeight = effectiveFontSize * settingsStore.linePadding
-
-    // Estimate characters per line based on width and actual font size
-    // Hebrew characters width varies with font size
-    const charWidth = effectiveFontSize * (effectiveWidth < 250 ? 0.75 : 0.65)
-    const charsPerLine = Math.max(10, Math.floor(effectiveWidth / charWidth))
-
     processedLinkGroups.value.forEach((group, groupIndex) => {
-        // Better height estimation accounting for very long paragraphs
-        // Header height scales with font size
-        const headerHeight = Math.ceil(effectiveFontSize * 2.5)
-        let totalEstimatedHeight = headerHeight
-
-        // CRITICAL: Account for actual number of links retrieved from database
-        // Each link in group.links is a separate database row (potentially merged from multiple source lines)
-        const actualLinkCount = group.links.length
-
-        group.links.forEach((link, linkIndex) => {
-            // Strip HTML tags to get approximate text length
-            const textLength = link.html.replace(/<[^>]*>/g, '').length
-
-            // Calculate estimated number of lines based on viewport width
-            const estimatedLines = Math.ceil(textLength / charsPerLine)
-
-            // Use actual line height from settings
-            // Minimum height per link to ensure each database row has adequate space
-            const minHeightPerLink = effectiveLineHeight * 2
-            let linkHeight = Math.max(minHeightPerLink, estimatedLines * effectiveLineHeight)
-
-            // Add buffer based on viewport width (narrower = more unpredictable wrapping)
-            let bufferMultiplier = 1.0
-            if (effectiveWidth < 250) {
-                bufferMultiplier = 1.5  // 50% buffer for extremely narrow
-            } else if (effectiveWidth < 400) {
-                bufferMultiplier = 1.3  // 30% buffer for narrow
-            } else if (effectiveWidth < 600) {
-                bufferMultiplier = 1.15 // 15% buffer for medium
-            } else {
-                bufferMultiplier = 1.1  // 10% buffer for wide
-            }
-
-            linkHeight = Math.floor(linkHeight * bufferMultiplier)
-
-            // Add spacing between individual links (each database row)
-            const spacingBetweenLinks = 10
-            totalEstimatedHeight += linkHeight + spacingBetweenLinks
-        })
-
-        // Additional buffer based on total link count from database
-        // Accounts for cumulative rendering overhead when many links are merged
-        if (actualLinkCount > 5) {
-            const extraBuffer = Math.floor(actualLinkCount * effectiveLineHeight * 0.2)
-            totalEstimatedHeight += extraBuffer
-        }
-
+        // Add group header as separate item
         items.push({
-            id: `group-${groupIndex}`,
-            type: 'group-with-links',
+            id: `group-header-${groupIndex}`,
+            type: 'group-header',
             groupIndex: groupIndex,
             groupName: group.groupName,
             targetBookId: group.targetBookId,
-            targetLineIndex: group.targetLineIndex,
-            links: group.links,
-            estimatedHeight: totalEstimatedHeight
+            targetLineIndex: group.targetLineIndex
+        })
+
+        // Add each link as separate item
+        group.links.forEach((link, linkIndex) => {
+            items.push({
+                id: `group-${groupIndex}-link-${linkIndex}`,
+                type: 'link',
+                groupIndex: groupIndex,
+                html: link.html
+            })
         })
     })
 
@@ -985,9 +914,24 @@ async function loadCommentaryLinks(bookId: number, lineIndex: number, scrollToTa
                 }
             }, 150)
         } else {
-            // Default to first group
-            currentGroupIndex.value = 0
-            comboboxSelectedValue.value = 0
+            // Check if book has a default commentator and this is first time opening
+            let defaultGroupIndex = 0
+            if (props.book?.defaultCommentatorBookId) {
+                const defaultIndex = linkGroups.value.findIndex(g => g.targetBookId === props.book!.defaultCommentatorBookId)
+                if (defaultIndex >= 0) {
+                    defaultGroupIndex = defaultIndex
+                }
+            }
+            
+            // Default to first group or default commentator
+            currentGroupIndex.value = defaultGroupIndex
+            comboboxSelectedValue.value = defaultGroupIndex
+            
+            if (defaultGroupIndex > 0) {
+                setTimeout(() => {
+                    scrollToGroup(defaultGroupIndex)
+                }, 150)
+            }
         }
 
         setTimeout(() => {
@@ -1138,8 +1082,9 @@ watch(currentGroupIndex, (newIndex) => {
 const scrollToGroup = (index: number) => {
     if (!commentaryScrollerRef.value) return
 
-    const groupItemId = `group-${index}`
-    const itemIndex = virtualCommentaryItems.value.findIndex(item => item.id === groupItemId)
+    // Find the group header item for this group index
+    const groupHeaderId = `group-header-${index}`
+    const itemIndex = virtualCommentaryItems.value.findIndex(item => item.id === groupHeaderId)
 
     if (itemIndex !== -1) {
         isNavigating.value = true
@@ -1275,16 +1220,19 @@ function handleCopy(event: ClipboardEvent) {
         return
     }
 
-    // Only copy all content as HTML if Ctrl+A was pressed (chained shortcut pattern)
-    if (!selectAllWasPressed.value) {
-        console.log('[BookCommentaryView] Ctrl+A was not pressed, using default copy behavior')
+    // Check if user has selected all content (via Ctrl+A, context menu, or any other method)
+    // by checking if the selection encompasses the entire container
+    const isFullSelection = range.startContainer === containerEl || 
+                           containerEl.contains(range.startContainer) &&
+                           containerEl.contains(range.endContainer) &&
+                           range.toString().length > containerEl.textContent!.length * 0.95 // 95% threshold
+
+    if (!isFullSelection) {
+        console.log('[BookCommentaryView] Partial selection, using default browser copy')
         return // Let browser handle partial selection copy
     }
 
-    // Reset the flag after use
-    selectAllWasPressed.value = false
-
-    console.log('[BookCommentaryView] Ctrl+A -> Ctrl+C detected, copying all source content...')
+    console.log('[BookCommentaryView] Full selection detected, copying all source content...')
 
     // Get all source commentary content as HTML
     let htmlContent = ''
@@ -1308,6 +1256,20 @@ function handleCopy(event: ClipboardEvent) {
         htmlContent += '\n'
         textContent += '\n'
     })
+
+    // Wrap in full HTML document with RTL body
+    htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+body { direction: rtl; font-weight: normal; }
+</style>
+</head>
+<body>
+${htmlContent}
+</body>
+</html>`
 
     // Set clipboard data
     event.clipboardData?.setData('text/html', htmlContent)
@@ -1347,8 +1309,9 @@ function setupScrollTracking() {
     const updateCurrentSection = () => {
         if (isNavigating.value || isLoadingFromNavigation.value) return
 
-        const sections = scrollerEl.querySelectorAll('section.commentary-section')
-        if (sections.length === 0) return
+        // Look for all items with data-group-index (headers and links)
+        const items = scrollerEl.querySelectorAll('[data-group-index]')
+        if (items.length === 0) return
 
         const scrollerRect = scrollerEl.getBoundingClientRect()
         const scrollerTop = scrollerRect.top
@@ -1357,20 +1320,20 @@ function setupScrollTracking() {
         let targetSection: number | undefined = undefined
 
         if (scrollDirection.value === 'up') {
-            // Scrolling UP: Find the first section whose top is visible or just above viewport top
+            // Scrolling UP: Find the first item whose top is visible or just above viewport top
             let bestSection: number | undefined = undefined
             let bestDistance = Infinity
 
-            sections.forEach((section: Element) => {
-                const rect = section.getBoundingClientRect()
-                const sectionIndex = parseInt(section.getAttribute('data-group-index') || '-1')
+            items.forEach((item: Element) => {
+                const rect = item.getBoundingClientRect()
+                const sectionIndex = parseInt(item.getAttribute('data-group-index') || '-1')
                 if (sectionIndex < 0) return
 
-                // Check if section is visible (any part in viewport)
+                // Check if item is visible (any part in viewport)
                 const isVisible = rect.bottom > scrollerTop && rect.top < scrollerBottom
 
                 if (isVisible) {
-                    // Distance from section top to viewport top (prefer sections at top)
+                    // Distance from item top to viewport top (prefer items at top)
                     const distance = Math.abs(rect.top - scrollerTop)
                     if (distance < bestDistance) {
                         bestDistance = distance
@@ -1381,16 +1344,16 @@ function setupScrollTracking() {
 
             targetSection = bestSection
         } else if (scrollDirection.value === 'down') {
-            // Scrolling DOWN: Find the last section that's visible
+            // Scrolling DOWN: Find the last item that's visible
             let bestSection: number | undefined = undefined
             let bestTop = -Infinity
 
-            sections.forEach((section: Element) => {
-                const rect = section.getBoundingClientRect()
-                const sectionIndex = parseInt(section.getAttribute('data-group-index') || '-1')
+            items.forEach((item: Element) => {
+                const rect = item.getBoundingClientRect()
+                const sectionIndex = parseInt(item.getAttribute('data-group-index') || '-1')
                 if (sectionIndex < 0) return
 
-                // Check if section is visible (any part in viewport)
+                // Check if item is visible (any part in viewport)
                 const isVisible = rect.bottom > scrollerTop && rect.top < scrollerBottom
 
                 if (isVisible && rect.top > bestTop) {
@@ -1401,13 +1364,13 @@ function setupScrollTracking() {
 
             targetSection = bestSection
         } else {
-            // No direction: Find section closest to top of viewport
+            // No direction: Find item closest to top of viewport
             let bestSection: number | undefined = undefined
             let bestDistance = Infinity
 
-            sections.forEach((section: Element) => {
-                const rect = section.getBoundingClientRect()
-                const sectionIndex = parseInt(section.getAttribute('data-group-index') || '-1')
+            items.forEach((item: Element) => {
+                const rect = item.getBoundingClientRect()
+                const sectionIndex = parseInt(item.getAttribute('data-group-index') || '-1')
                 if (sectionIndex < 0) return
 
                 const isVisible = rect.bottom > scrollerTop && rect.top < scrollerBottom

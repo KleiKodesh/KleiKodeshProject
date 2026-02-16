@@ -331,7 +331,8 @@ class DatabaseService {
 
     async getLineIndexFromLineId(lineId: number): Promise<{ lineIndex: number; bookId: number } | null> {
         if (this.isWebViewAvailable()) {
-            return await webviewBridge.call('GetLineIndexFromLineId', lineId, SqlQueries.getLineIndexFromLineId(lineId))
+            const result = await webviewBridge.call<Array<{ lineIndex: number; bookId: number }>>('GetLineIndexFromLineId', lineId, SqlQueries.getLineIndexFromLineId(lineId))
+            return result?.[0] || null
         } else if (this.isDevServerAvailable()) {
             const result = await devQuery<{ lineIndex: number; bookId: number }>(SqlQueries.getLineIndexFromLineId(lineId))
             return result[0] || null

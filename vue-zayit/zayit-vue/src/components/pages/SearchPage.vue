@@ -687,7 +687,7 @@ const handleResultClick = async (result: BloomSearchResult) => {
       return
     }
 
-    console.log('[SearchPage] Opening book:', result.bookTitle, 'at line index:', lineInfo.lineIndex)
+    console.log('[SearchPage] Opening book:', result.bookTitle, 'at line index:', lineInfo.lineIndex, 'with highlight terms:', executedQuery.value, 'snippet:', result.snippet)
 
     const hasConnections = await checkBookHasConnections(result.bookId)
 

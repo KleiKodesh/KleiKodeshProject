@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue';
 import type { Tab, PageType } from '../types/Tab';
 import { webviewBridge } from '../services/webviewBridge';
 import { handleHebrewBookTabClosed } from '../services/hebrewBooksHandlers';
+import { useSettingsStore } from './settingsStore';
 
 const STORAGE_KEY = 'tabStore';
 const CURRENT_WORKSPACE_KEY = 'zayit_current_workspace';
@@ -215,6 +216,20 @@ export const useTabStore = defineStore('tabs', () => {
 
     const activeTab = computed(() => tabs.value.find(tab => tab.isActive));
 
+    // Centralized computed property for diacritics state
+    // Handles both global and per-tab modes in one place
+    const currentDiacriticsState = computed(() => {
+        const settingsStore = useSettingsStore();
+
+        if (settingsStore.globalDiacritics) {
+            // Global mode: return global state
+            return settingsStore.globalDiacriticsState;
+        }
+
+        // Per-tab mode: return active tab's state
+        return activeTab.value?.bookState?.diacriticsState || 0;
+    });
+
     // Helper function to handle tab cleanup (Hebrew books cache cleanup)
     const handleTabCleanup = async (tab: Tab) => {
         try {
@@ -354,6 +369,7 @@ export const useTabStore = defineStore('tabs', () => {
     };
 
     const openBook = (bookTitle: string, bookId: number, hasConnections?: boolean, initialLineIndex?: number) => {
+        const settingsStore = useSettingsStore();
         const tab = tabs.value.find(t => t.isActive);
         if (tab) {
             tab.currentPage = 'bookview';
@@ -367,7 +383,8 @@ export const useTabStore = defineStore('tabs', () => {
                     bookTitle,
                     hasConnections,
                     initialLineIndex,
-                    isLineDisplayInline: false // Default to block display (justified text)
+                    isLineDisplayInline: false, // Default to block display (justified text)
+                    diacriticsState: settingsStore.globalDiacritics ? settingsStore.globalDiacriticsState : 0 // Apply global state if enabled
                 };
             } else {
                 // Same book - update initialLineIndex if provided, otherwise clear it
@@ -407,14 +424,30 @@ export const useTabStore = defineStore('tabs', () => {
     };
 
     const toggleDiacritics = () => {
-        const tab = tabs.value.find(t => t.isActive);
-        if (tab?.bookState) {
-            // Initialize diacritics state if not set
-            if (tab.bookState.diacriticsState === undefined) {
-                tab.bookState.diacriticsState = 0;
+        // Import settings store to check global mode
+        const settingsStore = useSettingsStore();
+
+        if (settingsStore.globalDiacritics) {
+            // Global mode: cycle through global state and apply to all book tabs
+            settingsStore.globalDiacriticsState = (settingsStore.globalDiacriticsState + 1) % 3;
+
+            // Apply to all book tabs
+            tabs.value.forEach(tab => {
+                if (tab.bookState) {
+                    tab.bookState.diacriticsState = settingsStore.globalDiacriticsState;
+                }
+            });
+        } else {
+            // Per-tab mode: only affect active tab
+            const tab = tabs.value.find(t => t.isActive);
+            if (tab?.bookState) {
+                // Initialize diacritics state if not set
+                if (tab.bookState.diacriticsState === undefined) {
+                    tab.bookState.diacriticsState = 0;
+                }
+                // Cycle through states: 0 -> 1 -> 2 -> 0
+                tab.bookState.diacriticsState = (tab.bookState.diacriticsState + 1) % 3;
             }
-            // Cycle through states: 0 -> 1 -> 2 -> 0
-            tab.bookState.diacriticsState = (tab.bookState.diacriticsState + 1) % 3;
         }
     };
 
@@ -484,6 +517,24 @@ export const useTabStore = defineStore('tabs', () => {
     };
 
     const openPdfWithFile = (fileName: string, fileUrl: string) => {
+        // Ensure filename has .pdf extension
+        let displayName = fileName;
+        if (!displayName.toLowerCase().endsWith('.pdf')) {
+            displayName += '.pdf';
+        }
+
+        // Try to convert homepage to PDF viewer first
+        const currentTab = tabs.value.find(t => t.isActive);
+        if (currentTab?.currentPage === 'homepage') {
+            currentTab.currentPage = 'pdfview';
+            currentTab.title = displayName;
+            currentTab.pdfState = {
+                fileName: displayName,
+                fileUrl
+            };
+            return;
+        }
+
         // Create new PDF tab with file already selected
         tabs.value.forEach(tab => tab.isActive = false);
 
@@ -491,12 +542,6 @@ export const useTabStore = defineStore('tabs', () => {
         let newId = 1;
         while (existingIds.has(newId)) {
             newId++;
-        }
-
-        // Ensure filename has .pdf extension
-        let displayName = fileName;
-        if (!displayName.toLowerCase().endsWith('.pdf')) {
-            displayName += '.pdf';
         }
 
         const newTab: Tab = {
@@ -547,6 +592,25 @@ export const useTabStore = defineStore('tabs', () => {
     };
 
     const openPdfWithFilePathAndBlobUrl = (fileName: string, filePath: string, blobUrl: string) => {
+        // Ensure filename has .pdf extension
+        let displayName = fileName;
+        if (!displayName.toLowerCase().endsWith('.pdf')) {
+            displayName += '.pdf';
+        }
+
+        // Try to convert homepage to PDF viewer first
+        const currentTab = tabs.value.find(t => t.isActive);
+        if (currentTab?.currentPage === 'homepage') {
+            currentTab.currentPage = 'pdfview';
+            currentTab.title = displayName;
+            currentTab.pdfState = {
+                fileName: displayName,
+                fileUrl: blobUrl, // Use virtual URL for current session viewing
+                filePath // Store file path for persistence (virtual URL will be recreated on restart)
+            };
+            return;
+        }
+
         // Create new PDF tab with both file path (persistence) and blob URL (viewing)
         tabs.value.forEach(tab => tab.isActive = false);
 
@@ -554,12 +618,6 @@ export const useTabStore = defineStore('tabs', () => {
         let newId = 1;
         while (existingIds.has(newId)) {
             newId++;
-        }
-
-        // Ensure filename has .pdf extension
-        let displayName = fileName;
-        if (!displayName.toLowerCase().endsWith('.pdf')) {
-            displayName += '.pdf';
         }
 
         const newTab: Tab = {
@@ -664,6 +722,10 @@ export const useTabStore = defineStore('tabs', () => {
     };
 
     const openBookInNewTab = (bookTitle: string, bookId: number, hasConnections?: boolean, initialLineIndex?: number, shouldHighlight?: boolean, highlightTerms?: string, highlightSnippet?: string) => {
+        console.log('[tabStore] openBookInNewTab called with:', { bookTitle, bookId, initialLineIndex, shouldHighlight, highlightTerms, highlightSnippet })
+
+        const settingsStore = useSettingsStore();
+
         // Deactivate all current tabs
         tabs.value.forEach(tab => tab.isActive = false)
 
@@ -686,7 +748,9 @@ export const useTabStore = defineStore('tabs', () => {
                 hasConnections,
                 initialLineIndex,
                 shouldHighlight,
-                isLineDisplayInline: false
+                isLineDisplayInline: false,
+                diacriticsState: settingsStore.globalDiacritics ? settingsStore.globalDiacriticsState : 0, // Apply global state if enabled
+                isFirstTocOpen: false // Skip full-width TOC since we're opening directly to content
             },
             searchState: highlightTerms ? {
                 searchQuery: '',
@@ -697,6 +761,7 @@ export const useTabStore = defineStore('tabs', () => {
             } : undefined
         }
 
+        console.log('[tabStore] Created new tab:', newTab)
         tabs.value.push(newTab)
         nextId.value = Math.max(newId + 1, nextId.value)
     };
@@ -874,6 +939,7 @@ export const useTabStore = defineStore('tabs', () => {
     return {
         tabs,
         activeTab,
+        currentDiacriticsState,
         currentWorkspaceId,
         workspaces,
         addTab,

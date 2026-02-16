@@ -1,5 +1,6 @@
 import { webviewBridge } from './webviewBridge'
 import { bloomSearchCacheService } from './bloomSearchCacheService'
+import { dbService } from './dbService'
 import type { BloomSearchResult, IndexingProgress } from '../types/BloomSearch'
 
 class BloomSearchService {
@@ -36,16 +37,8 @@ class BloomSearchService {
 
     async getLineIndexFromLineId(lineId: number): Promise<{ lineIndex: number; bookId: number } | null> {
         try {
-            if (!webviewBridge.isAvailable()) {
-                console.warn('[BloomSearchService] WebView bridge not available')
-                return null
-            }
-
-            const result = await webviewBridge.getLineIndexFromLineId(lineId)
-            if (result.lineIndex === -1 || result.bookId === -1) {
-                return null
-            }
-            return result
+            // Use dbService which properly passes the SQL query
+            return await dbService.getLineIndexFromLineId(lineId)
         } catch (error) {
             console.error('[BloomSearchService] Error getting line index:', error)
             return null

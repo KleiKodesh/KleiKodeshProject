@@ -10,18 +10,24 @@ export const SqlQueries = {
 
   getAllBooks: `
     SELECT 
-      Id,
-      CategoryId,
-      Title,
-      HeShortDesc,
-      OrderIndex,
-      TotalLines,
-      HasTargumConnection,
-      HasReferenceConnection,
-      HasCommentaryConnection,
-      HasOtherConnection,
-      HasSourceConnection
-    FROM book
+      b.Id,
+      b.CategoryId,
+      b.Title,
+      b.HeShortDesc,
+      b.OrderIndex,
+      b.TotalLines,
+      b.HasTargumConnection,
+      b.HasReferenceConnection,
+      b.HasCommentaryConnection,
+      b.HasOtherConnection,
+      b.HasSourceConnection,
+      dc.commentatorBookId as defaultCommentatorBookId
+    FROM book b
+    LEFT JOIN (
+      SELECT bookId, commentatorBookId
+      FROM default_commentator
+      WHERE position = 0
+    ) dc ON dc.bookId = b.Id
   `,
 
   getToc: (docId: number) => `

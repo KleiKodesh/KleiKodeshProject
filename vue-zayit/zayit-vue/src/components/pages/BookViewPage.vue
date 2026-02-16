@@ -71,15 +71,27 @@ watch(() => myTab.value?.bookState?.bookId, async (bookId) => {
 
     // Check if we should highlight the initial line (from search or commentary navigation)
     if (myTab.value?.bookState?.shouldHighlight && myTab.value?.bookState?.initialLineIndex !== undefined) {
+      console.log('[BookViewPage] Should highlight line:', myTab.value.bookState.initialLineIndex, 'with terms:', myTab.value?.searchState?.highlightTerms)
+      
       // Wait for viewer to be ready, then trigger highlight
       setTimeout(() => {
         const viewer: any = lineViewerRef.value
         const highlightTerms = myTab.value?.searchState?.highlightTerms
         const highlightSnippet = myTab.value?.searchState?.highlightSnippet
 
+        console.log('[BookViewPage] Calling scrollToLineWithFadeHighlight with:', {
+          lineIndex: myTab.value!.bookState!.initialLineIndex,
+          highlightTerms,
+          highlightSnippet,
+          viewerExists: !!viewer,
+          methodExists: !!viewer?.scrollToLineWithFadeHighlight
+        })
+
         if (viewer?.scrollToLineWithFadeHighlight) {
           // Highlight line with optional search terms and snippet
           viewer.scrollToLineWithFadeHighlight(myTab.value!.bookState!.initialLineIndex!, highlightTerms, highlightSnippet)
+        } else {
+          console.error('[BookViewPage] scrollToLineWithFadeHighlight not available on viewer')
         }
 
         // Clear the flags so they don't highlight again
@@ -91,6 +103,8 @@ watch(() => myTab.value?.bookState?.bookId, async (bookId) => {
           myTab.value.searchState.highlightSnippet = undefined
         }
       }, 500) // Wait for book to load
+    } else {
+      console.log('[BookViewPage] Not highlighting - shouldHighlight:', myTab.value?.bookState?.shouldHighlight, 'initialLineIndex:', myTab.value?.bookState?.initialLineIndex)
     }
   }
 }, { immediate: true })

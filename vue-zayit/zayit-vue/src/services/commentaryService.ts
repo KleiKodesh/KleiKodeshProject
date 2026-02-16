@@ -72,11 +72,22 @@ export class CommentaryService {
     }
 
     /**
-     * Get default filter for a book (prefers COMMENTARY if available)
+     * Get default filter for a book (uses defaultCommentatorBookId if available)
      */
     getDefaultFilter(book: Book): number | undefined {
         const options = this.getAvailableFilterOptions(book)
         if (options.length === 0) return undefined
+
+        // If book has a default commentator, prefer COMMENTARY type
+        if (book.defaultCommentatorBookId) {
+            const connectionTypesStore = useConnectionTypesStore()
+            const commentaryTypeId = connectionTypesStore.getConnectionTypeId('COMMENTARY')
+            if (commentaryTypeId && options.some(opt => opt.value === commentaryTypeId)) {
+                return commentaryTypeId
+            }
+        }
+
+        // Fallback to the original logic
         const defaultOption = options.find(opt => opt.isDefault && opt.value !== undefined)
         return defaultOption ? defaultOption.value : options[0]!.value
     }

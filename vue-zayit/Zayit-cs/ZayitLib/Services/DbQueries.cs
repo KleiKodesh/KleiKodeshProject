@@ -185,6 +185,29 @@ namespace Zayit.Services
                         .ToArray();
                 }
 
+                // Debug: Log first book result to check defaultCommentatorBookId
+                if (sql.Contains("FROM book") && result is Array arr && arr.Length > 0)
+                {
+                    var firstBook = arr.GetValue(0);
+                    if (firstBook != null)
+                    {
+                        var props = firstBook.GetType().GetProperties();
+                        var propNames = string.Join(", ", props.Select(p => p.Name));
+                        Console.WriteLine($"[DbQueries] First book properties: {propNames}");
+                        
+                        var defaultCommentatorProp = firstBook.GetType().GetProperty("defaultCommentatorBookId");
+                        if (defaultCommentatorProp != null)
+                        {
+                            var value = defaultCommentatorProp.GetValue(firstBook);
+                            Console.WriteLine($"[DbQueries] defaultCommentatorBookId value: {value}");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"[DbQueries] defaultCommentatorBookId property NOT FOUND");
+                        }
+                    }
+                }
+
                 return result;
             }
             catch (Exception ex)

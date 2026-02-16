@@ -23,6 +23,7 @@
           <DiacriticsDropdown />
 
           <!-- Line display toggle dropdown item -->
+          <!-- COMMENTED OUT: Block view functionality removed for performance
           <div v-if="tabStore.activeTab?.currentPage === 'bookview'"
                @click.stop="handleLineDisplayClick"
                class="flex-row flex-center-start hover-bg c-pointer dropdown-item">
@@ -32,6 +33,7 @@
                   v-else />
             <span class="dropdown-label">{{ isLineDisplayInline ? 'תצוגת בלוק' : 'תצוגת שורה' }}</span>
           </div>
+          -->
 
 
 

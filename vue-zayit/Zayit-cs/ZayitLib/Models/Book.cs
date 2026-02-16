@@ -25,6 +25,7 @@
         public int HasOtherConnection { get; set; }
 
         public int HasSourceConnection { get; set; }
-    }
 
+        public int? DefaultCommentatorBookId { get; set; }
+    }
 }

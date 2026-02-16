@@ -12,6 +12,7 @@
                        @next="handleSearchNext"
                        @previous="handleSearchPrevious" />
 
+        <!-- Virtualized scroller -->
         <DynamicScroller ref="scrollerRef"
                          class="scroller height-fill line-viewer"
                          :style="containerStyles"
@@ -30,7 +31,6 @@
                                      :active="active"
                                      :size-dependencies="[
                                         item.content,
-                                        myTab?.bookState?.isLineDisplayInline,
                                         myTab?.bookState?.showAltToc
                                     ]"
                                      :data-index="index"
@@ -38,7 +38,6 @@
                     <BookLine :content="item.content || '\u00A0'"
                               :line-index="index"
                               :is-selected="selectedLineIndex === index"
-                              :inline-mode="myTab?.bookState?.isLineDisplayInline || false"
                               :alt-toc-entries="item.altTocEntries"
                               :show-alt-toc="myTab?.bookState?.showAltToc"
                               :class="{
@@ -188,17 +187,9 @@ function handleKeyDown(e: KeyboardEvent) {
     }
 }
 
-// Minimum item size for the scroller - account for variable heights
 // Minimum item size for the scroller - be more conservative to prevent scroll issues
 const minItemSize = computed(() => {
-    const isInline = myTab.value?.bookState?.isLineDisplayInline || false
-
-    // Use more conservative estimates to prevent virtual scroller height miscalculation
-    if (isInline) {
-        return 24 // Smaller for inline mode
-    } else {
-        return 40 // Conservative base size for block mode
-    }
+    return 40 // Conservative base size for block mode
 })
 
 // Create virtual items array for the scroller
@@ -714,16 +705,19 @@ function handleCopy(event: ClipboardEvent) {
         return
     }
 
-    // Only copy all content as HTML if Ctrl+A was pressed (chained shortcut pattern)
-    if (!selectAllWasPressed.value) {
-        console.log('[BookLineViewer] Ctrl+A was not pressed, using default copy behavior')
+    // Check if user has selected all content (via Ctrl+A, context menu, or any other method)
+    // by checking if the selection encompasses the entire scroller
+    const isFullSelection = range.startContainer === scrollerEl ||
+        scrollerEl.contains(range.startContainer) &&
+        scrollerEl.contains(range.endContainer) &&
+        range.toString().length > scrollerEl.textContent!.length * 0.95 // 95% threshold
+
+    if (!isFullSelection) {
+        console.log('[BookLineViewer] Partial selection, using default browser copy')
         return // Let browser handle partial selection copy
     }
 
-    // Reset the flag after use
-    selectAllWasPressed.value = false
-
-    console.log('[BookLineViewer] Ctrl+A -> Ctrl+C detected, copying all source content...')
+    console.log('[BookLineViewer] Full selection detected, copying all source content...')
 
     // Get all source lines as HTML
     const lines = viewerState.lines.value
@@ -747,6 +741,20 @@ function handleCopy(event: ClipboardEvent) {
         tempDiv.innerHTML = line
         textContent += (tempDiv.textContent || tempDiv.innerText || '') + '\n'
     }
+
+    // Wrap in full HTML document with RTL body
+    htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+body { direction: rtl; font-weight: normal; }
+</style>
+</head>
+<body>
+${htmlContent}
+</body>
+</html>`
 
     // Set clipboard data
     event.clipboardData?.setData('text/html', htmlContent)
@@ -1232,5 +1240,41 @@ function scrollToFirstHighlightedWord(lineIndex: number) {
 
 .scroller {
     height: 100%;
+}
+
+/* Global search snippet background animation */
+.line-viewer :deep(.global-search-snippet-bg) {
+    animation: fadeSearchHighlight 3s ease-out forwards;
+}
+
+@keyframes fadeSearchHighlight {
+    0% {
+        background-color: rgba(245, 158, 11, 0.3);
+        /* Orange/amber - same as in-book search */
+    }
+
+    100% {
+        background-color: transparent;
+    }
+}
+
+:root.dark .line-viewer :deep(.global-search-snippet-bg) {
+    animation: fadeSearchHighlightDark 3s ease-out forwards;
+}
+
+@keyframes fadeSearchHighlightDark {
+    0% {
+        background-color: rgba(251, 191, 36, 0.3);
+        /* Lighter amber for dark mode - same as in-book search */
+    }
+
+    100% {
+        background-color: transparent;
+    }
+}
+
+/* Global search highlighting - foreground color */
+.line-viewer :deep(.global-search-highlight) {
+    color: var(--accent-color);
 }
 </style>

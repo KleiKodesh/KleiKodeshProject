@@ -2,8 +2,9 @@
   <div class="bar c-pointer tab-header"
        @click.stop="handleHeaderClick">
     <div class="flex-row">
-      <!-- Settings menu -->
+      <!-- Settings menu - COMMENTED OUT: Moved first 3 items inline
       <TabHeaderMenu @close="handleDropdownClose" />
+      -->
 
       <button v-if="tabStore.activeTab?.currentPage === 'bookview'"
               @click.stop="handleButtonClick(goToToc)"
@@ -13,11 +14,22 @@
               class="rtl-flip" />
       </button>
 
-      <button v-if="tabStore.activeTab?.currentPage === 'bookview' && !isTocVisible"
-              @click.stop="handleButtonClick(openSearch)"
+      <!-- Diacritics toggle button -->
+      <button v-if="tabStore.activeTab?.currentPage === 'bookview'"
+              @click.stop="handleButtonClick(handleDiacriticsToggle)"
               class="flex-center c-pointer touch-interactive"
-              title="חיפוש (Ctrl+F)">
-        <Icon icon="fluent:search-28-filled" />
+              :title="diacriticsLabel">
+        <component :is="diacriticsIconComponent"
+                   class="diacritics-icon"
+                   :class="diacriticsStateClass" />
+      </button>
+
+      <!-- Alt TOC toggle button -->
+      <button v-if="tabStore.activeTab?.currentPage === 'bookview'"
+              @click.stop="handleButtonClick(handleAltTocToggle)"
+              class="flex-center c-pointer touch-interactive"
+              :title="isAltTocVisible ? 'הסתר כותרות נוספות' : 'הצג כותרות נוספות'">
+        <Icon icon="fluent:eye-lines-28-regular" />
       </button>
 
       <button v-if="tabStore.activeTab?.currentPage === 'bookview' && hasConnections && !isTocVisible"
@@ -28,14 +40,19 @@
               :icon="isSplitPaneOpen ? 'fluent:panel-bottom-expand-20-filled' : 'fluent:panel-bottom-contract-20-filled'" />
       </button>
 
-
-
-
     </div>
     <span class="center-text ellipsis activetab-title"
           title="הצג רשימת טאבים">{{ tabStore.activeTab?.title
           }}</span>
+
     <div class="flex-row justify-end">
+      <button v-if="tabStore.activeTab?.currentPage === 'bookview' && !isTocVisible"
+              @click.stop="handleButtonClick(openSearch)"
+              class="flex-center c-pointer touch-interactive"
+              title="חיפוש (Ctrl+F)">
+        <Icon icon="fluent:search-28-filled" />
+      </button>
+
       <button @click.stop="handleButtonClick(resetTab)"
               class="flex-center c-pointer touch-interactive"
               title="דף הבית">
@@ -62,7 +79,10 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { Icon } from '@iconify/vue';
-import TabHeaderMenu from './TabHeaderMenu.vue';
+// import TabHeaderMenu from './TabHeaderMenu.vue'; // Commented out
+import DiacriticsFullIcon from './icons/DiacriticsFullIcon.vue';
+import DiacriticsNikkudOnlyIcon from './icons/DiacriticsNikkudOnlyIcon.vue';
+import DiacriticsNoneIcon from './icons/DiacriticsNoneIcon.vue';
 import { useTabStore } from '../stores/tabStore';
 
 const tabStore = useTabStore();
@@ -90,6 +110,34 @@ const isSplitPaneOpen = computed(() => {
   return bookState.showBottomPane || false;
 });
 
+// Alt TOC visibility state
+const isAltTocVisible = computed(() => {
+  const bookState = tabStore.activeTab?.bookState;
+  if (!bookState) return true;
+  return bookState.showAltToc !== false;
+});
+
+// Diacritics state - centralized in tabStore
+const diacriticsState = computed(() => tabStore.currentDiacriticsState);
+
+const diacriticsStateClass = computed(() => {
+  if (diacriticsState.value === 1) return 'state-1';
+  if (diacriticsState.value === 2) return 'state-2';
+  return '';
+});
+
+const diacriticsIconComponent = computed(() => {
+  if (diacriticsState.value === 1) return DiacriticsNikkudOnlyIcon;
+  if (diacriticsState.value === 2) return DiacriticsNoneIcon;
+  return DiacriticsFullIcon;
+});
+
+const diacriticsLabel = computed(() => {
+  if (diacriticsState.value === 0) return 'הסר טעמים';
+  if (diacriticsState.value === 1) return 'הסר גם ניקוד';
+  return 'שחזר טעמים וניקוד';
+});
+
 const handleHeaderClick = () => {
   emit('click');
 };
@@ -111,6 +159,14 @@ const openSearch = () => {
 
 const toggleSplitPane = () => {
   tabStore.toggleSplitPane();
+};
+
+const handleAltTocToggle = () => {
+  tabStore.toggleAltTocDisplay();
+};
+
+const handleDiacriticsToggle = () => {
+  tabStore.toggleDiacritics();
 };
 
 const resetTab = () => {
@@ -148,5 +204,27 @@ const handleDropdownClose = () => {
 
 .activetab-title {
   opacity: 0.9;
+}
+
+.diacritics-icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+}
+
+.diacritics-icon :deep(svg) {
+  fill: currentColor;
+}
+
+.diacritics-icon.state-1 :deep(svg) {
+  fill: #ff8c00;
+}
+
+.diacritics-icon.state-2 :deep(svg) {
+  fill: #ff4500;
 }
 </style>

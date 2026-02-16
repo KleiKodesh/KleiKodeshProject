@@ -22,9 +22,8 @@ const showItem = computed(() => {
     return tabStore.activeTab?.currentPage === 'bookview'
 })
 
-const diacriticsState = computed(() => {
-    return tabStore.activeTab?.bookState?.diacriticsState || 0
-})
+// Use centralized diacritics state from tabStore
+const diacriticsState = computed(() => tabStore.currentDiacriticsState)
 
 const stateClass = computed(() => {
     if (diacriticsState.value === 1) return 'state-1'

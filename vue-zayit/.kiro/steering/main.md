@@ -43,6 +43,12 @@ The following files are loaded automatically based on context:
 - **File patterns**: `*BookLineViewer*`, `*virtualization*`
 - **Loads**: #[[file:custom-steering/virtualization.md]]
 
+### Commentary Virtualization
+
+- **Keywords**: commentary, links, scroll, height, estimation
+- **File patterns**: `*CommentaryView*`
+- **Loads**: #[[file:custom-steering/commentary-virtualization.md]]
+
 ### Hebrew Books Feature
 
 - **Keywords**: hebrew, book, download, pdf
@@ -93,6 +99,7 @@ You can manually load specific guidance using these context keys:
 - `#database-config` - Database configuration and path management
 - `#csharp` - C# integration guide
 - `#virtualization` - BookLineViewer virtualization
+- `#commentary` - Commentary view virtualization and scroll tracking
 - `#hebrew-books` - Hebrew book downloads
 - `#hebrew-fonts` - Hebrew fonts and typography guidelines
 - `#search` - Search functionality and navigation guidelines
@@ -228,3 +235,53 @@ Based on analysis of problematic code patterns in this project, follow these ess
 - Method signatures should be predictable and consistent
 - Avoid methods that sometimes return different types based on conditions
 - Use meaningful parameter names and return types
+
+## State Management Patterns
+
+### Centralized Computed State
+
+When implementing features with multiple modes (global vs per-item), centralize the logic in the store:
+
+**Pattern:**
+
+```typescript
+// ✅ GOOD: Single source of truth in store
+const currentState = computed(() => {
+  const settingsStore = useSettingsStore();
+
+  if (settingsStore.globalMode) {
+    return settingsStore.globalState;
+  }
+
+  return activeItem.value?.localState || defaultValue;
+});
+
+// Components just bind to this
+const state = computed(() => store.currentState);
+```
+
+**Anti-pattern:**
+
+```typescript
+// ❌ BAD: Logic duplicated in every component
+const state = computed(() => {
+  if (settingsStore.globalMode) {
+    return settingsStore.globalState;
+  }
+  return tabStore.activeTab?.localState || 0;
+});
+```
+
+**Benefits:**
+
+- Single source of truth
+- No duplication across components
+- Easier to maintain and test
+- Consistent behavior everywhere
+
+**Example: Diacritics State**
+
+- Settings store manages the preference (`globalDiacritics`, `globalDiacriticsState`)
+- Tab store provides centralized computed property (`currentDiacriticsState`)
+- All UI components bind to `tabStore.currentDiacriticsState`
+- Toggle logic in tab store updates appropriate state based on mode

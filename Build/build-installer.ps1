@@ -325,15 +325,21 @@ if (-not $NoRelease) {
             $commitHistory = ""
             if ($previousTag -and $LASTEXITCODE -eq 0) {
                 Write-Host "Previous release: $previousTag" -ForegroundColor Gray
-                $commits = git log "$previousTag..HEAD" --pretty=format:"- %s (%h)%n" 2>$null
+                $commits = git log "$previousTag..HEAD" --pretty=format:"- %s (%h)" 2>$null
                 if ($commits) {
                     $commitHistory = "**Commits since ${previousTag}:**`n$commits"
+                    Write-Host "Found $($commits.Count) commits since $previousTag" -ForegroundColor Cyan
+                } else {
+                    Write-Host "WARNING: No commits found since $previousTag" -ForegroundColor Yellow
                 }
             } else {
                 Write-Host "No previous release found, including recent commits" -ForegroundColor Gray
-                $commits = git log -10 --pretty=format:"- %s (%h)%n" 2>$null
+                $commits = git log -10 --pretty=format:"- %s (%h)" 2>$null
                 if ($commits) {
                     $commitHistory = "**Recent Commits:**`n$commits"
+                    Write-Host "Found recent commits" -ForegroundColor Cyan
+                } else {
+                    Write-Host "WARNING: No git commits found" -ForegroundColor Yellow
                 }
             }
             
@@ -352,7 +358,12 @@ if (-not $NoRelease) {
                 "file" {
                     Write-Host "Using RELEASE_NOTES.txt for release notes" -ForegroundColor Cyan
                     if ($fileContent) {
-                        $releaseNotes = $fileContent
+                        $releaseNotes = "Release $version`n`n"
+                        $releaseNotes += $fileContent
+                        $releaseNotes += "`n`n**Build Configuration:**`n"
+                        $releaseNotes += "- VSTO Project: $Configuration|$Platform (MSBuild)`n"
+                        $releaseNotes += "- WPF Installer: Release|$platformInfo (dotnet build)"
+                        Write-Host "Using content from RELEASE_NOTES.txt" -ForegroundColor Cyan
                     } else {
                         Write-Host "WARNING: RELEASE_NOTES.txt not found, using default notes" -ForegroundColor Yellow
                         $releaseNotes = "Release $version`n`n"

@@ -1,23 +1,5 @@
 <template>
-    <span v-if="inlineMode"
-          dir="rtl"
-          class="selectable line-1.6 justify book-line"
-          :class="{ selected: isSelected }"
-          :data-line-index="lineIndex"
-          @click="handleClick">
-        <!-- Alt TOC entries as proper HTML headings -->
-        <template v-if="altTocEntries && altTocEntries.length > 0 && props.showAltToc !== false">
-            <component v-for="(entry, index) in altTocEntries"
-                       :key="`alt-toc-${lineIndex}-${index}`"
-                       :is="getHeadingTag(entry.level)"
-                       class="alt-toc-entry"
-                       v-html="entry.text">
-            </component>
-        </template>
-        <span v-html="content + ' '"></span>
-    </span>
-    <div v-else
-         dir="rtl"
+    <div dir="rtl"
          class="selectable line-1.6 justify book-line"
          :class="{ selected: isSelected }"
          :data-line-index="lineIndex"
@@ -42,7 +24,6 @@ const props = defineProps<{
     content: string
     lineIndex: number
     isSelected: boolean
-    inlineMode: boolean
     altTocEntries?: AltTocLineEntry[]
     showAltToc?: boolean
 }>()
@@ -70,15 +51,10 @@ const getHeadingTag = (level: number): string => {
     line-height: var(--line-height, 1.2);
 }
 
-/* Block mode (div) gets padding and block display */
+/* Book line always uses block display with padding */
 div.book-line {
     padding: 0px 5px;
     display: block;
-}
-
-/* Inline mode (span) is inline by default */
-span.book-line {
-    display: inline;
 }
 
 .book-line :deep(h1),
@@ -104,24 +80,9 @@ span.book-line {
     position: relative;
 }
 
-/* Block mode selection - only for div elements when split pane is open */
-div.book-line.selected.show-selection {
-    position: relative;
-}
-
-/* Commented out - using background instead of ::after indicator
-div.book-line.selected.show-selection::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    right: -7px;
-    width: 3px;
-    height: 1em;
-    background-color: var(--accent-color);
-} */
-
+/* Selection styling when split pane is open */
 .book-line.selected.show-selection {
+    position: relative;
     background-color: var(--hover-bg);
 }
 
@@ -144,42 +105,6 @@ div.book-line.selected.show-selection::after {
 :root.dark .book-line :deep(mark.current) {
     background-color: rgba(251, 191, 36, 0.8) !important;
     font-weight: bold;
-}
-
-/* Global search snippet background - same color as in-book search */
-.book-line :deep(.global-search-snippet-bg) {
-    animation: fadeSearchHighlight 3s ease-out forwards;
-}
-
-/* Global search highlighting - foreground color */
-.book-line :deep(.global-search-highlight) {
-    color: var(--accent-color);
-}
-
-@keyframes fadeSearchHighlight {
-    0% {
-        background-color: rgba(245, 158, 11, 0.3);
-        /* Orange/amber - same as in-book search */
-    }
-
-    100% {
-        background-color: transparent;
-    }
-}
-
-:root.dark .book-line :deep(.global-search-snippet-bg) {
-    animation: fadeSearchHighlightDark 3s ease-out forwards;
-}
-
-@keyframes fadeSearchHighlightDark {
-    0% {
-        background-color: rgba(251, 191, 36, 0.3);
-        /* Lighter amber for dark mode - same as in-book search */
-    }
-
-    100% {
-        background-color: transparent;
-    }
 }
 
 /* Alt TOC entries - subtle opacity to distinguish from main content */
