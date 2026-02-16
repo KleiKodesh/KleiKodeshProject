@@ -263,15 +263,23 @@ watch(() => props.modelValue, (newValue, oldValue) => {
 
 .combobox-input {
     width: 100%;
-    padding: 3px 6px 3px 24px;
+    padding: 4px 6px 4px 24px;
     background: var(--bg-primary);
     border: 1px solid var(--border-color);
     border-radius: 3px;
     color: var(--text-primary);
     font-size: 12px;
     text-align: right;
-    height: 24px;
-    line-height: 1;
+    min-height: 28px;
+    line-height: 1.3;
+    touch-action: manipulation;
+}
+
+@media (hover: none) and (pointer: coarse) {
+    .combobox-input {
+        min-height: 32px;
+        padding: 6px 8px 6px 28px;
+    }
 }
 
 .combobox-input:focus {
@@ -287,8 +295,15 @@ watch(() => props.modelValue, (newValue, oldValue) => {
 .combobox-chevron {
     position: absolute;
     left: 6px;
+    top: 50%;
+    transform: translateY(-50%);
     color: var(--text-secondary);
     opacity: 0.6;
+    width: 12px;
+    height: 12px;
+    pointer-events: auto;
+    cursor: pointer;
+    touch-action: manipulation;
 }
 
 .combobox-wrapper:hover .combobox-chevron {
@@ -296,7 +311,7 @@ watch(() => props.modelValue, (newValue, oldValue) => {
 }
 
 .combobox-input:focus~.combobox-chevron {
-    transform: rotate(180deg);
+    transform: translateY(-50%) rotate(180deg);
     opacity: 1;
 }
 
@@ -316,13 +331,24 @@ watch(() => props.modelValue, (newValue, oldValue) => {
 }
 
 .combobox-option {
-    padding: 5px 8px;
+    padding: 6px 10px;
     color: var(--text-primary);
     font-size: 12px;
     text-align: right;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    min-height: 32px;
+    display: flex;
+    align-items: center;
+    touch-action: manipulation;
+}
+
+@media (hover: none) and (pointer: coarse) {
+    .combobox-option {
+        min-height: 36px;
+        padding: 8px 12px;
+    }
 }
 
 .combobox-option:hover,
@@ -331,11 +357,11 @@ watch(() => props.modelValue, (newValue, oldValue) => {
 }
 
 .combobox-option.active {
-    background: var(--accent-bg);
+    background: var(--accent-color);
     color: white;
 }
 
 .combobox-option.active.highlighted {
-    opacity: 0.8;
+    opacity: 0.9;
 }
 </style>

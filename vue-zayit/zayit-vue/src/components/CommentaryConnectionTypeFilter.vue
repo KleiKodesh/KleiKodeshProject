@@ -30,7 +30,7 @@ import { Icon } from '@iconify/vue'
 import type { Book } from '../types/Book'
 // import { SHOW_ALL_LABEL } from '../types/ConnectionType'
 import { commentaryService } from '../services/commentaryService'
-import { useClickOutside } from '../composables/useClickOutside'
+import { onClickOutside } from '@vueuse/core'
 
 interface FilterOption {
     label: string
@@ -52,8 +52,8 @@ const isOpen = ref(false)
 const toggleButton = ref<HTMLElement>()
 const filterContainer = ref<HTMLElement>()
 
-// Use touch-friendly click outside composable
-useClickOutside(filterContainer, () => {
+// Close filter when clicking outside
+onClickOutside(filterContainer, () => {
     if (isOpen.value) {
         isOpen.value = false
     }
@@ -95,21 +95,37 @@ const selectOption = (connectionTypeId: number) => {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 4px 6px;
+    padding: 0;
     background: transparent;
     border: none;
     border-radius: 3px;
     color: var(--text-primary);
     cursor: pointer;
     font-size: 12px;
-    min-height: 28px;
-    min-width: 28px;
-    height: 28px;
-    width: 28px;
+    min-height: 32px;
+    min-width: 32px;
+    height: 32px;
+    width: 32px;
+    touch-action: manipulation;
+    transition: transform 0.1s ease, background-color 0.1s ease;
 }
 
-.filter-toggle-btn:hover {
+.filter-toggle-btn:hover:not(:disabled) {
     background: var(--hover-bg);
+}
+
+.filter-toggle-btn:active:not(:disabled) {
+    transform: scale(0.95);
+    background: var(--active-bg, var(--hover-bg));
+}
+
+@media (hover: none) and (pointer: coarse) {
+    .filter-toggle-btn {
+        min-height: 36px;
+        min-width: 36px;
+        height: 36px;
+        width: 36px;
+    }
 }
 
 .filter-toggle-btn:disabled {
@@ -127,6 +143,13 @@ const selectOption = (connectionTypeId: number) => {
     flex-shrink: 0;
 }
 
+@media (hover: none) and (pointer: coarse) {
+    .filter-icon {
+        width: 18px;
+        height: 18px;
+    }
+}
+
 .filter-dropdown {
     position: absolute;
     top: calc(100% + 4px);
@@ -142,12 +165,24 @@ const selectOption = (connectionTypeId: number) => {
 }
 
 .filter-option {
-    padding: 8px 12px;
+    padding: 6px 10px;
     cursor: pointer;
-    font-size: 13px;
+    font-size: 12px;
     color: var(--text-primary);
     white-space: nowrap;
     border-bottom: 1px solid var(--border-color);
+    min-height: 32px;
+    display: flex;
+    align-items: center;
+    touch-action: manipulation;
+    transition: background-color 0.1s ease;
+}
+
+@media (hover: none) and (pointer: coarse) {
+    .filter-option {
+        min-height: 36px;
+        padding: 8px 12px;
+    }
 }
 
 .filter-option:last-child {

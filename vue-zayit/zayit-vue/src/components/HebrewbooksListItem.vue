@@ -60,7 +60,6 @@
 import type { HebrewBook } from '../types/HebrewBook'
 import { useHebrewBooksStore } from '../stores/hebrewBooksStore'
 import { Icon } from '@iconify/vue'
-import { parseTagsFromCsv } from '../utils/hebrewBookTags'
 
 defineProps<{
     book: HebrewBook
@@ -87,7 +86,13 @@ const trackDownload = async (book: HebrewBook) => {
 }
 
 const getBookTags = (book: HebrewBook): string[] => {
-    return parseTagsFromCsv(book._csvTags || '')
+    const tagsString = book._csvTags || ''
+    if (!tagsString.trim()) return []
+
+    return tagsString
+        .split(';')
+        .map(tag => tag.trim())
+        .filter(tag => tag.length > 0)
 }
 </script>
 

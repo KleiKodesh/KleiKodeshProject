@@ -126,7 +126,7 @@ import { useTabStore } from '../../stores/tabStore'
 import { useCategoryTreeStore } from '../../stores/categoryTreeStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { censorDivineNames } from '../../utils/censorDivineNames'
-import { useClickOutside } from '../../composables/useClickOutside'
+import { onClickOutside } from '@vueuse/core'
 import type { BloomSearchResult } from '../../types/BloomSearch'
 import type { Category } from '../../types/BookCategoryTree'
 import CheckedBookTree from '../CheckedBookTree.vue'
@@ -162,8 +162,8 @@ const filterPanelElement = computed(() => {
   return filterPanelRef.value?.$el as HTMLElement | undefined
 })
 
-// Use click outside to close filter panel
-useClickOutside(filterPanelElement, () => {
+// Close filter panel when clicking outside
+onClickOutside(filterPanelElement, () => {
   if (isFilterOpen.value) {
     isFilterOpen.value = false
   }

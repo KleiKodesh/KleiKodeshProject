@@ -93,15 +93,15 @@ import { useTabStore } from '../stores/tabStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { toggleTheme, isDarkTheme, syncPdfViewerTheme } from '../utils/theme';
 import { pdfService } from '../services/pdfService';
-import { useClickOutside } from '../composables/useClickOutside';
+import { onClickOutside } from '@vueuse/core';
 
 const tabStore = useTabStore();
 const settingsStore = useSettingsStore();
 const isOpen = ref(false);
 const dropdownContainer = ref<HTMLElement>();
 
-// Use touch-friendly click outside composable
-useClickOutside(dropdownContainer, () => {
+// Close dropdown when clicking outside
+onClickOutside(dropdownContainer, () => {
   if (isOpen.value) {
     closeDropdown();
   }

@@ -1,6 +1,5 @@
 ﻿using System.Collections.Generic;
 using System.Text;
-
 namespace BloomSearchEngineLib
 {
     public sealed class TermExtractor
@@ -11,15 +10,12 @@ namespace BloomSearchEngineLib
         public HashSet<string> ExtractTermsFromLines(List<string> lines)
         {
             _terms.Clear();
-
             foreach (var line in lines)
             {
                 if (string.IsNullOrWhiteSpace(line))
                     continue;
-
                 ProcessLine(line);
             }
-
             return _terms;
         }
 
@@ -33,9 +29,16 @@ namespace BloomSearchEngineLib
             {
                 char c = text[i];
 
-                // === TAG HANDLING (same logic as NormalizeText) ===
+                // === TAG HANDLING ===
                 if (c == '<')
                 {
+                    // Check if next character is Hebrew - if so, treat < as separator, not tag start
+                    if (i + 1 < text.Length && text[i + 1] >= '\u05D0' && text[i + 1] <= '\u05EA')
+                    {
+                        FlushWord(); // Just flush and continue, don't enter tag mode
+                        continue;
+                    }
+
                     FlushWord(); // Save current word before tag
                     inTag = true;
                     isLineBreakTag = false;
@@ -52,10 +55,8 @@ namespace BloomSearchEngineLib
                     else if (tagNamePos < 4)
                     {
                         char lc = (c >= 'A' && c <= 'Z') ? (char)(c | 32) : c;
-
                         if (c == '/' && tagNamePos == 0)
                             continue;
-
                         if (tagNamePos == 0)
                         {
                             isLineBreakTag = (lc == 'b' || lc == 'p' || lc == 'd');
@@ -70,7 +71,6 @@ namespace BloomSearchEngineLib
                             if (lc != 'v')
                                 isLineBreakTag = false;
                         }
-
                         if (lc >= 'a' && lc <= 'z')
                             tagNamePos++;
                     }
@@ -78,7 +78,6 @@ namespace BloomSearchEngineLib
                 }
 
                 // === CHARACTER PROCESSING ===
-
                 // Whitespace/separators → flush current word
                 if (c == ' ' || c == '\t' || c == '\n' || c == '\r' ||
                     c == '\u05BE' || c == '_')

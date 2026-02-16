@@ -36,8 +36,7 @@
               @click.stop="handleButtonClick(toggleSplitPane)"
               class="flex-center c-pointer touch-interactive"
               :title="isSplitPaneOpen ? 'הסתר קשרים' : 'הצג קשרים'">
-        <Icon
-              :icon="isSplitPaneOpen ? 'fluent:panel-bottom-expand-20-filled' : 'fluent:panel-bottom-contract-20-filled'" />
+        <Icon :icon="isSplitPaneOpen ? 'fluent:panel-bottom-20-filled' : 'fluent:panel-bottom-20-regular'" />
       </button>
 
     </div>

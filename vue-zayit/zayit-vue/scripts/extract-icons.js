@@ -40,6 +40,8 @@ const usedIcons = [
   'search-sparkle-24-filled',
   'panel-bottom-expand-20-filled',
   'panel-bottom-contract-20-filled',
+  'panel-bottom-20-filled',
+  'panel-bottom-20-regular',
   'home-28-regular',
   'add-16-filled',
   'add-24-regular',

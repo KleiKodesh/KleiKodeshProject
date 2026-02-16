@@ -15,7 +15,7 @@ export interface BookState {
     selectedLineIndex?: number; // Currently selected line index for commentary
     selectedTocEntryId?: number; // If a TOC line was clicked, store the TOC entry ID to load all its lines' links
     commentaryFilterConnectionTypeId?: number; // Selected connection type filter for commentary (undefined = show all)
-    commentaryPositionsByFilter?: Record<string, { groupIndex: number; targetBookId?: number; scrollPosition: number }>; // Position per filter for persistence when switching
+    commentaryPositionsByFilter?: Record<string, { groupIndex: number; targetBookId?: number; scrollPosition: number; topVisibleItemId?: string }>; // Position per filter for persistence when switching
     commentaryPositions?: Record<string, { groupIndex: number; targetBookId?: number }>; // Legacy position storage (simple format)
     diacriticsState?: number; // 0 = show all, 1 = hide cantillation, 2 = hide nikkud too
     isLineDisplayInline?: boolean; // false = block display, true = inline display
