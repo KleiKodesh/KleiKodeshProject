@@ -160,115 +160,101 @@ export const hebrewFonts = [
     'Segoe Script'        // Script style with Hebrew
 ]
 
-export class HebrewFontsService {
-    private static instance: HebrewFontsService
+/**
+ * Get all available Hebrew fonts
+ */
+export function getAllFonts(): string[] {
+    return [...hebrewFonts]
+}
 
-    static getInstance(): HebrewFontsService {
-        if (!HebrewFontsService.instance) {
-            HebrewFontsService.instance = new HebrewFontsService()
-        }
-        return HebrewFontsService.instance
+/**
+ * Get fonts with premium niqqud and ta'amim support
+ */
+export function getPremiumFonts(): string[] {
+    return hebrewFonts.slice(0, 6) // First 6 are premium fonts
+}
+
+/**
+ * Get fonts with excellent niqqud support
+ */
+export function getExcellentNiqqudFonts(): string[] {
+    return hebrewFonts.slice(6, 13) // Next 7 are excellent niqqud fonts
+}
+
+/**
+ * Get system fonts with good Hebrew support
+ */
+export function getSystemFonts(): string[] {
+    return hebrewFonts.filter(font =>
+        font.includes('David') ||
+        font.includes('Miriam') ||
+        font.includes('Guttman') ||
+        font.includes('Arial') ||
+        font.includes('Segoe') ||
+        font.includes('Calibri') ||
+        font.includes('Tahoma')
+    )
+}
+
+/**
+ * Get Google Fonts with Hebrew support
+ */
+export function getGoogleFonts(): string[] {
+    return hebrewFonts.filter(font =>
+        font.includes('Noto') ||
+        font.includes('Frank Ruhl Libre') ||
+        font.includes('IBM Plex') ||
+        font.includes('Miriam Libre') ||
+        font.includes('Alef') ||
+        font.includes('Assistant') ||
+        font.includes('Heebo') ||
+        font.includes('Rubik')
+    )
+}
+
+/**
+ * Check if a font is available in the system
+ */
+export async function isFontAvailable(fontName: string): Promise<boolean> {
+    if (!document.fonts) {
+        return false
     }
 
-    /**
-     * Get all available Hebrew fonts
-     */
-    getAllFonts(): string[] {
-        return [...hebrewFonts]
-    }
-
-    /**
-     * Get fonts with premium niqqud and ta'amim support
-     */
-    getPremiumFonts(): string[] {
-        return hebrewFonts.slice(0, 6) // First 6 are premium fonts
-    }
-
-    /**
-     * Get fonts with excellent niqqud support
-     */
-    getExcellentNiqqudFonts(): string[] {
-        return hebrewFonts.slice(6, 13) // Next 7 are excellent niqqud fonts
-    }
-
-    /**
-     * Get system fonts with good Hebrew support
-     */
-    getSystemFonts(): string[] {
-        return hebrewFonts.filter(font =>
-            font.includes('David') ||
-            font.includes('Miriam') ||
-            font.includes('Guttman') ||
-            font.includes('Arial') ||
-            font.includes('Segoe') ||
-            font.includes('Calibri') ||
-            font.includes('Tahoma')
-        )
-    }
-
-    /**
-     * Get Google Fonts with Hebrew support
-     */
-    getGoogleFonts(): string[] {
-        return hebrewFonts.filter(font =>
-            font.includes('Noto') ||
-            font.includes('Frank Ruhl Libre') ||
-            font.includes('IBM Plex') ||
-            font.includes('Miriam Libre') ||
-            font.includes('Alef') ||
-            font.includes('Assistant') ||
-            font.includes('Heebo') ||
-            font.includes('Rubik')
-        )
-    }
-
-    /**
-     * Check if a font is available in the system
-     */
-    async isFontAvailable(fontName: string): Promise<boolean> {
-        if (!document.fonts) {
-            return false
-        }
-
-        try {
-            return await document.fonts.check(`12px "${fontName}"`)
-        } catch {
-            return false
-        }
-    }
-
-    /**
-     * Get the best available font for Hebrew text
-     */
-    async getBestAvailableFont(): Promise<string> {
-        const premiumFonts = this.getPremiumFonts()
-
-        for (const font of premiumFonts) {
-            if (await this.isFontAvailable(font)) {
-                return font
-            }
-        }
-
-        // Fallback to system fonts
-        const systemFonts = ['David', 'Miriam', 'Arial', 'Segoe UI']
-        for (const font of systemFonts) {
-            if (await this.isFontAvailable(font)) {
-                return font
-            }
-        }
-
-        return 'Arial' // Ultimate fallback
-    }
-
-    /**
-     * Create CSS font-family string with fallbacks
-     */
-    createFontFamilyString(primaryFont: string): string {
-        const fallbacks = ['David', 'Miriam', 'Arial', 'sans-serif']
-        const fonts = [primaryFont, ...fallbacks.filter(f => f !== primaryFont)]
-        return fonts.map(font => `"${font}"`).join(', ')
+    try {
+        return await document.fonts.check(`12px "${fontName}"`)
+    } catch {
+        return false
     }
 }
 
-// Export singleton instance
-export const hebrewFontsService = HebrewFontsService.getInstance()
+/**
+ * Get the best available font for Hebrew text
+ */
+export async function getBestAvailableFont(): Promise<string> {
+    const premiumFonts = getPremiumFonts()
+
+    for (const font of premiumFonts) {
+        if (await isFontAvailable(font)) {
+            return font
+        }
+    }
+
+    // Fallback to system fonts
+    const systemFonts = ['David', 'Miriam', 'Arial', 'Segoe UI']
+    for (const font of systemFonts) {
+        if (await isFontAvailable(font)) {
+            return font
+        }
+    }
+
+    return 'Arial' // Ultimate fallback
+}
+
+/**
+ * Create CSS font-family string with fallbacks
+ */
+export function createFontFamilyString(primaryFont: string): string {
+    const fallbacks = ['David', 'Miriam', 'Arial', 'sans-serif']
+    const fonts = [primaryFont, ...fallbacks.filter(f => f !== primaryFont)]
+    return fonts.map(font => `"${font}"`).join(', ')
+}

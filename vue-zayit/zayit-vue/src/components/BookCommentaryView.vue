@@ -97,9 +97,7 @@
             <!-- Loading State -->
             <div v-if="isLoading"
                  class="flex-column flex-center height-fill text-secondary commentary-loading">
-                <Icon icon="fluent:spinner-ios-20-regular"
-                      class="loading-spinner" />
-                <div>טוען קשרים...</div>
+                <LoadingSpinner text="טוען קשרים..." />
             </div>
 
             <!-- Empty State -->
@@ -157,10 +155,11 @@ import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import Combobox, { type ComboboxOption } from './common/Combobox.vue'
 import GenericSearch from './common/GenericSearch.vue'
 import CommentaryConnectionTypeFilter from './CommentaryConnectionTypeFilter.vue'
+import LoadingSpinner from './common/LoadingSpinner.vue'
 import { Icon } from '@iconify/vue'
 
 import { useVirtualizedSearch } from '../composables/useVirtualizedSearch'
-import { commentaryService, type CommentaryLinkGroup } from '../services/commentaryService'
+import { bookCommentaryService, type CommentaryLinkGroup } from '../services/bookCommentaryService'
 import { dbService } from '../services/dbService'
 import { useTabStore } from '../stores/tabStore'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -241,7 +240,7 @@ const selectedConnectionTypeId = computed({
         const hasExplicitFilter = activeTab.bookState.hasOwnProperty('commentaryFilterConnectionTypeId')
 
         if (!hasExplicitFilter && props.book) {
-            const defaultFilter = commentaryService.getDefaultFilter(props.book)
+            const defaultFilter = bookCommentaryService.getDefaultFilter(props.book)
             if (defaultFilter !== undefined) {
                 activeTab.bookState.commentaryFilterConnectionTypeId = defaultFilter
                 return defaultFilter
@@ -715,7 +714,7 @@ async function loadCommentaryLinks(bookId: number, lineIndex: number, scrollToTa
             }
         } else {
             // Regular single-line commentary loading
-            linkGroups.value = await commentaryService.loadCommentaryLinks(
+            linkGroups.value = await bookCommentaryService.loadCommentaryLinks(
                 bookId,
                 lineIndex,
                 tabStore.activeTab?.id?.toString() || '',
@@ -726,7 +725,7 @@ async function loadCommentaryLinks(bookId: number, lineIndex: number, scrollToTa
         // Compute available filter options
         if (tocEntryId !== undefined) {
             if (props.book) {
-                availableFilterOptions.value = commentaryService.getAvailableFilterOptions(props.book)
+                availableFilterOptions.value = bookCommentaryService.getAvailableFilterOptions(props.book)
             }
         } else {
             computeAvailableFilterOptions(bookId, lineIndex).catch(() => { })
@@ -958,7 +957,7 @@ async function findLineWithTarget(
         if (candidate < 0) break
 
         try {
-            const groups = await commentaryService.loadCommentaryLinks(
+            const groups = await bookCommentaryService.loadCommentaryLinks(
                 props.bookId,
                 candidate,
                 tabId,
@@ -1332,7 +1331,7 @@ async function computeAvailableFilterOptions(bookId: number, lineIndex: number) 
     availableFilterOptions.value = []
     if (!props.book) return
 
-    const baseOptions = commentaryService.getAvailableFilterOptions(props.book)
+    const baseOptions = bookCommentaryService.getAvailableFilterOptions(props.book)
     if (!baseOptions || baseOptions.length === 0) return
 
     const tabId = tabStore.activeTab?.id?.toString() || ''
@@ -1340,7 +1339,7 @@ async function computeAvailableFilterOptions(bookId: number, lineIndex: number) 
 
     for (const opt of baseOptions) {
         try {
-            const groups = await commentaryService.loadCommentaryLinks(
+            const groups = await bookCommentaryService.loadCommentaryLinks(
                 bookId,
                 lineIndex,
                 tabId,
@@ -1517,7 +1516,7 @@ ${htmlContent}
 /* ============================================ */
 .commentary-header {
     justify-content: space-between;
-    padding: 2px 6px;
+    padding: 0 6px 6px 6px;
     min-height: 34px;
 }
 
@@ -1588,7 +1587,7 @@ ${htmlContent}
     }
 
     .commentary-header {
-        padding: 4px 8px;
+        padding: 2px 8px 4px 8px;
     }
 
     .nav-btn,
@@ -1642,22 +1641,6 @@ ${htmlContent}
 .commentary-loading {
     gap: 12px;
     direction: rtl;
-}
-
-.loading-spinner {
-    font-size: 24px;
-    color: var(--accent-color);
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    from {
-        transform: rotate(0deg);
-    }
-
-    to {
-        transform: rotate(360deg);
-    }
 }
 
 .commentary-placeholder {

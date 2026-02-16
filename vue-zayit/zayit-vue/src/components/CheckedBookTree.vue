@@ -16,8 +16,7 @@
         <div class="checked-tree-container">
             <div v-if="categoryTreeStore.isLoading"
                  class="loading-state">
-                <Icon icon="fluent:spinner-ios-20-regular"
-                      class="loading-spinner" />
+                <LoadingSpinner />
             </div>
             <div v-else
                  class="tree-content">
@@ -38,6 +37,7 @@ import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useCategoryTreeStore } from '../stores/categoryTreeStore'
 import CheckedCategoryNode from './CheckedCategoryNode.vue'
+import LoadingSpinner from './common/LoadingSpinner.vue'
 
 const props = defineProps<{
     checkedBookIds: Set<number>
@@ -162,22 +162,6 @@ const handleRootCheckboxToggle = () => {
     align-items: center;
     justify-content: center;
     height: 100%;
-}
-
-.loading-spinner {
-    width: 24px;
-    height: 24px;
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    from {
-        transform: rotate(0deg);
-    }
-
-    to {
-        transform: rotate(360deg);
-    }
 }
 
 .tree-content {

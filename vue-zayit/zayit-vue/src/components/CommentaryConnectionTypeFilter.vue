@@ -29,7 +29,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import type { Book } from '../types/Book'
 // import { SHOW_ALL_LABEL } from '../types/ConnectionType'
-import { commentaryService } from '../services/commentaryService'
+import { bookCommentaryService } from '../services/bookCommentaryService'
 import { onClickOutside } from '@vueuse/core'
 
 interface FilterOption {
@@ -65,7 +65,7 @@ const availableOptions = computed<FilterOption[]>(() => {
         return props.availableOptions as FilterOption[]
     }
     if (!props.book) return []
-    return commentaryService.getAvailableFilterOptions(props.book)
+    return bookCommentaryService.getAvailableFilterOptions(props.book)
 })
 
 // Get selected label for display

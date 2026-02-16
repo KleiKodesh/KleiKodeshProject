@@ -5,7 +5,7 @@
     <keep-alive>
       <BookTocTreeView v-if="myTab?.bookState?.isTocOpen && myTab?.bookState?.bookId"
                        ref="tocTreeViewRef"
-                       :toc-entries="tocEntries"
+                       :toc-entries="filteredTocEntries"
                        :is-loading="isTocLoading"
                        :is-compact-mode="!myTab.bookState.isFirstTocOpen"
                        class="toc-overlay"
@@ -57,6 +57,15 @@ const tocEntries = ref<TocEntry[]>([])
 const flatTocEntries = ref<TocEntry[]>([])
 const isTocLoading = ref(false)
 
+// Filtered TOC entries based on showAltToc setting
+const filteredTocEntries = computed(() => {
+  // If showAltToc is false, filter out the alt TOC root node (חלוקה נוספת)
+  if (myTab.value?.bookState?.showAltToc === false) {
+    return tocEntries.value.filter(entry => !entry.isAltToc)
+  }
+  return tocEntries.value
+})
+
 // Get current book from the category tree store
 const currentBook = computed(() => {
   const bookId = myTab.value?.bookState?.bookId
@@ -72,7 +81,7 @@ watch(() => myTab.value?.bookState?.bookId, async (bookId) => {
     // Check if we should highlight the initial line (from search or commentary navigation)
     if (myTab.value?.bookState?.shouldHighlight && myTab.value?.bookState?.initialLineIndex !== undefined) {
       console.log('[BookViewPage] Should highlight line:', myTab.value.bookState.initialLineIndex, 'with terms:', myTab.value?.searchState?.highlightTerms)
-      
+
       // Wait for viewer to be ready, then trigger highlight
       setTimeout(() => {
         const viewer: any = lineViewerRef.value

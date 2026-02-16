@@ -26,30 +26,60 @@ public sealed class ZayitDbManager : IDisposable
         _connection.Open();
 
         // Enable WAL mode - allows reads during writes!
-        using (var cmd = _connection.CreateCommand())
+        try
         {
-            cmd.CommandText = "PRAGMA journal_mode=WAL;";
-            cmd.ExecuteNonQuery();
+            using (var cmd = _connection.CreateCommand())
+            {
+                cmd.CommandText = "PRAGMA journal_mode=WAL;";
+                cmd.ExecuteNonQuery();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ZayitDbManager] WARNING: Failed to enable WAL mode: {ex.Message}");
         }
     }
 
     public int GetLineCount()
     {
-        using (var cmd = _connection.CreateCommand())
+        try
         {
-            cmd.CommandText = "SELECT COUNT(*) FROM line";
-            return (int)(long)cmd.ExecuteScalar();
+            using (var cmd = _connection.CreateCommand())
+            {
+                cmd.CommandText = "SELECT COUNT(*) FROM line";
+                return (int)(long)cmd.ExecuteScalar();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ZayitDbManager] ERROR in GetLineCount: {ex.Message}");
+            return 0;
         }
     }
 
     public IEnumerable<string> GetAllLineContents()
     {
-        using (var cmd = _connection.CreateCommand())
+        SQLiteCommand cmd = null;
+        SQLiteDataReader reader = null;
+        
+        try
         {
+            cmd = _connection.CreateCommand();
             cmd.CommandText = "SELECT content FROM line ORDER BY id";
-            using (var reader = cmd.ExecuteReader())
-                while (reader.Read())
-                    yield return reader.GetString(0);
+            reader = cmd.ExecuteReader();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ZayitDbManager] ERROR in GetAllLineContents: {ex.Message}");
+            cmd?.Dispose();
+            yield break;
+        }
+        
+        using (reader)
+        using (cmd)
+        {
+            while (reader.Read())
+                yield return reader.GetString(0);
         }
     }
 
@@ -75,13 +105,19 @@ public sealed class ZayitDbManager : IDisposable
         try
         {
             reader = cmd.ExecuteReader();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ZayitDbManager] ERROR in GetLineContentsChunk for chunk {chunkNumber}: {ex.Message}");
+            cmd.Dispose();
+            yield break;
+        }
+
+        using (reader)
+        using (cmd)
+        {
             while (reader.Read())
                 yield return reader.GetString(0);
-        }
-        finally
-        {
-            reader?.Dispose();
-            cmd.Dispose();
         }
     }
 
@@ -90,21 +126,29 @@ public sealed class ZayitDbManager : IDisposable
     /// </summary>
     public string GetLineContent(int lineId)
     {
-        using (var cmd = _connection.CreateCommand())
+        try
         {
-            cmd.CommandText = "SELECT content FROM line WHERE id = @lineId LIMIT 1";
-            cmd.Parameters.AddWithValue("@lineId", lineId);
-
-            using (var reader = cmd.ExecuteReader())
+            using (var cmd = _connection.CreateCommand())
             {
-                if (reader.Read())
+                cmd.CommandText = "SELECT content FROM line WHERE id = @lineId LIMIT 1";
+                cmd.Parameters.AddWithValue("@lineId", lineId);
+
+                using (var reader = cmd.ExecuteReader())
                 {
-                    return reader.GetString(0);
+                    if (reader.Read())
+                    {
+                        return reader.GetString(0);
+                    }
                 }
             }
-        }
 
-        return string.Empty;
+            return string.Empty;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ZayitDbManager] ERROR in GetLineContent for lineId {lineId}: {ex.Message}");
+            return string.Empty;
+        }
     }
 
     /// <summary>
@@ -112,36 +156,44 @@ public sealed class ZayitDbManager : IDisposable
     /// </summary>
     public (int bookId, string bookTitle, string tocText) GetLineMetadata(int lineId)
     {
-        using (var cmd = _connection.CreateCommand())
+        try
         {
-            cmd.CommandText = @"
-                SELECT 
-                    l.bookId,
-                    b.title,
-                    COALESCE(tt.text, '') as tocText
-                FROM line l
-                INNER JOIN book b ON l.bookId = b.id
-                LEFT JOIN line_toc lt ON l.id = lt.lineId
-                LEFT JOIN tocEntry te ON lt.tocEntryId = te.id
-                LEFT JOIN tocText tt ON te.textId = tt.id
-                WHERE l.id = @lineId
-                LIMIT 1";
-            cmd.Parameters.AddWithValue("@lineId", lineId);
-
-            using (var reader = cmd.ExecuteReader())
+            using (var cmd = _connection.CreateCommand())
             {
-                if (reader.Read())
+                cmd.CommandText = @"
+                    SELECT 
+                        l.bookId,
+                        b.title,
+                        COALESCE(tt.text, '') as tocText
+                    FROM line l
+                    INNER JOIN book b ON l.bookId = b.id
+                    LEFT JOIN line_toc lt ON l.id = lt.lineId
+                    LEFT JOIN tocEntry te ON lt.tocEntryId = te.id
+                    LEFT JOIN tocText tt ON te.textId = tt.id
+                    WHERE l.id = @lineId
+                    LIMIT 1";
+                cmd.Parameters.AddWithValue("@lineId", lineId);
+
+                using (var reader = cmd.ExecuteReader())
                 {
-                    return (
-                        reader.GetInt32(0),
-                        reader.GetString(1),
-                        reader.IsDBNull(2) ? "" : reader.GetString(2)
-                    );
+                    if (reader.Read())
+                    {
+                        return (
+                            reader.GetInt32(0),
+                            reader.GetString(1),
+                            reader.IsDBNull(2) ? "" : reader.GetString(2)
+                        );
+                    }
                 }
             }
-        }
 
-        return (0, "", "");
+            return (0, "", "");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ZayitDbManager] ERROR in GetLineMetadata for lineId {lineId}: {ex.Message}");
+            return (0, "", "");
+        }
     }
 
     /// <summary>
@@ -149,21 +201,29 @@ public sealed class ZayitDbManager : IDisposable
     /// </summary>
     public (int lineIndex, int bookId) GetLineIndexFromLineId(int lineId)
     {
-        using (var cmd = _connection.CreateCommand())
+        try
         {
-            cmd.CommandText = "SELECT lineIndex, bookId FROM line WHERE id = @lineId";
-            cmd.Parameters.AddWithValue("@lineId", lineId);
-
-            using (var reader = cmd.ExecuteReader())
+            using (var cmd = _connection.CreateCommand())
             {
-                if (reader.Read())
+                cmd.CommandText = "SELECT lineIndex, bookId FROM line WHERE id = @lineId";
+                cmd.Parameters.AddWithValue("@lineId", lineId);
+
+                using (var reader = cmd.ExecuteReader())
                 {
-                    return (reader.GetInt32(0), reader.GetInt32(1));
+                    if (reader.Read())
+                    {
+                        return (reader.GetInt32(0), reader.GetInt32(1));
+                    }
                 }
             }
-        }
 
-        return (-1, -1);
+            return (-1, -1);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ZayitDbManager] ERROR in GetLineIndexFromLineId for lineId {lineId}: {ex.Message}");
+            return (-1, -1);
+        }
     }
 
     /// <summary>
@@ -173,22 +233,29 @@ public sealed class ZayitDbManager : IDisposable
     {
         var lineIds = new List<int>();
         
-        using (var cmd = _connection.CreateCommand())
+        try
         {
-            cmd.CommandText = @"
-                SELECT lineId
-                FROM line_toc
-                WHERE tocEntryId = @tocEntryId
-                ORDER BY lineId";
-            cmd.Parameters.AddWithValue("@tocEntryId", tocEntryId);
-
-            using (var reader = cmd.ExecuteReader())
+            using (var cmd = _connection.CreateCommand())
             {
-                while (reader.Read())
+                cmd.CommandText = @"
+                    SELECT lineId
+                    FROM line_toc
+                    WHERE tocEntryId = @tocEntryId
+                    ORDER BY lineId";
+                cmd.Parameters.AddWithValue("@tocEntryId", tocEntryId);
+
+                using (var reader = cmd.ExecuteReader())
                 {
-                    lineIds.Add(reader.GetInt32(0));
+                    while (reader.Read())
+                    {
+                        lineIds.Add(reader.GetInt32(0));
+                    }
                 }
             }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ZayitDbManager] ERROR in GetLineIdsByTocEntry for tocEntryId {tocEntryId}: {ex.Message}");
         }
 
         return lineIds;
@@ -204,24 +271,31 @@ public sealed class ZayitDbManager : IDisposable
         if (lineIds.Count == 0)
             return lines;
 
-        using (var cmd = _connection.CreateCommand())
+        try
         {
-            var idParams = string.Join(",", lineIds);
-            cmd.CommandText = $@"
-                SELECT lineIndex, content
-                FROM line
-                WHERE bookId = @bookId
-                  AND id IN ({idParams})
-                ORDER BY lineIndex";
-            cmd.Parameters.AddWithValue("@bookId", bookId);
-
-            using (var reader = cmd.ExecuteReader())
+            using (var cmd = _connection.CreateCommand())
             {
-                while (reader.Read())
+                var idParams = string.Join(",", lineIds);
+                cmd.CommandText = $@"
+                    SELECT lineIndex, content
+                    FROM line
+                    WHERE bookId = @bookId
+                      AND id IN ({idParams})
+                    ORDER BY lineIndex";
+                cmd.Parameters.AddWithValue("@bookId", bookId);
+
+                using (var reader = cmd.ExecuteReader())
                 {
-                    lines.Add((reader.GetInt32(0), reader.GetString(1)));
+                    while (reader.Read())
+                    {
+                        lines.Add((reader.GetInt32(0), reader.GetString(1)));
+                    }
                 }
             }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ZayitDbManager] ERROR in GetLinesByIds for bookId {bookId}: {ex.Message}");
         }
 
         return lines;

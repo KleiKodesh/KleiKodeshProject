@@ -123,7 +123,7 @@
                     גודל גופן
                     <span class="text-secondary setting-value">{{
                         fontSize
-                    }}%</span>
+                        }}%</span>
                 </label>
                 <input type="range"
                        v-model.number="fontSize"
@@ -138,7 +138,7 @@
                 <label class="flex-between bold setting-label">
                     ריווח שורות
                     <span class="text-secondary setting-value">{{ linePadding
-                    }}</span>
+                        }}</span>
                 </label>
                 <input type="range"
                        v-model.number="linePadding"
@@ -232,7 +232,7 @@
 import { ref, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '../../stores/settingsStore'
-import { hebrewFonts } from '../../services/hebrewFontsService'
+import { hebrewFonts } from '../../utils/hebrewFonts'
 import { webviewBridge } from '../../services/webviewBridge'
 import { useDialog } from '../../composables/useDialog'
 import { toggleTheme, isDarkTheme, syncPdfViewerTheme } from '../../utils/theme'

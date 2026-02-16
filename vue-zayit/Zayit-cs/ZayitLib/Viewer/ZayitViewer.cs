@@ -110,8 +110,10 @@ namespace Zayit.Viewer
             var options = new CoreWebView2EnvironmentOptions();
 
             // Add command line arguments for better rendering quality
+            // --force-device-scale-factor=1 prevents Windows DPI scaling from affecting the WebView
             options.AdditionalBrowserArguments =
                 "--disable-web-security " +
+                "--force-device-scale-factor=1.2 " +
                 "--disable-features=VizDisplayCompositor " +
                 "--enable-gpu-rasterization " +
                 "--enable-zero-copy " +

@@ -1175,6 +1175,10 @@ defineExpose({
         if (searchTerms) {
             await nextTick()
             scrollToFirstHighlightedWord(lineIndex)
+
+            // Add fade animation class once
+            await nextTick()
+            addFadeAnimationOnce(lineIndex)
         }
     }
 })
@@ -1208,6 +1212,26 @@ function scrollToFirstHighlightedWord(lineIndex: number) {
         inline: 'nearest'
     })
 }
+
+// Helper function to add fade animation class once (prevents re-triggering on DOM updates)
+function addFadeAnimationOnce(lineIndex: number) {
+    const scrollerEl = scrollerRef.value?.$el
+    if (!scrollerEl) return
+
+    const lineEl = scrollerEl.querySelector(`[data-line-index-observer="${lineIndex}"]`)
+    if (!lineEl) return
+
+    const snippetBg = lineEl.querySelector('.global-search-snippet-bg')
+    if (!snippetBg) return
+
+    // Add animation class
+    snippetBg.classList.add('fade-animation')
+
+    // Remove class after animation completes (3s)
+    setTimeout(() => {
+        snippetBg.classList.remove('fade-animation')
+    }, 3000)
+}
 </script>
 
 <style scoped>
@@ -1227,7 +1251,7 @@ function scrollToFirstHighlightedWord(lineIndex: number) {
 }
 
 /* Global search snippet background animation */
-.line-viewer :deep(.global-search-snippet-bg) {
+.line-viewer :deep(.global-search-snippet-bg.fade-animation) {
     animation: fadeSearchHighlight 3s ease-out forwards;
 }
 
@@ -1242,7 +1266,7 @@ function scrollToFirstHighlightedWord(lineIndex: number) {
     }
 }
 
-:root.dark .line-viewer :deep(.global-search-snippet-bg) {
+:root.dark .line-viewer :deep(.global-search-snippet-bg.fade-animation) {
     animation: fadeSearchHighlightDark 3s ease-out forwards;
 }
 

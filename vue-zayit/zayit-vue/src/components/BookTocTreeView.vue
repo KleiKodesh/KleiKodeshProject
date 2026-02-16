@@ -27,7 +27,7 @@
                            v-model="searchInput"
                            type="text"
                            class="search-input-field"
-                           placeholder="חיפוש..."
+                           placeholder="חיפוש כותרת..."
                            @keydown="handleKeyDown"
                            autofocus />
                     <button @click="resetTree"

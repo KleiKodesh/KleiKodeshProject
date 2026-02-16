@@ -3,8 +3,7 @@
          class="overflow-y height-fill">
         <div v-if="categoryTreeStore.isLoading"
              class="height-fill flex-center">
-            <Icon icon="fluent:spinner-ios-20-regular"
-                  class="loading-spinner" />
+            <LoadingSpinner />
         </div>
         <template v-else>
             <BookTreeCategoryNode v-for="(category, index) in categoryTreeStore.categoryTree"
@@ -19,8 +18,8 @@
 import { ref } from 'vue'
 import { useCategoryTreeStore } from '../stores/categoryTreeStore'
 import BookTreeCategoryNode from './BookTreeCategoryNode.vue'
+import LoadingSpinner from './common/LoadingSpinner.vue'
 import { useListKeyboardNavigation } from '../composables/useListKeyboardNavigation'
-import { Icon } from '@iconify/vue'
 
 const emit = defineEmits<{
     returnFocus: []
