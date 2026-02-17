@@ -18,6 +18,7 @@
     "@vueuse/core": "^10.0.0",
     "papaparse": "^5.5.3",
     "pinia": "^3.0.3",
+    "tesseract.js": "^5.1.1",
     "vue": "^3.5.22",
     "vue-virtual-scroller": "^2.0.0-beta.8"
   },

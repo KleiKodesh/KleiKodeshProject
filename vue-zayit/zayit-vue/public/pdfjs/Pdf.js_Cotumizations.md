@@ -242,18 +242,19 @@ params.set("cMapPacked", "true"); // Use packed CMaps for faster font loading
 
 ### Problem
 
-Multi-column PDFs often have OCR issues where text from different columns gets mixed together, making it impossible to select text from a single column using normal text selection.
+Multi-column PDFs often have OCR issues where text from different columns gets mixed together, making it impossible to select text from a single column using normal text selection. Additionally, some PDFs are scanned images with no text layer at all.
 
 ### Solution
 
-Added a custom rectangle selection tool that allows users to draw a rectangle around a specific area to select only the text within that region. The tool shows an editable popup with the selected text, allowing users to review and modify before copying.
+Added a custom rectangle selection tool that allows users to draw a rectangle around a specific area to select only the text within that region. The tool shows an editable popup with the selected text, allowing users to review and modify before copying. If no text layer is found, the tool automatically falls back to OCR (Tesseract.js) to extract text from the image.
 
 ### Implementation
 
 **Files**:
 
-- `public/pdfjs/web/rectangle-selection.js` - New standalone tool
+- `public/pdfjs/web/rectangle-selection.js` - New standalone tool with OCR fallback
 - `public/pdfjs/web/viewer.html` - Added script reference
+- `package.json` - Added tesseract.js dependency
 
 ### How It Works
 
@@ -261,21 +262,26 @@ Added a custom rectangle selection tool that allows users to draw a rectangle ar
 2. **Drawing Mode** - Click the button to activate crosshair cursor
 3. **Rectangle Selection** - Click and drag to draw a selection rectangle
 4. **Word Detection** - Identifies all words (spans) whose center point falls within the rectangle
-5. **Editable Popup** - Shows selected text in an editable textarea with RTL support
-6. **Copy or Cancel** - User can edit the text and copy, or cancel the operation
-7. **Auto-Deactivate** - Tool deactivates after making a selection
+5. **OCR Fallback** - If no text found, captures the rectangle area as an image and performs OCR
+6. **Editable Popup** - Shows selected/recognized text in an editable textarea with RTL support
+7. **Copy or Cancel** - User can edit the text and copy, or cancel the operation
+8. **Auto-Deactivate** - Tool deactivates after making a selection
 
 ### Features
 
 - **Visual Feedback** - Dashed blue rectangle shows selection area while drawing
 - **Crosshair Cursor** - Clear indication when tool is active
 - **Word-Level Selection** - Leverages PDF.js's word-based text layer (each word is a separate span)
-- **Editable Preview** - Review and modify selected text before copying
+- **OCR Fallback** - Automatically uses Tesseract.js OCR when no text layer exists
+- **Hebrew OCR** - Tesseract worker configured specifically for Hebrew text recognition
+- **Loading Indicator** - Shows spinner with "מבצע OCR..." message during OCR processing
+- **Editable Preview** - Review and modify selected/recognized text before copying
 - **RTL Support** - Textarea uses right-to-left direction for Hebrew text
 - **Keyboard Support** - Press Escape to close popup, Enter in textarea for line breaks
 - **Click Outside to Close** - Click overlay to dismiss popup
 - **Scroll-Aware** - Works correctly with scrolled content
 - **Multi-Page Support** - Handles text across multiple visible pages
+- **High-DPI OCR** - Captures at canvas internal resolution for better OCR accuracy
 
 ### Technical Details
 
@@ -293,6 +299,16 @@ const isInRect =
   spanCenterY <= rect.top + rect.height;
 ```
 
+**OCR Fallback Process**:
+
+1. Check if any text spans found within rectangle
+2. If no text found, locate the PDF canvas that intersects with the rectangle
+3. Calculate rectangle position relative to canvas (accounting for scroll)
+4. Get canvas scale factor (internal resolution vs displayed size)
+5. Create cropped canvas with the rectangle area at full resolution
+6. Pass cropped canvas to Tesseract.js worker configured for Hebrew
+7. Display recognized text in popup with "טקסט מזוהה (OCR)" title
+
 **Why Word-Level Instead of Character-Level**:
 
 - PDF.js text layer wraps each word in its own `<span>` element
@@ -300,10 +316,18 @@ const isInRect =
 - Browser selection API cannot select non-continuous text (words with gaps)
 - Direct clipboard copy is the only way to get ONLY the words within rectangle bounds
 
+**Tesseract.js Integration**:
+
+- Loaded from CDN (https://cdn.jsdelivr.net/npm/tesseract.js@5)
+- Worker initialized with Hebrew language pack ('heb')
+- Runs offline after initial download of language data
+- Processes at full canvas resolution for better accuracy
+
 **Popup Features**:
 
 - Modal overlay with semi-transparent background
 - Centered popup with white background and shadow
+- Dynamic title: "טקסט נבחר" for text layer, "טקסט מזוהה (OCR)" for OCR results
 - Editable textarea with RTL direction and Hebrew alignment
 - "העתק" (Copy) button - copies text to clipboard and closes popup
 - "ביטול" (Cancel) button - closes popup without copying
@@ -315,6 +339,8 @@ const isInRect =
 1. Click the rectangle selection button in the toolbar (dashed rectangle icon)
 2. Click and drag to draw a rectangle around the desired text area
 3. Release to see the popup with selected text
+   - If text layer exists: Shows extracted text immediately
+   - If no text layer: Shows "מבצע OCR..." spinner, then recognized text
 4. Edit the text if needed
 5. Click "העתק" to copy to clipboard, or "ביטול" to cancel
 
@@ -322,10 +348,20 @@ const isInRect =
 
 - **Column-Specific Selection** - Select text from a single column in multi-column layouts
 - **OCR Problem Workaround** - Bypass OCR text ordering issues
+- **Scanned PDF Support** - Extract text from image-only PDFs using OCR
 - **Precise Selection** - Select exactly the text you need
 - **Review Before Copy** - See and edit what you're copying
 - **User-Friendly** - Simple click-and-drag interface with clear visual feedback
-- **Hebrew-Optimized** - RTL text direction and Hebrew button labels
+- **Hebrew-Optimized** - RTL text direction, Hebrew button labels, and Hebrew OCR
+- **Offline OCR** - Works without internet after initial language data download
+- **High Accuracy** - Uses full resolution canvas for better OCR results
+
+### Performance Notes
+
+- **First Use**: Tesseract.js downloads Hebrew language data (~2-3 MB) on first initialization
+- **Subsequent Uses**: Language data cached, OCR runs offline
+- **OCR Speed**: Typically 1-3 seconds depending on rectangle size and text complexity
+- **Memory**: Tesseract worker stays in memory for faster subsequent OCR operations
 
 ## Sidebar Customization (חלונית צד)
 
