@@ -4,7 +4,7 @@
     <div v-if="isLoadingPdf"
          class="flex-center height-fill">
       <div class="loading-container flex-column">
-        <Icon icon="fluent:spinner-ios-20-filled" 
+        <Icon icon="fluent:spinner-ios-20-filled"
               class="loading-spinner" />
         <span>טוען PDF...</span>
       </div>
@@ -56,10 +56,10 @@ const selectedPdfUrl = computed(() => {
 const hasPdfSource = computed(() => {
   const tab = tabStore.activeTab;
   if (!tab?.pdfState) return false;
-  
+
   // Don't show PDF viewer if still loading virtual URL
   if (tab.pdfState.isLoading) return false;
-  
+
   return !!(tab.pdfState.filePath || tab.pdfState.fileUrl);
 });
 
@@ -81,9 +81,15 @@ const pdfViewerUrl = computed(() => {
   if (fileSource) {
     params.set('file', fileSource);
   }
+
+  // Pass filename for proper document properties and save dialog
+  if (tab?.pdfState?.fileName) {
+    params.set('filename', encodeURIComponent(tab.pdfState.fileName));
+  }
+
   // Force Hebrew locale for tooltips
   params.set('locale', 'he');
-  
+
   // Performance optimizations for large files
   params.set('disableAutoFetch', 'false'); // Enable auto-fetch for better performance
   params.set('disableStream', 'false'); // Enable streaming for faster loading
@@ -92,10 +98,10 @@ const pdfViewerUrl = computed(() => {
   params.set('cMapPacked', 'true'); // Use packed CMaps for faster font loading
 
   const finalUrl = `${baseUrl}?${params.toString()}`;
-    
+
   console.log('[PdfViewPage] PDF viewer URL:', finalUrl);
   console.log('[PdfViewPage] File source:', fileSource);
-  
+
   return finalUrl;
 });
 
@@ -122,7 +128,7 @@ const openFilePicker = async () => {
     if (pdfService.isAvailable()) {
       // Use C# PDF service via existing bridge system
       const result = await pdfService.showFilePicker();
-      
+
       if (result.fileName && result.dataUrl) {
         // Update current tab's PDF state with virtual URL
         const tab = tabStore.activeTab;
@@ -138,7 +144,7 @@ const openFilePicker = async () => {
             tab.title = result.fileName;
           }
         }
-        
+
         console.log('[Vue] PDF loaded via C# bridge:', result.fileName, result.dataUrl);
       }
     } else {
@@ -221,7 +227,12 @@ const handleFileSelect = (event: Event) => {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

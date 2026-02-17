@@ -65,14 +65,20 @@ const hebrewBookUrl = computed(() => {
     const params = new URLSearchParams();
     params.set('file', tab.pdfState.fileUrl);
     params.set('locale', 'he'); // Force Hebrew locale for tooltips
-    
+
+    // Pass filename for proper document properties and save dialog
+    if (tab.pdfState.fileName || tab.pdfState.bookTitle) {
+      const filename = tab.pdfState.fileName || `${tab.pdfState.bookTitle}.pdf`;
+      params.set('filename', encodeURIComponent(filename));
+    }
+
     // Performance optimizations for large files
     params.set('disableAutoFetch', 'false'); // Enable auto-fetch for better performance
     params.set('disableStream', 'false'); // Enable streaming for faster loading
     params.set('disableRange', 'false'); // Enable range requests for partial loading
     params.set('enableHWA', 'true'); // Enable hardware acceleration
     params.set('cMapPacked', 'true'); // Use packed CMaps for faster font loading
-    
+
     const finalUrl = `/pdfjs/web/viewer.html?${params.toString()}`;
     console.log('[HebrewBooksViewPage] Constructed PDF viewer URL:', {
       fileUrl: tab.pdfState.fileUrl,
@@ -80,7 +86,7 @@ const hebrewBookUrl = computed(() => {
       tabTitle: tab.title,
       pdfState: tab.pdfState
     });
-    
+
     // Also log the individual components for debugging
     console.log('[HebrewBooksViewPage] URL components:', {
       baseViewer: '/pdfjs/web/viewer.html',
@@ -88,7 +94,7 @@ const hebrewBookUrl = computed(() => {
       localeParam: 'he',
       fullParams: params.toString()
     });
-    
+
     return finalUrl;
   }
   console.log('[HebrewBooksViewPage] No Hebrew book URL available:', {
@@ -161,7 +167,7 @@ watch(() => tabStore.activeTab?.pdfState, async (pdfState, oldPdfState) => {
           if (webviewHebrewBooks.isAvailable()) {
             // Check if file exists in cache first
             const cacheResult = await webviewHebrewBooks.checkInCache(pdfState.bookId, pdfState.bookTitle);
-            
+
             if (cacheResult.exists && cacheResult.url) {
               // File exists in cache, update tab state directly
               console.log('[HebrewBooksViewPage] File found in cache, updating tab state:', cacheResult.url);
@@ -242,7 +248,7 @@ const retryLoad = async () => {
       if (webviewHebrewBooks.isAvailable()) {
         // Check if file exists in cache first
         const cacheResult = await webviewHebrewBooks.checkInCache(pdfState.bookId, pdfState.bookTitle);
-        
+
         if (cacheResult.exists && cacheResult.url) {
           // File exists in cache, update tab state directly
           console.log('[HebrewBooksViewPage] File found in cache during retry, updating tab state:', cacheResult.url);

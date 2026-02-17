@@ -2,6 +2,21 @@
     <div class="flex-column width-fill height-fill settings-page">
         <div class="flex-110 overflow-y settings-content">
 
+            <!-- App Zoom - GLOBAL: Affects entire app UI scale -->
+            <div class="setting-group">
+                <label class="flex-between bold setting-label">
+                    זום האפליקציה
+                    <span class="text-secondary setting-value">{{
+                        Math.round(appZoom * 100) }}%</span>
+                </label>
+                <input type="range"
+                       v-model.number="appZoom"
+                       min="0.5"
+                       max="1.5"
+                       step="0.05"
+                       class="setting-slider" />
+            </div>
+
             <!-- Theme Toggle - GLOBAL: Affects entire app appearance -->
             <div class="setting-group">
                 <label class="flex-row bold setting-label">ערכת נושא</label>
@@ -17,21 +32,6 @@
                         מצב כהה
                     </button>
                 </div>
-            </div>
-
-            <!-- App Zoom - GLOBAL: Affects entire app UI scale -->
-            <div class="setting-group">
-                <label class="flex-between bold setting-label">
-                    זום האפליקציה
-                    <span class="text-secondary setting-value">{{
-                        Math.round(appZoom * 100) }}%</span>
-                </label>
-                <input type="range"
-                       v-model.number="appZoom"
-                       min="0.5"
-                       max="1.5"
-                       step="0.05"
-                       class="setting-slider" />
             </div>
 
             <!-- Divine Name Censoring - GLOBAL: Affects all text content -->
@@ -123,7 +123,7 @@
                     גודל גופן
                     <span class="text-secondary setting-value">{{
                         fontSize
-                        }}%</span>
+                    }}%</span>
                 </label>
                 <input type="range"
                        v-model.number="fontSize"
@@ -138,7 +138,7 @@
                 <label class="flex-between bold setting-label">
                     ריווח שורות
                     <span class="text-secondary setting-value">{{ linePadding
-                        }}</span>
+                    }}</span>
                 </label>
                 <input type="range"
                        v-model.number="linePadding"

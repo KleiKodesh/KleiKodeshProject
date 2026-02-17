@@ -286,63 +286,181 @@ class RectangleSelectionTool {
     selectTextInRectangle(rect) {
         // Get all text layers
         const textLayers = this.viewerContainer.querySelectorAll('.textLayer');
-        const selection = window.getSelection();
-        selection.removeAllRanges();
+        const containerRect = this.viewerContainer.getBoundingClientRect();
 
-        const range = document.createRange();
-        let hasSelection = false;
-        let firstNode = null;
-        let lastNode = null;
+        // Collect all spans within the rectangle
+        const selectedWords = [];
 
         textLayers.forEach(textLayer => {
-            const textLayerRect = textLayer.getBoundingClientRect();
-            const containerRect = this.viewerContainer.getBoundingClientRect();
-
-            // Adjust for scroll position
-            const layerOffsetLeft = textLayerRect.left - containerRect.left + this.viewerContainer.scrollLeft;
-            const layerOffsetTop = textLayerRect.top - containerRect.top + this.viewerContainer.scrollTop;
-
             const spans = textLayer.querySelectorAll('span');
 
             spans.forEach(span => {
+                const text = span.textContent;
+                if (!text) return;
+
                 const spanRect = span.getBoundingClientRect();
                 const spanLeft = spanRect.left - containerRect.left + this.viewerContainer.scrollLeft;
                 const spanTop = spanRect.top - containerRect.top + this.viewerContainer.scrollTop;
-                const spanRight = spanLeft + spanRect.width;
-                const spanBottom = spanTop + spanRect.height;
 
-                // Check if span intersects with selection rectangle
-                const intersects = !(
-                    spanRight < rect.left ||
-                    spanLeft > rect.left + rect.width ||
-                    spanBottom < rect.top ||
-                    spanTop > rect.top + rect.height
+                // Check if span center is within rectangle
+                const spanCenterX = spanLeft + spanRect.width / 2;
+                const spanCenterY = spanTop + spanRect.height / 2;
+
+                const isInRect = (
+                    spanCenterX >= rect.left &&
+                    spanCenterX <= rect.left + rect.width &&
+                    spanCenterY >= rect.top &&
+                    spanCenterY <= rect.top + rect.height
                 );
 
-                if (intersects && span.textContent.trim()) {
-                    if (!firstNode) {
-                        firstNode = span.firstChild || span;
-                    }
-                    lastNode = span.lastChild || span;
-                    hasSelection = true;
+                if (isInRect) {
+                    selectedWords.push(text);
                 }
             });
         });
 
-        // Create the selection range
-        if (hasSelection && firstNode && lastNode) {
-            try {
-                range.setStartBefore(firstNode);
-                range.setEndAfter(lastNode);
-                selection.addRange(range);
-
-                // Auto-deactivate the tool after selection
-                this.deactivate();
-                this.isActive = false;
-            } catch (e) {
-                console.error('Error creating text selection:', e);
-            }
+        // Show popup with selected text
+        if (selectedWords.length > 0) {
+            const textToCopy = selectedWords.join(' ');
+            this.showTextPopup(textToCopy);
         }
+
+        // Auto-deactivate the tool after selection
+        this.deactivate();
+        this.isActive = false;
+    }
+
+    showTextPopup(text) {
+        // Create overlay
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+
+        // Create popup container
+        const popup = document.createElement('div');
+        popup.style.cssText = `
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            max-width: 600px;
+            width: 90%;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        `;
+
+        // Create title
+        const title = document.createElement('div');
+        title.textContent = 'טקסט נבחר';
+        title.style.cssText = `
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 12px;
+            text-align: right;
+        `;
+
+        // Create textarea
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.cssText = `
+            width: 100%;
+            min-height: 150px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: inherit;
+            resize: vertical;
+            direction: rtl;
+            text-align: right;
+            box-sizing: border-box;
+        `;
+
+        // Create button container
+        const buttonContainer = document.createElement('div');
+        buttonContainer.style.cssText = `
+            display: flex;
+            gap: 10px;
+            margin-top: 12px;
+            justify-content: flex-end;
+        `;
+
+        // Create copy button
+        const copyButton = document.createElement('button');
+        copyButton.textContent = 'העתק';
+        copyButton.style.cssText = `
+            padding: 8px 20px;
+            background-color: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        `;
+        copyButton.onmouseover = () => copyButton.style.backgroundColor = '#0052a3';
+        copyButton.onmouseout = () => copyButton.style.backgroundColor = '#0066cc';
+        copyButton.onclick = () => {
+            navigator.clipboard.writeText(textarea.value).then(() => {
+                copyButton.textContent = '✓ הועתק';
+                setTimeout(() => overlay.remove(), 500);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+                alert('שגיאה בהעתקה');
+            });
+        };
+
+        // Create cancel button
+        const cancelButton = document.createElement('button');
+        cancelButton.textContent = 'ביטול';
+        cancelButton.style.cssText = `
+            padding: 8px 20px;
+            background-color: #f0f0f0;
+            color: #333;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        `;
+        cancelButton.onmouseover = () => cancelButton.style.backgroundColor = '#e0e0e0';
+        cancelButton.onmouseout = () => cancelButton.style.backgroundColor = '#f0f0f0';
+        cancelButton.onclick = () => overlay.remove();
+
+        // Assemble popup
+        buttonContainer.appendChild(cancelButton);
+        buttonContainer.appendChild(copyButton);
+        popup.appendChild(title);
+        popup.appendChild(textarea);
+        popup.appendChild(buttonContainer);
+        overlay.appendChild(popup);
+
+        // Close on overlay click
+        overlay.onclick = (e) => {
+            if (e.target === overlay) {
+                overlay.remove();
+            }
+        };
+
+        // Close on Escape key
+        const escapeHandler = (e) => {
+            if (e.key === 'Escape') {
+                overlay.remove();
+                document.removeEventListener('keydown', escapeHandler);
+            }
+        };
+        document.addEventListener('keydown', escapeHandler);
+
+        // Add to document and focus textarea
+        document.body.appendChild(overlay);
+        textarea.focus();
+        textarea.select();
     }
 }
 

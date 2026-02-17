@@ -36,11 +36,11 @@
 /******/ 			if (__webpack_require__.o(definition, key) && !__webpack_require__.o(exports, key)) {
 /******/ 				Object.defineProperty(exports, key, { enumerable: true, get: definition[key] });
         /******/
-}
+      }
       /******/
-}
+    }
     /******/
-};
+  };
   /******/
 })();
 /******/
@@ -5536,7 +5536,60 @@ class CommentPopup {
 
 ;// ./web/download_manager.js
 
-function download(blobUrl, filename) {
+async function download(blobUrl, filename) {
+  // Debug logging
+  console.log('[PDF.js Download] Filename received:', filename);
+  console.log('[PDF.js Download] Blob URL:', blobUrl);
+
+  // Ensure we have a valid filename, fallback to 'document.pdf' if not provided
+  const suggestedFilename = filename || 'document.pdf';
+
+  // Try to use File System Access API for save dialog (Chrome/Edge)
+  if (window.showSaveFilePicker) {
+    try {
+      // Fetch the blob data
+      const response = await fetch(blobUrl);
+      const blob = await response.blob();
+
+      console.log('[PDF.js Download] Showing save dialog with filename:', suggestedFilename);
+
+      // Show save dialog
+      const handle = await window.showSaveFilePicker({
+        suggestedName: suggestedFilename,
+        types: [{
+          description: 'PDF Files',
+          accept: { 'application/pdf': ['.pdf'] }
+        }]
+      });
+
+      // Write the file
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+
+      console.log('[PDF.js Download] File saved successfully');
+
+      // Clean up blob URL
+      if (blobUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(blobUrl);
+      }
+      return;
+    } catch (err) {
+      // User cancelled or error occurred, fall back to default behavior
+      if (err.name !== 'AbortError') {
+        console.warn('Save dialog failed, falling back to default download:', err);
+      } else {
+        // User cancelled, don't proceed with fallback
+        console.log('[PDF.js Download] User cancelled save dialog');
+        if (blobUrl.startsWith('blob:')) {
+          URL.revokeObjectURL(blobUrl);
+        }
+        return;
+      }
+    }
+  }
+
+  // Fallback for browsers without File System Access API
   const a = document.createElement("a");
   if (!a.click) {
     throw new Error('DownloadManager: "a.click()" is not supported.');
@@ -5544,7 +5597,7 @@ function download(blobUrl, filename) {
   a.href = blobUrl;
   a.target = "_parent";
   if ("download" in a) {
-    a.download = filename;
+    a.download = suggestedFilename;
   }
   (document.body || document.documentElement).append(a);
   a.click();
@@ -16708,7 +16761,7 @@ class ViewsManager extends Sidebar {
       toggleButton
     }, l10n.getDirection() === "ltr", false);
     this.isOpen = false;
-    this.active = SidebarView.THUMBS;
+    this.active = SidebarView.OUTLINE;  // Custom: Default to outline view instead of thumbs
     this.isInitialViewSet = false;
     this.isInitialEventDispatched = false;
     this.onToggled = null;
@@ -17431,6 +17484,14 @@ const PDFViewerApplication = {
     const queryString = document.location.search.substring(1);
     const params = parseQueryString(queryString);
     file = params.get("file") ?? AppOptions.get("defaultUrl");
+
+    // Custom: Handle filename parameter for blob URLs
+    const customFilename = params.get("filename");
+    if (customFilename) {
+      this._contentDispositionFilename = decodeURIComponent(customFilename);
+      console.log('[PDF.js] Custom filename from URL parameter:', this._contentDispositionFilename);
+    }
+
     try {
       file = new URL(file).href;
     } catch {

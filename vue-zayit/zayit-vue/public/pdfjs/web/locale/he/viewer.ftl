@@ -180,12 +180,12 @@ pdfjs-views-manager-view-selector-button =
     .title = תצוגות
 pdfjs-views-manager-view-selector-button-label = תצוגות
 pdfjs-views-manager-pages-title = עמודים
-pdfjs-views-manager-outlines-title = תוכן עניינים של המסמך
+pdfjs-views-manager-outlines-title = תוכן עניינים
 pdfjs-views-manager-attachments-title = קבצים מצורפים
 pdfjs-views-manager-layers-title = שכבות
 
 pdfjs-views-manager-pages-option-label = עמודים
-pdfjs-views-manager-outlines-option-label = תוכן עניינים של המסמך
+pdfjs-views-manager-outlines-option-label = תוכן עניינים
 pdfjs-views-manager-attachments-option-label = קבצים מצורפים
 pdfjs-views-manager-layers-option-label = שכבות
 

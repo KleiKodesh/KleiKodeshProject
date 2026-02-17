@@ -54,6 +54,10 @@ See https://github.com/adobe-type-tools/cmap-resources
   <link rel="stylesheet"
         href="viewer.css" />
 
+  <!-- Custom Zayit styles -->
+  <link rel="stylesheet"
+        href="viewer-custom.css" />
+
   <script src="viewer.mjs"
           type="module"></script>
 
@@ -109,19 +113,19 @@ See https://github.com/adobe-type-tools/cmap-resources
                             role="listbox"
                             class="popupMenu withMark">
                         <li>
-                          <button id="thumbnailsViewMenu"
-                                  role="option"
-                                  type="button"
-                                  tabindex="-1">
-                            <span data-l10n-id="pdfjs-views-manager-pages-option-label"></span>
-                          </button>
-                        </li>
-                        <li>
                           <button id="outlinesViewMenu"
                                   role="option"
                                   type="button"
                                   tabindex="-1">
                             <span data-l10n-id="pdfjs-views-manager-outlines-option-label"></span>
+                          </button>
+                        </li>
+                        <li>
+                          <button id="thumbnailsViewMenu"
+                                  role="option"
+                                  type="button"
+                                  tabindex="-1">
+                            <span data-l10n-id="pdfjs-views-manager-pages-option-label"></span>
                           </button>
                         </li>
                         <li>
