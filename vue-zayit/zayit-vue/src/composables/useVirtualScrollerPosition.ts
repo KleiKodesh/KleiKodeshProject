@@ -54,7 +54,6 @@ export function useVirtualScrollerPosition(
         try {
             const key = getStorageKey()
             localStorage.setItem(key, JSON.stringify(position))
-            console.log('💾 [VirtualScroller] Saved position:', key, position)
         } catch (error) {
             console.warn('[VirtualScroller] Failed to save position:', error)
         }
@@ -69,10 +68,7 @@ export function useVirtualScrollerPosition(
             const stored = localStorage.getItem(key)
             if (stored) {
                 const position = JSON.parse(stored) as VirtualScrollerPosition
-                console.log('📂 [VirtualScroller] Loaded position:', key, position)
                 return position
-            } else {
-                console.log('📂 [VirtualScroller] No saved position for:', key)
             }
         } catch (error) {
             console.warn('[VirtualScroller] Failed to load position:', error)
@@ -325,18 +321,12 @@ export function useVirtualScrollerPosition(
      * @returns true if a position was restored, false otherwise
      */
     async function autoRestore(): Promise<boolean> {
-        console.log('🔄 [VirtualScroller] autoRestore called')
-        console.log('🔄 [VirtualScroller] Scroller ref:', !!scrollerRef.value)
-        console.log('🔄 [VirtualScroller] Skip restore:', skipRestore?.value)
-
         if (!scrollerRef.value) {
-            console.log('🔄 [VirtualScroller] No scroller ref, aborting restore')
             return false
         }
 
         // Check if restore should be skipped (for overrides)
         if (skipRestore?.value) {
-            console.log('🔄 [VirtualScroller] Skipping restore due to flag')
             skipRestore.value = false
             return false
         }
@@ -348,7 +338,6 @@ export function useVirtualScrollerPosition(
         // Check if scroller has items before attempting restore
         const scrollerEl = scrollerRef.value.$el as HTMLElement | undefined
         if (!scrollerEl) {
-            console.log('🔄 [VirtualScroller] No scroller element, aborting restore')
             return false
         }
 
@@ -358,14 +347,10 @@ export function useVirtualScrollerPosition(
             return false
         }
 
-        console.log('🔄 [VirtualScroller] Scroller has items, attempting restore')
         const savedPosition = loadFromStorage()
         if (savedPosition) {
-            console.log('🔄 [VirtualScroller] Restoring position:', savedPosition)
             await restorePosition(savedPosition)
             return true
-        } else {
-            console.log('🔄 [VirtualScroller] No saved position to restore')
         }
 
         return false
@@ -399,17 +384,13 @@ export function useVirtualScrollerPosition(
     watch(positionId, async (newId, oldId) => {
         if (!oldId) return // Skip initial mount
 
-        console.log('🔄 [VirtualScroller] Position ID changed:', oldId, '→', newId)
-
         // Scroller stays mounted, just restore the new position
         await nextTick()
 
         // Wait a bit for data to update
         await new Promise(resolve => setTimeout(resolve, 100))
 
-        const restored = await autoRestore()
-
-        console.log('🔄 [VirtualScroller] Auto-restore result:', restored)
+        await autoRestore()
     })
 
     // Cleanup on unmount

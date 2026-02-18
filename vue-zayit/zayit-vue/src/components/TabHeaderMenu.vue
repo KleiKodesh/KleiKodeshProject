@@ -20,7 +20,7 @@
           </div>
 
           <!-- Diacritics toggle dropdown item -->
-          <DiacriticsDropdown />
+          <!-- <DiacriticsDropdown /> -->
 
           <!-- Line display toggle dropdown item -->
           <!-- COMMENTED OUT: Block view functionality removed for performance
@@ -56,21 +56,37 @@
             <span class="dropdown-label">ניהול סביבות עבודה</span>
           </div>
 
-          <!-- Hebrew Books - only show on open file page, not homepage, and only in WebView
-          <div v-if="!isHomepage && isWebViewAvailable"
-               @click.stop="handleHebrewBooksClick"
+          <!-- Search Page -->
+          <div v-if="!isHomepage"
+               @click.stop="handleSearchPageClick"
+               class="flex-row flex-center-start hover-bg c-pointer dropdown-item">
+            <Icon icon="fluent:search-sparkle-24-filled" />
+            <span class="dropdown-label">חיפוש כללי</span>
+          </div>
+
+          <!-- Open Book - only show when not on homepage -->
+          <div v-if="!isHomepage"
+               @click.stop="handleOpenBookClick"
                class="flex-row flex-center-start hover-bg c-pointer dropdown-item">
             <Icon icon="fluent:library-28-regular" />
-            <span class="dropdown-label">היברו-בוקס</span>
-          </div> -->
+            <span class="dropdown-label">פתח ספר</span>
+          </div>
 
-          <!-- PDF viewer - only show on open file page, not homepage
+          <!-- PDF viewer - only show on open file page, not homepage -->
           <div v-if="!isHomepage"
                @click.stop="handleOpenPdfClick"
                class="flex-row flex-center-start hover-bg c-pointer dropdown-item">
             <Icon icon="fluent:document-pdf-28-regular" />
             <span class="dropdown-label">פתח PDF</span>
-          </div> -->
+          </div>
+
+          <!-- Hebrew Books - only show on open file page, not homepage-->
+          <div v-if="!isHomepage"
+               @click.stop="handleHebrewBooksClick"
+               class="flex-row flex-center-start hover-bg c-pointer dropdown-item">
+            <Icon icon="fluent:book-open-48-regular" />
+            <span class="dropdown-label">היברו-בוקס</span>
+          </div>
 
           <!-- Popout toggle - only available in C# WebView -->
           <div v-if="isWebViewAvailable"
@@ -164,8 +180,18 @@ const handleWorkspaceManagerClick = () => {
   closeDropdown();
 };
 
+const handleOpenBookClick = () => {
+  tabStore.openKezayitOpenFilePage();
+  closeDropdown();
+};
+
 const handleHebrewBooksClick = () => {
   tabStore.openHebrewBooks();
+  closeDropdown();
+};
+
+const handleSearchPageClick = () => {
+  tabStore.openKezayitSearch();
   closeDropdown();
 };
 

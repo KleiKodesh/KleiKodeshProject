@@ -26,7 +26,7 @@
       <DynamicScroller v-else
                        ref="scrollerRef"
                        :items="filteredResults"
-                       :min-item-size="80"
+                       :min-item-size="100"
                        key-field="lineId"
                        class="scroller">
         <template #default="{ item, index, active }">
@@ -191,8 +191,8 @@ const positionManager = useVirtualScrollerPosition(scrollerRef, positionId)
 
 // Keyboard navigation for virtual scroller
 useVirtualScrollerKeyboard(
-    scrollerRef,
-    computed(() => filteredResults.value.length)
+  scrollerRef,
+  computed(() => filteredResults.value.length)
 )
 
 // Filter results based on checked books

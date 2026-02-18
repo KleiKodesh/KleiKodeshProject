@@ -3,6 +3,8 @@ import { ref, watch } from 'vue'
 
 const STORAGE_KEY = 'zayit-settings'
 
+export type NewTabPage = 'homepage' | 'openfile' | 'hebrewbooks' | 'kezayit-search'
+
 export interface Settings {
     headerFont: string
     textFont: string
@@ -14,6 +16,7 @@ export interface Settings {
     databasePath: string
     globalDiacritics: boolean
     globalDiacriticsState: number
+    newTabPage: NewTabPage
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -26,7 +29,8 @@ const DEFAULT_SETTINGS: Settings = {
     readingBackgroundColor: '',
     databasePath: '',
     globalDiacritics: false,
-    globalDiacriticsState: 0
+    globalDiacriticsState: 0,
+    newTabPage: 'homepage'
 }
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -40,6 +44,7 @@ export const useSettingsStore = defineStore('settings', () => {
     const databasePath = ref(DEFAULT_SETTINGS.databasePath)
     const globalDiacritics = ref(DEFAULT_SETTINGS.globalDiacritics)
     const globalDiacriticsState = ref(DEFAULT_SETTINGS.globalDiacriticsState)
+    const newTabPage = ref<NewTabPage>(DEFAULT_SETTINGS.newTabPage)
 
     const loadFromStorage = () => {
         try {
@@ -56,6 +61,7 @@ export const useSettingsStore = defineStore('settings', () => {
                 databasePath.value = settings.databasePath || DEFAULT_SETTINGS.databasePath
                 globalDiacritics.value = settings.globalDiacritics ?? DEFAULT_SETTINGS.globalDiacritics
                 globalDiacriticsState.value = settings.globalDiacriticsState ?? DEFAULT_SETTINGS.globalDiacriticsState
+                newTabPage.value = settings.newTabPage || DEFAULT_SETTINGS.newTabPage
             }
         } catch (e) {
             console.error('Failed to load settings:', e)
@@ -74,7 +80,8 @@ export const useSettingsStore = defineStore('settings', () => {
                 readingBackgroundColor: readingBackgroundColor.value,
                 databasePath: databasePath.value,
                 globalDiacritics: globalDiacritics.value,
-                globalDiacriticsState: globalDiacriticsState.value
+                globalDiacriticsState: globalDiacriticsState.value,
+                newTabPage: newTabPage.value
             }))
         } catch (e) {
             console.error('Failed to save settings:', e)
@@ -130,6 +137,7 @@ export const useSettingsStore = defineStore('settings', () => {
         databasePath.value = DEFAULT_SETTINGS.databasePath
         globalDiacritics.value = DEFAULT_SETTINGS.globalDiacritics
         globalDiacriticsState.value = DEFAULT_SETTINGS.globalDiacriticsState
+        newTabPage.value = DEFAULT_SETTINGS.newTabPage
         localStorage.removeItem(STORAGE_KEY)
         applyCSSVariables()
     }
@@ -139,7 +147,7 @@ export const useSettingsStore = defineStore('settings', () => {
     applyCSSVariables()
 
     // Watch for changes and persist
-    watch([headerFont, textFont, fontSize, linePadding, censorDivineNames, appZoom, readingBackgroundColor, databasePath, globalDiacritics, globalDiacriticsState], () => {
+    watch([headerFont, textFont, fontSize, linePadding, censorDivineNames, appZoom, readingBackgroundColor, databasePath, globalDiacritics, globalDiacriticsState, newTabPage], () => {
         saveToStorage()
         applyCSSVariables()
     })
@@ -155,6 +163,7 @@ export const useSettingsStore = defineStore('settings', () => {
         databasePath,
         globalDiacritics,
         globalDiacriticsState,
+        newTabPage,
         reset
     }
 })

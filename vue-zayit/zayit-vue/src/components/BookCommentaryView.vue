@@ -333,7 +333,6 @@ const scrollPositionId = computed(() => {
     const bookId = props.bookId || 0
     const filterId = selectedConnectionTypeId.value ?? 'all'
     const id = `commentary-${tabId}-${bookId}-${filterId}`
-    console.log('📍 Scroll Position ID:', id)
     return id
 })
 
@@ -501,26 +500,26 @@ function handleScrollUpdate() {
     if (!scrollObserverEnabled.value || isLineNavigationInProgress.value) {
         return
     }
-    
+
     const centerGroupIndex = findCenterCommentaryGroup()
-    
+
     if (centerGroupIndex !== null && centerGroupIndex !== currentGroupIndex.value) {
         const centerGroup = linkGroups.value[centerGroupIndex]
         const activeTab = tabStore.activeTab
-        
+
         if (centerGroup && activeTab?.bookState) {
             isUpdatingFromScroll.value = true
-            
+
             // Update combobox
             currentGroupIndex.value = centerGroupIndex
             comboboxSelectedValue.value = centerGroupIndex
-            
+
             // Update tab state (for line navigation only)
             activeTab.bookState.currentCommentaryBookId = centerGroup.targetBookId
             activeTab.bookState.currentCommentaryGroupName = centerGroup.groupName
-            
+
             // Note: Scroll position is automatically saved by useVirtualScrollerPosition composable
-            
+
             // Reset flag after update completes
             nextTick(() => {
                 setTimeout(() => {
@@ -576,7 +575,7 @@ onMounted(() => {
 
     // Container width tracking for responsive height estimation
     let resizeObserver: ResizeObserver | null = null
-    
+
     nextTick(() => {
         if (commentaryContentRef.value) {
             containerWidth.value = commentaryContentRef.value.clientWidth
@@ -598,7 +597,7 @@ onMounted(() => {
         if (resizeObserver) {
             resizeObserver.disconnect()
         }
-        
+
         // Clean up scroll observer (handled by watcher)
         if (scrollObserverCleanup) {
             scrollObserverCleanup()
@@ -623,18 +622,18 @@ watch(commentaryScrollerRef, (newScroller) => {
     if (newScroller) {
         nextTick(() => {
             scrollObserverCleanup = setupScrollObserver()
-            
+
             // Apply pending default group index if waiting
             if (pendingDefaultGroupIndex.value !== null) {
                 const defaultGroupIndex = pendingDefaultGroupIndex.value
                 pendingDefaultGroupIndex.value = null
-                
+
                 // Update current group index
                 currentGroupIndex.value = defaultGroupIndex
-                
+
                 // Update combobox value (for display only, don't trigger watcher scroll)
                 comboboxSelectedValue.value = defaultGroupIndex
-                
+
                 // Update tab state immediately
                 const activeTab = tabStore.activeTab
                 if (activeTab?.bookState) {
@@ -644,7 +643,7 @@ watch(commentaryScrollerRef, (newScroller) => {
                         activeTab.bookState.currentCommentaryGroupName = targetGroup.groupName
                     }
                 }
-                
+
                 // Directly scroll to the group (bypasses watcher)
                 scrollToGroup(defaultGroupIndex)
             }
@@ -669,7 +668,7 @@ watch(comboboxSelectedValue, (newValue) => {
     if (isLineNavigationInProgress.value) {
         return
     }
-    
+
     // Ignore updates triggered by scroll observer
     if (isUpdatingFromScroll.value) {
         return
@@ -769,13 +768,13 @@ function updateDarkMode() {
  */
 async function handleFilterChange(connectionTypeId: number) {
     console.log('🔄 Filter change:', selectedConnectionTypeId.value, '→', connectionTypeId)
-    
+
     // Switch to new filter (positionId will change, triggering auto-restore)
     selectedConnectionTypeId.value = connectionTypeId
 
     if (props.bookId !== undefined && props.selectedLineIndex !== undefined) {
         await loadCommentaryLinks(props.bookId, props.selectedLineIndex)
-        
+
         // Give the virtual scroller time to render before auto-restore kicks in
         await nextTick()
         await nextTick()
@@ -792,9 +791,9 @@ async function loadCommentaryLinks(bookId: number, lineIndex: number, isLineNavi
         isLineNavigationInProgress.value = true
         skipScrollRestore.value = true // Skip scroll position restore during line navigation
     }
-    
+
     isLoading.value = true
-    
+
     // Reset current group index when loading new commentary
     currentGroupIndex.value = -1
 
@@ -869,11 +868,11 @@ async function loadCommentaryLinks(bookId: number, lineIndex: number, isLineNavi
 
         // Handle commentary scrolling based on context
         await nextTick()
-        
+
         if (isLineNavigation) {
             // Line navigation - scroll to current commentary
             await handleLineNavigationCommentary()
-            
+
             // CLEAR MASTER FLAG after everything is complete
             setTimeout(() => {
                 isLineNavigationInProgress.value = false
@@ -887,7 +886,7 @@ async function loadCommentaryLinks(bookId: number, lineIndex: number, isLineNavi
     } catch (error) {
         console.error('❌ Failed to load commentary links:', error)
         linkGroups.value = []
-        
+
         // Clear flag on error too
         if (isLineNavigation) {
             isLineNavigationInProgress.value = false
@@ -905,37 +904,37 @@ async function loadCommentaryLinks(bookId: number, lineIndex: number, isLineNavi
 async function scrollToCommentaryBookId(targetBookId: number, targetGroupName?: string) {
     // Find the group with this book ID and optionally matching group name
     let groupIndex = -1
-    
+
     if (targetGroupName) {
         // Try to find exact match by both book ID and group name
         groupIndex = linkGroups.value.findIndex(
             group => group.targetBookId === targetBookId && group.groupName === targetGroupName
         )
     }
-    
+
     if (groupIndex === -1) {
         // Fall back to just book ID
         groupIndex = linkGroups.value.findIndex(
             group => group.targetBookId === targetBookId
         )
     }
-    
+
     if (groupIndex === -1) {
         groupIndex = 0
     }
-    
+
     // Wait for DOM to update
     await nextTick()
-    
+
     // If scroller not available, store for later
     if (!commentaryScrollerRef.value) {
         pendingDefaultGroupIndex.value = groupIndex
         return
     }
-    
+
     // Set combobox - watcher handles scroll
     comboboxSelectedValue.value = groupIndex
-    
+
     // Note: We don't update tab state here - the scroll observer will do it after scroll completes
 }
 
@@ -946,7 +945,7 @@ async function handleFirstLoadDefaultCommentary() {
     // Check if we have a saved scroll position (from useVirtualScrollerPosition)
     const positionKey = `vscroller-pos-${scrollPositionId.value}`
     const hasSavedPosition = localStorage.getItem(positionKey) !== null
-    
+
     if (hasSavedPosition) {
         // Let useVirtualScrollerPosition handle restoration
         return
@@ -956,9 +955,9 @@ async function handleFirstLoadDefaultCommentary() {
     const activeTab = tabStore.activeTab
     const currentCommentaryBookId = activeTab?.bookState?.currentCommentaryBookId
     const defaultCommentaryBookId = props.book?.defaultCommentatorBookId
-    
+
     const targetBookId = currentCommentaryBookId || defaultCommentaryBookId
-    
+
     if (!targetBookId) {
         return
     }
@@ -974,10 +973,10 @@ async function handleLineNavigationCommentary() {
     const currentCommentaryBookId = activeTab?.bookState?.currentCommentaryBookId
     const currentCommentaryGroupName = activeTab?.bookState?.currentCommentaryGroupName
     const defaultCommentaryBookId = props.book?.defaultCommentatorBookId
-    
+
     // Use current if available, otherwise fall back to default
     const targetBookId = currentCommentaryBookId || defaultCommentaryBookId
-    
+
     if (!targetBookId) {
         if (linkGroups.value.length > 0) {
             comboboxSelectedValue.value = 0
@@ -997,18 +996,18 @@ async function handleLineNavigationCommentary() {
  */
 async function findNextLineWithCommentary(startLine: number, maxScanLines = 50): Promise<number | null> {
     if (!props.bookId) return null
-    
+
     const activeTab = tabStore.activeTab
     const currentCommentaryBookId = activeTab?.bookState?.currentCommentaryBookId
     if (!currentCommentaryBookId) return null
-    
+
     const tabId = activeTab?.id?.toString() || ''
     const connectionTypeId = selectedConnectionTypeId.value
-    
+
     // Scan forward up to maxScanLines
     for (let offset = 1; offset <= maxScanLines; offset++) {
         const testLine = startLine + offset
-        
+
         try {
             // Load commentary for this line
             const testGroups = await bookCommentaryService.loadCommentaryLinks(
@@ -1017,7 +1016,7 @@ async function findNextLineWithCommentary(startLine: number, maxScanLines = 50):
                 tabId,
                 { connectionTypeId }
             )
-            
+
             // Check if current commentary exists in this line
             const hasCommentary = testGroups.some(group => group.targetBookId === currentCommentaryBookId)
             if (hasCommentary) {
@@ -1028,7 +1027,7 @@ async function findNextLineWithCommentary(startLine: number, maxScanLines = 50):
             break
         }
     }
-    
+
     return null
 }
 
@@ -1038,19 +1037,19 @@ async function findNextLineWithCommentary(startLine: number, maxScanLines = 50):
  */
 async function findPreviousLineWithCommentary(startLine: number, maxScanLines = 50): Promise<number | null> {
     if (!props.bookId) return null
-    
+
     const activeTab = tabStore.activeTab
     const currentCommentaryBookId = activeTab?.bookState?.currentCommentaryBookId
     if (!currentCommentaryBookId) return null
-    
+
     const tabId = activeTab?.id?.toString() || ''
     const connectionTypeId = selectedConnectionTypeId.value
-    
+
     // Scan backward up to maxScanLines or until line 0
     for (let offset = 1; offset <= maxScanLines; offset++) {
         const testLine = startLine - offset
         if (testLine < 0) break
-        
+
         try {
             // Load commentary for this line
             const testGroups = await bookCommentaryService.loadCommentaryLinks(
@@ -1059,7 +1058,7 @@ async function findPreviousLineWithCommentary(startLine: number, maxScanLines = 
                 tabId,
                 { connectionTypeId }
             )
-            
+
             // Check if current commentary exists in this line
             const hasCommentary = testGroups.some(group => group.targetBookId === currentCommentaryBookId)
             if (hasCommentary) {
@@ -1070,7 +1069,7 @@ async function findPreviousLineWithCommentary(startLine: number, maxScanLines = 
             continue
         }
     }
-    
+
     return null
 }
 
@@ -1079,12 +1078,12 @@ async function findPreviousLineWithCommentary(startLine: number, maxScanLines = 
  */
 async function handleNavigateToNextLine() {
     if (!canNavigateToNextLine.value || props.selectedLineIndex === undefined || isNavigatingToLine.value) return
-    
+
     isNavigatingToLine.value = true
-    
+
     try {
         const nextLine = await findNextLineWithCommentary(props.selectedLineIndex)
-        
+
         if (nextLine !== null) {
             emit('navigate-line', nextLine)
         }
@@ -1098,12 +1097,12 @@ async function handleNavigateToNextLine() {
  */
 async function handleNavigateToPreviousLine() {
     if (!canNavigateToPreviousLine.value || props.selectedLineIndex === undefined || isNavigatingToLine.value) return
-    
+
     isNavigatingToLine.value = true
-    
+
     try {
         const previousLine = await findPreviousLineWithCommentary(props.selectedLineIndex)
-        
+
         if (previousLine !== null) {
             emit('navigate-line', previousLine)
         }
@@ -1117,7 +1116,7 @@ async function handleNavigateToPreviousLine() {
  */
 function handleNavigateToPreviousGroup() {
     if (!canNavigateToPreviousGroup.value) return
-    
+
     const newIndex = currentGroupIndex.value - 1
     comboboxSelectedValue.value = newIndex
 }
@@ -1127,7 +1126,7 @@ function handleNavigateToPreviousGroup() {
  */
 function handleNavigateToNextGroup() {
     if (!canNavigateToNextGroup.value) return
-    
+
     const newIndex = currentGroupIndex.value + 1
     comboboxSelectedValue.value = newIndex
 }
@@ -1185,9 +1184,9 @@ async function scrollToGroup(groupIndex: number) {
 
     // Use virtual scroller to scroll to item (gets it into rendered range)
     commentaryScrollerRef.value.scrollToItem(itemIndex)
-    
+
     const scrollerEl = commentaryScrollerRef.value.$el as HTMLElement
-    
+
     // Update tab state immediately (don't wait for scroll observer)
     const targetGroup = linkGroups.value[groupIndex]
     const activeTab = tabStore.activeTab
@@ -1195,34 +1194,30 @@ async function scrollToGroup(groupIndex: number) {
         activeTab.bookState.currentCommentaryBookId = targetGroup.targetBookId
         activeTab.bookState.currentCommentaryGroupName = targetGroup.groupName
     }
-    
+
     // Wait for virtual scroller to render, then use scrollIntoView for precise positioning
     await nextTick()
-    
+
     if (!scrollerEl) return
-    
+
     // Poll for the element to appear in DOM (virtual scroller renders lazily)
     const maxAttempts = 20
     let attempts = 0
     let targetElement: HTMLElement | null = null
-    
+
     while (attempts < maxAttempts && !targetElement) {
         await new Promise(resolve => requestAnimationFrame(resolve))
         targetElement = scrollerEl.querySelector(`[data-group-index="${groupIndex}"]`) as HTMLElement
         attempts++
     }
-    
+
     if (!targetElement) {
         scrollObserverEnabled.value = true
         return
     }
-    
-    targetElement.scrollIntoView({ 
-        behavior: 'auto', 
-        block: 'start', 
-        inline: 'nearest' 
-    })
-    
+
+    targetElement.scrollIntoView({ block: 'start', behavior: 'auto' })
+
     // Re-enable scroll observer after scroll settles
     await nextTick()
     setTimeout(() => {
@@ -1566,8 +1561,6 @@ ${htmlContent}
     direction: rtl;
     scroll-padding-top: 70px;
     /* Account for search bar */
-    overscroll-behavior: contain;
-    /* Prevent scroll propagation to parent/document */
 }
 
 /* ============================================ */

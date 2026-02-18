@@ -11,7 +11,7 @@ const DEFAULT_WORKSPACE_ID = 'default';
 
 const PAGE_TITLES: Record<PageType, string> = {
     'homepage': 'דף הבית',
-    'openfile': 'פתיחת קובץ',
+    'openfile': 'פתיחת ספר',
     'bookview': 'תצוגת ספר',
     'pdfview': 'תצוגת PDF',
     'hebrewbooks-view': 'ספר עברי',
@@ -191,8 +191,19 @@ export const useTabStore = defineStore('tabs', () => {
         }
     })();
 
-    // Centralized function to determine appropriate homepage - always returns homepage
+    // Centralized function to determine appropriate homepage - uses user setting
     async function navigateToHomepage(): Promise<{ pageType: PageType, title: string }> {
+        const settingsStore = useSettingsStore();
+        const pageType = settingsStore.newTabPage as PageType;
+
+        return {
+            pageType,
+            title: PAGE_TITLES[pageType]
+        };
+    }
+
+    // Function to always return actual homepage (for reset/home button)
+    function navigateToActualHomepage(): { pageType: PageType, title: string } {
         return {
             pageType: 'homepage',
             title: PAGE_TITLES['homepage']
@@ -244,15 +255,17 @@ export const useTabStore = defineStore('tabs', () => {
     };
 
     const addTab = async () => {
-        // Check if a homepage tab already exists
-        const existingHomepageTab = tabs.value.find(t =>
-            t.currentPage === 'homepage'
-        );
+        // Get the page type from user settings
+        const { pageType, title } = await navigateToHomepage();
 
-        if (existingHomepageTab) {
-            // Switch to existing homepage tab instead of creating a new one
-            setActiveTab(existingHomepageTab.id);
-            return;
+        // Check if this is a single-instance page type that already exists
+        if (pageType === 'homepage' || pageType === 'openfile' || pageType === 'settings' || pageType === 'workspaces') {
+            const existingTab = tabs.value.find(t => t.currentPage === pageType);
+            if (existingTab) {
+                // Switch to existing tab instead of creating a new one
+                setActiveTab(existingTab.id);
+                return;
+            }
         }
 
         tabs.value.forEach(tab => tab.isActive = false);
@@ -263,9 +276,6 @@ export const useTabStore = defineStore('tabs', () => {
         while (existingIds.has(newId)) {
             newId++;
         }
-
-        // Create tab using centralized homepage logic
-        const { pageType, title } = await navigateToHomepage();
 
         const newTab: Tab = {
             id: newId,
@@ -291,7 +301,17 @@ export const useTabStore = defineStore('tabs', () => {
         tabs.value = tabs.value.filter(tab => !tab.isActive);
 
         if (tabs.value.length === 0) {
-            await addTab();
+            // When closing the last tab, always create a homepage (not user preference)
+            const { pageType, title } = navigateToActualHomepage();
+
+            const newTab: Tab = {
+                id: 1,
+                title,
+                isActive: true,
+                currentPage: pageType
+            };
+            tabs.value.push(newTab);
+            nextId.value = 2;
         } else {
             const newIndex = Math.min(currentIndex, tabs.value.length - 1);
             const newTab = tabs.value[newIndex];
@@ -322,8 +342,8 @@ export const useTabStore = defineStore('tabs', () => {
                 return;
             }
 
-            // Reset current tab to appropriate page using centralized homepage logic
-            const { pageType, title } = await navigateToHomepage();
+            // Reset current tab to actual homepage (not user preference)
+            const { pageType, title } = navigateToActualHomepage();
 
             tab.currentPage = pageType;
             tab.title = title;
@@ -639,8 +659,8 @@ export const useTabStore = defineStore('tabs', () => {
 
 
     const closeAllTabs = async () => {
-        // Clear all tabs and create a new default tab using centralized homepage logic
-        const { pageType, title } = await navigateToHomepage();
+        // Clear all tabs and create a new homepage tab (always default to homepage)
+        const { pageType, title } = navigateToActualHomepage();
 
         tabs.value = [{
             id: 1,
@@ -675,7 +695,12 @@ export const useTabStore = defineStore('tabs', () => {
             return;
         }
 
-        // Otherwise create new tab (allow multiple)
+        // Check if openfile page already exists and switch to it (single instance)
+        if (switchToExistingOrCreate('openfile')) {
+            return;
+        }
+
+        // Create new openfile tab (only if none exists)
         tabs.value.forEach(tab => tab.isActive = false);
 
         const existingIds = new Set(tabs.value.map(t => t.id));

@@ -1,8 +1,8 @@
 <template>
   <transition name="slide">
-    <div v-if="isVisible && tabStore.tabs.length > 0"
+    <div v-if="isVisible && visibleTabs.length > 0"
          class="tab-dropdown">
-      <template v-for="tab in tabStore.tabs"
+      <template v-for="tab in visibleTabs"
                 :key="tab.id">
         <div :class="['flex-row bar c-pointer tab-item', { active: tab.isActive }]"
              @click="selectTab(tab.id)">
@@ -22,12 +22,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useTabStore } from '../stores/tabStore';
 
 const tabStore = useTabStore();
 const isVisible = ref(false);
+
+// Filter out settings and workspaces pages from dropdown
+const visibleTabs = computed(() => {
+  return tabStore.tabs.filter(tab =>
+    tab.currentPage !== 'settings' && tab.currentPage !== 'workspaces'
+  );
+});
 
 const toggle = () => {
   isVisible.value = !isVisible.value;

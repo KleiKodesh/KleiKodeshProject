@@ -23,6 +23,8 @@
         </svg>
         <div v-if="showDropdown && filteredOptions.length > 0"
              class="combobox-dropdown"
+             :style="dropdownStyle"
+             ref="dropdownRef"
              @mousedown="isMouseDownOnDropdown = true"
              @mouseup="isMouseDownOnDropdown = false"
              @mouseleave="isMouseDownOnDropdown = false">
@@ -33,7 +35,8 @@
                  :class="{
                     active: option.value === modelValue,
                     highlighted: index === highlightedIndex
-                }">
+                }"
+                 :data-index="index">
                 {{ option.label }}
             </div>
         </div>
@@ -77,12 +80,14 @@ const emit = defineEmits<{
 
 const comboboxRef = ref<HTMLElement | null>(null)
 const inputRef = ref<HTMLInputElement | null>(null)
+const dropdownRef = ref<HTMLElement | null>(null)
 const searchText = ref('')
 const debouncedSearchText = ref('')
 const showDropdown = ref(false)
 const highlightedIndex = ref(-1)
 const isMouseDownOnDropdown = ref(false)
 const isFocused = ref(false)
+const dropdownWidth = ref<number>(0)
 
 const currentLabel = computed(() => {
     const option = props.options.find(opt => opt.value === props.modelValue)
@@ -114,6 +119,68 @@ const filteredOptions = computed(() => {
         return searchWords.every(word => labelLower.includes(word))
     })
 })
+
+const dropdownStyle = computed(() => {
+    const inputWidth = comboboxRef.value?.offsetWidth || 0
+    const width = Math.max(dropdownWidth.value, inputWidth)
+    return {
+        width: `${Math.min(width, 400)}px`
+    }
+})
+
+// Calculate width based on currently visible items
+function updateDropdownWidth() {
+    if (!dropdownRef.value) return
+
+    const dropdown = dropdownRef.value
+    const dropdownRect = dropdown.getBoundingClientRect()
+
+    // Get all option elements
+    const options = dropdown.querySelectorAll('.combobox-option')
+
+    let maxVisibleWidth = 0
+
+    // Create a temporary element to measure natural text width
+    const temp = document.createElement('div')
+    temp.style.position = 'absolute'
+    temp.style.visibility = 'hidden'
+    temp.style.whiteSpace = 'nowrap'
+    temp.style.padding = '6px 10px'
+    temp.style.fontSize = '12px'
+    temp.style.fontFamily = getComputedStyle(dropdown).fontFamily
+    document.body.appendChild(temp)
+
+    options.forEach((option) => {
+        const optionRect = option.getBoundingClientRect()
+
+        // Check if option is visible in the dropdown viewport
+        const isVisible =
+            optionRect.bottom > dropdownRect.top &&
+            optionRect.top < dropdownRect.bottom
+
+        if (isVisible && option instanceof HTMLElement) {
+            // Measure the natural width of the text content
+            temp.textContent = option.textContent || ''
+            const naturalWidth = temp.offsetWidth
+            if (naturalWidth > maxVisibleWidth) {
+                maxVisibleWidth = naturalWidth
+            }
+        }
+    })
+
+    document.body.removeChild(temp)
+
+    // Add a small buffer for scrollbar (if present)
+    const scrollbarWidth = dropdown.offsetWidth - dropdown.clientWidth
+    maxVisibleWidth += scrollbarWidth
+
+    dropdownWidth.value = maxVisibleWidth
+}
+
+// Scroll handler - update width immediately
+function onDropdownScroll() {
+    updateDropdownWidth()
+}
 
 // Keyboard navigation using useEventListener
 useEventListener('keydown', (event: KeyboardEvent) => {
@@ -180,6 +247,17 @@ const onFocus = (event: FocusEvent) => {
             input.select()
         }
     }
+
+    // Scroll to currently selected item when dropdown opens
+    scrollToSelected()
+
+    // Setup scroll listener and initial width calculation
+    setTimeout(() => {
+        if (dropdownRef.value) {
+            dropdownRef.value.addEventListener('scroll', onDropdownScroll, { passive: true })
+            updateDropdownWidth()
+        }
+    }, 50)
 }
 
 const onBlur = (event: FocusEvent) => {
@@ -194,6 +272,11 @@ const onBlur = (event: FocusEvent) => {
         searchText.value = ''
         debouncedSearchText.value = ''
         highlightedIndex.value = -1
+
+        // Cleanup scroll listener
+        if (dropdownRef.value) {
+            dropdownRef.value.removeEventListener('scroll', onDropdownScroll)
+        }
     }, 200)
 }
 
@@ -205,9 +288,25 @@ const toggleDropdown = () => {
         debouncedSearchText.value = ''
         highlightedIndex.value = -1
         inputRef.value?.blur()
+
+        // Cleanup scroll listener
+        if (dropdownRef.value) {
+            dropdownRef.value.removeEventListener('scroll', onDropdownScroll)
+        }
     } else {
         showDropdown.value = true
         inputRef.value?.focus()
+
+        // Scroll to currently selected item when dropdown opens
+        scrollToSelected()
+
+        // Setup scroll listener and initial width calculation
+        setTimeout(() => {
+            if (dropdownRef.value) {
+                dropdownRef.value.addEventListener('scroll', onDropdownScroll, { passive: true })
+                updateDropdownWidth()
+            }
+        }, 50)
     }
 }
 
@@ -225,24 +324,48 @@ const onKeyDown = (event: KeyboardEvent) => {
     if (!showDropdown.value && (event.code === 'ArrowDown' || event.code === 'ArrowUp')) {
         showDropdown.value = true
         event.preventDefault()
+
+        // Scroll to currently selected item when dropdown opens
+        scrollToSelected()
+
+        // Setup scroll listener and initial width calculation
+        setTimeout(() => {
+            if (dropdownRef.value) {
+                dropdownRef.value.addEventListener('scroll', onDropdownScroll, { passive: true })
+                updateDropdownWidth()
+            }
+        }, 50)
         return
     }
+}
+
+const scrollToSelected = () => {
+    // Wait for dropdown to render
+    setTimeout(() => {
+        const dropdown = dropdownRef.value
+        const activeOption = dropdown?.querySelector('.combobox-option.active')
+
+        if (dropdown && activeOption && activeOption instanceof HTMLElement) {
+            // Scroll the active option into view
+            activeOption.scrollIntoView({ block: 'center', behavior: 'auto' })
+        }
+    }, 0)
 }
 
 const scrollToHighlighted = () => {
     if (highlightedIndex.value < 0) return
 
     setTimeout(() => {
-        const dropdown = comboboxRef.value?.querySelector('.combobox-dropdown')
+        const dropdown = dropdownRef.value
         const highlighted = dropdown?.querySelector('.combobox-option.highlighted')
         if (dropdown && highlighted && highlighted instanceof HTMLElement) {
             const dropdownRect = dropdown.getBoundingClientRect()
             const highlightedRect = highlighted.getBoundingClientRect()
 
             if (highlightedRect.bottom > dropdownRect.bottom) {
-                highlighted.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' })
+                highlighted.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
             } else if (highlightedRect.top < dropdownRect.top) {
-                highlighted.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' })
+                highlighted.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
             }
         }
     }, 0)
@@ -273,6 +396,9 @@ watch(() => props.modelValue, (newValue, oldValue) => {
     min-height: 28px;
     line-height: 1.3;
     touch-action: manipulation;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 @media (hover: none) and (pointer: coarse) {
@@ -318,14 +444,15 @@ watch(() => props.modelValue, (newValue, oldValue) => {
 .combobox-dropdown {
     position: absolute;
     top: 100%;
-    left: 0;
     right: 0;
+    left: auto;
     margin-top: 2px;
     background: var(--bg-primary);
     border: 1px solid var(--border-color);
     border-radius: 4px;
     max-height: 200px;
     overflow-y: auto;
+    overflow-x: hidden;
     z-index: 1001;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
@@ -336,8 +463,6 @@ watch(() => props.modelValue, (newValue, oldValue) => {
     font-size: 12px;
     text-align: right;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
     min-height: 32px;
     display: flex;
     align-items: center;

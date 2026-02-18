@@ -1,5 +1,7 @@
 ﻿using Microsoft.Web.WebView2.WinForms;
 using System;
+using System.Linq;
+using System.Text.RegularExpressions;
 using System.Windows.Forms;
 
 namespace Zayit.Services
@@ -40,11 +42,32 @@ namespace Zayit.Services
             Console.WriteLine("[ContextMenuService] Context menu initialized");
         }
 
-        private void CoreWebView2_ContextMenuRequested(object sender, Microsoft.Web.WebView2.Core.CoreWebView2ContextMenuRequestedEventArgs e)
+        private void CoreWebView2_ContextMenuRequested(
+     object sender,
+     Microsoft.Web.WebView2.Core.CoreWebView2ContextMenuRequestedEventArgs e)
         {
             try
             {
                 var menuItems = e.MenuItems;
+
+                // Detect Hebrew in any existing menu item
+                bool containsHebrew = menuItems
+                    .Where(m => !string.IsNullOrEmpty(m.Label))
+                    .Any(m => Regex.IsMatch(m.Label, @"[\u0590-\u05FF]"));
+
+                string toggleLabel;
+                string printScreenLabel;
+
+                if (containsHebrew)
+                {
+                    toggleLabel = "החלף תצוגה: חלון / חלונית צד";
+                    printScreenLabel = "כלי החיתוך";
+                }
+                else
+                {
+                    toggleLabel = "Toggle View: Window / Side Pane";
+                    printScreenLabel = "Snipping Tool";
+                }
 
                 // Separator
                 var separator = _webView.CoreWebView2.Environment.CreateContextMenuItem(
@@ -56,17 +79,19 @@ namespace Zayit.Services
 
                 // Toggle visibility item
                 var toggleItem = _webView.CoreWebView2.Environment.CreateContextMenuItem(
-                    "החלף תצוגה: חלון / חלונית צד",
+                    toggleLabel,
                     null,
                     Microsoft.Web.WebView2.Core.CoreWebView2ContextMenuItemKind.Command
                 );
+
                 toggleItem.CustomItemSelected += (s, args) =>
                 {
-                    Console.WriteLine("[ContextMenuService] Toggle visibility menu item clicked");
                     _toggleVisibilityAction?.Invoke();
                 };
+
                 menuItems.Add(toggleItem);
 
+                // Separator
                 var separator2 = _webView.CoreWebView2.Environment.CreateContextMenuItem(
                     "-",
                     null,
@@ -76,24 +101,24 @@ namespace Zayit.Services
 
                 // PrintScreen item
                 var printScreenItem = _webView.CoreWebView2.Environment.CreateContextMenuItem(
-                    "כלי החיתוך",
+                    printScreenLabel,
                     null,
                     Microsoft.Web.WebView2.Core.CoreWebView2ContextMenuItemKind.Command
                 );
+
                 printScreenItem.CustomItemSelected += (s, args) =>
                 {
-                    Console.WriteLine("[ContextMenuService] Print Screen menu item clicked");
                     SendPrintScreen();
                 };
-                menuItems.Add(printScreenItem);
 
-                Console.WriteLine("[ContextMenuService] Context menu items added");
+                menuItems.Add(printScreenItem);
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[ContextMenuService] Error adding context menu items: {ex}");
             }
         }
+
 
         private void SendPrintScreen()
         {

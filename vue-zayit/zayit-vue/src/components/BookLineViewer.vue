@@ -1077,7 +1077,7 @@ function addFadeAnimationOnce(lineIndex: number) {
 
 <style scoped>
 .line-viewer {
-    padding: 25px 15px;
+    padding: 8px 12px;
     font-size: var(--font-size, 100%);
 }
 

@@ -18,7 +18,7 @@
             </div>
 
             <!-- Theme Toggle - GLOBAL: Affects entire app appearance -->
-            <div class="setting-group">
+            <!-- <div class="setting-group">
                 <label class="flex-row bold setting-label">ערכת נושא</label>
                 <div class="flex-row theme-toggle">
                     <button :class="{ active: !currentTheme }"
@@ -32,7 +32,7 @@
                         מצב כהה
                     </button>
                 </div>
-            </div>
+            </div> -->
 
             <!-- Divine Name Censoring - GLOBAL: Affects all text content -->
             <div class="setting-group">
@@ -65,6 +65,33 @@
                             @click="globalDiacritics = true"
                             class="flex-110 c-pointer theme-option">
                         גלובלי
+                    </button>
+                </div>
+            </div>
+
+            <!-- New Tab Page - GLOBAL: Controls what page new tabs open to -->
+            <div class="setting-group">
+                <label class="flex-row bold setting-label">דף ברירת מחדל לטאב חדש</label>
+                <div class="flex-row new-tab-options">
+                    <button :class="{ active: newTabPage === 'homepage' }"
+                            @click="newTabPage = 'homepage'"
+                            class="flex-110 c-pointer theme-option">
+                        דף הבית
+                    </button>
+                    <button :class="{ active: newTabPage === 'openfile' }"
+                            @click="newTabPage = 'openfile'"
+                            class="flex-110 c-pointer theme-option">
+                        פתיחת קובץ
+                    </button>
+                    <button :class="{ active: newTabPage === 'hebrewbooks' }"
+                            @click="newTabPage = 'hebrewbooks'"
+                            class="flex-110 c-pointer theme-option">
+                        היברו בוקס
+                    </button>
+                    <button :class="{ active: newTabPage === 'kezayit-search' }"
+                            @click="newTabPage = 'kezayit-search'"
+                            class="flex-110 c-pointer theme-option">
+                        חיפוש
                     </button>
                 </div>
             </div>
@@ -239,7 +266,7 @@ import { toggleTheme, isDarkTheme, syncPdfViewerTheme } from '../../utils/theme'
 import CustomDialog from '../common/CustomDialog.vue'
 
 const settingsStore = useSettingsStore()
-const { headerFont, textFont, fontSize, linePadding, censorDivineNames, appZoom, readingBackgroundColor, databasePath, globalDiacritics } = storeToRefs(settingsStore)
+const { headerFont, textFont, fontSize, linePadding, censorDivineNames, appZoom, readingBackgroundColor, databasePath, globalDiacritics, newTabPage } = storeToRefs(settingsStore)
 const { dialogRef, dialogOptions, confirm, error, handleConfirm, handleCancel, handleClose } = useDialog()
 
 const availableFonts = ref<string[]>([])
@@ -547,6 +574,11 @@ onMounted(() => {
 
 .theme-toggle {
     gap: 8px;
+}
+
+.new-tab-options {
+    gap: 8px;
+    flex-wrap: wrap;
 }
 
 .theme-option {

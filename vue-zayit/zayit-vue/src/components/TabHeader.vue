@@ -2,9 +2,8 @@
   <div class="bar c-pointer tab-header"
        @click.stop="handleHeaderClick">
     <div class="flex-row">
-      <!-- Settings menu - COMMENTED OUT: Moved first 3 items inline
+      <!-- Settings menu -->
       <TabHeaderMenu @close="handleDropdownClose" />
-      -->
 
       <button v-if="tabStore.activeTab?.currentPage === 'bookview'"
               @click.stop="handleButtonClick(goToToc)"
@@ -24,13 +23,13 @@
                    :class="diacriticsStateClass" />
       </button>
 
-      <!-- Alt TOC toggle button -->
+      <!-- Alt TOC toggle button
       <button v-if="tabStore.activeTab?.currentPage === 'bookview'"
               @click.stop="handleButtonClick(handleAltTocToggle)"
               class="flex-center c-pointer touch-interactive"
               :title="isAltTocVisible ? 'הסתר כותרות נוספות' : 'הצג כותרות נוספות'">
         <Icon icon="fluent:eye-lines-28-regular" />
-      </button>
+      </button> -->
 
       <button v-if="tabStore.activeTab?.currentPage === 'bookview' && hasConnections && !isTocVisible"
               @click.stop="handleButtonClick(toggleSplitPane)"
@@ -78,7 +77,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { Icon } from '@iconify/vue';
-// import TabHeaderMenu from './TabHeaderMenu.vue'; // Commented out
+import TabHeaderMenu from './TabHeaderMenu.vue'; // Commented out
 import DiacriticsFullIcon from './icons/DiacriticsFullIcon.vue';
 import DiacriticsNikkudOnlyIcon from './icons/DiacriticsNikkudOnlyIcon.vue';
 import DiacriticsNoneIcon from './icons/DiacriticsNoneIcon.vue';
