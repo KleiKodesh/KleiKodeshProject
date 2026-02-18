@@ -240,9 +240,9 @@ const scrollToHighlighted = () => {
             const highlightedRect = highlighted.getBoundingClientRect()
 
             if (highlightedRect.bottom > dropdownRect.bottom) {
-                highlighted.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+                highlighted.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' })
             } else if (highlightedRect.top < dropdownRect.top) {
-                highlighted.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+                highlighted.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' })
             }
         }
     }, 0)

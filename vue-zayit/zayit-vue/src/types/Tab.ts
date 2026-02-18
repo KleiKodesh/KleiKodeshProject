@@ -7,6 +7,7 @@ export interface BookState {
     bookTitle: string;
     initialLineIndex?: number; // Line index (0 to totalLines-1) representing which line should be at the top of the viewport. Set by TOC selection or saved from scroll position
     lineOffset?: number; // Pixel offset of the line from viewport top - for accurate restoration (negative = line is scrolled up)
+    scrollTop?: number; // Raw scroll position in pixels - Layer 1 for fast restoration
     shouldHighlight?: boolean; // Whether to highlight the initial line (for search result navigation)
     isTocOpen?: boolean; // Whether TOC overlay is open
     isFirstTocOpen?: boolean; // Whether this is the first time opening TOC (for full-width vs compact display)
@@ -15,8 +16,9 @@ export interface BookState {
     selectedLineIndex?: number; // Currently selected line index for commentary
     selectedTocEntryId?: number; // If a TOC line was clicked, store the TOC entry ID to load all its lines' links
     commentaryFilterConnectionTypeId?: number; // Selected connection type filter for commentary (undefined = show all)
-    commentaryPositionsByFilter?: Record<string, { groupIndex: number; targetBookId?: number; scrollPosition: number; topVisibleItemId?: string }>; // Position per filter for persistence when switching
-    commentaryPositions?: Record<string, { groupIndex: number; targetBookId?: number }>; // Legacy position storage (simple format)
+    defaultCommentaryBookId?: number; // Book's default commentary (from book definition, used on first load)
+    currentCommentaryBookId?: number; // Currently selected commentary book ID (updated by scroll observer)
+    currentCommentaryGroupName?: string; // Currently selected commentary group name (for precise matching when same book appears multiple times)
     diacriticsState?: number; // 0 = show all, 1 = hide cantillation, 2 = hide nikkud too
     isLineDisplayInline?: boolean; // false = block display, true = inline display
     originalHtml?: string; // Store original HTML for diacritics restoration
@@ -38,6 +40,7 @@ export interface SearchState {
     searchQuery: string; // Current search text
     scrollPosition: number; // Scroll position in results list (legacy - for non-virtual scroll)
     firstVisibleItemIndex?: number; // First visible item index for virtual scroll restoration
+    itemOffset?: number; // Pixel offset of first visible item from viewport top
     hasSearched: boolean; // Whether a search has been executed
     highlightTerms?: string; // Terms to highlight when navigating from search results to book
     highlightSnippet?: string; // Snippet to use for background highlighting

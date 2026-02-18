@@ -19,9 +19,11 @@ namespace Zayit.Viewer
 
         private ServiceProvider _services;
         private WebViewBridgeService _bridge;
+        private ContextMenuService _contextMenuService;
         private readonly string HtmlPath;
 
         private bool _coreInitialized;
+        private Action _toggleVisibilityAction;
 
         public ZayitViewer(object commandHandler = null)
         {
@@ -57,6 +59,7 @@ namespace Zayit.Viewer
                 var dbQueries = new DbQueries();
                 _services = new ServiceProvider(this, dbQueries);
                 _bridge = new WebViewBridgeService(this, _services);
+                _contextMenuService = new ContextMenuService(this);
 
                 Console.WriteLine($"[ZayitViewer#{_instanceId}] Services initialized successfully");
             }
@@ -75,7 +78,9 @@ namespace Zayit.Viewer
 
         public void SetPopOutToggleAction(Action popOutToggleAction)
         {
+            _toggleVisibilityAction = popOutToggleAction;
             _services?.SetPopOutToggleAction(popOutToggleAction);
+            _contextMenuService?.SetToggleVisibilityAction(popOutToggleAction);
         }
 
         public async Task EnsureCoreAsyncSafe()
@@ -111,13 +116,13 @@ namespace Zayit.Viewer
 
             // Add command line arguments for better rendering quality
             // --force-device-scale-factor=1 prevents Windows DPI scaling from affecting the WebView
-            options.AdditionalBrowserArguments =
-                "--disable-web-security " +
-                "--force-device-scale-factor=1.2 " +
-                "--disable-features=VizDisplayCompositor " +
-                "--enable-gpu-rasterization " +
-                "--enable-zero-copy " +
-                "--enable-hardware-overlays";
+            //options.AdditionalBrowserArguments =
+            //    "--disable-web-security " +
+            //    //"--force-device-scale-factor=1.2 " +
+            //    "--disable-features=VizDisplayCompositor " +
+            //    "--enable-gpu-rasterization " +
+            //    "--enable-zero-copy " +
+            //    "--enable-hardware-overlays";
 
             var env = await CoreWebView2Environment.CreateAsync(
                 browserExecutableFolder: null,
@@ -195,6 +200,12 @@ namespace Zayit.Viewer
                 settings.IsSwipeNavigationEnabled = false;
                 settings.IsPinchZoomEnabled = true;
 
+                // Lock browser zoom at 100% - app zoom is controlled via CSS
+                //this.ZoomFactor = 1.0;
+                float dpiScale = this.DeviceDpi / 96f;
+                this.ZoomFactor = 1.0 / dpiScale;
+
+
                 // Enable hardware acceleration and smooth scrolling
                 settings.IsGeneralAutofillEnabled = false;
                 settings.IsPasswordAutosaveEnabled = false;
@@ -236,6 +247,10 @@ namespace Zayit.Viewer
                 // Initialize services now that CoreWebView2 is ready
                 Console.WriteLine($"[ZayitViewer#{_instanceId}] Initializing services");
                 _services?.InitializePdfManager();
+
+                // Initialize context menu
+                Console.WriteLine($"[ZayitViewer#{_instanceId}] Initializing context menu");
+                _contextMenuService?.InitializeContextMenu();
 
                 // Navigate
                 Console.WriteLine($"[ZayitViewer#{_instanceId}] Navigating to zayitHost/index.html");
@@ -279,6 +294,16 @@ namespace Zayit.Viewer
         {
             Console.WriteLine($"[ZayitViewer#{_instanceId}] CoreWebView2_DownloadStarting event fired");
             // Download handling is now managed by services
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _contextMenuService?.Dispose();
+                Console.WriteLine($"[ZayitViewer#{_instanceId}] Disposed");
+            }
+            base.Dispose(disposing);
         }
 
         // Services are now handled by WebViewBridgeService

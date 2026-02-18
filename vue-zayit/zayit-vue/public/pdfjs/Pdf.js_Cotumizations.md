@@ -246,15 +246,16 @@ Multi-column PDFs often have OCR issues where text from different columns gets m
 
 ### Solution
 
-Added a custom rectangle selection tool that allows users to draw a rectangle around a specific area to select only the text within that region. The tool shows an editable popup with the selected text, allowing users to review and modify before copying. If no text layer is found, the tool automatically falls back to OCR (Tesseract.js) to extract text from the image.
+Added a custom rectangle selection tool that allows users to draw a rectangle around a specific area to select only the text within that region. The tool shows an editable popup with the selected text, allowing users to review and modify before copying. If no text layer is found, the tool automatically uses OCR to extract text from the image, with a smart fallback chain for best results.
 
 ### Implementation
 
 **Files**:
 
-- `public/pdfjs/web/rectangle-selection.js` - New standalone tool with OCR fallback
+- `public/pdfjs/web/rectangle-selection.js` - New standalone tool with dual-mode OCR
 - `public/pdfjs/web/viewer.html` - Added script reference
 - `package.json` - Added tesseract.js dependency
+- `public/pdfjs/tesseract/heb.traineddata` - Hebrew language data for offline OCR (must be downloaded separately)
 
 ### How It Works
 
@@ -262,7 +263,9 @@ Added a custom rectangle selection tool that allows users to draw a rectangle ar
 2. **Drawing Mode** - Click the button to activate crosshair cursor
 3. **Rectangle Selection** - Click and drag to draw a selection rectangle
 4. **Word Detection** - Identifies all words (spans) whose center point falls within the rectangle
-5. **OCR Fallback** - If no text found, captures the rectangle area as an image and performs OCR
+5. **Dual-Mode OCR Fallback** - If no text found:
+   - **First**: Try OCR.space API (online AI OCR) - superior quality
+   - **Fallback**: Use local Tesseract.js if online fails
 6. **Editable Popup** - Shows selected/recognized text in an editable textarea with RTL support
 7. **Copy or Cancel** - User can edit the text and copy, or cancel the operation
 8. **Auto-Deactivate** - Tool deactivates after making a selection
@@ -272,8 +275,8 @@ Added a custom rectangle selection tool that allows users to draw a rectangle ar
 - **Visual Feedback** - Dashed blue rectangle shows selection area while drawing
 - **Crosshair Cursor** - Clear indication when tool is active
 - **Word-Level Selection** - Leverages PDF.js's word-based text layer (each word is a separate span)
-- **OCR Fallback** - Automatically uses Tesseract.js OCR when no text layer exists
-- **Hebrew OCR** - Tesseract worker configured specifically for Hebrew text recognition
+- **Dual-Mode OCR** - Online AI OCR when internet available, offline Tesseract as backup
+- **Hebrew OCR** - Both engines configured specifically for Hebrew text recognition
 - **Loading Indicator** - Shows spinner with "מבצע OCR..." message during OCR processing
 - **Editable Preview** - Review and modify selected/recognized text before copying
 - **RTL Support** - Textarea uses right-to-left direction for Hebrew text
@@ -282,6 +285,38 @@ Added a custom rectangle selection tool that allows users to draw a rectangle ar
 - **Scroll-Aware** - Works correctly with scrolled content
 - **Multi-Page Support** - Handles text across multiple visible pages
 - **High-DPI OCR** - Captures at canvas internal resolution for better OCR accuracy
+
+### OCR Modes
+
+**Mode 1: Online AI OCR (OCR.space)**
+
+- Uses OCR.space API with Engine 2 (optimized for Hebrew)
+- Superior accuracy compared to Tesseract
+- Handles poor quality scans better
+- Auto-detects text orientation
+- Better at mixed Hebrew/English text
+- Requires internet connection
+- Uses public demo API key (shared rate limits)
+- **Future Enhancement**: Allow users to configure their own API key in settings for better rate limits
+
+**Mode 2: Offline OCR (Tesseract.js)**
+
+- Runs completely offline using local Hebrew language data
+- No rate limits or API dependencies
+- Privacy-friendly (images never leave the computer)
+- Always available as fallback
+- Good accuracy for most Hebrew text
+- Requires `heb.traineddata` file (~1.8 MB) to be downloaded and placed in `public/pdfjs/tesseract/`
+
+**Fallback Chain:**
+
+```
+Text Layer Found? → Use text layer (instant)
+    ↓ No
+Internet Available? → Try OCR.space API (better quality)
+    ↓ Failed/No Internet
+Use Tesseract.js → Always works offline
+```
 
 ### Technical Details
 
@@ -306,8 +341,9 @@ const isInRect =
 3. Calculate rectangle position relative to canvas (accounting for scroll)
 4. Get canvas scale factor (internal resolution vs displayed size)
 5. Create cropped canvas with the rectangle area at full resolution
-6. Pass cropped canvas to Tesseract.js worker configured for Hebrew
-7. Display recognized text in popup with "טקסט מזוהה (OCR)" title
+6. Try OCR.space API first (if internet available)
+7. If online OCR fails, use Tesseract.js worker configured for Hebrew
+8. Display recognized text in popup with "טקסט מזוהה (OCR)" title
 
 **Why Word-Level Instead of Character-Level**:
 
@@ -316,11 +352,20 @@ const isInRect =
 - Browser selection API cannot select non-continuous text (words with gaps)
 - Direct clipboard copy is the only way to get ONLY the words within rectangle bounds
 
+**OCR.space Integration**:
+
+- API endpoint: https://api.ocr.space/parse/image
+- Uses public demo API key (shared across all users)
+- Engine 2 selected for better Hebrew support
+- Includes orientation detection and auto-scaling
+- Gracefully handles failures (network errors, rate limits, API downtime)
+
 **Tesseract.js Integration**:
 
 - Loaded from CDN (https://cdn.jsdelivr.net/npm/tesseract.js@5)
 - Worker initialized with Hebrew language pack ('heb')
-- Runs offline after initial download of language data
+- Language data loaded from local file (`/pdfjs/tesseract/heb.traineddata`)
+- Runs offline after initial setup
 - Processes at full canvas resolution for better accuracy
 
 **Popup Features**:
@@ -334,13 +379,26 @@ const isInRect =
 - Escape key handler for quick dismissal
 - Click-outside-to-close functionality
 
+### Setup Requirements
+
+**Hebrew Language Data:**
+
+Download the Hebrew trained data file for offline OCR:
+
+1. Download: https://github.com/tesseract-ocr/tessdata_fast/raw/4.1.0/heb.traineddata
+2. Save to: `zayit-vue/public/pdfjs/tesseract/heb.traineddata`
+3. File size: ~1.8 MB
+
+Without this file, only online OCR (OCR.space) will work.
+
 ### Usage
 
 1. Click the rectangle selection button in the toolbar (dashed rectangle icon)
 2. Click and drag to draw a rectangle around the desired text area
-3. Release to see the popup with selected text
-   - If text layer exists: Shows extracted text immediately
-   - If no text layer: Shows "מבצע OCR..." spinner, then recognized text
+3. Release to see the popup with selected text:
+   - **Text layer exists**: Shows extracted text immediately
+   - **No text layer + internet**: Shows "מבצע OCR..." spinner, then OCR.space result
+   - **No text layer + no internet**: Shows "מבצע OCR..." spinner, then Tesseract result
 4. Edit the text if needed
 5. Click "העתק" to copy to clipboard, or "ביטול" to cancel
 
@@ -349,19 +407,29 @@ const isInRect =
 - **Column-Specific Selection** - Select text from a single column in multi-column layouts
 - **OCR Problem Workaround** - Bypass OCR text ordering issues
 - **Scanned PDF Support** - Extract text from image-only PDFs using OCR
+- **Best Quality Available** - Uses superior online AI OCR when possible
+- **Always Works** - Falls back to offline OCR when needed
 - **Precise Selection** - Select exactly the text you need
 - **Review Before Copy** - See and edit what you're copying
 - **User-Friendly** - Simple click-and-drag interface with clear visual feedback
 - **Hebrew-Optimized** - RTL text direction, Hebrew button labels, and Hebrew OCR
-- **Offline OCR** - Works without internet after initial language data download
-- **High Accuracy** - Uses full resolution canvas for better OCR results
+- **Privacy-Conscious** - Offline mode available for sensitive documents
+- **No Setup Required** - Works immediately with demo API key
 
 ### Performance Notes
 
-- **First Use**: Tesseract.js downloads Hebrew language data (~2-3 MB) on first initialization
-- **Subsequent Uses**: Language data cached, OCR runs offline
-- **OCR Speed**: Typically 1-3 seconds depending on rectangle size and text complexity
+- **Text Layer Extraction**: Instant
+- **Online OCR (OCR.space)**: 1-2 seconds (depends on internet speed)
+- **Offline OCR (Tesseract)**: 2-4 seconds (depends on rectangle size and text complexity)
+- **First Use**: Tesseract.js library loads from CDN (~500 KB)
 - **Memory**: Tesseract worker stays in memory for faster subsequent OCR operations
+- **API Limits**: Demo key is shared across all users, may be rate-limited during heavy usage
+
+### Future Enhancements
+
+- **User API Key Configuration**: Allow users to optionally configure their own OCR.space API key in settings for better rate limits (25,000 requests/month per user instead of shared demo key)
+- **OCR Engine Selection**: Let users choose between online/offline OCR or disable online OCR entirely
+- **Additional OCR Providers**: Support for Azure Computer Vision or Google Cloud Vision APIs for even better accuracy
 
 ## Sidebar Customization (חלונית צד)
 

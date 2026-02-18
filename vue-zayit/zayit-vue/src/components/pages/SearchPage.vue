@@ -28,8 +28,7 @@
                        :items="filteredResults"
                        :min-item-size="80"
                        key-field="lineId"
-                       class="scroller"
-                       @scroll="onScroll">
+                       class="scroller">
         <template #default="{ item, index, active }">
           <DynamicScrollerItem :item="item"
                                :active="active"
@@ -127,6 +126,8 @@ import { useCategoryTreeStore } from '../../stores/categoryTreeStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { censorDivineNames } from '../../utils/censorDivineNames'
 import { onClickOutside } from '@vueuse/core'
+import { useVirtualScrollerPosition } from '../../composables/useVirtualScrollerPosition'
+import { useVirtualScrollerKeyboard } from '../../composables/useVirtualScrollerKeyboard'
 import type { BloomSearchResult } from '../../types/BloomSearch'
 import type { Category } from '../../types/BookCategoryTree'
 import CheckedBookTree from '../CheckedBookTree.vue'
@@ -154,7 +155,6 @@ const isFilterOpen = ref(false)
 const checkedBookIds = ref<Set<number>>(new Set())
 const isDev = import.meta.env.DEV
 let currentSearchId: string | null = null
-let scrollSaveTimeout: number | null = null
 let isInitialized = ref(false)
 
 // Computed ref to get the actual DOM element from the component
@@ -184,6 +184,16 @@ const currentSearchState = computed(() => {
   const tab = tabStore.tabs.find(t => t.isActive && t.currentPage === 'kezayit-search')
   return tab?.searchState
 })
+
+// Position manager for virtual scroller with auto-persistence
+const positionId = ref('search-results')
+const positionManager = useVirtualScrollerPosition(scrollerRef, positionId)
+
+// Keyboard navigation for virtual scroller
+useVirtualScrollerKeyboard(
+    scrollerRef,
+    computed(() => filteredResults.value.length)
+)
 
 // Filter results based on checked books
 const filteredResults = computed(() => {
@@ -288,13 +298,7 @@ onMounted(async () => {
 
       if (cachedResults !== null) {
         results.value = cachedResults
-
-        // Restore scroll position after virtual scroller is ready
-        await nextTick()
-        if (scrollerRef.value) {
-          restoreScrollPosition()
-          hasRestoredScroll = true
-        }
+        // Position is automatically restored by composable
       } else {
         // Cache miss - re-execute search
         await executeSearch()
@@ -307,85 +311,6 @@ onMounted(async () => {
   })
 })
 
-// Helper function to restore scroll position
-const restoreScrollPosition = () => {
-  if (!scrollerRef.value || !currentSearchState.value) return
-
-  // Try to restore using virtual scroll first
-  if (currentSearchState.value.firstVisibleItemIndex !== undefined) {
-    const itemIndex = currentSearchState.value.firstVisibleItemIndex
-
-    if (itemIndex >= 0 && itemIndex < results.value.length) {
-      // Use the double-call hack for vue3-virtual-scroller
-      const scrollerEl = scrollerRef.value.$el as HTMLElement
-      if (scrollerEl) {
-        // Hide scrolling during restoration to prevent flickering
-        scrollerEl.style.overflow = 'hidden'
-        scrollerEl.style.pointerEvents = 'none'
-      }
-
-      try {
-        // First call
-        scrollerRef.value.scrollToItem(itemIndex)
-
-        // Second call after delay (required for vue3-virtual-scroller)
-        setTimeout(() => {
-          if (scrollerRef.value && scrollerEl) {
-            scrollerRef.value.scrollToItem(itemIndex)
-
-            // Re-enable scrolling
-            setTimeout(() => {
-              if (scrollerEl) {
-                scrollerEl.style.overflow = ''
-                scrollerEl.style.pointerEvents = ''
-              }
-            }, 10)
-          }
-        }, 50)
-      } catch (error) {
-        console.warn('[SearchPage] Failed to restore scroll position:', error)
-        if (scrollerEl) {
-          scrollerEl.style.overflow = ''
-          scrollerEl.style.pointerEvents = ''
-        }
-      }
-      return
-    }
-  }
-
-  // Fallback to legacy scrollTop if firstVisibleItemIndex not available
-  if (currentSearchState.value.scrollPosition > 0) {
-    const scrollElement = scrollerRef.value.$el as HTMLElement
-    if (scrollElement) {
-      scrollElement.scrollTop = currentSearchState.value.scrollPosition
-    }
-  }
-}
-
-// Watch for results being loaded during search and restore scroll position
-let hasRestoredScroll = false
-watch(() => results.value.length, (newLength, oldLength) => {
-  // Only restore if results are being added during a search (not on mount)
-  if (newLength > 0 && oldLength === 0 && !hasRestoredScroll && scrollerRef.value && isSearching.value) {
-    nextTick(() => {
-      restoreScrollPosition()
-      hasRestoredScroll = true
-    })
-  }
-
-  // Reset the flag when results are cleared
-  if (newLength === 0 && oldLength > 0) {
-    hasRestoredScroll = false
-  }
-})
-
-onBeforeUnmount(() => {
-  if (scrollSaveTimeout) {
-    clearTimeout(scrollSaveTimeout)
-  }
-  saveScrollPosition()
-})
-
 // Watch for changes and save to state (but not results)
 watch([searchQuery, hasSearched], () => {
   if (currentSearchState.value) {
@@ -393,57 +318,6 @@ watch([searchQuery, hasSearched], () => {
     currentSearchState.value.hasSearched = hasSearched.value
   }
 })
-
-// Handle scroll events
-const onScroll = () => {
-  if (scrollSaveTimeout) {
-    clearTimeout(scrollSaveTimeout)
-  }
-  scrollSaveTimeout = window.setTimeout(() => {
-    saveScrollPosition()
-  }, 300)
-}
-
-// Save scroll position - track first visible item for virtual scroll
-const saveScrollPosition = () => {
-  if (currentSearchState.value && scrollerRef.value) {
-    const scrollElement = scrollerRef.value.$el as HTMLElement
-    if (scrollElement) {
-      // Save legacy scrollTop for backwards compatibility
-      currentSearchState.value.scrollPosition = scrollElement.scrollTop
-
-      // Find first visible item for virtual scroll
-      const firstVisibleItem = getFirstVisibleItemIndex()
-      if (firstVisibleItem !== null) {
-        currentSearchState.value.firstVisibleItemIndex = firstVisibleItem
-      }
-    }
-  }
-}
-
-// Get the index of the first visible item in the virtual scroller
-const getFirstVisibleItemIndex = (): number | null => {
-  if (!scrollerRef.value?.$el) return null
-
-  const scrollerEl = scrollerRef.value.$el as HTMLElement
-  const scrollerRect = scrollerEl.getBoundingClientRect()
-
-  // Find all result items
-  const items = scrollerEl.querySelectorAll('[data-index]')
-
-  for (const item of items) {
-    const itemRect = item.getBoundingClientRect()
-    // Check if item is visible (at least partially)
-    if (itemRect.bottom > scrollerRect.top && itemRect.top < scrollerRect.bottom) {
-      const index = parseInt(item.getAttribute('data-index') || '-1')
-      if (index >= 0) {
-        return index
-      }
-    }
-  }
-
-  return null
-}
 
 // Toggle filter panel
 const toggleFilter = () => {
@@ -662,22 +536,21 @@ const clearSearch = () => {
   if (currentSearchState.value) {
     currentSearchState.value.scrollPosition = 0
     currentSearchState.value.firstVisibleItemIndex = undefined
+    currentSearchState.value.itemOffset = undefined
   }
-  
+
   // Reset tab title to default
   const currentTab = tabStore.tabs.find(t => t.isActive && t.currentPage === 'kezayit-search')
   if (currentTab) {
     currentTab.title = 'חיפוש'
   }
-  
+
   searchInputRef.value?.focus()
 }
 
 // Handle result click
 const handleResultClick = async (result: BloomSearchResult) => {
   console.log('[SearchPage] Result clicked:', result)
-
-  saveScrollPosition()
 
   try {
     const lineInfo = await bloomSearchService.getLineIndexFromLineId(result.lineId)

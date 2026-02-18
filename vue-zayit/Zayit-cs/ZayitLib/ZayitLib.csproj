@@ -98,6 +98,7 @@
     <Compile Include="Models\TocEntry.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Services\BloomSearchService.cs" />
+    <Compile Include="Services\ContextMenuService.cs" />
     <Compile Include="Services\DbQueries.cs" />
     <Compile Include="Services\DbService.cs" />
     <Compile Include="Services\HebrewBooksCacheManager.cs" />

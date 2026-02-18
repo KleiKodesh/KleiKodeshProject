@@ -18,6 +18,8 @@ const usedIcons = [
   'chevron-left-28-regular',
   'chevron-left-24-regular',
   'chevron-right-28-regular',
+  'chevron-up-28-regular',
+  'chevron-down-28-regular',
   'book-open-24-regular',
   'book-open-28-regular',
   'book-20-regular',

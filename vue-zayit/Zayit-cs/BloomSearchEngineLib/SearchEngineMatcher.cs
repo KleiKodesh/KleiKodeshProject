@@ -150,7 +150,7 @@ namespace BloomSearchEngineLib
         }
 
         public static string ExtractSnippetFromCluster(
-            string text, int clusterStart, int clusterEnd, int maxSnippetLength = 350)
+            string text, int clusterStart, int clusterEnd, int maxSnippetLength = 500)
         {
             if (string.IsNullOrEmpty(text))
                 return string.Empty;

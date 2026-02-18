@@ -149,6 +149,11 @@ function handleTocSelection(lineIndex: number) {
 }
 
 function handleNavigateLine(newIndex: number) {
+  // Update the selected line index in tab state
+  if (myTab.value?.bookState) {
+    myTab.value.bookState.selectedLineIndex = newIndex
+  }
+  
   // Scroll the line viewer explicitly for navigation requests coming from the commentary pane
   const viewer: any = lineViewerRef.value
   if (viewer?.scrollToLineIndex) {

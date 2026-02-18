@@ -22,7 +22,7 @@ const DEFAULT_SETTINGS: Settings = {
     fontSize: 105,
     linePadding: 1.6,
     censorDivineNames: false,
-    appZoom: 1.0,
+    appZoom: 0.9,
     readingBackgroundColor: '',
     databasePath: '',
     globalDiacritics: false,

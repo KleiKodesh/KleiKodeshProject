@@ -1467,3 +1467,136 @@ This properly mimics normal browser behavior where Ctrl+A selection stays active
 - **Best Practices**: Guidelines for optimization and troubleshooting
 
 The line loading architecture is well-designed for both current performance and future virtualization enhancements, with excellent separation of concerns and efficient resource management.
+
+## Critical: Virtual Scroller forceUpdate() Pattern
+
+### **Problem: Programmatic Scrolling Fails in Virtual Scrollers**
+
+When calling `scrollToItem()` immediately after data changes or component mounting, the virtual scroller may not have calculated item heights and positions yet. This causes:
+
+- `scrollToItem()` to fail silently (doesn't scroll)
+- Elements not appearing in DOM even after scroll
+- Inconsistent behavior (works sometimes, fails other times)
+
+### **Root Cause**
+
+Virtual scrollers calculate item positions lazily:
+
+1. Data changes → Vue updates reactive state
+2. `nextTick()` → Vue flushes DOM updates
+3. **BUT** virtual scroller hasn't calculated heights yet
+4. `scrollToItem()` called → uses stale/missing height data → fails
+
+### **Solution: Call forceUpdate() Before Scrolling**
+
+```typescript
+async function scrollToGroup(groupIndex: number) {
+  if (!commentaryScrollerRef.value) return;
+
+  // Update current group index
+  currentGroupIndex.value = groupIndex;
+
+  // CRITICAL: Force virtual scroller to recalculate heights
+  await nextTick();
+  if (
+    commentaryScrollerRef.value &&
+    typeof commentaryScrollerRef.value.forceUpdate === "function"
+  ) {
+    commentaryScrollerRef.value.forceUpdate();
+    console.log("🎯 Forced virtual scroller update");
+    await nextTick();
+  }
+
+  // Now scrollToItem will work reliably
+  const groupHeaderId = `group-header-${groupIndex}`;
+  const itemIndex = virtualCommentaryItems.value.findIndex(
+    (item) => item.id === groupHeaderId,
+  );
+
+  if (itemIndex !== -1) {
+    commentaryScrollerRef.value.scrollToItem(itemIndex);
+
+    // Wait for rendering, then use scrollIntoView for precise positioning
+    await nextTick();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    const scrollerEl = commentaryScrollerRef.value.$el as HTMLElement;
+    const targetElement = scrollerEl.querySelector(
+      `[data-group-index="${groupIndex}"]`,
+    ) as HTMLElement;
+    if (targetElement) {
+      targetElement.scrollIntoView({ block: "start", behavior: "auto" });
+    }
+  }
+}
+```
+
+### **When to Use forceUpdate()**
+
+Use `forceUpdate()` before `scrollToItem()` when:
+
+1. **After data changes**: New items loaded, items filtered, items reordered
+2. **After component mounting**: Scroller just became available
+3. **After display mode changes**: Inline/block toggle, font size changes
+4. **Before programmatic navigation**: TOC clicks, search navigation, restoration
+
+### **Complete Pattern with Verification**
+
+```typescript
+async function scrollToGroup(groupIndex: number) {
+  if (!commentaryScrollerRef.value) return;
+
+  // 1. Force virtual scroller to recalculate
+  await nextTick();
+  if (typeof commentaryScrollerRef.value.forceUpdate === "function") {
+    commentaryScrollerRef.value.forceUpdate();
+    await nextTick();
+  }
+
+  // 2. Find target item index
+  const itemIndex = virtualCommentaryItems.value.findIndex(
+    (item) => item.id === `group-header-${groupIndex}`,
+  );
+  if (itemIndex === -1) return;
+
+  // 3. Scroll to item
+  commentaryScrollerRef.value.scrollToItem(itemIndex);
+
+  // 4. Wait for rendering with polling
+  const scrollerEl = commentaryScrollerRef.value.$el as HTMLElement;
+  const maxAttempts = 20;
+  let attempts = 0;
+  let targetElement: HTMLElement | null = null;
+
+  while (attempts < maxAttempts && !targetElement) {
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    targetElement = scrollerEl.querySelector(
+      `[data-group-index="${groupIndex}"]`,
+    );
+    attempts++;
+  }
+
+  // 5. Fine-tune with scrollIntoView
+  if (targetElement) {
+    targetElement.scrollIntoView({ block: "start", behavior: "auto" });
+
+    // 6. Verify success
+    await nextTick();
+    const rect = targetElement.getBoundingClientRect();
+    const scrollerRect = scrollerEl.getBoundingClientRect();
+    const isVisible =
+      rect.top >= scrollerRect.top && rect.top <= scrollerRect.bottom;
+    console.log("✅ Scroll verified - target visible:", isVisible);
+  }
+}
+```
+
+### **Key Takeaways**
+
+1. **Always call `forceUpdate()` before `scrollToItem()`** when scrolling programmatically
+2. **Use `requestAnimationFrame()` polling** to wait for DOM rendering (not just `nextTick()`)
+3. **Combine `scrollToItem()` + `scrollIntoView()`** for reliable positioning
+4. **Verify scroll success** by checking element position in viewport
+5. **This pattern is essential** for any virtual scroller programmatic navigation
+
+This pattern ensures 100% reliable scrolling in virtual scrollers, eliminating the "sometimes works, sometimes doesn't" problem.

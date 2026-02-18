@@ -23,8 +23,7 @@
                          key-field="index"
                          tabindex="0"
                          @keydown="handleKeyDown"
-                         @click="() => scrollerRef?.$el?.focus()"
-                         @scroll.passive="handleScrollForPositionTracking">
+                         @click="() => scrollerRef?.$el?.focus()">
 
             <template #default="{ item, index, active }">
                 <DynamicScrollerItem :item="item"
@@ -33,8 +32,7 @@
                                         item.content,
                                         myTab?.bookState?.showAltToc
                                     ]"
-                                     :data-index="index"
-                                     :data-line-index-observer="index">
+                                     :data-index="index">
                     <BookLine :content="item.content || '\u00A0'"
                               :line-index="index"
                               :is-selected="selectedLineIndex === index"
@@ -62,6 +60,8 @@ import GenericSearch from './common/GenericSearch.vue'
 import { BookLineViewerService } from '../services/bookLineViewerService'
 
 import { useVirtualizedSearch } from '../composables/useVirtualizedSearch'
+import { useVirtualScrollerPosition } from '../composables/useVirtualScrollerPosition'
+import { useVirtualScrollerKeyboard } from '../composables/useVirtualScrollerKeyboard'
 import { useTabStore } from '../stores/tabStore'
 import { useSettingsStore } from '../stores/settingsStore'
 
@@ -118,7 +118,6 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-    updateScrollPosition: [lineIndex: number]
     placeholdersReady: []
     lineClick: [lineIndex: number]
     clearOtherSelections: []
@@ -277,8 +276,8 @@ const virtualItems = computed(() => {
 // Use virtualized search composable
 const searchUI = useVirtualizedSearch({
     scrollerRef,
-    itemSelector: '[data-line-index-observer]',
-    itemIndexAttribute: 'data-line-index-observer',
+    itemSelector: '[data-index]',
+    itemIndexAttribute: 'data-index',
     minItemSize,
     totalItems: computed(() => viewerState.totalLines.value),
     searchBarOffset: 50,
@@ -289,7 +288,27 @@ const searchUI = useVirtualizedSearch({
     }
 })
 
-const { searchQuery, matches, currentMatchIndex, totalMatches, currentMatch, highlightMatches, clear, isSearchOpen: searchOpenState, isNavigating, handleSearchNext, handleSearchPrevious, openSearch, handleSearchClose: closeSearch } = searchUI
+const { searchQuery, matches, currentMatchIndex, totalMatches, currentMatch, highlightMatches, clear, isSearchOpen: searchOpenState, isNavigating: searchNavigating, handleSearchNext, handleSearchPrevious, openSearch, handleSearchClose: closeSearch } = searchUI
+
+// ============================================
+// POSITION COMPOSABLE SETUP
+// ============================================
+// Self-sufficient position manager with localStorage persistence
+// Position ID format: "book-lines-{tabId}-{bookId}"
+const positionId = computed(() => {
+    const tabId = props.tabId ?? 'none'
+    const bookId = myTab.value?.bookState?.bookId ?? 'none'
+    return `book-lines-${tabId}-${bookId}`
+})
+
+useVirtualScrollerPosition(scrollerRef, positionId)
+
+// Keyboard navigation for virtual scroller
+useVirtualScrollerKeyboard(
+    scrollerRef,
+    computed(() => viewerState.totalLines.value),
+    hasFocus
+)
 
 // ============================================
 // SEARCH STATE MANAGEMENT
@@ -361,157 +380,23 @@ async function handleSearch(query: string) {
 }
 
 // ============================================
-// SCROLL POSITION TRACKING
-// ============================================
-let scrollUpdateTimeout: any = null
-
-function handleScrollForPositionTracking() {
-    // Only track scroll position, don't interfere with navigation
-    if (!scrollerRef.value || viewerState.isInitialLoad) return
-
-    if (scrollUpdateTimeout !== null) {
-        clearTimeout(scrollUpdateTimeout)
-        scrollUpdateTimeout = null
-    }
-
-    scrollUpdateTimeout = setTimeout(() => {
-        // Skip if currently navigating to avoid interference
-        if (isNavigating.value) return
-
-        // Get the actual top visible line and its offset from viewport top
-        const position = getTopVisibleLinePosition()
-
-        if (position && position.lineIndex >= 0 && position.lineIndex < viewerState.totalLines.value) {
-            // Save both line index and its pixel offset for accurate restoration
-            if (myTab.value?.bookState) {
-                myTab.value.bookState.initialLineIndex = position.lineIndex
-                myTab.value.bookState.lineOffset = position.offset
-            }
-        }
-    }, 500) // Longer delay to avoid interference with navigation
-}
-
-function getTopVisibleLinePosition(): { lineIndex: number; offset: number } | null {
-    if (!scrollerRef.value?.$el) return null
-
-    const scrollerEl = scrollerRef.value.$el
-    const scrollerRect = scrollerEl.getBoundingClientRect()
-
-    // Find all line elements currently rendered
-    const lineElements = scrollerEl.querySelectorAll('[data-line-index-observer]')
-
-    let topMostLine: { element: Element; lineIndex: number; top: number } | null = null
-
-    for (const lineEl of lineElements) {
-        const lineRect = lineEl.getBoundingClientRect()
-
-        // Check if this line is visible in the viewport
-        if (lineRect.bottom > scrollerRect.top && lineRect.top < scrollerRect.bottom) {
-            const lineIndex = parseInt(lineEl.getAttribute('data-line-index-observer') || '-1')
-            if (lineIndex >= 0) {
-                // Find the line that's closest to the top of the viewport
-                if (!topMostLine || lineRect.top < topMostLine.top) {
-                    topMostLine = {
-                        element: lineEl,
-                        lineIndex: lineIndex,
-                        top: lineRect.top
-                    }
-                }
-            }
-        }
-    }
-
-    // Return the topmost visible line with its offset from viewport top
-    if (topMostLine) {
-        const offset = topMostLine.top - scrollerRect.top
-        return {
-            lineIndex: topMostLine.lineIndex,
-            offset: offset // Negative if line is scrolled up past viewport top, positive if below
-        }
-    }
-
-    // Fallback: estimate from scroll position if no rendered lines found
-    const scrollTop = scrollerEl.scrollTop || 0
-    const estimatedLine = Math.floor(scrollTop / minItemSize.value)
-    if (estimatedLine >= 0 && estimatedLine < viewerState.totalLines.value) {
-        return {
-            lineIndex: estimatedLine,
-            offset: 0 // No offset information available in fallback
-        }
-    }
-
-    return null
-}
-
-
-// ============================================
 // WATCHERS - Book Loading
 // ============================================
-// Load book when bookId changes
+// Load book when bookId changes (position restore is automatic via positionId)
 watch(() => myTab.value?.bookState?.bookId, async (bookId, oldBookId) => {
     if (bookId && bookId !== oldBookId) {
         const initialLineIndex = myTab.value?.bookState?.initialLineIndex
         const isRestore = oldBookId === undefined && initialLineIndex !== undefined
-
-        // Set loading state if we need to scroll to a specific position
-        if (initialLineIndex !== undefined) {
-            isInitialLoading.value = true
-        }
 
         await viewerState.loadBook(bookId, isRestore, initialLineIndex)
         await nextTick()
 
         emit('placeholdersReady')
 
-        // Scroll to initial position if provided (session resume)
-        if (initialLineIndex !== undefined) {
-            // Set navigation flag to prevent interference
-            isNavigating.value = true
-
-            // Wait a bit more for the virtual scroller to initialize
-            setTimeout(async () => {
-                const lineOffset = myTab.value?.bookState?.lineOffset
-                await scrollToLine(initialLineIndex, lineOffset)
-                // Clear loading state after scroll completes
-                isInitialLoading.value = false
-
-                // Re-enable scroll tracking after restoration
-                setTimeout(() => {
-                    isNavigating.value = false
-                }, 200)
-            }, 100)
-        } else {
-            isInitialLoading.value = false
-        }
+        // Position is automatically restored by composable when positionId changes
     }
 }, { immediate: true })
 
-// ============================================
-// WATCHERS - Tab Activation
-// ============================================
-// Restore scroll when tab becomes active
-watch(() => myTab.value?.isActive, async (isActive, wasActive) => {
-    const bookId = myTab.value?.bookState?.bookId
-    const initialLineIndex = myTab.value?.bookState?.initialLineIndex
-    if (isActive && !wasActive && bookId && viewerState.totalLines.value > 0) {
-        await nextTick()
-        if (initialLineIndex !== undefined) {
-            // Set navigation flag to prevent interference
-            isNavigating.value = true
-
-            // Wait for virtual scroller to be ready
-            setTimeout(async () => {
-                const lineOffset = myTab.value?.bookState?.lineOffset
-                await scrollToLine(initialLineIndex, lineOffset)
-
-                // Re-enable scroll tracking after restoration
-                setTimeout(() => {
-                    isNavigating.value = false
-                }, 200)
-            }, 50)
-        }
-    }
-})
 
 // ============================================
 // SCROLL FUNCTIONS
@@ -519,77 +404,47 @@ watch(() => myTab.value?.isActive, async (isActive, wasActive) => {
 async function scrollToLine(lineIndex: number, pixelOffset?: number) {
     if (!scrollerRef.value) return
 
-    // Prioritize loading lines around the target for smooth scrolling
-    await viewerState.prioritizeLines(lineIndex, 100)
-
-    // Wait for DOM update
     await nextTick()
 
-    // Hide scrolling during the double-call hack to prevent flickering
-    const scrollerEl = scrollerRef.value.$el
-    if (scrollerEl) {
-        // Temporarily disable scroll events and hide overflow to prevent flickering
-        scrollerEl.style.overflow = 'hidden'
-        scrollerEl.style.pointerEvents = 'none'
-    }
+    const scrollerEl = scrollerRef.value.$el as HTMLElement | undefined
+    if (!scrollerEl) return
+
+    // Hide scrolling during the double-call hack
+    scrollerEl.style.overflow = 'hidden'
+    scrollerEl.style.pointerEvents = 'none'
 
     try {
         // First call
         scrollerRef.value.scrollToItem(lineIndex)
 
-        // Wait a bit and call it again (the hack!) - but hidden
+        // Second call after delay
         setTimeout(() => {
             if (scrollerRef.value && scrollerEl) {
                 scrollerRef.value.scrollToItem(lineIndex)
 
-                // If we have a pixel offset, apply it after the scroll completes
+                // Apply pixel offset if provided
                 if (pixelOffset !== undefined && pixelOffset !== 0) {
                     setTimeout(() => {
                         if (scrollerEl) {
-                            // Adjust scroll position by the offset to restore exact position
-                            // Negative offset means the line was scrolled up, so we scroll down more
                             scrollerEl.scrollTop = scrollerEl.scrollTop - pixelOffset
                         }
                     }, 20)
                 }
 
-                // Re-enable scrolling after the second call
+                // Re-enable scrolling
                 setTimeout(() => {
                     if (scrollerEl) {
                         scrollerEl.style.overflow = ''
                         scrollerEl.style.pointerEvents = ''
                     }
-                }, pixelOffset !== undefined ? 30 : 10) // Slightly longer delay if applying offset
+                }, pixelOffset !== undefined ? 30 : 10)
             }
         }, 50)
 
     } catch (error) {
-        console.warn('Failed to scroll to line:', lineIndex, error)
-        // Fallback: try to scroll manually twice (also hidden)
-        const scrollTop = lineIndex * minItemSize.value
-        if (scrollerEl) {
-            scrollerEl.scrollTop = scrollTop
-            setTimeout(() => {
-                if (scrollerEl) {
-                    scrollerEl.scrollTop = scrollTop
-
-                    // Apply offset in fallback too
-                    if (pixelOffset !== undefined && pixelOffset !== 0) {
-                        setTimeout(() => {
-                            if (scrollerEl) {
-                                scrollerEl.scrollTop = scrollerEl.scrollTop - pixelOffset
-                            }
-                        }, 20)
-                    }
-
-                    // Re-enable scrolling after fallback
-                    setTimeout(() => {
-                        scrollerEl.style.overflow = ''
-                        scrollerEl.style.pointerEvents = ''
-                    }, pixelOffset !== undefined ? 30 : 10)
-                }
-            }, 50)
-        }
+        console.warn('[BookLineViewer] scrollToLine failed:', error)
+        scrollerEl.style.overflow = ''
+        scrollerEl.style.pointerEvents = ''
     }
 }
 
@@ -597,19 +452,13 @@ async function scrollToLine(lineIndex: number, pixelOffset?: number) {
 // TOC NAVIGATION
 // ============================================
 async function handleTocSelection(lineIndex: number) {
-    // Set flag to prevent scroll tracking interference
-    isNavigating.value = true
-
     await viewerState.handleTocSelection(lineIndex)
 
-    // Scroll immediately using the improved scroller with verification
+    // Scroll to the selected line
     await nextTick()
     await scrollToLine(lineIndex)
 
-    // Re-enable scroll tracking after TOC navigation completes
-    setTimeout(() => {
-        isNavigating.value = false
-    }, 200)
+    // Position will be automatically saved by composable after scroll settles (300ms debounce)
 }
 
 // ============================================
@@ -1133,19 +982,11 @@ function isDiacriticForSearch(char: string): boolean {
 // ============================================
 // LIFECYCLE - Cleanup
 // ============================================
+// LIFECYCLE - Cleanup
+// ============================================
 onUnmounted(() => {
     viewerState.cleanup()
-
-    // Save current scroll position when unmounting for session restoration
-    if (myTab.value?.bookState) {
-        const position = getTopVisibleLinePosition()
-
-        if (position && position.lineIndex >= 0 && position.lineIndex < viewerState.totalLines.value) {
-            myTab.value.bookState.initialLineIndex = position.lineIndex
-            myTab.value.bookState.lineOffset = position.offset
-            emit('updateScrollPosition', position.lineIndex)
-        }
-    }
+    // Position is automatically saved by composable to localStorage
 })
 
 // ============================================
@@ -1192,7 +1033,7 @@ function scrollToFirstHighlightedWord(lineIndex: number) {
     if (!scrollerEl) return
 
     // Find the line element
-    const lineEl = scrollerEl.querySelector(`[data-line-index-observer="${lineIndex}"]`)
+    const lineEl = scrollerEl.querySelector(`[data-index="${lineIndex}"]`)
     if (!lineEl) return
 
     // Try to find the snippet background first (preferred)
@@ -1218,7 +1059,7 @@ function addFadeAnimationOnce(lineIndex: number) {
     const scrollerEl = scrollerRef.value?.$el
     if (!scrollerEl) return
 
-    const lineEl = scrollerEl.querySelector(`[data-line-index-observer="${lineIndex}"]`)
+    const lineEl = scrollerEl.querySelector(`[data-index="${lineIndex}"]`)
     if (!lineEl) return
 
     const snippetBg = lineEl.querySelector('.global-search-snippet-bg')

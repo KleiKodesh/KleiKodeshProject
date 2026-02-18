@@ -114,8 +114,53 @@ You can manually load specific guidance using these context keys:
 2. **Smart Detection**: Automatically detect context from files and keywords
 3. **Manual Override**: Use context keys when automatic detection isn't enough
 4. **Single Source**: Each topic has one authoritative guide
+5. **No Unsolicited Documentation**: Do NOT create markdown files to document your work unless explicitly requested by the user
 
 ## Vue.js Development Standards
+
+### Async Operations and Timing
+
+- **ALWAYS prefer `nextTick()` over `setTimeout()`** for waiting on DOM updates
+- `nextTick()` waits for Vue's reactive system to flush updates to the DOM
+- Only use `setTimeout()` when you need a specific time delay for non-Vue reasons (animations, external APIs, etc.)
+- Never use arbitrary timeouts (100ms, 200ms) to wait for Vue updates - use `nextTick()` instead
+
+**Examples:**
+
+```typescript
+// ✅ GOOD: Wait for DOM update after reactive change
+currentIndex.value = 5;
+await nextTick();
+scrollToItem(currentIndex.value);
+
+// ❌ BAD: Arbitrary timeout hoping DOM is ready
+currentIndex.value = 5;
+setTimeout(() => {
+  scrollToItem(currentIndex.value);
+}, 200); // Why 200ms? What if it needs 300ms?
+
+// ✅ GOOD: Multiple updates, single nextTick
+items.value = newItems;
+selectedIndex.value = 0;
+await nextTick();
+updateUI();
+
+// ❌ BAD: Nested timeouts
+items.value = newItems;
+setTimeout(() => {
+  selectedIndex.value = 0;
+  setTimeout(() => {
+    updateUI();
+  }, 100);
+}, 150);
+```
+
+**When setTimeout IS appropriate:**
+
+- Debouncing user input
+- Animation delays
+- Polling external resources
+- Rate limiting API calls
 
 ### VueUse Composables
 

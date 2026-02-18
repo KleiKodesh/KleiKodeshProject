@@ -35,7 +35,7 @@
       <button v-if="tabStore.activeTab?.currentPage === 'bookview' && hasConnections && !isTocVisible"
               @click.stop="handleButtonClick(toggleSplitPane)"
               class="flex-center c-pointer touch-interactive"
-              :title="isSplitPaneOpen ? 'הסתר קשרים' : 'הצג קשרים'">
+              :title="isSplitPaneOpen ? 'הסתר מפרשים וקישורים' : 'הצג מפרשים וקישורים'">
         <Icon :icon="isSplitPaneOpen ? 'fluent:panel-bottom-20-filled' : 'fluent:panel-bottom-20-regular'" />
       </button>
 

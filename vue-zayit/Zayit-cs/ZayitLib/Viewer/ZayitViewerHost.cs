@@ -10,13 +10,7 @@ namespace Zayit.Viewer
 
         public ZayitViewerHost()
         {
-            // Ensure crisp rendering on high-DPI displays
-            AutoScaleMode = AutoScaleMode.Dpi;
-            SetStyle(ControlStyles.OptimizedDoubleBuffer |
-                     ControlStyles.AllPaintingInWmPaint |
-                     ControlStyles.UserPaint |
-                     ControlStyles.ResizeRedraw, true);
-
+            this.AutoScaleMode = AutoScaleMode.None;
             this.Dock = DockStyle.Fill;
             this.Paint += ZayitViewerHost_Paint;
         }
