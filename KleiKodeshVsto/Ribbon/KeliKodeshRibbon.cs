@@ -69,11 +69,15 @@ namespace KleiKodesh.Ribbon
                     case "DuplicatePane":
                         try { TaskPaneManager.DuplicateCurrent(); } catch { }
                         break;
+                    case "OpenChildDoc":
+                        WordWindowHelper.OpenSoftSnapLeft();
+                        break;
                     case "Settings":
                         TaskPaneManager.Show(new RibbonSettingsControl(ribbon), "הגדרות כלי קודש", 400);
                         break;
                     case "About":
                         OpenAboutDocument();
+                        WordWindowHelper.OpenSoftSnapLeft();
                         break;
                     default:
                         MessageBox.Show($"אירעה שגיאה במהלך טעינת {id}");

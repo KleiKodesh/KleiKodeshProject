@@ -276,6 +276,7 @@
     <Compile Include="Common\KleiKodeshWebView.cs">
       <SubType>Component</SubType>
     </Compile>
+    <Compile Include="Helpers\WordWindowHelper.cs" />
     <Compile Include="Helpers\WpfTaskPane.cs">
       <SubType>UserControl</SubType>
     </Compile>

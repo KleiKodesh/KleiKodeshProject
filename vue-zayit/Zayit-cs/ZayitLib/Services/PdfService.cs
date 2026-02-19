@@ -2,7 +2,6 @@ using Microsoft.Web.WebView2.WinForms;
 using System;
 using System.IO;
 using System.Threading.Tasks;
-using System.Windows.Forms;
 using Zayit.Viewer;
 
 namespace Zayit.Services
@@ -84,10 +83,11 @@ namespace Zayit.Services
 
             Console.WriteLine($"[PdfService] File selected: {fileName} -> {virtualUrl}");
 
-            return new { 
-                fileName = fileName, 
-                dataUrl = virtualUrl, 
-                originalPath = filePath 
+            return new
+            {
+                fileName = fileName,
+                dataUrl = virtualUrl,
+                originalPath = filePath
             };
         }
 
@@ -107,14 +107,14 @@ namespace Zayit.Services
                 // Create unique filename to avoid conflicts
                 var uniqueName = Guid.NewGuid().ToString() + "_" + Path.GetFileName(filePath);
                 var tempPath = Path.Combine(tempDir, uniqueName);
-                
+
                 // Copy file to temp location for virtual URL access
                 File.Copy(filePath, tempPath, true);
-                
+
                 // Return virtual URL
                 var virtualUrl = $"https://{PDF_HOST}/temp/{uniqueName}";
                 Console.WriteLine($"[PdfService] Created virtual URL: {filePath} -> {virtualUrl}");
-                
+
                 return virtualUrl;
             }
             catch (Exception ex)
@@ -185,13 +185,13 @@ namespace Zayit.Services
             {
                 var htmlPath = GetHtmlPath();
                 var tempDir = Path.Combine(htmlPath, "temp");
-                
+
                 if (!Directory.Exists(tempDir))
                     return new { fileCount = 0, totalSize = 0 };
 
                 var files = Directory.GetFiles(tempDir);
                 long totalSize = 0;
-                
+
                 foreach (var file in files)
                 {
                     totalSize += new FileInfo(file).Length;
@@ -215,7 +215,7 @@ namespace Zayit.Services
             {
                 var htmlPath = GetHtmlPath();
                 var tempDir = Path.Combine(htmlPath, "temp");
-                
+
                 if (Directory.Exists(tempDir))
                 {
                     Directory.Delete(tempDir, true);
@@ -233,14 +233,14 @@ namespace Zayit.Services
         {
             // Get Html path - handle both regular and ClickOnce deployments
             var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            
+
             // 1. Standard deployment: zayit-vue-app folder in base directory
             var standardPath = Path.Combine(baseDir, "zayit-vue-app");
             if (Directory.Exists(standardPath))
             {
                 return Path.GetFullPath(standardPath);
             }
-            
+
             // 2. ClickOnce deployment: Check assembly location
             var assemblyPath = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
             var clickOncePath = Path.Combine(assemblyPath, "zayit-vue-app");
@@ -248,7 +248,7 @@ namespace Zayit.Services
             {
                 return Path.GetFullPath(clickOncePath);
             }
-            
+
             // 3. Fallback: Return standard path even if it doesn't exist
             Console.WriteLine($"[PdfService] WARNING: zayit-vue-app folder not found! Tried:");
             Console.WriteLine($"  - {standardPath}");

@@ -67,6 +67,13 @@
 								imageMso="ReviewReviewingPaneVertical"
 								onAction="button_Click"/>
 
+							<button id="OpenChildDoc"
+							label="פתח מסמך בחלונית משנה"
+							screentip="מסמך בחלונית משנה"
+							supertip="מוצג תמיד מעל המסמך הנוכחי וממוזער יחד איתו"
+							imageMso="DocumentTemplate"
+							onAction="button_Click"/>
+
 							<button id="Settings"
 									label="הגדרות"
 									imageMso="ComAddInsDialog"
