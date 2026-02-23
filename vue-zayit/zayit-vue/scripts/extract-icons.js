@@ -34,6 +34,7 @@ const usedIcons = [
   'settings-28-regular',
   'info-28-regular',
   'library-28-regular',
+  'book-open-48-regular',
   'document-pdf-28-regular',
   'open-28-regular',
   'search-28-filled',

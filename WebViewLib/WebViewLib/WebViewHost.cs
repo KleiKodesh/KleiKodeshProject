@@ -118,7 +118,7 @@ namespace WebViewLib
             if (WebView.CoreWebView2 == null)
                 await WebView.EnsureCoreWebView2Async(_environment);
         }
-        
+
         public async void Navigate(string url)
         {
             try
@@ -126,7 +126,7 @@ namespace WebViewLib
                 await EnsurCoreAsync();
                 WebView.CoreWebView2.Navigate(url);
             }
-            catch (Exception ex){ MessageBox.Show(ex.Message, "WebViewHostError"); }
+            catch (Exception ex) { MessageBox.Show(ex.Message, "WebViewHostError"); }
         }
 
         public async void DocumentWrite(string html)
@@ -134,14 +134,14 @@ namespace WebViewLib
             await EnsurCoreAsync();
             string tempFilePath = Path.Combine(Path.GetTempPath(), $"Otzarnik_Temp_File{Guid.NewGuid()}.html");
             File.WriteAllText(tempFilePath, html);
-            WebView.CoreWebView2.DOMContentLoaded +=  (s, _) => File.Delete(tempFilePath);
+            WebView.CoreWebView2.DOMContentLoaded += (s, _) => File.Delete(tempFilePath);
             Navigate(tempFilePath);
         }
 
         public async Task<string> ExecuteScriptAsync(string script)
         {
             await EnsurCoreAsync();
-            return await WebView.ExecuteScriptAsync(script) ;
+            return await WebView.ExecuteScriptAsync(script);
         }
 
         public async Task Sleep() =>

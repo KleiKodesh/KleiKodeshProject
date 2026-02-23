@@ -2,13 +2,14 @@ using Microsoft.Web.WebView2.WinForms;
 using System;
 using System.IO;
 using System.Threading.Tasks;
+using System.Windows.Forms;
 using Zayit.Viewer;
 
 namespace Zayit.Services
 {
     /// <summary>
-    /// Global PDF Service - Handles all general PDF operations (file picker, virtual URLs, temp files)
-    /// Does NOT handle Hebrew books specific functionality - that's in HebrewBooksService
+    /// Global PDF Service - Handles general PDF operations (file picker, virtual URLs, temp files).
+    /// Conversion is fully async via <see cref="WordToPdfConverter"/> — the UI is never blocked.
     /// </summary>
     public class PdfService
     {
@@ -20,16 +21,14 @@ namespace Zayit.Services
             _webView = webView;
         }
 
-        /// <summary>
-        /// Initialize PDF manager and set up virtual host mapping
-        /// </summary>
+        #region PDF Manager Initialization
+
         public bool InitializePdfManager()
         {
             try
             {
                 if (_webView?.CoreWebView2 == null) return false;
 
-                // Set up virtual host mapping for PDF files
                 var htmlPath = GetHtmlPath();
                 _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                     PDF_HOST,
@@ -47,53 +46,104 @@ namespace Zayit.Services
             }
         }
 
+        public bool CheckPdfManagerReady()
+        {
+            return _webView?.CoreWebView2 != null;
+        }
+
+        #endregion
+
+        #region File Picker
+
         /// <summary>
-        /// Open file picker dialog and create virtual URL for selected PDF
-        /// Returns result object with fileName, dataUrl (virtual URL), and originalPath for persistence
+        /// Opens a file picker for PDFs or Word/HTML documents.
+        /// Non-PDF files are converted asynchronously on a background thread before
+        /// a virtual URL is returned — the UI stays responsive throughout.
         /// </summary>
-        public object OpenPdfFilePicker()
+        public async Task<object> OpenPdfOrWordFilePickerAsync()
         {
             try
             {
-                return OpenPdfFilePickerAsync().GetAwaiter().GetResult();
+                var filter = "מסמכים (*.pdf;*.doc;*.docx;*.dot;*.dotx;*.docm;*.dotm;*.rtf;*.odt;*.txt;*.wps;*.xml;*.mht;*.mhtml;*.htm;*.html)|*.pdf;*.doc;*.docx;*.dot;*.dotx;*.docm;*.dotm;*.rtf;*.odt;*.txt;*.wps;*.xml;*.mht;*.mhtml;*.htm;*.html";
+                var filePath = await WebViewDialogHelper.ShowOpenFileDialogAsync(
+                    _webView,
+                    filter,
+                    "בחר קובץ PDF או Word"
+                );
+
+                if (string.IsNullOrEmpty(filePath))
+                    return EmptyResult();
+
+                string finalPath = filePath;
+
+                if (!filePath.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+                {
+                    finalPath = await PromptAndConvertAsync(filePath);
+
+                    // User declined the conversion dialog
+                    if (finalPath == null)
+                        return EmptyResult();
+                }
+
+                var virtualUrl = CreateVirtualUrl(finalPath);
+                return new
+                {
+                    fileName = Path.GetFileName(finalPath),
+                    dataUrl = virtualUrl,
+                    originalPath = finalPath
+                };
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[PdfService] Error in file picker: {ex}");
-                return new { fileName = (string)null, dataUrl = (string)null, originalPath = (string)null };
+                return EmptyResult();
             }
-        }
-
-        private async Task<object> OpenPdfFilePickerAsync()
-        {
-            var filePath = await WebViewDialogHelper.ShowOpenFileDialogAsync(
-                _webView,
-                "PDF files (*.pdf)|*.pdf",
-                "Select PDF File"
-            );
-
-            if (string.IsNullOrEmpty(filePath))
-            {
-                return new { fileName = (string)null, dataUrl = (string)null, originalPath = (string)null };
-            }
-
-            // Create virtual URL for the selected file
-            var virtualUrl = CreateVirtualUrl(filePath);
-            var fileName = Path.GetFileName(filePath);
-
-            Console.WriteLine($"[PdfService] File selected: {fileName} -> {virtualUrl}");
-
-            return new
-            {
-                fileName = fileName,
-                dataUrl = virtualUrl,
-                originalPath = filePath
-            };
         }
 
         /// <summary>
-        /// Create virtual URL from file path by copying to temp directory
+        /// Shows a confirmation dialog, then converts the file to PDF on a background thread.
+        /// Returns the PDF path, or null if the user declined.
         /// </summary>
+        private async Task<string> PromptAndConvertAsync(string filePath)
+        {
+            bool isHtmlTxt = filePath.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)
+                             && WordToPdfConverter.TxtFileContainsHtml(filePath);
+
+            string extraNote = isHtmlTxt ? "הקובץ מכיל תוכן HTML.\n" : string.Empty;
+            var msg = $"{extraNote}כדי לפתוח קובץ ממין זה נדרש להמירו לקובץ PDF.\n\n" +
+                      $"הקובץ המומר יישמר באותה תיקייה כמו קובץ המקור:\n" +
+                      $"📁 {Path.GetDirectoryName(filePath)}\n" +
+                      $"📄 {Path.GetFileNameWithoutExtension(filePath)}.pdf\n\n" +
+                      $"האם אתה בטוח שברצונך להמיר את הקובץ?";
+
+            var result = MessageBox.Show(
+                msg,
+                "המרת קובץ ל-PDF",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button2,
+                MessageBoxOptions.RightAlign | MessageBoxOptions.RtlReading
+            );
+
+            if (result != DialogResult.Yes)
+                return null;
+
+            string pdfPath = Path.ChangeExtension(filePath, ".pdf");
+
+            // Both conversion paths are async — Word Interop runs on a background thread
+            // so the UI remains responsive during the (potentially slow) conversion.
+            return isHtmlTxt
+                ? await WordToPdfConverter.ConvertHtmlToPdfAsync(filePath, pdfPath)
+                : await WordToPdfConverter.ConvertWordToPdfAsync(filePath, pdfPath);
+        }
+
+        private static object EmptyResult() =>
+            new { fileName = (string)null, dataUrl = (string)null, originalPath = (string)null };
+
+        #endregion
+
+        #region Virtual URL / Temp Files
+
         public string CreateVirtualUrl(string filePath)
         {
             try
@@ -104,14 +154,11 @@ namespace Zayit.Services
                 var tempDir = Path.Combine(htmlPath, "temp");
                 Directory.CreateDirectory(tempDir);
 
-                // Create unique filename to avoid conflicts
                 var uniqueName = Guid.NewGuid().ToString() + "_" + Path.GetFileName(filePath);
                 var tempPath = Path.Combine(tempDir, uniqueName);
 
-                // Copy file to temp location for virtual URL access
                 File.Copy(filePath, tempPath, true);
 
-                // Return virtual URL
                 var virtualUrl = $"https://{PDF_HOST}/temp/{uniqueName}";
                 Console.WriteLine($"[PdfService] Created virtual URL: {filePath} -> {virtualUrl}");
 
@@ -124,9 +171,6 @@ namespace Zayit.Services
             }
         }
 
-        /// <summary>
-        /// Recreate virtual URL from stored file path (for session persistence)
-        /// </summary>
         public string RecreateVirtualUrlFromPath(string originalPath)
         {
             try
@@ -137,7 +181,6 @@ namespace Zayit.Services
                     return null;
                 }
 
-                // Create new virtual URL for the existing file
                 return CreateVirtualUrl(originalPath);
             }
             catch (Exception ex)
@@ -147,17 +190,6 @@ namespace Zayit.Services
             }
         }
 
-        /// <summary>
-        /// Check if PDF manager is ready
-        /// </summary>
-        public bool CheckPdfManagerReady()
-        {
-            return _webView?.CoreWebView2 != null;
-        }
-
-        /// <summary>
-        /// Clean up temp file
-        /// </summary>
         public void CleanupTempFile(string fileName)
         {
             try
@@ -176,9 +208,6 @@ namespace Zayit.Services
             }
         }
 
-        /// <summary>
-        /// Get temp file statistics
-        /// </summary>
         public object GetTempFileStats()
         {
             try
@@ -193,9 +222,7 @@ namespace Zayit.Services
                 long totalSize = 0;
 
                 foreach (var file in files)
-                {
                     totalSize += new FileInfo(file).Length;
-                }
 
                 return new { fileCount = files.Length, totalSize = totalSize };
             }
@@ -206,9 +233,6 @@ namespace Zayit.Services
             }
         }
 
-        /// <summary>
-        /// Clear all temp files
-        /// </summary>
         public void ClearTempFiles()
         {
             try
@@ -231,29 +255,23 @@ namespace Zayit.Services
 
         private string GetHtmlPath()
         {
-            // Get Html path - handle both regular and ClickOnce deployments
             var baseDir = AppDomain.CurrentDomain.BaseDirectory;
 
-            // 1. Standard deployment: zayit-vue-app folder in base directory
             var standardPath = Path.Combine(baseDir, "zayit-vue-app");
             if (Directory.Exists(standardPath))
-            {
                 return Path.GetFullPath(standardPath);
-            }
 
-            // 2. ClickOnce deployment: Check assembly location
             var assemblyPath = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
             var clickOncePath = Path.Combine(assemblyPath, "zayit-vue-app");
             if (Directory.Exists(clickOncePath))
-            {
                 return Path.GetFullPath(clickOncePath);
-            }
 
-            // 3. Fallback: Return standard path even if it doesn't exist
             Console.WriteLine($"[PdfService] WARNING: zayit-vue-app folder not found! Tried:");
             Console.WriteLine($"  - {standardPath}");
             Console.WriteLine($"  - {clickOncePath}");
             return Path.GetFullPath(standardPath);
         }
+
+        #endregion
     }
 }

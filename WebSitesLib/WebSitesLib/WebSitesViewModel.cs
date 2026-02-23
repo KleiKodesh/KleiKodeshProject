@@ -1,128 +1,126 @@
-﻿﻿using System;
-using System.Collections.Generic;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.IO;
-using System.Linq;
 using System.Text.Json;
-using System.Windows.Media;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
 using WpfLib;
-using WpfLib.ViewModels;
 
 namespace WebSitesLib
 {
-public class WebSitesViewModel : ViewModelBase
+    public class WebSitesViewModel : ViewModelBase
+    {
+        // ── Constants ────────────────────────────────────────────────────────
+        private const string FileName = "websites.json";
+
+
+
+        // ── State ────────────────────────────────────────────────────────────
+        private readonly string _filePath =
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, FileName);
+
+        // ── Collections ──────────────────────────────────────────────────────
+        /// <summary>Full list of all sites (visible and hidden), bound to WhiteListDialog.</summary>
+        public ObservableCollection<WebAdressModel> Adresses { get; }
+            = new ObservableCollection<WebAdressModel>();
+
+        /// <summary>Filtered list shown in the address bar ComboBox.</summary>
+        public ObservableCollection<WebAdressModel> VisibleAdresses
         {
-            ObservableCollection<WebAdressModel> _adresses;
-            ObservableCollection<WebAdressModel> _visibleAdresses;
-            string _mainFileName = "WebSitesWhitelist.json";
-            string _settingsFileName = "UserWebSitesSettings.json";
-
-            string AppDataFolder => Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            string MainJsonPath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", _mainFileName);
-            string UserSettingsPath => Path.Combine(AppDataFolder, "WebWaysLib", _settingsFileName);  
-
-            public ObservableCollection<WebAdressModel> Adresses 
+            get
             {
-                get => _adresses; 
-                set
-                {
-                    if (_adresses != null)
-                    {
-                        foreach (var address in _adresses)
-                            address.PropertyChanged -= Address_PropertyChanged;
-                    }
-
-                    SetProperty(ref _adresses, value);
-
-                    if (_adresses != null)
-                    {
-                        foreach (var address in _adresses)
-                            address.PropertyChanged += Address_PropertyChanged;
-                    }
-
-                    UpdateVisibleAdresses();
-                }
+                var filtered = new ObservableCollection<WebAdressModel>();
+                foreach (var a in Adresses)
+                    if (a.IsVisible)
+                        filtered.Add(a);
+                return filtered;
             }
-
-            public ObservableCollection<WebAdressModel> VisibleAdresses
-            {
-                get => _visibleAdresses;
-                set => SetProperty(ref _visibleAdresses, value);
-            }
-
-            public WebSitesViewModel() 
-            {
-                PopulateAdressList();
-            }
-
-            void PopulateAdressList()
-            {
-                if (File.Exists(MainJsonPath))
-                {
-                    string json = File.ReadAllText(MainJsonPath);
-                    Adresses = JsonSerializer.Deserialize<ObservableCollection<WebAdressModel>>(json)
-                        ?? new ObservableCollection<WebAdressModel>();
-                }
-
-                if (File.Exists(UserSettingsPath))
-                {
-                    string userJson = File.ReadAllText(UserSettingsPath);
-                    var userSettings = JsonSerializer.Deserialize<Dictionary<string, bool>>(userJson) ??
-                        new Dictionary<string, bool>();
-
-                    foreach (var address in Adresses)
-                        if (userSettings.TryGetValue(address.Url, out bool isVisible))
-                            address.IsVisible = isVisible;
-                }
-
-                UpdateVisibleAdresses();
-            }
-
-            void Address_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
-            {
-                if (e.PropertyName == nameof(WebAdressModel.IsVisible))
-                    UpdateVisibleAdresses();
-            }
-
-            void UpdateVisibleAdresses()
-            {
-                if (_adresses == null)
-                {
-                    VisibleAdresses = new ObservableCollection<WebAdressModel>();
-                    return;
-                }
-
-                VisibleAdresses = new ObservableCollection<WebAdressModel>(
-                    _adresses.Where(a => a.IsVisible == true));
-            }
-
-            public void ShowWhiteListDialog(Brush background, Brush foreground)
-            {
-                WhiteListDialog dialog = new WhiteListDialog(this) 
-                {
-                    Background = background,
-                    Foreground = foreground
-                };
-
-                dialog.ShowDialog();
-                SaveUserSettings();
-                UpdateVisibleAdresses();
-            }
-
-            void SaveUserSettings()
-            {
-                string directoryPath = Path.GetDirectoryName(UserSettingsPath);
-                if (!string.IsNullOrEmpty(directoryPath) && !Directory.Exists(directoryPath))
-                    Directory.CreateDirectory(directoryPath);
-
-                var userSettings = Adresses
-                    .Where(address => address.IsVisible.HasValue)
-                    .ToDictionary(address => address.Url, address => address.IsVisible.Value);
-
-                string userJson = JsonSerializer.Serialize(userSettings, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(UserSettingsPath, userJson);
-            }
-
         }
 
+        // ── Commands ─────────────────────────────────────────────────────────
+        /// <summary>
+        /// Opens the whitelist editor.
+        /// Bind CommandParameter="{Binding ElementName=Root}" in XAML so the
+        /// dialog can inherit the UserControl's Background/Foreground brushes.
+        /// </summary>
+        public ICommand ShowWhiteListCommand { get; }
+
+        // ── Constructor ──────────────────────────────────────────────────────
+        public WebSitesViewModel()
+        {
+            //ShowWhiteListCommand = new RelayCommand(p => ShowWhiteListDialog(p));
+            Load();
+        }
+
+        // ── WhiteList dialog ─────────────────────────────────────────────────
+        private void ShowWhiteListDialog(object parameter)
+        {
+            // Background and Foreground are defined on Control, not FrameworkElement.
+            // The CommandParameter is the UserControl (x:Name="Root") which IS a Control.
+            var control = parameter as Control;
+
+            var dialog = new WhiteListDialog(this)
+            {
+                Owner = Application.Current.MainWindow
+            };
+
+            if (control != null)
+            {
+                if (control.Background != null)
+                    dialog.Background = control.Background;
+                if (control.Foreground != null)
+                    dialog.Foreground = control.Foreground;
+            }
+
+            // ShowDialog returns true only when OK_Button_Click calls DialogResult = true.
+            // Currently the dialog just closes on OK, so we save regardless.
+            dialog.ShowDialog();
+            Save();
+            OnPropertyChanged(nameof(VisibleAdresses));
+        }
+
+        // ── Persistence ──────────────────────────────────────────────────────
+        private void Load()
+        {
+            string json;
+
+            if (File.Exists(_filePath))
+            {
+                json = File.ReadAllText(_filePath);
+            }
+            else
+            {
+                // First run: seed from the embedded default list and write it out
+                //json = DefaultJson;
+                //File.WriteAllText(_filePath, DefaultJson);
+            }
+
+            ObservableCollection<WebAdressModel> items = null;
+
+            try
+            {
+                //items = JsonSerializer.Deserialize<ObservableCollection<WebAdressModel>>(json);
+            }
+            catch (JsonException)
+            {
+                // Corrupted file — fall back to defaults
+                //items = JsonSerializer.Deserialize<ObservableCollection<WebAdressModel>>(DefaultJson);
+            }
+
+            if (items == null) return;
+
+            foreach (var item in items)
+                Adresses.Add(item);
+        }
+
+        public void Save()
+        {
+            var json = JsonSerializer.Serialize(
+                Adresses,
+                new JsonSerializerOptions { WriteIndented = true });
+
+            File.WriteAllText(_filePath, json);
+        }
+    }
 }

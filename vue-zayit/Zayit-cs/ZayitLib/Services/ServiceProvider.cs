@@ -89,14 +89,14 @@ namespace Zayit.Services
         }
         public object SearchLines(int bookId, string term, string q) => _db.SearchLines(bookId, term, q);
         public object DiagnoseDatabaseContent() => _db.DiagnoseDatabaseContent();
-        
+
         // TOC-based Line Loading
         public object GetLineIdsByTocEntry(int tocEntryId, string q) => _db.GetLineIdsByTocEntry(tocEntryId, q);
         public object GetLinesByIds(int bookId, object lineIds, string q) => _db.GetLinesByIds(bookId, lineIds, q);
         public object GetLineIndexFromLineId(int lineId, string q) => _db.GetLineIndexFromLineId(lineId, q);
 
         // PDF Operations - File Dialog & Virtual Host Mapping
-        public object OpenPdfFilePicker() => _pdf.OpenPdfFilePicker();
+        public object OpenPdfFilePicker() => _pdf.OpenPdfOrWordFilePickerAsync();
         public string CreateVirtualUrl(string path) => _pdf.CreateVirtualUrl(path);
         public string RecreateVirtualUrlFromPath(string path) => _pdf.RecreateVirtualUrlFromPath(path);
         public string LoadPdfFromPath(string path) => _pdf.CreateVirtualUrl(path); // Alias for CreateVirtualUrl
@@ -128,13 +128,13 @@ namespace Zayit.Services
         // Bloom Search Operations
         public bool IsBloomSearchReady() => _bloomSearch.IsReady();
         public object GetBloomIndexingProgress() => _bloomSearch.GetIndexingProgress();
-        
+
         // Start a new search and return search ID
         public string BloomSearchStart(string query)
         {
             return _bloomSearch.StartSearch(query);
         }
-        
+
         // Cancel an ongoing search
         public void BloomSearchCancel(string searchId)
         {
@@ -163,7 +163,7 @@ namespace Zayit.Services
                 };
 
                 var json = System.Text.Json.JsonSerializer.Serialize(message);
-                
+
                 // Must invoke on UI thread
                 if (_webView.InvokeRequired)
                 {
@@ -176,7 +176,7 @@ namespace Zayit.Services
                 {
                     _webView.CoreWebView2.PostWebMessageAsString(json);
                 }
-                
+
                 Console.WriteLine($"[ServiceProvider] Sent batch for {searchId}: {results.Count} results");
             }
             catch (Exception ex)
@@ -197,7 +197,7 @@ namespace Zayit.Services
                 };
 
                 var json = System.Text.Json.JsonSerializer.Serialize(message);
-                
+
                 // Must invoke on UI thread
                 if (_webView.InvokeRequired)
                 {
@@ -210,7 +210,7 @@ namespace Zayit.Services
                 {
                     _webView.CoreWebView2.PostWebMessageAsString(json);
                 }
-                
+
                 Console.WriteLine($"[ServiceProvider] Sent complete for {searchId}");
             }
             catch (Exception ex)
@@ -231,7 +231,7 @@ namespace Zayit.Services
                 };
 
                 var json = System.Text.Json.JsonSerializer.Serialize(message);
-                
+
                 // Must invoke on UI thread
                 if (_webView.InvokeRequired)
                 {
@@ -244,7 +244,7 @@ namespace Zayit.Services
                 {
                     _webView.CoreWebView2.PostWebMessageAsString(json);
                 }
-                
+
                 Console.WriteLine($"[ServiceProvider] Sent cancelled for {searchId}");
             }
             catch (Exception ex)
@@ -266,7 +266,7 @@ namespace Zayit.Services
                 };
 
                 var json = System.Text.Json.JsonSerializer.Serialize(message);
-                
+
                 // Must invoke on UI thread
                 if (_webView.InvokeRequired)
                 {
@@ -279,7 +279,7 @@ namespace Zayit.Services
                 {
                     _webView.CoreWebView2.PostWebMessageAsString(json);
                 }
-                
+
                 Console.WriteLine($"[ServiceProvider] Sent error for {searchId}: {error}");
             }
             catch (Exception ex)
@@ -442,15 +442,15 @@ namespace Zayit.Services
             try
             {
                 Console.WriteLine("[ServiceProvider] Reloading page");
-                
+
                 // Dispose and reinitialize database connection
                 DbQueries.DisposeConnection();
                 Console.WriteLine("[ServiceProvider] Database connection disposed");
-                
+
                 // Reinitialize BloomSearchService to trigger indexing if needed
                 _bloomSearch.Initialize();
                 Console.WriteLine("[ServiceProvider] BloomSearchService reinitialized");
-                
+
                 // Reload the WebView2 page
                 if (_webView.InvokeRequired)
                 {

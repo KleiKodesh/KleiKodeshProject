@@ -73,7 +73,8 @@ namespace KleiKodesh.Ribbon
                         WordWindowHelper.OpenSoftSnapLeft();
                         break;
                     case "Settings":
-                        TaskPaneManager.Show(new RibbonSettingsControl(ribbon), "הגדרות כלי קודש", 400);
+                        //TaskPaneManager.Show(new RibbonSettingsControl(ribbon), "הגדרות כלי קודש", 400);
+                        WpfTaskPane.Show(new RibbonSettingsView(ribbon), "הגדרות התוסף", 400);
                         break;
                     case "About":
                         OpenAboutDocument();

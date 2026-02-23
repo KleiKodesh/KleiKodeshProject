@@ -103,9 +103,9 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\WebSitesLib\WebSitesLib.csproj">
-      <Project>{861b62fc-9107-4e39-925c-794f2438891d}</Project>
-      <Name>WebSitesLib</Name>
+    <ProjectReference Include="..\WebSitesLib2\WebSitesLib2.csproj">
+      <Project>{8100c454-b34e-45a2-98b5-7f766487c9ff}</Project>
+      <Name>WebSitesLib2</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

@@ -28,19 +28,44 @@ namespace Zayit.Services
             InitializeConnection(dbPath);
         }
 
-        static void InitializeConnection(string dbPath)
-        {
-            // Dispose of existing connection if it exists
-            if (_connection != null)
-            {
-                _connection.Close();
-                _connection.Dispose();
-                _connection = null;
-            }
+       static void InitializeConnection(string dbPath)
+{
+    if (_connection != null)
+    {
+        _connection.Close();
+        _connection.Dispose();
+        _connection = null;
+    }
 
-            _connection = new SQLiteConnection($"Data Source={dbPath};Version=3;Read Only=True;");
-            _connection.Open();
+    _connection = new SQLiteConnection($"Data Source={dbPath};Version=3;Read Only=True;");
+    _connection.Open();
+    
+    EnsureExternalLibraryColumn();
+}
+
+static void EnsureExternalLibraryColumn()
+{
+    try
+    {
+        // Check with read-only connection
+        var columns = _connection.Query("PRAGMA table_info(book)");
+        bool columnExists = columns.Any(c => c.name == "externalLibraryId");
+
+        if (!columnExists)
+        {
+            // Open a temporary writable connection just for the ALTER TABLE
+            using var writableConnection = new SQLiteConnection(
+                $"Data Source={CurrentDbPath};Version=3;");
+            writableConnection.Open();
+            writableConnection.Execute(
+                "ALTER TABLE book ADD COLUMN externalLibraryId INTEGER DEFAULT NULL");
         }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[DbQueries] Warning: Could not ensure externalLibraryId column: {ex.Message}");
+    }
+}
 
         static string DefaultDbPath =>
            Path.Combine(

@@ -81,7 +81,7 @@
                     <button :class="{ active: newTabPage === 'openfile' }"
                             @click="newTabPage = 'openfile'"
                             class="flex-110 c-pointer theme-option">
-                        פתיחת קובץ
+                        פתיחת ספר
                     </button>
                     <button :class="{ active: newTabPage === 'hebrewbooks' }"
                             @click="newTabPage = 'hebrewbooks'"
@@ -150,7 +150,7 @@
                     גודל גופן
                     <span class="text-secondary setting-value">{{
                         fontSize
-                        }}%</span>
+                    }}%</span>
                 </label>
                 <input type="range"
                        v-model.number="fontSize"
@@ -165,7 +165,7 @@
                 <label class="flex-between bold setting-label">
                     ריווח שורות
                     <span class="text-secondary setting-value">{{ linePadding
-                        }}</span>
+                    }}</span>
                 </label>
                 <input type="range"
                        v-model.number="linePadding"

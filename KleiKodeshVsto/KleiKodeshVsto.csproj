@@ -319,10 +319,11 @@
       <SubType>UserControl</SubType>
     </Compile>
     <Compile Include="RegexFind\RegexSearchModels.cs" />
-    <Compile Include="Ribbon\RibbonSettingsControl.cs">
-      <SubType>UserControl</SubType>
-    </Compile>
+    <Compile Include="Ribbon\RibbonSettingsControl.cs" />
     <Compile Include="Ribbon\KeliKodeshRibbon.cs" />
+    <Compile Include="Ribbon\RibbonSettingsView.xaml.cs">
+      <DependentUpon>RibbonSettingsView.xaml</DependentUpon>
+    </Compile>
     <Compile Include="ThisAddIn.cs">
       <SubType>Code</SubType>
     </Compile>
@@ -389,7 +390,12 @@
       <Visible>false</Visible>
     </Content>
   </ItemGroup>
-  <ItemGroup />
+  <ItemGroup>
+    <Page Include="Ribbon\RibbonSettingsView.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\DocSeferLib\DocSeferLib.csproj">
       <Project>{74e59bc0-41e5-475a-85cb-eacdc2ef6415}</Project>
