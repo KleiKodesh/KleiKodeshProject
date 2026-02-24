@@ -11,7 +11,11 @@
   <Project Path="vue-zayit/Zayit-cs/BloomSearchEngineLib/BloomSearchEngineLib.csproj" Id="0f7c9226-2c18-4cb8-8f39-a3a539b7122a" />
   <Project Path="vue-zayit/Zayit-cs/ZayitLib/ZayitLib.csproj" Id="8c17c575-1cb3-4677-bf4c-dafeb5419377" />
   <Project Path="vue-zayit/Zayit-cs/ZayitWrapper/ZayitWrapper.csproj" Id="b8f3e2a1-4c5d-4e7f-8a9b-1c2d3e4f5a6b" />
-  <Project Path="WebSitesLib/WebSitesLib/WebSitesLib.csproj" Id="861b62fc-9107-4e39-925c-794f2438891d" />
-  <Project Path="WebViewLib/WebViewLib/WebViewLib.csproj" Id="a50d2909-20e5-4142-9392-3546812c916a" />
-  <Project Path="WpfLib/WpfLib/WpfLib.csproj" Id="494b02c1-54f2-4244-9a90-23c9984970e7" />
+  <Project Path="WebSitesLib/WebSitesLib2/WebSitesLib2.csproj" Id="8100c454-b34e-45a2-98b5-7f766487c9ff" />
+  <Project Path="WebViewLib/WebViewLib/WebViewLib.csproj" Id="a50d2909-20e5-4142-9392-3546812c916a">
+    <Platform Solution="*|x64" Project="x64" />
+  </Project>
+  <Project Path="WpfLib/WpfLib/WpfLib.csproj" Id="494b02c1-54f2-4244-9a90-23c9984970e7">
+    <Platform Solution="*|x64" Project="x64" />
+  </Project>
 </Solution>

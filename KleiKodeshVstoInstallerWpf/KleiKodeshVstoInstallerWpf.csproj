@@ -10,16 +10,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Temporarily commented out COM reference that causes issues with dotnet build -->
-    <!--<COMReference Include="{000204ef-0000-0000-c000-000000000046}">
-      <WrapperTool>tlbimp</WrapperTool>
-      <VersionMinor>0</VersionMinor>
-      <VersionMajor>6</VersionMajor>
-      <Guid>000204ef-0000-0000-c000-000000000046</Guid>
-    </COMReference>-->
-  </ItemGroup>
-
-  <ItemGroup>
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.IO.Compression.FileSystem" />
     <Reference Include="Microsoft.VisualBasic" />
@@ -88,6 +78,10 @@
     <EmbeddedResource Include="KleiKodesh.zip">
       <LogicalName>KleiKodesh.zip</LogicalName>
     </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3800.47" />
   </ItemGroup>
 
 </Project>

@@ -5,7 +5,6 @@ using System.Data;
 using System.Data.SQLite;
 using System.IO;
 using System.Linq;
-using System.Windows.Forms;
 
 namespace Zayit.Services
 {
@@ -28,44 +27,46 @@ namespace Zayit.Services
             InitializeConnection(dbPath);
         }
 
-       static void InitializeConnection(string dbPath)
-{
-    if (_connection != null)
-    {
-        _connection.Close();
-        _connection.Dispose();
-        _connection = null;
-    }
-
-    _connection = new SQLiteConnection($"Data Source={dbPath};Version=3;Read Only=True;");
-    _connection.Open();
-    
-    EnsureExternalLibraryColumn();
-}
-
-static void EnsureExternalLibraryColumn()
-{
-    try
-    {
-        // Check with read-only connection
-        var columns = _connection.Query("PRAGMA table_info(book)");
-        bool columnExists = columns.Any(c => c.name == "externalLibraryId");
-
-        if (!columnExists)
+        static void InitializeConnection(string dbPath)
         {
-            // Open a temporary writable connection just for the ALTER TABLE
-            using var writableConnection = new SQLiteConnection(
-                $"Data Source={CurrentDbPath};Version=3;");
-            writableConnection.Open();
-            writableConnection.Execute(
-                "ALTER TABLE book ADD COLUMN externalLibraryId INTEGER DEFAULT NULL");
+            if (_connection != null)
+            {
+                _connection.Close();
+                _connection.Dispose();
+                _connection = null;
+            }
+
+            _connection = new SQLiteConnection($"Data Source={dbPath};Version=3;Read Only=True;");
+            _connection.Open();
+
+            EnsureExternalLibraryColumn();
         }
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"[DbQueries] Warning: Could not ensure externalLibraryId column: {ex.Message}");
-    }
-}
+
+        static void EnsureExternalLibraryColumn()
+        {
+            try
+            {
+                // Check with read-only connection
+                var columns = _connection.Query("PRAGMA table_info(book)");
+                bool columnExists = columns.Any(c => c.name == "externalLibraryId");
+
+                if (!columnExists)
+                {
+                    // Open a temporary writable connection just for the ALTER TABLE
+                    using (var writableConnection = new SQLiteConnection(
+                        $"Data Source={CurrentDbPath};Version=3;"))
+                    {
+                        writableConnection.Open();
+                        writableConnection.Execute(
+                            "ALTER TABLE book ADD COLUMN externalLibraryId INTEGER DEFAULT NULL");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[DbQueries] Warning: Could not ensure externalLibraryId column: {ex.Message}");
+            }
+        }
 
         static string DefaultDbPath =>
            Path.Combine(
@@ -135,10 +136,10 @@ static void EnsureExternalLibraryColumn()
             string dbPath = CurrentDbPath;
             bool exists = File.Exists(dbPath);
             Console.WriteLine($"[DbQueries] IsDatabaseAvailable check - Path: {dbPath}, Exists: {exists}");
-            
+
             if (!exists)
                 return false;
-            
+
             // Also check if the database is valid by checking for required tables
             try
             {
@@ -219,7 +220,7 @@ static void EnsureExternalLibraryColumn()
                         var props = firstBook.GetType().GetProperties();
                         var propNames = string.Join(", ", props.Select(p => p.Name));
                         Console.WriteLine($"[DbQueries] First book properties: {propNames}");
-                        
+
                         var defaultCommentatorProp = firstBook.GetType().GetProperty("defaultCommentatorBookId");
                         if (defaultCommentatorProp != null)
                         {
