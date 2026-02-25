@@ -151,5 +151,33 @@ export const SqlQueries = {
     SELECT lineIndex, bookId
     FROM line
     WHERE id = ${lineId}
-  `
+  `,
+
+  getTopicsForBooks: (bookIds: number[]) => {
+    if (bookIds.length === 0) return { query: 'SELECT 1 WHERE 0', params: [] }
+    const placeholders = bookIds.map(() => '?').join(',')
+    return {
+      query: `
+        SELECT DISTINCT t.Id as id, t.Name as name
+        FROM topic t
+        JOIN book_topic bt ON bt.TopicId = t.Id
+        WHERE bt.BookId IN (${placeholders})
+        ORDER BY t.Name
+      `,
+      params: bookIds
+    }
+  },
+
+  getBookTopics: (bookIds: number[]) => {
+    if (bookIds.length === 0) return { query: 'SELECT 1 WHERE 0', params: [] }
+    const placeholders = bookIds.map(() => '?').join(',')
+    return {
+      query: `
+        SELECT BookId as bookId, TopicId as topicId
+        FROM book_topic
+        WHERE BookId IN (${placeholders})
+      `,
+      params: bookIds
+    }
+  }
 }

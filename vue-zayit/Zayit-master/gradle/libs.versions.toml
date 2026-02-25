@@ -1,0 +1,153 @@
+[versions]
+
+commonsCompress = "1.28.0"
+composeSonner = "0.4.0"
+confettikit = "0.7.0"
+filekitCore = "0.12.0"
+jsoup = "1.22.1"
+jvmToolchain = "25"
+knotify = "0.4.3"
+nucleus = "1.2.6"
+koalaplotCore = "0.11.0"
+kotlin = "2.3.10"
+compose = "1.10.1"
+agp = "8.12.3"
+androidx-activityCompose = "1.12.3"
+androidx-uiTest = "1.10.2"
+hotReload = "1.0.0"
+kermit = "2.0.8"
+kotlinpoet = "2.2.0"
+ktor = "3.4.0"
+androidx-lifecycle = "2.9.6"
+androidx-navigation = "2.9.2"
+kotlinx-serialization = "1.10.0"
+multiplatformSettings = "1.3.0"
+kotlinx-datetime = "0.7.1"
+buildConfig = "6.0.7"
+materialKolor = "4.1.1"
+jewel = "0.34.0-253.31033.149"
+oshiCore = "6.9.3"
+paging = "3.4.0"
+platformtools = "0.7.5"
+kotlinx-coroutines = "1.10.2"
+reorderable = "3.0.0"
+slf4j = "2.0.17"
+maven-publish = "0.36.0"
+sqlDelight = "2.2.1"
+adaptiveNavigation = "1.2.0"
+zmanim = "2.5.0"
+zstdJni = "1.5.7-7"
+metro = "0.10.4"
+lucene = "10.3.2"
+ktlint = "14.0.1"
+detekt = "2.0.0-alpha.2"
+structured-coroutines = "0.3.0"
+kover = "0.9.7"
+mockk = "1.14.9"
+kotlinx-coroutines-test = "1.10.2"
+sentry = "6.0.0"
+sentrySdk = "8.32.0"
+
+[libraries]
+
+androidx-activityCompose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activityCompose" }
+androidx-uitest-testManifest = { module = "androidx.compose.ui:ui-test-manifest", version.ref = "androidx-uiTest" }
+androidx-uitest-junit4 = { module = "androidx.compose.ui:ui-test-junit4", version.ref = "androidx-uiTest" }
+commons-compress = { module = "org.apache.commons:commons-compress", version.ref = "commonsCompress" }
+compose-sonner = { module = "io.github.brdominguez:compose-sonner", version.ref = "composeSonner" }
+confettikit = { module = "io.github.vinceglb:confettikit", version.ref = "confettikit" }
+filekit-core = { module = "io.github.vinceglb:filekit-core", version.ref = "filekitCore" }
+filekit-dialogs = { module = "io.github.vinceglb:filekit-dialogs", version.ref = "filekitCore" }
+filekit-dialogs-compose = { module = "io.github.vinceglb:filekit-dialogs-compose", version.ref = "filekitCore" }
+jdbc-driver = { module = "app.cash.sqldelight:jdbc-driver", version.ref = "sqlDelight" }
+jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
+kermit = { module = "co.touchlab:kermit", version.ref = "kermit" }
+knotify = { module = "io.github.kdroidfilter:knotify", version.ref = "knotify" }
+knotify-compose = { module = "io.github.kdroidfilter:knotify-compose", version.ref = "knotify" }
+nucleus-core-runtime = { module = "io.github.kdroidfilter:nucleus.core-runtime", version.ref = "nucleus" }
+nucleus-aot-runtime = { module = "io.github.kdroidfilter:nucleus.aot-runtime", version.ref = "nucleus" }
+nucleus-darkmode-detector = { module = "io.github.kdroidfilter:nucleus.darkmode-detector", version.ref = "nucleus" }
+nucleus-decorated-window = { module = "io.github.kdroidfilter:nucleus.decorated-window", version.ref = "nucleus" }
+nucleus-updater-runtime = { module = "io.github.kdroidfilter:nucleus.updater-runtime", version.ref = "nucleus" }
+nucleus-native-ssl = { module = "io.github.kdroidfilter:nucleus.native-ssl", version.ref = "nucleus" }
+nucleus-native-http-ktor = { module = "io.github.kdroidfilter:nucleus.native-http-ktor", version.ref = "nucleus" }
+koalaplot-core = { module = "io.github.koalaplot:koalaplot-core", version.ref = "koalaplotCore" }
+kotlinpoet = { module = "com.squareup:kotlinpoet", version.ref = "kotlinpoet" }
+kotlinx-serialization-protobuf = { module = "org.jetbrains.kotlinx:kotlinx-serialization-protobuf", version.ref = "kotlinx-serialization" }
+ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
+ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
+ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
+ktor-client-serialization = { module = "io.ktor:ktor-client-serialization", version.ref = "ktor" }
+ktor-serialization-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
+ktor-client-logging = { module = "io.ktor:ktor-client-logging", version.ref = "ktor" }
+ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
+ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
+ktor-client-js = { module = "io.ktor:ktor-client-js", version.ref = "ktor" }
+ktor-client-curl = { module = "io.ktor:ktor-client-curl", version.ref = "ktor" }
+ktor-client-winhttp = { module = "io.ktor:ktor-client-winhttp", version.ref = "ktor" }
+androidx-lifecycle-viewmodel = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "androidx-lifecycle" }
+androidx-lifecycle-runtime = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidx-lifecycle" }
+navigation-compose = { module = "org.jetbrains.androidx.navigation:navigation-compose", version.ref = "androidx-navigation" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
+
+multiplatformSettings = { module = "com.russhwolf:multiplatform-settings-no-arg", version.ref = "multiplatformSettings" }
+kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
+materialKolor = { module = "com.materialkolor:material-kolor", version.ref = "materialKolor" }
+foundation-desktop = { module = "org.jetbrains.compose.foundation:foundation-desktop", version.ref = "compose" }
+jetbrains-jewel-foundation = { module = "org.jetbrains.jewel:jewel-foundation", version.ref = "jewel" }
+jewel-int-ui-standalone = { module = "org.jetbrains.jewel:jewel-int-ui-standalone", version.ref = "jewel" }
+jewel-ui = { module = "org.jetbrains.jewel:jewel-ui", version.ref = "jewel" }
+androidx-paging-common = { module = "androidx.paging:paging-common", version.ref = "paging" }
+androidx-paging-compose = { module = "androidx.paging:paging-compose", version = "paging" }
+oshi-core = { module = "com.github.oshi:oshi-core", version.ref = "oshiCore" }
+platformtools-appmanager = { module = "io.github.kdroidfilter:platformtools.appmanager", version.ref = "platformtools" }
+platformtools-core = { module = "io.github.kdroidfilter:platformtools.core", version.ref = "platformtools" }
+platformtools-releasefetcher = { module = "io.github.kdroidfilter:platformtools.releasefetcher", version.ref = "platformtools" }
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
+kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinx-coroutines" }
+kotlinx-coroutines-swing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "kotlinx-coroutines" }
+reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
+slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
+adaptive-layout = { module = "org.jetbrains.compose.material3.adaptive:adaptive-layout", version.ref = "adaptiveNavigation" }
+adaptive-navigation = { module = "org.jetbrains.compose.material3.adaptive:adaptive-navigation", version.ref = "adaptiveNavigation" }
+split-pane-desktop = { module = "org.jetbrains.compose.components:components-splitpane-desktop", version.ref = "compose"}
+sqlite-driver = { module = "app.cash.sqldelight:sqlite-driver", version.ref = "sqlDelight" }
+zmanim = { module = "com.kosherjava:zmanim", version.ref = "zmanim" }
+zstd-jni = { module = "com.github.luben:zstd-jni", version.ref = "zstdJni" }
+lucene-core = { module = "org.apache.lucene:lucene-core", version.ref = "lucene" }
+lucene-analysis-common = { module = "org.apache.lucene:lucene-analysis-common", version.ref = "lucene" }
+lucene-queryparser = { module = "org.apache.lucene:lucene-queryparser", version.ref = "lucene" }
+lucene-highlighter = { module = "org.apache.lucene:lucene-highlighter", version.ref = "lucene" }
+
+# Sentry
+sentry-core = { module = "io.sentry:sentry", version.ref = "sentrySdk" }
+
+# Testing
+mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines-test" }
+
+# Metro
+metro-runtime = { module = "dev.zacsweers.metro:runtime", version.ref = "metro" }
+metrox-viewmodel-compose = { module = "dev.zacsweers.metro:metrox-viewmodel-compose", version.ref = "metro" }
+
+[plugins]
+
+multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+compose = { id = "org.jetbrains.compose", version.ref = "compose" }
+android-application = { id = "com.android.application", version.ref = "agp" }
+hotReload = { id = "org.jetbrains.compose.hot-reload", version.ref = "hotReload" }
+kotlinx-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+buildConfig = { id = "com.github.gmazzo.buildconfig", version.ref = "buildConfig" }
+maven-publish = { id = "com.vanniktech.maven.publish", version.ref = "maven-publish" }
+sqlDelight = { id = "app.cash.sqldelight", version.ref = "sqlDelight" }
+android-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
+caupain =  { id = "com.deezer.caupain", version = "1.7.1"}
+metro = { id = "dev.zacsweers.metro", version.ref = "metro" }
+nucleus = { id = "io.github.kdroidfilter.nucleus", version.ref = "nucleus" }
+stability-analyzer = { id = "com.github.skydoves.compose.stability.analyzer", version = "0.6.6" }
+ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlint" }
+detekt = { id = "dev.detekt", version.ref = "detekt" }
+structured-coroutines = { id = "io.github.santimattius.structured-coroutines", version.ref = "structured-coroutines" }
+kover = { id = "org.jetbrains.kotlinx.kover", version.ref = "kover" }
+sentryJvmGradle = { id = "io.sentry.jvm.gradle", version.ref = "sentry" }

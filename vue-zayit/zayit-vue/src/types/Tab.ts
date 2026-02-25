@@ -16,6 +16,7 @@ export interface BookState {
     selectedLineIndex?: number; // Currently selected line index for commentary
     selectedTocEntryId?: number; // If a TOC line was clicked, store the TOC entry ID to load all its lines' links
     commentaryFilterConnectionTypeId?: number; // Selected connection type filter for commentary (undefined = show all)
+    commentaryFilterCategoryId?: number | string; // Selected category filter for commentary books (undefined = show all, can be string for label-based filtering)
     defaultCommentaryBookId?: number; // Book's default commentary (from book definition, used on first load)
     currentCommentaryBookId?: number; // Currently selected commentary book ID (updated by scroll observer)
     currentCommentaryGroupName?: string; // Currently selected commentary group name (for precise matching when same book appears multiple times)

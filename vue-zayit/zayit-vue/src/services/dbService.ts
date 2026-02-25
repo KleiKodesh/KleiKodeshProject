@@ -341,6 +341,38 @@ class DatabaseService {
             throw new Error('No database source available')
         }
     }
+
+    // ============================================================================
+    // Topic Data
+    // ============================================================================
+
+    async getTopicsForBooks(bookIds: number[]): Promise<Array<{ id: number; name: string }>> {
+        if (bookIds.length === 0) return []
+
+        if (this.isWebViewAvailable()) {
+            const queryObj = SqlQueries.getTopicsForBooks(bookIds)
+            return await webviewBridge.call('GetTopicsForBooks', bookIds, queryObj.query, queryObj.params)
+        } else if (this.isDevServerAvailable()) {
+            const queryObj = SqlQueries.getTopicsForBooks(bookIds)
+            return await devQuery<{ id: number; name: string }>(queryObj.query, queryObj.params)
+        } else {
+            throw new Error('No database source available')
+        }
+    }
+
+    async getBookTopics(bookIds: number[]): Promise<Array<{ bookId: number; topicId: number }>> {
+        if (bookIds.length === 0) return []
+
+        if (this.isWebViewAvailable()) {
+            const queryObj = SqlQueries.getBookTopics(bookIds)
+            return await webviewBridge.call('GetBookTopics', bookIds, queryObj.query, queryObj.params)
+        } else if (this.isDevServerAvailable()) {
+            const queryObj = SqlQueries.getBookTopics(bookIds)
+            return await devQuery<{ bookId: number; topicId: number }>(queryObj.query, queryObj.params)
+        } else {
+            throw new Error('No database source available')
+        }
+    }
 }
 
 // Export singleton instance

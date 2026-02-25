@@ -52,9 +52,14 @@
                                                 :available-options="availableFilterOptions"
                                                 @filter-change="handleFilterChange" />
 
+                <!-- Category Filter -->
+                <CommentaryCategoryFilter :available-categories="availableCategories"
+                                          :selected-category-id="selectedCategoryId"
+                                          @category-change="handleCategoryChange" />
+
                 <!-- Commentary Selector Combobox -->
                 <Combobox v-model="comboboxSelectedValue"
-                          :options="groupOptions"
+                          :options="filteredGroupOptions"
                           placeholder="בחר פרשן..."
                           dir="rtl" />
 
@@ -154,6 +159,7 @@ import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import Combobox, { type ComboboxOption } from './common/Combobox.vue'
 import GenericSearch from './common/GenericSearch.vue'
 import CommentaryConnectionTypeFilter from './CommentaryConnectionTypeFilter.vue'
+import CommentaryCategoryFilter from './CommentaryCategoryFilter.vue'
 import LoadingSpinner from './common/LoadingSpinner.vue'
 import { Icon } from '@iconify/vue'
 
@@ -275,6 +281,20 @@ const selectedConnectionTypeId = computed({
     }
 })
 
+// Category filter state from tab store (now using string ID for label-based filtering)
+const selectedCategoryId = computed({
+    get: () => {
+        const activeTab = tabStore.activeTab
+        return activeTab?.bookState?.commentaryFilterCategoryId
+    },
+    set: (value: number | undefined) => {
+        const activeTab = tabStore.activeTab
+        if (activeTab?.bookState) {
+            activeTab.bookState.commentaryFilterCategoryId = value
+        }
+    }
+})
+
 // Dynamic styles based on dark mode and settings
 const commentaryStyles = computed(() => {
     const zoom = tabStore.activeTab?.bookState?.zoom || 100
@@ -359,6 +379,14 @@ const virtualCommentaryItems = computed(() => {
     }> = []
 
     processedLinkGroups.value.forEach((group, groupIndex) => {
+        // Apply category label filter
+        if (selectedCategoryId.value !== undefined && group.targetBookId) {
+            const label = bookCategoryLabelMap.value.get(group.targetBookId)
+            if (label !== selectedCategoryId.value) {
+                return // Skip this group
+            }
+        }
+
         // Add group header
         items.push({
             id: `group-header-${groupIndex}`,
@@ -445,6 +473,155 @@ const groupOptions = computed<ComboboxOption[]>(() => {
         label: group.groupName,
         value: index
     }))
+})
+
+// Get available categories from commentary books based on their category hierarchy
+const availableCategories = ref<Array<{ id: string; name: string; categoryIds: number[] }>>([])
+const bookCategoryLabelMap = ref<Map<number, string>>(new Map())
+
+// Resolve group label by walking up category tree (mimics Zayit's resolveGroupLabel)
+function resolveGroupLabel(book: Book | undefined, categoryTree: typeof categoryTreeStore.categoryTree): string {
+    if (!book) return ''
+    
+    // Build category map for quick lookup
+    const categoryMap = new Map<number, Category>()
+    function buildMap(cats: typeof categoryTree) {
+        cats.forEach(cat => {
+            categoryMap.set(cat.id, cat)
+            if (cat.children) buildMap(cat.children)
+        })
+    }
+    buildMap(categoryTree)
+    
+    let currentId: number | undefined = book.categoryId
+    while (currentId) {
+        const category = categoryMap.get(currentId)
+        if (!category) break
+        
+        const title = category.title
+        
+        // Prefer high-level "commentaries on ..." buckets
+        if (title.includes('על התנ״ך') || 
+            title.includes('על התלמוד') || 
+            title.includes('על המשנה') || 
+            title.includes('על המשניות') ||
+            title.includes('על הש״ס') ||
+            title.includes('על השס')) {
+            return title
+        }
+        
+        // Broad families
+        if (title === 'חסידות' || title.includes('חסידות')) {
+            return title
+        }
+        if (title.includes('מילונים')) {
+            return title
+        }
+        if (title === 'ראשונים') {
+            return title
+        }
+        if (title === 'מחברי זמננו') {
+            return title
+        }
+        if (title === 'ביאור חברותא' || title === 'הערות על ביאור חברותא') {
+            return 'חברותא'
+        }
+        
+        // Generic "מפרשים" bucket
+        if (title === 'מפרשים') {
+            const parent = category.parentId ? categoryMap.get(category.parentId) : undefined
+            if (parent && parent.title) {
+                return `מפרשים על ${parent.title}`
+            }
+            return title
+        }
+        
+        currentId = category.parentId
+    }
+    
+    // Fallback to base category
+    const baseCategory = categoryMap.get(book.categoryId)
+    return baseCategory?.title || ''
+}
+
+// Load categories when link groups change
+watch(linkGroups, () => {
+    console.log('🏷️ Loading category groups for commentary books...')
+    
+    // Get unique book IDs from link groups
+    const bookIds = Array.from(new Set(
+        linkGroups.value
+            .map(group => group.targetBookId)
+            .filter((id): id is number => id !== undefined)
+    ))
+
+    console.log('📚 Found book IDs:', bookIds)
+
+    if (bookIds.length === 0) {
+        availableCategories.value = []
+        bookCategoryLabelMap.value = new Map()
+        console.log('⚠️ No book IDs found, clearing categories')
+        return
+    }
+
+    try {
+        // Build map of bookId -> resolved group label
+        const labelMap = new Map<number, string>()
+        const labelToCategoryIds = new Map<string, Set<number>>()
+        
+        bookIds.forEach(bookId => {
+            const book = categoryTreeStore.allBooks.find(b => b.id === bookId)
+            if (book) {
+                const label = resolveGroupLabel(book, categoryTreeStore.categoryTree)
+                if (label) {
+                    labelMap.set(bookId, label)
+                    
+                    // Track which category IDs belong to this label
+                    if (!labelToCategoryIds.has(label)) {
+                        labelToCategoryIds.set(label, new Set())
+                    }
+                    labelToCategoryIds.get(label)!.add(book.categoryId)
+                }
+            }
+        })
+        
+        bookCategoryLabelMap.value = labelMap
+        
+        // Create unique filter options from resolved labels
+        const categories: Array<{ id: string; name: string; categoryIds: number[] }> = []
+        labelToCategoryIds.forEach((categoryIds, label) => {
+            categories.push({
+                id: label, // Use label as ID since it's unique
+                name: label,
+                categoryIds: Array.from(categoryIds)
+            })
+        })
+        
+        availableCategories.value = categories
+        
+        console.log('✅ Category filter ready with', categories.length, 'groups:', categories.map(c => c.name))
+    } catch (error) {
+        console.error('❌ Failed to load categories:', error)
+        availableCategories.value = []
+        bookCategoryLabelMap.value = new Map()
+    }
+}, { immediate: true })
+
+// Filter group options based on selected category label
+const filteredGroupOptions = computed<ComboboxOption[]>(() => {
+    if (selectedCategoryId.value === undefined) {
+        return groupOptions.value
+    }
+
+    // Filter groups by resolved category label
+    return groupOptions.value.filter(option => {
+        const groupIndex = option.value as number
+        const group = linkGroups.value[groupIndex]
+        if (!group?.targetBookId) return true // Keep groups without book ID
+        
+        const label = bookCategoryLabelMap.value.get(group.targetBookId)
+        return label === selectedCategoryId.value
+    })
 })
 
 // ============================================
@@ -782,6 +959,26 @@ async function handleFilterChange(connectionTypeId: number) {
         await nextTick()
         await nextTick()
         console.log('🔄 Filter change complete, scroller should restore position')
+    }
+}
+
+/**
+ * CATEGORY FILTER CHANGE HANDLER
+ * Filters commentary groups by resolved category label
+ */
+function handleCategoryChange(categoryId: number | string | undefined) {
+    console.log('🔄 Category filter change:', selectedCategoryId.value, '→', categoryId)
+    selectedCategoryId.value = categoryId
+
+    // Reset combobox selection if current selection is filtered out
+    if (categoryId !== undefined) {
+        const currentIndex = comboboxSelectedValue.value as number
+        const isCurrentVisible = filteredGroupOptions.value.some(opt => opt.value === currentIndex)
+        
+        if (!isCurrentVisible && filteredGroupOptions.value.length > 0) {
+            // Select first visible option
+            comboboxSelectedValue.value = filteredGroupOptions.value[0].value
+        }
     }
 }
 
