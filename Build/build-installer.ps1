@@ -415,58 +415,8 @@ if (-not $NoRelease) {
                         # Generate direct download link using the actual version from GitHub
                         $downloadUrl = "$repoUrl/releases/download/$actualVersion/$($setupAsset.name)"
                         Write-Host "Direct download URL: $downloadUrl" -ForegroundColor Cyan
-                        
-                        # Update website with new download link
                         Write-Host ""
-                        Write-Host "Updating website with new download link..." -ForegroundColor Yellow
-                        
-                        $websitePath = Join-Path $projectRoot "kleikodesh.github.io"
-                        if (Test-Path $websitePath) {
-                            $indexPath = Join-Path $websitePath "index.html"
-                            
-                            if (Test-Path $indexPath) {
-                                # Read the HTML file
-                                $htmlContent = Get-Content $indexPath -Raw -Encoding UTF8
-                                
-                                # Replace the download link - match the "הורד את ההתקנה כעת" button
-                                $pattern = '(<a href=")[^"]+("\s+class="inline-flex items-center gap-2[^>]+>\s+<svg[^>]+>[\s\S]*?</svg>\s+הורד את ההתקנה כעת)'
-                                $replacement = "`$1$downloadUrl`$2"
-                                
-                                $updatedContent = $htmlContent -replace $pattern, $replacement
-                                
-                                if ($updatedContent -ne $htmlContent) {
-                                    # Write updated content back
-                                    Set-Content -Path $indexPath -Value $updatedContent -Encoding UTF8 -NoNewline
-                                    Write-Host "Website index.html updated with new download link" -ForegroundColor Cyan
-                                    
-                                    # Commit and push changes to website repo
-                                    try {
-                                        Push-Location $websitePath
-                                        
-                                        git add index.html
-                                        git commit -m "Update download link to version $actualVersion"
-                                        git push
-                                        
-                                        if ($LASTEXITCODE -eq 0) {
-                                            Write-Host "SUCCESS: Website updated and pushed to GitHub!" -ForegroundColor Green
-                                        } else {
-                                            Write-Host "WARNING: Failed to push website changes to GitHub" -ForegroundColor Yellow
-                                        }
-                                        
-                                        Pop-Location
-                                    } catch {
-                                        Pop-Location
-                                        Write-Host "WARNING: Failed to update website repo: $($_.Exception.Message)" -ForegroundColor Yellow
-                                    }
-                                } else {
-                                    Write-Host "WARNING: Could not find download link pattern in index.html" -ForegroundColor Yellow
-                                }
-                            } else {
-                                Write-Host "WARNING: index.html not found at $indexPath" -ForegroundColor Yellow
-                            }
-                        } else {
-                            Write-Host "WARNING: Website folder not found at $websitePath" -ForegroundColor Yellow
-                        }
+                        Write-Host "NOTE: Website will automatically fetch the latest release via GitHub API" -ForegroundColor Cyan
                     } else {
                         Write-Host "WARNING: Setup file not found in GitHub release assets" -ForegroundColor Yellow
                     }
