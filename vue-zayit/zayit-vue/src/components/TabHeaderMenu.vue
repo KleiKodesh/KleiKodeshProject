@@ -51,7 +51,8 @@
             <span class="dropdown-label">הגדרות</span>
           </div>
 
-          <div @click.stop="handleWorkspaceManagerClick"
+          <div v-if="!isHomepage"
+               @click.stop="handleWorkspaceManagerClick"
                class="flex-row flex-center-start hover-bg c-pointer dropdown-item">
             <Icon icon="fluent:apps-28-regular" />
             <span class="dropdown-label">ניהול סביבות עבודה</span>

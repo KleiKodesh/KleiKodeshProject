@@ -1,4 +1,4 @@
-﻿using Microsoft.Office.Interop.Word;
+﻿﻿using Microsoft.Office.Interop.Word;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -9,50 +9,155 @@ namespace Zayit.Services
 {
     /// <summary>
     /// Handles all Word/HTML to PDF conversion logic using Word Interop.
-    /// All conversions run on a background thread so the UI is never blocked.
+    /// In VSTO mode, runs synchronously on calling thread using existing Word instance.
+    /// In standalone mode, creates new Word instance on background STA thread.
     /// </summary>
     public static class WordToPdfConverter
     {
-        public static Microsoft.Office.Interop.Word.Application wordApp = null;
-        public static bool IsVstoMode;
+        /// <summary>
+        /// Optional Word Application instance (set by VSTO add-in to reuse existing instance).
+        /// </summary>
+        public static Microsoft.Office.Interop.Word.Application WordApp { get; set; }
+
         /// <summary>
         /// Converts a Word document (doc, docx, rtf, etc.) to PDF asynchronously.
         /// Returns the output PDF path on success, or the original path on failure.
+        /// Always runs on a dedicated STA thread to ensure proper COM apartment state.
         /// </summary>
-        public static Task<string> ConvertWordToPdfAsync(string sourcePath, string outputPath)
+        public static Task<string> ConvertWordToPdfAsync(System.Windows.Forms.Control control, string sourcePath, string outputPath)
         {
-            return System.Threading.Tasks.Task.Run(() =>
+            var tcs = new TaskCompletionSource<string>();
+            Form progressForm = null;
+
+            // Create and show progress dialog on UI thread
+            if (control != null && control.InvokeRequired == false)
             {
-                Document doc = null;
+                progressForm = BuildProgressForm(Path.GetFileName(sourcePath));
+                progressForm.Show();
+            }
+            else if (control != null)
+            {
+                control.Invoke(new Action(() =>
+                {
+                    progressForm = BuildProgressForm(Path.GetFileName(sourcePath));
+                    progressForm.Show();
+                }));
+            }
+
+            var thread = new System.Threading.Thread(() =>
+            {
                 try
                 {
-                    if (wordApp == null)
-                        wordApp = new Microsoft.Office.Interop.Word.Application();
-                    wordApp.Visible = false;
-                    wordApp.ScreenUpdating = false;
-
-                    doc = wordApp.Documents.Open(sourcePath);
-                    doc.ExportAsFixedFormat(outputPath, WdExportFormat.wdExportFormatPDF);
-                    doc.Close(false);
-
-                    Console.WriteLine($"[WordToPdfConverter] Converted {sourcePath} -> {outputPath}");
-                    return outputPath;
+                    Console.WriteLine($"[WordToPdfConverter] Starting conversion: {sourcePath}");
+                    var result = ConvertWordToPdfSync(sourcePath, outputPath);
+                    Console.WriteLine($"[WordToPdfConverter] Conversion completed: {result}");
+                    tcs.SetResult(result);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[WordToPdfConverter] Word to PDF conversion failed: {ex}");
-                    return sourcePath;
+                    Console.WriteLine($"[WordToPdfConverter] Thread exception: {ex}");
+                    tcs.SetResult(sourcePath);
                 }
                 finally
                 {
-                    if (doc != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(doc);
-                    if (wordApp != null && IsVstoMode)
+                    // Close progress dialog on UI thread
+                    if (progressForm != null)
                     {
-                        wordApp.Quit();
-                        System.Runtime.InteropServices.Marshal.ReleaseComObject(wordApp);
+                        if (progressForm.InvokeRequired)
+                        {
+                            progressForm.Invoke(new Action(() =>
+                            {
+                                progressForm.Close();
+                                progressForm.Dispose();
+                            }));
+                        }
+                        else
+                        {
+                            progressForm.Close();
+                            progressForm.Dispose();
+                        }
                     }
                 }
             });
+            thread.SetApartmentState(System.Threading.ApartmentState.STA);
+            thread.Start();
+            return tcs.Task;
+        }
+
+        private static Form BuildInProgressForm(string fileName)
+        {
+            var form = new Form
+            {
+                Text = "ממיר קובץ…",
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                StartPosition = FormStartPosition.CenterScreen,
+                Size = new System.Drawing.Size(400, 100),
+                MinimizeBox = false,
+                MaximizeBox = false,
+                ControlBox = false,
+                RightToLeft = RightToLeft.Yes,
+                RightToLeftLayout = true,
+                TopMost = true
+            };
+
+            var label = new Label
+            {
+                Text = $"ממיר את \"{fileName}\" ל-PDF...",
+                Dock = DockStyle.Fill,
+                TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
+                Font = new System.Drawing.Font("Segoe UI", 11F, System.Drawing.FontStyle.Regular),
+                Padding = new Padding(20)
+            };
+
+            form.Controls.Add(label);
+            return form;
+        }
+
+
+        private static string ConvertWordToPdfSync(string sourcePath, string outputPath)
+        {
+            Microsoft.Office.Interop.Word.Application wordApp = null;
+            bool createdNewApp = false;
+            Document doc = null;
+            try
+            {
+                // Use existing VSTO app if available, otherwise create new
+                if (WordApp != null)
+                {
+                    wordApp = WordApp;
+                    createdNewApp = false;
+                }
+                else
+                {
+                    wordApp = new Microsoft.Office.Interop.Word.Application();
+                    wordApp.Visible = false;
+                    wordApp.ScreenUpdating = false;
+                    createdNewApp = true;
+                }
+
+                doc = wordApp.Documents.Open(sourcePath, Visible: false);
+                doc.ExportAsFixedFormat(outputPath, WdExportFormat.wdExportFormatPDF);
+                doc.Close(false);
+
+                Console.WriteLine($"[WordToPdfConverter] Converted {sourcePath} -> {outputPath}");
+                return outputPath;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[WordToPdfConverter] Word to PDF conversion failed: {ex}");
+                return sourcePath;
+            }
+            finally
+            {
+                if (doc != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(doc);
+
+                // Only quit and release if we created a new instance
+                if (createdNewApp && wordApp != null)
+                {
+                    wordApp.Quit();
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(wordApp);
+                }
+            }
         }
 
         /// <summary>
@@ -60,54 +165,127 @@ namespace Zayit.Services
         /// The HTML content is wrapped in a full RTL document shell before being
         /// pasted into Word via the clipboard.
         /// Returns the output PDF path on success, or the original path on failure.
+        /// Always runs on a dedicated STA thread to ensure proper COM apartment state.
         /// </summary>
-        public static Task<string> ConvertHtmlToPdfAsync(string sourcePath, string outputPath)
+        public static Task<string> ConvertHtmlToPdfAsync(System.Windows.Forms.Control control, string sourcePath, string outputPath)
         {
-            return System.Threading.Tasks.Task.Run(() =>
+            var tcs = new TaskCompletionSource<string>();
+            Form progressForm = null;
+
+            // Create and show progress dialog on UI thread
+            if (control != null && control.InvokeRequired == false)
             {
-                Microsoft.Office.Interop.Word.Application wordApp = null;
-                Document doc = null;
+                progressForm = BuildProgressForm(Path.GetFileName(sourcePath));
+                progressForm.Show();
+            }
+            else if (control != null)
+            {
+                control.Invoke(new Action(() =>
+                {
+                    progressForm = BuildProgressForm(Path.GetFileName(sourcePath));
+                    progressForm.Show();
+                }));
+            }
+
+            var thread = new System.Threading.Thread(() =>
+            {
                 try
                 {
-                    string rawHtml = File.ReadAllText(sourcePath);
-                    string wrappedHtml = WrapWithRtlHtmlDocument(rawHtml);
-                    string clipboardPayload = WrapWithHtmlClipboardFormat(wrappedHtml);
-
-                    // Clipboard must be set on an STA thread; Task.Run uses MTA.
-                    SetClipboardOnStaThread(clipboardPayload);
-
-                    wordApp = new Microsoft.Office.Interop.Word.Application();
-                    wordApp.Visible = false;
-                    wordApp.ScreenUpdating = false;
-
-                    doc = wordApp.Documents.Add();
-
-                    var selection = wordApp.Selection;
-                    selection.WholeStory();
-                    selection.Delete();
-                    selection.Paste();
-
-                    doc.ExportAsFixedFormat(outputPath, WdExportFormat.wdExportFormatPDF);
-                    doc.Close(false);
-
-                    Console.WriteLine($"[WordToPdfConverter] Converted HTML {sourcePath} -> {outputPath}");
-                    return outputPath;
+                    Console.WriteLine($"[WordToPdfConverter] Starting HTML conversion: {sourcePath}");
+                    var result = ConvertHtmlToPdfSync(sourcePath, outputPath);
+                    Console.WriteLine($"[WordToPdfConverter] HTML conversion completed: {result}");
+                    tcs.SetResult(result);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[WordToPdfConverter] HTML to PDF conversion failed: {ex}");
-                    return sourcePath;
+                    Console.WriteLine($"[WordToPdfConverter] Thread exception: {ex}");
+                    tcs.SetResult(sourcePath);
                 }
                 finally
                 {
-                    if (doc != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(doc);
-                    if (wordApp != null)
+                    // Close progress dialog on UI thread
+                    if (progressForm != null)
                     {
-                        wordApp.Quit();
-                        System.Runtime.InteropServices.Marshal.ReleaseComObject(wordApp);
+                        if (progressForm.InvokeRequired)
+                        {
+                            progressForm.Invoke(new Action(() =>
+                            {
+                                progressForm.Close();
+                                progressForm.Dispose();
+                            }));
+                        }
+                        else
+                        {
+                            progressForm.Close();
+                            progressForm.Dispose();
+                        }
                     }
                 }
             });
+            thread.SetApartmentState(System.Threading.ApartmentState.STA);
+            thread.Start();
+            return tcs.Task;
+        }
+
+        private static string ConvertHtmlToPdfSync(string sourcePath, string outputPath)
+        {
+            Microsoft.Office.Interop.Word.Application wordApp = null;
+            bool createdNewApp = false;
+            Document doc = null;
+            try
+            {
+                string rawHtml = File.ReadAllText(sourcePath);
+                string wrappedHtml = WrapWithRtlHtmlDocument(rawHtml);
+                string clipboardPayload = WrapWithHtmlClipboardFormat(wrappedHtml);
+
+                // Set clipboard - requires STA thread
+                var dataObject = new DataObject();
+                dataObject.SetData(DataFormats.Html, clipboardPayload);
+                Clipboard.SetDataObject(dataObject, true);
+
+                // Use existing VSTO app if available, otherwise create new
+                if (WordApp != null)
+                {
+                    wordApp = WordApp;
+                    createdNewApp = false;
+                }
+                else
+                {
+                    wordApp = new Microsoft.Office.Interop.Word.Application();
+                    wordApp.Visible = false;
+                    wordApp.ScreenUpdating = false;
+                    createdNewApp = true;
+                }
+
+                doc = wordApp.Documents.Add(Visible: false);
+
+                var selection = wordApp.Selection;
+                selection.WholeStory();
+                selection.Delete();
+                selection.Paste();
+
+                doc.ExportAsFixedFormat(outputPath, WdExportFormat.wdExportFormatPDF);
+                doc.Close(false);
+
+                Console.WriteLine($"[WordToPdfConverter] Converted HTML {sourcePath} -> {outputPath}");
+                return outputPath;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[WordToPdfConverter] HTML to PDF conversion failed: {ex}");
+                return sourcePath;
+            }
+            finally
+            {
+                if (doc != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(doc);
+
+                // Only quit and release if we created a new instance
+                if (createdNewApp && wordApp != null)
+                {
+                    wordApp.Quit();
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(wordApp);
+                }
+            }
         }
 
         /// <summary>
@@ -215,36 +393,6 @@ namespace Zayit.Services
             string body = $"<html><body><!--StartFragment-->{html}<!--EndFragment--></body></html>";
             string endPos = (97 + body.Length).ToString("D8");
             return string.Format(headerTemplate, endPos) + body;
-        }
-
-        /// <summary>
-        /// Sets clipboard HTML data on a dedicated STA thread.
-        /// The Windows clipboard API requires an STA thread; Task.Run uses MTA threads.
-        /// </summary>
-        private static void SetClipboardOnStaThread(string htmlClipboardData)
-        {
-            Exception staException = null;
-
-            var thread = new System.Threading.Thread(() =>
-            {
-                try
-                {
-                    var dataObject = new DataObject();
-                    dataObject.SetData(DataFormats.Html, htmlClipboardData);
-                    Clipboard.SetDataObject(dataObject, true);
-                }
-                catch (Exception ex)
-                {
-                    staException = ex;
-                }
-            });
-
-            thread.SetApartmentState(System.Threading.ApartmentState.STA);
-            thread.Start();
-            thread.Join();
-
-            if (staException != null)
-                throw new InvalidOperationException("Clipboard set failed on STA thread.", staException);
         }
     }
 }

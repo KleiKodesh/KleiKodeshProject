@@ -5,20 +5,20 @@
       <!-- Settings menu -->
       <TabHeaderMenu @close="handleDropdownClose" />
 
-      <button v-if="tabStore.activeTab?.currentPage === 'bookview'"
-              @click.stop="handleButtonClick(goToToc)"
-              class="flex-center c-pointer touch-interactive"
-              title="תוכן עניינים">
-        <Icon icon="fluent:text-bullet-list-tree-24-regular"
-              class="rtl-flip" />
-      </button>
-
       <!-- Toolbar toggle button -->
       <button v-if="tabStore.activeTab?.currentPage === 'bookview'"
               @click.stop="handleButtonClick(toggleToolbar)"
               class="flex-center c-pointer touch-interactive"
               :title="isToolbarVisible ? 'הסתר סרגל כלים' : 'הצג סרגל כלים'">
         <Icon :icon="isToolbarVisible ? 'fluent:options-24-filled' : 'fluent:options-24-regular'" />
+      </button>
+
+      <button v-if="tabStore.activeTab?.currentPage === 'bookview'"
+              @click.stop="handleButtonClick(goToToc)"
+              class="flex-center c-pointer touch-interactive"
+              title="תוכן עניינים">
+        <Icon icon="fluent:text-bullet-list-tree-24-regular"
+              class="rtl-flip" />
       </button>
 
       <button v-if="tabStore.activeTab?.currentPage === 'bookview' && hasConnections && !isTocVisible && !isToolbarVisible"

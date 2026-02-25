@@ -12,6 +12,10 @@
                        @next="handleSearchNext"
                        @previous="handleSearchPrevious" />
 
+        <!-- Context Menu -->
+        <ContextMenu ref="contextMenuRef"
+                     :items="contextMenuItems" />
+
         <!-- Virtualized scroller -->
         <DynamicScroller ref="scrollerRef"
                          class="scroller height-fill line-viewer"
@@ -23,7 +27,8 @@
                          key-field="index"
                          tabindex="0"
                          @keydown="handleKeyDown"
-                         @click="() => scrollerRef?.$el?.focus()">
+                         @click="() => scrollerRef?.$el?.focus()"
+                         @contextmenu="handleContextMenu">
 
             <template #default="{ item, index, active }">
                 <DynamicScrollerItem :item="item"
@@ -57,6 +62,7 @@ import { useFocus, useEventListener } from '@vueuse/core'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import BookLine from './BookLine.vue'
 import GenericSearch from './common/GenericSearch.vue'
+import ContextMenu, { type ContextMenuItem } from './common/ContextMenu.vue'
 import { BookLineViewerService } from '../services/bookLineViewerService'
 
 import { useVirtualizedSearch } from '../composables/useVirtualizedSearch'
@@ -141,6 +147,104 @@ const isInitialLoading = ref(false)
 
 const viewerState = new BookLineViewerService()
 const scrollerRef = ref<InstanceType<typeof DynamicScroller> | null>(null)
+const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
+
+// ============================================
+// CONTEXT MENU
+// ============================================
+const contextMenuItems = computed<ContextMenuItem[]>(() => [
+    {
+        label: 'העתק',
+        action: handleCopyFromContextMenu
+    },
+    {
+        label: 'העתק כבלוק',
+        action: handleCopyAsBlockFromContextMenu
+    }
+])
+
+function handleContextMenu(event: MouseEvent) {
+    contextMenuRef.value?.show(event)
+}
+
+function handleCopyFromContextMenu() {
+    document.execCommand('copy')
+}
+
+function handleCopyAsBlockFromContextMenu() {
+    const scrollerEl = scrollerRef.value?.$el
+    if (!scrollerEl) return
+
+    const selection = window.getSelection()
+    if (!selection) return
+
+    // If no selection, select all first
+    if (!selection.toString().trim()) {
+        const range = document.createRange()
+        range.selectNodeContents(scrollerEl)
+        selection.removeAllRanges()
+        selection.addRange(range)
+    }
+
+    // Get the selected content
+    const range = selection.getRangeAt(0)
+    const container = document.createElement('div')
+    container.appendChild(range.cloneContents())
+
+    // Recursively remove ALL div elements, keeping their innerHTML
+    function removeDivs(element: Element) {
+        const divs = Array.from(element.querySelectorAll('div'))
+        divs.forEach(div => {
+            // First process any nested divs
+            removeDivs(div)
+
+            // Create a fragment with the div's content
+            const fragment = document.createDocumentFragment()
+            while (div.firstChild) {
+                fragment.appendChild(div.firstChild)
+            }
+            // Add a space after the content
+            fragment.appendChild(document.createTextNode(' '))
+
+            // Replace the div with the fragment
+            div.parentNode?.replaceChild(fragment, div)
+        })
+    }
+
+    removeDivs(container)
+
+    // Get the modified HTML
+    const htmlContent = container.innerHTML
+
+    // Get plain text
+    const textContent = container.textContent || container.innerText || ''
+
+    // Create HTML document
+    const fullHtml = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+body { direction: rtl; font-weight: normal; }
+</style>
+</head>
+<body>${htmlContent}</body>
+</html>`
+
+    // Copy to clipboard
+    const clipboardItem = new ClipboardItem({
+        'text/html': new Blob([fullHtml], { type: 'text/html' }),
+        'text/plain': new Blob([textContent], { type: 'text/plain' })
+    })
+
+    navigator.clipboard.write([clipboardItem]).catch(err => {
+        console.error('Failed to copy:', err)
+        navigator.clipboard.writeText(textContent)
+    })
+
+    // Clear selection
+    selection.removeAllRanges()
+}
 
 // Track if this component's scroller has focus
 const scrollerElRef = computed(() => scrollerRef.value?.$el as HTMLElement | undefined)

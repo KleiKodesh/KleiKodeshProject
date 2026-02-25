@@ -59,7 +59,7 @@
     
     <!-- Copy VSTO files to temp directory -->
     <ItemGroup>
-      <VstoFiles Include="$(VstoOutputPath)\**\*.*" />
+      <VstoFiles Include="$(VstoOutputPath)\**\*.*" Exclude="$(VstoOutputPath)\BloomFilters\**\*.*" />
     </ItemGroup>
     
     <Copy SourceFiles="@(VstoFiles)" DestinationFolder="$(TempPackageDir)\%(RecursiveDir)" />

@@ -32,14 +32,14 @@ namespace Zayit.Services
         /// </summary>
         public void InitializeContextMenu()
         {
-            if (_webView.CoreWebView2 == null)
-            {
-                Console.WriteLine("[ContextMenuService] CoreWebView2 not initialized yet");
-                return;
-            }
+            //if (_webView.CoreWebView2 == null)
+            //{
+            //    Console.WriteLine("[ContextMenuService] CoreWebView2 not initialized yet");
+            //    return;
+            //}
 
-            _webView.CoreWebView2.ContextMenuRequested += CoreWebView2_ContextMenuRequested;
-            Console.WriteLine("[ContextMenuService] Context menu initialized");
+            //_webView.CoreWebView2.ContextMenuRequested += CoreWebView2_ContextMenuRequested;
+            //Console.WriteLine("[ContextMenuService] Context menu initialized");
         }
 
         private void CoreWebView2_ContextMenuRequested(

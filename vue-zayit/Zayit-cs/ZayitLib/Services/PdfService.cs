@@ -1,7 +1,7 @@
 using Microsoft.Web.WebView2.WinForms;
 using System;
-using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Zayit.Viewer;
@@ -11,35 +11,13 @@ namespace Zayit.Services
     /// <summary>
     /// Global PDF Service - Handles general PDF operations (file picker, virtual URLs, temp files).
     /// Non-PDF files are converted via a background task; the UI shows a progress dialog throughout.
-    /// Converted PDFs are cached in AppDomain (LRU, max 10 entries) to avoid redundant conversions.
+    /// Converted PDFs are cached on disk (LRU, max 10 entries) to avoid redundant conversions.
     /// </summary>
     public class PdfService
     {
         private readonly WebView2 _webView;
         private const string PDF_HOST = "zayitHost";
-
-        // ── LRU Cache ────────────────────────────────────────────────────────────
-        private const string CacheKey = "PdfService_ConversionCache";
         private const int CacheMax = 10;
-
-        /// <summary>
-        /// Per-AppDomain LRU cache: source file path → converted PDF path.
-        /// Stored in AppDomain.CurrentDomain.GetData / SetData so it survives
-        /// multiple PdfService instances within the same process.
-        /// </summary>
-        private static LruCache<string, string> ConversionCache
-        {
-            get
-            {
-                var cache = AppDomain.CurrentDomain.GetData(CacheKey) as LruCache<string, string>;
-                if (cache == null)
-                {
-                    cache = new LruCache<string, string>(CacheMax);
-                    AppDomain.CurrentDomain.SetData(CacheKey, cache);
-                }
-                return cache;
-            }
-        }
 
         public PdfService(WebView2 webView)
         {
@@ -129,18 +107,18 @@ namespace Zayit.Services
         /// </summary>
         private async Task<string> ConvertWithProgressAsync(string filePath)
         {
-            var cache = ConversionCache;
+            var cacheDir = GetConversionCacheDir();
 
-            // ── Cache hit ────────────────────────────────────────────────────────
-            if (cache.TryGet(filePath, out var cachedPdf) && File.Exists(cachedPdf))
+            // ── Check disk cache ─────────────────────────────────────────────────
+            var cachedPdf = FindInCache(cacheDir, filePath);
+            if (cachedPdf != null && File.Exists(cachedPdf))
             {
                 Console.WriteLine($"[PdfService] Cache hit for: {filePath}");
+                File.SetLastAccessTime(cachedPdf, DateTime.Now); // Update LRU
                 return cachedPdf;
             }
 
-            // ── Show progress dialog ─────────────────────────────────────────────
-            var progressForm = BuildProgressForm(Path.GetFileName(filePath));
-            progressForm.Show(_webView.FindForm());
+            Console.WriteLine($"[PdfService] Starting conversion: {filePath}");
 
             string pdfPath = null;
             Exception conversionError = null;
@@ -148,22 +126,24 @@ namespace Zayit.Services
             bool isHtmlTxt = filePath.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)
                              && WordToPdfConverter.TxtFileContainsHtml(filePath);
 
+            // Create output path with hash + original filename
+            var outputFileName = GetCacheFileName(filePath);
+            var outputPath = Path.Combine(cacheDir, outputFileName);
+
+            Console.WriteLine($"[PdfService] Output path: {outputPath}");
+
             try
             {
                 pdfPath = isHtmlTxt
-                    ? await WordToPdfConverter.ConvertHtmlToPdfAsync(filePath,
-                          Path.ChangeExtension(filePath, ".pdf"))
-                    : await WordToPdfConverter.ConvertWordToPdfAsync(filePath,
-                          Path.ChangeExtension(filePath, ".pdf"));
+                    ? await WordToPdfConverter.ConvertHtmlToPdfAsync(_webView, filePath, outputPath)
+                    : await WordToPdfConverter.ConvertWordToPdfAsync(_webView, filePath, outputPath);
+                
+                Console.WriteLine($"[PdfService] Conversion returned: {pdfPath}");
+                Console.WriteLine($"[PdfService] File exists: {File.Exists(pdfPath)}");
             }
             catch (Exception ex)
             {
                 conversionError = ex;
-            }
-            finally
-            {
-                progressForm.Close();
-                progressForm.Dispose();
             }
 
             if (conversionError != null)
@@ -181,8 +161,8 @@ namespace Zayit.Services
 
             if (pdfPath != null)
             {
-                // ── Cache the result ─────────────────────────────────────────────
-                cache.Put(filePath, pdfPath);
+                // ── Enforce LRU cache limit ──────────────────────────────────────
+                EnforceCacheLimit(cacheDir);
                 Console.WriteLine($"[PdfService] Cached conversion: {filePath} -> {pdfPath}");
             }
 
@@ -354,66 +334,73 @@ namespace Zayit.Services
             return Path.GetFullPath(standardPath);
         }
 
+        private string GetConversionCacheDir()
+        {
+            var htmlPath = GetHtmlPath();
+            var cacheDir = Path.Combine(htmlPath, "pdfconversioncache");
+            Directory.CreateDirectory(cacheDir);
+            return cacheDir;
+        }
+
+        private string GetCacheFileName(string sourceFilePath)
+        {
+            // Create hash from full path
+            using (var sha256 = System.Security.Cryptography.SHA256.Create())
+            {
+                var hashBytes = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(sourceFilePath.ToLowerInvariant()));
+                var hash = BitConverter.ToString(hashBytes).Replace("-", "").Substring(0, 16);
+                var originalName = Path.GetFileNameWithoutExtension(sourceFilePath);
+                return $"{hash}_{originalName}.pdf";
+            }
+        }
+
+        private string FindInCache(string cacheDir, string sourceFilePath)
+        {
+            try
+            {
+                var expectedFileName = GetCacheFileName(sourceFilePath);
+                var cachedPath = Path.Combine(cacheDir, expectedFileName);
+
+                if (File.Exists(cachedPath))
+                    return cachedPath;
+
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[PdfService] Error finding in cache: {ex}");
+                return null;
+            }
+        }
+
+        private void EnforceCacheLimit(string cacheDir)
+        {
+            try
+            {
+                var files = Directory.GetFiles(cacheDir, "*.pdf");
+
+                if (files.Length <= CacheMax)
+                    return;
+
+                // Sort by last access time (oldest first)
+                var fileInfos = files.Select(f => new FileInfo(f))
+                    .OrderBy(fi => fi.LastAccessTime)
+                    .ToArray();
+
+                // Delete oldest files until we're at the limit
+                int toDelete = fileInfos.Length - CacheMax;
+                for (int i = 0; i < toDelete; i++)
+                {
+                    fileInfos[i].Delete();
+                    Console.WriteLine($"[PdfService] LRU evicted: {fileInfos[i].Name}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[PdfService] Error enforcing cache limit: {ex}");
+            }
+        }
+
         #endregion
-    }
-
-    // ────────────────────────────────────────────────────────────────────────────
-    // Simple LRU Cache (not thread-safe — all calls come from the UI thread)
-    // ────────────────────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Least-Recently-Used cache with a fixed capacity.
-    /// When full, the least recently accessed entry is evicted.
-    /// </summary>
-    internal sealed class LruCache<TKey, TValue>
-    {
-        private readonly int _capacity;
-        private readonly Dictionary<TKey, LinkedListNode<(TKey Key, TValue Value)>> _map;
-        private readonly LinkedList<(TKey Key, TValue Value)> _order;
-
-        public LruCache(int capacity)
-        {
-            if (capacity <= 0) throw new ArgumentOutOfRangeException(nameof(capacity));
-            _capacity = capacity;
-            _map = new Dictionary<TKey, LinkedListNode<(TKey, TValue)>>(capacity);
-            _order = new LinkedList<(TKey, TValue)>();
-        }
-
-        /// <summary>Returns true and sets <paramref name="value"/> if the key exists; promotes it to MRU.</summary>
-        public bool TryGet(TKey key, out TValue value)
-        {
-            if (_map.TryGetValue(key, out var node))
-            {
-                // Move to front (most recently used)
-                _order.Remove(node);
-                _order.AddFirst(node);
-                value = node.Value.Value;
-                return true;
-            }
-            value = default;
-            return false;
-        }
-
-        /// <summary>Inserts or updates a key/value pair; evicts LRU entry when at capacity.</summary>
-        public void Put(TKey key, TValue value)
-        {
-            if (_map.TryGetValue(key, out var existing))
-            {
-                _order.Remove(existing);
-                _map.Remove(key);
-            }
-            else if (_map.Count >= _capacity)
-            {
-                // Evict least recently used (tail)
-                var lru = _order.Last;
-                _order.RemoveLast();
-                _map.Remove(lru.Value.Key);
-            }
-
-            var node = _order.AddFirst((key, value));
-            _map[key] = node;
-        }
-
-        public int Count => _map.Count;
     }
 }

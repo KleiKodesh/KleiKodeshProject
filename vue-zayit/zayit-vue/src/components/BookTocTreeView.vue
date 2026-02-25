@@ -170,11 +170,15 @@ watch(() => props.currentTocEntryId, (tocEntryId) => {
 function autoSelectTocEntry(tocEntryId: number) {
     if (!treeRef.value) return;
 
-    // Find the TOC entry by ID and collect the path to it
+    // Find the TOC entry by ID and collect the path to it (skip alt TOC entries)
     const findEntryPath = (entries: TocEntry[], id: number, path: number[] = []): number[] | null => {
         for (let i = 0; i < entries.length; i++) {
             const entry = entries[i];
             if (!entry) continue;
+
+            // Skip alt TOC entries entirely
+            if (entry.isAltToc) continue;
+
             if (entry.id === id) return [...path, i];
             if (entry.children) {
                 const found = findEntryPath(entry.children, id, [...path, i]);
@@ -221,9 +225,12 @@ function autoSelectTocEntry(tocEntryId: number) {
     });
 }
 
-// Helper to find entry by ID
+// Helper to find entry by ID (skip alt TOC entries)
 function findEntryById(entries: TocEntry[], id: number): TocEntry | null {
     for (const entry of entries) {
+        // Skip alt TOC entries
+        if (entry.isAltToc) continue;
+
         if (entry.id === id) return entry;
         if (entry.children) {
             const found = findEntryById(entry.children, id);

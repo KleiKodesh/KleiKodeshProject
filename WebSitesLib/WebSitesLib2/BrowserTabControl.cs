@@ -56,7 +56,7 @@ namespace WebSitesLib2
         public IEnumerable<WebAddressModel> VisibleAddressModels =>
             _webAddressModels?.Where(m => m.IsVisible == true) ?? Enumerable.Empty<WebAddressModel>();
 
-        public static ObservableCollection<BrowserTab> TabsCollection { get; }
+        public ObservableCollection<BrowserTab> TabsCollection { get; }
             = new ObservableCollection<BrowserTab>();
 
         BrowserTab CurrentTab => (BrowserTab)SelectedItem;
@@ -449,7 +449,7 @@ namespace WebSitesLib2
             CloseTabCommand = new RelayCommand(() =>
             {
                 Console.WriteLine($"[BrowserTab '{Title}'] CloseTabCommand invoked");
-                BrowserTabControl.TabsCollection.Remove(this);
+                owner.TabsCollection.Remove(this);
             });
 
             // Expose MoveToFrontCommand so the dropdown item can call it via DataContext binding

@@ -70,11 +70,6 @@ export class TocService {
         // Wrap alt TOC in a synthetic root node if it exists
         const tree = [...regularTree]
 
-        // Set first regular root item to be expanded by default
-        if (regularTree.length > 0 && regularTree[0]) {
-            regularTree[0].isExpanded = true
-        }
-
         if (altTree.length > 0) {
             const altRootNode: TocEntry = {
                 id: -1,
@@ -92,6 +87,13 @@ export class TocService {
                 isExpanded: false
             }
             tree.unshift(altRootNode) // Add to beginning instead of end
+        }
+
+        // Set first regular root item to be expanded by default
+        // Find the first non-alt TOC entry in the tree
+        const firstRegularEntry = tree.find(entry => !entry.isAltToc)
+        if (firstRegularEntry) {
+            firstRegularEntry.isExpanded = true
         }
 
         return { tree, allTocs: allEntries, altTocByLineIndex }

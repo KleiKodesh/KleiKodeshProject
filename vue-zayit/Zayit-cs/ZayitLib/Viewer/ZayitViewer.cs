@@ -92,7 +92,17 @@ namespace Zayit.Viewer
             }
             catch (Exception ex)
             {
+                string errorMsg = $"WebView2 initialization failed!\n\n" +
+                                $"Error: {ex.Message}\n\n" +
+                                $"This usually means:\n" +
+                                $"1. WebView2 Runtime is not installed\n" +
+                                $"2. Antivirus is blocking WebView2\n" +
+                                $"3. File permissions issue\n\n" +
+                                $"Please install WebView2 Runtime from:\n" +
+                                $"https://go.microsoft.com/fwlink/p/?LinkId=2124703";
+                Console.WriteLine($"[ZayitViewer#{_instanceId}] {errorMsg}");
                 Debug.WriteLine("WebView2 initialization failed: " + ex);
+                MessageBox.Show(errorMsg, "WebView2 Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -160,8 +170,15 @@ namespace Zayit.Viewer
             }
 
             // 3. Fallback: Return standard path even if it doesn't exist (will fail later with clear error)
-            MessageBox.Show($"[ZayitViewer] WARNING: Html folder not found! Tried: {standardPath} and {clickOncePath}");
-            Console.WriteLine($"[ZayitViewer] Falling back to standard path: {standardPath}");
+            string errorMsg = $"[ZayitViewer] CRITICAL ERROR: Html folder not found!\n\n" +
+                            $"Tried paths:\n" +
+                            $"1. {standardPath}\n" +
+                            $"2. {clickOncePath}\n\n" +
+                            $"Base Directory: {baseDir}\n" +
+                            $"Assembly Location: {Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)}\n\n" +
+                            $"Please contact support with this information.";
+            MessageBox.Show(errorMsg, "Zayit Loading Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            Console.WriteLine(errorMsg);
             return standardPath;
         }
 
@@ -221,7 +238,17 @@ namespace Zayit.Viewer
                     Console.WriteLine($"[ZayitViewer#{_instanceId}] Navigation completed. Success: {navArgs.IsSuccess}");
                     if (!navArgs.IsSuccess)
                     {
-                        Console.WriteLine($"[ZayitViewer#{_instanceId}] Navigation failed with WebErrorStatus: {navArgs.WebErrorStatus}");
+                        string errorMsg = $"[ZayitViewer#{_instanceId}] Navigation failed!\n\n" +
+                                        $"WebErrorStatus: {navArgs.WebErrorStatus}\n" +
+                                        $"URL: https://zayitHost/index.html\n" +
+                                        $"Html Path: {HtmlPath}\n\n" +
+                                        $"Common causes:\n" +
+                                        $"1. index.html file is missing or corrupted\n" +
+                                        $"2. Virtual host mapping failed\n" +
+                                        $"3. File permissions issue\n" +
+                                        $"4. Antivirus blocking file access";
+                        Console.WriteLine(errorMsg);
+                        MessageBox.Show(errorMsg, "Zayit Navigation Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     }
                 };
 
