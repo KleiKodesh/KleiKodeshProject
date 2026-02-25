@@ -93,7 +93,8 @@
           <!-- Popout toggle - only available in C# WebView -->
           <div v-if="isWebViewAvailable"
                @click.stop="handlePopoutClick"
-               class="flex-row flex-center-start hover-bg c-pointer dropdown-item">
+               class="flex-row flex-center-start hover-bg c-pointer dropdown-item"
+               title="פתח בחלון עצמאי או החזר לחלונית צד של Word">
             <Icon icon="fluent:open-28-regular" />
             <span class="dropdown-label">הצג בחלונית</span>
           </div>
