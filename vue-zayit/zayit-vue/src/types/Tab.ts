@@ -24,6 +24,11 @@ export interface BookState {
     originalHtml?: string; // Store original HTML for diacritics restoration
     isSearchOpen?: boolean; // Whether search overlay is open
     showAltToc?: boolean; // Whether to display alt TOC entries (default: true)
+    showToolbar?: boolean; // Whether to show the book view toolbar (default: true)
+    toolbarPosition?: 'top' | 'bottom' | 'left' | 'right' | 'float-vertical' | 'float-horizontal'; // Toolbar position (default: 'top')
+    toolbarFloatX?: number; // X position when floating
+    toolbarFloatY?: number; // Y position when floating
+    zoom?: number; // Zoom level for this tab (default: 100, range: 50-200)
 }
 
 export interface PdfState {

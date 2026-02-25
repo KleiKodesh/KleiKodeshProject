@@ -28,6 +28,30 @@ useEventListener('keydown', (event: KeyboardEvent) => {
     if (hasCtrlOrMeta && event.code === 'KeyX') {
         tabStore.closeAllTabs()
     }
+
+    // Ctrl+Plus/Equal: Zoom in (only on bookview page)
+    if (hasCtrlOrMeta && (event.code === 'Equal' || event.code === 'NumpadAdd')) {
+        if (tabStore.activeTab?.currentPage === 'bookview') {
+            event.preventDefault()
+            tabStore.zoomIn()
+        }
+    }
+
+    // Ctrl+Minus: Zoom out (only on bookview page)
+    if (hasCtrlOrMeta && (event.code === 'Minus' || event.code === 'NumpadSubtract')) {
+        if (tabStore.activeTab?.currentPage === 'bookview') {
+            event.preventDefault()
+            tabStore.zoomOut()
+        }
+    }
+
+    // Ctrl+0: Reset zoom (only on bookview page)
+    if (hasCtrlOrMeta && (event.code === 'Digit0' || event.code === 'Numpad0')) {
+        if (tabStore.activeTab?.currentPage === 'bookview') {
+            event.preventDefault()
+            tabStore.resetZoom()
+        }
+    }
 })
 
 onMounted(() => {

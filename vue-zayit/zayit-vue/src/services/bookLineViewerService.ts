@@ -87,8 +87,6 @@ export class BookLineViewerService {
         this.priorityQueue = this.priorityQueue.filter(batch => !neededBatches.has(batch))
         this.priorityQueue.unshift(...batchArray)
 
-        console.log(`[BookLineViewerService] prioritizeLines(${centerLine}) → batches [${batchArray.join(', ')}] moved to front, queue length: ${this.priorityQueue.length}`)
-
         // Load the most critical batch immediately
         if (batchArray.length > 0) {
             await this.loadBatch(batchArray[0]!)

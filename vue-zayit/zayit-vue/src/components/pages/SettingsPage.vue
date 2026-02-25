@@ -18,7 +18,7 @@
             </div>
 
             <!-- Theme Toggle - GLOBAL: Affects entire app appearance -->
-            <!-- <div class="setting-group">
+            <div class="setting-group">
                 <label class="flex-row bold setting-label">ערכת נושא</label>
                 <div class="flex-row theme-toggle">
                     <button :class="{ active: !currentTheme }"
@@ -32,7 +32,7 @@
                         מצב כהה
                     </button>
                 </div>
-            </div> -->
+            </div>
 
             <!-- Divine Name Censoring - GLOBAL: Affects all text content -->
             <div class="setting-group">
@@ -150,7 +150,7 @@
                     גודל גופן
                     <span class="text-secondary setting-value">{{
                         fontSize
-                    }}%</span>
+                        }}%</span>
                 </label>
                 <input type="range"
                        v-model.number="fontSize"
@@ -165,7 +165,7 @@
                 <label class="flex-between bold setting-label">
                     ריווח שורות
                     <span class="text-secondary setting-value">{{ linePadding
-                    }}</span>
+                        }}</span>
                 </label>
                 <input type="range"
                        v-model.number="linePadding"

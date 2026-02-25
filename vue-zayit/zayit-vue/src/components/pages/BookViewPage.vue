@@ -1,36 +1,65 @@
 <template>
   <div class="flex-column height-fill book-view-wrapper"
        @click="handleBackgroundClick">
-    <!-- Virtualized viewer is now always enabled -->
-    <keep-alive>
-      <BookTocTreeView v-if="myTab?.bookState?.isTocOpen && myTab?.bookState?.bookId"
-                       ref="tocTreeViewRef"
-                       :toc-entries="filteredTocEntries"
-                       :is-loading="isTocLoading"
-                       :is-compact-mode="!myTab.bookState.isFirstTocOpen"
-                       :current-toc-entry-id="currentTocEntryId"
-                       class="toc-overlay"
-                       @select-line="handleTocSelection" />
-    </keep-alive>
+    <!-- Top Toolbar -->
+    <BookViewToolbar v-show="myTab?.bookState?.bookId && toolbarPosition === 'top'"
+                     ref="toolbarRef"
+                     position="top" />
 
-    <SplitPane v-if="myTab?.bookState?.bookId"
-               :show-bottom="myTab.bookState.showBottomPane || false">
-      <template #top>
-        <BookLineViewer ref="lineViewerRef"
-                        :tab-id="myTabId"
-                        :alt-toc-by-line-index="altTocByLineIndex"
-                        :flat-toc-entries="flatTocEntries"
-                        class="flex-110"
-                        @center-line-changed="currentCenterLineIndex = $event"
-                        @current-toc-entry-changed="currentTocEntryId = $event" />
-      </template>
-      <template #bottom>
-        <BookCommentaryView :book-id="myTab.bookState.bookId"
-                            :selected-line-index="myTab.bookState.selectedLineIndex"
-                            :book="currentBook"
-                            @navigate-line="handleNavigateLine" />
-      </template>
-    </SplitPane>
+    <!-- Floating Toolbars -->
+    <BookViewToolbar v-show="myTab?.bookState?.bookId && toolbarPosition === 'float-horizontal'"
+                     position="float-horizontal" />
+    <BookViewToolbar v-show="myTab?.bookState?.bookId && toolbarPosition === 'float-vertical'"
+                     position="float-vertical" />
+
+    <!-- Content area with TOC overlay -->
+    <div class="flex-110 content-area-wrapper">
+      <!-- Right Toolbar (ימין - appears on right in RTL) -->
+      <BookViewToolbar v-show="myTab?.bookState?.bookId && toolbarPosition === 'right'"
+                       position="right" />
+
+      <div class="flex-110 content-area">
+        <!-- Virtualized viewer is now always enabled -->
+        <keep-alive>
+          <BookTocTreeView v-if="myTab?.bookState?.isTocOpen && myTab?.bookState?.bookId"
+                           ref="tocTreeViewRef"
+                           :toc-entries="filteredTocEntries"
+                           :is-loading="isTocLoading"
+                           :is-compact-mode="!myTab.bookState.isFirstTocOpen"
+                           :current-toc-entry-id="currentTocEntryId"
+                           class="toc-overlay"
+                           @select-line="handleTocSelection" />
+        </keep-alive>
+
+        <SplitPane v-if="myTab?.bookState?.bookId"
+                   :show-bottom="myTab.bookState.showBottomPane || false"
+                   class="height-fill">
+          <template #top>
+            <BookLineViewer ref="lineViewerRef"
+                            :tab-id="myTabId"
+                            :alt-toc-by-line-index="altTocByLineIndex"
+                            :flat-toc-entries="flatTocEntries"
+                            class="flex-110"
+                            @center-line-changed="currentCenterLineIndex = $event"
+                            @current-toc-entry-changed="currentTocEntryId = $event" />
+          </template>
+          <template #bottom>
+            <BookCommentaryView :book-id="myTab.bookState.bookId"
+                                :selected-line-index="myTab.bookState.selectedLineIndex"
+                                :book="currentBook"
+                                @navigate-line="handleNavigateLine" />
+          </template>
+        </SplitPane>
+      </div>
+
+      <!-- Left Toolbar (שמאל - appears on left in RTL) -->
+      <BookViewToolbar v-show="myTab?.bookState?.bookId && toolbarPosition === 'left'"
+                       position="left" />
+    </div>
+
+    <!-- Bottom Toolbar -->
+    <BookViewToolbar v-show="myTab?.bookState?.bookId && toolbarPosition === 'bottom'"
+                     position="bottom" />
   </div>
 </template>
 
@@ -43,6 +72,7 @@ import BookTocTreeView from '../BookTocTreeView.vue'
 import BookLineViewer from '../BookLineViewer.vue'
 import SplitPane from '../common/SplitPane.vue'
 import BookCommentaryView from '../BookCommentaryView.vue'
+import BookViewToolbar from '../BookViewToolbar.vue'
 import { dbService } from '../../services/dbService'
 import { buildTocFromFlat } from '../../services/bookTocService'
 import type { AltTocLineEntry } from '../../services/bookTocService'
@@ -54,8 +84,13 @@ const categoryTreeStore = useCategoryTreeStore()
 const myTabId = ref<number | undefined>(tabStore.activeTab?.id)
 const myTab = computed(() => tabStore.tabs.find(t => t.id === myTabId.value))
 
+const toolbarPosition = computed(() => myTab.value?.bookState?.toolbarPosition || 'top')
+const toolbarPositionClass = computed(() => `toolbar-position-${toolbarPosition.value}`)
+const contentAreaClass = computed(() => `content-with-toolbar-${toolbarPosition.value}`)
+
 const lineViewerRef = ref<InstanceType<typeof BookLineViewer> | null>(null)
 const tocTreeViewRef = ref<InstanceType<typeof BookTocTreeView> | null>(null)
+const toolbarRef = ref<InstanceType<typeof BookViewToolbar> | null>(null)
 const altTocByLineIndex = ref<Map<number, AltTocLineEntry[]>>(new Map())
 const tocEntries = ref<TocEntry[]>([])
 const flatTocEntries = ref<TocEntry[]>([])
@@ -77,7 +112,7 @@ const filteredTocEntries = computed(() => {
   if (bookTitle && entries.length === 1) {
     const rootEntry = entries[0]
     // Check if single root entry matches book title (case-insensitive, trimmed)
-    if ((rootEntry.level === 0 || !rootEntry.parentId) &&
+    if (rootEntry && (rootEntry.level === 0 || !rootEntry.parentId) &&
       rootEntry.text.trim().toLowerCase() === bookTitle.trim().toLowerCase() &&
       rootEntry.children && rootEntry.children.length > 0) {
       // Return the children as the new root level
@@ -199,11 +234,21 @@ function handleBackgroundClick(event: MouseEvent) {
   position: relative;
 }
 
+.content-area-wrapper {
+  display: flex;
+  flex-direction: row;
+}
+
+.content-area {
+  position: relative;
+}
+
 .toc-overlay {
   position: absolute;
   height: 100%;
   width: 100%;
   z-index: 100;
+  top: 0;
 }
 
 /* For compact mode, the TOC is now fixed positioned, so no special overlay styling needed */

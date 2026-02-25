@@ -11,16 +11,16 @@
       <div v-if="isOpen"
            class="dropdown-menu">
         <div class="dropdown-content">
-          <!-- Alt TOC toggle dropdown item - moved to top -->
-          <div v-if="tabStore.activeTab?.currentPage === 'bookview'"
+          <!-- Alt TOC toggle dropdown item - moved to toolbar -->
+          <!-- <div v-if="tabStore.activeTab?.currentPage === 'bookview' && !isToolbarVisible"
                @click.stop="handleAltTocToggleClick"
                class="flex-row flex-center-start hover-bg c-pointer dropdown-item">
             <Icon icon="fluent:eye-lines-28-regular" />
             <span class="dropdown-label">{{ isAltTocVisible ? 'הסתר כותרות נוספות' : 'הצג כותרות נוספות' }}</span>
-          </div>
+          </div> -->
 
-          <!-- Diacritics toggle dropdown item -->
-          <!-- <DiacriticsDropdown /> -->
+          <!-- Diacritics toggle dropdown item - moved to toolbar -->
+          <!-- <DiacriticsDropdown :hide-when-toolbar-visible="true" /> -->
 
           <!-- Line display toggle dropdown item -->
           <!-- COMMENTED OUT: Block view functionality removed for performance
@@ -37,12 +37,13 @@
 
 
 
-          <div @click.stop="handleThemeClick"
+          <!-- Theme toggle - moved to toolbar and settings -->
+          <!-- <div @click.stop="handleThemeClick"
                class="flex-row flex-center-start hover-bg c-pointer dropdown-item">
             <Icon :icon="themeToggleIcon"
                   class="theme-icon" />
             <span class="dropdown-label">{{ themeToggleText }}</span>
-          </div>
+          </div> -->
 
           <div @click.stop="handleSettingsClick"
                class="flex-row flex-center-start hover-bg c-pointer dropdown-item">
@@ -150,6 +151,13 @@ const isAltTocVisible = computed(() => {
   const bookState = tabStore.activeTab?.bookState;
   if (!bookState) return true; // Default to visible
   return bookState.showAltToc !== false; // Default to true if undefined
+});
+
+// Toolbar visibility state
+const isToolbarVisible = computed(() => {
+  const bookState = tabStore.activeTab?.bookState;
+  if (!bookState) return true; // Default to visible
+  return bookState.showToolbar !== false; // Default to true if undefined
 });
 
 // Theme toggle computed properties

@@ -174,6 +174,7 @@ function autoSelectTocEntry(tocEntryId: number) {
     const findEntryPath = (entries: TocEntry[], id: number, path: number[] = []): number[] | null => {
         for (let i = 0; i < entries.length; i++) {
             const entry = entries[i];
+            if (!entry) continue;
             if (entry.id === id) return [...path, i];
             if (entry.children) {
                 const found = findEntryPath(entry.children, id, [...path, i]);
@@ -243,6 +244,7 @@ function expandNodesAlongPath(path: number[]) {
     let currentNodes = nodeRefs;
     for (let i = 0; i < path.length - 1; i++) {
         const nodeIndex = path[i];
+        if (nodeIndex === undefined) continue;
         const node = currentNodes[nodeIndex];
 
         if (node && node.expand) {

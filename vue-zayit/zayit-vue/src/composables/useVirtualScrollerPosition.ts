@@ -36,7 +36,6 @@ export function useVirtualScrollerPosition(
     function saveToStorage(pos: VirtualScrollerPosition) {
         try {
             localStorage.setItem(storageKey(), JSON.stringify(pos))
-            console.log('[VirtualScroller] saveToStorage — itemIndex:', pos.itemIndex, 'itemOffset:', pos.itemOffset)
         } catch (e) {
             console.warn('[VirtualScroller] Save failed:', e)
         }
@@ -79,7 +78,6 @@ export function useVirtualScrollerPosition(
 
     function savePosition() {
         if (suppressSave) {
-            console.log('[VirtualScroller] savePosition — suppressed')
             return
         }
         const pos = capturePosition()
@@ -112,8 +110,6 @@ export function useVirtualScrollerPosition(
         const saved = loadFromStorage()
         if (!saved) return
 
-        console.log('[VirtualScroller] restorePosition — itemIndex:', saved.itemIndex, 'itemOffset:', saved.itemOffset)
-
         let el: HTMLElement
         try {
             el = await waitForItems(signal)
@@ -141,8 +137,6 @@ export function useVirtualScrollerPosition(
             const itemRect = itemEl.getBoundingClientRect()
             const currentOffset = itemRect.top - scrollerRect.top
             const delta = currentOffset - saved.itemOffset
-
-            console.log('[VirtualScroller] rAF — currentOffset:', currentOffset, 'savedOffset:', saved.itemOffset, 'delta:', delta)
 
             if (Math.abs(delta) > 2) {
                 el.scrollTop += delta
@@ -197,10 +191,8 @@ export function useVirtualScrollerPosition(
     onUnmounted(() => {
         restoreAbortController?.abort()
         clearTimeout(saveDebounce)
-        console.log('[VirtualScroller] onUnmounted — suppressSave:', suppressSave, 'lastKnownGood:', lastKnownGoodPosition)
         if (suppressSave && lastKnownGoodPosition) {
             // Mid-restore: trust lastKnownGoodPosition over drifting scrollTop
-            console.log('[VirtualScroller] onUnmounted — saving lastKnownGoodPosition')
             saveToStorage(lastKnownGoodPosition)
         } else {
             suppressSave = false

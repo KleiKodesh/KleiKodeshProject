@@ -443,6 +443,38 @@ export const useTabStore = defineStore('tabs', () => {
         }
     };
 
+    const toggleToolbar = () => {
+        const tab = tabs.value.find(t => t.isActive);
+        if (tab?.bookState) {
+            // Initialize to true if undefined, then toggle
+            const currentState = tab.bookState.showToolbar !== false; // Default true
+            tab.bookState.showToolbar = !currentState;
+        }
+    };
+
+    const zoomIn = () => {
+        const tab = tabs.value.find(t => t.isActive);
+        if (tab?.bookState) {
+            const currentZoom = tab.bookState.zoom || 100;
+            tab.bookState.zoom = Math.min(200, currentZoom + 10);
+        }
+    };
+
+    const zoomOut = () => {
+        const tab = tabs.value.find(t => t.isActive);
+        if (tab?.bookState) {
+            const currentZoom = tab.bookState.zoom || 100;
+            tab.bookState.zoom = Math.max(50, currentZoom - 10);
+        }
+    };
+
+    const resetZoom = () => {
+        const tab = tabs.value.find(t => t.isActive);
+        if (tab?.bookState) {
+            tab.bookState.zoom = 100;
+        }
+    };
+
     const toggleDiacritics = () => {
         // Import settings store to check global mode
         const settingsStore = useSettingsStore();
@@ -979,6 +1011,10 @@ export const useTabStore = defineStore('tabs', () => {
         openBook,
         openBookInNewTab,
         toggleSplitPane,
+        toggleToolbar,
+        zoomIn,
+        zoomOut,
+        resetZoom,
         toggleDiacritics,
         toggleLineDisplay,
         openSettings,

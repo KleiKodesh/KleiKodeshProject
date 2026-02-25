@@ -99,14 +99,18 @@ onMounted(() => {
 // COMPUTED STYLES
 // ============================================
 // Computed styles that respect dark mode and reading background
-const containerStyles = computed(() => ({
-    backgroundColor: !isDarkMode.value && settingsStore.readingBackgroundColor
-        ? settingsStore.readingBackgroundColor
-        : 'var(--bg-primary)',
-    color: !isDarkMode.value && settingsStore.readingBackgroundColor
-        ? 'var(--reading-text-color)'
-        : 'var(--text-primary)'
-}))
+const containerStyles = computed(() => {
+    const zoom = myTab.value?.bookState?.zoom || 100
+    return {
+        backgroundColor: !isDarkMode.value && settingsStore.readingBackgroundColor
+            ? settingsStore.readingBackgroundColor
+            : 'var(--bg-primary)',
+        color: !isDarkMode.value && settingsStore.readingBackgroundColor
+            ? 'var(--reading-text-color)'
+            : 'var(--text-primary)',
+        fontSize: `calc(var(--font-size, 100%) * ${zoom / 100})`
+    }
+})
 
 // ============================================
 // PROPS & EMITS
@@ -305,7 +309,6 @@ const positionId = computed(() => {
 
 useVirtualScrollerPosition(scrollerRef, positionId, {
     onRestore: async (itemIndex) => {
-        console.log('[BookLineViewer] Session restore at line', itemIndex, '— prioritizing lines')
         await viewerState.prioritizeLines(itemIndex)
     }
 })
@@ -366,7 +369,6 @@ function updateTabTitleWithToc(lineIndex: number) {
         // Emit current TOC entry ID for auto-selection in TOC tree
         emit('currentTocEntryChanged', tocEntry.id)
     } else {
-        console.log('[BookLineViewer] No TOC entry found')
         myTab.value.title = bookTitle
 
         // Clear current TOC entry ID
@@ -571,7 +573,6 @@ async function scrollToLine(lineIndex: number, pixelOffset?: number) {
         }, 50)
 
     } catch (error) {
-        console.warn('[BookLineViewer] scrollToLine failed:', error)
         scrollerEl.style.overflow = ''
         scrollerEl.style.pointerEvents = ''
     }
@@ -614,24 +615,19 @@ function selectAllInContainer() {
 // ============================================
 // Handle copy event to copy full source content (not just visible virtual items)
 function handleCopy(event: ClipboardEvent) {
-    console.log('[BookLineViewer] Copy event detected')
-
     const selection = window.getSelection()
     if (!selection || selection.rangeCount === 0) {
-        console.log('[BookLineViewer] No selection, skipping')
         return
     }
 
     // Check if the selection is within our scroller
     const scrollerEl = scrollerRef.value?.$el
     if (!scrollerEl) {
-        console.log('[BookLineViewer] No scroller element, skipping')
         return
     }
 
     const range = selection.getRangeAt(0)
     if (!scrollerEl.contains(range.commonAncestorContainer)) {
-        console.log('[BookLineViewer] Selection not in scroller, skipping')
         return
     }
 
@@ -643,11 +639,8 @@ function handleCopy(event: ClipboardEvent) {
         range.toString().length > scrollerEl.textContent!.length * 0.95 // 95% threshold
 
     if (!isFullSelection) {
-        console.log('[BookLineViewer] Partial selection, using default browser copy')
         return // Let browser handle partial selection copy
     }
-
-    console.log('[BookLineViewer] Full selection detected, copying all source content...')
 
     // Get all source lines as HTML
     const lines = viewerState.lines.value
@@ -690,12 +683,6 @@ ${htmlContent}
     event.clipboardData?.setData('text/html', htmlContent)
     event.clipboardData?.setData('text/plain', textContent)
     event.preventDefault()
-
-    console.log('[BookLineViewer] ✅ Copied all content to clipboard:', {
-        totalLines: viewerState.totalLines.value,
-        htmlLength: htmlContent.length,
-        textLength: textContent.length
-    })
 }
 
 // Set up copy event listener using useEventListener for automatic cleanup

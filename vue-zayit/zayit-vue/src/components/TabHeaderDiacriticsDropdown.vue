@@ -16,10 +16,23 @@ import DiacriticsFullIcon from './icons/DiacriticsFullIcon.vue'
 import DiacriticsNikkudOnlyIcon from './icons/DiacriticsNikkudOnlyIcon.vue'
 import DiacriticsNoneIcon from './icons/DiacriticsNoneIcon.vue'
 
+const props = defineProps<{
+    hideWhenToolbarVisible?: boolean
+}>()
+
 const tabStore = useTabStore()
 
 const showItem = computed(() => {
-    return tabStore.activeTab?.currentPage === 'bookview'
+    if (tabStore.activeTab?.currentPage !== 'bookview') return false
+
+    // Hide when toolbar is visible if prop is set
+    if (props.hideWhenToolbarVisible) {
+        const bookState = tabStore.activeTab?.bookState
+        const isToolbarVisible = bookState?.showToolbar !== false
+        if (isToolbarVisible) return false
+    }
+
+    return true
 })
 
 // Use centralized diacritics state from tabStore
