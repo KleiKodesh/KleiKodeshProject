@@ -292,11 +292,11 @@ namespace Zayit.Services
         public void TogglePopOut() => _popOutAction?.Invoke();
 
         // Database Configuration Operations
-        public object OpenDatabaseFilePicker()
+        public async Task<object> OpenDatabaseFilePicker()
         {
             try
             {
-                return OpenDatabaseFilePickerAsync().GetAwaiter().GetResult();
+                return await OpenDatabaseFilePickerAsync();
             }
             catch (Exception ex)
             {

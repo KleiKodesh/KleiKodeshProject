@@ -1,4 +1,4 @@
-﻿﻿using Microsoft.Office.Interop.Word;
+﻿using Microsoft.Office.Interop.Word;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -32,14 +32,14 @@ namespace Zayit.Services
             // Create and show progress dialog on UI thread
             if (control != null && control.InvokeRequired == false)
             {
-                progressForm = BuildProgressForm(Path.GetFileName(sourcePath));
+                progressForm = BuildInProgressForm(Path.GetFileName(sourcePath));
                 progressForm.Show();
             }
             else if (control != null)
             {
                 control.Invoke(new Action(() =>
                 {
-                    progressForm = BuildProgressForm(Path.GetFileName(sourcePath));
+                    progressForm = BuildInProgressForm(Path.GetFileName(sourcePath));
                     progressForm.Show();
                 }));
             }
@@ -175,14 +175,14 @@ namespace Zayit.Services
             // Create and show progress dialog on UI thread
             if (control != null && control.InvokeRequired == false)
             {
-                progressForm = BuildProgressForm(Path.GetFileName(sourcePath));
+                progressForm = BuildInProgressForm(Path.GetFileName(sourcePath));
                 progressForm.Show();
             }
             else if (control != null)
             {
                 control.Invoke(new Action(() =>
                 {
-                    progressForm = BuildProgressForm(Path.GetFileName(sourcePath));
+                    progressForm = BuildInProgressForm(Path.GetFileName(sourcePath));
                     progressForm.Show();
                 }));
             }
