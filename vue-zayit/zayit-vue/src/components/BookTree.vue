@@ -5,6 +5,17 @@
              class="height-fill flex-center">
             <LoadingSpinner />
         </div>
+        <div v-else-if="categoryTreeStore.error"
+             class="height-fill flex-center error-message">
+            <div>
+                <p>שגיאה בטעינת עץ הספרים:</p>
+                <p class="error-details">{{ categoryTreeStore.error }}</p>
+            </div>
+        </div>
+        <div v-else-if="categoryTreeStore.categoryTree.length === 0"
+             class="height-fill flex-center error-message">
+            <p>לא נמצאו ספרים. אנא בדוק את חיבור מסד הנתונים.</p>
+        </div>
         <template v-else>
             <BookTreeCategoryNode v-for="(category, index) in categoryTreeStore.categoryTree"
                                   :key="category.id"
@@ -45,3 +56,18 @@ defineExpose({
     resetTree
 })
 </script>
+
+<style scoped>
+.error-message {
+    color: var(--text-secondary);
+    padding: 20px;
+    text-align: center;
+}
+
+.error-details {
+    color: var(--error-color, #e74c3c);
+    font-size: 0.9em;
+    margin-top: 8px;
+    font-family: monospace;
+}
+</style>

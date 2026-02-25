@@ -18,6 +18,7 @@ import { SqlQueries } from './dbQueries'
 export interface LineLoadResult {
     lineIndex: number
     content: string
+    tocEntryId?: number | null
 }
 
 /**

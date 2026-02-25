@@ -121,6 +121,8 @@ const emit = defineEmits<{
     placeholdersReady: []
     lineClick: [lineIndex: number]
     clearOtherSelections: []
+    centerLineChanged: [lineIndex: number]
+    currentTocEntryChanged: [tocEntryId: number | undefined]
 }>()
 
 // ============================================
@@ -301,7 +303,12 @@ const positionId = computed(() => {
     return `book-lines-${tabId}-${bookId}`
 })
 
-useVirtualScrollerPosition(scrollerRef, positionId)
+useVirtualScrollerPosition(scrollerRef, positionId, {
+    onRestore: async (itemIndex) => {
+        console.log('[BookLineViewer] Session restore at line', itemIndex, '— prioritizing lines')
+        await viewerState.prioritizeLines(itemIndex)
+    }
+})
 
 // Keyboard navigation for virtual scroller
 useVirtualScrollerKeyboard(
@@ -309,6 +316,124 @@ useVirtualScrollerKeyboard(
     computed(() => viewerState.totalLines.value),
     hasFocus
 )
+
+// ============================================
+// CENTER LINE OBSERVER - TOC Title Update
+// ============================================
+const centerLineObserver = ref<IntersectionObserver | null>(null)
+const currentCenterLineIndex = ref<number | null>(null)
+
+// Update tab title with TOC text
+function updateTabTitleWithToc(lineIndex: number) {
+    if (!myTab.value || !props.flatTocEntries) return
+
+    const bookTitle = myTab.value.bookState?.bookTitle
+    if (!bookTitle) return
+
+    // Find the TOC entry by matching lineIndex
+    let tocEntry = props.flatTocEntries.find(toc => toc.lineIndex === lineIndex && !toc.isAltToc)
+
+    // If no exact match, find the most recent TOC entry before this line
+    if (!tocEntry) {
+        const previousTocEntries = props.flatTocEntries
+            .filter(toc => !toc.isAltToc && toc.lineIndex !== undefined && toc.lineIndex <= lineIndex)
+            .sort((a, b) => (b.lineIndex || 0) - (a.lineIndex || 0))
+
+        tocEntry = previousTocEntries[0]
+    }
+
+    // Update tab title
+    if (tocEntry && tocEntry.text) {
+        // If we're at the root TOC entry that matches the book title, just show the book title
+        if (tocEntry.text === bookTitle && !tocEntry.path) {
+            myTab.value.title = bookTitle
+        } else {
+            // Build the full TOC path
+            const tocPath = tocEntry.path ? `${tocEntry.path} - ${tocEntry.text}` : tocEntry.text
+
+            // Check if the path already starts with the book title (common for books with root TOC = book title)
+            const pathStartsWithTitle = tocPath.startsWith(bookTitle)
+
+            if (pathStartsWithTitle) {
+                // Path already includes book title, use it as-is
+                myTab.value.title = tocPath
+            } else {
+                // Path doesn't include book title, prepend it
+                myTab.value.title = `${bookTitle} - ${tocPath}`
+            }
+        }
+
+        // Emit current TOC entry ID for auto-selection in TOC tree
+        emit('currentTocEntryChanged', tocEntry.id)
+    } else {
+        console.log('[BookLineViewer] No TOC entry found')
+        myTab.value.title = bookTitle
+
+        // Clear current TOC entry ID
+        emit('currentTocEntryChanged', undefined)
+    }
+}
+
+// Set up intersection observer to detect center line
+function setupCenterLineObserver() {
+    const scrollerEl = scrollerElRef.value
+    if (!scrollerEl) return
+
+    // Clean up existing observer if any
+    if (centerLineObserver.value) {
+        centerLineObserver.value.disconnect()
+    }
+
+    centerLineObserver.value = new IntersectionObserver(
+        (entries) => {
+            // Find the entry closest to the center of the viewport
+            const viewportCenter = window.innerHeight / 2
+            let closestDistance = Infinity
+            let closestLineIndex: number | null = null
+
+            entries.forEach(entry => {
+                if (entry.isIntersecting && entry.target instanceof Element) {
+                    const rect = entry.boundingClientRect
+                    const elementCenter = rect.top + rect.height / 2
+                    const distance = Math.abs(elementCenter - viewportCenter)
+
+                    if (distance < closestDistance) {
+                        closestDistance = distance
+                        const lineIndex = parseInt(entry.target.getAttribute('data-index') || '0', 10)
+                        closestLineIndex = lineIndex
+                    }
+                }
+            })
+
+            if (closestLineIndex !== null && closestLineIndex !== currentCenterLineIndex.value) {
+                currentCenterLineIndex.value = closestLineIndex
+                updateTabTitleWithToc(closestLineIndex)
+                emit('centerLineChanged', closestLineIndex)
+            }
+        },
+        {
+            root: scrollerEl,
+            rootMargin: '-45% 0px -45% 0px', // Observe middle 10% of viewport
+            threshold: [0, 0.5, 1]
+        }
+    )
+
+    // Observe all line elements
+    const observeLines = () => {
+        const lineElements = scrollerEl.querySelectorAll('[data-index]')
+        lineElements.forEach(el => {
+            centerLineObserver.value?.observe(el)
+        })
+    }
+
+    // Initial observation
+    setTimeout(observeLines, 500)
+}
+
+// Cleanup on unmount
+onUnmounted(() => {
+    centerLineObserver.value?.disconnect()
+})
 
 // ============================================
 // SEARCH STATE MANAGEMENT
@@ -394,6 +519,10 @@ watch(() => myTab.value?.bookState?.bookId, async (bookId, oldBookId) => {
         emit('placeholdersReady')
 
         // Position is automatically restored by composable when positionId changes
+
+        // Set up center line observer after book loads
+        await nextTick()
+        setupCenterLineObserver()
     }
 }, { immediate: true })
 
@@ -452,9 +581,9 @@ async function scrollToLine(lineIndex: number, pixelOffset?: number) {
 // TOC NAVIGATION
 // ============================================
 async function handleTocSelection(lineIndex: number) {
+    // Prioritize loading lines around the target before scrolling
     await viewerState.handleTocSelection(lineIndex)
 
-    // Scroll to the selected line
     await nextTick()
     await scrollToLine(lineIndex)
 
@@ -979,8 +1108,6 @@ function isDiacriticForSearch(char: string): boolean {
     return code >= 0x0591 && code <= 0x05C7
 }
 
-// ============================================
-// LIFECYCLE - Cleanup
 // ============================================
 // LIFECYCLE - Cleanup
 // ============================================

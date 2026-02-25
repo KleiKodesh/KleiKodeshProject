@@ -111,7 +111,7 @@ export class TocService {
             // Build path from parent's path + parent's text (no trailing separator)
             if (parent) {
                 if (parent.path) {
-                    child.path = parent.path + ' > ' + parent.text
+                    child.path = parent.path + ' - ' + parent.text
                 } else {
                     child.path = parent.text
                 }
@@ -166,7 +166,7 @@ export class TocService {
      */
     getTocPath(entry: TocEntry): string {
         if (entry.path) {
-            return entry.path + ' > ' + entry.text
+            return entry.path + ' - ' + entry.text
         }
         return entry.text
     }

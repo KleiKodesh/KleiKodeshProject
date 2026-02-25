@@ -4,8 +4,35 @@ import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 import Database from 'better-sqlite3'
 
+// Path to your SQLite database
+const DB_PATH = 'C:\\Users\\Admin\\AppData\\Roaming\\io.github.kdroidfilter.seforimapp\\databases\\seforim.db'
+
+// Ensure externalLibraryId column exists
+function ensureExternalLibraryColumn() {
+  try {
+    const db = new Database(DB_PATH, { readonly: false })
+
+    // Check if column exists
+    const columns = db.prepare('PRAGMA table_info(book)').all() as Array<{ name: string }>
+    const columnExists = columns.some(c => c.name === 'externalLibraryId')
+
+    if (!columnExists) {
+      console.log('[SQLite Plugin] Adding externalLibraryId column to book table...')
+      db.prepare('ALTER TABLE book ADD COLUMN externalLibraryId INTEGER DEFAULT NULL').run()
+      console.log('[SQLite Plugin] ✓ externalLibraryId column added successfully')
+    }
+
+    db.close()
+  } catch (error: any) {
+    console.warn('[SQLite Plugin] Warning: Could not ensure externalLibraryId column:', error.message)
+  }
+}
+
 // SQLite Database Plugin for Vite Dev Server
 function sqlitePlugin() {
+  // Run migration once when plugin is initialized
+  ensureExternalLibraryColumn()
+
   return {
     name: 'vite-plugin-sqlite',
     configureServer(server: any) {
@@ -22,9 +49,7 @@ function sqlitePlugin() {
           try {
             const { query, params = [] } = JSON.parse(body)
 
-            // Path to your SQLite database
-            const dbPath = 'C:\\Users\\Admin\\AppData\\Roaming\\io.github.kdroidfilter.seforimapp\\databases\\seforim.db'
-            const db = new Database(dbPath, { readonly: true })
+            const db = new Database(DB_PATH, { readonly: true })
 
             const stmt = db.prepare(query)
             const data = params.length > 0 ? stmt.all(...params) : stmt.all()

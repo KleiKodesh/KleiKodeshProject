@@ -36,8 +36,10 @@ import { useTabStore } from '../stores/tabStore'
 import { storeToRefs } from 'pinia'
 
 type BookTocTreeNodeInstance = {
+    expand: () => void
     collapse: () => void
     reset: () => void
+    entry: TocEntry
 }
 
 const props = withDefaults(defineProps<{
@@ -66,6 +68,10 @@ const handleSelect = () => {
     emit('selectLine', props.entry.lineIndex)
 }
 
+const expand = () => {
+    isExpanded.value = true
+}
+
 const collapse = () => {
     isExpanded.value = false
 }
@@ -80,8 +86,10 @@ const reset = () => {
 }
 
 defineExpose({
+    expand,
     collapse,
-    reset
+    reset,
+    childRefs
 })
 </script>
 

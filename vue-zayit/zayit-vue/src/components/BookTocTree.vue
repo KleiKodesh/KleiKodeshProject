@@ -57,6 +57,7 @@ const resetTree = () => {
 }
 
 defineExpose({
-    resetTree
+    resetTree,
+    nodeRefs
 })
 </script>

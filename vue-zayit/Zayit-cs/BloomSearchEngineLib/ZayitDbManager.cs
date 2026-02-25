@@ -171,6 +171,7 @@ public sealed class ZayitDbManager : IDisposable
                     LEFT JOIN tocEntry te ON lt.tocEntryId = te.id
                     LEFT JOIN tocText tt ON te.textId = tt.id
                     WHERE l.id = @lineId
+                      AND b.externalLibraryId IS NULL
                     LIMIT 1";
                 cmd.Parameters.AddWithValue("@lineId", lineId);
 

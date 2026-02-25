@@ -13,6 +13,8 @@ namespace Zayit.Services
     /// </summary>
     public static class WordToPdfConverter
     {
+        public static Microsoft.Office.Interop.Word.Application wordApp = null;
+        public static bool IsVstoMode;
         /// <summary>
         /// Converts a Word document (doc, docx, rtf, etc.) to PDF asynchronously.
         /// Returns the output PDF path on success, or the original path on failure.
@@ -21,11 +23,11 @@ namespace Zayit.Services
         {
             return System.Threading.Tasks.Task.Run(() =>
             {
-                Microsoft.Office.Interop.Word.Application wordApp = null;
                 Document doc = null;
                 try
                 {
-                    wordApp = new Microsoft.Office.Interop.Word.Application();
+                    if (wordApp == null)
+                        wordApp = new Microsoft.Office.Interop.Word.Application();
                     wordApp.Visible = false;
                     wordApp.ScreenUpdating = false;
 
@@ -44,7 +46,7 @@ namespace Zayit.Services
                 finally
                 {
                     if (doc != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(doc);
-                    if (wordApp != null)
+                    if (wordApp != null && IsVstoMode)
                     {
                         wordApp.Quit();
                         System.Runtime.InteropServices.Marshal.ReleaseComObject(wordApp);

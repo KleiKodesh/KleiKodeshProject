@@ -1,414 +1,214 @@
 import type { Ref } from 'vue'
-import { ref, watch, onUnmounted, nextTick } from 'vue'
+import { watch, onUnmounted } from 'vue'
 import type { DynamicScroller } from 'vue-virtual-scroller'
 
-/**
- * Position state for virtual scroller restoration
- */
 export interface VirtualScrollerPosition {
-    scrollTop: number          // Raw scroll position (Layer 1)
-    itemIndex: number          // Index of top visible item (Layer 2)
-    itemOffset: number         // Pixel offset of item from viewport top (Layer 2)
+    itemIndex: number
+    itemOffset: number
 }
 
-/**
- * 100% Self-Sufficient Virtual Scroller Position Manager
- * 
- * Automatically saves scroll position to localStorage and restores it.
- * Just pass in your scroller ref and a unique position ID - that's it!
- * 
- * @param scrollerRef - Reference to DynamicScroller instance
- * @param positionId - Unique ID for this scroll position
- * @param skipRestore - Optional ref to skip next restore (for overrides)
- */
+const STORAGE_KEY_PREFIX = 'vscroller-pos-'
+const SAVE_DEBOUNCE_MS = 300
+
 export function useVirtualScrollerPosition(
     scrollerRef: Ref<InstanceType<typeof DynamicScroller> | null>,
     positionId: Ref<string>,
-    skipRestore?: Ref<boolean>
+    options?: {
+        skipRestore?: Ref<boolean>
+        onRestore?: (itemIndex: number) => Promise<void> | void
+    }
 ) {
-    // Constants
-    const STORAGE_KEY_PREFIX = 'vscroller-pos-'
-    const SAVE_DEBOUNCE_MS = 300
-    const RESTORE_DELAY_MS = 100
-    const itemSelector = '[data-index]'
-    const itemIndexAttribute = 'data-index'
-    const minItemSize = 40
+    const skipRestore = options?.skipRestore
+    const onRestore = options?.onRestore
 
-    // State
-    let saveDebounce: number | undefined
-    let scrollListener: (() => void) | undefined
+    let saveDebounce: ReturnType<typeof setTimeout> | undefined
+    let removeScrollListener: (() => void) | undefined
+    let restoreAbortController: AbortController | undefined
+    let suppressSave = false
+    let lastKnownGoodPosition: VirtualScrollerPosition | null = null
 
-    // Storage functions
+    // --- Storage ---
 
-    /**
-     * Get storage key for current position ID
-     */
-    function getStorageKey(): string {
+    function storageKey() {
         return STORAGE_KEY_PREFIX + positionId.value
     }
 
-    /**
-     * Save position to localStorage
-     */
-    function saveToStorage(position: VirtualScrollerPosition) {
+    function saveToStorage(pos: VirtualScrollerPosition) {
         try {
-            const key = getStorageKey()
-            localStorage.setItem(key, JSON.stringify(position))
-        } catch (error) {
-            console.warn('[VirtualScroller] Failed to save position:', error)
+            localStorage.setItem(storageKey(), JSON.stringify(pos))
+            console.log('[VirtualScroller] saveToStorage — itemIndex:', pos.itemIndex, 'itemOffset:', pos.itemOffset)
+        } catch (e) {
+            console.warn('[VirtualScroller] Save failed:', e)
         }
     }
 
-    /**
-     * Load position from localStorage
-     */
     function loadFromStorage(): VirtualScrollerPosition | null {
         try {
-            const key = getStorageKey()
-            const stored = localStorage.getItem(key)
-            if (stored) {
-                const position = JSON.parse(stored) as VirtualScrollerPosition
-                return position
-            }
-        } catch (error) {
-            console.warn('[VirtualScroller] Failed to load position:', error)
+            const raw = localStorage.getItem(storageKey())
+            const pos = raw ? (JSON.parse(raw) as VirtualScrollerPosition) : null
+            return pos
+        } catch {
+            return null
         }
-        return null
     }
 
-    // Position capture
+    // --- Position capture ---
 
-    /**
-     * Capture current scroll position (both layers)
-     */
     function capturePosition(): VirtualScrollerPosition | null {
-        const scrollerEl = scrollerRef.value?.$el as HTMLElement | undefined
-        if (!scrollerEl) return null
+        const el = scrollerRef.value?.$el as HTMLElement | undefined
+        if (!el) return null
 
-        // Layer 1: Raw scrollTop
-        const scrollTop = scrollerEl.scrollTop
+        const scrollerRect = el.getBoundingClientRect()
 
-        // Layer 2: Top visible item and offset
-        const topItem = getTopVisibleItem()
-
-        if (!topItem) {
-            // Fallback: estimate from scroll position
-            const estimatedIndex = Math.floor(scrollTop / minItemSize)
-            return {
-                scrollTop,
-                itemIndex: estimatedIndex,
-                itemOffset: 0
-            }
-        }
-
-        return {
-            scrollTop,
-            itemIndex: topItem.itemIndex,
-            itemOffset: topItem.offset
-        }
-    }
-
-    /**
-     * Get the top visible item and its offset from viewport top
-     */
-    function getTopVisibleItem(): { itemIndex: number; offset: number } | null {
-        const scrollerEl = scrollerRef.value?.$el as HTMLElement | undefined
-        if (!scrollerEl) return null
-
-        const scrollerRect = scrollerEl.getBoundingClientRect()
-        const itemElements = scrollerEl.querySelectorAll(itemSelector)
-
-        let topMostItem: { itemIndex: number; top: number } | null = null
-
-        for (const itemEl of itemElements) {
-            const itemRect = itemEl.getBoundingClientRect()
-
-            // Check if this item is visible in the viewport
-            if (itemRect.bottom > scrollerRect.top && itemRect.top < scrollerRect.bottom) {
-                const itemIndex = parseInt(itemEl.getAttribute(itemIndexAttribute) || '-1')
-                if (itemIndex >= 0) {
-                    // Find the item that's closest to the top of the viewport
-                    if (!topMostItem || itemRect.top < topMostItem.top) {
-                        topMostItem = {
-                            itemIndex: itemIndex,
-                            top: itemRect.top
-                        }
+        for (const itemEl of el.querySelectorAll('[data-index]')) {
+            const rect = itemEl.getBoundingClientRect()
+            if (rect.bottom > scrollerRect.top && rect.top < scrollerRect.bottom) {
+                const index = parseInt(itemEl.getAttribute('data-index') ?? '-1')
+                if (index >= 0) {
+                    const pos = {
+                        itemIndex: index,
+                        itemOffset: rect.top - scrollerRect.top
                     }
+                    return pos
                 }
-            }
-        }
-
-        if (topMostItem) {
-            const offset = topMostItem.top - scrollerRect.top
-            return {
-                itemIndex: topMostItem.itemIndex,
-                offset: offset
             }
         }
 
         return null
     }
 
-    // Automatic save
-
-    /**
-     * Save current position (debounced)
-     */
     function savePosition() {
-        const position = capturePosition()
-        if (position) {
-            saveToStorage(position)
+        if (suppressSave) {
+            console.log('[VirtualScroller] savePosition — suppressed')
+            return
+        }
+        const pos = capturePosition()
+        if (pos) {
+            saveToStorage(pos)
+            lastKnownGoodPosition = pos
         }
     }
 
-    // Automatic restore
+    // --- Restore ---
 
-    /**
-     * Restore position using item-based approach
-     */
-    async function restorePosition(position: VirtualScrollerPosition): Promise<void> {
-        const scrollerEl = scrollerRef.value?.$el as HTMLElement | undefined
-        if (!scrollerEl) return
-
-        // Wait for items to render
-        await new Promise(resolve => setTimeout(resolve, 50))
-
-        const isItemVisible = checkItemVisibility(position.itemIndex)
-
-        if (!isItemVisible) {
-            // Item not visible - use scrollToItem
-            await scrollToItem(position.itemIndex, position.itemOffset)
-        } else {
-            // Item is visible - fine-tune with offset if needed
-            if (position.itemOffset !== undefined && position.itemOffset !== 0) {
-                const currentPosition = getItemPosition(position.itemIndex)
-                if (currentPosition !== null) {
-                    const offsetDiff = currentPosition.offset - position.itemOffset
-                    if (Math.abs(offsetDiff) > 5) {
-                        scrollerEl.scrollTop = scrollerEl.scrollTop + offsetDiff
-                    }
-                }
+    function waitForItems(signal: AbortSignal): Promise<HTMLElement> {
+        return new Promise((resolve, reject) => {
+            const check = () => {
+                if (signal.aborted) return reject(new DOMException('Aborted', 'AbortError'))
+                const el = scrollerRef.value?.$el as HTMLElement | undefined
+                if (el && el.querySelector('[data-index]')) return resolve(el)
+                requestAnimationFrame(check)
             }
-        }
+            requestAnimationFrame(check)
+        })
     }
 
-    /**
-     * Check if a specific item is currently visible
-     */
-    function checkItemVisibility(itemIndex: number): boolean {
-        const scrollerEl = scrollerRef.value?.$el as HTMLElement | undefined
-        if (!scrollerEl) return false
-
-        const scrollerRect = scrollerEl.getBoundingClientRect()
-        const itemEl = scrollerEl.querySelector(`${itemSelector}[${itemIndexAttribute}="${itemIndex}"]`)
-
-        if (!itemEl) return false
-
-        const itemRect = itemEl.getBoundingClientRect()
-        return itemRect.bottom > scrollerRect.top && itemRect.top < scrollerRect.bottom
-    }
-
-    /**
-     * Get the current position of a specific item
-     */
-    function getItemPosition(itemIndex: number): { offset: number } | null {
-        const scrollerEl = scrollerRef.value?.$el as HTMLElement | undefined
-        if (!scrollerEl) return null
-
-        const scrollerRect = scrollerEl.getBoundingClientRect()
-        const itemEl = scrollerEl.querySelector(`${itemSelector}[${itemIndexAttribute}="${itemIndex}"]`)
-
-        if (!itemEl) return null
-
-        const itemRect = itemEl.getBoundingClientRect()
-        const offset = itemRect.top - scrollerRect.top
-
-        return { offset }
-    }
-
-    /**
-     * Scroll to a specific item with optional pixel offset
-     */
-    async function scrollToItem(itemIndex: number, pixelOffset?: number): Promise<void> {
-        if (!scrollerRef.value) return
-
-        await nextTick()
-
-        const scrollerEl = scrollerRef.value.$el as HTMLElement | undefined
-        if (!scrollerEl) return
-
-        // Check if scroller is ready (has items rendered)
-        const hasItems = scrollerEl.querySelectorAll(itemSelector).length > 0
-        if (!hasItems) {
-            console.warn('[VirtualScroller] Scroller not ready, skipping scrollToItem')
+    async function restorePosition(signal: AbortSignal): Promise<void> {
+        if (skipRestore?.value) {
+            skipRestore.value = false
             return
         }
 
-        // Hide scrolling during the double-call hack
-        scrollerEl.style.overflow = 'hidden'
-        scrollerEl.style.pointerEvents = 'none'
+        const saved = loadFromStorage()
+        if (!saved) return
 
+        console.log('[VirtualScroller] restorePosition — itemIndex:', saved.itemIndex, 'itemOffset:', saved.itemOffset)
+
+        let el: HTMLElement
         try {
-            // First call
-            scrollerRef.value.scrollToItem(itemIndex)
-
-            // Second call after delay (the hack!)
-            setTimeout(() => {
-                if (scrollerRef.value && scrollerEl) {
-                    scrollerRef.value.scrollToItem(itemIndex)
-
-                    // Apply pixel offset if provided
-                    if (pixelOffset !== undefined && pixelOffset !== 0) {
-                        setTimeout(() => {
-                            if (scrollerEl) {
-                                scrollerEl.scrollTop = scrollerEl.scrollTop - pixelOffset
-                            }
-                        }, 20)
-                    }
-
-                    // Re-enable scrolling
-                    setTimeout(() => {
-                        if (scrollerEl) {
-                            scrollerEl.style.overflow = ''
-                            scrollerEl.style.pointerEvents = ''
-                        }
-                    }, pixelOffset !== undefined ? 30 : 10)
-                }
-            }, 50)
-
-        } catch (error) {
-            console.warn('[VirtualScroller] scrollToItem failed:', error)
-            // Fallback: manual scroll
-            const scrollTop = itemIndex * minItemSize
-            scrollerEl.scrollTop = scrollTop
-            setTimeout(() => {
-                scrollerEl.style.overflow = ''
-                scrollerEl.style.pointerEvents = ''
-            }, 100)
+            el = await waitForItems(signal)
+        } catch {
+            return
         }
+
+        if (signal.aborted) return
+
+        // Notify consumer to prioritize loading lines around target
+        await onRestore?.(saved.itemIndex)
+        if (signal.aborted) return
+
+        // Scroll to the target item
+        scrollerRef.value?.scrollToItem(saved.itemIndex)
+
+        // After the scroller paints, apply the sub-item pixel offset
+        requestAnimationFrame(() => {
+            if (signal.aborted || !scrollerRef.value) return
+
+            const itemEl = el.querySelector(`[data-index="${saved.itemIndex}"]`)
+            if (!itemEl) return
+
+            const scrollerRect = el.getBoundingClientRect()
+            const itemRect = itemEl.getBoundingClientRect()
+            const currentOffset = itemRect.top - scrollerRect.top
+            const delta = currentOffset - saved.itemOffset
+
+            console.log('[VirtualScroller] rAF — currentOffset:', currentOffset, 'savedOffset:', saved.itemOffset, 'delta:', delta)
+
+            if (Math.abs(delta) > 2) {
+                el.scrollTop += delta
+            }
+        })
     }
 
-    /**
-     * Setup scroll listener for auto-saving
-     */
-    function setupScrollListener() {
-        const scrollerEl = scrollerRef.value?.$el as HTMLElement | undefined
-        if (!scrollerEl) return
+    function triggerRestore() {
+        restoreAbortController?.abort()
+        restoreAbortController = new AbortController()
+        restorePosition(restoreAbortController.signal)
+    }
 
-        const handleScroll = () => {
-            if (saveDebounce) {
-                clearTimeout(saveDebounce)
-            }
+    // --- Scroll listener ---
 
-            saveDebounce = window.setTimeout(() => {
-                savePosition()
-            }, SAVE_DEBOUNCE_MS)
+    function setupScrollListener(el: HTMLElement) {
+        const onScroll = () => {
+            clearTimeout(saveDebounce)
+            saveDebounce = setTimeout(savePosition, SAVE_DEBOUNCE_MS)
         }
-
-        scrollerEl.addEventListener('scroll', handleScroll, { passive: true })
-
-        // Return cleanup function
+        el.addEventListener('scroll', onScroll, { passive: true })
         return () => {
-            scrollerEl.removeEventListener('scroll', handleScroll)
-            if (saveDebounce) {
-                clearTimeout(saveDebounce)
-            }
+            el.removeEventListener('scroll', onScroll)
+            clearTimeout(saveDebounce)
         }
     }
 
-    /**
-     * Auto-restore position when scroller becomes available
-     * @returns true if a position was restored, false otherwise
-     */
-    async function autoRestore(): Promise<boolean> {
-        if (!scrollerRef.value) {
-            return false
-        }
+    // --- Lifecycle ---
 
-        // Check if restore should be skipped (for overrides)
-        if (skipRestore?.value) {
-            skipRestore.value = false
-            return false
-        }
+    let firstMount = true
 
-        // Wait for items to be rendered
-        await nextTick()
-        await new Promise(resolve => setTimeout(resolve, RESTORE_DELAY_MS))
+    watch(scrollerRef, (scroller) => {
+        removeScrollListener?.()
+        removeScrollListener = undefined
 
-        // Check if scroller has items before attempting restore
-        const scrollerEl = scrollerRef.value.$el as HTMLElement | undefined
-        if (!scrollerEl) {
-            return false
-        }
+        if (!scroller) return
 
-        const hasItems = scrollerEl.querySelectorAll(itemSelector).length > 0
-        if (!hasItems) {
-            console.warn('[VirtualScroller] No items rendered yet, skipping restore')
-            return false
-        }
+        const el = scroller.$el as HTMLElement
+        removeScrollListener = setupScrollListener(el)
 
-        const savedPosition = loadFromStorage()
-        if (savedPosition) {
-            await restorePosition(savedPosition)
-            return true
-        }
-
-        return false
-    }
-
-    // Lifecycle management
-
-    let hasInitialized = false
-
-    // Watch for scroller becoming available
-    watch(scrollerRef, (newScroller) => {
-        // Cleanup old listener
-        if (scrollListener) {
-            scrollListener()
-            scrollListener = undefined
-        }
-
-        // Setup new listener
-        if (newScroller) {
-            scrollListener = setupScrollListener()
-
-            // Only auto-restore on first mount, not on every scroller update
-            if (!hasInitialized) {
-                hasInitialized = true
-                autoRestore()
-            }
+        if (firstMount) {
+            firstMount = false
+            triggerRestore()
         }
     }, { immediate: true })
 
-    // Watch for position ID changes (e.g., switching filters)
-    watch(positionId, async (newId, oldId) => {
-        if (!oldId) return // Skip initial mount
-
-        // Scroller stays mounted, just restore the new position
-        await nextTick()
-
-        // Wait a bit for data to update
-        await new Promise(resolve => setTimeout(resolve, 100))
-
-        await autoRestore()
+    watch(positionId, (newId, oldId) => {
+        if (!oldId || newId === oldId) return
+        triggerRestore()
     })
 
-    // Cleanup on unmount
     onUnmounted(() => {
-        // Final save
-        savePosition()
-
-        // Cleanup listener
-        if (scrollListener) {
-            scrollListener()
+        restoreAbortController?.abort()
+        clearTimeout(saveDebounce)
+        console.log('[VirtualScroller] onUnmounted — suppressSave:', suppressSave, 'lastKnownGood:', lastKnownGoodPosition)
+        if (suppressSave && lastKnownGoodPosition) {
+            // Mid-restore: trust lastKnownGoodPosition over drifting scrollTop
+            console.log('[VirtualScroller] onUnmounted — saving lastKnownGoodPosition')
+            saveToStorage(lastKnownGoodPosition)
+        } else {
+            suppressSave = false
+            savePosition()
         }
-
-        if (saveDebounce) {
-            clearTimeout(saveDebounce)
-        }
+        removeScrollListener?.()
     })
 
-    // Composable is fully self-sufficient
     return {
         hasSavedPosition: () => loadFromStorage() !== null
     }

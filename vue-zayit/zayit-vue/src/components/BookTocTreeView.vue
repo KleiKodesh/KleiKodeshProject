@@ -56,6 +56,7 @@ const props = defineProps<{
     tocEntries: TocEntry[]
     isLoading?: boolean
     isCompactMode?: boolean
+    currentTocEntryId?: number
 }>();
 
 const emit = defineEmits<{
@@ -148,9 +149,111 @@ watch(() => tabStore.activeTab?.bookState?.isTocOpen, (isOpen) => {
     if (isOpen) {
         nextTick(() => {
             searchInputRef.value?.focus();
+
+            // Auto-select current TOC entry when tree opens
+            if (props.currentTocEntryId) {
+                autoSelectTocEntry(props.currentTocEntryId);
+            }
         });
     }
 });
+
+// Watch for changes to current TOC entry ID
+watch(() => props.currentTocEntryId, (tocEntryId) => {
+    // Only auto-select if TOC is open
+    if (tabStore.activeTab?.bookState?.isTocOpen && tocEntryId) {
+        autoSelectTocEntry(tocEntryId);
+    }
+});
+
+// Auto-select and scroll to the TOC entry
+function autoSelectTocEntry(tocEntryId: number) {
+    if (!treeRef.value) return;
+
+    // Find the TOC entry by ID and collect the path to it
+    const findEntryPath = (entries: TocEntry[], id: number, path: number[] = []): number[] | null => {
+        for (let i = 0; i < entries.length; i++) {
+            const entry = entries[i];
+            if (entry.id === id) return [...path, i];
+            if (entry.children) {
+                const found = findEntryPath(entry.children, id, [...path, i]);
+                if (found) return found;
+            }
+        }
+        return null;
+    };
+
+    const path = findEntryPath(props.tocEntries, tocEntryId);
+    if (!path) return;
+
+    // Expand all parent nodes along the path
+    expandNodesAlongPath(path);
+
+    // Scroll to the entry after expansion
+    nextTick(() => {
+        const treeEl = (treeRef.value as any)?.$el || treeRef.value;
+        if (treeEl) {
+            // Remove any existing highlights
+            const previousHighlights = treeEl.querySelectorAll('.highlight-current');
+            previousHighlights.forEach((el: Element) => el.classList.remove('highlight-current'));
+
+            // Find the DOM element for this TOC entry by ID
+            const allNodes = treeEl.querySelectorAll('[role="treeitem"]');
+            for (const node of allNodes) {
+                const nodeText = node.querySelector('.node-title')?.textContent;
+                const targetEntry = findEntryById(props.tocEntries, tocEntryId);
+                if (targetEntry && nodeText === targetEntry.text) {
+                    // Find the actual tree node div (the one with flex-row class)
+                    const treeNodeDiv = node.querySelector('.tree-node') as HTMLElement;
+
+                    if (treeNodeDiv) {
+                        treeNodeDiv.classList.add('highlight-current');
+                    } else {
+                        (node as HTMLElement).classList.add('highlight-current');
+                    }
+
+                    node.scrollIntoView({ behavior: 'auto', block: 'center' });
+                    break;
+                }
+            }
+        }
+    });
+}
+
+// Helper to find entry by ID
+function findEntryById(entries: TocEntry[], id: number): TocEntry | null {
+    for (const entry of entries) {
+        if (entry.id === id) return entry;
+        if (entry.children) {
+            const found = findEntryById(entry.children, id);
+            if (found) return found;
+        }
+    }
+    return null;
+}
+
+// Expand nodes along the path by calling expand() on node components
+function expandNodesAlongPath(path: number[]) {
+    if (!treeRef.value) return;
+
+    const nodeRefs = (treeRef.value as any).nodeRefs;
+    if (!nodeRefs) return;
+
+    // Navigate through the path and expand each node
+    let currentNodes = nodeRefs;
+    for (let i = 0; i < path.length - 1; i++) {
+        const nodeIndex = path[i];
+        const node = currentNodes[nodeIndex];
+
+        if (node && node.expand) {
+            node.expand();
+            // Get child refs for next level
+            if (node.childRefs) {
+                currentNodes = node.childRefs;
+            }
+        }
+    }
+}
 
 </script>
 
@@ -213,5 +316,9 @@ watch(() => tabStore.activeTab?.bookState?.isTocOpen, (isOpen) => {
 .reset-button:hover {
     background: var(--hover-bg);
     color: var(--text-primary);
+}
+
+:deep(.tree-node.highlight-current) {
+    background-color: color-mix(in srgb, var(--accent-color) 12%, transparent) !important;
 }
 </style>

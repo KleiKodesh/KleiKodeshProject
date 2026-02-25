@@ -1,15 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Xml.Linq;
-using Word = Microsoft.Office.Interop.Word;
-using Office = Microsoft.Office.Core;
-using Microsoft.Office.Tools.Word;
-using KleiKodesh.Ribbon;
-using KleiKodesh.Helpers;
-using Microsoft.Office.Interop.Word;
+﻿using KleiKodesh.Ribbon;
 using UpdateCheckerLib;
+using Office = Microsoft.Office.Core;
 
 namespace KleiKodesh
 {
@@ -22,6 +13,8 @@ namespace KleiKodesh
 
         private void ThisAddIn_Startup(object sender, System.EventArgs e)
         {
+            Zayit.Services.WordToPdfConverter.wordApp = this.Application;
+            Zayit.Services.WordToPdfConverter.IsVstoMode = true;
             // Add-in startup - no automatic update checks here
             // Updates are checked when user opens taskpanes
         }
@@ -30,7 +23,7 @@ namespace KleiKodesh
         {
             // Run any pending installer that was deferred during update process
             UpdateChecker.RunPendingInstaller();
-            
+
             // Add-in shutdown cleanup
         }
 
@@ -45,7 +38,7 @@ namespace KleiKodesh
             this.Startup += new System.EventHandler(ThisAddIn_Startup);
             this.Shutdown += new System.EventHandler(ThisAddIn_Shutdown);
         }
-        
+
         #endregion
     }
 }

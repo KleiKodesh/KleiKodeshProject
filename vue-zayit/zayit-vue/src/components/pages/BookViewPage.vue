@@ -8,6 +8,7 @@
                        :toc-entries="filteredTocEntries"
                        :is-loading="isTocLoading"
                        :is-compact-mode="!myTab.bookState.isFirstTocOpen"
+                       :current-toc-entry-id="currentTocEntryId"
                        class="toc-overlay"
                        @select-line="handleTocSelection" />
     </keep-alive>
@@ -19,7 +20,9 @@
                         :tab-id="myTabId"
                         :alt-toc-by-line-index="altTocByLineIndex"
                         :flat-toc-entries="flatTocEntries"
-                        class="flex-110" />
+                        class="flex-110"
+                        @center-line-changed="currentCenterLineIndex = $event"
+                        @current-toc-entry-changed="currentTocEntryId = $event" />
       </template>
       <template #bottom>
         <BookCommentaryView :book-id="myTab.bookState.bookId"
@@ -52,18 +55,37 @@ const myTabId = ref<number | undefined>(tabStore.activeTab?.id)
 const myTab = computed(() => tabStore.tabs.find(t => t.id === myTabId.value))
 
 const lineViewerRef = ref<InstanceType<typeof BookLineViewer> | null>(null)
+const tocTreeViewRef = ref<InstanceType<typeof BookTocTreeView> | null>(null)
 const altTocByLineIndex = ref<Map<number, AltTocLineEntry[]>>(new Map())
 const tocEntries = ref<TocEntry[]>([])
 const flatTocEntries = ref<TocEntry[]>([])
 const isTocLoading = ref(false)
+const currentCenterLineIndex = ref<number | null>(null)
+const currentTocEntryId = ref<number | undefined>(undefined)
 
-// Filtered TOC entries based on showAltToc setting
+// Filtered TOC entries based on showAltToc setting and book title
 const filteredTocEntries = computed(() => {
+  let entries = tocEntries.value
+
   // If showAltToc is false, filter out the alt TOC root node (חלוקה נוספת)
   if (myTab.value?.bookState?.showAltToc === false) {
-    return tocEntries.value.filter(entry => !entry.isAltToc)
+    entries = entries.filter(entry => !entry.isAltToc)
   }
-  return tocEntries.value
+
+  // If root entry matches book title, promote its children to root level
+  const bookTitle = currentBook.value?.title
+  if (bookTitle && entries.length === 1) {
+    const rootEntry = entries[0]
+    // Check if single root entry matches book title (case-insensitive, trimmed)
+    if ((rootEntry.level === 0 || !rootEntry.parentId) &&
+      rootEntry.text.trim().toLowerCase() === bookTitle.trim().toLowerCase() &&
+      rootEntry.children && rootEntry.children.length > 0) {
+      // Return the children as the new root level
+      return rootEntry.children
+    }
+  }
+
+  return entries
 })
 
 // Get current book from the category tree store
@@ -153,7 +175,7 @@ function handleNavigateLine(newIndex: number) {
   if (myTab.value?.bookState) {
     myTab.value.bookState.selectedLineIndex = newIndex
   }
-  
+
   // Scroll the line viewer explicitly for navigation requests coming from the commentary pane
   const viewer: any = lineViewerRef.value
   if (viewer?.scrollToLineIndex) {

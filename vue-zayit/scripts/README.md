@@ -56,7 +56,7 @@ Example:
 
 ### Configuration
 
-Edit `update-hebrewbooks.ts` to adjust:
+Edit `update-hebrewbooks-puppeteer.ts` to adjust:
 
 - `MAX_CONSECUTIVE_EMPTY`: Number of empty results before stopping (default: 10)
 - `REQUEST_DELAY_MS`: Delay between requests in milliseconds (default: 1000)

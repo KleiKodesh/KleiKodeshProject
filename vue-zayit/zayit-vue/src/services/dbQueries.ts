@@ -28,6 +28,7 @@ export const SqlQueries = {
       FROM default_commentator
       WHERE position = 0
     ) dc ON dc.bookId = b.Id
+    WHERE b.externalLibraryId IS NULL
   `,
 
   getToc: (docId: number) => `
@@ -77,15 +78,17 @@ export const SqlQueries = {
       JOIN book bk ON bk.id = l.targetBookId
       WHERE l.sourceLineId = ?
       ${connectionTypeId !== undefined ? 'AND l.connectionTypeId = ?' : ''}
+        AND bk.externalLibraryId IS NULL
       ORDER BY bk.title
     `,
     params: connectionTypeId !== undefined ? [lineId, connectionTypeId] : [lineId]
   }),
 
   getLineContent: (bookId: number, lineIndex: number) => `
-    SELECT content 
-    FROM line 
-    WHERE bookId = ${bookId} AND lineIndex = ${lineIndex}
+    SELECT l.content, lt.tocEntryId
+    FROM line l
+    LEFT JOIN line_toc lt ON l.id = lt.lineId
+    WHERE l.bookId = ${bookId} AND l.lineIndex = ${lineIndex}
   `,
 
   getLineId: (bookId: number, lineIndex: number) => `
@@ -98,23 +101,26 @@ export const SqlQueries = {
     SELECT TotalLines as totalLines
     FROM book 
     WHERE Id = ${bookId}
+      AND externalLibraryId IS NULL
   `,
 
   getLineRange: (bookId: number, start: number, end: number) => `
-    SELECT lineIndex, content 
-    FROM line 
-    WHERE bookId = ${bookId} 
-      AND lineIndex >= ${start} 
-      AND lineIndex <= ${end} 
-    ORDER BY lineIndex
+    SELECT l.lineIndex, l.content, lt.tocEntryId
+    FROM line l
+    LEFT JOIN line_toc lt ON l.id = lt.lineId
+    WHERE l.bookId = ${bookId} 
+      AND l.lineIndex >= ${start} 
+      AND l.lineIndex <= ${end} 
+    ORDER BY l.lineIndex
   `,
 
   searchLines: (bookId: number, searchTerm: string) => `
-    SELECT lineIndex, content 
-    FROM line 
-    WHERE bookId = ${bookId} 
-      AND content LIKE '%${searchTerm}%'
-    ORDER BY lineIndex
+    SELECT l.lineIndex, l.content, lt.tocEntryId
+    FROM line l
+    LEFT JOIN line_toc lt ON l.id = lt.lineId
+    WHERE l.bookId = ${bookId} 
+      AND l.content LIKE '%${searchTerm}%'
+    ORDER BY l.lineIndex
   `,
 
   getConnectionTypes: `
@@ -133,11 +139,12 @@ export const SqlQueries = {
   `,
 
   getLinesByIds: (bookId: number, lineIds: number[]) => `
-    SELECT lineIndex, content
-    FROM line
-    WHERE bookId = ${bookId}
-      AND id IN (${lineIds.join(',')})
-    ORDER BY lineIndex
+    SELECT l.lineIndex, l.content, lt.tocEntryId
+    FROM line l
+    LEFT JOIN line_toc lt ON l.id = lt.lineId
+    WHERE l.bookId = ${bookId}
+      AND l.id IN (${lineIds.join(',')})
+    ORDER BY l.lineIndex
   `,
 
   getLineIndexFromLineId: (lineId: number) => `

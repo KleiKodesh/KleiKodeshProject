@@ -87,6 +87,8 @@ export class BookLineViewerService {
         this.priorityQueue = this.priorityQueue.filter(batch => !neededBatches.has(batch))
         this.priorityQueue.unshift(...batchArray)
 
+        console.log(`[BookLineViewerService] prioritizeLines(${centerLine}) → batches [${batchArray.join(', ')}] moved to front, queue length: ${this.priorityQueue.length}`)
+
         // Load the most critical batch immediately
         if (batchArray.length > 0) {
             await this.loadBatch(batchArray[0]!)
@@ -180,9 +182,7 @@ export class BookLineViewerService {
             const start = batchIndex * BATCH_SIZE
             const end = Math.min(start + BATCH_SIZE - 1, this.totalLines.value - 1)
 
-            // console.log(`[BookLineViewerService] Loading batch ${batchIndex}, lines ${start}-${end}`);
             const loadedLines = await dbService.loadLineRange(this.bookId, start, end)
-            // console.log(`[BookLineViewerService] Received ${loadedLines.length} lines from batch ${batchIndex}`);
 
             // Update lines with proper reactivity - create new object to trigger Vue's reactivity
             const updatedLines = { ...this.lines.value }
@@ -190,8 +190,6 @@ export class BookLineViewerService {
                 updatedLines[line.lineIndex] = line.content
             })
             this.lines.value = updatedLines
-
-            // console.log(`[BookLineViewerService] Updated lines.value, total keys: ${Object.keys(this.lines.value).length}`);
 
         } catch (error) {
             console.error(`❌ Failed to load batch ${batchIndex}:`, error)

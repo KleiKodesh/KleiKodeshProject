@@ -6,6 +6,7 @@ import { dbService } from '../services/dbService'
 
 export const useCategoryTreeStore = defineStore('categoryTree', () => {
     const isLoading = ref(true);
+    const error = ref<string | null>(null);
     const categoryTree = ref<Category[]>([])
     const allBooks = ref<Book[]>([])
 
@@ -19,6 +20,7 @@ export const useCategoryTreeStore = defineStore('categoryTree', () => {
 
     async function buildTree() {
         try {
+            error.value = null;
             const { categoriesFlat: categories, booksFlat: books } = await dbService.getTree()
 
             // Group books by categoryId and sort them by orderIndex
@@ -90,14 +92,19 @@ export const useCategoryTreeStore = defineStore('categoryTree', () => {
             allBooks.value = books
             categoryTree.value = roots
             isLoading.value = false;
-        } catch (error) {
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+            console.error('❌ Failed to build category tree:', err);
+            error.value = errorMessage;
             isLoading.value = false;
+            throw err; // Re-throw so caller knows it failed
         }
     }
 
     return {
         categoryTree,
         allBooks,
-        isLoading
+        isLoading,
+        error
     }
 })

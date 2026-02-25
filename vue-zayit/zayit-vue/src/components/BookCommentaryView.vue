@@ -340,7 +340,7 @@ const scrollPositionId = computed(() => {
 useVirtualScrollerPosition(
     commentaryScrollerRef,
     scrollPositionId,
-    skipScrollRestore
+    { skipRestore: skipScrollRestore }
 )
 
 // Flatten link groups into individual virtual items
