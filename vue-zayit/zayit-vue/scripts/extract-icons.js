@@ -53,10 +53,16 @@ const usedIcons = [
   'filter-28-regular',
   'filter-24-regular',
   'eye-lines-28-regular',
+  'eye-lines-28-filled',
   'apps-28-regular',
   'checkmark-24-regular',
   'edit-24-regular',
-  'delete-24-regular'
+  'delete-24-regular',
+  're-order-dots-horizontal-24-regular',
+  're-order-dots-vertical-24-regular',
+  'arrow-move-24-regular',
+  'zoom-out-24-regular',
+  'zoom-in-24-regular'
 ];
 
 // List of fluent-color icons used in the app
