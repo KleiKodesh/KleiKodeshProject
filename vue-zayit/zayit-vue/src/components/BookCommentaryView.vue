@@ -545,10 +545,12 @@ function resolveGroupLabel(book: Book | undefined, categoryTree: typeof category
 }
 
 // Load categories when link groups change
-watch(linkGroups, () => {
+// Load categories when link groups OR connection type filter changes
+watch([linkGroups, selectedConnectionTypeId], () => {
     console.log('🏷️ Loading category groups for commentary books...')
+    console.log('🔍 Current connection type filter:', selectedConnectionTypeId.value)
     
-    // Get unique book IDs from link groups
+    // Get unique book IDs from link groups (already filtered by connection type at SQL level)
     const bookIds = Array.from(new Set(
         linkGroups.value
             .map(group => group.targetBookId)
@@ -600,6 +602,15 @@ watch(linkGroups, () => {
         availableCategories.value = categories
         
         console.log('✅ Category filter ready with', categories.length, 'groups:', categories.map(c => c.name))
+        
+        // Clear category selection if it's no longer available
+        if (selectedCategoryId.value !== undefined) {
+            const stillAvailable = categories.some(cat => cat.id === selectedCategoryId.value)
+            if (!stillAvailable) {
+                console.log('⚠️ Previously selected category no longer available, clearing selection')
+                selectedCategoryId.value = undefined
+            }
+        }
     } catch (error) {
         console.error('❌ Failed to load categories:', error)
         availableCategories.value = []
