@@ -3,7 +3,7 @@
        @click.stop="handleHeaderClick">
     <div class="flex-row">
       <!-- Settings menu -->
-      <TabHeaderMenu @close="handleDropdownClose" />
+      <TitlebarDropdownMenu @close="handleDropdownClose" />
 
       <!-- Toolbar toggle button -->
       <button v-if="tabStore.activeTab?.currentPage === 'bookview'"
@@ -67,8 +67,8 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { Icon } from '@iconify/vue';
-import TabHeaderMenu from './TabHeaderMenu.vue';
-import CommentaryToggleIcon from './icons/CommentaryToggleIcon.vue';
+import TitlebarDropdownMenu from './TitlebarDropdownMenu.vue';
+import CommentaryToggleIcon from '@/components/icons/CommentaryToggleIcon.vue';
 import { useTabStore } from '../stores/tabStore';
 
 const tabStore = useTabStore();

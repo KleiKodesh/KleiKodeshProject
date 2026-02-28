@@ -217,6 +217,43 @@ useEventListener("keydown", (event: KeyboardEvent) => {
 - `event.key`: Character produced (varies: 'a' on English, 'ש' on Hebrew keyboard)
 - Shortcuts must work on any keyboard layout, so use `event.code`
 
+### Scroll Behavior
+
+- **ALWAYS use `block: 'nearest'` with `scrollIntoView()`** to prevent aggressive scrolling
+- `block: 'nearest'` only scrolls if the element is not visible and does minimal scroll
+- **NEVER use `block: 'center'` or `block: 'start'`** - they can cause parent containers to scroll unexpectedly
+- This prevents the entire app from shifting when scrolling to elements
+
+**Examples:**
+
+```typescript
+// ✅ GOOD: Minimal scroll, only if needed
+element.scrollIntoView({
+  behavior: "smooth",
+  block: "nearest",
+  inline: "nearest",
+});
+
+// ❌ BAD: Aggressive centering can scroll parent containers
+element.scrollIntoView({
+  behavior: "smooth",
+  block: "center",
+});
+
+// ❌ BAD: Forces alignment even if already visible
+element.scrollIntoView({
+  behavior: "smooth",
+  block: "start",
+});
+```
+
+**Why block: 'nearest' is safer:**
+
+- Only scrolls if element is outside viewport
+- Does minimal scroll to bring element into view
+- Doesn't try to center or force specific alignment
+- Reduces unwanted parent container scrolling
+
 ## Clean Code Principles
 
 Based on analysis of problematic code patterns in this project, follow these essential practices:

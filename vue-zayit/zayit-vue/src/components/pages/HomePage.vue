@@ -37,9 +37,12 @@
                          custom-class="workspace-tile"
                          @click="openWorkspaceManager" />
 
-                <AppTile label="PDF"
-                         image-src="/pdf.png"
-                         @click="openPdf" />
+                <AppTile label="מסמך מהמחשב"
+                         @click="openPdf">
+                    <template #icon>
+                        <FolderDocumentIcon />
+                    </template>
+                </AppTile>
 
                 <AppTile label="היברו-בוקס"
                          image-src="/Hebrewbooks.png"
@@ -60,10 +63,10 @@ import { useTabStore } from '../../stores/tabStore';
 import { pdfService } from '../../services/pdfService';
 import { webviewBridge } from '../../services/webviewBridge';
 import { bloomSearchService } from '../../services/bloomSearchService';
-import UniformGrid from '../UniformGrid.vue';
+import UniformGrid from '../common/UniformGrid.vue';
 import AppTile from '../AppTile.vue';
-import CircularProgress from '../ui/CircularProgress.vue';
-
+import CircularProgress from '../common/CircularProgress.vue';
+import FolderDocumentIcon from '@/components/icons/FolderDocumentIcon.vue';
 const tabStore = useTabStore();
 
 const isSearchIndexing = ref(false);

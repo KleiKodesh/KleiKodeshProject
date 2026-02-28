@@ -20,7 +20,7 @@
             </div>
             <div v-else
                  class="tree-content">
-                <CheckedCategoryNode v-for="category in categoryTreeStore.categoryTree"
+                <FsCheckedCategoryNode v-for="category in categoryTreeStore.categoryTree"
                                      :key="category.id"
                                      :category="category"
                                      :checked-book-ids="checkedBookIds"
@@ -36,7 +36,7 @@
 import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useCategoryTreeStore } from '../stores/categoryTreeStore'
-import CheckedCategoryNode from './CheckedCategoryNode.vue'
+import FsCheckedCategoryNode from './FsCheckedCategoryNode.vue'
 import LoadingSpinner from './common/LoadingSpinner.vue'
 
 const props = defineProps<{

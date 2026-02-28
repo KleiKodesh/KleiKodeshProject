@@ -38,7 +38,7 @@
                                         myTab?.bookState?.showAltToc
                                     ]"
                                      :data-index="index">
-                    <BookLine :content="item.content || '\u00A0'"
+                    <Line :content="item.content || '\u00A0'"
                               :line-index="index"
                               :is-selected="selectedLineIndex === index"
                               :alt-toc-entries="item.altTocEntries"
@@ -60,7 +60,7 @@
 import { ref, watch, nextTick, onMounted, onUnmounted, computed } from 'vue'
 import { useFocus, useEventListener } from '@vueuse/core'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
-import BookLine from './BookLine.vue'
+import Line from './Line.vue'
 import GenericSearch from './common/GenericSearch.vue'
 import ContextMenu, { type ContextMenuItem } from './common/ContextMenu.vue'
 import { BookLineViewerService } from '../services/bookLineViewerService'

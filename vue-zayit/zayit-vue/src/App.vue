@@ -7,15 +7,35 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import TabControl from './components/TabControl.vue'
 import { useTabStore } from './stores/tabStore'
+import { useZoomHandler } from './utils/zoom'
 
 const tabStore = useTabStore()
 const appContainer = ref<HTMLElement>()
 
-// Keyboard shortcuts using useEventListener to support any keyboard layout
+// Zoom handling with keyboard, trackpad, and touch support
+const currentZoom = computed({
+    get: () => tabStore.activeTab?.bookState?.zoom || 100,
+    set: (value: number) => {
+        const tab = tabStore.activeTab
+        if (tab?.bookState) {
+            tab.bookState.zoom = value
+        }
+    }
+})
+
+const isBookViewPage = computed(() => tabStore.activeTab?.currentPage === 'bookview')
+
+useZoomHandler({
+    zoom: currentZoom,
+    target: appContainer,
+    enabled: isBookViewPage
+})
+
+// Other keyboard shortcuts using useEventListener to support any keyboard layout
 useEventListener('keydown', (event: KeyboardEvent) => {
     const hasCtrlOrMeta = event.ctrlKey || event.metaKey
 
@@ -27,30 +47,6 @@ useEventListener('keydown', (event: KeyboardEvent) => {
     // Ctrl+X: Close all tabs (use event.code for keyboard layout independence)
     if (hasCtrlOrMeta && event.code === 'KeyX') {
         tabStore.closeAllTabs()
-    }
-
-    // Ctrl+Plus/Equal: Zoom in (only on bookview page)
-    if (hasCtrlOrMeta && (event.code === 'Equal' || event.code === 'NumpadAdd')) {
-        if (tabStore.activeTab?.currentPage === 'bookview') {
-            event.preventDefault()
-            tabStore.zoomIn()
-        }
-    }
-
-    // Ctrl+Minus: Zoom out (only on bookview page)
-    if (hasCtrlOrMeta && (event.code === 'Minus' || event.code === 'NumpadSubtract')) {
-        if (tabStore.activeTab?.currentPage === 'bookview') {
-            event.preventDefault()
-            tabStore.zoomOut()
-        }
-    }
-
-    // Ctrl+0: Reset zoom (only on bookview page)
-    if (hasCtrlOrMeta && (event.code === 'Digit0' || event.code === 'Numpad0')) {
-        if (tabStore.activeTab?.currentPage === 'bookview') {
-            event.preventDefault()
-            tabStore.resetZoom()
-        }
     }
 })
 

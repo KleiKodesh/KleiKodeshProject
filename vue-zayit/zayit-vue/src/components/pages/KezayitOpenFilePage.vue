@@ -1,12 +1,12 @@
 <template>
     <div class="flex-column height-fill">
-        <BookTreeSearch v-if="searchInput"
+        <FsTreeSearch v-if="searchInput"
                         ref="searchRef"
                         :books="allBooks"
                         :search-query="searchInput"
                         class="flex-110"
                         @return-focus="returnFocusToSearch" />
-        <BookTree v-else
+        <FsTree v-else
                   ref="treeRef"
                   class="flex-110"
                   @return-focus="returnFocusToSearch" />
@@ -30,8 +30,8 @@
 
 <script setup lang="ts">
 import { ref, onMounted, nextTick, watch } from 'vue';
-import BookTree from '../BookTree.vue';
-import BookTreeSearch from '../BookTreeSearch.vue';
+import FsTree from '../FsTree.vue';
+import FsTreeSearch from '../FsTreeSearch.vue';
 import { Icon } from '@iconify/vue';
 import { useCategoryTreeStore } from '../../stores/categoryTreeStore';
 import { storeToRefs } from 'pinia';
@@ -41,8 +41,8 @@ const { allBooks, isLoading } = storeToRefs(categoryTreeStore);
 
 const searchInput = ref('');
 const searchInputRef = ref<HTMLInputElement | null>(null);
-const treeRef = ref<InstanceType<typeof BookTree> | null>(null);
-const searchRef = ref<InstanceType<typeof BookTreeSearch> | null>(null);
+const treeRef = ref<InstanceType<typeof FsTree> | null>(null);
+const searchRef = ref<InstanceType<typeof FsTreeSearch> | null>(null);
 
 // Reset tree: clear search and collapse all
 const resetTree = () => {

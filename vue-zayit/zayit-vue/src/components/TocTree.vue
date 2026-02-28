@@ -13,9 +13,9 @@
             <span class="text-secondary">אין תוכן עניינים זמין</span>
         </div>
         <template v-else>
-            <BookTocTreeNode v-for="(entry, index) in tocEntries"
+            <TocTreeNode v-for="(entry, index) in tocEntries"
                              :key="entry.id"
-                             :ref="el => { if (el) nodeRefs[index] = el as InstanceType<typeof BookTocTreeNode> }"
+                             :ref="el => { if (el) nodeRefs[index] = el as InstanceType<typeof TocTreeNode> }"
                              :entry="entry"
                              :is-compact-mode="$props.isCompactMode"
                              @select-line="emit('selectLine', $event)" />
@@ -26,7 +26,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { Icon } from '@iconify/vue'
-import BookTocTreeNode from './BookTocTreeNode.vue'
+import TocTreeNode from './TocTreeNode.vue'
 import { useListKeyboardNavigation } from '../composables/useListKeyboardNavigation'
 import type { TocEntry } from '../types/BookToc'
 
@@ -41,7 +41,7 @@ const emit = defineEmits<{
     returnFocus: []
 }>()
 
-const nodeRefs = ref<InstanceType<typeof BookTocTreeNode>[]>([])
+const nodeRefs = ref<InstanceType<typeof TocTreeNode>[]>([])
 const containerRef = ref<HTMLElement>()
 
 const { handleKeyDown } = useListKeyboardNavigation(containerRef, {

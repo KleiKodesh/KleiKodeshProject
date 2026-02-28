@@ -2,26 +2,26 @@
   <div class="flex-column height-fill book-view-wrapper"
        @click="handleBackgroundClick">
     <!-- Top Toolbar -->
-    <BookViewToolbar v-show="myTab?.bookState?.bookId && toolbarPosition === 'top'"
+    <LineViewToolbar v-show="myTab?.bookState?.bookId && toolbarPosition === 'top'"
                      ref="toolbarRef"
                      position="top" />
 
     <!-- Floating Toolbars -->
-    <BookViewToolbar v-show="myTab?.bookState?.bookId && toolbarPosition === 'float-horizontal'"
+    <LineViewToolbar v-show="myTab?.bookState?.bookId && toolbarPosition === 'float-horizontal'"
                      position="float-horizontal" />
-    <BookViewToolbar v-show="myTab?.bookState?.bookId && toolbarPosition === 'float-vertical'"
+    <LineViewToolbar v-show="myTab?.bookState?.bookId && toolbarPosition === 'float-vertical'"
                      position="float-vertical" />
 
     <!-- Content area with TOC overlay -->
     <div class="flex-110 content-area-wrapper">
       <!-- Right Toolbar (ימין - appears on right in RTL) -->
-      <BookViewToolbar v-show="myTab?.bookState?.bookId && toolbarPosition === 'right'"
+      <LineViewToolbar v-show="myTab?.bookState?.bookId && toolbarPosition === 'right'"
                        position="right" />
 
       <div class="flex-110 content-area">
         <!-- Virtualized viewer is now always enabled -->
         <keep-alive>
-          <BookTocTreeView v-if="myTab?.bookState?.isTocOpen && myTab?.bookState?.bookId"
+          <TocTreeView v-if="myTab?.bookState?.isTocOpen && myTab?.bookState?.bookId"
                            ref="tocTreeViewRef"
                            :toc-entries="filteredTocEntries"
                            :is-loading="isTocLoading"
@@ -35,7 +35,7 @@
                    :show-bottom="myTab.bookState.showBottomPane || false"
                    class="height-fill">
           <template #top>
-            <BookLineViewer ref="lineViewerRef"
+            <LineView ref="lineViewerRef"
                             :tab-id="myTabId"
                             :alt-toc-by-line-index="altTocByLineIndex"
                             :flat-toc-entries="flatTocEntries"
@@ -44,7 +44,7 @@
                             @current-toc-entry-changed="currentTocEntryId = $event" />
           </template>
           <template #bottom>
-            <BookCommentaryView :book-id="myTab.bookState.bookId"
+            <CommentaryView :book-id="myTab.bookState.bookId"
                                 :selected-line-index="myTab.bookState.selectedLineIndex"
                                 :book="currentBook"
                                 @navigate-line="handleNavigateLine" />
@@ -53,12 +53,12 @@
       </div>
 
       <!-- Left Toolbar (שמאל - appears on left in RTL) -->
-      <BookViewToolbar v-show="myTab?.bookState?.bookId && toolbarPosition === 'left'"
+      <LineViewToolbar v-show="myTab?.bookState?.bookId && toolbarPosition === 'left'"
                        position="left" />
     </div>
 
     <!-- Bottom Toolbar -->
-    <BookViewToolbar v-show="myTab?.bookState?.bookId && toolbarPosition === 'bottom'"
+    <LineViewToolbar v-show="myTab?.bookState?.bookId && toolbarPosition === 'bottom'"
                      position="bottom" />
   </div>
 </template>
@@ -68,11 +68,11 @@ import { ref, computed, watch } from 'vue'
 import { useTabStore } from '../../stores/tabStore'
 import { useCategoryTreeStore } from '../../stores/categoryTreeStore'
 
-import BookTocTreeView from '../BookTocTreeView.vue'
-import BookLineViewer from '../BookLineViewer.vue'
+import TocTreeView from '../TocTreeView.vue'
+import LineView from '../LineView.vue'
 import SplitPane from '../common/SplitPane.vue'
-import BookCommentaryView from '../BookCommentaryView.vue'
-import BookViewToolbar from '../BookViewToolbar.vue'
+import CommentaryView from '../CommentaryView.vue'
+import LineViewToolbar from '../LineViewToolbar.vue'
 import { dbService } from '../../services/dbService'
 import { buildTocFromFlat } from '../../services/bookTocService'
 import type { AltTocLineEntry } from '../../services/bookTocService'
@@ -88,9 +88,9 @@ const toolbarPosition = computed(() => myTab.value?.bookState?.toolbarPosition |
 const toolbarPositionClass = computed(() => `toolbar-position-${toolbarPosition.value}`)
 const contentAreaClass = computed(() => `content-with-toolbar-${toolbarPosition.value}`)
 
-const lineViewerRef = ref<InstanceType<typeof BookLineViewer> | null>(null)
-const tocTreeViewRef = ref<InstanceType<typeof BookTocTreeView> | null>(null)
-const toolbarRef = ref<InstanceType<typeof BookViewToolbar> | null>(null)
+const lineViewerRef = ref<InstanceType<typeof LineView> | null>(null)
+const tocTreeViewRef = ref<InstanceType<typeof TocTreeView> | null>(null)
+const toolbarRef = ref<InstanceType<typeof LineViewToolbar> | null>(null)
 const altTocByLineIndex = ref<Map<number, AltTocLineEntry[]>>(new Map())
 const tocEntries = ref<TocEntry[]>([])
 const flatTocEntries = ref<TocEntry[]>([])

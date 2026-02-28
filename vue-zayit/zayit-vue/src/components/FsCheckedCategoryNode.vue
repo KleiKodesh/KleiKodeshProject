@@ -26,7 +26,7 @@
                                  :checked-book-ids="checkedBookIds"
                                  :result-counts="resultCounts"
                                  @toggle-book="$emit('toggleBook', $event)"
-                                 @toggle-category="(cat, checked) => $emit('toggleCategory', cat, checked)" />
+                                 @toggle-category="(cat: Category, checked: boolean) => $emit('toggleCategory', cat, checked)" />
 
             <div v-for="book in category.books"
                  :key="book.id"

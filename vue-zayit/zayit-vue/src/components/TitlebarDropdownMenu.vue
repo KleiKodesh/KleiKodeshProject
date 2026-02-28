@@ -20,7 +20,7 @@
           </div> -->
 
           <!-- Diacritics toggle dropdown item - moved to toolbar -->
-          <!-- <DiacriticsDropdown :hide-when-toolbar-visible="true" /> -->
+          <!-- <TitlebarDiacriticsDropdown :hide-when-toolbar-visible="true" /> -->
 
           <!-- Line display toggle dropdown item -->
           <!-- COMMENTED OUT: Block view functionality removed for performance
@@ -107,7 +107,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { Icon } from '@iconify/vue';
-import DiacriticsDropdown from './TabHeaderDiacriticsDropdown.vue';
+import TitlebarDiacriticsDropdown from './DiacriticsDropdownItem.vue';
 import { useTabStore } from '../stores/tabStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { toggleTheme, isDarkTheme, syncPdfViewerTheme } from '../utils/theme';
@@ -278,7 +278,7 @@ const handlePopoutClick = async () => {
       const { webviewBridge } = await import('../services/webviewBridge');
       await webviewBridge.call('TogglePopOut');
     } catch (error) {
-      console.error('[TabHeaderMenu] Failed to toggle popout:', error);
+      console.error('[TitlebarDropdownMenu] Failed to toggle popout:', error);
     }
   }
   closeDropdown();

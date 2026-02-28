@@ -1,7 +1,7 @@
 <template>
   <div class="flex-column height-fill">
     <div class="header-container">
-      <TabHeader @click="toggleDropdown"
+      <Titlebar @click="toggleDropdown"
                  @close-tab-dropdown="closeDropdown"
                  :is-dropdown-open="dropdownRef?.isVisible || false" />
       <TabListDropdown ref="dropdownRef" />
@@ -13,7 +13,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import TabHeader from './TabHeader.vue';
+import Titlebar from './Titlebar.vue';
 import TabListDropdown from './TabListDropdown.vue';
 import TabContent from './TabContent.vue';
 

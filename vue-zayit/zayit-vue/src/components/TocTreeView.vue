@@ -4,7 +4,7 @@
              :class="{ 'compact-mode': isCompactMode }"
              @click.stop>
             <div class="overflow-y flex-110">
-                <BookTocTreeSearch v-if="searchInput"
+                <TocTreeSearch v-if="searchInput"
                                    ref="searchRef"
                                    :toc-entries="props.tocEntries"
                                    :search-query="searchInput"
@@ -12,7 +12,7 @@
                                    @select-line="handleSelectLine"
                                    @return-focus="returnFocusToSearch" />
 
-                <BookTocTree v-else
+                <TocTree v-else
                              :toc-entries="props.tocEntries"
                              :is-loading="props.isLoading"
                              :is-compact-mode="isCompactMode"
@@ -45,8 +45,8 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useEventListener } from '@vueuse/core';
-import BookTocTree from './BookTocTree.vue';
-import BookTocTreeSearch from './BookTocTreeSearch.vue';
+import TocTree from './TocTree.vue';
+import TocTreeSearch from './TocTreeSearch.vue';
 import { Icon } from '@iconify/vue';
 import { scrollToElementCentered } from '../composables/useScrollToElement';
 
@@ -68,8 +68,8 @@ const tabStore = useTabStore();
 
 const searchInput = ref('');
 const searchInputRef = ref<HTMLInputElement | null>(null);
-const treeRef = ref<InstanceType<typeof BookTocTree> | null>(null);
-const searchRef = ref<InstanceType<typeof BookTocTreeSearch> | null>(null);
+const treeRef = ref<InstanceType<typeof TocTree> | null>(null);
+const searchRef = ref<InstanceType<typeof TocTreeSearch> | null>(null);
 
 // Handle TOC line selection
 const handleSelectLine = (lineIndex: number) => {

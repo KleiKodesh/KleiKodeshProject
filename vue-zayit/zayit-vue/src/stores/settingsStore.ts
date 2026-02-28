@@ -4,6 +4,8 @@ import { ref, watch } from 'vue'
 const STORAGE_KEY = 'zayit-settings'
 
 export type NewTabPage = 'homepage' | 'openfile' | 'hebrewbooks' | 'kezayit-search'
+export type BookViewToolbarPosition = 'top' | 'bottom' | 'left' | 'right' | 'float-vertical' | 'float-horizontal'
+export type CommentaryToolbarPosition = 'top' | 'bottom'
 
 export interface Settings {
     headerFont: string
@@ -17,6 +19,8 @@ export interface Settings {
     globalDiacritics: boolean
     globalDiacriticsState: number
     newTabPage: NewTabPage
+    defaultBookViewToolbarPosition: BookViewToolbarPosition
+    commentaryToolbarPosition: CommentaryToolbarPosition
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -30,7 +34,9 @@ const DEFAULT_SETTINGS: Settings = {
     databasePath: '',
     globalDiacritics: false,
     globalDiacriticsState: 0,
-    newTabPage: 'homepage'
+    newTabPage: 'homepage',
+    defaultBookViewToolbarPosition: 'top',
+    commentaryToolbarPosition: 'top'
 }
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -45,6 +51,8 @@ export const useSettingsStore = defineStore('settings', () => {
     const globalDiacritics = ref(DEFAULT_SETTINGS.globalDiacritics)
     const globalDiacriticsState = ref(DEFAULT_SETTINGS.globalDiacriticsState)
     const newTabPage = ref<NewTabPage>(DEFAULT_SETTINGS.newTabPage)
+    const defaultBookViewToolbarPosition = ref<BookViewToolbarPosition>(DEFAULT_SETTINGS.defaultBookViewToolbarPosition)
+    const commentaryToolbarPosition = ref<CommentaryToolbarPosition>(DEFAULT_SETTINGS.commentaryToolbarPosition)
 
     const loadFromStorage = () => {
         try {
@@ -62,6 +70,8 @@ export const useSettingsStore = defineStore('settings', () => {
                 globalDiacritics.value = settings.globalDiacritics ?? DEFAULT_SETTINGS.globalDiacritics
                 globalDiacriticsState.value = settings.globalDiacriticsState ?? DEFAULT_SETTINGS.globalDiacriticsState
                 newTabPage.value = settings.newTabPage || DEFAULT_SETTINGS.newTabPage
+                defaultBookViewToolbarPosition.value = settings.defaultBookViewToolbarPosition || DEFAULT_SETTINGS.defaultBookViewToolbarPosition
+                commentaryToolbarPosition.value = settings.commentaryToolbarPosition || DEFAULT_SETTINGS.commentaryToolbarPosition
             }
         } catch (e) {
             console.error('Failed to load settings:', e)
@@ -81,7 +91,9 @@ export const useSettingsStore = defineStore('settings', () => {
                 databasePath: databasePath.value,
                 globalDiacritics: globalDiacritics.value,
                 globalDiacriticsState: globalDiacriticsState.value,
-                newTabPage: newTabPage.value
+                newTabPage: newTabPage.value,
+                defaultBookViewToolbarPosition: defaultBookViewToolbarPosition.value,
+                commentaryToolbarPosition: commentaryToolbarPosition.value
             }))
         } catch (e) {
             console.error('Failed to save settings:', e)
@@ -138,6 +150,8 @@ export const useSettingsStore = defineStore('settings', () => {
         globalDiacritics.value = DEFAULT_SETTINGS.globalDiacritics
         globalDiacriticsState.value = DEFAULT_SETTINGS.globalDiacriticsState
         newTabPage.value = DEFAULT_SETTINGS.newTabPage
+        defaultBookViewToolbarPosition.value = DEFAULT_SETTINGS.defaultBookViewToolbarPosition
+        commentaryToolbarPosition.value = DEFAULT_SETTINGS.commentaryToolbarPosition
         localStorage.removeItem(STORAGE_KEY)
         applyCSSVariables()
     }
@@ -147,7 +161,7 @@ export const useSettingsStore = defineStore('settings', () => {
     applyCSSVariables()
 
     // Watch for changes and persist
-    watch([headerFont, textFont, fontSize, linePadding, censorDivineNames, appZoom, readingBackgroundColor, databasePath, globalDiacritics, globalDiacriticsState, newTabPage], () => {
+    watch([headerFont, textFont, fontSize, linePadding, censorDivineNames, appZoom, readingBackgroundColor, databasePath, globalDiacritics, globalDiacriticsState, newTabPage, defaultBookViewToolbarPosition, commentaryToolbarPosition], () => {
         saveToStorage()
         applyCSSVariables()
     })
@@ -164,6 +178,8 @@ export const useSettingsStore = defineStore('settings', () => {
         globalDiacritics,
         globalDiacriticsState,
         newTabPage,
+        defaultBookViewToolbarPosition,
+        commentaryToolbarPosition,
         reset
     }
 })

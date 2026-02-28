@@ -12,9 +12,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useTabStore } from '../stores/tabStore'
-import DiacriticsFullIcon from './icons/DiacriticsFullIcon.vue'
-import DiacriticsNikkudOnlyIcon from './icons/DiacriticsNikkudOnlyIcon.vue'
-import DiacriticsNoneIcon from './icons/DiacriticsNoneIcon.vue'
+import DiacriticsFullIcon from '@/components/icons/DiacriticsFullIcon.vue'
+import DiacriticsNikkudOnlyIcon from '@/components/icons/DiacriticsNikkudOnlyIcon.vue'
+import DiacriticsNoneIcon from '@/components/icons/DiacriticsNoneIcon.vue'
 
 const props = defineProps<{
     hideWhenToolbarVisible?: boolean

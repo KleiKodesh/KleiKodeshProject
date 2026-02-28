@@ -78,7 +78,6 @@ namespace KleiKodesh.Ribbon
                         break;
                     case "About":
                         OpenAboutDocument();
-                        WordWindowHelper.OpenSoftSnapLeft();
                         break;
                     default:
                         MessageBox.Show($"אירעה שגיאה במהלך טעינת {id}");
