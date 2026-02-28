@@ -101,7 +101,7 @@
     </div>
 
     <!-- Filter panel -->
-    <CheckedBookTree v-if="isFilterOpen"
+    <FsCheckedTree v-if="isFilterOpen"
                      ref="filterPanelRef"
                      :checked-book-ids="checkedBookIds"
                      :result-counts="resultCounts"
@@ -130,7 +130,7 @@ import { useVirtualScrollerPosition } from '../../composables/useVirtualScroller
 import { useVirtualScrollerKeyboard } from '../../composables/useVirtualScrollerKeyboard'
 import type { BloomSearchResult } from '../../types/BloomSearch'
 import type { Category } from '../../types/BookCategoryTree'
-import CheckedBookTree from '../CheckedBookTree.vue'
+import FsCheckedTree from '../FsCheckedTree.vue'
 
 const tabStore = useTabStore()
 const categoryTreeStore = useCategoryTreeStore()
@@ -147,7 +147,7 @@ const searchQuery = ref('')
 const executedQuery = ref('') // The query that was actually searched
 const searchInputRef = ref<HTMLInputElement | null>(null)
 const scrollerRef = ref<InstanceType<typeof DynamicScroller> | null>(null)
-const filterPanelRef = ref<InstanceType<typeof CheckedBookTree>>()
+const filterPanelRef = ref<InstanceType<typeof FsCheckedTree>>()
 const results = ref<BloomSearchResult[]>([])
 const isSearching = ref(false)
 const hasSearched = ref(false)

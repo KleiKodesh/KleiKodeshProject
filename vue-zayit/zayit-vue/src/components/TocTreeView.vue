@@ -48,6 +48,7 @@ import { useEventListener } from '@vueuse/core';
 import BookTocTree from './BookTocTree.vue';
 import BookTocTreeSearch from './BookTocTreeSearch.vue';
 import { Icon } from '@iconify/vue';
+import { scrollToElementCentered } from '../composables/useScrollToElement';
 
 import type { TocEntry } from '../types/BookToc';
 import { useTabStore } from '../stores/tabStore';
@@ -195,7 +196,7 @@ function autoSelectTocEntry(tocEntryId: number) {
     expandNodesAlongPath(path);
 
     // Scroll to the entry after expansion
-    nextTick(() => {
+    nextTick(async () => {
         const treeEl = (treeRef.value as any)?.$el || treeRef.value;
         if (treeEl) {
             // Remove any existing highlights
@@ -217,7 +218,8 @@ function autoSelectTocEntry(tocEntryId: number) {
                         (node as HTMLElement).classList.add('highlight-current');
                     }
 
-                    node.scrollIntoView({ behavior: 'auto', block: 'center' });
+                    // Use scrollToElementCentered to center the TOC entry
+                    await scrollToElementCentered(node as HTMLElement);
                     break;
                 }
             }
