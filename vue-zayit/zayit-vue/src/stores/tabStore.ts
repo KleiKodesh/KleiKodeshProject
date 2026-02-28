@@ -4,6 +4,7 @@ import type { Tab, PageType } from '../types/Tab';
 import { webviewBridge } from '../services/webviewBridge';
 import { handleHebrewBookTabClosed } from '../services/hebrewBooksHandlers';
 import { useSettingsStore } from './settingsStore';
+import { zoomIn as zoomInUtil, zoomOut as zoomOutUtil, resetZoom as resetZoomUtil } from '../utils/zoom';
 
 const STORAGE_KEY = 'tabStore';
 const CURRENT_WORKSPACE_KEY = 'zayit_current_workspace';
@@ -249,6 +250,28 @@ export const useTabStore = defineStore('tabs', () => {
                 console.log('[TabStore] Cleaning up Hebrew book tab:', tab.pdfState.fileName);
                 handleHebrewBookTabClosed(tab);
             }
+
+            // Clean up ALL persisted data for this tab
+            const { LRUStorage } = await import('../utils/lruStorage')
+            const scrollStorage = new LRUStorage('vscroller-pos-', 1000)
+
+            // Pattern matches:
+            // - book-lines-{tabId}-*
+            // - commentary-{tabId}-*
+            // This clears all scroll positions for book viewer and commentary for this tab
+            const tabPattern = new RegExp(`^(book-lines|commentary)-${tab.id}-`)
+            const removed = scrollStorage.clearMatching(tabPattern)
+
+            if (removed > 0) {
+                console.log('[TabStore] 🧹 Cleaned up persisted data for tab:', {
+                    tabId: tab.id,
+                    tabTitle: tab.title,
+                    scrollPositionsRemoved: removed
+                })
+            }
+
+            // Note: Tab state (bookState, pdfState, etc.) is automatically cleaned up
+            // when the tab is removed from tabs.value array
         } catch (error) {
             console.error('[TabStore] Error during tab cleanup:', error);
         }
@@ -404,7 +427,8 @@ export const useTabStore = defineStore('tabs', () => {
                     hasConnections,
                     initialLineIndex,
                     isLineDisplayInline: false, // Default to block display (justified text)
-                    diacriticsState: settingsStore.globalDiacritics ? settingsStore.globalDiacriticsState : 0 // Apply global state if enabled
+                    diacriticsState: settingsStore.globalDiacritics ? settingsStore.globalDiacriticsState : 0, // Apply global state if enabled
+                    toolbarPosition: settingsStore.defaultBookViewToolbarPosition // Apply default toolbar position from settings
                 };
             } else {
                 // Same book - update initialLineIndex if provided, otherwise clear it
@@ -456,7 +480,7 @@ export const useTabStore = defineStore('tabs', () => {
         const tab = tabs.value.find(t => t.isActive);
         if (tab?.bookState) {
             const currentZoom = tab.bookState.zoom || 100;
-            tab.bookState.zoom = Math.min(200, currentZoom + 10);
+            tab.bookState.zoom = zoomInUtil(currentZoom);
         }
     };
 
@@ -464,14 +488,14 @@ export const useTabStore = defineStore('tabs', () => {
         const tab = tabs.value.find(t => t.isActive);
         if (tab?.bookState) {
             const currentZoom = tab.bookState.zoom || 100;
-            tab.bookState.zoom = Math.max(50, currentZoom - 10);
+            tab.bookState.zoom = zoomOutUtil(currentZoom);
         }
     };
 
     const resetZoom = () => {
         const tab = tabs.value.find(t => t.isActive);
         if (tab?.bookState) {
-            tab.bookState.zoom = 100;
+            tab.bookState.zoom = resetZoomUtil();
         }
     };
 
@@ -807,6 +831,7 @@ export const useTabStore = defineStore('tabs', () => {
                 shouldHighlight,
                 isLineDisplayInline: false,
                 diacriticsState: settingsStore.globalDiacritics ? settingsStore.globalDiacriticsState : 0, // Apply global state if enabled
+                toolbarPosition: settingsStore.defaultBookViewToolbarPosition, // Apply default toolbar position from settings
                 isFirstTocOpen: false // Skip full-width TOC since we're opening directly to content
             },
             searchState: highlightTerms ? {

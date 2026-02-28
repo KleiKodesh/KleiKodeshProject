@@ -21,7 +21,7 @@
                                   :category="child"
                                   :depth="depth + 1" />
 
-            <BookTreeNode v-for="book in category.books"
+            <FsBookNode v-for="book in category.books"
                           :key="book.id"
                           :book="book"
                           :depth="depth + 1" />
@@ -33,7 +33,7 @@
 import { ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import type { Category } from '../types/BookCategoryTree'
-import BookTreeNode from './BookTreeNode.vue'
+import FsBookNode from './FsBookNode.vue'
 
 type BookCategoryNodeInstance = {
     collapse: () => void

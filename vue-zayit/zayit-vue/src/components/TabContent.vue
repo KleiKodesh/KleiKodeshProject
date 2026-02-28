@@ -12,7 +12,7 @@ import KezayitOpenFilePage from './pages/KezayitOpenFilePage.vue';
 import BookViewPage from './pages/BookViewPage.vue';
 import PdfViewPage from './pages/PdfViewPage.vue';
 import HebrewBooksViewPage from './pages/HebrewBooksViewPage.vue';
-import SearchPage from './pages/SearchPage.vue';
+import KezayitSearchPage from './pages/KezayitSearchPage.vue';
 import SettingsPage from './pages/SettingsPage.vue';
 import HebrewbooksPage from './pages/HebrewbooksPage.vue';
 import WorkspacesPage from './pages/WorkspacesPage.vue';
@@ -26,10 +26,10 @@ const pageComponents: Record<PageType, any> = {
   'bookview': BookViewPage,
   'pdfview': PdfViewPage,
   'hebrewbooks-view': HebrewBooksViewPage,
-  'search': SearchPage,
+  'search': KezayitSearchPage,
   'settings': SettingsPage,
   'hebrewbooks': HebrewbooksPage,
-  'kezayit-search': SearchPage, // Use new Bloom search page
+  'kezayit-search': KezayitSearchPage, // Use new Bloom search page
   'workspaces': WorkspacesPage
 };
 
