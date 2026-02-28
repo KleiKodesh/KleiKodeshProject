@@ -61,15 +61,14 @@
 
         <div class="toolbar-separator"></div>
         <!-- Search button -->
-        <button v-if="!isTocVisible"
-                @click="handleSearchClick"
+        <button @click="handleSearchClick"
                 class="flex-center c-pointer touch-interactive"
                 title="חיפוש (Ctrl+F)">
             <Icon icon="fluent:search-24-regular" />
         </button>
 
         <!-- Commentary toggle button -->
-        <button v-if="hasConnections && !isTocVisible"
+        <button v-if="hasConnections"
                 @click="handleToggleSplitPane"
                 class="flex-center c-pointer touch-interactive"
                 :title="isSplitPaneOpen ? 'הסתר מפרשים וקישורים' : 'הצג מפרשים וקישורים'">
