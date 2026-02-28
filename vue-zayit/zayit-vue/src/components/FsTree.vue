@@ -17,9 +17,9 @@
             <p>לא נמצאו ספרים. אנא בדוק את חיבור מסד הנתונים.</p>
         </div>
         <template v-else>
-            <BookTreeCategoryNode v-for="(category, index) in categoryTreeStore.categoryTree"
+            <FsCategoryNode v-for="(category, index) in categoryTreeStore.categoryTree"
                                   :key="category.id"
-                                  :ref="el => { if (el) nodeRefs[index] = el as InstanceType<typeof BookTreeCategoryNode> }"
+                                  :ref="el => { if (el) nodeRefs[index] = el as InstanceType<typeof FsCategoryNode> }"
                                   :category="category" />
         </template>
     </div>
@@ -28,7 +28,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useCategoryTreeStore } from '../stores/categoryTreeStore'
-import BookTreeCategoryNode from './BookTreeCategoryNode.vue'
+import FsCategoryNode from './FsCategoryNode.vue'
 import LoadingSpinner from './common/LoadingSpinner.vue'
 import { useListKeyboardNavigation } from '../composables/useListKeyboardNavigation'
 
@@ -37,7 +37,7 @@ const emit = defineEmits<{
 }>()
 
 const categoryTreeStore = useCategoryTreeStore()
-const nodeRefs = ref<InstanceType<typeof BookTreeCategoryNode>[]>([])
+const nodeRefs = ref<InstanceType<typeof FsCategoryNode>[]>([])
 const treeContainerRef = ref<HTMLElement>()
 
 const { handleKeyDown } = useListKeyboardNavigation(treeContainerRef, {

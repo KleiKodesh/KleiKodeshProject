@@ -1,5 +1,6 @@
 import { useEventListener } from '@vueuse/core'
 import { type Ref, computed, toValue, type MaybeRefOrGetter } from 'vue'
+import { scrollToElement } from './useScrollToElement'
 
 /**
  * Composable for arrow key navigation in tree/list structures
@@ -66,15 +67,7 @@ export function useListKeyboardNavigation(
         return Array.from(items) as HTMLElement[]
     }
 
-    function scrollIntoView(element: HTMLElement) {
-        element.scrollIntoView({
-            behavior: 'auto',
-            block: 'nearest',
-            inline: 'nearest'
-        })
-    }
-
-    function navigateDown() {
+    async function navigateDown() {
         const focusableItems = getFocusableItems()
         if (focusableItems.length === 0) return
 
@@ -84,11 +77,11 @@ export function useListKeyboardNavigation(
         const nextItem = focusableItems[nextIndex]
         if (nextItem) {
             nextItem.focus({ preventScroll: true })
-            scrollIntoView(nextItem)
+            await scrollToElement(nextItem)
         }
     }
 
-    function navigateUp() {
+    async function navigateUp() {
         const focusableItems = getFocusableItems()
         if (focusableItems.length === 0) return
 
@@ -98,7 +91,7 @@ export function useListKeyboardNavigation(
         const nextItem = focusableItems[nextIndex]
         if (nextItem) {
             nextItem.focus({ preventScroll: true })
-            scrollIntoView(nextItem)
+            await scrollToElement(nextItem)
         }
     }
 

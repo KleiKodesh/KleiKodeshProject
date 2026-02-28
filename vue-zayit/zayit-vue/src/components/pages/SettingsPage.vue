@@ -96,6 +96,43 @@
                 </div>
             </div>
 
+            <!-- BookView Toolbar Position - READING-SPECIFIC: Controls default toolbar position for new books -->
+            <div class="setting-group">
+                <label class="flex-row bold setting-label">מיקום ברירת מחדל של סרגל כלים</label>
+                <div class="flex-row toolbar-position-options">
+                    <button :class="{ active: defaultBookViewToolbarPosition === 'top' }"
+                            @click="defaultBookViewToolbarPosition = 'top'"
+                            class="flex-110 c-pointer theme-option">
+                        למעלה
+                    </button>
+                    <button :class="{ active: defaultBookViewToolbarPosition === 'bottom' }"
+                            @click="defaultBookViewToolbarPosition = 'bottom'"
+                            class="flex-110 c-pointer theme-option">
+                        למטה
+                    </button>
+                    <button :class="{ active: defaultBookViewToolbarPosition === 'left' }"
+                            @click="defaultBookViewToolbarPosition = 'left'"
+                            class="flex-110 c-pointer theme-option">
+                        שמאל
+                    </button>
+                    <button :class="{ active: defaultBookViewToolbarPosition === 'right' }"
+                            @click="defaultBookViewToolbarPosition = 'right'"
+                            class="flex-110 c-pointer theme-option">
+                        ימין
+                    </button>
+                    <button :class="{ active: defaultBookViewToolbarPosition === 'float-vertical' }"
+                            @click="defaultBookViewToolbarPosition = 'float-vertical'"
+                            class="flex-110 c-pointer theme-option">
+                        צף מאונך
+                    </button>
+                    <button :class="{ active: defaultBookViewToolbarPosition === 'float-horizontal' }"
+                            @click="defaultBookViewToolbarPosition = 'float-horizontal'"
+                            class="flex-110 c-pointer theme-option">
+                        צף מאוזן
+                    </button>
+                </div>
+            </div>
+
             <!-- Header Font - SEMI-GLOBAL: Affects all headers -->
             <div class="setting-group">
                 <label class="flex-row bold setting-label">גופן
@@ -150,7 +187,7 @@
                     גודל גופן
                     <span class="text-secondary setting-value">{{
                         fontSize
-                        }}%</span>
+                    }}%</span>
                 </label>
                 <input type="range"
                        v-model.number="fontSize"
@@ -165,7 +202,7 @@
                 <label class="flex-between bold setting-label">
                     ריווח שורות
                     <span class="text-secondary setting-value">{{ linePadding
-                        }}</span>
+                    }}</span>
                 </label>
                 <input type="range"
                        v-model.number="linePadding"
@@ -266,7 +303,7 @@ import { toggleTheme, isDarkTheme, syncPdfViewerTheme } from '../../utils/theme'
 import CustomDialog from '../common/CustomDialog.vue'
 
 const settingsStore = useSettingsStore()
-const { headerFont, textFont, fontSize, linePadding, censorDivineNames, appZoom, readingBackgroundColor, databasePath, globalDiacritics, newTabPage } = storeToRefs(settingsStore)
+const { headerFont, textFont, fontSize, linePadding, censorDivineNames, appZoom, readingBackgroundColor, databasePath, globalDiacritics, newTabPage, defaultBookViewToolbarPosition } = storeToRefs(settingsStore)
 const { dialogRef, dialogOptions, confirm, error, handleConfirm, handleCancel, handleClose } = useDialog()
 
 const availableFonts = ref<string[]>([])
@@ -577,6 +614,11 @@ onMounted(() => {
 }
 
 .new-tab-options {
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.toolbar-position-options {
     gap: 8px;
     flex-wrap: wrap;
 }

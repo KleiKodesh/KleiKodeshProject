@@ -8,8 +8,10 @@ import fluentColorIcons from '@iconify-json/fluent-color/icons.json' with { type
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// List of all icons used in the app
+// List of all icons used in the app 
+// run: node extract-icons.js
 const usedIcons = [
+  'folder-28-regular',
   'spinner-ios-20-regular',
   'spinner-ios-20-filled',
   'dismiss-16-regular',

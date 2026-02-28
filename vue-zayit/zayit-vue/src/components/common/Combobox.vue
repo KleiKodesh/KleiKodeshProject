@@ -46,6 +46,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useEventListener } from '@vueuse/core'
+import { scrollToElement } from '../../composables/useScrollToElement'
 
 // Simple debounce function
 function debounce<T extends (...args: any[]) => any>(
@@ -341,13 +342,12 @@ const onKeyDown = (event: KeyboardEvent) => {
 
 const scrollToSelected = () => {
     // Wait for dropdown to render
-    setTimeout(() => {
+    setTimeout(async () => {
         const dropdown = dropdownRef.value
         const activeOption = dropdown?.querySelector('.combobox-option.active')
 
         if (dropdown && activeOption && activeOption instanceof HTMLElement) {
-            // Scroll the active option into view
-            activeOption.scrollIntoView({ block: 'center', behavior: 'auto' })
+            await scrollToElement(activeOption)
         }
     }, 0)
 }
@@ -355,17 +355,15 @@ const scrollToSelected = () => {
 const scrollToHighlighted = () => {
     if (highlightedIndex.value < 0) return
 
-    setTimeout(() => {
+    setTimeout(async () => {
         const dropdown = dropdownRef.value
         const highlighted = dropdown?.querySelector('.combobox-option.highlighted')
         if (dropdown && highlighted && highlighted instanceof HTMLElement) {
             const dropdownRect = dropdown.getBoundingClientRect()
             const highlightedRect = highlighted.getBoundingClientRect()
 
-            if (highlightedRect.bottom > dropdownRect.bottom) {
-                highlighted.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-            } else if (highlightedRect.top < dropdownRect.top) {
-                highlighted.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+            if (highlightedRect.bottom > dropdownRect.bottom || highlightedRect.top < dropdownRect.top) {
+                await scrollToElement(highlighted)
             }
         }
     }, 0)

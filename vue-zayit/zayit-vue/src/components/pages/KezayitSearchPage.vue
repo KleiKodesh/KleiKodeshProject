@@ -392,12 +392,12 @@ const handleRootCheckboxToggle = () => {
 // Cancel search
 const cancelSearch = async () => {
   if (currentSearchId) {
-    console.log('[SearchPage] User cancelled search:', currentSearchId)
+    console.log('[KezayitSearchPage] User cancelled search:', currentSearchId)
     try {
       await webviewBridge.bloomSearchCancel(currentSearchId)
       webviewBridge.unregisterSearchListener(currentSearchId)
     } catch (error) {
-      console.error('[SearchPage] Error cancelling search:', error)
+      console.error('[KezayitSearchPage] Error cancelling search:', error)
     }
     currentSearchId = null
     isSearching.value = false
@@ -418,14 +418,14 @@ const executeSearch = async () => {
 
   // Cancel previous search completely across all layers
   if (currentSearchId) {
-    console.log('[SearchPage] Cancelling previous search:', currentSearchId)
+    console.log('[KezayitSearchPage] Cancelling previous search:', currentSearchId)
     try {
       // Unregister listener first to stop receiving messages
       webviewBridge.unregisterSearchListener(currentSearchId)
       // Cancel in C# backend
       await webviewBridge.bloomSearchCancel(currentSearchId)
     } catch (error) {
-      console.error('[SearchPage] Error cancelling previous search:', error)
+      console.error('[KezayitSearchPage] Error cancelling previous search:', error)
     }
     currentSearchId = null
   }
@@ -438,16 +438,16 @@ const executeSearch = async () => {
   // Store the query being executed for highlighting
   executedQuery.value = searchQuery.value
 
-  console.log('[SearchPage] Executing streaming search:', searchQuery.value)
+  console.log('[KezayitSearchPage] Executing streaming search:', searchQuery.value)
 
   try {
     if (isDev) {
       const isReady = await bloomSearchService.isReady()
       if (!isReady) {
-        console.log('[SearchPage] Dev mode: Using sample data')
+        console.log('[KezayitSearchPage] Dev mode: Using sample data')
         await new Promise(resolve => setTimeout(resolve, 500))
         results.value = sampleResults
-        console.log('[SearchPage] Dev mode: Loaded sample results:', sampleResults.length)
+        console.log('[KezayitSearchPage] Dev mode: Loaded sample results:', sampleResults.length)
         isSearching.value = false
         return
       }
@@ -456,7 +456,7 @@ const executeSearch = async () => {
     const normalizedQuery = searchQuery.value.trim().toLowerCase()
     const cachedResults = await bloomSearchCacheService.get(normalizedQuery)
     if (cachedResults !== null) {
-      console.log('[SearchPage] Using cached results:', cachedResults.length)
+      console.log('[KezayitSearchPage] Using cached results:', cachedResults.length)
       results.value = cachedResults
       isSearching.value = false
       return
@@ -464,19 +464,19 @@ const executeSearch = async () => {
 
     const searchId = await webviewBridge.bloomSearchStart(searchQuery.value)
     currentSearchId = searchId
-    console.log('[SearchPage] Search started with ID:', searchId)
+    console.log('[KezayitSearchPage] Search started with ID:', searchId)
 
     webviewBridge.registerSearchListener(
       searchId,
       (batchResults) => {
         if (currentSearchId === searchId) {
-          console.log('[SearchPage] Received batch:', batchResults.length, 'results')
+          console.log('[KezayitSearchPage] Received batch:', batchResults.length, 'results')
           results.value = [...results.value, ...batchResults]
         }
       },
       async () => {
         if (currentSearchId === searchId) {
-          console.log('[SearchPage] Search completed, total results:', results.value.length)
+          console.log('[KezayitSearchPage] Search completed, total results:', results.value.length)
           isSearching.value = false
 
           if (results.value.length > 0) {
@@ -498,30 +498,30 @@ const executeSearch = async () => {
       },
       () => {
         if (currentSearchId === searchId) {
-          console.log('[SearchPage] Search cancelled')
+          console.log('[KezayitSearchPage] Search cancelled')
           isSearching.value = false
           currentSearchId = null
         }
       },
       (error) => {
         if (currentSearchId === searchId) {
-          console.error('[SearchPage] Search error:', error)
+          console.error('[KezayitSearchPage] Search error:', error)
           isSearching.value = false
           currentSearchId = null
 
           if (isDev) {
-            console.log('[SearchPage] Dev mode: Error fallback to sample data')
+            console.log('[KezayitSearchPage] Dev mode: Error fallback to sample data')
             results.value = sampleResults
           }
         }
       }
     )
   } catch (error) {
-    console.error('[SearchPage] Search error:', error)
+    console.error('[KezayitSearchPage] Search error:', error)
     isSearching.value = false
 
     if (isDev) {
-      console.log('[SearchPage] Dev mode: Error fallback to sample data')
+      console.log('[KezayitSearchPage] Dev mode: Error fallback to sample data')
       results.value = sampleResults
     }
   }
@@ -550,17 +550,17 @@ const clearSearch = () => {
 
 // Handle result click
 const handleResultClick = async (result: BloomSearchResult) => {
-  console.log('[SearchPage] Result clicked:', result)
+  console.log('[KezayitSearchPage] Result clicked:', result)
 
   try {
     const lineInfo = await bloomSearchService.getLineIndexFromLineId(result.lineId)
 
     if (!lineInfo) {
-      console.error('[SearchPage] Failed to get line index for lineId:', result.lineId)
+      console.error('[KezayitSearchPage] Failed to get line index for lineId:', result.lineId)
       return
     }
 
-    console.log('[SearchPage] Opening book:', result.bookTitle, 'at line index:', lineInfo.lineIndex, 'with highlight terms:', executedQuery.value, 'snippet:', result.snippet)
+    console.log('[KezayitSearchPage] Opening book:', result.bookTitle, 'at line index:', lineInfo.lineIndex, 'with highlight terms:', executedQuery.value, 'snippet:', result.snippet)
 
     const hasConnections = await checkBookHasConnections(result.bookId)
 
@@ -574,7 +574,7 @@ const handleResultClick = async (result: BloomSearchResult) => {
       result.snippet // Pass snippet for background highlighting
     )
   } catch (error) {
-    console.error('[SearchPage] Error opening book:', error)
+    console.error('[KezayitSearchPage] Error opening book:', error)
   }
 }
 
@@ -592,7 +592,7 @@ const checkBookHasConnections = async (bookId: number): Promise<boolean> => {
     }
     return false
   } catch (error) {
-    console.error('[SearchPage] Error checking book connections:', error)
+    console.error('[KezayitSearchPage] Error checking book connections:', error)
     return false
   }
 }
