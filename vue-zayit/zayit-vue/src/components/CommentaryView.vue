@@ -1,5 +1,6 @@
 <template>
-    <div class="flex-column height-fill">
+    <div class="flex-column height-fill"
+         :class="commentaryToolbarPositionClass">
         <!-- ============================================ -->
         <!-- HEADER BAR -->
         <!-- ============================================ -->
@@ -166,6 +167,7 @@ import { Icon } from '@iconify/vue'
 import { useVirtualizedSearch } from '../composables/useVirtualizedSearch'
 import { useVirtualScrollerKeyboard } from '../composables/useVirtualScrollerKeyboard'
 import { useVirtualScrollerPosition } from '../composables/useVirtualScrollerPosition'
+import { scrollToElement } from '../composables/useScrollToElement'
 import { bookCommentaryService, type CommentaryLinkGroup } from '../services/bookCommentaryService'
 import { dbService } from '../services/dbService'
 import { useTabStore } from '../stores/tabStore'
@@ -173,6 +175,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useCategoryTreeStore } from '../stores/categoryTreeStore'
 import type { Book } from '../types/Book'
 import { hasConnections } from '../types/Book'
+import type { Category } from '../types/BookCategoryTree'
 
 // ============================================
 // PROPS & EMITS
@@ -235,6 +238,10 @@ const availableFilterOptions = ref<Array<{ label: string; value: number }>>([])
 // ============================================
 // COMPUTED PROPERTIES
 // ============================================
+// Commentary toolbar position from settings
+const commentaryToolbarPosition = computed(() => settingsStore.commentaryToolbarPosition)
+const commentaryToolbarPositionClass = computed(() => `commentary-toolbar-${commentaryToolbarPosition.value}`)
+
 // Can navigate to previous/next line
 const canNavigateToPreviousLine = computed(() => {
     return props.selectedLineIndex !== undefined && props.selectedLineIndex > 0
@@ -281,13 +288,13 @@ const selectedConnectionTypeId = computed({
     }
 })
 
-// Category filter state from tab store (now using string ID for label-based filtering)
+// Category filter state from tab store (using string ID for label-based filtering)
 const selectedCategoryId = computed({
     get: () => {
         const activeTab = tabStore.activeTab
         return activeTab?.bookState?.commentaryFilterCategoryId
     },
-    set: (value: number | undefined) => {
+    set: (value: number | string | undefined) => {
         const activeTab = tabStore.activeTab
         if (activeTab?.bookState) {
             activeTab.bookState.commentaryFilterCategoryId = value
@@ -350,20 +357,29 @@ useVirtualScrollerKeyboard(
     hasFocus
 )
 
-// Position ID for scroll persistence (tab + book + filter)
+// Position ID for scroll persistence (tab + book + connection filter + category filter)
 const scrollPositionId = computed(() => {
     const tabId = tabStore.activeTab?.id?.toString() || ''
     const bookId = props.bookId || 0
-    const filterId = selectedConnectionTypeId.value ?? 'all'
-    const id = `commentary-${tabId}-${bookId}-${filterId}`
+    const connectionFilterId = selectedConnectionTypeId.value ?? 'all'
+    const categoryFilterId = selectedCategoryId.value ?? 'all'
+    const id = `commentary-${tabId}-${bookId}-${connectionFilterId}-${categoryFilterId}`
     return id
 })
 
 // Scroll position persistence (for tab switches, filter changes, sessions)
-useVirtualScrollerPosition(
+const { hasSavedPosition } = useVirtualScrollerPosition(
     commentaryScrollerRef,
     scrollPositionId,
-    { skipRestore: skipScrollRestore }
+    {
+        skipRestore: skipScrollRestore,
+        onRestoreComplete: () => {
+            // Re-enable scroll observer after a short delay to let things settle
+            setTimeout(() => {
+                scrollObserverEnabled.value = true
+            }, 100)
+        }
+    }
 )
 
 // Flatten link groups into individual virtual items
@@ -482,7 +498,7 @@ const bookCategoryLabelMap = ref<Map<number, string>>(new Map())
 // Resolve group label by walking up category tree (mimics Zayit's resolveGroupLabel)
 function resolveGroupLabel(book: Book | undefined, categoryTree: typeof categoryTreeStore.categoryTree): string {
     if (!book) return ''
-    
+
     // Build category map for quick lookup
     const categoryMap = new Map<number, Category>()
     function buildMap(cats: typeof categoryTree) {
@@ -492,24 +508,24 @@ function resolveGroupLabel(book: Book | undefined, categoryTree: typeof category
         })
     }
     buildMap(categoryTree)
-    
+
     let currentId: number | undefined = book.categoryId
     while (currentId) {
         const category = categoryMap.get(currentId)
         if (!category) break
-        
+
         const title = category.title
-        
+
         // Prefer high-level "commentaries on ..." buckets
-        if (title.includes('על התנ״ך') || 
-            title.includes('על התלמוד') || 
-            title.includes('על המשנה') || 
+        if (title.includes('על התנ״ך') ||
+            title.includes('על התלמוד') ||
+            title.includes('על המשנה') ||
             title.includes('על המשניות') ||
             title.includes('על הש״ס') ||
             title.includes('על השס')) {
             return title
         }
-        
+
         // Broad families
         if (title === 'חסידות' || title.includes('חסידות')) {
             return title
@@ -526,7 +542,7 @@ function resolveGroupLabel(book: Book | undefined, categoryTree: typeof category
         if (title === 'ביאור חברותא' || title === 'הערות על ביאור חברותא') {
             return 'חברותא'
         }
-        
+
         // Generic "מפרשים" bucket
         if (title === 'מפרשים') {
             const parent = category.parentId ? categoryMap.get(category.parentId) : undefined
@@ -535,21 +551,17 @@ function resolveGroupLabel(book: Book | undefined, categoryTree: typeof category
             }
             return title
         }
-        
+
         currentId = category.parentId
     }
-    
+
     // Fallback to base category
     const baseCategory = categoryMap.get(book.categoryId)
     return baseCategory?.title || ''
 }
 
-// Load categories when link groups change
 // Load categories when link groups OR connection type filter changes
 watch([linkGroups, selectedConnectionTypeId], () => {
-    console.log('🏷️ Loading category groups for commentary books...')
-    console.log('🔍 Current connection type filter:', selectedConnectionTypeId.value)
-    
     // Get unique book IDs from link groups (already filtered by connection type at SQL level)
     const bookIds = Array.from(new Set(
         linkGroups.value
@@ -557,12 +569,9 @@ watch([linkGroups, selectedConnectionTypeId], () => {
             .filter((id): id is number => id !== undefined)
     ))
 
-    console.log('📚 Found book IDs:', bookIds)
-
     if (bookIds.length === 0) {
         availableCategories.value = []
         bookCategoryLabelMap.value = new Map()
-        console.log('⚠️ No book IDs found, clearing categories')
         return
     }
 
@@ -570,14 +579,14 @@ watch([linkGroups, selectedConnectionTypeId], () => {
         // Build map of bookId -> resolved group label
         const labelMap = new Map<number, string>()
         const labelToCategoryIds = new Map<string, Set<number>>()
-        
+
         bookIds.forEach(bookId => {
             const book = categoryTreeStore.allBooks.find(b => b.id === bookId)
             if (book) {
                 const label = resolveGroupLabel(book, categoryTreeStore.categoryTree)
                 if (label) {
                     labelMap.set(bookId, label)
-                    
+
                     // Track which category IDs belong to this label
                     if (!labelToCategoryIds.has(label)) {
                         labelToCategoryIds.set(label, new Set())
@@ -586,9 +595,9 @@ watch([linkGroups, selectedConnectionTypeId], () => {
                 }
             }
         })
-        
+
         bookCategoryLabelMap.value = labelMap
-        
+
         // Create unique filter options from resolved labels
         const categories: Array<{ id: string; name: string; categoryIds: number[] }> = []
         labelToCategoryIds.forEach((categoryIds, label) => {
@@ -598,21 +607,18 @@ watch([linkGroups, selectedConnectionTypeId], () => {
                 categoryIds: Array.from(categoryIds)
             })
         })
-        
+
         availableCategories.value = categories
-        
-        console.log('✅ Category filter ready with', categories.length, 'groups:', categories.map(c => c.name))
-        
-        // Clear category selection if it's no longer available
+
+        // Handle persisted category selection - clear if no longer available
         if (selectedCategoryId.value !== undefined) {
             const stillAvailable = categories.some(cat => cat.id === selectedCategoryId.value)
             if (!stillAvailable) {
-                console.log('⚠️ Previously selected category no longer available, clearing selection')
                 selectedCategoryId.value = undefined
             }
         }
     } catch (error) {
-        console.error('❌ Failed to load categories:', error)
+        console.error('Failed to load categories:', error)
         availableCategories.value = []
         bookCategoryLabelMap.value = new Map()
     }
@@ -629,7 +635,7 @@ const filteredGroupOptions = computed<ComboboxOption[]>(() => {
         const groupIndex = option.value as number
         const group = linkGroups.value[groupIndex]
         if (!group?.targetBookId) return true // Keep groups without book ID
-        
+
         const label = bookCategoryLabelMap.value.get(group.targetBookId)
         return label === selectedCategoryId.value
     })
@@ -711,25 +717,22 @@ function handleScrollUpdate() {
 
             // Note: Scroll position is automatically saved by useVirtualScrollerPosition composable
 
-            // Reset flag after update completes
-            nextTick(() => {
-                setTimeout(() => {
-                    isUpdatingFromScroll.value = false
-                }, 50)
-            })
+            // Reset flag immediately
+            isUpdatingFromScroll.value = false
         }
     }
 }
 
-// Debounced scroll handler to avoid excessive updates
-let scrollTimeout: ReturnType<typeof setTimeout> | null = null
+// Instant scroll handler using requestAnimationFrame for smooth updates
+let scrollRafId: number | null = null
 function onScrollerScroll() {
-    if (scrollTimeout) {
-        clearTimeout(scrollTimeout)
+    if (scrollRafId) {
+        cancelAnimationFrame(scrollRafId)
     }
-    scrollTimeout = setTimeout(() => {
+    scrollRafId = requestAnimationFrame(() => {
         handleScrollUpdate()
-    }, 150) // Debounce to wait for scroll to settle
+        scrollRafId = null
+    })
 }
 
 /**
@@ -746,8 +749,8 @@ function setupScrollObserver() {
     // Return cleanup function
     return () => {
         scrollerEl.removeEventListener('scroll', onScrollerScroll)
-        if (scrollTimeout) {
-            clearTimeout(scrollTimeout)
+        if (scrollRafId) {
+            cancelAnimationFrame(scrollRafId)
         }
     }
 }
@@ -958,8 +961,6 @@ function updateDarkMode() {
  * Position is automatically saved/restored by composable when positionId changes
  */
 async function handleFilterChange(connectionTypeId: number) {
-    console.log('🔄 Filter change:', selectedConnectionTypeId.value, '→', connectionTypeId)
-
     // Switch to new filter (positionId will change, triggering auto-restore)
     selectedConnectionTypeId.value = connectionTypeId
 
@@ -969,28 +970,24 @@ async function handleFilterChange(connectionTypeId: number) {
         // Give the virtual scroller time to render before auto-restore kicks in
         await nextTick()
         await nextTick()
-        console.log('🔄 Filter change complete, scroller should restore position')
     }
 }
 
 /**
  * CATEGORY FILTER CHANGE HANDLER
  * Filters commentary groups by resolved category label
+ * Position is automatically saved/restored by composable when positionId changes
  */
-function handleCategoryChange(categoryId: number | string | undefined) {
-    console.log('🔄 Category filter change:', selectedCategoryId.value, '→', categoryId)
+async function handleCategoryChange(categoryId: number | string | undefined) {
+    // Disable scroll observer during filter change to prevent interference with restore
+    scrollObserverEnabled.value = false
+
+    // Switch to new category filter (positionId will change, triggering auto-restore)
     selectedCategoryId.value = categoryId
 
-    // Reset combobox selection if current selection is filtered out
-    if (categoryId !== undefined) {
-        const currentIndex = comboboxSelectedValue.value as number
-        const isCurrentVisible = filteredGroupOptions.value.some(opt => opt.value === currentIndex)
-        
-        if (!isCurrentVisible && filteredGroupOptions.value.length > 0) {
-            // Select first visible option
-            comboboxSelectedValue.value = filteredGroupOptions.value[0].value
-        }
-    }
+    // Note: Don't update combobox here - let the scroll observer update it after position restore
+    // The composable will restore the scroll position, then the scroll observer will update the combobox
+    // scrollObserverEnabled will be re-enabled by onRestoreComplete callback
 }
 
 /**
@@ -1154,10 +1151,7 @@ async function scrollToCommentaryBookId(targetBookId: number, targetGroupName?: 
  */
 async function handleFirstLoadDefaultCommentary() {
     // Check if we have a saved scroll position (from useVirtualScrollerPosition)
-    const positionKey = `vscroller-pos-${scrollPositionId.value}`
-    const hasSavedPosition = localStorage.getItem(positionKey) !== null
-
-    if (hasSavedPosition) {
+    if (hasSavedPosition()) {
         // Let useVirtualScrollerPosition handle restoration
         return
     }
@@ -1406,7 +1400,7 @@ async function scrollToGroup(groupIndex: number) {
         activeTab.bookState.currentCommentaryGroupName = targetGroup.groupName
     }
 
-    // Wait for virtual scroller to render, then use scrollIntoView for precise positioning
+    // Wait for virtual scroller to render
     await nextTick()
 
     if (!scrollerEl) return
@@ -1427,7 +1421,8 @@ async function scrollToGroup(groupIndex: number) {
         return
     }
 
-    targetElement.scrollIntoView({ block: 'start', behavior: 'auto' })
+    // Use scrollToElement utility for consistent behavior
+    await scrollToElement(targetElement)
 
     // Re-enable scroll observer after scroll settles
     await nextTick()
@@ -1650,6 +1645,19 @@ ${htmlContent}
 </script>
 
 <style scoped>
+/* ============================================ */
+/* LAYOUT - Toolbar Position */
+/* ============================================ */
+/* Default: toolbar at top (flex-column) */
+.commentary-toolbar-top {
+    flex-direction: column;
+}
+
+/* Toolbar at bottom: reverse flex direction */
+.commentary-toolbar-bottom {
+    flex-direction: column-reverse;
+}
+
 /* ============================================ */
 /* HEADER */
 /* ============================================ */

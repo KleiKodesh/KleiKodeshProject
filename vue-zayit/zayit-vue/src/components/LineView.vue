@@ -68,6 +68,7 @@ import { BookLineViewerService } from '../services/bookLineViewerService'
 import { useVirtualizedSearch } from '../composables/useVirtualizedSearch'
 import { useVirtualScrollerPosition } from '../composables/useVirtualScrollerPosition'
 import { useVirtualScrollerKeyboard } from '../composables/useVirtualScrollerKeyboard'
+import { scrollToElement } from '../composables/useScrollToElement'
 import { useTabStore } from '../stores/tabStore'
 import { useSettingsStore } from '../stores/settingsStore'
 
@@ -1246,7 +1247,7 @@ defineExpose({
 // PUBLIC API - Exposed Functions
 // ============================================
 // Helper function to scroll to the first highlighted word in a line
-function scrollToFirstHighlightedWord(lineIndex: number) {
+async function scrollToFirstHighlightedWord(lineIndex: number) {
     const scrollerEl = scrollerRef.value?.$el
     if (!scrollerEl) return
 
@@ -1264,12 +1265,8 @@ function scrollToFirstHighlightedWord(lineIndex: number) {
 
     if (!targetElement) return
 
-    // Scroll the target into view vertically
-    targetElement.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-        inline: 'nearest'
-    })
+    // Use scrollToElement utility for consistent behavior
+    await scrollToElement(targetElement as HTMLElement)
 }
 
 // Helper function to add fade animation class once (prevents re-triggering on DOM updates)
