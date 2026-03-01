@@ -50,8 +50,6 @@ button {
 button:active {
   background: var(--active-bg);
   /* Darker background when pressed */
-  transform: scale(0.95);
-  /* Touch-friendly scale effect */
 }
 
 /* Ensure minimum touch target size on touch devices */
