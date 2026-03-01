@@ -39,14 +39,14 @@
                                     ]"
                                      :data-index="index">
                     <Line :content="item.content || '\u00A0'"
-                              :line-index="index"
-                              :is-selected="selectedLineIndex === index"
-                              :alt-toc-entries="item.altTocEntries"
-                              :show-alt-toc="myTab?.bookState?.showAltToc"
-                              :class="{
-                                'show-selection': myTab?.bookState?.showBottomPane
-                            }"
-                              @line-click="handleLineClick" />
+                          :line-index="index"
+                          :is-selected="selectedLineIndex === index"
+                          :alt-toc-entries="item.altTocEntries"
+                          :show-alt-toc="myTab?.bookState?.showAltToc"
+                          :class="{
+                            'show-selection': myTab?.bookState?.showBottomPane
+                        }"
+                          @line-click="handleLineClick" />
                 </DynamicScrollerItem>
             </template>
         </DynamicScroller>
@@ -109,12 +109,8 @@ onMounted(() => {
 const containerStyles = computed(() => {
     const zoom = myTab.value?.bookState?.zoom || 100
     return {
-        backgroundColor: !isDarkMode.value && settingsStore.readingBackgroundColor
-            ? settingsStore.readingBackgroundColor
-            : 'var(--bg-primary)',
-        color: !isDarkMode.value && settingsStore.readingBackgroundColor
-            ? 'var(--reading-text-color)'
-            : 'var(--text-primary)',
+        backgroundColor: 'var(--reading-bg-primary)',
+        color: 'var(--reading-text-primary)',
         fontSize: `calc(var(--font-size, 100%) * ${zoom / 100})`
     }
 })

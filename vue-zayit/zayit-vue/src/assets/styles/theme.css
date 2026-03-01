@@ -3,57 +3,53 @@
 /* Light mode (default) - Windows 11 Fluent Design + VS Code style */
 :root { 
   /* Background colors - VS Code Light */
-  --bg-primary: #ffffff;        /* Main background */
-  --bg-primary-rgb: 255, 255, 255; /* RGB values for transparency */
-  --bg-secondary: #f8f8f8;      /* More neutral secondary background (was #f3f3f3) */
-  --bg-secondary-rgb: 248, 248, 248; /* RGB values for transparency */
+  --bg-primary: var(--bg-primary-custom, #ffffff);        /* Main background */
+  --bg-primary-rgb: var(--bg-primary-rgb-custom, 255, 255, 255); /* RGB values for transparency */
+  --bg-secondary: var(--bg-secondary-custom, #f8f8f8);      /* More neutral secondary background (was #f3f3f3) */
+  --bg-secondary-rgb: var(--bg-secondary-rgb-custom, 248, 248, 248); /* RGB values for transparency */
   
   /* Border colors - Fluent subtle borders */
-  --border-color: #e5e5e5;      /* Borders and dividers */
+  --border-color: var(--border-color-custom, #e5e5e5);      /* Borders and dividers */
   
   /* Text colors - Fluent text hierarchy */
-  --text-primary: #1f1f1f;      /* Main text color (Fluent primary) */
-  --text-secondary: #5a5a5a;    /* Secondary text (balanced visibility) */
+  --text-primary: var(--text-primary-custom, #1f1f1f);      /* Main text color (Fluent primary) */
+  --text-secondary: var(--text-secondary-custom, #5a5a5a);    /* Secondary text (balanced visibility) */
   
   /* Interactive states - Fluent hover/press */
-  --hover-bg: rgba(0, 0, 0, 0.06);   /* Background on hover (Fluent subtle) */
-  --active-bg: rgba(0, 0, 0, 0.09);  /* Background when clicked (Fluent rest) */
+  --hover-bg: var(--hover-bg-custom, rgba(0, 0, 0, 0.06));   /* Background on hover (Fluent subtle) */
+  --active-bg: var(--active-bg-custom, rgba(0, 0, 0, 0.09));  /* Background when clicked (Fluent rest) */
   
   /* Accent colors - Windows 11 default blue */
-  --accent-color: #0078d4;           /* Primary accent (Fluent blue) */
+  --accent-color: var(--accent-color-custom, #0078d4);           /* Primary accent (Fluent blue) */
   --accent-bg: rgba(0, 120, 212, 0.1);  /* Light accent background */
   --accent-bg-light: rgba(0, 120, 212, 0.05);  /* Extra light accent background */
   
   /* Font families - customizable via settings */
   --header-font: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
   --text-font: 'Times New Roman', Times, serif;
-  
-  /* Reading background and text colors - customizable via settings */
-  --reading-bg-color: '';
-  --reading-text-color: var(--text-primary);
 }
 
 /* Dark mode - Windows 11 Fluent Dark + VS Code Dark */
 :root.dark {
   /* Background colors - VS Code Dark */
-  --bg-primary: #1e1e1e;        /* Main background (VS Code dark) */
-  --bg-primary-rgb: 30, 30, 30; /* RGB values for transparency */
-  --bg-secondary: #2d2d2d;      /* More neutral secondary background (was #252526) */
-  --bg-secondary-rgb: 45, 45, 45; /* RGB values for transparency */
+  --bg-primary: var(--bg-primary-custom, #1e1e1e);        /* Main background (VS Code dark) */
+  --bg-primary-rgb: var(--bg-primary-rgb-custom, 30, 30, 30); /* RGB values for transparency */
+  --bg-secondary: var(--bg-secondary-custom, #2d2d2d);      /* More neutral secondary background (was #252526) */
+  --bg-secondary-rgb: var(--bg-secondary-rgb-custom, 45, 45, 45); /* RGB values for transparency */
   
   /* Border colors - Fluent dark borders */
-  --border-color: #3b3b3b;      /* Borders (Fluent dark divider) */
+  --border-color: var(--border-color-custom, #3b3b3b);      /* Borders (Fluent dark divider) */
   
   /* Text colors - Fluent dark text */
-  --text-primary: #ffffff;      /* Main text (Fluent primary on dark) */
-  --text-secondary: #a6a6a6;    /* Secondary text (balanced visibility on dark) */
+  --text-primary: var(--text-primary-custom, #ffffff);      /* Main text (Fluent primary on dark) */
+  --text-secondary: var(--text-secondary-custom, #a6a6a6);    /* Secondary text (balanced visibility on dark) */
   
   /* Interactive states - Fluent dark hover/press */
-  --hover-bg: rgba(255, 255, 255, 0.08);   /* Light overlay on hover */
-  --active-bg: rgba(255, 255, 255, 0.12);  /* Light overlay when clicked */
+  --hover-bg: var(--hover-bg-custom, rgba(255, 255, 255, 0.08));   /* Light overlay on hover */
+  --active-bg: var(--active-bg-custom, rgba(255, 255, 255, 0.12));  /* Light overlay when clicked */
   
   /* Accent colors - Windows 11 blue on dark */
-  --accent-color: #60cdff;                 /* Lighter blue for dark mode */
+  --accent-color: var(--accent-color-custom, #60cdff);                 /* Lighter blue for dark mode */
   --accent-bg: rgba(96, 205, 255, 0.15);   /* Light blue background */
   --accent-bg-light: rgba(96, 205, 255, 0.08);  /* Extra light accent background */
   

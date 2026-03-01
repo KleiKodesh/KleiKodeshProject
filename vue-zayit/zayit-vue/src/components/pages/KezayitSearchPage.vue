@@ -102,14 +102,14 @@
 
     <!-- Filter panel -->
     <FsCheckedTree v-if="isFilterOpen"
-                     ref="filterPanelRef"
-                     :checked-book-ids="checkedBookIds"
-                     :result-counts="resultCounts"
-                     @toggle-book="toggleBook"
-                     @toggle-category="toggleCategory"
-                     @check-all="checkAllBooks"
-                     @uncheck-all="uncheckAllBooks"
-                     @close="isFilterOpen = false" />
+                   ref="filterPanelRef"
+                   :checked-book-ids="checkedBookIds"
+                   :result-counts="resultCounts"
+                   @toggle-book="toggleBook"
+                   @toggle-category="toggleCategory"
+                   @check-all="checkAllBooks"
+                   @uncheck-all="uncheckAllBooks"
+                   @close="isFilterOpen = false" />
   </div>
 </template>
 
@@ -171,12 +171,8 @@ onClickOutside(filterPanelElement, () => {
 
 // Computed styles for reading background
 const resultsContainerStyles = computed(() => ({
-  backgroundColor: !isDarkMode.value && settingsStore.readingBackgroundColor
-    ? settingsStore.readingBackgroundColor
-    : 'var(--bg-primary)',
-  color: !isDarkMode.value && settingsStore.readingBackgroundColor
-    ? 'var(--reading-text-color)'
-    : 'var(--text-primary)'
+  backgroundColor: 'var(--reading-bg-primary)',
+  color: 'var(--reading-text-primary)'
 }))
 
 // Get current tab's search state

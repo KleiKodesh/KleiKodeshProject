@@ -306,12 +306,8 @@ const selectedCategoryId = computed({
 const commentaryStyles = computed(() => {
     const zoom = tabStore.activeTab?.bookState?.zoom || 100
     return {
-        backgroundColor: !isDarkMode.value && settingsStore.readingBackgroundColor
-            ? settingsStore.readingBackgroundColor
-            : 'var(--bg-primary)',
-        color: !isDarkMode.value && settingsStore.readingBackgroundColor
-            ? 'var(--reading-text-color)'
-            : 'var(--text-primary)',
+        backgroundColor: 'var(--reading-bg-primary)',
+        color: 'var(--reading-text-primary)',
         fontFamily: settingsStore.textFont,
         fontSize: `calc(${settingsStore.fontSize}% * ${zoom / 100})`,
         lineHeight: settingsStore.linePadding.toString()
