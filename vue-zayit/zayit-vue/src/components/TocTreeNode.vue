@@ -17,13 +17,13 @@
         </div>
 
         <template v-if="isExpanded && entry.children">
-            <BookTocTreeNode v-for="(child, index) in entry.children"
-                             :key="child.id"
-                             :ref="(el: any) => { if (el) childRefs[index] = el }"
-                             :entry="child"
-                             :depth="depth + 1"
-                             :is-compact-mode="isCompactMode"
-                             @select-line="emit('selectLine', $event)" />
+            <TocTreeNode v-for="(child, index) in entry.children"
+                         :key="child.id"
+                         :ref="(el: any) => { if (el) childRefs[index] = el }"
+                         :entry="child"
+                         :depth="depth + 1"
+                         :is-compact-mode="isCompactMode"
+                         @select-line="emit('selectLine', $event)" />
         </template>
     </div>
 </template>
@@ -35,7 +35,7 @@ import type { TocEntry } from '../types/BookToc'
 import { useTabStore } from '../stores/tabStore'
 import { storeToRefs } from 'pinia'
 
-type BookTocTreeNodeInstance = {
+type TocTreeNodeInstance = {
     expand: () => void
     collapse: () => void
     reset: () => void
@@ -56,7 +56,7 @@ const emit = defineEmits<{
 }>()
 
 const isExpanded = ref(props.entry.isExpanded || false)
-const childRefs = ref<BookTocTreeNodeInstance[]>([])
+const childRefs = ref<TocTreeNodeInstance[]>([])
 
 const toggleExpand = () => {
     if (props.entry.hasChildren) {
@@ -78,7 +78,7 @@ const collapse = () => {
 
 const reset = () => {
     isExpanded.value = false
-    childRefs.value.forEach((child: BookTocTreeNodeInstance) => {
+    childRefs.value.forEach((child: TocTreeNodeInstance) => {
         if (child && child.reset) {
             child.reset()
         }

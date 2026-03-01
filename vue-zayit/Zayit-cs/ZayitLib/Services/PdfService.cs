@@ -137,7 +137,7 @@ namespace Zayit.Services
                 pdfPath = isHtmlTxt
                     ? await WordToPdfConverter.ConvertHtmlToPdfAsync(_webView, filePath, outputPath)
                     : await WordToPdfConverter.ConvertWordToPdfAsync(_webView, filePath, outputPath);
-                
+
                 Console.WriteLine($"[PdfService] Conversion returned: {pdfPath}");
                 Console.WriteLine($"[PdfService] File exists: {File.Exists(pdfPath)}");
             }
@@ -350,7 +350,7 @@ namespace Zayit.Services
                 var hashBytes = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(sourceFilePath.ToLowerInvariant()));
                 var hash = BitConverter.ToString(hashBytes).Replace("-", "").Substring(0, 16);
                 var originalName = Path.GetFileNameWithoutExtension(sourceFilePath);
-                return $"{hash}_{originalName}.pdf";
+                return $"{originalName}_{hash}.pdf";
             }
         }
 
