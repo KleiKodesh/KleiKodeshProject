@@ -1,221 +1,95 @@
 <template>
     <div class="flex-column width-fill height-fill settings-page">
+
+        <!-- Tab Bar: all items horizontally stacked -->
+        <div class="tab-bar">
+            <button :class="['tab-btn', { active: activeTab === 'reading' }]"
+                    @click="activeTab = 'reading'">
+                קריאה
+            </button>
+            <button :class="['tab-btn', { active: activeTab === 'general' }]"
+                    @click="activeTab = 'general'">
+                כללי
+            </button>
+            <button class="tab-btn tab-btn--reset"
+                    @click="resetSettings">
+                ↺ איפוס
+            </button>
+        </div>
+
+        <!-- Tab Content -->
         <div class="flex-110 overflow-y settings-content">
 
-            <!-- App Zoom - GLOBAL: Affects entire app UI scale -->
-            <div class="setting-group">
-                <label class="flex-between bold setting-label">
-                    זום האפליקציה
-                    <span class="text-secondary setting-value">{{
-                        Math.round(appZoom * 100) }}%</span>
-                </label>
-                <input type="range"
-                       v-model.number="appZoom"
-                       min="0.5"
-                       max="1.5"
-                       step="0.05"
-                       class="setting-slider" />
-            </div>
+            <!-- ══ TAB: תצוגה — fonts, zoom, theme, background ══ -->
+            <div v-if="activeTab === 'reading'"
+                 class="tab-pane">
 
-            <!-- Theme Toggle - GLOBAL: Affects entire app appearance -->
-            <div class="setting-group">
-                <label class="flex-row bold setting-label">ערכת נושא</label>
-                <div class="flex-row theme-toggle">
-                    <button :class="{ active: !currentTheme }"
-                            @click="setTheme(false)"
-                            class="flex-110 c-pointer theme-option">
-                        מצב בהיר
-                    </button>
-                    <button :class="{ active: currentTheme }"
-                            @click="setTheme(true)"
-                            class="flex-110 c-pointer theme-option">
-                        מצב כהה
-                    </button>
-                </div>
-            </div>
-
-            <!-- Divine Name Censoring - GLOBAL: Affects all text content -->
-            <div class="setting-group">
-                <label class="flex-row bold setting-label">כיסוי שם
-                    ה'</label>
-                <div class="flex-row theme-toggle">
-                    <button :class="{ active: !censorDivineNames }"
-                            @click="setCensorDivineNames(false)"
-                            class="flex-110 c-pointer theme-option">
-                        כתיב מלא
-                    </button>
-                    <button :class="{ active: censorDivineNames }"
-                            @click="setCensorDivineNames(true)"
-                            class="flex-110 c-pointer theme-option">
-                        כיסוי (ה→ק)
-                    </button>
-                </div>
-            </div>
-
-            <!-- Diacritics Mode - READING-SPECIFIC: Controls diacritics behavior -->
-            <div class="setting-group">
-                <label class="flex-row bold setting-label">מצב טעמים וניקוד</label>
-                <div class="flex-row theme-toggle">
-                    <button :class="{ active: !globalDiacritics }"
-                            @click="globalDiacritics = false"
-                            class="flex-110 c-pointer theme-option">
-                        לכל טאב בנפרד
-                    </button>
-                    <button :class="{ active: globalDiacritics }"
-                            @click="globalDiacritics = true"
-                            class="flex-110 c-pointer theme-option">
-                        גלובלי
-                    </button>
-                </div>
-            </div>
-
-            <!-- New Tab Page - GLOBAL: Controls what page new tabs open to -->
-            <div class="setting-group">
-                <label class="flex-row bold setting-label">דף ברירת מחדל לטאב חדש</label>
-                <div class="flex-row new-tab-options">
-                    <button :class="{ active: newTabPage === 'homepage' }"
-                            @click="newTabPage = 'homepage'"
-                            class="flex-110 c-pointer theme-option">
-                        דף הבית
-                    </button>
-                    <button :class="{ active: newTabPage === 'openfile' }"
-                            @click="newTabPage = 'openfile'"
-                            class="flex-110 c-pointer theme-option">
-                        פתיחת ספר
-                    </button>
-                    <button :class="{ active: newTabPage === 'hebrewbooks' }"
-                            @click="newTabPage = 'hebrewbooks'"
-                            class="flex-110 c-pointer theme-option">
-                        היברו בוקס
-                    </button>
-                    <button :class="{ active: newTabPage === 'kezayit-search' }"
-                            @click="newTabPage = 'kezayit-search'"
-                            class="flex-110 c-pointer theme-option">
-                        חיפוש
-                    </button>
-                </div>
-            </div>
-
-            <!-- BookView Toolbar Position - READING-SPECIFIC: Controls default toolbar position for new books -->
-            <div class="setting-group">
-                <label class="flex-row bold setting-label">מיקום ברירת מחדל של סרגל כלים</label>
-                <div class="flex-row toolbar-position-options">
-                    <button :class="{ active: defaultBookViewToolbarPosition === 'top' }"
-                            @click="defaultBookViewToolbarPosition = 'top'"
-                            class="flex-110 c-pointer theme-option">
-                        למעלה
-                    </button>
-                    <button :class="{ active: defaultBookViewToolbarPosition === 'bottom' }"
-                            @click="defaultBookViewToolbarPosition = 'bottom'"
-                            class="flex-110 c-pointer theme-option">
-                        למטה
-                    </button>
-                    <button :class="{ active: defaultBookViewToolbarPosition === 'left' }"
-                            @click="defaultBookViewToolbarPosition = 'left'"
-                            class="flex-110 c-pointer theme-option">
-                        שמאל
-                    </button>
-                    <button :class="{ active: defaultBookViewToolbarPosition === 'right' }"
-                            @click="defaultBookViewToolbarPosition = 'right'"
-                            class="flex-110 c-pointer theme-option">
-                        ימין
-                    </button>
-                    <button :class="{ active: defaultBookViewToolbarPosition === 'float-vertical' }"
-                            @click="defaultBookViewToolbarPosition = 'float-vertical'"
-                            class="flex-110 c-pointer theme-option">
-                        צף מאונך
-                    </button>
-                    <button :class="{ active: defaultBookViewToolbarPosition === 'float-horizontal' }"
-                            @click="defaultBookViewToolbarPosition = 'float-horizontal'"
-                            class="flex-110 c-pointer theme-option">
-                        צף מאוזן
-                    </button>
-                </div>
-            </div>
-
-            <!-- Header Font - SEMI-GLOBAL: Affects all headers -->
-            <div class="setting-group">
-                <label class="flex-row bold setting-label">גופן
-                    כותרות</label>
-                <div class="flex-row c-pointer custom-select"
-                     @click="toggleHeaderDropdown"
-                     tabindex="0">
-                    <div class="select-display">{{ getDisplayName(headerFont) }}
-                    </div>
-                    <div class="select-arrow">▼</div>
-                    <div v-if="isHeaderDropdownOpen"
-                         class="select-dropdown"
-                         @click.stop>
-                        <div v-for="font in availableFonts"
-                             :key="font"
-                             class="c-pointer select-option"
-                             :class="{ selected: headerFont.includes(font) }"
-                             @click="selectHeaderFont(font)">
-                            {{ font }}
+                <div class="setting-group">
+                    <label class="setting-label bold">גופן כותרות</label>
+                    <div class="c-pointer custom-select"
+                         @click="toggleHeaderDropdown"
+                         tabindex="0">
+                        <div class="select-display">{{ getDisplayName(headerFont) }}</div>
+                        <div class="select-arrow">▼</div>
+                        <div v-if="isHeaderDropdownOpen"
+                             class="select-dropdown"
+                             @click.stop>
+                            <div v-for="font in availableFonts"
+                                 :key="font"
+                                 class="c-pointer select-option"
+                                 :class="{ selected: headerFont.includes(font) }"
+                                 @click="selectHeaderFont(font)">{{ font }}</div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Text Font - SEMI-GLOBAL: Affects all body text -->
-            <div class="setting-group">
-                <label class="flex-row bold setting-label">גופן
-                    טקסט</label>
-                <div class="flex-row c-pointer custom-select"
-                     @click="toggleTextDropdown"
-                     tabindex="0">
-                    <div class="select-display">{{ getDisplayName(textFont) }}
-                    </div>
-                    <div class="select-arrow">▼</div>
-                    <div v-if="isTextDropdownOpen"
-                         class="select-dropdown"
-                         @click.stop>
-                        <div v-for="font in availableFonts"
-                             :key="font"
-                             class="c-pointer select-option"
-                             :class="{ selected: textFont.includes(font) }"
-                             @click="selectTextFont(font)">
-                            {{ font }}
+                <div class="setting-group">
+                    <label class="setting-label bold">גופן טקסט</label>
+                    <div class="c-pointer custom-select"
+                         @click="toggleTextDropdown"
+                         tabindex="0">
+                        <div class="select-display">{{ getDisplayName(textFont) }}</div>
+                        <div class="select-arrow">▼</div>
+                        <div v-if="isTextDropdownOpen"
+                             class="select-dropdown"
+                             @click.stop>
+                            <div v-for="font in availableFonts"
+                                 :key="font"
+                                 class="c-pointer select-option"
+                                 :class="{ selected: textFont.includes(font) }"
+                                 @click="selectTextFont(font)">{{ font }}</div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Font Size - READING-SPECIFIC: Affects reading content -->
-            <div class="setting-group">
-                <label class="flex-between bold setting-label">
-                    גודל גופן
-                    <span class="text-secondary setting-value">{{
-                        fontSize
-                    }}%</span>
-                </label>
-                <input type="range"
-                       v-model.number="fontSize"
-                       min="50"
-                       max="200"
-                       step="5"
-                       class="setting-slider" />
-            </div>
+                <div class="setting-group">
+                    <label class="setting-label">
+                        <span class="bold">גודל גופן</span>
+                        <span class="text-secondary setting-value">{{ fontSize }}%</span>
+                    </label>
+                    <input type="range"
+                           v-model.number="fontSize"
+                           min="50"
+                           max="200"
+                           step="5"
+                           class="setting-slider" />
+                </div>
 
-            <!-- Line Padding - READING-SPECIFIC: Affects reading content -->
-            <div class="setting-group">
-                <label class="flex-between bold setting-label">
-                    ריווח שורות
-                    <span class="text-secondary setting-value">{{ linePadding
-                    }}</span>
-                </label>
-                <input type="range"
-                       v-model.number="linePadding"
-                       min="1.2"
-                       max="3.0"
-                       step="0.1"
-                       class="setting-slider" />
-            </div>
+                <div class="setting-group">
+                    <label class="setting-label">
+                        <span class="bold">ריווח שורות</span>
+                        <span class="text-secondary setting-value">{{ linePadding }}</span>
+                    </label>
+                    <input type="range"
+                           v-model.number="linePadding"
+                           min="1.2"
+                           max="3.0"
+                           step="0.1"
+                           class="setting-slider" />
+                </div>
 
-            <!-- Reading Background Color - READING-SPECIFIC: Affects reading area only -->
-            <div class="setting-group">
-                <label class="flex-row bold setting-label">רקע קריאה</label>
-                <div class="flex-column">
+                <div class="setting-group">
+                    <label class="setting-label bold">רקע קריאה</label>
                     <div class="color-palette">
                         <button v-for="color in readingBackgroundColors"
                                 :key="color.value"
@@ -227,48 +101,130 @@
                                   class="default-indicator">ברירת מחדל</span>
                         </button>
                     </div>
-                    <div class="flex-row flex-center custom-color-row">
+                    <div class="custom-color-row">
                         <input type="color"
                                v-model="readingBackgroundColor"
                                class="color-picker" />
                         <span class="custom-color-label">צבע מותאם אישית</span>
                         <button v-if="readingBackgroundColor && !isPresetColor(readingBackgroundColor, readingBackgroundColors)"
                                 @click="readingBackgroundColor = ''"
-                                class="c-pointer clear-color-btn"
-                                title="נקה צבע">
-                            ✕
-                        </button>
+                                class="c-pointer clear-color-btn">✕</button>
                     </div>
                 </div>
+
             </div>
 
-            <!-- Database Path: Data source for entire app -->
-            <div v-if="webviewBridge.isAvailable()"
-                 class="setting-group">
-                <label class="flex-row bold setting-label">מיקום מסד הנתונים</label>
-                <div class="flex-column">
-                    <div class="flex-row database-path-row">
+            <!-- ══ TAB: כללי — behaviour, navigation, advanced ══ -->
+            <div v-if="activeTab === 'general'"
+                 class="tab-pane">
+
+                <div class="setting-group">
+                    <label class="setting-label bold">ערכת נושא</label>
+                    <div class="button-group">
+                        <button :class="{ active: !currentTheme }"
+                                @click="setTheme(false)"
+                                class="toggle-btn">מצב בהיר</button>
+                        <button :class="{ active: currentTheme }"
+                                @click="setTheme(true)"
+                                class="toggle-btn">מצב כהה</button>
+                    </div>
+                </div>
+
+                <div class="setting-group">
+                    <label class="setting-label">
+                        <span class="bold">זום האפליקציה</span>
+                        <span class="text-secondary setting-value">{{ Math.round(appZoom * 100) }}%</span>
+                    </label>
+                    <input type="range"
+                           v-model.number="appZoom"
+                           min="0.5"
+                           max="1.5"
+                           step="0.05"
+                           class="setting-slider" />
+                </div>
+
+                <div class="setting-group">
+                    <label class="setting-label bold">דף ברירת מחדל לטאב חדש</label>
+                    <div class="button-group wrap">
+                        <button :class="{ active: newTabPage === 'homepage' }"
+                                @click="newTabPage = 'homepage'"
+                                class="toggle-btn compact">דף הבית</button>
+                        <button :class="{ active: newTabPage === 'openfile' }"
+                                @click="newTabPage = 'openfile'"
+                                class="toggle-btn compact">פתיחת ספר</button>
+                        <button :class="{ active: newTabPage === 'hebrewbooks' }"
+                                @click="newTabPage = 'hebrewbooks'"
+                                class="toggle-btn compact">היברו בוקס</button>
+                        <button :class="{ active: newTabPage === 'kezayit-search' }"
+                                @click="newTabPage = 'kezayit-search'"
+                                class="toggle-btn compact">חיפוש</button>
+                    </div>
+                </div>
+
+                <div class="setting-group">
+                    <label class="setting-label bold">מצב טעמים וניקוד</label>
+                    <div class="button-group">
+                        <button :class="{ active: !globalDiacritics }"
+                                @click="globalDiacritics = false"
+                                class="toggle-btn">לכל טאב בנפרד</button>
+                        <button :class="{ active: globalDiacritics }"
+                                @click="globalDiacritics = true"
+                                class="toggle-btn">גלובלי</button>
+                    </div>
+                </div>
+
+                <div class="setting-group">
+                    <label class="setting-label bold">מיקום ברירת מחדל של סרגל הכלים</label>
+                    <div class="button-group wrap">
+                        <button :class="{ active: defaultBookViewToolbarPosition === 'top' }"
+                                @click="defaultBookViewToolbarPosition = 'top'"
+                                class="toggle-btn compact">למעלה</button>
+                        <button :class="{ active: defaultBookViewToolbarPosition === 'bottom' }"
+                                @click="defaultBookViewToolbarPosition = 'bottom'"
+                                class="toggle-btn compact">למטה</button>
+                        <button :class="{ active: defaultBookViewToolbarPosition === 'left' }"
+                                @click="defaultBookViewToolbarPosition = 'left'"
+                                class="toggle-btn compact">שמאל</button>
+                        <button :class="{ active: defaultBookViewToolbarPosition === 'right' }"
+                                @click="defaultBookViewToolbarPosition = 'right'"
+                                class="toggle-btn compact">ימין</button>
+                        <button :class="{ active: defaultBookViewToolbarPosition === 'float-vertical' }"
+                                @click="defaultBookViewToolbarPosition = 'float-vertical'"
+                                class="toggle-btn compact">צף מאונך</button>
+                        <button :class="{ active: defaultBookViewToolbarPosition === 'float-horizontal' }"
+                                @click="defaultBookViewToolbarPosition = 'float-horizontal'"
+                                class="toggle-btn compact">צף מאוזן</button>
+                    </div>
+                </div>
+
+                <div class="setting-group">
+                    <label class="setting-label bold">כיסוי שם ה'</label>
+                    <div class="button-group">
+                        <button :class="{ active: !censorDivineNames }"
+                                @click="setCensorDivineNames(false)"
+                                class="toggle-btn">כתיב מלא</button>
+                        <button :class="{ active: censorDivineNames }"
+                                @click="setCensorDivineNames(true)"
+                                class="toggle-btn">כיסוי (ה→ק)</button>
+                    </div>
+                </div>
+
+                <div v-if="webviewBridge.isAvailable()"
+                     class="setting-group">
+                    <label class="setting-label bold">מיקום מסד הנתונים</label>
+                    <div class="database-path-row">
                         <input type="text"
                                v-model="databasePath"
                                placeholder="בחר מיקום מסד הנתונים (seforim.db)"
                                class="database-path-input"
                                readonly />
                         <button @click="selectDatabaseFile"
-                                class="c-pointer database-browse-btn"
-                                title="בחר קובץ מסד נתונים">
-                            📁
-                        </button>
+                                class="c-pointer database-browse-btn">📁</button>
                     </div>
                 </div>
+
             </div>
 
-            <!-- Reset Button - UTILITY: Resets all settings -->
-            <div class="setting-group">
-                <button @click="resetSettings"
-                        class="width-fill c-pointer bold reset-button">
-                    איפוס הגדרות
-                </button>
-            </div>
         </div>
 
         <!-- Custom Dialog -->
@@ -303,195 +259,98 @@ import { toggleTheme, isDarkTheme, syncPdfViewerTheme } from '../../utils/theme'
 import CustomDialog from '../common/CustomDialog.vue'
 
 const settingsStore = useSettingsStore()
-const { headerFont, textFont, fontSize, linePadding, censorDivineNames, appZoom, readingBackgroundColor, databasePath, globalDiacritics, newTabPage, defaultBookViewToolbarPosition } = storeToRefs(settingsStore)
+const {
+    headerFont, textFont, fontSize, linePadding, censorDivineNames,
+    appZoom, readingBackgroundColor, databasePath, globalDiacritics,
+    newTabPage, defaultBookViewToolbarPosition
+} = storeToRefs(settingsStore)
 const { dialogRef, dialogOptions, confirm, error, handleConfirm, handleCancel, handleClose } = useDialog()
 
+const activeTab = ref<'reading' | 'general'>('reading')
 const availableFonts = ref<string[]>([])
 const isHeaderDropdownOpen = ref(false)
 const isTextDropdownOpen = ref(false)
 const currentTheme = ref(isDarkTheme())
 
-// Reading background colors palette - based on research for optimal reading comfort
 const readingBackgroundColors = [
     { name: 'ברירת מחדל', value: '' },
-    { name: 'קרם חם', value: '#FDF6E3' }, // Warm cream - reduces eye strain
-    { name: 'בז\' רך', value: '#F5F5DC' }, // Soft beige - classic reading background
-    { name: 'נייר ישן', value: '#FAF0E6' }, // Old paper - vintage feel
-    { name: 'ירוק רך', value: '#F0F8F0' }, // Soft green - calming for eyes
-    { name: 'כחול רך', value: '#F0F8FF' }, // Soft blue - reduces glare
-    { name: 'אפור בהיר', value: '#F8F8F8' }, // Light gray - neutral
-    { name: 'ורוד רך', value: '#FFF0F5' }, // Soft pink - warm and gentle
-    { name: 'צהוב עדין', value: '#FFFACD' }, // Light yellow - bright but soft
+    { name: 'קרם חם', value: '#FDF6E3' },
+    { name: "בז' רך", value: '#F5F5DC' },
+    { name: 'נייר ישן', value: '#FAF0E6' },
+    { name: 'ירוק רך', value: '#F0F8F0' },
+    { name: 'כחול רך', value: '#F0F8FF' },
+    { name: 'אפור בהיר', value: '#F8F8F8' },
+    { name: 'ורוד רך', value: '#FFF0F5' },
+    { name: 'צהוב עדין', value: '#FFFACD' },
 ]
 
-// Helper function to check if a color is in the preset palette
-const isPresetColor = (color: string, palette: typeof readingBackgroundColors) => {
-    return palette.some(preset => preset.value === color)
-}
+const isPresetColor = (color: string, palette: typeof readingBackgroundColors) =>
+    palette.some(p => p.value === color)
 
-// Use imported font list
-const fontsToCheck = hebrewFonts
-
-// Function to check if a font is available
 const isFontAvailable = (fontName: string): boolean => {
     const canvas = document.createElement('canvas')
-    const context = canvas.getContext('2d')
-    if (!context) return false
-
-    const testString = 'אבגדהוזחטיכלמנסעפצקרשת'
-    const baseFonts = ['monospace', 'sans-serif', 'serif']
-
-    const testFont = (font: string, baseFont: string) => {
-        context.font = `72px ${baseFont}`
-        const baseWidth = context.measureText(testString).width
-
-        context.font = `72px '${font}', ${baseFont}`
-        const fontWidth = context.measureText(testString).width
-
-        return baseWidth !== fontWidth
-    }
-
-    return baseFonts.some(baseFont => testFont(fontName, baseFont))
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return false
+    const str = 'אבגדהוזחטיכלמנסעפצקרשת'
+    return ['monospace', 'sans-serif', 'serif'].some(base => {
+        ctx.font = `72px ${base}`
+        const w = ctx.measureText(str).width
+        ctx.font = `72px '${fontName}', ${base}`
+        return w !== ctx.measureText(str).width
+    })
 }
 
-// Detect available fonts
 const detectFonts = () => {
-    const detected: string[] = []
-    for (const font of fontsToCheck) {
-        if (isFontAvailable(font)) {
-            detected.push(font)
-        }
-    }
-    availableFonts.value = detected.length > 0 ? detected : fontsToCheck
+    const detected = hebrewFonts.filter(isFontAvailable)
+    availableFonts.value = detected.length > 0 ? detected : hebrewFonts
 }
 
-const toggleHeaderDropdown = () => {
-    isHeaderDropdownOpen.value = !isHeaderDropdownOpen.value
-    isTextDropdownOpen.value = false
-}
-
-const toggleTextDropdown = () => {
-    isTextDropdownOpen.value = !isTextDropdownOpen.value
-    isHeaderDropdownOpen.value = false
-}
-
-const selectHeaderFont = (font: string) => {
-    headerFont.value = `'${font}', sans-serif`
-    isHeaderDropdownOpen.value = false
-}
-
-const selectTextFont = (font: string) => {
-    textFont.value = `'${font}', serif`
-    isTextDropdownOpen.value = false
-}
-
-const getDisplayName = (fontValue: string): string => {
-    const match = fontValue.match(/'([^']+)'/)
-    return match && match[1] ? match[1] : fontValue
-}
+const toggleHeaderDropdown = () => { isHeaderDropdownOpen.value = !isHeaderDropdownOpen.value; isTextDropdownOpen.value = false }
+const toggleTextDropdown = () => { isTextDropdownOpen.value = !isTextDropdownOpen.value; isHeaderDropdownOpen.value = false }
+const selectHeaderFont = (font: string) => { headerFont.value = `'${font}', sans-serif`; isHeaderDropdownOpen.value = false }
+const selectTextFont = (font: string) => { textFont.value = `'${font}', serif`; isTextDropdownOpen.value = false }
+const getDisplayName = (v: string) => v.match(/'([^']+)'/)?.[1] ?? v
 
 const resetSettings = async () => {
     const confirmed = await confirm(
         'האם אתה בטוח שברצונך לאפס את כל ההגדרות? פעולה זו תחזיר את האפליקציה למצב ברירת המחדל.',
-        {
-            title: 'איפוס הגדרות',
-            confirmVariant: 'danger'
-        }
+        { title: 'איפוס הגדרות', confirmVariant: 'danger' }
     )
-
-    if (!confirmed) {
-        return
-    }
-
+    if (!confirmed) return
     settingsStore.reset()
-
-    // Also reset database path to default in C# mode
-    if (webviewBridge.isAvailable()) {
-        try {
-            // Clear the custom database path (this will revert to default)
-            const success = await webviewBridge.clearDatabasePath()
-            if (success) {
-                // Reload the page to use the default database and apply all reset settings
-                window.location.reload()
-                return
-            } else {
-                console.error('Failed to reset database path, but continuing with other settings reset')
-            }
-        } catch (error) {
-            console.error('Failed to reset database path:', error)
-        }
-    }
-
-    // If not in C# mode or database reset failed, still reload to apply other settings
+    if (webviewBridge.isAvailable()) { try { await webviewBridge.clearDatabasePath() } catch { } }
     window.location.reload()
 }
 
-const setCensorDivineNames = (censor: boolean) => {
-    censorDivineNames.value = censor
-    // Reload to apply censoring from data layer
-    window.location.reload()
-}
+const setCensorDivineNames = (censor: boolean) => { censorDivineNames.value = censor; window.location.reload() }
 
 const setTheme = (isDark: boolean) => {
-    const needsToggle = isDark !== currentTheme.value
-    if (needsToggle) {
+    if (isDark !== currentTheme.value) {
         toggleTheme()
         currentTheme.value = isDarkTheme()
-
-        // Sync theme with any open PDF.js viewers
-        setTimeout(() => {
-            syncPdfViewerTheme()
-        }, 50)
+        setTimeout(syncPdfViewerTheme, 50)
     }
 }
 
 const selectDatabaseFile = async () => {
     try {
         const result = await webviewBridge.openDatabaseFilePicker()
-        if (result.filePath) {
-            // First validate the selected database file
-            const isValid = await webviewBridge.validateDatabasePath(result.filePath)
-            if (!isValid) {
-                await error('הקובץ שנבחר אינו מסד נתונים תקין של SQLite. אנא בחר קובץ seforim.db תקין.')
-                return
-            }
-
-            databasePath.value = result.filePath
-            // Notify the C# backend about the new database path
-            const success = await webviewBridge.setDatabasePath(result.filePath)
-            if (success) {
-                // Reload the page to use the new database
-                window.location.reload()
-            } else {
-                await error('שגיאה בהגדרת מיקום מסד הנתונים. אנא נסה שוב.')
-                databasePath.value = '' // Reset on failure
-            }
-        }
-    } catch (err) {
-        console.error('Failed to select database file:', err)
-        await error('שגיאה בבחירת קובץ מסד הנתונים. אנא נסה שוב.')
-    }
-}
-
-const loadCurrentDatabasePath = async () => {
-    try {
-        if (webviewBridge.isAvailable()) {
-            // C# mode - get path from backend
-            const currentPath = await webviewBridge.getCurrentDatabasePath()
-            if (currentPath && !databasePath.value) {
-                databasePath.value = currentPath
-            }
-        }
-    } catch (error) {
-        console.error('Failed to load current database path:', error)
-    }
+        if (!result.filePath) return
+        const isValid = await webviewBridge.validateDatabasePath(result.filePath)
+        if (!isValid) { await error('הקובץ שנבחר אינו מסד נתונים תקין של SQLite.'); return }
+        databasePath.value = result.filePath
+        const ok = await webviewBridge.setDatabasePath(result.filePath)
+        if (ok) window.location.reload()
+        else { await error('שגיאה בהגדרת מיקום מסד הנתונים. אנא נסה שוב.'); databasePath.value = '' }
+    } catch { await error('שגיאה בבחירת קובץ מסד הנתונים. אנא נסה שוב.') }
 }
 
 onMounted(() => {
     detectFonts()
-    // Load database path only in C# WebView mode
     if (webviewBridge.isAvailable()) {
-        loadCurrentDatabasePath()
+        webviewBridge.getCurrentDatabasePath()
+            .then(p => { if (p && !databasePath.value) databasePath.value = p })
+            .catch(() => { })
     }
 })
 </script>
@@ -501,34 +360,149 @@ onMounted(() => {
     background: var(--bg-primary);
 }
 
-.settings-content {
-    padding: 20px;
+/* ════════════════════════════════
+   Tab Bar — horizontal row
+   ════════════════════════════════ */
+.tab-bar {
+    display: flex;
+    flex-direction: row;
+    /* explicit: all tabs in one horizontal line */
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    flex-shrink: 0;
 }
 
+.tab-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 6px;
+    background: none;
+    border: none;
+    border-bottom: none;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: color 0.15s, background 0.15s;
+    white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.tab-btn:hover {
+    color: var(--text-primary);
+    background: var(--hover-bg);
+}
+
+.tab-btn.active {
+    background: var(--hover-bg);
+    color: var(--text-primary);
+    font-weight: 700;
+}
+
+/* Reset tab — distinct destructive action, never shows as "active" */
+.tab-btn--reset:hover {
+    color: #e53e3e;
+    background: color-mix(in srgb, #e53e3e 8%, transparent);
+}
+
+/* ════════════════════════════════
+   Content
+   ════════════════════════════════ */
+.settings-content {
+    padding: 0;
+}
+
+.tab-pane {
+    direction: rtl;
+}
+
+/* ════════════════════════════════
+   Setting groups
+   ════════════════════════════════ */
 .setting-group {
-    margin-bottom: 24px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.setting-group:last-child {
+    border-bottom: none;
 }
 
 .setting-label {
     font-size: 14px;
     color: var(--text-primary);
-    margin-bottom: 8px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .setting-value {
     font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: normal;
 }
 
+/* ════════════════════════════════
+   Toggle buttons
+   ════════════════════════════════ */
+.button-group {
+    display: flex;
+    gap: 8px;
+}
+
+.button-group.wrap {
+    flex-wrap: wrap;
+}
+
+.toggle-btn {
+    flex: 1;
+    padding: 10px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.toggle-btn.compact {
+    padding: 8px 10px;
+    font-size: 12px;
+}
+
+.toggle-btn:hover {
+    background: var(--hover-bg);
+    border-color: var(--accent-color);
+}
+
+.toggle-btn.active {
+    background: var(--accent-color);
+    color: #fff;
+    border-color: var(--accent-color);
+}
+
+/* ════════════════════════════════
+   Custom select
+   ════════════════════════════════ */
 .custom-select {
     position: relative;
     width: 100%;
+    box-sizing: border-box;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
-    border-radius: 4px;
+    border-radius: 8px;
     direction: rtl;
-    height: 38px;
+    height: 42px;
     padding: 0 12px;
     user-select: none;
+    display: flex;
+    align-items: center;
 }
 
 .custom-select:hover {
@@ -555,15 +529,15 @@ onMounted(() => {
     margin-top: 4px;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
-    border-radius: 4px;
+    border-radius: 8px;
     max-height: 200px;
     overflow-y: auto;
     z-index: 1001;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
 }
 
 .select-option {
-    padding: 8px 12px;
+    padding: 10px 12px;
     color: var(--text-primary);
     font-size: 13px;
 }
@@ -578,6 +552,9 @@ onMounted(() => {
     font-weight: 500;
 }
 
+/* ════════════════════════════════
+   Slider
+   ════════════════════════════════ */
 .setting-slider {
     width: 100%;
     height: 6px;
@@ -590,98 +567,49 @@ onMounted(() => {
 
 .setting-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
-    appearance: none;
-    width: 18px;
-    height: 18px;
+    width: 22px;
+    height: 22px;
     background: var(--accent-color);
     border-radius: 50%;
     cursor: pointer;
-    transition: all 0.2s ease;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 }
 
 .setting-slider::-moz-range-thumb {
-    width: 18px;
-    height: 18px;
+    width: 22px;
+    height: 22px;
     background: var(--accent-color);
     border-radius: 50%;
     cursor: pointer;
     border: none;
-    transition: all 0.2s ease;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 }
 
-.theme-toggle {
-    gap: 8px;
-}
-
-.new-tab-options {
-    gap: 8px;
-    flex-wrap: wrap;
-}
-
-.toolbar-position-options {
-    gap: 8px;
-    flex-wrap: wrap;
-}
-
-.theme-option {
-    padding: 10px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    color: var(--text-primary);
-    font-size: 14px;
-}
-
-.theme-option:hover {
-    background: var(--hover-bg);
-    border-color: var(--accent-color);
-}
-
-.theme-option.active {
-    background: var(--accent-color);
-    color: white;
-    border-color: var(--accent-color);
-}
-
-.reset-button {
-    padding: 12px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    color: var(--text-primary);
-    font-size: 14px;
-}
-
-.reset-button:hover {
-    background: var(--hover-bg);
-    border-color: var(--accent-color);
-}
-
-/* Color palette styles */
+/* ════════════════════════════════
+   Color palette
+   ════════════════════════════════ */
 .color-palette {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 8px;
     margin-bottom: 10px;
 }
 
 .color-swatch {
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
     border: 2px solid var(--border-color);
-    border-radius: 5px;
+    border-radius: 8px;
     cursor: pointer;
-    position: relative;
-    transition: all 0.2s ease;
     display: flex;
     align-items: center;
     justify-content: center;
-    user-select: none;
+    transition: all 0.15s;
 }
 
 .color-swatch:hover {
     border-color: var(--accent-color);
-    transform: scale(1.05);
+    transform: scale(1.08);
 }
 
 .color-swatch.active {
@@ -691,7 +619,7 @@ onMounted(() => {
 }
 
 .default-indicator {
-    font-size: 9px;
+    font-size: 8px;
     color: var(--text-secondary);
     text-align: center;
     line-height: 1.1;
@@ -699,8 +627,9 @@ onMounted(() => {
 }
 
 .custom-color-row {
-    gap: 6px;
+    display: flex;
     align-items: center;
+    gap: 8px;
     margin-top: 6px;
 }
 
@@ -710,12 +639,11 @@ onMounted(() => {
     flex: 1;
 }
 
-/* Color picker styles */
 .color-picker {
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
     border: 2px solid var(--border-color);
-    border-radius: 5px;
+    border-radius: 8px;
     cursor: pointer;
     background: none;
     padding: 0;
@@ -726,8 +654,8 @@ onMounted(() => {
 }
 
 .clear-color-btn {
-    width: 22px;
-    height: 22px;
+    width: 24px;
+    height: 24px;
     border: 1px solid var(--border-color);
     border-radius: 50%;
     background: var(--bg-secondary);
@@ -736,29 +664,30 @@ onMounted(() => {
     display: flex;
     align-items: center;
     justify-content: center;
-    user-select: none;
 }
 
 .clear-color-btn:hover {
     background: var(--hover-bg);
     border-color: var(--accent-color);
-    color: var(--text-primary);
 }
 
-/* Database path styles - only visible in C# mode */
+/* ════════════════════════════════
+   Database path
+   ════════════════════════════════ */
 .database-path-row {
+    display: flex;
     gap: 8px;
     align-items: center;
 }
 
 .database-path-input {
     flex: 1;
-    padding: 8px 12px;
+    padding: 10px 12px;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
-    border-radius: 4px;
+    border-radius: 8px;
     color: var(--text-primary);
-    font-size: 14px;
+    font-size: 13px;
     direction: ltr;
     text-align: left;
     cursor: pointer;
@@ -769,17 +698,18 @@ onMounted(() => {
 }
 
 .database-browse-btn {
-    width: 38px;
-    height: 38px;
+    width: 42px;
+    height: 42px;
+    flex-shrink: 0;
     background: var(--accent-color);
     border: none;
-    border-radius: 4px;
-    color: white;
+    border-radius: 8px;
+    color: #fff;
     font-size: 16px;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s ease;
+    transition: all 0.15s;
 }
 
 .database-browse-btn:hover {

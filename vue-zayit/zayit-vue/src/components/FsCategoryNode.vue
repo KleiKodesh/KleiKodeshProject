@@ -15,11 +15,11 @@
         </div>
 
         <template v-if="isExpanded">
-            <BookTreeCategoryNode v-for="(child, index) in category.children"
-                                  :key="child.id"
-                                  :ref="(el: any) => { if (el) childRefs[index] = el }"
-                                  :category="child"
-                                  :depth="depth + 1" />
+            <FsCategoryNode v-for="(child, index) in category.children"
+                            :key="child.id"
+                            :ref="(el: any) => { if (el) childRefs[index] = el }"
+                            :category="child"
+                            :depth="depth + 1" />
 
             <FsBookNode v-for="book in category.books"
                           :key="book.id"
@@ -35,7 +35,7 @@ import { Icon } from '@iconify/vue'
 import type { Category } from '../types/BookCategoryTree'
 import FsBookNode from './FsBookNode.vue'
 
-type BookCategoryNodeInstance = {
+type CategoryNodeInstance = {
     collapse: () => void
     reset: () => void
 }
@@ -48,7 +48,7 @@ withDefaults(defineProps<{
 })
 
 const isExpanded = ref(false)
-const childRefs = ref<BookCategoryNodeInstance[]>([])
+const childRefs = ref<CategoryNodeInstance[]>([])
 
 const toggleExpand = () => {
     isExpanded.value = !isExpanded.value
@@ -61,7 +61,7 @@ const collapse = () => {
 const reset = () => {
     isExpanded.value = false
     // Recursively reset all children
-    childRefs.value.forEach((child: BookCategoryNodeInstance) => {
+    childRefs.value.forEach((child: CategoryNodeInstance) => {
         if (child && child.reset) {
             child.reset()
         }
