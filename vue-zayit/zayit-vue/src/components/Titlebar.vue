@@ -5,6 +5,10 @@
       <!-- Settings menu -->
       <TitlebarDropdownMenu @close="handleDropdownClose" />
 
+      <!-- Theme toggle for PDF and Hebrew books pages -->
+      <ThemeToggleButton v-if="isPdfPage || isHebrewBooksPage"
+                         @click.stop />
+
       <!-- Toolbar toggle button -->
       <button v-if="tabStore.activeTab?.currentPage === 'bookview'"
               @click.stop="handleButtonClick(toggleToolbar)"
@@ -69,6 +73,7 @@ import { computed } from 'vue';
 import { Icon } from '@iconify/vue';
 import TitlebarDropdownMenu from './TitlebarDropdownMenu.vue';
 import CommentaryToggleIcon from '@/components/icons/CommentaryToggleIcon.vue';
+import ThemeToggleButton from './ThemeToggleButton.vue';
 import { useTabStore } from '../stores/tabStore';
 
 const tabStore = useTabStore();
@@ -100,6 +105,14 @@ const isToolbarVisible = computed(() => {
   const bookState = tabStore.activeTab?.bookState;
   if (!bookState) return true; // Default to visible
   return bookState.showToolbar !== false; // Default to true if undefined
+});
+
+const isPdfPage = computed(() => {
+  return tabStore.activeTab?.currentPage === 'pdfview';
+});
+
+const isHebrewBooksPage = computed(() => {
+  return tabStore.activeTab?.currentPage === 'hebrewbooks-view';
 });
 
 const handleHeaderClick = () => {

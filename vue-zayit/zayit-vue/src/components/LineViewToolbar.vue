@@ -114,11 +114,7 @@
         <div class="toolbar-separator"></div>
 
         <!-- Theme toggle button -->
-        <button @click="handleThemeToggle"
-                class="flex-center c-pointer touch-interactive"
-                :title="isDark ? 'מצב בהיר' : 'מצב כהה'">
-            <Icon :icon="isDark ? 'fluent:weather-sunny-24-regular' : 'fluent:dark-theme-24-regular'" />
-        </button>
+        <ThemeToggleButton />
     </div>
 </template>
 
@@ -131,7 +127,7 @@ import DiacriticsFullIcon from '@/components/icons/DiacriticsFullIcon.vue'
 import DiacriticsNikkudOnlyIcon from '@/components/icons/DiacriticsNikkudOnlyIcon.vue'
 import DiacriticsNoneIcon from '@/components/icons/DiacriticsNoneIcon.vue'
 import CommentaryToggleIcon from '@/components/icons/CommentaryToggleIcon.vue'
-import { toggleTheme, isDarkTheme, syncPdfViewerTheme } from '../utils/theme'
+import ThemeToggleButton from './ThemeToggleButton.vue'
 
 const props = defineProps<{
     position: 'top' | 'bottom' | 'left' | 'right' | 'float-vertical' | 'float-horizontal'
@@ -252,8 +248,6 @@ const isAltTocVisible = computed(() => {
     return bookState.showAltToc !== false
 })
 
-const isDark = ref(isDarkTheme())
-
 const handleZoomIn = () => {
     tabStore.zoomIn()
 }
@@ -272,15 +266,6 @@ const handleToggleSplitPane = () => {
 
 const handleAltTocToggle = () => {
     tabStore.toggleAltTocDisplay()
-}
-
-const handleThemeToggle = () => {
-    toggleTheme()
-    isDark.value = isDarkTheme()
-
-    setTimeout(() => {
-        syncPdfViewerTheme()
-    }, 50)
 }
 
 const diacriticsState = computed(() => tabStore.currentDiacriticsState)

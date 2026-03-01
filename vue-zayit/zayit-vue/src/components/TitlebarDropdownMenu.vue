@@ -110,7 +110,6 @@ import { Icon } from '@iconify/vue';
 import TitlebarDiacriticsDropdown from './DiacriticsDropdownItem.vue';
 import { useTabStore } from '../stores/tabStore';
 import { useSettingsStore } from '../stores/settingsStore';
-import { toggleTheme, isDarkTheme, syncPdfViewerTheme } from '../utils/theme';
 import { pdfService } from '../services/pdfService';
 import { onClickOutside } from '@vueuse/core';
 
@@ -125,9 +124,6 @@ onClickOutside(dropdownContainer, () => {
     closeDropdown();
   }
 });
-
-// Theme state - reactive to theme changes
-const currentTheme = ref(isDarkTheme());
 
 const emit = defineEmits<{
   'close': []
@@ -162,15 +158,6 @@ const isToolbarVisible = computed(() => {
   return bookState.showToolbar !== false; // Default to true if undefined
 });
 
-// Theme toggle computed properties
-const themeToggleText = computed(() => {
-  return currentTheme.value ? 'מצב בהיר' : 'מצב כהה';
-});
-
-const themeToggleIcon = computed(() => {
-  return currentTheme.value ? 'fluent:weather-sunny-24-regular' : 'fluent:dark-theme-24-regular';
-});
-
 const toggleDropdown = () => {
   isOpen.value = !isOpen.value;
 };
@@ -203,18 +190,6 @@ const handleHebrewBooksClick = () => {
 const handleSearchPageClick = () => {
   tabStore.openKezayitSearch();
   closeDropdown();
-};
-
-const handleThemeClick = () => {
-  toggleTheme();
-  // Update reactive state after theme toggle
-  currentTheme.value = isDarkTheme();
-
-  // Sync theme with any open PDF.js viewers
-  // Small delay to ensure theme classes are applied first
-  setTimeout(() => {
-    syncPdfViewerTheme();
-  }, 50);
 };
 
 const handleLineDisplayClick = () => {

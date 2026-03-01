@@ -71,7 +71,7 @@ const filteredBooks = computed(() => {
         const searchText = `${book.path || ''} ${book.title}`.toLowerCase()
         if (searchWords.every(word => searchText.includes(word))) {
             results.push(book)
-            if (results.length === 100) {
+            if (results.length === 250) {
                 break
             }
         }
@@ -84,3 +84,16 @@ const selectBook = (book: Book) => {
     tabStore.openBookToc(book.title, book.id, hasConnections(book))
 }
 </script>
+
+<style scoped>
+.search-result {
+    align-items: flex-start;
+    min-height: 44px;
+    height: auto;
+}
+
+.search-result .flex-column {
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+</style>

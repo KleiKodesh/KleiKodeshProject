@@ -1,37 +1,8 @@
 /**
- * Theme utility for managing dark/light mode
- * Also syncs theme with PDF.js viewer
+ * Theme utility for syncing theme with PDF.js viewer
  */
 
-export function toggleTheme(): void {
-    const isDark = document.documentElement.classList.contains('dark')
-
-    console.log('[Theme] Toggling theme from:', isDark ? 'dark' : 'light', 'to:', isDark ? 'light' : 'dark')
-
-    if (isDark) {
-        document.documentElement.classList.remove('dark')
-        localStorage.setItem('theme', 'light')
-    } else {
-        document.documentElement.classList.add('dark')
-        localStorage.setItem('theme', 'dark')
-    }
-
-    // Sync with PDF.js viewer immediately and with retry
-    syncPdfViewerTheme()
-
-    // Retry sync after a short delay to catch any iframes that weren't ready
-    setTimeout(() => {
-        console.log('[Theme] Retrying PDF theme sync after delay')
-        syncPdfViewerTheme()
-    }, 100)
-}
-
 export function initTheme(): void {
-    const savedTheme = localStorage.getItem('theme')
-    if (savedTheme === 'dark') {
-        document.documentElement.classList.add('dark')
-    }
-
     // Sync with PDF.js viewer on init
     syncPdfViewerTheme()
 
@@ -41,7 +12,6 @@ export function initTheme(): void {
     // Make theme functions available globally for debugging
     if (typeof window !== 'undefined') {
         (window as any).zayitTheme = {
-            toggle: toggleTheme,
             sync: forceSyncAllPdfViewers,
             isDark: isDarkTheme,
             current: () => isDarkTheme() ? 'dark' : 'light'
