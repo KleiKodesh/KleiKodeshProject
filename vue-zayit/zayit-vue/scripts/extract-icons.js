@@ -11,6 +11,8 @@ const __dirname = path.dirname(__filename);
 // List of all icons used in the app 
 // run: node extract-icons.js
 const usedIcons = [
+  'fluent:panel-right-28-filled',
+  'fluent:panel-right-28-regular',
   'folder-28-regular',
   'spinner-ios-20-regular',
   'spinner-ios-20-filled',

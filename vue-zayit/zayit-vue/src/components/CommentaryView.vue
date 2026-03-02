@@ -1,5 +1,5 @@
 <template>
-    <div class="flex-column height-fill"
+    <div class="flex-column height-fill commentary-container"
          :class="commentaryToolbarPositionClass">
         <!-- ============================================ -->
         <!-- HEADER BAR -->
@@ -47,16 +47,20 @@
                           class="small-icon" />
                 </button>
 
-                <!-- Filter Dropdown -->
+                <!-- Connection Type Filter -->
                 <CommentaryConnectionTypeFilter :book="book"
                                                 :selected-connection-type-id="selectedConnectionTypeId"
                                                 :available-options="availableFilterOptions"
-                                                @filter-change="handleFilterChange" />
+                                                @filter-change="handleConnectionTypeChange" />
 
-                <!-- Category Filter -->
-                <CommentaryCategoryFilter :available-categories="availableCategories"
-                                          :selected-category-id="selectedCategoryId"
-                                          @category-change="handleCategoryChange" />
+                <!-- Filter Panel Toggle Button -->
+                <button class="flex-center c-pointer nav-btn"
+                        ref="filterToggleBtn"
+                        @click="toggleFilterPanel"
+                        :title="isFilterPanelOpen ? 'סגור סינון' : 'פתח סינון'">
+                    <Icon :icon="isFilterPanelOpen ? 'fluent:panel-right-28-filled' : 'fluent:panel-right-28-regular'"
+                          class="small-icon" />
+                </button>
 
                 <!-- Commentary Selector Combobox -->
                 <Combobox v-model="comboboxSelectedValue"
@@ -92,60 +96,72 @@
         </div>
 
         <!-- ============================================ -->
-        <!-- CONTENT AREA -->
+        <!-- CONTENT AREA WITH FILTER PANEL -->
         <!-- ============================================ -->
-        <div class="commentary-content-container"
-             ref="commentaryContentRef"
-             :style="commentaryStyles"
-             tabindex="0"
-             @keydown="handleKeyDown">
+        <div class="commentary-main-area">
+            <!-- Filter Panel -->
+            <CommentaryFilterPanel :is-open="isFilterPanelOpen"
+                                   :tree-data="filterTreeData"
+                                   :is-loading="isFilterTreeLoading"
+                                   :selected-ids="selectedFilterIds"
+                                   :ignore-elements="[filterToggleBtn]"
+                                   @close="closeFilterPanel"
+                                   @update:selected-ids="handleFilterSelectionChange" />
 
-            <!-- Loading State -->
-            <div v-if="isLoading"
-                 class="flex-column flex-center height-fill text-secondary commentary-loading">
-                <LoadingSpinner text="טוען קשרים..." />
+            <!-- Content Container -->
+            <div class="commentary-content-container"
+                 ref="commentaryContentRef"
+                 :style="commentaryStyles"
+                 tabindex="0"
+                 @keydown="handleKeyDown">
+
+                <!-- Loading State -->
+                <div v-if="isLoading"
+                     class="flex-column flex-center height-fill text-secondary commentary-loading">
+                    <LoadingSpinner text="טוען קשרים..." />
+                </div>
+
+                <!-- Empty State -->
+                <div v-else-if="linkGroups.length === 0"
+                     class="flex-column flex-center height-fill text-secondary commentary-placeholder">
+                    <div class="bold placeholder-text">לא נמצרו קשרים בקטגוריה זו</div>
+                </div>
+
+                <!-- Virtual Scroller with Commentary Content -->
+                <DynamicScroller v-else
+                                 ref="commentaryScrollerRef"
+                                 class="commentary-scroller"
+                                 :items="virtualCommentaryItems"
+                                 :min-item-size="commentaryMinItemSize"
+                                 :buffer="400"
+                                 key-field="id">
+
+                    <template #default="{ item, index, active }">
+                        <DynamicScrollerItem :item="item"
+                                             :active="active"
+                                             :size-dependencies="[item.html?.length || 0, containerWidth]"
+                                             :data-index="index"
+                                             :data-commentary-item-observer="item.id">
+
+                            <!-- Group Header -->
+                            <div v-if="item.type === 'group-header'"
+                                 class="bold group-header selectable"
+                                 :class="{ 'c-pointer': item.targetBookId !== undefined }"
+                                 :data-group-index="item.groupIndex"
+                                 @click="handleGroupClick(item)"
+                                 v-html="item.groupName">
+                            </div>
+
+                            <!-- Individual Commentary Link -->
+                            <div v-else-if="item.type === 'link'"
+                                 class="selectable line-1.6 justify link-item"
+                                 :data-group-index="item.groupIndex"
+                                 v-html="item.html">
+                            </div>
+                        </DynamicScrollerItem>
+                    </template>
+                </DynamicScroller>
             </div>
-
-            <!-- Empty State -->
-            <div v-else-if="linkGroups.length === 0"
-                 class="flex-column flex-center height-fill text-secondary commentary-placeholder">
-                <div class="bold placeholder-text">לא נמצרו קשרים בקטגוריה זו</div>
-            </div>
-
-            <!-- Virtual Scroller with Commentary Content -->
-            <DynamicScroller v-else
-                             ref="commentaryScrollerRef"
-                             class="commentary-scroller"
-                             :items="virtualCommentaryItems"
-                             :min-item-size="commentaryMinItemSize"
-                             :buffer="400"
-                             key-field="id">
-
-                <template #default="{ item, index, active }">
-                    <DynamicScrollerItem :item="item"
-                                         :active="active"
-                                         :size-dependencies="[item.html?.length || 0, containerWidth]"
-                                         :data-index="index"
-                                         :data-commentary-item-observer="item.id">
-
-                        <!-- Group Header -->
-                        <div v-if="item.type === 'group-header'"
-                             class="bold group-header selectable"
-                             :class="{ 'c-pointer': item.targetBookId !== undefined }"
-                             :data-group-index="item.groupIndex"
-                             @click="handleGroupClick(item)"
-                             v-html="item.groupName">
-                        </div>
-
-                        <!-- Individual Commentary Link -->
-                        <div v-else-if="item.type === 'link'"
-                             class="selectable line-1.6 justify link-item"
-                             :data-group-index="item.groupIndex"
-                             v-html="item.html">
-                        </div>
-                    </DynamicScrollerItem>
-                </template>
-            </DynamicScroller>
         </div>
     </div>
 </template>
@@ -159,8 +175,8 @@ import { useFocus, useEventListener } from '@vueuse/core'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import Combobox, { type ComboboxOption } from './common/Combobox.vue'
 import GenericSearch from './common/GenericSearch.vue'
+import CommentaryFilterPanel from './CommentaryFilterPanel.vue'
 import CommentaryConnectionTypeFilter from './CommentaryConnectionTypeFilter.vue'
-import CommentaryCategoryFilter from './CommentaryCategoryFilter.vue'
 import LoadingSpinner from './common/LoadingSpinner.vue'
 import { Icon } from '@iconify/vue'
 
@@ -176,6 +192,7 @@ import { useCategoryTreeStore } from '../stores/categoryTreeStore'
 import type { Book } from '../types/Book'
 import { hasConnections } from '../types/Book'
 import type { Category } from '../types/BookCategoryTree'
+import type { TreeNode } from './CommentaryCheckedTreeNode.vue'
 
 // ============================================
 // PROPS & EMITS
@@ -210,6 +227,7 @@ const categoryTreeStore = useCategoryTreeStore()
 const commentaryScrollerRef = ref<InstanceType<typeof DynamicScroller> | null>(null)
 const commentaryContentRef = ref<HTMLElement | null>(null)
 const searchRef = ref<InstanceType<typeof GenericSearch> | null>(null)
+const filterToggleBtn = ref<HTMLElement | null>(null)
 
 // Core State
 const linkGroups = ref<CommentaryLinkGroup[]>([])
@@ -231,6 +249,12 @@ const isLineNavigationInProgress = ref(false) // MASTER FLAG: Disables ALL watch
 
 // Selection State
 const selectAllWasPressed = ref(false)
+
+// Filter Panel State
+const isFilterPanelOpen = ref(false)
+const isFilterTreeLoading = ref(false)
+const filterTreeData = ref<TreeNode[]>([])
+const selectedFilterIds = ref<Set<string>>(new Set())
 
 // Filter Options
 const availableFilterOptions = ref<Array<{ label: string; value: number }>>([])
@@ -254,11 +278,11 @@ const canNavigateToNextLine = computed(() => {
 
 // Can navigate to previous/next group
 const canNavigateToPreviousGroup = computed(() => {
-    return linkGroups.value.length > 0 && currentGroupIndex.value > 0
+    return sortedLinkGroups.value.length > 0 && currentGroupIndex.value > 0
 })
 
 const canNavigateToNextGroup = computed(() => {
-    return linkGroups.value.length > 0 && currentGroupIndex.value < linkGroups.value.length - 1
+    return sortedLinkGroups.value.length > 0 && currentGroupIndex.value < sortedLinkGroups.value.length - 1
 })
 
 // Filter state from tab store with smart default
@@ -314,12 +338,9 @@ const commentaryStyles = computed(() => {
     }
 })
 
-// Title that shows filter label (defaults to "קשרים" for "שונות")
+// Title - show "קשרים" as default
 const commentaryTitle = computed(() => {
-    const option = availableFilterOptions.value.find(opt => opt.value === selectedConnectionTypeId.value)
-    if (!option) return 'קשרים'
-    if (option.label === 'שונות') return 'קשרים'
-    return option.label
+    return 'קשרים'
 })
 
 // Virtual scroller minimum item size
@@ -353,13 +374,12 @@ useVirtualScrollerKeyboard(
     hasFocus
 )
 
-// Position ID for scroll persistence (tab + book + connection filter + category filter)
+// Position ID for scroll persistence (tab + book + selected filter IDs)
 const scrollPositionId = computed(() => {
     const tabId = tabStore.activeTab?.id?.toString() || ''
     const bookId = props.bookId || 0
-    const connectionFilterId = selectedConnectionTypeId.value ?? 'all'
-    const categoryFilterId = selectedCategoryId.value ?? 'all'
-    const id = `commentary-${tabId}-${bookId}-${connectionFilterId}-${categoryFilterId}`
+    const filterHash = Array.from(selectedFilterIds.value).sort().join(',')
+    const id = `commentary-${tabId}-${bookId}-${filterHash}`
     return id
 })
 
@@ -390,11 +410,16 @@ const virtualCommentaryItems = computed(() => {
         html?: string
     }> = []
 
+    // If nothing is selected, show nothing (not all)
+    if (selectedFilterIds.value.size === 0) {
+        return items
+    }
+
     processedLinkGroups.value.forEach((group, groupIndex) => {
-        // Apply category label filter
-        if (selectedCategoryId.value !== undefined && group.targetBookId) {
-            const label = bookCategoryLabelMap.value.get(group.targetBookId)
-            if (label !== selectedCategoryId.value) {
+        // Apply filter based on selected filter IDs from tree
+        if (group.targetBookId) {
+            const bookIdStr = `book-${group.targetBookId}`
+            if (!selectedFilterIds.value.has(bookIdStr)) {
                 return // Skip this group
             }
         }
@@ -423,6 +448,42 @@ const virtualCommentaryItems = computed(() => {
     return items
 })
 
+// Create sort order map from filter tree (category order + book order within categories)
+const treeSortOrderMap = computed(() => {
+    const orderMap = new Map<number, number>()
+    let order = 0
+
+    filterTreeData.value.forEach(categoryNode => {
+        if (categoryNode.children) {
+            categoryNode.children.forEach(bookNode => {
+                if (bookNode.bookId !== undefined) {
+                    orderMap.set(bookNode.bookId, order++)
+                }
+            })
+        }
+    })
+
+    return orderMap
+})
+
+// Sort link groups by tree order (categories by pub date, books within categories by pub date)
+const sortedLinkGroups = computed(() => {
+    const sorted = [...linkGroups.value]
+    const orderMap = treeSortOrderMap.value
+
+    sorted.sort((a, b) => {
+        const orderA = a.targetBookId !== undefined ? orderMap.get(a.targetBookId) ?? 9999 : 9999
+        const orderB = b.targetBookId !== undefined ? orderMap.get(b.targetBookId) ?? 9999 : 9999
+
+        if (orderA !== orderB) return orderA - orderB
+
+        // Fallback to name if not in tree
+        return a.groupName.localeCompare(b.groupName, 'he')
+    })
+
+    return sorted
+})
+
 // Process link groups with diacritics filtering and search highlighting
 const processedLinkGroups = computed(() => {
     const activeTab = tabStore.activeTab
@@ -433,7 +494,7 @@ const processedLinkGroups = computed(() => {
     let virtualItemIndex = 0
     const itemIndexMap = new Map<string, number>()
 
-    linkGroups.value.forEach((group, groupIndex) => {
+    sortedLinkGroups.value.forEach((group, groupIndex) => {
         // Map group header
         itemIndexMap.set(`group-header-${groupIndex}`, virtualItemIndex++)
 
@@ -443,7 +504,7 @@ const processedLinkGroups = computed(() => {
         })
     })
 
-    return linkGroups.value.map((group, groupIndex) => {
+    return sortedLinkGroups.value.map((group, groupIndex) => {
         // Apply highlighting to group name if searching
         let processedGroupName = group.groupName
         if (query) {
@@ -478,10 +539,9 @@ const processedLinkGroups = computed(() => {
     })
 })
 
-// Combobox removed - will be reimplemented
-// Combobox options from link groups (use original names without highlighting)
+// Combobox options from sorted link groups (use original names without highlighting)
 const groupOptions = computed<ComboboxOption[]>(() => {
-    return linkGroups.value.map((group, index) => ({
+    return sortedLinkGroups.value.map((group, index) => ({
         label: group.groupName,
         value: index
     }))
@@ -613,6 +673,9 @@ watch([linkGroups, selectedConnectionTypeId], () => {
                 selectedCategoryId.value = undefined
             }
         }
+
+        // Rebuild filter tree when link groups change (always, not just when panel is open)
+        buildFilterTree()
     } catch (error) {
         console.error('Failed to load categories:', error)
         availableCategories.value = []
@@ -620,20 +683,22 @@ watch([linkGroups, selectedConnectionTypeId], () => {
     }
 }, { immediate: true })
 
-// Filter group options based on selected category label
+// Filter group options based on selected filter IDs from tree
 const filteredGroupOptions = computed<ComboboxOption[]>(() => {
-    if (selectedCategoryId.value === undefined) {
-        return groupOptions.value
+    // If nothing is selected, show nothing (not all)
+    if (selectedFilterIds.value.size === 0) {
+        return []
     }
 
-    // Filter groups by resolved category label
+    // Filter groups by selected book IDs from tree
     return groupOptions.value.filter(option => {
         const groupIndex = option.value as number
-        const group = linkGroups.value[groupIndex]
+        const group = sortedLinkGroups.value[groupIndex]
         if (!group?.targetBookId) return true // Keep groups without book ID
 
-        const label = bookCategoryLabelMap.value.get(group.targetBookId)
-        return label === selectedCategoryId.value
+        // Check if this book's ID is in selected filter IDs
+        const bookIdStr = `book-${group.targetBookId}`
+        return selectedFilterIds.value.has(bookIdStr)
     })
 })
 
@@ -697,7 +762,7 @@ function handleScrollUpdate() {
     const centerGroupIndex = findCenterCommentaryGroup()
 
     if (centerGroupIndex !== null && centerGroupIndex !== currentGroupIndex.value) {
-        const centerGroup = linkGroups.value[centerGroupIndex]
+        const centerGroup = sortedLinkGroups.value[centerGroupIndex]
         const activeTab = tabStore.activeTab
 
         if (centerGroup && activeTab?.bookState) {
@@ -827,7 +892,7 @@ watch(commentaryScrollerRef, (newScroller) => {
                 // Update tab state immediately
                 const activeTab = tabStore.activeTab
                 if (activeTab?.bookState) {
-                    const targetGroup = linkGroups.value[defaultGroupIndex]
+                    const targetGroup = sortedLinkGroups.value[defaultGroupIndex]
                     if (targetGroup) {
                         activeTab.bookState.currentCommentaryBookId = targetGroup.targetBookId
                         activeTab.bookState.currentCommentaryGroupName = targetGroup.groupName
@@ -841,8 +906,8 @@ watch(commentaryScrollerRef, (newScroller) => {
     }
 }, { immediate: true })
 
-// Load commentary when props or TOC mode changes
-watch([() => props.bookId, () => props.selectedLineIndex, () => tabStore.activeTab?.bookState?.selectedTocEntryId],
+// Load commentary when props, TOC mode, or connection type changes
+watch([() => props.bookId, () => props.selectedLineIndex, () => tabStore.activeTab?.bookState?.selectedTocEntryId, selectedConnectionTypeId],
     async ([bookId, lineIndex], [oldBookId, oldLineIndex]) => {
         if (bookId !== undefined && lineIndex !== undefined) {
             const isLineNavigation = oldBookId === bookId && oldLineIndex !== undefined && oldLineIndex !== lineIndex
@@ -873,7 +938,7 @@ watch(comboboxSelectedValue, (newValue) => {
         // Handle text search in combobox
         const searchText = newValue.toLowerCase().trim()
         if (searchText) {
-            const matchingGroup = linkGroups.value.find(group =>
+            const matchingGroup = sortedLinkGroups.value.find(group =>
                 group.groupName.toLowerCase().includes(searchText)
             )
             if (matchingGroup) {
@@ -950,40 +1015,6 @@ useEventListener(commentaryContentRef, 'copy', handleCopy)
  */
 function updateDarkMode() {
     isDarkMode.value = document.documentElement.classList.contains('dark')
-}
-
-/**
- * FILTER CHANGE HANDLER
- * Position is automatically saved/restored by composable when positionId changes
- */
-async function handleFilterChange(connectionTypeId: number) {
-    // Switch to new filter (positionId will change, triggering auto-restore)
-    selectedConnectionTypeId.value = connectionTypeId
-
-    if (props.bookId !== undefined && props.selectedLineIndex !== undefined) {
-        await loadCommentaryLinks(props.bookId, props.selectedLineIndex)
-
-        // Give the virtual scroller time to render before auto-restore kicks in
-        await nextTick()
-        await nextTick()
-    }
-}
-
-/**
- * CATEGORY FILTER CHANGE HANDLER
- * Filters commentary groups by resolved category label
- * Position is automatically saved/restored by composable when positionId changes
- */
-async function handleCategoryChange(categoryId: number | string | undefined) {
-    // Disable scroll observer during filter change to prevent interference with restore
-    scrollObserverEnabled.value = false
-
-    // Switch to new category filter (positionId will change, triggering auto-restore)
-    selectedCategoryId.value = categoryId
-
-    // Note: Don't update combobox here - let the scroll observer update it after position restore
-    // The composable will restore the scroll position, then the scroll observer will update the combobox
-    // scrollObserverEnabled will be re-enabled by onRestoreComplete callback
 }
 
 /**
@@ -1111,14 +1142,14 @@ async function scrollToCommentaryBookId(targetBookId: number, targetGroupName?: 
 
     if (targetGroupName) {
         // Try to find exact match by both book ID and group name
-        groupIndex = linkGroups.value.findIndex(
+        groupIndex = sortedLinkGroups.value.findIndex(
             group => group.targetBookId === targetBookId && group.groupName === targetGroupName
         )
     }
 
     if (groupIndex === -1) {
         // Fall back to just book ID
-        groupIndex = linkGroups.value.findIndex(
+        groupIndex = sortedLinkGroups.value.findIndex(
             group => group.targetBookId === targetBookId
         )
     }
@@ -1179,13 +1210,219 @@ async function handleLineNavigationCommentary() {
     const targetBookId = currentCommentaryBookId || defaultCommentaryBookId
 
     if (!targetBookId) {
-        if (linkGroups.value.length > 0) {
+        if (sortedLinkGroups.value.length > 0) {
             comboboxSelectedValue.value = 0
         }
         return
     }
 
     await scrollToCommentaryBookId(targetBookId, currentCommentaryGroupName)
+}
+
+// ============================================
+// FILTER PANEL FUNCTIONS
+// ============================================
+/**
+ * Toggle filter panel open/close
+ */
+function toggleFilterPanel() {
+    isFilterPanelOpen.value = !isFilterPanelOpen.value
+
+    // Build tree data when opening panel
+    if (isFilterPanelOpen.value && filterTreeData.value.length === 0) {
+        buildFilterTree()
+    }
+}
+
+/**
+ * Close filter panel
+ */
+function closeFilterPanel() {
+    isFilterPanelOpen.value = false
+}
+
+/**
+ * Handle filter selection change from tree
+ */
+function handleFilterSelectionChange(newSelectedIds: Set<string>) {
+    selectedFilterIds.value = newSelectedIds
+}
+
+/**
+ * Handle connection type filter change
+ */
+function handleConnectionTypeChange(connectionTypeId: number) {
+    selectedConnectionTypeId.value = connectionTypeId
+}
+
+/**
+ * Build flat tree data: Category > Books (no connection types, all expanded)
+ * Categories sorted by earliest book publication year, then alphabetically
+ * Books within categories sorted by publication year, then alphabetically
+ */
+async function buildFilterTree() {
+    isFilterTreeLoading.value = true
+
+    try {
+        const treeNodes: TreeNode[] = []
+
+        // Get all unique book IDs from link groups
+        const bookIds = Array.from(new Set(
+            linkGroups.value
+                .map(group => group.targetBookId)
+                .filter((id): id is number => id !== undefined)
+        ))
+
+        // Fetch default commentaries for current book
+        const defaultCommentaryBookIds = new Set<number>()
+        if (props.bookId) {
+            try {
+                const defaultsQuery = `
+                    SELECT commentatorBookId
+                    FROM default_commentator
+                    WHERE bookId = ?
+                    ORDER BY position
+                `
+                const defaults = await dbService.rawQuery<{ commentatorBookId: number }>(defaultsQuery, [props.bookId])
+                defaults.forEach(row => defaultCommentaryBookIds.add(row.commentatorBookId))
+            } catch (error) {
+                console.warn('Failed to load default commentaries:', error)
+            }
+        }
+
+        // Fetch publication dates for all books
+        const pubDatesMap = new Map<number, number>()
+        if (bookIds.length > 0) {
+            try {
+                const placeholders = bookIds.map(() => '?').join(',')
+                const query = `
+                    SELECT bpd.bookId, MIN(pd.date) as earliestDate
+                    FROM book_pub_date bpd
+                    JOIN pub_date pd ON pd.id = bpd.pubDateId
+                    WHERE bpd.bookId IN (${placeholders})
+                    GROUP BY bpd.bookId
+                `
+                const results = await dbService.rawQuery<{ bookId: number; earliestDate: string }>(query, bookIds)
+
+                results.forEach(row => {
+                    // Extract year from date string (format varies: "1234", "1234-1235", etc.)
+                    const yearMatch = row.earliestDate.match(/\d{3,4}/)
+                    if (yearMatch) {
+                        pubDatesMap.set(row.bookId, parseInt(yearMatch[0]))
+                    }
+                })
+            } catch (error) {
+                console.warn('Failed to load publication dates:', error)
+            }
+        }
+
+        // Build category map: category label -> books (merged from all connection types)
+        const categoryMap = new Map<string, Array<{ bookId: number; groupName: string; pubYear: number }>>()
+
+        linkGroups.value.forEach(group => {
+            if (group.targetBookId) {
+                const label = bookCategoryLabelMap.value.get(group.targetBookId) || 'אחר'
+                const pubYear = pubDatesMap.get(group.targetBookId) || 9999
+
+                if (!categoryMap.has(label)) {
+                    categoryMap.set(label, [])
+                }
+
+                // Avoid duplicates
+                const existing = categoryMap.get(label)!.find(b => b.bookId === group.targetBookId)
+                if (!existing) {
+                    categoryMap.get(label)!.push({
+                        bookId: group.targetBookId,
+                        groupName: group.groupName,
+                        pubYear
+                    })
+                }
+            }
+        })
+
+        // Build category entries with sorting
+        const categoryEntries: Array<{ label: string; books: Array<{ bookId: number; groupName: string; pubYear: number }>; earliestYear: number }> = []
+
+        categoryMap.forEach((books, categoryLabel) => {
+            // Sort books within category by publication year, then name
+            const sortedBooks = books.sort((a, b) => {
+                if (a.pubYear !== b.pubYear) return a.pubYear - b.pubYear
+                return a.groupName.localeCompare(b.groupName, 'he')
+            })
+
+            // Get earliest year for this category
+            const earliestYear = sortedBooks.length > 0 && sortedBooks[0] ? sortedBooks[0].pubYear : 9999
+
+            categoryEntries.push({
+                label: categoryLabel,
+                books: sortedBooks,
+                earliestYear
+            })
+        })
+
+        // Sort categories by earliest year, then alphabetically
+        categoryEntries.sort((a, b) => {
+            if (a.earliestYear !== b.earliestYear) return a.earliestYear - b.earliestYear
+            return a.label.localeCompare(b.label, 'he')
+        })
+
+        // Build tree nodes from sorted categories
+        categoryEntries.forEach(({ label, books }) => {
+            const categoryNode: TreeNode = {
+                id: `cat-${label}`,
+                label: label,
+                children: []
+            }
+
+            // Add book nodes
+            books.forEach(book => {
+                if (categoryNode.children) {
+                    categoryNode.children.push({
+                        id: `book-${book.bookId}`,
+                        label: book.groupName,
+                        bookId: book.bookId
+                    })
+                }
+            })
+
+            treeNodes.push(categoryNode)
+        })
+
+        filterTreeData.value = treeNodes
+
+        // Initialize with only default commentaries selected (if any exist)
+        if (defaultCommentaryBookIds.size > 0) {
+            const defaultIds = Array.from(defaultCommentaryBookIds).map(id => `book-${id}`)
+            selectedFilterIds.value = new Set(defaultIds)
+        } else {
+            // Fallback: select all if no defaults defined
+            const allLeafIds = getAllLeafIdsFromTree(treeNodes)
+            selectedFilterIds.value = new Set(allLeafIds)
+        }
+
+    } catch (error) {
+        console.error('Failed to build filter tree:', error)
+        filterTreeData.value = []
+    } finally {
+        isFilterTreeLoading.value = false
+    }
+}
+
+/**
+ * Get all leaf node IDs from tree
+ */
+function getAllLeafIdsFromTree(nodes: TreeNode[]): string[] {
+    const ids: string[] = []
+
+    nodes.forEach(node => {
+        if (!node.children || node.children.length === 0) {
+            ids.push(node.id)
+        } else {
+            ids.push(...getAllLeafIdsFromTree(node.children))
+        }
+    })
+
+    return ids
 }
 
 // ============================================
@@ -1357,7 +1594,7 @@ function updateTabLineIndex(lineIndex: number) {
  */
 async function scrollToGroup(groupIndex: number) {
     if (!commentaryScrollerRef.value) return
-    if (groupIndex < 0 || groupIndex >= linkGroups.value.length) return
+    if (groupIndex < 0 || groupIndex >= sortedLinkGroups.value.length) return
 
     // DISABLE scroll observer during programmatic scroll
     scrollObserverEnabled.value = false
@@ -1389,7 +1626,7 @@ async function scrollToGroup(groupIndex: number) {
     const scrollerEl = commentaryScrollerRef.value.$el as HTMLElement
 
     // Update tab state immediately (don't wait for scroll observer)
-    const targetGroup = linkGroups.value[groupIndex]
+    const targetGroup = sortedLinkGroups.value[groupIndex]
     const activeTab = tabStore.activeTab
     if (targetGroup && activeTab?.bookState) {
         activeTab.bookState.currentCommentaryBookId = targetGroup.targetBookId
@@ -1644,6 +1881,11 @@ ${htmlContent}
 /* ============================================ */
 /* LAYOUT - Toolbar Position */
 /* ============================================ */
+.commentary-container {
+    position: relative;
+    overflow: hidden;
+}
+
 /* Default: toolbar at top (flex-column) */
 .commentary-toolbar-top {
     flex-direction: column;
@@ -1652,6 +1894,15 @@ ${htmlContent}
 /* Toolbar at bottom: reverse flex direction */
 .commentary-toolbar-bottom {
     flex-direction: column-reverse;
+}
+
+/* Main area with filter panel */
+.commentary-main-area {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    overflow: hidden;
 }
 
 /* ============================================ */
@@ -1767,6 +2018,7 @@ ${htmlContent}
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    position: relative;
 }
 
 .commentary-scroller {

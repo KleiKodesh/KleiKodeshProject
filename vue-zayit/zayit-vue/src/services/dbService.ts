@@ -373,6 +373,20 @@ class DatabaseService {
             throw new Error('No database source available')
         }
     }
+
+    /**
+     * Execute a raw SQL query with parameters
+     * Use for custom queries not covered by specific methods
+     */
+    async rawQuery<T = any>(query: string, params: any[] = []): Promise<T[]> {
+        if (this.isWebViewAvailable()) {
+            return await webviewBridge.call('RawQuery', query, params)
+        } else if (this.isDevServerAvailable()) {
+            return await devQuery<T>(query, params)
+        } else {
+            throw new Error('No database source available')
+        }
+    }
 }
 
 // Export singleton instance
