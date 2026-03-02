@@ -1,10 +1,9 @@
 <template>
-    <div class="flex-between bar commentary-header"
-         style="position: relative;">
-        <!-- Title -->
-        <!-- <span class="bold smaller-em commentary-title">{{ title }}</span> -->
+    <div class="flex-between bar commentary-header">
+        <!-- Spacer for layout balance -->
+        <div style="width: 32px;"></div>
 
-        <!-- Navigation Controls -->
+        <!-- Centered Navigation Controls -->
         <div class="flex-row flex-center commentary-navigation">
             <!-- Previous/Next Line Buttons -->
             <button class="flex-center c-pointer nav-btn"
@@ -20,14 +19,6 @@
                     @click.stop="$emit('navigate-next-line')"
                     :title="isNavigatingToLine ? 'מחפש...' : 'שורה הבאה'">
                 <Icon icon="fluent:chevron-left-28-regular"
-                      class="small-icon" />
-            </button>
-
-            <!-- Search Button -->
-            <button class="flex-center c-pointer nav-btn"
-                    @click="$emit('open-search')"
-                    title="חיפוש (Ctrl+F)">
-                <Icon icon="fluent:search-28-regular"
                       class="small-icon" />
             </button>
 
@@ -68,6 +59,14 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Search Button -->
+            <button class="flex-center c-pointer nav-btn"
+                    @click="$emit('open-search')"
+                    title="חיפוש (Ctrl+F)">
+                <Icon icon="fluent:search-28-regular"
+                      class="small-icon" />
+            </button>
 
             <!-- Commentary Selector Combobox -->
             <Combobox :model-value="comboboxSelectedValue"
@@ -123,7 +122,6 @@ import CommentaryConnectionTypeFilter from './CommentaryConnectionTypeFilter.vue
 import type { Book } from '../types/Book'
 
 defineProps<{
-    title: string
     canNavigateToPreviousLine: boolean
     canNavigateToNextLine: boolean
     isNavigatingToLine: boolean
@@ -165,9 +163,7 @@ function selectCategory(category: string | null) {
     showCategoryDropdown.value = false
 }
 
-// Close dropdown when clicking outside (but not on the button)
 onClickOutside(categoryDropdownRef, (event) => {
-    // Don't close if clicking on the button itself
     if (categoryFilterButtonRef.value?.contains(event.target as Node)) {
         return
     }
@@ -176,6 +172,15 @@ onClickOutside(categoryDropdownRef, (event) => {
 </script>
 
 <style scoped>
+.commentary-header {
+    padding: 2px 4px;
+    gap: 4px;
+}
+
+.commentary-navigation {
+    gap: 2px;
+}
+
 .nav-btn.active {
     background-color: rgba(128, 128, 128, 0.15);
 }
