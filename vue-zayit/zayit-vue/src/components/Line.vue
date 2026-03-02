@@ -47,14 +47,9 @@ const getHeadingTag = (level: number): string => {
 
 <style scoped>
 .book-line {
+    padding: 0px 5px;
     font-family: var(--text-font);
     line-height: var(--line-height, 1.2);
-}
-
-/* Book line always uses block display with padding */
-div.book-line {
-    padding: 0px 5px;
-    display: block;
 }
 
 .book-line :deep(h1),
@@ -64,6 +59,10 @@ div.book-line {
 .book-line :deep(h5),
 .book-line :deep(h6) {
     font-family: var(--header-font);
+}
+
+.book-line :deep(h1) {
+  position: relative;
 }
 
 .book-line :deep(h1)::after {
@@ -76,9 +75,7 @@ div.book-line {
     background-color: var(--hover-bg)
 }
 
-.book-line :deep(h1) {
-    position: relative;
-}
+
 
 /* Selection styling when split pane is open */
 .book-line.selected.show-selection {

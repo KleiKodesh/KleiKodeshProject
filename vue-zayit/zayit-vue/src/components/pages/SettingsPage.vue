@@ -387,7 +387,7 @@ onMounted(() => {
 /* Minimal settings-specific styles - most styling comes from global CSS */
 
 .settings-page {
-    background: var(--bg-primary);
+    background: var(--reading-bg);
     position: relative;
 }
 

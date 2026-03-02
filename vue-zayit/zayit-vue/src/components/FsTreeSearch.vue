@@ -87,9 +87,8 @@ const selectBook = (book: Book) => {
 
 <style scoped>
 .search-result {
-    align-items: flex-start;
+    align-items: flex-start !important;
     min-height: 44px;
-    height: auto;
 }
 
 .search-result .flex-column {
