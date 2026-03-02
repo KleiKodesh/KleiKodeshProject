@@ -2,7 +2,7 @@
     <div class="theme-preview-dropdown"
          ref="dropdownRef">
         <div class="dropdown-trigger"
-             @click="isOpen = !isOpen">
+             @click.stop="isOpen = !isOpen">
             <span>{{ currentThemeName }}</span>
             <span class="dropdown-arrow">{{ isOpen ? '▲' : '▼' }}</span>
         </div>
