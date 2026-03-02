@@ -151,16 +151,6 @@
                 </div>
 
                 <div class="setting-group">
-                    <label class="setting-label flex-between bold">מצב טעמים וניקוד</label>
-                    <div class="button-group flex-row">
-                        <button :class="['toggle-btn c-pointer', { active: !globalDiacritics }]"
-                                @click="globalDiacritics = false">לכל טאב בנפרד</button>
-                        <button :class="['toggle-btn c-pointer', { active: globalDiacritics }]"
-                                @click="globalDiacritics = true">גלובלי</button>
-                    </div>
-                </div>
-
-                <div class="setting-group">
                     <label class="setting-label flex-between bold">מיקום ברירת מחדל של סרגל הכלים</label>
                     <div class="button-group flex-row wrap">
                         <button :class="['toggle-btn compact c-pointer', { active: defaultBookViewToolbarPosition === 'top' }]"
@@ -175,6 +165,16 @@
                                 @click="defaultBookViewToolbarPosition = 'float-vertical'">צף מאונך</button>
                         <button :class="['toggle-btn compact c-pointer', { active: defaultBookViewToolbarPosition === 'float-horizontal' }]"
                                 @click="defaultBookViewToolbarPosition = 'float-horizontal'">צף מאוזן</button>
+                    </div>
+                </div>
+
+                <div class="setting-group">
+                    <label class="setting-label flex-between bold">מצב טעמים וניקוד</label>
+                    <div class="button-group flex-row">
+                        <button :class="['toggle-btn c-pointer', { active: !globalDiacritics }]"
+                                @click="globalDiacritics = false">לכל טאב בנפרד</button>
+                        <button :class="['toggle-btn c-pointer', { active: globalDiacritics }]"
+                                @click="globalDiacritics = true">גלובלי</button>
                     </div>
                 </div>
 
