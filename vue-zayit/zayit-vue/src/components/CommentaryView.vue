@@ -470,7 +470,7 @@ async function handleLineNavigationCommentary() {
 // ============================================
 // NAVIGATION FUNCTIONS
 // ============================================
-async function findNextLineWithCommentary(startLine: number, maxScanLines = 50): Promise<number | null> {
+async function findNextLineWithCommentary(startLine: number, maxScanLines = 50): Promise<{ lineIndex: number; tocEntryId?: number } | null> {
     if (!props.bookId) return null
 
     const activeTab = tabStore.activeTab
@@ -479,31 +479,72 @@ async function findNextLineWithCommentary(startLine: number, maxScanLines = 50):
 
     const tabId = activeTab?.id?.toString() || ''
     const connectionTypeId = selectedConnectionTypeId.value
+    const isInTocMode = activeTab?.bookState?.selectedTocEntryId !== undefined
 
-    for (let offset = 1; offset <= maxScanLines; offset++) {
-        const testLine = startLine + offset
+    if (isInTocMode && props.flatTocEntries && props.flatTocEntries.length > 0) {
+        // TOC mode: Find next TOC entry with commentary
+        const currentTocIndex = props.flatTocEntries.findIndex(
+            toc => toc.lineIndex === startLine && !toc.isAltToc
+        )
 
-        try {
-            const testGroups = await bookCommentaryService.loadCommentaryLinks(
-                props.bookId,
-                testLine,
-                tabId,
-                { connectionTypeId }
-            )
+        // Start searching from the next TOC entry
+        const startIndex = currentTocIndex >= 0 ? currentTocIndex + 1 : 0
 
-            const hasCommentary = testGroups.some(group => group.targetBookId === currentCommentaryBookId)
-            if (hasCommentary) {
-                return testLine
+        for (let i = startIndex; i < props.flatTocEntries.length; i++) {
+            const tocEntry = props.flatTocEntries[i]
+            if (!tocEntry || tocEntry.isAltToc || tocEntry.lineIndex === undefined) continue
+
+            try {
+                // Get all lines for this TOC entry
+                const lineIdResults = await dbService.getLineIdsByTocEntry(props.bookId, tocEntry.id)
+                const lineIds = lineIdResults.map(r => r.lineId)
+
+                if (lineIds.length > 0) {
+                    // Check if any of these lines have commentary for the current commentator
+                    const linksPromises = lineIds.map(lineId =>
+                        dbService.getLinks(lineId, tabId, props.bookId!, connectionTypeId)
+                    )
+                    const allLinksArrays = await Promise.all(linksPromises)
+                    const allLinks = allLinksArrays.flat()
+
+                    const hasCommentary = allLinks.some(link => link.targetBookId === currentCommentaryBookId)
+                    if (hasCommentary) {
+                        return { lineIndex: tocEntry.lineIndex, tocEntryId: tocEntry.id }
+                    }
+                }
+            } catch (error) {
+                continue
             }
-        } catch (error) {
-            break
         }
-    }
 
-    return null
+        return null
+    } else {
+        // Regular mode: Find next line with commentary
+        for (let offset = 1; offset <= maxScanLines; offset++) {
+            const testLine = startLine + offset
+
+            try {
+                const testGroups = await bookCommentaryService.loadCommentaryLinks(
+                    props.bookId,
+                    testLine,
+                    tabId,
+                    { connectionTypeId }
+                )
+
+                const hasCommentary = testGroups.some(group => group.targetBookId === currentCommentaryBookId)
+                if (hasCommentary) {
+                    return { lineIndex: testLine }
+                }
+            } catch (error) {
+                break
+            }
+        }
+
+        return null
+    }
 }
 
-async function findPreviousLineWithCommentary(startLine: number, maxScanLines = 50): Promise<number | null> {
+async function findPreviousLineWithCommentary(startLine: number, maxScanLines = 50): Promise<{ lineIndex: number; tocEntryId?: number } | null> {
     if (!props.bookId) return null
 
     const activeTab = tabStore.activeTab
@@ -512,29 +553,70 @@ async function findPreviousLineWithCommentary(startLine: number, maxScanLines = 
 
     const tabId = activeTab?.id?.toString() || ''
     const connectionTypeId = selectedConnectionTypeId.value
+    const isInTocMode = activeTab?.bookState?.selectedTocEntryId !== undefined
 
-    for (let offset = 1; offset <= maxScanLines; offset++) {
-        const testLine = startLine - offset
-        if (testLine < 0) break
+    if (isInTocMode && props.flatTocEntries && props.flatTocEntries.length > 0) {
+        // TOC mode: Find previous TOC entry with commentary
+        const currentTocIndex = props.flatTocEntries.findIndex(
+            toc => toc.lineIndex === startLine && !toc.isAltToc
+        )
 
-        try {
-            const testGroups = await bookCommentaryService.loadCommentaryLinks(
-                props.bookId,
-                testLine,
-                tabId,
-                { connectionTypeId }
-            )
+        // Start searching from the previous TOC entry
+        const startIndex = currentTocIndex > 0 ? currentTocIndex - 1 : props.flatTocEntries.length - 1
 
-            const hasCommentary = testGroups.some(group => group.targetBookId === currentCommentaryBookId)
-            if (hasCommentary) {
-                return testLine
+        for (let i = startIndex; i >= 0; i--) {
+            const tocEntry = props.flatTocEntries[i]
+            if (!tocEntry || tocEntry.isAltToc || tocEntry.lineIndex === undefined) continue
+
+            try {
+                // Get all lines for this TOC entry
+                const lineIdResults = await dbService.getLineIdsByTocEntry(props.bookId, tocEntry.id)
+                const lineIds = lineIdResults.map(r => r.lineId)
+
+                if (lineIds.length > 0) {
+                    // Check if any of these lines have commentary for the current commentator
+                    const linksPromises = lineIds.map(lineId =>
+                        dbService.getLinks(lineId, tabId, props.bookId!, connectionTypeId)
+                    )
+                    const allLinksArrays = await Promise.all(linksPromises)
+                    const allLinks = allLinksArrays.flat()
+
+                    const hasCommentary = allLinks.some(link => link.targetBookId === currentCommentaryBookId)
+                    if (hasCommentary) {
+                        return { lineIndex: tocEntry.lineIndex, tocEntryId: tocEntry.id }
+                    }
+                }
+            } catch (error) {
+                continue
             }
-        } catch (error) {
-            continue
         }
-    }
 
-    return null
+        return null
+    } else {
+        // Regular mode: Find previous line with commentary
+        for (let offset = 1; offset <= maxScanLines; offset++) {
+            const testLine = startLine - offset
+            if (testLine < 0) break
+
+            try {
+                const testGroups = await bookCommentaryService.loadCommentaryLinks(
+                    props.bookId,
+                    testLine,
+                    tabId,
+                    { connectionTypeId }
+                )
+
+                const hasCommentary = testGroups.some(group => group.targetBookId === currentCommentaryBookId)
+                if (hasCommentary) {
+                    return { lineIndex: testLine }
+                }
+            } catch (error) {
+                continue
+            }
+        }
+
+        return null
+    }
 }
 
 async function handleNavigateToNextLine() {
@@ -543,10 +625,10 @@ async function handleNavigateToNextLine() {
     isNavigatingToLine.value = true
 
     try {
-        const nextLine = await findNextLineWithCommentary(props.selectedLineIndex)
+        const result = await findNextLineWithCommentary(props.selectedLineIndex)
 
-        if (nextLine !== null) {
-            emit('navigate-line', nextLine)
+        if (result !== null) {
+            emit('navigate-line', result.lineIndex, result.tocEntryId)
         }
     } finally {
         isNavigatingToLine.value = false
@@ -559,10 +641,10 @@ async function handleNavigateToPreviousLine() {
     isNavigatingToLine.value = true
 
     try {
-        const previousLine = await findPreviousLineWithCommentary(props.selectedLineIndex)
+        const result = await findPreviousLineWithCommentary(props.selectedLineIndex)
 
-        if (previousLine !== null) {
-            emit('navigate-line', previousLine)
+        if (result !== null) {
+            emit('navigate-line', result.lineIndex, result.tocEntryId)
         }
     } finally {
         isNavigatingToLine.value = false

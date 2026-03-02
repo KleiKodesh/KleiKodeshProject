@@ -22,13 +22,13 @@
         <!-- Virtualized viewer is now always enabled -->
         <keep-alive>
           <TocTreeView v-if="myTab?.bookState?.isTocOpen && myTab?.bookState?.bookId"
-                           ref="tocTreeViewRef"
-                           :toc-entries="filteredTocEntries"
-                           :is-loading="isTocLoading"
-                           :is-compact-mode="!myTab.bookState.isFirstTocOpen"
-                           :current-toc-entry-id="currentTocEntryId"
-                           class="toc-overlay"
-                           @select-line="handleTocSelection" />
+                       ref="tocTreeViewRef"
+                       :toc-entries="filteredTocEntries"
+                       :is-loading="isTocLoading"
+                       :is-compact-mode="!myTab.bookState.isFirstTocOpen"
+                       :current-toc-entry-id="currentTocEntryId"
+                       class="toc-overlay"
+                       @select-line="handleTocSelection" />
         </keep-alive>
 
         <SplitPane v-if="myTab?.bookState?.bookId"
@@ -36,18 +36,19 @@
                    class="height-fill">
           <template #top>
             <LineView ref="lineViewerRef"
-                            :tab-id="myTabId"
-                            :alt-toc-by-line-index="altTocByLineIndex"
-                            :flat-toc-entries="flatTocEntries"
-                            class="flex-110"
-                            @center-line-changed="currentCenterLineIndex = $event"
-                            @current-toc-entry-changed="currentTocEntryId = $event" />
+                      :tab-id="myTabId"
+                      :alt-toc-by-line-index="altTocByLineIndex"
+                      :flat-toc-entries="flatTocEntries"
+                      class="flex-110"
+                      @center-line-changed="currentCenterLineIndex = $event"
+                      @current-toc-entry-changed="currentTocEntryId = $event" />
           </template>
           <template #bottom>
             <CommentaryView :book-id="myTab.bookState.bookId"
-                                :selected-line-index="myTab.bookState.selectedLineIndex"
-                                :book="currentBook"
-                                @navigate-line="handleNavigateLine" />
+                            :selected-line-index="myTab.bookState.selectedLineIndex"
+                            :book="currentBook"
+                            :flat-toc-entries="flatTocEntries"
+                            @navigate-line="handleNavigateLine" />
           </template>
         </SplitPane>
       </div>
@@ -205,10 +206,15 @@ function handleTocSelection(lineIndex: number) {
   }
 }
 
-function handleNavigateLine(newIndex: number) {
+function handleNavigateLine(newIndex: number, tocEntryId?: number) {
   // Update the selected line index in tab state
   if (myTab.value?.bookState) {
     myTab.value.bookState.selectedLineIndex = newIndex
+
+    // Update TOC entry ID if provided (for TOC mode navigation)
+    if (tocEntryId !== undefined) {
+      myTab.value.bookState.selectedTocEntryId = tocEntryId
+    }
   }
 
   // Scroll the line viewer explicitly for navigation requests coming from the commentary pane
