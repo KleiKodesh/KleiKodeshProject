@@ -66,6 +66,7 @@ import type { CommentaryLinkGroup } from '../services/bookCommentaryService'
 import { useTabStore } from '../stores/tabStore'
 import { useCategoryTreeStore } from '../stores/categoryTreeStore'
 import { hasConnections } from '../types/Book'
+import { scrollToElementTop } from '../composables/useScrollToElement'
 
 const props = defineProps<{
     processedLinkGroups: CommentaryLinkGroup[]
@@ -206,11 +207,7 @@ async function scrollToGroup(groupIndex: number, instant = false) {
 
     const targetElement = contentRef.value.querySelector(`[data-group-index="${groupIndex}"]`) as HTMLElement
     if (targetElement) {
-        targetElement.scrollIntoView({
-            behavior: instant ? 'instant' : 'smooth',
-            block: 'nearest',
-            inline: 'nearest'
-        })
+        await scrollToElementTop(targetElement, { behavior: instant ? 'instant' : 'smooth' })
     }
 }
 

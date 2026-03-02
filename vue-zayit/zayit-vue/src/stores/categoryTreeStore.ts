@@ -23,6 +23,57 @@ export const useCategoryTreeStore = defineStore('categoryTree', () => {
             error.value = null;
             const { categoriesFlat: categories, booksFlat: books } = await dbService.getTree()
 
+            // Helper function to find category period by traversing up
+            function findCategoryPeriod(categoryId: number, categoryMap: Map<number, Category>): string | null {
+                const visited = new Set<number>()
+
+                function traverse(id: number): string | null {
+                    if (visited.has(id)) return null
+                    visited.add(id)
+
+                    const category = categoryMap.get(id)
+                    if (!category) return null
+
+                    const title = category.title.toLowerCase()
+
+                    // Check for major arch-categories (in priority order)
+                    if (title.includes('תנ"ך') || title.includes('תנך')) {
+                        return 'תנ"ך'
+                    } else if (title.includes('משנה') && !title.includes('משנה תורה')) {
+                        return 'ספרות חז"ל'
+                    } else if (title.includes('תלמוד')) {
+                        return 'ספרות חז"ל'
+                    } else if (title.includes('מדרש')) {
+                        return 'ספרות חז"ל'
+                    } else if (title.includes('תוספתא')) {
+                        return 'ספרות חז"ל'
+                    } else if (title.includes('גאונים')) {
+                        return 'גאונים'
+                    } else if (title.includes('ראשונים')) {
+                        return 'ראשונים'
+                    } else if (title.includes('אחרונים')) {
+                        return 'אחרונים'
+                    } else if (title.includes('קבלה')) {
+                        return 'קבלה'
+                    } else if (title.includes('מוסר') || title.includes('חסידות')) {
+                        return 'מוסר וחסידות'
+                    } else if (title.includes('הלכה') || title.includes('משנה תורה') || title.includes('שולחן ערוך')) {
+                        return 'הלכה'
+                    } else if (title.includes('אחר')) {
+                        return 'אחר'
+                    }
+
+                    // Traverse up to parent
+                    if (category.parentId) {
+                        return traverse(category.parentId)
+                    }
+
+                    return null
+                }
+
+                return traverse(categoryId)
+            }
+
             // Group books by categoryId and sort them by orderIndex
             const booksByCategory = new Map<number, Book[]>()
             for (const book of books) {
@@ -54,6 +105,11 @@ export const useCategoryTreeStore = defineStore('categoryTree', () => {
                         parent.children.push(cat)
                     }
                 }
+            }
+
+            // Assign periods to all books
+            for (const book of books) {
+                book.period = findCategoryPeriod(book.categoryId, categoryMap) || 'אחר'
             }
 
             // Sort children within each category by orderIndex

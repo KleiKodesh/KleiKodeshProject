@@ -28,17 +28,25 @@
              @mousedown="isMouseDownOnDropdown = true"
              @mouseup="isMouseDownOnDropdown = false"
              @mouseleave="isMouseDownOnDropdown = false">
-            <div v-for="(option, index) in filteredOptions"
-                 :key="option.value"
-                 class="c-pointer combobox-option"
-                 @mousedown.prevent="selectOption(option.value)"
-                 :class="{
-                    active: option.value === modelValue,
-                    highlighted: index === highlightedIndex
-                }"
-                 :data-index="index">
-                {{ option.label }}
-            </div>
+            <template v-for="(option, index) in filteredOptions"
+                      :key="option.value">
+                <div v-if="option.isSeparator"
+                     class="combobox-separator"
+                     :class="{ 'with-title': option.separatorTitle }">
+                    <span v-if="option.separatorTitle"
+                          class="separator-title">{{ option.separatorTitle }}</span>
+                </div>
+                <div v-else
+                     class="c-pointer combobox-option"
+                     @mousedown.prevent="selectOption(option.value)"
+                     :class="{
+                        active: option.value === modelValue,
+                        highlighted: index === highlightedIndex
+                    }"
+                     :data-index="index">
+                    {{ option.label }}
+                </div>
+            </template>
         </div>
     </div>
 </template>
@@ -46,7 +54,22 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useEventListener } from '@vueuse/core'
-import { scrollToElement } from '../../composables/useScrollToElement'
+import { scrollToElementCenter } from '../../composables/useScrollToElement'
+
+/**
+ * Reusable Combobox component with search, keyboard navigation, and separator support
+ * 
+ * Usage with separators:
+ * 
+ * const options: ComboboxOption[] = [
+ *   { label: 'Option 1', value: 1 },
+ *   { label: 'Option 2', value: 2 },
+ *   { label: '', value: 'sep1', isSeparator: true }, // Simple separator
+ *   { label: 'Option 3', value: 3 },
+ *   { label: '', value: 'sep2', isSeparator: true, separatorTitle: 'Category' }, // Separator with title
+ *   { label: 'Option 4', value: 4 },
+ * ]
+ */
 
 // Simple debounce function
 function debounce<T extends (...args: any[]) => any>(
@@ -63,6 +86,8 @@ function debounce<T extends (...args: any[]) => any>(
 export interface ComboboxOption {
     label: string
     value: string | number
+    isSeparator?: boolean
+    separatorTitle?: string
 }
 
 const props = withDefaults(defineProps<{
@@ -116,6 +141,11 @@ const filteredOptions = computed(() => {
 
     const searchWords = search.split(/\s+/).filter(word => word.length > 0)
     return props.options.filter(option => {
+        // Always include separators
+        if (option.isSeparator) {
+            return true
+        }
+
         const labelLower = option.label.toLowerCase()
         return searchWords.every(word => labelLower.includes(word))
     })
@@ -190,14 +220,24 @@ useEventListener('keydown', (event: KeyboardEvent) => {
     // Arrow Down - move highlight down
     if (event.code === 'ArrowDown') {
         event.preventDefault()
-        highlightedIndex.value = Math.min(highlightedIndex.value + 1, filteredOptions.value.length - 1)
+        let nextIndex = highlightedIndex.value + 1
+        // Skip separators
+        while (nextIndex < filteredOptions.value.length && filteredOptions.value[nextIndex]?.isSeparator) {
+            nextIndex++
+        }
+        highlightedIndex.value = Math.min(nextIndex, filteredOptions.value.length - 1)
         scrollToHighlighted()
     }
 
     // Arrow Up - move highlight up
     if (event.code === 'ArrowUp') {
         event.preventDefault()
-        highlightedIndex.value = Math.max(highlightedIndex.value - 1, -1)
+        let prevIndex = highlightedIndex.value - 1
+        // Skip separators
+        while (prevIndex >= 0 && filteredOptions.value[prevIndex]?.isSeparator) {
+            prevIndex--
+        }
+        highlightedIndex.value = Math.max(prevIndex, -1)
         scrollToHighlighted()
     }
 
@@ -206,13 +246,14 @@ useEventListener('keydown', (event: KeyboardEvent) => {
         event.preventDefault()
         if (highlightedIndex.value >= 0 && highlightedIndex.value < filteredOptions.value.length) {
             const option = filteredOptions.value[highlightedIndex.value]
-            if (option) {
+            if (option && !option.isSeparator) {
                 selectOption(option.value)
             }
-        } else if (filteredOptions.value.length === 1) {
-            const option = filteredOptions.value[0]
-            if (option) {
-                selectOption(option.value)
+        } else {
+            // If no highlight, select first non-separator option
+            const firstOption = filteredOptions.value.find(opt => !opt.isSeparator)
+            if (firstOption) {
+                selectOption(firstOption.value)
             }
         }
     }
@@ -347,7 +388,7 @@ const scrollToSelected = () => {
         const activeOption = dropdown?.querySelector('.combobox-option.active')
 
         if (dropdown && activeOption && activeOption instanceof HTMLElement) {
-            await scrollToElement(activeOption)
+            await scrollToElementCenter(activeOption, { behavior: 'instant' })
         }
     }, 0)
 }
@@ -363,7 +404,7 @@ const scrollToHighlighted = () => {
             const highlightedRect = highlighted.getBoundingClientRect()
 
             if (highlightedRect.bottom > dropdownRect.bottom || highlightedRect.top < dropdownRect.top) {
-                await scrollToElement(highlighted)
+                await scrollToElementCenter(highlighted, { behavior: 'instant' })
             }
         }
     }, 0)
@@ -486,5 +527,30 @@ watch(() => props.modelValue, (newValue, oldValue) => {
 
 .combobox-option.active.highlighted {
     opacity: 0.9;
+}
+
+.combobox-separator {
+    height: 1px;
+    background: var(--border-color);
+    margin: 4px 0;
+}
+
+.combobox-separator.with-title {
+    height: auto;
+    background: none;
+    margin: 8px 0 4px 0;
+    padding: 0 10px;
+}
+
+.separator-title {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    text-align: right;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border-color);
 }
 </style>
