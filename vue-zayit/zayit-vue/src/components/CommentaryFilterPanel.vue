@@ -1,7 +1,6 @@
 <template>
     <div class="filter-panel"
          :class="{ 'panel-open': isOpen }"
-         :style="{ width: `${panelWidth}px` }"
          ref="panelRef">
         <div class="panel-content"
              ref="contentRef">
@@ -28,7 +27,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import CommentaryCheckedTreeNode, { type TreeNode } from './CommentaryCheckedTreeNode.vue'
 import LoadingSpinner from './common/LoadingSpinner.vue'
@@ -45,47 +44,47 @@ const emit = defineEmits<{ close: [], 'update:selectedIds': [ids: Set<string>] }
 
 const panelRef = ref<HTMLElement>()
 const contentRef = ref<HTMLElement>()
-const panelWidth = ref(200)
 const checkedIds = ref(new Set(props.selectedIds))
 const expandedIds = ref(new Set<string>())
+const isTogglingFromButton = ref(false)
 
-onClickOutside(panelRef, () => props.isOpen && emit('close'), { ignore: props.ignoreElements || [] })
+onClickOutside(panelRef, (event) => {
+    console.log('👆 Click outside detected on filter panel')
+    console.log('   - Panel open:', props.isOpen)
+    console.log('   - Click target:', event.target)
+    console.log('   - Ignore elements:', props.ignoreElements)
+    console.log('   - Is toggling from button:', isTogglingFromButton.value)
 
-function updatePanelWidth() {
-    if (!contentRef.value) return
-    const labels = contentRef.value.querySelectorAll('.tree-label')
-    let maxWidth = 180
-    const temp = document.createElement('div')
-    Object.assign(temp.style, { position: 'absolute', visibility: 'hidden', whiteSpace: 'nowrap', padding: '1px 2px', fontSize: '12px', fontFamily: getComputedStyle(contentRef.value).fontFamily })
-    document.body.appendChild(temp)
-    labels.forEach(label => {
-        temp.textContent = label.textContent || ''
-        maxWidth = Math.max(maxWidth, temp.offsetWidth)
-    })
-    document.body.removeChild(temp)
-    panelWidth.value = Math.min(maxWidth + 80, 450)
-}
+    // Don't close if we're in the middle of toggling from the button
+    if (isTogglingFromButton.value) {
+        console.log('   - Skipping close (button toggle in progress)')
+        isTogglingFromButton.value = false
+        return
+    }
 
-watch(() => props.treeData, (newData) => {
-    // Don't auto-expand - let user expand manually
-    setTimeout(updatePanelWidth, 100)
-}, { deep: true })
+    if (props.isOpen) {
+        console.log('   - Emitting close event')
+        emit('close')
+    }
+}, { ignore: props.ignoreElements || [] })
 
-watch(() => props.isOpen, isOpen => {
-    if (isOpen) {
-        // Don't auto-expand on open
-        setTimeout(updatePanelWidth, 100)
+// Watch for panel opening to set the toggle flag
+watch(() => props.isOpen, (newValue, oldValue) => {
+    if (newValue && !oldValue) {
+        // Panel just opened, likely from button click
+        isTogglingFromButton.value = true
+        // Reset after a short delay
+        setTimeout(() => {
+            isTogglingFromButton.value = false
+        }, 100)
     }
 })
 
 watch(() => props.selectedIds, ids => checkedIds.value = new Set(ids), { deep: true })
 
-onMounted(() => {
-    if (props.isOpen) {
-        // Don't auto-expand on mount
-        setTimeout(updatePanelWidth, 100)
-    }
-})
+watch(() => props.ignoreElements, (elements) => {
+    console.log('🎯 Ignore elements updated:', elements)
+}, { deep: true, immediate: true })
 
 function handleToggleExpand(nodeId: string) {
     const newExpandedIds = new Set(expandedIds.value)
@@ -95,7 +94,6 @@ function handleToggleExpand(nodeId: string) {
         newExpandedIds.add(nodeId)
     }
     expandedIds.value = newExpandedIds
-    setTimeout(updatePanelWidth, 100)
 }
 
 function handleToggleCheck(nodeId: string) {
@@ -138,8 +136,10 @@ function getDescendants(node: TreeNode): string[] {
     border-left: 1px solid var(--border-color);
     z-index: 100;
     transform: translateX(100%);
-    transition: transform 0.2s, width 0.2s;
+    transition: transform 0.2s;
     box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
+    width: fit-content;
+    max-width: 450px;
 }
 
 .panel-open {

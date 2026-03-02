@@ -2,7 +2,6 @@
     <div class="tree-node">
         <div class="tree-node-content hover-bg click-effect c-pointer"
              :class="{ 'is-category': hasChildren }"
-             :style="{ paddingLeft: `${2 + depth * 8}px` }"
              @click="handleClick">
             <!-- Expand/Collapse Arrow -->
             <Icon v-if="hasChildren"
@@ -121,7 +120,7 @@ function getAllDescendantIds(node: TreeNode): string[] {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 6px 12px 6px 3px;
+    padding: 6px 12px;
     border-radius: 2px;
     transition: background-color 0.1s ease;
 }
@@ -172,7 +171,7 @@ function getAllDescendantIds(node: TreeNode): string[] {
 
 @media (hover: none) and (pointer: coarse) {
     .tree-node-content {
-        padding: 10px 16px 10px 8px;
+        padding: 10px 16px;
         gap: 8px;
     }
 
