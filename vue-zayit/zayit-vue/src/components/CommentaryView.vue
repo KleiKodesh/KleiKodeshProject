@@ -14,11 +14,14 @@
                                :combobox-selected-value="comboboxSelectedValue"
                                :filtered-group-options="filteredGroupOptions"
                                :show-all-commentaries="showAllCommentaries"
+                               :available-categories="availableCategories"
+                               :selected-category-filter="selectedCategoryFilter"
                                @navigate-previous-line="handleNavigateToPreviousLine"
                                @navigate-next-line="handleNavigateToNextLine"
                                @open-search="handleOpenSearch"
                                @connection-type-change="handleConnectionTypeChange"
                                @update:combobox-value="comboboxSelectedValue = $event"
+                               @update:category-filter="selectedCategoryFilter = $event"
                                @navigate-previous-group="handleNavigateToPreviousGroup"
                                @navigate-next-group="handleNavigateToNextGroup"
                                @toggle-view-mode="handleToggleViewMode"
@@ -59,16 +62,18 @@ const props = withDefaults(defineProps<{
     bookId?: number
     selectedLineIndex?: number
     book?: Book
+    flatTocEntries?: Array<{ id: number; lineIndex?: number; isAltToc?: boolean }>
 }>(), {
     bookId: undefined,
     selectedLineIndex: undefined,
-    book: undefined
+    book: undefined,
+    flatTocEntries: () => []
 })
 
 const emit = defineEmits<{
     (e: 'clearOtherSelections'): void
     (e: 'update:selectedLineIndex', newIndex: number): void
-    (e: 'navigate-line', newIndex: number): void
+    (e: 'navigate-line', newIndex: number, tocEntryId?: number): void
 }>()
 
 // ============================================
@@ -88,7 +93,7 @@ const isLoading = ref(false)
 
 // Navigation State
 const currentGroupIndex = ref(0)
-const comboboxSelectedValue = ref<string | number>(0)
+const selectedCategoryFilter = ref<string | null>(null) // null means "all categories"
 const isNavigatingToLine = ref(false)
 const skipScrollRestore = ref(false)
 
@@ -102,6 +107,16 @@ const showAllCommentaries = ref(false)
 
 // Filter Options
 const availableFilterOptions = ref<Array<{ label: string; value: number }>>([])
+
+// Computed: Sync combobox with currentGroupIndex
+const comboboxSelectedValue = computed<string | number>({
+    get: () => currentGroupIndex.value,
+    set: (value: string | number) => {
+        if (typeof value === 'number') {
+            currentGroupIndex.value = value
+        }
+    }
+})
 
 // ============================================
 // COMPUTED PROPERTIES
@@ -162,7 +177,18 @@ const commentaryStyles = computed(() => {
     }
 })
 
-const commentaryTitle = computed(() => 'קשרים')
+const commentaryTitle = computed(() => {
+    // Find the selected connection type label
+    const selectedOption = availableFilterOptions.value.find(
+        opt => opt.value === selectedConnectionTypeId.value
+    )
+
+    if (selectedOption) {
+        return selectedOption.label
+    }
+
+    return 'קשרים'
+})
 
 // Sort link groups alphabetically
 const sortedLinkGroups = computed(() => {
@@ -202,7 +228,53 @@ const groupOptions = computed<ComboboxOption[]>(() => {
 })
 
 const filteredGroupOptions = computed<ComboboxOption[]>(() => {
-    return groupOptions.value
+    const categoryTreeStore = useCategoryTreeStore()
+
+    // If a specific category is selected, filter and sort alphabetically
+    if (selectedCategoryFilter.value) {
+        const filtered = sortedLinkGroups.value
+            .map((group, index) => {
+                const book = group.targetBookId ? categoryTreeStore.allBooks.find(b => b.id === group.targetBookId) : null
+                const period = book?.period || 'אחר'
+                return { group, index, period }
+            })
+            .filter(item => item.period === selectedCategoryFilter.value)
+
+        // Sort alphabetically
+        filtered.sort((a, b) => a.group.groupName.localeCompare(b.group.groupName, 'he'))
+
+        return filtered.map(({ group, index }) => ({
+            label: group.groupName,
+            value: index
+        }))
+    }
+
+    // When "הכל" is selected, show all items sorted alphabetically only
+    const allItems = sortedLinkGroups.value.map((group, index) => ({
+        label: group.groupName,
+        value: index
+    }))
+
+    // Sort alphabetically
+    allItems.sort((a, b) => a.label.localeCompare(b.label, 'he'))
+
+    return allItems
+})
+
+// Available categories for filtering
+const availableCategories = computed(() => {
+    const categoryTreeStore = useCategoryTreeStore()
+    const categories = new Set<string>()
+
+    sortedLinkGroups.value.forEach((group) => {
+        const book = group.targetBookId ? categoryTreeStore.allBooks.find(b => b.id === group.targetBookId) : null
+        const period = book?.period || 'אחר'
+        categories.add(period)
+    })
+
+    // Return in chronological order
+    const periodOrder = ['תנ"ך', 'ספרות חז"ל', 'גאונים', 'ראשונים', 'אחרונים', 'קבלה', 'מוסר וחסידות', 'הלכה', 'אחר']
+    return periodOrder.filter(p => categories.has(p))
 })
 
 // ============================================
@@ -219,34 +291,23 @@ watch([() => props.bookId, () => props.selectedLineIndex, () => tabStore.activeT
     { immediate: true }
 )
 
-// Handle combobox selection changes
-watch(comboboxSelectedValue, (newValue) => {
-    if (isLineNavigationInProgress.value) return
+// Watch currentGroupIndex and scroll when it changes (unified scrolling logic)
+watch(currentGroupIndex, async (newIndex, oldIndex) => {
     if (isUpdatingFromScroll.value) return
+    if (newIndex === oldIndex) return
 
-    if (typeof newValue === 'number') {
-        if (newValue !== currentGroupIndex.value) {
-            currentGroupIndex.value = newValue
-            if (showAllCommentaries.value) {
-                scrollToGroup(newValue)
-            }
-        }
-    } else if (typeof newValue === 'string') {
-        const searchText = newValue.toLowerCase().trim()
-        if (searchText) {
-            const matchingGroup = sortedLinkGroups.value.find(group =>
-                group.groupName.toLowerCase().includes(searchText)
-            )
-            if (matchingGroup) {
-                const matchingIndex = sortedLinkGroups.value.indexOf(matchingGroup)
-                if (matchingIndex !== -1 && matchingIndex !== currentGroupIndex.value) {
-                    currentGroupIndex.value = matchingIndex
-                    if (showAllCommentaries.value) {
-                        scrollToGroup(matchingIndex)
-                    }
-                }
-            }
-        }
+    // Update tab state
+    const targetGroup = sortedLinkGroups.value[newIndex]
+    const activeTab = tabStore.activeTab
+    if (targetGroup && activeTab?.bookState) {
+        activeTab.bookState.currentCommentaryBookId = targetGroup.targetBookId
+        activeTab.bookState.currentCommentaryGroupName = targetGroup.groupName
+    }
+
+    // Scroll to group if in "show all" mode
+    if (showAllCommentaries.value && !isLineNavigationInProgress.value) {
+        await nextTick()
+        await scrollToGroup(newIndex)
     }
 })
 
@@ -351,6 +412,9 @@ async function loadCommentaryLinks(bookId: number, lineIndex: number, isLineNavi
 }
 
 async function scrollToCommentaryBookId(targetBookId: number, targetGroupName?: string) {
+    // Wait for sortedLinkGroups to be computed
+    await nextTick()
+
     let groupIndex = -1
 
     if (targetGroupName) {
@@ -369,8 +433,8 @@ async function scrollToCommentaryBookId(targetBookId: number, targetGroupName?: 
         groupIndex = 0
     }
 
-    await nextTick()
-    comboboxSelectedValue.value = groupIndex
+    // Just set the index - the watcher will handle scrolling
+    currentGroupIndex.value = groupIndex
 }
 
 async function handleFirstLoadDefaultCommentary() {
@@ -548,7 +612,6 @@ function handleScrollUpdate(centerGroupIndex: number) {
             isUpdatingFromScroll.value = true
 
             currentGroupIndex.value = centerGroupIndex
-            comboboxSelectedValue.value = centerGroupIndex
 
             activeTab.bookState.currentCommentaryBookId = centerGroup.targetBookId
             activeTab.bookState.currentCommentaryGroupName = centerGroup.groupName
@@ -575,7 +638,7 @@ async function scrollToGroup(groupIndex: number) {
 
     await nextTick()
     if (commentaryViewContentRef.value) {
-        await commentaryViewContentRef.value.scrollToGroup(groupIndex)
+        await commentaryViewContentRef.value.scrollToGroup(groupIndex, true) // Use instant scrolling
     }
 
     await nextTick()
