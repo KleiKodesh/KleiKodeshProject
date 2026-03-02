@@ -2,8 +2,7 @@
     <div class="flex-column height-fill commentary-container"
          :class="commentaryToolbarPositionClass">
         <!-- Toolbar -->
-        <CommentaryViewToolbar :title="commentaryTitle"
-                               :can-navigate-to-previous-line="canNavigateToPreviousLine"
+        <CommentaryViewToolbar :can-navigate-to-previous-line="canNavigateToPreviousLine"
                                :can-navigate-to-next-line="canNavigateToNextLine"
                                :is-navigating-to-line="isNavigatingToLine"
                                :can-navigate-to-previous-group="canNavigateToPreviousGroup"
@@ -20,7 +19,7 @@
                                @navigate-next-line="handleNavigateToNextLine"
                                @open-search="handleOpenSearch"
                                @connection-type-change="handleConnectionTypeChange"
-                               @update:combobox-value="comboboxSelectedValue = $event"
+                               @update:combobox-value="handleComboboxValueChange"
                                @update:category-filter="selectedCategoryFilter = $event"
                                @navigate-previous-group="handleNavigateToPreviousGroup"
                                @navigate-next-group="handleNavigateToNextGroup"
@@ -29,31 +28,28 @@
 
         <!-- Content Area -->
         <div class="commentary-main-area">
-            <CommentaryViewContent ref="commentaryViewContentRef"
+            <CommentaryContentView ref="commentaryViewContentRef"
                                    :processed-link-groups="processedLinkGroups"
                                    :is-loading="isLoading"
                                    :commentary-styles="commentaryStyles"
-                                   :show-all-commentaries="showAllCommentaries"
-                                   :selected-group-index="comboboxSelectedValue as number"
-                                   :current-group-index="currentGroupIndex"
-                                   :scroll-observer-enabled="scrollObserverEnabled"
+                                   :filtered-group-options="filteredGroupOptions"
                                    @clear-other-selections="emit('clearOtherSelections')"
-                                   @scroll-update="handleScrollUpdate" />
+                                   @update:current-commentary="handleCurrentCommentaryChange" />
         </div>
     </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
-import { type ComboboxOption } from './common/Combobox.vue'
 import CommentaryViewToolbar from './CommentaryViewToolbar.vue'
-import CommentaryViewContent from './CommentaryViewContent.vue'
+import CommentaryContentView from './CommentaryContentView.vue'
 import { bookCommentaryService, type CommentaryLinkGroup } from '../services/bookCommentaryService'
 import { dbService } from '../services/dbService'
 import { useTabStore } from '../stores/tabStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useCategoryTreeStore } from '../stores/categoryTreeStore'
 import type { Book } from '../types/Book'
+import type { ComboboxOption } from './common/Combobox.vue'
 
 // ============================================
 // PROPS & EMITS
@@ -72,7 +68,6 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
     (e: 'clearOtherSelections'): void
-    (e: 'update:selectedLineIndex', newIndex: number): void
     (e: 'navigate-line', newIndex: number, tocEntryId?: number): void
 }>()
 
@@ -85,38 +80,12 @@ const settingsStore = useSettingsStore()
 // ============================================
 // REFS & STATE
 // ============================================
-const commentaryViewContentRef = ref<InstanceType<typeof CommentaryViewContent> | null>(null)
-
-// Core State
+const commentaryViewContentRef = ref<InstanceType<typeof CommentaryContentView> | null>(null)
 const linkGroups = ref<CommentaryLinkGroup[]>([])
 const isLoading = ref(false)
-
-// Navigation State
-const currentGroupIndex = ref(0)
-const selectedCategoryFilter = ref<string | null>(null) // null means "all categories"
+const selectedCategoryFilter = ref<string | null>(null)
 const isNavigatingToLine = ref(false)
-const skipScrollRestore = ref(false)
-
-// Scroll tracking flags
-const isUpdatingFromScroll = ref(false)
-const scrollObserverEnabled = ref(true)
-const isLineNavigationInProgress = ref(false)
-
-// View Mode State
-const showAllCommentaries = ref(false)
-
-// Filter Options
 const availableFilterOptions = ref<Array<{ label: string; value: number }>>([])
-
-// Computed: Sync combobox with currentGroupIndex
-const comboboxSelectedValue = computed<string | number>({
-    get: () => currentGroupIndex.value,
-    set: (value: string | number) => {
-        if (typeof value === 'number') {
-            currentGroupIndex.value = value
-        }
-    }
-})
 
 // ============================================
 // COMPUTED PROPERTIES
@@ -132,12 +101,21 @@ const canNavigateToNextLine = computed(() => {
     return props.selectedLineIndex !== undefined && props.bookId !== undefined
 })
 
+// Computed properties that delegate to content viewer
+const comboboxSelectedValue = computed(() => {
+    return commentaryViewContentRef.value?.currentGroupIndex ?? 0
+})
+
 const canNavigateToPreviousGroup = computed(() => {
-    return sortedLinkGroups.value.length > 0 && currentGroupIndex.value > 0
+    return commentaryViewContentRef.value?.canNavigateToPreviousGroup ?? false
 })
 
 const canNavigateToNextGroup = computed(() => {
-    return sortedLinkGroups.value.length > 0 && currentGroupIndex.value < sortedLinkGroups.value.length - 1
+    return commentaryViewContentRef.value?.canNavigateToNextGroup ?? false
+})
+
+const showAllCommentaries = computed(() => {
+    return commentaryViewContentRef.value?.showAllCommentaries ?? false
 })
 
 const selectedConnectionTypeId = computed({
@@ -177,27 +155,12 @@ const commentaryStyles = computed(() => {
     }
 })
 
-const commentaryTitle = computed(() => {
-    // Find the selected connection type label
-    const selectedOption = availableFilterOptions.value.find(
-        opt => opt.value === selectedConnectionTypeId.value
-    )
-
-    if (selectedOption) {
-        return selectedOption.label
-    }
-
-    return 'קשרים'
-})
-
-// Sort link groups alphabetically
 const sortedLinkGroups = computed(() => {
     const sorted = [...linkGroups.value]
     sorted.sort((a, b) => a.groupName.localeCompare(b.groupName, 'he'))
     return sorted
 })
 
-// Process link groups with diacritics filtering and search highlighting
 const processedLinkGroups = computed(() => {
     const activeTab = tabStore.activeTab
     const diacriticsState = activeTab?.bookState?.diacriticsState
@@ -208,7 +171,6 @@ const processedLinkGroups = computed(() => {
             links: group.links.map((link) => {
                 let html = link.html
 
-                // Apply diacritics filter
                 if (diacriticsState && diacriticsState > 0) {
                     html = applyDiacriticsFilter(html, diacriticsState)
                 }
@@ -219,18 +181,9 @@ const processedLinkGroups = computed(() => {
     })
 })
 
-// Combobox options
-const groupOptions = computed<ComboboxOption[]>(() => {
-    return sortedLinkGroups.value.map((group, index) => ({
-        label: group.groupName,
-        value: index
-    }))
-})
-
 const filteredGroupOptions = computed<ComboboxOption[]>(() => {
     const categoryTreeStore = useCategoryTreeStore()
 
-    // If a specific category is selected, filter and sort alphabetically
     if (selectedCategoryFilter.value) {
         const filtered = sortedLinkGroups.value
             .map((group, index) => {
@@ -240,7 +193,6 @@ const filteredGroupOptions = computed<ComboboxOption[]>(() => {
             })
             .filter(item => item.period === selectedCategoryFilter.value)
 
-        // Sort alphabetically
         filtered.sort((a, b) => a.group.groupName.localeCompare(b.group.groupName, 'he'))
 
         return filtered.map(({ group, index }) => ({
@@ -249,19 +201,16 @@ const filteredGroupOptions = computed<ComboboxOption[]>(() => {
         }))
     }
 
-    // When "הכל" is selected, show all items sorted alphabetically only
     const allItems = sortedLinkGroups.value.map((group, index) => ({
         label: group.groupName,
         value: index
     }))
 
-    // Sort alphabetically
     allItems.sort((a, b) => a.label.localeCompare(b.label, 'he'))
 
     return allItems
 })
 
-// Available categories for filtering
 const availableCategories = computed(() => {
     const categoryTreeStore = useCategoryTreeStore()
     const categories = new Set<string>()
@@ -272,7 +221,6 @@ const availableCategories = computed(() => {
         categories.add(period)
     })
 
-    // Return in chronological order
     const periodOrder = ['תנ"ך', 'ספרות חז"ל', 'גאונים', 'ראשונים', 'אחרונים', 'קבלה', 'מוסר וחסידות', 'הלכה', 'אחר']
     return periodOrder.filter(p => categories.has(p))
 })
@@ -280,7 +228,6 @@ const availableCategories = computed(() => {
 // ============================================
 // WATCHERS
 // ============================================
-// Load commentary when props or connection type changes
 watch([() => props.bookId, () => props.selectedLineIndex, () => tabStore.activeTab?.bookState?.selectedTocEntryId, selectedConnectionTypeId],
     async ([bookId, lineIndex], [oldBookId, oldLineIndex]) => {
         if (bookId !== undefined && lineIndex !== undefined) {
@@ -291,37 +238,11 @@ watch([() => props.bookId, () => props.selectedLineIndex, () => tabStore.activeT
     { immediate: true }
 )
 
-// Watch currentGroupIndex and scroll when it changes (unified scrolling logic)
-watch(currentGroupIndex, async (newIndex, oldIndex) => {
-    if (isUpdatingFromScroll.value) return
-    if (newIndex === oldIndex) return
-
-    // Update tab state
-    const targetGroup = sortedLinkGroups.value[newIndex]
-    const activeTab = tabStore.activeTab
-    if (targetGroup && activeTab?.bookState) {
-        activeTab.bookState.currentCommentaryBookId = targetGroup.targetBookId
-        activeTab.bookState.currentCommentaryGroupName = targetGroup.groupName
-    }
-
-    // Scroll to group if in "show all" mode
-    if (showAllCommentaries.value && !isLineNavigationInProgress.value) {
-        await nextTick()
-        await scrollToGroup(newIndex)
-    }
-})
-
 // ============================================
 // CORE FUNCTIONS
 // ============================================
 async function loadCommentaryLinks(bookId: number, lineIndex: number, isLineNavigation = false) {
-    if (isLineNavigation) {
-        isLineNavigationInProgress.value = true
-        skipScrollRestore.value = true
-    }
-
     isLoading.value = true
-    currentGroupIndex.value = -1
 
     try {
         const activeTab = tabStore.activeTab
@@ -390,10 +311,6 @@ async function loadCommentaryLinks(bookId: number, lineIndex: number, isLineNavi
 
         if (isLineNavigation) {
             await handleLineNavigationCommentary()
-            setTimeout(() => {
-                isLineNavigationInProgress.value = false
-                skipScrollRestore.value = false
-            }, 1000)
         } else {
             await handleFirstLoadDefaultCommentary()
         }
@@ -401,18 +318,12 @@ async function loadCommentaryLinks(bookId: number, lineIndex: number, isLineNavi
     } catch (error) {
         console.error('❌ Failed to load commentary links:', error)
         linkGroups.value = []
-
-        if (isLineNavigation) {
-            isLineNavigationInProgress.value = false
-            skipScrollRestore.value = false
-        }
     } finally {
         isLoading.value = false
     }
 }
 
 async function scrollToCommentaryBookId(targetBookId: number, targetGroupName?: string) {
-    // Wait for sortedLinkGroups to be computed
     await nextTick()
 
     let groupIndex = -1
@@ -433,8 +344,10 @@ async function scrollToCommentaryBookId(targetBookId: number, targetGroupName?: 
         groupIndex = 0
     }
 
-    // Just set the index - the watcher will handle scrolling
-    currentGroupIndex.value = groupIndex
+    // Tell content viewer to scroll to this group
+    if (commentaryViewContentRef.value) {
+        commentaryViewContentRef.value.scrollToGroupByIndex(groupIndex)
+    }
 }
 
 async function handleFirstLoadDefaultCommentary() {
@@ -456,15 +369,22 @@ async function handleLineNavigationCommentary() {
     const defaultCommentaryBookId = props.book?.defaultCommentatorBookId
 
     const targetBookId = currentCommentaryBookId || defaultCommentaryBookId
-
     if (!targetBookId) {
-        if (sortedLinkGroups.value.length > 0) {
-            comboboxSelectedValue.value = 0
+        if (sortedLinkGroups.value.length > 0 && commentaryViewContentRef.value) {
+            commentaryViewContentRef.value.scrollToGroupByIndex(0)
         }
         return
     }
 
     await scrollToCommentaryBookId(targetBookId, currentCommentaryGroupName)
+}
+
+function handleCurrentCommentaryChange(payload: { bookId?: number; groupName?: string }) {
+    const activeTab = tabStore.activeTab
+    if (activeTab?.bookState) {
+        activeTab.bookState.currentCommentaryBookId = payload.bookId
+        activeTab.bookState.currentCommentaryGroupName = payload.groupName
+    }
 }
 
 // ============================================
@@ -482,12 +402,10 @@ async function findNextLineWithCommentary(startLine: number, maxScanLines = 50):
     const isInTocMode = activeTab?.bookState?.selectedTocEntryId !== undefined
 
     if (isInTocMode && props.flatTocEntries && props.flatTocEntries.length > 0) {
-        // TOC mode: Find next TOC entry with commentary
         const currentTocIndex = props.flatTocEntries.findIndex(
             toc => toc.lineIndex === startLine && !toc.isAltToc
         )
 
-        // Start searching from the next TOC entry
         const startIndex = currentTocIndex >= 0 ? currentTocIndex + 1 : 0
 
         for (let i = startIndex; i < props.flatTocEntries.length; i++) {
@@ -495,12 +413,10 @@ async function findNextLineWithCommentary(startLine: number, maxScanLines = 50):
             if (!tocEntry || tocEntry.isAltToc || tocEntry.lineIndex === undefined) continue
 
             try {
-                // Get all lines for this TOC entry
                 const lineIdResults = await dbService.getLineIdsByTocEntry(props.bookId, tocEntry.id)
                 const lineIds = lineIdResults.map(r => r.lineId)
 
                 if (lineIds.length > 0) {
-                    // Check if any of these lines have commentary for the current commentator
                     const linksPromises = lineIds.map(lineId =>
                         dbService.getLinks(lineId, tabId, props.bookId!, connectionTypeId)
                     )
@@ -519,7 +435,6 @@ async function findNextLineWithCommentary(startLine: number, maxScanLines = 50):
 
         return null
     } else {
-        // Regular mode: Find next line with commentary
         for (let offset = 1; offset <= maxScanLines; offset++) {
             const testLine = startLine + offset
 
@@ -556,12 +471,10 @@ async function findPreviousLineWithCommentary(startLine: number, maxScanLines = 
     const isInTocMode = activeTab?.bookState?.selectedTocEntryId !== undefined
 
     if (isInTocMode && props.flatTocEntries && props.flatTocEntries.length > 0) {
-        // TOC mode: Find previous TOC entry with commentary
         const currentTocIndex = props.flatTocEntries.findIndex(
             toc => toc.lineIndex === startLine && !toc.isAltToc
         )
 
-        // Start searching from the previous TOC entry
         const startIndex = currentTocIndex > 0 ? currentTocIndex - 1 : props.flatTocEntries.length - 1
 
         for (let i = startIndex; i >= 0; i--) {
@@ -569,12 +482,10 @@ async function findPreviousLineWithCommentary(startLine: number, maxScanLines = 
             if (!tocEntry || tocEntry.isAltToc || tocEntry.lineIndex === undefined) continue
 
             try {
-                // Get all lines for this TOC entry
                 const lineIdResults = await dbService.getLineIdsByTocEntry(props.bookId, tocEntry.id)
                 const lineIds = lineIdResults.map(r => r.lineId)
 
                 if (lineIds.length > 0) {
-                    // Check if any of these lines have commentary for the current commentator
                     const linksPromises = lineIds.map(lineId =>
                         dbService.getLinks(lineId, tabId, props.bookId!, connectionTypeId)
                     )
@@ -593,7 +504,6 @@ async function findPreviousLineWithCommentary(startLine: number, maxScanLines = 
 
         return null
     } else {
-        // Regular mode: Find previous line with commentary
         for (let offset = 1; offset <= maxScanLines; offset++) {
             const testLine = startLine - offset
             if (testLine < 0) break
@@ -651,26 +561,30 @@ async function handleNavigateToPreviousLine() {
     }
 }
 
-function handleNavigateToPreviousGroup() {
-    if (!canNavigateToPreviousGroup.value) return
-
-    const newIndex = currentGroupIndex.value - 1
-    comboboxSelectedValue.value = newIndex
-}
-
-function handleNavigateToNextGroup() {
-    if (!canNavigateToNextGroup.value) return
-
-    const newIndex = currentGroupIndex.value + 1
-    comboboxSelectedValue.value = newIndex
-}
-
 function handleConnectionTypeChange(connectionTypeId: number) {
     selectedConnectionTypeId.value = connectionTypeId
 }
 
+function handleNavigateToPreviousGroup() {
+    commentaryViewContentRef.value?.navigateToPreviousGroup()
+}
+
+function handleNavigateToNextGroup() {
+    commentaryViewContentRef.value?.navigateToNextGroup()
+}
+
+function handleComboboxValueChange(value: string | number) {
+    if (typeof value === 'number' && commentaryViewContentRef.value) {
+        commentaryViewContentRef.value.currentGroupIndex = value
+    }
+}
+
 function handleToggleViewMode() {
-    showAllCommentaries.value = !showAllCommentaries.value
+    commentaryViewContentRef.value?.toggleViewMode()
+}
+
+function handleOpenSearch() {
+    commentaryViewContentRef.value?.openSearch()
 }
 
 function handleClose() {
@@ -678,62 +592,6 @@ function handleClose() {
     if (activeTab?.bookState) {
         activeTab.bookState.showBottomPane = false
     }
-}
-
-// ============================================
-// SCROLL FUNCTIONS
-// ============================================
-function handleScrollUpdate(centerGroupIndex: number) {
-    if (isLineNavigationInProgress.value) return
-
-    if (centerGroupIndex !== currentGroupIndex.value) {
-        const centerGroup = sortedLinkGroups.value[centerGroupIndex]
-        const activeTab = tabStore.activeTab
-
-        if (centerGroup && activeTab?.bookState) {
-            isUpdatingFromScroll.value = true
-
-            currentGroupIndex.value = centerGroupIndex
-
-            activeTab.bookState.currentCommentaryBookId = centerGroup.targetBookId
-            activeTab.bookState.currentCommentaryGroupName = centerGroup.groupName
-
-            isUpdatingFromScroll.value = false
-        }
-    }
-}
-
-async function scrollToGroup(groupIndex: number) {
-    if (!showAllCommentaries.value) return
-    if (groupIndex < 0 || groupIndex >= sortedLinkGroups.value.length) return
-
-    scrollObserverEnabled.value = false
-
-    currentGroupIndex.value = groupIndex
-
-    const targetGroup = sortedLinkGroups.value[groupIndex]
-    const activeTab = tabStore.activeTab
-    if (targetGroup && activeTab?.bookState) {
-        activeTab.bookState.currentCommentaryBookId = targetGroup.targetBookId
-        activeTab.bookState.currentCommentaryGroupName = targetGroup.groupName
-    }
-
-    await nextTick()
-    if (commentaryViewContentRef.value) {
-        await commentaryViewContentRef.value.scrollToGroup(groupIndex, true) // Use instant scrolling
-    }
-
-    await nextTick()
-    setTimeout(() => {
-        scrollObserverEnabled.value = true
-    }, 500)
-}
-
-// ============================================
-// SEARCH FUNCTIONS (Delegate to subcomponent)
-// ============================================
-function handleOpenSearch() {
-    commentaryViewContentRef.value?.openSearch()
 }
 
 // ============================================
