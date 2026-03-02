@@ -6,14 +6,13 @@
     </div>
     <div v-else
          ref="containerRef"
-         class="flex-column overflow-y">
+         class="search-results-container">
         <div v-for="book in filteredBooks"
              :key="book.id"
-             class="flex-row hover-bg focus-accent click-effect c-pointer tree-node search-result reactive-icon"
+             class="search-result flex-row hover-bg focus-accent click-effect c-pointer reactive-icon"
              tabindex="0"
              @click="selectBook(book)"
              @keydown.enter.prevent="selectBook(book)">
-            <Icon icon="fluent:book-open-24-regular" />
             <div class="flex-column flex-110 smaller-rem">
                 <span class="bold">{{ book.title }}</span>
                 <span v-if="book.path"
@@ -86,13 +85,27 @@ const selectBook = (book: Book) => {
 </script>
 
 <style scoped>
+.search-results-container {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    height: 100%;
+}
+
 .search-result {
+    display: flex !important;
+    flex-direction: row !important;
     align-items: flex-start !important;
+    gap: 12px;
+    padding: 8px 12px;
     min-height: 44px;
+    touch-action: manipulation;
+    flex-shrink: 0;
 }
 
 .search-result .flex-column {
     word-break: break-word;
     overflow-wrap: break-word;
+    flex: 1 1 auto;
 }
 </style>

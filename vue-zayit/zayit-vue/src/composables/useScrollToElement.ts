@@ -2,7 +2,7 @@ import { nextTick, type Ref } from 'vue'
 
 // For regular (non-virtual) scrollers
 interface RegularScrollOptions {
-    behavior?: 'auto'
+    behavior?: ScrollBehavior
     block?: ScrollLogicalPosition
     inline?: ScrollLogicalPosition
     searchBarOffset?: number
@@ -149,5 +149,98 @@ export async function scrollToVirtualItemCentered(
         // Adjust scroll to center the element
         const scrollAdjustment = elementCenter - containerCenter
         scrollerEl.scrollTop += scrollAdjustment
+    }
+}
+
+/**
+ * Scroll to an element and position it at the top of the container
+ * Two-tier approach: scrollIntoView(nearest) → manual positioning to top
+ * This prevents parent container scrolling while achieving top positioning
+ */
+export async function scrollToElementTop(
+    element: HTMLElement,
+    options: { behavior?: ScrollBehavior; topOffset?: number } = {}
+): Promise<void> {
+    const { behavior = 'instant', topOffset = 0 } = options
+
+    // Tier 1: Use nearest to get element into view without affecting parents
+    element.scrollIntoView({ behavior, block: 'nearest', inline: 'nearest' })
+    await nextTick()
+
+    // Tier 2: Manually position at top of the scrollable container
+    // Find the scrollable container by looking for overflow-y or specific class
+    let container: HTMLElement | null = element.parentElement
+
+    while (container) {
+        const style = window.getComputedStyle(container)
+        const overflowY = style.overflowY
+
+        // Check if this element is scrollable
+        if (overflowY === 'auto' || overflowY === 'scroll' ||
+            container.classList.contains('commentary-content') ||
+            container.classList.contains('scroller')) {
+            break
+        }
+
+        container = container.parentElement
+    }
+
+    if (container) {
+        const containerRect = container.getBoundingClientRect()
+        const elementRect = element.getBoundingClientRect()
+
+        // Calculate the offset needed to position element at top
+        const elementRelativeTop = elementRect.top - containerRect.top
+
+        // Adjust scroll to position element at top (with optional offset)
+        container.scrollTop += elementRelativeTop - topOffset
+    }
+}
+
+/**
+ * Scroll to an element and center it in the container
+ * Two-tier approach: scrollIntoView(nearest) → manual centering
+ * This prevents parent container scrolling while achieving centering
+ */
+export async function scrollToElementCenter(
+    element: HTMLElement,
+    options: { behavior?: ScrollBehavior } = {}
+): Promise<void> {
+    const { behavior = 'instant' } = options
+
+    // Tier 1: Use nearest to get element into view without affecting parents
+    element.scrollIntoView({ behavior, block: 'nearest', inline: 'nearest' })
+    await nextTick()
+
+    // Tier 2: Manually center within the scrollable container
+    // Find the scrollable container by looking for overflow-y or specific class
+    let container: HTMLElement | null = element.parentElement
+
+    while (container) {
+        const style = window.getComputedStyle(container)
+        const overflowY = style.overflowY
+
+        // Check if this element is scrollable
+        if (overflowY === 'auto' || overflowY === 'scroll' ||
+            container.classList.contains('combobox-dropdown') ||
+            container.classList.contains('scroller')) {
+            break
+        }
+
+        container = container.parentElement
+    }
+
+    if (container) {
+        const containerRect = container.getBoundingClientRect()
+        const elementRect = element.getBoundingClientRect()
+
+        // Calculate the offset needed to center the element
+        const containerCenter = containerRect.height / 2
+        const elementRelativeTop = elementRect.top - containerRect.top
+        const elementCenter = elementRelativeTop + (elementRect.height / 2)
+
+        // Adjust scroll to center the element
+        const scrollAdjustment = elementCenter - containerCenter
+        container.scrollTop += scrollAdjustment
     }
 }

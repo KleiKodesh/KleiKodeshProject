@@ -2,7 +2,7 @@
     <div class="flex-between bar commentary-header"
          style="position: relative;">
         <!-- Title -->
-        <span class="bold smaller-em commentary-title">{{ title }}</span>
+        <!-- <span class="bold smaller-em commentary-title">{{ title }}</span> -->
 
         <!-- Navigation Controls -->
         <div class="flex-row flex-center commentary-navigation">
@@ -37,6 +37,45 @@
                                             :available-options="availableFilterOptions"
                                             @filter-change="$emit('connection-type-change', $event)" />
 
+            <!-- Category Filter Toggle Button -->
+            <div class="category-filter-wrapper"
+                 v-if="availableCategories.length > 1">
+                <button class="flex-center c-pointer nav-btn"
+                        ref="categoryFilterButtonRef"
+                        :class="{ 'active': showCategoryDropdown }"
+                        @click.stop="toggleCategoryDropdown"
+                        :title="selectedCategoryFilter ? `סנן: ${selectedCategoryFilter}` : 'סנן לפי קטגוריה'">
+                    <Icon icon="fluent:folder-24-regular"
+                          class="small-icon" />
+                </button>
+
+                <!-- Category Dropdown -->
+                <div v-if="showCategoryDropdown"
+                     class="category-dropdown"
+                     ref="categoryDropdownRef"
+                     @click.stop>
+                    <div class="category-option"
+                         :class="{ 'selected': selectedCategoryFilter === null }"
+                         @click="selectCategory(null)">
+                        הכל
+                    </div>
+                    <div v-for="category in availableCategories"
+                         :key="category"
+                         class="category-option"
+                         :class="{ 'selected': selectedCategoryFilter === category }"
+                         @click="selectCategory(category)">
+                        {{ category }}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Commentary Selector Combobox -->
+            <Combobox :model-value="comboboxSelectedValue"
+                      :options="filteredGroupOptions"
+                      placeholder="בחר פרשן..."
+                      dir="rtl"
+                      @update:model-value="$emit('update:combobox-value', $event)" />
+
             <!-- View Mode Toggle Button -->
             <button class="flex-center c-pointer nav-btn"
                     :class="{ 'active': showAllCommentaries }"
@@ -46,13 +85,6 @@
                       class="small-icon"
                       :flip="'horizontal'" />
             </button>
-
-            <!-- Commentary Selector Combobox -->
-            <Combobox :model-value="comboboxSelectedValue"
-                      :options="filteredGroupOptions"
-                      placeholder="בחר פרשן..."
-                      dir="rtl"
-                      @update:model-value="$emit('update:combobox-value', $event)" />
 
             <!-- Previous/Next Group Buttons -->
             <button class="flex-center c-pointer nav-btn"
@@ -83,7 +115,9 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { Icon } from '@iconify/vue'
+import { onClickOutside } from '@vueuse/core'
 import Combobox, { type ComboboxOption } from './common/Combobox.vue'
 import CommentaryConnectionTypeFilter from './CommentaryConnectionTypeFilter.vue'
 import type { Book } from '../types/Book'
@@ -101,23 +135,102 @@ defineProps<{
     comboboxSelectedValue: string | number
     filteredGroupOptions: ComboboxOption[]
     showAllCommentaries: boolean
+    availableCategories: string[]
+    selectedCategoryFilter: string | null
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
     'navigate-previous-line': []
     'navigate-next-line': []
     'open-search': []
     'connection-type-change': [id: number]
     'update:combobox-value': [value: string | number]
+    'update:category-filter': [value: string | null]
     'navigate-previous-group': []
     'navigate-next-group': []
     'toggle-view-mode': []
     'close': []
 }>()
+
+const showCategoryDropdown = ref(false)
+const categoryFilterButtonRef = ref<HTMLElement | null>(null)
+const categoryDropdownRef = ref<HTMLElement | null>(null)
+
+function toggleCategoryDropdown() {
+    showCategoryDropdown.value = !showCategoryDropdown.value
+}
+
+function selectCategory(category: string | null) {
+    emit('update:category-filter', category)
+    showCategoryDropdown.value = false
+}
+
+// Close dropdown when clicking outside (but not on the button)
+onClickOutside(categoryDropdownRef, (event) => {
+    // Don't close if clicking on the button itself
+    if (categoryFilterButtonRef.value?.contains(event.target as Node)) {
+        return
+    }
+    showCategoryDropdown.value = false
+}, { ignore: [categoryFilterButtonRef] })
 </script>
 
 <style scoped>
 .nav-btn.active {
     background-color: rgba(128, 128, 128, 0.15);
+}
+
+.category-filter-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.category-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 2px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    min-width: 120px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1001;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.category-option {
+    padding: 8px 12px;
+    color: var(--text-primary);
+    font-size: 12px;
+    text-align: right;
+    cursor: pointer;
+    white-space: nowrap;
+    min-height: 32px;
+    display: flex;
+    align-items: center;
+    touch-action: manipulation;
+}
+
+@media (hover: none) and (pointer: coarse) {
+    .category-option {
+        min-height: 36px;
+        padding: 10px 14px;
+    }
+}
+
+.category-option:hover {
+    background: var(--hover-bg);
+}
+
+.category-option.selected {
+    background: var(--accent-color);
+    color: white;
+}
+
+.category-option.selected:hover {
+    opacity: 0.9;
 }
 </style>

@@ -1,15 +1,15 @@
 <template>
     <div class="flex-column height-fill">
         <FsTreeSearch v-if="searchInput"
-                        ref="searchRef"
-                        :books="allBooks"
-                        :search-query="searchInput"
-                        class="flex-110"
-                        @return-focus="returnFocusToSearch" />
+                      ref="searchRef"
+                      :books="allBooks"
+                      :search-query="searchInput"
+                      class="flex-110"
+                      @return-focus="returnFocusToSearch" />
         <FsTree v-else
-                  ref="treeRef"
-                  class="flex-110"
-                  @return-focus="returnFocusToSearch" />
+                ref="treeRef"
+                class="flex-110"
+                @return-focus="returnFocusToSearch" />
 
         <div class="bar flex-row search-bar">
             <button @click="resetTree"
