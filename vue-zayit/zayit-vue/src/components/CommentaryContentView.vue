@@ -3,8 +3,7 @@
          class="commentary-content"
          :style="commentaryStyles"
          tabindex="0"
-         @keydown="handleKeyDown"
-         @copy="handleCopy">
+         @keydown="handleKeyDown">
 
         <!-- Search Overlay -->
         <GenericSearch ref="searchRef"
@@ -27,7 +26,7 @@
         <div v-else-if="displayGroups.length === 0"
              class="flex-column flex-center height-fill text-secondary commentary-placeholder">
             <div class="bold placeholder-text">
-                {{ showAllCommentaries ? 'לא נמצרו קשרים בקטגוריה זו' : 'בחר פרשן מהרשימה' }}
+                {{ processedLinkGroups.length === 0 ? 'לא נמצאו קשרים' : 'בחר פרשן מהרשימה' }}
             </div>
         </div>
 
@@ -72,16 +71,12 @@ const props = defineProps<{
     processedLinkGroups: CommentaryLinkGroup[]
     isLoading: boolean
     commentaryStyles: Record<string, string>
-    showAllCommentaries: boolean
-    selectedGroupIndex: number
-    currentGroupIndex: number
-    scrollObserverEnabled: boolean
+    filteredGroupOptions: Array<{ label: string; value: string | number }>
 }>()
 
 const emit = defineEmits<{
     (e: 'clearOtherSelections'): void
-    (e: 'scrollUpdate', groupIndex: number): void
-    (e: 'openSearch'): void
+    (e: 'update:currentCommentary', payload: { bookId?: number; groupName?: string }): void
 }>()
 
 const tabStore = useTabStore()
@@ -90,6 +85,10 @@ const categoryTreeStore = useCategoryTreeStore()
 const contentRef = ref<HTMLElement | null>(null)
 const searchRef = ref<InstanceType<typeof GenericSearch> | null>(null)
 const selectAllWasPressed = ref(false)
+
+// UI State
+const showAllCommentaries = ref(true) // Start with "show all" mode by default
+const currentGroupIndex = ref(0)
 
 // Search state
 const isSearchOpen = ref(false)
@@ -100,22 +99,55 @@ const totalMatches = computed(() => matches.value.length)
 
 const { focused: hasFocus } = useFocus(contentRef)
 
+// Computed: Sync combobox with currentGroupIndex
+const comboboxSelectedValue = computed<string | number>({
+    get: () => currentGroupIndex.value,
+    set: (value: string | number) => {
+        if (typeof value === 'number') {
+            currentGroupIndex.value = value
+        }
+    }
+})
+
+const canNavigateToPreviousGroup = computed(() => {
+    return props.processedLinkGroups.length > 0 && currentGroupIndex.value > 0
+})
+
+const canNavigateToNextGroup = computed(() => {
+    return props.processedLinkGroups.length > 0 && currentGroupIndex.value < props.processedLinkGroups.length - 1
+})
+
 // Display groups based on mode
 const displayGroups = computed(() => {
-    if (props.showAllCommentaries) {
+    if (!props.processedLinkGroups || props.processedLinkGroups.length === 0) {
+        return []
+    }
+
+    if (showAllCommentaries.value) {
         return props.processedLinkGroups
     } else {
         // Single mode - show only selected group
-        if (props.selectedGroupIndex < 0 || props.selectedGroupIndex >= props.processedLinkGroups.length) {
+        if (currentGroupIndex.value < 0 || currentGroupIndex.value >= props.processedLinkGroups.length) {
             return []
         }
-        return [props.processedLinkGroups[props.selectedGroupIndex]]
+        return [props.processedLinkGroups[currentGroupIndex.value]]
+    }
+})
+
+// Watch for group changes and emit to parent
+watch(currentGroupIndex, (newIndex) => {
+    const group = props.processedLinkGroups[newIndex]
+    if (group) {
+        emit('update:currentCommentary', {
+            bookId: group.targetBookId,
+            groupName: group.groupName
+        })
     }
 })
 
 // Watch for group changes in single mode and scroll to top
-watch(() => props.selectedGroupIndex, () => {
-    if (!props.showAllCommentaries && contentRef.value) {
+watch(() => currentGroupIndex.value, () => {
+    if (!showAllCommentaries.value && contentRef.value) {
         contentRef.value.scrollTop = 0
     }
     // Clear search when switching groups
@@ -125,81 +157,21 @@ watch(() => props.selectedGroupIndex, () => {
 })
 
 // Watch for mode changes and scroll to current group in all mode
-watch(() => props.showAllCommentaries, async (isAll) => {
+watch(() => showAllCommentaries.value, async (isAll) => {
     if (isAll) {
         await nextTick()
         // Use setTimeout to avoid blocking UI
         setTimeout(() => {
-            scrollToGroup(props.currentGroupIndex, true)
+            scrollToGroup(currentGroupIndex.value, true)
         }, 0)
     }
 })
-
-// Scroll observer for "All" mode
-let scrollRafId: number | null = null
-function onScroll() {
-    if (!props.showAllCommentaries || !props.scrollObserverEnabled) return
-
-    if (scrollRafId) {
-        cancelAnimationFrame(scrollRafId)
-    }
-    scrollRafId = requestAnimationFrame(() => {
-        const centerGroupIndex = findCenterCommentaryGroup()
-        if (centerGroupIndex !== null) {
-            emit('scrollUpdate', centerGroupIndex)
-        }
-        scrollRafId = null
-    })
-}
-
-// Setup scroll listener
-watch(contentRef, (newRef) => {
-    if (newRef) {
-        newRef.addEventListener('scroll', onScroll, { passive: true })
-    }
-}, { immediate: true })
-
-/**
- * Find the commentary group at the center of the viewport
- */
-function findCenterCommentaryGroup(): number | null {
-    if (!contentRef.value) return null
-
-    const containerRect = contentRef.value.getBoundingClientRect()
-    const centerY = containerRect.top + containerRect.height / 2
-
-    const items = contentRef.value.querySelectorAll('[data-group-index]')
-    if (items.length === 0) return null
-
-    let closestItem: Element | null = null
-    let closestDistance = Infinity
-
-    items.forEach((item: Element) => {
-        const rect = item.getBoundingClientRect()
-        const itemCenterY = rect.top + rect.height / 2
-        const distance = Math.abs(itemCenterY - centerY)
-
-        if (distance < closestDistance) {
-            closestDistance = distance
-            closestItem = item
-        }
-    })
-
-    if (!closestItem) return null
-
-    const groupIndexAttr = (closestItem as Element).getAttribute('data-group-index')
-    if (groupIndexAttr !== null) {
-        return parseInt(groupIndexAttr, 10)
-    }
-
-    return null
-}
 
 /**
  * Scroll to a specific group by index
  */
 async function scrollToGroup(groupIndex: number, instant = false) {
-    if (!props.showAllCommentaries) return
+    if (!showAllCommentaries.value) return
     if (!contentRef.value) return
     if (groupIndex < 0 || groupIndex >= props.processedLinkGroups.length) return
 
@@ -208,6 +180,52 @@ async function scrollToGroup(groupIndex: number, instant = false) {
     const targetElement = contentRef.value.querySelector(`[data-group-index="${groupIndex}"]`) as HTMLElement
     if (targetElement) {
         await scrollToElementTop(targetElement, { behavior: instant ? 'instant' : 'smooth' })
+    }
+}
+
+/**
+ * Public method to scroll to group by index (called from parent)
+ */
+function scrollToGroupByIndex(groupIndex: number) {
+    if (groupIndex < 0 || groupIndex >= props.processedLinkGroups.length) {
+        return
+    }
+
+    currentGroupIndex.value = groupIndex
+
+    // If in "show all" mode, scroll to the group
+    if (showAllCommentaries.value) {
+        scrollToGroup(groupIndex, true)
+    }
+}
+
+/**
+ * Public method to navigate to previous group
+ */
+function navigateToPreviousGroup() {
+    if (!canNavigateToPreviousGroup.value) return
+    currentGroupIndex.value = currentGroupIndex.value - 1
+}
+
+/**
+ * Public method to navigate to next group
+ */
+function navigateToNextGroup() {
+    if (!canNavigateToNextGroup.value) return
+    currentGroupIndex.value = currentGroupIndex.value + 1
+}
+
+/**
+ * Public method to toggle view mode
+ */
+function toggleViewMode() {
+    showAllCommentaries.value = !showAllCommentaries.value
+
+    // When switching to single mode, ensure we have a valid group selected
+    if (!showAllCommentaries.value && props.processedLinkGroups.length > 0) {
+        if (currentGroupIndex.value < 0 || currentGroupIndex.value >= props.processedLinkGroups.length) {
+            currentGroupIndex.value = 0
+        }
     }
 }
 
@@ -344,7 +362,6 @@ function handleSearchPrevious() {
  */
 function openSearch() {
     isSearchOpen.value = true
-    emit('openSearch')
 }
 
 /**
@@ -414,65 +431,6 @@ function selectAllInContainer() {
     emit('clearOtherSelections')
 }
 
-/**
- * Handle copy event
- */
-function handleCopy(event: ClipboardEvent) {
-    const selection = window.getSelection()
-    if (!selection || selection.rangeCount === 0) return
-
-    const containerEl = contentRef.value
-    if (!containerEl) return
-
-    const range = selection.getRangeAt(0)
-    if (!containerEl.contains(range.commonAncestorContainer)) return
-
-    // Check if full selection
-    const isFullSelection = range.startContainer === containerEl ||
-        containerEl.contains(range.startContainer) &&
-        containerEl.contains(range.endContainer) &&
-        range.toString().length > containerEl.textContent!.length * 0.95
-
-    if (!isFullSelection) return
-
-    // Get source commentary content
-    let htmlContent = ''
-    let textContent = ''
-
-    displayGroups.value.filter((g): g is CommentaryLinkGroup => g !== undefined).forEach((group) => {
-        htmlContent += `<div style="font-weight: bold;">${group.groupName}</div>\n`
-        textContent += `${group.groupName}\n`
-
-        group.links.forEach((link) => {
-            htmlContent += `<div>${link.html}</div>\n`
-
-            const tempDiv = document.createElement('div')
-            tempDiv.innerHTML = link.html
-            textContent += (tempDiv.textContent || tempDiv.innerText || '') + '\n'
-        })
-
-        htmlContent += '\n'
-        textContent += '\n'
-    })
-
-    htmlContent = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-body { direction: rtl; font-weight: normal; }
-</style>
-</head>
-<body>
-${htmlContent}
-</body>
-</html>`
-
-    event.clipboardData?.setData('text/html', htmlContent)
-    event.clipboardData?.setData('text/plain', textContent)
-    event.preventDefault()
-}
-
 // Keyboard shortcuts
 useEventListener('keydown', (event: KeyboardEvent) => {
     if (!hasFocus.value) return
@@ -522,14 +480,54 @@ defineExpose({
     contentRef,
     searchRef,
     hasFocus,
-    scrollToGroup,
+    scrollToGroupByIndex,
+    navigateToPreviousGroup,
+    navigateToNextGroup,
+    toggleViewMode,
     openSearch,
-    isSearchOpen
+    isSearchOpen,
+    currentGroupIndex,
+    canNavigateToPreviousGroup,
+    canNavigateToNextGroup,
+    showAllCommentaries
 })
 </script>
 
 <style scoped>
-@import './CommentaryViewShared.css';
+/* Shared styles */
+.group-header {
+    font-size: 1.1em;
+    margin: 12px;
+    margin-bottom: 16px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.link-item {
+    margin: 0 12px 8px 12px;
+    padding: 4px 0;
+}
+
+.commentary-loading,
+.commentary-placeholder {
+    padding: 24px;
+}
+
+.placeholder-text {
+    font-size: 1.1em;
+}
+
+/* Search highlighting */
+:deep(.search-highlight) {
+    background-color: yellow;
+    color: black;
+}
+
+:deep(.search-highlight-current) {
+    background-color: orange;
+    color: black;
+    font-weight: bold;
+}
 
 .commentary-content {
     height: 100%;
