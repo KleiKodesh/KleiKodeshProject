@@ -1,0 +1,73 @@
+/* Custom styles for Zayit PDF.js viewer */
+
+/* Make sidebar fill full height from toolbar to bottom, no rounded corners */
+#viewsManager {
+  /* Full height from toolbar to bottom */
+  height: calc(100vh - var(--toolbar-height)) !important;
+  top: var(--toolbar-height) !important;
+  bottom: 0 !important;
+  padding-bottom: 0 !important;
+  
+  /* Remove rounded corners */
+  border-radius: 0 !important;
+  
+  /* Remove any box shadows that might create floating effect */
+  box-shadow: none !important;
+}
+
+/* Hide only the default status action section (showing view name) */
+/* Keep visible when there are actual actions, warnings, or loading states */
+#viewsManagerStatusAction {
+  display: none !important;
+}
+
+/* Show status section when undo, warning, or waiting states are active */
+#viewsManagerStatusUndo:not(.hidden) ~ #viewsManagerStatusAction,
+#viewsManagerStatusWarning:not(.hidden) ~ #viewsManagerStatusAction,
+#viewsManagerStatusWaiting:not(.hidden) ~ #viewsManagerStatusAction {
+  display: flex !important;
+}
+
+/* Remove rounded corners from sidebar buttons */
+#viewsManager .viewsManagerButton {
+  border-radius: 0 !important;
+}
+
+/* Remove rounded corners from sidebar content areas */
+#viewsManager #viewsManagerContent {
+  border-radius: 0 !important;
+}
+
+/* Remove rounded corners from thumbnails */
+#viewsManager .thumbnail {
+  border-radius: 0 !important;
+}
+
+/* Remove rounded corners from tree items */
+#viewsManager .treeItem {
+  border-radius: 0 !important;
+}
+
+/* Remove rounded corners from all buttons in sidebar */
+#viewsManager button {
+  border-radius: 0 !important;
+}
+
+/* Remove rounded corners from sidebar header */
+#viewsManager #viewsManagerHeader {
+  border-radius: 0 !important;
+}
+
+/* Remove rounded corners from view selector */
+#viewsManager #viewsManagerSelector button {
+  border-radius: 0 !important;
+}
+
+/* Remove rounded corners from popup menus */
+#viewsManager .popupMenu {
+  border-radius: 0 !important;
+}
+
+#viewsManager .popupMenu button {
+  border-radius: 0 !important;
+}
