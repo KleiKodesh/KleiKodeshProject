@@ -1,0 +1,75 @@
+/* Layout Utilities */
+
+.flex-center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.flex-column {
+  display: flex;
+  flex-direction: column;
+}
+
+.flex-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap:3px;
+}
+
+.flex-110 {
+  flex: 1 1 0;
+}
+
+.flex-11a {
+  flex: 1 1 auto;
+}
+
+.flex-center-end {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.flex-center-start {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.flex-between {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.justify-end {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.height-fill {
+   height: 100%;
+}
+
+.width-fill {
+  width: 100%;
+}
+
+.overflow-y {
+  overflow-y: auto;
+}
+
+.overflow-x {
+  overflow-x: auto;
+}
+
+.rtl-flip {
+  transform: scaleX(-1);
+}
+
+.rotate-90 {
+  transform: rotate(-90deg);
+}

@@ -1,0 +1,90 @@
+/* Global button styles - VS Code style with touch support */
+
+button {
+  width: 2rem;
+  /* Button width (matches vue-tabs) */
+  height: 2rem;
+  /* Button height (matches vue-tabs) */
+  padding: 0.375rem;
+  /* Internal padding (matches vue-tabs) */
+  background: transparent;
+  /* Transparent background by default */
+  border: none;
+  /* No border */
+  border-radius: 0.25rem;
+  /* Slightly rounded corners (matches vue-tabs) */
+  font-size: 1.25rem;
+  /* Icon/text size (matches vue-tabs) */
+  color: var(--text-primary);
+  /* Secondary text color */
+  cursor: pointer;
+  /* Show hand cursor */
+  display: flex;
+  /* Flex layout */
+  align-items: center;
+  /* Vertically center content */
+  justify-content: center;
+  /* Horizontally center content */
+  flex-shrink: 0;
+  /* Prevent button from shrinking */
+  opacity: 0.8;
+  /* Touch-friendly properties */
+  touch-action: manipulation;
+  /* Prevent double-tap zoom */
+  transition: transform 0.1s ease, background-color 0.1s ease;
+  /* Smooth transitions */
+}
+
+/* Button hover effect - only on devices that support hover */
+@media (hover: hover) {
+  button:hover {
+    background: var(--hover-bg);
+    /* Light background on hover */
+    color: var(--text-primary);
+    /* primary text color on hover */
+    opacity: 0.9;
+  }
+}
+
+/* Button active/pressed effect - works on both mouse and touch */
+button:active {
+  background: var(--active-bg);
+  /* Darker background when pressed */
+}
+
+/* Ensure minimum touch target size on touch devices */
+@media (hover: none) and (pointer: coarse) {
+  button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* Images and SVGs inside buttons */
+button img,
+button svg {
+  width: 1.25rem;
+  /* Icon size (matches vue-tabs) */
+  height: 1.25rem;
+  /* Icon size (matches vue-tabs) */
+  pointer-events: none;
+  /* Prevent icon from blocking clicks */
+}
+
+/* Iconify icons inside buttons - inherit color */
+button .iconify {
+  color: inherit !important;
+}
+
+button .iconify svg,
+button .iconify svg * {
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+/* Icon/Text Button */
+.text-icon-button {
+  padding: 0.5rem;
+  /* color: var(--text-primary); */
+  font-size: 1.2rem;
+}

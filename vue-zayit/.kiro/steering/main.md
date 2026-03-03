@@ -116,6 +116,16 @@ You can manually load specific guidance using these context keys:
 4. **Single Source**: Each topic has one authoritative guide
 5. **No Unsolicited Documentation**: Do NOT create markdown files to document your work unless explicitly requested by the user
 
+## Critical Rules
+
+### Documentation Files
+
+- **NEVER create markdown (.md) files unless explicitly requested by the user**
+- This includes: status files, plan files, summary files, documentation files, notes, etc.
+- Do not create files to track progress, document changes, or summarize work
+- The only exception is when the user specifically asks for a markdown file
+- Focus on code changes, not documentation of those changes
+
 ## Vue.js Development Standards
 
 ### Async Operations and Timing
@@ -171,11 +181,34 @@ setTimeout(() => {
 
 **Examples:**
 
-- Use `useMagicKeys` instead of manual keyboard event listeners
-- Use `useLocalStorage` instead of manual localStorage access
+- Use `onClickOutside` instead of manual click-outside detection
 - Use `useEventListener` instead of `addEventListener`
+- Use `useLocalStorage` instead of manual localStorage access
 - Use `useIntersectionObserver` instead of manual IntersectionObserver setup
 - Use `useResizeObserver` instead of manual ResizeObserver setup
+- Use `useFocus` to track element focus state
+- Use `useDraggable` for drag-and-drop functionality
+
+**Click Outside Pattern:**
+
+```typescript
+import { onClickOutside } from "@vueuse/core";
+
+const dropdownRef = ref<HTMLElement | null>(null);
+const isOpen = ref(false);
+
+// ✅ GOOD: Use VueUse
+onClickOutside(dropdownRef, () => {
+  isOpen.value = false;
+});
+
+// ❌ BAD: Manual implementation
+document.addEventListener("click", (e) => {
+  if (!dropdownRef.value?.contains(e.target as Node)) {
+    isOpen.value = false;
+  }
+});
+```
 
 ### Keyboard Event Handling
 
@@ -367,3 +400,13 @@ const state = computed(() => {
 - Tab store provides centralized computed property (`currentDiacriticsState`)
 - All UI components bind to `tabStore.currentDiacriticsState`
 - Toggle logic in tab store updates appropriate state based on mode
+
+## Component Architecture Patterns
+
+### Dumb Components with Composables
+
+Components should be presentation-only ("dumb") with all business logic extracted into composables. This follows the layered architecture where data layer (stores/services) is accessed only through composables, never directly in components. Components receive reactive state and methods from composables, handle only UI concerns (rendering, user events, DOM manipulation), and remain testable and reusable. Extract complex logic (state management, API calls, computed values, side effects) into feature-specific composables colocated with components, and use shared composables for common UI patterns (dropdowns, dialogs, keyboard navigation, virtual scrolling).
+
+### Layered Architecture
+
+The codebase follows a strict layered architecture: data layer (stores, services, types, workers - framework-agnostic, no Vue imports), components layer (Vue components organized by feature), composables layer (connect data to components, feature composables access stores/services), and utils layer (pure functions, no framework dependencies). Import rules enforce boundaries: data imports nothing, components import composables and utils, composables import data and utils, utils import nothing. This separation enables independent testing, data layer portability to other platforms, and clear maintainability boundaries.

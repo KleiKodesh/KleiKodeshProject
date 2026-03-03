@@ -1,0 +1,84 @@
+/* Main CSS - Imports all style modules */
+
+@import './assets/styles/theme.css';
+@import './assets/styles/layout.css';
+@import './assets/styles/typography.css';
+@import './assets/styles/components.css';
+@import './assets/styles/states.css';
+@import './assets/styles/animations.css';
+@import './assets/styles/button.css';
+@import './assets/styles/input.css';
+@import './assets/styles/cursor.css';
+@import './assets/styles/touch.css';
+
+/* Vue Virtual Scroller CSS */
+@import 'vue-virtual-scroller/dist/vue-virtual-scroller.css';
+
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  /* transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1); */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  /* Touch-friendly defaults */
+  -webkit-tap-highlight-color: transparent; /* Remove iOS tap highlight */
+  touch-action: manipulation; /* Prevent double-tap zoom by default */
+  
+  /* Ensure crisp rendering on all elements */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+  direction: rtl;
+  overflow: hidden;
+  
+  /* Additional crisp rendering settings */
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+
+#app {
+  height: 100%;
+  direction: inherit;
+}
+
+
+/* Search highlight styles */
+mark {
+  background-color: rgba(245, 158, 11, 0.3); /* #f59e0b with transparency */
+  color: inherit;
+}
+
+mark.current {
+  background-color: rgba(245, 158, 11, 0.8) !important; /* #f59e0b with higher opacity */
+  font-weight: bold;
+}
+
+:root.dark mark {
+  background-color: rgba(251, 191, 36, 0.3); /* #fbbf24 with transparency */
+}
+
+:root.dark mark.current {
+  background-color: rgba(251, 191, 36, 0.8) !important; /* #fbbf24 with higher opacity */
+  font-weight: bold;
+}
