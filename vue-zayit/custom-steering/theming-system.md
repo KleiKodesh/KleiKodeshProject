@@ -135,16 +135,42 @@ if (readingBackground.value !== "default") {
 --reading-active-bg
 ```
 
+### UI Reading Background (calculated from UI colors)
+
+```css
+--ui-reading-bg
+```
+
+**Purpose:** Provides a softer background for UI pages (like settings) that's derived from UI theme colors, NOT affected by custom reading backgrounds.
+
+**Calculation:**
+
+- Dark themes: `lighten(ui.bgPrimary, 3)`
+- Light themes: `darken(ui.bgPrimary, 2)`
+
+**Usage:** Settings page, dialogs, and other UI pages that need a reading-friendly background but should remain part of the UI chrome, not the content reading area.
+
 ### Usage in Components
 
 - **UI Components:** Use `var(--bg-primary)`, `var(--text-primary)`, etc.
 - **Reading Components:** Use `var(--reading-bg-primary)`, `var(--reading-text-primary)`, etc.
+- **UI Reading Pages:** Use `var(--ui-reading-bg)` for background (e.g., SettingsPage)
 
-**Reading Components:**
+**Reading Components (Content):**
 
 - `LineView.vue` - Main text reading area
 - `CommentaryView.vue` - Commentary reading area
 - `KezayitSearchPage.vue` - Search results reading area
+
+**UI Reading Pages (Chrome):**
+
+- `SettingsPage.vue` - Settings interface
+- Other UI pages that need softer backgrounds
+
+**Key Distinction:**
+
+- `--reading-bg-primary`: For actual book/commentary content, customizable by user
+- `--ui-reading-bg`: For UI pages, always derived from UI theme, never customizable separately
 
 ## User Experience Flow
 
@@ -287,6 +313,92 @@ When modifying the theming system:
 1. **Don't duplicate color data** - Reading backgrounds reference themes, don't store colors
 2. **Don't forget both variants** - Every theme family needs light AND dark
 3. **Don't break migration** - Keep old theme name mappings for user settings
-4. **Don't use wrong CSS variables** - UI components use `--bg-primary`, reading uses `--reading-bg-primary`
+4. **Don't use wrong CSS variables** - UI components use `--bg-primary`, reading uses `--reading-bg-primary`, UI reading pages use `--ui-reading-bg`
 5. **Don't forget RGB values** - Some components need RGB for transparency
 6. **Don't skip Hebrew names** - All user-facing names must be in Hebrew
+7. **Don't confuse chrome and content** - Settings page is chrome (use `--ui-reading-bg`), book view is content (use `--reading-bg-primary`)
+
+## Architecture: Separation of Chrome and Content
+
+### The Problem
+
+Users want to customize reading backgrounds for books/commentaries without affecting the settings page appearance. The settings page needs a pleasant background that's always derived from the UI theme.
+
+### The Solution
+
+**Three-tier background system:**
+
+1. **UI Primary Background** (`--bg-primary-custom`)
+   - Used for: Toolbars, sidebars, menus, buttons
+   - Source: `theme.ui.bgPrimary`
+
+2. **UI Reading Background** (`--ui-reading-bg`)
+   - Used for: Settings page, dialogs, UI pages with text content
+   - Source: Calculated from `theme.ui.bgPrimary` (slightly lighter/darker)
+   - **Never customizable separately** - always follows UI theme
+
+3. **Content Reading Background** (`--reading-bg-primary`)
+   - Used for: Book view, commentary view, search results
+   - Source: `theme.reading.bgPrimary` (can be overridden by reading background setting)
+   - **Fully customizable** - user can pick any theme's reading colors
+
+### Visual Hierarchy
+
+```
+┌─────────────────────────────────────┐
+│  UI Chrome (--bg-primary-custom)    │  ← Darkest/Lightest
+│  ┌───────────────────────────────┐  │
+│  │ UI Reading (--ui-reading-bg)  │  │  ← Slightly softer
+│  │                               │  │
+│  │  Settings Page Content        │  │
+│  └───────────────────────────────┘  │
+└─────────────────────────────────────┘
+
+┌─────────────────────────────────────┐
+│  UI Chrome (--bg-primary-custom)    │
+│  ┌───────────────────────────────┐  │
+│  │ Content Reading               │  │
+│  │ (--reading-bg-primary)        │  │  ← Fully customizable
+│  │                               │  │
+│  │  Book/Commentary Content      │  │
+│  └───────────────────────────────┘  │
+└─────────────────────────────────────┘
+```
+
+### Implementation Details
+
+**In `themes.ts` `applyTheme()` function:**
+
+```typescript
+// Calculate UI reading background from UI colors
+const uiReadingBg = theme.isDark
+  ? lighten(uiColors.bgPrimary, 3)
+  : darken(uiColors.bgPrimary, 2);
+document.documentElement.style.setProperty("--ui-reading-bg", uiReadingBg);
+```
+
+**In component styles:**
+
+```css
+/* ❌ WRONG - Settings page using content reading background */
+.settings-page {
+  background: var(--reading-bg-primary);
+}
+
+/* ✅ CORRECT - Settings page using UI reading background */
+.settings-page {
+  background: var(--ui-reading-bg);
+}
+
+/* ✅ CORRECT - Book view using content reading background */
+.book-view {
+  background: var(--reading-bg-primary);
+}
+```
+
+### Benefits
+
+1. **Clear separation** - Chrome (UI) vs Content (reading) are visually distinct
+2. **User control** - Users can customize book reading backgrounds without breaking UI
+3. **Consistency** - Settings page always matches UI theme, never affected by custom reading backgrounds
+4. **Flexibility** - Users can mix and match: Dark UI + Cream reading background for books
