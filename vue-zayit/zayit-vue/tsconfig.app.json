@@ -15,6 +15,24 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@/data/*": [
+        "./src/data/*"
+      ],
+      "@/components/*": [
+        "./src/components/*"
+      ],
+      "@/composables/*": [
+        "./src/composables/*"
+      ],
+      "@/utils/*": [
+        "./src/utils/*"
+      ],
+      "@/config/*": [
+        "./src/config/*"
+      ],
+      "@/assets/*": [
+        "./src/assets/*"
       ]
     }
   }
