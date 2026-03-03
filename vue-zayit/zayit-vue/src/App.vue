@@ -9,25 +9,25 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useEventListener } from '@vueuse/core'
-import TabControl from './components/TabControl.vue'
-import { useTabStore } from './stores/tabStore'
-import { useZoomHandler } from './utils/zoom'
+import TabControl from '@/components/workspace/TabControl.vue'
+import { useTabs } from '@/components/workspace/useTabs'
+import { useZoomHandler } from '@/components/shared/useZoom'
 
-const tabStore = useTabStore()
+const { activeTab, closeTab, closeAllTabs } = useTabs()
 const appContainer = ref<HTMLElement>()
 
 // Zoom handling with keyboard, trackpad, and touch support
 const currentZoom = computed({
-    get: () => tabStore.activeTab?.bookState?.zoom || 100,
+    get: () => activeTab.value?.bookState?.zoom || 100,
     set: (value: number) => {
-        const tab = tabStore.activeTab
+        const tab = activeTab.value
         if (tab?.bookState) {
             tab.bookState.zoom = value
         }
     }
 })
 
-const isBookViewPage = computed(() => tabStore.activeTab?.currentPage === 'bookview')
+const isBookViewPage = computed(() => activeTab.value?.currentPage === 'bookview')
 
 useZoomHandler({
     zoom: currentZoom,
@@ -41,12 +41,12 @@ useEventListener('keydown', (event: KeyboardEvent) => {
 
     // Ctrl+W: Close current tab (use event.code for keyboard layout independence)
     if (hasCtrlOrMeta && event.code === 'KeyW') {
-        tabStore.closeTab()
+        closeTab()
     }
 
     // Ctrl+X: Close all tabs (use event.code for keyboard layout independence)
     if (hasCtrlOrMeta && event.code === 'KeyX') {
-        tabStore.closeAllTabs()
+        closeAllTabs()
     }
 })
 
