@@ -2,8 +2,8 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import './main.css'
-import { initTheme } from './utils/theme'
-import { initializeOfflineIcons } from './utils/iconify-offline'
+import { initTheme } from '@/utils/themes'
+import { initializeOfflineIcons } from '@/utils/iconify-offline'
 
 // Import vue-virtual-scroller components
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
@@ -40,8 +40,8 @@ app.component('DynamicScroller', DynamicScroller)
 app.component('DynamicScrollerItem', DynamicScrollerItem)
 
 // Initialize settings before mounting
-import { useSettingsStore } from './stores/settingsStore'
-import { useConnectionTypesStore } from './stores/connectionTypesStore'
+import { useSettingsStore } from '@/data/stores/settingsStore'
+import { useConnectionTypesStore } from '@/data/stores/connectionTypesStore'
 
 useSettingsStore()
 
