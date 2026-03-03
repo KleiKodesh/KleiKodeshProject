@@ -35,6 +35,19 @@ export function hexToRgbObj(hex: string): { r: number; g: number; b: number } {
     }
 }
 
+// Helper functions to lighten/darken colors
+function lighten(color: string, amount: number): string {
+    const hex = color.replace('#', '')
+    const r = Math.min(255, parseInt(hex.substring(0, 2), 16) + amount)
+    const g = Math.min(255, parseInt(hex.substring(2, 4), 16) + amount)
+    const b = Math.min(255, parseInt(hex.substring(4, 6), 16) + amount)
+    return '#' + [r, g, b].map(x => Math.round(x).toString(16).padStart(2, '0')).join('')
+}
+
+function darken(color: string, amount: number): string {
+    return lighten(color, -amount)
+}
+
 // Apply theme to document
 export function applyTheme(preset: ThemePreset) {
     const theme = getTheme(preset)
@@ -62,6 +75,13 @@ export function applyTheme(preset: ThemePreset) {
     document.documentElement.style.setProperty('--reading-accent-color', readingColors.accentColor)
     document.documentElement.style.setProperty('--reading-hover-bg', readingColors.hoverBg)
     document.documentElement.style.setProperty('--reading-active-bg', readingColors.activeBg)
+
+    // Set UI Reading background (for settings page, etc.) - calculated from UI colors, not content reading colors
+    // This provides a softer background for UI pages without being affected by custom reading backgrounds
+    const uiReadingBg = theme.isDark
+        ? lighten(uiColors.bgPrimary, 3)
+        : darken(uiColors.bgPrimary, 2)
+    document.documentElement.style.setProperty('--ui-reading-bg', uiReadingBg)
 
     // Calculate RGB values for transparency
     const bgPrimaryRgb = hexToRgb(uiColors.bgPrimary)

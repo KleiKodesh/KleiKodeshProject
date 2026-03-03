@@ -8,13 +8,6 @@
                             :show-delete="true"
                             @delete="$emit('deleteTheme', $event)" />
 
-      <!-- Reading Background within Theme group -->
-      <!-- <div class="reading-background-section">
-        <label class="setting-label bold">רקע קריאה</label>
-        <div class="setting-description">הגדר רקע קריאה שונה (אופציונלי)</div>
-        <ReadingBackgroundDropdown v-model="readingBackground" />
-      </div> -->
-
       <button @click="$emit('createTheme')"
               class="create-theme-btn">
         ערכת נושא מותאמת אישית
@@ -144,7 +137,6 @@ import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@/data/stores/settingsStore'
 import { webviewBridge } from '@/data/services/webviewBridge'
 import ThemePreviewDropdown from '@/components/settings/ThemePreviewDropdown.vue'
-import ReadingBackgroundDropdown from '@/components/settings/ReadingBackgroundDropdown.vue'
 
 defineEmits<{
   createTheme: []
@@ -160,8 +152,7 @@ const {
   globalDiacritics,
   newTabPage,
   defaultBookViewToolbarPosition,
-  themePreset,
-  readingBackground
+  themePreset
 } = storeToRefs(settingsStore)
 
 const setCensorDivineNames = (censor: boolean) => {
@@ -327,9 +318,5 @@ onMounted(() => {
 
 .create-theme-btn:hover {
   opacity: 0.9;
-}
-
-.reading-background-section {
-  margin-top: 16px;
 }
 </style>

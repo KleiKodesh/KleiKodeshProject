@@ -3,19 +3,16 @@
     <!-- Tab Bar -->
     <div class="flex-row tab-bar">
       <template v-if="!showCustomThemeCreator">
-        <button
-          :class="['tab-btn flex-center', { active: activeTab === 'general' }]"
-          @click="activeTab = 'general'"
-        >
+        <button :class="['tab-btn flex-center', { active: activeTab === 'general' }]"
+                @click="activeTab = 'general'">
           כללי
         </button>
-        <button
-          :class="['tab-btn flex-center', { active: activeTab === 'reading' }]"
-          @click="activeTab = 'reading'"
-        >
+        <button :class="['tab-btn flex-center', { active: activeTab === 'reading' }]"
+                @click="activeTab = 'reading'">
           קריאה
         </button>
-        <button class="tab-btn tab-btn--reset flex-center" @click="resetSettings">
+        <button class="tab-btn tab-btn--reset flex-center"
+                @click="resetSettings">
           ↺ איפוס
         </button>
       </template>
@@ -27,38 +24,36 @@
     <!-- Tab Content -->
     <div class="flex-110 overflow-y settings-content">
       <ReadingSettingsTab v-if="activeTab === 'reading'" />
-      <GeneralSettingsTab
-        v-if="activeTab === 'general'"
-        @create-theme="openCustomThemeCreator"
-        @delete-theme="deleteCustomThemeHandler"
-        @select-database="selectDatabaseFile"
-      />
+      <GeneralSettingsTab v-if="activeTab === 'general'"
+                          @create-theme="openCustomThemeCreator"
+                          @delete-theme="deleteCustomThemeHandler"
+                          @select-database="selectDatabaseFile" />
     </div>
 
     <!-- Custom Dialog -->
-    <CustomDialog
-      ref="dialogRef"
-      :title="dialogOptions.title"
-      :message="dialogOptions.message"
-      :icon="dialogOptions.icon"
-      :icon-type="dialogOptions.iconType"
-      :confirm-text="dialogOptions.confirmText"
-      :cancel-text="dialogOptions.cancelText"
-      :confirm-variant="dialogOptions.confirmVariant"
-      :show-confirm="dialogOptions.showConfirm"
-      :show-cancel="dialogOptions.showCancel"
-      :show-close-button="dialogOptions.showCloseButton"
-      :show-actions="dialogOptions.showActions"
-      :size="dialogOptions.size"
-      :close-on-overlay="dialogOptions.closeOnOverlay"
-      @confirm="handleConfirm"
-      @cancel="handleCancel"
-      @close="handleClose"
-    />
+    <CustomDialog ref="dialogRef"
+                  :title="dialogOptions.title"
+                  :message="dialogOptions.message"
+                  :icon="dialogOptions.icon"
+                  :icon-type="dialogOptions.iconType"
+                  :confirm-text="dialogOptions.confirmText"
+                  :cancel-text="dialogOptions.cancelText"
+                  :confirm-variant="dialogOptions.confirmVariant"
+                  :show-confirm="dialogOptions.showConfirm"
+                  :show-cancel="dialogOptions.showCancel"
+                  :show-close-button="dialogOptions.showCloseButton"
+                  :show-actions="dialogOptions.showActions"
+                  :size="dialogOptions.size"
+                  :close-on-overlay="dialogOptions.closeOnOverlay"
+                  @confirm="handleConfirm"
+                  @cancel="handleCancel"
+                  @close="handleClose" />
 
     <!-- Custom Theme Creator Overlay -->
-    <div v-if="showCustomThemeCreator" class="theme-creator-overlay">
-      <ThemeCreator @close="closeCustomThemeCreator" @save="handleCustomThemeSave" />
+    <div v-if="showCustomThemeCreator"
+         class="theme-creator-overlay">
+      <ThemeCreator @close="closeCustomThemeCreator"
+                    @save="handleCustomThemeSave" />
     </div>
   </div>
 </template>
@@ -68,6 +63,7 @@ import { ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@/data/stores/settingsStore'
 import type { SettingsTab } from '@/data/stores/settingsStore'
+import { useTabStore } from '@/data/stores/tabStore'
 import { webviewBridge } from '@/data/services/webviewBridge'
 import { useDialog } from '@/components/shared/useDialog'
 import CustomDialog from '@/components/shared/CustomDialog.vue'
@@ -83,6 +79,7 @@ import {
 } from '@/utils/themes'
 
 const settingsStore = useSettingsStore()
+const tabStore = useTabStore()
 const { databasePath, themePreset, lastSettingsTab } = storeToRefs(settingsStore)
 const { dialogRef, dialogOptions, confirm, error, handleConfirm, handleCancel, handleClose } =
   useDialog()
@@ -93,6 +90,14 @@ const showCustomThemeCreator = ref(false)
 // Watch activeTab and update lastSettingsTab in store
 watch(activeTab, (newTab) => {
   lastSettingsTab.value = newTab
+})
+
+// Update tab title when theme creator opens/closes
+watch(showCustomThemeCreator, (isOpen) => {
+  const tab = tabStore.tabs.find(t => t.isActive && t.currentPage === 'settings')
+  if (tab) {
+    tab.title = isOpen ? 'הגדרות - צור ערכת נושא' : 'הגדרות'
+  }
 })
 
 // Reset settings
@@ -108,7 +113,7 @@ const resetSettings = async () => {
   if (webviewBridge.isAvailable()) {
     try {
       await webviewBridge.clearDatabasePath()
-    } catch {}
+    } catch { }
   }
 
   window.location.reload()
@@ -191,7 +196,7 @@ async function deleteCustomThemeHandler(id: string) {
 
 <style scoped>
 .settings-page {
-  background: var(--reading-bg);
+  background: var(--ui-reading-bg);
   position: relative;
 }
 
