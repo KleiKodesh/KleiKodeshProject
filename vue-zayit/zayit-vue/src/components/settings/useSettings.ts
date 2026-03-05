@@ -25,6 +25,12 @@ export function useSettings() {
             set: (value) => { settingsStore.themePreset = value; }
         }),
 
+        // PDF state
+        pdfPageFilters: computed({
+            get: () => settingsStore.pdfPageFilters,
+            set: (value) => { settingsStore.pdfPageFilters = value; }
+        }),
+
         // Database state
         databasePath: computed(() => settingsStore.databasePath),
 

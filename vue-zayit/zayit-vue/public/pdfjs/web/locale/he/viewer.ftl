@@ -1,4 +1,4 @@
-# This Source Code Form is subject to the terms of the Mozilla Public
+﻿# This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
@@ -723,3 +723,10 @@ pdfjs-editor-add-signature-edit-button-label = עריכת תיאור
 ## Edit signature description dialog
 
 pdfjs-editor-edit-signature-dialog-title = עריכת תיאור
+
+
+## Rectangle selection button
+
+rectangle-selection-button =
+    .title = בחירת טקסט באזור מלבני
+rectangle-selection-button-label = בחירה מלבנית

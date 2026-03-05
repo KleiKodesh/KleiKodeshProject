@@ -1,5 +1,45 @@
 /* Custom styles for Zayit PDF.js viewer */
 
+/* Override PDF.js scrollbar variables to use semi-transparent overlays like Vue app */
+:root {
+  --scrollbar-color: rgba(0, 0, 0, 0.3) !important;
+  --scrollbar-bg-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+:root.dark {
+  --scrollbar-color: rgba(255, 255, 255, 0.3) !important;
+  --scrollbar-bg-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Override sidebar colors to use theme variables */
+.sidebar {
+  --sidebar-bg-color: var(--bg-primary-custom) !important;
+  --sidebar-border-color: var(--border-color-custom) !important;
+}
+
+#viewsManager {
+  --sidebar-bg-color: var(--bg-primary-custom) !important;
+  background-color: var(--bg-primary-custom) !important;
+}
+
+/* Override popup menu colors to use theme variables */
+.popupMenu {
+  --menu-bg: var(--bg-primary-custom) !important;
+  --menu-text-color: var(--text-primary-custom) !important;
+  --menu-border-color: var(--border-color-custom) !important;
+}
+
+/* PDF Page Filters - Apply theme-based filters to PDF content */
+/* Only apply when pdfPageFilters setting is enabled */
+.pdfViewer .canvasWrapper canvas {
+  transition: filter 0.3s ease;
+}
+
+/* All themes use CSS variable for filters */
+:root[data-pdf-filters="true"] .pdfViewer .canvasWrapper canvas {
+  filter: var(--pdf-page-filter, none);
+}
+
 /* Make sidebar fill full height from toolbar to bottom, no rounded corners */
 #viewsManager {
   /* Full height from toolbar to bottom */
