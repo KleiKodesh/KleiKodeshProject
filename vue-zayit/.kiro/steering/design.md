@@ -55,19 +55,197 @@ inclusion: always
 
 ## CSS Organization
 
-- Use unified CSS in assets folder for shared styles
-- Create reusable CSS classes and variables
-- Component-scoped styles are acceptable for component-specific styling
-- Share common styles across components
+- All shared styles live in src/assets/styles/ organized by category (button.css, input.css, layout.css, typography.css, etc.)
+- ALWAYS check existing utility classes before writing custom CSS
+- Component-scoped CSS should ONLY contain truly unique styles specific to that component
+- NO duplicate button styles, input styles, or layout patterns in component CSS
+- Use existing utilities: flex-row, flex-column, flex-center, flex-between, flex-110, bold, text-secondary, c-pointer, etc.
+- Custom component CSS is ONLY for: unique layouts, specific positioning, component-specific colors/sizes that don't fit utilities
+- When you see duplicate CSS patterns across components, extract to global utilities immediately
+- Class ordering: layout → sizing → interactive → cursor → typography → component utilities → specific
+- Parent controls child layout (parent applies flex-110, child defines internal structure only)
+- Minimal changes: only modify the specific problem, don't change unrelated styles
+- Example: Instead of `.my-button { display: flex; align-items: center; cursor: pointer; }` use `class="flex-center c-pointer"`
 
-## Code Brevity
+### CSS Simplicity Rule
 
-- Code and CSS must be as short as possible
-- Minimize line count without sacrificing clarity
-- Remove duplication immediately
-- Extract repeated patterns to utilities
-- When adjusting code, remove garbage code and fix duplication as you go
-- Clean up unused imports, variables, and dead code during every change
+**CRITICAL: Use the simplest CSS that achieves the desired effect. Excessive CSS is maintenance debt.**
+
+- **Question every property** - Does removing this property change the visual result? If no, delete it
+- **Default values are free** - Don't set `display: block` on a div, `position: static`, `flex-direction: row` on flex containers
+- **Avoid redundant properties** - If parent has `display: flex`, child doesn't need `display: block` to work
+- **Use CSS cascade** - Let parent styles cascade instead of repeating them on children
+- **Shorthand over longhand** - Use `margin: 0` instead of `margin-top: 0; margin-right: 0; margin-bottom: 0; margin-left: 0`
+- **Remove experimental properties** - Delete `-webkit-` prefixes if the standard property works in all target browsers
+- **One property per concern** - If `width: 100%` achieves the goal, don't add `min-width: 100%; max-width: 100%`
+
+### Examples of Excessive CSS
+
+❌ **BAD - Excessive:**
+
+```css
+.container {
+  display: flex;
+  flex-direction: row; /* default for flex */
+  flex-wrap: nowrap; /* default for flex */
+  align-items: stretch; /* default for flex */
+  position: relative; /* not needed if no absolute children */
+  width: 100%;
+  min-width: 100%; /* redundant with width: 100% */
+  height: auto; /* default for most elements */
+}
+```
+
+✅ **GOOD - Minimal:**
+
+```css
+.container {
+  display: flex;
+  width: 100%;
+}
+```
+
+❌ **BAD - Excessive:**
+
+```css
+.button {
+  display: inline-block;
+  padding: 10px 20px;
+  margin: 0;
+  border: none;
+  background: var(--accent-color);
+  color: white;
+  font-size: 14px;
+  font-weight: normal; /* default */
+  text-align: center;
+  text-decoration: none; /* only needed for <a> tags */
+  cursor: pointer;
+  outline: none; /* accessibility issue */
+  box-sizing: border-box; /* usually global */
+}
+```
+
+✅ **GOOD - Minimal:**
+
+```css
+.button {
+  padding: 10px 20px;
+  background: var(--accent-color);
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+}
+```
+
+### CSS Audit Checklist
+
+Before committing CSS, ask:
+
+1. **Can I delete this property without changing the visual result?** - If yes, delete it
+2. **Is this property already set by a parent/global style?** - If yes, delete it
+3. **Is this a default value?** - If yes, delete it
+4. **Can I use a utility class instead?** - If yes, use the utility
+5. **Does this property actually do anything?** - Test by removing it; if nothing changes, delete it
+
+## Code Duplication Prevention
+
+**CRITICAL: Duplication is the root of all maintenance problems. Eliminate it ruthlessly.**
+
+### Before Writing Any Code
+
+1. **Search first** - Use grep/search to find similar code patterns before writing new code
+2. **Check utilities** - Review existing utility files (CSS, TypeScript, composables) for reusable patterns
+3. **Ask: "Does this already exist?"** - If similar logic exists anywhere, extract and reuse it
+
+### When Creating New Code
+
+1. **If you write the same pattern twice, extract it immediately** - No exceptions
+2. **CSS duplication** - Check assets/styles/ before writing component CSS; if pattern exists 2+ times, move to global utilities
+3. **Logic duplication** - If business logic appears in 2+ components, extract to composable
+4. **Component duplication** - If UI pattern appears 2+ times, create shared component
+
+### When Modifying Existing Code
+
+1. **Look for duplication you're creating** - Your change might duplicate existing code elsewhere
+2. **Look for duplication you can remove** - If you touch a file, scan for duplicate patterns to extract
+3. **Check if your change makes existing code duplicate** - Adding feature A might make code B and C identical; consolidate them
+4. **Clean as you go** - Remove unused imports, dead code, commented code while making changes
+
+### Red Flags for Duplication
+
+🚩 Copy-pasting code between files
+🚩 Similar CSS in multiple components (buttons, inputs, layouts)
+🚩 Same computed properties in multiple components
+🚩 Identical event handlers across components
+🚩 Repeated validation/formatting logic
+🚩 Multiple components accessing stores the same way
+
+### Extraction Rules
+
+- **2+ occurrences = extract to utility/composable/component**
+- **CSS patterns = extract to assets/styles/**
+- **Business logic = extract to composable**
+- **UI patterns = extract to shared component**
+- **Pure functions = extract to utils/**
+
+### Examples
+
+❌ **BAD - Duplication:**
+
+```typescript
+// ComponentA.vue
+const formatDate = (date: Date) => date.toLocaleDateString("he-IL");
+
+// ComponentB.vue
+const formatDate = (date: Date) => date.toLocaleDateString("he-IL");
+```
+
+✅ **GOOD - Extracted:**
+
+```typescript
+// utils/dateFormatting.ts
+export const formatDate = (date: Date) => date.toLocaleDateString("he-IL");
+
+// Both components import and use it
+```
+
+❌ **BAD - CSS Duplication:**
+
+```css
+/* ComponentA.vue */
+.my-button {
+  padding: 10px;
+  background: var(--accent-color);
+  border-radius: 8px;
+}
+
+/* ComponentB.vue */
+.action-btn {
+  padding: 10px;
+  background: var(--accent-color);
+  border-radius: 8px;
+}
+```
+
+✅ **GOOD - Global Utility:**
+
+```css
+/* assets/styles/components.css */
+.btn-primary {
+  padding: 10px;
+  background: var(--accent-color);
+  border-radius: 8px;
+}
+
+/* Both components use class="btn-primary" */
+```
+
+### Enforcement
+
+- **Every code review** - Reject PRs with duplication
+- **Every change** - Scan for duplication to remove
+- **Every new feature** - Check if similar code exists first
+- **Zero tolerance** - Duplication is never acceptable, even "just this once"
 
 ## Component Reusability
 

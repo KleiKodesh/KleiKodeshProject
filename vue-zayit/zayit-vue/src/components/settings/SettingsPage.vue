@@ -93,29 +93,6 @@ const {
   gap: 0;
 }
 
-.tab-btn {
-  flex: 1;
-  padding: 10px 6px;
-  background: none;
-  border: none;
-  border-radius: 0;
-  color: var(--text-secondary);
-  font-size: 0.875rem;
-  white-space: nowrap;
-  transition: color 0.15s, background 0.15s;
-}
-
-.tab-btn:hover {
-  color: var(--text-primary);
-  background: var(--hover-bg);
-}
-
-.tab-btn.active {
-  background: var(--hover-bg);
-  color: var(--text-primary);
-  font-weight: 700;
-}
-
 .tab-btn--reset:hover {
   color: #e53e3e;
   background: color-mix(in srgb, #e53e3e 8%, transparent);

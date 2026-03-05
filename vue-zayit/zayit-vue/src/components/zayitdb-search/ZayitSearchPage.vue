@@ -143,8 +143,4 @@ onMounted(async () => {
 })
 </script>
 
-<style scoped>
-.search-page {
-  position: relative;
-}
-</style>
+<style scoped></style>

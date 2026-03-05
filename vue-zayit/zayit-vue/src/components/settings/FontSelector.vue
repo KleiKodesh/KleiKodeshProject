@@ -1,22 +1,21 @@
 <template>
   <div class="setting-group">
     <label class="setting-label flex-between bold">{{ label }}</label>
-    <div
-      class="c-pointer custom-select flex-row"
-      ref="dropdownRef"
-      @click="toggleDropdown"
-      tabindex="0"
-    >
+    <div class="c-pointer custom-select flex-row"
+         ref="dropdownRef"
+         @click="toggleDropdown"
+         tabindex="0">
       <div class="select-display">{{ displayName }}</div>
       <div class="select-arrow">{{ isOpen ? '▲' : '▼' }}</div>
-      <div v-if="isOpen" class="select-dropdown" :style="dropdownStyles" @click.stop>
-        <div
-          v-for="font in availableFonts"
-          :key="font"
-          class="c-pointer select-option"
-          :class="{ selected: modelValue.includes(font) }"
-          @click="selectFont(font)"
-        >
+      <div v-if="isOpen"
+           class="select-dropdown"
+           :style="dropdownStyles"
+           @click.stop>
+        <div v-for="font in availableFonts"
+             :key="font"
+             class="c-pointer select-option"
+             :class="{ selected: modelValue.includes(font) }"
+             @click="selectFont(font)">
           {{ font }}
         </div>
       </div>
@@ -71,16 +70,6 @@ defineExpose({ isOpen })
 </script>
 
 <style scoped>
-.setting-group {
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.setting-label {
-  font-size: 14px;
-  margin-bottom: 10px;
-}
-
 .custom-select {
   position: relative;
   background: var(--bg-secondary);

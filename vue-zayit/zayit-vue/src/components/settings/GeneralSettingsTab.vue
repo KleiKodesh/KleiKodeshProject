@@ -9,7 +9,8 @@
                             @delete="$emit('deleteTheme', $event)" />
 
       <button @click="$emit('createTheme')"
-              class="create-theme-btn">
+              class="btn-primary"
+              style="margin-top: 8px;">
         ערכת נושא מותאמת אישית
       </button>
     </div>
@@ -24,8 +25,7 @@
              v-model.number="appZoom"
              min="0.5"
              max="1.5"
-             step="0.05"
-             class="setting-slider" />
+             step="0.05" />
     </div>
 
     <!-- New Tab Page -->
@@ -120,10 +120,10 @@
         <input type="text"
                v-model="databasePath"
                placeholder="בחר מיקום מסד הנתונים (seforim.db)"
-               class="database-path-input"
+               class="database-path-input input-secondary"
                readonly />
         <button @click="$emit('selectDatabase')"
-                class="c-pointer database-browse-btn flex-center">
+                class="btn-icon flex-center">
           📁
         </button>
       </div>
@@ -159,146 +159,13 @@ const {
   direction: rtl;
 }
 
-.setting-group {
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.setting-group:last-child {
-  border-bottom: none;
-}
-
-.setting-label {
-  font-size: 14px;
-  margin-bottom: 10px;
-}
-
-.setting-description {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin-bottom: 10px;
-  direction: rtl;
-}
-
-.setting-value {
-  font-size: 13px;
-  font-weight: normal;
-}
-
-.button-group {
-  gap: 8px;
-}
-
-.button-group.wrap {
-  flex-wrap: wrap;
-}
-
-.toggle-btn {
-  flex: 1;
-  padding: 10px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  font-size: 13px;
-  transition: all 0.15s;
-}
-
-.toggle-btn.compact {
-  padding: 8px 10px;
-  font-size: 12px;
-}
-
-.toggle-btn:hover {
-  background: var(--hover-bg);
-  border-color: var(--accent-color);
-}
-
-.toggle-btn.active {
-  background: var(--accent-color);
-  color: #fff;
-  border-color: var(--accent-color);
-}
-
-.setting-slider {
-  width: 100%;
-  height: 6px;
-  background: var(--bg-secondary);
-  border-radius: 3px;
-  outline: none;
-  -webkit-appearance: none;
-  appearance: none;
-}
-
-.setting-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 22px;
-  height: 22px;
-  background: var(--accent-color);
-  border-radius: 50%;
-  cursor: pointer;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
-}
-
-.setting-slider::-moz-range-thumb {
-  width: 22px;
-  height: 22px;
-  background: var(--accent-color);
-  border-radius: 50%;
-  cursor: pointer;
-  border: none;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
-}
-
 .database-path-row {
   gap: 8px;
 }
 
 .database-path-input {
   flex: 1;
-  padding: 10px 12px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  font-size: 13px;
   direction: ltr;
   text-align: left;
-}
-
-.database-path-input:hover {
-  border-color: var(--accent-color);
-}
-
-.database-browse-btn {
-  width: 42px;
-  height: 42px;
-  flex-shrink: 0;
-  background: var(--accent-color);
-  border: none;
-  border-radius: 8px;
-  color: #fff;
-  font-size: 16px;
-  transition: all 0.15s;
-}
-
-.database-browse-btn:hover {
-  transform: scale(1.05);
-}
-
-.create-theme-btn {
-  width: 100%;
-  padding: 10px 12px;
-  background: var(--accent-color);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  transition: opacity 0.2s ease;
-  margin-top: 8px;
-}
-
-.create-theme-btn:hover {
-  opacity: 0.9;
 }
 </style>
