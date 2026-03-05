@@ -110,6 +110,7 @@ export const useHebrewBooksStore = defineStore('hebrewBooks', () => {
           const downloadUrl = `https://download.hebrewbooks.org/downloadhandler.ashx?req=${bookId}`
           const link = document.createElement('a')
           link.href = downloadUrl
+          link.download = `${title}.pdf`
           link.style.display = 'none'
           document.body.appendChild(link)
           link.click()
@@ -137,6 +138,7 @@ export const useHebrewBooksStore = defineStore('hebrewBooks', () => {
         const downloadUrl = `https://download.hebrewbooks.org/downloadhandler.ashx?req=${bookId}`
         const link = document.createElement('a')
         link.href = downloadUrl
+        link.download = `${title}.pdf`
         link.style.display = 'none'
         document.body.appendChild(link)
         link.click()
