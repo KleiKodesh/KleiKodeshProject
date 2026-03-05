@@ -1,4 +1,4 @@
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useFocus } from '@vueuse/core'
 import { useTabStore } from '@/data/stores/tabStore'
 import { useCategoryTreeStore } from '@/data/stores/categoryTreeStore'
@@ -15,6 +15,8 @@ export function useCommentaryContent(
 
     const showAllCommentaries = ref(true)
     const currentGroupIndex = ref(0)
+    const isProgrammaticScroll = ref(false)
+    let scrollTimeout: ReturnType<typeof setTimeout> | null = null
 
     const { focused: hasFocus } = useFocus(computed(() => contentRef()))
 
@@ -56,12 +58,17 @@ export function useCommentaryContent(
         if (!container) return
         if (groupIndex < 0 || groupIndex >= processedLinkGroups().length) return
 
+        isProgrammaticScroll.value = true
         await nextTick()
 
         const targetElement = container.querySelector(`[data-group-index="${groupIndex}"]`) as HTMLElement
         if (targetElement) {
             await scrollToElementTop(targetElement, { behavior: instant ? 'instant' : 'smooth' })
         }
+
+        setTimeout(() => {
+            isProgrammaticScroll.value = false
+        }, 300)
     }
 
     const scrollToGroupByIndex = (groupIndex: number) => {
@@ -78,12 +85,20 @@ export function useCommentaryContent(
 
     const navigateToPreviousGroup = () => {
         if (!canNavigateToPreviousGroup.value) return
-        currentGroupIndex.value = currentGroupIndex.value - 1
+        const newIndex = currentGroupIndex.value - 1
+        currentGroupIndex.value = newIndex
+        if (showAllCommentaries.value) {
+            scrollToGroup(newIndex)
+        }
     }
 
     const navigateToNextGroup = () => {
         if (!canNavigateToNextGroup.value) return
-        currentGroupIndex.value = currentGroupIndex.value + 1
+        const newIndex = currentGroupIndex.value + 1
+        currentGroupIndex.value = newIndex
+        if (showAllCommentaries.value) {
+            scrollToGroup(newIndex)
+        }
     }
 
     const toggleViewMode = () => {
@@ -128,7 +143,94 @@ export function useCommentaryContent(
             setTimeout(() => {
                 scrollToGroup(currentGroupIndex.value, true)
             }, 0)
+            setupScrollListener()
+        } else {
+            cleanupScrollListener()
         }
+    })
+
+    // Detect which group is at the center of the viewport
+    const detectCenterGroup = () => {
+        if (!showAllCommentaries.value || isProgrammaticScroll.value) return
+
+        const container = contentRef()
+        if (!container) return
+
+        const containerRect = container.getBoundingClientRect()
+        const centerY = containerRect.top + containerRect.height / 2
+
+        const groupHeaders = container.querySelectorAll('[data-group-index]')
+        let closestGroup = -1
+        let closestDistance = Infinity
+
+        groupHeaders.forEach((header) => {
+            const groupIndex = parseInt(header.getAttribute('data-group-index') || '-1')
+            if (groupIndex < 0) return
+
+            const rect = header.getBoundingClientRect()
+            const headerCenter = rect.top + rect.height / 2
+            const distance = Math.abs(headerCenter - centerY)
+
+            if (distance < closestDistance) {
+                closestDistance = distance
+                closestGroup = groupIndex
+            }
+        })
+
+        if (closestGroup >= 0 && closestGroup !== currentGroupIndex.value) {
+            currentGroupIndex.value = closestGroup
+        }
+    }
+
+    const handleScroll = () => {
+        if (scrollTimeout) {
+            clearTimeout(scrollTimeout)
+        }
+
+        scrollTimeout = setTimeout(() => {
+            detectCenterGroup()
+        }, 100)
+    }
+
+    const setupScrollListener = () => {
+        cleanupScrollListener()
+        const container = contentRef()
+        if (container && showAllCommentaries.value) {
+            container.addEventListener('scroll', handleScroll, { passive: true })
+        }
+    }
+
+    const cleanupScrollListener = () => {
+        if (scrollTimeout) {
+            clearTimeout(scrollTimeout)
+            scrollTimeout = null
+        }
+        const container = contentRef()
+        if (container) {
+            container.removeEventListener('scroll', handleScroll)
+        }
+    }
+
+    // Setup scroll listener when groups change
+    watch(() => processedLinkGroups().length, async () => {
+        if (showAllCommentaries.value) {
+            await nextTick()
+            setTimeout(() => {
+                setupScrollListener()
+            }, 100)
+        }
+    })
+
+    onMounted(() => {
+        if (showAllCommentaries.value) {
+            setTimeout(() => {
+                setupScrollListener()
+            }, 100)
+        }
+    })
+
+    onUnmounted(() => {
+        cleanupScrollListener()
     })
 
     return {
