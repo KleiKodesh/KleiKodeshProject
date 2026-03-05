@@ -63,7 +63,7 @@ import GenericSearch from '@/components/shared/GenericSearch.vue'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import type { CommentaryLinkGroup } from '@/data/services/bookCommentaryService'
 import { useCommentarySearch } from './useCommentarySearch'
-import { useCommentaryContentView } from './useCommentaryContentView'
+import { useCommentaryContent } from './useCommentaryContent'
 
 const props = defineProps<{
     processedLinkGroups: CommentaryLinkGroup[]
@@ -106,7 +106,7 @@ const {
     navigateToNextGroup,
     toggleViewMode,
     handleGroupClick
-} = useCommentaryContentView(
+} = useCommentaryContent(
     () => contentRef.value,
     () => props.processedLinkGroups
 )

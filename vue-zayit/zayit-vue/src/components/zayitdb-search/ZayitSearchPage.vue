@@ -34,6 +34,7 @@
 <script setup lang="ts">
 import { ref, onMounted, nextTick, computed } from 'vue'
 import { onClickOutside } from '@vueuse/core'
+import { useTabStore } from '@/data/stores/tabStore'
 import { useVirtualScrollerPosition } from '@/components/shared/useVirtualScrollerPosition'
 import { useVirtualScrollerKeyboard } from '@/components/shared/useVirtualScrollerKeyboard'
 import { useBloomSearch } from '@/components/zayitdb-search/useBloomSearch'
@@ -41,6 +42,9 @@ import { useZayitSearchPage } from '@/components/zayitdb-search/useZayitSearchPa
 import FsCheckedTree from '@/components/zayitdb-search/FsCheckedTree.vue'
 import SearchBar from '@/components/zayitdb-search/SearchBar.vue'
 import SearchResultsList from '@/components/zayitdb-search/SearchResultsList.vue'
+
+// Store
+const tabStore = useTabStore()
 
 // Bloom search composable
 const {

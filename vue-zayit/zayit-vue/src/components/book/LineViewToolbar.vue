@@ -121,8 +121,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { Icon } from '@iconify/vue'
-import { useToolbarPosition } from './useToolbarPosition'
-import { useLineViewToolbarActions } from './useLineViewToolbarActions'
+import { useToolbarPosition } from './useLineViewToolbarPosition'
+import { useLineViewToolbarActions } from './useLineViewToolbar'
 import CommentaryToggleIcon from '@/components/icons/CommentaryToggleIcon.vue'
 import ThemeToggleButton from '@/components/settings/ThemeToggleButton.vue'
 

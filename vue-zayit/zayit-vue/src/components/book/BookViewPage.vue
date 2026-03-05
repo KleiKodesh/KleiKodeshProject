@@ -21,14 +21,14 @@
       <div class="flex-110 content-area">
         <!-- Virtualized viewer is now always enabled -->
         <keep-alive>
-          <TocTreeView v-if="myTab?.bookState?.isTocOpen && myTab?.bookState?.bookId"
-                       ref="tocTreeViewRef"
-                       :toc-entries="filteredTocEntries"
-                       :is-loading="isTocLoading"
-                       :is-compact-mode="!myTab.bookState.isFirstTocOpen"
-                       :current-toc-entry-id="currentTocEntryId"
-                       class="toc-overlay"
-                       @select-line="handleTocSelection" />
+          <TocTreePanel v-if="myTab?.bookState?.isTocOpen && myTab?.bookState?.bookId"
+                        ref="tocTreeViewRef"
+                        :toc-entries="filteredTocEntries"
+                        :is-loading="isTocLoading"
+                        :is-compact-mode="!myTab.bookState.isFirstTocOpen"
+                        :current-toc-entry-id="currentTocEntryId"
+                        class="toc-overlay"
+                        @select-line="handleTocSelection" />
         </keep-alive>
 
         <SplitPane v-if="myTab?.bookState?.bookId"
@@ -66,16 +66,16 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import TocTreeView from '@/components/book/TocTreeView.vue'
+import TocTreePanel from '@/components/book/TocTreePanel.vue'
 import LineView from '@/components/book/LineView.vue'
 import SplitPane from '@/components/shared/SplitPane.vue'
 import CommentaryView from '@/components/commentary/CommentaryView.vue'
 import LineViewToolbar from '@/components/book/LineViewToolbar.vue'
-import { useBookViewPage } from '@/components/book/useBookViewPage'
+import { useBookViewPage } from '@/components/book/useBookView'
 
 const myTabId = ref<number | undefined>(undefined)
 const lineViewerRef = ref<InstanceType<typeof LineView> | null>(null)
-const tocTreeViewRef = ref<InstanceType<typeof TocTreeView> | null>(null)
+const tocTreeViewRef = ref<InstanceType<typeof TocTreePanel> | null>(null)
 const toolbarRef = ref<InstanceType<typeof LineViewToolbar> | null>(null)
 
 const {

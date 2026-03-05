@@ -10,7 +10,7 @@ interface DialogProps {
 
 export function useCustomDialog(
     props: DialogProps,
-    emit: (event: 'confirm' | 'cancel' | 'close') => void
+    emit: any
 ) {
     const isVisible = ref(false);
 

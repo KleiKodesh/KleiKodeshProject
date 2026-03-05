@@ -1,13 +1,14 @@
 // Vite plugin to automatically extract icons during development
-import { execSync } from 'child_process';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { execSync } from 'child_process'
+import path from 'path'
+import { fileURLToPath } from 'url'
+import type { Plugin } from 'vite'
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
-export function autoIconsPlugin() {
-    let isFirstRun = true;
+export function autoIconsPlugin(): Plugin {
+    let isFirstRun = true
 
     return {
         name: 'vite-plugin-auto-icons',
@@ -15,15 +16,15 @@ export function autoIconsPlugin() {
         buildStart() {
             // Only run on first build/dev server start
             if (isFirstRun) {
-                console.log('\n🔄 Auto-extracting icons from codebase...');
+                console.log('\n🔄 Auto-extracting icons from codebase...')
                 try {
                     execSync('node scripts/auto-extract-icons.js', {
                         cwd: path.join(__dirname, '..'),
                         stdio: 'inherit'
-                    });
-                    isFirstRun = false;
+                    })
+                    isFirstRun = false
                 } catch (error) {
-                    console.error('❌ Failed to extract icons:', error.message);
+                    console.error('❌ Failed to extract icons:', (error as Error).message)
                 }
             }
         },
@@ -33,8 +34,8 @@ export function autoIconsPlugin() {
             if (file.match(/\.(vue|ts|tsx|js|jsx)$/)) {
                 // Debounce: only check occasionally, not on every file change
                 // This is a simple approach - could be optimized further
-                return;
+                return
             }
         }
-    };
+    }
 }

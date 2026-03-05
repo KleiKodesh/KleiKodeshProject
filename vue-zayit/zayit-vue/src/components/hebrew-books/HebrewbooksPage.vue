@@ -37,7 +37,7 @@
                         <DynamicScrollerItem :item="item"
                                              :active="active"
                                              :data-index="index">
-                            <HebrewbooksListItem :book="item"
+                            <HebrewBooksListItem :book="item"
                                                  @book-clicked="trackBookInteractionHandler" />
                         </DynamicScrollerItem>
                     </template>
@@ -87,7 +87,7 @@
 import { computed, onMounted, onUnmounted, ref, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
-import HebrewbooksListItem from '@/components/hebrew-books/HebrewbooksListItem.vue'
+import HebrewBooksListItem from '@/components/hebrew-books/HebrewBooksListItem.vue'
 import type { HebrewBook } from '@/data/types/HebrewBook'
 import { useHebrewBooks } from '@/components/hebrew-books/useHebrewBooks'
 import { useListKeyboardNavigation } from '@/components/shared/useListKeyboardNavigation'

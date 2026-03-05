@@ -6,7 +6,7 @@ import { hasConnections } from '@/data/types/Book'
 import { scrollToElementTop } from '@/components/shared/useScrollToElement'
 import type { CommentaryLinkGroup } from '@/data/services/bookCommentaryService'
 
-export function useCommentaryContentView(
+export function useCommentaryContent(
     contentRef: () => HTMLElement | null,
     processedLinkGroups: () => CommentaryLinkGroup[]
 ) {
