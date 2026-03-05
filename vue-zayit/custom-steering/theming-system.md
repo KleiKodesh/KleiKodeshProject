@@ -431,6 +431,36 @@ The `generateDarkVariant()` function creates proper dark themes (not simple inve
 
 ## Design Guidelines
 
+### The UI Color Problem
+
+**Current Issue:**
+
+Components use `--bg-primary` and `--bg-secondary` CSS variables that map to `ui.bgPrimary` and `ui.bgSecondary` from themes.
+
+**Fluent Theme (Gold Standard):**
+
+- UI colors are neutral (#ffffff, #f8f8f8)
+- Works perfectly everywhere - dropdowns, inputs, panels, title bars
+- The app was designed with Fluent theme as the gold standard
+- All themes must be compared to Fluent to ensure they meet quality standards
+
+**Office Themes (Problematic):**
+
+- UI colors are BOLD/COLORED (#2b579a blue for Word, #c43e1c red for PowerPoint)
+- These bold colors were designed for title bars only
+- When applied to ALL UI elements (dropdowns, inputs, panels), it looks terrible
+- Creates overwhelming visual noise instead of clean interface
+
+**Root Cause:**
+
+The app was designed assuming UI colors would be neutral like Fluent. Office themes broke this assumption by using bold colors for title bars, but those same colors get applied to every UI element.
+
+**Theme Quality Standard:**
+
+- Fluent theme is the gold standard - all changes must compare to it
+- Remove or adjust any themes that don't fit the gold standard
+- Themes must have neutral UI colors for general use, not bold colors everywhere
+
 ### Background Color Hierarchy (Future Enhancement)
 
 **Current State:**
@@ -439,6 +469,7 @@ The `generateDarkVariant()` function creates proper dark themes (not simple inve
 - Code supports it with automatic fallback to `bgSecondary`
 - Custom themes created via ThemeCreator automatically include it
 - Built-in themes in themes.json don't have it yet
+- `bgTertiary` was added to solve the Office theme problem but not yet implemented in built-in themes
 
 **Future Implementation Plan:**
 When adding `bgTertiary` to built-in themes:
@@ -460,6 +491,7 @@ When adding `bgTertiary` to built-in themes:
 
 - Allows bold colored title bars without making entire UI overwhelming
 - Provides proper visual hierarchy
+- Solves the Office theme problem by separating title bar colors from general UI colors
 - Maintains backward compatibility (existing themes work without changes)
 
 ### Reading vs UI Colors

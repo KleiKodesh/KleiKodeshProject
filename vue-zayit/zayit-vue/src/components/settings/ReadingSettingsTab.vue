@@ -89,27 +89,4 @@ const {
 .tab-pane {
   direction: rtl;
 }
-
-.section-header {
-  padding: 16px 16px 12px;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary);
-  background: var(--bg-secondary);
-  border-bottom: 2px solid var(--border-color);
-}
-
-.setting-group {
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.setting-group:last-child {
-  border-bottom: none;
-}
-
-.setting-label {
-  font-size: 14px;
-  margin-bottom: 10px;
-}
 </style>
