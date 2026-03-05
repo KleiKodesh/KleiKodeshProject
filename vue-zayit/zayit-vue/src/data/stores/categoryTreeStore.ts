@@ -10,13 +10,8 @@ export const useCategoryTreeStore = defineStore('categoryTree', () => {
     const categoryTree = ref<Category[]>([])
     const allBooks = ref<Book[]>([])
 
-    // Initialize tree loading after store setup
-    if (categoryTree.value.length === 0) {
-        buildTree().catch(error => {
-            console.error('Failed to build category tree:', error);
-            isLoading.value = false;
-        });
-    }
+    // Start loading immediately (dbService will wait for database to be ready)
+    buildTree();
 
     async function buildTree() {
         try {
@@ -153,7 +148,6 @@ export const useCategoryTreeStore = defineStore('categoryTree', () => {
             console.error('❌ Failed to build category tree:', err);
             error.value = errorMessage;
             isLoading.value = false;
-            throw err; // Re-throw so caller knows it failed
         }
     }
 
