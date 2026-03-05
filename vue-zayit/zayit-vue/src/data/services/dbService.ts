@@ -225,6 +225,22 @@ class DatabaseService {
         return links
     }
 
+    async getLinkBookIds(lineId: number, connectionTypeId?: number): Promise<number[]> {
+        let results: Array<{ targetBookId: number }>
+
+        if (this.isWebViewAvailable()) {
+            const queryObj = SqlQueries.getLinkBookIds(lineId, connectionTypeId)
+            results = await webviewBridge.call('ExecuteQuery', queryObj.query, queryObj.params)
+        } else if (this.isDevServerAvailable()) {
+            const queryObj = SqlQueries.getLinkBookIds(lineId, connectionTypeId)
+            results = await devQuery<{ targetBookId: number }>(queryObj.query, queryObj.params)
+        } else {
+            throw new Error('No database source available')
+        }
+
+        return results.map(r => r.targetBookId)
+    }
+
     // ============================================================================
     // Line Operations
     // ============================================================================
