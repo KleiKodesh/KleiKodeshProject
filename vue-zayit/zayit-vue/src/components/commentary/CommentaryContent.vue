@@ -19,7 +19,17 @@
                  class="commentary-group">
                 <!-- Sticky Header -->
                 <div class="commentary-group-header">
-                    <h3>{{ group.groupName }}</h3>
+                    <a
+                        v-if="group.targetBookId !== undefined && group.targetLineIndex !== undefined"
+                        href="#"
+                        class="commentary-group-title"
+                        @click.prevent="handleGroupClick(group)"
+                    >
+                        {{ group.groupName }}
+                    </a>
+                    <h3 v-else class="commentary-group-title">
+                        {{ group.groupName }}
+                    </h3>
                 </div>
 
                 <!-- Content -->
@@ -36,7 +46,7 @@
                          class="commentary-links">
                         <div v-for="(link, linkIndex) in group.links"
                              :key="linkIndex"
-                             class="commentary-link"
+                             class="commentary-link selectable"
                              v-html="link.html" />
                     </div>
                 </div>
@@ -49,6 +59,10 @@
 import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useInfiniteScroll } from '@vueuse/core'
 import { useCommentaryContent } from './useCommentaryContent'
+import { useTabStore } from '@/data/stores/tabStore'
+import { useCategoryTreeStore } from '@/data/stores/categoryTreeStore'
+import { hasConnections } from '@/data/types/Book'
+import type { CommentaryMetadata } from './useCommentaryContent'
 
 const props = defineProps<{
     bookId?: number
@@ -63,6 +77,9 @@ const {
     loadGroupContent
 } = useCommentaryContent()
 
+const tabStore = useTabStore()
+const categoryTreeStore = useCategoryTreeStore()
+
 const scrollContainer = ref<HTMLElement | null>(null)
 const groupRefs = new Map<number, HTMLElement>()
 const observedGroups = new Set<number>()
@@ -70,6 +87,21 @@ const observedGroups = new Set<number>()
 function setGroupRef(el: any, index: number) {
     if (el) {
         groupRefs.set(index, el as HTMLElement)
+    }
+}
+
+function handleGroupClick(group: CommentaryMetadata) {
+    if (group.targetBookId !== undefined && group.targetLineIndex !== undefined) {
+        const targetBook = categoryTreeStore.allBooks.find(book => book.id === group.targetBookId)
+        const targetHasConnections = targetBook ? hasConnections(targetBook) : false
+
+        tabStore.openBookInNewTab(
+            group.groupName,
+            group.targetBookId,
+            targetHasConnections,
+            group.targetLineIndex,
+            true
+        )
     }
 }
 
@@ -100,7 +132,7 @@ function setupIntersectionObserver() {
         },
         {
             root: scrollContainer.value,
-            rootMargin: '200px', // Load content 200px before it comes into view
+            rootMargin: '200px',
             threshold: 0
         }
     )
@@ -157,6 +189,8 @@ onUnmounted(() => {
     overflow-y: auto;
     overflow-x: hidden;
     padding: 0 16px 16px 16px;
+    background-color: var(--reading-bg-primary);
+    color: var(--reading-text-primary);
 }
 
 .commentary-loading,
@@ -175,17 +209,28 @@ onUnmounted(() => {
 .commentary-group-header {
     position: sticky;
     top: 0;
-    background-color: var(--bg-primary);
+    background-color: var(--reading-bg-primary);
     padding: 8px 0;
     z-index: 10;
 }
 
-.commentary-group-header h3 {
+.commentary-group-title {
     margin: 0;
-    font-size: 1.1rem;
+    font-size: calc(1.1rem * var(--commentary-font-size) / 100);
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--reading-text-primary);
     direction: rtl;
+    font-family: var(--commentary-header-font);
+}
+
+a.commentary-group-title {
+    color: var(--accent-color);
+    text-decoration: none;
+    cursor: pointer;
+}
+
+a.commentary-group-title:hover {
+    text-decoration: underline;
 }
 
 .commentary-group-content {
@@ -206,8 +251,10 @@ onUnmounted(() => {
 }
 
 .commentary-link {
-    line-height: 1.8;
+    line-height: var(--commentary-line-height);
     direction: rtl;
     text-align: justify;
+    font-family: var(--commentary-text-font);
+    font-size: var(--commentary-font-size);
 }
 </style>
