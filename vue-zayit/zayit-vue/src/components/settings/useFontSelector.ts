@@ -7,7 +7,7 @@ import { ref, watch } from 'vue'
 import { hebrewFonts } from '@/utils/hebrewFonts'
 import { useDropdownPosition } from '@/components/shared/useDropdownPosition'
 
-export function useFontSelection() {
+export function useFontSelector() {
     const availableFonts = ref<string[]>([])
     const isHeaderDropdownOpen = ref(false)
     const isTextDropdownOpen = ref(false)

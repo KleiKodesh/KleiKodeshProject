@@ -2,47 +2,47 @@
     <div class="flex-column height-fill commentary-container"
          :class="commentaryToolbarPositionClass">
         <!-- Toolbar -->
-        <CommentaryViewToolbar :can-navigate-to-previous-line="canNavigateToPreviousLine"
-                               :can-navigate-to-next-line="canNavigateToNextLine"
-                               :is-navigating-to-line="isNavigatingToLine"
-                               :can-navigate-to-previous-group="canNavigateToPreviousGroup"
-                               :can-navigate-to-next-group="canNavigateToNextGroup"
-                               :book="book"
-                               :selected-connection-type-id="selectedConnectionTypeId"
-                               :available-filter-options="availableFilterOptions"
-                               :combobox-selected-value="comboboxSelectedValue"
-                               :filtered-group-options="filteredGroupOptions"
-                               :show-all-commentaries="showAllCommentaries"
-                               :available-categories="availableCategories"
-                               :selected-category-filter="selectedCategoryFilter"
-                               @navigate-previous-line="handleNavigateToPreviousLine"
-                               @navigate-next-line="handleNavigateToNextLine"
-                               @open-search="handleOpenSearch"
-                               @connection-type-change="handleConnectionTypeChange"
-                               @update:combobox-value="handleComboboxValueChange"
-                               @update:category-filter="selectedCategoryFilter = $event"
-                               @navigate-previous-group="handleNavigateToPreviousGroup"
-                               @navigate-next-group="handleNavigateToNextGroup"
-                               @toggle-view-mode="handleToggleViewMode"
-                               @close="handleClose" />
+        <CommentaryToolbar :can-navigate-to-previous-line="canNavigateToPreviousLine"
+                           :can-navigate-to-next-line="canNavigateToNextLine"
+                           :is-navigating-to-line="isNavigatingToLine"
+                           :can-navigate-to-previous-group="canNavigateToPreviousGroup"
+                           :can-navigate-to-next-group="canNavigateToNextGroup"
+                           :book="book"
+                           :selected-connection-type-id="selectedConnectionTypeId"
+                           :available-filter-options="availableFilterOptions"
+                           :combobox-selected-value="comboboxSelectedValue"
+                           :filtered-group-options="filteredGroupOptions"
+                           :show-all-commentaries="showAllCommentaries"
+                           :available-categories="availableCategories"
+                           :selected-category-filter="selectedCategoryFilter"
+                           @navigate-previous-line="handleNavigateToPreviousLine"
+                           @navigate-next-line="handleNavigateToNextLine"
+                           @open-search="handleOpenSearch"
+                           @connection-type-change="handleConnectionTypeChange"
+                           @update:combobox-value="handleComboboxValueChange"
+                           @update:category-filter="selectedCategoryFilter = $event"
+                           @navigate-previous-group="handleNavigateToPreviousGroup"
+                           @navigate-next-group="handleNavigateToNextGroup"
+                           @toggle-view-mode="handleToggleViewMode"
+                           @close="handleClose" />
 
         <!-- Content Area -->
         <div class="commentary-main-area">
-            <CommentaryContentView ref="commentaryViewContentRef"
-                                   :processed-link-groups="processedLinkGroups"
-                                   :is-loading="isLoading"
-                                   :commentary-styles="commentaryStyles"
-                                   :filtered-group-options="filteredGroupOptions"
-                                   @clear-other-selections="emit('clearOtherSelections')"
-                                   @update:current-commentary="handleCurrentCommentaryChange" />
+            <CommentaryContent ref="commentaryViewContentRef"
+                               :processed-link-groups="processedLinkGroups"
+                               :is-loading="isLoading"
+                               :commentary-styles="commentaryStyles"
+                               :filtered-group-options="filteredGroupOptions"
+                               @clear-other-selections="emit('clearOtherSelections')"
+                               @update:current-commentary="handleCurrentCommentaryChange" />
         </div>
     </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
-import CommentaryViewToolbar from './CommentaryViewToolbar.vue'
-import CommentaryContentView from './CommentaryContentView.vue'
+import CommentaryToolbar from './CommentaryToolbar.vue'
+import CommentaryContent from './CommentaryContent.vue'
 import { useCommentaryNavigation } from './useCommentaryNavigation'
 import { useCommentaryFilters } from './useCommentaryFilters'
 import { useCommentaryLoader } from './useCommentaryLoader'
@@ -75,7 +75,7 @@ const emit = defineEmits<{
 // REFS & STATE
 // ============================================
 const tabStore = useTabStore()
-const commentaryViewContentRef = ref<InstanceType<typeof CommentaryContentView> | null>(null)
+const commentaryViewContentRef = ref<InstanceType<typeof CommentaryContent> | null>(null)
 
 // Composables
 const { isNavigatingToLine, findNextLineWithCommentary, findPreviousLineWithCommentary } = useCommentaryNavigation()

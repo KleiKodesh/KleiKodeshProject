@@ -6,7 +6,7 @@ export function useGenericSearch(
         currentMatchIndex?: number;
         totalMatches?: number;
     },
-    emit: (event: 'close' | 'search' | 'next' | 'previous', ...args: any[]) => void
+    emit: any
 ) {
     const searchQuery = ref('');
     const searchInputRef = ref<HTMLInputElement | null>(null);

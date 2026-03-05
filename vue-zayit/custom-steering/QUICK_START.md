@@ -1,231 +1,54 @@
 # Quick Start Guide
 
-## ✅ PROJECT STATUS: COMMUNICATION PIPELINE VERIFIED
+## Project Status
 
-All communication pipelines between Vue and C# have been verified and are fully functional:
+All communication pipelines between Vue and C# are verified and functional:
 
-- **Category Tree Loading** ✅ Working
-- **TOC Loading** ✅ Working
-- **Book Lines Loading** ✅ Working (virtualized with smart batching)
-- **Commentary Loading** ✅ Working
-- **PDF Files** ✅ Working (SetVirtualHostNameToFolderMapping + session persistence)
-- **Hebrew Books** ✅ Working (download capture + cache management)
+- Category Tree Loading ✅
+- TOC Loading ✅
+- Book Lines Loading ✅ (virtualized with smart batching)
+- Commentary Loading ✅
+- PDF Files ✅ (SetVirtualHostNameToFolderMapping + session persistence)
+- Hebrew Books ✅ (download capture + cache management)
 
 ## Project Structure
 
 ```
 /
-├── zayit-vue/         # Vue 3 frontend (PRIMARY) - Clean services architecture
+├── zayit-vue/         # Vue 3 frontend - Clean services architecture
 ├── Zayit-cs/          # C# desktop application - Modern services architecture
 │   └── ZayitLib/
-│       └── Services/  # ✅ NEW: Clean service layer
+│       └── Services/  # Clean service layer
 └── shared-pdfjs/      # PDF.js distribution
 ```
 
-## Development
+## Architecture
 
-### Vue Frontend (zayit-vue/)
+### Communication Flow
 
-```bash
-# Install dependencies
-npm install
-
-# Development server with hot reload
-npm run dev
-# Opens at http://localhost:5173
-# Uses direct SQLite access via Vite plugin
-
-# Build for production
-npm run build
-# Outputs single HTML file to dist/index.html
-
-# Deploy to C# project
-build-and-deploy.bat
-```
-
-**IMPORTANT BUILD RULE**: Only build and deploy when explicitly requested by the user or when making final changes. The C# project has smart pre-build that automatically rebuilds Vue when needed. Avoid unnecessary builds during development iterations.
-
-**TESTING RULE**: Never run development servers (`npm run dev`) during testing. Use `npm run build` to test compilation and catch errors without starting long-running processes.
-
-### C# Backend (Zayit-cs/)
-
-```bash
-# Build with dotnet
-dotnet build "Zayit-cs/ZayitSolution.sln" --configuration Debug
-
-# Or use MSBuild if available
-msbuild "Zayit-cs/ZayitSolution.sln" /p:Configuration=Debug
-```
-
-## ✅ VERIFIED ARCHITECTURE
-
-### Modern Services Architecture (C#)
-
-```
-Vue Component → webviewBridge → WebViewBridgeService → ServiceProvider → Specialized Services
-                                                                        ├── DbService
-                                                                        ├── PdfService
-                                                                        └── HebrewBooksService
-```
-
-### Communication Protocol
-
-**Vue → C# (JSON Messages)**:
-
-```typescript
-// Modern bridge with lazy-loaded message listener
-await webviewBridge.call(
-  "GetTree",
-  SqlQueries.getAllCategories,
-  SqlQueries.getAllBooks,
-);
-await webviewBridge.call("OpenPdfFilePicker");
-await webviewBridge.call("PrepareHebrewBookDownload", bookId, title, "view");
-```
-
-**C# → Vue (JSON Responses)**:
-
-```csharp
-// ServiceProvider delegates to specialized services
-public object GetTree(string cq, string bq) => _db.GetTree(cq, bq);
-public object OpenPdfFilePicker() => _pdf.OpenPdfFilePicker();
-public object PrepareHebrewBookDownload(string id, string title, string action) =>
-    _hebrewBooks.PrepareDownload(id, title, action).GetAwaiter().GetResult();
-```
-
-### SQL Queries - Single Source of Truth
-
-- **Defined in**: `zayit-vue/src/services/sqlQueries.ts`
-- **Used by**: Both development (Vite) and production (C#)
-- **Rule**: Never define SQL elsewhere
+Vue Component → webviewBridge → WebViewBridgeService → ServiceProvider → Specialized Services (DbService, PdfService, HebrewBooksService)
 
 ### Data Flow
 
-**Development Mode**:
+**Development Mode**: Component → dbService → devQuery → Vite Plugin → SQLite
 
-```
-Component → dbService → devQuery → Vite Plugin → SQLite
-```
+**Production Mode**: Component → dbService → webviewBridge → C# ServiceProvider → DbService → SQLite
 
-**Production Mode**:
+### SQL Queries
 
-```
-Component → dbService → webviewBridge → C# ServiceProvider → DbService → SQLite
-```
+- Single source of truth: `zayit-vue/src/services/sqlQueries.ts`
+- Used by both development (Vite) and production (C#)
+- Never define SQL elsewhere
 
-## ✅ VERIFIED FILE OPERATIONS
-
-### PDF Files with SetVirtualHostNameToFolderMapping
-
-```csharp
-// C# creates secure virtual URLs
-webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
-    "zayitHost", htmlPath, CoreWebView2HostResourceAccessKind.Allow);
-// Returns: https://zayitHost/temp/uniqueId_filename.pdf
-```
-
-### Hebrew Books with Download Capture
-
-```csharp
-// Captures downloads and manages cache
-webView.CoreWebView2.DownloadStarting += (sender, e) => {
-    // Redirect to cache directory
-    e.ResultFilePath = Path.Combine(cacheDir, fileName);
-};
-// Auto-closes download dialog: webView.CoreWebView2.CloseDefaultDownloadDialog()
-```
-
-## Common Tasks
-
-### Add New Database Operation
-
-1. **Add SQL** to `zayit-vue/src/services/sqlQueries.ts`:
-
-```typescript
-export const SqlQueries = {
-  getMyData: (id: number) => `SELECT * FROM myTable WHERE id = ${id}`,
-};
-```
-
-2. **Add Vue service method** to `zayit-vue/src/services/dbService.ts`:
-
-```typescript
-async getMyData(id: number) {
-  if (this.isWebViewAvailable()) {
-    return await webviewBridge.call('GetMyData', id, SqlQueries.getMyData(id))
-  } else {
-    return await devQuery(SqlQueries.getMyData(id))
-  }
-}
-```
-
-3. **Add C# service method** to `Zayit-cs/ZayitLib/Services/DbService.cs`:
-
-```csharp
-public object GetMyData(int id, string query)
-{
-    return _dbQueries.ExecuteQuery(query);
-}
-```
-
-4. **Expose in ServiceProvider** `Zayit-cs/ZayitLib/Services/ServiceProvider.cs`:
-
-```csharp
-public object GetMyData(int id, string q) => _db.GetMyData(id, q);
-```
-
-### Add New PDF Operation
-
-1. **Add to PdfService.cs**:
-
-```csharp
-public object MyPdfOperation() {
-    // Use SetVirtualHostNameToFolderMapping for file access
-    return new { success = true, virtualUrl = "https://zayitHost/..." };
-}
-```
-
-2. **Expose in ServiceProvider**:
-
-```csharp
-public object MyPdfOperation() => _pdf.MyPdfOperation();
-```
-
-3. **Add Vue service call**:
-
-```typescript
-await webviewBridge.call("MyPdfOperation");
-```
-
-### Add New Hebrew Books Operation
-
-1. **Add to HebrewBooksService.cs**:
-
-```csharp
-public async Task<object> MyHebrewBooksOperation() {
-    // Use download capture and cache management
-    return new { success = true };
-}
-```
-
-2. **Expose in ServiceProvider with proper async handling**:
-
-```csharp
-public object MyHebrewBooksOperation() =>
-    _hebrewBooks.MyHebrewBooksOperation().GetAwaiter().GetResult();
-```
-
-## ✅ VERIFIED SERVICES
-
-### Vue Services (Clean Architecture)
+## Vue Services
 
 - `webviewBridge.ts` - Singleton bridge with lazy message listener
-- `dbService.ts` - Database operations (cleaned of legacy PDF/Hebrew Books methods)
+- `dbService.ts` - Database operations
 - `pdfService.ts` - Unified PDF operations with session persistence
-- `webviewHebrewBooks.ts` - Clean Hebrew Books operations
-- `hebrewBooksHandlers.ts` - Event handlers using unified service
+- `webviewHebrewBooks.ts` - Hebrew Books operations
+- `hebrewBooksHandlers.ts` - Event handlers
 
-### C# Services (Modern Architecture)
+## C# Services
 
 - `ServiceProvider.cs` - Central hub with all Vue-required methods
 - `WebViewBridgeService.cs` - JSON message parsing and method invocation
@@ -233,42 +56,72 @@ public object MyHebrewBooksOperation() =>
 - `PdfService.cs` - SetVirtualHostNameToFolderMapping operations
 - `HebrewBooksService.cs` - Download capture and cache management
 
+## Development
+
+### Vue Frontend
+
+```bash
+npm install              # Install dependencies
+npm run dev             # Development server at http://localhost:5173
+npm run build           # Build for production
+build-and-deploy.bat    # Deploy to C# project
+```
+
+**Build Rule**: Only build when explicitly requested or making final changes - C# project has smart pre-build that auto-rebuilds Vue when needed
+
+**Testing Rule**: Never run development servers during testing - use `npm run build` to test compilation
+
+### C# Backend
+
+```bash
+dotnet build "Zayit-cs/ZayitSolution.sln" --configuration Debug
+# Or use MSBuild if available
+msbuild "Zayit-cs/ZayitSolution.sln" /p:Configuration=Debug
+```
+
+## Common Tasks
+
+### Add Database Operation
+
+1. Add SQL to `zayit-vue/src/services/sqlQueries.ts`
+2. Add Vue service method to `zayit-vue/src/services/dbService.ts`
+3. Add C# service method to `Zayit-cs/ZayitLib/Services/DbService.cs`
+4. Expose in ServiceProvider `Zayit-cs/ZayitLib/Services/ServiceProvider.cs`
+
+### Add PDF Operation
+
+1. Add to PdfService.cs (use SetVirtualHostNameToFolderMapping for file access)
+2. Expose in ServiceProvider
+3. Add Vue service call
+
+### Add Hebrew Books Operation
+
+1. Add to HebrewBooksService.cs (use download capture and cache management)
+2. Expose in ServiceProvider with proper async handling
+3. Add Vue service call
+
 ## Troubleshooting
 
 ### Build Fails
 
-```bash
-# Vue build
-cd zayit-vue
-npm install
-npm run build
-
-# C# build
-dotnet build "Zayit-cs/ZayitSolution.sln" --configuration Debug
-```
+- Vue: `cd zayit-vue && npm install && npm run build`
+- C#: `dotnet build "Zayit-cs/ZayitSolution.sln" --configuration Debug`
 
 ### Communication Issues
 
-1. Check browser DevTools Console for Vue errors
-2. Check Visual Studio Output window for C# errors
-3. Verify WebView2 Runtime is installed
-4. Test `webviewBridge.isAvailable()` in Vue
+- Check browser DevTools Console for Vue errors
+- Check Visual Studio Output window for C# errors
+- Verify WebView2 Runtime is installed
+- Test `webviewBridge.isAvailable()` in Vue
 
 ### File Operations Not Working
 
-1. Verify `SetVirtualHostNameToFolderMapping` is set up
-2. Check file permissions and paths
-3. Ensure virtual URLs use correct host name (`zayitHost`)
+- Verify SetVirtualHostNameToFolderMapping is set up
+- Check file permissions and paths
+- Ensure virtual URLs use correct host name (zayitHost)
 
 ### Hebrew Books Cache Issues
 
-1. Check cache directory exists: `Html/pdfjs/web/hebrewbookscache/`
-2. Verify download event handlers are registered
-3. Test cache stats: `GetHebrewBooksCacheStats`
-
-## Resources
-
-- Vue 3 Docs: https://vuejs.org/
-- Vite Docs: https://vitejs.dev/
-- WebView2 Docs: https://learn.microsoft.com/en-us/microsoft-edge/webview2/
-- Pinia Docs: https://pinia.vuejs.org/
+- Check cache directory exists: `Html/pdfjs/web/hebrewbookscache/`
+- Verify download event handlers are registered
+- Test cache stats: GetHebrewBooksCacheStats
