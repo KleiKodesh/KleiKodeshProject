@@ -10,7 +10,7 @@
     "dev": "vite",
     "build": "run-p type-check \"build-only {@}\" --",
     "preview": "vite preview",
-    "build-only": "npm run extract-icons && vite build --config vite.config.prod.ts",
+    "build-only": "vite build --config vite.config.prod.ts",
     "type-check": "vue-tsc --build",
     "extract-icons": "node scripts/auto-extract-icons.js"
   },

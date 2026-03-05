@@ -235,9 +235,21 @@ namespace Zayit.Viewer
                 // Add navigation error handling
                 CoreWebView2.NavigationCompleted += (navSender, navArgs) =>
                 {
-                    Console.WriteLine($"[ZayitViewer#{_instanceId}] Navigation completed. Success: {navArgs.IsSuccess}");
+                    var navigationId = navArgs.NavigationId;
+                    Console.WriteLine($"[ZayitViewer#{_instanceId}] Navigation completed. Success: {navArgs.IsSuccess}, NavigationId: {navigationId}");
+                    
                     if (!navArgs.IsSuccess)
                     {
+                        // Check if this is a download navigation (external URL) - these are expected to fail with ConnectionAborted
+                        var webErrorStatus = navArgs.WebErrorStatus;
+                        
+                        // ConnectionAborted typically means a download was triggered - don't show error for these
+                        if (webErrorStatus == CoreWebView2WebErrorStatus.ConnectionAborted)
+                        {
+                            Console.WriteLine($"[ZayitViewer#{_instanceId}] Navigation aborted (likely a download), ignoring error");
+                            return;
+                        }
+                        
                         string errorMsg = $"[ZayitViewer#{_instanceId}] Navigation failed!\n\n" +
                                         $"WebErrorStatus: {navArgs.WebErrorStatus}\n" +
                                         $"URL: https://zayitHost/index.html\n" +

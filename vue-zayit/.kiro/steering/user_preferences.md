@@ -290,3 +290,4 @@ This document defines **HOW** to implement, not **WHAT** to implement.
 - **Maintain code organization** - respect established file structure and naming
 - Focus on **how** code is written, not **whether** features should exist
 - **Clean as you go** - remove garbage and repetitions with every change
+- **Never guess when problem solving** - trace through actual code execution paths, read the relevant files, follow the data flow, then diagnose based on facts
