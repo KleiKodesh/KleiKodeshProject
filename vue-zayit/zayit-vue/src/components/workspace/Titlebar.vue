@@ -9,6 +9,10 @@
       <ThemeToggleButton v-if="isPdfPage || isHebrewBooksPage"
                          @click.stop />
 
+      <!-- PDF page filters toggle for PDF and Hebrew books pages -->
+      <PdfFilterToggleButton v-if="isPdfPage || isHebrewBooksPage"
+                             @click.stop />
+
       <!-- Toolbar toggle button -->
       <button v-if="activeTab?.currentPage === 'bookview'"
               @click.stop="handleButtonClick(toggleToolbarHandler)"
@@ -74,6 +78,7 @@ import { Icon } from '@iconify/vue';
 import TitlebarDropdownMenu from './TitlebarDropdownMenu.vue';
 import CommentaryToggleIcon from '@/components/icons/CommentaryToggleIcon.vue';
 import ThemeToggleButton from '@/components/settings/ThemeToggleButton.vue';
+import PdfFilterToggleButton from '@/components/settings/PdfFilterToggleButton.vue';
 import { useWorkspace } from '@/components/workspace/useWorkspace';
 import { useBookViewer } from '@/components/book/useBookViewer';
 

@@ -54,16 +54,16 @@ export class PdfService {
    */
   static downloadPdfDirect(bookId: string, filename: string): void {
     console.log('Using direct download for:', filename, 'Book ID:', bookId)
-    
+
     const directUrl = `https://download.hebrewbooks.org/downloadhandler.ashx?req=${bookId}`
     console.log('Direct download URL:', directUrl)
-    
+
     // Create <a href="https://download.hebrewbooks.org/..." download> approach
     const a = document.createElement('a')
     a.href = directUrl
     a.download = filename  // This triggers the download dialog
     a.style.display = 'none'
-    
+
     // Add to DOM, click to trigger download, then remove
     document.body.appendChild(a)
     console.log('Triggering download with <a download> approach')
@@ -77,14 +77,14 @@ export class PdfService {
    */
   static async createDownloadLink(blob: Blob, filename: string): Promise<void> {
     console.log('Creating download link for:', filename, 'Blob size:', blob.size, 'Blob type:', blob.type)
-    
+
     // Ensure we have a valid blob
     if (!blob || blob.size === 0) {
       throw new Error('Invalid or empty blob')
     }
-    
+
     // Try different approaches based on browser capabilities
-    
+
     // Method 1: Try the File System Access API (Chrome/Edge with user gesture)
     if ('showSaveFilePicker' in window) {
       try {
@@ -95,7 +95,7 @@ export class PdfService {
             accept: { 'application/pdf': ['.pdf'] }
           }]
         })
-        
+
         const writable = await fileHandle.createWritable()
         await writable.write(blob)
         await writable.close()
@@ -106,7 +106,7 @@ export class PdfService {
         // Continue to fallback methods
       }
     }
-    
+
     // Method 2: Traditional download attribute method
     try {
       const url = URL.createObjectURL(blob)
@@ -114,10 +114,10 @@ export class PdfService {
       a.href = url
       a.download = filename
       a.style.display = 'none'
-      
+
       // Ensure the element is added to DOM before clicking
       document.body.appendChild(a)
-      
+
       // Use setTimeout to ensure the click happens after DOM insertion
       setTimeout(() => {
         a.click()
@@ -125,18 +125,18 @@ export class PdfService {
         URL.revokeObjectURL(url)
         console.log('Download triggered using anchor method')
       }, 10)
-      
+
       return
     } catch (error) {
       console.log('Anchor download method failed:', error)
     }
-    
+
     // Method 3: Open in new window as fallback
     try {
       const url = URL.createObjectURL(blob)
       const newWindow = window.open(url, '_blank')
       console.log('Opened PDF in new window as fallback')
-      
+
       // Clean up after delay
       setTimeout(() => {
         URL.revokeObjectURL(url)

@@ -89,6 +89,12 @@ The following files are loaded automatically based on context:
 - **Keywords**: git, commit, revert, reset
 - **Loads**: #[[file:custom-steering/git-safety.md]]
 
+### Iconify Offline Icons
+
+- **Keywords**: iconify, icons, offline, bundle, extract, tree-shake
+- **File patterns**: `*iconify*`, `*extract-icons*`, `*Icon*`
+- **Loads**: #[[file:custom-steering/iconify-offline.md]]
+
 ## Manual Loading
 
 You can manually load specific guidance using these context keys:
@@ -107,6 +113,7 @@ You can manually load specific guidance using these context keys:
 - `#git` - Git safety rules
 - `#touch` - Touch interaction guidelines and best practices
 - `#workspace` - Workspace management guidelines and implementation
+- `#iconify` - Iconify offline icon system and automatic extraction
 
 ## Core Principles
 

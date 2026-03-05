@@ -158,13 +158,13 @@ const openFilePicker = async () => {
   }
 };
 
-// Handle file selection - same as PDF.js built-in picker
+// Handle file selection - use blob URL for memory efficiency
 const handleFileSelect = (event: Event) => {
   const target = event.target as HTMLInputElement;
   const file = target.files?.[0];
 
   if (file && file.type === 'application/pdf') {
-    const fileUrl = URL.createObjectURL(file);  // Blob URL - same as PDF.js!
+    const fileUrl = URL.createObjectURL(file);  // Blob URL - memory efficient
     const fileName = file.name;
 
     // Update current tab's PDF state
@@ -190,8 +190,6 @@ const handleFileSelect = (event: Event) => {
 // Note: Blob URLs don't persist across app restarts (same as PDF.js built-in picker)
 // User will need to reselect files after restart - this is normal browser behavior
 
-// Note: Blob URLs don't persist across app restarts (same as PDF.js built-in picker)
-// User will need to reselect files after restart - this is normal browser behavior
 </script>
 
 <style scoped>

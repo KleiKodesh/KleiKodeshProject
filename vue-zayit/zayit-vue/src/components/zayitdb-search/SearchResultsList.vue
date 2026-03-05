@@ -54,9 +54,8 @@
 import { computed, ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
-import { useSettingsStore } from '@/data/stores/settingsStore'
-import { censorDivineNames } from '@/utils/censorDivineNames'
 import type { BloomSearchResult } from '@/data/types/BloomSearch'
+import { useSearchResultsList } from './useSearchResultsList'
 
 const props = defineProps<{
     results: BloomSearchResult[]
@@ -69,41 +68,12 @@ defineEmits<{
     resultClick: [result: BloomSearchResult]
 }>()
 
-const settingsStore = useSettingsStore()
 const scrollerRef = ref<InstanceType<typeof DynamicScroller> | null>(null)
 
-const containerStyles = computed(() => ({
-    backgroundColor: 'var(--reading-bg-primary)',
-    color: 'var(--reading-text-primary)'
-}))
-
-/**
- * Highlight search terms in snippet
- */
-const highlightedSnippet = (snippet: string): string => {
-    if (!props.searchQuery || !snippet) {
-        return snippet
-    }
-
-    // Apply censoring if enabled
-    let processedSnippet = snippet
-    if (settingsStore.censorDivineNames) {
-        processedSnippet = censorDivineNames(processedSnippet)
-    }
-
-    const terms = props.searchQuery.trim().split(/\s+/)
-    let highlighted = processedSnippet
-
-    terms.forEach((term) => {
-        if (term.length > 0) {
-            const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-            const regex = new RegExp(`(${escapedTerm})`, 'gi')
-            highlighted = highlighted.replace(regex, '<mark>$1</mark>')
-        }
-    })
-
-    return highlighted
-}
+// Use composable for business logic
+const { containerStyles, highlightedSnippet } = useSearchResultsList(
+    () => props.searchQuery
+)
 
 // Expose scroller ref for parent
 defineExpose({

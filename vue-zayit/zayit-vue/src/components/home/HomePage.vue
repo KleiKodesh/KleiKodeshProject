@@ -160,7 +160,7 @@ const openPdf = async () => {
                 const target = e.target as HTMLInputElement;
                 const file = target.files?.[0];
                 if (file && file.type === 'application/pdf') {
-                    const fileUrl = URL.createObjectURL(file);  // Blob URL fallback
+                    const fileUrl = URL.createObjectURL(file);  // Blob URL - memory efficient
                     console.log('[HomePage] Created blob URL for PDF:', fileUrl);
                     openPdfWithFile(file.name, fileUrl);
                 }
