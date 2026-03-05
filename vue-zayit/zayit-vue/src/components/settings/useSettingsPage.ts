@@ -5,10 +5,11 @@ import { useTabStore } from '@/data/stores/tabStore'
 import { webviewBridge } from '@/data/services/webviewBridge'
 import { addCustomTheme, deleteCustomTheme, getTheme, type ThemePreset, type ThemeColors } from '@/utils/themes'
 import type { SettingsTab } from '@/data/stores/settingsStore'
+import type { DialogOptions } from '@/components/shared/useDialog'
 
 export function useSettingsPage(
-    confirm: (message: string, options?: { title?: string; confirmVariant?: string }) => Promise<boolean>,
-    error: (message: string) => Promise<void>
+    confirm: (message: string, options?: Omit<DialogOptions, 'message'>) => Promise<boolean>,
+    error: (message: string, options?: Omit<DialogOptions, 'message'>) => Promise<boolean>
 ) {
     const settingsStore = useSettingsStore()
     const tabStore = useTabStore()

@@ -4,7 +4,7 @@
  */
 
 import { computed, type Ref } from 'vue'
-import type { ContextMenuItem } from '@/components/shared/ContextMenu.vue'
+import type { ContextMenuItem } from '@/components/shared/useContextMenu'
 
 export function useLineViewContextMenu() {
     const contextMenuItems = computed<ContextMenuItem[]>(() => [

@@ -11,10 +11,10 @@ import HomePage from '@/components/home/HomePage.vue';
 import ZayitOpenFilePage from '@/components/zayitdb-fs/ZayitOpenFilePage.vue';
 import BookViewPage from '@/components/book/BookViewPage.vue';
 import PdfViewPage from '@/components/pdf/PdfViewPage.vue';
-import HebrewBooksViewPage from '@/components/hebrew-books/HebrewBooksViewPage.vue';
+import HebrewBookViewPage from '@/components/hebrew-books/HebrewBookViewPage.vue';
 import ZayitSearchPage from '@/components/zayitdb-search/ZayitSearchPage.vue';
 import SettingsPage from '@/components/settings/SettingsPage.vue';
-import HebrewbooksPage from '@/components/hebrew-books/HebrewbooksPage.vue';
+import HebrewBooksPage from '@/components/hebrew-books/HebrewBooksPage.vue';
 import WorkspacesPage from '@/components/workspace/WorkspacesPage.vue';
 import type { PageType } from '@/data/types/Tab';
 
@@ -25,10 +25,10 @@ const pageComponents: Record<PageType, any> = {
   'openfile': ZayitOpenFilePage,
   'bookview': BookViewPage,
   'pdfview': PdfViewPage,
-  'hebrewbooks-view': HebrewBooksViewPage,
+  'hebrewbooks-view': HebrewBookViewPage,
   'search': ZayitSearchPage,
   'settings': SettingsPage,
-  'hebrewbooks': HebrewbooksPage,
+  'hebrewbooks': HebrewBooksPage,
   'kezayit-search': ZayitSearchPage, // Use new Bloom search page
   'workspaces': WorkspacesPage
 };

@@ -3,7 +3,7 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 import Database from 'better-sqlite3'
-import { autoIconsPlugin } from './scripts/vite-plugin-auto-icons.js'
+import { autoIconsPlugin } from './scripts/vite-plugin-auto-icons'
 
 // Path to your SQLite database
 const DB_PATH = 'C:\\Users\\Admin\\AppData\\Roaming\\io.github.kdroidfilter.seforimapp\\databases\\seforim.db'
