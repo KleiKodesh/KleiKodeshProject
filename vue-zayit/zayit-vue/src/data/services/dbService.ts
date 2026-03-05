@@ -51,6 +51,8 @@ async function devQuery<T = any>(sql: string, params: any[] = []): Promise<T[]> 
 
 class DatabaseService {
     private static instance: DatabaseService
+    private readyPromise: Promise<boolean> | null = null
+    private isReady = false
 
     static getInstance(): DatabaseService {
         if (!DatabaseService.instance) {
@@ -67,12 +69,95 @@ class DatabaseService {
         return import.meta.env.DEV
     }
 
+    /**
+     * Wait for database to be ready
+     */
+    async waitForReady(): Promise<boolean> {
+        if (this.isReady) {
+            return true
+        }
+
+        if (!this.readyPromise) {
+            this.readyPromise = this.checkDatabaseReady()
+        }
+
+        return this.readyPromise
+    }
+
+    /**
+     * Check if database is ready with retry logic
+     */
+    private async checkDatabaseReady(): Promise<boolean> {
+        const maxRetries = 20
+        const retryDelay = 200 // ms
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            // In dev mode, check if dev server endpoint is available
+            if (import.meta.env.DEV) {
+                try {
+                    const response = await fetch('/__db/query', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ query: 'SELECT 1', params: [] })
+                    })
+                    const result = await response.json()
+
+                    if (result.success) {
+                        this.isReady = true
+                        console.log('[DatabaseService] ✅ Dev server ready')
+                        return true
+                    }
+                } catch (error) {
+                    console.log(`[DatabaseService] Dev server not ready yet (attempt ${attempt}/${maxRetries})`)
+                }
+            } else {
+                // In production, check C# bridge
+                try {
+                    const available = await webviewBridge.isDatabaseAvailable()
+                    if (available) {
+                        this.isReady = true
+                        console.log('[DatabaseService] ✅ Database ready')
+                        return true
+                    }
+                } catch (error) {
+                    console.log(`[DatabaseService] Database not ready yet (attempt ${attempt}/${maxRetries})`)
+                }
+            }
+
+            // Wait before next retry
+            if (attempt < maxRetries) {
+                await new Promise(resolve => setTimeout(resolve, retryDelay))
+            }
+        }
+
+        // Failed after all retries
+        const errorMsg = import.meta.env.DEV
+            ? '❌ Dev server database endpoint failed to respond after 20 attempts. Check Vite dev server logs.'
+            : '❌ Database failed to load. Check C# bridge connection.'
+
+        console.error('[DatabaseService]', errorMsg)
+
+        // In dev mode, show alert to user
+        if (import.meta.env.DEV) {
+            alert('שגיאה: שרת הפיתוח לא הצליח להתחבר למסד הנתונים.\nבדוק את הלוגים של Vite.')
+        }
+
+        return false
+    }
+
     // ============================================================================
     // Tree Data
     // ============================================================================
 
     async getTree(): Promise<{ categoriesFlat: Category[], booksFlat: Book[] }> {
         console.log('[DatabaseService] getTree called')
+
+        // Wait for database to be ready
+        const isReady = await this.waitForReady()
+
+        if (!isReady) {
+            throw new Error('Database not available')
+        }
 
         if (this.isWebViewAvailable()) {
             console.log('[DatabaseService] Using WebView bridge')
