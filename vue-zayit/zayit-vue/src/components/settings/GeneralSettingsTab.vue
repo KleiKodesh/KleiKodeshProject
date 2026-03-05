@@ -132,11 +132,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
-import { storeToRefs } from 'pinia'
-import { useSettingsStore } from '@/data/stores/settingsStore'
-import { webviewBridge } from '@/data/services/webviewBridge'
 import ThemePreviewDropdown from '@/components/settings/ThemePreviewDropdown.vue'
+import { useGeneralSettingsTab } from '@/components/settings/useGeneralSettingsTab'
 
 defineEmits<{
   createTheme: []
@@ -144,7 +141,6 @@ defineEmits<{
   selectDatabase: []
 }>()
 
-const settingsStore = useSettingsStore()
 const {
   censorDivineNames,
   appZoom,
@@ -152,24 +148,10 @@ const {
   globalDiacritics,
   newTabPage,
   defaultBookViewToolbarPosition,
-  themePreset
-} = storeToRefs(settingsStore)
-
-const setCensorDivineNames = (censor: boolean) => {
-  censorDivineNames.value = censor
-  window.location.reload()
-}
-
-onMounted(() => {
-  if (webviewBridge.isAvailable()) {
-    webviewBridge
-      .getCurrentDatabasePath()
-      .then((p) => {
-        if (p && !databasePath.value) databasePath.value = p
-      })
-      .catch(() => { })
-  }
-})
+  themePreset,
+  setCensorDivineNames,
+  webviewBridge
+} = useGeneralSettingsTab()
 </script>
 
 <style scoped>

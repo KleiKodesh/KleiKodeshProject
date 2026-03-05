@@ -24,21 +24,129 @@ The Zayit theming system uses a unified approach where **reading backgrounds are
 
 ## File Structure
 
-### `zayit-vue/src/config/themes.ts`
+### `zayit-vue/src/data/themes.json`
 
-**Purpose:** Single source of truth for all colors
+**Purpose:** Single source of truth for all theme data (JSON format)
 
 **Structure:**
 
-```typescript
-export interface Theme {
-  name: string; // Hebrew display name
-  isDark: boolean; // Light or dark variant
-  family: string; // Theme family identifier
-  reading: ThemeColors; // Colors for reading areas (LineView, CommentaryView, KezayitSearchPage)
-  ui: ThemeColors; // Colors for UI chrome (toolbars, sidebars, menus, etc.)
+```json
+{
+  "fluent-light": {
+    "name": "עיצוב זורם",
+    "family": "fluent",
+    "isDark": false,
+    "reading": {
+      /* ThemeColors */
+    },
+    "ui": {
+      /* ThemeColors */
+    },
+    "pdfFilter": "none"
+  }
 }
 ```
+
+### `zayit-vue/src/data/themeTypes.ts`
+
+**Purpose:** TypeScript type definitions for themes
+
+**Key Types:**
+
+```typescript
+// Auto-generated from themes.json keys
+export type ThemePreset = keyof typeof themesData | string;
+
+export interface ThemeColors {
+  bgPrimary: string;
+  bgSecondary: string;
+  bgTertiary?: string; // Optional: Subtle backgrounds (fallback to bgSecondary if not defined)
+  textPrimary: string;
+  textSecondary: string;
+  borderColor: string;
+  accentColor: string;
+  hoverBg: string;
+  activeBg: string;
+}
+
+export interface Theme {
+  name: string;
+  isDark: boolean;
+  family: string;
+  reading: ThemeColors;
+  ui: ThemeColors;
+  pdfFilter?: string;
+}
+```
+
+**How it works:** TypeScript automatically infers `ThemePreset` type from themes.json keys using `keyof typeof`. No build script needed!
+
+**Background Color Hierarchy:**
+
+- `bgPrimary` - Main chrome (title bars, toolbars) - can be bold/colored
+- `bgSecondary` - Panels, dropdowns, inputs - should be neutral
+- `bgTertiary` (optional) - Subtle backgrounds, cards - even more neutral
+  - If not defined in theme JSON, automatically falls back to `bgSecondary`
+  - Future enhancement for better visual hierarchy in themed apps
+  - Custom themes created via ThemeCreator automatically include this
+
+### `zayit-vue/src/utils/themeColorUtils.ts`
+
+**Purpose:** Pure color manipulation utilities (no side effects)
+
+**Key Functions:**
+
+- `hexToRgb(hex)` - Convert hex to RGB string
+- `hexToRgbObj(hex)` - Convert hex to RGB object
+- `lighten(color, amount)` - Lighten a color
+- `darken(color, amount)` - Darken a color
+- `adjustAlpha(isDark)` - Calculate hover/active alpha values
+- `isDarkTheme(bgColor)` - Detect if color is dark
+- `generateDarkVariant(lightColors)` - Generate proper dark theme from light theme
+- `generateThemeColors(bg, text, accent)` - Generate complete ThemeColors from base colors
+
+**Design:** All functions are pure - same input always produces same output, no DOM manipulation.
+
+### `zayit-vue/src/utils/themes.ts`
+
+**Purpose:** Theme management, application, and PDF.js syncing
+
+**Key Functions:**
+
+- `applyTheme(preset)` - Applies theme to document, sets both UI and reading CSS variables
+- `toggleThemeMode(preset)` - Toggles between light/dark variant of same family
+- `getThemeFamilies()` - Returns theme families for dropdown selector
+- `getTheme(preset)` - Get theme by preset (built-in or custom)
+- `addCustomTheme(id, theme)` - Add custom theme
+- `deleteCustomTheme(id)` - Delete custom theme
+- `syncPdfViewerTheme()` - Sync theme to PDF.js iframes
+- `setPdfPageFilters(enabled)` - Enable/disable PDF page filters
+
+**Imports:** Re-exports color utilities from themeColorUtils.ts for convenience.
+
+### `zayit-vue/src/components/settings/useThemeBuilder.ts`
+
+**Purpose:** Composable for building custom themes in ThemeCreator
+
+**Key Features:**
+
+- Mix-and-match mode: Edit light and dark variants independently
+- Auto mode: Edit light variant, dark is auto-generated
+- Reading background modes: same as UI, preset, or custom
+- Proper dark variant generation (not simple inversion)
+
+### `zayit-vue/src/components/settings/ThemeCreator.vue`
+
+**Purpose:** UI for creating custom themes
+
+**Features:**
+
+- Base theme selection
+- Reading background mode selection
+- Mix-and-match toggle
+- Color pickers for UI and reading colors
+- Live preview of light and dark variants
+- Uses useThemeBuilder composable for all logic
 
 **Theme Families (18 families, 36 variants):**
 
@@ -67,7 +175,7 @@ export interface Theme {
 - `toggleThemeMode(preset)` - Toggles between light/dark variant of same family
 - `getThemeFamilies()` - Returns theme families for dropdown selector
 
-### `zayit-vue/src/config/readingBackgrounds.ts`
+### `zayit-vue/src/utils/readingBackgrounds.ts`
 
 **Purpose:** Provides reading background presets (references to themes)
 
@@ -114,6 +222,7 @@ if (readingBackground.value !== "default") {
 ```css
 --bg-primary-custom
 --bg-secondary-custom
+--bg-tertiary-custom  /* Falls back to bgSecondary if not defined in theme */
 --text-primary-custom
 --text-secondary-custom
 --border-color-custom
@@ -186,43 +295,68 @@ if (readingBackground.value !== "default") {
 
 ## Adding New Themes
 
-### 1. Add to ThemePreset type
+### 1. Add to themes.json
 
-```typescript
-export type ThemePreset =
-  | "existing-light"
-  | "existing-dark"
-  | "newtheme-light"
-  | "newtheme-dark"; // Add here
-```
-
-### 2. Add to THEME_PRESETS
-
-```typescript
-'newtheme-light': {
-    name: 'שם בעברית',
-    family: 'newtheme',
-    isDark: false,
-    reading: {
-        bgPrimary: '#ffffff',
-        bgSecondary: '#f8f8f8',
-        textPrimary: '#1f1f1f',
-        textSecondary: '#5a5a5a',
-        borderColor: '#e5e5e5',
-        accentColor: '#0078d4',
-        hoverBg: 'rgba(0, 0, 0, 0.06)',
-        activeBg: 'rgba(0, 0, 0, 0.09)'
+```json
+{
+  "newtheme-light": {
+    "name": "שם בעברית",
+    "family": "newtheme",
+    "isDark": false,
+    "reading": {
+      "bgPrimary": "#ffffff",
+      "bgSecondary": "#f8f8f8",
+      "textPrimary": "#1f1f1f",
+      "textSecondary": "#5a5a5a",
+      "borderColor": "#e5e5e5",
+      "accentColor": "#0078d4",
+      "hoverBg": "rgba(0, 0, 0, 0.06)",
+      "activeBg": "rgba(0, 0, 0, 0.09)"
     },
-    ui: {
-        // Slightly different from reading for visual separation
-        bgPrimary: '#f8f8f8',
-        bgSecondary: '#f0f0f0',
-        // ... rest of colors
-    }
+    "ui": {
+      "bgPrimary": "#f8f8f8",
+      "bgSecondary": "#f0f0f0",
+      "textPrimary": "#1f1f1f",
+      "textSecondary": "#5a5a5a",
+      "borderColor": "#e0e0e0",
+      "accentColor": "#0078d4",
+      "hoverBg": "rgba(0, 0, 0, 0.08)",
+      "activeBg": "rgba(0, 0, 0, 0.12)"
+    },
+    "pdfFilter": "none"
+  },
+  "newtheme-dark": {
+    "name": "שם בעברית",
+    "family": "newtheme",
+    "isDark": true,
+    "reading": {
+      "bgPrimary": "#1e1e1e",
+      "bgSecondary": "#2d2d2d",
+      "textPrimary": "#ffffff",
+      "textSecondary": "#a6a6a6",
+      "borderColor": "#3b3b3b",
+      "accentColor": "#60cdff",
+      "hoverBg": "rgba(255, 255, 255, 0.08)",
+      "activeBg": "rgba(255, 255, 255, 0.12)"
+    },
+    "ui": {
+      "bgPrimary": "#1e1e1e",
+      "bgSecondary": "#2d2d2d",
+      "textPrimary": "#ffffff",
+      "textSecondary": "#a6a6a6",
+      "borderColor": "#3b3b3b",
+      "accentColor": "#60cdff",
+      "hoverBg": "rgba(255, 255, 255, 0.08)",
+      "activeBg": "rgba(255, 255, 255, 0.12)"
+    },
+    "pdfFilter": "invert(0.9) hue-rotate(180deg) brightness(0.9) contrast(0.9)"
+  }
 }
 ```
 
-### 3. Add to reading backgrounds
+**Note:** TypeScript will automatically recognize the new theme presets - no manual type updates needed!
+
+### 2. Add to reading backgrounds
 
 ```typescript
 // In readingBackgrounds.ts
@@ -239,7 +373,7 @@ const READING_BACKGROUND_COLORS: Record<ReadingBackgroundPreset, string> = {
 };
 ```
 
-### 4. Add migration mapping (if replacing old theme)
+### 3. Add migration mapping (if replacing old theme)
 
 ```typescript
 // In settingsStore.ts migration section
@@ -249,7 +383,84 @@ const oldToNewMap: Record<string, ThemePreset> = {
 };
 ```
 
+## Custom Theme Creation
+
+### User-Created Themes
+
+Users can create custom themes through the ThemeCreator UI:
+
+**Two Modes:**
+
+1. **Auto Mode (Default)**
+   - User edits light variant colors
+   - Dark variant is automatically generated using `generateDarkVariant()`
+   - Maintains color relationships (hue, saturation) while adapting for dark mode
+   - Accent color is brightened for better visibility in dark mode
+
+2. **Mix-and-Match Mode**
+   - User can independently edit light and dark variants
+   - Click preview cards to switch between editing light or dark
+   - Full control over both variants
+
+**Reading Background Options:**
+
+- **Same as UI:** Reading colors match UI colors
+- **Preset:** Use another theme's reading colors
+- **Custom:** Define custom reading background and text colors
+
+**Storage:**
+
+- Custom themes are stored in localStorage
+- Managed by `addCustomTheme()`, `deleteCustomTheme()`, `getCustomThemes()`
+- Custom theme IDs use format: `custom-{timestamp}-light` / `custom-{timestamp}-dark`
+
+### Dark Variant Generation Algorithm
+
+The `generateDarkVariant()` function creates proper dark themes (not simple inversion):
+
+1. **Preserve hue and saturation** from light background
+2. **Generate dark background** with same color family but low lightness
+3. **Invert text luminance** - dark text becomes light
+4. **Brighten accent** - increase lightness while keeping hue
+5. **Maintain relationships** - dark variant feels related to light variant
+
+**Example:**
+
+- Light: Warm beige bg (#f4ecd8), brown text (#5f4b32), gold accent (#8b6914)
+- Dark: Dark brown bg (#3a2f1f), light beige text (#e8dcc4), light gold accent (#d4a574)
+
 ## Design Guidelines
+
+### Background Color Hierarchy (Future Enhancement)
+
+**Current State:**
+
+- `bgTertiary` is optional in theme definitions
+- Code supports it with automatic fallback to `bgSecondary`
+- Custom themes created via ThemeCreator automatically include it
+- Built-in themes in themes.json don't have it yet
+
+**Future Implementation Plan:**
+When adding `bgTertiary` to built-in themes:
+
+1. **Fluent/Neutral Themes:** All three levels similar
+   - Light: #ffffff → #f8f8f8 → #f0f0f0
+   - Dark: #1e1e1e → #2d2d2d → #252525
+
+2. **Office/Colored Themes:** Bold → Neutral → Subtle
+   - Word Light: #2b579a (blue) → #f3f3f3 (gray) → #fafafa (lighter gray)
+   - PowerPoint Light: #c43e1c (red) → #f3f3f3 (gray) → #fafafa (lighter gray)
+
+3. **Component Usage:**
+   - Title bars, main toolbars: `--bg-primary`
+   - Dropdowns, panels, inputs: `--bg-secondary`
+   - Cards, subtle backgrounds: `--bg-tertiary`
+
+**Why This Matters:**
+
+- Allows bold colored title bars without making entire UI overwhelming
+- Provides proper visual hierarchy
+- Maintains backward compatibility (existing themes work without changes)
 
 ### Reading vs UI Colors
 

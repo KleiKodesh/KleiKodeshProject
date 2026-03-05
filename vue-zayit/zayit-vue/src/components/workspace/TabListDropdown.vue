@@ -46,8 +46,8 @@ defineExpose({ toggle, close, isVisible });
   overflow-y: auto;
   /* Enable vertical scrolling if content exceeds max-height */
   /* scrollbar-gutter: stable; Reserve space for scrollbar to prevent layout shift */
-  z-index: 1000;
-  /* Stack above other content */
+  z-index: 1100;
+  /* Stack above overlays (theme creator uses 1000) */
   background-color: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   /* Bottom border separator */

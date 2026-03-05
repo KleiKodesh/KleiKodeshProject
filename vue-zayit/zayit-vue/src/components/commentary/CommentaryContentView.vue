@@ -57,16 +57,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
-import { useFocus, useEventListener } from '@vueuse/core'
+import { ref, computed, watch } from 'vue'
+import { useEventListener } from '@vueuse/core'
 import GenericSearch from '@/components/shared/GenericSearch.vue'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import type { CommentaryLinkGroup } from '@/data/services/bookCommentaryService'
-import { useTabStore } from '@/data/stores/tabStore'
-import { useCategoryTreeStore } from '@/data/stores/categoryTreeStore'
-import { hasConnections } from '@/data/types/Book'
-import { scrollToElementTop } from '@/components/shared/useScrollToElement'
 import { useCommentarySearch } from './useCommentarySearch'
+import { useCommentaryContentView } from './useCommentaryContentView'
 
 const props = defineProps<{
     processedLinkGroups: CommentaryLinkGroup[]
@@ -80,16 +77,9 @@ const emit = defineEmits<{
     (e: 'update:currentCommentary', payload: { bookId?: number; groupName?: string }): void
 }>()
 
-const tabStore = useTabStore()
-const categoryTreeStore = useCategoryTreeStore()
-
 const contentRef = ref<HTMLElement | null>(null)
 const searchRef = ref<InstanceType<typeof GenericSearch> | null>(null)
 const selectAllWasPressed = ref(false)
-
-// UI State
-const showAllCommentaries = ref(true)
-const currentGroupIndex = ref(0)
 
 // Search composable
 const {
@@ -103,42 +93,23 @@ const {
     handleSearchClose
 } = useCommentarySearch(contentRef)
 
-const { focused: hasFocus } = useFocus(contentRef)
-
-// Computed: Sync combobox with currentGroupIndex
-const comboboxSelectedValue = computed<string | number>({
-    get: () => currentGroupIndex.value,
-    set: (value: string | number) => {
-        if (typeof value === 'number') {
-            currentGroupIndex.value = value
-        }
-    }
-})
-
-const canNavigateToPreviousGroup = computed(() => {
-    return props.processedLinkGroups.length > 0 && currentGroupIndex.value > 0
-})
-
-const canNavigateToNextGroup = computed(() => {
-    return props.processedLinkGroups.length > 0 && currentGroupIndex.value < props.processedLinkGroups.length - 1
-})
-
-// Display groups based on mode
-const displayGroups = computed(() => {
-    if (!props.processedLinkGroups || props.processedLinkGroups.length === 0) {
-        return []
-    }
-
-    if (showAllCommentaries.value) {
-        return props.processedLinkGroups
-    } else {
-        // Single mode - show only selected group
-        if (currentGroupIndex.value < 0 || currentGroupIndex.value >= props.processedLinkGroups.length) {
-            return []
-        }
-        return [props.processedLinkGroups[currentGroupIndex.value]]
-    }
-})
+// Content view composable
+const {
+    showAllCommentaries,
+    currentGroupIndex,
+    hasFocus,
+    canNavigateToPreviousGroup,
+    canNavigateToNextGroup,
+    displayGroups,
+    scrollToGroupByIndex,
+    navigateToPreviousGroup,
+    navigateToNextGroup,
+    toggleViewMode,
+    handleGroupClick
+} = useCommentaryContentView(
+    () => contentRef.value,
+    () => props.processedLinkGroups
+)
 
 // Watch for group changes and emit to parent
 watch(currentGroupIndex, (newIndex) => {
@@ -151,123 +122,22 @@ watch(currentGroupIndex, (newIndex) => {
     }
 })
 
-// Watch for group changes in single mode and scroll to top
+// Watch for group changes and clear search
 watch(() => currentGroupIndex.value, () => {
-    if (!showAllCommentaries.value && contentRef.value) {
-        contentRef.value.scrollTop = 0
-    }
-    // Clear search when switching groups
     if (isSearchOpen.value) {
         handleSearchClose()
     }
 })
 
-// Watch for mode changes and scroll to current group in all mode
-watch(() => showAllCommentaries.value, async (isAll) => {
-    if (isAll) {
-        await nextTick()
-        // Use setTimeout to avoid blocking UI
-        setTimeout(() => {
-            scrollToGroup(currentGroupIndex.value, true)
-        }, 0)
-    }
-})
-
-/**
- * Scroll to a specific group by index
- */
-async function scrollToGroup(groupIndex: number, instant = false) {
-    if (!showAllCommentaries.value) return
-    if (!contentRef.value) return
-    if (groupIndex < 0 || groupIndex >= props.processedLinkGroups.length) return
-
-    await nextTick()
-
-    const targetElement = contentRef.value.querySelector(`[data-group-index="${groupIndex}"]`) as HTMLElement
-    if (targetElement) {
-        await scrollToElementTop(targetElement, { behavior: instant ? 'instant' : 'smooth' })
-    }
-}
-
-/**
- * Public method to scroll to group by index (called from parent)
- */
-function scrollToGroupByIndex(groupIndex: number) {
-    if (groupIndex < 0 || groupIndex >= props.processedLinkGroups.length) {
-        return
-    }
-
-    currentGroupIndex.value = groupIndex
-
-    // If in "show all" mode, scroll to the group
-    if (showAllCommentaries.value) {
-        scrollToGroup(groupIndex, true)
-    }
-}
-
-/**
- * Public method to navigate to previous group
- */
-function navigateToPreviousGroup() {
-    if (!canNavigateToPreviousGroup.value) return
-    currentGroupIndex.value = currentGroupIndex.value - 1
-}
-
-/**
- * Public method to navigate to next group
- */
-function navigateToNextGroup() {
-    if (!canNavigateToNextGroup.value) return
-    currentGroupIndex.value = currentGroupIndex.value + 1
-}
-
-/**
- * Public method to toggle view mode
- */
-function toggleViewMode() {
-    showAllCommentaries.value = !showAllCommentaries.value
-
-    // When switching to single mode, ensure we have a valid group selected
-    if (!showAllCommentaries.value && props.processedLinkGroups.length > 0) {
-        if (currentGroupIndex.value < 0 || currentGroupIndex.value >= props.processedLinkGroups.length) {
-            currentGroupIndex.value = 0
-        }
-    }
-}
-
-// Search functions are now handled by useCommentarySearch composable
-
-/**
- * Handle group header click
- */
-function handleGroupClick(group: CommentaryLinkGroup) {
-    if (group.targetBookId !== undefined && group.targetLineIndex !== undefined) {
-        const targetBook = categoryTreeStore.allBooks.find(book => book.id === group.targetBookId)
-        const targetHasConnections = targetBook ? hasConnections(targetBook) : false
-
-        tabStore.openBookInNewTab(
-            group.groupName,
-            group.targetBookId,
-            targetHasConnections,
-            group.targetLineIndex,
-            true
-        )
-    }
-}
-
-/**
- * Handle keydown
- */
-function handleKeyDown(e: KeyboardEvent) {
+// Handle keydown
+const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === ' ' && e.target instanceof HTMLElement && e.target.tagName !== 'INPUT') {
         e.preventDefault()
     }
 }
 
-/**
- * Select all content
- */
-function selectAllInContainer() {
+// Select all content
+const selectAllInContainer = () => {
     const container = contentRef.value
     if (!container) return
 
@@ -300,7 +170,6 @@ useEventListener('keydown', (event: KeyboardEvent) => {
         selectAllInContainer()
     }
 
-    // Reset selectAll flag on navigation/typing
     if (!hasCtrlOrMeta && !event.shiftKey) {
         if (event.code.startsWith('Arrow') ||
             event.code === 'Escape' ||

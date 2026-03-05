@@ -43,13 +43,11 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import CommentaryViewToolbar from './CommentaryViewToolbar.vue'
 import CommentaryContentView from './CommentaryContentView.vue'
-import { bookCommentaryService, type CommentaryLinkGroup } from '@/data/services/bookCommentaryService'
-import { useTabStore } from '@/data/stores/tabStore'
-import { useSettingsStore } from '@/data/stores/settingsStore'
 import { useCommentaryNavigation } from './useCommentaryNavigation'
 import { useCommentaryFilters } from './useCommentaryFilters'
 import { useCommentaryLoader } from './useCommentaryLoader'
-import { applyDiacriticsFilter } from '@/utils/hebrewTextProcessing'
+import { useCommentaryView } from './useCommentaryView'
+import { useTabStore } from '@/data/stores/tabStore'
 import type { Book } from '@/data/types/Book'
 import type { TocEntry } from '@/data/types/BookToc'
 
@@ -74,14 +72,9 @@ const emit = defineEmits<{
 }>()
 
 // ============================================
-// STORES
-// ============================================
-const tabStore = useTabStore()
-const settingsStore = useSettingsStore()
-
-// ============================================
 // REFS & STATE
 // ============================================
+const tabStore = useTabStore()
 const commentaryViewContentRef = ref<InstanceType<typeof CommentaryContentView> | null>(null)
 
 // Composables
@@ -98,19 +91,20 @@ const sortedLinkGroups = computed(() => {
 // Filters composable
 const { selectedCategoryFilter, filteredGroupOptions, availableCategories } = useCommentaryFilters(sortedLinkGroups)
 
+// View composable - handles computed properties and styles
+const {
+    commentaryToolbarPositionClass,
+    canNavigateToPreviousLine,
+    canNavigateToNextLine,
+    selectedConnectionTypeId,
+    commentaryStyles,
+    processedLinkGroups,
+    handleClose
+} = useCommentaryView(props, () => sortedLinkGroups.value)
+
 // ============================================
 // COMPUTED PROPERTIES
 // ============================================
-const commentaryToolbarPosition = computed(() => settingsStore.commentaryToolbarPosition)
-const commentaryToolbarPositionClass = computed(() => `commentary-toolbar-${commentaryToolbarPosition.value}`)
-
-const canNavigateToPreviousLine = computed(() => {
-    return props.selectedLineIndex !== undefined && props.selectedLineIndex > 0
-})
-
-const canNavigateToNextLine = computed(() => {
-    return props.selectedLineIndex !== undefined && props.bookId !== undefined
-})
 
 // Computed properties that delegate to content viewer
 const comboboxSelectedValue = computed(() => {
@@ -129,63 +123,6 @@ const showAllCommentaries = computed(() => {
     return commentaryViewContentRef.value?.showAllCommentaries ?? false
 })
 
-const selectedConnectionTypeId = computed({
-    get: () => {
-        const activeTab = tabStore.activeTab
-        if (!activeTab?.bookState) return undefined
-
-        const saved = activeTab.bookState.commentaryFilterConnectionTypeId
-        const hasExplicitFilter = activeTab.bookState.hasOwnProperty('commentaryFilterConnectionTypeId')
-
-        if (!hasExplicitFilter && props.book) {
-            const defaultFilter = bookCommentaryService.getDefaultFilter(props.book)
-            if (defaultFilter !== undefined) {
-                activeTab.bookState.commentaryFilterConnectionTypeId = defaultFilter
-                return defaultFilter
-            }
-        }
-
-        return saved
-    },
-    set: (value: number | undefined) => {
-        const activeTab = tabStore.activeTab
-        if (activeTab?.bookState) {
-            activeTab.bookState.commentaryFilterConnectionTypeId = value
-        }
-    }
-})
-
-const commentaryStyles = computed(() => {
-    const zoom = tabStore.activeTab?.bookState?.zoom || 100
-    return {
-        backgroundColor: 'var(--reading-bg-primary)',
-        color: 'var(--reading-text-primary)',
-        fontFamily: settingsStore.commentaryTextFont,
-        fontSize: `calc(${settingsStore.commentaryFontSize}% * ${zoom / 100})`,
-        lineHeight: settingsStore.commentaryLinePadding.toString()
-    }
-})
-
-const processedLinkGroups = computed(() => {
-    const activeTab = tabStore.activeTab
-    const diacriticsState = activeTab?.bookState?.diacriticsState
-
-    return sortedLinkGroups.value.map((group) => {
-        return {
-            ...group,
-            links: group.links.map((link) => {
-                let html = link.html
-
-                if (diacriticsState && diacriticsState > 0) {
-                    html = applyDiacriticsFilter(html, diacriticsState)
-                }
-
-                return { ...link, html }
-            })
-        }
-    })
-})
-
 // ============================================
 // WATCHERS
 // ============================================
@@ -193,7 +130,7 @@ watch([() => props.bookId, () => props.selectedLineIndex, () => tabStore.activeT
     async ([bookId, lineIndex], [oldBookId, oldLineIndex]) => {
         if (bookId !== undefined && lineIndex !== undefined) {
             const isLineNavigation = oldBookId === bookId && oldLineIndex !== undefined && oldLineIndex !== lineIndex
-            
+
             await loadLinks(
                 bookId,
                 lineIndex,
@@ -367,13 +304,6 @@ function handleToggleViewMode() {
 
 function handleOpenSearch() {
     commentaryViewContentRef.value?.openSearch()
-}
-
-function handleClose() {
-    const activeTab = tabStore.activeTab
-    if (activeTab?.bookState) {
-        activeTab.bookState.showBottomPane = false
-    }
 }
 </script>
 

@@ -32,6 +32,7 @@ export interface Settings {
     commentaryToolbarPosition: CommentaryToolbarPosition
     themePreset: ThemePreset
     lastSettingsTab: SettingsTab
+    pdfPageFilters: boolean
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -53,7 +54,8 @@ const DEFAULT_SETTINGS: Settings = {
     defaultBookViewToolbarPosition: 'top',
     commentaryToolbarPosition: 'top',
     themePreset: 'fluent-light',
-    lastSettingsTab: 'general'
+    lastSettingsTab: 'general',
+    pdfPageFilters: false
 }
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -76,6 +78,7 @@ export const useSettingsStore = defineStore('settings', () => {
     const commentaryToolbarPosition = ref<CommentaryToolbarPosition>(DEFAULT_SETTINGS.commentaryToolbarPosition)
     const themePreset = ref<ThemePreset>(DEFAULT_SETTINGS.themePreset)
     const lastSettingsTab = ref<SettingsTab>(DEFAULT_SETTINGS.lastSettingsTab)
+    const pdfPageFilters = ref(DEFAULT_SETTINGS.pdfPageFilters)
 
     const loadFromStorage = () => {
         try {
@@ -120,6 +123,7 @@ export const useSettingsStore = defineStore('settings', () => {
                 defaultBookViewToolbarPosition.value = settings.defaultBookViewToolbarPosition || DEFAULT_SETTINGS.defaultBookViewToolbarPosition
                 commentaryToolbarPosition.value = settings.commentaryToolbarPosition || DEFAULT_SETTINGS.commentaryToolbarPosition
                 lastSettingsTab.value = settings.lastSettingsTab || DEFAULT_SETTINGS.lastSettingsTab
+                pdfPageFilters.value = settings.pdfPageFilters ?? DEFAULT_SETTINGS.pdfPageFilters
 
                 // Migrate old theme presets to new format
                 let themeValue = settings.themePreset || DEFAULT_SETTINGS.themePreset
@@ -184,7 +188,8 @@ export const useSettingsStore = defineStore('settings', () => {
                 defaultBookViewToolbarPosition: defaultBookViewToolbarPosition.value,
                 commentaryToolbarPosition: commentaryToolbarPosition.value,
                 themePreset: themePreset.value,
-                lastSettingsTab: lastSettingsTab.value
+                lastSettingsTab: lastSettingsTab.value,
+                pdfPageFilters: pdfPageFilters.value
             }))
         } catch (e) {
             console.error('Failed to save settings:', e)
@@ -218,6 +223,9 @@ export const useSettingsStore = defineStore('settings', () => {
 
         // Apply theme preset
         applyTheme(themePreset.value)
+
+        // Initialize PDF page filters attribute
+        document.documentElement.setAttribute('data-pdf-filters', pdfPageFilters.value ? 'true' : 'false')
 
         // Apply zoom to the app element
         const appElement = document.getElementById('app')
@@ -255,7 +263,7 @@ export const useSettingsStore = defineStore('settings', () => {
     applyCSSVariables()
 
     // Watch for changes and persist
-    watch([headerFont, textFont, fontSize, linePadding, commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryLinePadding, censorDivineNames, appZoom, readingBackground, databasePath, globalDiacritics, globalDiacriticsState, newTabPage, defaultBookViewToolbarPosition, commentaryToolbarPosition, themePreset, lastSettingsTab], () => {
+    watch([headerFont, textFont, fontSize, linePadding, commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryLinePadding, censorDivineNames, appZoom, readingBackground, databasePath, globalDiacritics, globalDiacriticsState, newTabPage, defaultBookViewToolbarPosition, commentaryToolbarPosition, themePreset, lastSettingsTab, pdfPageFilters], () => {
         saveToStorage()
         applyCSSVariables()
     })
@@ -280,6 +288,7 @@ export const useSettingsStore = defineStore('settings', () => {
         commentaryToolbarPosition,
         themePreset,
         lastSettingsTab,
+        pdfPageFilters,
         reset
     }
 })

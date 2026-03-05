@@ -10,6 +10,7 @@ export type ThemePreset = keyof typeof themesData | string // Allow custom theme
 export interface ThemeColors {
     bgPrimary: string
     bgSecondary: string
+    bgTertiary?: string // Optional: Subtle backgrounds (fallback to bgSecondary if not defined)
     textPrimary: string
     textSecondary: string
     borderColor: string
@@ -24,4 +25,5 @@ export interface Theme {
     family: string
     reading: ThemeColors
     ui: ThemeColors
+    pdfFilter?: string // Optional CSS filter for PDF pages (e.g., "sepia(0.8) saturate(1.4)")
 }

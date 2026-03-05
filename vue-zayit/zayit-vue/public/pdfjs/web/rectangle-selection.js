@@ -30,27 +30,10 @@ class RectangleSelectionTool {
     }
 
     async initTesseract() {
-        try {
-            // Load Tesseract.js from CDN
-            if (!window.Tesseract) {
-                const script = document.createElement('script');
-                script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-                await new Promise((resolve, reject) => {
-                    script.onload = resolve;
-                    script.onerror = reject;
-                    document.head.appendChild(script);
-                });
-            }
-
-            // Create worker configured for Hebrew with local language data
-            this.tesseractWorker = await Tesseract.createWorker('heb', 1, {
-                langPath: '/pdfjs/tesseract',
-                logger: m => console.log('[Tesseract]', m)
-            });
-            console.log('[RectSelect] Tesseract worker initialized for Hebrew');
-        } catch (error) {
-            console.error('[RectSelect] Failed to initialize Tesseract:', error);
-        }
+        // Tesseract OCR is disabled - optional feature
+        // PDFs work fine without it (only needed for scanned PDFs without text layer)
+        console.log('[RectSelect] Tesseract OCR disabled');
+        return;
     }
 
     createButton() {
@@ -298,8 +281,10 @@ class RectangleSelectionTool {
             }
 
             // Remove the selection rectangle
-            this.selectionDiv.remove();
-            this.selectionDiv = null;
+            if (this.selectionDiv) {
+                this.selectionDiv.remove();
+                this.selectionDiv = null;
+            }
         }
     }
 

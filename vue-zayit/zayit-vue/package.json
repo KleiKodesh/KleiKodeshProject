@@ -10,8 +10,9 @@
     "dev": "vite",
     "build": "run-p type-check \"build-only {@}\" --",
     "preview": "vite preview",
-    "build-only": "vite build --config vite.config.prod.ts",
-    "type-check": "vue-tsc --build"
+    "build-only": "npm run extract-icons && vite build --config vite.config.prod.ts",
+    "type-check": "vue-tsc --build",
+    "extract-icons": "node scripts/auto-extract-icons.js"
   },
   "dependencies": {
     "@iconify/vue": "^5.0.0",
@@ -33,6 +34,7 @@
     "@vitejs/plugin-vue": "^6.0.1",
     "@vue/tsconfig": "^0.8.1",
     "better-sqlite3": "^12.5.0",
+    "glob": "^11.0.0",
     "npm-run-all2": "^8.0.4",
     "typescript": "~5.9.0",
     "unplugin-icons": "^23.0.1",

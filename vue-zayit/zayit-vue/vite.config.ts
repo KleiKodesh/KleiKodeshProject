@@ -3,6 +3,7 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 import Database from 'better-sqlite3'
+import { autoIconsPlugin } from './scripts/vite-plugin-auto-icons.js'
 
 // Path to your SQLite database
 const DB_PATH = 'C:\\Users\\Admin\\AppData\\Roaming\\io.github.kdroidfilter.seforimapp\\databases\\seforim.db'
@@ -71,6 +72,7 @@ function sqlitePlugin() {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
+    autoIconsPlugin(),
     vue(),
     vueDevTools(),
     sqlitePlugin(),
@@ -88,5 +90,9 @@ export default defineConfig({
   },
   optimizeDeps: {
     exclude: ['canvas', 'path2d-polyfill']
+  },
+  define: {
+    // Disable Iconify API - force offline mode
+    'import.meta.env.VITE_ICONIFY_API': JSON.stringify(''),
   },
 })

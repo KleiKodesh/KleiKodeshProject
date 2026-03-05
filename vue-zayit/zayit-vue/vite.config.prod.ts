@@ -2,10 +2,12 @@ import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { viteSingleFile } from 'vite-plugin-singlefile'
+import { autoIconsPlugin } from './scripts/vite-plugin-auto-icons.js'
 
 // Production build configuration for C# WebView2 integration
 export default defineConfig({
     plugins: [
+        autoIconsPlugin(),
         vue(),
         viteSingleFile(), // Bundle everything into single HTML file
     ],

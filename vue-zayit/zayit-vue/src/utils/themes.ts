@@ -5,47 +5,108 @@
 
 import themesData from '@/data/themes.json'
 import type { ThemePreset, Theme } from '@/data/themeTypes'
+import { lighten, darken, hexToRgb, hexToRgbObj } from './themeColorUtils'
 
 // Re-export types for convenience
 export type { ThemePreset, Theme, ThemeColors } from '@/data/themeTypes'
 
+// Re-export color utilities
+export { lighten, darken, hexToRgb, hexToRgbObj } from './themeColorUtils'
+
 // Load theme presets from JSON
 export const THEME_PRESETS: Record<ThemePreset, Theme> = themesData as Record<ThemePreset, Theme>
 
-// ============================================
-// Theme Utilities
-// ============================================
+// Calculate PDF filter based on theme colors
+function calculatePdfFilter(theme: Theme): string {
+    if (theme.isDark) {
+        // Dark themes: always use inversion as base
+        const bg = hexToRgbObj(theme.reading.bgPrimary)
+        const accent = hexToRgbObj(theme.reading.accentColor)
 
-// Helper function to convert hex to RGB
-export function hexToRgb(hex: string): string {
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
-    if (!result || !result[1] || !result[2] || !result[3]) return '255, 255, 255'
-    return `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}`
-}
+        // Calculate hue from accent color
+        const r = accent.r / 255
+        const g = accent.g / 255
+        const b = accent.b / 255
+        const max = Math.max(r, g, b)
+        const min = Math.min(r, g, b)
+        const delta = max - min
 
-export function hexToRgbObj(hex: string): { r: number; g: number; b: number } {
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
-    if (!result || !result[1] || !result[2] || !result[3]) {
-        return { r: 255, g: 255, b: 255 }
+        let hue = 0
+        if (delta !== 0) {
+            if (max === r) {
+                hue = 60 * (((g - b) / delta) % 6)
+            } else if (max === g) {
+                hue = 60 * (((b - r) / delta) + 2)
+            } else {
+                hue = 60 * (((r - g) / delta) + 4)
+            }
+        }
+        if (hue < 0) hue += 360
+
+        // Calculate saturation
+        const saturation = max === 0 ? 0 : delta / max
+
+        // Build filter based on color characteristics
+        let filter = 'invert(0.9) hue-rotate(180deg)'
+
+        // Add color tint if accent is saturated
+        if (saturation > 0.3) {
+            const sepiaAmount = Math.min(0.9, saturation * 1.2)
+            const hueShift = Math.round(hue)
+            const satAmount = Math.min(1.6, 1.2 + saturation * 0.8)
+            filter += ` sepia(${sepiaAmount}) hue-rotate(${hueShift}deg) saturate(${satAmount})`
+        }
+
+        filter += ' brightness(0.8) contrast(0.9)'
+        return filter
+    } else {
+        // Light themes: add color tint based on background warmth
+        const bg = hexToRgbObj(theme.reading.bgPrimary)
+
+        // Check if background is warm (yellowish/sepia)
+        const isWarm = bg.r > bg.b && bg.g > bg.b
+        const warmth = isWarm ? (bg.r + bg.g - 2 * bg.b) / 255 : 0
+
+        if (warmth > 0.2) {
+            // Warm background: apply sepia
+            const sepiaAmount = Math.min(1, warmth * 2)
+            const brightness = 0.88 + (1 - sepiaAmount) * 0.04
+            return `sepia(${sepiaAmount}) brightness(${brightness})`
+        }
+
+        // Check for color tint in background
+        const accent = hexToRgbObj(theme.reading.accentColor)
+        const r = accent.r / 255
+        const g = accent.g / 255
+        const b = accent.b / 255
+        const max = Math.max(r, g, b)
+        const min = Math.min(r, g, b)
+        const delta = max - min
+        const saturation = max === 0 ? 0 : delta / max
+
+        if (saturation > 0.4) {
+            // Saturated accent: apply color tint
+            let hue = 0
+            if (delta !== 0) {
+                if (max === r) {
+                    hue = 60 * (((g - b) / delta) % 6)
+                } else if (max === g) {
+                    hue = 60 * (((b - r) / delta) + 2)
+                } else {
+                    hue = 60 * (((r - g) / delta) + 4)
+                }
+            }
+            if (hue < 0) hue += 360
+
+            const sepiaAmount = Math.min(0.9, saturation * 1.5)
+            const hueShift = Math.round(hue)
+            const satAmount = Math.min(1.6, 1.2 + saturation * 0.6)
+            return `sepia(${sepiaAmount}) hue-rotate(${hueShift}deg) saturate(${satAmount})`
+        }
+
+        // Neutral theme: no filter
+        return 'none'
     }
-    return {
-        r: parseInt(result[1], 16),
-        g: parseInt(result[2], 16),
-        b: parseInt(result[3], 16)
-    }
-}
-
-// Helper functions to lighten/darken colors
-function lighten(color: string, amount: number): string {
-    const hex = color.replace('#', '')
-    const r = Math.min(255, parseInt(hex.substring(0, 2), 16) + amount)
-    const g = Math.min(255, parseInt(hex.substring(2, 4), 16) + amount)
-    const b = Math.min(255, parseInt(hex.substring(4, 6), 16) + amount)
-    return '#' + [r, g, b].map(x => Math.round(x).toString(16).padStart(2, '0')).join('')
-}
-
-function darken(color: string, amount: number): string {
-    return lighten(color, -amount)
 }
 
 // Apply theme to document
@@ -56,9 +117,13 @@ export function applyTheme(preset: ThemePreset) {
     const uiColors = theme.ui
     const readingColors = theme.reading
 
+    // Set theme preset as data attribute for PDF page filters
+    document.documentElement.setAttribute('data-theme-preset', preset)
+
     // Set UI CSS custom properties (for general app UI)
     document.documentElement.style.setProperty('--bg-primary-custom', uiColors.bgPrimary)
     document.documentElement.style.setProperty('--bg-secondary-custom', uiColors.bgSecondary)
+    document.documentElement.style.setProperty('--bg-tertiary-custom', uiColors.bgTertiary || uiColors.bgSecondary) // Fallback to secondary
     document.documentElement.style.setProperty('--text-primary-custom', uiColors.textPrimary)
     document.documentElement.style.setProperty('--text-secondary-custom', uiColors.textSecondary)
     document.documentElement.style.setProperty('--border-color-custom', uiColors.borderColor)
@@ -208,6 +273,16 @@ export function isCustomTheme(preset: ThemePreset): boolean {
 loadCustomThemes()
 
 // ============================================
+// PDF Page Filters Control
+// ============================================
+
+export function setPdfPageFilters(enabled: boolean): void {
+    document.documentElement.setAttribute('data-pdf-filters', enabled ? 'true' : 'false')
+    // Sync with all PDF iframes
+    syncPdfViewerTheme()
+}
+
+// ============================================
 // PDF.js Theme Syncing
 // ============================================
 
@@ -248,7 +323,72 @@ export function syncPdfViewerTheme(): void {
 
                 const iframeDoc = iframeWindow.document
                 if (iframeDoc?.documentElement) {
+                    // Set color-scheme for native light-dark() support
                     iframeDoc.documentElement.style.setProperty("color-scheme", isDark ? "dark" : "light")
+
+                    // Add/remove dark class for scrollbar theming
+                    if (isDark) {
+                        iframeDoc.documentElement.classList.add('dark')
+                    } else {
+                        iframeDoc.documentElement.classList.remove('dark')
+                    }
+
+                    // Inject Zayit theme CSS variables into PDF.js iframe
+                    const rootStyle = document.documentElement.style
+                    const iframeRootStyle = iframeDoc.documentElement.style
+
+                    // Set theme family and PDF filter variable
+                    const currentThemePreset = document.documentElement.getAttribute('data-theme-preset')
+                    if (currentThemePreset) {
+                        const theme = getTheme(currentThemePreset as ThemePreset)
+
+                        // Set theme family attribute
+                        if (isCustomTheme(currentThemePreset as ThemePreset)) {
+                            iframeDoc.documentElement.setAttribute('data-theme-family', 'custom')
+                        } else {
+                            const themeFamily = currentThemePreset.split('-')[0]
+                            if (themeFamily) {
+                                iframeDoc.documentElement.setAttribute('data-theme-family', themeFamily)
+                            }
+                        }
+
+                        // Set PDF filter as CSS variable (for all themes)
+                        if (theme?.pdfFilter) {
+                            // Use explicitly defined filter
+                            iframeRootStyle.setProperty('--pdf-page-filter', theme.pdfFilter)
+                        } else if (theme) {
+                            // Auto-calculate filter based on theme colors
+                            const autoFilter = calculatePdfFilter(theme)
+                            iframeRootStyle.setProperty('--pdf-page-filter', autoFilter)
+                        } else {
+                            iframeRootStyle.removeProperty('--pdf-page-filter')
+                        }
+                    }
+
+                    // Set PDF filters enabled/disabled based on parent document
+                    const pdfFiltersEnabled = document.documentElement.getAttribute('data-pdf-filters')
+                    if (pdfFiltersEnabled) {
+                        iframeDoc.documentElement.setAttribute('data-pdf-filters', pdfFiltersEnabled)
+                    }
+
+                    // Copy all theme variables from parent to iframe
+                    const themeVars = [
+                        '--bg-primary-custom',
+                        '--bg-secondary-custom',
+                        '--text-primary-custom',
+                        '--text-secondary-custom',
+                        '--border-color-custom',
+                        '--accent-color-custom',
+                        '--hover-bg-custom',
+                        '--active-bg-custom'
+                    ]
+
+                    themeVars.forEach(varName => {
+                        const value = rootStyle.getPropertyValue(varName)
+                        if (value) {
+                            iframeRootStyle.setProperty(varName, value)
+                        }
+                    })
                 }
             }
         } catch (error) {
