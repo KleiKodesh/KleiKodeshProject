@@ -84,6 +84,18 @@ export const SqlQueries = {
     params: connectionTypeId !== undefined ? [lineId, connectionTypeId] : [lineId]
   }),
 
+  getLinkBookIds: (lineId: number, connectionTypeId?: number) => ({
+    query: `
+      SELECT DISTINCT l.targetBookId
+      FROM link l
+      JOIN book bk ON bk.id = l.targetBookId
+      WHERE l.sourceLineId = ?
+      ${connectionTypeId !== undefined ? 'AND l.connectionTypeId = ?' : ''}
+        AND bk.externalLibraryId IS NULL
+    `,
+    params: connectionTypeId !== undefined ? [lineId, connectionTypeId] : [lineId]
+  }),
+
   getLineContent: (bookId: number, lineIndex: number) => `
     SELECT l.content, lt.tocEntryId
     FROM line l

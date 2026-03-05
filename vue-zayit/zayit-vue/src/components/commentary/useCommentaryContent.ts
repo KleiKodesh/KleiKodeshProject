@@ -1,250 +1,118 @@
-import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
-import { useFocus } from '@vueuse/core'
-import { useTabStore } from '@/data/stores/tabStore'
-import { useCategoryTreeStore } from '@/data/stores/categoryTreeStore'
-import { hasConnections } from '@/data/types/Book'
-import { scrollToElementTop } from '@/components/shared/useScrollToElement'
-import type { CommentaryLinkGroup } from '@/data/services/bookCommentaryService'
+import { ref, computed } from 'vue'
+import { dbService } from '@/data/services/dbService'
 
-export function useCommentaryContent(
-    contentRef: () => HTMLElement | null,
-    processedLinkGroups: () => CommentaryLinkGroup[]
-) {
-    const tabStore = useTabStore()
-    const categoryTreeStore = useCategoryTreeStore()
+export interface CommentaryMetadata {
+    groupName: string
+    targetBookId?: number
+    targetLineIndex?: number
+    isLoaded: boolean
+    links: Array<{ text: string; html: string }>
+}
 
-    const showAllCommentaries = ref(true)
-    const currentGroupIndex = ref(0)
-    const isProgrammaticScroll = ref(false)
-    let scrollTimeout: ReturnType<typeof setTimeout> | null = null
+export function useCommentaryContent() {
+    const commentaryGroups = ref<CommentaryMetadata[]>([])
+    const isLoadingMetadata = ref(false)
+    const loadingGroupIndices = ref<Set<number>>(new Set())
 
-    const { focused: hasFocus } = useFocus(computed(() => contentRef()))
+    /**
+     * Load commentary metadata (titles and IDs) without content
+     */
+    async function loadCommentaryMetadata(
+        bookId: number,
+        lineIndex: number,
+        connectionTypeId?: number
+    ): Promise<void> {
+        isLoadingMetadata.value = true
 
-    const comboboxSelectedValue = computed<string | number>({
-        get: () => currentGroupIndex.value,
-        set: (value: string | number) => {
-            if (typeof value === 'number') {
-                currentGroupIndex.value = value
+        try {
+            const lineId = await dbService.getLineId(bookId, lineIndex)
+            if (!lineId) {
+                commentaryGroups.value = []
+                return
             }
-        }
-    })
 
-    const canNavigateToPreviousGroup = computed(() => {
-        return processedLinkGroups().length > 0 && currentGroupIndex.value > 0
-    })
+            // Load links with metadata only (we'll use the title and IDs)
+            const links = await dbService.getLinks(lineId, '', bookId, connectionTypeId)
 
-    const canNavigateToNextGroup = computed(() => {
-        return processedLinkGroups().length > 0 && currentGroupIndex.value < processedLinkGroups().length - 1
-    })
+            // Group by title to get unique commentaries
+            const grouped = new Map<string, {
+                targetBookId?: number
+                targetLineIndex?: number
+            }>()
 
-    const displayGroups = computed(() => {
-        if (!processedLinkGroups() || processedLinkGroups().length === 0) {
-            return []
-        }
+            links.forEach(link => {
+                const groupName = link.title || 'אחר'
+                if (!grouped.has(groupName)) {
+                    grouped.set(groupName, {
+                        targetBookId: link.targetBookId,
+                        targetLineIndex: link.lineIndex
+                    })
+                }
+            })
 
-        if (showAllCommentaries.value) {
-            return processedLinkGroups()
-        } else {
-            if (currentGroupIndex.value < 0 || currentGroupIndex.value >= processedLinkGroups().length) {
-                return []
-            }
-            return [processedLinkGroups()[currentGroupIndex.value]]
-        }
-    })
-
-    const scrollToGroup = async (groupIndex: number, instant = false) => {
-        if (!showAllCommentaries.value) return
-        const container = contentRef()
-        if (!container) return
-        if (groupIndex < 0 || groupIndex >= processedLinkGroups().length) return
-
-        isProgrammaticScroll.value = true
-        await nextTick()
-
-        const targetElement = container.querySelector(`[data-group-index="${groupIndex}"]`) as HTMLElement
-        if (targetElement) {
-            await scrollToElementTop(targetElement, { behavior: instant ? 'instant' : 'smooth' })
-        }
-
-        setTimeout(() => {
-            isProgrammaticScroll.value = false
-        }, 300)
-    }
-
-    const scrollToGroupByIndex = (groupIndex: number) => {
-        if (groupIndex < 0 || groupIndex >= processedLinkGroups().length) {
-            return
-        }
-
-        currentGroupIndex.value = groupIndex
-
-        if (showAllCommentaries.value) {
-            scrollToGroup(groupIndex, true)
+            // Convert to metadata array
+            commentaryGroups.value = Array.from(grouped.entries()).map(([groupName, data]) => ({
+                groupName,
+                targetBookId: data.targetBookId,
+                targetLineIndex: data.targetLineIndex,
+                isLoaded: false,
+                links: []
+            }))
+        } catch (error) {
+            console.error('Failed to load commentary metadata:', error)
+            commentaryGroups.value = []
+        } finally {
+            isLoadingMetadata.value = false
         }
     }
 
-    const navigateToPreviousGroup = () => {
-        if (!canNavigateToPreviousGroup.value) return
-        const newIndex = currentGroupIndex.value - 1
-        currentGroupIndex.value = newIndex
-        if (showAllCommentaries.value) {
-            scrollToGroup(newIndex)
+    /**
+     * Load content for a specific commentary group
+     */
+    async function loadGroupContent(
+        groupIndex: number,
+        bookId: number,
+        lineIndex: number,
+        connectionTypeId?: number
+    ): Promise<void> {
+        if (groupIndex < 0 || groupIndex >= commentaryGroups.value.length) return
+
+        const group = commentaryGroups.value[groupIndex]
+        if (!group || group.isLoaded || loadingGroupIndices.value.has(groupIndex)) return
+
+        loadingGroupIndices.value.add(groupIndex)
+
+        try {
+            const lineId = await dbService.getLineId(bookId, lineIndex)
+            if (!lineId) return
+
+            // Load all links and filter for this specific group
+            const links = await dbService.getLinks(lineId, '', bookId, connectionTypeId)
+
+            const groupLinks = links
+                .filter(link => (link.title || 'אחר') === group.groupName)
+                .map(link => ({
+                    text: link.content || '',
+                    html: link.content || ''
+                }))
+
+            // Update the group with loaded content
+            group.links = groupLinks
+            group.isLoaded = true
+        } catch (error) {
+            console.error(`Failed to load content for group ${group.groupName}:`, error)
+        } finally {
+            loadingGroupIndices.value.delete(groupIndex)
         }
     }
 
-    const navigateToNextGroup = () => {
-        if (!canNavigateToNextGroup.value) return
-        const newIndex = currentGroupIndex.value + 1
-        currentGroupIndex.value = newIndex
-        if (showAllCommentaries.value) {
-            scrollToGroup(newIndex)
-        }
-    }
-
-    const toggleViewMode = () => {
-        showAllCommentaries.value = !showAllCommentaries.value
-
-        if (!showAllCommentaries.value && processedLinkGroups().length > 0) {
-            if (currentGroupIndex.value < 0 || currentGroupIndex.value >= processedLinkGroups().length) {
-                currentGroupIndex.value = 0
-            }
-        }
-    }
-
-    const handleGroupClick = (group: CommentaryLinkGroup) => {
-        if (group.targetBookId !== undefined && group.targetLineIndex !== undefined) {
-            const targetBook = categoryTreeStore.allBooks.find(book => book.id === group.targetBookId)
-            const targetHasConnections = targetBook ? hasConnections(targetBook) : false
-
-            tabStore.openBookInNewTab(
-                group.groupName,
-                group.targetBookId,
-                targetHasConnections,
-                group.targetLineIndex,
-                true
-            )
-        }
-    }
-
-    // Watch for group changes in single mode and scroll to top
-    watch(() => currentGroupIndex.value, () => {
-        if (!showAllCommentaries.value) {
-            const container = contentRef()
-            if (container) {
-                container.scrollTop = 0
-            }
-        }
-    })
-
-    // Watch for mode changes and scroll to current group in all mode
-    watch(() => showAllCommentaries.value, async (isAll) => {
-        if (isAll) {
-            await nextTick()
-            setTimeout(() => {
-                scrollToGroup(currentGroupIndex.value, true)
-            }, 0)
-            setupScrollListener()
-        } else {
-            cleanupScrollListener()
-        }
-    })
-
-    // Detect which group is at the center of the viewport
-    const detectCenterGroup = () => {
-        if (!showAllCommentaries.value || isProgrammaticScroll.value) return
-
-        const container = contentRef()
-        if (!container) return
-
-        const containerRect = container.getBoundingClientRect()
-        const centerY = containerRect.top + containerRect.height / 2
-
-        const groupHeaders = container.querySelectorAll('[data-group-index]')
-        let closestGroup = -1
-        let closestDistance = Infinity
-
-        groupHeaders.forEach((header) => {
-            const groupIndex = parseInt(header.getAttribute('data-group-index') || '-1')
-            if (groupIndex < 0) return
-
-            const rect = header.getBoundingClientRect()
-            const headerCenter = rect.top + rect.height / 2
-            const distance = Math.abs(headerCenter - centerY)
-
-            if (distance < closestDistance) {
-                closestDistance = distance
-                closestGroup = groupIndex
-            }
-        })
-
-        if (closestGroup >= 0 && closestGroup !== currentGroupIndex.value) {
-            currentGroupIndex.value = closestGroup
-        }
-    }
-
-    const handleScroll = () => {
-        if (scrollTimeout) {
-            clearTimeout(scrollTimeout)
-        }
-
-        scrollTimeout = setTimeout(() => {
-            detectCenterGroup()
-        }, 100)
-    }
-
-    const setupScrollListener = () => {
-        cleanupScrollListener()
-        const container = contentRef()
-        if (container && showAllCommentaries.value) {
-            container.addEventListener('scroll', handleScroll, { passive: true })
-        }
-    }
-
-    const cleanupScrollListener = () => {
-        if (scrollTimeout) {
-            clearTimeout(scrollTimeout)
-            scrollTimeout = null
-        }
-        const container = contentRef()
-        if (container) {
-            container.removeEventListener('scroll', handleScroll)
-        }
-    }
-
-    // Setup scroll listener when groups change
-    watch(() => processedLinkGroups().length, async () => {
-        if (showAllCommentaries.value) {
-            await nextTick()
-            setTimeout(() => {
-                setupScrollListener()
-            }, 100)
-        }
-    })
-
-    onMounted(() => {
-        if (showAllCommentaries.value) {
-            setTimeout(() => {
-                setupScrollListener()
-            }, 100)
-        }
-    })
-
-    onUnmounted(() => {
-        cleanupScrollListener()
-    })
+    const isLoadingAnyGroup = computed(() => loadingGroupIndices.value.size > 0)
 
     return {
-        showAllCommentaries,
-        currentGroupIndex,
-        hasFocus,
-        comboboxSelectedValue,
-        canNavigateToPreviousGroup,
-        canNavigateToNextGroup,
-        displayGroups,
-        scrollToGroupByIndex,
-        navigateToPreviousGroup,
-        navigateToNextGroup,
-        toggleViewMode,
-        handleGroupClick
+        commentaryGroups,
+        isLoadingMetadata,
+        isLoadingAnyGroup,
+        loadCommentaryMetadata,
+        loadGroupContent
     }
 }

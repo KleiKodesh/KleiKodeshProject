@@ -22,12 +22,6 @@
                       class="small-icon" />
             </button>
 
-            <!-- Connection Type Filter -->
-            <CommentaryConnectionTypeFilter :book="book"
-                                            :selected-connection-type-id="selectedConnectionTypeId"
-                                            :available-options="availableFilterOptions"
-                                            @filter-change="$emit('connection-type-change', $event)" />
-
             <!-- Category Filter Toggle Button -->
             <div class="category-filter-wrapper"
                  v-if="availableCategories.length > 1">
@@ -48,7 +42,7 @@
                     <div class="category-option"
                          :class="{ 'selected': selectedCategoryFilter === null }"
                          @click="selectCategory(null)">
-                        הכל
+                        כל המפרשים
                     </div>
                     <div v-for="category in availableCategories"
                          :key="category"
@@ -118,7 +112,6 @@ import { ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import { onClickOutside } from '@vueuse/core'
 import Combobox, { type ComboboxOption } from '@/components/shared/Combobox.vue'
-import CommentaryConnectionTypeFilter from './CommentaryConnectionTypeFilter.vue'
 import type { Book } from '@/data/types/Book'
 
 defineProps<{
@@ -128,8 +121,6 @@ defineProps<{
     canNavigateToPreviousGroup: boolean
     canNavigateToNextGroup: boolean
     book?: Book
-    selectedConnectionTypeId?: number
-    availableFilterOptions: Array<{ label: string; value: number }>
     comboboxSelectedValue: string | number
     filteredGroupOptions: ComboboxOption[]
     showAllCommentaries: boolean
@@ -141,7 +132,6 @@ const emit = defineEmits<{
     'navigate-previous-line': []
     'navigate-next-line': []
     'open-search': []
-    'connection-type-change': [id: number]
     'update:combobox-value': [value: string | number]
     'update:category-filter': [value: string | null]
     'navigate-previous-group': []
