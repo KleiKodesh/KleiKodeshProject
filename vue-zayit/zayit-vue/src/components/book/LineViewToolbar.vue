@@ -173,8 +173,6 @@ defineExpose({
 <style scoped>
 .book-view-toolbar {
     display: flex;
-    flex-direction: row;
-    flex-wrap: nowrap;
     align-items: center;
     justify-content: center;
     gap: 2px;
@@ -219,8 +217,6 @@ defineExpose({
 .toolbar-left,
 .toolbar-right {
     flex-direction: column;
-    justify-content: flex-start;
-    flex-wrap: nowrap;
     width: 48px;
 }
 
@@ -235,7 +231,6 @@ defineExpose({
 }
 
 .toolbar-float {
-    flex-direction: row;
     flex-wrap: wrap;
     border: 1px solid var(--border-color);
     border-radius: 4px;
@@ -244,8 +239,6 @@ defineExpose({
 }
 
 .toolbar-float-horizontal {
-    flex-direction: row;
-    flex-wrap: nowrap;
     border: 1px solid var(--border-color);
     border-radius: 4px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);

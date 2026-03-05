@@ -4,15 +4,13 @@
       <span class="bold">{{ label }}</span>
       <span class="text-secondary setting-value">{{ displayValue }}</span>
     </label>
-    <input
-      type="range"
-      :value="modelValue"
-      @input="handleInput"
-      :min="min"
-      :max="max"
-      :step="step"
-      class="setting-slider"
-    />
+    <input type="range"
+           :value="modelValue"
+           @input="handleInput"
+           :min="min"
+           :max="max"
+           :step="step"
+           class="setting-slider" />
   </div>
 </template>
 
@@ -43,48 +41,5 @@ const displayValue = computed(() => {
 </script>
 
 <style scoped>
-.setting-group {
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.setting-label {
-  font-size: 14px;
-  margin-bottom: 10px;
-}
-
-.setting-value {
-  font-size: 13px;
-  font-weight: normal;
-}
-
-.setting-slider {
-  width: 100%;
-  height: 6px;
-  background: var(--bg-secondary);
-  border-radius: 3px;
-  outline: none;
-  -webkit-appearance: none;
-  appearance: none;
-}
-
-.setting-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 22px;
-  height: 22px;
-  background: var(--accent-color);
-  border-radius: 50%;
-  cursor: pointer;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
-}
-
-.setting-slider::-moz-range-thumb {
-  width: 22px;
-  height: 22px;
-  background: var(--accent-color);
-  border-radius: 50%;
-  cursor: pointer;
-  border: none;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
-}
+/* No custom styles needed - all using global utilities */
 </style>
