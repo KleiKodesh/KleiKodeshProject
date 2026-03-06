@@ -74,14 +74,15 @@ function handleSelectGroup(node: CommentaryTreeNode) {
     
     selectedGroupName.value = node.name
     
-    // Scroll to the selected group in the commentary content
-    if (commentaryContentRef.value && node.type === 'book') {
-        console.log('[CommentaryView] Calling scrollToGroup for:', node.name)
-        commentaryContentRef.value.scrollToGroup(node.name)
+    // Scroll to the selected group in the commentary content using bookId
+    if (commentaryContentRef.value && node.type === 'book' && node.bookId !== undefined) {
+        console.log('[CommentaryView] Calling scrollToGroup for bookId:', node.bookId)
+        commentaryContentRef.value.scrollToGroup(node.bookId)
     } else {
         console.log('[CommentaryView] Skipping scroll - reason:', {
             isBook: node.type === 'book',
-            hasRef: !!commentaryContentRef.value
+            hasRef: !!commentaryContentRef.value,
+            hasBookId: node.bookId !== undefined
         })
     }
 }

@@ -15,7 +15,7 @@
              class="commentary-groups">
             <div v-for="(bookNode, index) in flattenedBooks"
                  :key="`${bookNode.path.join('-')}-${index}`"
-                 :data-group-name="bookNode.name"
+                 :data-book-id="bookNode.bookId"
                  class="commentary-group">
                 <!-- Sticky Header with full path -->
                 <CommentaryHeader
@@ -104,29 +104,29 @@ function handleGroupClick(node: CommentaryTreeNode) {
     }
 }
 
-async function scrollToGroup(groupName: string) {
-    console.log('[CommentaryContent] scrollToGroup called with:', groupName)
+async function scrollToGroup(bookId: number) {
+    console.log('[CommentaryContent] scrollToGroup called with bookId:', bookId)
     
     if (!scrollContainer.value) {
         console.log('[CommentaryContent] ERROR: scrollContainer is null')
         return
     }
     
-    const groupElement = scrollContainer.value.querySelector(`[data-group-name="${groupName}"]`) as HTMLElement
+    const groupElement = scrollContainer.value.querySelector(`[data-book-id="${bookId}"]`) as HTMLElement
     console.log('[CommentaryContent] Found group element:', {
-        groupName,
+        bookId,
         found: !!groupElement,
-        selector: `[data-group-name="${groupName}"]`
+        selector: `[data-book-id="${bookId}"]`
     })
     
     if (groupElement) {
         console.log('[CommentaryContent] Scrolling to element')
         await scrollToElement(groupElement)
     } else {
-        // Debug: log all available group names
-        const allGroups = scrollContainer.value.querySelectorAll('[data-group-name]')
-        const availableGroups = Array.from(allGroups).map(g => g.getAttribute('data-group-name'))
-        console.log('[CommentaryContent] Available groups:', availableGroups)
+        // Debug: log all available book IDs
+        const allGroups = scrollContainer.value.querySelectorAll('[data-book-id]')
+        const availableBookIds = Array.from(allGroups).map(g => g.getAttribute('data-book-id'))
+        console.log('[CommentaryContent] Available book IDs:', availableBookIds)
     }
 }
 </script>
@@ -152,6 +152,8 @@ async function scrollToGroup(groupName: string) {
 
 .commentary-group {
     margin-bottom: 12px;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 500px;
 }
 
 .commentary-group-content {

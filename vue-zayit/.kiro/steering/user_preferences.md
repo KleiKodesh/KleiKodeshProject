@@ -140,6 +140,33 @@ This document defines **HOW** to implement, not **WHAT** to implement.
 
 ---
 
+## Virtualization Strategy
+
+### CSS content-visibility: The Standard Approach
+
+Use CSS `content-visibility: auto` for all list virtualization needs.
+
+**Implementation:**
+
+```css
+.list-item {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 500px;
+}
+```
+
+**Benefits:**
+
+- Browser handles rendering optimization automatically
+- No JavaScript complexity or library dependencies
+- Preserves normal DOM flow and CSS features (sticky, flexbox, grid)
+- Scroll position maintained correctly
+- Excellent browser support
+
+**Rule:** Use CSS content-visibility for virtualization. Do not use JavaScript virtual scroller libraries (vue-virtual-scroller, etc.) unless there is a proven, specific technical limitation that CSS cannot solve.
+
+---
+
 ## Code Maintenance & Technical Debt
 
 ### The Gnarly Tree Problem
