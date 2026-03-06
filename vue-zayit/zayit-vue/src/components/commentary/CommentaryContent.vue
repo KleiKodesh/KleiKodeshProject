@@ -15,7 +15,7 @@
              class="commentary-groups">
             <div v-for="(bookNode, index) in flattenedBooks"
                  :key="`${bookNode.path.join('-')}-${index}`"
-                 :ref="el => setGroupRef(el, index)"
+                 :data-group-name="bookNode.name"
                  class="commentary-group">
                 <!-- Sticky Header with full path -->
                 <CommentaryHeader
@@ -49,46 +49,44 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, nextTick, computed } from 'vue'
-import { useInfiniteScroll } from '@vueuse/core'
-import { useCommentaryContent } from './useCommentaryContent'
+import { ref, computed } from 'vue'
+import { scrollToElement } from '@/components/shared/useScrollToElement'
 import { useCommentaryTree } from './useCommentaryTree'
 import { useTabStore } from '@/data/stores/tabStore'
 import { useCategoryTreeStore } from '@/data/stores/categoryTreeStore'
 import { hasConnections } from '@/data/types/Book'
 import CommentaryHeader from './CommentaryHeader.vue'
 import type { CommentaryTreeNode } from './useCommentaryTree'
+import type { CommentaryMetadata } from './useCommentaryContent'
 
 const props = defineProps<{
+    commentaryGroups: CommentaryMetadata[]
+    isLoadingMetadata: boolean
     bookId?: number
     selectedLineIndex?: number
     connectionTypeId?: number
 }>()
 
-const {
-    commentaryGroups,
-    isLoadingMetadata,
-    loadCommentaryMetadata,
-    loadGroupContent
-} = useCommentaryContent()
-
-const { flattenedBooks } = useCommentaryTree(computed(() => commentaryGroups.value))
+const { flattenedBooks } = useCommentaryTree(computed(() => props.commentaryGroups))
 
 const tabStore = useTabStore()
 const categoryTreeStore = useCategoryTreeStore()
 
 const scrollContainer = ref<HTMLElement | null>(null)
-const groupRefs = new Map<number, HTMLElement>()
-const observedGroups = new Set<number>()
 
-function setGroupRef(el: any, index: number) {
-    if (el) {
-        groupRefs.set(index, el as HTMLElement)
-    }
-}
+// Create a Map for O(1) lookups
+const commentaryGroupsMap = computed(() => {
+    const map = new Map<string, typeof props.commentaryGroups[0]>()
+    props.commentaryGroups.forEach(g => map.set(g.groupName, g))
+    return map
+})
+
+defineExpose({
+    scrollToGroup
+})
 
 function getGroupMetadata(node: CommentaryTreeNode) {
-    return commentaryGroups.value.find(g => g.groupName === node.metadata?.groupName)
+    return commentaryGroupsMap.value.get(node.metadata?.groupName || '')
 }
 
 function handleGroupClick(node: CommentaryTreeNode) {
@@ -106,93 +104,31 @@ function handleGroupClick(node: CommentaryTreeNode) {
     }
 }
 
-// Intersection Observer to detect when groups come into view
-let intersectionObserver: IntersectionObserver | null = null
-
-function setupIntersectionObserver() {
-    if (intersectionObserver) {
-        intersectionObserver.disconnect()
+async function scrollToGroup(groupName: string) {
+    console.log('[CommentaryContent] scrollToGroup called with:', groupName)
+    
+    if (!scrollContainer.value) {
+        console.log('[CommentaryContent] ERROR: scrollContainer is null')
+        return
     }
-
-    intersectionObserver = new IntersectionObserver(
-        (entries) => {
-            entries.forEach((entry) => {
-                if (entry.isIntersecting) {
-                    // Find which group this element belongs to
-                    for (const [index, element] of groupRefs.entries()) {
-                        if (element === entry.target) {
-                            const bookNode = flattenedBooks.value[index]
-                            if (bookNode?.metadata && !observedGroups.has(index) && props.bookId !== undefined && props.selectedLineIndex !== undefined) {
-                                observedGroups.add(index)
-                                // Find group index by matching groupName
-                                const groupIndex = commentaryGroups.value.findIndex(
-                                    g => g.groupName === bookNode.metadata!.groupName
-                                )
-                                console.log('Loading group:', bookNode.metadata.groupName, 'at index:', groupIndex)
-                                if (groupIndex >= 0) {
-                                    loadGroupContent(groupIndex, props.bookId, props.selectedLineIndex, props.connectionTypeId)
-                                        .then(() => {
-                                            console.log('Loaded group:', bookNode.metadata!.groupName, 'isLoaded:', commentaryGroups.value[groupIndex].isLoaded)
-                                        })
-                                }
-                            }
-                            break
-                        }
-                    }
-                }
-            })
-        },
-        {
-            root: scrollContainer.value,
-            rootMargin: '200px',
-            threshold: 0
-        }
-    )
-
-    // Observe all group elements
-    groupRefs.forEach((element) => {
-        intersectionObserver!.observe(element)
+    
+    const groupElement = scrollContainer.value.querySelector(`[data-group-name="${groupName}"]`) as HTMLElement
+    console.log('[CommentaryContent] Found group element:', {
+        groupName,
+        found: !!groupElement,
+        selector: `[data-group-name="${groupName}"]`
     })
-}
-
-// Watch for changes to bookId/lineIndex and reload metadata
-watch(
-    () => [props.bookId, props.selectedLineIndex, props.connectionTypeId] as const,
-    async ([bookId, lineIndex, connectionTypeId]) => {
-        if (bookId !== undefined && lineIndex !== undefined) {
-            // Clear previous state
-            groupRefs.clear()
-            observedGroups.clear()
-
-            // Load new metadata
-            await loadCommentaryMetadata(bookId, lineIndex, connectionTypeId)
-
-            // Setup observer after DOM updates
-            await nextTick()
-            setupIntersectionObserver()
-        }
-    },
-    { immediate: true }
-)
-
-// Infinite scroll for loading more groups (if needed in future)
-useInfiniteScroll(
-    scrollContainer,
-    () => {
-        // Future: Load more groups if pagination is needed
-    },
-    { distance: 100 }
-)
-
-onMounted(() => {
-    setupIntersectionObserver()
-})
-
-onUnmounted(() => {
-    if (intersectionObserver) {
-        intersectionObserver.disconnect()
+    
+    if (groupElement) {
+        console.log('[CommentaryContent] Scrolling to element')
+        await scrollToElement(groupElement)
+    } else {
+        // Debug: log all available group names
+        const allGroups = scrollContainer.value.querySelectorAll('[data-group-name]')
+        const availableGroups = Array.from(allGroups).map(g => g.getAttribute('data-group-name'))
+        console.log('[CommentaryContent] Available groups:', availableGroups)
     }
-})
+}
 </script>
 
 <style scoped>

@@ -13,7 +13,6 @@ export interface CommentaryMetadata {
 export function useCommentaryContent() {
     const commentaryGroups = ref<CommentaryMetadata[]>([])
     const isLoadingMetadata = ref(false)
-    const loadingGroupIndices = ref<Set<number>>(new Set())
 
     /**
      * Load commentary metadata and content in one call
@@ -76,28 +75,9 @@ export function useCommentaryContent() {
         }
     }
 
-    /**
-     * No-op since content is already loaded during metadata load
-     */
-    async function loadGroupContent(
-        groupIndex: number,
-        bookId: number,
-        lineIndex: number,
-        connectionTypeId?: number
-    ): Promise<void> {
-        // Content is already loaded in loadCommentaryMetadata, this is now instant
-        if (groupIndex < 0 || groupIndex >= commentaryGroups.value.length) return
-        // Mark as loading/loaded state if needed by UI
-        loadingGroupIndices.value.delete(groupIndex)
-    }
-
-    const isLoadingAnyGroup = computed(() => loadingGroupIndices.value.size > 0)
-
     return {
         commentaryGroups,
         isLoadingMetadata,
-        isLoadingAnyGroup,
-        loadCommentaryMetadata,
-        loadGroupContent
+        loadCommentaryMetadata
     }
 }
