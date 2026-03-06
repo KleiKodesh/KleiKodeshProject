@@ -13,38 +13,31 @@
 
         <div v-else
              class="commentary-groups">
-            <div v-for="(group, index) in commentaryGroups"
-                 :key="`${group.groupName}-${index}`"
+            <div v-for="(bookNode, index) in flattenedBooks"
+                 :key="`${bookNode.path.join('-')}-${index}`"
                  :ref="el => setGroupRef(el, index)"
                  class="commentary-group">
-                <!-- Sticky Header -->
-                <div class="commentary-group-header">
-                    <a
-                        v-if="group.targetBookId !== undefined && group.targetLineIndex !== undefined"
-                        href="#"
-                        class="commentary-group-title"
-                        @click.prevent="handleGroupClick(group)"
-                    >
-                        {{ group.groupName }}
-                    </a>
-                    <h3 v-else class="commentary-group-title">
-                        {{ group.groupName }}
-                    </h3>
-                </div>
+                <!-- Sticky Header with full path -->
+                <CommentaryHeader
+                    :path="bookNode.path"
+                    :book-id="bookNode.bookId"
+                    :line-index="bookNode.lineIndex"
+                    @click="handleGroupClick(bookNode)"
+                />
 
                 <!-- Content -->
                 <div class="commentary-group-content">
-                    <div v-if="!group.isLoaded"
+                    <div v-if="!getGroupMetadata(bookNode)?.isLoaded"
                          class="commentary-group-loading">
                         טוען תוכן...
                     </div>
-                    <div v-else-if="group.links.length === 0"
+                    <div v-else-if="!getGroupMetadata(bookNode)?.links || getGroupMetadata(bookNode)!.links.length === 0"
                          class="commentary-group-empty">
                         אין תוכן זמין
                     </div>
                     <div v-else
                          class="commentary-links">
-                        <div v-for="(link, linkIndex) in group.links"
+                        <div v-for="(link, linkIndex) in getGroupMetadata(bookNode)!.links"
                              :key="linkIndex"
                              class="commentary-link selectable"
                              v-html="link.html" />
@@ -56,13 +49,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, watch, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import { useInfiniteScroll } from '@vueuse/core'
 import { useCommentaryContent } from './useCommentaryContent'
+import { useCommentaryTree } from './useCommentaryTree'
 import { useTabStore } from '@/data/stores/tabStore'
 import { useCategoryTreeStore } from '@/data/stores/categoryTreeStore'
 import { hasConnections } from '@/data/types/Book'
-import type { CommentaryMetadata } from './useCommentaryContent'
+import CommentaryHeader from './CommentaryHeader.vue'
+import type { CommentaryTreeNode } from './useCommentaryTree'
 
 const props = defineProps<{
     bookId?: number
@@ -77,6 +72,8 @@ const {
     loadGroupContent
 } = useCommentaryContent()
 
+const { flattenedBooks } = useCommentaryTree(computed(() => commentaryGroups.value))
+
 const tabStore = useTabStore()
 const categoryTreeStore = useCategoryTreeStore()
 
@@ -90,16 +87,20 @@ function setGroupRef(el: any, index: number) {
     }
 }
 
-function handleGroupClick(group: CommentaryMetadata) {
-    if (group.targetBookId !== undefined && group.targetLineIndex !== undefined) {
-        const targetBook = categoryTreeStore.allBooks.find(book => book.id === group.targetBookId)
+function getGroupMetadata(node: CommentaryTreeNode) {
+    return commentaryGroups.value.find(g => g.groupName === node.metadata?.groupName)
+}
+
+function handleGroupClick(node: CommentaryTreeNode) {
+    if (node.bookId !== undefined && node.lineIndex !== undefined) {
+        const targetBook = categoryTreeStore.allBooks.find(book => book.id === node.bookId)
         const targetHasConnections = targetBook ? hasConnections(targetBook) : false
 
         tabStore.openBookInNewTab(
-            group.groupName,
-            group.targetBookId,
+            node.hebrewName,
+            node.bookId,
             targetHasConnections,
-            group.targetLineIndex,
+            node.lineIndex,
             true
         )
     }
@@ -120,9 +121,20 @@ function setupIntersectionObserver() {
                     // Find which group this element belongs to
                     for (const [index, element] of groupRefs.entries()) {
                         if (element === entry.target) {
-                            if (!observedGroups.has(index) && props.bookId !== undefined && props.selectedLineIndex !== undefined) {
+                            const bookNode = flattenedBooks.value[index]
+                            if (bookNode?.metadata && !observedGroups.has(index) && props.bookId !== undefined && props.selectedLineIndex !== undefined) {
                                 observedGroups.add(index)
-                                loadGroupContent(index, props.bookId, props.selectedLineIndex, props.connectionTypeId)
+                                // Find group index by matching groupName
+                                const groupIndex = commentaryGroups.value.findIndex(
+                                    g => g.groupName === bookNode.metadata!.groupName
+                                )
+                                console.log('Loading group:', bookNode.metadata.groupName, 'at index:', groupIndex)
+                                if (groupIndex >= 0) {
+                                    loadGroupContent(groupIndex, props.bookId, props.selectedLineIndex, props.connectionTypeId)
+                                        .then(() => {
+                                            console.log('Loaded group:', bookNode.metadata!.groupName, 'isLoaded:', commentaryGroups.value[groupIndex].isLoaded)
+                                        })
+                                }
                             }
                             break
                         }
@@ -188,7 +200,7 @@ onUnmounted(() => {
     height: 100%;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 0 16px 16px 16px;
+    padding: 0 12px 12px 12px;
     background-color: var(--reading-bg-primary);
     color: var(--reading-text-primary);
 }
@@ -203,51 +215,24 @@ onUnmounted(() => {
 }
 
 .commentary-group {
-    margin-bottom: 24px;
-}
-
-.commentary-group-header {
-    position: sticky;
-    top: 0;
-    background-color: var(--reading-bg-primary);
-    padding: 8px 0;
-    z-index: 10;
-}
-
-.commentary-group-title {
-    margin: 0;
-    font-size: calc(1.1rem * var(--commentary-font-size) / 100);
-    font-weight: 600;
-    color: var(--reading-text-primary);
-    direction: rtl;
-    font-family: var(--commentary-header-font);
-}
-
-a.commentary-group-title {
-    color: var(--accent-color);
-    text-decoration: none;
-    cursor: pointer;
-}
-
-a.commentary-group-title:hover {
-    text-decoration: underline;
+    margin-bottom: 12px;
 }
 
 .commentary-group-content {
-    padding-top: 8px;
+    padding-top: 4px;
 }
 
 .commentary-group-loading,
 .commentary-group-empty {
     color: var(--text-secondary);
     font-style: italic;
-    padding: 8px 0;
+    padding: 4px 0;
 }
 
 .commentary-links {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
 }
 
 .commentary-link {
