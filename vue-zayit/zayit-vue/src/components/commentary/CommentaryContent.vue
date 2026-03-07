@@ -92,55 +92,141 @@ const containerStyles = computed(() => {
     }
 })
 
-// Save scroll position to tab store
+// Save scroll position to tab store (two-tier: element index + offset)
 function saveScrollPosition() {
     if (!scrollContainer.value) return
     const activeTab = tabStore.activeTab
-    if (activeTab?.bookState) {
-        activeTab.bookState.commentaryScrollTop = scrollContainer.value.scrollTop
+    if (!activeTab?.bookState) return
+
+    // Find which element is at the top of the viewport
+    const containerRect = scrollContainer.value.getBoundingClientRect()
+    const topY = containerRect.top + 50 // Account for sticky header
+
+    const groups = scrollContainer.value.querySelectorAll('[data-book-id]')
+    for (let i = 0; i < groups.length; i++) {
+        const group = groups[i] as HTMLElement
+        const rect = group.getBoundingClientRect()
+        if (rect.top <= topY && rect.bottom > topY) {
+            // Save offset FROM the element's start (how far into the element we are)
+            const offset = topY - rect.top
+
+            activeTab.bookState.commentaryScrollElementIndex = i
+            activeTab.bookState.commentaryScrollOffset = offset
+
+            console.log('[CommentaryContent] 💾 SAVED scroll position:', { index: i, offset, topY, rectTop: rect.top })
+            return
+        }
     }
 }
 
-// Restore scroll position from tab store with retry logic
+// Restore scroll position from tab store with retry logic (two-tier: bookId + offset)
 async function restoreScrollPosition(isFirstInit: boolean) {
     if (!scrollContainer.value) return
 
     // Don't restore on first initialization - let default commentary scroll happen
     if (isFirstInit) {
-        console.log('[CommentaryContent] Skipping restore - first init')
+        console.log('[CommentaryContent] ⏭️ SKIP restore - first init')
         return
     }
 
     const activeTab = tabStore.activeTab
+    const elementIndex = activeTab?.bookState?.commentaryScrollElementIndex
+    const offset = activeTab?.bookState?.commentaryScrollOffset
 
-    // Only restore if we have a meaningful scroll position (> 0)
-    // Position of 0 means top, which is the default, so no need to restore
-    if (activeTab?.bookState?.commentaryScrollTop === undefined || activeTab.bookState.commentaryScrollTop === 0) {
-        console.log('[CommentaryContent] Skipping restore - no persisted position')
+    // Only restore if we have element index
+    if (elementIndex === undefined) {
+        console.log('[CommentaryContent] ⏭️ SKIP restore - no persisted position')
         return
     }
 
-    const targetScrollTop = activeTab.bookState.commentaryScrollTop
-    console.log('[CommentaryContent] Restoring scroll position:', targetScrollTop)
+    console.log('[CommentaryContent] 🔄 RESTORING scroll position:', { elementIndex, offset })
 
-    // Retry logic for content-visibility rendering
-    const maxRetries = 5
-    for (let i = 0; i < maxRetries; i++) {
-        scrollContainer.value.scrollTop = targetScrollTop
+    // Retry logic to wait for element to be available
+    let targetElement: HTMLElement | null = null
+    const maxRetries = 10
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
         await new Promise(resolve => requestAnimationFrame(resolve))
 
-        const isAtPosition = Math.abs(scrollContainer.value.scrollTop - targetScrollTop) < 5
-
-        if (isAtPosition) {
-            console.log('[CommentaryContent] Restore complete')
+        const groups = scrollContainer.value.querySelectorAll('[data-book-id]')
+        if (elementIndex < groups.length) {
+            targetElement = groups[elementIndex] as HTMLElement
+            console.log('[CommentaryContent] Found element by index:', elementIndex, 'attempt:', attempt + 1)
             break
         }
 
-        // Wait a bit before retry (content-visibility may still be rendering)
-        if (i < maxRetries - 1) {
-            await new Promise(resolve => setTimeout(resolve, 20))
+        // Wait before retry
+        if (attempt < maxRetries - 1) {
+            await new Promise(resolve => setTimeout(resolve, 50))
         }
     }
+
+    if (!targetElement) {
+        console.log('[CommentaryContent] ⚠️ Element not found after retries')
+        return
+    }
+
+    // Temporarily force render this element
+    const originalVisibility = targetElement.style.contentVisibility
+    targetElement.style.contentVisibility = 'visible'
+
+    await new Promise(resolve => requestAnimationFrame(resolve))
+    await new Promise(resolve => requestAnimationFrame(resolve))
+
+    // Scroll to element using the scroll composable
+    await scrollToElement(targetElement, { block: 'nearest' })
+
+    // If we have an offset, apply it with retry logic
+    if (offset !== undefined && offset !== 0) {
+        const maxOffsetRetries = 5
+        for (let i = 0; i < maxOffsetRetries; i++) {
+            await new Promise(resolve => requestAnimationFrame(resolve))
+
+            const containerRect = scrollContainer.value.getBoundingClientRect()
+            const elementRect = targetElement.getBoundingClientRect()
+            const topY = containerRect.top + 50 // Account for sticky header
+
+            // Calculate how far into the element we currently are
+            const currentOffset = topY - elementRect.top
+            const adjustment = offset - currentOffset
+
+            console.log('[CommentaryContent] 📍 Offset adjustment attempt', i + 1, ':', {
+                targetOffset: offset,
+                currentOffset,
+                adjustment,
+                topY,
+                elementTop: elementRect.top
+            })
+
+            if (Math.abs(adjustment) < 2) {
+                console.log('[CommentaryContent] ✅ Offset applied successfully')
+                break
+            }
+
+            scrollContainer.value.scrollTop += adjustment
+
+            if (i < maxOffsetRetries - 1) {
+                await new Promise(resolve => setTimeout(resolve, 20))
+            }
+        }
+    }
+
+    // Verify final position
+    await new Promise(resolve => requestAnimationFrame(resolve))
+    const finalRect = targetElement.getBoundingClientRect()
+    const finalContainerRect = scrollContainer.value.getBoundingClientRect()
+    const finalTopY = finalContainerRect.top + 50
+    const finalOffset = finalTopY - finalRect.top
+
+    console.log('[CommentaryContent] ✅ RESTORE complete:', {
+        elementIndex,
+        targetOffset: offset,
+        actualOffset: finalOffset,
+        diff: Math.abs((offset || 0) - finalOffset)
+    })
+
+    // Restore content-visibility
+    targetElement.style.contentVisibility = originalVisibility
 }
 
 // Create a Map for O(1) lookups
