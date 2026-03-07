@@ -94,17 +94,27 @@ export function useBookViewPage(
         }
     }
 
-    const handleNavigatePreviousLine = () => {
+    const handleNavigatePreviousLine = (bookId?: number) => {
         const currentLineIndex = myTab.value?.bookState?.selectedLineIndex
         if (currentLineIndex !== undefined && currentLineIndex > 0) {
             handleNavigateLine(currentLineIndex - 1)
+
+            // Set the selected commentary to the one that emitted the event
+            if (bookId !== undefined && myTab.value?.bookState) {
+                myTab.value.bookState.commentaryScrollElementIndex = bookId
+            }
         }
     }
 
-    const handleNavigateNextLine = () => {
+    const handleNavigateNextLine = (bookId?: number) => {
         const currentLineIndex = myTab.value?.bookState?.selectedLineIndex
         if (currentLineIndex !== undefined) {
             handleNavigateLine(currentLineIndex + 1)
+
+            // Set the selected commentary to the one that emitted the event
+            if (bookId !== undefined && myTab.value?.bookState) {
+                myTab.value.bookState.commentaryScrollElementIndex = bookId
+            }
         }
     }
 

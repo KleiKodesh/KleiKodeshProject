@@ -1,6 +1,7 @@
 <template>
     <div ref="scrollContainer"
          class="commentary-scroll-container"
+         tabindex="0"
          :style="containerStyles">
         <div v-if="isLoadingMetadata" class="commentary-loading flex-center">
             טוען רשימת מפרשים...
@@ -23,11 +24,15 @@
                                   :line-index="bookNode.lineIndex"
                                   :has-previous="index > 0"
                                   :has-next="index < flattenedBooks.length - 1"
+                                  :available-books="flattenedBooks"
+                                  :is-dragging-selection="isDraggingSelection"
                                   @click="handleGroupClick(bookNode)"
                                   @navigate-previous="navigateToPrevious(index)"
                                   @navigate-next="navigateToNext(index)"
-                                  @navigate-previous-line="emit('navigate-previous-line')"
-                                  @navigate-next-line="emit('navigate-next-line')" />
+                                  @navigate-previous-line="emit('navigate-previous-line', bookNode.bookId)"
+                                  @navigate-next-line="emit('navigate-next-line', bookNode.bookId)"
+                                  @select-commentary="(bookId) => emit('select-commentary', bookId)"
+                                  @focus-content="focusContent" />
 
                 <div class="commentary-group-content">
                     <div v-if="!getGroupMetadata(bookNode)?.isLoaded" class="commentary-group-loading">
@@ -66,11 +71,13 @@ const props = defineProps<{
 
 const emit = defineEmits<{
     (e: 'visible-book-changed', bookId: number): void
-    (e: 'navigate-previous-line'): void
-    (e: 'navigate-next-line'): void
+    (e: 'navigate-previous-line', bookId?: number): void
+    (e: 'navigate-next-line', bookId?: number): void
+    (e: 'select-commentary', bookId: number): void
 }>()
 
 const scrollContainer = ref<HTMLElement | null>(null)
+const isDraggingSelection = ref(false)
 const { flattenedBooks } = useCommentaryTree(computed(() => props.commentaryGroups))
 
 const {
@@ -98,41 +105,62 @@ function handleScroll() {
     saveScrollPosition()
 }
 
-function navigateToPrevious(currentIndex: number) {
+async function navigateToPrevious(currentIndex: number) {
     if (currentIndex > 0) {
         const previousBook = flattenedBooks.value[currentIndex - 1]
         if (previousBook?.bookId) {
-            scrollToGroup(previousBook.bookId)
+            await scrollToGroup(previousBook.bookId)
+            focusContent()
         }
     }
 }
 
-function navigateToNext(currentIndex: number) {
+async function navigateToNext(currentIndex: number) {
     if (currentIndex < flattenedBooks.value.length - 1) {
         const nextBook = flattenedBooks.value[currentIndex + 1]
         if (nextBook?.bookId) {
-            scrollToGroup(nextBook.bookId)
+            await scrollToGroup(nextBook.bookId)
+            focusContent()
         }
     }
+}
+
+function focusContent() {
+    if (scrollContainer.value) {
+        scrollContainer.value.focus()
+    }
+}
+
+function handleSelectStart() {
+    isDraggingSelection.value = true
+}
+
+function handleMouseUp() {
+    isDraggingSelection.value = false
 }
 
 onMounted(() => {
     if (scrollContainer.value) {
         scrollContainer.value.addEventListener('scroll', handleScroll, { passive: true })
+        scrollContainer.value.addEventListener('selectstart', handleSelectStart)
         detectVisibleGroup(emit)
     }
+    document.addEventListener('mouseup', handleMouseUp)
 })
 
 onUnmounted(() => {
     if (scrollContainer.value) {
         scrollContainer.value.removeEventListener('scroll', handleScroll)
+        scrollContainer.value.removeEventListener('selectstart', handleSelectStart)
     }
+    document.removeEventListener('mouseup', handleMouseUp)
     saveScrollPosition()
 })
 
 defineExpose({
     scrollToGroup,
-    restoreScrollPosition
+    restoreScrollPosition,
+    focusContent
 })
 </script>
 
@@ -144,6 +172,7 @@ defineExpose({
     padding: 0 12px 12px;
     background-color: var(--reading-bg-primary);
     color: var(--reading-text-primary);
+    outline: none;
 }
 
 .commentary-loading,

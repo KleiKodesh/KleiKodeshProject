@@ -13,8 +13,9 @@
                            :connection-type-id="selectedConnectionTypeId"
                            class="flex-110"
                            @visible-book-changed="handleVisibleBookChanged"
-                           @navigate-previous-line="emit('navigate-previous-line')"
-                           @navigate-next-line="emit('navigate-next-line')" />
+                           @navigate-previous-line="(bookId) => emit('navigate-previous-line', bookId)"
+                           @navigate-next-line="(bookId) => emit('navigate-next-line', bookId)"
+                           @select-commentary="onSelectCommentary" />
     </div>
 </template>
 
@@ -37,8 +38,8 @@ const props = defineProps<{
 const emit = defineEmits<{
     (e: 'clearOtherSelections'): void
     (e: 'navigate-line', newIndex: number, tocEntryId?: number): void
-    (e: 'navigate-previous-line'): void
-    (e: 'navigate-next-line'): void
+    (e: 'navigate-previous-line', bookId?: number): void
+    (e: 'navigate-next-line', bookId?: number): void
 }>()
 
 const commentaryContentRef = ref<any>()
@@ -50,12 +51,21 @@ const {
     selectedConnectionTypeId,
     handleSelectGroup,
     handleVisibleBookChanged,
-    initializeCommentary
+    initializeCommentary,
+    scrollToCommentary
 } = useCommentaryView(props)
 
 function onSelectGroup(node: CommentaryTreeNode) {
     const bookId = handleSelectGroup(node)
     if (bookId) commentaryContentRef.value?.scrollToGroup(bookId)
+}
+
+async function onSelectCommentary(bookId: number) {
+    if (commentaryContentRef.value?.scrollToGroup) {
+        await scrollToCommentary(bookId, (id) => commentaryContentRef.value!.scrollToGroup(id))
+        // Move focus back to content after navigation
+        commentaryContentRef.value?.focusContent()
+    }
 }
 
 watch(
