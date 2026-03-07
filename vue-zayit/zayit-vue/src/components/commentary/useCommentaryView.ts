@@ -4,6 +4,32 @@ import { useCommentaryContent } from './useCommentaryContent'
 import type { Book } from '@/data/types/Book'
 import type { CommentaryTreeNode } from './useCommentaryTree'
 
+/**
+ * Retry scrolling to a commentary group with exponential backoff
+ * This handles cases where the DOM isn't ready yet
+ */
+async function retryScrollToGroup(
+    bookId: number,
+    scrollToGroup: (bookId: number) => Promise<void>,
+    maxRetries = 10,
+    delayMs = 50
+): Promise<boolean> {
+    for (let i = 0; i < maxRetries; i++) {
+        await nextTick()
+        try {
+            await scrollToGroup(bookId)
+            return true
+        } catch (error) {
+            if (i === maxRetries - 1) {
+                console.warn(`Failed to scroll to commentary ${bookId} after ${maxRetries} retries`)
+                return false
+            }
+            await new Promise(resolve => setTimeout(resolve, delayMs))
+        }
+    }
+    return false
+}
+
 export function useCommentaryView(props: {
     bookId?: number
     selectedLineIndex?: number
@@ -31,6 +57,11 @@ export function useCommentaryView(props: {
         selectedBookId.value = bookId
     }
 
+    async function scrollToCommentary(bookId: number, scrollToGroup: (bookId: number) => Promise<void>) {
+        selectedBookId.value = bookId
+        await retryScrollToGroup(bookId, scrollToGroup)
+    }
+
     async function initializeCommentary(scrollToGroup: (bookId: number) => Promise<void>, restoreScrollPosition: (isFirstInit: boolean) => Promise<void>) {
         const bookId = props.bookId
         const lineIndex = props.selectedLineIndex
@@ -49,15 +80,7 @@ export function useCommentaryView(props: {
                     const targetBookId = defaultBookId || firstBookId
 
                     if (targetBookId) {
-                        selectedBookId.value = targetBookId
-                        for (let i = 0; i < 10; i++) {
-                            await nextTick()
-                            if (scrollToGroup) {
-                                await scrollToGroup(targetBookId)
-                                break
-                            }
-                            await new Promise(resolve => setTimeout(resolve, 50))
-                        }
+                        await scrollToCommentary(targetBookId, scrollToGroup)
                     }
                 } else {
                     await nextTick()
@@ -66,23 +89,47 @@ export function useCommentaryView(props: {
             } else if (commentaryGroups.value.length > 0) {
                 const isLineChange = previousLineIndex.value !== undefined && previousLineIndex.value !== lineIndex
 
-                if (isLineChange && selectedBookId.value) {
-                    const currentCommentaryExists = commentaryGroups.value.some(
-                        group => group.targetBookId === selectedBookId.value
-                    )
+                if (isLineChange) {
+                    // Check if we have a persisted commentary selection
+                    const persistedBookId = tabStore.activeTab?.bookState?.commentaryScrollElementIndex
 
-                    if (currentCommentaryExists) {
-                        await nextTick()
-                        await scrollToGroup(selectedBookId.value)
-                    } else {
-                        const defaultBookId = props.book?.defaultCommentatorBookId
-                        const firstBookId = commentaryGroups.value[0]?.targetBookId
-                        const targetBookId = defaultBookId || firstBookId
+                    if (persistedBookId !== undefined) {
+                        // Check if the persisted commentary exists in the new line
+                        const persistedCommentaryExists = commentaryGroups.value.some(
+                            group => group.targetBookId === persistedBookId
+                        )
 
-                        if (targetBookId) {
-                            selectedBookId.value = targetBookId
+                        if (persistedCommentaryExists) {
+                            selectedBookId.value = persistedBookId
                             await nextTick()
-                            await scrollToGroup(targetBookId)
+                            await scrollToGroup(persistedBookId)
+                        } else {
+                            // Fall back to default or first
+                            const defaultBookId = props.book?.defaultCommentatorBookId
+                            const firstBookId = commentaryGroups.value[0]?.targetBookId
+                            const targetBookId = defaultBookId || firstBookId
+
+                            if (targetBookId) {
+                                await scrollToCommentary(targetBookId, scrollToGroup)
+                            }
+                        }
+                    } else if (selectedBookId.value) {
+                        // Legacy behavior: try to maintain current commentary
+                        const currentCommentaryExists = commentaryGroups.value.some(
+                            group => group.targetBookId === selectedBookId.value
+                        )
+
+                        if (currentCommentaryExists) {
+                            await nextTick()
+                            await scrollToGroup(selectedBookId.value)
+                        } else {
+                            const defaultBookId = props.book?.defaultCommentatorBookId
+                            const firstBookId = commentaryGroups.value[0]?.targetBookId
+                            const targetBookId = defaultBookId || firstBookId
+
+                            if (targetBookId) {
+                                await scrollToCommentary(targetBookId, scrollToGroup)
+                            }
                         }
                     }
                 } else {
@@ -102,6 +149,7 @@ export function useCommentaryView(props: {
         selectedConnectionTypeId,
         handleSelectGroup,
         handleVisibleBookChanged,
-        initializeCommentary
+        initializeCommentary,
+        scrollToCommentary
     }
 }

@@ -1,49 +1,74 @@
 <template>
     <div class="commentary-header-nav">
-        <button class="commentary-nav-btn"
+        <button class="commentary-nav-btn c-pointer hover-bg"
                 :disabled="!hasPrevious"
                 :title="hasPrevious ? 'מפרש קודם' : 'אין מפרש קודם'"
-                @click="emit('navigate-previous')">
+                @click="handleNavigatePrevious">
             <Icon icon="fluent:chevron-up-28-regular" />
         </button>
-        <button class="commentary-nav-btn"
+        <button class="commentary-nav-btn c-pointer hover-bg"
                 :disabled="!hasNext"
                 :title="hasNext ? 'מפרש הבא' : 'אין מפרש הבא'"
-                @click="emit('navigate-next')">
+                @click="handleNavigateNext">
             <Icon icon="fluent:chevron-down-28-regular" />
         </button>
 
         <div class="nav-separator"></div>
 
-        <button class="commentary-nav-btn"
-                :title="'שורה קודמת'"
-                @click="emit('navigate-previous-line')">
+        <button class="commentary-nav-btn c-pointer hover-bg"
+                :title="'קטע קודם'"
+                @click="handleNavigatePreviousLine">
             <Icon icon="fluent:chevron-right-28-regular" />
         </button>
-        <button class="commentary-nav-btn"
-                :title="'שורה הבאה'"
-                @click="emit('navigate-next-line')">
+        <button class="commentary-nav-btn c-pointer hover-bg"
+                :title="'קטע הבא'"
+                @click="handleNavigateNextLine">
             <Icon icon="fluent:chevron-left-28-regular" />
         </button>
 
         <div class="nav-separator"></div>
 
         <button v-if="showBookButton"
-                class="commentary-nav-btn"
-                :title="'עבור לשורה בספר'"
-                @click="emit('navigate-to-book')">
+                class="commentary-nav-btn c-pointer hover-bg"
+                :title="`עבור לשורה בספר - ${commentaryTitle}`"
+                @click="handleNavigateToBook">
             <Icon icon="fluent:book-open-24-regular" />
         </button>
+
+        <div class="nav-separator"></div>
+
+        <div class="commentary-search-wrapper">
+            <input ref="inputRef"
+                   type="text"
+                   class="commentary-search-input"
+                   :list="`commentary-list-${componentId}`"
+                   placeholder="חפש מפרש..."
+                   @input="handleInput"
+                   @change="handleSelect"
+                   @keydown="handleKeydown"
+                   @focus="handleFocus"
+                   @blur="handleBlur" />
+            <datalist :id="`commentary-list-${componentId}`">
+                <option v-for="option in bookOptions"
+                        :key="option.bookId"
+                        :value="option.path">
+                </option>
+            </datalist>
+        </div>
     </div>
 </template>
 
 <script setup lang="ts">
+import { computed, watch, ref } from 'vue'
 import { Icon } from '@iconify/vue'
+import type { CommentaryTreeNode } from './useCommentaryTree'
 
-defineProps<{
+const props = defineProps<{
     hasPrevious?: boolean
     hasNext?: boolean
     showBookButton?: boolean
+    commentaryTitle?: string
+    availableBooks?: CommentaryTreeNode[]
 }>()
 
 const emit = defineEmits<{
@@ -52,7 +77,124 @@ const emit = defineEmits<{
     (e: 'navigate-previous-line'): void
     (e: 'navigate-next-line'): void
     (e: 'navigate-to-book'): void
+    (e: 'select-commentary', bookId: number): void
+    (e: 'input-focus'): void
+    (e: 'input-blur'): void
 }>()
+
+let uniqueId = 0
+const componentId = ++uniqueId
+
+const searchInput = ref('')
+const inputRef = ref<HTMLInputElement>()
+
+const bookOptions = computed(() => {
+    return props.availableBooks?.map(book => ({
+        bookId: book.bookId,
+        path: book.path.join(' > ')
+    })) || []
+})
+
+const filteredOptions = computed(() => {
+    if (!searchInput.value) return bookOptions.value
+    
+    const search = searchInput.value.toLowerCase()
+    return bookOptions.value.filter(option => 
+        option.path.toLowerCase().includes(search)
+    )
+})
+
+function handleNavigatePrevious() {
+    emit('navigate-previous')
+    emit('input-blur')
+}
+
+function handleNavigateNext() {
+    emit('navigate-next')
+    emit('input-blur')
+}
+
+function handleNavigatePreviousLine() {
+    emit('navigate-previous-line')
+    emit('input-blur')
+}
+
+function handleNavigateNextLine() {
+    emit('navigate-next-line')
+    emit('input-blur')
+}
+
+function handleNavigateToBook() {
+    emit('navigate-to-book')
+    emit('input-blur')
+}
+
+function handleInput(event: Event) {
+    const input = event.target as HTMLInputElement
+    searchInput.value = input.value
+}
+
+function handleKeydown(event: KeyboardEvent) {
+    if (event.key === 'Enter') {
+        event.preventDefault()
+        
+        // If there's exactly one filtered option, select it
+        if (filteredOptions.value.length === 1) {
+            const option = filteredOptions.value[0]
+            if (option?.bookId) {
+                emit('select-commentary', option.bookId)
+                searchInput.value = ''
+                if (inputRef.value) {
+                    inputRef.value.value = ''
+                    inputRef.value.blur()
+                }
+                // Emit event to move focus back to content
+                emit('input-blur')
+            }
+        }
+    } else if (event.key === 'Escape') {
+        searchInput.value = ''
+        if (inputRef.value) {
+            inputRef.value.value = ''
+            inputRef.value.blur()
+        }
+        // Emit event to move focus back to content
+        emit('input-blur')
+    }
+}
+
+function handleSelect(event: Event) {
+    const input = event.target as HTMLInputElement
+    const selectedPath = input.value
+    
+    if (!selectedPath) return
+    
+    // Find the book that matches the selected path
+    const selectedOption = bookOptions.value.find(
+        option => option.path === selectedPath
+    )
+    
+    if (selectedOption?.bookId) {
+        emit('select-commentary', selectedOption.bookId)
+    }
+    
+    // Clear the input and move focus back
+    searchInput.value = ''
+    input.value = ''
+    input.blur()
+    emit('input-blur')
+}
+
+function handleFocus() {
+    emit('input-focus')
+}
+
+function handleBlur() {
+    // Delay to allow click on datalist option
+    setTimeout(() => {
+        emit('input-blur')
+    }, 200)
+}
 </script>
 
 <style scoped>
@@ -60,6 +202,7 @@ const emit = defineEmits<{
     display: flex;
     gap: 4px;
     align-items: center;
+    width: 100%;
 }
 
 .nav-separator {
@@ -81,6 +224,7 @@ const emit = defineEmits<{
     padding: 0;
     color: var(--text-primary);
     transition: color 0.2s;
+    flex-shrink: 0;
 }
 
 .commentary-nav-btn:hover:not(:disabled) {
@@ -90,5 +234,31 @@ const emit = defineEmits<{
 .commentary-nav-btn:disabled {
     opacity: 0.4;
     cursor: not-allowed;
+}
+
+.commentary-search-wrapper {
+    margin-left: 4px;
+    flex: 1;
+    min-width: 0;
+}
+
+.commentary-search-input {
+    width: 100%;
+    padding: 2px 6px;
+    font-size: calc(0.9rem * var(--commentary-font-size) / 100);
+    color: var(--text-primary);
+    background-color: var(--input-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    direction: rtl;
+    outline: none;
+}
+
+.commentary-search-input:focus {
+    border-color: var(--accent-color);
+}
+
+.commentary-search-input::placeholder {
+    color: var(--text-secondary);
 }
 </style>
