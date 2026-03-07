@@ -112,8 +112,6 @@ function saveScrollPosition() {
 
             activeTab.bookState.commentaryScrollElementIndex = i
             activeTab.bookState.commentaryScrollOffset = offset
-
-            console.log('[CommentaryContent] 💾 SAVED scroll position:', { index: i, offset, topY, rectTop: rect.top })
             return
         }
     }
@@ -125,7 +123,6 @@ async function restoreScrollPosition(isFirstInit: boolean) {
 
     // Don't restore on first initialization - let default commentary scroll happen
     if (isFirstInit) {
-        console.log('[CommentaryContent] ⏭️ SKIP restore - first init')
         return
     }
 
@@ -135,11 +132,8 @@ async function restoreScrollPosition(isFirstInit: boolean) {
 
     // Only restore if we have element index
     if (elementIndex === undefined) {
-        console.log('[CommentaryContent] ⏭️ SKIP restore - no persisted position')
         return
     }
-
-    console.log('[CommentaryContent] 🔄 RESTORING scroll position:', { elementIndex, offset })
 
     // Retry logic to wait for element to be available
     let targetElement: HTMLElement | null = null
@@ -151,7 +145,6 @@ async function restoreScrollPosition(isFirstInit: boolean) {
         const groups = scrollContainer.value.querySelectorAll('[data-book-id]')
         if (elementIndex < groups.length) {
             targetElement = groups[elementIndex] as HTMLElement
-            console.log('[CommentaryContent] Found element by index:', elementIndex, 'attempt:', attempt + 1)
             break
         }
 
@@ -162,7 +155,6 @@ async function restoreScrollPosition(isFirstInit: boolean) {
     }
 
     if (!targetElement) {
-        console.log('[CommentaryContent] ⚠️ Element not found after retries')
         return
     }
 
@@ -184,22 +176,11 @@ async function restoreScrollPosition(isFirstInit: boolean) {
 
             const containerRect = scrollContainer.value.getBoundingClientRect()
             const elementRect = targetElement.getBoundingClientRect()
-            const topY = containerRect.top + 50 // Account for sticky header
-
-            // Calculate how far into the element we currently are
+            const topY = containerRect.top + 50
             const currentOffset = topY - elementRect.top
             const adjustment = offset - currentOffset
 
-            console.log('[CommentaryContent] 📍 Offset adjustment attempt', i + 1, ':', {
-                targetOffset: offset,
-                currentOffset,
-                adjustment,
-                topY,
-                elementTop: elementRect.top
-            })
-
             if (Math.abs(adjustment) < 2) {
-                console.log('[CommentaryContent] ✅ Offset applied successfully')
                 break
             }
 
@@ -210,20 +191,6 @@ async function restoreScrollPosition(isFirstInit: boolean) {
             }
         }
     }
-
-    // Verify final position
-    await new Promise(resolve => requestAnimationFrame(resolve))
-    const finalRect = targetElement.getBoundingClientRect()
-    const finalContainerRect = scrollContainer.value.getBoundingClientRect()
-    const finalTopY = finalContainerRect.top + 50
-    const finalOffset = finalTopY - finalRect.top
-
-    console.log('[CommentaryContent] ✅ RESTORE complete:', {
-        elementIndex,
-        targetOffset: offset,
-        actualOffset: finalOffset,
-        diff: Math.abs((offset || 0) - finalOffset)
-    })
 
     // Restore content-visibility
     targetElement.style.contentVisibility = originalVisibility
@@ -285,29 +252,17 @@ function handleGroupClick(node: CommentaryTreeNode) {
 }
 
 async function scrollToGroup(bookId: number) {
-    console.log('[CommentaryContent] scrollToGroup called with bookId:', bookId)
-
-    if (!scrollContainer.value) {
-        console.log('[CommentaryContent] No scroll container!')
-        return
-    }
+    if (!scrollContainer.value) return
 
     const groupElement = scrollContainer.value.querySelector(`[data-book-id="${bookId}"]`) as HTMLElement
-    if (!groupElement) {
-        console.log('[CommentaryContent] No group element found for bookId:', bookId)
-        return
-    }
-
-    console.log('[CommentaryContent] Found group element, disabling content-visibility')
+    if (!groupElement) return
 
     // Temporarily disable content-visibility to force rendering
     const originalContentVisibility = groupElement.style.contentVisibility
     groupElement.style.contentVisibility = 'visible'
 
-    // Wait for browser to render
     await new Promise(resolve => requestAnimationFrame(resolve))
 
-    console.log('[CommentaryContent] Scrolling to top')
     // Scroll to top
     await scrollToElementTop(groupElement)
 
@@ -317,17 +272,13 @@ async function scrollToGroup(bookId: number) {
     const elementRect = groupElement.getBoundingClientRect()
     const isAtTop = Math.abs(elementRect.top - containerRect.top) < 5
 
-    console.log('[CommentaryContent] Scroll verification:', { isAtTop, elementTop: elementRect.top, containerTop: containerRect.top })
-
     // If not at top, try one more time
     if (!isAtTop) {
-        console.log('[CommentaryContent] Not at top, retrying')
         await scrollToElementTop(groupElement)
     }
 
     // Restore content-visibility
     groupElement.style.contentVisibility = originalContentVisibility
-    console.log('[CommentaryContent] scrollToGroup complete')
 }
 
 // Track which commentary group is at the top
