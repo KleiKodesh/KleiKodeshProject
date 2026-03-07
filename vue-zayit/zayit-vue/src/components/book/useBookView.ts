@@ -94,26 +94,52 @@ export function useBookViewPage(
         }
     }
 
-    const handleNavigatePreviousLine = (bookId?: number) => {
+    const handleNavigatePreviousLine = async (bookId?: number) => {
         const currentLineIndex = myTab.value?.bookState?.selectedLineIndex
-        if (currentLineIndex !== undefined && currentLineIndex > 0) {
-            handleNavigateLine(currentLineIndex - 1)
+        const sourceBookId = myTab.value?.bookState?.bookId
+        const connectionTypeId = myTab.value?.bookState?.commentaryFilterConnectionTypeId
 
-            // Set the selected commentary to the one that emitted the event
-            if (bookId !== undefined && myTab.value?.bookState) {
-                myTab.value.bookState.commentaryScrollElementIndex = bookId
+        if (currentLineIndex !== undefined && sourceBookId !== undefined && bookId !== undefined) {
+            // Find previous line with this specific commentary
+            const previousLineIndex = await dbService.findPreviousLineWithCommentary(
+                sourceBookId,
+                currentLineIndex,
+                bookId,
+                connectionTypeId
+            )
+
+            if (previousLineIndex !== null) {
+                handleNavigateLine(previousLineIndex)
+
+                // Set the selected commentary to the one that emitted the event
+                if (myTab.value?.bookState) {
+                    myTab.value.bookState.commentaryScrollElementIndex = bookId
+                }
             }
         }
     }
 
-    const handleNavigateNextLine = (bookId?: number) => {
+    const handleNavigateNextLine = async (bookId?: number) => {
         const currentLineIndex = myTab.value?.bookState?.selectedLineIndex
-        if (currentLineIndex !== undefined) {
-            handleNavigateLine(currentLineIndex + 1)
+        const sourceBookId = myTab.value?.bookState?.bookId
+        const connectionTypeId = myTab.value?.bookState?.commentaryFilterConnectionTypeId
 
-            // Set the selected commentary to the one that emitted the event
-            if (bookId !== undefined && myTab.value?.bookState) {
-                myTab.value.bookState.commentaryScrollElementIndex = bookId
+        if (currentLineIndex !== undefined && sourceBookId !== undefined && bookId !== undefined) {
+            // Find next line with this specific commentary
+            const nextLineIndex = await dbService.findNextLineWithCommentary(
+                sourceBookId,
+                currentLineIndex,
+                bookId,
+                connectionTypeId
+            )
+
+            if (nextLineIndex !== null) {
+                handleNavigateLine(nextLineIndex)
+
+                // Set the selected commentary to the one that emitted the event
+                if (myTab.value?.bookState) {
+                    myTab.value.bookState.commentaryScrollElementIndex = bookId
+                }
             }
         }
     }
