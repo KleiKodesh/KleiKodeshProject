@@ -3,13 +3,11 @@
         <a v-if="bookId !== undefined && lineIndex !== undefined"
            href="#"
            class="commentary-group-title"
-           @click.prevent="handleClick">
+           @click.prevent="emit('click')">
             {{ displayPath }}
         </a>
         <h3 v-else
-            class="commentary-group-title">
-            {{ displayPath }}
-        </h3>
+            class="commentary-group-title">{{ displayPath }}</h3>
     </div>
 </template>
 
@@ -27,10 +25,6 @@ const emit = defineEmits<{
 }>()
 
 const displayPath = computed(() => props.path.join(' > '))
-
-function handleClick() {
-    emit('click')
-}
 </script>
 
 <style scoped>
