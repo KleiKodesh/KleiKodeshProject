@@ -1,6 +1,14 @@
 <template>
     <div class="commentary-header-nav">
         <button class="commentary-nav-btn c-pointer hover-bg"
+                :title="showTree ? 'הסתר עץ מפרשים' : 'הצג עץ מפרשים'"
+                @click="emit('toggle-tree')">
+            <Icon :icon="showTree ? 'fluent:panel-right-28-filled' : 'fluent:panel-right-28-regular'" />
+        </button>
+
+        <div class="nav-separator"></div>
+
+        <button class="commentary-nav-btn c-pointer hover-bg"
                 :disabled="!hasPrevious"
                 :title="hasPrevious ? 'מפרש קודם' : 'אין מפרש קודם'"
                 @click="handleNavigatePrevious">
@@ -48,6 +56,7 @@
                    @keydown="handleKeydown"
                    @focus="handleFocus"
                    @blur="handleBlur" />
+            <Icon icon="fluent:chevron-down-28-regular" class="search-dropdown-icon" />
             <datalist :id="`commentary-list-${componentId}`">
                 <option v-for="option in bookOptions"
                         :key="option.bookId"
@@ -69,6 +78,7 @@ const props = defineProps<{
     showBookButton?: boolean
     commentaryTitle?: string
     availableBooks?: CommentaryTreeNode[]
+    showTree?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -80,6 +90,7 @@ const emit = defineEmits<{
     (e: 'select-commentary', bookId: number): void
     (e: 'input-focus'): void
     (e: 'input-blur'): void
+    (e: 'toggle-tree'): void
 }>()
 
 let uniqueId = 0
@@ -240,11 +251,12 @@ function handleBlur() {
     margin-left: 4px;
     flex: 1;
     min-width: 0;
+    position: relative;
 }
 
 .commentary-search-input {
     width: 100%;
-    padding: 2px 6px;
+    padding: 2px 6px 2px 24px;
     font-size: calc(0.9rem * var(--commentary-font-size) / 100);
     color: var(--text-primary);
     background-color: var(--input-bg);
@@ -252,6 +264,24 @@ function handleBlur() {
     border-radius: 4px;
     direction: rtl;
     outline: none;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+}
+
+.commentary-search-input::-webkit-calendar-picker-indicator {
+    display: none;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.commentary-search-input::-webkit-list-button {
+    display: none;
+}
+
+.commentary-search-input::-moz-list-button {
+    display: none;
 }
 
 .commentary-search-input:focus {
@@ -260,5 +290,15 @@ function handleBlur() {
 
 .commentary-search-input::placeholder {
     color: var(--text-secondary);
+}
+
+.search-dropdown-icon {
+    position: absolute;
+    left: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: calc(0.8rem * var(--commentary-font-size) / 100);
+    color: var(--text-secondary);
+    pointer-events: none;
 }
 </style>

@@ -35,13 +35,19 @@ const emit = defineEmits<{
 const { commentaryTree } = useCommentaryTree(computed(() => props.commentaryGroups))
 const treeContainer = ref<HTMLElement | null>(null)
 
-watch(() => props.selectedBookId, async (bookId) => {
-    if (!bookId || !treeContainer.value) return
+async function scrollToSelected() {
+    if (!props.selectedBookId || !treeContainer.value) return
     await nextTick()
     await nextTick()
     const activeNode = treeContainer.value.querySelector('.tree-node.selected-accent-subtle') as HTMLElement
     if (activeNode) await scrollToElementCenter(activeNode)
-}, { flush: 'post' })
+}
+
+watch(() => props.selectedBookId, scrollToSelected, { flush: 'post' })
+
+defineExpose({
+    scrollToSelected
+})
 </script>
 
 <style scoped>

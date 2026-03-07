@@ -242,6 +242,7 @@ Use CSS `content-visibility: auto` for all list virtualization needs.
 - All scrolling operations MUST use useScrollToElement composable functions (scrollToElement, scrollToElementCenter, scrollToElementTop, scrollToVirtualItem, etc.)
 - Scroll pattern: always use block: 'nearest' first, then manual adjustment - never use 'center', 'start', or 'end' directly in scrollIntoView
 - This prevents parent container scrolling and provides precise control
+- Use Iconify icons via @iconify/vue for all icons (import { Icon } from '@iconify/vue', then <Icon icon="fluent:icon-name" />)
 
 ---
 

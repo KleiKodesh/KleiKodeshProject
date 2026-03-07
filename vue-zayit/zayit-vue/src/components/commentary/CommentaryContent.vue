@@ -26,13 +26,15 @@
                                   :has-next="index < flattenedBooks.length - 1"
                                   :available-books="flattenedBooks"
                                   :is-dragging-selection="isDraggingSelection"
+                                  :show-tree="showTree"
                                   @click="handleGroupClick(bookNode)"
                                   @navigate-previous="navigateToPrevious(index)"
                                   @navigate-next="navigateToNext(index)"
                                   @navigate-previous-line="emit('navigate-previous-line', bookNode.bookId)"
                                   @navigate-next-line="emit('navigate-next-line', bookNode.bookId)"
                                   @select-commentary="(bookId) => emit('select-commentary', bookId)"
-                                  @focus-content="focusContent" />
+                                  @focus-content="focusContent"
+                                  @toggle-tree="emit('toggle-tree')" />
 
                 <div class="commentary-group-content">
                     <div v-if="!getGroupMetadata(bookNode)?.isLoaded" class="commentary-group-loading">
@@ -67,6 +69,7 @@ const props = defineProps<{
     bookId?: number
     selectedLineIndex?: number
     connectionTypeId?: number
+    showTree?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -74,6 +77,7 @@ const emit = defineEmits<{
     (e: 'navigate-previous-line', bookId?: number): void
     (e: 'navigate-next-line', bookId?: number): void
     (e: 'select-commentary', bookId: number): void
+    (e: 'toggle-tree'): void
 }>()
 
 const scrollContainer = ref<HTMLElement | null>(null)

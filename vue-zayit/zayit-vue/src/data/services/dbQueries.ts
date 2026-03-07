@@ -191,5 +191,45 @@ export const SqlQueries = {
       `,
       params: bookIds
     }
-  }
+  },
+
+  findNextLineWithCommentary: (bookId: number, startLineIndex: number, targetBookId: number, connectionTypeId?: number) => ({
+    query: `
+      SELECT l.lineIndex
+      FROM line l
+      WHERE l.bookId = ?
+        AND l.lineIndex > ?
+        AND EXISTS (
+          SELECT 1 FROM link lk
+          WHERE lk.sourceLineId = l.id
+            AND lk.targetBookId = ?
+            ${connectionTypeId !== undefined ? 'AND lk.connectionTypeId = ?' : ''}
+        )
+      ORDER BY l.lineIndex ASC
+      LIMIT 1
+    `,
+    params: connectionTypeId !== undefined
+      ? [bookId, startLineIndex, targetBookId, connectionTypeId]
+      : [bookId, startLineIndex, targetBookId]
+  }),
+
+  findPreviousLineWithCommentary: (bookId: number, startLineIndex: number, targetBookId: number, connectionTypeId?: number) => ({
+    query: `
+      SELECT l.lineIndex
+      FROM line l
+      WHERE l.bookId = ?
+        AND l.lineIndex < ?
+        AND EXISTS (
+          SELECT 1 FROM link lk
+          WHERE lk.sourceLineId = l.id
+            AND lk.targetBookId = ?
+            ${connectionTypeId !== undefined ? 'AND lk.connectionTypeId = ?' : ''}
+        )
+      ORDER BY l.lineIndex DESC
+      LIMIT 1
+    `,
+    params: connectionTypeId !== undefined
+      ? [bookId, startLineIndex, targetBookId, connectionTypeId]
+      : [bookId, startLineIndex, targetBookId]
+  })
 }
