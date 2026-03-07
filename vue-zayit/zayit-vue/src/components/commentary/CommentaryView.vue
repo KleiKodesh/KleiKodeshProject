@@ -90,10 +90,11 @@ watch(
                 hasInitialized.value = true
 
                 const activeTab = tabStore.activeTab
-                const hasPersistedScroll = activeTab?.bookState?.commentaryScrollTop !== undefined && activeTab.bookState.commentaryScrollTop > 0
+                const hasPersistedScroll = activeTab?.bookState?.commentaryScrollElementIndex !== undefined
 
                 console.log('[CommentaryView] Persisted scroll check:', {
-                    commentaryScrollTop: activeTab?.bookState?.commentaryScrollTop,
+                    commentaryScrollElementIndex: activeTab?.bookState?.commentaryScrollElementIndex,
+                    commentaryScrollOffset: activeTab?.bookState?.commentaryScrollOffset,
                     hasPersistedScroll
                 })
 
