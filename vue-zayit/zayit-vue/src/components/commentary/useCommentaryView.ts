@@ -12,6 +12,7 @@ export function useCommentaryView(props: {
     const tabStore = useTabStore()
     const selectedBookId = ref<number>()
     const hasInitialized = ref(false)
+    const previousLineIndex = ref<number>()
 
     const { commentaryGroups, isLoadingMetadata, loadCommentaryMetadata } = useCommentaryContent()
 
@@ -63,9 +64,34 @@ export function useCommentaryView(props: {
                     await restoreScrollPosition(false)
                 }
             } else if (commentaryGroups.value.length > 0) {
-                await nextTick()
-                await restoreScrollPosition(false)
+                const isLineChange = previousLineIndex.value !== undefined && previousLineIndex.value !== lineIndex
+
+                if (isLineChange && selectedBookId.value) {
+                    const currentCommentaryExists = commentaryGroups.value.some(
+                        group => group.targetBookId === selectedBookId.value
+                    )
+
+                    if (currentCommentaryExists) {
+                        await nextTick()
+                        await scrollToGroup(selectedBookId.value)
+                    } else {
+                        const defaultBookId = props.book?.defaultCommentatorBookId
+                        const firstBookId = commentaryGroups.value[0]?.targetBookId
+                        const targetBookId = defaultBookId || firstBookId
+
+                        if (targetBookId) {
+                            selectedBookId.value = targetBookId
+                            await nextTick()
+                            await scrollToGroup(targetBookId)
+                        }
+                    }
+                } else {
+                    await nextTick()
+                    await restoreScrollPosition(false)
+                }
             }
+
+            previousLineIndex.value = lineIndex
         }
     }
 

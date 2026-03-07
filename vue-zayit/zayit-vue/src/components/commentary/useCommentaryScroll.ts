@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue'
+import { ref, computed, type Ref } from 'vue'
 import { useTabStore } from '@/data/stores/tabStore'
 import { useCategoryTreeStore } from '@/data/stores/categoryTreeStore'
 import { useSettingsStore } from '@/data/stores/settingsStore'
