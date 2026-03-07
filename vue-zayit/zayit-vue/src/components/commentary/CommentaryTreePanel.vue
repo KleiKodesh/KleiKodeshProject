@@ -1,20 +1,16 @@
 <template>
-    <div class="commentary-tree-panel">
-        <div ref="treeContainer"
-             class="tree-container">
-            <div v-if="commentaryTree.length === 0"
-                 class="tree-empty">
+    <div class="commentary-tree-panel flex-column">
+        <div ref="treeContainer" class="tree-container">
+            <div v-if="commentaryTree.length === 0" class="tree-empty">
                 אין מפרשים זמינים
             </div>
-
-            <div v-else
-                 class="tree-root">
+            <div v-else class="tree-root">
                 <CommentaryTreeViewNode v-for="node in commentaryTree"
                                         :key="node.name"
                                         :node="node"
                                         :depth="0"
                                         :selected-book-id="selectedBookId"
-                                        @select="selectNode" />
+                                        @select="emit('select', $event)" />
             </div>
         </div>
     </div>
@@ -32,36 +28,24 @@ const props = defineProps<{
     selectedBookId?: number
 }>()
 
-const { commentaryTree } = useCommentaryTree(computed(() => props.commentaryGroups))
-
 const emit = defineEmits<{
     (e: 'select', node: CommentaryTreeNode): void
 }>()
 
+const { commentaryTree } = useCommentaryTree(computed(() => props.commentaryGroups))
 const treeContainer = ref<HTMLElement | null>(null)
 
-function selectNode(node: CommentaryTreeNode) {
-    emit('select', node)
-}
-
-// Scroll to selected node when it changes
 watch(() => props.selectedBookId, async (bookId) => {
     if (!bookId || !treeContainer.value) return
-
     await nextTick()
     await nextTick()
-
     const activeNode = treeContainer.value.querySelector('.tree-node.selected-accent-subtle') as HTMLElement
-    if (activeNode) {
-        await scrollToElementCenter(activeNode)
-    }
+    if (activeNode) await scrollToElementCenter(activeNode)
 }, { flush: 'post' })
 </script>
 
 <style scoped>
 .commentary-tree-panel {
-    display: flex;
-    flex-direction: column;
     height: 100%;
     background-color: var(--reading-bg-secondary, #f5f5f5);
     overflow: hidden;

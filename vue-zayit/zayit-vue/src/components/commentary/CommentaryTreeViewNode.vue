@@ -1,11 +1,10 @@
 <template>
     <div role="treeitem">
-        <div class="tree-node hover-bg focus-accent click-effect touch-interactive"
+        <div class="tree-node flex-row hover-bg focus-accent click-effect touch-interactive c-pointer"
              :class="{
                 'selected-accent-subtle': isActive,
                 'connection-type-node': node.type === 'connection-type'
             }"
-             :style="{ paddingInlineStart: `${depth * 12}px` }"
              tabindex="0"
              @click="handleClick"
              @keydown.enter.stop="handleClick"
@@ -13,13 +12,9 @@
             <Icon v-if="hasChildren"
                   :icon="isExpanded ? 'fluent:chevron-down-28-regular' : 'fluent:chevron-left-28-regular'"
                   class="chevron-icon" />
-            <div v-else
-                 class="chevron-spacer"></div>
-
             <div class="node-label">
                 {{ node.hebrewName }}
-                <span v-if="itemCount"
-                      class="item-count">({{ itemCount }})</span>
+                <span v-if="itemCount" class="item-count">({{ itemCount }})</span>
             </div>
         </div>
 
@@ -27,7 +22,7 @@
             <CommentaryTreeViewNode v-for="child in node.children"
                                     :key="`${child.name}-${child.bookId}`"
                                     :node="child"
-                                    :depth="depth + 1"
+                                    :depth="0"
                                     :selected-book-id="selectedBookId"
                                     @select="emit('select', $event)"
                                     @expand-parent="isExpanded = true" />
@@ -54,7 +49,6 @@ const emit = defineEmits<{
 }>()
 
 const isExpanded = ref(false)
-const isManuallyCollapsed = ref(false)
 
 const hasChildren = computed(() => props.node.children && props.node.children.length > 0)
 
@@ -65,33 +59,23 @@ const itemCount = computed(() => {
     return undefined
 })
 
-const isActive = computed(() => {
-    return props.selectedBookId === props.node.bookId
-})
+const isActive = computed(() => props.selectedBookId === props.node.bookId)
 
 const hasSelectedChild = computed(() => {
     if (!hasChildren.value) return false
     return props.node.children.some(child => child.bookId === props.selectedBookId)
 })
 
-// Auto-expand if this node contains the selected book
-watch([hasSelectedChild, isActive, () => props.selectedBookId], async ([hasChild, active]) => {
-    if (hasChild || active) {
+watch([hasSelectedChild, isActive, () => props.selectedBookId], ([hasChild, active, bookId]) => {
+    if (bookId && (hasChild || active)) {
         isExpanded.value = true
-        isManuallyCollapsed.value = false
-        if (active) {
-            emit('expand-parent')
-        }
+        if (active) emit('expand-parent')
     }
 }, { immediate: true })
 
 function handleClick() {
     if (hasChildren.value) {
         isExpanded.value = !isExpanded.value
-        // Track manual collapse only for connection-type nodes
-        if (props.node.type === 'connection-type') {
-            isManuallyCollapsed.value = !isExpanded.value
-        }
     } else {
         emit('select', props.node)
     }
@@ -100,11 +84,8 @@ function handleClick() {
 
 <style scoped>
 .tree-node {
-    display: flex;
-    align-items: center;
     gap: 4px;
     padding: 4px;
-    cursor: pointer;
     border-radius: 3px;
     transition: background-color 0.2s ease;
     direction: rtl;
@@ -115,10 +96,26 @@ function handleClick() {
 .tree-node.connection-type-node {
     position: sticky;
     top: 0;
-    background-color: var(--reading-bg-secondary);
+    background-color: var(--bg-secondary);
     z-index: 10;
-    font-weight: 600;
+    font-weight: 700;
     border-radius: 0;
+    font-size: 11px;
+    padding: 8px 4px 4px 4px;
+    border-bottom: 1px solid var(--border-color);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+.tree-node.connection-type-node:first-child {
+    margin-top: 0;
+}
+
+.tree-node:not(.connection-type-node) {
+    font-size: 13px;
+    padding: 6px 4px;
 }
 
 @media (hover: hover) {
