@@ -165,6 +165,8 @@ Use CSS `content-visibility: auto` for all list virtualization needs.
 
 **Rule:** Use CSS content-visibility for virtualization. Do not use JavaScript virtual scroller libraries (vue-virtual-scroller, etc.) unless there is a proven, specific technical limitation that CSS cannot solve.
 
+**Note:** vue-virtual-scroller is legacy code still present in the codebase for transition purposes. Do not use it in new code. Use CSS content-visibility instead.
+
 ---
 
 ## Code Maintenance & Technical Debt
