@@ -1,6 +1,6 @@
 <template>
     <div class="commentary-tree-panel">
-        <div class="tree-container">
+        <div ref="treeContainer" class="tree-container">
             <div v-if="commentaryTree.length === 0" class="tree-empty">
                 אין מפרשים זמינים
             </div>
@@ -11,7 +11,7 @@
                     :key="node.name"
                     :node="node"
                     :depth="0"
-                    :selected-group-name="selectedGroupName"
+                    :selected-book-id="selectedBookId"
                     @select="selectNode"
                 />
             </div>
@@ -20,14 +20,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch, nextTick } from 'vue'
 import CommentaryTreeViewNode from './CommentaryTreeViewNode.vue'
 import { useCommentaryTree } from './useCommentaryTree'
+import { scrollToElementCenter } from '@/components/shared/useScrollToElement'
 import type { CommentaryTreeNode } from './useCommentaryTree'
 
 const props = defineProps<{
     commentaryGroups: any[]
-    selectedGroupName?: string
+    selectedBookId?: number
 }>()
 
 const { commentaryTree } = useCommentaryTree(computed(() => props.commentaryGroups))
@@ -36,9 +37,24 @@ const emit = defineEmits<{
     (e: 'select', node: CommentaryTreeNode): void
 }>()
 
+const treeContainer = ref<HTMLElement | null>(null)
+
 function selectNode(node: CommentaryTreeNode) {
     emit('select', node)
 }
+
+// Scroll to selected node when it changes
+watch(() => props.selectedBookId, async (bookId) => {
+    if (!bookId || !treeContainer.value) return
+    
+    await nextTick()
+    await nextTick()
+    
+    const activeNode = treeContainer.value.querySelector('.tree-node.active') as HTMLElement
+    if (activeNode) {
+        await scrollToElementCenter(activeNode)
+    }
+}, { flush: 'post' })
 </script>
 
 <style scoped>
