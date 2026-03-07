@@ -92,6 +92,57 @@ const containerStyles = computed(() => {
     }
 })
 
+// Save scroll position to tab store
+function saveScrollPosition() {
+    if (!scrollContainer.value) return
+    const activeTab = tabStore.activeTab
+    if (activeTab?.bookState) {
+        activeTab.bookState.commentaryScrollTop = scrollContainer.value.scrollTop
+    }
+}
+
+// Restore scroll position from tab store with retry logic
+async function restoreScrollPosition(isFirstInit: boolean) {
+    if (!scrollContainer.value) return
+
+    // Don't restore on first initialization - let default commentary scroll happen
+    if (isFirstInit) {
+        console.log('[CommentaryContent] Skipping restore - first init')
+        return
+    }
+
+    const activeTab = tabStore.activeTab
+
+    // Only restore if we have a meaningful scroll position (> 0)
+    // Position of 0 means top, which is the default, so no need to restore
+    if (activeTab?.bookState?.commentaryScrollTop === undefined || activeTab.bookState.commentaryScrollTop === 0) {
+        console.log('[CommentaryContent] Skipping restore - no persisted position')
+        return
+    }
+
+    const targetScrollTop = activeTab.bookState.commentaryScrollTop
+    console.log('[CommentaryContent] Restoring scroll position:', targetScrollTop)
+
+    // Retry logic for content-visibility rendering
+    const maxRetries = 5
+    for (let i = 0; i < maxRetries; i++) {
+        scrollContainer.value.scrollTop = targetScrollTop
+        await new Promise(resolve => requestAnimationFrame(resolve))
+
+        const isAtPosition = Math.abs(scrollContainer.value.scrollTop - targetScrollTop) < 5
+
+        if (isAtPosition) {
+            console.log('[CommentaryContent] Restore complete')
+            break
+        }
+
+        // Wait a bit before retry (content-visibility may still be rendering)
+        if (i < maxRetries - 1) {
+            await new Promise(resolve => setTimeout(resolve, 20))
+        }
+    }
+}
+
 // Create a Map for O(1) lookups
 const commentaryGroupsMap = computed(() => {
     const map = new Map<string, typeof props.commentaryGroups[0]>()
@@ -121,8 +172,11 @@ const intrinsicSize = computed(() => {
     return `auto ${Math.round(totalHeight)}px`
 })
 
-defineExpose({
-    scrollToGroup
+onMounted(() => {
+    if (scrollContainer.value) {
+        scrollContainer.value.addEventListener('scroll', handleScroll, { passive: true })
+        detectVisibleGroup()
+    }
 })
 
 function getGroupMetadata(node: CommentaryTreeNode) {
@@ -145,10 +199,20 @@ function handleGroupClick(node: CommentaryTreeNode) {
 }
 
 async function scrollToGroup(bookId: number) {
-    if (!scrollContainer.value) return
+    console.log('[CommentaryContent] scrollToGroup called with bookId:', bookId)
+
+    if (!scrollContainer.value) {
+        console.log('[CommentaryContent] No scroll container!')
+        return
+    }
 
     const groupElement = scrollContainer.value.querySelector(`[data-book-id="${bookId}"]`) as HTMLElement
-    if (!groupElement) return
+    if (!groupElement) {
+        console.log('[CommentaryContent] No group element found for bookId:', bookId)
+        return
+    }
+
+    console.log('[CommentaryContent] Found group element, disabling content-visibility')
 
     // Temporarily disable content-visibility to force rendering
     const originalContentVisibility = groupElement.style.contentVisibility
@@ -157,6 +221,7 @@ async function scrollToGroup(bookId: number) {
     // Wait for browser to render
     await new Promise(resolve => requestAnimationFrame(resolve))
 
+    console.log('[CommentaryContent] Scrolling to top')
     // Scroll to top
     await scrollToElementTop(groupElement)
 
@@ -166,13 +231,17 @@ async function scrollToGroup(bookId: number) {
     const elementRect = groupElement.getBoundingClientRect()
     const isAtTop = Math.abs(elementRect.top - containerRect.top) < 5
 
+    console.log('[CommentaryContent] Scroll verification:', { isAtTop, elementTop: elementRect.top, containerTop: containerRect.top })
+
     // If not at top, try one more time
     if (!isAtTop) {
+        console.log('[CommentaryContent] Not at top, retrying')
         await scrollToElementTop(groupElement)
     }
 
     // Restore content-visibility
     groupElement.style.contentVisibility = originalContentVisibility
+    console.log('[CommentaryContent] scrollToGroup complete')
 }
 
 // Track which commentary group is at the top
@@ -198,19 +267,19 @@ function detectVisibleGroup() {
 
 function handleScroll() {
     detectVisibleGroup()
+    saveScrollPosition()
 }
 
-onMounted(() => {
-    if (scrollContainer.value) {
-        scrollContainer.value.addEventListener('scroll', handleScroll, { passive: true })
-        detectVisibleGroup()
-    }
+defineExpose({
+    scrollToGroup,
+    restoreScrollPosition
 })
 
 onUnmounted(() => {
     if (scrollContainer.value) {
         scrollContainer.value.removeEventListener('scroll', handleScroll)
     }
+    saveScrollPosition()
 })
 </script>
 

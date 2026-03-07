@@ -251,6 +251,20 @@ export const useTabStore = defineStore('tabs', () => {
                 handleHebrewBookTabClosed(tab);
             }
 
+            // Clear ALL page-specific state when tab closes
+            if (tab.bookState) {
+                console.log('[TabStore] Clearing bookState for closed tab:', tab.id);
+                delete tab.bookState;
+            }
+            if (tab.pdfState) {
+                console.log('[TabStore] Clearing pdfState for closed tab:', tab.id);
+                delete tab.pdfState;
+            }
+            if (tab.searchState) {
+                console.log('[TabStore] Clearing searchState for closed tab:', tab.id);
+                delete tab.searchState;
+            }
+
             // Clean up ALL persisted data for this tab
             const { LRUStorage } = await import('@/utils/lruStorage')
             const scrollStorage = new LRUStorage('vscroller-pos-', 1000)
@@ -377,6 +391,18 @@ export const useTabStore = defineStore('tabs', () => {
     const setPage = (pageType: PageType) => {
         const tab = tabs.value.find(t => t.isActive);
         if (tab) {
+            // Clear page-specific state when navigating away
+            if (tab.currentPage === 'bookview' && pageType !== 'bookview') {
+                console.log('[TabStore] Clearing bookState - navigating away from bookview');
+                delete tab.bookState;
+            } else if (tab.currentPage === 'pdfview' && pageType !== 'pdfview') {
+                console.log('[TabStore] Clearing pdfState - navigating away from pdfview');
+                delete tab.pdfState;
+            } else if (tab.currentPage === 'search' && pageType !== 'search') {
+                console.log('[TabStore] Clearing searchState - navigating away from search');
+                delete tab.searchState;
+            }
+
             tab.currentPage = pageType;
             tab.title = PAGE_TITLES[pageType];
         }
@@ -420,7 +446,7 @@ export const useTabStore = defineStore('tabs', () => {
 
             // Create or update bookState
             if (!tab.bookState || tab.bookState.bookId !== bookId) {
-                // New book - create fresh bookState
+                // New book - create fresh bookState (commentary scroll is cleared automatically)
                 tab.bookState = {
                     bookId,
                     bookTitle,
