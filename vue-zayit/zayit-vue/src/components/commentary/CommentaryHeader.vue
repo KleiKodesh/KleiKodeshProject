@@ -1,14 +1,13 @@
 <template>
     <div class="commentary-group-header">
-        <a
-            v-if="bookId !== undefined && lineIndex !== undefined"
-            href="#"
-            class="commentary-group-title"
-            @click.prevent="handleClick"
-        >
+        <a v-if="bookId !== undefined && lineIndex !== undefined"
+           href="#"
+           class="commentary-group-title"
+           @click.prevent="handleClick">
             {{ displayPath }}
         </a>
-        <h3 v-else class="commentary-group-title">
+        <h3 v-else
+            class="commentary-group-title">
             {{ displayPath }}
         </h3>
     </div>
@@ -39,7 +38,7 @@ function handleClick() {
     position: sticky;
     top: 0;
     background-color: var(--reading-bg-primary);
-    padding: 4px 0;
+    padding: 8px 0;
     z-index: 10;
 }
 

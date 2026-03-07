@@ -1,11 +1,11 @@
 <template>
     <div role="treeitem">
-        <div class="tree-node hover-bg focus-accent click-effect"
+        <div class="tree-node hover-bg focus-accent click-effect touch-interactive"
              :class="{
                 'selected-accent-subtle': isActive,
                 'connection-type-node': node.type === 'connection-type'
             }"
-             :style="{ paddingInlineStart: `${depth * 6}px` }"
+             :style="{ paddingInlineStart: `${depth * 12}px` }"
              tabindex="0"
              @click="handleClick"
              @keydown.enter.stop="handleClick"
@@ -101,15 +101,15 @@ function handleClick() {
 <style scoped>
 .tree-node {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 4px;
-    padding: 2px 4px;
+    padding: 4px;
     cursor: pointer;
     border-radius: 3px;
     transition: background-color 0.2s ease;
     direction: rtl;
     text-align: right;
-    min-height: 20px;
+    min-height: 28px;
 }
 
 .tree-node.connection-type-node {
@@ -121,28 +121,37 @@ function handleClick() {
     border-radius: 0;
 }
 
+@media (hover: hover) {
+    .tree-node.connection-type-node:hover {
+        filter: brightness(0.95);
+    }
+}
+
+:root.dark .tree-node.connection-type-node:hover {
+    filter: brightness(1.1);
+}
+
 .chevron-icon {
     flex-shrink: 0;
-    font-size: 14px;
+    font-size: 16px;
     line-height: 1;
-    margin-top: 2px;
 }
 
 .chevron-spacer {
-    width: 14px;
+    width: 16px;
     flex-shrink: 0;
 }
 
 .node-label {
     flex: 1;
-    font-size: 12px;
-    line-height: 1.2;
+    font-size: 13px;
+    line-height: 1.3;
     min-width: 0;
     word-break: break-word;
 }
 
 .item-count {
-    font-size: 10px;
+    font-size: 11px;
     color: var(--text-secondary);
     margin-left: 2px;
 }
