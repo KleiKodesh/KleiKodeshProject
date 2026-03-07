@@ -1,23 +1,20 @@
 <template>
     <div class="flex-row height-fill commentary-container">
         <!-- Side panel tree view -->
-        <CommentaryTreePanel
-            :commentary-groups="commentaryGroups"
-            :selected-group-name="selectedGroupName"
-            class="commentary-tree-panel"
-            @select="handleSelectGroup"
-        />
-        
+        <CommentaryTreePanel :commentary-groups="commentaryGroups"
+                             :selected-book-id="selectedBookId"
+                             class="commentary-tree-panel"
+                             @select="handleSelectGroup" />
+
         <!-- Main commentary content -->
-        <CommentaryContent
-            ref="commentaryContentRef"
-            :commentary-groups="commentaryGroups"
-            :is-loading-metadata="isLoadingMetadata"
-            :book-id="props.bookId"
-            :selected-line-index="props.selectedLineIndex"
-            :connection-type-id="selectedConnectionTypeId"
-            class="commentary-content"
-        />
+        <CommentaryContent ref="commentaryContentRef"
+                           :commentary-groups="commentaryGroups"
+                           :is-loading-metadata="isLoadingMetadata"
+                           :book-id="props.bookId"
+                           :selected-line-index="props.selectedLineIndex"
+                           :connection-type-id="selectedConnectionTypeId"
+                           class="commentary-content"
+                           @visible-book-changed="handleVisibleBookChanged" />
     </div>
 </template>
 
@@ -28,6 +25,7 @@ import CommentaryTreePanel from './CommentaryTreePanel.vue'
 import { useTabStore } from '@/data/stores/tabStore'
 import { useConnectionTypesStore } from '@/data/stores/connectionTypesStore'
 import { useCommentaryContent } from './useCommentaryContent'
+import { nextTick } from 'vue'
 import type { Book } from '@/data/types/Book'
 import type { TocEntry } from '@/data/types/BookToc'
 import type { CommentaryTreeNode } from './useCommentaryTree'
@@ -51,7 +49,7 @@ const emit = defineEmits<{
 
 const tabStore = useTabStore()
 const connectionTypesStore = useConnectionTypesStore()
-const selectedGroupName = ref<string>()
+const selectedBookId = ref<number>()
 const commentaryContentRef = ref<any>()
 
 // Load commentary content at view level
@@ -64,27 +62,14 @@ const selectedConnectionTypeId = computed(() => {
 })
 
 function handleSelectGroup(node: CommentaryTreeNode) {
-    console.log('[CommentaryView] handleSelectGroup called:', {
-        nodeName: node.name,
-        nodeType: node.type,
-        nodeBookId: node.bookId,
-        nodeLineIndex: node.lineIndex,
-        hasContentRef: !!commentaryContentRef.value
-    })
-    
-    selectedGroupName.value = node.name
-    
-    // Scroll to the selected group in the commentary content using bookId
-    if (commentaryContentRef.value && node.type === 'book' && node.bookId !== undefined) {
-        console.log('[CommentaryView] Calling scrollToGroup for bookId:', node.bookId)
-        commentaryContentRef.value.scrollToGroup(node.bookId)
-    } else {
-        console.log('[CommentaryView] Skipping scroll - reason:', {
-            isBook: node.type === 'book',
-            hasRef: !!commentaryContentRef.value,
-            hasBookId: node.bookId !== undefined
-        })
+    if (node.type === 'book' && node.bookId !== undefined) {
+        selectedBookId.value = node.bookId
+        commentaryContentRef.value?.scrollToGroup(node.bookId)
     }
+}
+
+function handleVisibleBookChanged(bookId: number) {
+    selectedBookId.value = bookId
 }
 
 // Load metadata when props change
@@ -93,6 +78,20 @@ watch(
     async ([bookId, lineIndex, connectionTypeId]) => {
         if (bookId !== undefined && lineIndex !== undefined) {
             await loadCommentaryMetadata(bookId, lineIndex, connectionTypeId)
+
+            // Set default selected book on initial load
+            if (!selectedBookId.value && commentaryGroups.value.length > 0) {
+                const defaultBookId = props.book?.defaultCommentatorBookId
+                const firstBookId = commentaryGroups.value[0]?.targetBookId
+                const targetBookId = defaultBookId || firstBookId
+
+                if (targetBookId) {
+                    selectedBookId.value = targetBookId
+                    await nextTick()
+                    await nextTick()
+                    commentaryContentRef.value?.scrollToGroup(targetBookId)
+                }
+            }
         }
     },
     { immediate: true }

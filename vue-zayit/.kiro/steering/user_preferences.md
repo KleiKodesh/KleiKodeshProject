@@ -237,7 +237,9 @@ Use CSS `content-visibility: auto` for all list virtualization needs.
 - Use nextTick() for DOM updates, not setTimeout()
 - Prefer VueUse composables over custom implementations
 - Use event.code (not event.key) for keyboard shortcuts to support all layouts
-- Use useScrollToElement composable for scrolling operations to prevent aggressive scrolling
+- All scrolling operations MUST use useScrollToElement composable functions (scrollToElement, scrollToElementCenter, scrollToElementTop, scrollToVirtualItem, etc.)
+- Scroll pattern: always use block: 'nearest' first, then manual adjustment - never use 'center', 'start', or 'end' directly in scrollIntoView
+- This prevents parent container scrolling and provides precise control
 
 ---
 
