@@ -1,19 +1,20 @@
 <template>
     <div class="commentary-tree-panel">
-        <div ref="treeContainer" class="tree-container">
-            <div v-if="commentaryTree.length === 0" class="tree-empty">
+        <div ref="treeContainer"
+             class="tree-container">
+            <div v-if="commentaryTree.length === 0"
+                 class="tree-empty">
                 אין מפרשים זמינים
             </div>
-            
-            <div v-else class="tree-root">
-                <CommentaryTreeViewNode
-                    v-for="node in commentaryTree"
-                    :key="node.name"
-                    :node="node"
-                    :depth="0"
-                    :selected-book-id="selectedBookId"
-                    @select="selectNode"
-                />
+
+            <div v-else
+                 class="tree-root">
+                <CommentaryTreeViewNode v-for="node in commentaryTree"
+                                        :key="node.name"
+                                        :node="node"
+                                        :depth="0"
+                                        :selected-book-id="selectedBookId"
+                                        @select="selectNode" />
             </div>
         </div>
     </div>
@@ -46,11 +47,11 @@ function selectNode(node: CommentaryTreeNode) {
 // Scroll to selected node when it changes
 watch(() => props.selectedBookId, async (bookId) => {
     if (!bookId || !treeContainer.value) return
-    
+
     await nextTick()
     await nextTick()
-    
-    const activeNode = treeContainer.value.querySelector('.tree-node.active') as HTMLElement
+
+    const activeNode = treeContainer.value.querySelector('.tree-node.selected-accent-subtle') as HTMLElement
     if (activeNode) {
         await scrollToElementCenter(activeNode)
     }

@@ -1,34 +1,36 @@
 <template>
     <div role="treeitem">
-        <div
-            class="tree-node"
-            :class="{ 'active': isActive }"
-            :style="{ paddingInlineStart: `${depth * 6}px` }"
-            @click="handleClick"
-        >
-            <Icon
-                v-if="hasChildren"
-                :icon="isExpanded ? 'fluent:chevron-down-28-regular' : 'fluent:chevron-left-28-regular'"
-                class="chevron-icon"
-            />
-            <div v-else class="chevron-spacer"></div>
-            
+        <div class="tree-node hover-bg focus-accent click-effect"
+             :class="{
+                'selected-accent-subtle': isActive,
+                'connection-type-node': node.type === 'connection-type'
+            }"
+             :style="{ paddingInlineStart: `${depth * 6}px` }"
+             tabindex="0"
+             @click="handleClick"
+             @keydown.enter.stop="handleClick"
+             @keydown.space.stop.prevent="handleClick">
+            <Icon v-if="hasChildren"
+                  :icon="isExpanded ? 'fluent:chevron-down-28-regular' : 'fluent:chevron-left-28-regular'"
+                  class="chevron-icon" />
+            <div v-else
+                 class="chevron-spacer"></div>
+
             <div class="node-label">
                 {{ node.hebrewName }}
-                <span v-if="itemCount" class="item-count">({{ itemCount }})</span>
+                <span v-if="itemCount"
+                      class="item-count">({{ itemCount }})</span>
             </div>
         </div>
 
         <template v-if="isExpanded && hasChildren">
-            <CommentaryTreeViewNode
-                v-for="child in node.children"
-                :key="`${child.name}-${child.bookId}`"
-                :node="child"
-                :depth="depth + 1"
-                :selected-book-id="selectedBookId"
-                @select="emit('select', $event)"
-                @expand-parent="isExpanded = true"
-            />
+            <CommentaryTreeViewNode v-for="child in node.children"
+                                    :key="`${child.name}-${child.bookId}`"
+                                    :node="child"
+                                    :depth="depth + 1"
+                                    :selected-book-id="selectedBookId"
+                                    @select="emit('select', $event)"
+                                    @expand-parent="isExpanded = true" />
         </template>
     </div>
 </template>
@@ -52,6 +54,7 @@ const emit = defineEmits<{
 }>()
 
 const isExpanded = ref(false)
+const isManuallyCollapsed = ref(false)
 
 const hasChildren = computed(() => props.node.children && props.node.children.length > 0)
 
@@ -72,21 +75,23 @@ const hasSelectedChild = computed(() => {
 })
 
 // Auto-expand if this node contains the selected book
-watch([hasSelectedChild, isActive], async ([hasChild, active]) => {
-    if (hasChild) {
+watch([hasSelectedChild, isActive, () => props.selectedBookId], async ([hasChild, active]) => {
+    if (hasChild || active) {
         isExpanded.value = true
-    } else if (!hasChild && !active) {
-        isExpanded.value = false
-    }
-    
-    if (active) {
-        emit('expand-parent')
+        isManuallyCollapsed.value = false
+        if (active) {
+            emit('expand-parent')
+        }
     }
 }, { immediate: true })
 
 function handleClick() {
     if (hasChildren.value) {
         isExpanded.value = !isExpanded.value
+        // Track manual collapse only for connection-type nodes
+        if (props.node.type === 'connection-type') {
+            isManuallyCollapsed.value = !isExpanded.value
+        }
     } else {
         emit('select', props.node)
     }
@@ -107,13 +112,13 @@ function handleClick() {
     min-height: 20px;
 }
 
-.tree-node:hover {
-    background-color: var(--reading-bg-secondary, #f0f0f0);
-}
-
-.tree-node.active {
-    background-color: var(--accent-color);
-    color: var(--reading-bg-primary);
+.tree-node.connection-type-node {
+    position: sticky;
+    top: 0;
+    background-color: var(--reading-bg-secondary);
+    z-index: 10;
+    font-weight: 600;
+    border-radius: 0;
 }
 
 .chevron-icon {
@@ -142,7 +147,7 @@ function handleClick() {
     margin-left: 2px;
 }
 
-.tree-node.active .item-count {
+.tree-node.selected-accent-subtle .item-count {
     color: inherit;
 }
 </style>
