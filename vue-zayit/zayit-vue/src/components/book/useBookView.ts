@@ -94,6 +94,20 @@ export function useBookViewPage(
         }
     }
 
+    const handleNavigatePreviousLine = () => {
+        const currentLineIndex = myTab.value?.bookState?.selectedLineIndex
+        if (currentLineIndex !== undefined && currentLineIndex > 0) {
+            handleNavigateLine(currentLineIndex - 1)
+        }
+    }
+
+    const handleNavigateNextLine = () => {
+        const currentLineIndex = myTab.value?.bookState?.selectedLineIndex
+        if (currentLineIndex !== undefined) {
+            handleNavigateLine(currentLineIndex + 1)
+        }
+    }
+
     const handleBackgroundClick = () => {
         if (myTab.value?.bookState?.isTocOpen && !myTab.value.bookState.isFirstTocOpen) {
             closeToc()
@@ -155,6 +169,8 @@ export function useBookViewPage(
         currentBook,
         handleTocSelection,
         handleNavigateLine,
+        handleNavigatePreviousLine,
+        handleNavigateNextLine,
         handleBackgroundClick
     }
 }
