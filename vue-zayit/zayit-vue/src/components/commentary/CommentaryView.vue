@@ -12,7 +12,9 @@
                            :selected-line-index="props.selectedLineIndex"
                            :connection-type-id="selectedConnectionTypeId"
                            class="flex-110"
-                           @visible-book-changed="handleVisibleBookChanged" />
+                           @visible-book-changed="handleVisibleBookChanged"
+                           @navigate-previous-line="emit('navigate-previous-line')"
+                           @navigate-next-line="emit('navigate-next-line')" />
     </div>
 </template>
 
@@ -32,9 +34,11 @@ const props = defineProps<{
     flatTocEntries?: TocEntry[]
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
     (e: 'clearOtherSelections'): void
     (e: 'navigate-line', newIndex: number, tocEntryId?: number): void
+    (e: 'navigate-previous-line'): void
+    (e: 'navigate-next-line'): void
 }>()
 
 const commentaryContentRef = ref<any>()

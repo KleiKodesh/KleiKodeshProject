@@ -17,11 +17,17 @@
                  :data-book-id="bookNode.bookId"
                  class="commentary-group"
                  :style="{ containIntrinsicSize: intrinsicSize }">
-                <!-- Sticky Header with full path -->
+                <!-- Sticky Toolbar with navigation -->
                 <CommentaryHeader :path="bookNode.path"
                                   :book-id="bookNode.bookId"
                                   :line-index="bookNode.lineIndex"
-                                  @click="handleGroupClick(bookNode)" />
+                                  :has-previous="index > 0"
+                                  :has-next="index < flattenedBooks.length - 1"
+                                  @click="handleGroupClick(bookNode)"
+                                  @navigate-previous="navigateToPrevious(index)"
+                                  @navigate-next="navigateToNext(index)"
+                                  @navigate-previous-line="emit('navigate-previous-line')"
+                                  @navigate-next-line="emit('navigate-next-line')" />
 
                 <div class="commentary-group-content">
                     <div v-if="!getGroupMetadata(bookNode)?.isLoaded" class="commentary-group-loading">
@@ -60,6 +66,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
     (e: 'visible-book-changed', bookId: number): void
+    (e: 'navigate-previous-line'): void
+    (e: 'navigate-next-line'): void
 }>()
 
 const scrollContainer = ref<HTMLElement | null>(null)
@@ -88,6 +96,24 @@ function getGroupMetadata(node: CommentaryTreeNode) {
 function handleScroll() {
     detectVisibleGroup(emit)
     saveScrollPosition()
+}
+
+function navigateToPrevious(currentIndex: number) {
+    if (currentIndex > 0) {
+        const previousBook = flattenedBooks.value[currentIndex - 1]
+        if (previousBook?.bookId) {
+            scrollToGroup(previousBook.bookId)
+        }
+    }
+}
+
+function navigateToNext(currentIndex: number) {
+    if (currentIndex < flattenedBooks.value.length - 1) {
+        const nextBook = flattenedBooks.value[currentIndex + 1]
+        if (nextBook?.bookId) {
+            scrollToGroup(nextBook.bookId)
+        }
+    }
 }
 
 onMounted(() => {
