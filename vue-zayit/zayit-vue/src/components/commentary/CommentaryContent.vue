@@ -1,6 +1,7 @@
 <template>
     <div ref="scrollContainer"
-         class="commentary-scroll-container">
+         class="commentary-scroll-container"
+         :style="containerStyles">
         <div v-if="isLoadingMetadata"
              class="commentary-loading">
             טוען רשימת מפרשים...
@@ -16,7 +17,8 @@
             <div v-for="(bookNode, index) in flattenedBooks"
                  :key="`${bookNode.path.join('-')}-${index}`"
                  :data-book-id="bookNode.bookId"
-                 class="commentary-group">
+                 class="commentary-group"
+                 :style="{ containIntrinsicSize: intrinsicSize }">
                 <!-- Sticky Header with full path -->
                 <CommentaryHeader :path="bookNode.path"
                                   :book-id="bookNode.bookId"
@@ -52,6 +54,7 @@ import { scrollToElement, scrollToElementTop } from '@/components/shared/useScro
 import { useCommentaryTree } from './useCommentaryTree'
 import { useTabStore } from '@/data/stores/tabStore'
 import { useCategoryTreeStore } from '@/data/stores/categoryTreeStore'
+import { useSettingsStore } from '@/data/stores/settingsStore'
 import { hasConnections } from '@/data/types/Book'
 import CommentaryHeader from './CommentaryHeader.vue'
 import type { CommentaryTreeNode } from './useCommentaryTree'
@@ -73,14 +76,49 @@ const { flattenedBooks } = useCommentaryTree(computed(() => props.commentaryGrou
 
 const tabStore = useTabStore()
 const categoryTreeStore = useCategoryTreeStore()
+const settingsStore = useSettingsStore()
 
 const scrollContainer = ref<HTMLElement | null>(null)
+
+// Get current zoom from active tab
+const currentZoom = computed(() => {
+    return tabStore.activeTab?.bookState?.zoom || 100
+})
+
+// Computed styles with zoom applied
+const containerStyles = computed(() => {
+    return {
+        fontSize: `calc(var(--commentary-font-size, 100%) * ${currentZoom.value / 100})`
+    }
+})
 
 // Create a Map for O(1) lookups
 const commentaryGroupsMap = computed(() => {
     const map = new Map<string, typeof props.commentaryGroups[0]>()
     props.commentaryGroups.forEach(g => map.set(g.groupName, g))
     return map
+})
+
+// Calculate intrinsic size based on commentary settings and zoom
+const intrinsicSize = computed(() => {
+    const fontSize = settingsStore.commentaryFontSize / 100 // Convert percentage to multiplier
+    const lineHeight = settingsStore.commentaryLinePadding
+    const zoom = currentZoom.value / 100 // Apply zoom
+
+    // Base font size in pixels (browser default is typically 16px)
+    const baseFontSize = 16
+
+    // Header height: ~1.1rem font size + padding
+    const headerHeight = (baseFontSize * 1.1 * fontSize * zoom) + 8
+
+    // Estimate average 10 lines of content per group
+    const avgLines = 10
+    const lineHeightPx = baseFontSize * fontSize * lineHeight * zoom
+    const contentHeight = avgLines * lineHeightPx + 16 // +16 for gaps
+
+    const totalHeight = headerHeight + contentHeight
+
+    return `auto ${Math.round(totalHeight)}px`
 })
 
 defineExpose({
@@ -198,7 +236,6 @@ onUnmounted(() => {
 .commentary-group {
     margin-bottom: 12px;
     content-visibility: auto;
-    contain-intrinsic-size: auto 500px;
 }
 
 .commentary-group-content {

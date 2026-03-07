@@ -81,7 +81,7 @@
         <button @click="handleZoomOut"
                 class="flex-center c-pointer touch-interactive"
                 :disabled="currentZoom <= 50"
-                :title="`הקטן (Ctrl-)\nזום: ${currentZoom}%`">
+                :title="`הקטן (Ctrl-)\nזום: ${currentZoom}%\nאיפוס: Ctrl+0`">
             <Icon icon="fluent:zoom-out-24-regular" />
         </button>
 
@@ -89,7 +89,7 @@
         <button @click="handleZoomIn"
                 class="flex-center c-pointer touch-interactive"
                 :disabled="currentZoom >= 200"
-                :title="`הגדל (Ctrl+)\nזום: ${currentZoom}%`">
+                :title="`הגדל (Ctrl+)\nזום: ${currentZoom}%\nאיפוס: Ctrl+0`">
             <Icon icon="fluent:zoom-in-24-regular" />
         </button>
 

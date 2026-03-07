@@ -113,7 +113,7 @@ watch(
 
 .commentary-tree-panel {
     flex: 0 1 auto;
-    max-width: 25%;
+    max-width: 30%;
     min-width: 0;
     overflow: hidden;
     border-right: 1px solid var(--border-color, #ddd);
