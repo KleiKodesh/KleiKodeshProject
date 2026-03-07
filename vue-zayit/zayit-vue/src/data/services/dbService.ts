@@ -475,6 +475,44 @@ class DatabaseService {
         }
     }
 
+    async findNextLineWithCommentary(
+        bookId: number,
+        startLineIndex: number,
+        targetBookId: number,
+        connectionTypeId?: number
+    ): Promise<number | null> {
+        const queryObj = SqlQueries.findNextLineWithCommentary(bookId, startLineIndex, targetBookId, connectionTypeId)
+
+        if (this.isWebViewAvailable()) {
+            const results = await webviewBridge.call('FindNextLineWithCommentary', bookId, startLineIndex, targetBookId, connectionTypeId, queryObj.query, queryObj.params)
+            return results.length > 0 && results[0] ? results[0].lineIndex : null
+        } else if (this.isDevServerAvailable()) {
+            const results = await devQuery<{ lineIndex: number }>(queryObj.query, queryObj.params)
+            return results.length > 0 && results[0] ? results[0].lineIndex : null
+        } else {
+            throw new Error('No database source available')
+        }
+    }
+
+    async findPreviousLineWithCommentary(
+        bookId: number,
+        startLineIndex: number,
+        targetBookId: number,
+        connectionTypeId?: number
+    ): Promise<number | null> {
+        const queryObj = SqlQueries.findPreviousLineWithCommentary(bookId, startLineIndex, targetBookId, connectionTypeId)
+
+        if (this.isWebViewAvailable()) {
+            const results = await webviewBridge.call('FindPreviousLineWithCommentary', bookId, startLineIndex, targetBookId, connectionTypeId, queryObj.query, queryObj.params)
+            return results.length > 0 && results[0] ? results[0].lineIndex : null
+        } else if (this.isDevServerAvailable()) {
+            const results = await devQuery<{ lineIndex: number }>(queryObj.query, queryObj.params)
+            return results.length > 0 && results[0] ? results[0].lineIndex : null
+        } else {
+            throw new Error('No database source available')
+        }
+    }
+
     /**
      * Execute a raw SQL query with parameters
      * Use for custom queries not covered by specific methods

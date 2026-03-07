@@ -8,6 +8,7 @@
                              :show-book-button="bookId !== undefined && lineIndex !== undefined"
                              :commentary-title="displayPath"
                              :available-books="availableBooks"
+                             :show-tree="showTree"
                              @navigate-previous="emit('navigate-previous')"
                              @navigate-next="emit('navigate-next')"
                              @navigate-previous-line="emit('navigate-previous-line')"
@@ -15,7 +16,8 @@
                              @navigate-to-book="emit('click')"
                              @select-commentary="(bookId) => emit('select-commentary', bookId)"
                              @input-focus="isInputFocused = true"
-                             @input-blur="handleInputBlur" />
+                             @input-blur="handleInputBlur"
+                             @toggle-tree="emit('toggle-tree')" />
     </div>
 </template>
 
@@ -33,6 +35,7 @@ const props = defineProps<{
     hasNext?: boolean
     availableBooks?: CommentaryTreeNode[]
     isDraggingSelection?: boolean
+    showTree?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -43,6 +46,7 @@ const emit = defineEmits<{
     (e: 'navigate-next-line'): void
     (e: 'select-commentary', bookId: number): void
     (e: 'focus-content'): void
+    (e: 'toggle-tree'): void
 }>()
 
 const displayPath = computed(() => props.path.join(' > '))

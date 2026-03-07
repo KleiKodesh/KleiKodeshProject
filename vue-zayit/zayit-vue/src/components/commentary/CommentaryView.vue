@@ -1,6 +1,8 @@
 <template>
     <div class="flex-row height-fill">
-        <CommentaryTreePanel :commentary-groups="commentaryGroups"
+        <CommentaryTreePanel v-if="showTree"
+                             ref="commentaryTreePanelRef"
+                             :commentary-groups="commentaryGroups"
                              :selected-book-id="selectedBookId"
                              class="commentary-tree-panel"
                              @select="onSelectGroup" />
@@ -11,16 +13,18 @@
                            :book-id="props.bookId"
                            :selected-line-index="props.selectedLineIndex"
                            :connection-type-id="selectedConnectionTypeId"
+                           :show-tree="showTree"
                            class="flex-110"
                            @visible-book-changed="handleVisibleBookChanged"
                            @navigate-previous-line="(bookId) => emit('navigate-previous-line', bookId)"
                            @navigate-next-line="(bookId) => emit('navigate-next-line', bookId)"
-                           @select-commentary="onSelectCommentary" />
+                           @select-commentary="onSelectCommentary"
+                           @toggle-tree="handleToggleTree" />
     </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, nextTick } from 'vue'
 import CommentaryContent from './CommentaryContent.vue'
 import CommentaryTreePanel from './CommentaryTreePanel.vue'
 import { useCommentaryView } from './useCommentaryView'
@@ -43,6 +47,8 @@ const emit = defineEmits<{
 }>()
 
 const commentaryContentRef = ref<any>()
+const commentaryTreePanelRef = ref<any>()
+const showTree = ref(false) // Default to hidden
 
 const {
     commentaryGroups,
@@ -65,6 +71,14 @@ async function onSelectCommentary(bookId: number) {
         await scrollToCommentary(bookId, (id) => commentaryContentRef.value!.scrollToGroup(id))
         // Move focus back to content after navigation
         commentaryContentRef.value?.focusContent()
+    }
+}
+
+async function handleToggleTree() {
+    showTree.value = !showTree.value
+    if (showTree.value) {
+        await nextTick()
+        commentaryTreePanelRef.value?.scrollToSelected()
     }
 }
 
