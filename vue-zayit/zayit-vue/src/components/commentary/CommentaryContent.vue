@@ -18,12 +18,10 @@
                  :data-book-id="bookNode.bookId"
                  class="commentary-group">
                 <!-- Sticky Header with full path -->
-                <CommentaryHeader
-                    :path="bookNode.path"
-                    :book-id="bookNode.bookId"
-                    :line-index="bookNode.lineIndex"
-                    @click="handleGroupClick(bookNode)"
-                />
+                <CommentaryHeader :path="bookNode.path"
+                                  :book-id="bookNode.bookId"
+                                  :line-index="bookNode.lineIndex"
+                                  @click="handleGroupClick(bookNode)" />
 
                 <!-- Content -->
                 <div class="commentary-group-content">
@@ -49,8 +47,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { scrollToElement } from '@/components/shared/useScrollToElement'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { scrollToElement, scrollToElementTop } from '@/components/shared/useScrollToElement'
 import { useCommentaryTree } from './useCommentaryTree'
 import { useTabStore } from '@/data/stores/tabStore'
 import { useCategoryTreeStore } from '@/data/stores/categoryTreeStore'
@@ -65,6 +63,10 @@ const props = defineProps<{
     bookId?: number
     selectedLineIndex?: number
     connectionTypeId?: number
+}>()
+
+const emit = defineEmits<{
+    (e: 'visible-book-changed', bookId: number): void
 }>()
 
 const { flattenedBooks } = useCommentaryTree(computed(() => props.commentaryGroups))
@@ -105,30 +107,73 @@ function handleGroupClick(node: CommentaryTreeNode) {
 }
 
 async function scrollToGroup(bookId: number) {
-    console.log('[CommentaryContent] scrollToGroup called with bookId:', bookId)
-    
-    if (!scrollContainer.value) {
-        console.log('[CommentaryContent] ERROR: scrollContainer is null')
-        return
-    }
-    
+    if (!scrollContainer.value) return
+
     const groupElement = scrollContainer.value.querySelector(`[data-book-id="${bookId}"]`) as HTMLElement
-    console.log('[CommentaryContent] Found group element:', {
-        bookId,
-        found: !!groupElement,
-        selector: `[data-book-id="${bookId}"]`
-    })
-    
-    if (groupElement) {
-        console.log('[CommentaryContent] Scrolling to element')
-        await scrollToElement(groupElement)
-    } else {
-        // Debug: log all available book IDs
-        const allGroups = scrollContainer.value.querySelectorAll('[data-book-id]')
-        const availableBookIds = Array.from(allGroups).map(g => g.getAttribute('data-book-id'))
-        console.log('[CommentaryContent] Available book IDs:', availableBookIds)
+    if (!groupElement) return
+
+    // Temporarily disable content-visibility to force rendering
+    const originalContentVisibility = groupElement.style.contentVisibility
+    groupElement.style.contentVisibility = 'visible'
+
+    // Wait for browser to render
+    await new Promise(resolve => requestAnimationFrame(resolve))
+
+    // Scroll to top
+    await scrollToElementTop(groupElement)
+
+    // Verify scroll position
+    await new Promise(resolve => requestAnimationFrame(resolve))
+    const containerRect = scrollContainer.value.getBoundingClientRect()
+    const elementRect = groupElement.getBoundingClientRect()
+    const isAtTop = Math.abs(elementRect.top - containerRect.top) < 5
+
+    // If not at top, try one more time
+    if (!isAtTop) {
+        await scrollToElementTop(groupElement)
+    }
+
+    // Restore content-visibility
+    groupElement.style.contentVisibility = originalContentVisibility
+}
+
+// Track which commentary group is at the top
+function detectVisibleGroup() {
+    if (!scrollContainer.value) return
+
+    const containerRect = scrollContainer.value.getBoundingClientRect()
+    const topY = containerRect.top + 50
+
+    const groups = scrollContainer.value.querySelectorAll('[data-book-id]')
+
+    for (const group of groups) {
+        const rect = group.getBoundingClientRect()
+        if (rect.top <= topY && rect.bottom > topY) {
+            const bookId = parseInt(group.getAttribute('data-book-id') || '0')
+            if (bookId) {
+                emit('visible-book-changed', bookId)
+            }
+            break
+        }
     }
 }
+
+function handleScroll() {
+    detectVisibleGroup()
+}
+
+onMounted(() => {
+    if (scrollContainer.value) {
+        scrollContainer.value.addEventListener('scroll', handleScroll, { passive: true })
+        detectVisibleGroup()
+    }
+})
+
+onUnmounted(() => {
+    if (scrollContainer.value) {
+        scrollContainer.value.removeEventListener('scroll', handleScroll)
+    }
+})
 </script>
 
 <style scoped>

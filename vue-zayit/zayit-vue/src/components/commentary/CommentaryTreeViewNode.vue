@@ -25,31 +25,33 @@
                 :key="`${child.name}-${child.bookId}`"
                 :node="child"
                 :depth="depth + 1"
-                :selected-group-name="selectedGroupName"
+                :selected-book-id="selectedBookId"
                 @select="emit('select', $event)"
+                @expand-parent="isExpanded = true"
             />
         </template>
     </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
 import type { CommentaryTreeNode } from './useCommentaryTree'
 
 const props = withDefaults(defineProps<{
     node: CommentaryTreeNode
     depth?: number
-    selectedGroupName?: string
+    selectedBookId?: number
 }>(), {
     depth: 0
 })
 
 const emit = defineEmits<{
     (e: 'select', node: CommentaryTreeNode): void
+    (e: 'expand-parent'): void
 }>()
 
-const isExpanded = ref(true)
+const isExpanded = ref(false)
 
 const hasChildren = computed(() => props.node.children && props.node.children.length > 0)
 
@@ -61,19 +63,31 @@ const itemCount = computed(() => {
 })
 
 const isActive = computed(() => {
-    return props.selectedGroupName === props.node.name
+    return props.selectedBookId === props.node.bookId
 })
+
+const hasSelectedChild = computed(() => {
+    if (!hasChildren.value) return false
+    return props.node.children.some(child => child.bookId === props.selectedBookId)
+})
+
+// Auto-expand if this node contains the selected book
+watch([hasSelectedChild, isActive], async ([hasChild, active]) => {
+    if (hasChild) {
+        isExpanded.value = true
+    } else if (!hasChild && !active) {
+        isExpanded.value = false
+    }
+    
+    if (active) {
+        emit('expand-parent')
+    }
+}, { immediate: true })
 
 function handleClick() {
     if (hasChildren.value) {
         isExpanded.value = !isExpanded.value
     } else {
-        console.log('[TreeNode] Emitting select:', {
-            nodeName: props.node.name,
-            nodeType: props.node.type,
-            nodeBookId: props.node.bookId,
-            nodeLineIndex: props.node.lineIndex
-        })
         emit('select', props.node)
     }
 }
