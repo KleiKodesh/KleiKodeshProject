@@ -77,34 +77,21 @@ function handleVisibleBookChanged(bookId: number) {
 watch(
     () => [props.bookId, props.selectedLineIndex, selectedConnectionTypeId.value] as const,
     async ([bookId, lineIndex, connectionTypeId]) => {
-        console.log('[CommentaryView] Watch triggered:', { bookId, lineIndex, connectionTypeId, hasInitialized: hasInitialized.value })
-
         if (bookId !== undefined && lineIndex !== undefined) {
             await loadCommentaryMetadata(bookId, lineIndex, connectionTypeId)
 
-            console.log('[CommentaryView] Metadata loaded, groups count:', commentaryGroups.value.length)
-
             // Only apply default commentary on initial load
             if (!hasInitialized.value && commentaryGroups.value.length > 0) {
-                console.log('[CommentaryView] First initialization')
                 hasInitialized.value = true
 
                 const activeTab = tabStore.activeTab
                 const hasPersistedScroll = activeTab?.bookState?.commentaryScrollElementIndex !== undefined
-
-                console.log('[CommentaryView] Persisted scroll check:', {
-                    commentaryScrollElementIndex: activeTab?.bookState?.commentaryScrollElementIndex,
-                    commentaryScrollOffset: activeTab?.bookState?.commentaryScrollOffset,
-                    hasPersistedScroll
-                })
 
                 // Only scroll to default if no meaningful persisted position
                 if (!hasPersistedScroll) {
                     const defaultBookId = props.book?.defaultCommentatorBookId
                     const firstBookId = commentaryGroups.value[0]?.targetBookId
                     const targetBookId = defaultBookId || firstBookId
-
-                    console.log('[CommentaryView] Scrolling to default:', { defaultBookId, firstBookId, targetBookId })
 
                     if (targetBookId) {
                         selectedBookId.value = targetBookId
@@ -115,35 +102,25 @@ watch(
                                 await nextTick()
 
                                 if (commentaryContentRef.value?.scrollToGroup) {
-                                    console.log('[CommentaryView] Ref ready, calling scrollToGroup')
                                     await commentaryContentRef.value.scrollToGroup(targetBookId)
                                     return
                                 }
 
-                                console.log('[CommentaryView] Ref not ready, retry', i + 1)
                                 await new Promise(resolve => setTimeout(resolve, 50))
                             }
-                            console.log('[CommentaryView] Failed to get ref after retries')
                         }
 
                         scrollToDefault()
                     }
                 } else {
-                    console.log('[CommentaryView] Has persisted scroll, restoring')
                     // Restore persisted scroll position
                     await nextTick()
                     commentaryContentRef.value?.restoreScrollPosition(false)
                 }
             } else if (commentaryGroups.value.length > 0) {
                 // Subsequent loads - restore scroll position
-                console.log('[CommentaryView] Subsequent load, restoring scroll')
                 await nextTick()
                 commentaryContentRef.value?.restoreScrollPosition(false)
-            } else {
-                console.log('[CommentaryView] Skipping initialization:', {
-                    hasInitialized: hasInitialized.value,
-                    groupsLength: commentaryGroups.value.length
-                })
             }
         }
     },
