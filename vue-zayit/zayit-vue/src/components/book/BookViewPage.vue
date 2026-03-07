@@ -48,7 +48,9 @@
                             :selected-line-index="myTab.bookState.selectedLineIndex"
                             :book="currentBook"
                             :flat-toc-entries="flatTocEntries"
-                            @navigate-line="handleNavigateLine" />
+                            @navigate-line="handleNavigateLine"
+                            @navigate-previous-line="handleNavigatePreviousLine"
+                            @navigate-next-line="handleNavigateNextLine" />
           </template>
         </SplitPane>
       </div>
@@ -90,6 +92,8 @@ const {
   currentBook,
   handleTocSelection,
   handleNavigateLine,
+  handleNavigatePreviousLine,
+  handleNavigateNextLine,
   handleBackgroundClick
 } = useBookViewPage(
   () => myTabId.value,
