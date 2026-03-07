@@ -5,6 +5,16 @@
   background: var(--accent-bg-light);
 }
 
+.selected-accent {
+  background: var(--accent-color);
+  color: var(--bg-primary);
+}
+
+.selected-accent-subtle {
+  background: var(--accent-bg);
+  color: var(--accent-color);
+}
+
 .reactive-icon:focus > svg {
     color: var(--accent-color);
     opacity: 1;
