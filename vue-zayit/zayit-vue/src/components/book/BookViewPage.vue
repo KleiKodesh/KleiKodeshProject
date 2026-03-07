@@ -49,8 +49,8 @@
                             :book="currentBook"
                             :flat-toc-entries="flatTocEntries"
                             @navigate-line="handleNavigateLine"
-                            @navigate-previous-line="handleNavigatePreviousLine"
-                            @navigate-next-line="handleNavigateNextLine" />
+                            @navigate-previous-line="(bookId) => handleNavigatePreviousLine(bookId)"
+                            @navigate-next-line="(bookId) => handleNavigateNextLine(bookId)" />
           </template>
         </SplitPane>
       </div>
