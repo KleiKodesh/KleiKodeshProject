@@ -7,13 +7,12 @@ import { useEventListener } from '@vueuse/core'
 import type { Ref, ComputedRef } from 'vue'
 import type { BookLineViewerService } from '@/data/services/bookLineViewerService'
 import type { Tab } from '@/data/types/Tab'
-import { applyDiacriticsFilter } from '@/utils/hebrewTextProcessing'
+import { transformText } from '@/components/shared/useTextTransformations'
 
 export function useLineViewCopy(
     scrollerElRef: Ref<HTMLElement | undefined>,
     viewerState: BookLineViewerService,
-    myTab: ComputedRef<Tab | undefined>,
-    emit: (event: 'clearOtherSelections') => void
+    myTab: ComputedRef<Tab | undefined>
 ) {
     function handleCopy(event: ClipboardEvent) {
         const selection = window.getSelection()
@@ -31,7 +30,7 @@ export function useLineViewCopy(
             return
         }
 
-        // Check if user has selected all content
+        // Check if user has selected all content (Ctrl+A was used)
         const isFullSelection = range.startContainer === scrollerEl ||
             scrollerEl.contains(range.startContainer) &&
             scrollerEl.contains(range.endContainer) &&
@@ -51,10 +50,10 @@ export function useLineViewCopy(
         for (let i = 0; i < viewerState.totalLines.value; i++) {
             let line = lines[i] || '\u00A0'
 
-            // Apply diacritics filtering if needed
-            if (line !== '\u00A0' && diacriticsState && diacriticsState > 0) {
-                line = applyDiacriticsFilter(line, diacriticsState)
-            }
+            // Apply unified transformations (diacritics, search will be added later)
+            line = transformText(line, {
+                diacriticsState
+            })
 
             htmlContent += `<div>${line}</div>\n`
 
@@ -86,23 +85,4 @@ ${htmlContent}
 
     // Set up copy event listener
     useEventListener(scrollerElRef, 'copy', handleCopy)
-
-    function selectAllInContainer() {
-        const scrollerEl = scrollerElRef.value
-        if (!scrollerEl) return
-
-        const selection = window.getSelection()
-        if (!selection) return
-
-        const range = document.createRange()
-        range.selectNodeContents(scrollerEl)
-        selection.removeAllRanges()
-        selection.addRange(range)
-
-        emit('clearOtherSelections')
-    }
-
-    return {
-        selectAllInContainer
-    }
 }

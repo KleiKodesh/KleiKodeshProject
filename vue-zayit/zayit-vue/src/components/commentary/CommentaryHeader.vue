@@ -1,12 +1,14 @@
 <template>
-    <div ref="toolbarRef" class="commentary-toolbar selectable">
-        <h3 v-if="!shouldShowNav" class="commentary-toolbar-title ellipsis">{{ displayPath }}</h3>
+    <div ref="toolbarRef"
+         class="commentary-toolbar selectable">
+        <h3 v-if="!shouldShowNav"
+            class="commentary-toolbar-title ellipsis">{{ displayPath }}</h3>
 
         <CommentaryHeaderNav v-else
                              :has-previous="hasPrevious"
                              :has-next="hasNext"
                              :show-book-button="bookId !== undefined && lineIndex !== undefined"
-                             :commentary-title="displayPath"
+                             :commentary-title="bookTitle"
                              :available-books="availableBooks"
                              :show-tree="showTree"
                              @navigate-previous="emit('navigate-previous')"
@@ -50,6 +52,7 @@ const emit = defineEmits<{
 }>()
 
 const displayPath = computed(() => props.path.join(' > '))
+const bookTitle = computed(() => props.path[props.path.length - 1] || '')
 
 const toolbarRef = ref<HTMLElement>()
 const showNav = useElementHover(toolbarRef)
