@@ -8,17 +8,11 @@
 
         <div class="nav-separator"></div>
 
-        <button class="commentary-nav-btn c-pointer hover-bg"
-                :disabled="!hasPrevious"
-                :title="hasPrevious ? 'מפרש קודם' : 'אין מפרש קודם'"
-                @click="handleNavigatePrevious">
-            <Icon icon="fluent:chevron-up-28-regular" />
-        </button>
-        <button class="commentary-nav-btn c-pointer hover-bg"
-                :disabled="!hasNext"
-                :title="hasNext ? 'מפרש הבא' : 'אין מפרש הבא'"
-                @click="handleNavigateNext">
-            <Icon icon="fluent:chevron-down-28-regular" />
+        <button v-if="showBookButton"
+                class="commentary-nav-btn c-pointer hover-bg"
+                :title="`עבור לקטע בספר - ${commentaryTitle}`"
+                @click="handleNavigateToBook">
+            <Icon icon="fluent:book-open-24-regular" />
         </button>
 
         <div class="nav-separator"></div>
@@ -36,11 +30,17 @@
 
         <div class="nav-separator"></div>
 
-        <button v-if="showBookButton"
-                class="commentary-nav-btn c-pointer hover-bg"
-                :title="`עבור לשורה בספר - ${commentaryTitle}`"
-                @click="handleNavigateToBook">
-            <Icon icon="fluent:book-open-24-regular" />
+        <button class="commentary-nav-btn c-pointer hover-bg"
+                :disabled="!hasPrevious"
+                :title="hasPrevious ? 'מפרש קודם' : 'אין מפרש קודם'"
+                @click="handleNavigatePrevious">
+            <Icon icon="fluent:chevron-up-28-regular" />
+        </button>
+        <button class="commentary-nav-btn c-pointer hover-bg"
+                :disabled="!hasNext"
+                :title="hasNext ? 'מפרש הבא' : 'אין מפרש הבא'"
+                @click="handleNavigateNext">
+            <Icon icon="fluent:chevron-down-28-regular" />
         </button>
 
         <div class="nav-separator"></div>
@@ -56,7 +56,8 @@
                    @keydown="handleKeydown"
                    @focus="handleFocus"
                    @blur="handleBlur" />
-            <Icon icon="fluent:chevron-down-28-regular" class="search-dropdown-icon" />
+            <Icon icon="fluent:chevron-down-28-regular"
+                  class="search-dropdown-icon" />
             <datalist :id="`commentary-list-${componentId}`">
                 <option v-for="option in bookOptions"
                         :key="option.bookId"
@@ -108,9 +109,9 @@ const bookOptions = computed(() => {
 
 const filteredOptions = computed(() => {
     if (!searchInput.value) return bookOptions.value
-    
+
     const search = searchInput.value.toLowerCase()
-    return bookOptions.value.filter(option => 
+    return bookOptions.value.filter(option =>
         option.path.toLowerCase().includes(search)
     )
 })
@@ -148,7 +149,7 @@ function handleInput(event: Event) {
 function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Enter') {
         event.preventDefault()
-        
+
         // If there's exactly one filtered option, select it
         if (filteredOptions.value.length === 1) {
             const option = filteredOptions.value[0]
@@ -177,18 +178,18 @@ function handleKeydown(event: KeyboardEvent) {
 function handleSelect(event: Event) {
     const input = event.target as HTMLInputElement
     const selectedPath = input.value
-    
+
     if (!selectedPath) return
-    
+
     // Find the book that matches the selected path
     const selectedOption = bookOptions.value.find(
         option => option.path === selectedPath
     )
-    
+
     if (selectedOption?.bookId) {
         emit('select-commentary', selectedOption.bookId)
     }
-    
+
     // Clear the input and move focus back
     searchInput.value = ''
     input.value = ''

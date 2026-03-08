@@ -3,11 +3,13 @@
          class="commentary-scroll-container"
          tabindex="0"
          :style="containerStyles">
-        <div v-if="isLoadingMetadata" class="commentary-loading flex-center">
+        <div v-if="isLoadingMetadata"
+             class="commentary-loading flex-center">
             טוען רשימת מפרשים...
         </div>
 
-        <div v-else-if="commentaryGroups.length === 0" class="commentary-empty flex-center">
+        <div v-else-if="commentaryGroups.length === 0"
+             class="commentary-empty flex-center">
             אין מפרשים לשורה זו
         </div>
 
@@ -37,17 +39,20 @@
                                   @toggle-tree="emit('toggle-tree')" />
 
                 <div class="commentary-group-content">
-                    <div v-if="!getGroupMetadata(bookNode)?.isLoaded" class="commentary-group-loading">
+                    <div v-if="!getGroupMetadata(bookNode)?.isLoaded"
+                         class="commentary-group-loading">
                         טוען תוכן...
                     </div>
-                    <div v-else-if="!getGroupMetadata(bookNode)?.links || getGroupMetadata(bookNode)!.links.length === 0" class="commentary-group-empty">
+                    <div v-else-if="!getGroupMetadata(bookNode)?.links || getGroupMetadata(bookNode)!.links.length === 0"
+                         class="commentary-group-empty">
                         אין תוכן זמין
                     </div>
-                    <div v-else class="commentary-links">
+                    <div v-else
+                         class="commentary-links">
                         <div v-for="(link, linkIndex) in getGroupMetadata(bookNode)!.links"
                              :key="linkIndex"
                              class="commentary-link selectable"
-                             v-html="link.html" />
+                             v-html="getFilteredHtml(link.html)" />
                     </div>
                 </div>
             </div>
@@ -59,6 +64,8 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useCommentaryTree } from './useCommentaryTree'
 import { useCommentaryScroll } from './useCommentaryScroll'
+import { useTabStore } from '@/data/stores/tabStore'
+import { applyDiacriticsFilter } from '@/utils/hebrewTextProcessing'
 import CommentaryHeader from './CommentaryHeader.vue'
 import type { CommentaryTreeNode } from './useCommentaryTree'
 import type { CommentaryMetadata } from './useCommentaryContent'
@@ -82,7 +89,10 @@ const emit = defineEmits<{
 
 const scrollContainer = ref<HTMLElement | null>(null)
 const isDraggingSelection = ref(false)
+const tabStore = useTabStore()
 const { flattenedBooks } = useCommentaryTree(computed(() => props.commentaryGroups))
+
+const currentDiacriticsState = computed(() => tabStore.currentDiacriticsState)
 
 const {
     containerStyles,
@@ -102,6 +112,14 @@ const commentaryGroupsMap = computed(() => {
 
 function getGroupMetadata(node: CommentaryTreeNode) {
     return commentaryGroupsMap.value.get(node.metadata?.groupName || '')
+}
+
+function getFilteredHtml(html: string): string {
+    const diacriticsState = currentDiacriticsState.value
+    if (html !== '\u00A0' && diacriticsState && diacriticsState > 0) {
+        return applyDiacriticsFilter(html, diacriticsState)
+    }
+    return html
 }
 
 function handleScroll() {

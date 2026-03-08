@@ -52,6 +52,8 @@ export function useCommentaryContent() {
                         links: []
                     })
                 }
+
+                // Store original content without filtering
                 grouped.get(groupName)!.links.push({
                     text: link.content || '',
                     html: link.content || ''
