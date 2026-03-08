@@ -20,40 +20,36 @@
             <div class="empty-message">לא נמצאו תוצאות</div>
         </div>
 
-        <!-- Results list with virtualization -->
-        <DynamicScroller v-else
-                         ref="scrollerRef"
-                         :items="results"
-                         :min-item-size="100"
-                         key-field="lineId"
-                         class="scroller">
-            <template #default="{ item, index, active }">
-                <DynamicScrollerItem :item="item"
-                                     :active="active"
-                                     :data-index="index"
-                                     :size-dependencies="[item.snippet]">
-                    <div class="result-item">
-                        <div class="result-header"
-                             @click="$emit('resultClick', item)">
-                            <span class="book-title">{{ item.bookTitle }}</span>
-                            <span v-if="item.tocText"
-                                  class="toc-separator">›</span>
-                            <span v-if="item.tocText"
-                                  class="toc-text">{{ item.tocText }}</span>
-                        </div>
-                        <div class="result-snippet"
-                             v-html="highlightedSnippet(item.snippet)"></div>
+        <!-- Results list with CSS virtualization -->
+        <div v-else
+             ref="scrollContainer"
+             class="scroll-container"
+             tabindex="0">
+            <div class="results-list">
+                <div v-for="(item, index) in results"
+                     :key="item.lineId"
+                     :data-index="index"
+                     :style="{ containIntrinsicSize: intrinsicSize }"
+                     class="result-item">
+                    <div class="result-header"
+                         @click="$emit('resultClick', item)">
+                        <span class="book-title">{{ item.bookTitle }}</span>
+                        <span v-if="item.tocText"
+                              class="toc-separator">›</span>
+                        <span v-if="item.tocText"
+                              class="toc-text">{{ item.tocText }}</span>
                     </div>
-                </DynamicScrollerItem>
-            </template>
-        </DynamicScroller>
+                    <div class="result-snippet"
+                         v-html="highlightedSnippet(item.snippet)"></div>
+                </div>
+            </div>
+        </div>
     </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
-import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import type { BloomSearchResult } from '@/data/types/BloomSearch'
 import { useSearchResultsList } from './useSearchResultsList'
 
@@ -68,16 +64,39 @@ defineEmits<{
     resultClick: [result: BloomSearchResult]
 }>()
 
-const scrollerRef = ref<InstanceType<typeof DynamicScroller> | null>(null)
+const scrollContainer = ref<HTMLElement | null>(null)
 
 // Use composable for business logic
-const { containerStyles, highlightedSnippet } = useSearchResultsList(
-    () => props.searchQuery
+const {
+    containerStyles,
+    intrinsicSize,
+    highlightedSnippet,
+    saveScrollPosition,
+    restoreScrollPosition,
+    handleScroll
+} = useSearchResultsList(
+    () => props.searchQuery,
+    scrollContainer
 )
 
-// Expose scroller ref for parent
+// Setup scroll listener
+onMounted(() => {
+    if (scrollContainer.value) {
+        scrollContainer.value.addEventListener('scroll', handleScroll, { passive: true })
+    }
+    restoreScrollPosition()
+})
+
+onUnmounted(() => {
+    if (scrollContainer.value) {
+        scrollContainer.value.removeEventListener('scroll', handleScroll)
+    }
+    saveScrollPosition()
+})
+
+// Expose scroll container for parent
 defineExpose({
-    scrollerRef
+    scrollContainer
 })
 </script>
 
@@ -88,8 +107,15 @@ defineExpose({
     flex: 1 1 0;
 }
 
-.scroller {
+.scroll-container {
     height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    outline: none;
+}
+
+.results-list .result-item {
+    content-visibility: auto;
 }
 
 .empty-state {

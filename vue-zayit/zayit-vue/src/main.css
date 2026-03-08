@@ -11,10 +11,6 @@
 @import './assets/styles/cursor.css';
 @import './assets/styles/touch.css';
 
-/* Vue Virtual Scroller CSS */
-@import 'vue-virtual-scroller/dist/vue-virtual-scroller.css';
-
-
 * {
   margin: 0;
   padding: 0;
@@ -65,7 +61,7 @@ body {
 
 /* Search highlight styles */
 mark {
-  background-color: rgba(245, 158, 11, 0.3); /* #f59e0b with transparency */
+  background-color: rgba(245, 158, 11, 0.3) !important; /* #f59e0b with transparency */
   color: inherit;
 }
 
@@ -75,10 +71,10 @@ mark.current {
 }
 
 :root.dark mark {
-  background-color: rgba(251, 191, 36, 0.3); /* #fbbf24 with transparency */
+  background-color: rgba(249, 115, 22, 0.5) !important; /* #f97316 (orange-500) with transparency */
 }
 
 :root.dark mark.current {
-  background-color: rgba(251, 191, 36, 0.8) !important; /* #fbbf24 with higher opacity */
+  background-color: rgba(249, 115, 22, 0.95) !important; /* #f97316 (orange-500) with higher opacity */
   font-weight: bold;
 }

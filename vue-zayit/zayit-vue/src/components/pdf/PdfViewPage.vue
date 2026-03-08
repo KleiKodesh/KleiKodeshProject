@@ -3,11 +3,7 @@
     <!-- Show loading state when recreating virtual URL -->
     <div v-if="isLoadingPdf"
          class="flex-center height-fill">
-      <div class="loading-container flex-column">
-        <Icon icon="fluent:spinner-ios-20-filled"
-              class="loading-spinner" />
-        <span>טוען PDF...</span>
-      </div>
+      <LoadingSpinner text="טוען PDF..." />
     </div>
 
     <!-- Show placeholder when no PDF source available -->
@@ -39,6 +35,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { Icon } from '@iconify/vue';
+import LoadingSpinner from '@/components/shared/LoadingSpinner.vue';
 import { usePdf } from '@/components/pdf/usePdf';
 import { pdfService } from '@/data/services/pdfService';
 import { syncPdfViewerTheme, isDarkTheme } from '@/utils/themes';
@@ -211,26 +208,5 @@ const handleFileSelect = (event: Event) => {
   width: 100%;
   height: 100%;
   border: none;
-}
-
-.loading-container {
-  gap: 16px;
-  align-items: center;
-  color: var(--text-secondary);
-}
-
-.loading-spinner {
-  font-size: 32px;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
 }
 </style>

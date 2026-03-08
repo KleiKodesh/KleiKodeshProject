@@ -1,42 +1,22 @@
 /**
  * Line View Events Composable
- * Handles line click events and search state management
+ * Handles line click events
  */
 
-import { ref, computed, watch, type Ref, type ComputedRef } from 'vue'
+import { ref, watch, type ComputedRef } from 'vue'
 import type { Tab } from '@/data/types/Tab'
 import type { TocEntry } from '@/data/types/BookToc'
 import type { BookLineViewerService } from '@/data/services/bookLineViewerService'
 
 export function useLineViewEvents(
     myTab: ComputedRef<Tab | undefined>,
-    flatTocEntries: Ref<TocEntry[] | undefined>,
-    searchOpenState: Ref<boolean>,
+    flatTocEntries: ComputedRef<TocEntry[] | undefined>,
     viewerState: BookLineViewerService,
     emit: {
         (e: 'lineClick', lineIndex: number): void
     }
 ) {
     const selectedLineIndex = ref<number | null>(null)
-
-    // SEARCH STATE MANAGEMENT
-    // Sync search state with tab store
-    const isSearchOpen = computed({
-        get: () => myTab.value?.bookState?.isSearchOpen || false,
-        set: (value) => {
-            if (myTab.value?.bookState) {
-                myTab.value.bookState.isSearchOpen = value
-            }
-            searchOpenState.value = value
-        }
-    })
-
-    // Sync searchOpenState with isSearchOpen
-    watch(searchOpenState, (value) => {
-        if (myTab.value?.bookState) {
-            myTab.value.bookState.isSearchOpen = value
-        }
-    })
 
     // WATCHERS - Line Selection
     // Watch for selectedLineIndex changes to restore selection
@@ -69,21 +49,8 @@ export function useLineViewEvents(
         emit('lineClick', lineIndex)
     }
 
-    // EVENT HANDLERS - Search
-    function handleSearchClose() {
-        isSearchOpen.value = false
-    }
-
-    function handleSearch(query: string) {
-        // Search is handled by the search composable
-        // This is just a pass-through for the component
-    }
-
     return {
         selectedLineIndex,
-        isSearchOpen,
-        handleLineClick,
-        handleSearchClose,
-        handleSearch
+        handleLineClick
     }
 }

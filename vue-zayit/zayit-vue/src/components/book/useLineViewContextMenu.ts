@@ -5,8 +5,11 @@
 
 import { computed, type Ref } from 'vue'
 import type { ContextMenuItem } from '@/components/shared/useContextMenu'
+import { useScopedSelection } from '@/components/shared/useScopedSelection'
 
-export function useLineViewContextMenu() {
+export function useLineViewContextMenu(scrollerElRef: Ref<HTMLElement | undefined>) {
+    const { selectAllInContainer } = useScopedSelection(scrollerElRef)
+
     const contextMenuItems = computed<ContextMenuItem[]>(() => [
         {
             label: 'העתק',
@@ -15,6 +18,10 @@ export function useLineViewContextMenu() {
         {
             label: 'העתק כבלוק',
             action: handleCopyAsBlockFromContextMenu
+        },
+        {
+            label: 'בחר הכל',
+            action: selectAllInContainer
         }
     ])
 

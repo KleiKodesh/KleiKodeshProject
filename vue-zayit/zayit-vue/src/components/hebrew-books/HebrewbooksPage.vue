@@ -6,11 +6,7 @@
             <!-- Loading state -->
             <div v-if="isLoading"
                  class="flex-center height-fill">
-                <div class="loading-container">
-                    <Icon icon="fluent:spinner-ios-20-regular"
-                          class="loading-spinner" />
-                    <div class="loading-text">טוען ספרים...</div>
-                </div>
+                <LoadingSpinner text="טוען ספרים..." />
             </div>
 
             <!-- Error state -->
@@ -24,24 +20,23 @@
                 </div>
             </div>
 
-            <!-- Book list with virtualization -->
+            <!-- Book list with CSS virtualization -->
             <template v-else>
-                <DynamicScroller v-if="displayedBooks.length > 0"
-                                 ref="bookScroller"
-                                 :items="displayedBooks"
-                                 :min-item-size="80"
-                                 :buffer="200"
-                                 key-field="id"
-                                 class="scroller">
-                    <template #default="{ item, index, active }">
-                        <DynamicScrollerItem :item="item"
-                                             :active="active"
-                                             :data-index="index">
+                <div v-if="displayedBooks.length > 0"
+                     ref="bookScrollContainer"
+                     class="scroll-container"
+                     tabindex="0">
+                    <div class="books-list">
+                        <div v-for="(item, index) in displayedBooks"
+                             :key="item.id"
+                             :data-index="index"
+                             :style="{ containIntrinsicSize: intrinsicSize }"
+                             class="book-item">
                             <HebrewBooksListItem :book="item"
                                                  @book-clicked="trackBookInteractionHandler" />
-                        </DynamicScrollerItem>
-                    </template>
-                </DynamicScroller>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- Empty state -->
                 <div v-else
@@ -86,7 +81,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
-import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
+import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import HebrewBooksListItem from '@/components/hebrew-books/HebrewBooksListItem.vue'
 import type { HebrewBook } from '@/data/types/HebrewBook'
 import { useHebrewBooks } from '@/components/hebrew-books/useHebrewBooks'
@@ -101,14 +96,17 @@ const isOnline = ref(navigator.onLine)
 // Search input ref
 const searchInput = ref<HTMLInputElement>()
 
-// Book scroller ref
-const bookScroller = ref<InstanceType<typeof DynamicScroller>>()
+// Book scroll container ref
+const bookScrollContainer = ref<HTMLElement>()
 
-// Get the scroller element for keyboard navigation
-const scrollerElRef = computed(() => bookScroller.value?.$el as HTMLElement | undefined)
+// Intrinsic size for CSS virtualization
+const intrinsicSize = computed(() => {
+    const baseHeight = 80
+    return `auto ${baseHeight}px`
+})
 
 // Set up keyboard navigation for the book list
-useListKeyboardNavigation(scrollerElRef, {
+useListKeyboardNavigation(bookScrollContainer, {
     onEscape: () => returnFocusToSearch(),
     onTab: () => returnFocusToSearch()
 })
@@ -160,7 +158,7 @@ const handleSearchTabKey = (event: KeyboardEvent) => {
     event.preventDefault()
 
     // Find the first book item element and focus it
-    const firstBookItem = bookScroller.value?.$el?.querySelector('.tree-node[tabindex="0"]') as HTMLElement
+    const firstBookItem = bookScrollContainer.value?.querySelector('.tree-node[tabindex="0"]') as HTMLElement
     if (firstBookItem) {
         firstBookItem.focus()
     }
@@ -187,33 +185,15 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.scroller {
+.scroll-container {
     height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    outline: none;
 }
 
-.loading-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 16px;
-    padding: 40px;
-    text-align: center;
-}
-
-.loading-spinner {
-    font-size: 32px;
-    color: var(--accent-color);
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    from {
-        transform: rotate(0deg);
-    }
-
-    to {
-        transform: rotate(360deg);
-    }
+.books-list .book-item {
+    content-visibility: auto;
 }
 
 .error-icon,
@@ -223,7 +203,6 @@ onUnmounted(() => {
     opacity: 0.6;
 }
 
-.loading-text,
 .error-text,
 .empty-text {
     font-size: 16px;

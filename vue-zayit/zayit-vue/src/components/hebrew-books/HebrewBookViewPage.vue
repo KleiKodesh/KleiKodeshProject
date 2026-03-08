@@ -3,10 +3,7 @@
     <!-- Show loading state while preparing Hebrew book -->
     <div v-if="isLoading"
          class="flex-center height-fill">
-      <div class="loading-container">
-        <Icon icon="fluent:spinner-ios-20-regular"
-              class="loading-spinner" />
-      </div>
+      <LoadingSpinner />
     </div>
 
     <!-- Show Hebrew book viewer when ready -->
@@ -48,6 +45,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
+import LoadingSpinner from '@/components/shared/LoadingSpinner.vue';
 import { useHebrewBooks } from '@/components/hebrew-books/useHebrewBooks';
 import { syncPdfViewerTheme } from '@/utils/themes';
 import { webviewHebrewBooks } from '@/data/services/webviewHebrewBooks';
@@ -299,7 +297,6 @@ watch(hebrewBookUrl, (newUrl) => {
   flex-direction: column;
 }
 
-.loading-container,
 .error-container,
 .placeholder-container {
   display: flex;
@@ -308,28 +305,6 @@ watch(hebrewBookUrl, (newUrl) => {
   gap: 16px;
   padding: 40px;
   text-align: center;
-}
-
-.loading-spinner {
-  font-size: 32px;
-  color: var(--accent-color);
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.loading-text {
-  font-size: 16px;
-  color: var(--text-secondary);
-  font-weight: 500;
 }
 
 .error-icon {

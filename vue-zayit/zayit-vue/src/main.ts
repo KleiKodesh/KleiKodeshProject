@@ -5,10 +5,6 @@ import './main.css'
 import { initTheme } from '@/utils/themes'
 import { initializeOfflineIcons } from '@/utils/iconify-offline'
 
-// Import vue-virtual-scroller components
-import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
-import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
-
 // CRITICAL: Prevent browser default for Ctrl+F only
 // Ctrl+A is handled by individual components to allow proper focus checking
 console.log('[main.ts] Setting up global keyboard preventDefault')
@@ -34,10 +30,6 @@ const pinia = createPinia()
 const app = createApp(App)
 
 app.use(pinia)
-
-// Register vue3-virtual-scroller components globally
-app.component('DynamicScroller', DynamicScroller)
-app.component('DynamicScrollerItem', DynamicScrollerItem)
 
 // Initialize settings before mounting
 import { useSettingsStore } from '@/data/stores/settingsStore'

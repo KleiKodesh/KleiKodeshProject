@@ -23,6 +23,8 @@ export interface BookState {
     commentaryScrollBookId?: number; // Commentary scroll position - DEPRECATED (use elementIndex instead)
     commentaryScrollElementIndex?: number; // Commentary scroll position - Tier 1: index in DOM elements array
     commentaryScrollOffset?: number; // Commentary scroll position - Tier 2: pixel offset from top of that element
+    lineScrollElementIndex?: number; // Line view scroll position - Tier 1: index in DOM elements array
+    lineScrollOffset?: number; // Line view scroll position - Tier 2: pixel offset from top of that element
     diacriticsState?: number; // 0 = show all, 1 = hide cantillation, 2 = hide nikkud too
     isLineDisplayInline?: boolean; // false = block display, true = inline display
     originalHtml?: string; // Store original HTML for diacritics restoration

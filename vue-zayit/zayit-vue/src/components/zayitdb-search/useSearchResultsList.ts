@@ -1,14 +1,30 @@
-import { computed } from 'vue'
+import { computed, type Ref } from 'vue'
 import { useSettingsStore } from '@/data/stores/settingsStore'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 
-export function useSearchResultsList(searchQuery: () => string) {
+// Simple scroll position storage for search results
+let savedScrollPosition = 0
+
+export function useSearchResultsList(
+    searchQuery: () => string,
+    scrollContainer: Ref<HTMLElement | null>
+) {
     const settingsStore = useSettingsStore()
 
     const containerStyles = computed(() => ({
         backgroundColor: 'var(--reading-bg-primary)',
         color: 'var(--reading-text-primary)'
     }))
+
+    const intrinsicSize = computed(() => {
+        const baseFontSize = 16
+        const lineHeight = 1.5
+        const estimatedLines = 3
+        const padding = 16
+        const headerHeight = 30
+        const estimatedHeight = baseFontSize * lineHeight * estimatedLines + padding + headerHeight
+        return `auto ${Math.round(estimatedHeight)}px`
+    })
 
     /**
      * Highlight search terms in snippet
@@ -39,8 +55,28 @@ export function useSearchResultsList(searchQuery: () => string) {
         return highlighted
     }
 
+    function saveScrollPosition() {
+        if (scrollContainer.value) {
+            savedScrollPosition = scrollContainer.value.scrollTop
+        }
+    }
+
+    function restoreScrollPosition() {
+        if (scrollContainer.value && savedScrollPosition > 0) {
+            scrollContainer.value.scrollTop = savedScrollPosition
+        }
+    }
+
+    function handleScroll() {
+        saveScrollPosition()
+    }
+
     return {
         containerStyles,
-        highlightedSnippet
+        intrinsicSize,
+        highlightedSnippet,
+        saveScrollPosition,
+        restoreScrollPosition,
+        handleScroll
     }
 }

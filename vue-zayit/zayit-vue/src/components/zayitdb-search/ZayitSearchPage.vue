@@ -35,8 +35,6 @@
 import { ref, onMounted, nextTick, computed } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import { useTabStore } from '@/data/stores/tabStore'
-import { useVirtualScrollerPosition } from '@/components/shared/useVirtualScrollerPosition'
-import { useVirtualScrollerKeyboard } from '@/components/shared/useVirtualScrollerKeyboard'
 import { useBloomSearch } from '@/components/zayitdb-search/useBloomSearch'
 import { useZayitSearchPage } from '@/components/zayitdb-search/useZayitSearchPage'
 import FsCheckedTree from '@/components/zayitdb-search/FsCheckedTree.vue'
@@ -98,19 +96,6 @@ onClickOutside(filterPanelElement, () => {
     isFilterOpen.value = false
   }
 })
-
-// Get scroller ref from results list
-const scrollerRef = computed(() => resultsListRef.value?.scrollerRef || null)
-
-// Position manager for virtual scroller with auto-persistence
-const positionId = ref('search-results')
-useVirtualScrollerPosition(scrollerRef, positionId)
-
-// Keyboard navigation for virtual scroller
-useVirtualScrollerKeyboard(
-  scrollerRef,
-  computed(() => filteredResults.value.length)
-)
 
 // Setup state watchers
 setupStateWatchers(() => hasSearched.value)

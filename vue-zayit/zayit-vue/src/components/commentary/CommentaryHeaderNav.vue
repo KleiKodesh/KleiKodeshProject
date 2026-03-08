@@ -6,6 +6,40 @@
             <Icon :icon="showTree ? 'fluent:panel-right-28-filled' : 'fluent:panel-right-28-regular'" />
         </button>
 
+        <div class="commentary-search-wrapper">
+            <input ref="inputRef"
+                   type="text"
+                   class="commentary-search-input"
+                   :list="`commentary-list-${componentId}`"
+                   :placeholder="commentaryTitle || 'חפש מפרש...'"
+                   @input="handleInput"
+                   @change="handleSelect"
+                   @keydown="handleKeydown"
+                   @focus="handleFocus"
+                   @blur="handleBlur" />
+            <Icon icon="fluent:chevron-down-28-regular"
+                  class="search-dropdown-icon" />
+            <datalist :id="`commentary-list-${componentId}`">
+                <option v-for="option in bookOptions"
+                        :key="option.bookId"
+                        :value="option.path">
+                </option>
+            </datalist>
+        </div>
+
+        <button class="commentary-nav-btn c-pointer hover-bg"
+                :disabled="!hasPrevious"
+                :title="hasPrevious ? 'מפרש קודם' : 'אין מפרש קודם'"
+                @click="handleNavigatePrevious">
+            <Icon icon="fluent:chevron-up-28-regular" />
+        </button>
+        <button class="commentary-nav-btn c-pointer hover-bg"
+                :disabled="!hasNext"
+                :title="hasNext ? 'מפרש הבא' : 'אין מפרש הבא'"
+                @click="handleNavigateNext">
+            <Icon icon="fluent:chevron-down-28-regular" />
+        </button>
+
         <div class="nav-separator"></div>
 
         <button v-if="showBookButton"
@@ -27,44 +61,6 @@
                 @click="handleNavigateNextLine">
             <Icon icon="fluent:chevron-left-28-regular" />
         </button>
-
-        <div class="nav-separator"></div>
-
-        <button class="commentary-nav-btn c-pointer hover-bg"
-                :disabled="!hasPrevious"
-                :title="hasPrevious ? 'מפרש קודם' : 'אין מפרש קודם'"
-                @click="handleNavigatePrevious">
-            <Icon icon="fluent:chevron-up-28-regular" />
-        </button>
-        <button class="commentary-nav-btn c-pointer hover-bg"
-                :disabled="!hasNext"
-                :title="hasNext ? 'מפרש הבא' : 'אין מפרש הבא'"
-                @click="handleNavigateNext">
-            <Icon icon="fluent:chevron-down-28-regular" />
-        </button>
-
-        <div class="nav-separator"></div>
-
-        <div class="commentary-search-wrapper">
-            <input ref="inputRef"
-                   type="text"
-                   class="commentary-search-input"
-                   :list="`commentary-list-${componentId}`"
-                   placeholder="חפש מפרש..."
-                   @input="handleInput"
-                   @change="handleSelect"
-                   @keydown="handleKeydown"
-                   @focus="handleFocus"
-                   @blur="handleBlur" />
-            <Icon icon="fluent:chevron-down-28-regular"
-                  class="search-dropdown-icon" />
-            <datalist :id="`commentary-list-${componentId}`">
-                <option v-for="option in bookOptions"
-                        :key="option.bookId"
-                        :value="option.path">
-                </option>
-            </datalist>
-        </div>
     </div>
 </template>
 

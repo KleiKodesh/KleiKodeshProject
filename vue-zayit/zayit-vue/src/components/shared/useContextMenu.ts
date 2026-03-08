@@ -1,5 +1,6 @@
 import { ref, computed, nextTick } from 'vue';
 import { onClickOutside } from '@vueuse/core';
+import { calculateOnScreenPosition } from './useKeepOnScreen';
 
 export interface ContextMenuItem {
     label: string;
@@ -20,12 +21,27 @@ export function useContextMenu() {
     async function show(event: MouseEvent) {
         event.preventDefault();
         event.stopPropagation();
+
+        // Initially position at click location
         x.value = event.clientX;
         y.value = event.clientY;
         isVisible.value = true;
 
-        // Wait for next tick to set up click outside listener
+        // Wait for DOM to render so we can get menu dimensions
         await nextTick();
+
+        // Adjust position to keep menu on screen
+        if (menuRef.value) {
+            const rect = menuRef.value.getBoundingClientRect();
+            const adjustedPosition = calculateOnScreenPosition(
+                { x: event.clientX, y: event.clientY },
+                rect.width,
+                rect.height,
+                { horizontalAlign: 'right', verticalAlign: 'bottom' }
+            );
+            x.value = adjustedPosition.x;
+            y.value = adjustedPosition.y;
+        }
     }
 
     function hide() {

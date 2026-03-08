@@ -3,9 +3,7 @@
          class="overflow-y height-fill">
         <div v-if="isLoading"
              class="flex-center height-fill">
-            <Icon icon="fluent:spinner-ios-20-regular"
-                  class="loading-spinner" />
-            <span class="text-secondary">טוען...</span>
+            <LoadingSpinner text="טוען..." />
         </div>
         <div v-else-if="tocEntries.length === 0"
              class="flex-center height-fill">
@@ -27,6 +25,7 @@
 import { ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import TocTreeNode from './TocTreeNode.vue'
+import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import { useListKeyboardNavigation } from '@/components/shared/useListKeyboardNavigation'
 import type { TocEntry } from '@/data/types/BookToc'
 

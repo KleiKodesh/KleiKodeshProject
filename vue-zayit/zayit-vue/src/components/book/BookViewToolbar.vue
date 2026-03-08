@@ -121,8 +121,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { Icon } from '@iconify/vue'
-import { useToolbarPosition } from './useLineViewToolbarPosition'
-import { useLineViewToolbarActions } from './useLineViewToolbar'
+import { useToolbarPosition } from './useBookViewToolbarPosition'
+import { useBookViewToolbarActions } from './useBookViewToolbar'
 import CommentaryToggleIcon from '@/components/icons/CommentaryToggleIcon.vue'
 import ThemeToggleButton from '@/components/settings/ThemeToggleButton.vue'
 
@@ -159,7 +159,7 @@ const {
     handleToggleSplitPane,
     handleAltTocToggle,
     handleDiacriticsClick
-} = useLineViewToolbarActions()
+} = useBookViewToolbarActions()
 
 const toolbarPositionClass = computed(() => {
     return `toolbar-${props.position}`
