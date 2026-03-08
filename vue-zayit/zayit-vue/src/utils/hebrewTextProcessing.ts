@@ -1,6 +1,6 @@
 /**
  * Hebrew Text Processing Utilities
- * Pure functions for processing Hebrew text - diacritics removal, search normalization
+ * Pure functions for processing Hebrew text - diacritics removal
  */
 
 /**

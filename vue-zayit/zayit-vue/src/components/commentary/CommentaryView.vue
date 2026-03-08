@@ -90,6 +90,11 @@ watch(
     ),
     { immediate: true }
 )
+
+defineExpose({
+    commentaryContentRef,
+    commentaryGroups
+})
 </script>
 
 <style scoped>

@@ -2,7 +2,13 @@
     <div ref="scrollContainer"
          class="commentary-scroll-container"
          tabindex="0"
-         :style="containerStyles">
+         :style="containerStyles"
+         @keydown="handleKeyDown"
+         @contextmenu="handleContextMenu">
+        <!-- Context Menu -->
+        <ContextMenu ref="contextMenuRef"
+                     :items="contextMenuItems" />
+
         <div v-if="isLoadingMetadata"
              class="commentary-loading flex-center">
             טוען רשימת מפרשים...
@@ -15,44 +21,44 @@
 
         <div v-else
              class="commentary-groups">
-            <div v-for="(bookNode, index) in flattenedBooks"
-                 :key="`${bookNode.path.join('-')}-${index}`"
-                 :data-book-id="bookNode.bookId"
+            <div v-for="(group, index) in virtualGroups"
+                 :key="`${group.bookNode.path.join('-')}-${index}`"
+                 :data-book-id="group.bookNode.bookId"
                  class="commentary-group"
                  :style="{ containIntrinsicSize: intrinsicSize }">
                 <!-- Sticky Toolbar with navigation -->
-                <CommentaryHeader :path="bookNode.path"
-                                  :book-id="bookNode.bookId"
-                                  :line-index="bookNode.lineIndex"
+                <CommentaryHeader :path="group.bookNode.path"
+                                  :book-id="group.bookNode.bookId"
+                                  :line-index="group.bookNode.lineIndex"
                                   :has-previous="index > 0"
-                                  :has-next="index < flattenedBooks.length - 1"
+                                  :has-next="index < virtualGroups.length - 1"
                                   :available-books="flattenedBooks"
                                   :is-dragging-selection="isDraggingSelection"
                                   :show-tree="showTree"
-                                  @click="handleGroupClick(bookNode)"
+                                  @click="handleGroupClick(group.bookNode)"
                                   @navigate-previous="navigateToPrevious(index)"
                                   @navigate-next="navigateToNext(index)"
-                                  @navigate-previous-line="emit('navigate-previous-line', bookNode.bookId)"
-                                  @navigate-next-line="emit('navigate-next-line', bookNode.bookId)"
+                                  @navigate-previous-line="emit('navigate-previous-line', group.bookNode.bookId)"
+                                  @navigate-next-line="emit('navigate-next-line', group.bookNode.bookId)"
                                   @select-commentary="(bookId) => emit('select-commentary', bookId)"
                                   @focus-content="focusContent"
                                   @toggle-tree="emit('toggle-tree')" />
 
                 <div class="commentary-group-content">
-                    <div v-if="!getGroupMetadata(bookNode)?.isLoaded"
+                    <div v-if="!group.metadata?.isLoaded"
                          class="commentary-group-loading">
                         טוען תוכן...
                     </div>
-                    <div v-else-if="!getGroupMetadata(bookNode)?.links || getGroupMetadata(bookNode)!.links.length === 0"
+                    <div v-else-if="!group.metadata?.links || group.metadata.links.length === 0"
                          class="commentary-group-empty">
                         אין תוכן זמין
                     </div>
                     <div v-else
                          class="commentary-links">
-                        <div v-for="(link, linkIndex) in getGroupMetadata(bookNode)!.links"
+                        <div v-for="(link, linkIndex) in group.transformedLinks"
                              :key="linkIndex"
                              class="commentary-link selectable"
-                             v-html="getFilteredHtml(link.html)" />
+                             v-html="link.transformedHtml" />
                     </div>
                 </div>
             </div>
@@ -62,13 +68,16 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useEventListener } from '@vueuse/core'
 import { useCommentaryTree } from './useCommentaryTree'
 import { useCommentaryScroll } from './useCommentaryScroll'
+import { useCommentaryVirtualItems } from './useCommentaryVirtualItems'
 import { useTabStore } from '@/data/stores/tabStore'
-import { applyDiacriticsFilter } from '@/utils/hebrewTextProcessing'
 import CommentaryHeader from './CommentaryHeader.vue'
+import ContextMenu from '@/components/shared/ContextMenu.vue'
 import type { CommentaryTreeNode } from './useCommentaryTree'
 import type { CommentaryMetadata } from './useCommentaryContent'
+import type { ContextMenuItem } from '@/components/shared/useContextMenu'
 
 const props = defineProps<{
     commentaryGroups: CommentaryMetadata[]
@@ -88,6 +97,7 @@ const emit = defineEmits<{
 }>()
 
 const scrollContainer = ref<HTMLElement | null>(null)
+const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
 const isDraggingSelection = ref(false)
 const tabStore = useTabStore()
 const { flattenedBooks } = useCommentaryTree(computed(() => props.commentaryGroups))
@@ -110,17 +120,24 @@ const commentaryGroupsMap = computed(() => {
     return map
 })
 
-function getGroupMetadata(node: CommentaryTreeNode) {
-    return commentaryGroupsMap.value.get(node.metadata?.groupName || '')
-}
+// Create virtual items with transformed content (same pattern as LineView)
+const { virtualGroups } = useCommentaryVirtualItems(
+    flattenedBooks,
+    commentaryGroupsMap,
+    currentDiacriticsState
+)
 
-function getFilteredHtml(html: string): string {
-    const diacriticsState = currentDiacriticsState.value
-    if (html !== '\u00A0' && diacriticsState && diacriticsState > 0) {
-        return applyDiacriticsFilter(html, diacriticsState)
+// Context menu items
+const contextMenuItems = computed<ContextMenuItem[]>(() => [
+    {
+        label: 'העתק',
+        action: () => document.execCommand('copy')
+    },
+    {
+        label: 'בחר הכל',
+        action: selectAllInContainer
     }
-    return html
-}
+])
 
 function handleScroll() {
     detectVisibleGroup(emit)
@@ -153,12 +170,50 @@ function focusContent() {
     }
 }
 
+function selectAllInContainer() {
+    const container = scrollContainer.value
+    if (!container) return
+
+    const selection = window.getSelection()
+    if (!selection) return
+
+    const range = document.createRange()
+    range.selectNodeContents(container)
+    selection.removeAllRanges()
+    selection.addRange(range)
+}
+
+function handleContextMenu(event: MouseEvent) {
+    contextMenuRef.value?.show(event)
+}
+
 function handleSelectStart() {
     isDraggingSelection.value = true
 }
 
 function handleMouseUp() {
     isDraggingSelection.value = false
+}
+
+// Handle Ctrl+A to select all in commentary container only
+useEventListener('keydown', (event: KeyboardEvent) => {
+    const hasCtrlOrMeta = event.ctrlKey || event.metaKey
+
+    // Ctrl+A: Select all in container (scoped to this container only)
+    if (hasCtrlOrMeta && event.code === 'KeyA') {
+        const container = scrollContainer.value
+        if (container && document.activeElement === container) {
+            event.preventDefault()
+            selectAllInContainer()
+        }
+    }
+})
+
+function handleKeyDown(e: KeyboardEvent) {
+    // Prevent spacebar from scrolling
+    if (e.key === ' ' && e.target instanceof HTMLElement && e.target.tagName !== 'INPUT') {
+        e.preventDefault()
+    }
 }
 
 onMounted(() => {
@@ -182,7 +237,8 @@ onUnmounted(() => {
 defineExpose({
     scrollToGroup,
     restoreScrollPosition,
-    focusContent
+    focusContent,
+    scrollContainer
 })
 </script>
 
@@ -209,7 +265,7 @@ defineExpose({
 }
 
 .commentary-group-content {
-    padding-top: 4px;
+    padding-top: 0;
 }
 
 .commentary-group-loading,
@@ -231,5 +287,24 @@ defineExpose({
     text-align: justify;
     font-family: var(--commentary-text-font);
     font-size: var(--commentary-font-size);
+}
+
+/* Search match highlighting */
+.commentary-link :deep(.search-match) {
+    background-color: rgba(255, 255, 0, 0.3);
+    padding: 1px 0;
+}
+
+.commentary-link :deep(.search-match.current) {
+    background-color: rgba(255, 165, 0, 0.5);
+    font-weight: 600;
+}
+
+:root.dark .commentary-link :deep(.search-match) {
+    background-color: rgba(255, 255, 0, 0.2);
+}
+
+:root.dark .commentary-link :deep(.search-match.current) {
+    background-color: rgba(255, 165, 0, 0.4);
 }
 </style>

@@ -9,7 +9,7 @@ import DiacriticsFullIcon from '@/components/icons/DiacriticsFullIcon.vue'
 import DiacriticsNikkudOnlyIcon from '@/components/icons/DiacriticsNikkudOnlyIcon.vue'
 import DiacriticsNoneIcon from '@/components/icons/DiacriticsNoneIcon.vue'
 
-export function useLineViewToolbarActions() {
+export function useBookViewToolbarActions() {
     const tabStore = useTabStore()
 
     const isVisible = computed(() => {
