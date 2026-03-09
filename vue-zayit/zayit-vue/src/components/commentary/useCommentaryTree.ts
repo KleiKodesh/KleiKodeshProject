@@ -4,164 +4,260 @@ import { useConnectionTypesStore } from '@/data/stores/connectionTypesStore'
 import type { CommentaryMetadata } from './useCommentaryContent'
 
 export interface CommentaryTreeNode {
-    type: 'connection-type' | 'period' | 'book'
-    name: string
-    hebrewName: string
-    connectionType?: string
-    period?: string
-    bookId?: number
-    lineIndex?: number
-    children: CommentaryTreeNode[]
-    path: string[]
-    metadata?: CommentaryMetadata
+    type: "connection-type" | "book";
+    name: string;
+    hebrewName: string;
+    connectionType?: string;
+    category?: string;
+    bookId?: number;
+    lineIndex?: number;
+    children: CommentaryTreeNode[];
+    path: string[];
+    metadata?: CommentaryMetadata;
 }
 
 export function useCommentaryTree(commentaryGroups: ComputedRef<CommentaryMetadata[]>) {
     const categoryTreeStore = useCategoryTreeStore()
     const connectionTypesStore = useConnectionTypesStore()
 
-    const connectionTypeOrder = [
-        { name: 'SOURCE', hebrewName: 'מקור' },
-        { name: 'TARGUM', hebrewName: 'תרגומים' },
-        { name: 'COMMENTARY', hebrewName: 'מפרשים' },
-        { name: 'REFERENCE', hebrewName: 'קשרים' },
-        { name: 'OTHER', hebrewName: 'שונות' }
-    ]
+    // Helper function to sort categories
+    function sortCategories(entries: [string, CommentaryMetadata[]][]): [string, CommentaryMetadata[]][] {
+        return entries.sort((a, b) => {
+            const [catA, groupsA] = a
+            const [catB, groupsB] = b
+
+            // Get book info to check if these are secondary categories
+            const bookA = categoryTreeStore.allBooks.find(book => book.id === groupsA[0]?.targetBookId)
+            const bookB = categoryTreeStore.allBooks.find(book => book.id === groupsB[0]?.targetBookId)
+
+            // Check if these are secondary categories (for תנ"ך, משנה, תלמוד)
+            const isSecondaryA = bookA?.secondaryCategory === catA
+            const isSecondaryB = bookB?.secondaryCategory === catB
+
+            // Priority order for secondary categories
+            const secondaryCategoryOrder = ['תנ"ך', 'משנה', 'תוספתא', 'תלמוד']
+            const secondaryIndexA = isSecondaryA ? secondaryCategoryOrder.indexOf(catA) : -1
+            const secondaryIndexB = isSecondaryB ? secondaryCategoryOrder.indexOf(catB) : -1
+
+            // Hardcoded period order (גאונים before ראשונים before אחרונים)
+            const periodOrder = ['גאונים', 'ראשונים', 'אחרונים']
+            const periodIndexA = periodOrder.indexOf(catA)
+            const periodIndexB = periodOrder.indexOf(catB)
+
+            // Check if A is secondary and B is period
+            if (secondaryIndexA !== -1 && periodIndexB !== -1) return -1
+            // Check if A is period and B is secondary
+            if (periodIndexA !== -1 && secondaryIndexB !== -1) return 1
+
+            // If both are secondary categories, sort by their order
+            if (secondaryIndexA !== -1 && secondaryIndexB !== -1) {
+                return secondaryIndexA - secondaryIndexB
+            }
+
+            // If both are periods, sort by period order
+            if (periodIndexA !== -1 && periodIndexB !== -1) {
+                return periodIndexA - periodIndexB
+            }
+
+            // Secondary categories come before other categories
+            if (secondaryIndexA !== -1) return -1
+            if (secondaryIndexB !== -1) return 1
+
+            // Periods come before other categories
+            if (periodIndexA !== -1) return -1
+            if (periodIndexB !== -1) return 1
+
+            // For other categories, use category tree order
+            const orderA = isSecondaryA ? (bookA?.secondaryCategoryOrder ?? 999) : (bookA?.rootCategoryOrder ?? 999)
+            const orderB = isSecondaryB ? (bookB?.secondaryCategoryOrder ?? 999) : (bookB?.rootCategoryOrder ?? 999)
+
+            return orderA - orderB
+        })
+    }
 
     const commentaryTree = computed<CommentaryTreeNode[]>(() => {
         const tree: CommentaryTreeNode[] = []
-
-        // Group commentaries by connection type
         const groupedByConnectionType = new Map<string, CommentaryMetadata[]>()
 
         commentaryGroups.value.forEach(group => {
             if (!group.targetBookId || !group.connectionTypeId) return
-
-            // Get the connection type name from the connectionTypeId
             const connectionTypeName = connectionTypesStore.getConnectionTypeName(group.connectionTypeId)
             const connectionType = connectionTypeName || 'OTHER'
-
             if (!groupedByConnectionType.has(connectionType)) {
                 groupedByConnectionType.set(connectionType, [])
             }
             groupedByConnectionType.get(connectionType)!.push(group)
         })
 
-        // Build tree following connection type order
-        connectionTypeOrder.forEach(({ name: connectionType, hebrewName }) => {
-            const groups = groupedByConnectionType.get(connectionType)
-            if (!groups || groups.length === 0) return
-
-            const connectionTypeNode: CommentaryTreeNode = {
-                type: 'connection-type',
-                name: connectionType,
-                hebrewName,
-                connectionType,
-                children: [],
-                path: [hebrewName]
+        // 1. Handle מקור
+        const sourceGroups = groupedByConnectionType.get('SOURCE')
+        if (sourceGroups?.length) {
+            const sourceNode: CommentaryTreeNode = {
+                type: 'connection-type' as const,
+                name: 'SOURCE',
+                hebrewName: 'מקור',
+                children: sourceGroups.map(group => ({
+                    type: 'book' as const,
+                    name: group.groupName,
+                    hebrewName: group.groupName,
+                    bookId: group.targetBookId,
+                    lineIndex: group.targetLineIndex,
+                    children: [],
+                    path: ['מקור', group.groupName],
+                    metadata: group
+                })).sort((a, b) => a.hebrewName.localeCompare(b.hebrewName, 'he')),
+                path: ['מקור']
             }
+            tree.push(sourceNode)
+        }
 
-            // For COMMENTARY type, create combined nodes (e.g., "מפרשים - ראשונים")
-            if (connectionType === 'COMMENTARY') {
-                const groupedByPeriod = new Map<string, CommentaryMetadata[]>()
+        // 2. Handle קשרים (REFERENCE) - flat list
+        const referenceGroups = groupedByConnectionType.get('REFERENCE')
+        if (referenceGroups?.length) {
+            const referenceNode: CommentaryTreeNode = {
+                type: 'connection-type' as const,
+                name: 'REFERENCE',
+                hebrewName: 'קשרים',
+                children: referenceGroups.map(group => ({
+                    type: 'book' as const,
+                    name: group.groupName,
+                    hebrewName: group.groupName,
+                    bookId: group.targetBookId,
+                    lineIndex: group.targetLineIndex,
+                    children: [],
+                    path: ['קשרים', group.groupName],
+                    metadata: group
+                })).sort((a, b) => a.hebrewName.localeCompare(b.hebrewName, 'he')),
+                path: ['קשרים']
+            }
+            tree.push(referenceNode)
+        }
 
-                groups.forEach(group => {
-                    const book = categoryTreeStore.allBooks.find(b => b.id === group.targetBookId)
-                    const period = book?.period || 'אחר'
+        // 3. Handle תרגומים
+        const targumGroups = groupedByConnectionType.get('TARGUM')
+        if (targumGroups?.length) {
+            const targumNode: CommentaryTreeNode = {
+                type: 'connection-type' as const,
+                name: 'TARGUM',
+                hebrewName: 'תרגומים',
+                children: targumGroups.map(group => ({
+                    type: 'book' as const,
+                    name: group.groupName,
+                    hebrewName: group.groupName,
+                    bookId: group.targetBookId,
+                    lineIndex: group.targetLineIndex,
+                    children: [],
+                    path: ['תרגומים', group.groupName],
+                    metadata: group
+                })).sort((a, b) => a.hebrewName.localeCompare(b.hebrewName, 'he')),
+                path: ['תרגומים']
+            }
+            tree.push(targumNode)
+        }
 
-                    if (!groupedByPeriod.has(period)) {
-                        groupedByPeriod.set(period, [])
-                    }
-                    groupedByPeriod.get(period)!.push(group)
-                })
+        // 4. Handle מפרשים (COMMENTARY) - group by categories
+        const commentaryConnectionGroups = groupedByConnectionType.get('COMMENTARY')
+        if (commentaryConnectionGroups?.length) {
+            const groupedByCategory = new Map<string, CommentaryMetadata[]>()
 
-                const periodOrder = ['תנ"ך', 'ספרות חז"ל', 'גאונים', 'ראשונים', 'אחרונים', 'קבלה', 'מוסר וחסידות', 'הלכה', 'אחר']
+            commentaryConnectionGroups.forEach(group => {
+                const book = categoryTreeStore.allBooks.find(b => b.id === group.targetBookId)
 
-                periodOrder.forEach(period => {
-                    const periodGroups = groupedByPeriod.get(period)
-                    if (!periodGroups || periodGroups.length === 0) return
+                // First try to use period (ראשונים, אחרונים, גאונים)
+                let categoryToUse = book?.period
 
-                    // Use simplified name: "חז"ל" instead of "ספרות חז"ל", and just the period name for others
-                    const displayName = period === 'ספרות חז"ל' ? 'חז"ל' : period
+                // If no period, use secondaryCategory for specific root categories
+                if (!categoryToUse || categoryToUse === 'אחר') {
+                    const rootCat = book?.rootCategory || 'אחר'
+                    const shouldUseSecondary = rootCat === 'תנ"ך' || rootCat === 'משנה' || rootCat === 'תלמוד'
 
-                    const periodNode: CommentaryTreeNode = {
-                        type: 'period',
-                        name: displayName,
-                        hebrewName: displayName,
-                        connectionType,
-                        period,
-                        children: [],
-                        path: [displayName]
-                    }
+                    categoryToUse = (shouldUseSecondary && book?.secondaryCategory)
+                        ? book.secondaryCategory
+                        : rootCat
+                }
 
-                    periodGroups.forEach(group => {
-                        const bookNode: CommentaryTreeNode = {
-                            type: 'book',
-                            name: group.groupName,
-                            hebrewName: group.groupName,
-                            connectionType,
-                            period,
-                            bookId: group.targetBookId,
-                            lineIndex: group.targetLineIndex,
-                            children: [],
-                            path: [displayName, group.groupName],
-                            metadata: group
-                        }
-                        periodNode.children.push(bookNode)
-                    })
+                if (!groupedByCategory.has(categoryToUse)) {
+                    groupedByCategory.set(categoryToUse, [])
+                }
+                groupedByCategory.get(categoryToUse)!.push(group)
+            })
 
-                    // Sort books by publication date (oldest first), then alphabetically
-                    periodNode.children.sort((a, b) => {
-                        const bookA = a.bookId ? categoryTreeStore.allBooks.find(book => book.id === a.bookId) : null
-                        const bookB = b.bookId ? categoryTreeStore.allBooks.find(book => book.id === b.bookId) : null
+            // Create a node for each category, sorted by category tree order
+            const sortedCategories = sortCategories(Array.from(groupedByCategory.entries()))
 
-                        const dateA = bookA?.pubDate
-                        const dateB = bookB?.pubDate
-
-                        // Parse as numbers, ignore non-numeric dates
-                        const numA = dateA ? parseInt(dateA) : NaN
-                        const numB = dateB ? parseInt(dateB) : NaN
-
-                        // Both have valid numeric dates - sort by date
-                        if (!isNaN(numA) && !isNaN(numB)) {
-                            return numA - numB
-                        }
-
-                        // Only one has a valid numeric date - prioritize the one with a date
-                        if (!isNaN(numA) && isNaN(numB)) return -1
-                        if (isNaN(numA) && !isNaN(numB)) return 1
-
-                        // Neither has a valid numeric date - sort alphabetically
-                        return a.hebrewName.localeCompare(b.hebrewName, 'he')
-                    })
-
-                    tree.push(periodNode)
-                })
-            } else {
-                // For other connection types, direct children are books
-                groups.forEach(group => {
-                    const bookNode: CommentaryTreeNode = {
-                        type: 'book',
+            sortedCategories.forEach(([category, groups]) => {
+                const categoryNode: CommentaryTreeNode = {
+                    type: 'connection-type' as const,
+                    name: category,
+                    hebrewName: `מפרשים - ${category}`,
+                    children: groups.map(group => ({
+                        type: 'book' as const,
                         name: group.groupName,
                         hebrewName: group.groupName,
-                        connectionType,
+                        category: category,
                         bookId: group.targetBookId,
                         lineIndex: group.targetLineIndex,
                         children: [],
-                        path: [hebrewName, group.groupName],
+                        path: [`מפרשים - ${category}`, group.groupName],
                         metadata: group
-                    }
-                    connectionTypeNode.children.push(bookNode)
-                })
+                    })).sort((a, b) => a.hebrewName.localeCompare(b.hebrewName, 'he')),
+                    path: [`מפרשים - ${category}`]
+                }
+                tree.push(categoryNode)
+            })
+        }
 
-                // Sort books alphabetically
-                connectionTypeNode.children.sort((a, b) =>
-                    a.hebrewName.localeCompare(b.hebrewName, 'he')
-                )
+        // 5. Handle שונות (OTHER) - group by categories (same as COMMENTARY)
+        const otherGroups = groupedByConnectionType.get('OTHER')
+        if (otherGroups?.length) {
+            const groupedByCategory = new Map<string, CommentaryMetadata[]>()
 
-                tree.push(connectionTypeNode)
-            }
-        })
+            otherGroups.forEach(group => {
+                const book = categoryTreeStore.allBooks.find(b => b.id === group.targetBookId)
+
+                // First try to use period (ראשונים, אחרונים, גאונים)
+                let categoryToUse = book?.period
+
+                // If no period, use secondaryCategory for specific root categories
+                if (!categoryToUse || categoryToUse === 'אחר') {
+                    const rootCat = book?.rootCategory || 'אחר'
+                    const shouldUseSecondary = rootCat === 'תנ"ך' || rootCat === 'משנה' || rootCat === 'תלמוד'
+
+                    categoryToUse = (shouldUseSecondary && book?.secondaryCategory)
+                        ? book.secondaryCategory
+                        : rootCat
+                }
+
+                if (!groupedByCategory.has(categoryToUse)) {
+                    groupedByCategory.set(categoryToUse, [])
+                }
+                groupedByCategory.get(categoryToUse)!.push(group)
+            })
+
+            // Create a node for each category, sorted by category tree order
+            const sortedCategories = sortCategories(Array.from(groupedByCategory.entries()))
+
+            sortedCategories.forEach(([category, groups]) => {
+                const categoryNode: CommentaryTreeNode = {
+                    type: 'connection-type' as const,
+                    name: category,
+                    hebrewName: `שונות - ${category}`,
+                    children: groups.map(group => ({
+                        type: 'book' as const,
+                        name: group.groupName,
+                        hebrewName: group.groupName,
+                        category: category,
+                        bookId: group.targetBookId,
+                        lineIndex: group.targetLineIndex,
+                        children: [],
+                        path: [`שונות - ${category}`, group.groupName],
+                        metadata: group
+                    })).sort((a, b) => a.hebrewName.localeCompare(b.hebrewName, 'he')),
+                    path: [`שונות - ${category}`]
+                }
+                tree.push(categoryNode)
+            })
+        }
 
         return tree
     })
@@ -178,15 +274,6 @@ export function useCommentaryTree(commentaryGroups: ComputedRef<CommentaryMetada
         }
 
         commentaryTree.value.forEach(traverse)
-
-        // If there's only one connection type, remove it from paths
-        const uniqueConnectionTypes = new Set(books.map(b => b.connectionType))
-        if (uniqueConnectionTypes.size === 1) {
-            books.forEach(book => {
-                // Remove the first element (connection type) from the path
-                book.path = book.path.slice(1)
-            })
-        }
 
         return books
     })

@@ -2,7 +2,10 @@
     <div ref="toolbarRef"
          class="commentary-toolbar selectable">
         <h3 v-if="!shouldShowNav"
-            class="commentary-toolbar-title ellipsis">{{ displayPath }}</h3>
+            class="commentary-toolbar-title ellipsis">
+            <span v-if="parentNode" class="parent-node">{{ parentNode }} >&nbsp;</span>
+            <span class="book-name">{{ bookTitle }}</span>
+        </h3>
 
         <CommentaryHeaderNav v-else
                              :has-previous="hasPrevious"
@@ -51,8 +54,23 @@ const emit = defineEmits<{
     (e: 'toggle-tree'): void
 }>()
 
-const displayPath = computed(() => props.path.join(' > '))
+const parentNode = computed(() => {
+    return props.path.length > 1 ? props.path[0] : null
+})
+
 const bookTitle = computed(() => props.path[props.path.length - 1] || '')
+
+const displayPath = computed(() => {
+    const bookName = props.path[props.path.length - 1] || ''
+    
+    // If path has more than one element, show parent node > book name
+    if (props.path.length > 1) {
+        const parent = props.path[0]
+        return `${parent} > ${bookName}`
+    }
+    
+    return bookName
+})
 
 const toolbarRef = ref<HTMLElement>()
 const showNav = useElementHover(toolbarRef)
@@ -96,5 +114,21 @@ onClickOutside(toolbarRef, () => {
     font-family: var(--commentary-header-font);
     flex: 1;
     min-width: 0;
+    display: flex;
+    align-items: center;
+}
+
+.parent-node {
+    color: var(--text-secondary);
+    flex-shrink: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.book-name {
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 </style>

@@ -73,6 +73,6 @@ defineExpose({
 }
 
 .tree-root {
-    padding: 4px;
+    padding: 0;
 }
 </style>

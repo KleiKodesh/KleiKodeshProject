@@ -29,12 +29,29 @@ CommentaryView.vue (main view)
 ├── uses: useCommentaryLoader.ts, useCommentaryNavigation.ts
 ├── CommentaryToolbar.vue (child - toolbar)
 ├── CommentaryContent.vue (child - content display)
-│   └── uses: useCommentaryContent.ts, useCommentarySearch.ts
-└── CommentaryFilterPanel.vue (child - filter UI)
-    ├── uses: useCommentaryFilters.ts
-    ├── CommentaryConnectionTypeFilter.vue (child - connection filter)
-    └── CommentaryCheckedTreeNode.vue (child - tree node)
+│   ├── uses: useCommentaryContent.ts, useCommentarySearch.ts
+│   ├── uses: useCommentaryTree.ts (builds tree structure)
+│   └── CommentaryHeader.vue (child - displays category > book name)
+├── CommentaryFilterPanel.vue (child - filter UI)
+│   ├── uses: useCommentaryFilters.ts
+│   ├── CommentaryConnectionTypeFilter.vue (child - connection filter)
+│   └── CommentaryTreeView.vue (child - tree display)
+│       └── CommentaryTreeViewNode.vue (child - recursive tree node)
 ```
+
+### Commentary Tree Structure
+
+Tree groups books by connection type and category:
+
+1. מקור (SOURCE) - flat list, alphabetically sorted
+2. קשרים (REFERENCE) - flat list, alphabetically sorted
+3. תרגומים (TARGUM) - flat list, alphabetically sorted
+4. מפרשים (COMMENTARY) - grouped by categories with "מפרשים - " prefix
+5. שונות (OTHER) - grouped by categories with "שונות - " prefix
+
+Category grouping uses: period (if available) → secondaryCategory (for תנ"ך/משנה/תלמוד) → rootCategory
+Categories sorted by: hardcoded periods (גאונים, ראשונים, אחרונים) → category tree orderIndex
+Books within categories sorted alphabetically in Hebrew
 
 ## Hebrew Books Feature
 
