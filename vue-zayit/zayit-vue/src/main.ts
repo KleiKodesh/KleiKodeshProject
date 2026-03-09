@@ -7,8 +7,6 @@ import { initializeOfflineIcons } from '@/utils/iconify-offline'
 
 // CRITICAL: Prevent browser default for Ctrl+F only
 // Ctrl+A is handled by individual components to allow proper focus checking
-console.log('[main.ts] Setting up global keyboard preventDefault')
-
 window.addEventListener('keydown', (event: KeyboardEvent) => {
     if ((event.ctrlKey || event.metaKey)) {
         // Use event.code instead of event.key to work with any keyboard layout
@@ -17,8 +15,6 @@ window.addEventListener('keydown', (event: KeyboardEvent) => {
         }
     }
 }, { capture: true, passive: false })
-
-console.log('[main.ts] Global keyboard handler installed')
 
 // Initialize offline icons for WebView2 environment
 initializeOfflineIcons()

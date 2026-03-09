@@ -113,7 +113,7 @@ export function useBookViewPage(
 
                 // Set the selected commentary to the one that emitted the event
                 if (myTab.value?.bookState) {
-                    myTab.value.bookState.commentaryScrollElementIndex = bookId
+                    myTab.value.bookState.currentCommentaryBookId = bookId
                 }
             }
         }
@@ -138,7 +138,7 @@ export function useBookViewPage(
 
                 // Set the selected commentary to the one that emitted the event
                 if (myTab.value?.bookState) {
-                    myTab.value.bookState.commentaryScrollElementIndex = bookId
+                    myTab.value.bookState.currentCommentaryBookId = bookId
                 }
             }
         }

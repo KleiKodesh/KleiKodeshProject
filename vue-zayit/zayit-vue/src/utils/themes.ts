@@ -304,7 +304,6 @@ export function isDarkTheme(): boolean {
 }
 
 export function forceSyncAllPdfViewers(): void {
-    console.log('[Theme] Force syncing all PDF viewers...')
     syncPdfViewerTheme()
     setTimeout(() => syncPdfViewerTheme(), 500)
 }

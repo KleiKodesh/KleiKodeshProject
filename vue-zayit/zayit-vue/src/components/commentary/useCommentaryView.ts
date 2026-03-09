@@ -55,10 +55,18 @@ export function useCommentaryView(props: {
 
     function handleVisibleBookChanged(bookId: number) {
         selectedBookId.value = bookId
+        // Update the persisted current commentary book ID
+        if (tabStore.activeTab?.bookState) {
+            tabStore.activeTab.bookState.currentCommentaryBookId = bookId
+        }
     }
 
     async function scrollToCommentary(bookId: number, scrollToGroup: (bookId: number) => Promise<void>) {
         selectedBookId.value = bookId
+        // Update the persisted current commentary book ID
+        if (tabStore.activeTab?.bookState) {
+            tabStore.activeTab.bookState.currentCommentaryBookId = bookId
+        }
         await retryScrollToGroup(bookId, scrollToGroup)
     }
 
@@ -90,19 +98,20 @@ export function useCommentaryView(props: {
                 const isLineChange = previousLineIndex.value !== undefined && previousLineIndex.value !== lineIndex
 
                 if (isLineChange) {
-                    // Check if we have a persisted commentary selection
-                    const persistedBookId = tabStore.activeTab?.bookState?.commentaryScrollElementIndex
+                    // Get the currently selected commentary book ID
+                    const currentBookId = tabStore.activeTab?.bookState?.currentCommentaryBookId || selectedBookId.value
 
-                    if (persistedBookId !== undefined) {
-                        // Check if the persisted commentary exists in the new line
-                        const persistedCommentaryExists = commentaryGroups.value.some(
-                            group => group.targetBookId === persistedBookId
+                    if (currentBookId) {
+                        // Check if the current commentary exists in the new line
+                        const currentCommentaryExists = commentaryGroups.value.some(
+                            group => group.targetBookId === currentBookId
                         )
 
-                        if (persistedCommentaryExists) {
-                            selectedBookId.value = persistedBookId
+                        if (currentCommentaryExists) {
+                            // Stay on the current commentary
+                            selectedBookId.value = currentBookId
                             await nextTick()
-                            await scrollToGroup(persistedBookId)
+                            await scrollToGroup(currentBookId)
                         } else {
                             // Fall back to default or first
                             const defaultBookId = props.book?.defaultCommentatorBookId
@@ -113,23 +122,14 @@ export function useCommentaryView(props: {
                                 await scrollToCommentary(targetBookId, scrollToGroup)
                             }
                         }
-                    } else if (selectedBookId.value) {
-                        // Legacy behavior: try to maintain current commentary
-                        const currentCommentaryExists = commentaryGroups.value.some(
-                            group => group.targetBookId === selectedBookId.value
-                        )
+                    } else {
+                        // No current commentary, use default or first
+                        const defaultBookId = props.book?.defaultCommentatorBookId
+                        const firstBookId = commentaryGroups.value[0]?.targetBookId
+                        const targetBookId = defaultBookId || firstBookId
 
-                        if (currentCommentaryExists) {
-                            await nextTick()
-                            await scrollToGroup(selectedBookId.value)
-                        } else {
-                            const defaultBookId = props.book?.defaultCommentatorBookId
-                            const firstBookId = commentaryGroups.value[0]?.targetBookId
-                            const targetBookId = defaultBookId || firstBookId
-
-                            if (targetBookId) {
-                                await scrollToCommentary(targetBookId, scrollToGroup)
-                            }
+                        if (targetBookId) {
+                            await scrollToCommentary(targetBookId, scrollToGroup)
                         }
                     }
                 } else {
