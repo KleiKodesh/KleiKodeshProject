@@ -3,8 +3,7 @@
         <div class="tree-node flex-row hover-bg focus-accent click-effect touch-interactive c-pointer"
              :class="{
                 'selected-accent-subtle': isActive,
-                'connection-type-node': node.type === 'connection-type',
-                'period-node': node.type === 'period'
+                'connection-type-node': node.type === 'connection-type'
             }"
              tabindex="0"
              @click="handleClick"
@@ -15,13 +14,12 @@
                   class="chevron-icon" />
             <div class="node-label">
                 {{ node.hebrewName }}
-                <span v-if="itemCount" class="item-count">({{ itemCount }})</span>
             </div>
         </div>
 
         <template v-if="isExpanded && hasChildren">
             <CommentaryTreeViewNode v-for="child in node.children"
-                                    :key="`${child.name}-${child.bookId || child.period}`"
+                                    :key="`${child.name}-${child.bookId || child.category}`"
                                     :node="child"
                                     :selected-book-id="selectedBookId"
                                     @select="emit('select', $event)"
@@ -49,13 +47,6 @@ const isExpanded = ref(false)
 
 const hasChildren = computed(() => props.node.children && props.node.children.length > 0)
 
-const itemCount = computed(() => {
-    if (props.node.type === 'connection-type' || props.node.type === 'period') {
-        return props.node.children?.length || 0
-    }
-    return undefined
-})
-
 const isActive = computed(() => props.selectedBookId === props.node.bookId)
 
 const hasSelectedChild = computed(() => {
@@ -82,16 +73,15 @@ function handleClick() {
 <style scoped>
 .tree-node {
     gap: 4px;
-    padding: 4px;
-    border-radius: 3px;
+    padding: 4px 8px;
+    border-radius: 0;
     transition: background-color 0.2s ease;
     direction: rtl;
     text-align: right;
     min-height: 28px;
 }
 
-.tree-node.connection-type-node,
-.tree-node.period-node {
+.tree-node.connection-type-node {
     position: sticky;
     top: 0;
     background-color: var(--bg-secondary);
@@ -99,7 +89,7 @@ function handleClick() {
     font-weight: 700;
     border-radius: 0;
     font-size: 11px;
-    padding: 8px 4px 4px 4px;
+    padding: 8px;
     border-bottom: 1px solid var(--border-color);
     text-transform: uppercase;
     letter-spacing: 0.8px;
@@ -107,49 +97,36 @@ function handleClick() {
     margin-top: 4px;
 }
 
-.tree-node.connection-type-node:first-child,
-.tree-node.period-node:first-child {
+.tree-node.connection-type-node:first-child {
     margin-top: 0;
 }
 
-.tree-node:not(.connection-type-node):not(.period-node) {
-    font-size: 13px;
-    padding: 6px 4px;
+.tree-node:not(.connection-type-node) {
+    font-size: 12.5px;
+    padding: 6px 8px;
 }
 
 @media (hover: hover) {
-    .tree-node.connection-type-node:hover,
-    .tree-node.period-node:hover {
+    .tree-node.connection-type-node:hover {
         filter: brightness(0.95);
     }
 }
 
-:root.dark .tree-node.connection-type-node:hover,
-:root.dark .tree-node.period-node:hover {
+:root.dark .tree-node.connection-type-node:hover {
     filter: brightness(1.1);
 }
 
 .chevron-icon {
     flex-shrink: 0;
-    font-size: 16px;
+    font-size: 15px;
     line-height: 1;
 }
 
 .node-label {
     flex: 1;
-    font-size: 13px;
+    font-size: 12.5px;
     line-height: 1.3;
     min-width: 0;
     word-break: break-word;
-}
-
-.item-count {
-    font-size: 11px;
-    color: var(--text-secondary);
-    margin-left: 2px;
-}
-
-.tree-node.selected-accent-subtle .item-count {
-    color: inherit;
 }
 </style>

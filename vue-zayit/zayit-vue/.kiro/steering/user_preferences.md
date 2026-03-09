@@ -23,6 +23,8 @@ This document defines **HOW** to implement, not **WHAT** to implement.
 - When creating or editing steering files (.md in .kiro/steering/): one sentence or one paragraph per instruction, no descriptions, only direct actionable rules, concise and straight to the point
 - Never include code examples, usage samples, or descriptive text in steering files
 - When you encounter obvious duplication or excessive CSS while working on a task, fix it if it's quick (under 2 minutes); otherwise note it and continue with the main task
+- Always work incrementally: break down every task into small numbered steps, implement one step at a time, verify each step works before moving to the next
+- For each task, identify the steps first, then execute them one by one with clear step labels (Step 1, Step 2, etc.)
 
 ---
 

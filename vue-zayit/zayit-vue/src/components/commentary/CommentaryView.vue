@@ -136,7 +136,7 @@ defineExpose({
 <style scoped>
 .commentary-tree-panel {
     flex: 0 1 auto;
-    max-width: 30%;
+    max-width: 35%;
     overflow: hidden;
     border-right: 1px solid var(--border-color, #ddd);
 }
