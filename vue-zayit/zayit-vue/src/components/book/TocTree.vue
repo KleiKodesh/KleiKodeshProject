@@ -1,13 +1,11 @@
 <template>
-    <div ref="containerRef"
-         class="overflow-y height-fill">
+    <div ref="containerRef">
         <div v-if="isLoading"
              class="flex-center height-fill">
             <LoadingSpinner text="טוען..." />
         </div>
         <div v-else-if="tocEntries.length === 0"
              class="flex-center height-fill">
-            <Icon icon="fluent:book-open-24-regular" />
             <span class="text-secondary">אין תוכן עניינים זמין</span>
         </div>
         <template v-else>

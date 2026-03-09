@@ -21,12 +21,13 @@
       <div class="flex-110 content-area">
         <!-- Virtualized viewer is now always enabled -->
         <keep-alive>
-          <TocTreePanel v-if="myTab?.bookState?.isTocOpen && myTab?.bookState?.bookId"
+          <TocTreePanelSplit v-if="myTab?.bookState?.isTocOpen && myTab?.bookState?.bookId"
                         ref="tocTreeViewRef"
                         :toc-entries="filteredTocEntries"
                         :is-loading="isTocLoading"
                         :is-compact-mode="!myTab.bookState.isFirstTocOpen"
                         :current-toc-entry-id="currentTocEntryId"
+                        :show-alt-toc="myTab.bookState.showAltToc"
                         class="toc-overlay"
                         @select-line="handleTocSelection" />
         </keep-alive>
@@ -84,7 +85,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
 import { useEventListener } from '@vueuse/core'
-import TocTreePanel from '@/components/book/TocTreePanel.vue'
+import TocTreePanelSplit from '@/components/book/TocTreePanelSplit.vue'
 import LineView from '@/components/book/LineView.vue'
 import SplitPane from '@/components/shared/SplitPane.vue'
 import CommentaryView from '@/components/commentary/CommentaryView.vue'
@@ -96,7 +97,7 @@ import { useTabs } from '@/components/workspace/useTabs'
 const myTabId = ref<number | undefined>(undefined)
 const lineViewerRef = ref<InstanceType<typeof LineView> | null>(null)
 const commentaryViewRef = ref<InstanceType<typeof CommentaryView> | null>(null)
-const tocTreeViewRef = ref<InstanceType<typeof TocTreePanel> | null>(null)
+const tocTreeViewRef = ref<InstanceType<typeof TocTreePanelSplit> | null>(null)
 const toolbarRef = ref<InstanceType<typeof LineViewToolbar> | null>(null)
 
 const {

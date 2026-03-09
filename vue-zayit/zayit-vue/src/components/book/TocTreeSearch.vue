@@ -1,7 +1,6 @@
 <template>
     <div v-if="filteredEntries.length === 0"
          class="flex-center height-fill">
-        <Icon icon="fluent:book-open-28-regular" />
         <span class="text-secondary">לא נמצאו תוצאות</span>
     </div>
     <div v-else
@@ -16,11 +15,11 @@
              :style="{ paddingInlineStart: `${isCompactMode ? 12 : 20}px` }"
              @click="selectEntry(entry)"
              @keydown.enter.prevent="selectEntry(entry)">
-            <div class="flex-column flex-110 smaller-rem">
-                <span class="bold"
+            <div class="flex-column flex-110 search-result-content">
+                <span class="bold result-title"
                       :class="{ 'compact-text': isCompactMode }">{{ entry.text }}</span>
                 <span v-if="entry.path"
-                      class="text-secondary smaller-em"
+                      class="text-secondary result-path"
                       :class="{ 'compact-path': isCompactMode }">{{ entry.path }}</span>
             </div>
         </div>
@@ -107,12 +106,31 @@ const selectEntry = (entry: TocEntry) => {
 </script>
 
 <style scoped>
+.tree-node {
+    padding: 12px 12px;
+    gap: 4px;
+}
+
 .tree-node.compact {
-    min-height: 32px;
+    min-height: 40px;
+    padding: 10px 12px;
+}
+
+.search-result-content {
+    gap: 0;
+}
+
+.result-title {
+    line-height: 1.3;
+}
+
+.result-path {
+    font-size: 0.85em;
+    line-height: 1.2;
 }
 
 .compact-text {
-    font-size: 0.9em;
+    font-size: 0.95em;
 }
 
 .compact-path {
