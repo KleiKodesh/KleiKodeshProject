@@ -13,6 +13,7 @@ export interface Book {
     hasOtherConnection: number
     defaultCommentatorBookId: number | null
     period?: string // Category period (chronological): תנ"ך, ספרות חז"ל, גאונים, ראשונים, אחרונים, קבלה, מוסר וחסידות, הלכה, אחר
+    pubDate?: string | null // Publication date from pub_date table
 }
 
 export function hasConnections(book: Book): boolean {

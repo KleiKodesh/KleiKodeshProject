@@ -23,6 +23,7 @@ This document defines **HOW** to implement, not **WHAT** to implement.
 - When creating or editing steering files (.md in .kiro/steering/): one sentence or one paragraph per instruction, no descriptions, only direct actionable rules, concise and straight to the point
 - Never include code examples, usage samples, or descriptive text in steering files
 - When you encounter obvious duplication or excessive CSS while working on a task, fix it if it's quick (under 2 minutes); otherwise note it and continue with the main task
+- Only create markdown files when explicitly requested by user or when editing existing steering files
 
 ---
 
@@ -43,7 +44,6 @@ This document defines **HOW** to implement, not **WHAT** to implement.
 - All design tactics stem from managing complexity at scale
 - Organization and discipline are critical to maintainability
 - Speed and responsiveness are essential - UI must feel fast and reactive
-- Never create markdown files unless explicitly requested by user
 
 ---
 
@@ -98,7 +98,6 @@ This document defines **HOW** to implement, not **WHAT** to implement.
 - NO duplicate button styles, input styles, or layout patterns in component CSS
 - Custom component CSS is ONLY for: unique layouts, specific positioning, component-specific colors/sizes that don't fit utilities
 - When you see obvious duplicate CSS patterns (3+ occurrences), extract to global utilities
-- Class ordering: layout → sizing → interactive → cursor → typography → component utilities → specific
 - Parent controls child layout (parent applies flex-110, child defines internal structure only)
 - Minimal changes: only modify the specific problem, don't change unrelated styles
 - Question CSS properties - if removing it doesn't change the visual result, delete it
@@ -118,35 +117,26 @@ This document defines **HOW** to implement, not **WHAT** to implement.
 
 ## Abstraction Policy (Implementation Style)
 
-- No premature abstraction
-- Abstractions must **earn their existence**
-- Allowed only with:
-  - ≥ 2 real consumers, or
-  - A proven need for substitution
-- Prefer direct calls
+- Abstractions must earn their existence: allowed only with ≥2 real consumers OR a proven need for substitution
+- Prefer direct calls over abstraction layers
 - Flat > nested
-- **Note**: This is about code structure, not feature complexity
+- This is about code structure, not feature complexity
 
 ---
 
 ## Performance & Errors (Implementation Approach)
 
-- Optimize what users feel
+- Optimize for user-visible performance: operations that take >100ms or cause UI lag
 - UI responsiveness is non-negotiable
-- Never optimize hypothetical bottlenecks **in new code**
-- Handle real errors only
-- No defensive code "just in case"
-- **Note**: Existing optimizations (chunking, virtualization) are there for real reasons
+- Never optimize hypothetical bottlenecks in new code
+- Handle real errors only, no defensive code "just in case"
+- Existing optimizations (chunking, virtualization) are there for real reasons
 
 ---
 
 ## Virtualization Strategy
 
-### CSS content-visibility: The Standard Approach
-
 Use CSS `content-visibility: auto` for all list virtualization needs.
-
-**Implementation:**
 
 ```css
 .list-item {
@@ -155,17 +145,11 @@ Use CSS `content-visibility: auto` for all list virtualization needs.
 }
 ```
 
-**Benefits:**
+Benefits: Browser handles rendering optimization automatically, no JavaScript complexity, preserves normal DOM flow and CSS features (sticky, flexbox, grid), scroll position maintained correctly, excellent browser support.
 
-- Browser handles rendering optimization automatically
-- No JavaScript complexity or library dependencies
-- Preserves normal DOM flow and CSS features (sticky, flexbox, grid)
-- Scroll position maintained correctly
-- Excellent browser support
+Rule: Use CSS content-visibility for virtualization. Do not use JavaScript virtual scroller libraries (vue-virtual-scroller, etc.) unless there is a proven, specific technical limitation that CSS cannot solve.
 
-**Rule:** Use CSS content-visibility for virtualization. Do not use JavaScript virtual scroller libraries (vue-virtual-scroller, etc.) unless there is a proven, specific technical limitation that CSS cannot solve.
-
-**Note:** vue-virtual-scroller is legacy code still present in the codebase for transition purposes. Do not use it in new code. Use CSS content-visibility instead.
+Note: vue-virtual-scroller is legacy code still present in the codebase for transition purposes. Do not use it in new code.
 
 ---
 
