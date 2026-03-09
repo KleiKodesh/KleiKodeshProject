@@ -32,10 +32,6 @@ export function useBookViewPage(
     const filteredTocEntries = computed(() => {
         let entries = tocEntries.value
 
-        if (myTab.value?.bookState?.showAltToc === false) {
-            entries = entries.filter(entry => !entry.isAltToc)
-        }
-
         const bookTitle = currentBook.value?.title
         if (bookTitle && entries.length === 1) {
             const rootEntry = entries[0]
@@ -192,6 +188,31 @@ export function useBookViewPage(
             handleHighlightOnLoad()
         }
     }, { immediate: true })
+
+    // Update tab title and TOC selection based on center line
+    watch(currentCenterLineIndex, (lineIndex) => {
+        if (lineIndex === null || !flatTocEntries.value.length || !myTab.value) return
+
+        // Find the closest TOC entry at or before this line (excluding alt TOC)
+        let closestTocEntry: TocEntry | undefined
+        for (const entry of flatTocEntries.value) {
+            if (entry.isAltToc) continue
+            if (entry.lineIndex <= lineIndex) {
+                if (!closestTocEntry || entry.lineIndex > closestTocEntry.lineIndex) {
+                    closestTocEntry = entry
+                }
+            }
+        }
+
+        if (closestTocEntry) {
+            // Update current TOC entry ID for tree selection
+            currentTocEntryId.value = closestTocEntry.id
+
+            // Update tab title with TOC entry text
+            const bookTitle = currentBook.value?.title || ''
+            myTab.value.title = closestTocEntry.text ? `${bookTitle} - ${closestTocEntry.text}` : bookTitle
+        }
+    })
 
     return {
         myTab,
