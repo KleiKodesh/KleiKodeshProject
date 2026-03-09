@@ -24,12 +24,23 @@ export interface CommentaryVirtualGroup {
 export function useCommentaryVirtualItems(
     flattenedBooks: ComputedRef<CommentaryTreeNode[]>,
     commentaryGroupsMap: ComputedRef<Map<string, CommentaryMetadata>>,
-    diacriticsState: ComputedRef<number | undefined>
+    diacriticsState: ComputedRef<number | undefined>,
+    searchQuery: ComputedRef<string>,
+    currentMatchBookId: ComputedRef<number | null>,
+    currentMatchLinkIndex: ComputedRef<number | null>,
+    currentMatchIndexInLink: ComputedRef<number>
 ) {
     const virtualGroups = computed<CommentaryVirtualGroup[]>(() => {
+        // Access all reactive dependencies at the top level for proper tracking
+        const matchBookId = currentMatchBookId.value
+        const matchLinkIndex = currentMatchLinkIndex.value
+        const matchIndexInLink = currentMatchIndexInLink.value
+        const query = searchQuery.value
+        const diacritics = diacriticsState.value
+
         const groups: CommentaryVirtualGroup[] = []
 
-        flattenedBooks.value.forEach(bookNode => {
+        flattenedBooks.value.forEach((bookNode, groupIndex) => {
             const metadata = commentaryGroupsMap.value.get(bookNode.metadata?.groupName || '')
 
             if (!metadata) {
@@ -42,9 +53,16 @@ export function useCommentaryVirtualItems(
             }
 
             // Transform all links for this group
-            const transformedLinks: CommentaryVirtualLink[] = metadata.links.map(link => {
+            const transformedLinks: CommentaryVirtualLink[] = metadata.links.map((link, linkIndex) => {
+                const isCurrentSearchMatch =
+                    matchBookId === bookNode.bookId &&
+                    matchLinkIndex === linkIndex
+
                 const transformedHtml = transformText(link.html, {
-                    diacriticsState: diacriticsState.value
+                    diacriticsState: diacritics,
+                    searchQuery: query,
+                    isCurrentSearchMatch,
+                    currentMatchIndex: isCurrentSearchMatch ? matchIndexInLink : undefined
                 })
 
                 return {

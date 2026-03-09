@@ -59,7 +59,6 @@ export const useConnectionTypesStore = defineStore('connectionTypes', () => {
         try {
             connectionTypes.value = await dbService.getConnectionTypes()
             isLoaded.value = true
-            console.log('✅ Connection types loaded:', connectionTypes.value.map(ct => `${ct.id}: ${ct.name} (${hebrewLabels[ct.name]})`))
         } catch (error) {
             console.error('❌ Failed to load connection types:', error)
         } finally {

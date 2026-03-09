@@ -94,15 +94,12 @@ export const useTabStore = defineStore('tabs', () => {
                             // Import pdfService dynamically to avoid circular dependency
                             const { pdfService } = await import('../services/pdfService');
                             if (pdfService.isAvailable()) {
-                                // Wait for PDF manager to be ready before recreating URLs
-                                console.log('[TabStore] Waiting for PDF manager to be ready...');
                                 const isReady = await pdfService.checkManagerReady();
 
                                 if (isReady) {
                                     const virtualUrl = await pdfService.recreateVirtualUrl(tab.pdfState.filePath);
                                     if (virtualUrl) {
                                         tab.pdfState.fileUrl = virtualUrl;
-                                        console.log('[TabStore] Recreated virtual URL for PDF tab:', tab.title, virtualUrl);
                                     } else {
                                         console.warn('[TabStore] Failed to recreate virtual URL for PDF tab:', tab.title);
                                     }
@@ -247,21 +244,17 @@ export const useTabStore = defineStore('tabs', () => {
         try {
             // Check if this is a Hebrew book tab that needs cleanup
             if (tab.pdfState?.source === 'hebrewbook' && tab.pdfState.fileName) {
-                console.log('[TabStore] Cleaning up Hebrew book tab:', tab.pdfState.fileName);
                 handleHebrewBookTabClosed(tab);
             }
 
             // Clear ALL page-specific state when tab closes
             if (tab.bookState) {
-                console.log('[TabStore] Clearing bookState for closed tab:', tab.id);
                 delete tab.bookState;
             }
             if (tab.pdfState) {
-                console.log('[TabStore] Clearing pdfState for closed tab:', tab.id);
                 delete tab.pdfState;
             }
             if (tab.searchState) {
-                console.log('[TabStore] Clearing searchState for closed tab:', tab.id);
                 delete tab.searchState;
             }
 
@@ -274,15 +267,7 @@ export const useTabStore = defineStore('tabs', () => {
             // - commentary-{tabId}-*
             // This clears all scroll positions for book viewer and commentary for this tab
             const tabPattern = new RegExp(`^(book-lines|commentary)-${tab.id}-`)
-            const removed = scrollStorage.clearMatching(tabPattern)
-
-            if (removed > 0) {
-                console.log('[TabStore] 🧹 Cleaned up persisted data for tab:', {
-                    tabId: tab.id,
-                    tabTitle: tab.title,
-                    scrollPositionsRemoved: removed
-                })
-            }
+            scrollStorage.clearMatching(tabPattern)
 
             // Note: Tab state (bookState, pdfState, etc.) is automatically cleaned up
             // when the tab is removed from tabs.value array
@@ -393,13 +378,10 @@ export const useTabStore = defineStore('tabs', () => {
         if (tab) {
             // Clear page-specific state when navigating away
             if (tab.currentPage === 'bookview' && pageType !== 'bookview') {
-                console.log('[TabStore] Clearing bookState - navigating away from bookview');
                 delete tab.bookState;
             } else if (tab.currentPage === 'pdfview' && pageType !== 'pdfview') {
-                console.log('[TabStore] Clearing pdfState - navigating away from pdfview');
                 delete tab.pdfState;
             } else if (tab.currentPage === 'search' && pageType !== 'search') {
-                console.log('[TabStore] Clearing searchState - navigating away from search');
                 delete tab.searchState;
             }
 
@@ -829,8 +811,6 @@ export const useTabStore = defineStore('tabs', () => {
     };
 
     const openBookInNewTab = (bookTitle: string, bookId: number, hasConnections?: boolean, initialLineIndex?: number, shouldHighlight?: boolean, highlightTerms?: string, highlightSnippet?: string) => {
-        console.log('[tabStore] openBookInNewTab called with:', { bookTitle, bookId, initialLineIndex, shouldHighlight, highlightTerms, highlightSnippet })
-
         const settingsStore = useSettingsStore();
 
         // Deactivate all current tabs
@@ -869,7 +849,6 @@ export const useTabStore = defineStore('tabs', () => {
             } : undefined
         }
 
-        console.log('[tabStore] Created new tab:', newTab)
         tabs.value.push(newTab)
         nextId.value = Math.max(newId + 1, nextId.value)
     };

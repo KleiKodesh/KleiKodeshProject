@@ -52,18 +52,14 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
     const loadFromStorage = () => {
         try {
-            console.log('[WorkspaceStore] Loading...');
             const stored = localStorage.getItem(WORKSPACES_KEY);
 
             if (stored) {
-                console.log('[WorkspaceStore] Found stored data');
                 workspaces.value = JSON.parse(stored) as Workspace[];
             } else {
-                console.log('[WorkspaceStore] Checking for old tabStore...');
                 const oldTabStore = localStorage.getItem('tabStore');
 
                 if (oldTabStore) {
-                    console.log('[WorkspaceStore] Migrating from old tabStore');
                     const oldData = JSON.parse(oldTabStore);
 
                     // Migrate tabs, preserving all state
@@ -79,10 +75,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
                             nextId: oldData.nextId || 2
                         }
                     }];
-
-                    console.log('[WorkspaceStore] Migrated', migratedTabs.length, 'tabs');
                 } else {
-                    console.log('[WorkspaceStore] Creating default workspace');
                     workspaces.value = [{
                         id: DEFAULT_WORKSPACE_ID,
                         name: 'ברירת מחדל',
@@ -117,21 +110,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
                 }
             }
 
-            console.log('[WorkspaceStore] Loaded:', workspaces.value.length, 'workspaces');
-            console.log('[WorkspaceStore] Current workspace:', currentWorkspaceId.value);
-            console.log('[WorkspaceStore] Tabs in current workspace:', tabs.value.length);
-
-            // Log tab details for debugging
-            if (tabs.value.length > 0) {
-                console.log('[WorkspaceStore] Tab details:', tabs.value.map(t => ({
-                    id: t.id,
-                    title: t.title,
-                    page: t.currentPage,
-                    hasBookState: !!t.bookState,
-                    bookState: t.bookState,
-                    hasPdfState: !!t.pdfState
-                })));
-            }
         } catch (e) {
             console.error('[WorkspaceStore] Load error:', e);
             // Create default workspace on error
@@ -234,8 +212,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
         current.data.nextId = 2;
     }
 
-    console.log('[WorkspaceStore] Initialization complete');
-
     // Restore PDF virtual URLs asynchronously (doesn't block UI)
     (async () => {
         try {
@@ -249,7 +225,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
                                 const virtualUrl = await pdfService.recreateVirtualUrl(tab.pdfState.filePath);
                                 if (virtualUrl) {
                                     tab.pdfState.fileUrl = virtualUrl;
-                                    console.log('[WorkspaceStore] Restored PDF virtual URL for:', tab.title);
                                 }
                             }
                         } catch (error) {
