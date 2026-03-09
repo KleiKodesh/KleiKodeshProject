@@ -3,7 +3,8 @@
         <div class="tree-node flex-row hover-bg focus-accent click-effect touch-interactive c-pointer"
              :class="{
                 'selected-accent-subtle': isActive,
-                'connection-type-node': node.type === 'connection-type'
+                'connection-type-node': node.type === 'connection-type',
+                'period-node': node.type === 'period'
             }"
              tabindex="0"
              @click="handleClick"
@@ -20,9 +21,8 @@
 
         <template v-if="isExpanded && hasChildren">
             <CommentaryTreeViewNode v-for="child in node.children"
-                                    :key="`${child.name}-${child.bookId}`"
+                                    :key="`${child.name}-${child.bookId || child.period}`"
                                     :node="child"
-                                    :depth="0"
                                     :selected-book-id="selectedBookId"
                                     @select="emit('select', $event)"
                                     @expand-parent="isExpanded = true" />
@@ -31,17 +31,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, nextTick } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import type { CommentaryTreeNode } from './useCommentaryTree'
 
-const props = withDefaults(defineProps<{
+const props = defineProps<{
     node: CommentaryTreeNode
-    depth?: number
     selectedBookId?: number
-}>(), {
-    depth: 0
-})
+}>()
 
 const emit = defineEmits<{
     (e: 'select', node: CommentaryTreeNode): void
@@ -53,7 +50,7 @@ const isExpanded = ref(false)
 const hasChildren = computed(() => props.node.children && props.node.children.length > 0)
 
 const itemCount = computed(() => {
-    if (props.node.type === 'connection-type') {
+    if (props.node.type === 'connection-type' || props.node.type === 'period') {
         return props.node.children?.length || 0
     }
     return undefined
@@ -93,7 +90,8 @@ function handleClick() {
     min-height: 28px;
 }
 
-.tree-node.connection-type-node {
+.tree-node.connection-type-node,
+.tree-node.period-node {
     position: sticky;
     top: 0;
     background-color: var(--bg-secondary);
@@ -109,22 +107,25 @@ function handleClick() {
     margin-top: 4px;
 }
 
-.tree-node.connection-type-node:first-child {
+.tree-node.connection-type-node:first-child,
+.tree-node.period-node:first-child {
     margin-top: 0;
 }
 
-.tree-node:not(.connection-type-node) {
+.tree-node:not(.connection-type-node):not(.period-node) {
     font-size: 13px;
     padding: 6px 4px;
 }
 
 @media (hover: hover) {
-    .tree-node.connection-type-node:hover {
+    .tree-node.connection-type-node:hover,
+    .tree-node.period-node:hover {
         filter: brightness(0.95);
     }
 }
 
-:root.dark .tree-node.connection-type-node:hover {
+:root.dark .tree-node.connection-type-node:hover,
+:root.dark .tree-node.period-node:hover {
     filter: brightness(1.1);
 }
 
@@ -132,11 +133,6 @@ function handleClick() {
     flex-shrink: 0;
     font-size: 16px;
     line-height: 1;
-}
-
-.chevron-spacer {
-    width: 16px;
-    flex-shrink: 0;
 }
 
 .node-label {
