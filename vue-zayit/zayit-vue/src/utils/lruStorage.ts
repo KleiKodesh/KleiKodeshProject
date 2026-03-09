@@ -81,7 +81,6 @@ export class LRUStorage {
             if (toEvict) {
                 try {
                     localStorage.removeItem(toEvict)
-                    console.log('[LRUStorage] 🗑️ EVICTED:', { key: toEvict })
                 } catch (e) {
                     console.warn('[LRUStorage] Failed to evict:', toEvict, e)
                 }
@@ -109,11 +108,6 @@ export class LRUStorage {
         })
 
         if (validKeys.length !== metadata.keys.length) {
-            console.log('[LRUStorage] 🧹 CLEANUP:', {
-                before: metadata.keys.length,
-                after: validKeys.length,
-                removed: metadata.keys.length - validKeys.length
-            })
             metadata.keys = validKeys
             metadata.lastCleanup = Date.now()
             this.saveMetadata(metadata)
@@ -157,7 +151,6 @@ export class LRUStorage {
 
             // If quota exceeded, force cleanup and retry
             if (e instanceof DOMException && e.name === 'QuotaExceededError') {
-                console.log('[LRUStorage] 💾 QUOTA EXCEEDED, forcing cleanup...')
                 this.cleanup()
 
                 // Try again after cleanup
@@ -254,11 +247,6 @@ export class LRUStorage {
         } catch (e) {
             console.warn('[LRUStorage] Failed to update metadata during clear:', e)
         }
-
-        console.log('[LRUStorage] 🧹 CLEARED:', {
-            prefix: this.prefix,
-            removed: metadata.keys.length
-        })
     }
 
     /**
@@ -290,12 +278,6 @@ export class LRUStorage {
         if (removed > 0) {
             metadata.keys = keysToKeep
             this.saveMetadata(metadata)
-
-            console.log('[LRUStorage] 🧹 CLEARED MATCHING:', {
-                prefix: this.prefix,
-                pattern: pattern.toString(),
-                removed
-            })
         }
 
         return removed
@@ -324,11 +306,6 @@ export class LRUStorage {
             })
 
             localStorage.removeItem(METADATA_KEY)
-
-            console.log('[LRUStorage] 🧹 CLEARED ALL:', {
-                totalRemoved,
-                caches: Object.keys(allMetadata).length
-            })
         } catch (e) {
             console.warn('[LRUStorage] Failed to clear all:', e)
         }

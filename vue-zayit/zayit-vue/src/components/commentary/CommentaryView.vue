@@ -14,6 +14,10 @@
                            :selected-line-index="props.selectedLineIndex"
                            :connection-type-id="selectedConnectionTypeId"
                            :show-tree="showTree"
+                           :search-query="commentarySearchQuery"
+                           :current-match-book-id="currentMatchBookId"
+                           :current-match-link-index="currentMatchLinkIndex"
+                           :current-match-index-in-link="currentMatchIndexInLink"
                            class="flex-110"
                            @visible-book-changed="handleVisibleBookChanged"
                            @navigate-previous-line="(bookId) => emit('navigate-previous-line', bookId)"
@@ -24,10 +28,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, computed } from 'vue'
 import CommentaryContent from './CommentaryContent.vue'
 import CommentaryTreePanel from './CommentaryTreePanel.vue'
 import { useCommentaryView } from './useCommentaryView'
+import { useCommentarySearch } from './useCommentarySearch'
 import type { Book } from '@/data/types/Book'
 import type { TocEntry } from '@/data/types/BookToc'
 import type { CommentaryTreeNode } from './useCommentaryTree'
@@ -61,6 +66,25 @@ const {
     scrollToCommentary
 } = useCommentaryView(props)
 
+// Get scroll container from commentary content
+const scrollContainer = computed(() => commentaryContentRef.value?.$el as HTMLElement | null)
+
+// Commentary search
+const {
+    searchQuery: commentarySearchQuery,
+    currentMatch: commentarySearchCurrentMatch,
+    currentMatchIndex: commentarySearchCurrentMatchIndex,
+    totalMatches: commentarySearchTotalMatches,
+    performSearch: performCommentarySearch,
+    nextMatch: nextCommentarySearchMatch,
+    previousMatch: previousCommentarySearchMatch,
+    clearSearch: clearCommentarySearch
+} = useCommentarySearch(commentaryGroups, scrollContainer)
+
+const currentMatchBookId = computed(() => commentarySearchCurrentMatch.value?.bookId ?? null)
+const currentMatchLinkIndex = computed(() => commentarySearchCurrentMatch.value?.linkIndex ?? null)
+const currentMatchIndexInLink = computed(() => commentarySearchCurrentMatch.value?.matchIndex ?? 0)
+
 function onSelectGroup(node: CommentaryTreeNode) {
     const bookId = handleSelectGroup(node)
     if (bookId) commentaryContentRef.value?.scrollToGroup(bookId)
@@ -93,7 +117,19 @@ watch(
 
 defineExpose({
     commentaryContentRef,
-    commentaryGroups
+    commentaryGroups,
+    // Search methods
+    performCommentarySearch,
+    nextCommentarySearchMatch,
+    previousCommentarySearchMatch,
+    clearCommentarySearch,
+    // Search state - expose as getters for reactivity
+    get currentMatchIndex() {
+        return commentarySearchCurrentMatchIndex.value
+    },
+    get totalMatches() {
+        return commentarySearchTotalMatches.value
+    }
 })
 </script>
 

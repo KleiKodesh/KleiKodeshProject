@@ -130,8 +130,6 @@ export function useZayitSearchPage(
 
     // Handle result click
     const handleResultClick = async (result: BloomSearchResult) => {
-        console.log('[ZayitSearchPage] Result clicked:', result)
-
         try {
             const lineInfo = await bloomSearchService.getLineIndexFromLineId(result.lineId)
 
@@ -139,8 +137,6 @@ export function useZayitSearchPage(
                 console.error('[ZayitSearchPage] Failed to get line index for lineId:', result.lineId)
                 return
             }
-
-            console.log('[ZayitSearchPage] Opening book:', result.bookTitle, 'at line index:', lineInfo.lineIndex, 'with highlight terms:', executedQuery(), 'snippet:', result.snippet)
 
             const hasConnections = await checkBookHasConnections(result.bookId)
 

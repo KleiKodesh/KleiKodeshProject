@@ -114,16 +114,12 @@ export function useBloomSearch() {
         // Store the query being executed for highlighting
         executedQuery.value = query
 
-        console.log('[useBloomSearch] Executing streaming search:', query)
-
         try {
             if (isDev) {
                 const isReady = await bloomSearchService.isReady()
                 if (!isReady) {
-                    console.log('[useBloomSearch] Dev mode: Using sample data')
                     await new Promise(resolve => setTimeout(resolve, 500))
                     results.value = sampleResults
-                    console.log('[useBloomSearch] Dev mode: Loaded sample results:', sampleResults.length)
                     isSearching.value = false
                     return
                 }
@@ -132,7 +128,6 @@ export function useBloomSearch() {
             const normalizedQuery = query.trim().toLowerCase()
             const cachedResults = await bloomSearchCacheService.get(normalizedQuery)
             if (cachedResults !== null) {
-                console.log('[useBloomSearch] Using cached results:', cachedResults.length)
                 results.value = cachedResults
                 isSearching.value = false
                 return
@@ -186,7 +181,6 @@ export function useBloomSearch() {
                         currentSearchId = null
 
                         if (isDev) {
-                            console.log('[useBloomSearch] Dev mode: Error fallback to sample data')
                             results.value = sampleResults
                         }
                     }
@@ -197,7 +191,6 @@ export function useBloomSearch() {
             isSearching.value = false
 
             if (isDev) {
-                console.log('[useBloomSearch] Dev mode: Error fallback to sample data')
                 results.value = sampleResults
             }
         }

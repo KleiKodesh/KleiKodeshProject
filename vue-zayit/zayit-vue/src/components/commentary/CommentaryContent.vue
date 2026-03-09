@@ -57,6 +57,8 @@
                          class="commentary-links">
                         <div v-for="(link, linkIndex) in group.transformedLinks"
                              :key="linkIndex"
+                             :data-book-id="group.bookNode.bookId"
+                             :data-link-index="linkIndex"
                              class="commentary-link selectable"
                              v-html="link.transformedHtml" />
                     </div>
@@ -86,6 +88,10 @@ const props = defineProps<{
     selectedLineIndex?: number
     connectionTypeId?: number
     showTree?: boolean
+    searchQuery?: string
+    currentMatchBookId?: number | null
+    currentMatchLinkIndex?: number | null
+    currentMatchIndexInLink?: number
 }>()
 
 const emit = defineEmits<{
@@ -124,7 +130,11 @@ const commentaryGroupsMap = computed(() => {
 const { virtualGroups } = useCommentaryVirtualItems(
     flattenedBooks,
     commentaryGroupsMap,
-    currentDiacriticsState
+    currentDiacriticsState,
+    computed(() => props.searchQuery || ''),
+    computed(() => props.currentMatchBookId ?? null),
+    computed(() => props.currentMatchLinkIndex ?? null),
+    computed(() => props.currentMatchIndexInLink ?? 0)
 )
 
 // Context menu items
@@ -290,21 +300,21 @@ defineExpose({
 }
 
 /* Search match highlighting */
-.commentary-link :deep(.search-match) {
+.commentary-link :deep(mark) {
     background-color: rgba(255, 255, 0, 0.3);
     padding: 1px 0;
 }
 
-.commentary-link :deep(.search-match.current) {
+.commentary-link :deep(mark.current) {
     background-color: rgba(255, 165, 0, 0.5);
     font-weight: 600;
 }
 
-:root.dark .commentary-link :deep(.search-match) {
+:root.dark .commentary-link :deep(mark) {
     background-color: rgba(255, 255, 0, 0.2);
 }
 
-:root.dark .commentary-link :deep(.search-match.current) {
+:root.dark .commentary-link :deep(mark.current) {
     background-color: rgba(255, 165, 0, 0.4);
 }
 </style>
