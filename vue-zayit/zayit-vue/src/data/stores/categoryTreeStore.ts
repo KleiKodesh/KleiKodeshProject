@@ -18,10 +18,51 @@ export const useCategoryTreeStore = defineStore('categoryTree', () => {
             error.value = null;
             const { categoriesFlat: categories, booksFlat: books } = await dbService.getTree()
 
+            // Helper function to find root and secondary categories
+            function findCategoryHierarchy(categoryId: number, categoryMap: Map<number, Category>): { root: string | null, secondary: string | null, rootOrder: number | null, secondaryOrder: number | null } {
+                const visited = new Set<number>()
+                let rootCategory: Category | undefined = undefined
+                let secondaryCategory: Category | undefined = undefined
+
+                function traverse(id: number, depth: number = 0): void {
+                    if (visited.has(id)) return
+                    visited.add(id)
+
+                    const category = categoryMap.get(id)
+                    if (!category) return
+
+                    // Track root category (first-tier category)
+                    if (!category.parentId || category.parentId === 0) {
+                        rootCategory = category
+                        return
+                    }
+
+                    // Track secondary category (second-tier category)
+                    const parent = categoryMap.get(category.parentId)
+                    if (parent && (!parent.parentId || parent.parentId === 0)) {
+                        secondaryCategory = category
+                    }
+
+                    // Traverse up to parent
+                    if (category.parentId) {
+                        traverse(category.parentId, depth + 1)
+                    }
+                }
+
+                traverse(categoryId)
+
+                return {
+                    root: rootCategory ? (rootCategory as Category).title : null,
+                    secondary: secondaryCategory ? (secondaryCategory as Category).title : null,
+                    rootOrder: rootCategory ? (rootCategory as Category).orderIndex : null,
+                    secondaryOrder: secondaryCategory ? (secondaryCategory as Category).orderIndex : null
+                }
+            }
+
             // Helper function to find category period by traversing up
             function findCategoryPeriod(categoryId: number, categoryMap: Map<number, Category>): string | null {
                 const visited = new Set<number>()
-                let rootCategory: Category | null = null
+                let rootCategory: Category | undefined = undefined
 
                 function traverse(id: number): string | null {
                     if (visited.has(id)) return null
@@ -58,7 +99,7 @@ export const useCategoryTreeStore = defineStore('categoryTree', () => {
 
                 // If no meaningful period found, return root category title
                 if (!period && rootCategory) {
-                    return rootCategory.title
+                    return (rootCategory as Category).title
                 }
 
                 return period
@@ -97,9 +138,14 @@ export const useCategoryTreeStore = defineStore('categoryTree', () => {
                 }
             }
 
-            // Assign periods to all books
+            // Assign periods and category hierarchy to all books
             for (const book of books) {
                 book.period = findCategoryPeriod(book.categoryId, categoryMap) || 'אחר'
+                const hierarchy = findCategoryHierarchy(book.categoryId, categoryMap)
+                book.rootCategory = hierarchy.root || undefined
+                book.secondaryCategory = hierarchy.secondary || undefined
+                book.rootCategoryOrder = hierarchy.rootOrder || undefined
+                book.secondaryCategoryOrder = hierarchy.secondaryOrder || undefined
             }
 
             // Sort children within each category by orderIndex
