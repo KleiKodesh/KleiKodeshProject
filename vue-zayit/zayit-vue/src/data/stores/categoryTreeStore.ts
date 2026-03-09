@@ -21,6 +21,7 @@ export const useCategoryTreeStore = defineStore('categoryTree', () => {
             // Helper function to find category period by traversing up
             function findCategoryPeriod(categoryId: number, categoryMap: Map<number, Category>): string | null {
                 const visited = new Set<number>()
+                let rootCategory: Category | null = null
 
                 function traverse(id: number): string | null {
                     if (visited.has(id)) return null
@@ -29,33 +30,20 @@ export const useCategoryTreeStore = defineStore('categoryTree', () => {
                     const category = categoryMap.get(id)
                     if (!category) return null
 
+                    // Track root category (first-tier category)
+                    if (!category.parentId || category.parentId === 0) {
+                        rootCategory = category
+                    }
+
                     const title = category.title.toLowerCase()
 
-                    // Check for major arch-categories (in priority order)
-                    if (title.includes('תנ"ך') || title.includes('תנך')) {
-                        return 'תנ"ך'
-                    } else if (title.includes('משנה') && !title.includes('משנה תורה')) {
-                        return 'ספרות חז"ל'
-                    } else if (title.includes('תלמוד')) {
-                        return 'ספרות חז"ל'
-                    } else if (title.includes('מדרש')) {
-                        return 'ספרות חז"ל'
-                    } else if (title.includes('תוספתא')) {
-                        return 'ספרות חז"ל'
-                    } else if (title.includes('גאונים')) {
+                    // Check for meaningful periods (priority order)
+                    if (title.includes('גאונים')) {
                         return 'גאונים'
                     } else if (title.includes('ראשונים')) {
                         return 'ראשונים'
                     } else if (title.includes('אחרונים')) {
                         return 'אחרונים'
-                    } else if (title.includes('קבלה')) {
-                        return 'קבלה'
-                    } else if (title.includes('מוסר') || title.includes('חסידות')) {
-                        return 'מוסר וחסידות'
-                    } else if (title.includes('הלכה') || title.includes('משנה תורה') || title.includes('שולחן ערוך')) {
-                        return 'הלכה'
-                    } else if (title.includes('אחר')) {
-                        return 'אחר'
                     }
 
                     // Traverse up to parent
@@ -66,7 +54,14 @@ export const useCategoryTreeStore = defineStore('categoryTree', () => {
                     return null
                 }
 
-                return traverse(categoryId)
+                const period = traverse(categoryId)
+
+                // If no meaningful period found, return root category title
+                if (!period && rootCategory) {
+                    return rootCategory.title
+                }
+
+                return period
             }
 
             // Group books by categoryId and sort them by orderIndex
