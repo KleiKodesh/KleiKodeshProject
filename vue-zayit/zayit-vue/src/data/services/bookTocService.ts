@@ -67,33 +67,12 @@ export class TocService {
             }
         })
 
-        // Wrap alt TOC in a synthetic root node if it exists
-        const tree = [...regularTree]
-
-        if (altTree.length > 0) {
-            const altRootNode: TocEntry = {
-                id: -1,
-                bookId: altEntries[0]?.bookId || 0,
-                parentId: undefined,
-                level: 0,
-                lineId: 0,
-                lineIndex: 0,
-                isLastChild: false,
-                hasChildren: true,
-                text: 'חלוקה נוספת',
-                isAltToc: 1,
-                path: '',
-                children: altTree,
-                isExpanded: false
-            }
-            tree.unshift(altRootNode) // Add to beginning instead of end
-        }
+        // Combine regular and alt trees without wrapping
+        const tree = [...regularTree, ...altTree]
 
         // Set first regular root item to be expanded by default
-        // Find the first non-alt TOC entry in the tree
-        const firstRegularEntry = tree.find(entry => !entry.isAltToc)
-        if (firstRegularEntry) {
-            firstRegularEntry.isExpanded = true
+        if (regularTree.length > 0 && regularTree[0]) {
+            regularTree[0].isExpanded = true
         }
 
         return { tree, allTocs: allEntries, altTocByLineIndex }
