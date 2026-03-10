@@ -157,7 +157,9 @@ async function renderGroupsProgressively(
 export function useCommentaryContent() {
     const commentaryGroups = ref<CommentaryMetadata[]>([])
     const isLoadingMetadata = ref(false)
-    const isLoadingMore = ref(false) // Track if we're loading additional batches
+    const isLoadingMore = ref(false)
+    const loadingQueue = ref<Array<{ bookId: number; lineIndex: number }>>([])
+    const isProcessingQueue = ref(false)
 
     /**
      * Load commentary metadata (fast - no content)
@@ -217,13 +219,72 @@ export function useCommentaryContent() {
             // Set all groups at once (fast since no content)
             commentaryGroups.value = allGroups
 
+            // Queue all groups for loading (non-priority)
+            allGroups.forEach(group => {
+                if (group.targetBookId && group.targetLineIndex !== undefined) {
+                    queueGroupLoad(group.targetBookId, group.targetLineIndex, false)
+                }
+            })
+
             console.log(`⏱️ [useCommentaryContent] Total metadata load time: ${(performance.now() - loadStart).toFixed(2)}ms`)
+            console.log(`⏱️ [useCommentaryContent] Queued ${allGroups.length} groups for loading`)
         } catch (error) {
             console.error('Failed to load commentary metadata:', error)
             commentaryGroups.value = []
         } finally {
             isLoadingMetadata.value = false
         }
+    }
+
+    /**
+     * Process the loading queue one item at a time
+     */
+    async function processLoadingQueue() {
+        if (isProcessingQueue.value || loadingQueue.value.length === 0) {
+            return
+        }
+
+        isProcessingQueue.value = true
+
+        while (loadingQueue.value.length > 0) {
+            const item = loadingQueue.value.shift()
+            if (item) {
+                await loadGroupContent(item.bookId, item.lineIndex)
+                // Small delay to keep UI responsive
+                await new Promise(resolve => setTimeout(resolve, 10))
+            }
+        }
+
+        isProcessingQueue.value = false
+    }
+
+    /**
+     * Add item to loading queue with priority (visible items first)
+     */
+    function queueGroupLoad(bookId: number, lineIndex: number, priority: boolean = false) {
+        // Check if already in queue
+        const existingIndex = loadingQueue.value.findIndex(
+            item => item.bookId === bookId && item.lineIndex === lineIndex
+        )
+
+        if (existingIndex !== -1) {
+            // If priority is true, move to front of queue
+            if (priority) {
+                const item = loadingQueue.value.splice(existingIndex, 1)[0]
+                loadingQueue.value.unshift(item)
+            }
+            return
+        }
+
+        // Add to queue (priority items go to front)
+        if (priority) {
+            loadingQueue.value.unshift({ bookId, lineIndex })
+        } else {
+            loadingQueue.value.push({ bookId, lineIndex })
+        }
+
+        // Start processing if not already running
+        processLoadingQueue()
     }
 
     /**
@@ -285,6 +346,7 @@ export function useCommentaryContent() {
         isLoadingMetadata,
         isLoadingMore,
         loadCommentaryMetadata,
-        loadGroupContent
+        loadGroupContent,
+        queueGroupLoad
     }
 }
