@@ -2,8 +2,12 @@
     <div ref="toolbarRef"
          class="commentary-toolbar selectable">
         <h3 v-if="!shouldShowNav"
+            ref="titleRef"
             class="commentary-toolbar-title ellipsis">
-            <span v-if="parentNode" class="parent-node">{{ parentNode }} >&nbsp;</span>
+            <span v-if="parentNode"
+                  ref="parentRef"
+                  v-show="showParent"
+                  class="parent-node">{{ parentNode }} >&nbsp;</span>
             <span class="book-name">{{ bookTitle }}</span>
         </h3>
 
@@ -16,7 +20,7 @@
                              :show-tree="showTree"
                              @navigate-previous="emit('navigate-previous')"
                              @navigate-next="emit('navigate-next')"
-                             @navigate-previous-line="emit('navigate-previous-line')"
+                             @navigate-previous-line="emit('navigate-next-line')"
                              @navigate-next-line="emit('navigate-next-line')"
                              @navigate-to-book="emit('click')"
                              @select-commentary="(bookId) => emit('select-commentary', bookId)"
@@ -27,7 +31,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch, nextTick } from 'vue'
 import { useElementHover, onClickOutside } from '@vueuse/core'
 import CommentaryHeaderNav from './CommentaryHeaderNav.vue'
 import type { CommentaryTreeNode } from './useCommentaryTree'
@@ -58,23 +62,27 @@ const parentNode = computed(() => {
     return props.path.length > 1 ? props.path[0] : null
 })
 
-const bookTitle = computed(() => props.path[props.path.length - 1] || '')
+const bookTitle = computed(() => {
+    const title = props.path[props.path.length - 1] || ''
+    const parent = parentNode.value
 
-const displayPath = computed(() => {
-    const bookName = props.path[props.path.length - 1] || ''
-    
-    // If path has more than one element, show parent node > book name
-    if (props.path.length > 1) {
-        const parent = props.path[0]
-        return `${parent} > ${bookName}`
+    // Truncate only for מפרשים - remove "על" and everything after
+    if (parent && parent.startsWith('מפרשים')) {
+        const onIndex = title.indexOf('על')
+        if (onIndex !== -1) {
+            return title.substring(0, onIndex).trim()
+        }
     }
-    
-    return bookName
+
+    return title
 })
 
 const toolbarRef = ref<HTMLElement>()
+const titleRef = ref<HTMLElement>()
+const parentRef = ref<HTMLElement>()
 const showNav = useElementHover(toolbarRef)
 const isInputFocused = ref(false)
+const showParent = ref(true)
 
 const shouldShowNav = computed(() => {
     return (showNav.value || isInputFocused.value) && !props.isDraggingSelection
@@ -85,7 +93,38 @@ function handleInputBlur() {
     emit('focus-content')
 }
 
-// Hide nav when clicking outside
+function checkOverflow() {
+    if (!parentRef.value || !titleRef.value) return
+
+    const titleWidth = titleRef.value.offsetWidth
+    const titleScrollWidth = titleRef.value.scrollWidth
+
+    // If title content overflows, hide the parent
+    showParent.value = titleScrollWidth <= titleWidth
+}
+
+let resizeObserver: ResizeObserver | null = null
+
+watch([titleRef, () => props.path], async () => {
+    await nextTick()
+
+    if (resizeObserver) {
+        resizeObserver.disconnect()
+    }
+
+    if (titleRef.value) {
+        showParent.value = true
+        await nextTick()
+        checkOverflow()
+
+        resizeObserver = new ResizeObserver(() => {
+            showParent.value = true
+            nextTick(() => checkOverflow())
+        })
+        resizeObserver.observe(titleRef.value)
+    }
+}, { immediate: true })
+
 onClickOutside(toolbarRef, () => {
     if (isInputFocused.value) {
         isInputFocused.value = false
@@ -116,19 +155,17 @@ onClickOutside(toolbarRef, () => {
     min-width: 0;
     display: flex;
     align-items: center;
+    overflow: hidden;
 }
 
 .parent-node {
     color: var(--text-secondary);
-    flex-shrink: 1;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 0;
+    flex-shrink: 0;
 }
 
 .book-name {
-    flex-shrink: 0;
     white-space: nowrap;
+    flex-shrink: 0;
 }
 </style>

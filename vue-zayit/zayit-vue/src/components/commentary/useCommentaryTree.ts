@@ -39,15 +39,15 @@ export function useCommentaryTree(commentaryGroups: ComputedRef<CommentaryMetada
             const secondaryIndexA = isSecondaryA ? secondaryCategoryOrder.indexOf(catA) : -1
             const secondaryIndexB = isSecondaryB ? secondaryCategoryOrder.indexOf(catB) : -1
 
-            // Hardcoded period order (גאונים before ראשונים before אחרונים)
-            const periodOrder = ['גאונים', 'ראשונים', 'אחרונים']
+            // Hardcoded period order (תלמוד before גאונים before ראשונים before אחרונים)
+            const periodOrder = ['תלמוד', 'גאונים', 'ראשונים', 'אחרונים']
             const periodIndexA = periodOrder.indexOf(catA)
             const periodIndexB = periodOrder.indexOf(catB)
 
-            // Check if A is secondary and B is period
-            if (secondaryIndexA !== -1 && periodIndexB !== -1) return -1
-            // Check if A is period and B is secondary
-            if (periodIndexA !== -1 && secondaryIndexB !== -1) return 1
+            // Check if A is secondary and B is period (but not תלמוד)
+            if (secondaryIndexA !== -1 && periodIndexB !== -1 && catB !== 'תלמוד') return -1
+            // Check if A is period (but not תלמוד) and B is secondary
+            if (periodIndexA !== -1 && catA !== 'תלמוד' && secondaryIndexB !== -1) return 1
 
             // If both are secondary categories, sort by their order
             if (secondaryIndexA !== -1 && secondaryIndexB !== -1) {

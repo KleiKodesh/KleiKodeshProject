@@ -71,6 +71,26 @@ export function useBookViewPage(
         } else if (viewer?.scrollToLine) {
             viewer.scrollToLine(lineIndex)
         }
+
+        // Update tab title when selecting TOC item
+        if (myTab.value && flatTocEntries.value.length) {
+            let closestTocEntry: TocEntry | undefined
+            for (const entry of flatTocEntries.value) {
+                if (entry.isAltToc) continue
+                if (entry.lineIndex <= lineIndex) {
+                    if (!closestTocEntry || entry.lineIndex > closestTocEntry.lineIndex) {
+                        closestTocEntry = entry
+                    }
+                }
+            }
+
+            if (closestTocEntry) {
+                const bookTitle = currentBook.value?.title
+                if (bookTitle) {
+                    myTab.value.title = closestTocEntry.text ? `${bookTitle} - ${closestTocEntry.text}` : bookTitle
+                }
+            }
+        }
     }
 
     const handleNavigateLine = (newIndex: number, tocEntryId?: number) => {
@@ -208,9 +228,11 @@ export function useBookViewPage(
             // Update current TOC entry ID for tree selection
             currentTocEntryId.value = closestTocEntry.id
 
-            // Update tab title with TOC entry text
-            const bookTitle = currentBook.value?.title || ''
-            myTab.value.title = closestTocEntry.text ? `${bookTitle} - ${closestTocEntry.text}` : bookTitle
+            // Update tab title with TOC entry text only when TOC is not open and book title is available
+            const bookTitle = currentBook.value?.title
+            if (!myTab.value.bookState?.isTocOpen && bookTitle) {
+                myTab.value.title = closestTocEntry.text ? `${bookTitle} - ${closestTocEntry.text}` : bookTitle
+            }
         }
     })
 

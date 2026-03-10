@@ -1,5 +1,6 @@
 <template>
-  <div ref="dropdownContainer"
+  <div v-if="hasVisibleItems"
+       ref="dropdownContainer"
        class="dropdown-container">
     <button @click.stop="toggleDropdown"
             class="flex-center c-pointer dropdown-toggle"
@@ -35,17 +36,12 @@
           </div>
           -->
 
+          <!-- Theme toggle - only on bookview page -->
+          <ThemeDropdownItem v-if="isBookViewPage"
+                             @click.stop />
 
-
-          <!-- Theme toggle - moved to toolbar and settings -->
-          <!-- <div @click.stop="handleThemeClick"
-               class="flex-row flex-center-start hover-bg c-pointer dropdown-item">
-            <Icon :icon="themeToggleIcon"
-                  class="theme-icon" />
-            <span class="dropdown-label">{{ themeToggleText }}</span>
-          </div> -->
-
-          <div @click.stop="handleSettingsClick"
+          <div v-if="!isHomepage"
+               @click.stop="handleSettingsClick"
                class="flex-row flex-center-start hover-bg c-pointer dropdown-item">
             <Icon icon="fluent:settings-28-regular" />
             <span class="dropdown-label">הגדרות</span>
@@ -105,9 +101,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useTitlebarDropdown } from '@/components/workspace/useTitlebarDropdown';
+import ThemeDropdownItem from '@/components/settings/ThemeDropdownItem.vue';
 
 const emit = defineEmits<{
   'close': []
@@ -117,6 +114,7 @@ const {
   isOpen,
   isWebViewAvailable,
   isHomepage,
+  isBookViewPage,
   isLineDisplayInline,
   isAltTocVisible,
   isToolbarVisible,
@@ -135,6 +133,20 @@ const {
 } = useTitlebarDropdown();
 
 const dropdownContainer = ref<HTMLElement>();
+
+// Check if any dropdown items are visible
+const hasVisibleItems = computed(() => {
+  // Theme toggle on bookview page
+  if (isBookViewPage.value) return true;
+
+  // All other items show when not on homepage
+  if (!isHomepage.value) return true;
+
+  // Popout toggle when WebView is available
+  if (isWebViewAvailable.value) return true;
+
+  return false;
+});
 
 const closeDropdown = () => {
   close();

@@ -3,26 +3,52 @@
         <div class="flex-column height-fill book-toc-tree-view"
              :class="{ 'compact-mode': isCompactMode }"
              @click.stop>
-            <div class="overflow-y flex-110">
-                <TocTreeSearch v-if="searchInput"
+            <div class="flex-110 flex-column toc-content">
+                <!-- Loading state -->
+                <div v-if="props.isLoading"
+                     class="flex-center height-fill">
+                    <LoadingSpinner text="טוען..." />
+                </div>
+
+                <!-- Unified search results -->
+                <TocTreeSearch v-else-if="searchInput"
                                ref="searchRef"
                                :toc-entries="props.tocEntries"
                                :search-query="searchInput"
                                :is-compact-mode="isCompactMode"
+                               class="overflow-y flex-110"
                                @select-line="handleSelectLine"
                                @return-focus="returnFocusToSearch" />
 
-                <TocTree v-else
-                         :toc-entries="props.tocEntries"
-                         :is-loading="props.isLoading"
-                         :is-compact-mode="isCompactMode"
-                         ref="treeRef"
-                         @select-line="handleSelectLine"
-                         @return-focus="returnFocusToSearch" />
+                <!-- Split view: Regular TOC and Alt TOC -->
+                <template v-else>
+                    <!-- Regular TOC -->
+                    <div v-if="regularTocEntries.length > 0"
+                         class="toc-section overflow-y">
+                        <TocTree :toc-entries="regularTocEntries"
+                                 :is-loading="props.isLoading"
+                                 :is-compact-mode="isCompactMode"
+                                 ref="regularTreeRef"
+                                 @select-line="handleSelectLine"
+                                 @return-focus="returnFocusToSearch" />
+                    </div>
+
+                    <!-- Alt TOC (חלוקה אחרת) -->
+                    <div v-if="altTocEntries.length > 0 && props.showAltToc !== false"
+                         class="toc-section overflow-y alt-toc-section">
+                        <TocTree :toc-entries="altTocEntries"
+                                 :is-loading="props.isLoading"
+                                 :is-compact-mode="isCompactMode"
+                                 ref="altTreeRef"
+                                 @select-line="handleSelectLine"
+                                 @return-focus="returnFocusToSearch" />
+                    </div>
+                </template>
             </div>
 
             <div class="bar flex-row search-bar">
-                <div class="search-input-container flex-110">
+                <div class="search-input-container"
+                     :class="{ 'flex-110': !isCompactMode }">
                     <input ref="searchInputRef"
                            v-model="searchInput"
                            type="text"
@@ -43,10 +69,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
+import { ref, computed, onMounted, nextTick, watch } from 'vue';
 import { useEventListener } from '@vueuse/core';
 import TocTree from './TocTree.vue';
 import TocTreeSearch from './TocTreeSearch.vue';
+import LoadingSpinner from '@/components/shared/LoadingSpinner.vue';
 import { Icon } from '@iconify/vue';
 import { scrollToElementCentered } from '@/components/shared/useScrollToElement';
 
@@ -58,6 +85,7 @@ const props = defineProps<{
     isLoading?: boolean
     isCompactMode?: boolean
     currentTocEntryId?: number
+    showAltToc?: boolean
 }>();
 
 const emit = defineEmits<{
@@ -68,14 +96,22 @@ const { activeTab, closeToc } = useTabs();
 
 const searchInput = ref('');
 const searchInputRef = ref<HTMLInputElement | null>(null);
-const treeRef = ref<InstanceType<typeof TocTree> | null>(null);
+const regularTreeRef = ref<InstanceType<typeof TocTree> | null>(null);
+const altTreeRef = ref<InstanceType<typeof TocTree> | null>(null);
 const searchRef = ref<InstanceType<typeof TocTreeSearch> | null>(null);
+
+// Split TOC entries into regular and alt
+const regularTocEntries = computed(() => {
+    return props.tocEntries.filter(entry => !entry.isAltToc);
+});
+
+const altTocEntries = computed(() => {
+    return props.tocEntries.filter(entry => entry.isAltToc);
+});
 
 // Handle TOC line selection
 const handleSelectLine = (lineIndex: number) => {
     emit('selectLine', lineIndex);
-    // Only close TOC automatically in full-width mode (first time open)
-    // In compact mode, keep it open for easier navigation
     if (!props.isCompactMode) {
         closeToc();
     }
@@ -84,12 +120,13 @@ const handleSelectLine = (lineIndex: number) => {
 // Reset tree: clear search and collapse all
 const resetTree = () => {
     searchInput.value = '';
-    treeRef.value?.resetTree();
+    regularTreeRef.value?.resetTree();
+    altTreeRef.value?.resetTree();
 };
 
 // Focus first item in tree or search results
 const focusFirstItem = () => {
-    const container = searchInput.value ? searchRef.value : treeRef.value;
+    const container = searchInput.value ? searchRef.value : regularTreeRef.value;
     if (container) {
         const containerEl = (container as any).$el || container;
         const firstItem = containerEl.querySelector('[tabindex="0"]') as HTMLElement;
@@ -106,26 +143,28 @@ const returnFocusToSearch = () => {
 
 // Handle keyboard shortcuts on search input
 const handleKeyDown = (e: KeyboardEvent) => {
-    // Escape key - close TOC or reset tree
     if (e.key === 'Escape') {
         if (searchInput.value) {
-            // If there's search text, clear it first
             resetTree();
         } else {
-            // If no search text, close the TOC
             closeToc();
         }
         return;
     }
 
-    // Tab key - focus first tree/search item
+    if (e.key === 'Enter') {
+        if (!props.isCompactMode) {
+            closeToc();
+        }
+        return;
+    }
+
     if (e.key === 'Tab') {
         e.preventDefault();
         focusFirstItem();
         return;
     }
 
-    // Arrow keys - focus first tree item
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
         e.preventDefault();
         focusFirstItem();
@@ -151,7 +190,6 @@ watch(() => activeTab.value?.bookState?.isTocOpen, (isOpen) => {
         nextTick(() => {
             searchInputRef.value?.focus();
 
-            // Auto-select current TOC entry when tree opens
             if (props.currentTocEntryId) {
                 autoSelectTocEntry(props.currentTocEntryId);
             }
@@ -159,57 +197,33 @@ watch(() => activeTab.value?.bookState?.isTocOpen, (isOpen) => {
     }
 });
 
-// Watch for changes to current TOC entry ID
 watch(() => props.currentTocEntryId, (tocEntryId) => {
-    // Only auto-select if TOC is open
     if (activeTab.value?.bookState?.isTocOpen && tocEntryId) {
         autoSelectTocEntry(tocEntryId);
     }
 });
 
-// Auto-select and scroll to the TOC entry
+// Auto-select and scroll to the TOC entry (only for regular TOC, not alt TOC)
 function autoSelectTocEntry(tocEntryId: number) {
-    if (!treeRef.value) return;
+    // Only auto-select in regular TOC tree, ignore alt TOC entries
+    const entry = findEntryById(regularTocEntries.value, tocEntryId);
+    if (!entry || !regularTreeRef.value) return;
 
-    // Find the TOC entry by ID and collect the path to it (skip alt TOC entries)
-    const findEntryPath = (entries: TocEntry[], id: number, path: number[] = []): number[] | null => {
-        for (let i = 0; i < entries.length; i++) {
-            const entry = entries[i];
-            if (!entry) continue;
-
-            // Skip alt TOC entries entirely
-            if (entry.isAltToc) continue;
-
-            if (entry.id === id) return [...path, i];
-            if (entry.children) {
-                const found = findEntryPath(entry.children, id, [...path, i]);
-                if (found) return found;
-            }
-        }
-        return null;
-    };
-
-    const path = findEntryPath(props.tocEntries, tocEntryId);
+    const path = findEntryPath(regularTocEntries.value, tocEntryId);
     if (!path) return;
 
-    // Expand all parent nodes along the path
-    expandNodesAlongPath(path);
+    expandNodesAlongPath(regularTreeRef.value, path);
 
-    // Scroll to the entry after expansion
     nextTick(async () => {
-        const treeEl = (treeRef.value as any)?.$el || treeRef.value;
+        const treeEl = (regularTreeRef.value as any)?.$el || regularTreeRef.value;
         if (treeEl) {
-            // Remove any existing highlights
             const previousHighlights = treeEl.querySelectorAll('.highlight-current');
             previousHighlights.forEach((el: Element) => el.classList.remove('highlight-current'));
 
-            // Find the DOM element for this TOC entry by ID
             const allNodes = treeEl.querySelectorAll('[role="treeitem"]');
             for (const node of allNodes) {
                 const nodeText = node.querySelector('.node-title')?.textContent;
-                const targetEntry = findEntryById(props.tocEntries, tocEntryId);
-                if (targetEntry && nodeText === targetEntry.text) {
-                    // Find the actual tree node div (the one with flex-row class)
+                if (entry && nodeText === entry.text) {
                     const treeNodeDiv = node.querySelector('.tree-node') as HTMLElement;
 
                     if (treeNodeDiv) {
@@ -218,7 +232,6 @@ function autoSelectTocEntry(tocEntryId: number) {
                         (node as HTMLElement).classList.add('highlight-current');
                     }
 
-                    // Use scrollToElementCentered to center the TOC entry
                     await scrollToElementCentered(node as HTMLElement);
                     break;
                 }
@@ -227,12 +240,24 @@ function autoSelectTocEntry(tocEntryId: number) {
     });
 }
 
-// Helper to find entry by ID (skip alt TOC entries)
+// Find entry path by ID
+function findEntryPath(entries: TocEntry[], id: number, path: number[] = []): number[] | null {
+    for (let i = 0; i < entries.length; i++) {
+        const entry = entries[i];
+        if (!entry) continue;
+
+        if (entry.id === id) return [...path, i];
+        if (entry.children) {
+            const found = findEntryPath(entry.children, id, [...path, i]);
+            if (found) return found;
+        }
+    }
+    return null;
+}
+
+// Helper to find entry by ID
 function findEntryById(entries: TocEntry[], id: number): TocEntry | null {
     for (const entry of entries) {
-        // Skip alt TOC entries
-        if (entry.isAltToc) continue;
-
         if (entry.id === id) return entry;
         if (entry.children) {
             const found = findEntryById(entry.children, id);
@@ -242,14 +267,11 @@ function findEntryById(entries: TocEntry[], id: number): TocEntry | null {
     return null;
 }
 
-// Expand nodes along the path by calling expand() on node components
-function expandNodesAlongPath(path: number[]) {
-    if (!treeRef.value) return;
-
-    const nodeRefs = (treeRef.value as any).nodeRefs;
+// Expand nodes along the path
+function expandNodesAlongPath(treeRef: InstanceType<typeof TocTree>, path: number[]) {
+    const nodeRefs = (treeRef as any).nodeRefs;
     if (!nodeRefs) return;
 
-    // Navigate through the path and expand each node
     let currentNodes = nodeRefs;
     for (let i = 0; i < path.length - 1; i++) {
         const nodeIndex = path[i];
@@ -258,7 +280,6 @@ function expandNodesAlongPath(path: number[]) {
 
         if (node && node.expand) {
             node.expand();
-            // Get child refs for next level
             if (node.childRefs) {
                 currentNodes = node.childRefs;
             }
@@ -275,15 +296,38 @@ function expandNodesAlongPath(path: number[]) {
 
 .book-toc-tree-view.compact-mode {
     background-color: rgba(var(--bg-primary-rgb), 0.95);
-    width: max-content;
-    min-width: 200px;
-    max-width: 500px;
+    width: fit-content;
+    min-width: 150px;
+    max-width: 90vw;
     border-left: 1px solid rgba(0, 0, 0, 0.1);
     height: 100%;
     position: absolute;
     right: 0;
     top: 0;
     z-index: 100;
+}
+
+.toc-content {
+    min-height: 0;
+}
+
+.compact-mode .toc-content {
+    width: max-content;
+    padding-bottom: 40px;
+    min-width: 100%;
+}
+
+.toc-section {
+    flex: 1;
+    min-height: 0;
+}
+
+.compact-mode .toc-section {
+    width: 100%;
+}
+
+.alt-toc-section {
+    border-top: 1px solid var(--border-color);
 }
 
 .search-bar {
@@ -294,23 +338,29 @@ function expandNodesAlongPath(path: number[]) {
 
 .compact-mode .search-bar {
     padding: 4px 8px;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background-color: var(--bg-secondary);
+    border-top: 1px solid var(--border-color);
+    z-index: 10;
 }
 
 .search-input-container {
     position: relative;
     display: flex;
     align-items: center;
+    min-width: 0;
 }
 
 .search-input-field {
-    width: 100%;
-    min-width: 150px;
     padding-right: 32px;
-    /* Make room for the reset button */
+    width: 100%;
 }
 
 .compact-mode .search-input-field {
-    min-width: 150px;
+    width: 100%;
 }
 
 .reset-button {

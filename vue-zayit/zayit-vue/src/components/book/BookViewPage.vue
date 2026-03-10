@@ -21,7 +21,7 @@
       <div class="flex-110 content-area">
         <!-- Virtualized viewer is now always enabled -->
         <keep-alive>
-          <TocTreePanelSplit v-if="myTab?.bookState?.isTocOpen && myTab?.bookState?.bookId"
+          <TocTreePanel v-if="myTab?.bookState?.isTocOpen && myTab?.bookState?.bookId"
                         ref="tocTreeViewRef"
                         :toc-entries="filteredTocEntries"
                         :is-loading="isTocLoading"
@@ -85,7 +85,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
 import { useEventListener } from '@vueuse/core'
-import TocTreePanelSplit from '@/components/book/TocTreePanelSplit.vue'
+import TocTreePanel from '@/components/book/TocTreePanel.vue'
 import LineView from '@/components/book/LineView.vue'
 import SplitPane from '@/components/shared/SplitPane.vue'
 import CommentaryView from '@/components/commentary/CommentaryView.vue'
