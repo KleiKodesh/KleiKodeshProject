@@ -87,6 +87,25 @@ export const SqlQueries = {
     params: connectionTypeId !== undefined ? [lineId, connectionTypeId] : [lineId]
   }),
 
+  getLinksMetadata: (lineId: number, connectionTypeId?: number) => ({
+    query: `
+      SELECT
+        l.targetLineId,
+        l.targetBookId,
+        l.connectionTypeId,
+        bk.title,
+        ln.lineIndex AS lineIndex
+      FROM link l
+      JOIN line ln ON ln.id = l.targetLineId
+      JOIN book bk ON bk.id = l.targetBookId
+      WHERE l.sourceLineId = ?
+      ${connectionTypeId !== undefined ? 'AND l.connectionTypeId = ?' : ''}
+        AND bk.externalLibraryId IS NULL
+      ORDER BY bk.title
+    `,
+    params: connectionTypeId !== undefined ? [lineId, connectionTypeId] : [lineId]
+  }),
+
   getLinkBookIds: (lineId: number, connectionTypeId?: number) => ({
     query: `
       SELECT DISTINCT l.targetBookId
@@ -104,6 +123,12 @@ export const SqlQueries = {
     FROM line l
     LEFT JOIN line_toc lt ON l.id = lt.lineId
     WHERE l.bookId = ${bookId} AND l.lineIndex = ${lineIndex}
+  `,
+
+  getLineContentById: (lineId: number) => `
+    SELECT content
+    FROM line
+    WHERE id = ${lineId}
   `,
 
   getLineId: (bookId: number, lineIndex: number) => `

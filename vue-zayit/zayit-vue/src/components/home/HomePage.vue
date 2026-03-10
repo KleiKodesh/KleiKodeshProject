@@ -130,6 +130,7 @@ const openKezayit = () => {
 const openPdf = async () => {
     try {
         if (pdfService.isAvailable()) {
+            console.log('[HomePage] Opening PDF file picker (may take several minutes for large files)...');
             // Use C# PDF service via existing bridge system
             const result = await pdfService.showFilePicker();
 
@@ -143,6 +144,8 @@ const openPdf = async () => {
                     openPdfWithFile(result.fileName, result.dataUrl);
                     console.log('[HomePage] PDF loaded via C# bridge:', result.fileName, result.dataUrl);
                 }
+            } else {
+                console.log('[HomePage] PDF file picker cancelled or returned no result');
             }
         } else {
             // Fallback to browser file picker if not in WebView2
@@ -162,6 +165,12 @@ const openPdf = async () => {
         }
     } catch (error) {
         console.error('[HomePage] Error opening PDF file picker:', error);
+        
+        // Check if it's a timeout error
+        if (error instanceof Error && error.message.includes('timeout')) {
+            console.error('[HomePage] PDF conversion timed out - file may be too large or conversion failed');
+        }
+        
         // Fallback to browser file picker on error
         const input = document.createElement('input');
         input.type = 'file';

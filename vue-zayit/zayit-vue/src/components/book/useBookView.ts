@@ -46,14 +46,23 @@ export function useBookViewPage(
     })
 
     const loadTocData = async (bookId: number) => {
+        const tocLoadStart = performance.now()
+        console.log(`⏱️ [useBookView] Loading TOC for book ${bookId}...`)
         isTocLoading.value = true
         try {
+            const dbStart = performance.now()
             const { tocEntriesFlat } = await dbService.getToc(bookId)
+            console.log(`⏱️ [useBookView] DB getToc completed in ${(performance.now() - dbStart).toFixed(2)}ms`)
+
+            const buildStart = performance.now()
             const { tree, allTocs, altTocByLineIndex: altTocMap } = buildTocFromFlat(tocEntriesFlat)
+            console.log(`⏱️ [useBookView] buildTocFromFlat completed in ${(performance.now() - buildStart).toFixed(2)}ms`)
 
             tocEntries.value = tree
             altTocByLineIndex.value = altTocMap
             flatTocEntries.value = allTocs
+
+            console.log(`⏱️ [useBookView] Total TOC load time: ${(performance.now() - tocLoadStart).toFixed(2)}ms`)
         } catch (error) {
             console.error('❌ Failed to load TOC data:', error)
             tocEntries.value = []
@@ -114,22 +123,66 @@ export function useBookViewPage(
         const currentLineIndex = myTab.value?.bookState?.selectedLineIndex
         const sourceBookId = myTab.value?.bookState?.bookId
         const connectionTypeId = myTab.value?.bookState?.commentaryFilterConnectionTypeId
+        const selectedTocEntryId = myTab.value?.bookState?.selectedTocEntryId
 
         if (currentLineIndex !== undefined && sourceBookId !== undefined && bookId !== undefined) {
-            // Find previous line with this specific commentary
-            const previousLineIndex = await dbService.findPreviousLineWithCommentary(
-                sourceBookId,
-                currentLineIndex,
-                bookId,
-                connectionTypeId
-            )
+            // Check if we're in TOC mode
+            const isInTocMode = selectedTocEntryId !== undefined
 
-            if (previousLineIndex !== null) {
-                handleNavigateLine(previousLineIndex)
+            if (isInTocMode && flatTocEntries.value.length > 0) {
+                // TOC mode: Navigate to previous TOC entry with this commentary
+                const currentTocIndex = flatTocEntries.value.findIndex(
+                    toc => toc.lineIndex === currentLineIndex && !toc.isAltToc
+                )
 
-                // Set the selected commentary to the one that emitted the event
-                if (myTab.value?.bookState) {
-                    myTab.value.bookState.currentCommentaryBookId = bookId
+                const startIndex = currentTocIndex > 0 ? currentTocIndex - 1 : flatTocEntries.value.length - 1
+
+                for (let i = startIndex; i >= 0; i--) {
+                    const tocEntry = flatTocEntries.value[i]
+                    if (!tocEntry || tocEntry.isAltToc || tocEntry.lineIndex === undefined) continue
+
+                    try {
+                        const lineIdResults = await dbService.getLineIdsByTocEntry(sourceBookId, tocEntry.id)
+                        const lineIds = lineIdResults.map(r => r.lineId)
+
+                        if (lineIds.length > 0) {
+                            const linksPromises = lineIds.map(lineId =>
+                                dbService.getLinks(lineId, '', sourceBookId, connectionTypeId)
+                            )
+                            const allLinksArrays = await Promise.all(linksPromises)
+                            const allLinks = allLinksArrays.flat()
+
+                            const hasCommentary = allLinks.some(link => link.targetBookId === bookId)
+                            if (hasCommentary) {
+                                handleNavigateLine(tocEntry.lineIndex, tocEntry.id)
+
+                                // Set the selected commentary to the one that emitted the event
+                                if (myTab.value?.bookState) {
+                                    myTab.value.bookState.currentCommentaryBookId = bookId
+                                }
+                                return
+                            }
+                        }
+                    } catch (error) {
+                        continue
+                    }
+                }
+            } else {
+                // Line mode: Find previous line with this specific commentary
+                const previousLineIndex = await dbService.findPreviousLineWithCommentary(
+                    sourceBookId,
+                    currentLineIndex,
+                    bookId,
+                    connectionTypeId
+                )
+
+                if (previousLineIndex !== null) {
+                    handleNavigateLine(previousLineIndex)
+
+                    // Set the selected commentary to the one that emitted the event
+                    if (myTab.value?.bookState) {
+                        myTab.value.bookState.currentCommentaryBookId = bookId
+                    }
                 }
             }
         }
@@ -139,22 +192,66 @@ export function useBookViewPage(
         const currentLineIndex = myTab.value?.bookState?.selectedLineIndex
         const sourceBookId = myTab.value?.bookState?.bookId
         const connectionTypeId = myTab.value?.bookState?.commentaryFilterConnectionTypeId
+        const selectedTocEntryId = myTab.value?.bookState?.selectedTocEntryId
 
         if (currentLineIndex !== undefined && sourceBookId !== undefined && bookId !== undefined) {
-            // Find next line with this specific commentary
-            const nextLineIndex = await dbService.findNextLineWithCommentary(
-                sourceBookId,
-                currentLineIndex,
-                bookId,
-                connectionTypeId
-            )
+            // Check if we're in TOC mode
+            const isInTocMode = selectedTocEntryId !== undefined
 
-            if (nextLineIndex !== null) {
-                handleNavigateLine(nextLineIndex)
+            if (isInTocMode && flatTocEntries.value.length > 0) {
+                // TOC mode: Navigate to next TOC entry with this commentary
+                const currentTocIndex = flatTocEntries.value.findIndex(
+                    toc => toc.lineIndex === currentLineIndex && !toc.isAltToc
+                )
 
-                // Set the selected commentary to the one that emitted the event
-                if (myTab.value?.bookState) {
-                    myTab.value.bookState.currentCommentaryBookId = bookId
+                const startIndex = currentTocIndex >= 0 ? currentTocIndex + 1 : 0
+
+                for (let i = startIndex; i < flatTocEntries.value.length; i++) {
+                    const tocEntry = flatTocEntries.value[i]
+                    if (!tocEntry || tocEntry.isAltToc || tocEntry.lineIndex === undefined) continue
+
+                    try {
+                        const lineIdResults = await dbService.getLineIdsByTocEntry(sourceBookId, tocEntry.id)
+                        const lineIds = lineIdResults.map(r => r.lineId)
+
+                        if (lineIds.length > 0) {
+                            const linksPromises = lineIds.map(lineId =>
+                                dbService.getLinks(lineId, '', sourceBookId, connectionTypeId)
+                            )
+                            const allLinksArrays = await Promise.all(linksPromises)
+                            const allLinks = allLinksArrays.flat()
+
+                            const hasCommentary = allLinks.some(link => link.targetBookId === bookId)
+                            if (hasCommentary) {
+                                handleNavigateLine(tocEntry.lineIndex, tocEntry.id)
+
+                                // Set the selected commentary to the one that emitted the event
+                                if (myTab.value?.bookState) {
+                                    myTab.value.bookState.currentCommentaryBookId = bookId
+                                }
+                                return
+                            }
+                        }
+                    } catch (error) {
+                        continue
+                    }
+                }
+            } else {
+                // Line mode: Find next line with this specific commentary
+                const nextLineIndex = await dbService.findNextLineWithCommentary(
+                    sourceBookId,
+                    currentLineIndex,
+                    bookId,
+                    connectionTypeId
+                )
+
+                if (nextLineIndex !== null) {
+                    handleNavigateLine(nextLineIndex)
+
+                    // Set the selected commentary to the one that emitted the event
+                    if (myTab.value?.bookState) {
+                        myTab.value.bookState.currentCommentaryBookId = bookId
+                    }
                 }
             }
         }

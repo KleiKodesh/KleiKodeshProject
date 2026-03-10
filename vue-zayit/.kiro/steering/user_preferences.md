@@ -307,3 +307,4 @@ Note: vue-virtual-scroller is legacy code still present in the codebase for tran
 - Focus on **how** code is written, not **whether** features should exist
 - **Clean as you go** - remove garbage and repetitions with every change
 - **Never guess when problem solving** - trace through actual code execution paths, read the relevant files, follow the data flow, then diagnose based on facts
+- **Break down complex tasks** - when facing a large task, break it into clear steps; when steps are still complex, break them into subtasks; this incremental approach produces better, more accurate results

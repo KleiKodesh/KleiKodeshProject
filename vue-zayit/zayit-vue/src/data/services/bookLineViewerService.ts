@@ -30,31 +30,41 @@ export class BookLineViewerService {
      * Load a new book - immediate scaffolding + start streaming
      */
     async loadBook(bookId: number, isRestore: boolean, initialLineIndex?: number): Promise<void> {
-        console.log('📚 Loading book:', bookId, 'isRestore:', isRestore, 'initialLineIndex:', initialLineIndex)
+        const loadStart = performance.now()
+        console.log(`⏱️ [BookLineViewerService] Loading book ${bookId}, isRestore: ${isRestore}, initialLine: ${initialLineIndex}`)
 
         this.cleanup()
         this.bookId = bookId
         this.isInitialLoad = true
 
         try {
+            const totalLinesStart = performance.now()
             this.totalLines.value = await dbService.getTotalLines(bookId)
+            console.log(`⏱️ [BookLineViewerService] Got total lines (${this.totalLines.value}) in ${(performance.now() - totalLinesStart).toFixed(2)}ms`)
 
             // Stage 1: Immediate scaffolding with placeholders
+            const scaffoldStart = performance.now()
             const placeholders: Record<number, string> = {}
             for (let i = 0; i < this.totalLines.value; i++) {
                 placeholders[i] = '\u00A0' // Hard space placeholder
             }
             this.lines.value = placeholders
+            console.log(`⏱️ [BookLineViewerService] Scaffolding completed in ${(performance.now() - scaffoldStart).toFixed(2)}ms`)
 
             // Stage 2: Start smart streaming
+            const streamStart = performance.now()
             this.startSmartStreaming()
+            console.log(`⏱️ [BookLineViewerService] Streaming started in ${(performance.now() - streamStart).toFixed(2)}ms`)
 
             // Load initial content if restoring
             if (isRestore && initialLineIndex !== undefined) {
+                const prioritizeStart = performance.now()
                 await this.prioritizeLines(initialLineIndex)
+                console.log(`⏱️ [BookLineViewerService] Initial lines prioritized in ${(performance.now() - prioritizeStart).toFixed(2)}ms`)
             }
 
             this.isInitialLoad = false
+            console.log(`⏱️ [BookLineViewerService] Total loadBook time: ${(performance.now() - loadStart).toFixed(2)}ms`)
         } catch (error) {
             console.error('❌ Failed to load book:', error)
             this.totalLines.value = 0

@@ -40,10 +40,14 @@ export function useCommentaryView(props: {
     const hasInitialized = ref(false)
     const previousLineIndex = ref<number>()
 
-    const { commentaryGroups, isLoadingMetadata, loadCommentaryMetadata } = useCommentaryContent()
+    const { commentaryGroups, isLoadingMetadata, isLoadingMore, loadCommentaryMetadata, loadGroupContent } = useCommentaryContent()
 
     const selectedConnectionTypeId = computed(() =>
         tabStore.activeTab?.bookState?.commentaryFilterConnectionTypeId
+    )
+
+    const selectedTocEntryId = computed(() =>
+        tabStore.activeTab?.bookState?.selectedTocEntryId
     )
 
     function handleSelectGroup(node: CommentaryTreeNode) {
@@ -74,9 +78,10 @@ export function useCommentaryView(props: {
         const bookId = props.bookId
         const lineIndex = props.selectedLineIndex
         const connectionTypeId = selectedConnectionTypeId.value
+        const tocEntryId = selectedTocEntryId.value
 
         if (bookId !== undefined && lineIndex !== undefined) {
-            await loadCommentaryMetadata(bookId, lineIndex, connectionTypeId)
+            await loadCommentaryMetadata(bookId, lineIndex, connectionTypeId, tocEntryId)
 
             if (!hasInitialized.value && commentaryGroups.value.length > 0) {
                 hasInitialized.value = true
@@ -145,11 +150,14 @@ export function useCommentaryView(props: {
     return {
         commentaryGroups,
         isLoadingMetadata,
+        isLoadingMore,
         selectedBookId,
         selectedConnectionTypeId,
+        selectedTocEntryId,
         handleSelectGroup,
         handleVisibleBookChanged,
         initializeCommentary,
-        scrollToCommentary
+        scrollToCommentary,
+        loadGroupContent
     }
 }

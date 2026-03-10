@@ -97,8 +97,12 @@ import { useTabs } from '@/components/workspace/useTabs'
 const myTabId = ref<number | undefined>(undefined)
 const lineViewerRef = ref<InstanceType<typeof LineView> | null>(null)
 const commentaryViewRef = ref<InstanceType<typeof CommentaryView> | null>(null)
-const tocTreeViewRef = ref<InstanceType<typeof TocTreePanelSplit> | null>(null)
+const tocTreeViewRef = ref<InstanceType<typeof TocTreePanel> | null>(null)
 const toolbarRef = ref<InstanceType<typeof LineViewToolbar> | null>(null)
+
+// Performance tracking
+const perfStart = performance.now()
+console.log('⏱️ [BookViewPage] Component setup started')
 
 const {
   myTab,
@@ -120,11 +124,15 @@ const {
   () => lineViewerRef.value
 )
 
+console.log(`⏱️ [BookViewPage] useBookViewPage completed in ${(performance.now() - perfStart).toFixed(2)}ms`)
+
 // Initialize myTabId from active tab and keep it synced
 const { activeTab } = useTabs()
 
 watch(activeTab, (newTab) => {
+  const watchStart = performance.now()
   myTabId.value = newTab?.id
+  console.log(`⏱️ [BookViewPage] Active tab changed in ${(performance.now() - watchStart).toFixed(2)}ms`)
 }, { immediate: true })
 
 // Search

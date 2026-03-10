@@ -18,6 +18,7 @@
                            :current-match-book-id="currentMatchBookId"
                            :current-match-link-index="currentMatchLinkIndex"
                            :current-match-index-in-link="currentMatchIndexInLink"
+                           :load-group-content="loadGroupContent"
                            class="flex-110"
                            @visible-book-changed="handleVisibleBookChanged"
                            @navigate-previous-line="(bookId) => emit('navigate-previous-line', bookId)"
@@ -51,20 +52,28 @@ const emit = defineEmits<{
     (e: 'navigate-next-line', bookId?: number): void
 }>()
 
+// Performance tracking
+const componentStart = performance.now()
+console.log('⏱️ [CommentaryView] Component setup started')
+
 const commentaryContentRef = ref<any>()
 const commentaryTreePanelRef = ref<any>()
 const showTree = ref(false) // Default to hidden
 
+const composableStart = performance.now()
 const {
     commentaryGroups,
     isLoadingMetadata,
     selectedBookId,
     selectedConnectionTypeId,
+    selectedTocEntryId,
     handleSelectGroup,
     handleVisibleBookChanged,
     initializeCommentary,
-    scrollToCommentary
+    scrollToCommentary,
+    loadGroupContent
 } = useCommentaryView(props)
+console.log(`⏱️ [CommentaryView] useCommentaryView completed in ${(performance.now() - composableStart).toFixed(2)}ms`)
 
 // Get scroll container from commentary content
 const scrollContainer = computed(() => commentaryContentRef.value?.$el as HTMLElement | null)
@@ -107,7 +116,7 @@ async function handleToggleTree() {
 }
 
 watch(
-    () => [props.bookId, props.selectedLineIndex, selectedConnectionTypeId.value] as const,
+    () => [props.bookId, props.selectedLineIndex, selectedConnectionTypeId.value, selectedTocEntryId.value] as const,
     () => initializeCommentary(
         (bookId) => commentaryContentRef.value?.scrollToGroup(bookId),
         (isFirstInit) => commentaryContentRef.value?.restoreScrollPosition(isFirstInit)

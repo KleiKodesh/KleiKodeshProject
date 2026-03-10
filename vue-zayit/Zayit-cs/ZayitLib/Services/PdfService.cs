@@ -103,7 +103,8 @@ namespace Zayit.Services
 
         /// <summary>
         /// Returns a cached PDF path if available; otherwise converts the file on a
-        /// background thread while showing a WinForms progress dialog with a marquee bar.
+        /// background thread while monitoring the file system for completion.
+        /// Returns as soon as the PDF file appears, without waiting for the full conversion task.
         /// </summary>
         private async Task<string> ConvertWithProgressAsync(string filePath)
         {
@@ -118,10 +119,8 @@ namespace Zayit.Services
                 return cachedPdf;
             }
 
+            var startTime = DateTime.Now;
             Console.WriteLine($"[PdfService] Starting conversion: {filePath}");
-
-            string pdfPath = null;
-            Exception conversionError = null;
 
             bool isHtmlTxt = filePath.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)
                              && WordToPdfConverter.TxtFileContainsHtml(filePath);
@@ -132,25 +131,97 @@ namespace Zayit.Services
 
             Console.WriteLine($"[PdfService] Output path: {outputPath}");
 
+            // Set up FileSystemWatcher to detect when PDF is created
+            var tcs = new TaskCompletionSource<string>();
+            FileSystemWatcher watcher = null;
+
             try
             {
-                pdfPath = isHtmlTxt
-                    ? await WordToPdfConverter.ConvertHtmlToPdfAsync(_webView, filePath, outputPath)
-                    : await WordToPdfConverter.ConvertWordToPdfAsync(_webView, filePath, outputPath);
+                watcher = new FileSystemWatcher(cacheDir)
+                {
+                    Filter = outputFileName,
+                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.CreationTime | NotifyFilters.LastWrite,
+                    EnableRaisingEvents = true
+                };
 
-                Console.WriteLine($"[PdfService] Conversion returned: {pdfPath}");
-                Console.WriteLine($"[PdfService] File exists: {File.Exists(pdfPath)}");
+                // Watch for file creation
+                FileSystemEventHandler onCreated = (sender, e) =>
+                {
+                    var detectionTime = (DateTime.Now - startTime).TotalSeconds;
+                    Console.WriteLine($"[PdfService] PDF file detected after {detectionTime:F1}s: {e.FullPath}");
+                    
+                    // Wait a moment for file to be fully written
+                    System.Threading.Thread.Sleep(500);
+                    
+                    if (File.Exists(e.FullPath) && new FileInfo(e.FullPath).Length > 0)
+                    {
+                        Console.WriteLine($"[PdfService] PDF file ready: {e.FullPath}");
+                        tcs.TrySetResult(e.FullPath);
+                    }
+                };
+
+                watcher.Created += onCreated;
+                watcher.Changed += onCreated;
+
+                // Start conversion in background (don't await)
+                var conversionTask = isHtmlTxt
+                    ? WordToPdfConverter.ConvertHtmlToPdfAsync(_webView, filePath, outputPath)
+                    : WordToPdfConverter.ConvertWordToPdfAsync(_webView, filePath, outputPath);
+
+                // Handle conversion errors in background
+                conversionTask.ContinueWith(task =>
+                {
+                    var completionTime = (DateTime.Now - startTime).TotalSeconds;
+                    
+                    if (task.IsFaulted)
+                    {
+                        Console.WriteLine($"[PdfService] Conversion failed after {completionTime:F1}s: {task.Exception?.InnerException?.Message}");
+                        tcs.TrySetException(task.Exception?.InnerException ?? new Exception("Conversion failed"));
+                    }
+                    else if (task.IsCompleted && !tcs.Task.IsCompleted)
+                    {
+                        Console.WriteLine($"[PdfService] Conversion task completed after {completionTime:F1}s");
+                        
+                        // Conversion completed but file wasn't detected - check if it exists
+                        if (File.Exists(outputPath))
+                        {
+                            Console.WriteLine($"[PdfService] File exists: {outputPath}");
+                            tcs.TrySetResult(outputPath);
+                        }
+                        else
+                        {
+                            Console.WriteLine($"[PdfService] File not found: {outputPath}");
+                            tcs.TrySetException(new Exception("PDF file not created"));
+                        }
+                    }
+                }, TaskScheduler.Default);
+
+                // Wait for either file detection or timeout (5 minutes)
+                var timeoutTask = Task.Delay(300000);
+                var completedTask = await Task.WhenAny(tcs.Task, timeoutTask);
+
+                if (completedTask == timeoutTask)
+                {
+                    throw new TimeoutException("PDF conversion timed out");
+                }
+
+                var pdfPath = await tcs.Task;
+                var totalTime = (DateTime.Now - startTime).TotalSeconds;
+                
+                Console.WriteLine($"[PdfService] PDF ready for Vue after {totalTime:F1}s (early detection enabled)");
+
+                // ── Enforce LRU cache limit ──────────────────────────────────────
+                EnforceCacheLimit(cacheDir);
+                Console.WriteLine($"[PdfService] Cached conversion: {filePath} -> {pdfPath}");
+
+                return pdfPath;
             }
             catch (Exception ex)
             {
-                conversionError = ex;
-            }
-
-            if (conversionError != null)
-            {
-                Console.WriteLine($"[PdfService] Conversion failed: {conversionError}");
+                var errorTime = (DateTime.Now - startTime).TotalSeconds;
+                Console.WriteLine($"[PdfService] Conversion error after {errorTime:F1}s: {ex.Message}");
                 MessageBox.Show(
-                    $"המרת הקובץ נכשלה:\n{conversionError.Message}",
+                    $"המרת הקובץ נכשלה:\n{ex.Message}",
                     "שגיאה בהמרה",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error,
@@ -158,15 +229,14 @@ namespace Zayit.Services
                     MessageBoxOptions.RightAlign | MessageBoxOptions.RtlReading);
                 return null;
             }
-
-            if (pdfPath != null)
+            finally
             {
-                // ── Enforce LRU cache limit ──────────────────────────────────────
-                EnforceCacheLimit(cacheDir);
-                Console.WriteLine($"[PdfService] Cached conversion: {filePath} -> {pdfPath}");
+                if (watcher != null)
+                {
+                    watcher.EnableRaisingEvents = false;
+                    watcher.Dispose();
+                }
             }
-
-            return pdfPath;
         }
 
         /// <summary>Builds a borderless RTL progress dialog with a marquee bar.</summary>
