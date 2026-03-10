@@ -315,6 +315,35 @@ class DatabaseService {
         return content
     }
 
+    async getLineContentByIds(lineIds: number[]): Promise<Map<number, string>> {
+        if (lineIds.length === 0) {
+            return new Map()
+        }
+
+        let results: Array<{ id: number; content: string }>
+
+        if (this.isWebViewAvailable()) {
+            results = await webviewBridge.call('ExecuteQuery', SqlQueries.getLineContentByIds(lineIds))
+        } else if (this.isDevServerAvailable()) {
+            results = await devQuery<{ id: number; content: string }>(SqlQueries.getLineContentByIds(lineIds))
+        } else {
+            throw new Error('No database source available')
+        }
+
+        // Create map and apply censoring if enabled
+        const contentMap = new Map<number, string>()
+        const shouldCensor = useSettingsStore().censorDivineNames
+
+        results.forEach(row => {
+            if (row.content) {
+                const content = shouldCensor ? censorDivineNames(row.content) : row.content
+                contentMap.set(row.id, content)
+            }
+        })
+
+        return contentMap
+    }
+
     async getLineId(bookId: number, lineIndex: number): Promise<number | null> {
         if (this.isWebViewAvailable()) {
             return await webviewBridge.call('GetLineId', bookId, lineIndex, SqlQueries.getLineId(bookId, lineIndex))
