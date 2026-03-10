@@ -31,6 +31,11 @@ export function useTitlebarDropdown() {
         return activeTab.value?.currentPage === 'homepage';
     });
 
+    // Check if current page is bookview
+    const isBookViewPage = computed(() => {
+        return activeTab.value?.currentPage === 'bookview';
+    });
+
     // Line display state
     const isLineDisplayInline = computed(() => {
         return activeTab.value?.bookState?.isLineDisplayInline || false;
@@ -186,6 +191,7 @@ export function useTitlebarDropdown() {
         isOpen,
         isWebViewAvailable,
         isHomepage,
+        isBookViewPage,
         isLineDisplayInline,
         isAltTocVisible,
         isToolbarVisible,

@@ -80,11 +80,11 @@ export const useTabStore = defineStore('tabs', () => {
             const stored = localStorage.getItem(storageKey);
             if (stored) {
                 const data = JSON.parse(stored);
-                tabs.value = data.tabs || [];
+                const loadedTabs = data.tabs || [];
                 nextId.value = data.nextId || 2;
 
                 // Handle PDF tabs with stored file paths
-                for (const tab of tabs.value) {
+                for (const tab of loadedTabs) {
                     if (tab.pdfState && tab.pdfState.filePath) {
                         // Always recreate virtual URL from file path (virtual URLs don't persist)
                         // Clear any existing URL since it's invalid after restart
@@ -112,6 +112,9 @@ export const useTabStore = defineStore('tabs', () => {
                         }
                     }
                 }
+
+                // Assign tabs to trigger reactivity
+                tabs.value = loadedTabs;
 
                 // Ensure at least one tab is active
                 const hasActiveTab = tabs.value.some(tab => tab.isActive);
@@ -187,6 +190,9 @@ export const useTabStore = defineStore('tabs', () => {
             // Create initial tab using centralized homepage logic
             await createDefaultTab();
         }
+
+        // Force reactivity update for tab titles after loading
+        await new Promise(resolve => setTimeout(resolve, 0));
     })();
 
     // Centralized function to determine appropriate homepage - uses user setting

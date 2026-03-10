@@ -1,58 +1,53 @@
 <template>
     <div class="homepage flex-column height-fill">
-        <div class="grid-container">
-            <UniformGrid>
-                <AppTile v-if="isDatabaseAvailable || isDev"
-                         label="פתח ספר"
-                         icon="fluent:library-28-regular"
-                         custom-class="kezayit-tile"
-                         @click="openKezayit" />
+        <div class="grid">
+            <AppTile v-if="isDatabaseAvailable || isDev"
+                     label="פתח ספר"
+                     icon="fluent:library-28-regular"
+                     custom-class="kezayit-tile"
+                     @click="openKezayit" />
 
-                <AppTile v-if="isDatabaseAvailable"
-                         :label="searchTileLabel"
-                         :icon="searchTileIcon"
-                         custom-class="search-tile"
-                         :disabled="!isDev && (isSearchIndexing || !isSearchReady)"
-                         @click="openZayitSearchPage">
-                    <template v-if="isSearchIndexing"
-                              #icon>
-                        <CircularProgress :percentage="indexingPercentage" />
-                    </template>
-                </AppTile>
+            <AppTile v-if="isDatabaseAvailable || isDev"
+                     :label="searchTileLabel"
+                     :icon="searchTileIcon"
+                     custom-class="search-tile"
+                     :disabled="!isDev && (isSearchIndexing || !isSearchReady)"
+                     @click="openZayitSearchPage">
+                <template v-if="isSearchIndexing"
+                          #icon>
+                    <CircularProgress :percentage="indexingPercentage" />
+                </template>
+            </AppTile>
 
-                <AppTile v-if="!isDatabaseAvailable"
-                         label="התקן את הספרייה"
-                         icon="fluent:library-28-regular"
-                         custom-class="warning-tile kezayit-tile"
-                         @click="downloadZayit" />
+            <AppTile v-if="!isDatabaseAvailable && !isDev"
+                     label="התקן את הספרייה"
+                     icon="fluent:library-28-regular"
+                     custom-class="warning-tile kezayit-tile"
+                     @click="downloadZayit" />
 
-                <AppTile v-if="!isDatabaseAvailable"
-                         label="בחר קובץ מסד נתונים"
-                         icon="fluent:database-24-regular"
-                         custom-class="db-select-tile warning-tile"
-                         @click="selectDatabaseFile" />
+            <AppTile v-if="!isDatabaseAvailable && !isDev"
+                     label="בחר קובץ מסד נתונים"
+                     icon="fluent:database-24-regular"
+                     custom-class="db-select-tile warning-tile"
+                     @click="selectDatabaseFile" />
 
-                <AppTile label="ניהול סביבות עבודה"
-                         icon="fluent:apps-28-regular"
-                         custom-class="workspace-tile"
-                         @click="openWorkspaceManagerPage" />
+            <AppTile label="ניהול סביבות עבודה"
+                     icon="fluent:apps-28-regular"
+                     custom-class="workspace-tile"
+                     @click="openWorkspaceManagerPage" />
 
-                <AppTile label="מסמך מהמחשב"
-                         @click="openPdf">
-                    <template #icon>
-                        <FolderDocumentIcon />
-                    </template>
-                </AppTile>
+            <AppTile label="מסמך מהמחשב"
+                     image-src="/Directory.png"
+                     @click="openPdf" />
 
-                <AppTile label="היברו-בוקס"
-                         image-src="/Hebrewbooks.png"
-                         @click="openHebrewBooksPage" />
+            <AppTile label="היברו-בוקס"
+                     image-src="/Hebrewbooks.png"
+                     @click="openHebrewBooksPage" />
 
-                <AppTile label="הגדרות"
-                         icon="fluent-color:settings-24"
-                         @click="openSettingsPage" />
+            <AppTile label="הגדרות"
+                     icon="fluent-color:settings-24"
+                     @click="openSettingsPage" />
 
-            </UniformGrid>
         </div>
     </div>
 </template>
@@ -63,10 +58,8 @@ import { useHome } from '@/components/home/useHome';
 import { pdfService } from '@/data/services/pdfService';
 import { webviewBridge } from '@/data/services/webviewBridge';
 import { bloomSearchService } from '@/data/services/bloomSearchService';
-import UniformGrid from '@/components/shared/UniformGrid.vue';
 import AppTile from '@/components/shared/AppTile.vue';
 import CircularProgress from '@/components/shared/CircularProgress.vue';
-import FolderDocumentIcon from '@/components/icons/FolderDocumentIcon.vue';
 
 const {
     openZayitOpenFilePage,
@@ -242,33 +235,37 @@ const downloadZayit = async () => {
 <style scoped>
 .homepage {
     position: relative;
-    padding: 2rem;
+    padding: 1rem;
     align-items: center;
     justify-content: center;
+    overflow-x: hidden;
 }
 
-/* שכבת שקיפות
-.homepage::before {
-    content: "";
-    position: absolute;
-    background: url('/צילום מסך 2026-01-04 233317.png') center / cover no-repeat;
-    inset: 0;
-    opacity: 0.05;
-    z-index: 0;
-}
-
-/* כל התוכן מעל הרקע
-.homepage>* {
-    position: relative;
-    z-index: 1;
-} */
-
-.grid-container {
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, 90px);
+    gap: 12px;
     width: 100%;
-    max-width: min(90vw, 800px);
-    /* Increased to accommodate larger tiles */
-    display: flex;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 0.5rem;
+    box-sizing: border-box;
     justify-content: center;
+}
+
+.grid :deep(.app-tile) {
+    width: 90px;
+    height: 90px;
+}
+
+@media (min-width: 640px) {
+    .homepage {
+        padding: 2rem;
+    }
+
+    .grid {
+        padding: 2rem;
+    }
 }
 
 /* Search tile warm color styling */

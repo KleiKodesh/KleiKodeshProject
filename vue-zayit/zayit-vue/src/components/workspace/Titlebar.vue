@@ -5,8 +5,8 @@
       <!-- Settings menu -->
       <TitlebarDropdownMenu @close="handleDropdownClose" />
 
-      <!-- Theme toggle for PDF and Hebrew books pages -->
-      <ThemeToggleButton v-if="isPdfPage || isHebrewBooksPage"
+      <!-- Theme toggle for PDF, Hebrew books, and homepage -->
+      <ThemeToggleButton v-if="isPdfPage || isHebrewBooksPage || isHomepage"
                          @click.stop />
 
       <!-- PDF page filters toggle for PDF and Hebrew books pages -->
@@ -18,7 +18,8 @@
               @click.stop="handleButtonClick(toggleToolbarHandler)"
               class="flex-center c-pointer touch-interactive"
               :title="isToolbarVisible ? 'הסתר סרגל כלים' : 'הצג סרגל כלים'">
-        <Icon :icon="isToolbarVisible ? 'fluent:options-24-filled' : 'fluent:options-24-regular'" />
+        <Icon
+              :icon="isToolbarVisible ? 'fluent:options-24-filled' : 'fluent:options-24-regular'" />
       </button>
 
       <button v-if="activeTab?.currentPage === 'bookview'"
@@ -38,7 +39,9 @@
 
     </div>
     <span class="center-text ellipsis activetab-title"
-          title="הצג רשימת טאבים">{{ activeTab?.title
+          :key="activeTab?.id"
+          :title="`${activeTab?.title} (לחץ כאן להצגת רשימת הטאבים)`">{{
+            activeTab?.title
           }}</span>
 
     <div class="flex-row justify-end">
@@ -120,6 +123,10 @@ const isPdfPage = computed(() => {
 
 const isHebrewBooksPage = computed(() => {
   return activeTab.value?.currentPage === 'hebrewbooks-view';
+});
+
+const isHomepage = computed(() => {
+  return activeTab.value?.currentPage === 'homepage';
 });
 
 const handleHeaderClick = () => {
