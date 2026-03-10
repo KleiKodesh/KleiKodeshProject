@@ -155,9 +155,32 @@ const { virtualItems } = useLineViewVirtualItems(
 )
 
 // SCROLL EVENT HANDLER
+let scrollThrottleTimer: number | null = null
 function handleScroll() {
     detectVisibleLine(emit)
     saveScrollPosition()
+    
+    // Throttle prioritization to avoid excessive calls
+    if (scrollThrottleTimer) return
+    
+    scrollThrottleTimer = window.setTimeout(() => {
+        scrollThrottleTimer = null
+        
+        // Prioritize loading lines around current scroll position
+        if (scrollContainer.value) {
+            const containerRect = scrollContainer.value.getBoundingClientRect()
+            const containerHeight = containerRect.height
+            const scrollTop = scrollContainer.value.scrollTop
+            
+            // Calculate approximate center line based on scroll position
+            // Assuming average line height of 40px (adjust if needed)
+            const avgLineHeight = 40
+            const centerLine = Math.floor((scrollTop + containerHeight / 2) / avgLineHeight)
+            
+            // Prioritize lines around the center of viewport
+            viewerState.prioritizeLines(centerLine, 200)
+        }
+    }, 100) // Throttle to once per 100ms
 }
 
 // WATCHERS - Book Loading and Tab Switching
