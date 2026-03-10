@@ -40,7 +40,7 @@ export function useCommentaryView(props: {
     const hasInitialized = ref(false)
     const previousLineIndex = ref<number>()
 
-    const { commentaryGroups, isLoadingMetadata, isLoadingMore, loadCommentaryMetadata, loadGroupContent } = useCommentaryContent()
+    const { commentaryGroups, isLoadingMetadata, isLoadingMore, loadCommentaryMetadata, loadGroupContent, queueGroupLoad } = useCommentaryContent()
 
     const selectedConnectionTypeId = computed(() =>
         tabStore.activeTab?.bookState?.commentaryFilterConnectionTypeId
@@ -158,6 +158,7 @@ export function useCommentaryView(props: {
         handleVisibleBookChanged,
         initializeCommentary,
         scrollToCommentary,
-        loadGroupContent
+        loadGroupContent,
+        queueGroupLoad
     }
 }

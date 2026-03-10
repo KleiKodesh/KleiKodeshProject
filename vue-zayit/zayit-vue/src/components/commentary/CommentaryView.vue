@@ -19,6 +19,7 @@
                            :current-match-link-index="currentMatchLinkIndex"
                            :current-match-index-in-link="currentMatchIndexInLink"
                            :load-group-content="loadGroupContent"
+                           :queue-group-load="queueGroupLoad"
                            class="flex-110"
                            @visible-book-changed="handleVisibleBookChanged"
                            @navigate-previous-line="(bookId) => emit('navigate-previous-line', bookId)"
@@ -71,7 +72,8 @@ const {
     handleVisibleBookChanged,
     initializeCommentary,
     scrollToCommentary,
-    loadGroupContent
+    loadGroupContent,
+    queueGroupLoad
 } = useCommentaryView(props)
 console.log(`⏱️ [CommentaryView] useCommentaryView completed in ${(performance.now() - composableStart).toFixed(2)}ms`)
 
