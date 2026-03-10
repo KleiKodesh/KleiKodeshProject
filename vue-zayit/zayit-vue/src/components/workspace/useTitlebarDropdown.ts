@@ -100,6 +100,7 @@ export function useTitlebarDropdown() {
     const handleOpenPdfClick = async () => {
         try {
             if (pdfService.isAvailable()) {
+                console.log('[TitlebarDropdown] Opening PDF file picker (may take several minutes for large files)...');
                 const result = await pdfService.showFilePicker();
 
                 if (result.fileName && result.dataUrl) {
@@ -108,6 +109,8 @@ export function useTitlebarDropdown() {
                     } else {
                         openPdfWithFile(result.fileName, result.dataUrl);
                     }
+                } else {
+                    console.log('[TitlebarDropdown] PDF file picker cancelled or returned no result');
                 }
             } else {
                 // Fallback to browser file picker if not in WebView2
@@ -125,6 +128,13 @@ export function useTitlebarDropdown() {
                 input.click();
             }
         } catch (error) {
+            console.error('[TitlebarDropdown] Error opening PDF file picker:', error);
+
+            // Check if it's a timeout error
+            if (error instanceof Error && error.message.includes('timeout')) {
+                console.error('[TitlebarDropdown] PDF conversion timed out - file may be too large or conversion failed');
+            }
+
             // Fallback to browser file picker on error
             const input = document.createElement('input');
             input.type = 'file';

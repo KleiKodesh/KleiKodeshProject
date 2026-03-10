@@ -225,6 +225,24 @@ class DatabaseService {
         return links
     }
 
+    async getLinksMetadata(lineId: number, connectionTypeId?: number): Promise<Array<{
+        targetLineId: number
+        targetBookId: number
+        connectionTypeId: number
+        title: string
+        lineIndex: number
+    }>> {
+        if (this.isWebViewAvailable()) {
+            const queryObj = SqlQueries.getLinksMetadata(lineId, connectionTypeId)
+            return await webviewBridge.call('ExecuteQuery', queryObj.query, queryObj.params)
+        } else if (this.isDevServerAvailable()) {
+            const queryObj = SqlQueries.getLinksMetadata(lineId, connectionTypeId)
+            return await devQuery(queryObj.query, queryObj.params)
+        } else {
+            throw new Error('No database source available')
+        }
+    }
+
     async getLinkBookIds(lineId: number, connectionTypeId?: number): Promise<number[]> {
         let results: Array<{ targetBookId: number }>
 
@@ -263,6 +281,27 @@ class DatabaseService {
             content = await webviewBridge.call('GetLineContent', bookId, lineIndex, SqlQueries.getLineContent(bookId, lineIndex))
         } else if (this.isDevServerAvailable()) {
             const result = await devQuery<{ content: string }>(SqlQueries.getLineContent(bookId, lineIndex))
+            content = result[0]?.content ?? null
+        } else {
+            throw new Error('No database source available')
+        }
+
+        // Apply censoring if enabled
+        if (content && useSettingsStore().censorDivineNames) {
+            content = censorDivineNames(content)
+        }
+
+        return content
+    }
+
+    async getLineContentById(lineId: number): Promise<string | null> {
+        let content: string | null
+
+        if (this.isWebViewAvailable()) {
+            const result = await webviewBridge.call('ExecuteQuery', SqlQueries.getLineContentById(lineId))
+            content = result[0]?.content ?? null
+        } else if (this.isDevServerAvailable()) {
+            const result = await devQuery<{ content: string }>(SqlQueries.getLineContentById(lineId))
             content = result[0]?.content ?? null
         } else {
             throw new Error('No database source available')

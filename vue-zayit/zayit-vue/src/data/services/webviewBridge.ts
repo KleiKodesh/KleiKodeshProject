@@ -217,11 +217,26 @@ class WebViewBridge {
         console.log(`[WebViewBridge] Calling ${method} with ID ${id}`)
 
         return new Promise<T>((resolve, reject) => {
-            // Set timeout to prevent hanging requests
+            // Set timeout based on operation type
+            let timeoutMs = 30000 // Default 30 seconds
+
+            // Long-running operations get extended timeouts
+            if (method === 'OpenPdfFilePicker') {
+                timeoutMs = 300000 // 5 minutes for PDF conversion
+            } else if (method === 'GetTree') {
+                timeoutMs = 60000 // 1 minute for loading entire category tree
+            } else if (method === 'GetToc') {
+                timeoutMs = 45000 // 45 seconds for large TOCs
+            } else if (method === 'GetLinks') {
+                timeoutMs = 60000 // 1 minute for commentary links (can be many)
+            } else if (method === 'GetLineRange') {
+                timeoutMs = 45000 // 45 seconds for batch line loading
+            }
+
             const timeoutId = setTimeout(() => {
                 this.pendingRequests.delete(id)
-                reject(new Error(`Request timeout for method: ${method}`))
-            }, 30000) // 30 second timeout
+                reject(new Error(`Request timeout for method: ${method} (${timeoutMs}ms)`))
+            }, timeoutMs)
 
             this.pendingRequests.set(id, {
                 resolve: (value: any) => {

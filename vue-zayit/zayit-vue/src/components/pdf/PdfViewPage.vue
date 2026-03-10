@@ -123,6 +123,7 @@ const onPdfIframeLoad = () => {
 const openFilePicker = async () => {
   try {
     if (pdfService.isAvailable()) {
+      console.log('[PdfViewPage] Opening PDF file picker (may take several minutes for large files)...');
       // Use C# PDF service via existing bridge system
       const result = await pdfService.showFilePicker();
 
@@ -142,14 +143,22 @@ const openFilePicker = async () => {
           }
         }
 
-        console.log('[Vue] PDF loaded via C# bridge:', result.fileName, result.dataUrl);
+        console.log('[PdfViewPage] PDF loaded via C# bridge:', result.fileName, result.dataUrl);
+      } else {
+        console.log('[PdfViewPage] PDF file picker cancelled or returned no result');
       }
     } else {
       // Fallback to browser file picker if not in WebView2
       fileInput.value?.click();
     }
   } catch (error) {
-    console.error('[Vue] Error opening PDF file picker:', error);
+    console.error('[PdfViewPage] Error opening PDF file picker:', error);
+    
+    // Check if it's a timeout error
+    if (error instanceof Error && error.message.includes('timeout')) {
+      console.error('[PdfViewPage] PDF conversion timed out - file may be too large or conversion failed');
+    }
+    
     // Fallback to browser file picker on error
     fileInput.value?.click();
   }
