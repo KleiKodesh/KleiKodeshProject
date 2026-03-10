@@ -131,6 +131,12 @@ export const SqlQueries = {
     WHERE id = ${lineId}
   `,
 
+  getLineContentByIds: (lineIds: number[]) => `
+    SELECT id, content
+    FROM line
+    WHERE id IN (${lineIds.join(',')})
+  `,
+
   getLineId: (bookId: number, lineIndex: number) => `
     SELECT id 
     FROM line 

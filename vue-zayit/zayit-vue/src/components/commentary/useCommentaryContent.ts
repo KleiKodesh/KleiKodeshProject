@@ -237,7 +237,7 @@ export function useCommentaryContent() {
     }
 
     /**
-     * Process the loading queue one item at a time
+     * Process the loading queue in batches for better performance
      */
     async function processLoadingQueue() {
         if (isProcessingQueue.value || loadingQueue.value.length === 0) {
@@ -245,17 +245,76 @@ export function useCommentaryContent() {
         }
 
         isProcessingQueue.value = true
+        const batchSize = 20 // Load 20 groups at a time
 
         while (loadingQueue.value.length > 0) {
-            const item = loadingQueue.value.shift()
-            if (item) {
-                await loadGroupContent(item.bookId, item.lineIndex)
-                // Small delay to keep UI responsive
-                await new Promise(resolve => setTimeout(resolve, 10))
-            }
+            // Get next batch
+            const batch = loadingQueue.value.splice(0, batchSize)
+
+            // Load batch with single batched SQL query
+            await loadGroupContentBatch(batch)
+
+            // Small delay to keep UI responsive between batches
+            await new Promise(resolve => setTimeout(resolve, 10))
         }
 
         isProcessingQueue.value = false
+    }
+
+    /**
+     * Load content for multiple groups in a single batched SQL query
+     */
+    async function loadGroupContentBatch(batch: Array<{ bookId: number; lineIndex: number }>): Promise<void> {
+        try {
+            const contentStart = performance.now()
+
+            // Collect all groups and their line IDs
+            const groupsToLoad: Array<{
+                group: CommentaryMetadata
+                lineIds: number[]
+            }> = []
+
+            const allLineIds: number[] = []
+
+            for (const item of batch) {
+                const group = commentaryGroups.value.find(
+                    g => g.targetBookId === item.bookId && g.targetLineIndex === item.lineIndex
+                )
+
+                if (!group) continue
+
+                const lineIds = group.targetLineIds || []
+                if (lineIds.length === 0) continue
+
+                groupsToLoad.push({ group, lineIds })
+                allLineIds.push(...lineIds)
+            }
+
+            if (allLineIds.length === 0) return
+
+            // Single batched SQL query for all line IDs at once
+            const contentMap = await dbService.getLineContentByIds(allLineIds)
+
+            // Assign content to each group
+            for (const { group, lineIds } of groupsToLoad) {
+                const links = lineIds
+                    .map(lineId => contentMap.get(lineId))
+                    .filter(content => content !== undefined)
+                    .map(content => ({
+                        text: content!,
+                        html: content!
+                    }))
+
+                if (links.length > 0) {
+                    group.links = links
+                    group.isLoaded = true
+                }
+            }
+
+            console.log(`⏱️ [useCommentaryContent] Loaded batch of ${groupsToLoad.length} groups (${allLineIds.length} lines) in ${(performance.now() - contentStart).toFixed(2)}ms`)
+        } catch (error) {
+            console.error('Failed to load content batch:', error)
+        }
     }
 
     /**
