@@ -2,6 +2,9 @@
     <div v-if="viewerState.totalLines.value > 0"
          class="height-fill"
          style="position: relative;">
+        <!-- Progress bar -->
+        <ProgressBar :progress="viewerState.loadingProgress.value" />
+
         <!-- Context Menu -->
         <ContextMenu ref="contextMenuRef"
                      :items="contextMenuItems" />
@@ -38,6 +41,7 @@ import { ref, watch, nextTick, onMounted, onUnmounted, computed, type Ref } from
 import { useFocus } from '@vueuse/core'
 import Line from './Line.vue'
 import ContextMenu from '@/components/shared/ContextMenu.vue'
+import ProgressBar from '@/components/shared/ProgressBar.vue'
 import { BookLineViewerService } from '@/data/services/bookLineViewerService'
 import { useTabStore } from '@/data/stores/tabStore'
 
@@ -159,29 +163,31 @@ let scrollThrottleTimer: number | null = null
 function handleScroll() {
     detectVisibleLine(emit)
     saveScrollPosition()
-    
+
     // Throttle prioritization to avoid excessive calls
     if (scrollThrottleTimer) return
-    
+
     scrollThrottleTimer = window.setTimeout(() => {
         scrollThrottleTimer = null
-        
+
         // Prioritize loading lines around current scroll position
         if (scrollContainer.value) {
             const containerRect = scrollContainer.value.getBoundingClientRect()
             const containerHeight = containerRect.height
             const scrollTop = scrollContainer.value.scrollTop
-            
+
             // Calculate approximate center line based on scroll position
             // Assuming average line height of 40px (adjust if needed)
             const avgLineHeight = 40
             const centerLine = Math.floor((scrollTop + containerHeight / 2) / avgLineHeight)
-            
+
             // Prioritize lines around the center of viewport
             viewerState.prioritizeLines(centerLine, 200)
         }
     }, 100) // Throttle to once per 100ms
 }
+
+
 
 // WATCHERS - Book Loading and Tab Switching
 // Watch for both bookId changes AND tab changes
@@ -276,16 +282,11 @@ async function scrollToLineWithFadeHighlight(
 
 // LIFECYCLE
 onMounted(() => {
-    const mountStart = performance.now()
-    console.log('⏱️ [LineView] Component mounted, initializing...')
-    
     if (scrollContainer.value && !scrollContainer.value.dataset.scrollListenerAttached) {
         scrollContainer.value.addEventListener('scroll', handleScroll, { passive: true })
         scrollContainer.value.dataset.scrollListenerAttached = 'true'
         detectVisibleLine(emit)
     }
-    
-    console.log(`⏱️ [LineView] Mount completed in ${(performance.now() - mountStart).toFixed(2)}ms`)
 })
 
 onUnmounted(() => {

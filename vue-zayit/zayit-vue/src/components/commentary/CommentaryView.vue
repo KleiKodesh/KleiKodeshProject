@@ -10,6 +10,7 @@
         <CommentaryContent ref="commentaryContentRef"
                            :commentary-groups="commentaryGroups"
                            :is-loading-metadata="isLoadingMetadata"
+                           :loading-progress="loadingProgress"
                            :book-id="props.bookId"
                            :selected-line-index="props.selectedLineIndex"
                            :connection-type-id="selectedConnectionTypeId"
@@ -53,10 +54,6 @@ const emit = defineEmits<{
     (e: 'navigate-next-line', bookId?: number): void
 }>()
 
-// Performance tracking
-const componentStart = performance.now()
-console.log('⏱️ [CommentaryView] Component setup started')
-
 const commentaryContentRef = ref<any>()
 const commentaryTreePanelRef = ref<any>()
 const showTree = ref(false) // Default to hidden
@@ -65,6 +62,7 @@ const composableStart = performance.now()
 const {
     commentaryGroups,
     isLoadingMetadata,
+    loadingProgress,
     selectedBookId,
     selectedConnectionTypeId,
     selectedTocEntryId,
@@ -75,7 +73,6 @@ const {
     loadGroupContent,
     queueGroupLoad
 } = useCommentaryView(props)
-console.log(`⏱️ [CommentaryView] useCommentaryView completed in ${(performance.now() - composableStart).toFixed(2)}ms`)
 
 // Get scroll container from commentary content
 const scrollContainer = computed(() => commentaryContentRef.value?.$el as HTMLElement | null)
@@ -121,7 +118,7 @@ watch(
     () => [props.bookId, props.selectedLineIndex, selectedConnectionTypeId.value, selectedTocEntryId.value] as const,
     () => initializeCommentary(
         (bookId) => commentaryContentRef.value?.scrollToGroup(bookId),
-        (isFirstInit) => commentaryContentRef.value?.restoreScrollPosition(isFirstInit)
+        (isFirstInit) => commentaryContentRef.value?.restoreScrollPosition(isFirstInit, queueGroupLoad)
     ),
     { immediate: true }
 )
