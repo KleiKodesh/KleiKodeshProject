@@ -46,23 +46,15 @@ export function useBookViewPage(
     })
 
     const loadTocData = async (bookId: number) => {
-        const tocLoadStart = performance.now()
-        console.log(`⏱️ [useBookView] Loading TOC for book ${bookId}...`)
         isTocLoading.value = true
         try {
-            const dbStart = performance.now()
             const { tocEntriesFlat } = await dbService.getToc(bookId)
-            console.log(`⏱️ [useBookView] DB getToc completed in ${(performance.now() - dbStart).toFixed(2)}ms`)
 
-            const buildStart = performance.now()
             const { tree, allTocs, altTocByLineIndex: altTocMap } = buildTocFromFlat(tocEntriesFlat)
-            console.log(`⏱️ [useBookView] buildTocFromFlat completed in ${(performance.now() - buildStart).toFixed(2)}ms`)
 
             tocEntries.value = tree
             altTocByLineIndex.value = altTocMap
             flatTocEntries.value = allTocs
-
-            console.log(`⏱️ [useBookView] Total TOC load time: ${(performance.now() - tocLoadStart).toFixed(2)}ms`)
         } catch (error) {
             console.error('❌ Failed to load TOC data:', error)
             tocEntries.value = []

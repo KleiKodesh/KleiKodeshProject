@@ -112,7 +112,6 @@ async function renderGroupsProgressively(
     // Show first batch immediately for fast initial render
     const firstBatch = allGroups.slice(0, initialBatchSize)
     commentaryGroupsRef.value = firstBatch
-    console.log(`⏱️ [useCommentaryContent] Showing initial ${firstBatch.length} groups immediately`)
 
     if (allGroups.length <= initialBatchSize) {
         return // All done
@@ -125,7 +124,6 @@ async function renderGroupsProgressively(
     const addNextBatch = () => {
         if (currentIndex >= allGroups.length) {
             isLoadingMoreRef.value = false
-            console.log(`⏱️ [useCommentaryContent] Progressive rendering complete (${allGroups.length} groups)`)
             return
         }
 
@@ -133,8 +131,6 @@ async function renderGroupsProgressively(
 
         // Use push to add items without triggering full re-render
         commentaryGroupsRef.value.push(...nextBatch)
-
-        console.log(`⏱️ [useCommentaryContent] Added ${nextBatch.length} more groups (total: ${commentaryGroupsRef.value.length}/${allGroups.length})`)
 
         currentIndex += subsequentBatchSize
 
@@ -160,6 +156,8 @@ export function useCommentaryContent() {
     const isLoadingMore = ref(false)
     const loadingQueue = ref<Array<{ bookId: number; lineIndex: number }>>([])
     const isProcessingQueue = ref(false)
+    const loadingProgress = ref(0) // 0-100 percentage
+    const totalGroupsToLoad = ref(0)
 
     /**
      * Load commentary metadata (fast - no content)
@@ -178,19 +176,23 @@ export function useCommentaryContent() {
             return
         }
 
-        const loadStart = performance.now()
-        console.log(`⏱️ [useCommentaryContent] Loading commentary metadata for book ${bookId}, line ${lineIndex}, tocMode: ${tocEntryId !== undefined}`)
         isLoadingMetadata.value = true
+        loadingProgress.value = 5 // Start at 5%
+
+        // Simulate progress during metadata load
+        const progressInterval = setInterval(() => {
+            if (loadingProgress.value < 18) {
+                loadingProgress.value += 1
+            }
+        }, 50) // Update every 50ms
 
         try {
             let metadata: any[] = []
 
             if (tocEntryId !== undefined) {
                 // TOC mode: Load metadata for all lines in the TOC section
-                const tocStart = performance.now()
                 const lineIdResults = await dbService.getLineIdsByTocEntry(bookId, tocEntryId)
                 const lineIds = lineIdResults.map(r => r.lineId)
-                console.log(`⏱️ [useCommentaryContent] Got ${lineIds.length} line IDs for TOC in ${(performance.now() - tocStart).toFixed(2)}ms`)
 
                 if (lineIds.length === 0) {
                     commentaryGroups.value = []
@@ -198,33 +200,29 @@ export function useCommentaryContent() {
                 }
 
                 // Load metadata in batches (fast - no content)
-                const metadataStart = performance.now()
                 metadata = await loadLinksMetadataInBatches(lineIds, connectionTypeId, 8)
-                console.log(`⏱️ [useCommentaryContent] Loaded ${metadata.length} metadata items for TOC in ${(performance.now() - metadataStart).toFixed(2)}ms`)
             } else {
                 // Single line mode: Load metadata for just the selected line
-                const lineIdStart = performance.now()
                 const lineId = await dbService.getLineId(bookId, lineIndex)
-                console.log(`⏱️ [useCommentaryContent] Got line ID in ${(performance.now() - lineIdStart).toFixed(2)}ms`)
 
                 if (!lineId) {
                     commentaryGroups.value = []
                     return
                 }
 
-                const metadataStart = performance.now()
                 metadata = await dbService.getLinksMetadata(lineId, connectionTypeId)
-                console.log(`⏱️ [useCommentaryContent] Loaded ${metadata.length} metadata items in ${(performance.now() - metadataStart).toFixed(2)}ms`)
             }
 
             // Group by title (no content yet)
-            const groupStart = performance.now()
             const grouped = groupMetadata(metadata)
             const allGroups = metadataToCommentaryMetadata(grouped)
-            console.log(`⏱️ [useCommentaryContent] Grouped into ${allGroups.length} groups in ${(performance.now() - groupStart).toFixed(2)}ms`)
 
             // Set all groups at once (fast since no content)
             commentaryGroups.value = allGroups
+
+            // Clear progress simulation and set to 20%
+            clearInterval(progressInterval)
+            loadingProgress.value = 20
 
             // Queue all groups for loading (non-priority)
             allGroups.forEach(group => {
@@ -233,9 +231,10 @@ export function useCommentaryContent() {
                 }
             })
 
-            console.log(`⏱️ [useCommentaryContent] Total metadata load time: ${(performance.now() - loadStart).toFixed(2)}ms`)
-            console.log(`⏱️ [useCommentaryContent] Queued ${allGroups.length} groups for loading`)
+            // Initialize progress tracking for content loading (20% to 100%)
+            totalGroupsToLoad.value = allGroups.length
         } catch (error) {
+            clearInterval(progressInterval)
             console.error('Failed to load commentary metadata:', error)
             commentaryGroups.value = []
         } finally {
@@ -318,7 +317,17 @@ export function useCommentaryContent() {
                 }
             }
 
-            console.log(`⏱️ [useCommentaryContent] Loaded batch of ${groupsToLoad.length} groups (${allLineIds.length} lines) in ${(performance.now() - contentStart).toFixed(2)}ms`)
+            // Update progress (scale from 20% to 90%, then jump to 100% when all loaded)
+            const loadedCount = commentaryGroups.value.filter(g => g.isLoaded).length
+            const contentProgress = totalGroupsToLoad.value > 0 ? (loadedCount / totalGroupsToLoad.value) : 1
+
+            if (contentProgress >= 1) {
+                // All content loaded - set to 100% (rendering will happen in component)
+                loadingProgress.value = 100
+            } else {
+                // Still loading - scale from 20% to 90%
+                loadingProgress.value = Math.round(20 + (contentProgress * 70)) // 20% + (0-70%)
+            }
         } catch (error) {
             console.error('Failed to load content batch:', error)
         }
@@ -400,8 +409,6 @@ export function useCommentaryContent() {
             // Update the group
             group.links = links
             group.isLoaded = true
-
-            console.log(`⏱️ [useCommentaryContent] Loaded content for group ${group.groupName} in ${(performance.now() - contentStart).toFixed(2)}ms, links now: ${group.links.length}`)
         } catch (error) {
             console.error(`Failed to load content for book ${bookId}, line ${lineIndex}:`, error)
         }
@@ -411,6 +418,7 @@ export function useCommentaryContent() {
         commentaryGroups,
         isLoadingMetadata,
         isLoadingMore,
+        loadingProgress,
         loadCommentaryMetadata,
         loadGroupContent,
         queueGroupLoad
