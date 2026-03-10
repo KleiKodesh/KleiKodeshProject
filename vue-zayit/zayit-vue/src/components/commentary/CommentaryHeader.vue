@@ -20,7 +20,7 @@
                              :show-tree="showTree"
                              @navigate-previous="emit('navigate-previous')"
                              @navigate-next="emit('navigate-next')"
-                             @navigate-previous-line="emit('navigate-next-line')"
+                             @navigate-previous-line="emit('navigate-previous-line')"
                              @navigate-next-line="emit('navigate-next-line')"
                              @navigate-to-book="emit('click')"
                              @select-commentary="(bookId) => emit('select-commentary', bookId)"

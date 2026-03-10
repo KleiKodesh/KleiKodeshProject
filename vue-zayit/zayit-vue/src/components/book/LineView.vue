@@ -253,11 +253,16 @@ async function scrollToLineWithFadeHighlight(
 
 // LIFECYCLE
 onMounted(() => {
+    const mountStart = performance.now()
+    console.log('⏱️ [LineView] Component mounted, initializing...')
+    
     if (scrollContainer.value && !scrollContainer.value.dataset.scrollListenerAttached) {
         scrollContainer.value.addEventListener('scroll', handleScroll, { passive: true })
         scrollContainer.value.dataset.scrollListenerAttached = 'true'
         detectVisibleLine(emit)
     }
+    
+    console.log(`⏱️ [LineView] Mount completed in ${(performance.now() - mountStart).toFixed(2)}ms`)
 })
 
 onUnmounted(() => {

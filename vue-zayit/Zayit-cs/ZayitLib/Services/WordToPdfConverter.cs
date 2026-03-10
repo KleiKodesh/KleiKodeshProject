@@ -132,14 +132,35 @@ namespace Zayit.Services
                     wordApp = new Microsoft.Office.Interop.Word.Application();
                     wordApp.Visible = false;
                     wordApp.ScreenUpdating = false;
+                    wordApp.DisplayAlerts = WdAlertLevel.wdAlertsNone;  // Suppress dialogs
                     createdNewApp = true;
                 }
 
-                doc = wordApp.Documents.Open(sourcePath, Visible: false);
-                doc.ExportAsFixedFormat(outputPath, WdExportFormat.wdExportFormatPDF);
+                // Open with performance optimizations
+                doc = wordApp.Documents.Open(
+                    sourcePath, 
+                    ConfirmConversions: false,
+                    ReadOnly: true,
+                    AddToRecentFiles: false,
+                    Visible: false,
+                    NoEncodingDialog: true
+                );
+                
+                // Export with web optimization for smaller, faster-loading PDFs
+                doc.ExportAsFixedFormat(
+                    outputPath, 
+                    WdExportFormat.wdExportFormatPDF,
+                    OpenAfterExport: false,
+                    OptimizeFor: WdExportOptimizeFor.wdExportOptimizeForOnScreen,  // Web-optimized
+                    CreateBookmarks: WdExportCreateBookmarks.wdExportCreateNoBookmarks,
+                    DocStructureTags: false,  // Reduces file size
+                    BitmapMissingFonts: false,  // Faster export
+                    UseISO19005_1: false  // Skip PDF/A compliance for speed
+                );
+                
                 doc.Close(false);
 
-                Console.WriteLine($"[WordToPdfConverter] Converted {sourcePath} -> {outputPath}");
+                Console.WriteLine($"[WordToPdfConverter] Converted {sourcePath} -> {outputPath} (web-optimized)");
                 return outputPath;
             }
             catch (Exception ex)
@@ -254,6 +275,7 @@ namespace Zayit.Services
                     wordApp = new Microsoft.Office.Interop.Word.Application();
                     wordApp.Visible = false;
                     wordApp.ScreenUpdating = false;
+                    wordApp.DisplayAlerts = WdAlertLevel.wdAlertsNone;  // Suppress dialogs
                     createdNewApp = true;
                 }
 
@@ -264,10 +286,21 @@ namespace Zayit.Services
                 selection.Delete();
                 selection.Paste();
 
-                doc.ExportAsFixedFormat(outputPath, WdExportFormat.wdExportFormatPDF);
+                // Export with web optimization for smaller, faster-loading PDFs
+                doc.ExportAsFixedFormat(
+                    outputPath, 
+                    WdExportFormat.wdExportFormatPDF,
+                    OpenAfterExport: false,
+                    OptimizeFor: WdExportOptimizeFor.wdExportOptimizeForOnScreen,  // Web-optimized
+                    CreateBookmarks: WdExportCreateBookmarks.wdExportCreateNoBookmarks,
+                    DocStructureTags: false,  // Reduces file size
+                    BitmapMissingFonts: false,  // Faster export
+                    UseISO19005_1: false  // Skip PDF/A compliance for speed
+                );
+                
                 doc.Close(false);
 
-                Console.WriteLine($"[WordToPdfConverter] Converted HTML {sourcePath} -> {outputPath}");
+                Console.WriteLine($"[WordToPdfConverter] Converted HTML {sourcePath} -> {outputPath} (web-optimized)");
                 return outputPath;
             }
             catch (Exception ex)

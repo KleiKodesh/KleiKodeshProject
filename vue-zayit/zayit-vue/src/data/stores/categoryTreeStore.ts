@@ -11,12 +11,18 @@ export const useCategoryTreeStore = defineStore('categoryTree', () => {
     const allBooks = ref<Book[]>([])
 
     // Start loading immediately (dbService will wait for database to be ready)
+    const storeStart = performance.now()
+    console.log('⏱️ [CategoryTreeStore] Store initialization started')
     buildTree();
 
     async function buildTree() {
+        const buildStart = performance.now()
+        console.log('⏱️ [CategoryTreeStore] Building tree...')
         try {
             error.value = null;
+            const dbStart = performance.now()
             const { categoriesFlat: categories, booksFlat: books } = await dbService.getTree()
+            console.log(`⏱️ [CategoryTreeStore] DB getTree completed in ${(performance.now() - dbStart).toFixed(2)}ms (${categories.length} categories, ${books.length} books)`)
 
             // Helper function to find root and secondary categories
             function findCategoryHierarchy(categoryId: number, categoryMap: Map<number, Category>): { root: string | null, secondary: string | null, rootOrder: number | null, secondaryOrder: number | null } {
@@ -184,6 +190,7 @@ export const useCategoryTreeStore = defineStore('categoryTree', () => {
             allBooks.value = books
             categoryTree.value = roots
             isLoading.value = false;
+            console.log(`⏱️ [CategoryTreeStore] Total buildTree time: ${(performance.now() - buildStart).toFixed(2)}ms`)
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'Unknown error';
             console.error('❌ Failed to build category tree:', err);
