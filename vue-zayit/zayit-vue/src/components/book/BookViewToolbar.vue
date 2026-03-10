@@ -108,13 +108,14 @@
         <button @click="handleAltTocToggle"
                 class="flex-center c-pointer touch-interactive"
                 :title="isAltTocVisible ? 'הסתר כותרות נוספות' : 'הצג כותרות נוספות'">
-            <Icon :icon="isAltTocVisible ? 'fluent:eye-lines-28-filled' : 'fluent:eye-lines-28-regular'" />
+            <Icon
+                  :icon="isAltTocVisible ? 'fluent:eye-lines-28-filled' : 'fluent:eye-lines-28-regular'" />
         </button>
 
         <div class="toolbar-separator"></div>
 
         <!-- Theme toggle button -->
-        <ThemeToggleButton />
+        <!-- <ThemeToggleButton /> -->
     </div>
 </template>
 
@@ -124,7 +125,7 @@ import { Icon } from '@iconify/vue'
 import { useToolbarPosition } from './useBookViewToolbarPosition'
 import { useBookViewToolbarActions } from './useBookViewToolbar'
 import CommentaryToggleIcon from '@/components/icons/CommentaryToggleIcon.vue'
-import ThemeToggleButton from '@/components/settings/ThemeToggleButton.vue'
+// import ThemeToggleButton from '@/components/settings/ThemeToggleButton.vue'
 
 const props = defineProps<{
     position: 'top' | 'bottom' | 'left' | 'right' | 'float-vertical' | 'float-horizontal'

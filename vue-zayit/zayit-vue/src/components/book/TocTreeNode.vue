@@ -11,8 +11,8 @@
             <Icon icon="fluent:chevron-left-28-regular"
                   v-if="entry.hasChildren"
                   :class="{ 'rotate-90': isExpanded, 'compact-icon': isCompactMode }" />
-            <div class="flex-110 node-title"
-                 :class="{ 'compact-text': isCompactMode }"
+            <div class="node-title"
+                 :class="{ 'compact-text': isCompactMode, 'flex-110': !isCompactMode }"
                  @click="handleSelect">{{ entry.text }}</div>
         </div>
 
