@@ -5,14 +5,21 @@
          :style="containerStyles"
          @keydown="handleKeyDown"
          @contextmenu="handleContextMenu">
+        <!-- Progress bar -->
+        <ProgressBar :progress="loadingProgress" />
+
         <!-- Context Menu -->
         <ContextMenu ref="contextMenuRef"
                      :items="contextMenuItems" />
 
         <div v-if="isLoadingMetadata"
              class="commentary-loading flex-center">
-            <LoadingSpinner text="טוען רשימת מפרשים..."
-                            variant="dots" />
+            טוען רשימת מפרשים...
+        </div>
+
+        <div v-else-if="selectedLineIndex === undefined"
+             class="commentary-empty flex-center">
+            אנא בחר שורה להצגת מפרשים
         </div>
 
         <div v-else-if="commentaryGroups.length === 0"
@@ -74,7 +81,7 @@ import { useCommentaryVirtualItems } from './useCommentaryVirtualItems'
 import { useTabStore } from '@/data/stores/tabStore'
 import CommentaryHeader from './CommentaryHeader.vue'
 import ContextMenu from '@/components/shared/ContextMenu.vue'
-import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
+import ProgressBar from '@/components/shared/ProgressBar.vue'
 import type { CommentaryTreeNode } from './useCommentaryTree'
 import type { CommentaryMetadata } from './useCommentaryContent'
 import type { ContextMenuItem } from '@/components/shared/useContextMenu'
@@ -82,6 +89,7 @@ import type { ContextMenuItem } from '@/components/shared/useContextMenu'
 const props = defineProps<{
     commentaryGroups: CommentaryMetadata[]
     isLoadingMetadata: boolean
+    loadingProgress: number
     bookId?: number
     selectedLineIndex?: number
     connectionTypeId?: number
@@ -94,25 +102,15 @@ const props = defineProps<{
     queueGroupLoad: (bookId: number, lineIndex: number, priority?: boolean) => void
 }>()
 
-// Track rendering performance
+// Load visible items after groups change
 watch(() => props.commentaryGroups, async (newGroups, oldGroups) => {
     if (newGroups.length > 0 && newGroups !== oldGroups) {
-        const renderStart = performance.now()
-        console.log(`⏱️ [CommentaryContent] Commentary groups changed (${newGroups.length} groups), waiting for render...`)
-        
         await nextTick()
-        
-        const renderTime = performance.now() - renderStart
-        console.log(`⏱️ [CommentaryContent] Render completed in ${renderTime.toFixed(2)}ms`)
-        
-        if (renderTime > 100) {
-            console.log(`⚠️ [CommentaryContent] Slow render: ${renderTime.toFixed(2)}ms for ${newGroups.length} groups`)
-        }
-        
-        // Load visible items after render
         handleScroll()
     }
 }, { deep: false })
+
+
 
 const emit = defineEmits<{
     (e: 'visible-book-changed', bookId: number): void
@@ -172,26 +170,26 @@ const contextMenuItems = computed<ContextMenuItem[]>(() => [
 function handleScroll() {
     detectVisibleGroup(emit)
     saveScrollPosition()
-    
+
     // Reprioritize visible groups in the queue
     if (!scrollContainer.value) return
-    
+
     const containerRect = scrollContainer.value.getBoundingClientRect()
     const groups = scrollContainer.value.querySelectorAll('.commentary-group')
-    
+
     groups.forEach(groupElement => {
         const rect = groupElement.getBoundingClientRect()
         const isVisible = rect.top < containerRect.bottom + 500 && rect.bottom > containerRect.top - 500
-        
+
         if (isVisible) {
             const bookIdStr = (groupElement as HTMLElement).dataset.bookId
             if (bookIdStr) {
                 const bookId = Number(bookIdStr)
                 const group = props.commentaryGroups.find(g => g.targetBookId === bookId)
-                
+
                 if (group && group.targetBookId && group.targetLineIndex !== undefined) {
                     const hasContent = group.links && group.links.length > 0
-                    
+
                     // Only reprioritize if content not already loaded
                     if (!hasContent) {
                         // Reprioritize in queue (moves to front if already queued)
@@ -276,20 +274,15 @@ function handleKeyDown(e: KeyboardEvent) {
 }
 
 onMounted(() => {
-    const mountStart = performance.now()
-    console.log('⏱️ [CommentaryContent] Component mounted, initializing...')
-    
     if (scrollContainer.value) {
         scrollContainer.value.addEventListener('scroll', handleScroll, { passive: true })
         scrollContainer.value.addEventListener('selectstart', handleSelectStart)
         detectVisibleGroup(emit)
-        
+
         // Trigger initial load for visible items
         handleScroll()
     }
     document.addEventListener('mouseup', handleMouseUp)
-    
-    console.log(`⏱️ [CommentaryContent] Mount completed in ${(performance.now() - mountStart).toFixed(2)}ms`)
 })
 
 onUnmounted(() => {
@@ -312,6 +305,7 @@ defineExpose({
 <style scoped>
 .commentary-scroll-container {
     height: 100%;
+    position: relative;
     overflow-y: auto;
     overflow-x: hidden;
     padding: 0 12px 12px;

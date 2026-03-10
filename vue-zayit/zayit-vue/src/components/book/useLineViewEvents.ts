@@ -28,6 +28,11 @@ export function useLineViewEvents(
 
     // EVENT HANDLERS - Line Click
     function handleLineClick(lineIndex: number) {
+        // Don't allow line selection if commentary pane is not visible
+        if (!myTab.value?.bookState?.showBottomPane) {
+            return
+        }
+
         selectedLineIndex.value = lineIndex
 
         // Check if this line is a TOC entry (but NOT an alt TOC entry)
