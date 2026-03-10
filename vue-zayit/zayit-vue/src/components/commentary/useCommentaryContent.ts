@@ -169,8 +169,15 @@ export function useCommentaryContent() {
         bookId: number,
         lineIndex: number,
         connectionTypeId?: number,
-        tocEntryId?: number
+        tocEntryId?: number,
+        isVisible: boolean = true
     ): Promise<void> {
+        // Don't load if commentary pane is not visible
+        if (!isVisible) {
+            commentaryGroups.value = []
+            return
+        }
+
         const loadStart = performance.now()
         console.log(`⏱️ [useCommentaryContent] Loading commentary metadata for book ${bookId}, line ${lineIndex}, tocMode: ${tocEntryId !== undefined}`)
         isLoadingMetadata.value = true

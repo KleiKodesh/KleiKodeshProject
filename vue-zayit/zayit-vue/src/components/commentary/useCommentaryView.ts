@@ -79,9 +79,10 @@ export function useCommentaryView(props: {
         const lineIndex = props.selectedLineIndex
         const connectionTypeId = selectedConnectionTypeId.value
         const tocEntryId = selectedTocEntryId.value
+        const isVisible = tabStore.activeTab?.bookState?.showBottomPane || false
 
         if (bookId !== undefined && lineIndex !== undefined) {
-            await loadCommentaryMetadata(bookId, lineIndex, connectionTypeId, tocEntryId)
+            await loadCommentaryMetadata(bookId, lineIndex, connectionTypeId, tocEntryId, isVisible)
 
             if (!hasInitialized.value && commentaryGroups.value.length > 0) {
                 hasInitialized.value = true
