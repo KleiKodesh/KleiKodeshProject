@@ -89,3 +89,23 @@ export function buildPositionMapForSearch(text: string): number[] {
 
     return map
 }
+
+/**
+ * Normalize text for search by removing all non-word characters
+ * This allows flexible matching of abbreviations and words with punctuation
+ * 
+ * USAGE: ONLY for open book page search (LineView) and Hebrew books search
+ * DO NOT use for commentary search or other search features
+ * 
+ * Examples: 
+ * - רשב"א matches רשבא (removes gershayim)
+ * - רשב'א matches רשבא (removes geresh)
+ * - Removes quotes, punctuation, and other non-word characters
+ */
+export function normalizeTextForSearch(text: string): string {
+    return text
+        .replace(/[\u05F3\u05F4]/g, '')  // Remove Hebrew geresh (׳) and gershayim (״)
+        .replace(/['"״׳]/g, '')          // Remove quotes (ASCII and Hebrew)
+        .replace(/[־\-.,;:!?()[\]{}]/g, '') // Remove punctuation and separators
+}
+

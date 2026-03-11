@@ -1,7 +1,6 @@
 <template>
     <div v-if="filteredBooks.length === 0"
          class="flex-center height-fill">
-        <Icon icon="fluent:book-open-24-regular" />
         <span class="text-secondary">לא נמצאו תוצאות</span>
     </div>
     <div v-else
@@ -29,6 +28,7 @@ import { hasConnections } from '@/data/types/Book'
 import { Icon } from '@iconify/vue'
 import { useListKeyboardNavigation } from '@/components/shared/useListKeyboardNavigation'
 import { useBookViewer } from '@/components/book/useBookViewer'
+import { normalizeTextForSearch } from '@/utils/hebrewTextProcessing'
 
 const props = defineProps<{
     books: Book[]
@@ -64,10 +64,11 @@ const filteredBooks = computed(() => {
     }
 
     const searchWords = debouncedQuery.value.trim().toLowerCase().split(/\s+/)
+        .map(word => normalizeTextForSearch(word))
     const results: Book[] = []
 
     for (const book of props.books) {
-        const searchText = `${book.path || ''} ${book.title}`.toLowerCase()
+        const searchText = normalizeTextForSearch(`${book.path || ''} ${book.title}`.toLowerCase())
         if (searchWords.every(word => searchText.includes(word))) {
             results.push(book)
             if (results.length === 250) {
