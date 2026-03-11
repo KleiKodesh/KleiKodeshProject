@@ -24,6 +24,7 @@ export interface BookState {
     commentaryScrollOffset?: number; // Commentary scroll position - pixel offset from element top
     lineScrollElementIndex?: number; // Line view scroll position - Tier 1: index in DOM elements array
     lineScrollOffset?: number; // Line view scroll position - Tier 2: pixel offset from top of that element
+    virtuaCache?: string; // Virtua cache snapshot (JSON string) for exact scroll restoration
     diacriticsState?: number; // 0 = show all, 1 = hide cantillation, 2 = hide nikkud too
     isLineDisplayInline?: boolean; // false = block display, true = inline display
     originalHtml?: string; // Store original HTML for diacritics restoration

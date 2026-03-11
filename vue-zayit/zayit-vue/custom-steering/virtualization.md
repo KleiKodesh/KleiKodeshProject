@@ -2,351 +2,132 @@
 
 ## Overview
 
-The Zayit project uses **vue3-virtual-scroller** for efficient virtualization combined with smart streaming architecture for loading book content. This system provides instant navigation while efficiently managing memory and database access through intelligent batching and priority-based loading.
+The Zayit project uses **Virtua** for efficient virtualization combined with smart streaming architecture for loading book content. This system provides instant navigation while efficiently managing memory and database access through intelligent batching and priority-based loading.
 
-## Current Architecture: Vue3-Virtual-Scroller + Smart Streaming
+## Current Architecture: Virtua + Smart Streaming
 
-The system combines **vue3-virtual-scroller** for DOM virtualization with **smart streaming** for data loading:
+The system combines **Virtua** for DOM virtualization with **smart streaming** for data loading:
 
 ### **Virtualization Characteristics**
 
-- **DOM Rendering**: Only visible lines rendered (vue3-virtual-scroller)
+- **DOM Rendering**: Only visible lines rendered (Virtua VList)
 - **Data Loading**: Smart streaming with priority-based batch loading
 - **Search**: Progressive source data search (virtualization-compatible)
 - **Memory**: Efficient (only visible DOM + loaded content buffer)
-- **Navigation**: Reliable double-scroll hack for accurate positioning
+- **Navigation**: Virtua's scrollToIndex API for accurate positioning
 - **Performance**: Handles thousands of lines without performance issues
 
-## Vue3-Virtual-Scroller Implementation
+## Virtua Implementation
 
 ### **Core Components**
 
-**BookLineViewer** (`src/components/BookLineViewer.vue`) - **Virtualized UI Component**:
+**LineView** (`src/components/book/LineView.vue`) - **Virtualized UI Component**:
 
 ```vue
 <template>
-  <DynamicScroller
-    ref="scrollerRef"
-    class="scroller height-fill line-viewer"
-    :items="virtualItems"
-    :min-item-size="minItemSize"
-    :buffer="300"
-    key-field="index"
-    @scroll.passive="handleScrollForPositionTracking"
+  <VList
+    ref="virtuaRef"
+    :data="virtualItems"
+    :style="containerStyles"
+    class="line-scroll-container"
+    @scroll="handleVirtuaScroll"
+    #default="{ item, index }"
   >
-    <template #default="{ item, index, active }">
-      <DynamicScrollerItem
-        :item="item"
-        :active="active"
-        :size-dependencies="[
-          item.content,
-          myTab?.bookState?.isLineDisplayInline,
-          myTab?.bookState?.showAltToc,
-        ]"
-      >
-        <BookLine
-          :content="item.content || '\u00A0'"
-          :line-index="index"
-          :data-line-index-observer="index"
-        />
-      </DynamicScrollerItem>
-    </template>
-  </DynamicScroller>
-</template>
-```
-
-**BookCommentaryView** (`src/components/BookCommentaryView.vue`) - **Virtualized Commentary Component**:
-
-```vue
-<template>
-  <DynamicScroller
-    ref="commentaryScrollerRef"
-    class="commentary-scroller height-fill"
-    :items="virtualCommentaryItems"
-    :min-item-size="commentaryMinItemSize"
-    :buffer="100"
-    key-field="id"
-    @scroll.passive="handleCommentaryVirtualScroll"
-  >
-    <template #default="{ item, index, active }">
-      <DynamicScrollerItem
-        :item="item"
-        :active="active"
-        :size-dependencies="[item.content, item.type]"
-        :data-commentary-item-observer="item.id"
-      >
-        <!-- Group Header -->
-        <div v-if="item.type === 'group'" class="bold group-header">
-          {{ item.content }}
-        </div>
-        <!-- Commentary Link -->
-        <div
-          v-else-if="item.type === 'link'"
-          class="link-item"
-          v-html="item.content"
-        ></div>
-      </DynamicScrollerItem>
-    </template>
-  </DynamicScroller>
+    <Line
+      :content="item.content || '\u00A0'"
+      :line-index="index"
+      :is-selected="selectedLineIndex === index"
+      :alt-toc-entries="item.altTocEntries"
+      @line-click="handleLineClick"
+    />
+  </VList>
 </template>
 ```
 
 **Key Configuration**:
 
-- `minItemSize`: Conservative estimates (24px inline, 40px block for lines; 32px for commentary)
-- `buffer`: 300 lines for main viewer, 100 for commentary
-- `size-dependencies`: Content, display mode, TOC visibility for lines; content and type for commentary
-- `data-line-index-observer` / `data-commentary-item-observer`: Essential for position tracking
+- `data`: Array of virtual items (all lines with placeholders)
+- `@scroll`: Scroll event handler for position tracking
+- `#default`: Slot for rendering each item
+- No manual buffer or item size configuration needed (Virtua handles automatically)
 
 ### **Reliable Navigation System**
 
-**Double-Scroll Hack for Accurate Positioning**:
+**Virtua's scrollToIndex API**:
 
 ```typescript
 async function scrollToLine(lineIndex: number) {
-  if (!scrollerRef.value) return;
+  if (!virtuaRef.value) return;
 
-  // Prioritize loading lines around target
-  await viewerState.prioritizeLines(lineIndex, 100);
   await nextTick();
-
-  // Hide scrolling during double-call to prevent flickering
-  const scrollerEl = scrollerRef.value.$el;
-  if (scrollerEl) {
-    scrollerEl.style.overflow = "hidden";
-    scrollerEl.style.pointerEvents = "none";
-  }
-
-  try {
-    // First call (may be inaccurate due to dynamic heights)
-    scrollerRef.value.scrollToItem(lineIndex);
-
-    // Second call after 50ms (corrects position)
-    setTimeout(() => {
-      if (scrollerRef.value) {
-        scrollerRef.value.scrollToItem(lineIndex);
-
-        // Re-enable UI after completion
-        setTimeout(() => {
-          if (scrollerEl) {
-            scrollerEl.style.overflow = "";
-            scrollerEl.style.pointerEvents = "";
-          }
-        }, 10);
-      }
-    }, 50);
-  } catch (error) {
-    // Fallback with same double-call pattern
-    const scrollTop = lineIndex * minItemSize.value;
-    if (scrollerEl) {
-      scrollerEl.scrollTop = scrollTop;
-      setTimeout(() => {
-        if (scrollerEl) {
-          scrollerEl.scrollTop = scrollTop;
-          scrollerEl.style.overflow = "";
-          scrollerEl.style.pointerEvents = "";
-        }
-      }, 50);
-    }
-  }
+  virtuaRef.value.scrollToIndex(lineIndex, { align: "start" });
 }
 ```
 
-**Why Double-Scroll Works**:
+**Why Virtua Works Better**:
 
-1. **First Call**: Gets approximately to target (virtual scroller estimates)
-2. **50ms Delay**: Allows virtual scroller to render and calculate actual sizes
-3. **Second Call**: Corrects position based on actual rendered content
-4. **Anti-Flicker**: UI hidden during adjustment prevents visible jumps
+1. **Automatic Size Calculation**: No need for minItemSize estimates
+2. **Built-in Accuracy**: scrollToIndex handles dynamic heights correctly
+3. **No Double-Scroll Hack**: Single call is accurate
+4. **Simpler Code**: Less complexity, more reliable
 
 ### **Accurate Position Tracking**
 
-**DOM-Based Line Detection** (not scroll position estimation):
+**Virtua API-Based Detection**:
 
 ```typescript
-function getTopVisibleLineIndex(): number | null {
-  if (!scrollerRef.value?.$el) return null;
+function detectVisibleLine(
+  emit: (event: "centerLineChanged", lineIndex: number) => void,
+) {
+  if (!virtuaRef.value) return;
 
-  const scrollerEl = scrollerRef.value.$el;
-  const scrollerRect = scrollerEl.getBoundingClientRect();
-  const lineElements = scrollerEl.querySelectorAll(
-    "[data-line-index-observer]",
-  );
+  const scrollOffset = virtuaRef.value.scrollOffset;
+  const viewportSize = virtuaRef.value.viewportSize;
+  const centerOffset = scrollOffset + viewportSize / 2;
+  const centerLineIndex = virtuaRef.value.findItemIndex(centerOffset);
 
-  let topMostLine: { element: Element; lineIndex: number; top: number } | null =
-    null;
-
-  for (const lineEl of lineElements) {
-    const lineRect = lineEl.getBoundingClientRect();
-
-    // Check if line is visible in viewport
-    if (
-      lineRect.bottom > scrollerRect.top &&
-      lineRect.top < scrollerRect.bottom
-    ) {
-      const lineIndex = parseInt(
-        lineEl.getAttribute("data-line-index-observer") || "-1",
-      );
-      if (lineIndex >= 0) {
-        // Find line closest to top of viewport
-        if (!topMostLine || lineRect.top < topMostLine.top) {
-          topMostLine = { element: lineEl, lineIndex, top: lineRect.top };
-        }
-      }
-    }
-  }
-
-  // Validate it's actually at the top (prevent "one line down" bug)
-  if (topMostLine) {
-    const distanceFromTop = topMostLine.top - scrollerRect.top;
-    if (distanceFromTop >= -10 && distanceFromTop <= 50) {
-      return topMostLine.lineIndex;
-    }
-  }
-
-  return null;
+  emit("centerLineChanged", centerLineIndex);
 }
 ```
 
-**Position Tracking with Navigation Protection**:
+**Position Persistence**:
 
 ```typescript
-function handleScrollForPositionTracking() {
-  if (!scrollerRef.value || viewerState.isInitialLoad) return;
+function saveScrollPosition() {
+  if (!virtuaRef.value || !tabId.value) return;
 
-  scrollUpdateTimeout = setTimeout(() => {
-    // Skip if currently navigating (search, TOC, restoration)
-    if (isNavigating.value) return;
+  const tab = tabStore.tabs.find((t) => t.id === tabId.value);
+  if (!tab?.bookState) return;
 
-    // Get actual top visible line ID from DOM
-    const topVisibleLineIndex = getTopVisibleLineIndex();
+  const scrollOffset = virtuaRef.value.scrollOffset;
+  const centerOffset = scrollOffset + virtuaRef.value.viewportSize / 2;
+  const centerLineIndex = virtuaRef.value.findItemIndex(centerOffset);
+  const lineOffset =
+    centerOffset - virtuaRef.value.getItemOffset(centerLineIndex);
 
-    if (topVisibleLineIndex !== null) {
-      // Save to tab state for restoration
-      if (myTab.value?.bookState) {
-        myTab.value.bookState.initialLineIndex = topVisibleLineIndex;
-      }
-    }
-  }, 500);
+  tab.bookState.lineScrollElementIndex = centerLineIndex;
+  tab.bookState.lineScrollOffset = lineOffset;
 }
-```
 
-### **Navigation Integration**
+async function restoreScrollPosition(smooth: boolean = false) {
+  if (!virtuaRef.value || !tabId.value) return;
 
-**All Navigation Uses Same Reliable Method**:
+  const tab = tabStore.tabs.find((t) => t.id === tabId.value);
+  if (!tab?.bookState) return;
 
-```typescript
-// TOC Navigation (BookLineViewer)
-async function handleTocSelection(lineIndex: number) {
-  isNavigating.value = true;
-  await viewerState.handleTocSelection(lineIndex);
+  const savedLineIndex = tab.bookState.lineScrollElementIndex;
+  const savedOffset = tab.bookState.lineScrollOffset ?? 0;
+
+  if (savedLineIndex === undefined) return;
+
   await nextTick();
-  await scrollToLine(lineIndex); // Uses double-scroll hack
-  setTimeout(() => {
-    isNavigating.value = false;
-  }, 200);
+
+  const lineOffset = virtuaRef.value.getItemOffset(savedLineIndex);
+  const targetOffset =
+    lineOffset + savedOffset - virtuaRef.value.viewportSize / 2;
+
+  virtuaRef.value.scrollTo(Math.max(0, targetOffset));
 }
-
-// Search Navigation (BookLineViewer)
-function handleNavigateToMatch(matchIndex: number) {
-  search.navigateToMatch(matchIndex);
-  const match = search.currentMatch.value;
-  if (match) {
-    isNavigating.value = true;
-    scrollToLine(match.itemIndex); // Uses double-scroll hack
-    setTimeout(() => {
-      const currentMark = document.querySelector(".line-viewer mark.current");
-      if (currentMark) {
-        currentMark.scrollIntoView({ behavior: "auto", block: "center" });
-      }
-      setTimeout(() => {
-        isNavigating.value = false;
-      }, 100);
-    }, 150);
-  }
-}
-
-// Commentary Group Navigation (BookCommentaryView)
-const scrollToGroup = (index: number) => {
-  if (!commentaryScrollerRef.value) return;
-
-  const groupItemId = `group-${index}`;
-  const itemIndex = virtualCommentaryItems.value.findIndex(
-    (item) => item.id === groupItemId,
-  );
-
-  if (itemIndex !== -1) {
-    isNavigating.value = true;
-
-    // Use double-scroll hack with anti-flicker
-    const scrollerEl = commentaryScrollerRef.value.$el;
-    if (scrollerEl) {
-      scrollerEl.style.overflow = "hidden";
-      scrollerEl.style.pointerEvents = "none";
-    }
-
-    commentaryScrollerRef.value.scrollToItem(itemIndex);
-
-    setTimeout(() => {
-      if (commentaryScrollerRef.value) {
-        commentaryScrollerRef.value.scrollToItem(itemIndex);
-
-        setTimeout(() => {
-          if (scrollerEl) {
-            scrollerEl.style.overflow = "";
-            scrollerEl.style.pointerEvents = "";
-          }
-          setTimeout(() => {
-            isNavigating.value = false;
-          }, 50);
-        }, 10);
-      }
-    }, 50);
-  }
-};
-
-// Commentary Search Navigation (BookCommentaryView)
-function handleNavigateToMatch(matchIndex: number) {
-  search.navigateToMatch(matchIndex);
-  const match = search.currentMatch.value;
-  if (match && commentaryScrollerRef.value) {
-    isNavigating.value = true;
-
-    commentaryScrollerRef.value.scrollToItem(match.itemIndex);
-
-    setTimeout(() => {
-      const currentMark = document.querySelector(
-        ".commentary-content mark.current",
-      );
-      if (currentMark) {
-        currentMark.scrollIntoView({ behavior: "auto", block: "center" });
-      }
-
-      setTimeout(() => {
-        isNavigating.value = false;
-      }, 100);
-    }, 100);
-  }
-}
-
-// Session/Tab Restoration (BookLineViewer)
-watch(
-  () => myTab.value?.bookState?.bookId,
-  async (bookId, oldBookId) => {
-    if (bookId && bookId !== oldBookId) {
-      const initialLineIndex = myTab.value?.bookState?.initialLineIndex;
-      if (initialLineIndex !== undefined) {
-        isNavigating.value = true;
-        setTimeout(async () => {
-          await scrollToLine(initialLineIndex); // Uses double-scroll hack
-          setTimeout(() => {
-            isNavigating.value = false;
-          }, 200);
-        }, 100);
-      }
-    }
-  },
-);
 ```
 
 ## Smart Streaming Data Layer

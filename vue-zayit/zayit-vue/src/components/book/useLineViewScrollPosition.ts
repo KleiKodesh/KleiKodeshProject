@@ -1,18 +1,15 @@
 /**
  * Line View Scroll Position Composable
  * Handles scroll position persistence, restoration, and navigation for line view
- * Uses CSS content-visibility virtualization approach
+ * Uses simple index-based restoration (reliable with virtualization)
  */
 
-import { ref, computed, type Ref } from 'vue'
+import { computed, nextTick, type Ref } from 'vue'
 import { useTabStore } from '@/data/stores/tabStore'
-import { useSettingsStore } from '@/data/stores/settingsStore'
-import { scrollToElement, scrollToElementTop } from '@/components/shared/useScrollToElement'
-import { useScrollPosition } from '@/components/shared/useScrollPosition'
+import type { VirtualizerHandle } from 'virtua/vue'
 
-export function useLineViewScrollPosition(scrollContainer: Ref<HTMLElement | null>, tabId: Ref<number | undefined>) {
+export function useLineViewScrollPosition(virtuaRef: Ref<VirtualizerHandle | null>, tabId: Ref<number | undefined>) {
     const tabStore = useTabStore()
-    const settingsStore = useSettingsStore()
 
     const currentZoom = computed(() => tabStore.activeTab?.bookState?.zoom || 100)
 
@@ -22,61 +19,52 @@ export function useLineViewScrollPosition(scrollContainer: Ref<HTMLElement | nul
         fontSize: `calc(var(--font-size, 100%) * ${currentZoom.value / 100})`
     }))
 
-    const intrinsicSize = computed(() => {
-        const zoom = currentZoom.value / 100
-        const baseFontSize = 16
-        const lineHeight = settingsStore.linePadding || 1.6
-        const estimatedHeight = baseFontSize * lineHeight * zoom * 2
-        return `auto ${Math.round(estimatedHeight)}px`
-    })
+    function saveScrollPosition() {
+        if (!virtuaRef.value || !tabId.value) return
 
-    const { saveScrollPosition, restoreScrollPosition } = useScrollPosition(scrollContainer, {
-        stateKey: 'lineScrollElementIndex',
-        offsetKey: 'lineScrollOffset',
-        elementSelector: '[data-line-index]',
-        tabId
-    })
+        const tab = tabStore.tabs.find(t => t.id === tabId.value)
+        if (!tab?.bookState) return
+
+        // Save the top visible line index
+        const scrollOffset = virtuaRef.value.scrollOffset
+        const topLineIndex = virtuaRef.value.findItemIndex(scrollOffset)
+
+        tab.bookState.lineScrollElementIndex = topLineIndex
+    }
+
+    async function restoreScrollPosition() {
+        if (!virtuaRef.value || !tabId.value) return
+
+        const tab = tabStore.tabs.find(t => t.id === tabId.value)
+        if (!tab?.bookState) return
+
+        const savedLineIndex = tab.bookState.lineScrollElementIndex
+        if (savedLineIndex !== undefined && savedLineIndex >= 0) {
+            await nextTick()
+            virtuaRef.value.scrollToIndex(savedLineIndex, { align: 'start' })
+        }
+    }
 
     async function scrollToLine(lineIndex: number) {
-        if (!scrollContainer.value) return
-        const lineElement = scrollContainer.value.querySelector(`[data-line-index="${lineIndex}"]`) as HTMLElement
-        if (!lineElement) return
+        if (!virtuaRef.value) return
 
-        const originalVisibility = lineElement.style.contentVisibility
-        lineElement.style.contentVisibility = 'visible'
-
-        await new Promise(resolve => requestAnimationFrame(resolve))
-        await scrollToElementTop(lineElement)
-
-        await new Promise(resolve => requestAnimationFrame(resolve))
-        const containerRect = scrollContainer.value.getBoundingClientRect()
-        const elementRect = lineElement.getBoundingClientRect()
-        if (Math.abs(elementRect.top - containerRect.top) >= 5) {
-            await scrollToElementTop(lineElement)
-        }
-
-        lineElement.style.contentVisibility = originalVisibility
+        await nextTick()
+        virtuaRef.value.scrollToIndex(lineIndex, { align: 'start' })
     }
 
     function detectVisibleLine(emit: (event: 'centerLineChanged', lineIndex: number) => void) {
-        if (!scrollContainer.value) return
-        const containerRect = scrollContainer.value.getBoundingClientRect()
-        const centerY = containerRect.top + containerRect.height / 2
-        const lines = scrollContainer.value.querySelectorAll('[data-line-index]')
+        if (!virtuaRef.value) return
 
-        for (const line of lines) {
-            const rect = line.getBoundingClientRect()
-            if (rect.top <= centerY && rect.bottom > centerY) {
-                const lineIndex = parseInt(line.getAttribute('data-line-index') || '0')
-                emit('centerLineChanged', lineIndex)
-                break
-            }
-        }
+        const scrollOffset = virtuaRef.value.scrollOffset
+        const viewportSize = virtuaRef.value.viewportSize
+        const centerOffset = scrollOffset + viewportSize / 2
+        const centerLineIndex = virtuaRef.value.findItemIndex(centerOffset)
+
+        emit('centerLineChanged', centerLineIndex)
     }
 
     return {
         containerStyles,
-        intrinsicSize,
         saveScrollPosition,
         restoreScrollPosition,
         scrollToLine,

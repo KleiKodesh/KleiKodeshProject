@@ -21,8 +21,7 @@
     "pinia": "^3.0.3",
     "tesseract.js": "^5.1.1",
     "virtua": "^0.48.6",
-    "vue": "^3.5.22",
-    "vue-virtual-scroller": "^2.0.0-beta.8"
+    "vue": "^3.5.22"
   },
   "devDependencies": {
     "@iconify-json/fluent": "^1.2.36",

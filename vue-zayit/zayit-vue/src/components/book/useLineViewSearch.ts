@@ -5,7 +5,7 @@
 
 import { ref, computed, type Ref } from 'vue'
 import type { BookLineViewerService } from '@/data/services/bookLineViewerService'
-import { scrollToElementCenter } from '@/components/shared/useScrollToElement'
+import type { VirtualizerHandle } from 'virtua/vue'
 
 export interface SearchMatch {
     lineIndex: number
@@ -15,7 +15,7 @@ export interface SearchMatch {
 
 export function useLineViewSearch(
     viewerState: BookLineViewerService,
-    scrollContainer: Ref<HTMLElement | null>
+    virtuaRef: Ref<VirtualizerHandle | null>
 ) {
     const searchQuery = ref('')
     const matches = ref<SearchMatch[]>([])
@@ -94,29 +94,24 @@ export function useLineViewSearch(
 
     // Find match nearest to current scroll position
     function findNearestMatch(): number {
-        if (!scrollContainer.value || matches.value.length === 0) return 0
+        if (!virtuaRef.value || matches.value.length === 0) return 0
 
-        const container = scrollContainer.value
-        const containerRect = container.getBoundingClientRect()
-        const containerCenter = containerRect.top + (containerRect.height / 2)
+        const scrollOffset = virtuaRef.value.scrollOffset
+        const viewportSize = virtuaRef.value.viewportSize
+        const centerOffset = scrollOffset + viewportSize / 2
 
         let nearestIndex = 0
         let minDistance = Infinity
 
         matches.value.forEach((match, idx) => {
-            const lineElement = container.querySelector(
-                `[data-line-index="${match.lineIndex}"]`
-            ) as HTMLElement
+            const lineOffset = virtuaRef.value!.getItemOffset(match.lineIndex)
+            const lineSize = virtuaRef.value!.getItemSize(match.lineIndex)
+            const lineCenter = lineOffset + lineSize / 2
+            const distance = Math.abs(lineCenter - centerOffset)
 
-            if (lineElement) {
-                const lineRect = lineElement.getBoundingClientRect()
-                const lineCenter = lineRect.top + (lineRect.height / 2)
-                const distance = Math.abs(lineCenter - containerCenter)
-
-                if (distance < minDistance) {
-                    minDistance = distance
-                    nearestIndex = idx
-                }
+            if (distance < minDistance) {
+                minDistance = distance
+                nearestIndex = idx
             }
         })
 
@@ -142,36 +137,10 @@ export function useLineViewSearch(
     // Scroll to current match
     async function scrollToCurrentMatch() {
         const match = currentMatch.value
-        if (!match || !scrollContainer.value) return
+        if (!match || !virtuaRef.value) return
 
-        const lineElement = scrollContainer.value.querySelector(
-            `[data-line-index="${match.lineIndex}"]`
-        ) as HTMLElement
-
-        if (!lineElement) return
-
-        // Force visibility for reliable scrolling with content-visibility
-        const originalVisibility = lineElement.style.contentVisibility
-        lineElement.style.contentVisibility = 'visible'
-
-        // Wait for render
-        await new Promise(resolve => requestAnimationFrame(resolve))
-        await scrollToElementCenter(lineElement, { behavior: 'instant' })
-
-        // Verify scroll position and retry if needed
-        await new Promise(resolve => requestAnimationFrame(resolve))
-        const containerRect = scrollContainer.value.getBoundingClientRect()
-        const elementRect = lineElement.getBoundingClientRect()
-        const containerCenter = containerRect.top + containerRect.height / 2
-        const elementCenter = elementRect.top + elementRect.height / 2
-
-        // If not centered (tolerance of 5px), retry
-        if (Math.abs(elementCenter - containerCenter) >= 5) {
-            await scrollToElementCenter(lineElement, { behavior: 'instant' })
-        }
-
-        // Restore original visibility
-        lineElement.style.contentVisibility = originalVisibility
+        // Scroll to the line containing the match
+        virtuaRef.value.scrollToIndex(match.lineIndex, { align: 'center' })
     }
 
     // Clear search

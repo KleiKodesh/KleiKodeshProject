@@ -171,6 +171,7 @@ const contextMenuItems = computed<ContextMenuItem[]>(() => [
 ])
 
 function handleScroll() {
+    console.log('[Commentary] Scroll event triggered')
     detectVisibleGroup(emit)
     saveScrollPosition()
 
@@ -208,8 +209,7 @@ async function navigateToPrevious(currentIndex: number) {
     if (currentIndex > 0) {
         const previousBook = flattenedBooks.value[currentIndex - 1]
         if (previousBook?.bookId) {
-            await scrollToGroup(previousBook.bookId)
-            focusContent()
+            emit('select-commentary', previousBook.bookId)
         }
     }
 }
@@ -218,8 +218,7 @@ async function navigateToNext(currentIndex: number) {
     if (currentIndex < flattenedBooks.value.length - 1) {
         const nextBook = flattenedBooks.value[currentIndex + 1]
         if (nextBook?.bookId) {
-            await scrollToGroup(nextBook.bookId)
-            focusContent()
+            emit('select-commentary', nextBook.bookId)
         }
     }
 }
@@ -281,10 +280,13 @@ onMounted(() => {
     if (vListRef.value) {
         const vListElement = vListRef.value.$el as HTMLElement
         scrollContainer.value = vListElement
+        console.log('[Commentary] Mounted - vListElement:', vListElement)
+        console.log('[Commentary] Scroll container:', scrollContainer.value)
 
         if (scrollContainer.value) {
             scrollContainer.value.addEventListener('scroll', handleScroll, { passive: true })
             scrollContainer.value.addEventListener('selectstart', handleSelectStart)
+            console.log('[Commentary] Scroll listener attached')
             detectVisibleGroup(emit)
 
             // Trigger initial load for visible items

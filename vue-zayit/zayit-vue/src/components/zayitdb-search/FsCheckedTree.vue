@@ -7,7 +7,7 @@
                    class="root-checkbox"
                    @change="handleRootCheckboxToggle"
                    title="בחר/בטל הכל" />
-            <span class="tree-title">סינון לפי ספרים</span>
+            <span class="tree-title">סינון תוצאות</span>
             <button @click="$emit('close')"
                     class="close-button">
                 <Icon icon="fluent:dismiss-24-regular" />

@@ -66,10 +66,11 @@ const {
     selectedBookId,
     selectedConnectionTypeId,
     selectedTocEntryId,
+    currentCommentaryBookId,
     handleSelectGroup,
     handleVisibleBookChanged,
     initializeCommentary,
-    scrollToCommentary,
+    setCurrentCommentary,
     loadGroupContent,
     queueGroupLoad
 } = useCommentaryView(props)
@@ -95,15 +96,13 @@ const currentMatchIndexInLink = computed(() => commentarySearchCurrentMatch.valu
 
 function onSelectGroup(node: CommentaryTreeNode) {
     const bookId = handleSelectGroup(node)
-    if (bookId) commentaryContentRef.value?.scrollToGroup(bookId)
+    if (bookId) setCurrentCommentary(bookId)
 }
 
 async function onSelectCommentary(bookId: number) {
-    if (commentaryContentRef.value?.scrollToGroup) {
-        await scrollToCommentary(bookId, (id) => commentaryContentRef.value!.scrollToGroup(id))
-        // Move focus back to content after navigation
-        commentaryContentRef.value?.focusContent()
-    }
+    setCurrentCommentary(bookId)
+    // Move focus back to content after navigation
+    commentaryContentRef.value?.focusContent()
 }
 
 async function handleToggleTree() {
@@ -114,13 +113,30 @@ async function handleToggleTree() {
     }
 }
 
+// Unified scroll function - single place for all scrolling logic
+async function scrollToCurrentCommentary() {
+    const bookId = currentCommentaryBookId.value || selectedBookId.value
+    if (bookId && commentaryContentRef.value?.scrollToGroup) {
+        await nextTick()
+        await commentaryContentRef.value.scrollToGroup(bookId)
+    }
+}
+
+// Watch for line/filter changes - load commentary metadata
 watch(
     () => [props.bookId, props.selectedLineIndex, selectedConnectionTypeId.value, selectedTocEntryId.value] as const,
-    () => initializeCommentary(
-        (bookId) => commentaryContentRef.value?.scrollToGroup(bookId),
-        (isFirstInit) => commentaryContentRef.value?.restoreScrollPosition(isFirstInit)
-    ),
+    async () => {
+        await initializeCommentary()
+        // Scroll after loading new commentaries
+        await scrollToCurrentCommentary()
+    },
     { immediate: true }
+)
+
+// Watch currentCommentaryBookId - scroll when user changes commentary
+watch(
+    () => currentCommentaryBookId.value,
+    () => scrollToCurrentCommentary()
 )
 
 defineExpose({

@@ -9,28 +9,26 @@
         <ContextMenu ref="contextMenuRef"
                      :items="contextMenuItems" />
 
-        <!-- CSS Virtualized scroll container -->
-        <div ref="scrollContainer"
-             class="line-scroll-container"
-             :style="containerStyles"
-             tabindex="0"
-             @keydown="handleKeyDown"
-             @contextmenu="handleContextMenu">
-            <div class="line-items">
-                <Line v-for="(item, index) in virtualItems"
-                      :key="index"
-                      :content="item.content || '\u00A0'"
-                      :line-index="index"
-                      :is-selected="selectedLineIndex === index"
-                      :alt-toc-entries="item.altTocEntries"
-                      :show-alt-toc="myTab?.bookState?.showAltToc"
-                      :class="{
-                        'show-selection': myTab?.bookState?.showBottomPane
-                    }"
-                      :style="{ containIntrinsicSize: intrinsicSize }"
-                      @line-click="handleLineClick" />
-            </div>
-        </div>
+        <!-- Virtua virtualized scroll container -->
+        <VList ref="virtuaRef"
+               :data="virtualItems"
+               :style="containerStyles"
+               class="line-scroll-container"
+               tabindex="0"
+               @keydown="handleKeyDown"
+               @contextmenu="handleContextMenu"
+               @scroll="handleVirtuaScroll"
+               #default="{ item, index }">
+            <Line :content="item.content || '\u00A0'"
+                  :line-index="index"
+                  :is-selected="selectedLineIndex === index"
+                  :alt-toc-entries="item.altTocEntries"
+                  :show-alt-toc="myTab?.bookState?.showAltToc"
+                  :class="{
+                    'show-selection': myTab?.bookState?.showBottomPane
+                }"
+                  @line-click="handleLineClick" />
+        </VList>
     </div>
 </template>
 
@@ -39,6 +37,8 @@
 // IMPORTS
 import { ref, watch, nextTick, onMounted, onUnmounted, computed, type Ref } from 'vue'
 import { useFocus } from '@vueuse/core'
+import { VList } from 'virtua/vue'
+import type { VirtualizerHandle } from 'virtua/vue'
 import Line from './Line.vue'
 import ContextMenu from '@/components/shared/ContextMenu.vue'
 import ProgressBar from '@/components/shared/ProgressBar.vue'
@@ -60,21 +60,22 @@ const tabStore = useTabStore()
 // REFS & STATE
 const myTab = computed(() => tabStore.tabs.find(t => t.id === props.tabId))
 const viewerState = new BookLineViewerService()
-const scrollContainer = ref<HTMLElement | null>(null)
+const virtuaRef = ref<VirtualizerHandle | null>(null)
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
+
+// Get the actual DOM element from Virtua for selection/copy handlers
+const virtuaDomElement = computed(() => {
+    return virtuaRef.value?.$el as HTMLElement | undefined
+})
 
 // SCROLL COMPOSABLE - Handles scrolling and position persistence
 const {
     containerStyles,
-    intrinsicSize,
     saveScrollPosition,
     restoreScrollPosition,
     scrollToLine,
     detectVisibleLine
-} = useLineViewScrollPosition(scrollContainer, computed(() => props.tabId))
-
-// Track if this component's scroller has focus
-const { focused: hasFocus } = useFocus(scrollContainer)
+} = useLineViewScrollPosition(virtuaRef, computed(() => props.tabId))
 
 // PROPS & EMITS
 const props = defineProps<{
@@ -92,17 +93,17 @@ const emit = defineEmits<{
 }>()
 
 // CONTEXT MENU - Use extracted composable
-const { contextMenuItems } = useLineViewContextMenu(scrollContainer as Ref<HTMLElement | undefined>)
+const { contextMenuItems } = useLineViewContextMenu(virtuaDomElement)
 
 function handleContextMenu(event: MouseEvent) {
     contextMenuRef.value?.show(event)
 }
 
 // SELECTION MANAGEMENT - Use extracted composable
-useLineViewSelection(scrollContainer as Ref<HTMLElement | undefined>)
+useLineViewSelection(virtuaDomElement)
 
 // COPY HANDLER - Use extracted composable
-useLineViewCopy(scrollContainer as Ref<HTMLElement | undefined>, viewerState, myTab)
+useLineViewCopy(virtuaDomElement, viewerState, myTab)
 
 // Global search highlighting state
 const globalSearchHighlightLineIndex = ref<number | null>(null)
@@ -139,7 +140,7 @@ const {
     nextMatch: nextLineSearchMatch,
     previousMatch: previousLineSearchMatch,
     clearSearch: clearLineSearch
-} = useLineViewSearch(viewerState, scrollContainer)
+} = useLineViewSearch(viewerState, virtuaRef)
 
 const currentMatchLineIndex = computed(() => lineSearchCurrentMatch.value?.lineIndex ?? null)
 const currentMatchIndexInLine = computed(() => lineSearchCurrentMatch.value?.matchIndex ?? 0)
@@ -160,7 +161,7 @@ const { virtualItems } = useLineViewVirtualItems(
 
 // SCROLL EVENT HANDLER
 let scrollThrottleTimer: number | null = null
-function handleScroll() {
+function handleVirtuaScroll(offset: number) {
     detectVisibleLine(emit)
     saveScrollPosition()
 
@@ -171,15 +172,13 @@ function handleScroll() {
         scrollThrottleTimer = null
 
         // Prioritize loading lines around current scroll position
-        if (scrollContainer.value) {
-            const containerRect = scrollContainer.value.getBoundingClientRect()
-            const containerHeight = containerRect.height
-            const scrollTop = scrollContainer.value.scrollTop
+        if (virtuaRef.value) {
+            const viewportSize = virtuaRef.value.viewportSize
+            const scrollOffset = virtuaRef.value.scrollOffset
 
-            // Calculate approximate center line based on scroll position
-            // Assuming average line height of 40px (adjust if needed)
-            const avgLineHeight = 40
-            const centerLine = Math.floor((scrollTop + containerHeight / 2) / avgLineHeight)
+            // Find approximate center line using Virtua's API
+            const centerOffset = scrollOffset + viewportSize / 2
+            const centerLine = virtuaRef.value.findItemIndex(centerOffset)
 
             // Prioritize lines around the center of viewport
             viewerState.prioritizeLines(centerLine, 200)
@@ -212,27 +211,18 @@ watch(() => {
         await viewerState.loadBook(bookId, isRestore, initialLineIndex)
         await nextTick()
 
-        // Attach scroll listener after book loads and DOM is ready
-        if (scrollContainer.value && !scrollContainer.value.dataset.scrollListenerAttached) {
-            scrollContainer.value.addEventListener('scroll', handleScroll, { passive: true })
-            scrollContainer.value.dataset.scrollListenerAttached = 'true'
-        }
-
         emit('placeholdersReady')
 
-        // Restore scroll position if we have one
-        const targetTab = tabStore.tabs.find(t => t.id === props.tabId)
-        const hasPersistedScroll = targetTab?.bookState?.lineScrollElementIndex !== undefined
-        if (!hasPersistedScroll && initialLineIndex !== undefined) {
+        // Restore scroll position or scroll to initial line
+        if (initialLineIndex !== undefined) {
             await scrollToLine(initialLineIndex)
         } else {
-            await nextTick()
-            await restoreScrollPosition(false)
+            await restoreScrollPosition()
         }
     } else if (isTabSwitch) {
-        // Tab switched but same book - just restore scroll position
+        // Tab switched - restore scroll position
         await nextTick()
-        await restoreScrollPosition(false)
+        await restoreScrollPosition()
     }
 }, { immediate: true })
 
@@ -259,8 +249,8 @@ async function scrollToLineWithFadeHighlight(
 
     if (searchTerms) {
         await nextTick()
-        // Scroll to first highlighted word
-        const lineEl = scrollContainer.value?.querySelector(`[data-line-index="${lineIndex}"]`)
+        // Scroll to first highlighted word - find the line element in Virtua's rendered items
+        const lineEl = document.querySelector(`[data-line-index="${lineIndex}"]`)
         if (lineEl) {
             let targetElement = lineEl.querySelector('.global-search-snippet-bg')
             if (!targetElement) {
@@ -282,18 +272,10 @@ async function scrollToLineWithFadeHighlight(
 
 // LIFECYCLE
 onMounted(() => {
-    if (scrollContainer.value && !scrollContainer.value.dataset.scrollListenerAttached) {
-        scrollContainer.value.addEventListener('scroll', handleScroll, { passive: true })
-        scrollContainer.value.dataset.scrollListenerAttached = 'true'
-        detectVisibleLine(emit)
-    }
+    detectVisibleLine(emit)
 })
 
 onUnmounted(() => {
-    if (scrollContainer.value) {
-        scrollContainer.value.removeEventListener('scroll', handleScroll)
-        delete scrollContainer.value.dataset.scrollListenerAttached
-    }
     saveScrollPosition()
     viewerState.cleanup()
 })
@@ -307,7 +289,7 @@ defineExpose({
         await scrollToLine(target)
     },
     scrollToLineWithFadeHighlight,
-    scrollContainer,
+    virtuaRef,
     viewerState,
     // Search methods
     performLineSearch,
@@ -327,15 +309,8 @@ defineExpose({
 <style scoped>
 .line-scroll-container {
     height: 100%;
-    overflow-y: auto;
-    overflow-x: hidden;
     padding: 8px 12px;
     outline: none;
-    scroll-padding-top: 70px;
-}
-
-.line-items :deep(.book-line) {
-    content-visibility: auto;
 }
 
 /* Global search snippet background animation */
