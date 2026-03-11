@@ -118,7 +118,7 @@ watch(
     () => [props.bookId, props.selectedLineIndex, selectedConnectionTypeId.value, selectedTocEntryId.value] as const,
     () => initializeCommentary(
         (bookId) => commentaryContentRef.value?.scrollToGroup(bookId),
-        (isFirstInit) => commentaryContentRef.value?.restoreScrollPosition(isFirstInit, queueGroupLoad)
+        (isFirstInit) => commentaryContentRef.value?.restoreScrollPosition(isFirstInit)
     ),
     { immediate: true }
 )

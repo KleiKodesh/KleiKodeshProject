@@ -13,6 +13,24 @@ function parseTagsFromCsv(csvTags: string): string[] {
         .filter(tag => tag !== '')
 }
 
+/**
+ * Normalize text for search by removing all non-word characters
+ * This allows flexible matching of abbreviations and words with punctuation
+ * 
+ * USAGE: ONLY for Hebrew books search and open book page search
+ * DO NOT use for other search features
+ * 
+ * Examples: 
+ * - רשב"א matches רשבא (removes gershayim)
+ * - רשב'א matches רשבא (removes geresh)
+ */
+function normalizeTextForSearch(text: string): string {
+    return text
+        .replace(/[\u05F3\u05F4]/g, '')  // Remove Hebrew geresh (׳) and gershayim (״)
+        .replace(/['"״׳]/g, '')          // Remove quotes (ASCII and Hebrew)
+        .replace(/[־\-.,;:!?()[\]{}]/g, '') // Remove punctuation and separators
+}
+
 interface HistoryEntry {
     id: string
     title: string
@@ -74,8 +92,8 @@ function performSearch(books: HebrewBook[], searchTerm: string): HebrewBook[] {
         return []
     }
 
-    // Normalize search term (trim and convert to lowercase for better matching)
-    const normalizedSearchTerm = searchTerm.trim().toLowerCase()
+    // Normalize search term (trim, lowercase, and remove punctuation)
+    const normalizedSearchTerm = normalizeTextForSearch(searchTerm.trim().toLowerCase())
     const searchTerms = normalizedSearchTerm.split(' ').filter((term) => term.trim() !== '')
 
     if (searchTerms.length === 0) {
@@ -90,17 +108,17 @@ function performSearch(books: HebrewBook[], searchTerm: string): HebrewBook[] {
 
         // First try: StartsWith logic (more precise)
         let startsWithResults = books.filter((entry) => {
-            const titleLower = entry.title.toLowerCase()
-            const authorLower = entry.author.toLowerCase()
+            const titleNormalized = normalizeTextForSearch(entry.title.toLowerCase())
+            const authorNormalized = normalizeTextForSearch(entry.author.toLowerCase())
 
-            if (titleLower.startsWith(term) || authorLower.startsWith(term)) {
+            if (titleNormalized.startsWith(term) || authorNormalized.startsWith(term)) {
                 return true
             }
 
             // Only parse tags if needed
             if (entry._csvTags) {
                 const tags = parseTagsFromCsv(entry._csvTags)
-                return tags.some(tag => tag.toLowerCase().startsWith(term))
+                return tags.some(tag => normalizeTextForSearch(tag.toLowerCase()).startsWith(term))
             }
 
             return false
@@ -112,17 +130,17 @@ function performSearch(books: HebrewBook[], searchTerm: string): HebrewBook[] {
         } else {
             // Fallback: includes logic (broader search)
             results = books.filter((entry) => {
-                const titleLower = entry.title.toLowerCase()
-                const authorLower = entry.author.toLowerCase()
+                const titleNormalized = normalizeTextForSearch(entry.title.toLowerCase())
+                const authorNormalized = normalizeTextForSearch(entry.author.toLowerCase())
 
-                if (titleLower.includes(term) || authorLower.includes(term)) {
+                if (titleNormalized.includes(term) || authorNormalized.includes(term)) {
                     return true
                 }
 
                 // Only parse tags if needed
                 if (entry._csvTags) {
                     const tags = parseTagsFromCsv(entry._csvTags)
-                    return tags.some(tag => tag.toLowerCase().includes(term))
+                    return tags.some(tag => normalizeTextForSearch(tag.toLowerCase()).includes(term))
                 }
 
                 return false
@@ -131,18 +149,18 @@ function performSearch(books: HebrewBook[], searchTerm: string): HebrewBook[] {
     } else {
         // Multiple terms or longer single term (4+ characters): use includes logic (case-insensitive)
         results = books.filter((entry) => {
-            const titleLower = entry.title.toLowerCase()
-            const authorLower = entry.author.toLowerCase()
+            const titleNormalized = normalizeTextForSearch(entry.title.toLowerCase())
+            const authorNormalized = normalizeTextForSearch(entry.author.toLowerCase())
 
             // Pre-parse tags once per entry
             const tags = entry._csvTags ? parseTagsFromCsv(entry._csvTags) : []
-            const tagsLower = tags.map(tag => tag.toLowerCase())
+            const tagsNormalized = tags.map(tag => normalizeTextForSearch(tag.toLowerCase()))
 
             return searchTerms.every((term) => {
                 return (
-                    titleLower.includes(term) ||
-                    authorLower.includes(term) ||
-                    tagsLower.some(tag => tag.includes(term))
+                    titleNormalized.includes(term) ||
+                    authorNormalized.includes(term) ||
+                    tagsNormalized.some(tag => tag.includes(term))
                 )
             })
         })

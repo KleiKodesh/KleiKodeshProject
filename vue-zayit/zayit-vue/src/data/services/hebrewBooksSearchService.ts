@@ -141,6 +141,9 @@ export class HebrewBooksSearchService {
     }
 
     const normalizedSearchTerm = searchTerm.trim().toLowerCase()
+      .replace(/[\u05F3\u05F4]/g, '')  // Remove Hebrew geresh and gershayim
+      .replace(/['"״׳]/g, '')          // Remove quotes
+      .replace(/[־\-.,;:!?()[\]{}]/g, '') // Remove punctuation
     const searchTerms = normalizedSearchTerm.split(' ').filter((term) => term.trim() !== '')
 
     if (searchTerms.length === 0) {
@@ -148,11 +151,17 @@ export class HebrewBooksSearchService {
     }
 
     const results = books.filter((entry) => {
-      const titleLower = entry.title.toLowerCase()
-      const authorLower = entry.author.toLowerCase()
+      const titleNormalized = entry.title.toLowerCase()
+        .replace(/[\u05F3\u05F4]/g, '')
+        .replace(/['"״׳]/g, '')
+        .replace(/[־\-.,;:!?()[\]{}]/g, '')
+      const authorNormalized = entry.author.toLowerCase()
+        .replace(/[\u05F3\u05F4]/g, '')
+        .replace(/['"״׳]/g, '')
+        .replace(/[־\-.,;:!?()[\]{}]/g, '')
 
       return searchTerms.every((term) => {
-        return titleLower.includes(term) || authorLower.includes(term)
+        return titleNormalized.includes(term) || authorNormalized.includes(term)
       })
     })
 
