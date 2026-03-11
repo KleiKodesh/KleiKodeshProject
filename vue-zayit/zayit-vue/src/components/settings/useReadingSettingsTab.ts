@@ -1,4 +1,4 @@
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@/data/stores/settingsStore'
 import type FontSelector from '@/components/settings/FontSelector.vue'
@@ -13,7 +13,8 @@ export function useReadingSettingsTab() {
         commentaryHeaderFont,
         commentaryTextFont,
         commentaryFontSize,
-        commentaryLinePadding
+        commentaryLinePadding,
+        useSeparateCommentarySettings
     } = storeToRefs(settingsStore)
 
     const availableFonts = ref<string[]>([])
@@ -22,6 +23,16 @@ export function useReadingSettingsTab() {
     const textFontRef = ref<InstanceType<typeof FontSelector> | null>(null)
     const commentaryHeaderFontRef = ref<InstanceType<typeof FontSelector> | null>(null)
     const commentaryTextFontRef = ref<InstanceType<typeof FontSelector> | null>(null)
+
+    // Sync commentary settings with line view settings when toggle is off
+    watch([useSeparateCommentarySettings, headerFont, textFont, fontSize, linePadding], () => {
+        if (!useSeparateCommentarySettings.value) {
+            commentaryHeaderFont.value = headerFont.value
+            commentaryTextFont.value = textFont.value
+            commentaryFontSize.value = fontSize.value
+            commentaryLinePadding.value = linePadding.value
+        }
+    })
 
     const closeOtherDropdowns = (except: string) => {
         if (except !== 'header' && headerFontRef.value) {
@@ -129,6 +140,7 @@ export function useReadingSettingsTab() {
         commentaryTextFont,
         commentaryFontSize,
         commentaryLinePadding,
+        useSeparateCommentarySettings,
         availableFonts,
         headerFontRef,
         textFontRef,

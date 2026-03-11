@@ -27,54 +27,57 @@
             אין מפרשים לשורה זו
         </div>
 
-        <div v-else
-             class="commentary-groups">
-            <div v-for="(group, index) in virtualGroups"
-                 :key="`${group.bookNode.path.join('-')}-${index}`"
-                 :data-book-id="group.bookNode.bookId"
-                 class="commentary-group"
-                 :style="{ containIntrinsicSize: intrinsicSize }">
-                <!-- Sticky Toolbar with navigation -->
-                <CommentaryHeader :path="group.bookNode.path"
-                                  :book-id="group.bookNode.bookId"
-                                  :line-index="group.bookNode.lineIndex"
-                                  :has-previous="index > 0"
-                                  :has-next="index < virtualGroups.length - 1"
-                                  :available-books="flattenedBooks"
-                                  :is-dragging-selection="isDraggingSelection"
-                                  :show-tree="showTree"
-                                  @click="handleGroupClick(group.bookNode)"
-                                  @navigate-previous="navigateToPrevious(index)"
-                                  @navigate-next="navigateToNext(index)"
-                                  @navigate-previous-line="emit('navigate-previous-line', group.bookNode.bookId)"
-                                  @navigate-next-line="emit('navigate-next-line', group.bookNode.bookId)"
-                                  @select-commentary="(bookId) => emit('select-commentary', bookId)"
-                                  @focus-content="focusContent"
-                                  @toggle-tree="emit('toggle-tree')" />
+        <VList v-else
+               ref="vListRef"
+               class="commentary-groups"
+               :data="virtualGroups"
+               style="height: 100%; overflow-y: auto;">
+            <template #default="{ item: group, index }">
+                <div :data-book-id="group.bookNode.bookId"
+                     class="commentary-group">
+                    <!-- Sticky Toolbar with navigation -->
+                    <CommentaryHeader :path="group.bookNode.path"
+                                      :book-id="group.bookNode.bookId"
+                                      :line-index="group.bookNode.lineIndex"
+                                      :has-previous="index > 0"
+                                      :has-next="index < virtualGroups.length - 1"
+                                      :available-books="flattenedBooks"
+                                      :is-dragging-selection="isDraggingSelection"
+                                      :show-tree="showTree"
+                                      @click="handleGroupClick(group.bookNode)"
+                                      @navigate-previous="navigateToPrevious(index)"
+                                      @navigate-next="navigateToNext(index)"
+                                      @navigate-previous-line="emit('navigate-previous-line', group.bookNode.bookId)"
+                                      @navigate-next-line="emit('navigate-next-line', group.bookNode.bookId)"
+                                      @select-commentary="(bookId) => emit('select-commentary', bookId)"
+                                      @focus-content="focusContent"
+                                      @toggle-tree="emit('toggle-tree')" />
 
-                <div class="commentary-group-content">
-                    <div v-if="!group.metadata?.links || group.metadata.links.length === 0"
-                         class="commentary-links">
-                        <div class="commentary-link">טוען תוכן....</div>
-                    </div>
-                    <div v-else
-                         class="commentary-links">
-                        <div v-for="(link, linkIndex) in group.transformedLinks"
-                             :key="linkIndex"
-                             :data-book-id="group.bookNode.bookId"
-                             :data-link-index="linkIndex"
-                             class="commentary-link selectable"
-                             v-html="link.transformedHtml" />
+                    <div class="commentary-group-content">
+                        <div v-if="!group.metadata?.links || group.metadata.links.length === 0"
+                             class="commentary-links">
+                            <div class="commentary-link">טוען תוכן....</div>
+                        </div>
+                        <div v-else
+                             class="commentary-links">
+                            <div v-for="(link, linkIndex) in group.transformedLinks"
+                                 :key="linkIndex"
+                                 :data-book-id="group.bookNode.bookId"
+                                 :data-link-index="linkIndex"
+                                 class="commentary-link selectable"
+                                 v-html="link.transformedHtml" />
+                        </div>
                     </div>
                 </div>
-            </div>
-        </div>
+            </template>
+        </VList>
     </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useEventListener } from '@vueuse/core'
+import { VList } from 'virtua/vue'
 import { useCommentaryTree } from './useCommentaryTree'
 import { useCommentaryScroll } from './useCommentaryScroll'
 import { useCommentaryVirtualItems } from './useCommentaryVirtualItems'
@@ -121,22 +124,13 @@ const emit = defineEmits<{
 }>()
 
 const scrollContainer = ref<HTMLElement | null>(null)
+const vListRef = ref<InstanceType<typeof VList> | null>(null)
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
 const isDraggingSelection = ref(false)
 const tabStore = useTabStore()
 const { flattenedBooks } = useCommentaryTree(computed(() => props.commentaryGroups))
 
 const currentDiacriticsState = computed(() => tabStore.currentDiacriticsState)
-
-const {
-    containerStyles,
-    intrinsicSize,
-    saveScrollPosition,
-    restoreScrollPosition,
-    scrollToGroup,
-    detectVisibleGroup,
-    handleGroupClick
-} = useCommentaryScroll(scrollContainer)
 
 const commentaryGroupsMap = computed(() => {
     const map = new Map<string, typeof props.commentaryGroups[0]>()
@@ -154,6 +148,15 @@ const { virtualGroups } = useCommentaryVirtualItems(
     computed(() => props.currentMatchLinkIndex ?? null),
     computed(() => props.currentMatchIndexInLink ?? 0)
 )
+
+const {
+    containerStyles,
+    saveScrollPosition,
+    restoreScrollPosition,
+    scrollToGroup,
+    detectVisibleGroup,
+    handleGroupClick
+} = useCommentaryScroll(scrollContainer, vListRef, virtualGroups)
 
 // Context menu items
 const contextMenuItems = computed<ContextMenuItem[]>(() => [
@@ -274,13 +277,19 @@ function handleKeyDown(e: KeyboardEvent) {
 }
 
 onMounted(() => {
-    if (scrollContainer.value) {
-        scrollContainer.value.addEventListener('scroll', handleScroll, { passive: true })
-        scrollContainer.value.addEventListener('selectstart', handleSelectStart)
-        detectVisibleGroup(emit)
+    // Get the scrollable element from VList
+    if (vListRef.value) {
+        const vListElement = vListRef.value.$el as HTMLElement
+        scrollContainer.value = vListElement
+        
+        if (scrollContainer.value) {
+            scrollContainer.value.addEventListener('scroll', handleScroll, { passive: true })
+            scrollContainer.value.addEventListener('selectstart', handleSelectStart)
+            detectVisibleGroup(emit)
 
-        // Trigger initial load for visible items
-        handleScroll()
+            // Trigger initial load for visible items
+            handleScroll()
+        }
     }
     document.addEventListener('mouseup', handleMouseUp)
 })
@@ -306,12 +315,13 @@ defineExpose({
 .commentary-scroll-container {
     height: 100%;
     position: relative;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding: 0 12px 12px;
     background-color: var(--reading-bg-primary);
     color: var(--reading-text-primary);
     outline: none;
+}
+
+.commentary-groups {
+    padding: 0 12px 12px;
 }
 
 .commentary-loading,

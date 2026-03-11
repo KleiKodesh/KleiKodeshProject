@@ -346,7 +346,9 @@ export function useCommentaryContent() {
             // If priority is true, move to front of queue
             if (priority) {
                 const item = loadingQueue.value.splice(existingIndex, 1)[0]
-                loadingQueue.value.unshift(item)
+                if (item) {
+                    loadingQueue.value.unshift(item)
+                }
             }
             return
         }

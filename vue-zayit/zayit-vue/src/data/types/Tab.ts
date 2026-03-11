@@ -20,10 +20,8 @@ export interface BookState {
     defaultCommentaryBookId?: number; // Book's default commentary (from book definition, used on first load)
     currentCommentaryBookId?: number; // Currently selected commentary book ID (updated by scroll observer)
     currentCommentaryGroupName?: string; // Currently selected commentary group name (for precise matching when same book appears multiple times)
-    commentaryScrollBookId?: number; // Commentary scroll position - DEPRECATED (use elementIndex instead)
-    commentaryScrollElementIndex?: number; // Commentary scroll position - Tier 1: index in DOM elements array (commentary group)
-    commentaryScrollLinkIndex?: number; // Commentary scroll position - Tier 2: which link within the commentary group
-    commentaryScrollOffset?: number; // Commentary scroll position - Tier 3: pixel offset from top of that link element
+    commentaryScrollElementIndex?: number; // Commentary scroll position - element index in DOM
+    commentaryScrollOffset?: number; // Commentary scroll position - pixel offset from element top
     lineScrollElementIndex?: number; // Line view scroll position - Tier 1: index in DOM elements array
     lineScrollOffset?: number; // Line view scroll position - Tier 2: pixel offset from top of that element
     diacriticsState?: number; // 0 = show all, 1 = hide cantillation, 2 = hide nikkud too

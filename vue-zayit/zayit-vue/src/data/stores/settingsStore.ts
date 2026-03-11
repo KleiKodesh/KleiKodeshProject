@@ -21,6 +21,7 @@ export interface Settings {
     commentaryTextFont: string
     commentaryFontSize: number
     commentaryLinePadding: number
+    useSeparateCommentarySettings: boolean
     censorDivineNames: boolean
     appZoom: number
     readingBackground: ReadingBackgroundPreset
@@ -44,6 +45,7 @@ const DEFAULT_SETTINGS: Settings = {
     commentaryTextFont: "'Times New Roman', Times, serif",
     commentaryFontSize: 105,
     commentaryLinePadding: 1.6,
+    useSeparateCommentarySettings: false,
     censorDivineNames: false,
     appZoom: 0.9,
     readingBackground: 'default',
@@ -67,6 +69,7 @@ export const useSettingsStore = defineStore('settings', () => {
     const commentaryTextFont = ref(DEFAULT_SETTINGS.commentaryTextFont)
     const commentaryFontSize = ref(DEFAULT_SETTINGS.commentaryFontSize)
     const commentaryLinePadding = ref(DEFAULT_SETTINGS.commentaryLinePadding)
+    const useSeparateCommentarySettings = ref(DEFAULT_SETTINGS.useSeparateCommentarySettings)
     const censorDivineNames = ref(DEFAULT_SETTINGS.censorDivineNames)
     const appZoom = ref(DEFAULT_SETTINGS.appZoom)
     const readingBackground = ref<ReadingBackgroundPreset>(DEFAULT_SETTINGS.readingBackground)
@@ -93,6 +96,7 @@ export const useSettingsStore = defineStore('settings', () => {
                 commentaryTextFont.value = settings.commentaryTextFont || DEFAULT_SETTINGS.commentaryTextFont
                 commentaryFontSize.value = settings.commentaryFontSize || DEFAULT_SETTINGS.commentaryFontSize
                 commentaryLinePadding.value = settings.commentaryLinePadding || DEFAULT_SETTINGS.commentaryLinePadding
+                useSeparateCommentarySettings.value = settings.useSeparateCommentarySettings ?? DEFAULT_SETTINGS.useSeparateCommentarySettings
                 censorDivineNames.value = settings.censorDivineNames || DEFAULT_SETTINGS.censorDivineNames
                 appZoom.value = settings.appZoom || DEFAULT_SETTINGS.appZoom
 
@@ -178,6 +182,7 @@ export const useSettingsStore = defineStore('settings', () => {
                 commentaryTextFont: commentaryTextFont.value,
                 commentaryFontSize: commentaryFontSize.value,
                 commentaryLinePadding: commentaryLinePadding.value,
+                useSeparateCommentarySettings: useSeparateCommentarySettings.value,
                 censorDivineNames: censorDivineNames.value,
                 appZoom: appZoom.value,
                 readingBackground: readingBackground.value,
@@ -243,6 +248,7 @@ export const useSettingsStore = defineStore('settings', () => {
         commentaryTextFont.value = DEFAULT_SETTINGS.commentaryTextFont
         commentaryFontSize.value = DEFAULT_SETTINGS.commentaryFontSize
         commentaryLinePadding.value = DEFAULT_SETTINGS.commentaryLinePadding
+        useSeparateCommentarySettings.value = DEFAULT_SETTINGS.useSeparateCommentarySettings
         censorDivineNames.value = DEFAULT_SETTINGS.censorDivineNames
         appZoom.value = DEFAULT_SETTINGS.appZoom
         readingBackground.value = DEFAULT_SETTINGS.readingBackground
@@ -263,7 +269,7 @@ export const useSettingsStore = defineStore('settings', () => {
     applyCSSVariables()
 
     // Watch for changes and persist
-    watch([headerFont, textFont, fontSize, linePadding, commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryLinePadding, censorDivineNames, appZoom, readingBackground, databasePath, globalDiacritics, globalDiacriticsState, newTabPage, defaultBookViewToolbarPosition, commentaryToolbarPosition, themePreset, lastSettingsTab, pdfPageFilters], () => {
+    watch([headerFont, textFont, fontSize, linePadding, commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryLinePadding, useSeparateCommentarySettings, censorDivineNames, appZoom, readingBackground, databasePath, globalDiacritics, globalDiacriticsState, newTabPage, defaultBookViewToolbarPosition, commentaryToolbarPosition, themePreset, lastSettingsTab, pdfPageFilters], () => {
         saveToStorage()
         applyCSSVariables()
     })
@@ -277,6 +283,7 @@ export const useSettingsStore = defineStore('settings', () => {
         commentaryTextFont,
         commentaryFontSize,
         commentaryLinePadding,
+        useSeparateCommentarySettings,
         censorDivineNames,
         appZoom,
         readingBackground,

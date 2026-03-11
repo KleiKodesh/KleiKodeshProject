@@ -74,8 +74,8 @@
           <div v-if="!isHomepage"
                @click.stop="handleOpenPdfClick"
                class="flex-row flex-center-start hover-bg c-pointer dropdown-item">
-            <Icon icon="fluent:document-pdf-28-regular" />
-            <span class="dropdown-label">פתח PDF</span>
+            <Icon icon="fluent:folder-open-28-regular" />
+            <span class="dropdown-label">פתח קובץ מהמחשב</span>
           </div>
 
           <!-- Hebrew Books - only show on open file page, not homepage-->

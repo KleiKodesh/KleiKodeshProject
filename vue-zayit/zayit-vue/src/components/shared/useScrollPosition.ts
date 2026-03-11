@@ -16,8 +16,8 @@ export interface ScrollPositionState {
 export function useScrollPosition(
     scrollContainer: Ref<HTMLElement | null>,
     options: {
-        stateKey: 'lineScrollElementIndex' | 'commentaryScrollElementIndex'
-        offsetKey: 'lineScrollOffset' | 'commentaryScrollOffset'
+        stateKey: 'lineScrollElementIndex'
+        offsetKey: 'lineScrollOffset'
         elementSelector: string
         tabId?: Ref<number | undefined>
     }
