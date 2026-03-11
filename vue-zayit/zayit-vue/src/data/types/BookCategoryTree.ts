@@ -2,7 +2,7 @@ import type { Book } from './Book'
 
 export interface Category {
     id: number
-    parentId: number
+    parentId: number | null
     title: string
     path?: string
     level: number

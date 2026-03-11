@@ -30,11 +30,15 @@ app.use(pinia)
 // Initialize settings before mounting
 import { useSettingsStore } from '@/data/stores/settingsStore'
 import { useConnectionTypesStore } from '@/data/stores/connectionTypesStore'
+import { useCategoryTreeStore } from '@/data/stores/categoryTreeStore'
 
 useSettingsStore()
 
 // Initialize connection types on app startup
 const connectionTypesStore = useConnectionTypesStore()
 connectionTypesStore.loadConnectionTypes()
+
+// Initialize category tree on app startup (it auto-loads on first access)
+useCategoryTreeStore()
 
 app.mount('#app')

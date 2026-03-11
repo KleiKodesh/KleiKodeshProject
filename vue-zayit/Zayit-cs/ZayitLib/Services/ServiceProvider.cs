@@ -90,6 +90,9 @@ namespace Zayit.Services
         public object SearchLines(int bookId, string term, string q) => _db.SearchLines(bookId, term, q);
         public object DiagnoseDatabaseContent() => _db.DiagnoseDatabaseContent();
 
+        // Generic query execution for custom queries
+        public object ExecuteQuery(string q, object[] p = null) => _db.ExecuteQuery(q, p);
+
         // TOC-based Line Loading
         public object GetLineIdsByTocEntry(int tocEntryId, string q) => _db.GetLineIdsByTocEntry(tocEntryId, q);
         public object GetLinesByIds(int bookId, object lineIds, string q) => _db.GetLinesByIds(bookId, lineIds, q);
