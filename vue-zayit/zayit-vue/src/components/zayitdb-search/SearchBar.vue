@@ -41,7 +41,7 @@
             <button @click.stop="$emit('toggleFilter')"
                     class="search-button-inside search-button-right"
                     :class="{ 'filter-active': filterCount > 0 }"
-                    :title="filterCount > 0 ? `סינון: ${filterCount} ספרים` : 'סינון לפי ספרים'">
+                    :title="filterCount > 0 ? `סינון: ${filterCount} ספרים` : 'סינון תוצאות'">
                 <Icon icon="fluent:filter-24-regular" />
             </button>
         </div>

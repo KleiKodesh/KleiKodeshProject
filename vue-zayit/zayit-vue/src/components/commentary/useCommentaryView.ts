@@ -50,6 +50,16 @@ export function useCommentaryView(props: {
         tabStore.activeTab?.bookState?.selectedTocEntryId
     )
 
+    // Current commentary book ID from store (single source of truth)
+    const currentCommentaryBookId = computed({
+        get: () => tabStore.activeTab?.bookState?.currentCommentaryBookId,
+        set: (value) => {
+            if (tabStore.activeTab?.bookState) {
+                tabStore.activeTab.bookState.currentCommentaryBookId = value
+            }
+        }
+    })
+
     function handleSelectGroup(node: CommentaryTreeNode) {
         if (node.type === 'book' && node.bookId !== undefined) {
             selectedBookId.value = node.bookId
@@ -58,23 +68,12 @@ export function useCommentaryView(props: {
     }
 
     function handleVisibleBookChanged(bookId: number) {
+        console.log('[Commentary] Visible book changed to:', bookId)
         selectedBookId.value = bookId
-        // Update the persisted current commentary book ID
-        if (tabStore.activeTab?.bookState) {
-            tabStore.activeTab.bookState.currentCommentaryBookId = bookId
-        }
+        currentCommentaryBookId.value = bookId
     }
 
-    async function scrollToCommentary(bookId: number, scrollToGroup: (bookId: number) => Promise<void>) {
-        selectedBookId.value = bookId
-        // Update the persisted current commentary book ID
-        if (tabStore.activeTab?.bookState) {
-            tabStore.activeTab.bookState.currentCommentaryBookId = bookId
-        }
-        await retryScrollToGroup(bookId, scrollToGroup)
-    }
-
-    async function initializeCommentary(scrollToGroup: (bookId: number) => Promise<void>, restoreScrollPosition: (isFirstInit: boolean) => Promise<void>) {
+    async function initializeCommentary() {
         const bookId = props.bookId
         const lineIndex = props.selectedLineIndex
         const connectionTypeId = selectedConnectionTypeId.value
@@ -82,70 +81,49 @@ export function useCommentaryView(props: {
         const isVisible = tabStore.activeTab?.bookState?.showBottomPane || false
 
         if (bookId !== undefined && lineIndex !== undefined) {
+            console.log('[Commentary] Loading metadata for line:', lineIndex, 'Current book:', currentCommentaryBookId.value)
+
             await loadCommentaryMetadata(bookId, lineIndex, connectionTypeId, tocEntryId, isVisible)
 
-            if (!hasInitialized.value && commentaryGroups.value.length > 0) {
-                hasInitialized.value = true
-                const hasPersistedScroll = tabStore.activeTab?.bookState?.commentaryScrollElementIndex !== undefined
+            if (commentaryGroups.value.length > 0) {
+                console.log('[Commentary] Loaded groups:', commentaryGroups.value.map(g => ({ name: g.groupName, id: g.targetBookId })))
 
-                if (!hasPersistedScroll) {
+                // If no current book is set, initialize to default or first
+                if (!currentCommentaryBookId.value || !hasInitialized.value) {
                     const defaultBookId = props.book?.defaultCommentatorBookId
                     const firstBookId = commentaryGroups.value[0]?.targetBookId
-                    const targetBookId = defaultBookId || firstBookId
-
-                    if (targetBookId) {
-                        await scrollToCommentary(targetBookId, scrollToGroup)
-                    }
-                } else {
-                    await nextTick()
-                    await restoreScrollPosition(false)
+                    currentCommentaryBookId.value = defaultBookId || firstBookId
+                    console.log('[Commentary] Initialized to:', currentCommentaryBookId.value)
+                    hasInitialized.value = true
                 }
-            } else if (commentaryGroups.value.length > 0) {
-                const isLineChange = previousLineIndex.value !== undefined && previousLineIndex.value !== lineIndex
 
-                if (isLineChange) {
-                    // Get the currently selected commentary book ID
-                    const currentBookId = tabStore.activeTab?.bookState?.currentCommentaryBookId || selectedBookId.value
+                // Check if current book exists in new commentary list
+                const currentExists = commentaryGroups.value.some(
+                    group => group.targetBookId === currentCommentaryBookId.value
+                )
 
-                    if (currentBookId) {
-                        // Check if the current commentary exists in the new line
-                        const currentCommentaryExists = commentaryGroups.value.some(
-                            group => group.targetBookId === currentBookId
-                        )
+                console.log('[Commentary] Current book exists in new line:', currentExists, 'Book ID:', currentCommentaryBookId.value)
 
-                        if (currentCommentaryExists) {
-                            // Stay on the current commentary
-                            selectedBookId.value = currentBookId
-                            await nextTick()
-                            await scrollToGroup(currentBookId)
-                        } else {
-                            // Fall back to default or first
-                            const defaultBookId = props.book?.defaultCommentatorBookId
-                            const firstBookId = commentaryGroups.value[0]?.targetBookId
-                            const targetBookId = defaultBookId || firstBookId
-
-                            if (targetBookId) {
-                                await scrollToCommentary(targetBookId, scrollToGroup)
-                            }
-                        }
-                    } else {
-                        // No current commentary, use default or first
-                        const defaultBookId = props.book?.defaultCommentatorBookId
-                        const firstBookId = commentaryGroups.value[0]?.targetBookId
-                        const targetBookId = defaultBookId || firstBookId
-
-                        if (targetBookId) {
-                            await scrollToCommentary(targetBookId, scrollToGroup)
-                        }
-                    }
-                } else {
-                    await nextTick()
-                    await restoreScrollPosition(false)
+                // If current book doesn't exist, fall back to default or first
+                if (!currentExists) {
+                    const defaultBookId = props.book?.defaultCommentatorBookId
+                    const firstBookId = commentaryGroups.value[0]?.targetBookId
+                    currentCommentaryBookId.value = defaultBookId || firstBookId
+                    console.log('[Commentary] Fell back to:', currentCommentaryBookId.value)
                 }
+
+                // Trigger scroll by updating selectedBookId (watcher will handle scroll)
+                selectedBookId.value = currentCommentaryBookId.value
             }
 
             previousLineIndex.value = lineIndex
         }
+    }
+
+    // Set current commentary book (used by all interactions)
+    function setCurrentCommentary(bookId: number) {
+        currentCommentaryBookId.value = bookId
+        selectedBookId.value = bookId
     }
 
     return {
@@ -156,10 +134,11 @@ export function useCommentaryView(props: {
         selectedBookId,
         selectedConnectionTypeId,
         selectedTocEntryId,
+        currentCommentaryBookId,
         handleSelectGroup,
         handleVisibleBookChanged,
         initializeCommentary,
-        scrollToCommentary,
+        setCurrentCommentary,
         loadGroupContent,
         queueGroupLoad
     }
