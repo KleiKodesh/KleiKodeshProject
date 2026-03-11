@@ -57,14 +57,20 @@ export function useCommentaryScroll(
     }
 
     function detectVisibleGroup(emit: (event: 'visible-book-changed', bookId: number) => void) {
-        if (!scrollContainer.value) return
+        if (!scrollContainer.value) {
+            console.log('[Commentary] detectVisibleGroup - no scroll container')
+            return
+        }
 
         const topY = scrollContainer.value.getBoundingClientRect().top + 50
         const groups = scrollContainer.value.querySelectorAll('[data-book-id]')
+        console.log('[Commentary] detectVisibleGroup - found groups:', groups.length, 'topY:', topY)
+
         for (const group of groups) {
             const rect = group.getBoundingClientRect()
             if (rect.top <= topY && rect.bottom > topY) {
                 const bookId = parseInt(group.getAttribute('data-book-id') || '0')
+                console.log('[Commentary] Found visible group:', bookId)
                 if (bookId) {
                     emit('visible-book-changed', bookId)
                 }
