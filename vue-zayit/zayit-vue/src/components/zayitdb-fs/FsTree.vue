@@ -18,9 +18,9 @@
         </div>
         <template v-else>
             <FsCategoryNode v-for="(category, index) in categoryTree"
-                                  :key="category.id"
-                                  :ref="el => { if (el) nodeRefs[index] = el as InstanceType<typeof FsCategoryNode> }"
-                                  :category="category" />
+                            :key="category.id"
+                            :ref="el => { if (el) nodeRefs[index] = el as InstanceType<typeof FsCategoryNode> }"
+                            :category="category" />
         </template>
     </div>
 </template>
@@ -39,8 +39,8 @@ const emit = defineEmits<{
 
 const categoryTreeStore = useCategoryTreeStore()
 const { categoryTree } = useZayitFs()
-const isLoading = ref(categoryTreeStore.isLoading)
-const error = ref(categoryTreeStore.error)
+const isLoading = categoryTreeStore.isLoading
+const error = categoryTreeStore.error
 const nodeRefs = ref<InstanceType<typeof FsCategoryNode>[]>([])
 const treeContainerRef = ref<HTMLElement>()
 

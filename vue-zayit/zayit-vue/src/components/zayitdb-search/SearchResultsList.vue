@@ -200,10 +200,8 @@ defineExpose({
     user-select: text;
 }
 
-.result-snippet :deep(mark) {
-    background-color: transparent;
+.result-snippet :deep(.search-match) {
     color: var(--accent-color);
     font-weight: 600;
-    padding: 0;
 }
 </style>

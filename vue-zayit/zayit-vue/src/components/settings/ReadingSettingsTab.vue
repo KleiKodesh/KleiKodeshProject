@@ -33,8 +33,7 @@
     <!-- Section: Commentary Settings -->
     <div class="section-header">הגדרות תצוגת פירושים</div>
 
-    <div class="setting-row">
-      <label class="setting-label flex-between bold">הגדרות נפרדות למפרשים</label>
+    <div class="setting-group">
       <div class="button-group flex-row">
         <button :class="['toggle-btn c-pointer', { active: !useSeparateCommentarySettings }]"
                 @click="useSeparateCommentarySettings = false">

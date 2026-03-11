@@ -1,5 +1,6 @@
 <template>
-    <div class="category-node">
+    <div v-if="!hasSearched || totalResultCount > 0"
+         class="category-node">
         <div class="category-header"
              :style="{ paddingInlineStart: `${8 + depth * 20}px` }"
              @click="toggleExpand">
@@ -19,31 +20,34 @@
         </div>
 
         <template v-if="isExpanded">
-            <CheckedCategoryNode v-for="child in category.children"
-                                 :key="child.id"
-                                 :category="child"
-                                 :depth="depth + 1"
-                                 :checked-book-ids="checkedBookIds"
-                                 :result-counts="resultCounts"
-                                 @toggle-book="$emit('toggleBook', $event)"
-                                 @toggle-category="(cat: Category, checked: boolean) => $emit('toggleCategory', cat, checked)" />
+            <FsCheckedCategoryNode v-for="child in category.children"
+                                   :key="child.id"
+                                   :category="child"
+                                   :depth="depth + 1"
+                                   :checked-book-ids="checkedBookIds"
+                                   :result-counts="resultCounts"
+                                   :has-searched="hasSearched"
+                                   @toggle-book="$emit('toggleBook', $event)"
+                                   @toggle-category="(cat: Category, checked: boolean) => $emit('toggleCategory', cat, checked)" />
 
-            <div v-for="book in category.books"
-                 :key="book.id"
-                 class="book-node"
-                 :style="{ paddingInlineStart: `${28 + (depth + 1) * 20}px` }"
-                 @click="handleBookToggle(book.id)">
-                <input type="checkbox"
-                       :checked="checkedBookIds.has(book.id)"
-                       class="book-checkbox"
-                       @click.stop
-                       @change="handleBookToggle(book.id)" />
-                <Icon icon="fluent:book-open-24-regular"
-                      class="book-icon" />
-                <span class="book-title">{{ book.title }}</span>
-                <span v-if="resultCounts.get(book.id)"
-                      class="result-count">({{ resultCounts.get(book.id) }})</span>
-            </div>
+            <template v-for="book in category.books"
+                      :key="book.id">
+                <div v-if="!hasSearched || resultCounts.get(book.id)"
+                     class="book-node"
+                     :style="{ paddingInlineStart: `${28 + (depth + 1) * 20}px` }"
+                     @click="handleBookToggle(book.id)">
+                    <input type="checkbox"
+                           :checked="checkedBookIds.has(book.id)"
+                           class="book-checkbox"
+                           @click.stop
+                           @change="handleBookToggle(book.id)" />
+                    <Icon icon="fluent:book-open-24-regular"
+                          class="book-icon" />
+                    <span class="book-title">{{ book.title }}</span>
+                    <span v-if="resultCounts.get(book.id)"
+                          class="result-count">({{ resultCounts.get(book.id) }})</span>
+                </div>
+            </template>
         </template>
     </div>
 </template>
@@ -59,9 +63,11 @@ const props = withDefaults(
         depth?: number
         checkedBookIds: Set<number>
         resultCounts: Map<number, number>
+        hasSearched?: boolean
     }>(),
     {
-        depth: 0
+        depth: 0,
+        hasSearched: false
     }
 )
 

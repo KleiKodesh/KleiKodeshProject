@@ -9,7 +9,7 @@ export const SqlQueries = {
   `,
 
   getAllBooks: `
-    SELECT 
+    SELECT DISTINCT
       b.Id,
       b.CategoryId,
       b.Title,
@@ -21,16 +21,9 @@ export const SqlQueries = {
       b.HasCommentaryConnection,
       b.HasOtherConnection,
       b.HasSourceConnection,
-      dc.commentatorBookId as defaultCommentatorBookId,
-      pd.date as pubDate
+      (SELECT commentatorBookId FROM default_commentator WHERE bookId = b.Id AND position = 0 LIMIT 1) as defaultCommentatorBookId,
+      (SELECT pd.date FROM book_pub_date bpd JOIN pub_date pd ON pd.id = bpd.pubDateId WHERE bpd.bookId = b.Id LIMIT 1) as pubDate
     FROM book b
-    LEFT JOIN (
-      SELECT bookId, commentatorBookId
-      FROM default_commentator
-      WHERE position = 0
-    ) dc ON dc.bookId = b.Id
-    LEFT JOIN book_pub_date bpd ON bpd.bookId = b.Id
-    LEFT JOIN pub_date pd ON pd.id = bpd.pubDateId
     WHERE b.externalLibraryId IS NULL
   `,
 

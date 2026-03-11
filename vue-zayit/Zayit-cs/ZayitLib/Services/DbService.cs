@@ -256,5 +256,18 @@ namespace Zayit.Services
                 };
             }
         }
+
+        public object ExecuteQuery(string q, object[] p = null)
+        {
+            try
+            {
+                return _db.ExecuteQuery(q, p);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[DbService] ERROR in ExecuteQuery: {ex.Message}");
+                return new object[0];
+            }
+        }
     }
 }

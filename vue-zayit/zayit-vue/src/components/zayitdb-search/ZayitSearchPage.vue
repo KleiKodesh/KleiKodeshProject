@@ -1,5 +1,5 @@
 <template>
-  <div class="flex-column height-fill search-page">
+  <div class="flex-column height-fill search-page position-relative">
     <!-- Results area -->
     <SearchResultsList ref="resultsListRef"
                        :results="filteredResults"
@@ -23,6 +23,7 @@
                    ref="filterPanelRef"
                    :checked-book-ids="checkedBookIds"
                    :result-counts="resultCounts"
+                   :has-searched="hasSearched"
                    @toggle-book="toggleBook"
                    @toggle-category="toggleCategory"
                    @check-all="checkAllBooks"
@@ -132,4 +133,8 @@ onMounted(async () => {
 })
 </script>
 
-<style scoped></style>
+<style scoped>
+.search-page {
+  position: relative;
+}
+</style>

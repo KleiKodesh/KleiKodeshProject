@@ -48,7 +48,7 @@ export function useSearchResultsList(
             if (term.length > 0) {
                 const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
                 const regex = new RegExp(`(${escapedTerm})`, 'gi')
-                highlighted = highlighted.replace(regex, '<mark>$1</mark>')
+                highlighted = highlighted.replace(regex, '<span class="search-match">$1</span>')
             }
         })
 
