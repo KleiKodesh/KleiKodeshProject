@@ -281,7 +281,7 @@ onMounted(() => {
     if (vListRef.value) {
         const vListElement = vListRef.value.$el as HTMLElement
         scrollContainer.value = vListElement
-        
+
         if (scrollContainer.value) {
             scrollContainer.value.addEventListener('scroll', handleScroll, { passive: true })
             scrollContainer.value.addEventListener('selectstart', handleSelectStart)

@@ -21,12 +21,13 @@
             <div v-else
                  class="tree-content">
                 <FsCheckedCategoryNode v-for="category in categoryTreeStore.categoryTree"
-                                     :key="category.id"
-                                     :category="category"
-                                     :checked-book-ids="checkedBookIds"
-                                     :result-counts="resultCounts"
-                                     @toggle-book="toggleBook"
-                                     @toggle-category="toggleCategory" />
+                                       :key="category.id"
+                                       :category="category"
+                                       :checked-book-ids="checkedBookIds"
+                                       :result-counts="resultCounts"
+                                       :has-searched="hasSearched"
+                                       @toggle-book="toggleBook"
+                                       @toggle-category="toggleCategory" />
             </div>
         </div>
     </div>
@@ -42,6 +43,7 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 const props = defineProps<{
     checkedBookIds: Set<number>
     resultCounts: Map<number, number>
+    hasSearched?: boolean
 }>()
 
 const emit = defineEmits<{
