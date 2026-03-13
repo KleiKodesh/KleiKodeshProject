@@ -1,9 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "include": ["src/svelte/**/*"],
-  "exclude": ["node_modules"],
-  "compilerOptions": {
-    "noEmit": true,
-    "verbatimModuleSyntax": true
-  }
-}

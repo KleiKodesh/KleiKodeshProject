@@ -1,6 +1,0 @@
-# Build artifacts
-target/
-
-# Resources that need to be copied before build
-resources/splash.png
-resources/Zayit.msi

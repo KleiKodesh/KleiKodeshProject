@@ -35,6 +35,7 @@
                @scroll="handleScroll">
             <template #default="{ item: group, index }">
                 <div :data-book-id="group.bookNode.bookId"
+                     :data-group-index="index"
                      class="commentary-group">
                     <!-- Sticky Toolbar with navigation -->
                     <CommentaryHeader :path="group.bookNode.path"
