@@ -4,7 +4,7 @@ import type { TocEntry } from '@/data/types/BookToc';
 export function useToc() {
     return {
         // TOC building
-        buildTocFromFlat: (tocEntriesFlat: TocEntry[]) => bookTocService.buildTocFromFlat(tocEntriesFlat),
+        buildTocFromFlat: (tocEntriesFlat: TocEntry[], bookTitle?: string) => bookTocService.buildTocFromFlat(tocEntriesFlat, bookTitle),
         findTocEntryByLineIndex: (tocEntries: TocEntry[], lineIndex: number) =>
             bookTocService.findTocEntryByLineIndex(tocEntries, lineIndex),
         flattenTocTree: (tocEntries: TocEntry[]) => bookTocService.flattenTocTree(tocEntries),

@@ -38,7 +38,6 @@
 import { ref, watch, nextTick, onMounted, onUnmounted, computed, type Ref } from 'vue'
 import { useFocus } from '@vueuse/core'
 import { VList } from 'virtua/vue'
-import type { VirtualizerHandle } from 'virtua/vue'
 import Line from './Line.vue'
 import ContextMenu from '@/components/shared/ContextMenu.vue'
 import ProgressBar from '@/components/shared/ProgressBar.vue'
@@ -50,7 +49,7 @@ import { useLineViewContextMenu } from './useLineViewContextMenu'
 import { useLineViewSelection } from './useLineViewSelection'
 import { useLineViewCopy } from './useLineViewCopy'
 import { useLineViewVirtualItems } from './useLineViewVirtualItems'
-import { useLineViewScrollPosition } from './useLineViewScrollPosition'
+import { useLineViewScrollPositionVirtua as useLineViewScrollPosition } from './useLineViewScrollPositionVirtua'
 import { useLineViewEvents } from './useLineViewEvents'
 import { useLineViewSearch } from './useLineViewSearch'
 
@@ -60,7 +59,7 @@ const tabStore = useTabStore()
 // REFS & STATE
 const myTab = computed(() => tabStore.tabs.find(t => t.id === props.tabId))
 const viewerState = new BookLineViewerService()
-const virtuaRef = ref<VirtualizerHandle | null>(null)
+const virtuaRef: Ref<any> = ref(null)
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
 
 // Get the actual DOM element from Virtua for selection/copy handlers
@@ -74,7 +73,8 @@ const {
     saveScrollPosition,
     restoreScrollPosition,
     scrollToLine,
-    detectVisibleLine
+    detectVisibleLine,
+    findItemIndex
 } = useLineViewScrollPosition(virtuaRef, computed(() => props.tabId))
 
 // PROPS & EMITS
@@ -178,10 +178,12 @@ function handleVirtuaScroll(offset: number) {
 
             // Find approximate center line using Virtua's API
             const centerOffset = scrollOffset + viewportSize / 2
-            const centerLine = virtuaRef.value.findItemIndex(centerOffset)
+            const centerLine = findItemIndex(centerOffset)
 
             // Prioritize lines around the center of viewport
-            viewerState.prioritizeLines(centerLine, 200)
+            if (centerLine !== undefined) {
+                viewerState.prioritizeLines(centerLine, 200)
+            }
         }
     }, 100) // Throttle to once per 100ms
 }
@@ -220,7 +222,10 @@ watch(() => {
             await restoreScrollPosition()
         }
     } else if (isTabSwitch) {
-        // Tab switched - restore scroll position
+        // Tab switched - save current position before restoring
+        saveScrollPosition()
+        
+        // Then restore scroll position
         await nextTick()
         await restoreScrollPosition()
     }

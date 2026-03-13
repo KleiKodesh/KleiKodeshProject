@@ -1,4 +1,4 @@
-import { ref, computed, type Ref } from 'vue'
+import { computed, nextTick, type Ref } from 'vue'
 import { useTabStore } from '@/data/stores/tabStore'
 import { useCategoryTreeStore } from '@/data/stores/categoryTreeStore'
 import { hasConnections } from '@/data/types/Book'
@@ -19,32 +19,22 @@ export function useCommentaryScroll(
     }))
 
     function saveScrollPosition() {
-        if (!scrollContainer.value || !tabStore.activeTab?.bookState) return
+        if (!vListRef.value || !tabStore.activeTab?.bookState) return
 
-        const containerRect = scrollContainer.value.getBoundingClientRect()
-        const topY = containerRect.top + 50
+        const scrollOffset = vListRef.value.scrollOffset
+        const topGroupIndex = vListRef.value.findItemIndex(scrollOffset)
 
-        const groups = scrollContainer.value.querySelectorAll('[data-book-id]')
-        for (const group of groups) {
-            const rect = group.getBoundingClientRect()
-            if (rect.top <= topY && rect.bottom > topY) {
-                const bookId = parseInt(group.getAttribute('data-book-id') || '0')
-                tabStore.activeTab.bookState.currentCommentaryBookId = bookId
-                return
-            }
-        }
+        tabStore.activeTab.bookState.commentaryScrollElementIndex = topGroupIndex
     }
 
-    async function restoreScrollPosition(isFirstInit: boolean) {
-        if (!vListRef.value || isFirstInit) return
+    async function restoreScrollPosition() {
+        if (!vListRef.value || !tabStore.activeTab?.bookState) return
 
-        const bookId = tabStore.activeTab?.bookState?.currentCommentaryBookId
-        if (!bookId) return
-
-        const targetIndex = virtualGroups.value.findIndex(g => g.bookNode.bookId === bookId)
-        if (targetIndex === -1) return
-
-        vListRef.value.scrollToIndex(targetIndex, { align: 'start' })
+        const savedGroupIndex = tabStore.activeTab.bookState.commentaryScrollElementIndex
+        if (savedGroupIndex !== undefined && savedGroupIndex >= 0) {
+            await nextTick()
+            vListRef.value.scrollToIndex(savedGroupIndex, { align: 'start' })
+        }
     }
 
     async function scrollToGroup(bookId: number) {
@@ -53,29 +43,21 @@ export function useCommentaryScroll(
         const targetIndex = virtualGroups.value.findIndex(g => g.bookNode.bookId === bookId)
         if (targetIndex === -1) return
 
+        await nextTick()
         vListRef.value.scrollToIndex(targetIndex, { align: 'start' })
     }
 
     function detectVisibleGroup(emit: (event: 'visible-book-changed', bookId: number) => void) {
-        if (!scrollContainer.value) {
-            console.log('[Commentary] detectVisibleGroup - no scroll container')
-            return
-        }
+        if (!vListRef.value) return
 
-        const topY = scrollContainer.value.getBoundingClientRect().top + 50
-        const groups = scrollContainer.value.querySelectorAll('[data-book-id]')
-        console.log('[Commentary] detectVisibleGroup - found groups:', groups.length, 'topY:', topY)
+        const scrollOffset = vListRef.value.scrollOffset
+        const viewportSize = vListRef.value.viewportSize
+        const centerOffset = scrollOffset + viewportSize / 2
+        const centerGroupIndex = vListRef.value.findItemIndex(centerOffset)
 
-        for (const group of groups) {
-            const rect = group.getBoundingClientRect()
-            if (rect.top <= topY && rect.bottom > topY) {
-                const bookId = parseInt(group.getAttribute('data-book-id') || '0')
-                console.log('[Commentary] Found visible group:', bookId)
-                if (bookId) {
-                    emit('visible-book-changed', bookId)
-                }
-                break
-            }
+        const centerGroup = virtualGroups.value[centerGroupIndex]
+        if (centerGroup?.bookNode?.bookId) {
+            emit('visible-book-changed', centerGroup.bookNode.bookId)
         }
     }
 

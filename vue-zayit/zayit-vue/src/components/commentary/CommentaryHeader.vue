@@ -1,6 +1,8 @@
 <template>
     <div ref="toolbarRef"
-         class="commentary-toolbar selectable">
+         class="commentary-toolbar selectable"
+         @mouseenter="handleMouseEnter"
+         @mouseleave="handleMouseLeave">
         <h3 v-if="!shouldShowNav"
             ref="titleRef"
             class="commentary-toolbar-title ellipsis">
@@ -11,12 +13,14 @@
             <span class="book-name">{{ bookTitle }}</span>
         </h3>
 
-        <CommentaryHeaderNav v-else
+        <CommentaryHeaderNav v-if="shouldShowNav"
                              :has-previous="hasPrevious"
                              :has-next="hasNext"
                              :show-book-button="bookId !== undefined && lineIndex !== undefined"
                              :commentary-title="bookTitle"
                              :available-books="availableBooks"
+                             :commentary-groups="commentaryGroups"
+                             :connection-type-id="connectionTypeId"
                              :show-tree="showTree"
                              @navigate-previous="emit('navigate-previous')"
                              @navigate-next="emit('navigate-next')"
@@ -24,6 +28,7 @@
                              @navigate-next-line="emit('navigate-next-line')"
                              @navigate-to-book="emit('click')"
                              @select-commentary="(bookId) => emit('select-commentary', bookId)"
+                             @select-commentary-with-filter="(bookId, connectionTypeId) => emit('select-commentary-with-filter', bookId, connectionTypeId)"
                              @input-focus="isInputFocused = true"
                              @input-blur="handleInputBlur"
                              @toggle-tree="emit('toggle-tree')" />
@@ -31,8 +36,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, nextTick } from 'vue'
-import { useElementHover, onClickOutside } from '@vueuse/core'
+import { computed, ref, watch, nextTick, onUnmounted } from 'vue'
+import { onClickOutside } from '@vueuse/core'
 import CommentaryHeaderNav from './CommentaryHeaderNav.vue'
 import type { CommentaryTreeNode } from './useCommentaryTree'
 
@@ -43,6 +48,8 @@ const props = defineProps<{
     hasPrevious?: boolean
     hasNext?: boolean
     availableBooks?: CommentaryTreeNode[]
+    commentaryGroups?: any[]
+    connectionTypeId?: number
     isDraggingSelection?: boolean
     showTree?: boolean
 }>()
@@ -54,6 +61,7 @@ const emit = defineEmits<{
     (e: 'navigate-previous-line'): void
     (e: 'navigate-next-line'): void
     (e: 'select-commentary', bookId: number): void
+    (e: 'select-commentary-with-filter', bookId: number, connectionTypeId: number): void
     (e: 'focus-content'): void
     (e: 'toggle-tree'): void
 }>()
@@ -80,18 +88,45 @@ const bookTitle = computed(() => {
 const toolbarRef = ref<HTMLElement>()
 const titleRef = ref<HTMLElement>()
 const parentRef = ref<HTMLElement>()
-const showNav = useElementHover(toolbarRef)
+const showNav = ref(false)
 const isInputFocused = ref(false)
 const showParent = ref(true)
+let hoverTimeout: ReturnType<typeof setTimeout> | null = null
 
 const shouldShowNav = computed(() => {
     return (showNav.value || isInputFocused.value) && !props.isDraggingSelection
 })
 
+function handleMouseEnter() {
+    if (hoverTimeout) {
+        clearTimeout(hoverTimeout)
+    }
+    hoverTimeout = setTimeout(() => {
+        showNav.value = true
+    }, 300)
+}
+
+function handleMouseLeave() {
+    if (hoverTimeout) {
+        clearTimeout(hoverTimeout)
+        hoverTimeout = null
+    }
+    if (!isInputFocused.value) {
+        showNav.value = false
+    }
+}
+
 function handleInputBlur() {
     isInputFocused.value = false
+    showNav.value = false
     emit('focus-content')
 }
+
+onUnmounted(() => {
+    if (hoverTimeout) {
+        clearTimeout(hoverTimeout)
+    }
+})
 
 function checkOverflow() {
     if (!parentRef.value || !titleRef.value) return
