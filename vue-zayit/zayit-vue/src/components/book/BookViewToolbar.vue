@@ -75,6 +75,10 @@
             <CommentaryToggleIcon :is-open="isSplitPaneOpen" />
         </button>
 
+        <!-- Connection type filter -->
+        <ConnectionTypeFilter v-if="hasConnections && isSplitPaneOpen"
+                              :book="book" />
+
         <div class="toolbar-separator"></div>
 
         <!-- Zoom out button -->
@@ -108,8 +112,7 @@
         <button @click="handleAltTocToggle"
                 class="flex-center c-pointer touch-interactive"
                 :title="isAltTocVisible ? 'הסתר כותרות נוספות' : 'הצג כותרות נוספות'">
-            <Icon
-                  :icon="isAltTocVisible ? 'fluent:eye-lines-28-filled' : 'fluent:eye-lines-28-regular'" />
+            <Icon :icon="isAltTocVisible ? 'fluent:eye-lines-28-filled' : 'fluent:eye-lines-28-regular'" />
         </button>
 
         <div class="toolbar-separator"></div>
@@ -125,10 +128,13 @@ import { Icon } from '@iconify/vue'
 import { useToolbarPosition } from './useBookViewToolbarPosition'
 import { useBookViewToolbarActions } from './useBookViewToolbar'
 import CommentaryToggleIcon from '@/components/icons/CommentaryToggleIcon.vue'
+import ConnectionTypeFilter from './ConnectionTypeFilter.vue'
+import type { Book } from '@/data/types/Book'
 // import ThemeToggleButton from '@/components/settings/ThemeToggleButton.vue'
 
 const props = defineProps<{
     position: 'top' | 'bottom' | 'left' | 'right' | 'float-vertical' | 'float-horizontal'
+    book?: Book
 }>()
 
 const toolbarRef = ref<HTMLElement>()
@@ -374,3 +380,74 @@ button:disabled {
     fill: #ff4500;
 }
 </style>
+
+
+/* Connection type filter dropdown */
+.connection-type-filter {
+position: relative;
+}
+
+.connection-type-dropdown {
+position: absolute;
+background: var(--bg-secondary);
+border: 1px solid var(--border-color);
+border-radius: 4px;
+box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+min-width: 150px;
+max-height: 300px;
+overflow-y: auto;
+z-index: 1000;
+}
+
+.toolbar-top .connection-type-dropdown {
+top: 100%;
+right: 0;
+margin-top: 4px;
+}
+
+.toolbar-bottom .connection-type-dropdown {
+bottom: 100%;
+right: 0;
+margin-bottom: 4px;
+}
+
+.toolbar-left .connection-type-dropdown {
+top: 0;
+left: 100%;
+margin-left: 4px;
+}
+
+.toolbar-right .connection-type-dropdown {
+top: 0;
+right: 100%;
+margin-right: 4px;
+}
+
+.toolbar-float .connection-type-dropdown,
+.toolbar-float-horizontal .connection-type-dropdown {
+top: 100%;
+right: 0;
+margin-top: 4px;
+}
+
+.toolbar-float-vertical .connection-type-dropdown {
+top: 0;
+left: 100%;
+margin-left: 4px;
+}
+
+.connection-type-option {
+padding: 8px 12px;
+cursor: pointer;
+transition: background-color 0.15s ease;
+white-space: nowrap;
+}
+
+.connection-type-option:hover {
+background: var(--hover-bg);
+}
+
+.connection-type-option.active {
+background: var(--active-bg);
+font-weight: bold;
+}

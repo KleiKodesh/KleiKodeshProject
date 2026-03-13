@@ -31,7 +31,8 @@
                ref="vListRef"
                class="commentary-groups"
                :data="virtualGroups"
-               style="height: 100%; overflow-y: auto;">
+               style="height: 100%; overflow-y: auto;"
+               @scroll="handleScroll">
             <template #default="{ item: group, index }">
                 <div :data-book-id="group.bookNode.bookId"
                      class="commentary-group">
@@ -41,7 +42,9 @@
                                       :line-index="group.bookNode.lineIndex"
                                       :has-previous="index > 0"
                                       :has-next="index < virtualGroups.length - 1"
-                                      :available-books="flattenedBooks"
+                                      :available-books="allBooks"
+                                      :commentary-groups="commentaryGroups"
+                                      :connection-type-id="connectionTypeId"
                                       :is-dragging-selection="isDraggingSelection"
                                       :show-tree="showTree"
                                       @click="handleGroupClick(group.bookNode)"
@@ -50,6 +53,7 @@
                                       @navigate-previous-line="emit('navigate-previous-line', group.bookNode.bookId)"
                                       @navigate-next-line="emit('navigate-next-line', group.bookNode.bookId)"
                                       @select-commentary="(bookId) => emit('select-commentary', bookId)"
+                                      @select-commentary-with-filter="(bookId, connectionTypeId) => emit('select-commentary-with-filter', bookId, connectionTypeId)"
                                       @focus-content="focusContent"
                                       @toggle-tree="emit('toggle-tree')" />
 
@@ -109,7 +113,9 @@ const props = defineProps<{
 watch(() => props.commentaryGroups, async (newGroups, oldGroups) => {
     if (newGroups.length > 0 && newGroups !== oldGroups) {
         await nextTick()
-        handleScroll()
+        detectVisibleGroup(emit)
+        // Trigger initial load for visible items
+        loadVisibleGroups()
     }
 }, { deep: false })
 
@@ -120,6 +126,7 @@ const emit = defineEmits<{
     (e: 'navigate-previous-line', bookId?: number): void
     (e: 'navigate-next-line', bookId?: number): void
     (e: 'select-commentary', bookId: number): void
+    (e: 'select-commentary-with-filter', bookId: number, connectionTypeId: number): void
     (e: 'toggle-tree'): void
 }>()
 
@@ -128,7 +135,13 @@ const vListRef = ref<InstanceType<typeof VList> | null>(null)
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
 const isDraggingSelection = ref(false)
 const tabStore = useTabStore()
-const { flattenedBooks } = useCommentaryTree(computed(() => props.commentaryGroups))
+
+// Create separate tree instances - one for tree panel (unfiltered), one for content (filtered)
+const { flattenedBooks: allBooks } = useCommentaryTree(computed(() => props.commentaryGroups))
+const { flattenedBooks } = useCommentaryTree(
+    computed(() => props.commentaryGroups),
+    computed(() => props.connectionTypeId)
+)
 
 const currentDiacriticsState = computed(() => tabStore.currentDiacriticsState)
 
@@ -171,11 +184,12 @@ const contextMenuItems = computed<ContextMenuItem[]>(() => [
 ])
 
 function handleScroll() {
-    console.log('[Commentary] Scroll event triggered')
     detectVisibleGroup(emit)
     saveScrollPosition()
+    loadVisibleGroups()
+}
 
-    // Reprioritize visible groups in the queue
+function loadVisibleGroups() {
     if (!scrollContainer.value) return
 
     const containerRect = scrollContainer.value.getBoundingClientRect()
@@ -194,9 +208,7 @@ function handleScroll() {
                 if (group && group.targetBookId && group.targetLineIndex !== undefined) {
                     const hasContent = group.links && group.links.length > 0
 
-                    // Only reprioritize if content not already loaded
                     if (!hasContent) {
-                        // Reprioritize in queue (moves to front if already queued)
                         props.queueGroupLoad(group.targetBookId, group.targetLineIndex, true)
                     }
                 }
@@ -280,17 +292,11 @@ onMounted(() => {
     if (vListRef.value) {
         const vListElement = vListRef.value.$el as HTMLElement
         scrollContainer.value = vListElement
-        console.log('[Commentary] Mounted - vListElement:', vListElement)
-        console.log('[Commentary] Scroll container:', scrollContainer.value)
 
         if (scrollContainer.value) {
-            scrollContainer.value.addEventListener('scroll', handleScroll, { passive: true })
             scrollContainer.value.addEventListener('selectstart', handleSelectStart)
-            console.log('[Commentary] Scroll listener attached')
             detectVisibleGroup(emit)
-
-            // Trigger initial load for visible items
-            handleScroll()
+            loadVisibleGroups()
         }
     }
     document.addEventListener('mouseup', handleMouseUp)
@@ -298,7 +304,6 @@ onMounted(() => {
 
 onUnmounted(() => {
     if (scrollContainer.value) {
-        scrollContainer.value.removeEventListener('scroll', handleScroll)
         scrollContainer.value.removeEventListener('selectstart', handleSelectStart)
     }
     document.removeEventListener('mouseup', handleMouseUp)

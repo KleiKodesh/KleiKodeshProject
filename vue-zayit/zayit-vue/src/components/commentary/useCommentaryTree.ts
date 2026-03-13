@@ -16,9 +16,22 @@ export interface CommentaryTreeNode {
     metadata?: CommentaryMetadata;
 }
 
-export function useCommentaryTree(commentaryGroups: ComputedRef<CommentaryMetadata[]>) {
+export function useCommentaryTree(
+    commentaryGroups: ComputedRef<CommentaryMetadata[]>,
+    connectionTypeFilter?: ComputedRef<number | undefined>
+) {
     const categoryTreeStore = useCategoryTreeStore()
     const connectionTypesStore = useConnectionTypesStore()
+
+    // Filter groups by connection type if filter is provided
+    const filteredGroups = computed(() => {
+        if (!connectionTypeFilter?.value) {
+            return commentaryGroups.value
+        }
+        return commentaryGroups.value.filter(
+            group => group.connectionTypeId === connectionTypeFilter.value
+        )
+    })
 
     // Helper function to sort categories
     function sortCategories(entries: [string, CommentaryMetadata[]][]): [string, CommentaryMetadata[]][] {
@@ -79,7 +92,7 @@ export function useCommentaryTree(commentaryGroups: ComputedRef<CommentaryMetada
         const tree: CommentaryTreeNode[] = []
         const groupedByConnectionType = new Map<string, CommentaryMetadata[]>()
 
-        commentaryGroups.value.forEach(group => {
+        filteredGroups.value.forEach(group => {
             if (!group.targetBookId || !group.connectionTypeId) return
             const connectionTypeName = connectionTypesStore.getConnectionTypeName(group.connectionTypeId)
             const connectionType = connectionTypeName || 'OTHER'

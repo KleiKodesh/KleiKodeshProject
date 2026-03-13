@@ -13,10 +13,10 @@ export interface CommentaryMetadata {
 
 /**
  * Load links metadata in batches (fast - no content)
+ * Now loads ALL metadata without filtering by connectionTypeId
  */
 async function loadLinksMetadataInBatches(
     lineIds: number[],
-    connectionTypeId: number | undefined,
     batchSize: number = 8
 ): Promise<any[]> {
     const allMetadata: any[] = []
@@ -24,7 +24,7 @@ async function loadLinksMetadataInBatches(
     for (let i = 0; i < lineIds.length; i += batchSize) {
         const batch = lineIds.slice(i, i + batchSize)
         const batchPromises = batch.map(lineId =>
-            dbService.getLinksMetadata(lineId, connectionTypeId)
+            dbService.getLinksMetadata(lineId)
         )
         const batchResults = await Promise.all(batchPromises)
         allMetadata.push(...batchResults.flat())
@@ -161,6 +161,7 @@ export function useCommentaryContent() {
 
     /**
      * Load commentary metadata (fast - no content)
+     * Loads ALL metadata without filtering by connectionTypeId
      * If tocEntryId is provided, loads metadata for all lines in that TOC section
      */
     async function loadCommentaryMetadata(
@@ -173,6 +174,7 @@ export function useCommentaryContent() {
         // Don't load if commentary pane is not visible
         if (!isVisible) {
             commentaryGroups.value = []
+            loadingProgress.value = 100
             return
         }
 
@@ -195,22 +197,28 @@ export function useCommentaryContent() {
                 const lineIds = lineIdResults.map(r => r.lineId)
 
                 if (lineIds.length === 0) {
+                    clearInterval(progressInterval)
                     commentaryGroups.value = []
+                    loadingProgress.value = 100
+                    isLoadingMetadata.value = false
                     return
                 }
 
-                // Load metadata in batches (fast - no content)
-                metadata = await loadLinksMetadataInBatches(lineIds, connectionTypeId, 8)
+                // Load metadata in batches (fast - no content, no filtering)
+                metadata = await loadLinksMetadataInBatches(lineIds, 8)
             } else {
                 // Single line mode: Load metadata for just the selected line
                 const lineId = await dbService.getLineId(bookId, lineIndex)
 
                 if (!lineId) {
+                    clearInterval(progressInterval)
                     commentaryGroups.value = []
+                    loadingProgress.value = 100
+                    isLoadingMetadata.value = false
                     return
                 }
 
-                metadata = await dbService.getLinksMetadata(lineId, connectionTypeId)
+                metadata = await dbService.getLinksMetadata(lineId)
             }
 
             // Group by title (no content yet)
@@ -220,8 +228,16 @@ export function useCommentaryContent() {
             // Set all groups at once (fast since no content)
             commentaryGroups.value = allGroups
 
-            // Clear progress simulation and set to 20%
+            // Clear progress simulation
             clearInterval(progressInterval)
+
+            // If no groups, set progress to 100%
+            if (allGroups.length === 0) {
+                loadingProgress.value = 100
+                return
+            }
+
+            // Otherwise set to 20% and start loading content
             loadingProgress.value = 20
 
             // Queue all groups for loading (non-priority)
@@ -237,6 +253,7 @@ export function useCommentaryContent() {
             clearInterval(progressInterval)
             console.error('Failed to load commentary metadata:', error)
             commentaryGroups.value = []
+            loadingProgress.value = 100
         } finally {
             isLoadingMetadata.value = false
         }

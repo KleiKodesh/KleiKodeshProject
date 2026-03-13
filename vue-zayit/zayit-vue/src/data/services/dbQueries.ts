@@ -80,7 +80,7 @@ export const SqlQueries = {
     params: connectionTypeId !== undefined ? [lineId, connectionTypeId] : [lineId]
   }),
 
-  getLinksMetadata: (lineId: number, connectionTypeId?: number) => ({
+  getLinksMetadata: (lineId: number) => ({
     query: `
       SELECT
         l.targetLineId,
@@ -92,11 +92,10 @@ export const SqlQueries = {
       JOIN line ln ON ln.id = l.targetLineId
       JOIN book bk ON bk.id = l.targetBookId
       WHERE l.sourceLineId = ?
-      ${connectionTypeId !== undefined ? 'AND l.connectionTypeId = ?' : ''}
         AND bk.externalLibraryId IS NULL
       ORDER BY bk.title
     `,
-    params: connectionTypeId !== undefined ? [lineId, connectionTypeId] : [lineId]
+    params: [lineId]
   }),
 
   getLinkBookIds: (lineId: number, connectionTypeId?: number) => ({

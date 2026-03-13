@@ -28,8 +28,9 @@ export class TocService {
 
     /**
      * Build TOC tree from flat data and create alt TOC lookup map
+     * If bookTitle is provided and root TOC matches it, elevate children to roots
      */
-    buildTocFromFlat(tocEntriesFlat: TocEntry[]): {
+    buildTocFromFlat(tocEntriesFlat: TocEntry[], bookTitle?: string): {
         tree: TocEntry[]
         allTocs: TocEntry[]
         altTocByLineIndex: Map<number, AltTocLineEntry[]>
@@ -45,9 +46,38 @@ export class TocService {
         const regularEntries = allEntries.filter(e => !e.isAltToc)
         const altEntries = allEntries.filter(e => e.isAltToc)
 
+        // Check if we should skip root during path building
+        let skipRootId: number | undefined
+        console.log('[TOC Service] Starting root check - bookTitle:', bookTitle, 'regularEntries:', regularEntries.length)
+        if (bookTitle && regularEntries.length > 0) {
+            const potentialRoot = regularEntries.find(e => !e.parentId || e.parentId === 0)
+            console.log('[TOC Service] Potential root found:', potentialRoot?.text, 'id:', potentialRoot?.id)
+            if (potentialRoot &&
+                (potentialRoot.level === 0 || !potentialRoot.parentId) &&
+                potentialRoot.text.trim().toLowerCase() === bookTitle.trim().toLowerCase()) {
+                skipRootId = potentialRoot.id
+                console.log('[TOC Service] ✅ Root matches book title - will elevate. skipRootId:', skipRootId)
+            } else if (potentialRoot) {
+                console.log('[TOC Service] ❌ Root does NOT match:')
+                console.log('  Root text:', `"${potentialRoot.text.trim().toLowerCase()}"`)
+                console.log('  Book title:', `"${bookTitle.trim().toLowerCase()}"`)
+                console.log('  Match:', potentialRoot.text.trim().toLowerCase() === bookTitle.trim().toLowerCase())
+            }
+        }
+
         // Build separate trees
-        const regularTree = this.buildTocChildren(undefined, regularEntries)
+        let regularTree = this.buildTocChildren(undefined, regularEntries, skipRootId)
         const altTree = this.buildTocChildren(undefined, altEntries)
+
+        // Elevate children if single root matches book title (only for regular TOC, not alt TOC)
+        if (skipRootId !== undefined && regularTree.length === 1) {
+            const rootEntry = regularTree[0]
+            console.log('[TOC Service] Elevating - root has', rootEntry?.children?.length || 0, 'children')
+            if (rootEntry && rootEntry.children && rootEntry.children.length > 0) {
+                regularTree = rootEntry.children
+                console.log('[TOC Service] ✅ Children elevated. New root count:', regularTree.length)
+            }
+        }
 
         // Create alt TOC lookup map for efficient line display - supporting multiple entries per line
         const altTocByLineIndex = new Map<number, AltTocLineEntry[]>()
@@ -75,10 +105,17 @@ export class TocService {
             regularTree[0].isExpanded = true
         }
 
-        return { tree, allTocs: allEntries, altTocByLineIndex }
+        // Filter out the skipped root from allTocs if it was elevated
+        const allTocs = skipRootId !== undefined
+            ? allEntries.filter(e => e.id !== skipRootId)
+            : allEntries
+
+        console.log('[TOC Service] Final - tree:', tree.length, 'allTocs:', allTocs.length, 'filtered:', skipRootId !== undefined)
+
+        return { tree, allTocs, altTocByLineIndex }
     }
 
-    private buildTocChildren(parentId: number | undefined | null, items: TocEntry[]): TocEntry[] {
+    private buildTocChildren(parentId: number | undefined | null, items: TocEntry[], skipRootId?: number): TocEntry[] {
         const parent = items.find(t => t.id === parentId)
         const children = items.filter(t => {
             // Match null, undefined, or 0 as root level
@@ -90,7 +127,8 @@ export class TocService {
 
         for (const child of children) {
             // Build path from parent's path + parent's text (no trailing separator)
-            if (parent) {
+            // Skip adding the root node to paths if it matches the book title
+            if (parent && parent.id !== skipRootId) {
                 if (parent.path) {
                     child.path = parent.path + ' - ' + parent.text
                 } else {
@@ -100,7 +138,7 @@ export class TocService {
 
             // Recursively build children
             if (child.hasChildren) {
-                child.children = this.buildTocChildren(child.id, items)
+                child.children = this.buildTocChildren(child.id, items, skipRootId)
             }
         }
 

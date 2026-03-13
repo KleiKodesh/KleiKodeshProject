@@ -225,7 +225,7 @@ class DatabaseService {
         return links
     }
 
-    async getLinksMetadata(lineId: number, connectionTypeId?: number): Promise<Array<{
+    async getLinksMetadata(lineId: number): Promise<Array<{
         targetLineId: number
         targetBookId: number
         connectionTypeId: number
@@ -233,10 +233,10 @@ class DatabaseService {
         lineIndex: number
     }>> {
         if (this.isWebViewAvailable()) {
-            const queryObj = SqlQueries.getLinksMetadata(lineId, connectionTypeId)
+            const queryObj = SqlQueries.getLinksMetadata(lineId)
             return await webviewBridge.call('ExecuteQuery', queryObj.query, queryObj.params)
         } else if (this.isDevServerAvailable()) {
-            const queryObj = SqlQueries.getLinksMetadata(lineId, connectionTypeId)
+            const queryObj = SqlQueries.getLinksMetadata(lineId)
             return await devQuery(queryObj.query, queryObj.params)
         } else {
             throw new Error('No database source available')

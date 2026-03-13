@@ -29,32 +29,23 @@ export function useBookViewPage(
         return categoryTreeStore.allBooks.find(book => book.id === bookId)
     })
 
-    const filteredTocEntries = computed(() => {
-        let entries = tocEntries.value
-
-        const bookTitle = currentBook.value?.title
-        if (bookTitle && entries.length === 1) {
-            const rootEntry = entries[0]
-            if (rootEntry && (rootEntry.level === 0 || !rootEntry.parentId) &&
-                rootEntry.text.trim().toLowerCase() === bookTitle.trim().toLowerCase() &&
-                rootEntry.children && rootEntry.children.length > 0) {
-                return rootEntry.children
-            }
-        }
-
-        return entries
-    })
-
     const loadTocData = async (bookId: number) => {
         isTocLoading.value = true
         try {
             const { tocEntriesFlat } = await dbService.getToc(bookId)
 
-            const { tree, allTocs, altTocByLineIndex: altTocMap } = buildTocFromFlat(tocEntriesFlat)
+            // Use bookTitle from tab state (always available) instead of currentBook (may not be loaded yet)
+            const bookTitle = myTab.value?.bookState?.bookTitle || currentBook.value?.title
+            console.log('[useBookView] Loading TOC for book:', bookId)
+            console.log('[useBookView] Book title:', bookTitle)
+            console.log('[useBookView] TOC entries count:', tocEntriesFlat.length)
+
+            const { tree, allTocs, altTocByLineIndex: altTocMap } = buildTocFromFlat(tocEntriesFlat, bookTitle)
 
             tocEntries.value = tree
             altTocByLineIndex.value = altTocMap
             flatTocEntries.value = allTocs
+            console.log('[useBookView] TOC loaded - tree count:', tree.length, 'allTocs count:', allTocs.length)
         } catch (error) {
             console.error('❌ Failed to load TOC data:', error)
             tocEntries.value = []
@@ -88,7 +79,10 @@ export function useBookViewPage(
             if (closestTocEntry) {
                 const bookTitle = currentBook.value?.title
                 if (bookTitle) {
-                    myTab.value.title = closestTocEntry.text ? `${bookTitle} - ${closestTocEntry.text}` : bookTitle
+                    const fullTocPath = closestTocEntry.path
+                        ? `${closestTocEntry.path} - ${closestTocEntry.text}`
+                        : closestTocEntry.text
+                    myTab.value.title = fullTocPath ? `${bookTitle} - ${fullTocPath}` : bookTitle
                 }
             }
         }
@@ -317,10 +311,13 @@ export function useBookViewPage(
             // Update current TOC entry ID for tree selection
             currentTocEntryId.value = closestTocEntry.id
 
-            // Update tab title with TOC entry text only when TOC is not open and book title is available
+            // Update tab title with full TOC path only when TOC is not open and book title is available
             const bookTitle = currentBook.value?.title
             if (!myTab.value.bookState?.isTocOpen && bookTitle) {
-                myTab.value.title = closestTocEntry.text ? `${bookTitle} - ${closestTocEntry.text}` : bookTitle
+                const fullTocPath = closestTocEntry.path
+                    ? `${closestTocEntry.path} - ${closestTocEntry.text}`
+                    : closestTocEntry.text
+                myTab.value.title = fullTocPath ? `${bookTitle} - ${fullTocPath}` : bookTitle
             }
         }
     })
@@ -329,12 +326,13 @@ export function useBookViewPage(
         myTab,
         toolbarPosition,
         altTocByLineIndex,
-        filteredTocEntries,
+        tocEntries,
         flatTocEntries,
         isTocLoading,
         currentCenterLineIndex,
         currentTocEntryId,
         currentBook,
+        book: currentBook, // Alias for toolbar
         handleTocSelection,
         handleNavigateLine,
         handleNavigatePreviousLine,

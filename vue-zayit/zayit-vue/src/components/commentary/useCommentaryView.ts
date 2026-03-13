@@ -86,8 +86,6 @@ export function useCommentaryView(props: {
             await loadCommentaryMetadata(bookId, lineIndex, connectionTypeId, tocEntryId, isVisible)
 
             if (commentaryGroups.value.length > 0) {
-                console.log('[Commentary] Loaded groups:', commentaryGroups.value.map(g => ({ name: g.groupName, id: g.targetBookId })))
-
                 // If no current book is set, initialize to default or first
                 if (!currentCommentaryBookId.value || !hasInitialized.value) {
                     const defaultBookId = props.book?.defaultCommentatorBookId
@@ -126,6 +124,13 @@ export function useCommentaryView(props: {
         selectedBookId.value = bookId
     }
 
+    // Update connection type filter
+    function setConnectionTypeFilter(connectionTypeId: number | undefined) {
+        if (tabStore.activeTab?.bookState) {
+            tabStore.activeTab.bookState.commentaryFilterConnectionTypeId = connectionTypeId
+        }
+    }
+
     return {
         commentaryGroups,
         isLoadingMetadata,
@@ -139,6 +144,7 @@ export function useCommentaryView(props: {
         handleVisibleBookChanged,
         initializeCommentary,
         setCurrentCommentary,
+        setConnectionTypeFilter,
         loadGroupContent,
         queueGroupLoad
     }
