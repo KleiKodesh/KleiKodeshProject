@@ -741,10 +741,13 @@ export const useTabStore = defineStore('tabs', () => {
         nextId.value = 2;
     };
 
-    const toggleBookSearch = (isOpen: boolean) => {
+    const toggleBookSearch = (isOpen: boolean, scope?: 'lines' | 'commentary') => {
         const tab = tabs.value.find(t => t.isActive);
         if (tab?.bookState) {
             tab.bookState.isSearchOpen = isOpen;
+            if (scope && tab.bookState.searchScope !== undefined) {
+                tab.bookState.searchScope = scope;
+            }
         }
     };
 

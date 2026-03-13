@@ -83,6 +83,7 @@ export function useCommentaryScroll(
         const viewportSize = vListRef.value.viewportSize
         const centerOffset = scrollOffset + viewportSize / 2
         const centerGroupIndex = findGroupIndex(centerOffset)
+        if (centerGroupIndex === undefined) return
         const centerGroup = virtualGroups.value[centerGroupIndex]
         if (centerGroup?.bookNode?.bookId) {
             emit('visible-book-changed', centerGroup.bookNode.bookId)

@@ -93,7 +93,7 @@ This document defines **HOW** to implement, not **WHAT** to implement.
 ## CSS Organization
 
 - All shared styles live in src/assets/styles/ organized by category (button.css, input.css, layout.css, typography.css, etc.)
-- Check existing utility classes before writing custom CSS - see #[[file:custom-steering/css-utilities.md]] for complete list
+- Check existing utility classes in src/assets/styles/ before writing custom CSS
 - Component-scoped CSS should ONLY contain truly unique styles specific to that component
 - NO duplicate button styles, input styles, or layout patterns in component CSS
 - Custom component CSS is ONLY for: unique layouts, specific positioning, component-specific colors/sizes that don't fit utilities
@@ -221,7 +221,7 @@ Note: vue-virtual-scroller is legacy code still present in the codebase for tran
 ## Vue.js Standards
 
 - Use nextTick() for DOM updates, not setTimeout()
-- Prefer VueUse composables over custom implementations
+- Always prefer VueUse composables over custom implementations - check VueUse documentation first before writing custom reactive utilities
 - Use event.code (not event.key) for keyboard shortcuts to support all layouts
 - All scrolling operations MUST use useScrollToElement composable functions (scrollToElement, scrollToElementCenter, scrollToElementTop, scrollToVirtualItem, etc.)
 - Scroll pattern: always use block: 'nearest' first, then manual adjustment - never use 'center', 'start', or 'end' directly in scrollIntoView

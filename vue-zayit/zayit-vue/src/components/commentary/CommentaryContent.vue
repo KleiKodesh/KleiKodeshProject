@@ -56,7 +56,9 @@
                                       @select-commentary="(bookId) => emit('select-commentary', bookId)"
                                       @select-commentary-with-filter="(bookId, connectionTypeId) => emit('select-commentary-with-filter', bookId, connectionTypeId)"
                                       @focus-content="focusContent"
-                                      @toggle-tree="emit('toggle-tree')" />
+                                      @toggle-tree="emit('toggle-tree')"
+                                      @close-commentary="emit('close-commentary')"
+                                      @open-search="emit('open-search')" />
 
                     <div class="commentary-group-content">
                         <div v-if="!group.metadata?.links || group.metadata.links.length === 0"
@@ -129,6 +131,8 @@ const emit = defineEmits<{
     (e: 'select-commentary', bookId: number): void
     (e: 'select-commentary-with-filter', bookId: number, connectionTypeId: number): void
     (e: 'toggle-tree'): void
+    (e: 'close-commentary'): void
+    (e: 'open-search'): void
 }>()
 
 const scrollContainer = ref<HTMLElement | null>(null)

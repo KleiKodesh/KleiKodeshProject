@@ -1,10 +1,20 @@
 <template>
     <div class="commentary-header-nav">
-        <button class="commentary-nav-btn c-pointer hover-bg"
+        <!-- Temporarily disabled - deciding whether to keep this feature -->
+        <!-- <button class="commentary-nav-btn c-pointer hover-bg"
                 :title="showTree ? 'הסתר עץ מפרשים' : 'הצג עץ מפרשים'"
                 @click="emit('toggle-tree')">
             <Icon :icon="showTree ? 'fluent:panel-right-28-filled' : 'fluent:panel-right-28-regular'" />
+        </button> -->
+
+        <button v-if="showBookButton"
+                class="commentary-nav-btn c-pointer hover-bg"
+                :title="`עבור לספר: ${commentaryTitle}`"
+                @click="handleNavigateToBook">
+            <Icon icon="fluent:book-open-20-regular" />
         </button>
+
+        <div class="nav-separator"></div>
 
         <div class="commentary-search-wrapper">
             <input ref="inputRef"
@@ -17,7 +27,7 @@
                    @keydown="handleKeydown"
                    @focus="handleFocus"
                    @blur="handleBlur" />
-            <Icon icon="fluent:chevron-down-28-regular"
+            <Icon icon="fluent:chevron-down-20-regular"
                   class="search-dropdown-icon" />
             <datalist :id="`commentary-list-${componentId}`">
                 <option v-for="option in bookOptions"
@@ -31,22 +41,13 @@
                 :disabled="!hasPrevious"
                 :title="hasPrevious ? 'מפרש קודם' : 'אין מפרש קודם'"
                 @click="handleNavigatePrevious">
-            <Icon icon="fluent:chevron-up-28-regular" />
+            <Icon icon="fluent:chevron-up-20-regular" />
         </button>
         <button class="commentary-nav-btn c-pointer hover-bg"
                 :disabled="!hasNext"
                 :title="hasNext ? 'מפרש הבא' : 'אין מפרש הבא'"
                 @click="handleNavigateNext">
-            <Icon icon="fluent:chevron-down-28-regular" />
-        </button>
-
-        <div class="nav-separator"></div>
-
-        <button v-if="showBookButton"
-                class="commentary-nav-btn c-pointer hover-bg"
-                :title="`עבור לקטע בספר - ${commentaryTitle}`"
-                @click="handleNavigateToBook">
-            <Icon icon="fluent:book-open-24-regular" />
+            <Icon icon="fluent:chevron-down-20-regular" />
         </button>
 
         <div class="nav-separator"></div>
@@ -54,12 +55,20 @@
         <button class="commentary-nav-btn c-pointer hover-bg"
                 :title="'קטע קודם'"
                 @click="handleNavigatePreviousLine">
-            <Icon icon="fluent:chevron-right-28-regular" />
+            <Icon icon="fluent:chevron-right-20-regular" />
         </button>
         <button class="commentary-nav-btn c-pointer hover-bg"
                 :title="'קטע הבא'"
                 @click="handleNavigateNextLine">
-            <Icon icon="fluent:chevron-left-28-regular" />
+            <Icon icon="fluent:chevron-left-20-regular" />
+        </button>
+
+        <div class="nav-separator"></div>
+
+        <button class="commentary-nav-btn c-pointer hover-bg"
+                title="סגור ניווט"
+                @click.stop="emit('input-blur')">
+            <Icon icon="fluent:dismiss-20-regular" />
         </button>
     </div>
 </template>
@@ -91,6 +100,7 @@ const emit = defineEmits<{
     (e: 'input-focus'): void
     (e: 'input-blur'): void
     (e: 'toggle-tree'): void
+    (e: 'close-commentary'): void
 }>()
 
 let uniqueId = 0
@@ -156,14 +166,14 @@ function handleKeydown(event: KeyboardEvent) {
                 // Get the connectionTypeId from the selected book's metadata
                 const selectedGroup = props.commentaryGroups?.find(g => g.targetBookId === option.bookId)
                 const nodeConnectionTypeId = selectedGroup?.connectionTypeId
-                
+
                 // If different filter, emit special event with filter info
                 if (nodeConnectionTypeId !== undefined && nodeConnectionTypeId !== props.connectionTypeId) {
                     emit('select-commentary-with-filter', option.bookId, nodeConnectionTypeId)
                 } else {
                     emit('select-commentary', option.bookId)
                 }
-                
+
                 searchInput.value = ''
                 if (inputRef.value) {
                     inputRef.value.value = ''
@@ -199,7 +209,7 @@ function handleSelect(event: Event) {
         // Get the connectionTypeId from the selected book's metadata
         const selectedGroup = props.commentaryGroups?.find(g => g.targetBookId === selectedOption.bookId)
         const nodeConnectionTypeId = selectedGroup?.connectionTypeId
-        
+
         // If different filter, emit special event with filter info
         if (nodeConnectionTypeId !== undefined && nodeConnectionTypeId !== props.connectionTypeId) {
             emit('select-commentary-with-filter', selectedOption.bookId, nodeConnectionTypeId)
@@ -252,12 +262,14 @@ function handleBlur() {
     border: none;
     cursor: pointer;
     padding: 0;
-    color: var(--text-primary);
-    transition: color 0.2s;
+    color: var(--text-secondary);
+    transition: color 0.2s, opacity 0.2s;
     flex-shrink: 0;
+    opacity: 0.5;
 }
 
 .commentary-nav-btn:hover:not(:disabled) {
+    opacity: 1;
     color: var(--accent-color);
 }
 

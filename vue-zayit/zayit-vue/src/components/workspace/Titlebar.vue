@@ -18,8 +18,7 @@
               @click.stop="handleButtonClick(toggleToolbarHandler)"
               class="flex-center c-pointer touch-interactive"
               :title="isToolbarVisible ? 'הסתר סרגל כלים' : 'הצג סרגל כלים'">
-        <Icon
-              :icon="isToolbarVisible ? 'fluent:options-24-filled' : 'fluent:options-24-regular'" />
+        <Icon :icon="isToolbarVisible ? 'fluent:options-24-filled' : 'fluent:options-24-regular'" />
       </button>
 
       <button v-if="activeTab?.currentPage === 'bookview'"
@@ -145,7 +144,7 @@ const goToToc = () => {
 };
 
 const openSearch = () => {
-  toggleBookSearch(true);
+  toggleBookSearch(true, 'lines');
 };
 
 const toggleSplitPaneHandler = () => {

@@ -1,11 +1,12 @@
 <template>
     <div class="flex-row height-fill">
-        <CommentaryTreePanel v-if="showTree"
+        <!-- Temporarily disabled - deciding whether to keep this feature -->
+        <!-- <CommentaryTreePanel v-if="showTree"
                              ref="commentaryTreePanelRef"
                              :commentary-groups="commentaryGroups"
                              :selected-book-id="selectedBookId"
                              class="commentary-tree-panel"
-                             @select="onSelectGroup" />
+                             @select="onSelectGroup" /> -->
 
         <CommentaryContent ref="commentaryContentRef"
                            :commentary-groups="commentaryGroups"
@@ -27,7 +28,9 @@
                            @navigate-next-line="(bookId) => emit('navigate-next-line', bookId)"
                            @select-commentary="onSelectCommentary"
                            @select-commentary-with-filter="onSelectCommentaryWithFilter"
-                           @toggle-tree="handleToggleTree" />
+                           @toggle-tree="handleToggleTree"
+                           @close-commentary="handleCloseCommentary"
+                           @open-search="emit('open-search')" />
     </div>
 </template>
 
@@ -37,6 +40,7 @@ import CommentaryContent from './CommentaryContent.vue'
 import CommentaryTreePanel from './CommentaryTreePanel.vue'
 import { useCommentaryView } from './useCommentaryView'
 import { useCommentarySearch } from './useCommentarySearch'
+import { useTabStore } from '@/data/stores/tabStore'
 import type { Book } from '@/data/types/Book'
 import type { TocEntry } from '@/data/types/BookToc'
 import type { CommentaryTreeNode } from './useCommentaryTree'
@@ -53,6 +57,7 @@ const emit = defineEmits<{
     (e: 'navigate-line', newIndex: number, tocEntryId?: number): void
     (e: 'navigate-previous-line', bookId?: number): void
     (e: 'navigate-next-line', bookId?: number): void
+    (e: 'open-search'): void
 }>()
 
 const commentaryContentRef = ref<any>()
@@ -104,12 +109,12 @@ function onSelectGroup(node: CommentaryTreeNode) {
         // Get the connectionTypeId from the selected node's metadata
         const selectedGroup = commentaryGroups.value.find(g => g.targetBookId === bookId)
         const nodeConnectionTypeId = selectedGroup?.connectionTypeId
-        
+
         console.log('[Commentary] Selected node:', { bookId, nodeConnectionTypeId, currentFilter: selectedConnectionTypeId.value })
-        
+
         // Set programmatic navigation flag
         isProgrammaticNavigation.value = true
-        
+
         // If the selected node has a different connection type than current filter, update filter first
         if (nodeConnectionTypeId !== undefined && nodeConnectionTypeId !== selectedConnectionTypeId.value) {
             console.log('[Commentary] Updating filter to:', nodeConnectionTypeId)
@@ -137,13 +142,13 @@ async function onSelectCommentary(bookId: number) {
 
 async function onSelectCommentaryWithFilter(bookId: number, connectionTypeId: number) {
     console.log('[Commentary] Selected from header with filter:', { bookId, connectionTypeId, currentFilter: selectedConnectionTypeId.value })
-    
+
     // Set programmatic navigation flag
     isProgrammaticNavigation.value = true
-    
+
     // Set pending scroll target
     pendingScrollToBookId.value = bookId
-    
+
     // Update the filter - this will trigger the watch which will handle scrolling
     setConnectionTypeFilter(connectionTypeId)
 }
@@ -156,23 +161,28 @@ async function handleToggleTree() {
     }
 }
 
+function handleCloseCommentary() {
+    const tabStore = useTabStore()
+    tabStore.toggleSplitPane()
+}
+
 // Wait for a specific group's content to load
 async function waitForGroupContent(bookId: number, maxWaitMs = 3000): Promise<boolean> {
     const startTime = Date.now()
     const checkInterval = 100 // Check every 100ms
-    
+
     while (Date.now() - startTime < maxWaitMs) {
         const group = commentaryGroups.value.find(g => g.targetBookId === bookId)
-        
+
         if (group && group.isLoaded && group.links.length > 0) {
             console.log(`[Commentary] Content loaded for group ${bookId}`)
             return true
         }
-        
+
         // Wait before checking again
         await new Promise(resolve => setTimeout(resolve, checkInterval))
     }
-    
+
     console.warn(`[Commentary] Timeout waiting for content to load for group ${bookId}`)
     return false
 }
@@ -184,21 +194,21 @@ async function scrollToCurrentCommentary(maxRetries = 5) {
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
         await nextTick()
-        
+
         try {
             await commentaryContentRef.value.scrollToGroup(bookId)
             console.log(`[Commentary] Successfully scrolled to ${bookId} on attempt ${attempt + 1}`)
             return true
         } catch (error) {
             console.warn(`[Commentary] Scroll attempt ${attempt + 1} failed for ${bookId}:`, error)
-            
+
             if (attempt < maxRetries - 1) {
                 // Wait before retrying, with exponential backoff
                 await new Promise(resolve => setTimeout(resolve, 50 * (attempt + 1)))
             }
         }
     }
-    
+
     console.error(`[Commentary] Failed to scroll to ${bookId} after ${maxRetries} attempts`)
     return false
 }
@@ -228,13 +238,13 @@ watch(
             console.log('[Commentary] Filter change complete, waiting for target content to load:', pendingScrollToBookId.value)
             const targetBookId = pendingScrollToBookId.value
             pendingScrollToBookId.value = null
-            
+
             // Wait for the target group's content to load
             await waitForGroupContent(targetBookId)
-            
+
             // Now scroll to it
             setCurrentCommentary(targetBookId)
-            
+
             // Clear programmatic navigation flag after scroll completes
             setTimeout(() => {
                 isProgrammaticNavigation.value = false

@@ -29,6 +29,7 @@ export interface BookState {
     isLineDisplayInline?: boolean; // false = block display, true = inline display
     originalHtml?: string; // Store original HTML for diacritics restoration
     isSearchOpen?: boolean; // Whether search overlay is open
+    searchScope?: 'lines' | 'commentary'; // Search scope (lines = book text, commentary = commentaries)
     showAltToc?: boolean; // Whether to display alt TOC entries (default: true)
     showToolbar?: boolean; // Whether to show the book view toolbar (default: true)
     toolbarPosition?: 'top' | 'bottom' | 'left' | 'right' | 'float-vertical' | 'float-horizontal'; // Toolbar position (default: 'top')

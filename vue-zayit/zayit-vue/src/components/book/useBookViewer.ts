@@ -24,7 +24,7 @@ export function useBookViewer(tabId?: number) {
         // Book state toggles
         toggleSplitPane: () => tabStore.toggleSplitPane(),
         toggleToolbar: () => tabStore.toggleToolbar(),
-        toggleBookSearch: (isOpen: boolean) => tabStore.toggleBookSearch(isOpen),
+        toggleBookSearch: (isOpen: boolean, scope?: 'lines' | 'commentary') => tabStore.toggleBookSearch(isOpen, scope),
         toggleAltTocDisplay: () => tabStore.toggleAltTocDisplay(),
         toggleDiacritics: () => tabStore.toggleDiacritics(),
         toggleLineDisplay: () => tabStore.toggleLineDisplay(),
