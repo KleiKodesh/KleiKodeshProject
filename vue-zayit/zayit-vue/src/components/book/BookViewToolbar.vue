@@ -76,8 +76,9 @@
         </button>
 
         <!-- Connection type filter -->
-        <ConnectionTypeFilter v-if="hasConnections && isSplitPaneOpen"
-                              :book="book" />
+        <!-- TODO: Unsure if this should be removed entirely or kept for future use -->
+        <!-- <ConnectionTypeFilter v-if="hasConnections && isSplitPaneOpen"
+                              :book="book" /> -->
 
         <div class="toolbar-separator"></div>
 

@@ -67,7 +67,7 @@ export function useBookViewToolbarActions() {
     }
 
     const handleSearchClick = () => {
-        tabStore.toggleBookSearch(true)
+        tabStore.toggleBookSearch(true, 'lines')
     }
 
     const handleToggleSplitPane = () => {

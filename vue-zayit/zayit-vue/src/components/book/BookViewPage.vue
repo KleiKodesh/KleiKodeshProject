@@ -70,7 +70,8 @@
                             :flat-toc-entries="flatTocEntries"
                             @navigate-line="handleNavigateLine"
                             @navigate-previous-line="(bookId) => handleNavigatePreviousLine(bookId)"
-                            @navigate-next-line="(bookId) => handleNavigateNextLine(bookId)" />
+                            @navigate-next-line="(bookId) => handleNavigateNextLine(bookId)"
+                            @open-search="handleOpenSearchFromCommentary" />
           </template>
         </SplitPane>
       </div>
@@ -144,7 +145,21 @@ const isSearchOpen = computed({
   }
 })
 
-const searchScope = ref<'lines' | 'commentary' | 'both'>('lines')
+const searchScope = ref<'lines' | 'commentary'>('lines')
+
+// Sync searchScope with tab store
+watch(() => myTab.value?.bookState?.searchScope, (newScope) => {
+  if (newScope) {
+    searchScope.value = newScope
+  }
+}, { immediate: true })
+
+// Sync searchScope changes back to tab store
+watch(searchScope, (newScope) => {
+  if (myTab.value?.bookState) {
+    myTab.value.bookState.searchScope = newScope
+  }
+})
 
 const isCommentaryVisible = computed(() => myTab.value?.bookState?.showBottomPane || false)
 
@@ -162,23 +177,6 @@ function updateSearchState() {
   } else if (searchScope.value === 'commentary' && commentaryView) {
     searchCurrentMatchIndex.value = commentaryView.currentMatchIndex ?? 0
     searchTotalMatches.value = commentaryView.totalMatches ?? 0
-  } else if (searchScope.value === 'both') {
-    // Combined: lines first, then commentary
-    const lineMatches = lineView?.totalMatches ?? 0
-    const commentaryMatches = commentaryView?.totalMatches ?? 0
-    const lineCurrentIndex = lineView?.currentMatchIndex ?? -1
-    const commentaryCurrentIndex = commentaryView?.currentMatchIndex ?? -1
-
-    searchTotalMatches.value = lineMatches + commentaryMatches
-
-    // Determine which is current
-    if (lineCurrentIndex >= 0) {
-      searchCurrentMatchIndex.value = lineCurrentIndex
-    } else if (commentaryCurrentIndex >= 0) {
-      searchCurrentMatchIndex.value = lineMatches + commentaryCurrentIndex
-    } else {
-      searchCurrentMatchIndex.value = 0
-    }
   }
 }
 
@@ -197,16 +195,14 @@ function handleSearch(query: string) {
   }
 
   // Perform search based on scope
-  if (searchScope.value === 'lines' || searchScope.value === 'both') {
+  if (searchScope.value === 'lines') {
     lineViewerRef.value.performLineSearch(query)
-  } else {
-    lineViewerRef.value.clearLineSearch()
-  }
-
-  if ((searchScope.value === 'commentary' || searchScope.value === 'both') && commentaryViewRef.value) {
+    if (commentaryViewRef.value) {
+      commentaryViewRef.value.clearCommentarySearch()
+    }
+  } else if (searchScope.value === 'commentary' && commentaryViewRef.value) {
     commentaryViewRef.value.performCommentarySearch(query)
-  } else if (commentaryViewRef.value) {
-    commentaryViewRef.value.clearCommentarySearch()
+    lineViewerRef.value.clearLineSearch()
   }
 
   // Update state after search
@@ -221,22 +217,6 @@ function handleSearchNext() {
     lineView.nextLineSearchMatch()
   } else if (searchScope.value === 'commentary' && commentaryView) {
     commentaryView.nextCommentarySearchMatch()
-  } else if (searchScope.value === 'both') {
-    // Navigate through lines first, then commentary
-    const lineMatches = lineView?.totalMatches ?? 0
-    const lineCurrentIndex = lineView?.currentMatchIndex ?? -1
-
-    if (lineCurrentIndex >= 0 && lineCurrentIndex < lineMatches - 1) {
-      // Still in lines
-      lineView.nextLineSearchMatch()
-    } else if (lineCurrentIndex === lineMatches - 1 && commentaryView) {
-      // Move to first commentary match
-      lineView.clearLineSearch()
-      commentaryView.performCommentarySearch(lineView.searchQuery || '')
-    } else if (commentaryView) {
-      // In commentary
-      commentaryView.nextCommentarySearchMatch()
-    }
   }
 
   nextTick(() => updateSearchState())
@@ -250,33 +230,12 @@ function handleSearchPrevious() {
     lineView.previousLineSearchMatch()
   } else if (searchScope.value === 'commentary' && commentaryView) {
     commentaryView.previousCommentarySearchMatch()
-  } else if (searchScope.value === 'both') {
-    // Navigate through commentary first (reverse), then lines
-    const commentaryCurrentIndex = commentaryView?.currentMatchIndex ?? -1
-
-    if (commentaryCurrentIndex > 0 && commentaryView) {
-      // Still in commentary
-      commentaryView.previousCommentarySearchMatch()
-    } else if (commentaryCurrentIndex === 0 && lineView) {
-      // Move to last line match
-      commentaryView.clearCommentarySearch()
-      lineView.performLineSearch(commentaryView.searchQuery || '')
-      // Go to last match
-      const lineMatches = lineView.totalMatches ?? 0
-      if (lineMatches > 0) {
-        lineView.currentMatchIndex = lineMatches - 1
-        lineView.scrollToCurrentMatch()
-      }
-    } else if (lineView) {
-      // In lines
-      lineView.previousLineSearchMatch()
-    }
   }
 
   nextTick(() => updateSearchState())
 }
 
-function handleSearchScopeChange(scope: 'lines' | 'commentary' | 'both') {
+function handleSearchScopeChange(scope: 'lines' | 'commentary') {
   searchScope.value = scope
   // Re-run search with new scope if there's a query
   const lineView = lineViewerRef.value as any
@@ -287,7 +246,7 @@ function handleSearchScopeChange(scope: 'lines' | 'commentary' | 'both') {
 
 // Reset search scope to 'lines' when commentary is closed
 watch(isCommentaryVisible, (visible) => {
-  if (!visible && (searchScope.value === 'commentary' || searchScope.value === 'both')) {
+  if (!visible && searchScope.value === 'commentary') {
     searchScope.value = 'lines'
     // Re-run search if active
     const lineView = lineViewerRef.value as any
@@ -297,35 +256,35 @@ watch(isCommentaryVisible, (visible) => {
   }
 })
 
-// When search is opened via toolbar (not keyboard), default to 'both' if commentary is visible
+// When search is opened via toolbar (not keyboard), default to 'lines'
 let isOpeningViaKeyboard = false
+let isOpeningFromCommentary = false
+let isTogglingFromToolbar = false
+
 watch(isSearchOpen, (opened, wasOpened) => {
-  // Only set scope when opening via toolbar (not when already open and not via keyboard)
-  if (opened && !wasOpened && !isOpeningViaKeyboard) {
-    // Search was just opened via toolbar button
-    console.log('[Search Watch] Opened via toolbar')
-    const isCommentaryVisible = myTab.value?.bookState?.showBottomPane || false
-    console.log('[Search Watch] Commentary visible:', isCommentaryVisible)
-    console.log('[Search Watch] Current scope before:', searchScope.value)
-    if (isCommentaryVisible) {
-      console.log('[Search Watch] Setting scope to both')
-      searchScope.value = 'both'
-      console.log('[Search Watch] Scope after setting:', searchScope.value)
-    } else {
-      console.log('[Search Watch] Setting scope to lines')
-      searchScope.value = 'lines'
-      console.log('[Search Watch] Scope after setting:', searchScope.value)
-    }
+  if (opened && wasOpened && !isOpeningViaKeyboard && !isOpeningFromCommentary && !isTogglingFromToolbar) {
+    // Search is already open and being "opened" again from toolbar - toggle to lines
+    searchScope.value = 'lines'
+  } else if (opened && !wasOpened && !isOpeningViaKeyboard && !isOpeningFromCommentary) {
+    // Search was just opened via toolbar button - set to lines
+    searchScope.value = 'lines'
   }
-  // Reset flag
+  // Reset flags
   isOpeningViaKeyboard = false
+  isOpeningFromCommentary = false
+  isTogglingFromToolbar = false
 })
 
-// Watch searchScope changes to debug
-watch(searchScope, (newScope, oldScope) => {
-  console.log('[Search Scope Changed]', oldScope, '->', newScope)
-  console.trace('[Search Scope Stack Trace]')
-})
+function handleOpenSearchFromToolbar() {
+  // If search is already open, just toggle to lines mode
+  if (isSearchOpen.value) {
+    isTogglingFromToolbar = true
+    searchScope.value = 'lines'
+  } else {
+    // Opening search - will be handled by watch
+    isSearchOpen.value = true
+  }
+}
 
 function handleSearchClose() {
   if (lineViewerRef.value) {
@@ -335,6 +294,19 @@ function handleSearchClose() {
     commentaryViewRef.value.clearCommentarySearch()
   }
   isSearchOpen.value = false
+}
+
+function handleOpenSearchFromCommentary() {
+  // If search is already open, just toggle to commentary mode
+  if (isSearchOpen.value) {
+    searchScope.value = 'commentary'
+  } else {
+    // Set flag to prevent watch from overriding scope
+    isOpeningFromCommentary = true
+    // Set scope to commentary and open search
+    searchScope.value = 'commentary'
+    isSearchOpen.value = true
+  }
 }
 
 // Keyboard shortcut for search
@@ -351,7 +323,6 @@ useEventListener('keydown', (event: KeyboardEvent) => {
 
     if (!isCommentaryVisible) {
       // Commentary not visible, only lines available
-      console.log('[Keyboard] Commentary not visible, setting to lines')
       searchScope.value = 'lines'
     } else {
       // Check if focus is in commentary or line view
@@ -397,15 +368,10 @@ useEventListener('keydown', (event: KeyboardEvent) => {
 
       // Set scope based on focus
       if (isFocusInCommentary) {
-        console.log('[Keyboard] Focus in commentary, setting to commentary')
         searchScope.value = 'commentary'
-      } else if (isFocusInLineView) {
-        console.log('[Keyboard] Focus in line view, setting to lines')
-        searchScope.value = 'lines'
       } else {
-        // Neither focused, default to both
-        console.log('[Keyboard] No specific focus, setting to both')
-        searchScope.value = 'both'
+        // Default to lines (either in line view or no specific focus)
+        searchScope.value = 'lines'
       }
     }
 

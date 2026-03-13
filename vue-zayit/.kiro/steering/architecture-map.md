@@ -1,5 +1,7 @@
 ---
-inclusion: always
+inclusion: auto
+name: architecture-map
+description: Map of the app and its architecture
 ---
 
 # Architecture Map
@@ -38,10 +40,19 @@ inclusion: always
 │  └─ webviewHebrewBooks - Hebrew books C# bridge                 │
 │                                                                   │
 │  TYPES                                                           │
-│  └─ TypeScript interfaces and type definitions                  │
+│  ├─ BloomSearch        - Search types                           │
+│  ├─ Book               - Book data types                        │
+│  ├─ BookCategoryTree   - Category tree types                    │
+│  ├─ BookToc            - Table of contents types                │
+│  ├─ ConnectionType     - Database connection types              │
+│  ├─ HebrewBook         - Hebrew books types                     │
+│  ├─ Link               - Link types                             │
+│  ├─ LinkGroup          - Link group types                       │
+│  ├─ Tab                - Tab types                              │
+│  └─ Topic              - Topic types                            │
 │                                                                   │
 │  WORKERS                                                         │
-│  └─ Background processing threads                               │
+│  └─ searchWorker       - Background search processing           │
 │                                                                   │
 └─────────────────────────────────────────────────────────────────┘
                               ▲

@@ -20,16 +20,15 @@
             <div class="empty-message">לא נמצאו תוצאות</div>
         </div>
 
-        <!-- Results list with CSS virtualization -->
-        <div v-else
-             ref="scrollContainer"
-             class="scroll-container"
-             tabindex="0">
-            <div class="results-list">
-                <div v-for="(item, index) in results"
-                     :key="item.lineId"
-                     :data-index="index"
-                     :style="{ containIntrinsicSize: intrinsicSize }"
+        <!-- Results list with Virtua virtualization -->
+        <VList v-else
+               ref="vListRef"
+               class="scroll-container"
+               :data="results"
+               style="height: 100%; overflow-y: auto;"
+               @scroll="handleScroll">
+            <template #default="{ item, index }">
+                <div :data-result-index="index"
                      class="result-item">
                     <div class="result-header"
                          @click="$emit('resultClick', item)">
@@ -42,13 +41,14 @@
                     <div class="result-snippet"
                          v-html="highlightedSnippet(item.snippet)"></div>
                 </div>
-            </div>
-        </div>
+            </template>
+        </VList>
     </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
+import { VList } from 'virtua/vue'
 import { Icon } from '@iconify/vue'
 import type { BloomSearchResult } from '@/data/types/BloomSearch'
 import { useSearchResultsList } from './useSearchResultsList'
@@ -64,39 +64,32 @@ defineEmits<{
     resultClick: [result: BloomSearchResult]
 }>()
 
-const scrollContainer = ref<HTMLElement | null>(null)
+const vListRef = ref<InstanceType<typeof VList> | null>(null)
 
 // Use composable for business logic
 const {
     containerStyles,
-    intrinsicSize,
     highlightedSnippet,
     saveScrollPosition,
     restoreScrollPosition,
     handleScroll
 } = useSearchResultsList(
     () => props.searchQuery,
-    scrollContainer
+    vListRef
 )
 
-// Setup scroll listener
-onMounted(() => {
-    if (scrollContainer.value) {
-        scrollContainer.value.addEventListener('scroll', handleScroll, { passive: true })
-    }
-    restoreScrollPosition()
+// Setup scroll listener and restore position
+onMounted(async () => {
+    await restoreScrollPosition()
 })
 
 onUnmounted(() => {
-    if (scrollContainer.value) {
-        scrollContainer.value.removeEventListener('scroll', handleScroll)
-    }
     saveScrollPosition()
 })
 
-// Expose scroll container for parent
+// Expose for parent
 defineExpose({
-    scrollContainer
+    vListRef
 })
 </script>
 
@@ -112,10 +105,6 @@ defineExpose({
     overflow-y: auto;
     overflow-x: hidden;
     outline: none;
-}
-
-.results-list .result-item {
-    content-visibility: auto;
 }
 
 .empty-state {
