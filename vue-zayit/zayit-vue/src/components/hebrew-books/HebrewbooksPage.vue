@@ -20,23 +20,21 @@
                 </div>
             </div>
 
-            <!-- Book list with CSS virtualization -->
+            <!-- Book list with Virtua virtualization -->
             <template v-else>
-                <div v-if="displayedBooks.length > 0"
-                     ref="bookScrollContainer"
-                     class="scroll-container"
-                     tabindex="0">
-                    <div class="books-list">
-                        <div v-for="(item, index) in displayedBooks"
-                             :key="item.id"
-                             :data-index="index"
-                             :style="{ containIntrinsicSize: intrinsicSize }"
-                             class="book-item">
+                <VList v-if="displayedBooks.length > 0"
+                       ref="vListRef"
+                       :data="displayedBooks"
+                       class="scroll-container"
+                       style="height: 100%; overflow-y: auto;"
+                       tabindex="0">
+                    <template #default="{ item }">
+                        <div class="book-item">
                             <HebrewBooksListItem :book="item"
                                                  @book-clicked="trackBookInteractionHandler" />
                         </div>
-                    </div>
-                </div>
+                    </template>
+                </VList>
 
                 <!-- Empty state -->
                 <div v-else
@@ -80,6 +78,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, nextTick } from 'vue'
+import { VList } from 'virtua/vue'
 import { Icon } from '@iconify/vue'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import HebrewBooksListItem from '@/components/hebrew-books/HebrewBooksListItem.vue'
@@ -96,13 +95,12 @@ const isOnline = ref(navigator.onLine)
 // Search input ref
 const searchInput = ref<HTMLInputElement>()
 
-// Book scroll container ref
-const bookScrollContainer = ref<HTMLElement>()
+// VList ref for Virtua
+const vListRef = ref<InstanceType<typeof VList> | null>(null)
 
-// Intrinsic size for CSS virtualization
-const intrinsicSize = computed(() => {
-    const baseHeight = 80
-    return `auto ${baseHeight}px`
+// Get scroll container from VList
+const bookScrollContainer = computed(() => {
+    return vListRef.value?.$el as HTMLElement | undefined
 })
 
 // Set up keyboard navigation for the book list
@@ -158,9 +156,12 @@ const handleSearchTabKey = (event: KeyboardEvent) => {
     event.preventDefault()
 
     // Find the first book item element and focus it
-    const firstBookItem = bookScrollContainer.value?.querySelector('.tree-node[tabindex="0"]') as HTMLElement
-    if (firstBookItem) {
-        firstBookItem.focus()
+    const scrollContainer = vListRef.value?.$el as HTMLElement
+    if (scrollContainer) {
+        const firstBookItem = scrollContainer.querySelector('.tree-node[tabindex="0"]') as HTMLElement
+        if (firstBookItem) {
+            firstBookItem.focus()
+        }
     }
 }
 
@@ -190,10 +191,6 @@ onUnmounted(() => {
     overflow-y: auto;
     overflow-x: hidden;
     outline: none;
-}
-
-.books-list .book-item {
-    content-visibility: auto;
 }
 
 .error-icon,
