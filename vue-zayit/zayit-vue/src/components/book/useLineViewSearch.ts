@@ -5,7 +5,6 @@
 
 import { ref, computed, type Ref } from 'vue'
 import type { BookLineViewerService } from '@/data/services/bookLineViewerService'
-import type { VirtualizerHandle } from 'virtua/vue'
 
 export interface SearchMatch {
     lineIndex: number
@@ -15,7 +14,7 @@ export interface SearchMatch {
 
 export function useLineViewSearch(
     viewerState: BookLineViewerService,
-    virtuaRef: Ref<VirtualizerHandle | null>
+    virtuaRef: Ref<any>
 ) {
     const searchQuery = ref('')
     const matches = ref<SearchMatch[]>([])

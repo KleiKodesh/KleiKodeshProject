@@ -3,19 +3,23 @@
        @click="handleBackgroundClick">
     <!-- Top Toolbar -->
     <LineViewToolbar v-show="myTab?.bookState?.bookId && toolbarPosition === 'top'"
+                     :book="book"
                      ref="toolbarRef"
                      position="top" />
 
     <!-- Floating Toolbars -->
     <LineViewToolbar v-show="myTab?.bookState?.bookId && toolbarPosition === 'float-horizontal'"
+                     :book="book"
                      position="float-horizontal" />
     <LineViewToolbar v-show="myTab?.bookState?.bookId && toolbarPosition === 'float-vertical'"
+                     :book="book"
                      position="float-vertical" />
 
     <!-- Content area with TOC overlay -->
     <div class="flex-110 content-area-wrapper">
       <!-- Right Toolbar (ימין - appears on right in RTL) -->
       <LineViewToolbar v-show="myTab?.bookState?.bookId && toolbarPosition === 'right'"
+                       :book="book"
                        position="right" />
 
       <div class="flex-110 content-area">
@@ -23,7 +27,7 @@
         <keep-alive>
           <TocTreePanel v-if="myTab?.bookState?.isTocOpen && myTab?.bookState?.bookId"
                         ref="tocTreeViewRef"
-                        :toc-entries="filteredTocEntries"
+                        :toc-entries="tocEntries"
                         :is-loading="isTocLoading"
                         :is-compact-mode="!myTab.bookState.isFirstTocOpen"
                         :current-toc-entry-id="currentTocEntryId"
@@ -73,11 +77,13 @@
 
       <!-- Left Toolbar (שמאל - appears on left in RTL) -->
       <LineViewToolbar v-show="myTab?.bookState?.bookId && toolbarPosition === 'left'"
+                       :book="book"
                        position="left" />
     </div>
 
     <!-- Bottom Toolbar -->
     <LineViewToolbar v-show="myTab?.bookState?.bookId && toolbarPosition === 'bottom'"
+                     :book="book"
                      position="bottom" />
   </div>
 </template>
@@ -104,12 +110,13 @@ const {
   myTab,
   toolbarPosition,
   altTocByLineIndex,
-  filteredTocEntries,
+  tocEntries,
   flatTocEntries,
   isTocLoading,
   currentCenterLineIndex,
   currentTocEntryId,
   currentBook,
+  book,
   handleTocSelection,
   handleNavigateLine,
   handleNavigatePreviousLine,

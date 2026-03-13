@@ -40,7 +40,7 @@
     </div>
     <span class="center-text ellipsis activetab-title"
           :key="activeTab?.id"
-          :title="`${activeTab?.title} (לחץ כאן להצגת רשימת הטאבים)`">{{
+          :title="`${activeTab?.title}\n(לחץ כאן להצגת רשימת הטאבים)`">{{
             activeTab?.title
           }}</span>
 

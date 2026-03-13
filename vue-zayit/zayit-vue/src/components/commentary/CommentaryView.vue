@@ -22,10 +22,11 @@
                            :load-group-content="loadGroupContent"
                            :queue-group-load="queueGroupLoad"
                            class="flex-110"
-                           @visible-book-changed="handleVisibleBookChanged"
+                           @visible-book-changed="(bookId) => !isProgrammaticNavigation && handleVisibleBookChanged(bookId)"
                            @navigate-previous-line="(bookId) => emit('navigate-previous-line', bookId)"
                            @navigate-next-line="(bookId) => emit('navigate-next-line', bookId)"
                            @select-commentary="onSelectCommentary"
+                           @select-commentary-with-filter="onSelectCommentaryWithFilter"
                            @toggle-tree="handleToggleTree" />
     </div>
 </template>
@@ -57,6 +58,8 @@ const emit = defineEmits<{
 const commentaryContentRef = ref<any>()
 const commentaryTreePanelRef = ref<any>()
 const showTree = ref(false) // Default to hidden
+const pendingScrollToBookId = ref<number | null>(null) // Track pending scroll after filter change
+const isProgrammaticNavigation = ref(false) // Flag to prevent sync loops during programmatic navigation
 
 const composableStart = performance.now()
 const {
@@ -71,6 +74,7 @@ const {
     handleVisibleBookChanged,
     initializeCommentary,
     setCurrentCommentary,
+    setConnectionTypeFilter,
     loadGroupContent,
     queueGroupLoad
 } = useCommentaryView(props)
@@ -96,13 +100,52 @@ const currentMatchIndexInLink = computed(() => commentarySearchCurrentMatch.valu
 
 function onSelectGroup(node: CommentaryTreeNode) {
     const bookId = handleSelectGroup(node)
-    if (bookId) setCurrentCommentary(bookId)
+    if (bookId) {
+        // Get the connectionTypeId from the selected node's metadata
+        const selectedGroup = commentaryGroups.value.find(g => g.targetBookId === bookId)
+        const nodeConnectionTypeId = selectedGroup?.connectionTypeId
+        
+        console.log('[Commentary] Selected node:', { bookId, nodeConnectionTypeId, currentFilter: selectedConnectionTypeId.value })
+        
+        // Set programmatic navigation flag
+        isProgrammaticNavigation.value = true
+        
+        // If the selected node has a different connection type than current filter, update filter first
+        if (nodeConnectionTypeId !== undefined && nodeConnectionTypeId !== selectedConnectionTypeId.value) {
+            console.log('[Commentary] Updating filter to:', nodeConnectionTypeId)
+            // Set pending scroll target
+            pendingScrollToBookId.value = bookId
+            // Update the filter - this will trigger the watch which will handle scrolling
+            setConnectionTypeFilter(nodeConnectionTypeId)
+        } else {
+            // Same filter or no filter, just scroll
+            console.log('[Commentary] Same filter, scrolling to:', bookId)
+            setCurrentCommentary(bookId)
+            // Clear flag after a delay
+            setTimeout(() => {
+                isProgrammaticNavigation.value = false
+            }, 500)
+        }
+    }
 }
 
 async function onSelectCommentary(bookId: number) {
     setCurrentCommentary(bookId)
     // Move focus back to content after navigation
     commentaryContentRef.value?.focusContent()
+}
+
+async function onSelectCommentaryWithFilter(bookId: number, connectionTypeId: number) {
+    console.log('[Commentary] Selected from header with filter:', { bookId, connectionTypeId, currentFilter: selectedConnectionTypeId.value })
+    
+    // Set programmatic navigation flag
+    isProgrammaticNavigation.value = true
+    
+    // Set pending scroll target
+    pendingScrollToBookId.value = bookId
+    
+    // Update the filter - this will trigger the watch which will handle scrolling
+    setConnectionTypeFilter(connectionTypeId)
 }
 
 async function handleToggleTree() {
@@ -113,22 +156,93 @@ async function handleToggleTree() {
     }
 }
 
-// Unified scroll function - single place for all scrolling logic
-async function scrollToCurrentCommentary() {
-    const bookId = currentCommentaryBookId.value || selectedBookId.value
-    if (bookId && commentaryContentRef.value?.scrollToGroup) {
-        await nextTick()
-        await commentaryContentRef.value.scrollToGroup(bookId)
+// Wait for a specific group's content to load
+async function waitForGroupContent(bookId: number, maxWaitMs = 3000): Promise<boolean> {
+    const startTime = Date.now()
+    const checkInterval = 100 // Check every 100ms
+    
+    while (Date.now() - startTime < maxWaitMs) {
+        const group = commentaryGroups.value.find(g => g.targetBookId === bookId)
+        
+        if (group && group.isLoaded && group.links.length > 0) {
+            console.log(`[Commentary] Content loaded for group ${bookId}`)
+            return true
+        }
+        
+        // Wait before checking again
+        await new Promise(resolve => setTimeout(resolve, checkInterval))
     }
+    
+    console.warn(`[Commentary] Timeout waiting for content to load for group ${bookId}`)
+    return false
+}
+
+// Unified scroll function - single place for all scrolling logic with retry
+async function scrollToCurrentCommentary(maxRetries = 5) {
+    const bookId = currentCommentaryBookId.value || selectedBookId.value
+    if (!bookId || !commentaryContentRef.value?.scrollToGroup) return
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+        await nextTick()
+        
+        try {
+            await commentaryContentRef.value.scrollToGroup(bookId)
+            console.log(`[Commentary] Successfully scrolled to ${bookId} on attempt ${attempt + 1}`)
+            return true
+        } catch (error) {
+            console.warn(`[Commentary] Scroll attempt ${attempt + 1} failed for ${bookId}:`, error)
+            
+            if (attempt < maxRetries - 1) {
+                // Wait before retrying, with exponential backoff
+                await new Promise(resolve => setTimeout(resolve, 50 * (attempt + 1)))
+            }
+        }
+    }
+    
+    console.error(`[Commentary] Failed to scroll to ${bookId} after ${maxRetries} attempts`)
+    return false
 }
 
 // Watch for line/filter changes - load commentary metadata
 watch(
     () => [props.bookId, props.selectedLineIndex, selectedConnectionTypeId.value, selectedTocEntryId.value] as const,
-    async () => {
+    async ([bookId, lineIndex, connectionTypeId], oldValues) => {
+        const oldBookId = oldValues?.[0]
+        const oldLineIndex = oldValues?.[1]
+        const oldConnectionTypeId = oldValues?.[2]
+
+        const isLineChange = bookId === oldBookId && lineIndex !== oldLineIndex
+        const isFilterChange = connectionTypeId !== oldConnectionTypeId
+
         await initializeCommentary()
-        // Scroll after loading new commentaries
-        await scrollToCurrentCommentary()
+
+        // Wait for content to render
+        await nextTick()
+        await nextTick()
+
+        if (isLineChange) {
+            // Line changed - scroll to current commentary
+            await scrollToCurrentCommentary()
+        } else if (isFilterChange && pendingScrollToBookId.value) {
+            // Filter changed and we have a pending scroll target
+            console.log('[Commentary] Filter change complete, waiting for target content to load:', pendingScrollToBookId.value)
+            const targetBookId = pendingScrollToBookId.value
+            pendingScrollToBookId.value = null
+            
+            // Wait for the target group's content to load
+            await waitForGroupContent(targetBookId)
+            
+            // Now scroll to it
+            setCurrentCommentary(targetBookId)
+            
+            // Clear programmatic navigation flag after scroll completes
+            setTimeout(() => {
+                isProgrammaticNavigation.value = false
+            }, 500)
+        } else {
+            // Book or filter changed - restore scroll position
+            await commentaryContentRef.value?.restoreScrollPosition()
+        }
     },
     { immediate: true }
 )

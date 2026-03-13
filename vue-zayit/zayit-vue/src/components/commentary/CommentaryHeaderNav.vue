@@ -75,6 +75,8 @@ const props = defineProps<{
     showBookButton?: boolean
     commentaryTitle?: string
     availableBooks?: CommentaryTreeNode[]
+    commentaryGroups?: any[]
+    connectionTypeId?: number
     showTree?: boolean
 }>()
 
@@ -85,6 +87,7 @@ const emit = defineEmits<{
     (e: 'navigate-next-line'): void
     (e: 'navigate-to-book'): void
     (e: 'select-commentary', bookId: number): void
+    (e: 'select-commentary-with-filter', bookId: number, connectionTypeId: number): void
     (e: 'input-focus'): void
     (e: 'input-blur'): void
     (e: 'toggle-tree'): void
@@ -150,7 +153,17 @@ function handleKeydown(event: KeyboardEvent) {
         if (filteredOptions.value.length === 1) {
             const option = filteredOptions.value[0]
             if (option?.bookId) {
-                emit('select-commentary', option.bookId)
+                // Get the connectionTypeId from the selected book's metadata
+                const selectedGroup = props.commentaryGroups?.find(g => g.targetBookId === option.bookId)
+                const nodeConnectionTypeId = selectedGroup?.connectionTypeId
+                
+                // If different filter, emit special event with filter info
+                if (nodeConnectionTypeId !== undefined && nodeConnectionTypeId !== props.connectionTypeId) {
+                    emit('select-commentary-with-filter', option.bookId, nodeConnectionTypeId)
+                } else {
+                    emit('select-commentary', option.bookId)
+                }
+                
                 searchInput.value = ''
                 if (inputRef.value) {
                     inputRef.value.value = ''
@@ -183,7 +196,16 @@ function handleSelect(event: Event) {
     )
 
     if (selectedOption?.bookId) {
-        emit('select-commentary', selectedOption.bookId)
+        // Get the connectionTypeId from the selected book's metadata
+        const selectedGroup = props.commentaryGroups?.find(g => g.targetBookId === selectedOption.bookId)
+        const nodeConnectionTypeId = selectedGroup?.connectionTypeId
+        
+        // If different filter, emit special event with filter info
+        if (nodeConnectionTypeId !== undefined && nodeConnectionTypeId !== props.connectionTypeId) {
+            emit('select-commentary-with-filter', selectedOption.bookId, nodeConnectionTypeId)
+        } else {
+            emit('select-commentary', selectedOption.bookId)
+        }
     }
 
     // Clear the input and move focus back
