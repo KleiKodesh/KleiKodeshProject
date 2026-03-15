@@ -1,9 +1,13 @@
+import { normalize } from '@/utils/normalize'
+
 export interface BookRow {
   id: number
   categoryId: number
   title: string
   heShortDesc: string | null
   orderIndex: number
+  fullPath?: string
+  searchPath?: string  // normalized fullPath for search
 }
 
 export interface CategoryRow {
@@ -30,4 +34,15 @@ export function buildTree(categories: CategoryRow[], books: BookRow[]): Category
     else map.get(node.parentId)?.children.push(node)
   }
   return roots
+}
+
+export function assignFullPaths(nodes: CategoryNode[], parentPath = ''): void {
+  for (const node of nodes) {
+    const nodePath = parentPath ? `${parentPath} / ${node.title}` : node.title
+    for (const book of node.books) {
+      book.fullPath = `${nodePath} / ${book.title}`
+      book.searchPath = normalize(book.fullPath)
+    }
+    assignFullPaths(node.children, nodePath)
+  }
 }

@@ -13,8 +13,8 @@ export function hexToRgbObj(hex: string): { r: number; g: number; b: number } {
 
 export function lighten(color: string, amount: number): string {
   const hex = color.replace('#', '')
-  const [r, g, b] = [0, 2, 4].map(i => Math.min(255, Math.max(0, parseInt(hex.slice(i, i + 2), 16) + amount)))
-  return '#' + [r, g, b].map(x => Math.round(x).toString(16).padStart(2, '0')).join('')
+  const channels = [0, 2, 4].map(i => Math.min(255, Math.max(0, parseInt(hex.slice(i, i + 2), 16) + amount)))
+  return '#' + channels.map(x => Math.round(x).toString(16).padStart(2, '0')).join('')
 }
 
 export function darken(color: string, amount: number): string {

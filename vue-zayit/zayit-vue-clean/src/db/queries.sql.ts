@@ -126,7 +126,7 @@ export const SQL = {
 
   /** Lines for a book in order */
   GET_LINES_BY_BOOK: `
-    SELECT id, lineIndex, content, heRef, tocEntryId
+    SELECT id, lineIndex, content, tocEntryId
     FROM line
     WHERE bookId = ?
     ORDER BY lineIndex
@@ -134,7 +134,7 @@ export const SQL = {
 
   /** A page of lines (for virtual scrolling) */
   GET_LINES_PAGED: `
-    SELECT id, lineIndex, content, heRef, tocEntryId
+    SELECT id, lineIndex, content, tocEntryId
     FROM line
     WHERE bookId = ?
     ORDER BY lineIndex
@@ -143,7 +143,7 @@ export const SQL = {
 
   /** Single line by id */
   GET_LINE_BY_ID: `
-    SELECT id, lineIndex, content, heRef, tocEntryId
+    SELECT id, lineIndex, content, tocEntryId
     FROM line
     WHERE id = ?
   `,

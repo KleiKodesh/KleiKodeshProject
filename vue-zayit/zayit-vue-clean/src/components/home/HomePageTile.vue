@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
-defineProps<{ label: string; icon: Component; color: string }>()
+defineProps<{ label: string; icon: Component; color?: string }>()
 defineEmits<{ tap: [] }>()
 </script>
 
 <template>
-  <button class="tile" :style="{ '--c': color }" @click="$emit('tap')">
-    <div class="tile-icon"><component :is="icon" /></div>
+  <button class="tile" @click="$emit('tap')">
+    <div class="tile-icon">
+      <component :is="icon" :style="color ? { color } : {}" />
+    </div>
     <span class="tile-label">{{ label }}</span>
   </button>
 </template>
@@ -16,37 +18,36 @@ defineEmits<{ tap: [] }>()
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  width: 80px;
-  padding: 8px 4px;
+  gap: 6px;
+  width: 68px;
+  padding: 6px 4px;
   background: none;
   border: none;
   border-radius: 8px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition: background 0.1s;
 }
-.tile:hover { background: var(--hover-bg); }
-.tile:active { background: var(--active-bg); }
+.tile:hover .tile-icon { transform: scale(1.08); }
+.tile:active .tile-icon { transform: scale(0.95); }
 
 .tile-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 56px;
-  height: 56px;
+  width: 48px;
+  height: 48px;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--c) 15%, transparent);
-  color: var(--c);
-  font-size: 28px;
+  background: var(--bg-secondary);
+  font-size: 24px;
+  transition: transform 0.15s;
 }
 
 .tile-label {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-primary);
   text-align: center;
   line-height: 1.3;
-  max-width: 76px;
+  max-width: 66px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

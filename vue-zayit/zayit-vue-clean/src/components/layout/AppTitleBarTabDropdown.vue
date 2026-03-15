@@ -44,8 +44,8 @@ defineEmits<{ select: [id: string]; close: [id: string] }>()
 .tab-row {
   display: flex;
   align-items: center;
-  height: 48px;
-  padding: 0 8px;
+  height: 36px;
+  padding: 0 4px;
   cursor: pointer;
   border-top: 1px solid var(--border-color);
   transition: background 120ms;
@@ -53,17 +53,17 @@ defineEmits<{ select: [id: string]; close: [id: string] }>()
 .tab-row:hover { background: var(--hover-bg); }
 
 .tab-row-start { display: flex; align-items: center; flex: 1; padding-inline-start: 4px; color: var(--text-secondary); }
-.tab-icon { width: 20px; height: 20px; }
-.tab-row-title { font-weight: 600; font-size: 1rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tab-icon { width: 16px; height: 16px; }
+.tab-row-title { font-weight: 500; font-size: 0.82rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .tab-row-end { display: flex; align-items: center; justify-content: flex-end; flex: 1; }
 
 .tab-close {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 6px;
+  width: 24px;
+  height: 24px;
+  padding: 4px;
   border: none;
   border-radius: 4px;
   background: transparent;

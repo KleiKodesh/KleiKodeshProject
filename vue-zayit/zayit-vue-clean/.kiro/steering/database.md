@@ -148,7 +148,6 @@ Closure table for category hierarchy.
 | bookId | INTEGER | FK → book |
 | lineIndex | INTEGER | not null |
 | content | TEXT | not null |
-| heRef | TEXT | nullable |
 | tocEntryId | INTEGER | nullable |
 | chunk_id | INTEGER | nullable |
 

@@ -5,6 +5,8 @@ import { syncPdfViewerTheme } from '@/theme/themes'
 
 const pdfStore = usePdfStore()
 
+function onIframeLoad() { setTimeout(syncPdfViewerTheme, 100) }
+
 const iframeSrc = computed(() => {
   const url = pdfStore.blobUrl
   if (!url) return null
@@ -16,7 +18,7 @@ const iframeSrc = computed(() => {
 
 <template>
   <div class="pdf-page">
-    <iframe v-if="iframeSrc" :src="iframeSrc" class="pdf-iframe" allowfullscreen @load="setTimeout(syncPdfViewerTheme, 100)" />
+    <iframe v-if="iframeSrc" :src="iframeSrc" class="pdf-iframe" allowfullscreen @load="onIframeLoad" />
     <div v-else class="pdf-empty">לא נבחר קובץ</div>
   </div>
 </template>

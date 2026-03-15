@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import HomeTile from './HomePageTile.vue'
-import { IconLibrary24Regular, IconSearch24Regular, IconFolderOpen24Regular, IconSettings24Regular } from '@iconify-prerendered/vue-fluent'
+import { IconLibrary24Filled, IconFolderOpen24Filled } from '@iconify-prerendered/vue-fluent'
+import { IconSettings24, IconSearchSparkle24 } from '@iconify-prerendered/vue-fluent-color'
 import { usePdfStore } from '@/stores/pdfStore'
 import { useTabStore } from '@/stores/tabStore'
 
@@ -8,10 +9,10 @@ const pdfStore = usePdfStore()
 const tabStore = useTabStore()
 
 const tiles = [
-  { label: 'ספרים', icon: IconLibrary24Regular, color: '#e8622a' },
-  { label: 'חיפוש', icon: IconSearch24Regular, color: '#3478f6' },
-  { label: 'פתח קובץ', icon: IconFolderOpen24Regular, color: '#f0a500' },
-  { label: 'הגדרות', icon: IconSettings24Regular, color: '#6c757d' },
+  { label: 'ספרים', icon: IconLibrary24Filled, color: '#C1440E' },
+  { label: 'חיפוש', icon: IconSearchSparkle24 },
+  { label: 'פתח קובץ', icon: IconFolderOpen24Filled, color: '#f0a500' },
+  { label: 'הגדרות', icon: IconSettings24 },
 ]
 
 const ROUTES: Record<string, string> = { 'ספרים': '/books', 'הגדרות': '/settings' }
@@ -19,9 +20,7 @@ const ROUTES: Record<string, string> = { 'ספרים': '/books', 'הגדרות':
 function onTap(label: string) {
   const route = ROUTES[label]
   if (route) {
-    const existing = tabStore.tabs.find(t => t.route === route)
-    if (existing) tabStore.switchTab(existing.id)
-    else tabStore.openTab({ title: label, route: route as any })
+    tabStore.updateActiveTab({ title: label, route: route as any })
   } else if (label === 'פתח קובץ') {
     const input = Object.assign(document.createElement('input'), { type: 'file', accept: '.pdf,.doc,.docx,.rtf,.txt,.odt,.htm,.html,.xml' })
     input.onchange = () => {

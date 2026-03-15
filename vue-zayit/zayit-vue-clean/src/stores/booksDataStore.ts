@@ -1,0 +1,39 @@
+import { defineStore } from 'pinia'
+import { ref } from 'vue'
+import { query } from '@/db/db'
+import { SQL } from '@/db/queries.sql'
+import { buildTree, assignFullPaths } from '@/components/books-fs/booksFsTree'
+import type { CategoryNode, CategoryRow, BookRow } from '@/components/books-fs/booksFsTree'
+
+export const useBooksDataStore = defineStore('booksData', () => {
+  const loaded = ref(false)
+  const loading = ref(false)
+  const error = ref<string | null>(null)
+  const allBooks = ref<BookRow[]>([])
+  const ROOT = ref<CategoryNode>({
+    id: -1, parentId: null, title: '', level: -1, orderIndex: 0, children: [], books: [],
+  })
+
+  async function ensureLoaded() {
+    if (loaded.value || loading.value) return
+    loading.value = true
+    error.value = null
+    try {
+      const [categories, books] = await Promise.all([
+        query<CategoryRow>(SQL.GET_ALL_CATEGORIES),
+        query<BookRow>(SQL.GET_ALL_BOOKS),
+      ])
+      const children = buildTree(categories, books)
+      assignFullPaths(children)
+      ROOT.value = { ...ROOT.value, children }
+      allBooks.value = books
+      loaded.value = true
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'שגיאה בטעינת הנתונים'
+    } finally {
+      loading.value = false
+    }
+  }
+
+  return { loaded, loading, error, allBooks, ensureLoaded, ROOT }
+})

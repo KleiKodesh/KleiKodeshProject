@@ -28,28 +28,30 @@ defineEmits<{ navigate: [index: number] }>()
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 2px;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--border-color);
+  gap: 0;
+  padding: 2px 8px;
   background: var(--bg-secondary);
-  min-height: 40px;
+  min-height: 32px;
 }
 
 .crumb {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 6px;
+  gap: 2px;
+  padding: 2px 4px;
   background: none;
   border: none;
   border-radius: 4px;
   font-size: 13px;
-  color: var(--text-secondary);
+  color: var(--accent-color);
   cursor: pointer;
-  transition: background 0.1s;
+  transition: background 150ms;
+  min-height: 28px;
 }
-.crumb:hover { background: var(--hover-bg); color: var(--text-primary); }
-.crumb.active { color: var(--text-primary); font-weight: 500; cursor: default; pointer-events: none; }
+.crumb:hover { background: var(--hover-bg); }
+.crumb:active { background: var(--active-bg); }
+.crumb.active { color: var(--text-primary); font-weight: 600; cursor: default; pointer-events: none; }
+.crumb svg { color: var(--accent-color); }
 
-.sep { color: var(--text-secondary); opacity: 0.5; }
+.sep { color: var(--text-secondary); opacity: 0.4; font-size: 12px; padding: 0 1px; }
 </style>

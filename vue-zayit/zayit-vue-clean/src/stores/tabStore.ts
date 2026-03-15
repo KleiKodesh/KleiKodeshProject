@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
+import { persistGet, persistSet, PERSIST_KEYS } from '@/utils/persist'
 
 export type TabRoute = '/' | '/pdf-view' | '/settings' | '/books' | '/book-view'
 
@@ -9,15 +10,44 @@ export interface Tab {
   route: TabRoute
   pdfBlobUrl?: string
   pdfFileName?: string
+  bookId?: number
 }
 
-let nextId = 1
+interface PersistedTabState {
+  tabs: Omit<Tab, 'pdfBlobUrl'>[]
+  activeTabId: string
+  nextId: number
+}
+
+function loadPersistedTabs(): { tabs: Tab[]; activeTabId: string; nextId: number } {
+  const saved = persistGet<PersistedTabState | null>(PERSIST_KEYS.TABS, null)
+  if (saved && saved.tabs.length > 0) {
+    return { tabs: saved.tabs, activeTabId: saved.activeTabId, nextId: saved.nextId }
+  }
+  return { tabs: [{ id: '1', title: 'בית', route: '/' }], activeTabId: '1', nextId: 1 }
+}
 
 export const useTabStore = defineStore('tabs', () => {
-  const tabs = ref<Tab[]>([{ id: '1', title: 'בית', route: '/' }])
-  const activeTabId = ref('1')
+  const initial = loadPersistedTabs()
+  let nextId = initial.nextId
 
+  const tabs = ref<Tab[]>(initial.tabs)
+  const activeTabId = ref(initial.activeTabId)
   const activeTab = computed((): Tab => tabs.value.find(t => t.id === activeTabId.value) ?? tabs.value[0]!)
+
+  // Callbacks registered by other stores to react to tab close (avoids circular imports)
+  const onCloseCallbacks: Array<(id: string) => void> = []
+  function onTabClose(cb: (id: string) => void) { onCloseCallbacks.push(cb) }
+
+  function persist() {
+    persistSet<PersistedTabState>(PERSIST_KEYS.TABS, {
+      tabs: tabs.value.map(({ pdfBlobUrl, ...t }) => t),
+      activeTabId: activeTabId.value,
+      nextId,
+    })
+  }
+
+  watch([tabs, activeTabId], persist, { deep: true })
 
   function openTab(partial: Omit<Tab, 'id'>) {
     const tab: Tab = { id: String(++nextId), ...partial }
@@ -35,6 +65,7 @@ export const useTabStore = defineStore('tabs', () => {
     if (idx === -1) return
     const tab = tabs.value[idx]!
     if (tab.pdfBlobUrl) URL.revokeObjectURL(tab.pdfBlobUrl)
+    onCloseCallbacks.forEach(cb => cb(id))
     tabs.value.splice(idx, 1)
     if (activeTabId.value === id) {
       activeTabId.value = tabs.value[Math.min(idx, tabs.value.length - 1)]?.id ?? ''
@@ -57,5 +88,5 @@ export const useTabStore = defineStore('tabs', () => {
     else openTab({ title: 'בית', route: '/' })
   }
 
-  return { tabs, activeTabId, activeTab, openTab, switchTab, closeTab, updateActiveTab, openNewHomeTab }
+  return { tabs, activeTabId, activeTab, openTab, switchTab, closeTab, updateActiveTab, openNewHomeTab, onTabClose }
 })

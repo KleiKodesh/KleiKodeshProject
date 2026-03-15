@@ -13,7 +13,15 @@
 
 - Mobile-first, tabbed navigation app
 - Features: browse books, full-text search books, etc.
-- `src/components/` is organized by feature folder (e.g. `books/`, `search/`)
+- `src/components/` is organized by feature folder (e.g. `books-fs/`, `book-view/`, `search/`)
+
+## Navigation Pattern
+
+- This is a page-navigation app — navigating to a new page replaces the current tab's content in-place
+- Always use `tabStore.updateActiveTab({ title, route, ...data })` for page navigation — never `openTab`
+- `openTab` is reserved for explicitly creating a second tab (e.g. a "new tab" button)
+- When a user taps a tile on the home screen or selects a book in the file browser, the current tab navigates to the new page — the previous page is gone, not stacked
+- This mirrors iOS navigation: forward navigation replaces the view, back is handled by the tab's history (not yet implemented)
 
 ## Folder Structure
 
@@ -67,14 +75,27 @@
 - Always use Iconify via `@iconify-prerendered/vue-fluent` (or `@iconify-prerendered/vue-fluent-color` for colored variants) — never inline SVGs
 - Pick the size variant that matches the context (e.g. `20` for UI controls, `24` for larger touch targets)
 - Prefer `Regular` weight by default; use `Filled` for active/selected states
+- For home screen tiles, use `Filled` variants with an explicit color prop, or the fluent color variant where available (e.g. `IconSettings24` from `vue-fluent-color`)
+- For list items (fs browser), use `Filled` icons with no container — same icon and color as tiles, always visible, no hover color change
+- Never use the fluent color package for icons that don't have a color variant — fall back to filled + explicit color instead
 
 ### Design Language
-- The app follows Windows 11 Fluent Design principles
-- Use `color-mix()` tinted backgrounds instead of solid fills for icon containers
-- Prefer subtle hover/active states via `--hover-bg` / `--active-bg` over transforms or shadows
-- Rounded corners: `4px` for small controls, `8px` for cards/tiles, `12px` for icon containers
-- No drop shadows on interactive elements — depth comes from color and layering, not shadows
-- Motion should be minimal and fast (100–150ms), only on background/color transitions
+- The app blends iOS visual feel with Windows 11 Fluent Design — Fluent icons and color tokens, iOS-style layout and interaction patterns
+- Targets small Android-type screens with touch support — keep UI compact but maintain minimum 44px touch targets
+- Compact sizing: title bar 40px, book-view toolbar 32px, list rows 44px, breadcrumb 32px, home tiles 48px icon size
+- Home screen tiles: solid `var(--bg-secondary)` background container, `border-radius: 12px`, filled icon colored with an explicit color value, label below in 11px
+- Current tile colors: ספרים `#C1440E` (burnt orange-brown), חיפוש `#3478f6` (blue), פתח קובץ `#f0a500` (amber), הגדרות uses `IconSettings24` from `vue-fluent-color` (no explicit color)
+- All buttons have a global active shrink effect: `button:active { transform: scale(0.92) }` defined in `main.css`
+- Global button defaults (hover background, text color change, active shrink) are defined once in `main.css` — do not repeat `background`, `border`, `cursor`, `transition`, `color`, `:hover`, or `:active` in component-scoped button styles; only add layout properties (`width`, `height`, `padding`, `display`) and state variants (`.active` color) locally
+- Hover on tiles emphasizes the icon container via `transform: scale(1.08)`, active via `scale(0.95)` — no background color change on the tile itself
+- List rows (fs browser): no icon container/tile — plain filled icon inline, always colored (folders `#f0a500`, books `#C1440E`), no color change on hover — background highlight on hover/active only
+- Search bar: iOS-style pill input (`border-radius: 10px`) with a muted fill (`color-mix(in srgb, var(--text-secondary) 12%, transparent)`), icon inline, no outer border — always anchored to bottom of screen
+- The native search clear button (×) should be desaturated: `.search-input::-webkit-search-cancel-button { filter: grayscale(1) opacity(0.4) }`
+- Use `color-mix()` tinted backgrounds instead of solid fills for icon containers in list contexts
+- Rounded corners: `4px` for small controls, `8px` for cards, `10–12px` for search/input pills, `12px` for tile icon containers
+- Use `var(--bg-toolbar)` for secondary toolbars (e.g. book-view toolbar) — sits between `--bg-primary` and `--bg-secondary` to visually distinguish it from the app title bar without being jarring
+- Motion: scale transitions on tiles at 150ms; background/color transitions at 100–150ms
+- Split pane divider hover uses `color-mix(in srgb, var(--text-secondary) 25%, transparent)` — never the accent color
 
 ### Language & Direction
 - The app is Hebrew-only and strictly RTL
