@@ -63,7 +63,9 @@
                     <div class="commentary-group-content">
                         <div v-if="!group.metadata?.links || group.metadata.links.length === 0"
                              class="commentary-links">
-                            <div class="commentary-link">טוען תוכן....</div>
+                            <div v-for="n in (group.metadata?.targetLineIds?.length || 1)"
+                                 :key="n"
+                                 class="commentary-link">&nbsp;</div>
                         </div>
                         <div v-else
                              class="commentary-links">
@@ -141,12 +143,8 @@ const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
 const isDraggingSelection = ref(false)
 const tabStore = useTabStore()
 
-// Create separate tree instances - one for tree panel (unfiltered), one for content (filtered)
-const { flattenedBooks: allBooks } = useCommentaryTree(computed(() => props.commentaryGroups))
-const { flattenedBooks } = useCommentaryTree(
-    computed(() => props.commentaryGroups),
-    computed(() => props.connectionTypeId)
-)
+// Single tree instance - all connection types shown, no filtering
+const { flattenedBooks: allBooks, flattenedBooks } = useCommentaryTree(computed(() => props.commentaryGroups))
 
 const currentDiacriticsState = computed(() => tabStore.currentDiacriticsState)
 
@@ -344,8 +342,6 @@ defineExpose({
 
 .commentary-group {
     margin-bottom: 12px;
-    content-visibility: auto;
-    contain-intrinsic-size: auto 500px;
 }
 
 .commentary-group-content {

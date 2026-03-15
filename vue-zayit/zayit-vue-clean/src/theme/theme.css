@@ -1,0 +1,36 @@
+:root {
+  --bg-primary: var(--bg-primary-custom, #ffffff);
+  --bg-primary-rgb: var(--bg-primary-rgb-custom, 255, 255, 255);
+  --bg-secondary: var(--bg-secondary-custom, #f8f8f8);
+  --bg-secondary-rgb: var(--bg-secondary-rgb-custom, 248, 248, 248);
+  --border-color: var(--border-color-custom, #e5e5e5);
+  --text-primary: var(--text-primary-custom, #1f1f1f);
+  --text-secondary: var(--text-secondary-custom, #5a5a5a);
+  --hover-bg: var(--hover-bg-custom, rgba(0, 0, 0, 0.06));
+  --active-bg: var(--active-bg-custom, rgba(0, 0, 0, 0.09));
+  --accent-color: var(--accent-color-custom, #0078d4);
+  --accent-bg: rgba(0, 120, 212, 0.1);
+  --accent-bg-light: rgba(0, 120, 212, 0.05);
+  --header-font: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  --text-font: 'Times New Roman', Times, serif;
+}
+
+:root.dark {
+  --bg-primary: var(--bg-primary-custom, #1e1e1e);
+  --bg-primary-rgb: var(--bg-primary-rgb-custom, 30, 30, 30);
+  --bg-secondary: var(--bg-secondary-custom, #2d2d2d);
+  --bg-secondary-rgb: var(--bg-secondary-rgb-custom, 45, 45, 45);
+  --border-color: var(--border-color-custom, #3b3b3b);
+  --text-primary: var(--text-primary-custom, #ffffff);
+  --text-secondary: var(--text-secondary-custom, #a6a6a6);
+  --hover-bg: var(--hover-bg-custom, rgba(255, 255, 255, 0.08));
+  --active-bg: var(--active-bg-custom, rgba(255, 255, 255, 0.12));
+  --accent-color: var(--accent-color-custom, #60cdff);
+  --accent-bg: rgba(96, 205, 255, 0.15);
+  --accent-bg-light: rgba(96, 205, 255, 0.08);
+}
+
+* { scrollbar-color: rgba(0, 0, 0, 0.3) rgba(0, 0, 0, 0.05); }
+:root.dark * { scrollbar-color: rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.05); }
+:root.dark button img { filter: invert(1) brightness(1.2); }
+svg { color: var(--text-secondary); }

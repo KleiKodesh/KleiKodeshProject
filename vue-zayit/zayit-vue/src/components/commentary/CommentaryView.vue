@@ -135,9 +135,10 @@ function onSelectGroup(node: CommentaryTreeNode) {
 }
 
 async function onSelectCommentary(bookId: number) {
+    isProgrammaticNavigation.value = true
     setCurrentCommentary(bookId)
-    // Move focus back to content after navigation
     commentaryContentRef.value?.focusContent()
+    setTimeout(() => { isProgrammaticNavigation.value = false }, 500)
 }
 
 async function onSelectCommentaryWithFilter(bookId: number, connectionTypeId: number) {
@@ -223,6 +224,7 @@ watch(
 
         const isLineChange = bookId === oldBookId && lineIndex !== oldLineIndex
         const isFilterChange = connectionTypeId !== oldConnectionTypeId
+        const isFirstLoad = oldValues === undefined
 
         await initializeCommentary()
 
@@ -230,9 +232,10 @@ watch(
         await nextTick()
         await nextTick()
 
-        if (isLineChange) {
-            // Line changed - scroll to current commentary
+        if (isFirstLoad || isLineChange) {
+            isProgrammaticNavigation.value = true
             await scrollToCurrentCommentary()
+            isProgrammaticNavigation.value = false
         } else if (isFilterChange && pendingScrollToBookId.value) {
             // Filter changed and we have a pending scroll target
             console.log('[Commentary] Filter change complete, waiting for target content to load:', pendingScrollToBookId.value)
@@ -257,10 +260,14 @@ watch(
     { immediate: true }
 )
 
-// Watch currentCommentaryBookId - scroll when user changes commentary
+// Watch currentCommentaryBookId - only scroll when changed by user intent, not by scroll tracking
 watch(
     () => currentCommentaryBookId.value,
-    () => scrollToCurrentCommentary()
+    async (newBookId) => {
+        if (newBookId && isProgrammaticNavigation.value) {
+            await scrollToCurrentCommentary()
+        }
+    }
 )
 
 defineExpose({
