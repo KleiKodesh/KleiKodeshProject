@@ -2,6 +2,9 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+* { user-select: none; }
+.lines-content * { user-select: text; }
+
 html, body, #app { height: 100%; width: 100%; }
 
 #app { display: flex; flex-direction: column; }
@@ -23,3 +26,17 @@ button {
 }
 button:hover { background: var(--hover-bg); color: var(--text-primary); }
 button:active { transform: scale(0.92); transition: transform 0.1s; }
+
+h1 {
+  position: relative;
+  padding-bottom: 4px;
+}
+h1::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--border-color);
+}

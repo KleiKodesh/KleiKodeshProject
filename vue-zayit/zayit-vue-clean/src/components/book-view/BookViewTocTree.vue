@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
-import { useEventListener } from '@vueuse/core'
+import { ref, computed, nextTick, watch } from 'vue'
+import { onClickOutside } from '@vueuse/core'
 import { useToc, type TocEntry } from './useToc'
 import BookViewTocTreeSection from './BookViewTocTreeSection.vue'
 import SplitPane from '@/components/common/SplitPane.vue'
@@ -8,13 +8,21 @@ import SplitPane from '@/components/common/SplitPane.vue'
 const props = defineProps<{ bookId: number | undefined; bookTitle?: string }>()
 const emit = defineEmits<{ close: []; select: [entry: TocEntry] }>()
 
+const panelRef = ref<HTMLElement | null>(null)
 const searchQuery = ref('')
 const searchRef = ref<HTMLInputElement | null>(null)
 const { tocEntries, altTocSections, loading, error } = useToc(() => props.bookId)
 
-// Focus search once content is ready (after loading resolves and DOM updates)
+let justSelected = false
+
 watch(loading, (val) => { if (!val) nextTick(() => searchRef.value?.focus()) })
-useEventListener('keydown', (e: KeyboardEvent) => { if (e.key === 'Escape') emit('close') })
+onClickOutside(panelRef, () => { if (!justSelected) emit('close') })
+
+function onSelect(entry: TocEntry) {
+  justSelected = true
+  emit('select', entry)
+  nextTick(() => { justSelected = false })
+}
 
 const hasToc = computed(() => displayedTocEntries.value.length > 0)
 const hasAlt = computed(() => altTocSections.value.length > 0)
@@ -33,82 +41,66 @@ const displayedTocEntries = computed(() => {
 </script>
 
 <template>
-  <Transition name="toc-overlay">
-    <div class="toc-backdrop">
-      <div class="toc-backdrop-dismiss" @click="$emit('close')" />
-      <div class="toc-panel" @click.stop>
+  <Transition name="toc-slide">
+    <div ref="panelRef" class="toc-panel">
 
-        <div v-if="loading" class="toc-state">טוען...</div>
-        <div v-else-if="error" class="toc-state error">{{ error }}</div>
+      <div v-if="loading" class="toc-state">טוען...</div>
+      <div v-else-if="error" class="toc-state error">{{ error }}</div>
 
-        <template v-else>
-          <!-- Split pane fills all space above the search bar -->
-          <SplitPane :bottom-visible="hasBoth" class="toc-body">
-            <template #top>
-              <BookViewTocTreeSection
-                v-if="hasToc"
-                :title="null"
-                :entries="displayedTocEntries"
-                :filter="searchQuery"
-                @select="$emit('select', $event)"
-              />
-            </template>
-            <template #bottom>
-              <BookViewTocTreeSection
-                v-for="section in altTocSections"
-                :key="section.structure.id"
-                :title="null"
-                :entries="section.entries"
-                :filter="searchQuery"
-                @select="$emit('select', $event)"
-              />
-            </template>
-          </SplitPane>
+      <template v-else>
+        <SplitPane :bottom-visible="hasBoth" class="toc-body">
+          <template #top>
+            <BookViewTocTreeSection
+              v-if="hasToc"
+              :title="null"
+              :entries="displayedTocEntries"
+              :filter="searchQuery"
+              @select="onSelect"
+            />
+          </template>
+          <template #bottom>
+            <BookViewTocTreeSection
+              v-for="section in altTocSections"
+              :key="section.structure.id"
+              :title="null"
+              :entries="section.entries"
+              :filter="searchQuery"
+              @select="onSelect"
+            />
+          </template>
+        </SplitPane>
 
-          <div class="toc-search">
-            <div class="search-inner">
-              <input
-                ref="searchRef"
-                v-model="searchQuery"
-                type="search"
-                class="search-input"
-                placeholder="חיפוש..."
-              />
-            </div>
+        <div class="toc-search">
+          <div class="search-inner">
+            <input
+              ref="searchRef"
+              v-model="searchQuery"
+              type="search"
+              class="search-input"
+              placeholder="חיפוש..."
+            />
           </div>
-        </template>
+        </div>
+      </template>
 
-      </div>
     </div>
   </Transition>
 </template>
 
 <style scoped>
-.toc-backdrop {
-  position: absolute;
-  inset: 0;
-  z-index: 100;
-}
-
 .toc-panel {
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
+  z-index: 100;
   display: flex;
   flex-direction: column;
   width: fit-content;
   max-width: min(320px, 85%);
-  background: rgba(var(--bg-secondary-rgb), 0.82);
+  background: color-mix(in srgb, var(--bg-toolbar) 97%, transparent);
   border-left: 1px solid var(--border-color);
   overflow: hidden;
-}
-
-.toc-backdrop-dismiss {
-  position: absolute;
-  inset: 0;
-  cursor: pointer;
-  background: color-mix(in srgb, #000 30%, transparent);
 }
 
 /* toc-body fills all remaining vertical space above the search bar */
@@ -121,22 +113,20 @@ const displayedTocEntries = computed(() => {
   padding: 6px 8px 8px;
   border-top: 1px solid var(--border-color);
   flex-shrink: 0;
-  /* must not drive panel width — align to whatever width the content set */
-  width: 100%;
   box-sizing: border-box;
 }
 
 .search-inner {
   display: flex;
   align-items: center;
-  background: color-mix(in srgb, var(--text-secondary) 12%, transparent);
+  background: color-mix(in srgb, var(--text-secondary) 7%, transparent);
   border-radius: 10px;
   padding: 5px 8px;
 }
 
 .search-input {
   flex: 1;
-  width: 0; /* let flex drive width, not intrinsic size */
+  width: 0;
   min-width: 0;
   background: none;
   border: none;
@@ -155,16 +145,19 @@ const displayedTocEntries = computed(() => {
 }
 .toc-state.error { color: #ff3b30; }
 
-.toc-overlay-enter-active,
-.toc-overlay-leave-active {
-  transition: opacity 180ms ease;
-}
-.toc-overlay-enter-active .toc-panel,
-.toc-overlay-leave-active .toc-panel {
+.toc-slide-enter-active,
+.toc-slide-leave-active {
   transition: transform 180ms ease;
 }
-.toc-overlay-enter-from,
-.toc-overlay-leave-to { opacity: 0; }
-.toc-overlay-enter-from .toc-panel,
-.toc-overlay-leave-to .toc-panel { transform: translateX(100%); }
+.toc-slide-enter-from,
+.toc-slide-leave-to {
+  transform: translateX(100%);
+}
+
+:deep(*) { 
+  scrollbar-color: rgba(0, 0, 0, 0.3) var(--bg-toolbar); 
+  scrollbar-width: thin;
+}
+
+
 </style>

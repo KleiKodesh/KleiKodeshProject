@@ -240,7 +240,7 @@ Junction tables: `bookId` + respective FK, composite PK.
 
 ## Persistence
 
-- All `localStorage` access goes through `src/utils/persist.ts` — never call `localStorage` directly elsewhere
+- All `localStorage` access goes through `src/utils/persist.ts` — never call `localStorage` directly elsewhere, except for prefix-based bulk removal (e.g. clearing all keys under a tab on close)
 
 ```ts
 import { persistGet, persistSet, persistRemove, clearAll, PERSIST_KEYS } from '@/utils/persist'
@@ -260,7 +260,8 @@ import { persistGet, persistSet, persistRemove, clearAll, PERSIST_KEYS } from '@
 | `app.books.view` | `BooksFsPage` | List vs tiles view toggle |
 | `app.bookView.toolbarVisible` | `bookViewStore` | Global toolbar toggle |
 | `app.bookView.searchBarPos` | `bookViewStore` | Global search bar position |
-| `app.bookTab.<tabId>` | `bookViewStore` | Per-tab state: `bottomVisible` |
+| `app.bookTab.<tabId>` | `bookViewStore` | Per-tab state: `bottomVisible`, `tocVisible` |
+| `app.bookTab.<tabId>.scroll.<bookId>` | `bookViewStore` | Scroll position (lineIndex) per book per tab |
 
 All keys live in `PERSIST_KEYS` in `persist.ts` — never use raw strings elsewhere.
 
@@ -269,8 +270,12 @@ All keys live in `PERSIST_KEYS` in `persist.ts` — never use raw strings elsewh
 - `pdfBlobUrl` intentionally excluded — blob URLs don't survive sessions
 
 ### Per-tab State
-- `bookViewStore.getTabState(tabId)` / `setTabState(tabId, patch)` manage per-tab data
-- On tab close, `tabStore` fires `onTabClose` callbacks — `bookViewStore` uses this to call `persistRemove(PERSIST_KEYS.BOOK_TAB(id))`
+- `bookViewStore.getTabState(tabId)` / `setTabState(tabId, patch)` manage per-tab UI state (`bottomVisible`, `tocVisible`)
+- `bookViewStore.getScrollIndex(tabId, bookId)` / `setScrollIndex(tabId, bookId, index)` manage per-book scroll position
+- Scroll is saved 500ms after the user stops scrolling (debounced)
+- On tab close, `bookViewStore` wipes everything under `app.bookTab.<tabId>` — tab state + all scroll entries
+- Navigating away from a book (opening a new book in the same tab) also clears all scroll data for that tab
+- TOC opens automatically on first load of a book (set in `onSelectBook` before navigation)
 
 ### Pages with No Persisted State
 - Books FS page — always reloads fresh
@@ -280,3 +285,4 @@ All keys live in `PERSIST_KEYS` in `persist.ts` — never use raw strings elsewh
 1. Add key to `PERSIST_KEYS` in `persist.ts`
 2. Read with `persistGet` at init; write with `persistSet` in the mutating function
 3. For per-tab book-view data, add field to `BookTabState` in `bookViewStore.ts`
+4. For per-book scroll-like data, use the `app.bookTab.<tabId>.<scope>.<bookId>` pattern

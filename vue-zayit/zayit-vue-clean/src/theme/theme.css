@@ -4,6 +4,7 @@
   --bg-secondary: var(--bg-secondary-custom, #f8f8f8);
   --bg-secondary-rgb: var(--bg-secondary-rgb-custom, 248, 248, 248);
   --bg-toolbar: var(--bg-toolbar-custom, #f0f0f0);
+  --bg-toolbar-rgb: var(--bg-toolbar-rgb-custom, 240, 240, 240);
   --border-color: var(--border-color-custom, #e5e5e5);
   --text-primary: var(--text-primary-custom, #1f1f1f);
   --text-secondary: var(--text-secondary-custom, #5a5a5a);
@@ -22,6 +23,7 @@
   --bg-secondary: var(--bg-secondary-custom, #2d2d2d);
   --bg-secondary-rgb: var(--bg-secondary-rgb-custom, 45, 45, 45);
   --bg-toolbar: var(--bg-toolbar-custom, #252525);
+  --bg-toolbar-rgb: var(--bg-toolbar-rgb-custom, 37, 37, 37);
   --border-color: var(--border-color-custom, #3b3b3b);
   --text-primary: var(--text-primary-custom, #ffffff);
   --text-secondary: var(--text-secondary-custom, #a6a6a6);
@@ -32,7 +34,9 @@
   --accent-bg-light: rgba(96, 205, 255, 0.08);
 }
 
-* { scrollbar-color: rgba(0, 0, 0, 0.3) rgba(0, 0, 0, 0.05); }
-:root.dark * { scrollbar-color: rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.05); }
+* { 
+  scrollbar-color: rgba(0, 0, 0, 0.3) var(--bg-toolbar); 
+}
+:root.dark * { scrollbar-color: rgba(255, 255, 255, 0.3) var(--bg-toolbar); }
 :root.dark button img { filter: invert(1) brightness(1.2); }
 svg { color: var(--text-secondary); }

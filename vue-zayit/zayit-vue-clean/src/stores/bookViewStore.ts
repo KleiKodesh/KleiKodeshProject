@@ -1,10 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useTabStore } from './tabStore'
-import { persistGet, persistSet, persistRemove, PERSIST_KEYS } from '@/utils/persist'
+import { persistGet, persistSet, PERSIST_KEYS } from '@/utils/persist'
 
 export interface BookTabState {
   bottomVisible: boolean
+  tocVisible: boolean
 }
 
 export const useBookViewStore = defineStore('bookView', () => {
@@ -31,6 +32,7 @@ export const useBookViewStore = defineStore('bookView', () => {
   function getTabState(tabId: string): BookTabState {
     return persistGet<BookTabState>(PERSIST_KEYS.BOOK_TAB(tabId), {
       bottomVisible: false,
+      tocVisible: true,
     })
   }
 
@@ -39,8 +41,22 @@ export const useBookViewStore = defineStore('bookView', () => {
     persistSet(PERSIST_KEYS.BOOK_TAB(tabId), { ...current, ...patch })
   }
 
-  // Clear persisted tab data when a tab is closed
-  tabStore.onTabClose((id) => persistRemove(PERSIST_KEYS.BOOK_TAB(id)))
+  function getScrollIndex(tabId: string, bookId: number): { index: number; offset: number } | null {
+    return persistGet(PERSIST_KEYS.BOOK_SCROLL(tabId, bookId), null)
+  }
 
-  return { toolbarVisible, searchBarPos, isBookViewActive, toggleToolbar, setSearchBarPos, getTabState, setTabState }
+  function setScrollIndex(tabId: string, bookId: number, pos: { index: number; offset: number }) {
+    persistSet(PERSIST_KEYS.BOOK_SCROLL(tabId, bookId), pos)
+  }
+
+  // Clear persisted tab data when a tab is closed
+  tabStore.onTabClose((id) => {
+    // Remove tab state + all per-book scroll entries for this tab
+    const prefix = `app.bookTab.${id}`
+    Object.keys(localStorage)
+      .filter(k => k.startsWith(prefix))
+      .forEach(k => localStorage.removeItem(k))
+  })
+
+  return { toolbarVisible, searchBarPos, isBookViewActive, toggleToolbar, setSearchBarPos, getTabState, setTabState, getScrollIndex, setScrollIndex }
 })

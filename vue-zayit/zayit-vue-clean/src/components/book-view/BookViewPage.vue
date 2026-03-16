@@ -8,6 +8,7 @@ import BookViewLinesContent from './BookViewLinesContent.vue'
 import BookViewBottomPanel from './BookViewBottomPanel.vue'
 import BookViewSearchBar from './BookViewSearchBar.vue'
 import BookViewTocTree from './BookViewTocTree.vue'
+import type { TocEntry } from './useToc'
 
 const bookViewStore = useBookViewStore()
 const tabStore = useTabStore()
@@ -17,9 +18,15 @@ const bookId = computed(() => tabStore.activeTab.bookId)
 const saved = bookViewStore.getTabState(tabId)
 const bottomVisible = ref(saved.bottomVisible)
 const searchVisible = ref(false)
-const tocVisible = ref(true)
+const tocVisible = ref(saved.tocVisible ?? true)
+const linesContentRef = ref<InstanceType<typeof BookViewLinesContent> | null>(null)
 
 watch(bottomVisible, (val) => bookViewStore.setTabState(tabId, { bottomVisible: val }))
+watch(tocVisible, (val) => bookViewStore.setTabState(tabId, { tocVisible: val }))
+
+function onTocSelect(entry: TocEntry) {
+  if (entry.lineId != null) linesContentRef.value?.scrollToLineId(entry.lineId)
+}
 </script>
 
 <template>
@@ -41,7 +48,7 @@ watch(bottomVisible, (val) => bookViewStore.setTabState(tabId, { bottomVisible: 
       />
       <BookViewSplitPane :bottom-visible="bottomVisible">
         <template #top>
-          <BookViewLinesContent />
+          <BookViewLinesContent ref="linesContentRef" />
         </template>
         <template #bottom>
           <BookViewBottomPanel />
@@ -52,6 +59,7 @@ watch(bottomVisible, (val) => bookViewStore.setTabState(tabId, { bottomVisible: 
         :book-id="bookId"
         :book-title="tabStore.activeTab.title"
         @close="tocVisible = false"
+        @select="onTocSelect"
       />
     </div>
   </div>

@@ -1,34 +1,50 @@
 <script setup lang="ts">
-import { RecycleScroller } from 'vue-virtual-scroller'
-import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
+import { useVirtualizer } from '@tanstack/vue-virtual'
+import { ref, computed } from 'vue'
 import { IconBook20Filled, IconFolderOpen20Filled } from '@iconify-prerendered/vue-fluent'
 import type { FsItem } from './useBooksFs'
 import type { CategoryNode, BookRow } from './booksFsTree'
 
-defineProps<{ items: FsItem[]; view: 'list' | 'tiles' }>()
+const props = defineProps<{ items: FsItem[]; view: 'list' | 'tiles' }>()
 defineEmits<{ selectBook: [book: BookRow]; enterFolder: [node: CategoryNode] }>()
 
-const asFsItem = (item: unknown) => item as FsItem
-const asFolder = (item: unknown) => item as Extract<FsItem, { kind: 'folder' }>
-const asBook = (item: unknown) => item as Extract<FsItem, { kind: 'book' }>
+const scrollEl = ref<HTMLElement | null>(null)
+
+const virtualizer = useVirtualizer(computed(() => ({
+  count: props.items.length,
+  getScrollElement: () => scrollEl.value,
+  estimateSize: () => 36,
+  overscan: 10,
+})))
+
+const asFolder = (item: FsItem) => item as Extract<FsItem, { kind: 'folder' }>
+const asBook = (item: FsItem) => item as Extract<FsItem, { kind: 'book' }>
 </script>
 
 <template>
   <p v-if="!items.length" class="empty">אין פריטים</p>
 
   <!-- List view -->
-  <RecycleScroller v-else-if="view === 'list'" class="scroller" :items="items" :item-size="36" key-field="uid">
-    <template #default="{ item }">
-      <div v-if="asFsItem(item).kind === 'folder'" class="fs-item" @click="$emit('enterFolder', asFolder(item).node)">
-        <span class="icon folder-icon"><IconFolderOpen20Filled /></span>
-        <span class="title">{{ asFolder(item).node.title }}</span>
+  <div v-else-if="view === 'list'" ref="scrollEl" class="scroller">
+    <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
+      <div
+        v-for="vRow in virtualizer.getVirtualItems()"
+        :key="String(vRow.key)"
+        :style="{ position: 'absolute', top: 0, left: 0, right: 0, transform: `translateY(${vRow.start}px)`, height: `${vRow.size}px` }"
+      >
+        <template v-if="items[vRow.index] as FsItem | undefined">
+          <div v-if="items[vRow.index]!.kind === 'folder'" class="fs-item" @click="$emit('enterFolder', asFolder(items[vRow.index]!).node)">
+            <span class="icon folder-icon"><IconFolderOpen20Filled /></span>
+            <span class="title">{{ asFolder(items[vRow.index]!).node.title }}</span>
+          </div>
+          <div v-else class="fs-item" @click="$emit('selectBook', asBook(items[vRow.index]!).book)">
+            <span class="icon book-icon"><IconBook20Filled /></span>
+            <span class="title">{{ asBook(items[vRow.index]!).book.title }}</span>
+          </div>
+        </template>
       </div>
-      <div v-else class="fs-item" @click="$emit('selectBook', asBook(item).book)">
-        <span class="icon book-icon"><IconBook20Filled /></span>
-        <span class="title">{{ asBook(item).book.title }}</span>
-      </div>
-    </template>
-  </RecycleScroller>
+    </div>
+  </div>
 
   <!-- Tiles view -->
   <div v-else class="tiles-grid">
@@ -48,7 +64,7 @@ const asBook = (item: unknown) => item as Extract<FsItem, { kind: 'book' }>
 
 <style scoped>
 .empty { padding: 24px 16px; color: var(--text-secondary); font-size: 14px; text-align: center; }
-.scroller { height: 100%; }
+.scroller { height: 100%; overflow-y: auto; }
 
 .fs-item {
   display: flex;

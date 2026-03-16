@@ -99,7 +99,6 @@ const visibleEntries = computed(() => {
   height: 32px;
   min-width: 100%;
   padding-inline-end: 8px;
-  cursor: pointer;
 }
 .toc-row:hover { background: color-mix(in srgb, var(--text-primary) 6%, transparent); }
 .toc-row:active { background: color-mix(in srgb, var(--text-primary) 10%, transparent); }
@@ -107,19 +106,17 @@ const visibleEntries = computed(() => {
 .chevron-btn {
   width: 24px;
   flex-shrink: 0;
-}
-
-.chevron-placeholder {
-  width: 20px;
-  flex-shrink: 0;
-}
-
-.chevron-btn {
   display: flex;
   align-items: center;
   justify-content: center;
   height: 32px;
   color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.chevron-placeholder {
+  width: 20px;
+  flex-shrink: 0;
 }
 
 .toc-entry {
@@ -131,5 +128,6 @@ const visibleEntries = computed(() => {
   font-size: 0.85rem;
   color: var(--text-primary);
   white-space: nowrap;
+  cursor: pointer;
 }
 </style>

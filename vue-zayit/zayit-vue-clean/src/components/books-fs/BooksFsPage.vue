@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { IconSearch20Regular, IconTextBulletList20Regular, IconGrid20Regular } from '@iconify-prerendered/vue-fluent'
 import { useBooksFs } from './useBooksFs'
 import BooksBreadcrumb from './BooksBreadcrumb.vue'
@@ -8,9 +8,11 @@ import BooksSearchResults from './BooksSearchResults.vue'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
 import type { BookRow } from './booksFsTree'
 import { useTabStore } from '@/stores/tabStore'
+import { useBookViewStore } from '@/stores/bookViewStore'
 import { persistGet, persistSet, PERSIST_KEYS } from '@/utils/persist'
 
 const tabStore = useTabStore()
+const bookViewStore = useBookViewStore()
 const { loading, error, path, searchQuery, isSearching, treeItems, searchItems, load, enter, navigateTo } = useBooksFs()
 
 const view = ref<'list' | 'tiles'>(persistGet(PERSIST_KEYS.BOOKS_VIEW, 'list') as 'list' | 'tiles')
@@ -20,9 +22,15 @@ function toggleView() {
   persistSet(PERSIST_KEYS.BOOKS_VIEW, view.value)
 }
 
-onMounted(load)
+const searchInputRef = ref<HTMLInputElement | null>(null)
+
+onMounted(() => {
+  load()
+  nextTick(() => searchInputRef.value?.focus())
+})
 
 function onSelectBook(book: BookRow) {
+  bookViewStore.setTabState(tabStore.activeTabId, { tocVisible: true })
   tabStore.updateActiveTab({ title: book.title, route: '/book-view', bookId: book.id })
 }
 </script>
@@ -49,7 +57,7 @@ function onSelectBook(book: BookRow) {
     <div class="search-bar">
       <div class="search-inner">
         <IconSearch20Regular class="search-icon" />
-        <input v-model="searchQuery" type="search" placeholder="חיפוש ספר..." class="search-input" />
+        <input ref="searchInputRef" v-model="searchQuery" type="search" placeholder="חיפוש ספר..." class="search-input" />
       </div>
     </div>
   </div>

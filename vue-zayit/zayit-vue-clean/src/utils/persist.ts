@@ -10,6 +10,7 @@ export const PERSIST_KEYS = {
   BOOK_VIEW_TOOLBAR: 'app.bookView.toolbarVisible',
   BOOK_VIEW_SEARCH_BAR_POS: 'app.bookView.searchBarPos',
   BOOK_TAB: (tabId: string) => `app.bookTab.${tabId}`,
+  BOOK_SCROLL: (tabId: string, bookId: number) => `app.bookTab.${tabId}.scroll.${bookId}`,
 } as const
 
 export function persistGet<T>(key: string, fallback: T): T {
