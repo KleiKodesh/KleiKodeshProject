@@ -35,36 +35,33 @@ const visibleEntries = computed(() => {
   return result
 })
 
-// Keys of groups where at least one sibling has children — used to align leaf nodes
-const siblingsWithChildren = computed(() => {
-  const set = new Set<string>()
-  for (const e of props.entries) {
-    if (e.hasChildren) set.add(`${e.parentId ?? 'root'}-${e.level}`)
-  }
-  return set
-})
 </script>
 
 <template>
   <div class="toc-section">
     <div v-if="title" class="section-title">{{ title }}</div>
     <div class="entries">
-      <div v-for="entry in visibleEntries" :key="entry.id" class="toc-row">
+      <div
+        v-for="entry in visibleEntries"
+        :key="entry.id"
+        class="toc-row"
+      >
         <div
           v-if="entry.hasChildren && !filter"
           class="chevron-btn"
+          :style="{ marginInlineStart: `${entry.level * 10}px` }"
           @click.stop="toggle(entry)"
         >
           <IconChevronDown20Regular v-if="expanded.has(entry.id)" />
           <IconChevronLeft20Regular v-else />
         </div>
         <span
-          v-else-if="siblingsWithChildren.has(`${entry.parentId ?? 'root'}-${entry.level}`)"
+          v-else
           class="chevron-placeholder"
+          :style="{ marginInlineStart: `${entry.level * 10}px` }"
         />
         <div
           class="toc-entry"
-          :style="{ paddingInlineStart: `${entry.level * 16 + 4}px` }"
           @click.stop="$emit('select', entry)"
         >{{ entry.text }}</div>
       </div>
@@ -107,8 +104,13 @@ const siblingsWithChildren = computed(() => {
 .toc-row:hover { background: color-mix(in srgb, var(--text-primary) 6%, transparent); }
 .toc-row:active { background: color-mix(in srgb, var(--text-primary) 10%, transparent); }
 
-.chevron-btn, .chevron-placeholder {
+.chevron-btn {
   width: 24px;
+  flex-shrink: 0;
+}
+
+.chevron-placeholder {
+  width: 20px;
   flex-shrink: 0;
 }
 

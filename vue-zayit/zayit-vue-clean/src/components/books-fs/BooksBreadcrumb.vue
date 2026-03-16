@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { IconHome20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconChevronLeft16Regular, IconHome24Regular } from '@iconify-prerendered/vue-fluent'
 import type { CategoryNode } from './booksFsTree'
 
 defineProps<{ path: CategoryNode[] }>()
@@ -9,16 +9,15 @@ defineEmits<{ navigate: [index: number] }>()
 <template>
   <nav class="breadcrumb">
     <button class="crumb" :class="{ active: path.length === 1 }" @click="$emit('navigate', 0)">
-      <IconHome20Regular />
+      <IconHome24Regular />
     </button>
-    <template v-if="path.length > 1">
-      <span class="sep">/</span>
-      <template v-for="(node, i) in path.slice(1)" :key="node.id">
-        <button class="crumb" :class="{ active: i === path.length - 2 }" @click="$emit('navigate', i + 1)">
-          {{ node.title }}
-        </button>
-        <span v-if="i < path.length - 2" class="sep">/</span>
-      </template>
+    <template v-for="(node, i) in path.slice(1)" :key="node.id">
+      <IconChevronLeft16Regular class="sep" />
+      <button
+        class="crumb"
+        :class="{ active: i === path.length - 2 }"
+        @click="$emit('navigate', i + 1)"
+      >{{ node.title }}</button>
     </template>
   </nav>
 </template>
@@ -26,32 +25,35 @@ defineEmits<{ navigate: [index: number] }>()
 <style scoped>
 .breadcrumb {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 0;
-  padding: 2px 8px;
-  background: var(--bg-secondary);
-  min-height: 32px;
+  padding-inline: 4px;
+  height: 32px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .crumb {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  padding: 2px 4px;
-  background: none;
-  border: none;
+  padding: 0 6px;
+  height: 24px;
   border-radius: 4px;
-  font-size: 13px;
-  color: var(--accent-color);
-  cursor: pointer;
-  transition: background 150ms;
-  min-height: 28px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
-.crumb:hover { background: var(--hover-bg); }
-.crumb:active { background: var(--active-bg); }
-.crumb.active { color: var(--text-primary); font-weight: 600; cursor: default; pointer-events: none; }
-.crumb svg { color: var(--accent-color); }
+.crumb:hover { color: var(--text-primary); }
+.crumb.active {
+  color: var(--text-primary);
+  pointer-events: none;
+}
 
-.sep { color: var(--text-secondary); opacity: 0.4; font-size: 12px; padding: 0 1px; }
+.sep {
+  color: var(--text-secondary);
+  opacity: 0.4;
+  flex-shrink: 0;
+  width: 12px;
+}
 </style>

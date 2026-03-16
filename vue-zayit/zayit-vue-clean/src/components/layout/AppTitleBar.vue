@@ -35,12 +35,7 @@ function goHome() {
     <div class="bar-start">
       <button class="bar-btn" @click.stop><IconLineHorizontal320Regular /></button>
       <ThemeToggle @click.stop />
-    </div>
-
-    <span class="bar-title" :title="activeTab?.title">{{ activeTab?.title }}</span>
-
-    <div class="bar-end">
-      <button
+            <button
         v-if="bookViewStore.isBookViewActive"
         class="bar-btn"
         :class="{ active: bookViewStore.toolbarVisible }"
@@ -49,6 +44,11 @@ function goHome() {
       >
         <IconLayoutRowTwo20Regular />
       </button>
+    </div>
+
+    <span class="bar-title" :title="activeTab?.title">{{ activeTab?.title }}</span>
+
+    <div class="bar-end">
       <button class="bar-btn" title="בית" @click.stop="goHome"><IconHome20Regular /></button>
       <button class="bar-btn" title="לשונית חדשה" @click.stop="tabStore.openNewHomeTab"><IconAdd20Regular /></button>
       <button class="bar-btn" title="סגור לשונית" @click.stop="tabStore.closeTab(tabStore.activeTabId)"><IconDismiss20Regular /></button>
