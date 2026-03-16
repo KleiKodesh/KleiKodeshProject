@@ -2,3 +2,6 @@ load fs data once only
 the search in fs should include the full path of the files and likewaise the full path should be search bale if user searches תנ"ך all under תנ"ך aill show up
 also adjust search so that it uses same methods as the old vue search system
 cpnfirm usage of bue vortual scroller
+UNIFOED HOVER BG AND ACTIVE BG
+DEFAULT SHOULD BE CLICK STOP TO STTERING
+toc tree chevron button is not reaching the edge

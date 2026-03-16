@@ -3,8 +3,8 @@ import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import { IconTextBulletListTree20Regular } from '@iconify-prerendered/vue-fluent'
 import { IconPanelBottom20Regular } from '@iconify-prerendered/vue-fluent'
 
-defineProps<{ bottomVisible: boolean; searchVisible: boolean }>()
-defineEmits<{ toggleBottom: []; toggleSearch: [] }>()
+defineProps<{ bottomVisible: boolean; searchVisible: boolean; tocVisible: boolean }>()
+defineEmits<{ toggleBottom: []; toggleSearch: []; toggleToc: [] }>()
 </script>
 
 <template>
@@ -12,7 +12,7 @@ defineEmits<{ toggleBottom: []; toggleSearch: [] }>()
     <button @click="$emit('toggleSearch')" :class="{ active: searchVisible }">
       <IconSearch20Regular />
     </button>
-    <button>
+    <button @click="$emit('toggleToc')" :class="{ active: tocVisible }">
       <IconTextBulletListTree20Regular />
     </button>
     <button @click="$emit('toggleBottom')" :class="{ active: bottomVisible }">

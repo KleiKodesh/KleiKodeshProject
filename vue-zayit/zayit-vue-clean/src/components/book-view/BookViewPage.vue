@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useTabStore } from '@/stores/tabStore'
 import BookViewToolbar from './BookViewToolbar.vue'
@@ -12,10 +12,12 @@ import BookViewTocTree from './BookViewTocTree.vue'
 const bookViewStore = useBookViewStore()
 const tabStore = useTabStore()
 const tabId = tabStore.activeTabId
+const bookId = computed(() => tabStore.activeTab.bookId)
 
 const saved = bookViewStore.getTabState(tabId)
 const bottomVisible = ref(saved.bottomVisible)
 const searchVisible = ref(false)
+const tocVisible = ref(true)
 
 watch(bottomVisible, (val) => bookViewStore.setTabState(tabId, { bottomVisible: val }))
 </script>
@@ -26,8 +28,10 @@ watch(bottomVisible, (val) => bookViewStore.setTabState(tabId, { bottomVisible: 
       v-if="bookViewStore.toolbarVisible"
       :bottom-visible="bottomVisible"
       :search-visible="searchVisible"
+      :toc-visible="tocVisible"
       @toggle-bottom="bottomVisible = !bottomVisible"
       @toggle-search="searchVisible = !searchVisible"
+      @toggle-toc="tocVisible = !tocVisible"
     />
     <div class="content-area">
       <BookViewSearchBar
@@ -43,6 +47,12 @@ watch(bottomVisible, (val) => bookViewStore.setTabState(tabId, { bottomVisible: 
           <BookViewBottomPanel />
         </template>
       </BookViewSplitPane>
+      <BookViewTocTree
+        v-if="tocVisible"
+        :book-id="bookId"
+        :book-title="tabStore.activeTab.title"
+        @close="tocVisible = false"
+      />
     </div>
   </div>
 </template>

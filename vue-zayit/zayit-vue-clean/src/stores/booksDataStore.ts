@@ -29,7 +29,8 @@ export const useBooksDataStore = defineStore('booksData', () => {
       allBooks.value = books
       loaded.value = true
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'שגיאה בטעינת הנתונים'
+      const msg = e instanceof Error ? e.message : ''
+      error.value = msg.toLowerCase().includes('failed to fetch') ? 'שגיאה בטעינת הנתונים — לא ניתן להתחבר לשרת' : (msg || 'שגיאה בטעינת הנתונים')
     } finally {
       loading.value = false
     }

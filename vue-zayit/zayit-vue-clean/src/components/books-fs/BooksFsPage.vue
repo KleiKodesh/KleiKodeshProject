@@ -5,7 +5,7 @@ import { useBooksFs } from './useBooksFs'
 import BooksBreadcrumb from './BooksBreadcrumb.vue'
 import BooksTreeView from './BooksTreeView.vue'
 import BooksSearchResults from './BooksSearchResults.vue'
-import AppSpinner from '@/components/AppSpinner.vue'
+import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
 import type { BookRow } from './booksFsTree'
 import { useTabStore } from '@/stores/tabStore'
 import { persistGet, persistSet, PERSIST_KEYS } from '@/utils/persist'
@@ -38,7 +38,7 @@ function onSelectBook(book: BookRow) {
     </div>
 
     <div class="books-content">
-      <AppSpinner v-if="loading" />
+      <LoadingAnimation v-if="loading" />
       <div v-else-if="error" class="state error">{{ error }}</div>
       <template v-else>
         <BooksTreeView v-show="!isSearching" :items="treeItems" :view="view" @select-book="onSelectBook" @enter-folder="enter" />

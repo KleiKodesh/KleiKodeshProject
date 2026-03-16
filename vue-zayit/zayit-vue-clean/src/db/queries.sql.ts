@@ -102,24 +102,32 @@ export const SQL = {
 
   // ── TOC ──────────────────────────────────────────────────────────────────────
 
-  /** Root TOC entries for a book */
-  GET_TOC_ROOT_ENTRIES: `
+  /** All TOC entries for a book, flat — build tree in memory */
+  GET_ALL_TOC_ENTRIES: `
     SELECT te.id, te.parentId, te.level, te.lineId, te.isLastChild, te.hasChildren,
            tt.text
     FROM tocEntry te
     JOIN tocText tt ON tt.id = te.textId
-    WHERE te.bookId = ? AND te.parentId IS NULL
+    WHERE te.bookId = ?
     ORDER BY te.id
   `,
 
-  /** Children of a TOC entry */
-  GET_TOC_CHILDREN: `
-    SELECT te.id, te.parentId, te.level, te.lineId, te.isLastChild, te.hasChildren,
+  /** All alt_toc structures for a book */
+  GET_ALT_TOC_STRUCTURES: `
+    SELECT id, key, title, heTitle
+    FROM alt_toc_structure
+    WHERE bookId = ?
+    ORDER BY id
+  `,
+
+  /** All alt_toc entries for a structure, flat — build tree in memory */
+  GET_ALL_ALT_TOC_ENTRIES: `
+    SELECT ae.id, ae.parentId, ae.level, ae.lineId, ae.isLastChild, ae.hasChildren,
            tt.text
-    FROM tocEntry te
-    JOIN tocText tt ON tt.id = te.textId
-    WHERE te.parentId = ?
-    ORDER BY te.id
+    FROM alt_toc_entry ae
+    JOIN tocText tt ON tt.id = ae.textId
+    WHERE ae.structureId = ?
+    ORDER BY ae.id
   `,
 
   // ── Lines ────────────────────────────────────────────────────────────────────
