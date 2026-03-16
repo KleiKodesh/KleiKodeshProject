@@ -21,7 +21,7 @@ function selectTab(id: string) { tabStore.switchTab(id); dropdownOpen.value = fa
 function goHome() {
   const existing = tabStore.tabs.find(t => t.route === '/')
   if (existing) {
-    const cur = tabStore.activeTabId
+    const cur = tabStore.activeTabId.value
     tabStore.switchTab(existing.id)
     if (cur !== existing.id) tabStore.closeTab(cur)
   } else {
@@ -46,7 +46,10 @@ function goHome() {
       </button>
     </div>
 
-    <span class="bar-title" :title="activeTab?.title">{{ activeTab?.title }}</span>
+    <span class="bar-title" :title="bookViewStore.currentTocPath ? `${activeTab?.title} · ${bookViewStore.currentTocPath}` : activeTab?.title">
+      {{ activeTab?.title }}
+      <span v-if="bookViewStore.currentTocPath" class="bar-toc-path"> · {{ bookViewStore.currentTocPath }}</span>
+    </span>
 
     <div class="bar-end">
       <button class="bar-btn" title="בית" @click.stop="goHome"><IconHome20Regular /></button>
@@ -80,6 +83,7 @@ function goHome() {
 .bar-start { display: flex; align-items: center; gap: 0; flex: 1; }
 .bar-end { display: flex; align-items: center; justify-content: flex-end; gap: 0; flex: 1; }
 .bar-title { font-weight: 600; font-size: 0.9rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-toc-path { font-weight: 400; color: var(--text-secondary); }
 
 .bar-btn {
   display: flex;

@@ -105,9 +105,10 @@ export const SQL = {
   /** All TOC entries for a book, flat — build tree in memory */
   GET_ALL_TOC_ENTRIES: `
     SELECT te.id, te.parentId, te.level, te.lineId, te.isLastChild, te.hasChildren,
-           tt.text
+           tt.text, l.lineIndex
     FROM tocEntry te
     JOIN tocText tt ON tt.id = te.textId
+    LEFT JOIN line l ON l.id = te.lineId
     WHERE te.bookId = ?
     ORDER BY te.id
   `,
@@ -123,9 +124,10 @@ export const SQL = {
   /** All alt_toc entries for a structure, flat — build tree in memory */
   GET_ALL_ALT_TOC_ENTRIES: `
     SELECT ae.id, ae.parentId, ae.level, ae.lineId, ae.isLastChild, ae.hasChildren,
-           tt.text
+           tt.text, l.lineIndex
     FROM alt_toc_entry ae
     JOIN tocText tt ON tt.id = ae.textId
+    LEFT JOIN line l ON l.id = ae.lineId
     WHERE ae.structureId = ?
     ORDER BY ae.id
   `,

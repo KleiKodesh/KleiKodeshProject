@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useTabStore } from '@/stores/tabStore'
+import { useToc } from './useToc'
 import BookViewToolbar from './BookViewToolbar.vue'
 import BookViewSplitPane from './BookViewSplitPane.vue'
 import BookViewLinesContent from './BookViewLinesContent.vue'
@@ -12,21 +13,57 @@ import type { TocEntry } from './useToc'
 
 const bookViewStore = useBookViewStore()
 const tabStore = useTabStore()
-const tabId = tabStore.activeTabId
-const bookId = computed(() => tabStore.activeTab.bookId)
+const tabId = tabStore.activeTabId.value
+const bookId = tabStore.activeTab.bookId
+const bookTitle = tabStore.activeTab.title
+const openToc = tabStore.activeTab.openToc ?? false
+if (openToc) tabStore.updateActiveTab({ openToc: false })
 
-const saved = bookViewStore.getTabState(tabId)
-const bottomVisible = ref(saved.bottomVisible)
+const bottomVisible = ref(false)
 const searchVisible = ref(false)
-const tocVisible = ref(saved.tocVisible ?? true)
+const tocVisible = ref(openToc)
 const linesContentRef = ref<InstanceType<typeof BookViewLinesContent> | null>(null)
+const activeTocEntryId = ref<number | undefined>(undefined)
 
-watch(bottomVisible, (val) => bookViewStore.setTabState(tabId, { bottomVisible: val }))
-watch(tocVisible, (val) => bookViewStore.setTabState(tabId, { tocVisible: val }))
+const { getActiveTocEntry, getTocPath, altTocSections } = useToc(() => bookId, () => bookTitle)
+
+// Map of lineIndex → alt toc label for rendering pseudo-labels in the content view
+const altTocLabelMap = computed(() => {
+  const map = new Map<number, string>()
+  for (const section of altTocSections.value) {
+    for (const entry of section.entries) {
+      if (entry.lineIndex == null) continue
+      const existing = map.get(entry.lineIndex)
+      map.set(entry.lineIndex, existing ? `${existing} / ${entry.text}` : entry.text)
+    }
+  }
+  return map
+})
+
+function onLinesScrolled(lineIndex: number) {
+  const entry = getActiveTocEntry(lineIndex)
+  if (entry && entry.id !== activeTocEntryId.value) {
+    activeTocEntryId.value = entry.id
+    bookViewStore.currentTocPath = getTocPath(entry)
+  }
+}
+
+onMounted(async () => {
+  const saved = await tabStore.getTabViewState(tabId)
+  if (saved) {
+    bottomVisible.value = saved.bottomVisible
+    if (!openToc) tocVisible.value = saved.tocVisible
+  }
+})
+
+watch(bottomVisible, (val) => tabStore.setTabViewState(tabId, { bottomVisible: val, tocVisible: tocVisible.value }))
+watch(tocVisible, (val) => tabStore.setTabViewState(tabId, { bottomVisible: bottomVisible.value, tocVisible: val }))
 
 function onTocSelect(entry: TocEntry) {
   if (entry.lineId != null) linesContentRef.value?.scrollToLineId(entry.lineId)
 }
+
+onUnmounted(() => { bookViewStore.currentTocPath = null })
 </script>
 
 <template>
@@ -48,16 +85,18 @@ function onTocSelect(entry: TocEntry) {
       />
       <BookViewSplitPane :bottom-visible="bottomVisible">
         <template #top>
-          <BookViewLinesContent ref="linesContentRef" />
+          <BookViewLinesContent ref="linesContentRef" :alt-toc-label-map="altTocLabelMap" @scrolled="onLinesScrolled" />
         </template>
         <template #bottom>
           <BookViewBottomPanel />
         </template>
       </BookViewSplitPane>
       <BookViewTocTree
-        v-if="tocVisible"
+        v-show="tocVisible"
         :book-id="bookId"
-        :book-title="tabStore.activeTab.title"
+        :book-title="bookTitle"
+        :active-toc-entry-id="activeTocEntryId"
+        :visible="tocVisible"
         @close="tocVisible = false"
         @select="onTocSelect"
       />

@@ -8,7 +8,8 @@ import PdfViewPage from '@/components/pdf/PdfViewPage.vue'
 import SettingsPage from '@/components/settings/SettingsPage.vue'
 import { useTabStore } from '@/stores/tabStore'
 
-const route = computed(() => useTabStore().activeTab.route)
+const tabStore = useTabStore()
+const route = computed(() => tabStore.activeTab.route)
 </script>
 
 <template>
@@ -17,7 +18,7 @@ const route = computed(() => useTabStore().activeTab.route)
     <main class="app-content">
       <HomePage v-if="route === '/'" />
       <BooksPage v-else-if="route === '/books'" />
-      <BookViewPage v-else-if="route === '/book-view'" />
+      <BookViewPage v-else-if="route === '/book-view'" :key="tabStore.activeTabId" />
       <PdfViewPage v-else-if="route === '/pdf-view'" />
       <SettingsPage v-else-if="route === '/settings'" />
     </main>

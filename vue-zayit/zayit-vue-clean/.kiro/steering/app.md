@@ -240,49 +240,58 @@ Junction tables: `bookId` + respective FK, composite PK.
 
 ## Persistence
 
-- All `localStorage` access goes through `src/utils/persist.ts` — never call `localStorage` directly elsewhere, except for prefix-based bulk removal (e.g. clearing all keys under a tab on close)
+`tabStore` (`src/stores/tabStore.ts`) is the single hub for all persistence. No component, composable, or other store may import from `src/utils/persist.ts` or `src/utils/tabDb.ts` directly — always go through `tabStore` functions.
 
+### localStorage — `src/utils/persist.ts`
+Internal to `tabStore` only. Stores global settings that survive sessions.
+
+| Key | `tabStore` function | Notes |
+|---|---|---|
+| `app.tabs` | internal (`persistTabs`) | Tab list, activeTabId, nextId counter. `pdfBlobUrl` excluded |
+| `app.settings` | — | Reserved, not yet used |
+| `app.books.view` | `getBooksView()` / `setBooksView(view)` | List vs tiles toggle |
+| `app.bookView.toolbarVisible` | `getToolbarVisible()` / `setToolbarVisible(val)` | Global toolbar toggle |
+| `app.bookView.searchBarPos` | `getSearchBarPos()` / `setSearchBarPos(pos)` | Floating search bar position |
+
+### IndexedDB — `src/utils/tabDb.ts`
+Internal to `tabStore` only. Per-tab and per-tab+book state, fully isolated by key. DB name: `app-tab-state`.
+
+**`tab-state`** store — key: `tabId`, value: `TabState`
 ```ts
-import { persistGet, persistSet, persistRemove, clearAll, PERSIST_KEYS } from '@/utils/persist'
+interface TabState { bottomVisible: boolean; tocVisible: boolean }
 ```
 
-- `persistGet<T>(key, fallback)` — safe read with JSON parse, returns fallback on missing/error
-- `persistSet<T>(key, value)` — JSON serialize and write
-- `persistRemove(key)` — remove a single key
-- `clearAll()` — wipes all `app.*` keys (use for full app reset)
+**`book-state`** store — key: `"tabId:bookId"`, value: `BookState`
+```ts
+interface BookState { scrollIndex: number; scrollOffset: number }
+```
 
-### Persisted State
+| `tabStore` function | Description |
+|---|---|
+| `getTabViewState(tabId)` | Read tab UI state |
+| `setTabViewState(tabId, state)` | Write tab UI state |
+| `getBookViewState(tabId, bookId)` | Read per-book state (scroll position) |
+| `setBookViewState(tabId, bookId, state)` | Write per-book state |
+| `clearBookViewState(tabId, bookId)` | Delete book state entry |
 
-| Key | Owner | Notes |
-|---|---|---|
-| `app.tabs` | `tabStore` | Tab list, activeTabId, nextId counter. `pdfBlobUrl` excluded (session-only) |
-| `app.settings` | settings (placeholder) | Reserved, not yet used |
-| `app.books.view` | `BooksFsPage` | List vs tiles view toggle |
-| `app.bookView.toolbarVisible` | `bookViewStore` | Global toolbar toggle |
-| `app.bookView.searchBarPos` | `bookViewStore` | Global search bar position |
-| `app.bookTab.<tabId>` | `bookViewStore` | Per-tab state: `bottomVisible`, `tocVisible` |
-| `app.bookTab.<tabId>.scroll.<bookId>` | `bookViewStore` | Scroll position (lineIndex) per book per tab |
+### Stores
 
-All keys live in `PERSIST_KEYS` in `persist.ts` — never use raw strings elsewhere.
+**`tabStore`** — owns all persistence, tab lifecycle, and navigation
+- Tab list persisted to localStorage on every mutation via `watch`
+- `closeTab(id)` internally calls `deleteTab(id)` — wipes tab-state + all `tabId:*` book-state from IDB
+- `pdfBlobUrl` excluded from persistence — blob URLs don't survive sessions
 
-### Tab Persistence
-- `tabStore` persists full tab list on every mutation via `watch` — restored exactly on next session
-- `pdfBlobUrl` intentionally excluded — blob URLs don't survive sessions
+**`bookViewStore`** — reactive UI state only, no direct persistence
+- Reads initial values from `tabStore` at init (`getToolbarVisible`, `getSearchBarPos`)
+- Writes back through `tabStore` (`setToolbarVisible`, `setSearchBarPos`)
+- Exposes: `toolbarVisible`, `searchBarPos`, `isBookViewActive`, `toggleToolbar`, `setSearchBarPos`
 
-### Per-tab State
-- `bookViewStore.getTabState(tabId)` / `setTabState(tabId, patch)` manage per-tab UI state (`bottomVisible`, `tocVisible`)
-- `bookViewStore.getScrollIndex(tabId, bookId)` / `setScrollIndex(tabId, bookId, index)` manage per-book scroll position
-- Scroll is saved 500ms after the user stops scrolling (debounced)
-- On tab close, `bookViewStore` wipes everything under `app.bookTab.<tabId>` — tab state + all scroll entries
-- Navigating away from a book (opening a new book in the same tab) also clears all scroll data for that tab
-- TOC opens automatically on first load of a book (set in `onSelectBook` before navigation)
+### Tab isolation for book view
+- `BookViewPage` gets `:key="tabStore.activeTabId"` in `App.vue` — Vue destroys and re-creates it on every tab switch, giving each tab a fully isolated component instance
+- `tabId` and `bookId` are snapshotted as plain values at mount (`tabStore.activeTabId.value`, `tabStore.activeTab.bookId`) — never read reactively after that
+- On unmount: scroll position saved via `tabStore.setBookViewState`; if no position captured, `tabStore.clearBookViewState` deletes the entry
 
-### Pages with No Persisted State
-- Books FS page — always reloads fresh
-- Home page — stateless
-
-### Adding New Persisted State
-1. Add key to `PERSIST_KEYS` in `persist.ts`
-2. Read with `persistGet` at init; write with `persistSet` in the mutating function
-3. For per-tab book-view data, add field to `BookTabState` in `bookViewStore.ts`
-4. For per-book scroll-like data, use the `app.bookTab.<tabId>.<scope>.<bookId>` pattern
+### Adding new persisted state
+- Global setting → add key to `PERSIST_KEYS` in `persist.ts`, add `get*/set*` pair to `tabStore`
+- Per-tab UI state → add field to `TabState` in `tabDb.ts`, expose via `tabStore.getTabViewState/setTabViewState`
+- Per-book state → add field to `BookState` in `tabDb.ts`, expose via `tabStore.getBookViewState/setBookViewState`

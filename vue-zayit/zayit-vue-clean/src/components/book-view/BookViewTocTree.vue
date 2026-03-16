@@ -5,13 +5,13 @@ import { useToc, type TocEntry } from './useToc'
 import BookViewTocTreeSection from './BookViewTocTreeSection.vue'
 import SplitPane from '@/components/common/SplitPane.vue'
 
-const props = defineProps<{ bookId: number | undefined; bookTitle?: string }>()
+const props = defineProps<{ bookId: number | undefined; bookTitle?: string; activeTocEntryId?: number; visible?: boolean }>()
 const emit = defineEmits<{ close: []; select: [entry: TocEntry] }>()
 
 const panelRef = ref<HTMLElement | null>(null)
 const searchQuery = ref('')
 const searchRef = ref<HTMLInputElement | null>(null)
-const { tocEntries, altTocSections, loading, error } = useToc(() => props.bookId)
+const { tocEntries, altTocSections, loading, error } = useToc(() => props.bookId, () => props.bookTitle)
 
 let justSelected = false
 
@@ -24,20 +24,9 @@ function onSelect(entry: TocEntry) {
   nextTick(() => { justSelected = false })
 }
 
-const hasToc = computed(() => displayedTocEntries.value.length > 0)
+const hasToc = computed(() => tocEntries.value.length > 0)
 const hasAlt = computed(() => altTocSections.value.length > 0)
 const hasBoth = computed(() => hasToc.value && hasAlt.value)
-
-const displayedTocEntries = computed(() => {
-  const entries = tocEntries.value
-  if (!props.bookTitle || entries.length === 0) return entries
-  const roots = entries.filter(e => e.parentId === null)
-  if (roots.length !== 1 || roots[0]!.text !== props.bookTitle) return entries
-  const rootId = roots[0]!.id
-  return entries
-    .filter(e => e.id !== rootId)
-    .map(e => e.parentId === rootId ? { ...e, parentId: null, level: e.level - 1 } : { ...e, level: e.level - 1 })
-})
 </script>
 
 <template>
@@ -53,8 +42,10 @@ const displayedTocEntries = computed(() => {
             <BookViewTocTreeSection
               v-if="hasToc"
               :title="null"
-              :entries="displayedTocEntries"
+              :entries="tocEntries"
               :filter="searchQuery"
+              :active-entry-id="activeTocEntryId"
+              :visible="props.visible"
               @select="onSelect"
             />
           </template>
@@ -98,7 +89,7 @@ const displayedTocEntries = computed(() => {
   flex-direction: column;
   width: fit-content;
   max-width: min(320px, 85%);
-  background: color-mix(in srgb, var(--bg-toolbar) 97%, transparent);
+  background: color-mix(in srgb, var(--bg-toolbar) 95%, transparent);
   border-left: 1px solid var(--border-color);
   overflow: hidden;
 }

@@ -2,16 +2,19 @@
 import { computed, ref, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useTabStore } from '@/stores/tabStore'
-import { useBookViewStore } from '@/stores/bookViewStore'
 import { useLines } from './useLines'
 import { query } from '@/db/db'
 import { SQL } from '@/db/queries.sql'
+import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
 
+const emit = defineEmits<{ scrolled: [lineIndex: number] }>()
+
+const props = defineProps<{ altTocLabelMap?: Map<number, string> }>()
 const tabStore = useTabStore()
-const bookViewStore = useBookViewStore()
-const tabId = tabStore.activeTabId
-const bookId = computed(() => tabStore.activeTab.bookId)
-const { lines, loading, prioritise } = useLines(() => bookId.value)
+const tabId = tabStore.activeTabId.value
+// Snapshot at mount — this instance owns exactly one tab+book pair
+const bookId = tabStore.activeTab.bookId!
+const { lines, loading, prioritise } = useLines(() => bookId)
 
 const scrollerEl = ref<HTMLElement | null>(null)
 
@@ -31,70 +34,75 @@ watch(virtualItems, () => {
 
 // ── Scroll persistence ───────────────────────────────────────────────────────
 
-interface ScrollPos { index: number; offset: number }
+const restoring = ref(false)
 
-function captureScrollPos(): ScrollPos | null {
+function captureScrollPos() {
   const scroller = scrollerEl.value
   if (!scroller || virtualItems.value.length === 0) return null
   const first = virtualItems.value[0]!
-  // offset = how far the top item has been scrolled past (pixels into the item)
-  const offset = scroller.scrollTop - first.start
-  return { index: first.index, offset }
+  return { scrollIndex: first.index, scrollOffset: scroller.scrollTop - first.start }
 }
 
-async function restoreScrollPos(pos: ScrollPos) {
-  prioritise(pos.index)
-
-  // Phase 1: scroll the target index into view so tanstack measures it
-  virtualizer.value.scrollToIndex(pos.index, { align: 'start' })
-  await nextTick()
-
-  // Phase 2: wait for the virtualizer to measure and settle the item heights
-  await new Promise(resolve => setTimeout(resolve, 500))
-
-  // Phase 3: read the now-accurate item start offset and apply the sub-item offset on top
-  const item = virtualizer.value.getVirtualItems().find(v => v.index === pos.index)
-  const itemStart = item?.start ?? virtualizer.value.scrollOffset
-  if (scrollerEl.value) scrollerEl.value.scrollTop = itemStart + pos.offset
-
-  await nextTick()
-  await new Promise(resolve => setTimeout(resolve, 600))
-}
-
-// Restore once lines are loaded and scroller is mounted
-watch(loading, async (val) => {
-  if (!val && lines.value.length > 0 && bookId.value != null) {
+async function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
+  restoring.value = true
+  try {
+    prioritise(scrollIndex)
+    virtualizer.value.scrollToIndex(scrollIndex, { align: 'start' })
     await nextTick()
-    const saved = bookViewStore.getScrollIndex(tabId, bookId.value)
-    if (saved) await restoreScrollPos(saved)
+    await new Promise(resolve => setTimeout(resolve, 500))
+    const item = virtualizer.value.getVirtualItems().find(v => v.index === scrollIndex)
+    const itemStart = item?.start ?? virtualizer.value.scrollOffset
+    if (scrollerEl.value) scrollerEl.value.scrollTop = itemStart + scrollOffset
+    await nextTick()
+    await new Promise(resolve => setTimeout(resolve, 600))
+  } finally {
+    restoring.value = false
+  }
+}
+
+watch(loading, async (val) => {
+  if (!val && lines.value.length > 0) {
+    await nextTick()
+    const saved = await tabStore.getBookViewState(tabId, bookId)
+    if (saved) await restoreScrollPos(saved.scrollIndex, saved.scrollOffset)
   }
 })
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 
 function onScroll() {
+  const scroller = scrollerEl.value
   const first = virtualItems.value[0]?.index ?? 0
   prioritise(first)
-  if (bookId.value == null) return
+  if (scroller) {
+    const center = scroller.scrollTop + scroller.clientHeight / 2
+    const centerItem = virtualItems.value.reduce((best, item) => {
+      const itemCenter = item.start + item.size / 2
+      const bestCenter = best.start + best.size / 2
+      return Math.abs(itemCenter - center) < Math.abs(bestCenter - center) ? item : best
+    }, virtualItems.value[0]!)
+    emit('scrolled', centerItem.index)
+  }
   if (saveTimer) clearTimeout(saveTimer)
   saveTimer = setTimeout(() => {
     const pos = captureScrollPos()
-    if (pos) bookViewStore.setScrollIndex(tabId, bookId.value!, pos)
-  }, 500)
+    if (pos) tabStore.setBookViewState(tabId, bookId, pos)
+  }, 100)
 }
 
 async function scrollToLineId(lineId: number) {
-  const [row] = await query<{ lineIndex: number }>(SQL.GET_LINE_BY_ID, [lineId])
-  if (row == null) return
-  prioritise(row.lineIndex)
-  virtualizer.value.scrollToIndex(row.lineIndex, { align: 'start' })
+  const found = lines.value.find(l => l.id === lineId)
+  const lineIndex = found?.lineIndex ?? (await query<{ lineIndex: number }>(SQL.GET_LINE_BY_ID, [lineId]))[0]?.lineIndex
+  if (lineIndex == null) return
+  prioritise(lineIndex)
+  virtualizer.value.scrollToIndex(lineIndex, { align: 'start' })
 }
 
-// Save position immediately when component unmounts (tab switch / close)
 onBeforeUnmount(() => {
   if (saveTimer) clearTimeout(saveTimer)
   const pos = captureScrollPos()
-  if (pos && bookId.value != null) bookViewStore.setScrollIndex(tabId, bookId.value, pos)
+  if (pos) tabStore.setBookViewState(tabId, bookId, pos)
+  else tabStore.clearBookViewState(tabId, bookId)
 })
 
 defineExpose({ scrollToLineId })
@@ -102,8 +110,10 @@ defineExpose({ scrollToLineId })
 
 <template>
   <div class="lines-content">
-    <div v-if="loading" class="state-msg">טוען...</div>
-    <div v-else ref="scrollerEl" class="scroller" @scroll="onScroll">
+    <div v-if="loading || restoring" class="loading-overlay">
+      <LoadingAnimation />
+    </div>
+    <div ref="scrollerEl" class="scroller" @scroll="onScroll">
       <div :style="{ height: `${totalSize}px`, position: 'relative' }">
         <div
           v-for="vItem in virtualItems"
@@ -115,6 +125,7 @@ defineExpose({ scrollToLineId })
           <div
             v-if="lines[vItem.index]?.content !== null"
             class="line"
+            :data-alt-toc="props.altTocLabelMap?.get(vItem.index) ?? undefined"
             v-html="lines[vItem.index]?.content"
           />
           <div v-else class="line placeholder" />
@@ -127,23 +138,19 @@ defineExpose({ scrollToLineId })
 <style scoped>
 .lines-content {
   height: 100%;
-  display: flex;
-  flex-direction: column;
+  position: relative;
 }
 
-.state-msg {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  color: var(--text-secondary);
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: var(--bg-primary);
 }
 
 .scroller {
-  flex: 1;
-  overflow-y: auto;
   height: 100%;
+  overflow-y: auto;
 }
 
 .line {
@@ -151,7 +158,17 @@ defineExpose({ scrollToLineId })
   font-size: 15px;
   line-height: 1.7;
   color: var(--text-primary);
-  text-align: start;
+  text-align: justify;
+}
+
+.line[data-alt-toc]::before {
+  content: attr(data-alt-toc);
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding-block-end: 2px;
+  opacity: 0.7;
 }
 
 .line.placeholder {

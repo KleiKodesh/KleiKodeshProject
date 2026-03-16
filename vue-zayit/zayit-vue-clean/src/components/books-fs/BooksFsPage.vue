@@ -8,18 +8,15 @@ import BooksSearchResults from './BooksSearchResults.vue'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
 import type { BookRow } from './booksFsTree'
 import { useTabStore } from '@/stores/tabStore'
-import { useBookViewStore } from '@/stores/bookViewStore'
-import { persistGet, persistSet, PERSIST_KEYS } from '@/utils/persist'
 
 const tabStore = useTabStore()
-const bookViewStore = useBookViewStore()
 const { loading, error, path, searchQuery, isSearching, treeItems, searchItems, load, enter, navigateTo } = useBooksFs()
 
-const view = ref<'list' | 'tiles'>(persistGet(PERSIST_KEYS.BOOKS_VIEW, 'list') as 'list' | 'tiles')
+const view = ref<'list' | 'tiles'>(tabStore.getBooksView())
 
 function toggleView() {
   view.value = view.value === 'list' ? 'tiles' : 'list'
-  persistSet(PERSIST_KEYS.BOOKS_VIEW, view.value)
+  tabStore.setBooksView(view.value)
 }
 
 const searchInputRef = ref<HTMLInputElement | null>(null)
@@ -30,8 +27,7 @@ onMounted(() => {
 })
 
 function onSelectBook(book: BookRow) {
-  bookViewStore.setTabState(tabStore.activeTabId, { tocVisible: true })
-  tabStore.updateActiveTab({ title: book.title, route: '/book-view', bookId: book.id })
+  tabStore.updateActiveTab({ title: book.title, route: '/book-view', bookId: book.id, openToc: true })
 }
 </script>
 

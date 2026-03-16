@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { IconChevronLeft20Regular, IconChevronDown20Regular } from '@iconify-prerendered/vue-fluent'
 import type { TocEntry } from './useToc'
 
@@ -7,15 +7,69 @@ const props = defineProps<{
   title: string | null
   entries: TocEntry[]
   filter: string
+  activeEntryId?: number
+  visible?: boolean
 }>()
 
 defineEmits<{ select: [entry: TocEntry] }>()
 
 const expanded = ref<Set<number>>(new Set())
+const rowRefs = ref<Map<number, HTMLElement>>(new Map())
+
+function setRowRef(el: unknown, id: number) {
+  if (el) rowRefs.value.set(id, el as HTMLElement)
+  else rowRefs.value.delete(id)
+}
+
+watch(() => props.activeEntryId, (id) => {
+  if (id == null) return
+  const entry = props.entries.find(e => e.id === id)
+  if (entry) {
+    let current = entry
+    while (current.parentId != null) {
+      expanded.value.add(current.parentId)
+      const parent = entryMap.value.get(current.parentId)
+      if (!parent) break
+      current = parent
+    }
+  }
+  nextTick(() => scrollActiveIntoView(id))
+})
+
+watch(() => props.visible, (val) => {
+  if (val && props.activeEntryId != null) nextTick(() => scrollActiveIntoView(props.activeEntryId!))
+})
+
+function scrollActiveIntoView(id: number) {
+  const el = rowRefs.value.get(id)
+  if (!el) return
+  const container = el.closest('.entries') as HTMLElement | null
+  if (!container) return
+  const rowTop = el.offsetTop
+  const rowHeight = el.offsetHeight
+  const containerHeight = container.clientHeight
+  container.scrollTop = rowTop - containerHeight / 2 + rowHeight / 2
+}
 
 function toggle(entry: TocEntry) {
   if (expanded.value.has(entry.id)) expanded.value.delete(entry.id)
   else expanded.value.add(entry.id)
+}
+
+const entryMap = computed(() => {
+  const map = new Map<number, TocEntry>()
+  for (const e of props.entries) map.set(e.id, e)
+  return map
+})
+
+function getPath(entry: TocEntry): string {
+  const parts: string[] = []
+  let current: TocEntry | undefined = entry
+  while (current) {
+    parts.unshift(current.text)
+    current = current.parentId != null ? entryMap.value.get(current.parentId) : undefined
+  }
+  return parts.join(' / ')
 }
 
 const visibleEntries = computed(() => {
@@ -44,7 +98,9 @@ const visibleEntries = computed(() => {
       <div
         v-for="entry in visibleEntries"
         :key="entry.id"
+        :ref="el => setRowRef(el, entry.id)"
         class="toc-row"
+        :class="{ 'is-filtered': !!filter, 'is-active': entry.id === activeEntryId }"
       >
         <div
           v-if="entry.hasChildren && !filter"
@@ -56,14 +112,14 @@ const visibleEntries = computed(() => {
           <IconChevronLeft20Regular v-else />
         </div>
         <span
-          v-else
+          v-else-if="!filter"
           class="chevron-placeholder"
           :style="{ marginInlineStart: `${entry.level * 10}px` }"
         />
         <div
           class="toc-entry"
           @click.stop="$emit('select', entry)"
-        >{{ entry.text }}</div>
+        >{{ filter ? getPath(entry) : entry.text }}</div>
       </div>
     </div>
   </div>
@@ -101,7 +157,9 @@ const visibleEntries = computed(() => {
   padding-inline-end: 8px;
 }
 .toc-row:hover { background: color-mix(in srgb, var(--text-primary) 6%, transparent); }
-.toc-row:active { background: color-mix(in srgb, var(--text-primary) 10%, transparent); }
+.toc-row:has(.toc-entry:active) { background: color-mix(in srgb, var(--text-primary) 10%, transparent); }
+.toc-row.is-active { background: color-mix(in srgb, var(--text-primary) 8%, transparent); }
+.toc-row.is-active .toc-entry { color: var(--accent-color, #3478f6); font-weight: 500; }
 
 .chevron-btn {
   width: 24px;
@@ -129,5 +187,19 @@ const visibleEntries = computed(() => {
   color: var(--text-primary);
   white-space: nowrap;
   cursor: pointer;
+}
+
+.toc-row.is-filtered .toc-entry {
+  height: auto;
+  line-height: 1.4;
+  padding-block: 6px;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.toc-row.is-filtered {
+  height: auto;
+  align-items: flex-start;
+  padding-inline-start: 12px;
 }
 </style>
