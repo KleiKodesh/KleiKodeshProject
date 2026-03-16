@@ -8,7 +8,6 @@ export const useBookViewStore = defineStore('bookView', () => {
   const toolbarVisible = ref(tabStore.getToolbarVisible())
   const searchBarPos = ref<{ x: number; y: number } | null>(tabStore.getSearchBarPos())
   const isBookViewActive = computed(() => tabStore.activeTab.route === '/book-view')
-  const currentTocPath = ref<string | null>(null)
 
   function toggleToolbar() {
     toolbarVisible.value = !toolbarVisible.value
@@ -20,5 +19,5 @@ export const useBookViewStore = defineStore('bookView', () => {
     tabStore.setSearchBarPos(pos)
   }
 
-  return { toolbarVisible, searchBarPos, isBookViewActive, currentTocPath, toggleToolbar, setSearchBarPos }
+  return { toolbarVisible, searchBarPos, isBookViewActive, toggleToolbar, setSearchBarPos }
 })

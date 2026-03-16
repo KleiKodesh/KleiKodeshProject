@@ -3,20 +3,18 @@ import { computed, ref, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useTabStore } from '@/stores/tabStore'
 import { useLines } from './useLines'
-import { query } from '@/db/db'
-import { SQL } from '@/db/queries.sql'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
 
 const emit = defineEmits<{ scrolled: [lineIndex: number] }>()
-
 const props = defineProps<{ altTocLabelMap?: Map<number, string> }>()
+
 const tabStore = useTabStore()
 const tabId = tabStore.activeTabId.value
-// Snapshot at mount — this instance owns exactly one tab+book pair
 const bookId = tabStore.activeTab.bookId!
 const { lines, loading, prioritise } = useLines(() => bookId)
 
 const scrollerEl = ref<HTMLElement | null>(null)
+const restoring = ref(false)
 
 const virtualizer = useVirtualizer(computed(() => ({
   count: lines.value.length,
@@ -28,19 +26,10 @@ const virtualizer = useVirtualizer(computed(() => ({
 const virtualItems = computed(() => virtualizer.value.getVirtualItems())
 const totalSize = computed(() => virtualizer.value.getTotalSize())
 
-watch(virtualItems, () => {
-  virtualizer.value.measureElement
-})
-
-// ── Scroll persistence ───────────────────────────────────────────────────────
-
-const restoring = ref(false)
-
 function captureScrollPos() {
-  const scroller = scrollerEl.value
-  if (!scroller || virtualItems.value.length === 0) return null
-  const first = virtualItems.value[0]!
-  return { scrollIndex: first.index, scrollOffset: scroller.scrollTop - first.start }
+  const first = virtualItems.value[0]
+  if (!first || !scrollerEl.value) return null
+  return { scrollIndex: first.index, scrollOffset: scrollerEl.value.scrollTop - first.start }
 }
 
 async function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
@@ -49,12 +38,10 @@ async function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
     prioritise(scrollIndex)
     virtualizer.value.scrollToIndex(scrollIndex, { align: 'start' })
     await nextTick()
-    await new Promise(resolve => setTimeout(resolve, 500))
+    await new Promise(r => setTimeout(r, 500))
     const item = virtualizer.value.getVirtualItems().find(v => v.index === scrollIndex)
-    const itemStart = item?.start ?? virtualizer.value.scrollOffset
-    if (scrollerEl.value) scrollerEl.value.scrollTop = itemStart + scrollOffset
-    await nextTick()
-    await new Promise(resolve => setTimeout(resolve, 600))
+    if (scrollerEl.value) scrollerEl.value.scrollTop = (item?.start ?? scrollerEl.value?.scrollTop ?? 0) + scrollOffset
+    await new Promise(r => setTimeout(r, 600))
   } finally {
     restoring.value = false
   }
@@ -62,7 +49,6 @@ async function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
 
 watch(loading, async (val) => {
   if (!val && lines.value.length > 0) {
-    await nextTick()
     const saved = await tabStore.getBookViewState(tabId, bookId)
     if (saved) await restoreScrollPos(saved.scrollIndex, saved.scrollOffset)
   }
@@ -74,14 +60,12 @@ function onScroll() {
   const scroller = scrollerEl.value
   const first = virtualItems.value[0]?.index ?? 0
   prioritise(first)
-  if (scroller) {
+  if (scroller && !restoring.value) {
     const center = scroller.scrollTop + scroller.clientHeight / 2
-    const centerItem = virtualItems.value.reduce((best, item) => {
-      const itemCenter = item.start + item.size / 2
-      const bestCenter = best.start + best.size / 2
-      return Math.abs(itemCenter - center) < Math.abs(bestCenter - center) ? item : best
-    }, virtualItems.value[0]!)
-    emit('scrolled', centerItem.index)
+    const mid = virtualItems.value.reduce((best, item) =>
+      Math.abs(item.start + item.size / 2 - center) < Math.abs(best.start + best.size / 2 - center) ? item : best
+    , virtualItems.value[0]!)
+    emit('scrolled', mid.index)
   }
   if (saveTimer) clearTimeout(saveTimer)
   saveTimer = setTimeout(() => {
@@ -90,9 +74,8 @@ function onScroll() {
   }, 100)
 }
 
-async function scrollToLineId(lineId: number) {
-  const found = lines.value.find(l => l.id === lineId)
-  const lineIndex = found?.lineIndex ?? (await query<{ lineIndex: number }>(SQL.GET_LINE_BY_ID, [lineId]))[0]?.lineIndex
+function scrollToLineId(lineId: number) {
+  const lineIndex = lines.value.find(l => l.id === lineId)?.lineIndex
   if (lineIndex == null) return
   prioritise(lineIndex)
   virtualizer.value.scrollToIndex(lineIndex, { align: 'start' })
@@ -110,9 +93,7 @@ defineExpose({ scrollToLineId })
 
 <template>
   <div class="lines-content">
-    <div v-if="loading || restoring" class="loading-overlay">
-      <LoadingAnimation />
-    </div>
+    <div v-if="loading || restoring" class="loading-overlay"><LoadingAnimation /></div>
     <div ref="scrollerEl" class="scroller" @scroll="onScroll">
       <div :style="{ height: `${totalSize}px`, position: 'relative' }">
         <div
@@ -122,12 +103,9 @@ defineExpose({ scrollToLineId })
           :data-index="vItem.index"
           :style="{ position: 'absolute', top: 0, right: 0, left: 0, transform: `translateY(${vItem.start}px)` }"
         >
-          <div
-            v-if="lines[vItem.index]?.content !== null"
-            class="line"
-            :data-alt-toc="props.altTocLabelMap?.get(vItem.index) ?? undefined"
-            v-html="lines[vItem.index]?.content"
-          />
+          <div v-if="lines[vItem.index]?.content !== null" class="line"
+            :data-alt-toc="props.altTocLabelMap?.get(vItem.index)"
+            v-html="lines[vItem.index]?.content" />
           <div v-else class="line placeholder" />
         </div>
       </div>
@@ -136,46 +114,10 @@ defineExpose({ scrollToLineId })
 </template>
 
 <style scoped>
-.lines-content {
-  height: 100%;
-  position: relative;
-}
-
-.loading-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 10;
-  background: var(--bg-primary);
-}
-
-.scroller {
-  height: 100%;
-  overflow-y: auto;
-}
-
-.line {
-  padding-inline: 12px;
-  font-size: 15px;
-  line-height: 1.7;
-  color: var(--text-primary);
-  text-align: justify;
-}
-
-.line[data-alt-toc]::before {
-  content: attr(data-alt-toc);
-  display: block;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  padding-block-end: 2px;
-  opacity: 0.7;
-}
-
-.line.placeholder {
-  height: 28px;
-  margin-inline: 12px;
-  margin-block: 4px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
-}
+.lines-content { height: 100%; position: relative; }
+.loading-overlay { position: absolute; inset: 0; z-index: 10; background: var(--bg-primary); }
+.scroller { height: 100%; overflow-y: auto; }
+.line { padding-inline: 12px; font-size: 15px; line-height: 1.7; color: var(--text-primary); text-align: justify; }
+.line[data-alt-toc]::before { content: attr(data-alt-toc); display: block; font-size: 0.85rem; font-weight: 600; opacity: 0.35; padding-block-end: 2px; }
+.line.placeholder { height: 28px; margin-inline: 12px; margin-block: 4px; border-radius: 4px; background: color-mix(in srgb, var(--text-primary) 5%, transparent); }
 </style>

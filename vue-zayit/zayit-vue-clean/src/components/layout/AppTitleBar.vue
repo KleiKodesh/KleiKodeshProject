@@ -46,9 +46,9 @@ function goHome() {
       </button>
     </div>
 
-    <span class="bar-title" :title="bookViewStore.currentTocPath ? `${activeTab?.title} · ${bookViewStore.currentTocPath}` : activeTab?.title">
+    <span class="bar-title" :title="activeTab?.tocPath ? `${activeTab?.title} · ${activeTab?.tocPath}` : activeTab?.title">
       {{ activeTab?.title }}
-      <span v-if="bookViewStore.currentTocPath" class="bar-toc-path"> · {{ bookViewStore.currentTocPath }}</span>
+      <span v-if="activeTab?.tocPath" class="bar-toc-path"> · {{ activeTab?.tocPath }}</span>
     </span>
 
     <div class="bar-end">

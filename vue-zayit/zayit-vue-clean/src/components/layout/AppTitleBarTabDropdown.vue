@@ -18,7 +18,10 @@ defineEmits<{ select: [id: string]; close: [id: string] }>()
         <IconHome20Regular v-if="tab.route === '/'" class="tab-icon" />
         <IconDocument20Regular v-else class="tab-icon" />
       </div>
-      <span class="tab-row-title">{{ tab.title }}</span>
+      <span class="tab-row-title">
+        {{ tab.title }}
+        <span v-if="tab.tocPath" class="tab-toc-path"> · {{ tab.tocPath }}</span>
+      </span>
       <div class="tab-row-end">
         <button class="tab-close" @click.stop="$emit('close', tab.id)" title="סגור">
           <IconDismiss20Regular />
@@ -55,6 +58,7 @@ defineEmits<{ select: [id: string]; close: [id: string] }>()
 .tab-row-start { display: flex; align-items: center; flex: 1; padding-inline-start: 4px; color: var(--text-secondary); }
 .tab-icon { width: 16px; height: 16px; }
 .tab-row-title { font-weight: 500; font-size: 0.82rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tab-toc-path { font-weight: 400; color: var(--text-secondary); }
 .tab-row-end { display: flex; align-items: center; justify-content: flex-end; flex: 1; }
 
 .tab-close {

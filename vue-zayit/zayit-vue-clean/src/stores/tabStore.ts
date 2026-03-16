@@ -14,6 +14,7 @@ export interface Tab {
   pdfFileName?: string
   bookId?: number
   openToc?: boolean // transient — consumed once on BookViewPage mount, never persisted
+  tocPath?: string // current TOC position — updated as user scrolls, excluded from persistence
 }
 
 interface PersistedTabList {

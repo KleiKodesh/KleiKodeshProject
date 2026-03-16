@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
+import { ref, watch, onMounted, computed } from 'vue'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useTabStore } from '@/stores/tabStore'
 import { useToc } from './useToc'
@@ -23,11 +23,8 @@ const bottomVisible = ref(false)
 const searchVisible = ref(false)
 const tocVisible = ref(openToc)
 const linesContentRef = ref<InstanceType<typeof BookViewLinesContent> | null>(null)
-const activeTocEntryId = ref<number | undefined>(undefined)
-
 const { getActiveTocEntry, getTocPath, altTocSections } = useToc(() => bookId, () => bookTitle)
 
-// Map of lineIndex → alt toc label for rendering pseudo-labels in the content view
 const altTocLabelMap = computed(() => {
   const map = new Map<number, string>()
   for (const section of altTocSections.value) {
@@ -40,11 +37,13 @@ const altTocLabelMap = computed(() => {
   return map
 })
 
+const activeTocEntryId = ref<number | undefined>(undefined)
+
 function onLinesScrolled(lineIndex: number) {
   const entry = getActiveTocEntry(lineIndex)
   if (entry && entry.id !== activeTocEntryId.value) {
     activeTocEntryId.value = entry.id
-    bookViewStore.currentTocPath = getTocPath(entry)
+    tabStore.updateActiveTab({ tocPath: getTocPath(entry) })
   }
 }
 
@@ -62,8 +61,6 @@ watch(tocVisible, (val) => tabStore.setTabViewState(tabId, { bottomVisible: bott
 function onTocSelect(entry: TocEntry) {
   if (entry.lineId != null) linesContentRef.value?.scrollToLineId(entry.lineId)
 }
-
-onUnmounted(() => { bookViewStore.currentTocPath = null })
 </script>
 
 <template>
