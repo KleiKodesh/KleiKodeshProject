@@ -22,6 +22,7 @@ export interface TabState {
 export interface BookState {
   scrollIndex: number
   scrollOffset: number
+  selectedLineId?: number | null
 }
 
 let db: IDBDatabase | null = null

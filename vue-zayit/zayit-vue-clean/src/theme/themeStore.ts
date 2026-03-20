@@ -6,7 +6,7 @@ export type { ThemePreset } from './themes'
 const KEY = 'zayit-theme'
 
 export const useThemeStore = defineStore('theme', () => {
-  const themePreset = ref<ThemePreset>('fluent-light')
+  const themePreset = ref<ThemePreset>('vscode-dark')
   const readingBackground = ref('default')
 
   function load() {

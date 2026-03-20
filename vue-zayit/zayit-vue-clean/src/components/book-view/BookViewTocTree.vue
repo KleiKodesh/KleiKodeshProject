@@ -6,22 +6,26 @@ import BookViewTocTreeSection from './BookViewTocTreeSection.vue'
 import SplitPane from '@/components/common/SplitPane.vue'
 
 const props = defineProps<{ bookId: number | undefined; bookTitle?: string; activeTocEntryId?: number; visible?: boolean }>()
-const emit = defineEmits<{ close: []; select: [entry: TocEntry] }>()
+const emit = defineEmits<{ close: []; select: [entry: TocEntry]; altSelect: [entry: TocEntry] }>()
 
 const panelRef = ref<HTMLElement | null>(null)
 const searchQuery = ref('')
 const searchRef = ref<HTMLInputElement | null>(null)
 const { tocEntries, altTocSections, loading, error } = useToc(() => props.bookId, () => props.bookTitle)
 
-let justSelected = false
+const justSelected = ref(false)
 
 watch(loading, (val) => { if (!val) nextTick(() => searchRef.value?.focus()) })
-onClickOutside(panelRef, () => { if (!justSelected) emit('close') })
+onClickOutside(panelRef, () => { if (!justSelected.value) emit('close') })
 
 function onSelect(entry: TocEntry) {
-  justSelected = true
+  justSelected.value = true
   emit('select', entry)
-  nextTick(() => { justSelected = false })
+  nextTick(() => { justSelected.value = false })
+}
+
+function onAltSelect(entry: TocEntry) {
+  emit('altSelect', entry)
 }
 
 const hasToc = computed(() => tocEntries.value.length > 0)
@@ -46,6 +50,7 @@ const hasBoth = computed(() => hasToc.value && hasAlt.value)
               :filter="searchQuery"
               :active-entry-id="activeTocEntryId"
               :visible="props.visible"
+              :suppress-scroll="justSelected"
               @select="onSelect"
             />
           </template>
@@ -56,7 +61,7 @@ const hasBoth = computed(() => hasToc.value && hasAlt.value)
               :title="null"
               :entries="section.entries"
               :filter="searchQuery"
-              @select="onSelect"
+              @select="onAltSelect"
             />
           </template>
         </SplitPane>
@@ -89,9 +94,10 @@ const hasBoth = computed(() => hasToc.value && hasAlt.value)
   flex-direction: column;
   width: fit-content;
   max-width: min(320px, 85%);
-  background: color-mix(in srgb, var(--bg-toolbar) 95%, transparent);
+  background: var(--bg-secondary);
   border-left: 1px solid var(--border-color);
   overflow: hidden;
+  --tree-bg: var(--bg-secondary);
 }
 
 /* toc-body fills all remaining vertical space above the search bar */
@@ -101,18 +107,19 @@ const hasBoth = computed(() => hasToc.value && hasAlt.value)
 }
 
 .toc-search {
-  padding: 6px 8px 8px;
+  padding: 5px 6px 6px;
   border-top: 1px solid var(--border-color);
   flex-shrink: 0;
   box-sizing: border-box;
+  background: var(--tree-bg, var(--bg-primary));
 }
 
 .search-inner {
   display: flex;
   align-items: center;
-  background: color-mix(in srgb, var(--text-secondary) 7%, transparent);
-  border-radius: 10px;
-  padding: 5px 8px;
+  background: color-mix(in srgb, var(--text-secondary) 10%, transparent);
+  border-radius: 6px;
+  padding: 4px 8px;
 }
 
 .search-input {
@@ -122,7 +129,7 @@ const hasBoth = computed(() => hasToc.value && hasAlt.value)
   background: none;
   border: none;
   outline: none;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-primary);
 }
 .search-input::placeholder { color: var(--text-secondary); }
@@ -144,11 +151,4 @@ const hasBoth = computed(() => hasToc.value && hasAlt.value)
 .toc-slide-leave-to {
   transform: translateX(100%);
 }
-
-:deep(*) { 
-  scrollbar-color: rgba(0, 0, 0, 0.3) var(--bg-toolbar); 
-  scrollbar-width: thin;
-}
-
-
 </style>

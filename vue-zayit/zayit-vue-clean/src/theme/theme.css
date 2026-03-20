@@ -35,8 +35,8 @@
 }
 
 * { 
-  scrollbar-color: rgba(0, 0, 0, 0.3) var(--bg-toolbar); 
+  scrollbar-color: color-mix(in srgb, var(--text-secondary) 30%, transparent) transparent;
 }
-:root.dark * { scrollbar-color: rgba(255, 255, 255, 0.3) var(--bg-toolbar); }
+:root.dark * { scrollbar-color: color-mix(in srgb, var(--text-secondary) 30%, transparent) transparent; }
 :root.dark button img { filter: invert(1) brightness(1.2); }
 svg { color: var(--text-secondary); }

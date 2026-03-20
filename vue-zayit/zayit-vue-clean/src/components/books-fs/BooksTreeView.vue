@@ -13,7 +13,7 @@ const scrollEl = ref<HTMLElement | null>(null)
 const virtualizer = useVirtualizer(computed(() => ({
   count: props.items.length,
   getScrollElement: () => scrollEl.value,
-  estimateSize: () => 36,
+  estimateSize: () => 38,
   overscan: 10,
 })))
 
@@ -69,9 +69,9 @@ const asBook = (item: FsItem) => item as Extract<FsItem, { kind: 'book' }>
 .fs-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 10px;
-  height: 36px;
+  gap: 10px;
+  padding: 0 12px;
+  height: 38px;
   cursor: pointer;
   box-sizing: border-box;
   transition: background 0.1s;
@@ -80,6 +80,7 @@ const asBook = (item: FsItem) => item as Extract<FsItem, { kind: 'book' }>
 .fs-item:active { background: var(--active-bg); }
 
 .icon { display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.icon svg { width: 20px; height: 20px; }
 .folder-icon svg { color: #f0a500; }
 .book-icon svg { color: #C1440E; }
 .title { font-size: 14px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -112,13 +113,13 @@ const asBook = (item: FsItem) => item as Extract<FsItem, { kind: 'book' }>
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
   background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
   transition: transform 0.15s;
 }
+.tile .tile-icon svg { width: 22px; height: 22px; }
 .tile .folder-icon svg { color: #f0a500; }
 .tile .book-icon svg { color: #C1440E; }
 

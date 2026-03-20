@@ -3,12 +3,26 @@ import { IconBook20Filled } from '@iconify-prerendered/vue-fluent'
 import type { BookFsItem } from './useBooksFs'
 import type { BookRow } from './booksFsTree'
 
-defineProps<{ items: BookFsItem[]; view: 'list' | 'tiles' }>()
+defineProps<{ items: BookFsItem[]; view: 'list' | 'tiles' | 'tree' }>()
 defineEmits<{ selectBook: [book: BookRow] }>()
 </script>
 
 <template>
   <p v-if="!items.length" class="empty">אין תוצאות</p>
+
+  <!-- Tree mode: plain rows, no icons -->
+  <div v-else-if="view === 'tree'" class="results-list">
+    <div v-for="item in items" :key="item.uid"
+      class="fs-item no-icon"
+      :title="item.book.title"
+      @click="$emit('selectBook', item.book)"
+    >
+      <span class="item-text">
+        <span class="item-title">{{ item.book.title }}</span>
+        <span v-if="item.book.fullPath" class="item-path">{{ item.book.fullPath.split(' / ').slice(0, -1).join(' / ') }}</span>
+      </span>
+    </div>
+  </div>
 
   <!-- List view -->
   <div v-else-if="view === 'list'" class="results-list">
@@ -18,7 +32,10 @@ defineEmits<{ selectBook: [book: BookRow] }>()
       @click="$emit('selectBook', item.book)"
     >
       <span class="icon"><IconBook20Filled /></span>
-      <span class="path">{{ item.book.fullPath }}</span>
+      <span class="item-text">
+        <span class="item-title">{{ item.book.title }}</span>
+        <span v-if="item.book.fullPath" class="item-path">{{ item.book.fullPath.split(' / ').slice(0, -1).join(' / ') }}</span>
+      </span>
     </div>
   </div>
 
@@ -45,10 +62,10 @@ defineEmits<{ selectBook: [book: BookRow] }>()
 
 .fs-item {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 8px 10px;
-  min-height: 36px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  min-height: 44px;
   cursor: pointer;
   box-sizing: border-box;
   transition: background 0.1s;
@@ -56,10 +73,13 @@ defineEmits<{ selectBook: [book: BookRow] }>()
 .fs-item:hover { background: var(--hover-bg); }
 .fs-item:active { background: var(--active-bg); }
 
-.icon { display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
-.icon svg { color: #C1440E; }
+.icon { display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.icon svg { width: 20px; height: 20px; color: #C1440E; }
+.fs-item.no-icon { padding-inline-start: 14px; }
 
-.path { font-size: 14px; color: var(--text-primary); line-height: 1.4; white-space: normal; }
+.item-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.item-title { font-size: 14px; color: var(--text-primary); line-height: 1.3; }
+.item-path { font-size: 11px; color: var(--text-secondary); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Tiles */
 .tiles-grid {
@@ -94,7 +114,6 @@ defineEmits<{ selectBook: [book: BookRow] }>()
   height: 48px;
   border-radius: 12px;
   background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
   transition: transform 0.15s;
 }
 .tile-icon svg { color: #C1440E; }

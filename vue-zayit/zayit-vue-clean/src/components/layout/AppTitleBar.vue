@@ -1,27 +1,44 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { onClickOutside } from '@vueuse/core'
-import { IconLineHorizontal320Regular, IconAdd20Regular, IconDismiss20Regular, IconHome20Regular, IconLayoutRowTwo20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconLineHorizontal320Regular, IconAdd20Regular, IconDismiss20Regular, IconHome20Regular, IconLayoutRowTwo20Regular, IconColor24Regular, IconColor24Filled } from '@iconify-prerendered/vue-fluent'
 import ThemeToggle from '@/theme/ThemeToggle.vue'
 import AppTitleBarTabDropdown from './AppTitleBarTabDropdown.vue'
 import { useTabStore } from '@/stores/tabStore'
+import type { TabRoute } from '@/stores/tabStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
+import { useSettingsStore } from '@/stores/settingsStore'
 
 const bookViewStore = useBookViewStore()
+const settingsStore = useSettingsStore()
 
 const tabStore = useTabStore()
 const activeTab = computed(() => tabStore.activeTab)
 const dropdownOpen = ref(false)
 const barRef = ref<HTMLElement | null>(null)
 
+const isPdfTab = computed(() => activeTab.value?.route === '/pdf-view' || activeTab.value?.route === '/hebrewbooks')
+
 onClickOutside(barRef, () => { dropdownOpen.value = false })
+
+const ROUTE_MAP: Record<string, { title: string; route: TabRoute }> = {
+  homepage:         { title: 'בית', route: '/' },
+  openfile:         { title: 'ספרים', route: '/books' },
+  hebrewbooks:      { title: 'היברו-בוקס', route: '/hebrewbooks' },
+  'kezayit-search': { title: 'חיפוש', route: '/books' },
+}
+
+function openNewTab() {
+  const target = ROUTE_MAP[settingsStore.newTabPage] ?? { title: 'בית', route: '/' as TabRoute }
+  tabStore.openTab({ title: target.title, route: target.route })
+}
 
 function selectTab(id: string) { tabStore.switchTab(id); dropdownOpen.value = false }
 
 function goHome() {
   const existing = tabStore.tabs.find(t => t.route === '/')
   if (existing) {
-    const cur = tabStore.activeTabId.value
+    const cur = tabStore.activeTabId
     tabStore.switchTab(existing.id)
     if (cur !== existing.id) tabStore.closeTab(cur)
   } else {
@@ -44,6 +61,16 @@ function goHome() {
       >
         <IconLayoutRowTwo20Regular />
       </button>
+      <button
+        v-if="isPdfTab"
+        class="bar-btn"
+        :class="{ active: settingsStore.pdfPageFilters }"
+        :title="settingsStore.pdfPageFilters ? 'ביטול פילטרים לעמודי PDF' : 'החלת פילטרים לעמודי PDF'"
+        @click.stop="settingsStore.togglePdfPageFilters()"
+      >
+        <IconColor24Filled v-if="settingsStore.pdfPageFilters" />
+        <IconColor24Regular v-else />
+      </button>
     </div>
 
     <span class="bar-title" :title="activeTab?.tocPath ? `${activeTab?.title} · ${activeTab?.tocPath}` : activeTab?.title">
@@ -53,7 +80,7 @@ function goHome() {
 
     <div class="bar-end">
       <button class="bar-btn" title="בית" @click.stop="goHome"><IconHome20Regular /></button>
-      <button class="bar-btn" title="לשונית חדשה" @click.stop="tabStore.openNewHomeTab"><IconAdd20Regular /></button>
+      <button class="bar-btn" title="לשונית חדשה" @click.stop="openNewTab"><IconAdd20Regular /></button>
       <button class="bar-btn" title="סגור לשונית" @click.stop="tabStore.closeTab(tabStore.activeTabId)"><IconDismiss20Regular /></button>
     </div>
 
@@ -82,8 +109,8 @@ function goHome() {
 
 .bar-start { display: flex; align-items: center; gap: 0; flex: 1; }
 .bar-end { display: flex; align-items: center; justify-content: flex-end; gap: 0; flex: 1; }
-.bar-title { font-weight: 600; font-size: 0.9rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bar-toc-path { font-weight: 400; color: var(--text-secondary); }
+.bar-title { font-weight: 400; font-size: 0.82rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-toc-path { color: var(--text-secondary); opacity: 0.7; }
 
 .bar-btn {
   display: flex;
@@ -92,6 +119,8 @@ function goHome() {
   width: 32px;
   height: 32px;
   padding: 6px;
+  border-radius: 4px;
 }
+.bar-btn svg { width: 16px; height: 16px; }
 .bar-btn.active { color: var(--accent-color); }
 </style>

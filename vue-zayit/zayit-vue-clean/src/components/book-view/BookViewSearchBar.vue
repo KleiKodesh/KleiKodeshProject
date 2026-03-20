@@ -1,23 +1,43 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed, nextTick } from 'vue'
 import { useDraggable } from '@vueuse/core'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import {
   IconChevronUp20Regular,
   IconChevronDown20Regular,
   IconDismiss20Regular,
-  IconReOrderDotsVertical20Regular,
+  IconBook20Filled,
+  IconChatMultiple20Filled,
 } from '@iconify-prerendered/vue-fluent'
 
-const props = defineProps<{ visible: boolean; toolbarVisible: boolean }>()
-defineEmits<{ close: [] }>()
+export type SearchMode = 'content' | 'commentary'
+
+const props = defineProps<{ visible: boolean; toolbarVisible: boolean; matchCount: number; currentMatch: number; commentaryVisible: boolean }>()
+const emit = defineEmits<{ close: []; queryChange: [string]; next: []; prev: []; modeChange: [SearchMode] }>()
 
 const bookViewStore = useBookViewStore()
 
 const barRef = ref<HTMLElement | null>(null)
-const handleRef = ref<HTMLElement | null>(null)
+const inputValue = ref('')
+const searchMode = ref<SearchMode>('content')
 
-const BAR_WIDTH = 240
+const inputRef = ref<HTMLInputElement | null>(null)
+
+watch(inputValue, (v) => emit('queryChange', v))
+watch(searchMode, (m) => { inputValue.value = ''; emit('modeChange', m) })
+watch(() => props.visible, (v) => { if (v) nextTick(() => inputRef.value?.focus()) })
+watch(() => props.commentaryVisible, (v) => { if (!v && searchMode.value === 'commentary') searchMode.value = 'content' })
+
+const placeholder = computed(() =>
+  searchMode.value === 'content' ? 'חיפוש בטקסט...' : 'חיפוש במפרשים...'
+)
+
+const matchLabel = computed(() => {
+  if (props.matchCount === 0) return '0 / 0'
+  return `${props.currentMatch + 1} / ${props.matchCount}`
+})
+
+const BAR_WIDTH = 260
 const APP_TITLE_BAR = 40
 const BOOK_TOOLBAR = 32
 
@@ -28,33 +48,44 @@ function defaultPosition() {
 
 const { x, y, style } = useDraggable(barRef, {
   initialValue: bookViewStore.searchBarPos ?? defaultPosition(),
-  handle: handleRef,
 })
 
-// Persist position globally whenever it changes
 watch([x, y], ([nx, ny]) => {
   bookViewStore.setSearchBarPos({ x: nx, y: ny })
 })
+
+function onClose() {
+  inputValue.value = ''
+  emit('close')
+}
 </script>
 
 <template>
   <Transition name="search-bar">
     <div v-if="visible" ref="barRef" class="search-bar" :style="style">
-      <span ref="handleRef" class="drag-handle">
-        <IconReOrderDotsVertical20Regular />
-      </span>
       <div class="search-inner">
         <input
+          ref="inputRef"
+          v-model="inputValue"
           type="search"
           class="search-input"
-          placeholder="חיפוש..."
-          autofocus
+          :placeholder="placeholder"
+          @keydown.enter.exact="emit('next')"
+          @keydown.shift.enter="emit('prev')"
         />
+        <span class="match-count" :class="{ 'no-match': inputValue && matchCount === 0 }">{{ matchLabel }}</span>
       </div>
-      <span class="match-count">0 / 0</span>
-      <button class="nav-btn"><IconChevronUp20Regular /></button>
-      <button class="nav-btn"><IconChevronDown20Regular /></button>
-      <button class="close-btn" @click="$emit('close')"><IconDismiss20Regular /></button>
+      <button v-if="commentaryVisible" class="mode-btn" :class="{ active: searchMode === 'commentary' }"
+        :title="searchMode === 'content' ? 'עבור לחיפוש במפרשים' : 'עבור לחיפוש בטקסט'"
+        @click="searchMode = searchMode === 'content' ? 'commentary' : 'content'">
+        <IconChatMultiple20Filled v-if="searchMode === 'commentary'" />
+        <IconBook20Filled v-else />
+      </button>
+            <span v-if="commentaryVisible" class="sep" />
+      <button class="nav-btn" :disabled="matchCount === 0" @click="emit('prev')"><IconChevronUp20Regular /></button>
+      <button class="nav-btn" :disabled="matchCount === 0" @click="emit('next')"><IconChevronDown20Regular /></button>
+      <span class="sep" />
+      <button class="close-btn" @click="onClose"><IconDismiss20Regular /></button>
     </div>
   </Transition>
 </template>
@@ -65,53 +96,51 @@ watch([x, y], ([nx, ny]) => {
   z-index: 9999;
   display: flex;
   align-items: center;
-  gap: 4px;
-  width: 240px;
-  padding: 4px 6px;
-  background: color-mix(in srgb, var(--bg-secondary) 96%, transparent);
-  backdrop-filter: blur(12px);
+  gap: 2px;
+  width: fit-content;
+  padding: 5px 6px;
+  background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 10px;
+  border-radius: 8px;
   box-sizing: border-box;
   user-select: none;
   touch-action: none;
-}
-
-.drag-handle {
-  color: var(--text-secondary);
-  flex-shrink: 0;
   cursor: grab;
-  opacity: 0.5;
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--text-primary) 18%, transparent),
+              0 1px 3px color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
+.search-bar:active { cursor: grabbing; }
+
+.mode-btn {
   display: flex;
   align-items: center;
-  touch-action: none;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  color: var(--text-secondary);
 }
-.drag-handle:active { cursor: grabbing; }
+.mode-btn svg { width: 16px; height: 16px; }
+.mode-btn.active { color: var(--accent-color); }
 
 .search-inner {
-  flex: 1;
-  min-width: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
-  background: color-mix(in srgb, var(--text-secondary) 12%, transparent);
-  border-radius: 8px;
-  padding: 4px 8px;
-}
-
-.search-icon {
-  color: var(--text-secondary);
-  flex-shrink: 0;
+  background: color-mix(in srgb, var(--text-secondary) 10%, transparent);
+  border-radius: 6px;
+  padding: 5px 6px;
+  gap: 4px;
 }
 
 .search-input {
-  flex: 1;
-  min-width: 0;
+  width: 120px;
   border: none;
   background: none;
   outline: none;
   font-size: 13px;
   color: var(--text-primary);
+  cursor: text;
 }
 .search-input::placeholder { color: var(--text-secondary); }
 .search-input::-webkit-search-cancel-button { filter: grayscale(1) opacity(0.4); }
@@ -121,15 +150,32 @@ watch([x, y], ([nx, ny]) => {
   color: var(--text-secondary);
   white-space: nowrap;
   flex-shrink: 0;
+  min-width: 32px;
+  text-align: end;
+}
+.match-count.no-match { color: #e05252; }
+
+.sep {
+  width: 1px;
+  height: 16px;
+  background: var(--border-color);
+  flex-shrink: 0;
+  margin-inline: 1px;
 }
 
 .nav-btn,
 .close-btn {
   display: flex;
   align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
-  padding: 2px;
+  border-radius: 4px;
+  cursor: pointer;
 }
+.nav-btn svg, .close-btn svg { width: 16px; height: 16px; }
+.nav-btn:disabled { opacity: 0.3; cursor: default; }
 
 .search-bar-enter-active,
 .search-bar-leave-active {

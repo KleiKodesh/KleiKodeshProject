@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { IconChevronLeft16Regular, IconHome24Regular } from '@iconify-prerendered/vue-fluent'
+import { IconChevronLeft16Regular, IconHome16Regular } from '@iconify-prerendered/vue-fluent'
 import type { CategoryNode } from './booksFsTree'
 
 defineProps<{ path: CategoryNode[] }>()
@@ -8,8 +8,8 @@ defineEmits<{ navigate: [index: number] }>()
 
 <template>
   <nav class="breadcrumb">
-    <button class="crumb" :class="{ active: path.length === 1 }" @click="$emit('navigate', 0)">
-      <IconHome24Regular />
+    <button class="crumb" :class="{ active: path.length === 1 }" title="איפוס" @click="$emit('navigate', 0)">
+      <IconHome16Regular />
     </button>
     <template v-for="(node, i) in path.slice(1)" :key="node.id">
       <IconChevronLeft16Regular class="sep" />
@@ -36,9 +36,9 @@ defineEmits<{ navigate: [index: number] }>()
 .crumb {
   display: inline-flex;
   align-items: center;
-  padding: 0 6px;
-  height: 24px;
-  border-radius: 4px;
+  padding: 0 5px;
+  height: 22px;
+  border-radius: 3px;
   font-size: 12px;
   color: var(--text-secondary);
   white-space: nowrap;

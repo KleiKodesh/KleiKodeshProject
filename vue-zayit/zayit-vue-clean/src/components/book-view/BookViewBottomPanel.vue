@@ -1,22 +1,9 @@
 <script setup lang="ts">
-// placeholder — bottom panel content implemented later
+import CommentaryView from './CommentaryView.vue'
+defineProps<{ selectedLineId: number | null }>()
+const emit = defineEmits<{ 'close': [] }>()
 </script>
 
 <template>
-  <div class="bottom-panel">
-    <span class="placeholder">פאנל תחתון — בקרוב</span>
-  </div>
+  <CommentaryView :selected-line-id="selectedLineId" @close="emit('close')" />
 </template>
-
-<style scoped>
-.bottom-panel {
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.placeholder {
-  font-size: 14px;
-  color: var(--text-secondary);
-}
-</style>

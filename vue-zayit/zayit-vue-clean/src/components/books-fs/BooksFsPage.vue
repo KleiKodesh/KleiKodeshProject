@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, nextTick } from 'vue'
-import { IconSearch20Regular, IconTextBulletList20Regular, IconGrid20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import { useBooksFs } from './useBooksFs'
-import BooksBreadcrumb from './BooksBreadcrumb.vue'
+import BooksFsTitleBar from './BooksFsTitleBar.vue'
 import BooksTreeView from './BooksTreeView.vue'
+import BooksFullTree from './BooksFullTree.vue'
 import BooksSearchResults from './BooksSearchResults.vue'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
 import type { BookRow } from './booksFsTree'
@@ -12,14 +13,14 @@ import { useTabStore } from '@/stores/tabStore'
 const tabStore = useTabStore()
 const { loading, error, path, searchQuery, isSearching, treeItems, searchItems, load, enter, navigateTo } = useBooksFs()
 
-const view = ref<'list' | 'tiles'>(tabStore.getBooksView())
-
-function toggleView() {
-  view.value = view.value === 'list' ? 'tiles' : 'list'
-  tabStore.setBooksView(view.value)
-}
-
+const view = ref<'list' | 'tiles' | 'tree'>(tabStore.getBooksView())
+const fullTreeRef = ref<InstanceType<typeof BooksFullTree> | null>(null)
 const searchInputRef = ref<HTMLInputElement | null>(null)
+
+function setView(v: 'list' | 'tiles' | 'tree') {
+  view.value = v
+  tabStore.setBooksView(v)
+}
 
 onMounted(() => {
   load()
@@ -29,31 +30,56 @@ onMounted(() => {
 function onSelectBook(book: BookRow) {
   tabStore.updateActiveTab({ title: book.title, route: '/book-view', bookId: book.id, openToc: true })
 }
+
+function onSearchEnter() {
+  if (isSearching.value && searchItems.value.length === 1) {
+    const item = searchItems.value[0]
+    if (item) onSelectBook(item.book)
+  }
+}
 </script>
 
 <template>
   <div class="books-page">
-    <div class="books-toolbar">
-      <BooksBreadcrumb :path="path" @navigate="navigateTo" />
-      <button class="view-toggle" :title="view === 'list' ? 'תצוגת אריחים' : 'תצוגת רשימה'" @click="toggleView">
-        <IconGrid20Regular v-if="view === 'list'" />
-        <IconTextBulletList20Regular v-else />
-      </button>
-    </div>
+    <BooksFsTitleBar
+      :view="view"
+      :path="path"
+      :is-searching="isSearching"
+      @set-view="setView"
+      @navigate="navigateTo"
+      @reset="fullTreeRef?.reset()"
+    />
 
     <div class="books-content">
       <LoadingAnimation v-if="loading" />
       <div v-else-if="error" class="state error">{{ error }}</div>
       <template v-else>
-        <BooksTreeView v-show="!isSearching" :items="treeItems" :view="view" @select-book="onSelectBook" @enter-folder="enter" />
-        <BooksSearchResults v-show="isSearching" :items="searchItems" :view="view" @select-book="onSelectBook" />
+        <BooksFullTree
+          ref="fullTreeRef"
+          v-show="view === 'tree' && !isSearching"
+          @select-book="onSelectBook"
+        />
+        <BooksTreeView
+          v-show="view !== 'tree' && !isSearching"
+          :items="treeItems"
+          :view="view === 'tree' ? 'list' : view"
+          @select-book="onSelectBook"
+          @enter-folder="enter"
+        />
+        <BooksSearchResults
+          v-show="isSearching"
+          :items="searchItems"
+          :view="view"
+          @select-book="onSelectBook"
+        />
       </template>
     </div>
 
     <div class="search-bar">
       <div class="search-inner">
         <IconSearch20Regular class="search-icon" />
-        <input ref="searchInputRef" v-model="searchQuery" type="search" placeholder="חיפוש ספר..." class="search-input" />
+        <input ref="searchInputRef" v-model="searchQuery" type="search" placeholder="חיפוש ספר..." class="search-input"
+          @keydown.enter="onSearchEnter" />
       </div>
     </div>
   </div>
@@ -63,34 +89,8 @@ function onSelectBook(book: BookRow) {
 .books-page { display: flex; flex-direction: column; height: 100%; background: var(--bg-primary); }
 .books-content { flex: 1; overflow: hidden; position: relative; }
 
-.books-toolbar {
-  display: flex;
-  align-items: center;
-  border-bottom: 1px solid var(--border-color);
-  background: var(--bg-secondary);
-}
-
-.view-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  flex-shrink: 0;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  margin-inline-start: auto;
-  margin-inline-end: 4px;
-  transition: background 0.1s, color 0.1s;
-}
-.view-toggle:hover { background: var(--hover-bg); color: var(--text-primary); }
-.view-toggle:active { background: var(--active-bg); }
-
 .search-bar {
-  padding: 6px 12px 8px;
+  padding: 5px 10px 6px;
   background: var(--bg-secondary);
   border-top: 1px solid var(--border-color);
 }

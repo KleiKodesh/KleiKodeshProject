@@ -1,239 +1,128 @@
 <template>
     <div class="flex-column height-fill">
-        <!-- Book List -->
-        <div class="flex-110 overflow-y"
-             style="overflow-x: hidden;">
-            <!-- Loading state -->
-            <div v-if="isLoading"
-                 class="flex-center height-fill">
+        <!-- Book list -->
+        <div class="flex-110 overflow-y list-container">
+            <!-- Loading -->
+            <div v-if="isLoading" class="flex-center height-fill">
                 <LoadingSpinner text="טוען ספרים..." />
             </div>
 
-            <!-- Error state -->
-            <div v-else-if="error"
-                 class="flex-center height-fill">
-                <div class="flex-column flex-center">
-                    <div class="error-icon">⚠️</div>
-                    <div class="error-text">שגיאה בטעינת הספרים</div>
-                    <div class="error-subtext text-secondary">{{ error }}
-                    </div>
+            <!-- Error -->
+            <div v-else-if="error" class="flex-center height-fill">
+                <div class="flex-column flex-center state-message">
+                    <span class="state-icon">⚠️</span>
+                    <span>שגיאה בטעינת הספרים</span>
+                    <span class="text-secondary">{{ error }}</span>
                 </div>
             </div>
 
-            <!-- Book list with Virtua virtualization -->
-            <template v-else>
-                <VList v-if="displayedBooks.length > 0"
-                       ref="vListRef"
-                       :data="displayedBooks"
-                       class="scroll-container"
-                       style="height: 100%; overflow-y: auto;"
-                       tabindex="0">
-                    <template #default="{ item }">
-                        <div class="book-item">
-                            <HebrewBooksListItem :book="item"
-                                                 @book-clicked="trackBookInteractionHandler" />
-                        </div>
-                    </template>
-                </VList>
-
-                <!-- Empty state -->
-                <div v-else
-                     class="flex-center height-fill">
-                    <div class="flex-column flex-center">
-                        <div class="empty-icon">📚</div>
-                        <div v-if="searchTerm"
-                             class="empty-text">לא נמצאו ספרים
-                        </div>
-                        <div v-else
-                             class="empty-text">אין היסטוריה</div>
-                        <div v-if="searchTerm"
-                             class="empty-subtext text-secondary">נסה
-                            לחפש
-                            במילים אחרות</div>
-                        <div v-else
-                             class="empty-subtext text-secondary">לחץ על ספרים
-                            כדי לראות
-                            אותם כאן</div>
-                    </div>
-                </div>
+            <!-- List -->
+            <template v-else-if="displayedBooks.length > 0">
+                <HebrewbooksListItem
+                    v-for="book in displayedBooks"
+                    :key="book.id"
+                    :book="book"
+                    @book-clicked="onBookClicked"
+                    @download-clicked="onDownloadClicked"
+                />
             </template>
+
+            <!-- Empty -->
+            <div v-else class="flex-center height-fill">
+                <div class="flex-column flex-center state-message">
+                    <span class="state-icon">📚</span>
+                    <span v-if="searchTerm">לא נמצאו ספרים</span>
+                    <span v-else>אין היסטוריה</span>
+                    <span class="text-secondary" v-if="searchTerm">נסה לחפש במילים אחרות</span>
+                    <span class="text-secondary" v-else>לחץ על ספרים כדי לראות אותם כאן</span>
+                </div>
+            </div>
         </div>
 
-        <!-- Search at bottom -->
+        <!-- Search bar -->
         <div class="bar">
-            <input ref="searchInput"
-                   :value="searchTerm"
-                   @input="handleSearchInput"
-                   @keydown.tab="handleSearchTabKey"
-                   @keydown.arrow-down="handleSearchTabKey"
-                   @keydown.arrow-up="handleSearchTabKey"
-                   type="text"
-                   :placeholder="searchPlaceholder"
-                   :disabled="!isOnline"
-                   class="width-fill search-input"
-                   :class="{ 'search-disabled': !isOnline }" />
+            <input
+                ref="searchInputRef"
+                :value="searchTerm"
+                @input="onSearchInput"
+                type="text"
+                :placeholder="searchPlaceholder"
+                :disabled="!isOnline"
+                class="width-fill"
+                :class="{ 'search-disabled': !isOnline }"
+                dir="rtl"
+            />
         </div>
     </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, nextTick } from 'vue'
-import { VList } from 'virtua/vue'
-import { Icon } from '@iconify/vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
-import HebrewBooksListItem from '@/components/hebrew-books/HebrewBooksListItem.vue'
-import type { HebrewBook } from '@/data/types/HebrewBook'
+import HebrewbooksListItem from '@/components/hebrew-books/HebrewbooksListItem.vue'
 import { useHebrewBooks } from '@/components/hebrew-books/useHebrewBooks'
-import { useListKeyboardNavigation } from '@/components/shared/useListKeyboardNavigation'
+import type { HebrewBook } from '@/data/types/HebrewBook'
 
-// Use composable
-const { filteredBooks, isLoading, error, searchTerm, performSearch, trackBookInteraction } = useHebrewBooks()
+const { filteredBooks, isLoading, error, searchTerm, loadBooks, performSearch, trackBookInteraction, openHebrewBookViewer, downloadHebrewBook } = useHebrewBooks()
 
-// Online status
+const searchInputRef = ref<HTMLInputElement>()
 const isOnline = ref(navigator.onLine)
 
-// Search input ref
-const searchInput = ref<HTMLInputElement>()
-
-// VList ref for Virtua
-const vListRef = ref<InstanceType<typeof VList> | null>(null)
-
-// Get scroll container from VList
-const bookScrollContainer = computed(() => {
-    return vListRef.value?.$el as HTMLElement | undefined
-})
-
-// Set up keyboard navigation for the book list
-useListKeyboardNavigation(bookScrollContainer, {
-    onEscape: () => returnFocusToSearch(),
-    onTab: () => returnFocusToSearch()
-})
-
-// Return focus to search input
-const returnFocusToSearch = () => {
-    nextTick(() => {
-        searchInput.value?.focus()
-    })
-}
-
-// Check online status when component mounts or tab becomes active
-const checkOnlineStatus = () => {
-    isOnline.value = navigator.onLine
-}
-
-// Computed books to display - limit to 10 most recent if offline and no search
 const displayedBooks = computed(() => {
-    if (isOnline.value || searchTerm.value) {
-        return filteredBooks.value
-    }
-    // Offline and no search - show only 10 most recent history items
+    if (isOnline.value || searchTerm.value) return filteredBooks.value
     return filteredBooks.value.slice(0, 10)
 })
 
-// Search placeholder based on online status
-const searchPlaceholder = computed(() => {
-    return isOnline.value
-        ? 'חפש ספרים, מחברים או נושאים...'
-        : 'נדרש חיבור לאינטרנט לחיפוש ספר'
-})
+const searchPlaceholder = computed(() =>
+    isOnline.value ? 'חפש ספרים, מחברים או נושאים...' : 'נדרש חיבור לאינטרנט לחיפוש ספר'
+)
 
-// Track user interactions
-const trackBookInteractionHandler = async (book: HebrewBook) => {
-    await trackBookInteraction(book.id)
-}
-
-// Handle search input changes
-const handleSearchInput = (event: Event) => {
+const onSearchInput = (e: Event) => {
     if (!isOnline.value) return
-    const target = event.target as HTMLInputElement
-    performSearch(target.value)
+    performSearch((e.target as HTMLInputElement).value)
 }
 
-// Handle Tab and Arrow keys in search input - move focus to first book item
-const handleSearchTabKey = (event: KeyboardEvent) => {
-    if (displayedBooks.value.length === 0) return
-
-    event.preventDefault()
-
-    // Find the first book item element and focus it
-    const scrollContainer = vListRef.value?.$el as HTMLElement
-    if (scrollContainer) {
-        const firstBookItem = scrollContainer.querySelector('.tree-node[tabindex="0"]') as HTMLElement
-        if (firstBookItem) {
-            firstBookItem.focus()
-        }
-    }
+const onBookClicked = async (book: HebrewBook) => {
+    await trackBookInteraction(book.id)
+    openHebrewBookViewer(book.id, book.title)
 }
 
-// Load books on component mount
-onMounted(async () => {
-    checkOnlineStatus()
-    window.addEventListener('online', checkOnlineStatus)
-    window.addEventListener('offline', checkOnlineStatus)
+const onDownloadClicked = (book: HebrewBook) => {
+    downloadHebrewBook(book.id, book.title)
+}
 
-    // Load books (history + start catalog load in background)
-    const { loadBooks } = useHebrewBooks()
+const updateOnlineStatus = () => { isOnline.value = navigator.onLine }
+
+onMounted(() => {
+    updateOnlineStatus()
+    window.addEventListener('online', updateOnlineStatus)
+    window.addEventListener('offline', updateOnlineStatus)
     loadBooks()
-
-    // Focus search input
-    searchInput.value?.focus()
+    searchInputRef.value?.focus()
 })
 
 onUnmounted(() => {
-    window.removeEventListener('online', checkOnlineStatus)
-    window.removeEventListener('offline', checkOnlineStatus)
+    window.removeEventListener('online', updateOnlineStatus)
+    window.removeEventListener('offline', updateOnlineStatus)
 })
 </script>
 
 <style scoped>
-.scroll-container {
-    height: 100%;
-    overflow-y: auto;
+.list-container {
     overflow-x: hidden;
-    outline: none;
 }
 
-.error-icon,
-.empty-icon {
-    font-size: 48px;
-    margin-bottom: 16px;
-    opacity: 0.6;
-}
-
-.error-text,
-.empty-text {
-    font-size: 16px;
-    font-weight: 500;
+.state-message {
+    gap: 8px;
+    text-align: center;
     color: var(--text-secondary);
-}
-
-.error-subtext,
-.empty-subtext {
     font-size: 14px;
 }
 
-.search-input {
-    padding: 10px 16px;
-    border: 1px solid var(--border-color);
-    border-radius: 20px;
-    background-color: var(--bg-primary);
-    color: var(--text-primary);
-    font-size: 15px;
-    direction: rtl;
-    text-align: right;
-    transition: border-color 0.15s ease;
-    height: 40px;
-}
-
-.search-input:focus {
-    border-color: var(--accent-color);
-    box-shadow: 0 0 0 0.5px var(--accent-color);
-    outline: none;
-}
-
-.search-input::placeholder {
-    color: var(--text-secondary);
-    opacity: 1;
+.state-icon {
+    font-size: 40px;
+    opacity: 0.6;
+    margin-bottom: 4px;
 }
 
 .search-disabled {

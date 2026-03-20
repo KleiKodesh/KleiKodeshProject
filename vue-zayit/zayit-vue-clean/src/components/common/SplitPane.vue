@@ -65,12 +65,22 @@ function onPointerUp() {
 .top-pane { flex-shrink: 0; }
 .bottom-pane { flex: 1; }
 .divider {
-  height: 5px;
+  height: 3px;
   flex-shrink: 0;
   background: var(--border-color);
   cursor: row-resize;
   touch-action: none;
+  position: relative;
   transition: background 120ms;
+}
+.divider::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 20px;
 }
 .divider:hover {
   background: color-mix(in srgb, var(--text-secondary) 25%, transparent);

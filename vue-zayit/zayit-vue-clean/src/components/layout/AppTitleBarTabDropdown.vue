@@ -35,8 +35,8 @@ defineEmits<{ select: [id: string]; close: [id: string] }>()
 .tab-dropdown {
   position: absolute;
   top: 100%;
-  inset-inline-start: 0;
-  inset-inline-end: 0;
+  left: 0;
+  right: 0;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   z-index: 100;
@@ -47,7 +47,7 @@ defineEmits<{ select: [id: string]; close: [id: string] }>()
 .tab-row {
   display: flex;
   align-items: center;
-  height: 36px;
+  height: 32px;
   padding: 0 4px;
   cursor: pointer;
   border-top: 1px solid var(--border-color);
@@ -56,24 +56,23 @@ defineEmits<{ select: [id: string]; close: [id: string] }>()
 .tab-row:hover { background: var(--hover-bg); }
 
 .tab-row-start { display: flex; align-items: center; flex: 1; padding-inline-start: 4px; color: var(--text-secondary); }
-.tab-icon { width: 16px; height: 16px; }
-.tab-row-title { font-weight: 500; font-size: 0.82rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.tab-toc-path { font-weight: 400; color: var(--text-secondary); }
+.tab-icon { width: 14px; height: 14px; }
+.tab-row-title { font-weight: 400; font-size: 0.82rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tab-toc-path { color: var(--text-secondary); }
 .tab-row-end { display: flex; align-items: center; justify-content: flex-end; flex: 1; }
 
 .tab-close {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 4px;
-  border: none;
-  border-radius: 4px;
+  width: 22px;
+  height: 22px;
+  padding: 3px;
+  border-radius: 0;
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: background 120ms, color 120ms;
 }
+.tab-close svg { width: 14px; height: 14px; }
 .tab-close:hover { background: var(--hover-bg); color: var(--text-primary); }
 </style>

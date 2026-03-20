@@ -36,7 +36,7 @@ This app is strictly RTL. Every spatial decision must be understood in physical 
 - `src/components/` organized by feature folder (e.g. `books-fs/`, `book-view/`, `search/`)
 - Each feature folder contains its page component, composables, and sub-components — keep flat, no nested subfolders
 - Sub-components named after parent: `BookCard.vue` → `BookCardCover.vue`, `BookCardMeta.vue`
-- Shared reusable components (used across features): `src/components/common/` (e.g. `AppSpinner.vue`)
+- Shared reusable components (used across features): `src/components/common/`
 - Shared composables across features: `src/composables/`
 - Shared pure utils: `src/utils/`
 - Pinia stores: `src/stores/` — never under `src/data/` or elsewhere
@@ -50,11 +50,22 @@ This app is strictly RTL. Every spatial decision must be understood in physical 
 
 ## Design Language
 
-- Blends iOS layout/interaction with Windows 11 Fluent Design (Fluent icons + color tokens)
+The visual style is a deliberate blend of two design systems:
+
+- **VSCode** provides the structural foundation: color palette, flat chrome, thin borders, muted text hierarchy, and overall density
+- **Windows 11 Fluent** provides the interaction feel: `4px` rounded corners on controls, subtle depth via `color-mix()` tints, smooth motion, touch-friendly sizing, and Fluent icons throughout
+
+Neither system dominates — VSCode sets the colors and layout, Fluent sets the shape language and tactile quality. The result is clean and editor-like, but warm and touch-friendly rather than purely utilitarian.
+
 - Targets small Android-type screens with touch — minimum 44px touch targets
 - Compact sizing: title bar 40px, book-view toolbar 32px, list rows 44px, breadcrumb 32px, home tiles 48px icon size
+- Default theme: `vscode-dark` — use `vscode-dark` / `vscode-light` as the reference for all color decisions
+- VSCode dark palette: bg `#1e1e1e`, sidebar `#252526`, toolbar `#2d2d2d`, border `#3c3c3c`, text `#d4d4d4`, secondary `#858585`, accent `#0078d4`
+- VSCode light palette: bg `#ffffff`, sidebar `#f3f3f3`, toolbar `#ebebeb`, border `#e7e7e7`, text `#616161`, accent `#007acc`
+- Font: `Segoe UI Variable` → `Segoe UI` → `system-ui` — the native Windows 11 typeface
 
 ### Buttons & Motion
+- Global button `border-radius: 4px` — Fluent feel, defined in `main.css`, applies everywhere
 - Global active shrink: `button:active { transform: scale(0.92) }` defined in `main.css`
 - Global button defaults (hover bg, text color, active shrink) live in `main.css` — do not repeat `background`, `border`, `cursor`, `transition`, `color`, `:hover`, or `:active` in component styles; only add layout props (`width`, `height`, `padding`, `display`) and `.active` color locally
 - Motion: scale transitions on tiles 150ms; background/color transitions 100–150ms
@@ -81,11 +92,33 @@ This app is strictly RTL. Every spatial decision must be understood in physical 
 - iOS pill input: `border-radius: 10px`, muted fill `color-mix(in srgb, var(--text-secondary) 12%, transparent)`, icon inline, no outer border
 - Clear button desaturated: `.search-input::-webkit-search-cancel-button { filter: grayscale(1) opacity(0.4) }`
 
+### Search Inputs
+- All search input containers use `border-radius: 6px` — Windows 11 Fluent style
+- Exception: the bottom search bar in `BooksFsPage` uses `border-radius: 10px` (iOS pill, per its anchored-to-bottom design)
+- Never use `border-radius: 0` on search inputs or their wrapper containers
+
+### Book View — Commentary & TOC Compact Sizing
+
+These components live inside the split-pane bottom panel and TOC side panel, where vertical space is at a premium. They intentionally use tighter sizing than the rest of the app:
+
+| Element | Size | Notes |
+|---|---|---|
+| `CommentaryHeader` row height | 32px | vs 40px title bar |
+| `CommentaryHeader` buttons | 24×24px, 14px icons | vs 32×32px elsewhere |
+| `CommentaryHeader` title font | 13px | vs 14px standard |
+| `CommentaryHeaderNav` row height | 32px | matches header |
+| `CommentaryHeaderNav` buttons | 24×24px, 14px icons | same as header |
+| `CommentaryHeaderNav` search input | 20px tall, 11px font | compact pill |
+| TOC search input | 12px font, `padding: 4px 8px` | bottom of TOC panel |
+
+Both `CommentaryHeader` and `CommentaryHeaderNav` use `background: var(--bg-primary)` — same as the commentary view content — so they blend in rather than standing out as a distinct toolbar.
+
 ### Misc UI
 - Use `color-mix()` tinted backgrounds instead of solid fills for icon containers in list contexts
 - Rounded corners: `4px` small controls, `8px` cards, `10–12px` search/input pills, `12px` tile icon containers
 - Secondary toolbars use `var(--bg-toolbar)` — between `--bg-primary` and `--bg-secondary`
 - Split pane divider hover: `color-mix(in srgb, var(--text-secondary) 25%, transparent)` — never accent color
+- Split pane divider visual height is 1px but touch target is 20px via a `::before` pseudo-element (`position: absolute; height: 20px; top: 50%; transform: translateY(-50%)`) — always keep this pattern on any resize handle
 
 ## Vue Patterns
 
@@ -295,3 +328,9 @@ interface BookState { scrollIndex: number; scrollOffset: number }
 - Global setting → add key to `PERSIST_KEYS` in `persist.ts`, add `get*/set*` pair to `tabStore`
 - Per-tab UI state → add field to `TabState` in `tabDb.ts`, expose via `tabStore.getTabViewState/setTabViewState`
 - Per-book state → add field to `BookState` in `tabDb.ts`, expose via `tabStore.getBookViewState/setBookViewState`
+
+## Dropdowns
+
+- Always anchor the top-left corner of a dropdown to the left edge of its toggle — `position: absolute; top: calc(100% + 4px); left: 0` — so it flows rightward and stays within the viewport naturally
+- Never anchor to `right: 0` (that would push it off the left edge of the screen in RTL)
+- Extract every dropdown to its own component — never inline dropdown markup in a parent component

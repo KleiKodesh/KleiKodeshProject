@@ -66,6 +66,7 @@ export function applyTheme(preset: ThemePreset) {
     ['--bg-primary-custom', ui.bgPrimary],
     ['--bg-secondary-custom', ui.bgSecondary],
     ['--bg-tertiary-custom', ui.bgTertiary ?? ui.bgSecondary],
+    ['--bg-toolbar-custom', ui.bgTertiary ?? ui.bgSecondary],
     ['--text-primary-custom', ui.textPrimary],
     ['--text-secondary-custom', ui.textSecondary],
     ['--border-color-custom', ui.borderColor],

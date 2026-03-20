@@ -4,7 +4,7 @@ import { persistGet, persistSet, PERSIST_KEYS } from '@/utils/persist'
 import { getTabState, setTabState, getBookState, setBookState, deleteBook, deleteTab } from '@/utils/tabDb'
 import type { TabState, BookState } from '@/utils/tabDb'
 
-export type TabRoute = '/' | '/pdf-view' | '/settings' | '/books' | '/book-view'
+export type TabRoute = '/' | '/pdf-view' | '/settings' | '/books' | '/book-view' | '/hebrewbooks'
 
 export interface Tab {
   id: string
@@ -13,8 +13,8 @@ export interface Tab {
   pdfBlobUrl?: string
   pdfFileName?: string
   bookId?: number
-  openToc?: boolean // transient — consumed once on BookViewPage mount, never persisted
-  tocPath?: string // current TOC position — updated as user scrolls, excluded from persistence
+  openToc?: boolean
+  tocPath?: string
 }
 
 interface PersistedTabList {
@@ -53,11 +53,11 @@ export const useTabStore = defineStore('tabs', () => {
 
   // ── Books view preference (localStorage) ────────────────────────────────────
 
-  function getBooksView(): 'list' | 'tiles' {
-    return persistGet<'list' | 'tiles'>(PERSIST_KEYS.BOOKS_VIEW, 'list')
+  function getBooksView(): 'list' | 'tiles' | 'tree' {
+    return persistGet<'list' | 'tiles' | 'tree'>(PERSIST_KEYS.BOOKS_VIEW, 'list')
   }
 
-  function setBooksView(view: 'list' | 'tiles') {
+  function setBooksView(view: 'list' | 'tiles' | 'tree') {
     persistSet(PERSIST_KEYS.BOOKS_VIEW, view)
   }
 

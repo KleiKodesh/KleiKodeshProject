@@ -22,13 +22,7 @@ const isDark = computed(() => store.themePreset.includes('-dark'))
   width: 32px;
   height: 32px;
   padding: 6px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: background 120ms, color 120ms;
+  border-radius: 0;
 }
-.theme-toggle:hover { background: var(--hover-bg); color: var(--text-primary); }
-.theme-toggle svg { width: 100%; height: 100%; }
+.theme-toggle svg { width: 16px; height: 16px; }
 </style>
