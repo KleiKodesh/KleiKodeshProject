@@ -12,7 +12,7 @@ const tiles = [
   { label: 'ספרים', icon: IconLibrary24Filled, color: '#C1440E' },
   { label: 'חיפוש', icon: IconSearchSparkle24 },
   { label: 'פתח קובץ', icon: IconFolderOpen24Filled, color: '#f0a500' },
-  { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#f97316' },
+  { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#ff5400' },
   { label: 'הגדרות', icon: IconSettings24 },
 ]
 

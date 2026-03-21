@@ -2,9 +2,8 @@
 import CommentaryView from './CommentaryView.vue'
 import type { CommentaryGroup } from './useCommentary'
 defineProps<{ selectedLineId: number | null; groups: CommentaryGroup[]; loading: boolean }>()
-const emit = defineEmits<{ 'close': [] }>()
+defineEmits<{ close: [] }>()
 </script>
-
 <template>
-  <CommentaryView :selected-line-id="selectedLineId" :groups="groups" :loading="loading" @close="emit('close')" />
+  <CommentaryView :selected-line-id="selectedLineId" :groups="groups" :loading="loading" @close="$emit('close')" />
 </template>

@@ -20,6 +20,7 @@ interface Settings {
   appZoom: number
   newTabPage: NewTabPage
   pdfPageFilters: boolean
+  resumeLastRead: boolean
 }
 
 const DEFAULTS: Settings = {
@@ -37,6 +38,7 @@ const DEFAULTS: Settings = {
   appZoom: 1.0,
   newTabPage: 'homepage',
   pdfPageFilters: false,
+  resumeLastRead: true,
 }
 
 function load(): Settings {
@@ -64,6 +66,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const appZoom = ref(saved.appZoom)
   const newTabPage = ref<NewTabPage>(saved.newTabPage)
   const pdfPageFilters = ref(saved.pdfPageFilters)
+  const resumeLastRead = ref(saved.resumeLastRead)
 
   function applyCSSVariables() {
     const s = document.documentElement.style
@@ -96,6 +99,7 @@ export const useSettingsStore = defineStore('settings', () => {
       appZoom: appZoom.value,
       newTabPage: newTabPage.value,
       pdfPageFilters: pdfPageFilters.value,
+      resumeLastRead: resumeLastRead.value,
     }))
   }
 
@@ -127,6 +131,7 @@ export const useSettingsStore = defineStore('settings', () => {
     appZoom.value = DEFAULTS.appZoom
     newTabPage.value = DEFAULTS.newTabPage
     pdfPageFilters.value = DEFAULTS.pdfPageFilters
+    resumeLastRead.value = DEFAULTS.resumeLastRead
     localStorage.removeItem(STORAGE_KEY)
     applyCSSVariables()
   }
@@ -136,13 +141,13 @@ export const useSettingsStore = defineStore('settings', () => {
   watch([
     censorDivineNames, diacriticsState, headerFont, textFont, fontSize, linePadding,
     commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryLinePadding,
-    useSeparateCommentarySettings, appZoom, newTabPage, pdfPageFilters,
+    useSeparateCommentarySettings, appZoom, newTabPage, pdfPageFilters, resumeLastRead,
   ], () => { persist(); applyCSSVariables() })
 
   return {
     censorDivineNames, diacriticsState, headerFont, textFont, fontSize, linePadding,
     commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryLinePadding,
-    useSeparateCommentarySettings, appZoom, newTabPage, pdfPageFilters,
+    useSeparateCommentarySettings, appZoom, newTabPage, pdfPageFilters, resumeLastRead,
     cycleDiacritics, togglePdfPageFilters, reset,
   }
 })

@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
-import { IconTextBulletListTree20Regular } from '@iconify-prerendered/vue-fluent'
-import { IconPanelBottom20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconSearch20Regular, IconTextBulletListTree20Regular, IconPanelBottom20Regular } from '@iconify-prerendered/vue-fluent'
 import { useSettingsStore } from '@/stores/settingsStore'
 
 defineProps<{ bottomVisible: boolean; searchVisible: boolean; tocVisible: boolean }>()
@@ -10,33 +8,16 @@ defineEmits<{ toggleBottom: []; toggleSearch: []; toggleToc: [] }>()
 
 const settingsStore = useSettingsStore()
 const diacriticsState = computed(() => settingsStore.diacriticsState)
-
-const diacriticsTitle = computed(() => {
-  if (diacriticsState.value === 0) return 'הסר טעמים'
-  if (diacriticsState.value === 1) return 'הסר גם ניקוד'
-  return 'שחזר טעמים וניקוד'
-})
+const diacriticsTitle = computed(() => ['הסר טעמים', 'הסר גם ניקוד', 'שחזר טעמים וניקוד'][diacriticsState.value]!)
 </script>
 
 <template>
   <div class="book-view-toolbar">
-    <button @click="$emit('toggleSearch')" :class="{ active: searchVisible }">
-      <IconSearch20Regular />
-    </button>
-    <button @click="$emit('toggleToc')" :class="{ active: tocVisible }">
-      <IconTextBulletListTree20Regular />
-    </button>
-    <button @click="$emit('toggleBottom')" :class="{ active: bottomVisible }">
-      <IconPanelBottom20Regular />
-    </button>
-
-    <!-- Diacritics toggle: cycles 0 → 1 → 2 → 0 -->
-    <button
-      @click="settingsStore.cycleDiacritics()"
-      :class="['diacritics-btn', { 'state-1': diacriticsState === 1, 'state-2': diacriticsState === 2 }]"
-      :title="diacriticsTitle"
-    >
-      <!-- State 0: full diacritics (nikkud + cantillation) -->
+    <button :class="{ active: searchVisible }" @click="$emit('toggleSearch')"><IconSearch20Regular /></button>
+    <button :class="{ active: tocVisible }" @click="$emit('toggleToc')"><IconTextBulletListTree20Regular /></button>
+    <button :class="{ active: bottomVisible }" @click="$emit('toggleBottom')"><IconPanelBottom20Regular /></button>
+    <button :class="['diacritics-btn', { 'state-1': diacriticsState === 1, 'state-2': diacriticsState === 2 }]"
+      :title="diacriticsTitle" @click="settingsStore.cycleDiacritics()">
       <svg v-if="diacriticsState === 0" width="16" height="18" viewBox="0 0 126 139" fill="currentColor">
         <g transform="translate(0,139) scale(0.1,-0.1)">
           <path d="M398 1153c-37-40-48-66-48-112 0-56 15-90 62-138 39-40 40-41 19-52-28-15-68-87-76-137-3-22-1-70 5-106 13-71 4-108-25-108-8 0-15-7-15-15 0-12 19-15 113-15 134 0 157 10 157 68 0 42-12 62-82 141-51 59-61 99-34 136 13 18 24 9 180-139 134-128 167-164 172-192 8-45 27-43 63 6 59 81 49 150-34 242-49 54-57 90-33 154 9 27 17 33 50 37 22 3 42 7 44 10 3 3 5 32 5 66 1 94-27 126-118 137-26 3-61 15-76 26-39 27-50 14-55-69-5-80 13-122 64-149 24-13 32-23 28-34-4-8-9-25-11-37-3-13-9-23-13-23-8 0-232 208-267 249-12 14-25 38-28 53-8 35-15 35-47 1z"/>
@@ -44,14 +25,12 @@ const diacriticsTitle = computed(() => {
           <path d="M650 395V360h50c47 0 50-2 50-25 0-14-4-25-9-25-19 0-23-41-7-65 22-33 60-33 82 0 16 24 12 65-7 65-5 0-9 11-9 25 0 23 3 25 50 25h50v35 35H775 650V395Z"/>
         </g>
       </svg>
-      <!-- State 1: nikkud only (no cantillation) -->
       <svg v-else-if="diacriticsState === 1" width="16" height="18" viewBox="0 0 112 135" fill="currentColor">
         <g transform="translate(0,135) scale(0.1,-0.1)">
           <path d="M328 1103c-37-40-48-66-48-112 0-56 15-90 62-138 39-40 40-41 19-52-28-15-68-87-76-137-3-22-1-70 5-106 13-71 4-108-25-108-8 0-15-7-15-15 0-12 19-15 113-15 134 0 157 10 157 68 0 42-12 62-82 141-51 59-61 99-34 136 13 18 24 9 180-139 134-128 167-164 172-192 8-45 27-43 63 6 59 81 49 150-34 242-49 54-57 90-33 154 9 27 17 33 50 37 22 3 42 7 44 10 3 3 5 32 5 66 1 94-27 126-118 137-26 3-61 15-76 26-39 27-50 14-55-69-5-80 13-122 64-149 24-13 32-23 28-34-4-8-9-25-11-37-3-13-9-23-13-23-8 0-232 208-267 249-12 14-25 38-28 53-8 35-15 35-47 1z"/>
           <path d="M440 345l0-35 50 0c47 0 50-2 50-25 0-14-4-25-9-25-17 0-20-45-5-67 30-46 104-12 90 42-4 14-11 25-16 25-6 0-10 11-10 25 0 23 3 25 50 25l50 0 0 35 0 35-125 0-125 0 0-35z"/>
         </g>
       </svg>
-      <!-- State 2: no diacritics -->
       <svg v-else width="16" height="16" viewBox="0 0 88 111" fill="currentColor" style="transform:scale(0.85)">
         <g transform="translate(0,111) scale(0.1,-0.1)">
           <path d="M198 903c-37-40-48-66-48-112 0-56 15-90 62-138 39-40 40-41 19-52-28-15-68-87-76-137-3-22-1-70 5-106 13-71 4-108-25-108-8 0-15-7-15-15 0-12 19-15 113-15 134 0 157 10 157 68 0 42-12 62-82 141-51 59-61 99-34 136 13 18 24 9 180-139 134-128 167-164 172-192 8-45 27-43 63 6 59 81 49 150-34 242-49 54-57 90-33 154 9 27 17 33 50 37 22 3 42 7 44 10 3 3 5 32 5 66 1 94-27 126-118 137-26 3-61 15-76 26-39 27-50 14-55-69-5-80 13-122 64-149 24-13 32-23 28-34-4-8-9-25-11-37-3-13-9-23-13-23-8 0-232 208-267 249-12 14-25 38-28 53-8 35-15 35-47 1z"/>
@@ -62,27 +41,8 @@ const diacriticsTitle = computed(() => {
 </template>
 
 <style scoped>
-.book-view-toolbar {
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0;
-  padding-inline: 4px;
-  background: var(--bg-toolbar);
-  border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0;
-  transition: background 120ms;
-}
-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 6px;
-  border-radius: 4px;
-}
+.book-view-toolbar { height: 32px; display: flex; align-items: center; justify-content: center; gap: 0; padding-inline: 4px; background: var(--bg-toolbar); border-bottom: 1px solid var(--border-color); flex-shrink: 0; transition: background 120ms; }
+button { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 6px; border-radius: 4px; }
 button svg { width: 16px; height: 16px; }
 button.active { color: var(--accent-color); }
 .diacritics-btn.state-1 { color: #ff8c00; }

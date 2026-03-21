@@ -3,35 +3,20 @@ import { query } from '@/db/db'
 import { SQL } from '@/db/queries.sql'
 
 export interface TocEntry {
-  id: number
-  parentId: number | null
-  level: number
-  lineId: number | null
-  lineIndex: number | null
-  hasChildren: number
-  text: string
+  id: number; parentId: number | null; level: number; lineId: number | null
+  lineIndex: number | null; hasChildren: number; text: string
 }
-
-export interface AltTocStructure {
-  id: number
-  key: string
-  title: string | null
-  heTitle: string | null
-}
-
-export interface AltTocSection {
-  structure: AltTocStructure
-  entries: TocEntry[]
-}
+export interface AltTocStructure { id: number; key: string; title: string | null; heTitle: string | null }
+export interface AltTocSection { structure: AltTocStructure; entries: TocEntry[] }
 
 function stripBookTitleRoot(entries: TocEntry[], bookTitle: string | undefined): TocEntry[] {
-  if (!bookTitle || entries.length === 0) return entries
+  if (!bookTitle || !entries.length) return entries
   const roots = entries.filter(e => e.parentId === null)
   if (roots.length !== 1 || roots[0]!.text !== bookTitle) return entries
   const rootId = roots[0]!.id
   return entries
     .filter(e => e.id !== rootId)
-    .map(e => e.parentId === rootId ? { ...e, parentId: null, level: e.level - 1 } : { ...e, level: e.level - 1 })
+    .map(e => ({ ...e, parentId: e.parentId === rootId ? null : e.parentId, level: e.level - 1 }))
 }
 
 export function useToc(bookId: () => number | undefined, bookTitle?: () => string | undefined) {
@@ -49,14 +34,9 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
         query<AltTocStructure>(SQL.GET_ALT_TOC_STRUCTURES, [id]),
       ])
       tocEntries.value = stripBookTitleRoot(entries, bookTitle?.())
-
-      const sections = await Promise.all(
-        structures.map(async (s) => ({
-          structure: s,
-          entries: await query<TocEntry>(SQL.GET_ALL_ALT_TOC_ENTRIES, [s.id]),
-        }))
+      altTocSections.value = await Promise.all(
+        structures.map(async s => ({ structure: s, entries: await query<TocEntry>(SQL.GET_ALL_ALT_TOC_ENTRIES, [s.id]) }))
       )
-      altTocSections.value = sections
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'שגיאה בטעינת תוכן עניינים'
     } finally {
@@ -64,11 +44,7 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
     }
   }
 
-  watch(
-    bookId,
-    (id) => { if (id != null) load(id) },
-    { immediate: true }
-  )
+  watch(bookId, (id) => { if (id != null) load(id) }, { immediate: true })
 
   function getActiveTocEntry(lineIndex: number): TocEntry | null {
     let active: TocEntry | null = null
@@ -83,11 +59,8 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
   function getTocPath(entry: TocEntry): string {
     const map = new Map(tocEntries.value.map(e => [e.id, e]))
     const parts: string[] = []
-    let current: TocEntry | undefined = entry
-    while (current) {
-      parts.unshift(current.text)
-      current = current.parentId != null ? map.get(current.parentId) : undefined
-    }
+    let cur: TocEntry | undefined = entry
+    while (cur) { parts.unshift(cur.text); cur = cur.parentId != null ? map.get(cur.parentId) : undefined }
     return parts.join(' / ')
   }
 

@@ -8,13 +8,14 @@ import { applyDiacriticsFilter, removeDiacriticsForSearch } from '@/utils/hebrew
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
 
-const emit = defineEmits<{ scrolled: [lineIndex: number]; lineSelected: [lineId: number] }>()
+const emit = defineEmits<{ scrolled: [number]; lineSelected: [number] }>()
 const props = defineProps<{
   altTocLabelMap?: Map<number, string>
   selectedLineId?: number | null
   bottomVisible?: boolean
   searchQuery?: string
   currentMatchLineIndex?: number
+  currentMatchOccurrence?: number
   initialLineIndex?: number
 }>()
 
@@ -26,63 +27,42 @@ const { lines, loading, prioritise } = useLines(() => bookId)
 
 const diacriticsState = computed(() => settingsStore.diacriticsState)
 
-function lineContent(raw: string | null, lineIndex: number): string | null {
-  if (raw === null) return null
-  let content = diacriticsState.value === 0 ? raw : applyDiacriticsFilter(raw, diacriticsState.value)
-  if (settingsStore.censorDivineNames) content = censorDivineNames(content)
-  if (props.searchQuery?.trim()) content = highlightMatches(raw, content, props.searchQuery, lineIndex === props.currentMatchLineIndex)
-  return content
-}
-
-function highlightMatches(raw: string, content: string, query: string, isCurrentLine: boolean): string {
+function highlightMatches(raw: string, content: string, query: string, isCurrentLine: boolean, currentOccurrence: number): string {
   const q = removeDiacriticsForSearch(query.trim())
   if (!q) return content
-
-  const result: string[] = []
-  let strippedPos = 0
-  let inTag = false
-  let matchStrippedCount = 0
-  let inMatch = false
-  let matchOccurrence = 0
-
-  // Find all match start positions in stripped space
   const stripped = removeDiacriticsForSearch(content.replace(/<[^>]*>/g, ''))
   const matchStarts = new Set<number>()
   let idx = 0
   while ((idx = stripped.indexOf(q, idx)) !== -1) { matchStarts.add(idx); idx++ }
   if (!matchStarts.size) return content
 
+  const out: string[] = []
+  let strippedPos = 0, inTag = false, inMatch = false, matchStrippedCount = 0, matchOccurrence = 0
   for (let i = 0; i < content.length; i++) {
     const ch = content[i]!
-    if (ch === '<') { inTag = true; result.push(ch); continue }
-    if (ch === '>') { inTag = false; result.push(ch); continue }
-    if (inTag) { result.push(ch); continue }
-
+    if (ch === '<') { inTag = true; out.push(ch); continue }
+    if (ch === '>') { inTag = false; out.push(ch); continue }
+    if (inTag) { out.push(ch); continue }
     const isDiacritic = /[\u0591-\u05C7]/.test(ch)
-
     if (!isDiacritic && matchStarts.has(strippedPos) && !inMatch) {
-      const isCurrent = isCurrentLine && matchOccurrence === 0
-      result.push(`<mark class="search-match${isCurrent ? ' current' : ''}">`)
-      inMatch = true
-      matchStrippedCount = 0
+      out.push(`<mark class="search-match${isCurrentLine && matchOccurrence === currentOccurrence ? ' current' : ''}">`)
+      inMatch = true; matchStrippedCount = 0
     }
-
-    result.push(ch)
-
+    out.push(ch)
     if (!isDiacritic) {
-      if (inMatch) {
-        matchStrippedCount++
-        if (matchStrippedCount === q.length) {
-          result.push('</mark>')
-          inMatch = false
-          matchOccurrence++
-        }
-      }
+      if (inMatch && ++matchStrippedCount === q.length) { out.push('</mark>'); inMatch = false; matchOccurrence++ }
       strippedPos++
     }
   }
+  return out.join('')
+}
 
-  return result.join('')
+function lineContent(raw: string | null, lineIndex: number): string | null {
+  if (raw === null) return null
+  let content = diacriticsState.value === 0 ? raw : applyDiacriticsFilter(raw, diacriticsState.value)
+  if (settingsStore.censorDivineNames) content = censorDivineNames(content)
+  if (props.searchQuery?.trim()) content = highlightMatches(raw, content, props.searchQuery, lineIndex === props.currentMatchLineIndex, props.currentMatchOccurrence ?? 0)
+  return content
 }
 
 const scrollerEl = ref<HTMLElement | null>(null)
@@ -112,94 +92,85 @@ async function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
     await nextTick()
     await new Promise(r => setTimeout(r, 500))
     const item = virtualizer.value.getVirtualItems().find(v => v.index === scrollIndex)
-    if (scrollerEl.value) scrollerEl.value.scrollTop = (item?.start ?? scrollerEl.value?.scrollTop ?? 0) + scrollOffset
+    if (scrollerEl.value) scrollerEl.value.scrollTop = (item?.start ?? scrollerEl.value.scrollTop) + scrollOffset
     await new Promise(r => setTimeout(r, 600))
   } finally {
-    restoring.value = false
-  }
+    restoring.value = false }
 }
 
 watch(loading, async (val) => {
-  if (!val && lines.value.length > 0) {
-    if (props.initialLineIndex != null) {
-      await nextTick()
-      await restoreScrollPos(props.initialLineIndex, 0)
-      return
-    }
-    const saved = await tabStore.getBookViewState(tabId, bookId)
-    if (saved) {
-      if (saved.selectedLineId != null) {
-        const lineIndex = lines.value.find(l => l.id === saved.selectedLineId)?.lineIndex
-        if (lineIndex != null) {
-          await restoreScrollPos(lineIndex, 0)
-        } else {
-          await restoreScrollPos(saved.scrollIndex, saved.scrollOffset)
-        }
-      } else {
-        await restoreScrollPos(saved.scrollIndex, saved.scrollOffset)
-      }
+  if (val || !lines.value.length) return
+  if (props.initialLineIndex != null) { await nextTick(); await restoreScrollPos(props.initialLineIndex, 0); return }
+  const saved = await tabStore.getBookViewState(tabId, bookId)
+  if (saved) {
+    if (saved.selectedLineId != null) {
+      const lineIndex = lines.value.find(l => l.id === saved.selectedLineId)?.lineIndex
+      await restoreScrollPos(lineIndex ?? saved.scrollIndex, lineIndex != null ? 0 : saved.scrollOffset)
     } else {
-      const global = await tabStore.getLastReadPos(bookId)
-      if (global) await restoreScrollPos(global.scrollIndex, global.scrollOffset)
+      await restoreScrollPos(saved.scrollIndex, saved.scrollOffset)
     }
+  } else {
+    const global = await tabStore.getLastReadPos(bookId)
+    if (global) await restoreScrollPos(global.scrollIndex, global.scrollOffset)
   }
 }, { flush: 'post' })
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
+let programmaticScrollTimer: ReturnType<typeof setTimeout> | null = null
+let programmaticScrolling = false
+
+function savePos() {
+  const pos = captureScrollPos()
+  if (pos) {
+    tabStore.setBookViewState(tabId, bookId, { ...pos, selectedLineId: props.selectedLineId })
+    tabStore.setLastReadPos(bookId, pos)
+  }
+}
 
 function onScroll() {
-  const scroller = scrollerEl.value
   const first = virtualItems.value[0]?.index ?? 0
   prioritise(first)
-  if (scroller && !restoring.value && !programmaticScrolling) {
-    const center = scroller.scrollTop + scroller.clientHeight / 2
+  if (scrollerEl.value && !restoring.value && !programmaticScrolling) {
+    const center = scrollerEl.value.scrollTop + scrollerEl.value.clientHeight / 2
     const mid = virtualItems.value.reduce((best, item) =>
       Math.abs(item.start + item.size / 2 - center) < Math.abs(best.start + best.size / 2 - center) ? item : best
     , virtualItems.value[0]!)
     emit('scrolled', mid.index)
   }
   if (saveTimer) clearTimeout(saveTimer)
-  saveTimer = setTimeout(() => {
-    const pos = captureScrollPos()
-    if (pos) {
-      tabStore.setBookViewState(tabId, bookId, { ...pos, selectedLineId: props.selectedLineId })
-      tabStore.setLastReadPos(bookId, pos)
-    }
-  }, 100)
+  saveTimer = setTimeout(savePos, 100)
 }
 
-let programmaticScrollTimer: ReturnType<typeof setTimeout> | null = null
-let programmaticScrolling = false
+function setProgrammaticScroll() {
+  programmaticScrolling = true
+  if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer)
+  programmaticScrollTimer = setTimeout(() => { programmaticScrolling = false }, 300)
+}
 
 function scrollToLineId(lineId: number) {
   const lineIndex = lines.value.find(l => l.id === lineId)?.lineIndex
   if (lineIndex == null) return
-  programmaticScrolling = true
-  if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer)
-  prioritise(lineIndex)
+  setProgrammaticScroll(); prioritise(lineIndex)
   virtualizer.value.scrollToIndex(lineIndex, { align: 'start' })
-  programmaticScrollTimer = setTimeout(() => { programmaticScrolling = false }, 300)
+}
+
+function scrollToLineIndex(lineIndex: number) {
+  setProgrammaticScroll(); prioritise(lineIndex)
+  virtualizer.value.scrollToIndex(lineIndex, { align: 'nearest' as any })
+  requestAnimationFrame(() => {
+    if (scrollerEl.value) scrollerEl.value.scrollTop -= 52
+  })
 }
 
 onBeforeUnmount(() => {
   if (saveTimer) clearTimeout(saveTimer)
   if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer)
   const pos = captureScrollPos()
-  if (pos) {
-    tabStore.setBookViewState(tabId, bookId, { ...pos, selectedLineId: props.selectedLineId })
-    tabStore.setLastReadPos(bookId, pos)
-  } else tabStore.clearBookViewState(tabId, bookId)
+  if (pos) { tabStore.setBookViewState(tabId, bookId, { ...pos, selectedLineId: props.selectedLineId }); tabStore.setLastReadPos(bookId, pos) }
+  else tabStore.clearBookViewState(tabId, bookId)
 })
 
 defineExpose({ scrollToLineId, scrollToLineIndex })
-
-function scrollToLineIndex(lineIndex: number) {
-  programmaticScrolling = true
-  if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer)
-  prioritise(lineIndex)
-  virtualizer.value.scrollToIndex(lineIndex, { align: 'nearest' as any })
-  programmaticScrollTimer = setTimeout(() => { programmaticScrolling = false }, 300)
-}
 </script>
 
 <template>
@@ -207,13 +178,10 @@ function scrollToLineIndex(lineIndex: number) {
     <div v-if="loading || restoring" class="loading-overlay"><LoadingAnimation /></div>
     <div ref="scrollerEl" class="scroller" @scroll="onScroll">
       <div :style="{ height: `${totalSize}px`, position: 'relative' }">
-        <div
-          v-for="vItem in virtualItems"
-          :key="String(vItem.key)"
+        <div v-for="vItem in virtualItems" :key="String(vItem.key)"
           :ref="el => el && virtualizer.measureElement(el as Element)"
           :data-index="vItem.index"
-          :style="{ position: 'absolute', top: 0, right: 0, left: 0, transform: `translateY(${vItem.start}px)` }"
-        >
+          :style="{ position: 'absolute', top: 0, right: 0, left: 0, transform: `translateY(${vItem.start}px)` }">
           <div v-if="lines[vItem.index]?.content !== null" class="line"
             :class="{ selected: props.bottomVisible && selectedLineId === lines[vItem.index]?.id }"
             :data-alt-toc="props.altTocLabelMap?.get(vItem.index)"

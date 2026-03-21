@@ -2,7 +2,6 @@
 import SplitPane from '@/components/common/SplitPane.vue'
 defineProps<{ bottomVisible: boolean }>()
 </script>
-
 <template>
   <SplitPane :bottom-visible="bottomVisible">
     <template #top><slot name="top" /></template>

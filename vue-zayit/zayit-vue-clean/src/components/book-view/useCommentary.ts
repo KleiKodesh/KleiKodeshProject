@@ -3,12 +3,7 @@ import { query } from '@/db/db'
 import { SQL } from '@/db/queries.sql'
 
 export interface CommentaryLine { lineId: number; content: string }
-export interface CommentaryGroup {
-  bookId: number
-  bookTitle: string
-  connectionTypes: string[]
-  lines: CommentaryLine[]
-}
+export interface CommentaryGroup { bookId: number; bookTitle: string; connectionTypes: string[]; lines: CommentaryLine[] }
 
 const CT_ORDER: Record<string, number> = { TARGUM: 0, COMMENTARY: 1, SOURCE: 2, REFERENCE: 3, OTHER: 4 }
 
@@ -35,12 +30,9 @@ export function useCommentary(selectedLineId: () => number | null) {
 
       const bookIds = [...byBook.keys()]
       const lineIds = links.map(l => l.targetLineId)
-      const bp = bookIds.map(() => '?').join(',')
-      const lp = lineIds.map(() => '?').join(',')
-
       const [bookRows, lineRows] = await Promise.all([
-        query<{ id: number; title: string }>(`SELECT id, title FROM book WHERE id IN (${bp})`, bookIds),
-        query<{ id: number; content: string }>(`SELECT id, content FROM line WHERE id IN (${lp})`, lineIds),
+        query<{ id: number; title: string }>(`SELECT id, title FROM book WHERE id IN (${bookIds.map(() => '?').join(',')})`, bookIds),
+        query<{ id: number; content: string }>(`SELECT id, content FROM line WHERE id IN (${lineIds.map(() => '?').join(',')})`, lineIds),
       ])
 
       const bookTitleMap = new Map(bookRows.map(b => [b.id, b.title]))

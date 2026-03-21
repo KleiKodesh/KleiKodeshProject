@@ -10,6 +10,7 @@ export function useSettingsPage() {
     commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryLinePadding,
     useSeparateCommentarySettings, appZoom,
     newTabPage,
+    resumeLastRead,
   } = storeToRefs(settings)
 
   const availableFonts = ref<string[]>([])
@@ -51,6 +52,7 @@ export function useSettingsPage() {
     commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryLinePadding,
     useSeparateCommentarySettings, appZoom,
     newTabPage,
+    resumeLastRead,
     reset: settings.reset,
   }
 }

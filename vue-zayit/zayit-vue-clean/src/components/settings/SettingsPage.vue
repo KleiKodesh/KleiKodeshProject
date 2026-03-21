@@ -13,6 +13,7 @@ const {
   commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryLinePadding,
   useSeparateCommentarySettings, appZoom,
   newTabPage,
+  resumeLastRead,
   reset,
 } = useSettingsPage()
 
@@ -45,7 +46,7 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
         />
       </SettingRow>
 
-      <SettingRow label="דף ברירת מחדל" wrap>
+      <SettingRow label="פתח טאב חדש אל:" wrap>
         <ToggleGroup
           v-model="newTabPage"
           :options="[
@@ -54,6 +55,13 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
             { label: 'היברו בוקס', value: 'hebrewbooks' },
             { label: 'חיפוש', value: 'kezayit-search' },
           ]"
+        />
+      </SettingRow>
+
+      <SettingRow label="זכור מיקום אחרון בספר" title="בפתיחת ספר מחדש, האפליקציה תחזור אוטומטית למקום שבו הפסקת לקרוא">
+        <ToggleGroup
+          v-model="resumeLastRead"
+          :options="[{ label: 'כן', value: true }, { label: 'לא', value: false }]"
         />
       </SettingRow>
 

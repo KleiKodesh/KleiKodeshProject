@@ -2,40 +2,45 @@ import { ref, computed, watch } from 'vue'
 import { removeDiacriticsForSearch } from '@/utils/hebrewTextProcessing'
 import type { LineItem } from './useLines'
 
+export interface BookViewMatch {
+  lineIndex: number
+  occurrenceInLine: number
+}
+
 export function useBookViewSearch(lines: () => LineItem[]) {
-    const query = ref('')
-    const currentMatchIdx = ref(0)
+  const query = ref('')
+  const currentMatchIdx = ref(0)
 
-    const matchLineIndices = computed(() => {
-        const q = removeDiacriticsForSearch(query.value.trim())
-        if (!q) return []
-        const results: number[] = []
-        for (const line of lines()) {
-            if (line.content === null) continue
-            const stripped = removeDiacriticsForSearch(line.content.replace(/<[^>]*>/g, ''))
-            if (stripped.includes(q)) results.push(line.lineIndex)
-        }
-        return results
-    })
-
-    watch(matchLineIndices, () => { currentMatchIdx.value = 0 })
-
-    const matchCount = computed(() => matchLineIndices.value.length)
-    const currentMatchLineIndex = computed(() => matchLineIndices.value[currentMatchIdx.value] ?? -1)
-
-    function next() {
-        if (!matchCount.value) return
-        currentMatchIdx.value = (currentMatchIdx.value + 1) % matchCount.value
+  const matches = computed<BookViewMatch[]>(() => {
+    const q = removeDiacriticsForSearch(query.value.trim())
+    if (!q) return []
+    const results: BookViewMatch[] = []
+    for (const line of lines()) {
+      if (line.content === null) continue
+      const stripped = removeDiacriticsForSearch(line.content.replace(/<[^>]*>/g, ''))
+      let idx = 0, occ = 0
+      while ((idx = stripped.indexOf(q, idx)) !== -1) {
+        results.push({ lineIndex: line.lineIndex, occurrenceInLine: occ })
+        occ++
+        idx++
+      }
     }
+    return results
+  })
 
-    function prev() {
-        if (!matchCount.value) return
-        currentMatchIdx.value = (currentMatchIdx.value - 1 + matchCount.value) % matchCount.value
-    }
+  // keep backward-compat: unique line indices that have matches
+  const matchLineIndices = computed(() => [...new Set(matches.value.map(m => m.lineIndex))])
 
-    function clear() {
-        query.value = ''
-    }
+  watch(matches, () => { currentMatchIdx.value = 0 })
 
-    return { query, matchCount, currentMatchIdx, currentMatchLineIndex, matchLineIndices, next, prev, clear }
+  const matchCount = computed(() => matches.value.length)
+  const currentMatch = computed(() => matches.value[currentMatchIdx.value] ?? null)
+  const currentMatchLineIndex = computed(() => currentMatch.value?.lineIndex ?? -1)
+  const currentMatchOccurrence = computed(() => currentMatch.value?.occurrenceInLine ?? 0)
+
+  function next() { if (matchCount.value) currentMatchIdx.value = (currentMatchIdx.value + 1) % matchCount.value }
+  function prev() { if (matchCount.value) currentMatchIdx.value = (currentMatchIdx.value - 1 + matchCount.value) % matchCount.value }
+  function clear() { query.value = '' }
+
+  return { query, matchCount, currentMatchIdx, currentMatchLineIndex, currentMatchOccurrence, matchLineIndices, next, prev, clear }
 }
