@@ -23,7 +23,9 @@ const tabId = tabStore.activeTabId
 const bookId = tabStore.activeTab.bookId
 const bookTitle = tabStore.activeTab.title
 const openToc = tabStore.activeTab.openToc ?? false
+const openTocEntryId = tabStore.activeTab.openTocEntryId
 if (openToc) tabStore.updateActiveTab({ openToc: false })
+if (openTocEntryId != null) tabStore.updateActiveTab({ openTocEntryId: undefined })
 
 const bottomVisible = ref(false)
 const searchVisible = ref(false)
@@ -34,7 +36,7 @@ const searchMode = ref<SearchMode>('content')
 const linesContentRef = ref<InstanceType<typeof BookViewLinesContent> | null>(null)
 const commentaryViewRef = ref<InstanceType<typeof CommentaryView> | null>(null)
 
-const { getActiveTocEntry, getTocPath, altTocSections } = useToc(() => bookId, () => bookTitle)
+const { getActiveTocEntry, getTocPath, altTocSections, tocEntries } = useToc(() => bookId, () => bookTitle)
 const { lines } = useLines(() => bookId)
 const { groups, loading: commentaryLoading } = useCommentary(() => selectedLineId.value)
 const contentSearch = useBookViewSearch(() => lines.value)
@@ -57,6 +59,19 @@ const altTocLabelMap = computed(() => {
 })
 
 const activeTocEntryId = ref<number | undefined>(undefined)
+
+// If opened from TOC search, scroll to the target entry once TOC loads
+if (openTocEntryId != null) {
+  const stopWatch = watch(tocEntries, (entries) => {
+    if (!entries.length) return
+    const entry = entries.find(e => e.id === openTocEntryId)
+    if (entry?.lineId != null) {
+      activeTocEntryId.value = entry.id
+      nextTick(() => linesContentRef.value?.scrollToLineId(entry.lineId!))
+    }
+    stopWatch()
+  })
+}
 
 function onLinesScrolled(lineIndex: number) {
   if (tocScrolling) return

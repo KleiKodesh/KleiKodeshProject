@@ -8,10 +8,11 @@ import BooksFullTree from './BooksFullTree.vue'
 import BooksSearchResults from './BooksSearchResults.vue'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
 import type { BookRow } from './booksFsTree'
+import type { TocFsItem } from './useBooksFsSearch'
 import { useTabStore } from '@/stores/tabStore'
 
 const tabStore = useTabStore()
-const { loading, error, path, searchQuery, isSearching, treeItems, searchItems, load, enter, navigateTo } = useBooksFs()
+const { loading, error, path, searchQuery, isSearching, treeItems, searchItems, tocSearching, load, enter, navigateTo } = useBooksFs()
 
 const view = ref<'list' | 'tiles' | 'tree'>(tabStore.getBooksView())
 const fullTreeRef = ref<InstanceType<typeof BooksFullTree> | null>(null)
@@ -29,6 +30,10 @@ onMounted(() => {
 
 function onSelectBook(book: BookRow) {
   tabStore.updateActiveTab({ title: book.title, route: '/book-view', bookId: book.id, openToc: true })
+}
+
+function onSelectToc(item: TocFsItem) {
+  tabStore.updateActiveTab({ title: item.book.title, route: '/book-view', bookId: item.book.id, openToc: true, openTocEntryId: item.tocEntryId })
 }
 
 function onSearchEnter() {
@@ -66,12 +71,16 @@ function onSearchEnter() {
           @select-book="onSelectBook"
           @enter-folder="enter"
         />
-        <BooksSearchResults
-          v-show="isSearching"
-          :items="searchItems"
-          :view="view"
-          @select-book="onSelectBook"
-        />
+        <template v-if="isSearching">
+          <LoadingAnimation v-if="tocSearching" />
+          <BooksSearchResults
+            v-else
+            :items="searchItems"
+            :view="view"
+            @select-book="onSelectBook"
+            @select-toc="onSelectToc"
+          />
+        </template>
       </template>
     </div>
 

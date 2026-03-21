@@ -29,5 +29,5 @@ const route = computed(() => tabStore.activeTab.route)
 
 <style scoped>
 .app-layout { display: flex; flex-direction: column; height: 100%; }
-.app-content { flex: 1; overflow-y: auto; }
+.app-content { flex: 1; overflow: hidden; }
 </style>

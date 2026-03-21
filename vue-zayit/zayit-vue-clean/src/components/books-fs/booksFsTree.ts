@@ -6,6 +6,7 @@ export interface BookRow {
   title: string
   heShortDesc: string | null
   orderIndex: number
+  treeOrder?: number   // depth-first position assigned during assignFullPaths
   fullPath?: string
   searchPath?: string  // normalized fullPath for search
 }
@@ -36,13 +37,14 @@ export function buildTree(categories: CategoryRow[], books: BookRow[]): Category
   return roots
 }
 
-export function assignFullPaths(nodes: CategoryNode[], parentPath = ''): void {
+export function assignFullPaths(nodes: CategoryNode[], parentPath = '', counter = { n: 0 }): void {
   for (const node of nodes) {
     const nodePath = parentPath ? `${parentPath} / ${node.title}` : node.title
     for (const book of node.books) {
+      book.treeOrder = counter.n++
       book.fullPath = `${nodePath} / ${book.title}`
       book.searchPath = normalize(book.fullPath)
     }
-    assignFullPaths(node.children, nodePath)
+    assignFullPaths(node.children, nodePath, counter)
   }
 }

@@ -121,6 +121,7 @@ const visibleNodes = computed(() => {
 <style scoped>
 .tree-entries {
   flex: 1;
+  height: 100%;
   overflow: auto;
   min-height: 0;
   background: var(--tree-bg, var(--bg-primary));

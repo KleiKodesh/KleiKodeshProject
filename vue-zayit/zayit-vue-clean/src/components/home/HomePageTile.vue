@@ -49,7 +49,7 @@ defineEmits<{ tap: [] }>()
   line-height: 1.3;
   max-width: 66px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
 }
 </style>

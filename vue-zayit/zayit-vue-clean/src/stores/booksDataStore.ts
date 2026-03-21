@@ -26,7 +26,7 @@ export const useBooksDataStore = defineStore('booksData', () => {
       const children = buildTree(categories, books)
       assignFullPaths(children)
       ROOT.value = { ...ROOT.value, children }
-      allBooks.value = books
+      allBooks.value = books.slice().sort((a, b) => (a.treeOrder ?? 0) - (b.treeOrder ?? 0))
       loaded.value = true
     } catch (e) {
       const msg = e instanceof Error ? e.message : ''

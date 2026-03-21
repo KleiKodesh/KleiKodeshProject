@@ -79,8 +79,7 @@ const asBook = (item: FsItem) => item as Extract<FsItem, { kind: 'book' }>
 .fs-item:hover { background: var(--hover-bg); }
 .fs-item:active { background: var(--active-bg); }
 
-.icon { display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.icon svg { width: 20px; height: 20px; }
+.icon { display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 20px; }
 .folder-icon svg { color: #f0a500; }
 .book-icon svg { color: #C1440E; }
 .title { font-size: 14px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -130,7 +129,7 @@ const asBook = (item: FsItem) => item as Extract<FsItem, { kind: 'book' }>
   line-height: 1.3;
   width: 100%;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
 }
 </style>
