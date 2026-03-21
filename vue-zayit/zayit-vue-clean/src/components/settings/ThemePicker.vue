@@ -74,22 +74,29 @@ function select(key: ThemeKey) { themePreset.value = key; isOpen.value = false }
 
   <Teleport to="body">
     <div v-if="isOpen" ref="dropdownRef" class="theme-dropdown" :style="dropdownStyle">
-      <div v-for="([family, variants]) in families" :key="family" class="theme-family">
-        <button
-          v-for="{ key, theme } in variants"
-          :key="key"
-          class="theme-btn"
-          :class="{ active: themePreset === key }"
-          :title="theme.name + (theme.isDark ? ' — כהה' : ' — בהיר')"
-          @click.stop="select(key)"
-        >
-          <span class="swatch" :style="{ background: theme.ui.bgSecondary, borderColor: theme.ui.borderColor }">
-            <span class="swatch-bar" :style="{ background: theme.ui.bgPrimary }" />
-            <span class="swatch-accent" :style="{ background: theme.ui.accentColor }" />
-            <span class="swatch-text" :style="{ background: theme.ui.textPrimary }" />
-          </span>
-        </button>
+      <div class="theme-grid-header">
+        <span></span>
+        <span class="col-label">בהיר</span>
+        <span class="col-label">כהה</span>
+      </div>
+      <div v-for="([family, variants]) in families" :key="family" class="theme-row">
         <span class="family-name">{{ variants[0]?.theme.name }}</span>
+        <template v-for="isDark in [false, true]" :key="String(isDark)">
+          <button
+            v-for="{ key, theme } in variants.filter(v => v.theme.isDark === isDark)"
+            :key="key"
+            class="theme-btn"
+            :class="{ active: themePreset === key }"
+            :title="theme.name + (theme.isDark ? ' — כהה' : ' — בהיר')"
+            @click.stop="select(key)"
+          >
+            <span class="swatch" :style="{ background: theme.ui.bgSecondary, borderColor: theme.ui.borderColor }">
+              <span class="swatch-bar" :style="{ background: theme.ui.bgPrimary }" />
+              <span class="swatch-accent" :style="{ background: theme.ui.accentColor }" />
+              <span class="swatch-text" :style="{ background: theme.ui.textPrimary }" />
+            </span>
+          </button>
+        </template>
       </div>
     </div>
   </Teleport>
@@ -119,33 +126,47 @@ function select(key: ThemeKey) { themePreset.value = key; isOpen.value = false }
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 4px;
-  padding: 10px 12px;
+  padding: 8px 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
-.theme-family {
-  display: flex;
+.theme-grid-header {
+  display: grid;
+  grid-template-columns: 1fr 44px 44px;
   align-items: center;
-  gap: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 2px;
+}
+.col-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+.theme-row {
+  display: grid;
+  grid-template-columns: 1fr 44px 44px;
+  align-items: center;
+  gap: 4px;
 }
 .family-name {
   font-size: 12px;
   color: var(--text-secondary);
-  min-width: 60px;
 }
 .theme-btn {
-  padding: 4px;
+  padding: 3px;
   border: 1px solid var(--border-color);
   border-radius: 4px;
   background: none;
   cursor: pointer;
+  justify-self: center;
 }
 .theme-btn.active { border-color: var(--accent-color); }
 .theme-btn:hover { border-color: var(--text-secondary); }
 .swatch {
   display: flex; flex-direction: column; gap: 2px;
-  width: 36px; height: 28px; border-radius: 2px; border: 1px solid;
+  width: 32px; height: 26px; border-radius: 2px; border: 1px solid;
   padding: 3px; overflow: hidden;
 }
 .swatch-bar  { height: 5px; border-radius: 1px; opacity: 0.7; }

@@ -14,6 +14,7 @@ const props = defineProps<{
   selectedLineId?: number | null
   bottomVisible?: boolean
   searchQuery?: string
+  currentMatchLineIndex?: number
 }>()
 
 const tabStore = useTabStore()
@@ -28,11 +29,11 @@ function lineContent(raw: string | null, lineIndex: number): string | null {
   if (raw === null) return null
   let content = diacriticsState.value === 0 ? raw : applyDiacriticsFilter(raw, diacriticsState.value)
   if (settingsStore.censorDivineNames) content = censorDivineNames(content)
-  if (props.searchQuery?.trim()) content = highlightMatches(raw, content, props.searchQuery)
+  if (props.searchQuery?.trim()) content = highlightMatches(raw, content, props.searchQuery, lineIndex === props.currentMatchLineIndex)
   return content
 }
 
-function highlightMatches(raw: string, content: string, query: string): string {
+function highlightMatches(raw: string, content: string, query: string, isCurrentLine: boolean): string {
   const q = removeDiacriticsForSearch(query.trim())
   if (!q) return content
 
@@ -41,6 +42,7 @@ function highlightMatches(raw: string, content: string, query: string): string {
   let inTag = false
   let matchStrippedCount = 0
   let inMatch = false
+  let matchOccurrence = 0
 
   // Find all match start positions in stripped space
   const stripped = removeDiacriticsForSearch(content.replace(/<[^>]*>/g, ''))
@@ -58,7 +60,8 @@ function highlightMatches(raw: string, content: string, query: string): string {
     const isDiacritic = /[\u0591-\u05C7]/.test(ch)
 
     if (!isDiacritic && matchStarts.has(strippedPos) && !inMatch) {
-      result.push('<mark class="search-match">')
+      const isCurrent = isCurrentLine && matchOccurrence === 0
+      result.push(`<mark class="search-match${isCurrent ? ' current' : ''}">`)
       inMatch = true
       matchStrippedCount = 0
     }
@@ -71,6 +74,7 @@ function highlightMatches(raw: string, content: string, query: string): string {
         if (matchStrippedCount === q.length) {
           result.push('</mark>')
           inMatch = false
+          matchOccurrence++
         }
       }
       strippedPos++
@@ -218,4 +222,5 @@ function scrollToLineIndex(lineIndex: number) {
 .line[data-alt-toc]::before { content: attr(data-alt-toc); display: block; font-size: 0.85rem; font-weight: 600; opacity: 0.35; padding-block-end: 2px; }
 .line.placeholder { height: 28px; margin-inline: 12px; margin-block: 4px; border-radius: 4px; background: color-mix(in srgb, var(--text-primary) 5%, transparent); }
 .line :deep(mark.search-match) { background: rgba(255, 165, 0, 0.4); color: inherit; border-radius: 2px; }
+.line :deep(mark.search-match.current) { background: rgba(255, 165, 0, 0.9); color: #000; }
 </style>

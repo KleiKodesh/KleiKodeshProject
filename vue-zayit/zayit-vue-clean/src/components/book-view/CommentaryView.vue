@@ -3,26 +3,31 @@ import { computed, ref } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import CommentaryHeader from './CommentaryHeader.vue'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
-import { useCommentary } from './useCommentary'
+import type { CommentaryGroup } from './useCommentary'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { applyDiacriticsFilter, removeDiacriticsForSearch } from '@/utils/hebrewTextProcessing'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 
-const props = defineProps<{ selectedLineId: number | null; searchQuery?: string }>()
+const props = defineProps<{
+  selectedLineId: number | null
+  groups: CommentaryGroup[]
+  loading: boolean
+  searchQuery?: string
+  currentMatchFlatIndex?: number
+}>()
 const emit = defineEmits<{ close: [] }>()
-const { groups, loading } = useCommentary(() => props.selectedLineId)
 
 const settingsStore = useSettingsStore()
 const diacriticsState = computed(() => settingsStore.diacriticsState)
 
-function renderContent(content: string): string {
+function renderContent(content: string, flatIndex: number): string {
   let result = diacriticsState.value === 0 ? content : applyDiacriticsFilter(content, diacriticsState.value)
   if (settingsStore.censorDivineNames) result = censorDivineNames(result)
-  if (props.searchQuery?.trim()) result = highlightMatches(result, props.searchQuery)
+  if (props.searchQuery?.trim()) result = highlightMatches(result, props.searchQuery, flatIndex === props.currentMatchFlatIndex)
   return result
 }
 
-function highlightMatches(content: string, query: string): string {
+function highlightMatches(content: string, query: string, isCurrent: boolean): string {
   const q = removeDiacriticsForSearch(query.trim())
   if (!q) return content
 
@@ -34,7 +39,7 @@ function highlightMatches(content: string, query: string): string {
   while ((idx = stripped.indexOf(q, idx)) !== -1) { matchStarts.add(idx); idx++ }
 
   const out: string[] = []
-  let strippedPos = 0, inTag = false, inMatch = false, matchCount = 0
+  let strippedPos = 0, inTag = false, inMatch = false, matchCount = 0, matchOccurrence = 0
 
   for (let i = 0; i < content.length; i++) {
     const ch = content[i]!
@@ -44,13 +49,18 @@ function highlightMatches(content: string, query: string): string {
 
     const isDiacritic = /[\u0591-\u05C7]/.test(ch)
     if (!isDiacritic && matchStarts.has(strippedPos) && !inMatch) {
-      out.push('<mark class="search-match">')
+      const markCurrent = isCurrent && matchOccurrence === 0
+      out.push(`<mark class="search-match${markCurrent ? ' current' : ''}">`)
       inMatch = true
       matchCount = 0
     }
     out.push(ch)
     if (!isDiacritic) {
-      if (inMatch && ++matchCount === q.length) { out.push('</mark>'); inMatch = false }
+      if (inMatch && ++matchCount === q.length) {
+        out.push('</mark>')
+        inMatch = false
+        matchOccurrence++
+      }
       strippedPos++
     }
   }
@@ -63,7 +73,7 @@ type FlatItem =
 
 const flatItems = computed<FlatItem[]>(() => {
   const items: FlatItem[] = []
-  for (const g of groups.value) {
+  for (const g of props.groups) {
     items.push({ type: 'header', bookTitle: g.bookTitle, connectionTypes: g.connectionTypes })
     for (const l of g.lines) items.push({ type: 'line', content: l.content, lineId: l.lineId })
   }
@@ -98,7 +108,7 @@ function onScroll() { scrollTop.value = scrollerEl.value?.scrollTop ?? 0 }
 
 function scrollToGroup(bookId: number) {
   const idx = flatItems.value.findIndex(
-    item => item.type === 'header' && groups.value.find(g => g.bookId === bookId && g.bookTitle === item.bookTitle)
+    item => item.type === 'header' && props.groups.find(g => g.bookId === bookId && g.bookTitle === item.bookTitle)
   )
   if (idx !== -1) virtualizer.value.scrollToIndex(idx, { align: 'start' })
 }
@@ -112,14 +122,14 @@ defineExpose({ scrollToGroup, scrollToFlatIndex })
 
 <template>
   <div class="commentary-view">
-    <div v-if="loading" class="state-overlay"><LoadingAnimation /></div>
+    <div v-if="props.loading" class="state-overlay"><LoadingAnimation /></div>
     <div v-else-if="!flatItems.length" class="state-overlay">
       <span class="hint">בחר שורה לצפייה בפרשנות</span>
     </div>
     <template v-else>
       <CommentaryHeader v-if="stickyHeader" class="sticky-header"
         :book-title="stickyHeader.bookTitle" :connection-types="stickyHeader.connectionTypes"
-        :groups="groups" :scroll-to-group="scrollToGroup" :is-sticky="true" @close="emit('close')" />
+        :groups="props.groups" :scroll-to-group="scrollToGroup" :is-sticky="true" @close="emit('close')" />
       <div ref="scrollerEl" class="scroller" @scroll="onScroll">
         <div :style="{ height: `${totalSize}px`, position: 'relative' }">
           <div v-for="vItem in virtualItems" :key="String(vItem.key)"
@@ -129,8 +139,8 @@ defineExpose({ scrollToGroup, scrollToFlatIndex })
             <CommentaryHeader v-if="flatItems[vItem.index]?.type === 'header'"
               :book-title="(flatItems[vItem.index] as any).bookTitle"
               :connection-types="(flatItems[vItem.index] as any).connectionTypes"
-              :groups="groups" :scroll-to-group="scrollToGroup" />
-            <div v-else class="line" v-html="renderContent((flatItems[vItem.index] as any).content)" />
+              :groups="props.groups" :scroll-to-group="scrollToGroup" />
+            <div v-else class="line" v-html="renderContent((flatItems[vItem.index] as any).content, vItem.index)" />
           </div>
         </div>
       </div>
@@ -160,4 +170,5 @@ defineExpose({ scrollToGroup, scrollToFlatIndex })
   user-select: text;
 }
 .line :deep(mark.search-match) { background: rgba(255, 165, 0, 0.4); color: inherit; border-radius: 2px; }
+.line :deep(mark.search-match.current) { background: rgba(255, 165, 0, 0.9); color: #000; }
 </style>

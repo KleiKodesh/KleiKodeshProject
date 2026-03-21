@@ -18,13 +18,12 @@ const emit = defineEmits<{ close: []; queryChange: [string]; next: []; prev: [];
 const bookViewStore = useBookViewStore()
 
 const barRef = ref<HTMLElement | null>(null)
+const inputRef = ref<HTMLInputElement | null>(null)
 const inputValue = ref('')
 const searchMode = ref<SearchMode>('content')
 
-const inputRef = ref<HTMLInputElement | null>(null)
-
 watch(inputValue, (v) => emit('queryChange', v))
-watch(searchMode, (m) => { inputValue.value = ''; emit('modeChange', m) })
+watch(searchMode, (m) => { emit('modeChange', m); nextTick(() => inputRef.value?.focus()) })
 watch(() => props.visible, (v) => { if (v) nextTick(() => inputRef.value?.focus()) })
 watch(() => props.commentaryVisible, (v) => { if (!v && searchMode.value === 'commentary') searchMode.value = 'content' })
 
@@ -58,6 +57,8 @@ function onClose() {
   inputValue.value = ''
   emit('close')
 }
+
+defineExpose({ focus: () => inputRef.value?.focus() })
 </script>
 
 <template>
@@ -81,7 +82,7 @@ function onClose() {
         <IconChatMultiple20Filled v-if="searchMode === 'commentary'" />
         <IconBook20Filled v-else />
       </button>
-            <span v-if="commentaryVisible" class="sep" />
+      <span v-if="commentaryVisible" class="sep" />
       <button class="nav-btn" :disabled="matchCount === 0" @click="emit('prev')"><IconChevronUp20Regular /></button>
       <button class="nav-btn" :disabled="matchCount === 0" @click="emit('next')"><IconChevronDown20Regular /></button>
       <span class="sep" />
@@ -106,8 +107,7 @@ function onClose() {
   user-select: none;
   touch-action: none;
   cursor: grab;
-  box-shadow: 0 4px 16px color-mix(in srgb, var(--text-primary) 18%, transparent),
-              0 1px 3px color-mix(in srgb, var(--text-primary) 10%, transparent);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 .search-bar:active { cursor: grabbing; }
 

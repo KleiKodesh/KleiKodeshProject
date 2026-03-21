@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onBeforeUnmount, computed } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount, computed, nextTick } from 'vue'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useTabStore } from '@/stores/tabStore'
 import { useToc } from './useToc'
@@ -36,7 +36,7 @@ const commentaryViewRef = ref<InstanceType<typeof CommentaryView> | null>(null)
 
 const { getActiveTocEntry, getTocPath, altTocSections } = useToc(() => bookId, () => bookTitle)
 const { lines } = useLines(() => bookId)
-const { groups } = useCommentary(() => selectedLineId.value)
+const { groups, loading: commentaryLoading } = useCommentary(() => selectedLineId.value)
 const contentSearch = useBookViewSearch(() => lines.value)
 const commentarySearch = useCommentarySearch(() => groups.value)
 
@@ -117,9 +117,20 @@ function onAltTocSelect(entry: TocEntry) {
 }
 
 function onModeChange(mode: SearchMode) {
-  searchMode.value = mode
+  const currentQuery = activeSearch.value.query.value
   contentSearch.clear()
   commentarySearch.clear()
+  searchMode.value = mode
+  if (!currentQuery) return
+  const target = mode === 'content' ? contentSearch : commentarySearch
+  target.query.value = currentQuery
+  nextTick(() => {
+    if (mode === 'content' && contentSearch.matchLineIndices.value.length) {
+      linesContentRef.value?.scrollToLineIndex(contentSearch.matchLineIndices.value[0]!)
+    } else if (mode === 'commentary' && commentarySearch.matchFlatIndices.value.length) {
+      commentaryViewRef.value?.scrollToFlatIndex(commentarySearch.matchFlatIndices.value[0]!)
+    }
+  })
 }
 
 function onQueryChange(q: string) {
@@ -186,6 +197,7 @@ function onLineSelected(lineId: number) {
             :selected-line-id="selectedLineId"
             :bottom-visible="bottomVisible"
             :search-query="searchMode === 'content' ? contentSearch.query.value : ''"
+            :current-match-line-index="searchMode === 'content' ? contentSearch.currentMatchLineIndex.value : undefined"
             @scrolled="onLinesScrolled"
             @line-selected="onLineSelected"
           />
@@ -194,7 +206,10 @@ function onLineSelected(lineId: number) {
           <CommentaryView
             ref="commentaryViewRef"
             :selected-line-id="selectedLineId"
+            :groups="groups"
+            :loading="commentaryLoading"
             :search-query="searchMode === 'commentary' ? commentarySearch.query.value : ''"
+            :current-match-flat-index="searchMode === 'commentary' ? commentarySearch.currentMatchFlatIndex.value : undefined"
             @close="bottomVisible = false"
           />
         </template>

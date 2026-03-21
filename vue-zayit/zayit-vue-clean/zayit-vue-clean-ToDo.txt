@@ -8,3 +8,4 @@ UNIFOED HOVER BG AND ACTIVE BG
 only show comentry pane toggle hwen tehre any connection types
 tabniavigation uses v if!????
 settings דף ברירית המחדל
+search i snot highlugting current and civering search perbombkm
