@@ -5,6 +5,7 @@ export interface TocNode {
   parentId: number | null
   bookId: number
   text: string
+  lineIndex: number | null
 }
 
 export interface TocSearchNode extends TocNode {

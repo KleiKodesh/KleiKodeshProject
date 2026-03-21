@@ -16,6 +16,7 @@ const { tocEntries, altTocSections, loading, error } = useToc(() => props.bookId
 const justSelected = ref(false)
 
 watch(loading, (val) => { if (!val) nextTick(() => searchRef.value?.focus()) })
+watch(() => props.visible, (val) => { if (val && !loading.value) setTimeout(() => searchRef.value?.focus(), 0) })
 onClickOutside(panelRef, () => { if (!justSelected.value) emit('close') })
 
 function onSelect(entry: TocEntry) {

@@ -15,6 +15,7 @@ const props = defineProps<{
   bottomVisible?: boolean
   searchQuery?: string
   currentMatchLineIndex?: number
+  initialLineIndex?: number
 }>()
 
 const tabStore = useTabStore()
@@ -120,10 +121,14 @@ async function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
 
 watch(loading, async (val) => {
   if (!val && lines.value.length > 0) {
+    if (props.initialLineIndex != null) {
+      await nextTick()
+      await restoreScrollPos(props.initialLineIndex, 0)
+      return
+    }
     const saved = await tabStore.getBookViewState(tabId, bookId)
     if (saved) {
       if (saved.selectedLineId != null) {
-        // Prioritise scrolling to the selected line
         const lineIndex = lines.value.find(l => l.id === saved.selectedLineId)?.lineIndex
         if (lineIndex != null) {
           await restoreScrollPos(lineIndex, 0)
@@ -135,7 +140,7 @@ watch(loading, async (val) => {
       }
     }
   }
-})
+}, { flush: 'post' })
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 

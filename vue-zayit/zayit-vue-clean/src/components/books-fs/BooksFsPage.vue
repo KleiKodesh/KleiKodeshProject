@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, nextTick, watch } from 'vue'
+import { useIntervalFn } from '@vueuse/core'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import { useBooksFs } from './useBooksFs'
 import BooksFsTitleBar from './BooksFsTitleBar.vue'
@@ -18,6 +19,30 @@ const view = ref<'list' | 'tiles' | 'tree'>(tabStore.getBooksView())
 const fullTreeRef = ref<InstanceType<typeof BooksFullTree> | null>(null)
 const searchInputRef = ref<HTMLInputElement | null>(null)
 
+const PLACEHOLDERS = ['חיפוש ספר...', 'בראשית פרק ד', 'בבלי ברכות דף יד']
+const placeholder = ref(PLACEHOLDERS[0]!)
+
+let phraseIdx = 0
+let charIdx = 0
+let pauseTicks = 0
+
+const { pause: pauseTyping, resume: resumeTyping } = useIntervalFn(() => {
+  if (pauseTicks > 0) { pauseTicks--; return }
+  const target = PLACEHOLDERS[phraseIdx]!
+  if (charIdx < target.length) {
+    placeholder.value = target.slice(0, ++charIdx)
+  } else {
+    pauseTicks = 12
+    phraseIdx = (phraseIdx + 1) % PLACEHOLDERS.length
+    charIdx = 0
+  }
+}, 80)
+
+watch(searchQuery, (val) => {
+  if (val) pauseTyping()
+  else resumeTyping()
+})
+
 function setView(v: 'list' | 'tiles' | 'tree') {
   view.value = v
   tabStore.setBooksView(v)
@@ -33,7 +58,7 @@ function onSelectBook(book: BookRow) {
 }
 
 function onSelectToc(item: TocFsItem) {
-  tabStore.updateActiveTab({ title: item.book.title, route: '/book-view', bookId: item.book.id, openToc: true, openTocEntryId: item.tocEntryId })
+  tabStore.updateActiveTab({ title: item.book.title, route: '/book-view', bookId: item.book.id, openTocEntryId: item.tocEntryId, openTocLineIndex: item.tocLineIndex ?? undefined })
 }
 
 function onSearchEnter() {
@@ -87,7 +112,8 @@ function onSearchEnter() {
     <div class="search-bar">
       <div class="search-inner">
         <IconSearch20Regular class="search-icon" />
-        <input ref="searchInputRef" v-model="searchQuery" type="search" placeholder="חיפוש ספר..." class="search-input"
+        <input ref="searchInputRef" v-model="searchQuery" type="search" class="search-input"
+          :placeholder="placeholder"
           @keydown.enter="onSearchEnter" />
       </div>
     </div>

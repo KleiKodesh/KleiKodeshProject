@@ -113,11 +113,12 @@ export const SQL = {
     ORDER BY te.id
   `,
 
-  /** TOC entry ids, parentIds, bookIds and titles for multiple books — used for TOC search fallback */
+  /** TOC entry ids, parentIds, bookIds, titles and lineIndex for multiple books — used for TOC search fallback */
   GET_TOC_TITLES_FOR_BOOKS: (count: number) => `
-    SELECT te.id, te.parentId, te.bookId, tt.text
+    SELECT te.id, te.parentId, te.bookId, tt.text, l.lineIndex
     FROM tocEntry te
     JOIN tocText tt ON tt.id = te.textId
+    LEFT JOIN line l ON l.id = te.lineId
     WHERE te.bookId IN (${Array(count).fill('?').join(', ')})
     ORDER BY te.id
   `,

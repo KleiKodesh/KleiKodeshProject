@@ -15,6 +15,7 @@ export interface Tab {
   bookId?: number
   openToc?: boolean
   openTocEntryId?: number
+  openTocLineIndex?: number
   tocPath?: string
 }
 
@@ -44,7 +45,7 @@ export const useTabStore = defineStore('tabs', () => {
 
   function persistTabs() {
     persistSet<PersistedTabList>(PERSIST_KEYS.TABS, {
-      tabs: tabs.value.map(({ pdfBlobUrl, openToc, openTocEntryId, ...t }) => t),
+      tabs: tabs.value.map(({ pdfBlobUrl, openToc, openTocEntryId, openTocLineIndex, ...t }) => t),
       activeTabId: activeTabId.value,
       nextId,
     })

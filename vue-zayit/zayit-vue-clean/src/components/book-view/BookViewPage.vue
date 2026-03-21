@@ -22,14 +22,13 @@ const tabStore = useTabStore()
 const tabId = tabStore.activeTabId
 const bookId = tabStore.activeTab.bookId
 const bookTitle = tabStore.activeTab.title
-const openToc = tabStore.activeTab.openToc ?? false
 const openTocEntryId = tabStore.activeTab.openTocEntryId
-if (openToc) tabStore.updateActiveTab({ openToc: false })
-if (openTocEntryId != null) tabStore.updateActiveTab({ openTocEntryId: undefined })
+const openTocLineIndex = tabStore.activeTab.openTocLineIndex
+if (openTocEntryId != null) tabStore.updateActiveTab({ openTocEntryId: undefined, openTocLineIndex: undefined })
 
 const bottomVisible = ref(false)
 const searchVisible = ref(false)
-const tocVisible = ref(openToc)
+const tocVisible = ref(false)
 const selectedLineId = ref<number | null>(null)
 const searchMode = ref<SearchMode>('content')
 
@@ -59,16 +58,14 @@ const altTocLabelMap = computed(() => {
 })
 
 const activeTocEntryId = ref<number | undefined>(undefined)
+const initialLineIndex = ref<number | undefined>(openTocLineIndex)
 
-// If opened from TOC search, scroll to the target entry once TOC loads
+// If opened from TOC search, set activeTocEntryId once TOC entries load
 if (openTocEntryId != null) {
   const stopWatch = watch(tocEntries, (entries) => {
     if (!entries.length) return
     const entry = entries.find(e => e.id === openTocEntryId)
-    if (entry?.lineId != null) {
-      activeTocEntryId.value = entry.id
-      nextTick(() => linesContentRef.value?.scrollToLineId(entry.lineId!))
-    }
+    if (entry != null) activeTocEntryId.value = entry.id
     stopWatch()
   })
 }
@@ -86,7 +83,7 @@ onMounted(async () => {
   const saved = await tabStore.getTabViewState(tabId)
   if (saved) {
     bottomVisible.value = saved.bottomVisible
-    if (!openToc) tocVisible.value = saved.tocVisible
+    tocVisible.value = saved.tocVisible
   }
   if (bookId != null) {
     const bookSaved = await tabStore.getBookViewState(tabId, bookId)
@@ -211,6 +208,7 @@ function onLineSelected(lineId: number) {
             :alt-toc-label-map="altTocLabelMap"
             :selected-line-id="selectedLineId"
             :bottom-visible="bottomVisible"
+            :initial-line-index="initialLineIndex"
             :search-query="searchMode === 'content' ? contentSearch.query.value : ''"
             :current-match-line-index="searchMode === 'content' ? contentSearch.currentMatchLineIndex.value : undefined"
             @scrolled="onLinesScrolled"

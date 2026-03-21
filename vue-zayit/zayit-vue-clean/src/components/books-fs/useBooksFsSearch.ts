@@ -14,6 +14,7 @@ export type TocFsItem = {
   kind: 'toc'
   book: BookRow
   tocEntryId: number
+  tocLineIndex: number | null
   tocTitle: string
   tocPath: string
 }
@@ -40,7 +41,7 @@ function stripRoots(rows: TocRow[], bookTitles: Map<number, string>): TocRow[] {
     .map(r => rootIds.has(r.parentId!) ? { ...r, parentId: null } : r)
 }
 
-type TocRow = { id: number; parentId: number | null; bookId: number; text: string }
+type TocRow = { id: number; parentId: number | null; bookId: number; text: string; lineIndex: number | null }
 
 // Yield to the browser every N nodes to avoid blocking the main thread
 const MATCH_YIELD_EVERY = 200
@@ -58,6 +59,7 @@ async function matchNodes(nodes: TocSearchNode[], tocWords: string[], bookMap: M
         kind: 'toc',
         book,
         tocEntryId: node.id,
+        tocLineIndex: node.lineIndex,
         tocTitle: node.text,
         tocPath: node.tocDisplayPath,
       })
