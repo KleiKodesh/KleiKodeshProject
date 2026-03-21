@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { persistGet, persistSet, PERSIST_KEYS } from '@/utils/persist'
-import { getTabState, setTabState, getBookState, setBookState, deleteBook, deleteTab } from '@/utils/tabDb'
+import { getTabState, setTabState, getBookState, setBookState, deleteBook, deleteTab, getLastRead, setLastRead } from '@/utils/tabDb'
 import type { TabState, BookState } from '@/utils/tabDb'
 
 export type TabRoute = '/' | '/pdf-view' | '/settings' | '/books' | '/book-view' | '/hebrewbooks'
@@ -81,6 +81,16 @@ export const useTabStore = defineStore('tabs', () => {
     persistSet(PERSIST_KEYS.BOOK_VIEW_SEARCH_BAR_POS, pos)
   }
 
+  // ── Global last-read position per book (IndexedDB) ───────────────────────────
+
+  function getLastReadPos(bookId: number): Promise<{ scrollIndex: number; scrollOffset: number } | null> {
+    return getLastRead(bookId)
+  }
+
+  function setLastReadPos(bookId: number, pos: { scrollIndex: number; scrollOffset: number }): Promise<void> {
+    return setLastRead(bookId, pos)
+  }
+
   // ── Per-tab state (IndexedDB) ────────────────────────────────────────────────
 
   function getTabViewState(tabId: string): Promise<TabState | null> {
@@ -152,6 +162,7 @@ export const useTabStore = defineStore('tabs', () => {
     getBooksView, setBooksView,
     getToolbarVisible, setToolbarVisible,
     getSearchBarPos, setSearchBarPos,
+    getLastReadPos, setLastReadPos,
     getTabViewState, setTabViewState,
     getBookViewState, setBookViewState, clearBookViewState,
   }

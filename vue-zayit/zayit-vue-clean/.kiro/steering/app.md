@@ -276,7 +276,7 @@ Junction tables: `bookId` + respective FK, composite PK.
 `tabStore` (`src/stores/tabStore.ts`) is the single hub for all persistence. No component, composable, or other store may import from `src/utils/persist.ts` or `src/utils/tabDb.ts` directly — always go through `tabStore` functions.
 
 ### localStorage — `src/utils/persist.ts`
-Internal to `tabStore` only. Stores global settings that survive sessions.
+Internal to `tabStore` only. Stores global settings that survive sessions. **Only use localStorage for small, fixed-size scalar settings** (booleans, strings, small objects). Never store collections, maps, or any data that grows with user activity — use IndexedDB for that.
 
 | Key | `tabStore` function | Notes |
 |---|---|---|
@@ -287,7 +287,7 @@ Internal to `tabStore` only. Stores global settings that survive sessions.
 | `app.bookView.searchBarPos` | `getSearchBarPos()` / `setSearchBarPos(pos)` | Floating search bar position |
 
 ### IndexedDB — `src/utils/tabDb.ts`
-Internal to `tabStore` only. Per-tab and per-tab+book state, fully isolated by key. DB name: `app-tab-state`.
+Internal to `tabStore` only. Per-tab, per-tab+book, and per-book state. Use IndexedDB for **any data that grows with usage** — scroll positions, reading history, per-item state. Each read/write is O(1) and operates on a single record, unlike localStorage which serializes the entire value on every write. DB name: `app-tab-state`, current version: `2`.
 
 **`tab-state`** store — key: `tabId`, value: `TabState`
 ```ts
@@ -296,8 +296,14 @@ interface TabState { bottomVisible: boolean; tocVisible: boolean }
 
 **`book-state`** store — key: `"tabId:bookId"`, value: `BookState`
 ```ts
-interface BookState { scrollIndex: number; scrollOffset: number }
+interface BookState { scrollIndex: number; scrollOffset: number; selectedLineId?: number | null }
 ```
+
+**`book-last-read`** store — key: `bookId`, value: `LastReadState`
+```ts
+interface LastReadState { scrollIndex: number; scrollOffset: number }
+```
+Global resume position per book — written on every scroll save, used as fallback when no tab-specific state exists. Never auto-deleted.
 
 | `tabStore` function | Description |
 |---|---|
@@ -306,6 +312,18 @@ interface BookState { scrollIndex: number; scrollOffset: number }
 | `getBookViewState(tabId, bookId)` | Read per-book state (scroll position) |
 | `setBookViewState(tabId, bookId, state)` | Write per-book state |
 | `clearBookViewState(tabId, bookId)` | Delete book state entry |
+| `getLastReadPos(bookId)` | Read global last-read position for a book |
+| `setLastReadPos(bookId, pos)` | Write global last-read position for a book |
+
+### localStorage vs IndexedDB — when to use which
+
+| Use localStorage | Use IndexedDB |
+|---|---|
+| Single scalar value (bool, string, number) | Any collection or map keyed by id |
+| Fixed set of global settings | Data that grows with user activity |
+| Synchronous access is genuinely needed | Per-tab, per-book, or per-item state |
+
+The critical anti-pattern to avoid: **never store a `Record<id, value>` map in localStorage**. It reads and rewrites the entire JSON blob on every update. As the map grows (e.g. one entry per book ever opened), writes get progressively more expensive. Always use an IndexedDB object store with the id as the key instead.
 
 ### Stores
 
@@ -325,9 +343,10 @@ interface BookState { scrollIndex: number; scrollOffset: number }
 - On unmount: scroll position saved via `tabStore.setBookViewState`; if no position captured, `tabStore.clearBookViewState` deletes the entry
 
 ### Adding new persisted state
-- Global setting → add key to `PERSIST_KEYS` in `persist.ts`, add `get*/set*` pair to `tabStore`
+- Global scalar setting → add key to `PERSIST_KEYS` in `persist.ts`, add `get*/set*` pair to `tabStore`
 - Per-tab UI state → add field to `TabState` in `tabDb.ts`, expose via `tabStore.getTabViewState/setTabViewState`
-- Per-book state → add field to `BookState` in `tabDb.ts`, expose via `tabStore.getBookViewState/setBookViewState`
+- Per-tab+book state → add field to `BookState` in `tabDb.ts`, expose via `tabStore.getBookViewState/setBookViewState`
+- Per-book global state (grows with usage) → add a new object store to `tabDb.ts` (bump `DB_VERSION`), expose via `tabStore` — never use localStorage for this
 
 ## Dropdowns
 

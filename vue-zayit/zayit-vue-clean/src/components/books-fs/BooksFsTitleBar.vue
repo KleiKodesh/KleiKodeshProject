@@ -1,24 +1,9 @@
 <script setup lang="ts">
-import {
-  IconTextBulletList20Regular,
-  IconGrid20Regular,
-  IconTextBulletListTree20Regular,
-  IconHome16Regular,
-} from '@iconify-prerendered/vue-fluent'
+import { IconTextBulletList20Regular, IconGrid20Regular, IconTextBulletListTree20Regular, IconHome16Regular } from '@iconify-prerendered/vue-fluent'
 import BooksBreadcrumb from './BooksBreadcrumb.vue'
 import type { CategoryNode } from './booksFsTree'
-
-const props = defineProps<{
-  view: 'list' | 'tiles' | 'tree'
-  path: CategoryNode[]
-  isSearching: boolean
-}>()
-
-defineEmits<{
-  setView: ['list' | 'tiles' | 'tree']
-  navigate: [number]
-  reset: []
-}>()
+defineProps<{ view: 'list' | 'tiles' | 'tree'; path: CategoryNode[]; isSearching: boolean }>()
+defineEmits<{ setView: ['list' | 'tiles' | 'tree']; navigate: [number]; reset: [] }>()
 </script>
 
 <template>
@@ -34,47 +19,12 @@ defineEmits<{
 </template>
 
 <style scoped>
-.titlebar {
-  display: flex;
-  align-items: stretch;
-  border-bottom: 1px solid var(--border-color);
-  background: var(--bg-toolbar);
-  min-height: 32px;
-}
-
-.home-btn {
-  display: inline-flex;
-  align-items: center;
-  padding: 0 6px;
-  height: 24px;
-  border-radius: 0;
-  color: var(--text-secondary);
-  margin-inline-start: 4px;
-  margin-inline-end: auto;
-  align-self: center;
-}
+.titlebar { display: flex; align-items: stretch; border-bottom: 1px solid var(--border-color); background: var(--bg-toolbar); min-height: 32px; }
+.home-btn { display: inline-flex; align-items: center; padding: 0 6px; height: 24px; border-radius: 0; color: var(--text-secondary); margin-inline-start: 4px; margin-inline-end: auto; align-self: center; }
 .home-btn:hover { color: var(--text-primary); }
-
-.view-switcher {
-  display: flex;
-  align-items: stretch;
-  flex-shrink: 0;
-}
-
-.view-switcher button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 100%;
-  padding: 6px;
-  border-radius: 0;
-  border-bottom: 2px solid transparent;
-}
-.view-switcher button svg { width: 16px; height: 16px; }
-.view-switcher button.active {
-  color: var(--accent-color);
-  border-bottom-color: var(--accent-color);
-}
 .home-btn svg { width: 16px; height: 16px; }
+.view-switcher { display: flex; align-items: stretch; flex-shrink: 0; }
+.view-switcher button { display: flex; align-items: center; justify-content: center; width: 32px; height: 100%; padding: 6px; border-radius: 0; border-bottom: 2px solid transparent; }
+.view-switcher button svg { width: 16px; height: 16px; }
+.view-switcher button.active { color: var(--accent-color); border-bottom-color: var(--accent-color); }
 </style>

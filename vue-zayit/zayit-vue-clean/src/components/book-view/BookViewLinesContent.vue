@@ -138,6 +138,9 @@ watch(loading, async (val) => {
       } else {
         await restoreScrollPos(saved.scrollIndex, saved.scrollOffset)
       }
+    } else {
+      const global = await tabStore.getLastReadPos(bookId)
+      if (global) await restoreScrollPos(global.scrollIndex, global.scrollOffset)
     }
   }
 }, { flush: 'post' })
@@ -158,7 +161,10 @@ function onScroll() {
   if (saveTimer) clearTimeout(saveTimer)
   saveTimer = setTimeout(() => {
     const pos = captureScrollPos()
-    if (pos) tabStore.setBookViewState(tabId, bookId, { ...pos, selectedLineId: props.selectedLineId })
+    if (pos) {
+      tabStore.setBookViewState(tabId, bookId, { ...pos, selectedLineId: props.selectedLineId })
+      tabStore.setLastReadPos(bookId, pos)
+    }
   }, 100)
 }
 
@@ -179,8 +185,10 @@ onBeforeUnmount(() => {
   if (saveTimer) clearTimeout(saveTimer)
   if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer)
   const pos = captureScrollPos()
-  if (pos) tabStore.setBookViewState(tabId, bookId, { ...pos, selectedLineId: props.selectedLineId })
-  else tabStore.clearBookViewState(tabId, bookId)
+  if (pos) {
+    tabStore.setBookViewState(tabId, bookId, { ...pos, selectedLineId: props.selectedLineId })
+    tabStore.setLastReadPos(bookId, pos)
+  } else tabStore.clearBookViewState(tabId, bookId)
 })
 
 defineExpose({ scrollToLineId, scrollToLineIndex })
