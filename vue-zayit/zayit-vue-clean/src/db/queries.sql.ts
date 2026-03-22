@@ -186,4 +186,28 @@ export const SQL = {
     WHERE l.targetLineId = ?
   `,
 
+  /** Next line in main book (by lineIndex) that has a link to a given commentary book */
+  GET_NEXT_SECTION_WITH_COMMENTARY: `
+    SELECT ln.id, ln.lineIndex
+    FROM line ln
+    JOIN link lk ON lk.sourceLineId = ln.id
+    WHERE ln.bookId = ?
+      AND lk.targetBookId = ?
+      AND ln.lineIndex > ?
+    ORDER BY ln.lineIndex ASC
+    LIMIT 1
+  `,
+
+  /** Previous line in main book (by lineIndex) that has a link to a given commentary book */
+  GET_PREV_SECTION_WITH_COMMENTARY: `
+    SELECT ln.id, ln.lineIndex
+    FROM line ln
+    JOIN link lk ON lk.sourceLineId = ln.id
+    WHERE ln.bookId = ?
+      AND lk.targetBookId = ?
+      AND ln.lineIndex < ?
+    ORDER BY ln.lineIndex DESC
+    LIMIT 1
+  `,
+
 } as const

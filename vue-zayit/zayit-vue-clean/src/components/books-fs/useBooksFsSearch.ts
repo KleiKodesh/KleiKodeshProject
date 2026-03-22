@@ -56,7 +56,7 @@ export function useBooksFsSearch(searchQuery: ReturnType<typeof ref<string>>) {
 
   // Phase 1: instant book match
   watch(searchQuery, (raw) => {
-    const words = toWords(raw)
+    const words = toWords(raw ?? '')
     if (words.length === 0) { results.value = []; return }
     const matches = filterBooks(words)
     if (matches.length) results.value = matches.map(b => ({ uid: `b-${b.id}`, kind: 'book' as const, book: b }))

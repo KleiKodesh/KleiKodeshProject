@@ -7,6 +7,7 @@ import { useLines } from './useLines'
 import { useCommentary } from './useCommentary'
 import { useBookViewSearch } from './useBookViewSearch'
 import { useCommentarySearch } from './useCommentarySearch'
+import { findNextCommentarySection, findPrevCommentarySection } from '@/utils/commentaryNav'
 import BookViewToolbar from './BookViewToolbar.vue'
 import BookViewSplitPane from './BookViewSplitPane.vue'
 import BookViewLinesContent from './BookViewLinesContent.vue'
@@ -125,6 +126,29 @@ function onQueryChange(q: string) {
 function onSearchNext() { activeSearch.value.next(); scrollContentMatch() }
 function onSearchPrev() { activeSearch.value.prev(); scrollContentMatch() }
 
+let pendingNavStop: (() => void) | null = null
+
+async function onNavigateSection(direction: 'next' | 'prev', commentaryBookId: number) {
+  if (selectedLineId.value == null || bookId == null) return
+  const currentLine = lines.value.find(l => l.id === selectedLineId.value)
+  if (currentLine == null) return
+  const fn = direction === 'next' ? findNextCommentarySection : findPrevCommentarySection
+  const result = await fn(bookId, commentaryBookId, currentLine.lineIndex)
+  if (result == null) return
+  if (pendingNavStop) { pendingNavStop(); pendingNavStop = null }
+  selectedLineId.value = result.id
+  bottomVisible.value = true
+  linesContentRef.value?.scrollToLineId(result.id)
+  const stop = watch(commentaryLoading, (loading) => {
+    if (loading) return
+    if (selectedLineId.value !== result.id) return
+    pendingNavStop = null
+    stop()
+    nextTick(() => commentaryViewRef.value?.scrollToGroup(commentaryBookId))
+  }, { flush: 'sync' })
+  pendingNavStop = stop
+}
+
 onMounted(async () => {
   const saved = await tabStore.getTabViewState(tabId)
   if (saved) { bottomVisible.value = saved.bottomVisible; tocVisible.value = saved.tocVisible }
@@ -169,7 +193,8 @@ watch(searchVisible, v => { if (!v) { contentSearch.clear(); commentarySearch.cl
             :search-query="searchMode === 'commentary' ? commentarySearch.query.value : ''"
             :current-match-flat-index="searchMode === 'commentary' ? commentarySearch.currentMatchFlatIndex.value : undefined"
             :current-match-occurrence="searchMode === 'commentary' ? commentarySearch.currentMatchOccurrence.value : undefined"
-            @close="bottomVisible = false" />
+            @close="bottomVisible = false" @navigate-section="onNavigateSection"
+            @open-book="(bookId, lineIndex) => tabStore.openTab({ title: groups.find(g => g.bookId === bookId)?.bookTitle ?? '', route: '/book-view', bookId, openTocLineIndex: lineIndex })" />
         </template>
       </BookViewSplitPane>
       <BookViewTocTree v-show="tocVisible" :book-id="bookId" :book-title="bookTitle"

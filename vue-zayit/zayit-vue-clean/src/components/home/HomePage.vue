@@ -9,10 +9,10 @@ const pdfStore = usePdfStore()
 const tabStore = useTabStore()
 
 const tiles = [
-  { label: 'ספרים', icon: IconLibrary24Filled, color: '#C1440E' },
+  { label: 'ספרים', icon: IconLibrary24Filled, color: '#B5451B' },
   { label: 'חיפוש', icon: IconSearchSparkle24 },
   { label: 'פתח קובץ', icon: IconFolderOpen24Filled, color: '#f0a500' },
-  { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#ff5400' },
+  { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#D94F1E' },
   { label: 'הגדרות', icon: IconSettings24 },
 ]
 

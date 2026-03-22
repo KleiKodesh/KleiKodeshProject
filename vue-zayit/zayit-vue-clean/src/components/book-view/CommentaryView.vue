@@ -9,7 +9,7 @@ import { applyDiacriticsFilter, removeDiacriticsForSearch } from '@/utils/hebrew
 import { censorDivineNames } from '@/utils/censorDivineNames'
 
 const props = defineProps<{ selectedLineId: number | null; groups: CommentaryGroup[]; loading: boolean; searchQuery?: string; currentMatchFlatIndex?: number; currentMatchOccurrence?: number }>()
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: []; 'navigate-section': [direction: 'next' | 'prev', bookId: number]; 'open-book': [bookId: number, lineIndex: number] }>()
 
 const settingsStore = useSettingsStore()
 const diacriticsState = computed(() => settingsStore.diacriticsState)
@@ -65,6 +65,7 @@ const flatItems = computed<FlatItem[]>(() => {
 
 const scrollerEl = ref<HTMLElement | null>(null)
 const scrollTop = ref(0)
+const stickyShowNav = ref(true)
 
 const virtualizer = useVirtualizer(computed(() => ({
   count: flatItems.value.length,
@@ -81,18 +82,23 @@ const stickyHeader = computed(() => {
   for (const m of virtualizer.value.measurementsCache) {
     const item = flatItems.value[m.index]
     if (item?.type !== 'header') continue
-    if (m.start <= scrollTop.value) active = item as FlatItem & { type: 'header' }
+    if (m.start < scrollTop.value + 5) active = item as FlatItem & { type: 'header' }
     else break
   }
   return active
 })
 
-function onScroll() { scrollTop.value = scrollerEl.value?.scrollTop ?? 0 }
-
 function scrollToGroup(bookId: number) {
   const idx = flatItems.value.findIndex(item => item.type === 'header' && props.groups.find(g => g.bookId === bookId && g.bookTitle === item.bookTitle))
-  if (idx !== -1) virtualizer.value.scrollToIndex(idx, { align: 'start' })
+  if (idx === -1) return
+  virtualizer.value.scrollToIndex(idx, { align: 'start' })
+  // scrollToIndex is synchronous for already-measured items — read scrollTop immediately
+  scrollTop.value = scrollerEl.value?.scrollTop ?? 0
+  // also update after paint in case the browser deferred the scroll
+  requestAnimationFrame(() => { scrollTop.value = scrollerEl.value?.scrollTop ?? 0 })
 }
+
+function onScroll() { scrollTop.value = scrollerEl.value?.scrollTop ?? 0 }
 
 function scrollToFlatIndex(flatIndex: number) {
   virtualizer.value.scrollToIndex(flatIndex, { align: 'nearest' as any })
@@ -111,7 +117,10 @@ defineExpose({ scrollToGroup, scrollToFlatIndex })
     <template v-else>
       <CommentaryHeader v-if="stickyHeader" class="sticky-header"
         :book-title="stickyHeader.bookTitle" :connection-types="stickyHeader.connectionTypes"
-        :groups="props.groups" :scroll-to-group="scrollToGroup" :is-sticky="true" @close="emit('close')" />
+        :groups="props.groups" :scroll-to-group="scrollToGroup" :is-sticky="true"
+        :show-nav="stickyShowNav" @update:show-nav="stickyShowNav = $event"
+        @close="emit('close')" @navigate-section="(d, id) => emit('navigate-section', d, id)"
+        @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)" />
       <div ref="scrollerEl" class="scroller" @scroll="onScroll">
         <div :style="{ height: `${totalSize}px`, position: 'relative' }">
           <div v-for="vItem in virtualItems" :key="String(vItem.key)"
@@ -121,7 +130,9 @@ defineExpose({ scrollToGroup, scrollToFlatIndex })
             <CommentaryHeader v-if="flatItems[vItem.index]?.type === 'header'"
               :book-title="(flatItems[vItem.index] as any).bookTitle"
               :connection-types="(flatItems[vItem.index] as any).connectionTypes"
-              :groups="props.groups" :scroll-to-group="scrollToGroup" />
+              :groups="props.groups" :scroll-to-group="scrollToGroup"
+              @navigate-section="(d, id) => emit('navigate-section', d, id)"
+              @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)" />
             <div v-else class="line" v-html="renderContent((flatItems[vItem.index] as any).content, vItem.index)" />
           </div>
         </div>

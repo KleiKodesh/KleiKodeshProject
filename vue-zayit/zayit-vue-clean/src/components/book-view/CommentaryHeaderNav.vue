@@ -4,11 +4,12 @@ import {
   IconChevronDown20Regular, IconChevronUp20Regular,
   IconChevronRight20Regular, IconChevronLeft20Regular,
   IconArrowStepBack20Regular, IconSearch20Regular,
+  IconBookOpen20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import type { CommentaryGroup } from './useCommentary'
 
-const props = defineProps<{ groups: CommentaryGroup[]; scrollToGroup: (bookId: number) => void; bookTitle: string }>()
-const emit = defineEmits<{ 'input-blur': []; 'toggle-search': [] }>()
+const props = defineProps<{ groups: CommentaryGroup[]; scrollToGroup: (bookId: number) => void; bookTitle: string; activeBookId: number }>()
+const emit = defineEmits<{ 'input-blur': []; 'toggle-search': []; 'navigate-section': [direction: 'next' | 'prev', bookId: number]; close: []; 'open-book': [bookId: number, lineIndex: number]; 'update:activeBookId': [bookId: number] }>()
 
 const inputRef = ref<HTMLInputElement | null>(null)
 const componentId = Math.random().toString(36).slice(2)
@@ -24,17 +25,23 @@ const groupLabel = (g: CommentaryGroup) => {
 
 function navigateToGroup(bookId: number) {
   props.scrollToGroup(bookId)
+  emit('update:activeBookId', bookId)
   if (inputRef.value) inputRef.value.value = ''
 }
 
-const activeIndex = computed(() => props.groups.findIndex(g => g.bookTitle === props.bookTitle))
+const activeIndex = computed(() => props.groups.findIndex(g => g.bookId === props.activeBookId))
 const hasPrevious = computed(() => activeIndex.value > 0)
-const hasNext = computed(() => activeIndex.value < props.groups.length - 1)
+const hasNext = computed(() => activeIndex.value !== -1 && activeIndex.value < props.groups.length - 1)
 
 function handleSelect() {
   const val = inputRef.value?.value ?? ''
   const match = props.groups.find(g => groupLabel(g) === val || g.bookTitle === val)
   if (match) navigateToGroup(match.bookId)
+}
+
+function openBook() {
+  const group = props.groups.find(g => g.bookId === props.activeBookId)
+  if (group && group.lines[0] != null) emit('open-book', group.bookId, group.lines[0].lineIndex)
 }
 
 function handleKeydown(e: KeyboardEvent) {
@@ -59,11 +66,15 @@ function handleKeydown(e: KeyboardEvent) {
     <button class="btn c-pointer hover-bg" :disabled="!hasPrevious" title="מפרש קודם" @click="navigateToGroup(groups[activeIndex - 1]!.bookId)"><IconChevronUp20Regular /></button>
     <button class="btn c-pointer hover-bg" :disabled="!hasNext" title="מפרש הבא" @click="navigateToGroup(groups[activeIndex + 1]!.bookId)"><IconChevronDown20Regular /></button>
     <div class="sep" />
-    <button class="btn c-pointer hover-bg" title="קטע קודם"><IconChevronRight20Regular /></button>
-    <button class="btn c-pointer hover-bg" title="קטע הבא"><IconChevronLeft20Regular /></button>
+    <button class="btn c-pointer hover-bg" title="קטע קודם" @click="emit('navigate-section', 'prev', props.activeBookId)"><IconChevronRight20Regular /></button>
+    <button class="btn c-pointer hover-bg" title="קטע הבא" @click="emit('navigate-section', 'next', props.activeBookId)"><IconChevronLeft20Regular /></button>
     <div class="sep" />
     <button class="btn c-pointer hover-bg" title="חיפוש" @click.stop="emit('toggle-search')"><IconSearch20Regular /></button>
+    <button class="btn c-pointer hover-bg" title="פתח את הספר בלשונית חדשה" @click.stop="openBook()"><IconBookOpen20Regular /></button>
+    <div class="sep" />
     <button class="btn c-pointer hover-bg" title="סגור ניווט" @click.stop="emit('input-blur')"><IconArrowStepBack20Regular /></button>
+    <!-- TODO: decide whether to remove close button -->
+    <!-- <button class="btn c-pointer hover-bg" title="סגור חלונית מפרשים" @click.stop="emit('close')"><IconDismiss20Regular /></button> -->
   </div>
 </template>
 

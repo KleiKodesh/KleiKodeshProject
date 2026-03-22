@@ -19,6 +19,10 @@ const virtualizer = useVirtualizer(computed(() => ({
 function onClickItem(item: FsItem) {
   item.kind === 'folder' ? emit('enterFolder', item.node) : emit('selectBook', item.book)
 }
+
+function getTitle(item: FsItem) {
+  return item.kind === 'folder' ? item.node.title : item.book.title
+}
 </script>
 
 <template>
@@ -31,7 +35,7 @@ function onClickItem(item: FsItem) {
           <span class="icon" :class="items[vRow.index]!.kind === 'folder' ? 'folder-icon' : 'book-icon'">
             <IconFolderOpen20Filled v-if="items[vRow.index]!.kind === 'folder'" /><IconBook20Filled v-else />
           </span>
-          <span class="title">{{ items[vRow.index]!.kind === 'folder' ? items[vRow.index]!.node.title : items[vRow.index]!.book.title }}</span>
+          <span class="title">{{ getTitle(items[vRow.index]!) }}</span>
         </div>
       </div>
     </div>

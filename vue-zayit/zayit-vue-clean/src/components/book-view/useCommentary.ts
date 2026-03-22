@@ -2,7 +2,7 @@ import { ref, watch } from 'vue'
 import { query } from '@/db/db'
 import { SQL } from '@/db/queries.sql'
 
-export interface CommentaryLine { lineId: number; content: string }
+export interface CommentaryLine { lineId: number; lineIndex: number; content: string }
 export interface CommentaryGroup { bookId: number; bookTitle: string; connectionTypes: string[]; lines: CommentaryLine[] }
 
 const CT_ORDER: Record<string, number> = { TARGUM: 0, COMMENTARY: 1, SOURCE: 2, REFERENCE: 3, OTHER: 4 }
@@ -32,11 +32,11 @@ export function useCommentary(selectedLineId: () => number | null) {
       const lineIds = links.map(l => l.targetLineId)
       const [bookRows, lineRows] = await Promise.all([
         query<{ id: number; title: string }>(`SELECT id, title FROM book WHERE id IN (${bookIds.map(() => '?').join(',')})`, bookIds),
-        query<{ id: number; content: string }>(`SELECT id, content FROM line WHERE id IN (${lineIds.map(() => '?').join(',')})`, lineIds),
+        query<{ id: number; lineIndex: number; content: string }>(`SELECT id, lineIndex, content FROM line WHERE id IN (${lineIds.map(() => '?').join(',')})`, lineIds),
       ])
 
       const bookTitleMap = new Map(bookRows.map(b => [b.id, b.title]))
-      const lineContentMap = new Map(lineRows.map(l => [l.id, l.content]))
+      const lineMap = new Map(lineRows.map(l => [l.id, l]))
 
       groups.value = bookIds.map(bookId => {
         const g = byBook.get(bookId)!
@@ -44,7 +44,7 @@ export function useCommentary(selectedLineId: () => number | null) {
           bookId,
           bookTitle: bookTitleMap.get(bookId) ?? String(bookId),
           connectionTypes: [...g.connectionTypes],
-          lines: g.lineIds.map(id => ({ lineId: id, content: lineContentMap.get(id) ?? '' })),
+          lines: g.lineIds.map(id => ({ lineId: id, lineIndex: lineMap.get(id)?.lineIndex ?? 0, content: lineMap.get(id)?.content ?? '' })),
         }
       }).sort((a, b) => {
         const diff = (CT_ORDER[a.connectionTypes[0] ?? ''] ?? 99) - (CT_ORDER[b.connectionTypes[0] ?? ''] ?? 99)

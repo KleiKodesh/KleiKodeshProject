@@ -1,37 +1,51 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { IconDismiss20Regular, IconArrowStepOver20Regular } from '@iconify-prerendered/vue-fluent'
 import CommentaryHeaderNav from './CommentaryHeaderNav.vue'
-import CommentaryTypeDropdown from './CommentaryTypeDropdown.vue'
 import type { CommentaryGroup } from './useCommentary'
 
-const props = defineProps<{ bookTitle: string; connectionTypes: string[]; groups: CommentaryGroup[]; scrollToGroup: (bookId: number) => void; isSticky?: boolean }>()
-const emit = defineEmits<{ close: [] }>()
+const props = defineProps<{ bookTitle: string; connectionTypes: string[]; groups: CommentaryGroup[]; scrollToGroup: (bookId: number) => void; isSticky?: boolean; showNav?: boolean }>()
+const emit = defineEmits<{ close: []; 'navigate-section': [direction: 'next' | 'prev', bookId: number]; 'update:showNav': [val: boolean]; 'open-book': [bookId: number, lineIndex: number] }>()
 
 const CT_LABELS: Record<string, string> = { SOURCE: 'מקור', OTHER: 'אחר', COMMENTARY: 'מפרשים', TARGUM: 'תרגום', REFERENCE: 'הפניה' }
 
-const showNav = ref(false)
-const dropdownOpen = ref(false)
+const localShowNav = ref(false)
+const showNav = computed({
+  get: () => props.isSticky ? (props.showNav ?? false) : localShowNav.value,
+  set: (val) => props.isSticky ? emit('update:showNav', val) : (localShowNav.value = val),
+})
 
-function navigateToGroup(bookId: number) { props.scrollToGroup(bookId); dropdownOpen.value = false }
+const localActiveBookId = ref(props.groups.find(g => g.bookTitle === props.bookTitle)?.bookId ?? 0)
+const activeBookId = computed(() => localActiveBookId.value || (props.groups.find(g => g.bookTitle === props.bookTitle)?.bookId ?? 0))
+
+// keep localActiveBookId in sync when the sticky header switches group due to scrolling
+watch(() => props.bookTitle, (title) => {
+  const id = props.groups.find(g => g.bookTitle === title)?.bookId
+  if (id) localActiveBookId.value = id
+})
+
+function onHeaderClick(e: MouseEvent) {
+  if (e.ctrlKey || e.metaKey) {
+    const group = props.groups.find(g => g.bookTitle === props.bookTitle)
+    if (group && group.lines[0] != null) emit('open-book', group.bookId, group.lines[0].lineIndex)
+    return
+  }
+  if (props.isSticky) showNav.value = true
+  else localShowNav.value = !localShowNav.value
+}
 </script>
 
 <template>
-  <div class="commentary-header" @click="isSticky && (showNav = true)">
-    <template v-if="!showNav || !isSticky">
-      <h5 class="book-title">{{ bookTitle }}</h5>
-      <div v-if="isSticky" class="badge-wrapper" @click.stop="dropdownOpen = !dropdownOpen">
-        <button class="badge" :class="{ active: dropdownOpen }">
-          {{ connectionTypes[0] ? (CT_LABELS[connectionTypes[0]] ?? connectionTypes[0]) : '' }}
-        </button>
-        <CommentaryTypeDropdown v-if="dropdownOpen" :groups="groups" :ct-labels="CT_LABELS" @navigate="navigateToGroup" @close="dropdownOpen = false" />
-      </div>
-      <div v-if="isSticky" class="header-actions" @click.stop>
-        <button class="action-btn c-pointer hover-bg" title="ניווט מפרשים" @click.stop="showNav = true"><IconArrowStepOver20Regular /></button>
-        <button class="action-btn c-pointer hover-bg" title="סגור פרשנות" @click.stop="emit('close')"><IconDismiss20Regular /></button>
+  <div class="commentary-header" :class="{ 'is-sticky': isSticky }" title="לחץ לניווט מפרשים • Ctrl+לחץ לפתיחת הספר" @click="onHeaderClick($event)">
+    <template v-if="!showNav">
+      <h5 class="book-title">{{ connectionTypes[0] ? `${CT_LABELS[connectionTypes[0]] ?? connectionTypes[0]} > ${bookTitle}` : bookTitle }}</h5>
+      <div class="header-actions" @click.stop>
+        <button class="action-btn nav-btn c-pointer hover-bg" title="ניווט מפרשים" @click.stop="showNav = true"><IconArrowStepOver20Regular /></button>
+        <!-- TODO: decide whether to remove close button -->
+        <!-- <button v-if="isSticky" class="action-btn c-pointer hover-bg" title="סגור חלונית מפרשים" @click.stop="emit('close')"><IconDismiss20Regular /></button> -->
       </div>
     </template>
-    <CommentaryHeaderNav v-if="showNav && isSticky" :groups="groups" :scroll-to-group="scrollToGroup" :book-title="bookTitle" @input-blur="showNav = false" />
+    <CommentaryHeaderNav v-if="showNav" :groups="groups" :scroll-to-group="scrollToGroup" :book-title="bookTitle" :active-book-id="activeBookId" @input-blur="showNav = false" @navigate-section="(d, id) => emit('navigate-section', d, id)" @close="emit('close')" @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)" @update:active-book-id="localActiveBookId = $event" />
   </div>
 </template>
 
@@ -40,10 +54,11 @@ function navigateToGroup(bookId: number) { props.scrollToGroup(bookId); dropdown
 .book-title { flex: 1; margin: 0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; user-select: text; }
 .book-title:hover { color: var(--accent-color); }
 .badge-wrapper { position: relative; flex-shrink: 0; }
-@container (max-width: 160px) { .badge-wrapper { display: none; } }
-.badge { display: flex; align-items: center; font-size: 11px; color: var(--text-secondary); background: color-mix(in srgb, var(--text-secondary) 12%, transparent); border-radius: 4px; padding: 2px 8px; white-space: nowrap; }
-.badge:hover, .badge.active { background: color-mix(in srgb, var(--accent-color) 15%, transparent); color: var(--accent-color); }
 .header-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
 .action-btn { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 4px; color: var(--text-secondary); }
 .action-btn svg { width: 14px; height: 14px; }
+/* nav button hidden by default on inline headers, visible on hover; always visible on sticky */
+.nav-btn { opacity: 0; }
+.commentary-header:hover .nav-btn { opacity: 1; }
+.commentary-header.is-sticky .nav-btn { opacity: 1; }
 </style>

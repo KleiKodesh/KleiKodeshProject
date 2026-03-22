@@ -150,7 +150,16 @@ function setProgrammaticScroll() {
 function scrollToLineId(lineId: number) {
   const lineIndex = lines.value.find(l => l.id === lineId)?.lineIndex
   if (lineIndex == null) return
-  setProgrammaticScroll(); prioritise(lineIndex)
+  prioritise(lineIndex)
+
+  const scroller = scrollerEl.value
+  const vItem = virtualItems.value.find(v => v.index === lineIndex)
+  if (vItem && scroller) {
+    const viewTop = scroller.scrollTop
+    const viewBottom = viewTop + scroller.clientHeight
+    if (vItem.start >= viewTop && vItem.start + vItem.size <= viewBottom) return
+  }
+  setProgrammaticScroll()
   virtualizer.value.scrollToIndex(lineIndex, { align: 'start' })
 }
 
