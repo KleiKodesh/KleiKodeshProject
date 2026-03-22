@@ -4,12 +4,12 @@ import {
   IconChevronDown20Regular, IconChevronUp20Regular,
   IconChevronRight20Regular, IconChevronLeft20Regular,
   IconArrowStepBack20Regular, IconSearch20Regular,
-  IconBookOpen20Regular,
+  IconBookOpen20Regular, IconTextBulletListTree20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import type { CommentaryGroup } from './useCommentary'
 
-const props = defineProps<{ groups: CommentaryGroup[]; scrollToGroup: (bookId: number) => void; bookTitle: string; activeBookId: number }>()
-const emit = defineEmits<{ 'input-blur': []; 'toggle-search': []; 'navigate-section': [direction: 'next' | 'prev', bookId: number]; close: []; 'open-book': [bookId: number, lineIndex: number]; 'update:activeBookId': [bookId: number] }>()
+const props = defineProps<{ groups: CommentaryGroup[]; scrollToGroup: (bookId: number) => void; bookTitle: string; activeBookId: number; treeVisible?: boolean; isSticky?: boolean }>()
+const emit = defineEmits<{ 'input-blur': []; 'toggle-search': []; 'navigate-section': [direction: 'next' | 'prev', bookId: number]; close: []; 'open-book': [bookId: number, lineIndex: number]; 'update:activeBookId': [bookId: number]; 'toggle-tree': [] }>()
 
 const inputRef = ref<HTMLInputElement | null>(null)
 const componentId = Math.random().toString(36).slice(2)
@@ -55,7 +55,7 @@ function handleKeydown(e: KeyboardEvent) {
 
 <template>
   <div class="nav">
-    <div class="search-wrapper">
+    <div v-if="!treeVisible" class="search-wrapper">
       <IconChevronDown20Regular class="search-icon" />
       <input ref="inputRef" type="text" class="search-input" :list="`commentary-list-${componentId}`"
         :placeholder="bookTitle || 'חפש מפרש...'" @change="handleSelect" @keydown="handleKeydown" />
@@ -69,12 +69,11 @@ function handleKeydown(e: KeyboardEvent) {
     <button class="btn c-pointer hover-bg" title="קטע קודם" @click="emit('navigate-section', 'prev', props.activeBookId)"><IconChevronRight20Regular /></button>
     <button class="btn c-pointer hover-bg" title="קטע הבא" @click="emit('navigate-section', 'next', props.activeBookId)"><IconChevronLeft20Regular /></button>
     <div class="sep" />
-    <button class="btn c-pointer hover-bg" title="חיפוש" @click.stop="emit('toggle-search')"><IconSearch20Regular /></button>
+    <button v-if="isSticky" class="btn c-pointer hover-bg" title="חיפוש" @click.stop="emit('toggle-search')"><IconSearch20Regular /></button>
     <button class="btn c-pointer hover-bg" title="פתח את הספר בלשונית חדשה" @click.stop="openBook()"><IconBookOpen20Regular /></button>
     <div class="sep" />
     <button class="btn c-pointer hover-bg" title="סגור ניווט" @click.stop="emit('input-blur')"><IconArrowStepBack20Regular /></button>
-    <!-- TODO: decide whether to remove close button -->
-    <!-- <button class="btn c-pointer hover-bg" title="סגור חלונית מפרשים" @click.stop="emit('close')"><IconDismiss20Regular /></button> -->
+    <button v-if="isSticky" class="btn c-pointer hover-bg" :class="{ active: treeVisible }" title="עץ מפרשים" @click.stop="emit('toggle-tree')"><IconTextBulletListTree20Regular /></button>
   </div>
 </template>
 
@@ -83,6 +82,7 @@ function handleKeydown(e: KeyboardEvent) {
 .btn { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex-shrink: 0; border-radius: 4px; color: var(--text-primary); }
 .btn svg { width: 14px; height: 14px; }
 .btn:disabled { opacity: 0.3; pointer-events: none; }
+.btn.active { color: var(--accent-color); }
 .sep { width: 1px; height: 14px; flex-shrink: 0; background: color-mix(in srgb, var(--text-secondary) 20%, transparent); margin-inline: 2px; }
 .search-wrapper { flex: 1; min-width: 0; position: relative; display: flex; align-items: center; }
 .search-icon { position: absolute; left: 4px; width: 12px; height: 12px; color: var(--text-secondary); pointer-events: none; }

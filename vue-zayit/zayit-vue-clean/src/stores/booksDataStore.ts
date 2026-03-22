@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { query } from '@/db/db'
 import { SQL } from '@/db/queries.sql'
-import { buildTree, assignFullPaths } from '@/components/books-fs/booksFsTree'
+import { buildTree, assignFullPaths, findCategoryHierarchy, findCategoryPeriod } from '@/components/books-fs/booksFsTree'
 import type { CategoryNode, CategoryRow, BookRow } from '@/components/books-fs/booksFsTree'
 
 export const useBooksDataStore = defineStore('booksData', () => {
@@ -25,6 +25,24 @@ export const useBooksDataStore = defineStore('booksData', () => {
       ])
       const children = buildTree(categories, books)
       assignFullPaths(children)
+
+      // Build flat category map for hierarchy lookups
+      const categoryMap = new Map<number, CategoryNode>()
+      const flattenNodes = (nodes: CategoryNode[]) => {
+        for (const node of nodes) { categoryMap.set(node.id, node); flattenNodes(node.children) }
+      }
+      flattenNodes(children)
+
+      // Assign period and category hierarchy to all books
+      for (const book of books) {
+        book.period = findCategoryPeriod(book.categoryId, categoryMap) ?? 'אחר'
+        const h = findCategoryHierarchy(book.categoryId, categoryMap)
+        book.rootCategory = h.root ?? undefined
+        book.secondaryCategory = h.secondary ?? undefined
+        book.rootCategoryOrder = h.rootOrder ?? undefined
+        book.secondaryCategoryOrder = h.secondaryOrder ?? undefined
+      }
+
       ROOT.value = { ...ROOT.value, children }
       allBooks.value = books.slice().sort((a, b) => (a.treeOrder ?? 0) - (b.treeOrder ?? 0))
       loaded.value = true

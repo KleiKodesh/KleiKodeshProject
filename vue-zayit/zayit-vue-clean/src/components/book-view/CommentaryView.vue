@@ -2,8 +2,9 @@
 import { computed, ref, nextTick } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import CommentaryHeader from './CommentaryHeader.vue'
+import CommentaryTreePanel from './CommentaryTreePanel.vue'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
-import type { CommentaryGroup } from './useCommentary'
+import type { CommentaryGroup, CommentaryTreeNode } from './useCommentary'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { applyDiacriticsFilter, removeDiacriticsForSearch } from '@/utils/hebrewTextProcessing'
 import { censorDivineNames } from '@/utils/censorDivineNames'
@@ -52,12 +53,12 @@ function renderContent(content: string, flatIndex: number): string {
   return result
 }
 
-type FlatItem = { type: 'header'; bookTitle: string; connectionTypes: string[] } | { type: 'line'; content: string; lineId: number }
+type FlatItem = { type: 'header'; bookTitle: string; connectionTypes: string[]; sectionLabel?: string } | { type: 'line'; content: string; lineId: number }
 
 const flatItems = computed<FlatItem[]>(() => {
   const items: FlatItem[] = []
   for (const g of props.groups) {
-    items.push({ type: 'header', bookTitle: g.bookTitle, connectionTypes: g.connectionTypes })
+    items.push({ type: 'header', bookTitle: g.bookTitle, connectionTypes: g.connectionTypes, sectionLabel: g.sectionLabel })
     for (const l of g.lines) items.push({ type: 'line', content: l.content, lineId: l.lineId })
   }
   return items
@@ -66,6 +67,13 @@ const flatItems = computed<FlatItem[]>(() => {
 const scrollerEl = ref<HTMLElement | null>(null)
 const scrollTop = ref(0)
 const stickyShowNav = ref(true)
+const treeVisible = ref(false)
+
+function onTreeSelect(node: CommentaryTreeNode) {
+  if (node.bookId == null) return
+  treeVisible.value = false
+  scrollToGroup(node.bookId)
+}
 
 const virtualizer = useVirtualizer(computed(() => ({
   count: flatItems.value.length,
@@ -115,25 +123,37 @@ defineExpose({ scrollToGroup, scrollToFlatIndex })
     <div v-if="props.loading" class="state-overlay"><LoadingAnimation /></div>
     <div v-else-if="!flatItems.length" class="state-overlay"><span class="hint">בחר שורה לצפייה בפרשנות</span></div>
     <template v-else>
-      <CommentaryHeader v-if="stickyHeader" class="sticky-header"
-        :book-title="stickyHeader.bookTitle" :connection-types="stickyHeader.connectionTypes"
-        :groups="props.groups" :scroll-to-group="scrollToGroup" :is-sticky="true"
-        :show-nav="stickyShowNav" @update:show-nav="stickyShowNav = $event"
-        @close="emit('close')" @navigate-section="(d, id) => emit('navigate-section', d, id)"
-        @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)" />
-      <div ref="scrollerEl" class="scroller" @scroll="onScroll">
-        <div :style="{ height: `${totalSize}px`, position: 'relative' }">
-          <div v-for="vItem in virtualItems" :key="String(vItem.key)"
-            :ref="el => el && virtualizer.measureElement(el as Element)"
-            :data-index="vItem.index"
-            :style="{ position: 'absolute', top: 0, right: 0, left: 0, transform: `translateY(${vItem.start}px)` }">
-            <CommentaryHeader v-if="flatItems[vItem.index]?.type === 'header'"
-              :book-title="(flatItems[vItem.index] as any).bookTitle"
-              :connection-types="(flatItems[vItem.index] as any).connectionTypes"
-              :groups="props.groups" :scroll-to-group="scrollToGroup"
-              @navigate-section="(d, id) => emit('navigate-section', d, id)"
-              @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)" />
-            <div v-else class="line" v-html="renderContent((flatItems[vItem.index] as any).content, vItem.index)" />
+      <div class="body">
+        <CommentaryTreePanel v-if="treeVisible" class="tree-panel"
+          :groups="props.groups"
+          :selected-book-id="props.groups.find(g => g.bookTitle === stickyHeader?.bookTitle)?.bookId"
+          @select="onTreeSelect" />
+        <div class="content-col">
+          <CommentaryHeader v-if="stickyHeader" class="sticky-header"
+            :book-title="stickyHeader.bookTitle" :connection-types="stickyHeader.connectionTypes"
+            :section-label="stickyHeader.sectionLabel"
+            :groups="props.groups" :scroll-to-group="scrollToGroup" :is-sticky="true"
+            :show-nav="stickyShowNav" :tree-visible="treeVisible"
+            @update:show-nav="stickyShowNav = $event"
+            @close="emit('close')" @navigate-section="(d, id) => emit('navigate-section', d, id)"
+            @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)"
+            @toggle-tree="treeVisible = !treeVisible" />
+          <div ref="scrollerEl" class="scroller" @scroll="onScroll">
+            <div :style="{ height: `${totalSize}px`, position: 'relative' }">
+              <div v-for="vItem in virtualItems" :key="String(vItem.key)"
+                :ref="el => el && virtualizer.measureElement(el as Element)"
+                :data-index="vItem.index"
+                :style="{ position: 'absolute', top: 0, right: 0, left: 0, transform: `translateY(${vItem.start}px)` }">
+                <CommentaryHeader v-if="flatItems[vItem.index]?.type === 'header'"
+                  :book-title="(flatItems[vItem.index] as any).bookTitle"
+                  :connection-types="(flatItems[vItem.index] as any).connectionTypes"
+                  :section-label="(flatItems[vItem.index] as any).sectionLabel"
+                  :groups="props.groups" :scroll-to-group="scrollToGroup"
+                  @navigate-section="(d, id) => emit('navigate-section', d, id)"
+                  @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)" />
+                <div v-else class="line" v-html="renderContent((flatItems[vItem.index] as any).content, vItem.index)" />
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -142,11 +162,14 @@ defineExpose({ scrollToGroup, scrollToFlatIndex })
 </template>
 
 <style scoped>
-.commentary-view { height: 100%; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+.commentary-view { height: 100%; display: flex; flex-direction: column; overflow: hidden; }
 .state-overlay { flex: 1; display: flex; align-items: center; justify-content: center; }
 .hint { font-size: 13px; color: var(--text-secondary); }
+.body { flex: 1; display: flex; flex-direction: row; min-height: 0; }
+.tree-panel { width: max-content; max-width: 35%; flex-shrink: 0; border-inline-start: 1px solid var(--border-color); }
+.content-col { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
 .sticky-header { position: absolute; top: 0; left: 16px; right: 0; z-index: 2; }
-.scroller { flex: 1; overflow-y: auto; }
+.scroller { flex: 1; overflow-y: auto; padding-top: 36px; }
 .line { padding-inline: 12px; padding-block: 2px; font-size: 15px; line-height: 1.7; color: var(--text-primary); text-align: justify; user-select: text; }
 .line :deep(mark.search-match) { background: rgba(255, 165, 0, 0.4); color: inherit; border-radius: 2px; }
 .line :deep(mark.search-match.current) { background: rgba(255, 165, 0, 0.9); color: #000; }

@@ -8,5 +8,7 @@ createApp(App).use(createPinia()).use(router).mount('#app')
 
 import { useThemeStore } from './theme/themeStore'
 import { initPdfThemeObserver } from './theme/themes'
+import { useBooksDataStore } from './stores/booksDataStore'
 useThemeStore()
 initPdfThemeObserver()
+useBooksDataStore().ensureLoaded()
