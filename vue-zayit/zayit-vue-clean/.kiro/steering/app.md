@@ -21,6 +21,7 @@ This app is strictly RTL. Every spatial decision must be understood in physical 
 - Slide in from right: start at `translateX(100%)`, animate to `translateX(0)`
 - Slide in from left: start at `translateX(-100%)`, animate to `translateX(0)`
 - Tree chevrons: collapsed → `IconChevronLeft` (points left toward children); expanded → `IconChevronDown`
+- `IconTextBulletListTree` must always have `class="rtl-flip"` (`transform: scaleX(-1)`) — it's an LTR-designed icon
 - Use physical `left`/`right` for absolutely/fixed positioned overlays and panels — not `inset-inline-start/end`
 - Use logical properties (`padding-inline-start`, `margin-inline-end`, etc.) only for flow content
 

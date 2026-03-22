@@ -2,18 +2,20 @@
 import { ref, watch, computed, nextTick } from 'vue'
 import { useDraggable } from '@vueuse/core'
 import { useBookViewStore } from '@/stores/bookViewStore'
-import { IconChevronUp20Regular, IconChevronDown20Regular, IconDismiss20Regular, IconBook20Filled, IconChatMultiple20Filled } from '@iconify-prerendered/vue-fluent'
+import { IconChevronUp20Regular, IconChevronDown20Regular, IconDismiss20Regular, IconLayoutRowTwoFocusTop20Filled, IconLayoutRowTwoFocusBottom20Filled } from '@iconify-prerendered/vue-fluent'
 
 export type SearchMode = 'content' | 'commentary'
 
-const props = defineProps<{ visible: boolean; toolbarVisible: boolean; matchCount: number; currentMatch: number; commentaryVisible: boolean }>()
+const props = defineProps<{ visible: boolean; toolbarVisible: boolean; matchCount: number; currentMatch: number; commentaryVisible: boolean; mode: SearchMode }>()
 const emit = defineEmits<{ close: []; queryChange: [string]; next: []; prev: []; modeChange: [SearchMode] }>()
 
 const bookViewStore = useBookViewStore()
 const barRef = ref<HTMLElement | null>(null)
 const inputRef = ref<HTMLInputElement | null>(null)
 const inputValue = ref('')
-const searchMode = ref<SearchMode>('content')
+const searchMode = ref<SearchMode>(props.mode)
+
+watch(() => props.mode, m => { if (searchMode.value !== m) searchMode.value = m })
 
 watch(inputValue, v => emit('queryChange', v))
 watch(searchMode, m => { emit('modeChange', m); nextTick(() => inputRef.value?.focus()) })
@@ -41,13 +43,13 @@ defineExpose({ focus: () => inputRef.value?.focus() })
     <div v-if="visible" ref="barRef" class="search-bar" :style="style">
       <div class="search-inner">
         <input ref="inputRef" v-model="inputValue" type="search" class="search-input" :placeholder="placeholder"
-          @keydown.enter.exact="emit('next')" @keydown.shift.enter="emit('prev')" />
+          @keydown.enter.exact="emit('next')" @keydown.shift.enter="emit('prev')" @keydown.esc="onClose" />
         <span class="match-count" :class="{ 'no-match': inputValue && matchCount === 0 }">{{ matchLabel }}</span>
       </div>
       <button v-if="commentaryVisible" class="mode-btn" :class="{ active: searchMode === 'commentary' }"
         :title="searchMode === 'content' ? 'עבור לחיפוש במפרשים' : 'עבור לחיפוש בטקסט'"
         @click="searchMode = searchMode === 'content' ? 'commentary' : 'content'">
-        <IconChatMultiple20Filled v-if="searchMode === 'commentary'" /><IconBook20Filled v-else />
+        <IconLayoutRowTwoFocusBottom20Filled v-if="searchMode === 'commentary'" /><IconLayoutRowTwoFocusTop20Filled v-else />
       </button>
       <span v-if="commentaryVisible" class="sep" />
       <button class="nav-btn" :disabled="matchCount === 0" @click="emit('prev')"><IconChevronUp20Regular /></button>

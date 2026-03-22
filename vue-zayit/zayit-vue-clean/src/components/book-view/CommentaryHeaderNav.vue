@@ -3,13 +3,26 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import {
   IconChevronDown20Regular, IconChevronUp20Regular,
   IconChevronRight20Regular, IconChevronLeft20Regular,
-  IconArrowStepBack20Regular, IconSearch20Regular,
-  IconBookOpen20Regular, IconTextBulletListTree20Regular,
+  IconSearch20Regular, IconDismiss20Regular,
+  IconPanelRight20Regular, IconPanelRight20Filled,
 } from '@iconify-prerendered/vue-fluent'
 import type { CommentaryGroup } from './useCommentary'
 
-const props = defineProps<{ groups: CommentaryGroup[]; scrollToGroup: (bookId: number) => void; bookTitle: string; activeBookId: number; treeVisible?: boolean; isSticky?: boolean }>()
-const emit = defineEmits<{ 'input-blur': []; 'toggle-search': []; 'navigate-section': [direction: 'next' | 'prev', bookId: number]; close: []; 'open-book': [bookId: number, lineIndex: number]; 'update:activeBookId': [bookId: number]; 'toggle-tree': [] }>()
+const props = defineProps<{
+  groups: CommentaryGroup[]
+  scrollToGroup: (bookId: number) => void
+  bookTitle: string
+  activeBookId: number
+  treeVisible?: boolean
+}>()
+
+const emit = defineEmits<{
+  'navigate-section': [direction: 'next' | 'prev', bookId: number]
+  'toggle-tree': []
+  'toggle-search': []
+  'close': []
+  'update:activeBookId': [bookId: number]
+}>()
 
 const inputRef = ref<HTMLInputElement | null>(null)
 const componentId = Math.random().toString(36).slice(2)
@@ -39,11 +52,6 @@ function handleSelect() {
   if (match) navigateToGroup(match.bookId)
 }
 
-function openBook() {
-  const group = props.groups.find(g => g.bookId === props.activeBookId)
-  if (group && group.lines[0] != null) emit('open-book', group.bookId, group.lines[0].lineIndex)
-}
-
 function handleKeydown(e: KeyboardEvent) {
   if (e.key !== 'Enter') return
   const val = (inputRef.value?.value ?? '').trim()
@@ -55,6 +63,10 @@ function handleKeydown(e: KeyboardEvent) {
 
 <template>
   <div class="nav">
+    <button class="btn c-pointer hover-bg" :class="{ active: treeVisible }" :title="treeVisible ? 'הסתר עץ מפרשים' : 'הצג עץ מפרשים'" @click.stop="emit('toggle-tree')">
+      <IconPanelRight20Filled v-if="treeVisible" /><IconPanelRight20Regular v-else />
+    </button>
+    <div class="sep" />
     <div v-if="!treeVisible" class="search-wrapper">
       <IconChevronDown20Regular class="search-icon" />
       <input ref="inputRef" type="text" class="search-input" :list="`commentary-list-${componentId}`"
@@ -69,16 +81,13 @@ function handleKeydown(e: KeyboardEvent) {
     <button class="btn c-pointer hover-bg" title="קטע קודם" @click="emit('navigate-section', 'prev', props.activeBookId)"><IconChevronRight20Regular /></button>
     <button class="btn c-pointer hover-bg" title="קטע הבא" @click="emit('navigate-section', 'next', props.activeBookId)"><IconChevronLeft20Regular /></button>
     <div class="sep" />
-    <button v-if="isSticky" class="btn c-pointer hover-bg" title="חיפוש" @click.stop="emit('toggle-search')"><IconSearch20Regular /></button>
-    <button class="btn c-pointer hover-bg" title="פתח את הספר בלשונית חדשה" @click.stop="openBook()"><IconBookOpen20Regular /></button>
-    <div class="sep" />
-    <button class="btn c-pointer hover-bg" title="סגור ניווט" @click.stop="emit('input-blur')"><IconArrowStepBack20Regular /></button>
-    <button v-if="isSticky" class="btn c-pointer hover-bg" :class="{ active: treeVisible }" title="עץ מפרשים" @click.stop="emit('toggle-tree')"><IconTextBulletListTree20Regular /></button>
+    <button class="btn c-pointer hover-bg" title="חיפוש בפרשנות" @click.stop="emit('toggle-search')"><IconSearch20Regular /></button>
+    <button class="btn c-pointer hover-bg" title="סגור פרשנות" @click.stop="emit('close')"><IconDismiss20Regular /></button>
   </div>
 </template>
 
 <style scoped>
-.nav { display: flex; align-items: center; gap: 2px; width: 100%; height: 32px; overflow: hidden; background: var(--bg-primary); }
+.nav { display: flex; align-items: center; gap: 2px; width: 100%; height: 32px; overflow: hidden; background: var(--bg-primary); padding-inline: 6px; }
 .btn { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex-shrink: 0; border-radius: 4px; color: var(--text-primary); }
 .btn svg { width: 14px; height: 14px; }
 .btn:disabled { opacity: 0.3; pointer-events: none; }

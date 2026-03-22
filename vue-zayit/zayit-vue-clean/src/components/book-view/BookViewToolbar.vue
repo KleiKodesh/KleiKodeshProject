@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { IconSearch20Regular, IconTextBulletListTree20Regular, IconPanelBottom20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconSearch20Regular, IconTextBulletListTree20Regular, IconLayoutRowTwo20Regular, IconLayoutRowTwoFocusBottom20Filled } from '@iconify-prerendered/vue-fluent'
 import { useSettingsStore } from '@/stores/settingsStore'
 
 defineProps<{ bottomVisible: boolean; searchVisible: boolean; tocVisible: boolean }>()
@@ -13,9 +13,11 @@ const diacriticsTitle = computed(() => ['הסר טעמים', 'הסר גם ניק
 
 <template>
   <div class="book-view-toolbar">
-    <button :class="{ active: searchVisible }" @click="$emit('toggleSearch')"><IconSearch20Regular /></button>
-    <button :class="{ active: tocVisible }" @click="$emit('toggleToc')"><IconTextBulletListTree20Regular /></button>
-    <button :class="{ active: bottomVisible }" @click="$emit('toggleBottom')"><IconPanelBottom20Regular /></button>
+    <button :class="{ active: searchVisible }" title="חיפוש" @click="$emit('toggleSearch')"><IconSearch20Regular /></button>
+    <button :class="{ active: tocVisible }" title="תוכן עניינים" @click="$emit('toggleToc')"><IconTextBulletListTree20Regular class="rtl-flip" /></button>
+    <button :class="{ active: bottomVisible }" title="פאנל תחתון" @click="$emit('toggleBottom')">
+      <IconLayoutRowTwoFocusBottom20Filled v-if="bottomVisible" /><IconLayoutRowTwo20Regular v-else />
+    </button>
     <button :class="['diacritics-btn', { 'state-1': diacriticsState === 1, 'state-2': diacriticsState === 2 }]"
       :title="diacriticsTitle" @click="settingsStore.cycleDiacritics()">
       <svg v-if="diacriticsState === 0" width="16" height="18" viewBox="0 0 126 139" fill="currentColor">
@@ -47,4 +49,5 @@ button svg { width: 16px; height: 16px; }
 button.active { color: var(--accent-color); }
 .diacritics-btn.state-1 { color: #ff8c00; }
 .diacritics-btn.state-2 { color: #ff4500; }
+.rtl-flip { transform: scaleX(-1); }
 </style>

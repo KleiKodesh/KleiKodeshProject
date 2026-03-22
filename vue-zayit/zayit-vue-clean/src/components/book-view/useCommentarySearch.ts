@@ -7,7 +7,7 @@ export interface CommentaryMatch {
   occurrenceInLine: number
 }
 
-export function useCommentarySearch(groups: () => CommentaryGroup[]) {
+export function useCommentarySearch(groups: () => CommentaryGroup[], currentFlatIndex: () => number = () => 0) {
   const query = ref('')
   const currentMatchIdx = ref(0)
 
@@ -35,7 +35,12 @@ export function useCommentarySearch(groups: () => CommentaryGroup[]) {
   // keep backward-compat: unique flat indices that have matches
   const matchFlatIndices = computed(() => [...new Set(matches.value.map(m => m.flatIndex))])
 
-  watch(matches, () => { currentMatchIdx.value = 0 })
+  watch(matches, (newMatches) => {
+    if (!newMatches.length) { currentMatchIdx.value = 0; return }
+    const cur = currentFlatIndex()
+    const nearestIdx = newMatches.findIndex(m => m.flatIndex >= cur)
+    currentMatchIdx.value = nearestIdx === -1 ? 0 : nearestIdx
+  }, { flush: 'sync' })
 
   const matchCount = computed(() => matches.value.length)
   const currentMatch = computed(() => matches.value[currentMatchIdx.value] ?? null)

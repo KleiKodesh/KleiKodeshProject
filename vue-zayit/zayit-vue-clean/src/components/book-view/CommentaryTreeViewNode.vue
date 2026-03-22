@@ -47,6 +47,8 @@ function handleClick() {
 <style scoped>
 .tree-node { display: flex; align-items: center; gap: 4px; padding: 6px 8px; direction: rtl; text-align: right; min-height: 28px; }
 .tree-node.is-section { position: sticky; top: 0; z-index: 1; background: var(--bg-secondary); font-size: 11px; font-weight: 700; color: var(--text-secondary); border-bottom: 1px solid var(--border-color); text-transform: uppercase; letter-spacing: 0.8px; padding: 8px; }
+.tree-node.is-section:hover { filter: brightness(0.95); }
+:root.dark .tree-node.is-section:hover { filter: brightness(1.1); }
 .tree-node:not(.is-section) { font-size: 12.5px; }
 .tree-node.is-active { background: var(--accent-subtle, color-mix(in srgb, var(--accent-color) 15%, transparent)); color: var(--accent-color); }
 .chevron { flex-shrink: 0; width: 14px; height: 14px; color: var(--text-secondary); }

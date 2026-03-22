@@ -28,6 +28,10 @@ button {
 button:hover { background: var(--hover-bg); color: var(--text-primary); }
 button:active { transform: scale(0.92); transition: transform 0.1s; }
 
+.c-pointer { cursor: pointer; }
+.hover-bg { transition: background 120ms, color 120ms; }
+.hover-bg:hover { background: var(--hover-bg); }
+
 h1, h2, h3, h4, h5, h6 { opacity: 0.95; }
 
 h1 {

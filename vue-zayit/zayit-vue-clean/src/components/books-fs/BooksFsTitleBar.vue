@@ -13,7 +13,7 @@ defineEmits<{ setView: ['list' | 'tiles' | 'tree']; navigate: [number]; reset: [
     <div class="view-switcher">
       <button :class="{ active: view === 'list' }" title="תצוגת רשימה" @click="$emit('setView', 'list')"><IconTextBulletList20Regular /></button>
       <button :class="{ active: view === 'tiles' }" title="תצוגת אריחים" @click="$emit('setView', 'tiles')"><IconGrid20Regular /></button>
-      <button :class="{ active: view === 'tree' }" title="תצוגת עץ" @click="$emit('setView', 'tree')"><IconTextBulletListTree20Regular /></button>
+      <button :class="{ active: view === 'tree' }" title="תצוגת עץ" @click="$emit('setView', 'tree')"><IconTextBulletListTree20Regular class="rtl-flip" /></button>
     </div>
   </div>
 </template>
@@ -27,4 +27,5 @@ defineEmits<{ setView: ['list' | 'tiles' | 'tree']; navigate: [number]; reset: [
 .view-switcher button { display: flex; align-items: center; justify-content: center; width: 32px; height: 100%; padding: 6px; border-radius: 0; border-bottom: 2px solid transparent; }
 .view-switcher button svg { width: 16px; height: 16px; }
 .view-switcher button.active { color: var(--accent-color); border-bottom-color: var(--accent-color); }
+.rtl-flip { transform: scaleX(-1); }
 </style>

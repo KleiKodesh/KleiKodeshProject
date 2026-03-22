@@ -7,6 +7,7 @@ import { useLines } from './useLines'
 import { applyDiacriticsFilter, removeDiacriticsForSearch } from '@/utils/hebrewTextProcessing'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
+import { scrollToIndexWithRetry } from '@/utils/scrollToIndexWithRetry'
 
 const emit = defineEmits<{ scrolled: [number]; lineSelected: [number] }>()
 const props = defineProps<{
@@ -131,11 +132,7 @@ function onScroll() {
   const first = virtualItems.value[0]?.index ?? 0
   prioritise(first)
   if (scrollerEl.value && !restoring.value && !programmaticScrolling) {
-    const center = scrollerEl.value.scrollTop + scrollerEl.value.clientHeight / 2
-    const mid = virtualItems.value.reduce((best, item) =>
-      Math.abs(item.start + item.size / 2 - center) < Math.abs(best.start + best.size / 2 - center) ? item : best
-    , virtualItems.value[0]!)
-    emit('scrolled', mid.index)
+    emit('scrolled', first)
   }
   if (saveTimer) clearTimeout(saveTimer)
   saveTimer = setTimeout(savePos, 100)
@@ -164,11 +161,10 @@ function scrollToLineId(lineId: number) {
 }
 
 function scrollToLineIndex(lineIndex: number) {
-  setProgrammaticScroll(); prioritise(lineIndex)
-  virtualizer.value.scrollToIndex(lineIndex, { align: 'nearest' as any })
-  requestAnimationFrame(() => {
-    if (scrollerEl.value) scrollerEl.value.scrollTop -= 52
-  })
+  if (!scrollerEl.value) return
+  setProgrammaticScroll()
+  prioritise(lineIndex)
+  scrollToIndexWithRetry(virtualizer.value, scrollerEl.value, lineIndex, -52)
 }
 
 onBeforeUnmount(() => {

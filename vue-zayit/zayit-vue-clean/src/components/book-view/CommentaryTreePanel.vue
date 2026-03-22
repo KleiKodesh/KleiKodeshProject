@@ -4,7 +4,8 @@ import CommentaryTreeViewNode from './CommentaryTreeViewNode.vue'
 import { buildCommentaryTree } from './useCommentary'
 import type { CommentaryGroup, CommentaryTreeNode } from './useCommentary'
 
-const props = defineProps<{ groups: CommentaryGroup[]; selectedBookId?: number }>()
+const props = defineProps<{ groups: CommentaryGroup[]; selectedBookId?: number; suppressScroll?: boolean }>()
+
 const emit = defineEmits<{ select: [node: CommentaryTreeNode] }>()
 
 const tree = computed(() => buildCommentaryTree(props.groups))
@@ -13,11 +14,24 @@ const containerRef = ref<HTMLElement | null>(null)
 async function scrollToSelected() {
   if (!props.selectedBookId || !containerRef.value) return
   await nextTick()
+  await nextTick()
   const el = containerRef.value.querySelector('.tree-node.is-active') as HTMLElement | null
-  el?.scrollIntoView({ block: 'nearest' })
+  if (!el) return
+  // Tier 1: get into view without affecting parents
+  el.scrollIntoView({ behavior: 'instant', block: 'nearest', inline: 'nearest' })
+  await nextTick()
+  // Tier 2: manually center within the container
+  const container = containerRef.value
+  const containerRect = container.getBoundingClientRect()
+  const elRect = el.getBoundingClientRect()
+  const elRelTop = elRect.top - containerRect.top
+  const targetScrollTop = container.scrollTop + elRelTop - (containerRect.height / 2) + (elRect.height / 2)
+  container.scrollTop = targetScrollTop
 }
 
-watch(() => props.selectedBookId, scrollToSelected, { flush: 'post' })
+watch(() => props.selectedBookId, () => {
+  if (!props.suppressScroll) scrollToSelected()
+}, { flush: 'post' })
 defineExpose({ scrollToSelected })
 </script>
 

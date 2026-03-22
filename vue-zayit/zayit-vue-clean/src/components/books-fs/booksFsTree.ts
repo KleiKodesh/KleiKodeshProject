@@ -34,12 +34,27 @@ export function assignFullPaths(nodes: CategoryNode[], parentPath = '', counter 
   }
 }
 
-export function findCategoryHierarchy(categoryId: number, map: Map<number, CategoryNode>): {
+const PERIOD_KEYWORDS: [string, string][] = [
+  ['גאונים', 'גאונים'], ['ראשונים', 'ראשונים'], ['אחרונים', 'אחרונים'],
+  ['מדרש', 'מדרש'], ['תלמוד', 'תלמוד'], ['תוספתא', 'תוספתא'],
+  ['תנ"ך', 'תנ"ך'], ['מקרא', 'תנ"ך'],
+]
+
+function detectPeriod(title: string): string | null {
+  if (title === 'משנה') return 'משנה'
+  for (const [keyword, period] of PERIOD_KEYWORDS) if (title.includes(keyword)) return period
+  return null
+}
+
+/** Single-pass traversal: returns period, root, and secondary category info together. */
+export function findCategoryMeta(categoryId: number, map: Map<number, CategoryNode>): {
+  period: string | null
   root: string | null; secondary: string | null; rootOrder: number | null; secondaryOrder: number | null
 } {
   const visited = new Set<number>()
   let rootCat: CategoryNode | undefined
   let secondaryCat: CategoryNode | undefined
+  let period: string | null = null
 
   function traverse(id: number): void {
     if (visited.has(id)) return
@@ -48,38 +63,17 @@ export function findCategoryHierarchy(categoryId: number, map: Map<number, Categ
     if (!cat) return
     if (cat.parentId == null) { rootCat = cat; return }
     const parent = map.get(cat.parentId)
-    if (parent && parent.parentId == null) secondaryCat = cat
+    if (parent?.parentId == null) secondaryCat = cat
+    if (!period) period = detectPeriod(cat.title)
     if (cat.parentId) traverse(cat.parentId)
   }
 
   traverse(categoryId)
   return {
-    root: rootCat ? rootCat.title : null,
-    secondary: secondaryCat ? secondaryCat.title : null,
-    rootOrder: rootCat ? rootCat.orderIndex : null,
-    secondaryOrder: secondaryCat ? secondaryCat.orderIndex : null,
+    period: period ?? (rootCat ? rootCat.title : null),
+    root: rootCat?.title ?? null,
+    secondary: secondaryCat?.title ?? null,
+    rootOrder: rootCat?.orderIndex ?? null,
+    secondaryOrder: secondaryCat?.orderIndex ?? null,
   }
-}
-
-export function findCategoryPeriod(categoryId: number, map: Map<number, CategoryNode>): string | null {
-  const visited = new Set<number>()
-  let rootCat: CategoryNode | undefined
-
-  function traverse(id: number): string | null {
-    if (visited.has(id)) return null
-    visited.add(id)
-    const cat = map.get(id)
-    if (!cat) return null
-    if (cat.parentId == null) rootCat = cat
-    const title = cat.title.toLowerCase()
-    if (title.includes('גאונים')) return 'גאונים'
-    if (title.includes('ראשונים')) return 'ראשונים'
-    if (title.includes('אחרונים')) return 'אחרונים'
-    if (cat.parentId) return traverse(cat.parentId)
-    return null
-  }
-
-  const period = traverse(categoryId)
-  if (!period && rootCat) return rootCat.title
-  return period
 }

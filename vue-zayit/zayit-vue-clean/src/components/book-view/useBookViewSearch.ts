@@ -7,7 +7,7 @@ export interface BookViewMatch {
   occurrenceInLine: number
 }
 
-export function useBookViewSearch(lines: () => LineItem[]) {
+export function useBookViewSearch(lines: () => LineItem[], currentLineIndex: () => number = () => 0) {
   const query = ref('')
   const currentMatchIdx = ref(0)
 
@@ -31,7 +31,12 @@ export function useBookViewSearch(lines: () => LineItem[]) {
   // keep backward-compat: unique line indices that have matches
   const matchLineIndices = computed(() => [...new Set(matches.value.map(m => m.lineIndex))])
 
-  watch(matches, () => { currentMatchIdx.value = 0 })
+  watch(matches, (newMatches) => {
+    if (!newMatches.length) { currentMatchIdx.value = 0; return }
+    const cur = currentLineIndex()
+    const nearestIdx = newMatches.findIndex(m => m.lineIndex >= cur)
+    currentMatchIdx.value = nearestIdx === -1 ? 0 : nearestIdx
+  }, { flush: 'sync' })
 
   const matchCount = computed(() => matches.value.length)
   const currentMatch = computed(() => matches.value[currentMatchIdx.value] ?? null)

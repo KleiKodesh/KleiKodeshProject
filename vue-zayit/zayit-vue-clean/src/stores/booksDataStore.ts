@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { query } from '@/db/db'
 import { SQL } from '@/db/queries.sql'
-import { buildTree, assignFullPaths, findCategoryHierarchy, findCategoryPeriod } from '@/components/books-fs/booksFsTree'
+import { buildTree, assignFullPaths, findCategoryMeta } from '@/components/books-fs/booksFsTree'
 import type { CategoryNode, CategoryRow, BookRow } from '@/components/books-fs/booksFsTree'
 
 export const useBooksDataStore = defineStore('booksData', () => {
@@ -33,14 +33,16 @@ export const useBooksDataStore = defineStore('booksData', () => {
       }
       flattenNodes(children)
 
-      // Assign period and category hierarchy to all books
+      // Assign period and category hierarchy to all books (cached per categoryId)
+      const metaCache = new Map<number, ReturnType<typeof findCategoryMeta>>()
       for (const book of books) {
-        book.period = findCategoryPeriod(book.categoryId, categoryMap) ?? 'אחר'
-        const h = findCategoryHierarchy(book.categoryId, categoryMap)
-        book.rootCategory = h.root ?? undefined
-        book.secondaryCategory = h.secondary ?? undefined
-        book.rootCategoryOrder = h.rootOrder ?? undefined
-        book.secondaryCategoryOrder = h.secondaryOrder ?? undefined
+        let meta = metaCache.get(book.categoryId)
+        if (!meta) { meta = findCategoryMeta(book.categoryId, categoryMap); metaCache.set(book.categoryId, meta) }
+        book.period = meta.period ?? 'אחר'
+        book.rootCategory = meta.root ?? undefined
+        book.secondaryCategory = meta.secondary ?? undefined
+        book.rootCategoryOrder = meta.rootOrder ?? undefined
+        book.secondaryCategoryOrder = meta.secondaryOrder ?? undefined
       }
 
       ROOT.value = { ...ROOT.value, children }

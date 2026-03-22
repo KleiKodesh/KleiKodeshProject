@@ -44,49 +44,25 @@ export function buildCommentaryTree(groups: CommentaryGroup[]): CommentaryTreeNo
   return root
 }
 
-// Connection type display order: SOURCE first, then TARGUM, then COMMENTARY (grouped), then REFERENCE, then OTHER (grouped)
-const CT_ORDER: Record<string, number> = { SOURCE: 0, TARGUM: 1, COMMENTARY: 2, REFERENCE: 3, OTHER: 4 }
-
-const SECONDARY_ORDER = ['תנ"ך', 'משנה', 'תוספתא', 'תלמוד']
-const PERIOD_ORDER = ['תלמוד', 'גאונים', 'ראשונים', 'אחרונים']
-
 function resolveCategory(book: BookRow | undefined): string {
   if (!book) return 'אחר'
   if (book.period && book.period !== 'אחר') return book.period
-  const root = book.rootCategory ?? 'אחר'
-  const useSecondary = root === 'תנ"ך' || root === 'משנה' || root === 'תלמוד'
-  return (useSecondary && book.secondaryCategory) ? book.secondaryCategory : root
+  return book.rootCategory ?? 'אחר'
+}
+const CATEGORY_ORDER = [
+  'תנ"ך', 'משנה', 'תוספתא', 'תלמוד',
+  'מדרש',
+  'גאונים', 'ראשונים', 'אחרונים',
+  'אחר',
+]
+
+function categoryRank(cat: string): number {
+  const idx = CATEGORY_ORDER.indexOf(cat)
+  return idx === -1 ? CATEGORY_ORDER.length - 1 : idx
 }
 
-function sortCategoryEntries(
-  entries: [string, { bookId: number }[]][],
-  allBooks: BookRow[]
-): [string, { bookId: number }[]][] {
-  return entries.sort(([catA, groupsA], [catB, groupsB]) => {
-    const bookA = allBooks.find(b => b.id === groupsA[0]?.bookId)
-    const bookB = allBooks.find(b => b.id === groupsB[0]?.bookId)
-
-    const isSecondaryA = bookA?.secondaryCategory === catA
-    const isSecondaryB = bookB?.secondaryCategory === catB
-
-    const secIdxA = isSecondaryA ? SECONDARY_ORDER.indexOf(catA) : -1
-    const secIdxB = isSecondaryB ? SECONDARY_ORDER.indexOf(catB) : -1
-    const perIdxA = PERIOD_ORDER.indexOf(catA)
-    const perIdxB = PERIOD_ORDER.indexOf(catB)
-
-    if (secIdxA !== -1 && perIdxB !== -1 && catB !== 'תלמוד') return -1
-    if (perIdxA !== -1 && catA !== 'תלמוד' && secIdxB !== -1) return 1
-    if (secIdxA !== -1 && secIdxB !== -1) return secIdxA - secIdxB
-    if (perIdxA !== -1 && perIdxB !== -1) return perIdxA - perIdxB
-    if (secIdxA !== -1) return -1
-    if (secIdxB !== -1) return 1
-    if (perIdxA !== -1) return -1
-    if (perIdxB !== -1) return 1
-
-    const orderA = isSecondaryA ? (bookA?.secondaryCategoryOrder ?? 999) : (bookA?.rootCategoryOrder ?? 999)
-    const orderB = isSecondaryB ? (bookB?.secondaryCategoryOrder ?? 999) : (bookB?.rootCategoryOrder ?? 999)
-    return orderA - orderB
-  })
+function sortCategoryEntries(entries: [string, { bookId: number }[]][]): [string, { bookId: number }[]][] {
+  return entries.sort(([catA], [catB]) => categoryRank(catA) - categoryRank(catB))
 }
 
 export function useCommentary(selectedLineId: () => number | null) {
@@ -139,7 +115,6 @@ export function useCommentary(selectedLineId: () => number | null) {
         }
       })
 
-      // Separate by connection type
       const byType = new Map<string, typeof raw>()
       for (const g of raw) {
         if (!byType.has(g.ct)) byType.set(g.ct, [])
@@ -156,33 +131,30 @@ export function useCommentary(selectedLineId: () => number | null) {
         }
       }
 
-      // Helper: add category-grouped groups (COMMENTARY / OTHER)
-      const addGrouped = (ct: string, labelPrefix: string) => {
-        const items = byType.get(ct) ?? []
+      // Merge COMMENTARY + OTHER and group purely by resolved category
+      const addMergedByCategory = () => {
+        const items = [...(byType.get('COMMENTARY') ?? []), ...(byType.get('OTHER') ?? [])]
         if (!items.length) return
-        // group by category
-        const byCat = new Map<string, typeof raw>()
+        const byCat = new Map<string, typeof items>()
         for (const g of items) {
           if (!byCat.has(g.category)) byCat.set(g.category, [])
           byCat.get(g.category)!.push(g)
         }
         const sorted = sortCategoryEntries(
-          [...byCat.entries()].map(([cat, gs]) => [cat, gs.map(g => ({ bookId: g.bookId }))]),
-          booksDataStore.allBooks
+          [...byCat.entries()].map(([cat, gs]) => [cat, gs.map(g => ({ bookId: g.bookId }))])
         )
         for (const [cat] of sorted) {
           const catItems = byCat.get(cat)!.sort((a, b) => a.bookTitle.localeCompare(b.bookTitle, 'he'))
           for (const g of catItems) {
-            result.push({ bookId: g.bookId, bookTitle: g.bookTitle, connectionTypes: g.connectionTypes, lines: g.lines, category: cat, sectionLabel: `${labelPrefix} - ${cat}` })
+            result.push({ bookId: g.bookId, bookTitle: g.bookTitle, connectionTypes: g.connectionTypes, lines: g.lines, category: cat, sectionLabel: cat })
           }
         }
       }
 
       addFlat('SOURCE', 'מקור')
       addFlat('TARGUM', 'תרגומים')
-      addGrouped('COMMENTARY', 'מפרשים')
+      addMergedByCategory()
       addFlat('REFERENCE', 'קשרים')
-      addGrouped('OTHER', 'שונות')
 
       groups.value = result
     } finally {
