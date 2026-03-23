@@ -56,3 +56,7 @@
 - Pick the size variant that matches the context (e.g. `20` for UI controls, `24` for larger touch targets)
 - Prefer `Regular` weight by default; use `Filled` for active/selected states
 - Never use the fluent color package for icons that don't have a color variant — fall back to filled + explicit color instead
+
+## Git
+
+- Never use git commands unless explicitly asked by the user

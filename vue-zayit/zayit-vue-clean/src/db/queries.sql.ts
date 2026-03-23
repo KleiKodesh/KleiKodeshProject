@@ -93,6 +93,14 @@ export const SQL = {
     WHERE l.sourceLineId = ?
   `,
 
+  /** All links where source line is within a range (for toc-section commentary) */
+  GET_LINKS_FOR_SOURCE_LINE_RANGE: (count: number) => `
+    SELECT l.targetBookId, l.targetLineId, ct.name AS connectionType
+    FROM link l
+    JOIN connection_type ct ON ct.id = l.connectionTypeId
+    WHERE l.sourceLineId IN (${Array(count).fill('?').join(',')})
+  `,
+
   /** Next line in main book (by lineIndex) that has a link to a given commentary book */
   GET_NEXT_SECTION_WITH_COMMENTARY: `
     SELECT ln.id, ln.lineIndex
@@ -114,6 +122,18 @@ export const SQL = {
       AND lk.targetBookId = ?
       AND ln.lineIndex < ?
     ORDER BY ln.lineIndex DESC
+    LIMIT 1
+  `,
+
+  /** Next toc entry (by lineIndex) whose section contains a link to a given commentary book */
+  HAS_COMMENTARY_IN_RANGE: `
+    SELECT 1
+    FROM line ln
+    JOIN link lk ON lk.sourceLineId = ln.id
+    WHERE ln.bookId = ?
+      AND lk.targetBookId = ?
+      AND ln.lineIndex >= ?
+      AND ln.lineIndex < ?
     LIMIT 1
   `,
 

@@ -160,7 +160,6 @@ function savePos() {
   if (restoring.value) return
   const pos = captureScrollPos()
   if (pos) {
-    console.log('[BookViewLinesContent] savePos selectedLineId=', props.selectedLineId)
     tabStore.setBookViewState(tabId, bookId, { ...pos, selectedLineId: props.selectedLineId })
     tabStore.setLastReadPos(bookId, { ...pos, selectedLineId: props.selectedLineId })
   }
@@ -214,11 +213,10 @@ onBeforeUnmount(() => {
   if (saveTimer) clearTimeout(saveTimer)
   if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer)
   const pos = captureScrollPos()
-  console.log('[BookViewLinesContent] onBeforeUnmount pos=', pos, 'selectedLineId=', props.selectedLineId)
   if (pos) { tabStore.setBookViewState(tabId, bookId, { ...pos, selectedLineId: props.selectedLineId }); tabStore.setLastReadPos(bookId, { ...pos, selectedLineId: props.selectedLineId }) }
   else tabStore.clearBookViewState(tabId, bookId)
 })
-
+defineExpose({ scrollToLineId, scrollToLineIndex })
 </script>
 
 <template>

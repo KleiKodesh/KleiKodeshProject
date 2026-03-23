@@ -9,7 +9,7 @@ import { useLines } from './useLines'
 import { useCommentary } from './useCommentary'
 import { useBookViewSearch } from './useBookViewSearch'
 import { useCommentarySearch } from './useCommentarySearch'
-import { findNextCommentarySection, findPrevCommentarySection } from '@/utils/commentaryNav'
+import { findNextCommentarySection, findPrevCommentarySection, findNextTocCommentarySection, findPrevTocCommentarySection } from '@/utils/commentaryNav'
 import BookViewToolbar from './BookViewToolbar.vue'
 import BookViewSplitPane from './BookViewSplitPane.vue'
 import BookViewLinesContent from './BookViewLinesContent.vue'
@@ -45,7 +45,21 @@ const searchBarRef = ref<InstanceType<typeof BookViewSearchBar> | null>(null)
 
 const { getActiveTocEntry, getTocPath, altTocSections, tocEntries } = useToc(() => bookId, () => bookTitle)
 const { lines } = useLines(() => bookId)
-const { groups, loading: commentaryLoading } = useCommentary(() => selectedLineId.value)
+
+// When selected line is a toc entry line, collect all line IDs in that section
+const selectedSectionLineIds = computed<number[] | null>(() => {
+  if (selectedLineId.value == null || !tocEntries.value.length || !lines.value.length) return null
+  const tocEntry = tocEntries.value.find(e => e.lineId === selectedLineId.value)
+  if (!tocEntry || tocEntry.lineIndex == null) return null
+  // find next toc entry at same or higher level to determine section end
+  const idx = tocEntries.value.indexOf(tocEntry)
+  const nextEntry = tocEntries.value.slice(idx + 1).find(e => e.lineIndex != null && e.level <= tocEntry.level)
+  const fromIndex = tocEntry.lineIndex
+  const toIndex = nextEntry?.lineIndex ?? lines.value.length
+  return lines.value.filter(l => l.lineIndex >= fromIndex && l.lineIndex < toIndex).map(l => l.id)
+})
+
+const { groups, loading: commentaryLoading } = useCommentary(() => selectedLineId.value, () => selectedSectionLineIds.value)
 const contentSearch = useBookViewSearch(() => lines.value, () => currentScrollLineIndex.value)
 const commentarySearch = useCommentarySearch(() => groups.value, () => commentaryViewRef.value?.topVisibleFlatIndex.value ?? 0)
 
@@ -144,20 +158,40 @@ let pendingNavStop: (() => void) | null = null
 
 async function onNavigateSection(direction: 'next' | 'prev', commentaryBookId: number) {
   if (selectedLineId.value == null || bookId == null) return
+  if (pendingNavStop) { pendingNavStop(); pendingNavStop = null }
+
+  // toc mode: navigate to next/prev toc entry at same level that has commentary
+  const currentTocEntry = tocEntries.value.find(e => e.lineId === selectedLineId.value)
+  if (currentTocEntry) {
+    const fn = direction === 'next' ? findNextTocCommentarySection : findPrevTocCommentarySection
+    const entry = await fn(bookId, commentaryBookId, currentTocEntry, tocEntries.value)
+    if (entry == null || entry.lineId == null) return
+    selectedLineId.value = entry.lineId
+    bottomVisible.value = true
+    linesContentRef.value?.scrollToLineId(entry.lineId)
+    const stop = watch(commentaryLoading, (loading) => {
+      if (loading) return
+      if (selectedLineId.value !== entry.lineId) return
+      pendingNavStop = null; stop()
+      nextTick(() => commentaryViewRef.value?.scrollToGroup(commentaryBookId))
+    }, { flush: 'sync' })
+    pendingNavStop = stop
+    return
+  }
+
+  // normal mode: navigate to next/prev line with commentary for this book
   const currentLine = lines.value.find(l => l.id === selectedLineId.value)
   if (currentLine == null) return
   const fn = direction === 'next' ? findNextCommentarySection : findPrevCommentarySection
   const result = await fn(bookId, commentaryBookId, currentLine.lineIndex)
   if (result == null) return
-  if (pendingNavStop) { pendingNavStop(); pendingNavStop = null }
   selectedLineId.value = result.id
   bottomVisible.value = true
   linesContentRef.value?.scrollToLineId(result.id)
   const stop = watch(commentaryLoading, (loading) => {
     if (loading) return
     if (selectedLineId.value !== result.id) return
-    pendingNavStop = null
-    stop()
+    pendingNavStop = null; stop()
     nextTick(() => commentaryViewRef.value?.scrollToGroup(commentaryBookId))
   }, { flush: 'sync' })
   pendingNavStop = stop
@@ -169,16 +203,12 @@ onMounted(async () => {
   if (bookId != null) {
     const bookSaved = await tabStore.getBookViewState(tabId, bookId)
     const lastRead = await tabStore.getLastReadPos(bookId)
-    console.log('[BookViewPage] onMounted bookSaved=', bookSaved, 'lastRead=', lastRead)
     const restoredLineId = bookSaved?.selectedLineId ?? lastRead?.selectedLineId
-    console.log('[BookViewPage] restoredLineId=', restoredLineId)
     if (restoredLineId != null) { selectedLineId.value = restoredLineId; bottomVisible.value = true }
   }
 })
 
 onBeforeUnmount(() => tabStore.updateActiveTab({ tocPath: undefined }))
-
-watch(selectedLineId, val => console.log('[BookViewPage] selectedLineId changed =', val))
 
 watch(bottomVisible, val => tabStore.setTabViewState(tabId, { bottomVisible: val, tocVisible: tocVisible.value }))
 watch(tocVisible, val => tabStore.setTabViewState(tabId, { bottomVisible: bottomVisible.value, tocVisible: val }))
