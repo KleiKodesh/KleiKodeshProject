@@ -187,7 +187,7 @@ defineExpose({ scrollToGroup, scrollToFlatIndex, topVisibleFlatIndex, activeBook
   <div class="commentary-view">
     <ContextMenu ref="contextMenuRef" :items="contextMenuItems" />
     <div v-if="props.loading" class="state-overlay"><LoadingAnimation /></div>
-    <div v-else-if="!flatItems.length" class="state-overlay"><span class="hint">בחר שורה לצפייה בפרשנות</span></div>
+    <div v-else-if="!flatItems.length" class="state-overlay"><span class="hint">בחר שורה לצפייה במפרשים</span></div>
     <template v-else>
       <div class="body">
         <CommentaryTreePanel v-if="treeVisible" class="tree-panel"
@@ -206,6 +206,7 @@ defineExpose({ scrollToGroup, scrollToFlatIndex, topVisibleFlatIndex, activeBook
               @update:active-book-id="() => {}"
               @navigate-section="(d, id) => emit('navigate-section', d, id)"
               @toggle-search="emit('toggle-search')"
+              @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)"
               @close="emit('close')"
               @toggle-tree="treeVisible = !treeVisible" />
             <div :style="{ height: `${totalSize}px`, position: 'relative' }">

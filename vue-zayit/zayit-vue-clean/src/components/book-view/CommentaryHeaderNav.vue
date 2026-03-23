@@ -3,7 +3,8 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import {
   IconChevronDown20Regular, IconChevronUp20Regular,
   IconChevronRight20Regular, IconChevronLeft20Regular,
-  IconSearch20Regular, IconDismiss20Regular,
+  IconSearch20Regular, IconMinimize20Regular,
+  IconBookOpen20Regular,
   IconPanelRight20Regular, IconPanelRight20Filled,
 } from '@iconify-prerendered/vue-fluent'
 import type { CommentaryGroup } from './useCommentary'
@@ -20,6 +21,7 @@ const emit = defineEmits<{
   'navigate-section': [direction: 'next' | 'prev', bookId: number]
   'toggle-tree': []
   'toggle-search': []
+  'open-book': [bookId: number, lineIndex: number]
   'close': []
   'update:activeBookId': [bookId: number]
 }>()
@@ -29,11 +31,11 @@ const componentId = Math.random().toString(36).slice(2)
 
 onMounted(() => nextTick(() => inputRef.value?.focus()))
 
-const CT_LABELS: Record<string, string> = { SOURCE: 'מקור', OTHER: 'אחר', COMMENTARY: 'מפרשים', TARGUM: 'תרגום', REFERENCE: 'הפניה' }
+const CT_LABELS: Record<string, string> = { SOURCE: 'מקור', OTHER: 'מראי מקומות', COMMENTARY: 'מפרשים', TARGUM: 'תרגום', REFERENCE: 'הפניה' }
 
 const groupLabel = (g: CommentaryGroup) => {
-  const ct = CT_LABELS[g.connectionTypes[0] ?? ''] ?? g.connectionTypes[0] ?? ''
-  return ct ? `${ct} > ${g.bookTitle}` : g.bookTitle
+  const section = g.sectionLabel ?? CT_LABELS[g.connectionTypes[0] ?? ''] ?? g.connectionTypes[0] ?? ''
+  return section ? `${section} > ${g.bookTitle}` : g.bookTitle
 }
 
 function navigateToGroup(bookId: number) {
@@ -45,6 +47,11 @@ function navigateToGroup(bookId: number) {
 const activeIndex = computed(() => props.groups.findIndex(g => g.bookId === props.activeBookId))
 const hasPrevious = computed(() => activeIndex.value > 0)
 const hasNext = computed(() => activeIndex.value !== -1 && activeIndex.value < props.groups.length - 1)
+
+function openActiveBook() {
+  const group = props.groups.find(g => g.bookId === props.activeBookId)
+  if (group?.lines[0] != null) emit('open-book', group.bookId, group.lines[0].lineIndex)
+}
 
 function handleSelect() {
   const val = inputRef.value?.value ?? ''
@@ -81,8 +88,9 @@ function handleKeydown(e: KeyboardEvent) {
     <button class="btn c-pointer hover-bg" title="קטע קודם" @click="emit('navigate-section', 'prev', props.activeBookId)"><IconChevronRight20Regular /></button>
     <button class="btn c-pointer hover-bg" title="קטע הבא" @click="emit('navigate-section', 'next', props.activeBookId)"><IconChevronLeft20Regular /></button>
     <div class="sep" />
-    <button class="btn c-pointer hover-bg" title="חיפוש בפרשנות" @click.stop="emit('toggle-search')"><IconSearch20Regular /></button>
-    <button class="btn c-pointer hover-bg" title="סגור פרשנות" @click.stop="emit('close')"><IconDismiss20Regular /></button>
+    <button class="btn c-pointer hover-bg" title="חיפוש במפרשים" @click.stop="emit('toggle-search')"><IconSearch20Regular /></button>
+    <button class="btn c-pointer hover-bg" title="פתח ספר זה בלשונית חדשה" @click.stop="openActiveBook()"><IconBookOpen20Regular /></button>
+    <button class="btn c-pointer hover-bg" title="סגור חלונית מפרשים" @click.stop="emit('close')"><IconMinimize20Regular /></button>
   </div>
 </template>
 

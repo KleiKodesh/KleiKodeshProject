@@ -140,9 +140,9 @@ export function useCommentary(selectedLineId: () => number | null, selectedLineI
         }
       }
 
-      // Merge COMMENTARY + OTHER and group purely by resolved category
+      // Group COMMENTARY only by resolved category
       const addMergedByCategory = () => {
-        const items = [...(byType.get('COMMENTARY') ?? []), ...(byType.get('OTHER') ?? [])]
+        const items = [...(byType.get('COMMENTARY') ?? [])]
         if (!items.length) return
         const byCat = new Map<string, typeof items>()
         for (const g of items) {
@@ -163,7 +163,8 @@ export function useCommentary(selectedLineId: () => number | null, selectedLineI
       addFlat('SOURCE', 'מקור')
       addFlat('TARGUM', 'תרגומים')
       addMergedByCategory()
-      addFlat('REFERENCE', 'קשרים')
+      addFlat('OTHER', 'מראי מקומות')
+      addFlat('REFERENCE', 'ציונים')
 
       groups.value = result
     } finally {
@@ -227,7 +228,7 @@ export function useCommentary(selectedLineId: () => number | null, selectedLineI
           result.push({ bookId: g.bookId, bookTitle: g.bookTitle, connectionTypes: g.connectionTypes, lines: g.lines, category: g.category, sectionLabel: label })
       }
       const addMergedByCategory = () => {
-        const items = [...(byType.get('COMMENTARY') ?? []), ...(byType.get('OTHER') ?? [])]
+        const items = [...(byType.get('COMMENTARY') ?? [])]
         if (!items.length) return
         const byCat = new Map<string, typeof items>()
         for (const g of items) { if (!byCat.has(g.category)) byCat.set(g.category, []); byCat.get(g.category)!.push(g) }
@@ -240,7 +241,8 @@ export function useCommentary(selectedLineId: () => number | null, selectedLineI
       addFlat('SOURCE', 'מקור')
       addFlat('TARGUM', 'תרגומים')
       addMergedByCategory()
-      addFlat('REFERENCE', 'קשרים')
+      addFlat('OTHER', 'מראי מקומות')
+      addFlat('REFERENCE', 'ציונים')
       groups.value = result
     } finally {
       loading.value = false

@@ -1,4 +1,4 @@
 <Solution>
-  <Project Path="ZayitVueHost/ZayitVueHost.csproj" />
-  <Project Path="ZayitVueHostLib/ZayitVueHostLib.csproj" />
+  <Project Path="ZayitVueHost/ZayitVueHost.csproj" Id="2b6e5acb-2062-4281-aacb-c46681fcfe42" />
+  <Project Path="ZayitVueHostLib/ZayitVueHostLib.csproj" Id="7a32654f-f1cb-4429-aa29-51143b02e234" />
 </Solution>

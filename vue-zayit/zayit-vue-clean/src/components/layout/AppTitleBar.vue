@@ -4,6 +4,7 @@ import { onClickOutside } from '@vueuse/core'
 import { IconLineHorizontal320Regular, IconAdd20Regular, IconDismiss20Regular, IconHome20Regular, IconOptions24Regular, IconOptions24Filled, IconColor24Regular, IconColor24Filled } from '@iconify-prerendered/vue-fluent'
 import ThemeToggle from '@/theme/ThemeToggle.vue'
 import AppTitleBarTabDropdown from './AppTitleBarTabDropdown.vue'
+import AppTitleBarNavDropdown from './AppTitleBarNavDropdown.vue'
 import { useTabStore } from '@/stores/tabStore'
 import type { TabRoute } from '@/stores/tabStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
@@ -15,6 +16,7 @@ const settingsStore = useSettingsStore()
 const tabStore = useTabStore()
 const activeTab = computed(() => tabStore.activeTab)
 const dropdownOpen = ref(false)
+const navDropdownOpen = ref(false)
 const barRef = ref<HTMLElement | null>(null)
 
 const isPdfTab = computed(() => activeTab.value?.route === '/pdf-view' || activeTab.value?.route === '/hebrewbooks')
@@ -50,7 +52,10 @@ function goHome() {
 <template>
   <header ref="barRef" class="title-bar" @click="dropdownOpen = !dropdownOpen">
     <div class="bar-start">
-      <button class="bar-btn" @click.stop><IconLineHorizontal320Regular /></button>
+      <div class="nav-btn-wrap">
+        <button class="bar-btn" @click.stop="navDropdownOpen = !navDropdownOpen; dropdownOpen = false"><IconLineHorizontal320Regular /></button>
+        <AppTitleBarNavDropdown v-if="navDropdownOpen" @close="navDropdownOpen = false" @click.stop />
+      </div>
       <ThemeToggle @click.stop />
             <button
         v-if="bookViewStore.isBookViewActive"
@@ -108,6 +113,7 @@ function goHome() {
 }
 
 .bar-start { display: flex; align-items: center; gap: 0; flex: 1; }
+.nav-btn-wrap { position: relative; }
 .bar-end { display: flex; align-items: center; justify-content: flex-end; gap: 0; flex: 1; }
 .bar-title { font-weight: 400; font-size: 0.82rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bar-toc-path { color: var(--text-secondary); opacity: 0.7; }

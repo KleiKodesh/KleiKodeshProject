@@ -1,21 +1,23 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import { onLongPress } from '@vueuse/core'
 import { IconChevronRight20Regular, IconChevronLeft20Regular } from '@iconify-prerendered/vue-fluent'
 import type { CommentaryGroup } from './useCommentary'
 
 const props = defineProps<{ bookTitle: string; sectionLabel?: string; groups: CommentaryGroup[] }>()
 const emit = defineEmits<{ 'navigate-section': [direction: 'next' | 'prev', bookId: number]; 'open-book': [bookId: number, lineIndex: number] }>()
 
+const headerEl = ref<HTMLElement | null>(null)
 const bookId = computed(() => props.groups.find(g => g.bookTitle === props.bookTitle)?.bookId ?? 0)
 
-function onHeaderClick() {
+onLongPress(headerEl, () => {
   const group = props.groups.find(g => g.bookTitle === props.bookTitle)
   if (group?.lines[0] != null) emit('open-book', group.bookId, group.lines[0].lineIndex)
-}
+}, { delay: 500 })
 </script>
 
 <template>
-  <div class="commentary-header" title="לחץ לפתיחת הספר" @click="onHeaderClick()">
+  <div ref="headerEl" class="commentary-header" title="לחץ ממושכות לפתיחת הספר בלשונית חדשה">
     <div class="title-block">
       <span class="book-title">{{ sectionLabel ? `${sectionLabel} > ${bookTitle}` : bookTitle }}</span>
     </div>
