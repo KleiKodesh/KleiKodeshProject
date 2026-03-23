@@ -28,7 +28,7 @@ const display = computed(() => props.suffix ? `${props.modelValue}${props.suffix
 <style scoped>
 .setting-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
 .setting-label { font-size: 11px; color: var(--text-secondary); }
-.setting-control { display: flex; align-items: center; gap: 6px; }
-.value { flex-shrink: 0; width: 44px; font-size: 12px; color: var(--text-secondary); text-align: end; white-space: nowrap; }
+.setting-control { display: flex; align-items: center; gap: 6px; width: 100%; }
+.value { flex-shrink: 0; width: 40px; font-size: 12px; color: var(--text-secondary); text-align: end; white-space: nowrap; }
 input[type=range] { flex: 1; min-width: 0; width: 0; accent-color: var(--accent-color); }
 </style>

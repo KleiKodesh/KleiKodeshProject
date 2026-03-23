@@ -14,6 +14,7 @@ import type { ContextMenuItem } from '@/components/common/ContextMenu.vue'
 import { useEventListener } from '@vueuse/core'
 import { useScopedKeys } from '@/composables/useScopedKeys'
 import { useScopedCopy } from '@/composables/useScopedCopy'
+import { scrollToIndexWithRetry } from '@/utils/scrollToIndexWithRetry'
 
 const emit = defineEmits<{ scrolled: [number]; lineSelected: [number]; 'ctrl-f': [] }>()
 const props = defineProps<{
@@ -213,7 +214,7 @@ function scrollToLineIndex(lineIndex: number) {
   if (!scrollerEl.value) return
   setProgrammaticScroll()
   prioritise(lineIndex)
-  scrollToIndexWithRetry(virtualizer.value, scrollerEl.value, lineIndex, -52)
+  scrollToIndexWithRetry(virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>, scrollerEl.value, lineIndex, -52)
 }
 
 onBeforeUnmount(() => {

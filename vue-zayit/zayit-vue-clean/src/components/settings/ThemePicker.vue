@@ -105,7 +105,7 @@ function select(key: ThemeKey) { themePreset.value = key; isOpen.value = false }
 <style scoped>
 .select-box {
   flex: 1; display: flex; align-items: center; gap: 8px;
-  height: 28px; padding: 0 8px; cursor: pointer; user-select: none;
+  height: 28px; padding: 0 8px; cursor: pointer; user-select: none; width: 100%; box-sizing: border-box;
   background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px;
 }
 .select-box:hover { border-color: var(--accent-color); }
@@ -126,6 +126,7 @@ function select(key: ThemeKey) { themePreset.value = key; isOpen.value = false }
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
   padding: 8px 12px;
   display: flex;
   flex-direction: column;

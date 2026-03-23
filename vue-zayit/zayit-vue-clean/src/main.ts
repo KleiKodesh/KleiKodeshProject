@@ -3,12 +3,30 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
 import './assets/styles/main.css'
-
-createApp(App).use(createPinia()).use(router).mount('#app')
-
+import { useWorkspaceStore } from './stores/workspaceStore'
+import { useTabStore } from './stores/tabStore'
+import { useBookViewStore } from './stores/bookViewStore'
+import { useSettingsStore } from './stores/settingsStore'
 import { useThemeStore } from './theme/themeStore'
-import { initPdfThemeObserver } from './theme/themes'
+import { loadCustomThemes, initPdfThemeObserver } from './theme/themes'
 import { useBooksDataStore } from './stores/booksDataStore'
-useThemeStore()
+
+const pinia = createPinia()
+const app = createApp(App).use(pinia).use(router)
+
+// workspaceStore must init first — tabStore depends on activeId
+await useWorkspaceStore().init()
+
+// Init all remaining stores from IDB before mounting
+await Promise.all([
+  useTabStore().init(),
+  useBookViewStore().init(),
+  useSettingsStore().init(),
+  useThemeStore().init(),
+  loadCustomThemes(),
+])
+
+app.mount('#app')
+
 initPdfThemeObserver()
 useBooksDataStore().ensureLoaded()

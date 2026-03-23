@@ -1,20 +1,20 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
+import { idbGet, idbSet, KEYS } from '@/utils/idbPersistence'
 import { applyTheme, getTheme, toggleThemeMode, type ThemePreset } from './themes'
 export type { ThemePreset } from './themes'
 
-const KEY = 'zayit-theme'
+interface ThemeState { themePreset: ThemePreset; readingBackground: string }
 
 export const useThemeStore = defineStore('theme', () => {
-  const themePreset = ref<ThemePreset>('vscode-dark')
+  const themePreset = ref<ThemePreset>('fluent-light')
   const readingBackground = ref('default')
 
-  function load() {
-    try {
-      const d = JSON.parse(localStorage.getItem(KEY) ?? '{}')
-      if (d.themePreset && getTheme(d.themePreset)) themePreset.value = d.themePreset
-      if (d.readingBackground) readingBackground.value = d.readingBackground
-    } catch { /* noop */ }
+  async function init() {
+    const saved = await idbGet<ThemeState>(KEYS.SETTINGS_THEME)
+    if (saved?.themePreset && getTheme(saved.themePreset)) themePreset.value = saved.themePreset
+    if (saved?.readingBackground) readingBackground.value = saved.readingBackground
+    apply()
   }
 
   function apply() {
@@ -34,12 +34,13 @@ export const useThemeStore = defineStore('theme', () => {
 
   function toggleDarkMode() { themePreset.value = toggleThemeMode(themePreset.value) }
 
-  load()
+  // Apply defaults immediately (before async init) so the UI doesn't flash
   apply()
+
   watch([themePreset, readingBackground], () => {
-    try { localStorage.setItem(KEY, JSON.stringify({ themePreset: themePreset.value, readingBackground: readingBackground.value })) } catch { /* noop */ }
+    idbSet<ThemeState>(KEYS.SETTINGS_THEME, { themePreset: themePreset.value, readingBackground: readingBackground.value })
     apply()
   })
 
-  return { themePreset, readingBackground, toggleDarkMode }
+  return { themePreset, readingBackground, toggleDarkMode, init }
 })

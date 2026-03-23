@@ -49,6 +49,12 @@ This app is strictly RTL. Every spatial decision must be understood in physical 
 - `openTab` is reserved for explicitly creating a second tab (e.g. a "new tab" button)
 - Mirrors iOS navigation: forward replaces the view, back via tab history (not yet implemented)
 
+### Singleton pages
+
+The routes `/settings`, `/books`, and `/hebrewbooks` are **singleton tabs** — only one tab of each may exist at a time. Always navigate to them via `tabStore.navigateToSingleton(route)`, never `updateActiveTab` or `openTab` directly. If a tab with that route already exists, it switches to it; otherwise the current tab is replaced.
+
+These routes are also **never persisted** across sessions — `persistTabs` strips them before writing to IDB, so they will not be restored on next launch.
+
 ## Design Language
 
 The visual style is a deliberate blend of two design systems:
@@ -272,80 +278,44 @@ Junction tables: `bookId` + respective FK, composite PK.
 
 ## Persistence
 
-`tabStore` (`src/stores/tabStore.ts`) is the single hub for all persistence. No component, composable, or other store may import from `src/utils/persist.ts` or `src/utils/tabDb.ts` directly — always go through `tabStore` functions.
+All persistence uses a single **IndexedDB** database (`app-state`, version 1) with one object store and prefixed string keys. No localStorage is used anywhere. No migration code exists.
 
-### localStorage — `src/utils/persist.ts`
-Internal to `tabStore` only. Stores global settings that survive sessions. **Only use localStorage for small, fixed-size scalar settings** (booleans, strings, small objects). Never store collections, maps, or any data that grows with user activity — use IndexedDB for that.
+**All IDB access must go through `src/utils/idb.ts` exclusively — no component, composable, or store may import from `indexedDB` directly or call any IDB API directly. This is a hard rule with no exceptions.**
 
-| Key | `tabStore` function | Notes |
-|---|---|---|
-| `app.tabs` | internal (`persistTabs`) | Tab list, activeTabId, nextId counter. `pdfBlobUrl` excluded |
-| `app.settings` | — | Reserved, not yet used |
-| `app.books.view` | `getBooksView()` / `setBooksView(view)` | List vs tiles toggle |
-| `app.bookView.toolbarVisible` | `getToolbarVisible()` / `setToolbarVisible(val)` | Global toolbar toggle |
-| `app.bookView.searchBarPos` | `getSearchBarPos()` / `setSearchBarPos(pos)` | Floating search bar position |
+Components and composables must never import from `src/utils/idb.ts` directly — they go through a store (`tabStore`, `bookViewStore`, `settingsStore`). Only stores import from `idb.ts`.
 
-### IndexedDB — `src/utils/tabDb.ts`
-Internal to `tabStore` only. Per-tab, per-tab+book, and per-book state. Use IndexedDB for **any data that grows with usage** — scroll positions, reading history, per-item state. Each read/write is O(1) and operates on a single record, unlike localStorage which serializes the entire value on every write. DB name: `app-tab-state`, current version: `2`.
+### Key scheme
 
-**`tab-state`** store — key: `tabId`, value: `TabState`
-```ts
-interface TabState { bottomVisible: boolean; tocVisible: boolean }
-```
+| Prefix | Example key | Value | Notes |
+|---|---|---|---|
+| `settings:` | `settings:headerFont` | scalar | One key per setting — never a blob |
+| `tabs:` | `tabs:list` | `PersistedTabList` | Tab list + activeTabId + nextId |
+| `tab:` | `tab:{tabId}` | `TabState` | Per-tab UI state (`bottomVisible` only) |
+| `book:` | `book:{tabId}:{bookId}` | `BookState` | Per-tab+book reading state |
+| `lastread:` | `lastread:{bookId}` | `LastReadState` | Global per-book resume, LRU-capped at 1000 |
 
-**`book-state`** store — key: `"tabId:bookId"`, value: `BookState`
-```ts
-interface BookState { scrollIndex: number; scrollOffset: number; selectedLineId?: number | null }
-```
-
-**`book-last-read`** store — key: `bookId`, value: `LastReadState`
-```ts
-interface LastReadState { scrollIndex: number; scrollOffset: number; selectedLineId?: number | null }
-```
-Global resume position per book — written on every scroll save, used as fallback when opening a book in a new tab or after the original tab was closed. Never auto-deleted. Both `book-state` and `book-last-read` are persisted across sessions; the difference is that `book-state` is tied to a specific tab (and wiped when that tab closes), while `book-last-read` is the cross-tab/cross-session fallback.
-
-| `tabStore` function | Description |
-|---|---|
-| `getTabViewState(tabId)` | Read tab UI state |
-| `setTabViewState(tabId, state)` | Write tab UI state |
-| `getBookViewState(tabId, bookId)` | Read per-book state (scroll position) |
-| `setBookViewState(tabId, bookId, state)` | Write per-book state |
-| `clearBookViewState(tabId, bookId)` | Delete book state entry |
-| `getLastReadPos(bookId)` | Read global last-read position for a book |
-| `setLastReadPos(bookId, pos)` | Write global last-read position for a book |
-
-### localStorage vs IndexedDB — when to use which
-
-| Use localStorage | Use IndexedDB |
-|---|---|
-| Single scalar value (bool, string, number) | Any collection or map keyed by id |
-| Fixed set of global settings | Data that grows with user activity |
-| Synchronous access is genuinely needed | Per-tab, per-book, or per-item state |
-
-The critical anti-pattern to avoid: **never store a `Record<id, value>` map in localStorage**. It reads and rewrites the entire JSON blob on every update. As the map grows (e.g. one entry per book ever opened), writes get progressively more expensive. Always use an IndexedDB object store with the id as the key instead.
+Both `book:` and `lastread:` are persisted across sessions. `book:` is tab-specific (wiped when tab closes). `lastread:` is the fallback when opening a book in a new tab or after the original tab was closed.
 
 ### Stores
 
-**`tabStore`** — owns all persistence, tab lifecycle, and navigation
-- Tab list persisted to localStorage on every mutation via `watch`
-- `closeTab(id)` internally calls `deleteTab(id)` — wipes tab-state + all `tabId:*` book-state from IDB
-- `pdfBlobUrl` excluded from persistence — blob URLs don't survive sessions
+- `tabStore` — tab lifecycle, navigation, tab/book state, lastread, booksView setting, and `resetAll()`
+- `bookViewStore` — toolbar/zoom/searchBarPos; reads from IDB at init, writes via `idb.ts`
+- `settingsStore` — app settings; each setting has its own `settings:` key, loaded in parallel at init, each watch writes only its own key
+- `themeStore` — theme preset + reading background; stored as one object at `settings:theme`; custom themes at `settings:customThemes` via `themes.ts`
 
-**`bookViewStore`** — reactive UI state only, no direct persistence
-- Reads initial values from `tabStore` at init (`getToolbarVisible`, `getSearchBarPos`)
-- Writes back through `tabStore` (`setToolbarVisible`, `setSearchBarPos`)
-- Exposes: `toolbarVisible`, `searchBarPos`, `isBookViewActive`, `toggleToolbar`, `setSearchBarPos`
+### lastread LRU cap
 
-### Tab isolation for book view
-- `BookViewPage` gets `:key="tabStore.activeTabId"` in `App.vue` — Vue destroys and re-creates it on every tab switch, giving each tab a fully isolated component instance
-- `tabId` and `bookId` are snapshotted as plain values at mount (`tabStore.activeTabId.value`, `tabStore.activeTab.bookId`) — never read reactively after that
-- On unmount: scroll position saved via `tabStore.setBookViewState`; if no position captured, `tabStore.clearBookViewState` deletes the entry
+Always use `tabStore.setLastReadPos()` — it calls `idbSetLastRead()` which enforces the 1000-entry cap.
+
+### App reset
+
+`tabStore.resetAll()` calls `idbClearAll()` then the caller does `window.location.reload()`. The "איפוס האפליקציה" tab in `SettingsPage.vue` triggers this.
 
 ### Adding new persisted state
-- Global scalar setting → add key to `PERSIST_KEYS` in `persist.ts`, add `get*/set*` pair to `tabStore`
-- Per-tab UI state → add field to `TabState` in `tabDb.ts`, expose via `tabStore.getTabViewState/setTabViewState`
-- Per-tab+book state → add field to `BookState` in `tabDb.ts`, expose via `tabStore.getBookViewState/setBookViewState`
-- Per-book global state (grows with usage) → add a new object store to `tabDb.ts` (bump `DB_VERSION`), expose via `tabStore` — never use localStorage for this
+- Global scalar setting → add key to `KEYS` in `idb.ts`, expose via the owning store
+- Per-tab UI state → add field to `TabState` in `idb.ts`, expose via `tabStore.getTabViewState/setTabViewState`
+- Per-tab+book state → add field to `BookState` in `idb.ts`, expose via `tabStore.getBookViewState/setBookViewState`
+- Per-book global state → add field to `LastReadState` in `idb.ts`, expose via `tabStore.getLastReadPos/setLastReadPos`
 
 ## Dropdowns
 

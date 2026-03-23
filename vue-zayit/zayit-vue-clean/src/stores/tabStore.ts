@@ -1,10 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import { persistGet, persistSet, PERSIST_KEYS } from '@/utils/persist'
-import { getTabState, setTabState, getBookState, setBookState, deleteBook, deleteTab, getLastRead, setLastRead } from '@/utils/tabDb'
-import type { TabState, BookState } from '@/utils/tabDb'
+import { idbGet, idbSet, idbDelete, idbDeleteByPrefix, idbSetLastRead, idbClearAll, KEYS } from '@/utils/idbPersistence'
+import type { TabState, BookState, LastReadState } from '@/utils/idbPersistence'
+import { useWorkspaceStore } from './workspaceStore'
 
-export type TabRoute = '/' | '/pdf-view' | '/settings' | '/books' | '/book-view' | '/hebrewbooks'
+export type TabRoute = '/' | '/pdf-view' | '/settings' | '/books' | '/book-view' | '/hebrewbooks' | '/workspaces'
 
 export interface Tab {
   id: string
@@ -25,97 +25,96 @@ interface PersistedTabList {
   nextId: number
 }
 
-function loadPersistedTabs(): { tabs: Tab[]; activeTabId: string; nextId: number } {
-  const saved = persistGet<PersistedTabList | null>(PERSIST_KEYS.TABS, null)
-  if (saved && saved.tabs.length > 0) {
-    return { tabs: saved.tabs, activeTabId: saved.activeTabId, nextId: saved.nextId }
-  }
-  return { tabs: [{ id: '1', title: 'בית', route: '/' }], activeTabId: '1', nextId: 1 }
-}
+const DEFAULT_TAB: Tab = { id: '1', title: 'בית', route: '/' }
 
 export const useTabStore = defineStore('tabs', () => {
-  const initial = loadPersistedTabs()
-  let nextId = initial.nextId
+  const tabs = ref<Tab[]>([DEFAULT_TAB])
+  const activeTabId = ref('1')
+  let nextId = 1
 
-  const tabs = ref<Tab[]>(initial.tabs)
-  const activeTabId = ref(initial.activeTabId)
-  const activeTab = computed((): Tab => tabs.value.find(t => t.id === activeTabId.value) ?? tabs.value[0]!)
+  // ── Init (called once from main.ts before mount) ──────────────────────────
 
-  // ── Tab list persistence (localStorage) ─────────────────────────────────────
+  async function init() {
+    const wsStore = useWorkspaceStore()
+    const wsId = wsStore.activeId
+    const saved = await idbGet<PersistedTabList>(KEYS.tabsList(wsId))
+    if (saved && saved.tabs.length > 0) {
+      tabs.value = saved.tabs
+      activeTabId.value = saved.activeTabId
+      nextId = saved.nextId
+    }
+  }
+
+  // ── Singleton routes — never persisted across sessions ───────────────────
+
+  const SINGLETON_ROUTES: TabRoute[] = ['/settings', '/books', '/hebrewbooks', '/workspaces']
+  const SINGLETON_TITLES: Record<string, string> = { '/settings': 'הגדרות', '/books': 'ספרים', '/hebrewbooks': 'היברו-בוקס', '/workspaces': 'סביבות עבודה' }
+
+  // ── Tab list persistence ──────────────────────────────────────────────────
 
   function persistTabs() {
-    persistSet<PersistedTabList>(PERSIST_KEYS.TABS, {
-      tabs: tabs.value.map(({ pdfBlobUrl, openToc, openTocEntryId, openTocLineIndex, ...t }) => t),
-      activeTabId: activeTabId.value,
+    const wsId = useWorkspaceStore().activeId
+    const persistable = tabs.value.filter(t => !SINGLETON_ROUTES.includes(t.route))
+    idbSet<PersistedTabList>(KEYS.tabsList(wsId), {
+      tabs: persistable.map(({ pdfBlobUrl, openToc, openTocEntryId, openTocLineIndex, ...t }) => t),
+      activeTabId: persistable.some(t => t.id === activeTabId.value) ? activeTabId.value : (persistable[0]?.id ?? activeTabId.value),
       nextId,
     })
   }
 
   watch([tabs, activeTabId], persistTabs, { deep: true })
 
-  // ── Books view preference (localStorage) ────────────────────────────────────
+  const activeTab = computed((): Tab => tabs.value.find(t => t.id === activeTabId.value) ?? tabs.value[0]!)
 
-  function getBooksView(): 'list' | 'tiles' | 'tree' {
-    return persistGet<'list' | 'tiles' | 'tree'>(PERSIST_KEYS.BOOKS_VIEW, 'list')
-  }
-
-  function setBooksView(view: 'list' | 'tiles' | 'tree') {
-    persistSet(PERSIST_KEYS.BOOKS_VIEW, view)
-  }
-
-  // ── Global book-view prefs (localStorage) ────────────────────────────────────
-
-  function getToolbarVisible(): boolean {
-    return persistGet(PERSIST_KEYS.BOOK_VIEW_TOOLBAR, true)
-  }
-
-  function setToolbarVisible(val: boolean) {
-    persistSet(PERSIST_KEYS.BOOK_VIEW_TOOLBAR, val)
-  }
-
-  function getSearchBarPos(): { x: number; y: number } | null {
-    return persistGet(PERSIST_KEYS.BOOK_VIEW_SEARCH_BAR_POS, null)
-  }
-
-  function setSearchBarPos(pos: { x: number; y: number }) {
-    persistSet(PERSIST_KEYS.BOOK_VIEW_SEARCH_BAR_POS, pos)
-  }
-
-  // ── Global last-read position per book (IndexedDB) ───────────────────────────
-
-  function getLastReadPos(bookId: number): Promise<{ scrollIndex: number; scrollOffset: number; selectedLineId?: number | null; commentaryScrollIndex?: number | null; commentaryScrollOffset?: number | null } | null> {
-    return getLastRead(bookId)
-  }
-
-  function setLastReadPos(bookId: number, pos: { scrollIndex: number; scrollOffset: number; selectedLineId?: number | null; commentaryScrollIndex?: number | null; commentaryScrollOffset?: number | null }): Promise<void> {
-    return setLastRead(bookId, pos)
-  }
-
-  // ── Per-tab state (IndexedDB) ────────────────────────────────────────────────
+  // ── Per-tab state ─────────────────────────────────────────────────────────
 
   function getTabViewState(tabId: string): Promise<TabState | null> {
-    return getTabState(tabId)
+    const wsId = useWorkspaceStore().activeId
+    return idbGet<TabState>(KEYS.tab(wsId, tabId))
   }
-
   function setTabViewState(tabId: string, state: TabState): Promise<void> {
-    return setTabState(tabId, state)
+    const wsId = useWorkspaceStore().activeId
+    return idbSet(KEYS.tab(wsId, tabId), state)
   }
 
-  // ── Per-tab+book state (IndexedDB) ───────────────────────────────────────────
+  // ── Per-tab+book state ────────────────────────────────────────────────────
 
   function getBookViewState(tabId: string, bookId: number): Promise<BookState | null> {
-    return getBookState(tabId, bookId)
+    const wsId = useWorkspaceStore().activeId
+    return idbGet<BookState>(KEYS.book(wsId, tabId, bookId))
   }
-
   function setBookViewState(tabId: string, bookId: number, state: BookState): Promise<void> {
-    return setBookState(tabId, bookId, state)
+    const wsId = useWorkspaceStore().activeId
+    return idbSet(KEYS.book(wsId, tabId, bookId), state)
   }
-
   function clearBookViewState(tabId: string, bookId: number): Promise<void> {
-    return deleteBook(tabId, bookId)
+    const wsId = useWorkspaceStore().activeId
+    return idbDelete(KEYS.book(wsId, tabId, bookId))
   }
 
-  // ── Tab lifecycle ────────────────────────────────────────────────────────────
+  // ── Global last-read per book (LRU-capped at 1000) ────────────────────────
+
+  function getLastReadPos(bookId: number): Promise<LastReadState | null> {
+    return idbGet<LastReadState>(KEYS.lastread(bookId))
+  }
+  function setLastReadPos(bookId: number, pos: LastReadState): Promise<void> {
+    return idbSetLastRead(bookId, pos)
+  }
+
+  // ── Books view setting ────────────────────────────────────────────────────
+
+  async function getBooksView(): Promise<'list' | 'tiles' | 'tree'> {
+    return (await idbGet<'list' | 'tiles' | 'tree'>(KEYS.SETTINGS_BOOKS_VIEW)) ?? 'list'
+  }
+  function setBooksView(v: 'list' | 'tiles' | 'tree') { idbSet(KEYS.SETTINGS_BOOKS_VIEW, v) }
+
+  // ── App reset ─────────────────────────────────────────────────────────────
+
+  function resetAll(): Promise<void> {
+    return idbClearAll()
+  }
+
+  // ── Tab lifecycle ─────────────────────────────────────────────────────────
 
   function openTab(partial: Omit<Tab, 'id'>) {
     const tab: Tab = { id: String(++nextId), ...partial }
@@ -133,11 +132,12 @@ export const useTabStore = defineStore('tabs', () => {
     if (idx === -1) return
     const tab = tabs.value[idx]!
     if (tab.pdfBlobUrl) URL.revokeObjectURL(tab.pdfBlobUrl)
-    deleteTab(id) // wipe all IDB state for this tab
+    const wsId = useWorkspaceStore().activeId
+    idbDelete(KEYS.tab(wsId, id))
+    idbDeleteByPrefix(KEYS.tabPrefix(wsId, id))
     tabs.value.splice(idx, 1)
-    if (activeTabId.value === id) {
+    if (activeTabId.value === id)
       activeTabId.value = tabs.value[Math.min(idx, tabs.value.length - 1)]?.id ?? ''
-    }
     if (tabs.value.length === 0) {
       const home: Tab = { id: String(++nextId), title: 'בית', route: '/' }
       tabs.value.push(home)
@@ -156,14 +156,26 @@ export const useTabStore = defineStore('tabs', () => {
     else openTab({ title: 'בית', route: '/' })
   }
 
+  // Singleton pages — only one tab per route allowed; switch if exists, else replace current tab
+  // These routes are never persisted across sessions — they are always stripped before saving
+
+  function navigateToSingleton(route: TabRoute) {
+    const existing = tabs.value.find(t => t.route === route)
+    if (existing) {
+      switchTab(existing.id)
+    } else {
+      updateActiveTab({ route, title: SINGLETON_TITLES[route] ?? route })
+    }
+  }
+
   return {
     tabs, activeTabId, activeTab,
-    openTab, switchTab, closeTab, updateActiveTab, openNewHomeTab,
+    init,
+    openTab, switchTab, closeTab, updateActiveTab, openNewHomeTab, navigateToSingleton,
     getBooksView, setBooksView,
-    getToolbarVisible, setToolbarVisible,
-    getSearchBarPos, setSearchBarPos,
     getLastReadPos, setLastReadPos,
     getTabViewState, setTabViewState,
     getBookViewState, setBookViewState, clearBookViewState,
+    resetAll,
   }
 })

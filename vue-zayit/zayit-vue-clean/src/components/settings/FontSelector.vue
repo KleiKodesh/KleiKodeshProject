@@ -78,14 +78,15 @@ defineExpose({ isOpen })
 .setting-label { font-size: 11px; color: var(--text-secondary); }
 
 .select-box {
-  flex: 1; position: relative; display: flex; align-items: center;
-  height: 28px; padding: 0 8px; cursor: pointer; user-select: none;
+  display: flex; align-items: center;
+  width: 100%; height: 28px; padding: 0 8px;
+  cursor: pointer; user-select: none; box-sizing: border-box;
   background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px;
 }
 .select-box:hover { border-color: var(--accent-color); }
 
-.select-display { flex: 1; font-size: 11px; color: var(--text-secondary); }
-.select-preview { font-size: 14px; color: var(--text-primary); padding-inline-end: 6px; }
+.select-display { flex: 1; min-width: 0; font-size: 12px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select-preview { font-size: 13px; color: var(--text-primary); padding-inline-end: 6px; flex-shrink: 0; }
 .select-chevron { color: var(--text-secondary); flex-shrink: 0; }
 </style>
 
@@ -93,10 +94,12 @@ defineExpose({ isOpen })
 .select-dropdown {
   overflow-y: auto;
   background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
-.select-option { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 10px; cursor: pointer; color: var(--text-primary); gap: 8px; }
-.opt-name { flex-shrink: 0; font-size: 11px; color: var(--text-secondary); }
-.opt-preview { font-size: 14px; }
+.select-option { display: flex; justify-content: space-between; align-items: center; padding: 0 10px; height: 32px; cursor: pointer; color: var(--text-primary); gap: 8px; }
+.opt-name { flex-shrink: 0; font-size: 12px; color: var(--text-secondary); }
+.opt-preview { font-size: 13px; }
 .select-option:hover { background: var(--hover-bg); }
 .select-option.selected { background: var(--accent-bg); color: var(--accent-color); font-weight: 500; }
+.select-option.selected .opt-name { color: var(--accent-color); }
 </style>

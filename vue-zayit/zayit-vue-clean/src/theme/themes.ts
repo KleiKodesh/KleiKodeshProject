@@ -1,6 +1,7 @@
 import themesData from './themes.json'
 import type { ThemePreset, Theme } from './themeTypes'
 import { lighten, darken, hexToRgb, hexToRgbObj } from './themeColorUtils'
+import { idbGet, idbSet, idbDelete, KEYS } from '@/utils/idbPersistence'
 
 export type { ThemePreset, Theme, ThemeColors } from './themeTypes'
 export { lighten, darken, hexToRgb, hexToRgbObj } from './themeColorUtils'
@@ -9,12 +10,14 @@ export const THEME_PRESETS: Record<ThemePreset, Theme> = themesData as Record<Th
 
 // ── Custom themes ────────────────────────────────────────────────────────────
 
-const CUSTOM_KEY = 'zayit-custom-themes'
 let customThemes: Record<string, Theme> = {}
-try { customThemes = JSON.parse(localStorage.getItem(CUSTOM_KEY) ?? '{}') } catch { /* noop */ }
+
+export async function loadCustomThemes() {
+  customThemes = (await idbGet<Record<string, Theme>>(KEYS.SETTINGS_CUSTOM_THEMES)) ?? {}
+}
 
 function saveCustomThemes() {
-  try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(customThemes)) } catch { /* noop */ }
+  idbSet(KEYS.SETTINGS_CUSTOM_THEMES, customThemes)
 }
 
 export const getTheme = (preset: ThemePreset): Theme | undefined => THEME_PRESETS[preset] ?? customThemes[preset]

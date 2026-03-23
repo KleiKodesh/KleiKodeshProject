@@ -1,72 +1,86 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
-
-const STORAGE_KEY = 'zayit-settings'
+import { idbGet, idbSet, idbDeleteByPrefix, KEYS } from '@/utils/idbPersistence'
 
 export type NewTabPage = 'homepage' | 'openfile' | 'hebrewbooks' | 'kezayit-search'
 
-interface Settings {
-  censorDivineNames: boolean
-  diacriticsState: number
-  headerFont: string
-  textFont: string
-  fontSize: number
-  linePadding: number
-  commentaryHeaderFont: string
-  commentaryTextFont: string
-  commentaryFontSize: number
-  commentaryLinePadding: number
-  useSeparateCommentarySettings: boolean
-  appZoom: number
-  newTabPage: NewTabPage
-  pdfPageFilters: boolean
-  resumeLastRead: boolean
-}
-
-const DEFAULTS: Settings = {
+const DEFAULTS = {
   censorDivineNames: false,
   diacriticsState: 0,
   headerFont: "'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif",
   textFont: "'Times New Roman', Times, serif",
-  fontSize: 105,
+  fontSize: 100,
   linePadding: 1.6,
   commentaryHeaderFont: "'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif",
   commentaryTextFont: "'Times New Roman', Times, serif",
-  commentaryFontSize: 105,
+  commentaryFontSize: 100,
   commentaryLinePadding: 1.6,
   useSeparateCommentarySettings: false,
   appZoom: 1.0,
-  newTabPage: 'homepage',
+  newTabPage: 'homepage' as NewTabPage,
   pdfPageFilters: false,
   resumeLastRead: true,
 }
 
-function load(): Settings {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return { ...DEFAULTS, ...JSON.parse(raw) }
-  } catch {}
-  return { ...DEFAULTS }
-}
-
 export const useSettingsStore = defineStore('settings', () => {
-  const saved = load()
+  const censorDivineNames = ref(DEFAULTS.censorDivineNames)
+  const diacriticsState = ref(DEFAULTS.diacriticsState)
+  const headerFont = ref(DEFAULTS.headerFont)
+  const textFont = ref(DEFAULTS.textFont)
+  const fontSize = ref(DEFAULTS.fontSize)
+  const linePadding = ref(DEFAULTS.linePadding)
+  const commentaryHeaderFont = ref(DEFAULTS.commentaryHeaderFont)
+  const commentaryTextFont = ref(DEFAULTS.commentaryTextFont)
+  const commentaryFontSize = ref(DEFAULTS.commentaryFontSize)
+  const commentaryLinePadding = ref(DEFAULTS.commentaryLinePadding)
+  const useSeparateCommentarySettings = ref(DEFAULTS.useSeparateCommentarySettings)
+  const appZoom = ref(DEFAULTS.appZoom)
+  const newTabPage = ref<NewTabPage>(DEFAULTS.newTabPage)
+  const pdfPageFilters = ref(DEFAULTS.pdfPageFilters)
+  const resumeLastRead = ref(DEFAULTS.resumeLastRead)
 
-  const censorDivineNames = ref(saved.censorDivineNames)
-  const diacriticsState = ref(saved.diacriticsState)
-  const headerFont = ref(saved.headerFont)
-  const textFont = ref(saved.textFont)
-  const fontSize = ref(saved.fontSize)
-  const linePadding = ref(saved.linePadding)
-  const commentaryHeaderFont = ref(saved.commentaryHeaderFont)
-  const commentaryTextFont = ref(saved.commentaryTextFont)
-  const commentaryFontSize = ref(saved.commentaryFontSize)
-  const commentaryLinePadding = ref(saved.commentaryLinePadding)
-  const useSeparateCommentarySettings = ref(saved.useSeparateCommentarySettings)
-  const appZoom = ref(saved.appZoom)
-  const newTabPage = ref<NewTabPage>(saved.newTabPage)
-  const pdfPageFilters = ref(saved.pdfPageFilters)
-  const resumeLastRead = ref(saved.resumeLastRead)
+  // Called from main.ts before mount — loads each setting individually
+  async function init() {
+    const [
+      censored, diacritics, hFont, tFont, fSize, lPad,
+      cHFont, cTFont, cFSize, cLPad, sepCommentary,
+      aZoom, ntPage, pdfFilters, resumeLast,
+    ] = await Promise.all([
+      idbGet<boolean>(KEYS.SETTINGS_CENSOR_DIVINE),
+      idbGet<number>(KEYS.SETTINGS_DIACRITICS),
+      idbGet<string>(KEYS.SETTINGS_HEADER_FONT),
+      idbGet<string>(KEYS.SETTINGS_TEXT_FONT),
+      idbGet<number>(KEYS.SETTINGS_FONT_SIZE),
+      idbGet<number>(KEYS.SETTINGS_LINE_PADDING),
+      idbGet<string>(KEYS.SETTINGS_COMMENTARY_HEADER_FONT),
+      idbGet<string>(KEYS.SETTINGS_COMMENTARY_TEXT_FONT),
+      idbGet<number>(KEYS.SETTINGS_COMMENTARY_FONT_SIZE),
+      idbGet<number>(KEYS.SETTINGS_COMMENTARY_LINE_PADDING),
+      idbGet<boolean>(KEYS.SETTINGS_SEPARATE_COMMENTARY),
+      idbGet<number>(KEYS.SETTINGS_APP_ZOOM),
+      idbGet<NewTabPage>(KEYS.SETTINGS_NEW_TAB_PAGE),
+      idbGet<boolean>(KEYS.SETTINGS_PDF_FILTERS),
+      idbGet<boolean>(KEYS.SETTINGS_RESUME_LAST_READ),
+    ])
+
+    if (censored !== null)       censorDivineNames.value = censored
+    if (diacritics !== null)     diacriticsState.value = diacritics
+    if (hFont !== null)          headerFont.value = hFont
+    if (tFont !== null)          textFont.value = tFont
+    if (fSize !== null)          fontSize.value = fSize
+    if (lPad !== null)           linePadding.value = lPad
+    if (cHFont !== null)         commentaryHeaderFont.value = cHFont
+    if (cTFont !== null)         commentaryTextFont.value = cTFont
+    if (cFSize !== null)         commentaryFontSize.value = cFSize
+    if (cLPad !== null)          commentaryLinePadding.value = cLPad
+    if (sepCommentary !== null)  useSeparateCommentarySettings.value = sepCommentary
+    if (aZoom !== null)          appZoom.value = aZoom
+    if (ntPage !== null)         newTabPage.value = ntPage
+    if (pdfFilters !== null)     pdfPageFilters.value = pdfFilters
+    if (resumeLast !== null)     resumeLastRead.value = resumeLast
+
+    applyCSSVariables()
+  }
 
   function applyCSSVariables() {
     const s = document.documentElement.style
@@ -83,31 +97,10 @@ export const useSettingsStore = defineStore('settings', () => {
     if (app) app.style.zoom = appZoom.value.toString()
   }
 
-  function persist() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      censorDivineNames: censorDivineNames.value,
-      diacriticsState: diacriticsState.value,
-      headerFont: headerFont.value,
-      textFont: textFont.value,
-      fontSize: fontSize.value,
-      linePadding: linePadding.value,
-      commentaryHeaderFont: commentaryHeaderFont.value,
-      commentaryTextFont: commentaryTextFont.value,
-      commentaryFontSize: commentaryFontSize.value,
-      commentaryLinePadding: commentaryLinePadding.value,
-      useSeparateCommentarySettings: useSeparateCommentarySettings.value,
-      appZoom: appZoom.value,
-      newTabPage: newTabPage.value,
-      pdfPageFilters: pdfPageFilters.value,
-      resumeLastRead: resumeLastRead.value,
-    }))
-  }
-
   function cycleDiacritics() { diacriticsState.value = (diacriticsState.value + 1) % 3 }
 
   function togglePdfPageFilters() {
     pdfPageFilters.value = !pdfPageFilters.value
-    // Sync to all open PDF iframes
     document.documentElement.setAttribute('data-pdf-filters', pdfPageFilters.value ? 'true' : 'false')
     document.querySelectorAll<HTMLIFrameElement>('iframe[src*="/pdfjs/web/viewer.html"]').forEach(iframe => {
       try {
@@ -132,22 +125,32 @@ export const useSettingsStore = defineStore('settings', () => {
     newTabPage.value = DEFAULTS.newTabPage
     pdfPageFilters.value = DEFAULTS.pdfPageFilters
     resumeLastRead.value = DEFAULTS.resumeLastRead
-    localStorage.removeItem(STORAGE_KEY)
+    // Delete all settings keys via prefix
+    idbDeleteByPrefix('settings:')
     applyCSSVariables()
   }
 
-  applyCSSVariables()
-
-  watch([
-    censorDivineNames, diacriticsState, headerFont, textFont, fontSize, linePadding,
-    commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryLinePadding,
-    useSeparateCommentarySettings, appZoom, newTabPage, pdfPageFilters, resumeLastRead,
-  ], () => { persist(); applyCSSVariables() })
+  // Watch each setting individually — only write the changed key
+  watch(censorDivineNames,             v => { idbSet(KEYS.SETTINGS_CENSOR_DIVINE, v);   applyCSSVariables() })
+  watch(diacriticsState,               v => { idbSet(KEYS.SETTINGS_DIACRITICS, v) })
+  watch(headerFont,                    v => { idbSet(KEYS.SETTINGS_HEADER_FONT, v);      applyCSSVariables() })
+  watch(textFont,                      v => { idbSet(KEYS.SETTINGS_TEXT_FONT, v);        applyCSSVariables() })
+  watch(fontSize,                      v => { idbSet(KEYS.SETTINGS_FONT_SIZE, v);        applyCSSVariables() })
+  watch(linePadding,                   v => { idbSet(KEYS.SETTINGS_LINE_PADDING, v);     applyCSSVariables() })
+  watch(commentaryHeaderFont,          v => { idbSet(KEYS.SETTINGS_COMMENTARY_HEADER_FONT, v);  applyCSSVariables() })
+  watch(commentaryTextFont,            v => { idbSet(KEYS.SETTINGS_COMMENTARY_TEXT_FONT, v);    applyCSSVariables() })
+  watch(commentaryFontSize,            v => { idbSet(KEYS.SETTINGS_COMMENTARY_FONT_SIZE, v);    applyCSSVariables() })
+  watch(commentaryLinePadding,         v => { idbSet(KEYS.SETTINGS_COMMENTARY_LINE_PADDING, v); applyCSSVariables() })
+  watch(useSeparateCommentarySettings, v => { idbSet(KEYS.SETTINGS_SEPARATE_COMMENTARY, v) })
+  watch(appZoom,                       v => { idbSet(KEYS.SETTINGS_APP_ZOOM, v);         applyCSSVariables() })
+  watch(newTabPage,                    v => { idbSet(KEYS.SETTINGS_NEW_TAB_PAGE, v) })
+  watch(pdfPageFilters,                v => { idbSet(KEYS.SETTINGS_PDF_FILTERS, v) })
+  watch(resumeLastRead,                v => { idbSet(KEYS.SETTINGS_RESUME_LAST_READ, v) })
 
   return {
     censorDivineNames, diacriticsState, headerFont, textFont, fontSize, linePadding,
     commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryLinePadding,
     useSeparateCommentarySettings, appZoom, newTabPage, pdfPageFilters, resumeLastRead,
-    cycleDiacritics, togglePdfPageFilters, reset,
+    init, cycleDiacritics, togglePdfPageFilters, reset,
   }
 })

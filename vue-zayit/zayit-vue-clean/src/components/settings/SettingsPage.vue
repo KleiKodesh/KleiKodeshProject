@@ -14,10 +14,11 @@ const {
   useSeparateCommentarySettings, appZoom,
   newTabPage,
   resumeLastRead,
-  reset,
+  resetSettings,
+  resetAll,
 } = useSettingsPage()
 
-const activeTab = ref<'general' | 'reading'>('general')
+const activeTab = ref<'general' | 'reading' | 'reset'>('general')
 const bookDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null>(null)
 const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null>(null)
 </script>
@@ -28,7 +29,7 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
     <div class="tab-bar">
       <button :class="['tab-btn', { active: activeTab === 'general' }]" @click="activeTab = 'general'">כללי</button>
       <button :class="['tab-btn', { active: activeTab === 'reading' }]" @click="activeTab = 'reading'">קריאה</button>
-      <button class="tab-btn tab-btn-reset" @click="reset">↺ איפוס</button>
+      <button :class="['tab-btn tab-btn-reset', { active: activeTab === 'reset' }]" @click="activeTab = 'reset'">איפוס האפליקציה</button>
     </div>
 
     <div v-if="activeTab === 'general'" class="pane">
@@ -102,6 +103,13 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
       />
 
     </div>
+
+    <div v-if="activeTab === 'reset'" class="pane reset-pane">
+      <p class="reset-desc">מאפס את כל נתוני האפליקציה — הגדרות, היסטוריית קריאה, מיקומי גלילה, וטאבים פתוחים.</p>
+      <button class="reset-all-btn" @click="resetAll">איפוס מלא</button>
+      <p class="reset-desc reset-desc-small">מאפס רק את ההגדרות לברירות המחדל — ללא השפעה על היסטוריית הקריאה או הטאבים.</p>
+      <button class="reset-all-btn" @click="resetSettings">איפוס ההגדרות</button>
+    </div>
   </div>
 </template>
 
@@ -135,8 +143,32 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
 }
 .tab-btn:hover { background: var(--hover-bg); color: var(--text-primary); }
 .tab-btn.active { color: var(--text-primary); border-bottom-color: var(--accent-color); }
-.tab-btn-reset { flex: 0 0 auto; padding: 0 12px; border-bottom: none; }
+.tab-btn-reset { border-bottom: none; }
 .tab-btn-reset:hover { color: #e53e3e; background: color-mix(in srgb, #e53e3e 8%, transparent); }
+.tab-btn-reset.active { color: #e53e3e; border-bottom-color: #e53e3e; }
+
+.reset-pane {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+.reset-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+.reset-desc-small { font-size: 11px; }
+.reset-all-btn {
+  width: 140px;
+  height: 32px;
+  font-size: 13px;
+  color: #e53e3e;
+  border: 1px solid color-mix(in srgb, #e53e3e 40%, transparent);
+  background: color-mix(in srgb, #e53e3e 8%, transparent);
+}
+.reset-all-btn:hover { background: color-mix(in srgb, #e53e3e 16%, transparent); }
 
 .pane {
   flex: 1;

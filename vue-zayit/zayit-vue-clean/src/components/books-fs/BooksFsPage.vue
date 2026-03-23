@@ -15,7 +15,8 @@ import type { TocFsItem } from './useBooksFsSearch'
 const tabStore = useTabStore()
 const { loading, error, path, searchQuery, isSearching, treeItems, searchItems, tocSearching, load, enter, navigateTo } = useBooksFs()
 
-const view = ref<'list' | 'tiles' | 'tree'>(tabStore.getBooksView())
+const view = ref<'list' | 'tiles' | 'tree'>('list')
+onMounted(async () => { view.value = await tabStore.getBooksView() })
 const fullTreeRef = ref<InstanceType<typeof BooksFullTree> | null>(null)
 const searchInputRef = ref<HTMLInputElement | null>(null)
 

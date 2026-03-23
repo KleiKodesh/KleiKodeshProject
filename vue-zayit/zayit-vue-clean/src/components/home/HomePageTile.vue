@@ -19,7 +19,7 @@ defineEmits<{ tap: [] }>()
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  width: 68px;
+  width: 100%;
   padding: 6px 4px;
   background: none;
   border: none;

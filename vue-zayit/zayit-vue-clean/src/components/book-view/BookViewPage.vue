@@ -61,7 +61,7 @@ const selectedSectionLineIds = computed<number[] | null>(() => {
 
 const { groups, loading: commentaryLoading } = useCommentary(() => selectedLineId.value, () => selectedSectionLineIds.value)
 const contentSearch = useBookViewSearch(() => lines.value, () => currentScrollLineIndex.value)
-const commentarySearch = useCommentarySearch(() => groups.value, () => commentaryViewRef.value?.topVisibleFlatIndex.value ?? 0)
+const commentarySearch = useCommentarySearch(() => groups.value, () => commentaryViewRef.value?.topVisibleFlatIndex ?? 0)
 
 const activeSearch = computed(() => searchMode.value === 'content' ? contentSearch : commentarySearch)
 const activeMatchCount = computed(() => activeSearch.value.matchCount.value)
@@ -199,7 +199,7 @@ async function onNavigateSection(direction: 'next' | 'prev', commentaryBookId: n
 
 onMounted(async () => {
   const saved = await tabStore.getTabViewState(tabId)
-  if (saved) { bottomVisible.value = saved.bottomVisible; tocVisible.value = saved.tocVisible }
+  if (saved) { bottomVisible.value = saved.bottomVisible }
   if (bookId != null) {
     const bookSaved = await tabStore.getBookViewState(tabId, bookId)
     const lastRead = await tabStore.getLastReadPos(bookId)
@@ -242,8 +242,8 @@ watch(selectedLineId, () => {
     pinnedCommentaryBookId.value = commentaryViewRef.value.activeBookId
   }
 })
-watch(bottomVisible, val => tabStore.setTabViewState(tabId, { bottomVisible: val, tocVisible: tocVisible.value }))
-watch(tocVisible, val => tabStore.setTabViewState(tabId, { bottomVisible: bottomVisible.value, tocVisible: val }))
+watch(bottomVisible, val => tabStore.setTabViewState(tabId, { bottomVisible: val }))
+watch(tocVisible, () => { /* tocVisible is local only — not persisted */ })
 watch(searchVisible, v => { if (!v) { contentSearch.clear(); commentarySearch.clear() } })
 </script>
 

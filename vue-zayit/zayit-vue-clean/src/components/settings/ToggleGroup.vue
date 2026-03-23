@@ -15,7 +15,8 @@ defineEmits<{ 'update:modelValue': [T] }>()
 <style scoped>
 .toggle-btn {
   flex: 1;
-  padding: 5px 10px;
+  height: 28px;
+  padding: 0 10px;
   border: 1px solid var(--border-color);
   background: var(--bg-secondary);
   color: var(--text-primary);

@@ -162,7 +162,7 @@ const topVisibleFlatIndex = computed(() => {
 
 function scrollToFlatIndex(flatIndex: number) {
   if (!scrollerEl.value) return
-  scrollToIndexWithRetry(virtualizer.value, scrollerEl.value, flatIndex, -52)
+  scrollToIndexWithRetry(virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>, scrollerEl.value, flatIndex, -52)
 }
 
 function captureScrollPos(): { scrollIndex: number; scrollOffset: number } | null {
