@@ -1,15 +1,21 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, onBeforeUnmount } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useTabStore } from '@/stores/tabStore'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useBookViewStore } from '@/stores/bookViewStore'
 import { useLines } from './useLines'
 import { applyDiacriticsFilter, removeDiacriticsForSearch } from '@/utils/hebrewTextProcessing'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
-import { scrollToIndexWithRetry } from '@/utils/scrollToIndexWithRetry'
+import ContextMenu from '@/components/common/ContextMenu.vue'
+import type { ContextMenuItem } from '@/components/common/ContextMenu.vue'
+import { useEventListener } from '@vueuse/core'
+import { useScopedKeys } from '@/composables/useScopedKeys'
+import { useScopedCopy } from '@/composables/useScopedCopy'
 
-const emit = defineEmits<{ scrolled: [number]; lineSelected: [number] }>()
+const emit = defineEmits<{ scrolled: [number]; lineSelected: [number]; 'ctrl-f': [] }>()
 const props = defineProps<{
   altTocLabelMap?: Map<number, string>
   selectedLineId?: number | null
@@ -22,6 +28,8 @@ const props = defineProps<{
 
 const tabStore = useTabStore()
 const settingsStore = useSettingsStore()
+const bookViewStore = useBookViewStore()
+const { zoom } = storeToRefs(bookViewStore)
 const tabId = tabStore.activeTabId
 const bookId = tabStore.activeTab.bookId!
 const { lines, loading, prioritise } = useLines(() => bookId)
@@ -69,6 +77,39 @@ function lineContent(raw: string | null, lineIndex: number): string | null {
 const scrollerEl = ref<HTMLElement | null>(null)
 const restoring = ref(false)
 
+const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, { onCtrlF: () => emit('ctrl-f') })
+useScopedCopy(scrollerEl, () => lines.value.map(l => l.content ?? '').filter(Boolean), isSelectAll)
+
+const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
+const contextMenuItems: ContextMenuItem[] = [
+  { label: 'העתק', action: () => document.execCommand('copy') },
+  { label: 'העתק כבלוק', action: () => {
+    let joined: string
+    if (isSelectAll.value) {
+      joined = lines.value.map(l => l.content ?? '').filter(Boolean).join(' ')
+    } else {
+      const sel = window.getSelection()
+      if (!sel || sel.rangeCount === 0) return
+      const range = sel.getRangeAt(0)
+      const fragment = range.cloneContents()
+      const tmp = document.createElement('div')
+      tmp.appendChild(fragment)
+      // flatten: remove block-level wrappers, join with space
+      joined = Array.from(tmp.querySelectorAll('.line')).map(el => el.innerHTML).join(' ')
+      if (!joined) joined = tmp.innerHTML
+    }
+    if (!joined.trim()) return
+    const htmlContent = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{direction:rtl;}</style></head><body><div>${joined}</div></body></html>`
+    const tempDiv = document.createElement('div')
+    tempDiv.innerHTML = joined
+    navigator.clipboard.write([new ClipboardItem({
+      'text/html': new Blob([htmlContent], { type: 'text/html' }),
+      'text/plain': new Blob([tempDiv.textContent ?? ''], { type: 'text/plain' }),
+    })])
+  }},
+  { label: 'בחר הכל', action: selectAllInContainer },
+]
+
 const virtualizer = useVirtualizer(computed(() => ({
   count: lines.value.length,
   getScrollElement: () => scrollerEl.value,
@@ -104,12 +145,7 @@ watch(loading, async (val) => {
   if (props.initialLineIndex != null) { await nextTick(); await restoreScrollPos(props.initialLineIndex, 0); return }
   const saved = await tabStore.getBookViewState(tabId, bookId)
   if (saved) {
-    if (saved.selectedLineId != null) {
-      const lineIndex = lines.value.find(l => l.id === saved.selectedLineId)?.lineIndex
-      await restoreScrollPos(lineIndex ?? saved.scrollIndex, lineIndex != null ? 0 : saved.scrollOffset)
-    } else {
-      await restoreScrollPos(saved.scrollIndex, saved.scrollOffset)
-    }
+    await restoreScrollPos(saved.scrollIndex, saved.scrollOffset)
   } else {
     const global = await tabStore.getLastReadPos(bookId)
     if (global) await restoreScrollPos(global.scrollIndex, global.scrollOffset)
@@ -121,10 +157,12 @@ let programmaticScrollTimer: ReturnType<typeof setTimeout> | null = null
 let programmaticScrolling = false
 
 function savePos() {
+  if (restoring.value) return
   const pos = captureScrollPos()
   if (pos) {
+    console.log('[BookViewLinesContent] savePos selectedLineId=', props.selectedLineId)
     tabStore.setBookViewState(tabId, bookId, { ...pos, selectedLineId: props.selectedLineId })
-    tabStore.setLastReadPos(bookId, pos)
+    tabStore.setLastReadPos(bookId, { ...pos, selectedLineId: props.selectedLineId })
   }
 }
 
@@ -137,6 +175,11 @@ function onScroll() {
   if (saveTimer) clearTimeout(saveTimer)
   saveTimer = setTimeout(savePos, 100)
 }
+
+watch(() => props.selectedLineId, () => {
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = setTimeout(savePos, 100)
+})
 
 function setProgrammaticScroll() {
   programmaticScrolling = true
@@ -171,17 +214,18 @@ onBeforeUnmount(() => {
   if (saveTimer) clearTimeout(saveTimer)
   if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer)
   const pos = captureScrollPos()
-  if (pos) { tabStore.setBookViewState(tabId, bookId, { ...pos, selectedLineId: props.selectedLineId }); tabStore.setLastReadPos(bookId, pos) }
+  console.log('[BookViewLinesContent] onBeforeUnmount pos=', pos, 'selectedLineId=', props.selectedLineId)
+  if (pos) { tabStore.setBookViewState(tabId, bookId, { ...pos, selectedLineId: props.selectedLineId }); tabStore.setLastReadPos(bookId, { ...pos, selectedLineId: props.selectedLineId }) }
   else tabStore.clearBookViewState(tabId, bookId)
 })
 
-defineExpose({ scrollToLineId, scrollToLineIndex })
 </script>
 
 <template>
   <div class="lines-content">
+    <ContextMenu ref="contextMenuRef" :items="contextMenuItems" />
     <div v-if="loading || restoring" class="loading-overlay"><LoadingAnimation /></div>
-    <div ref="scrollerEl" class="scroller" @scroll="onScroll">
+    <div ref="scrollerEl" class="scroller" tabindex="0" :style="{ fontSize: `${zoom / 100 * 15}px` }" @scroll="onScroll" @contextmenu="contextMenuRef?.show($event)">
       <div :style="{ height: `${totalSize}px`, position: 'relative' }">
         <div v-for="vItem in virtualItems" :key="String(vItem.key)"
           :ref="el => el && virtualizer.measureElement(el as Element)"
@@ -203,7 +247,7 @@ defineExpose({ scrollToLineId, scrollToLineIndex })
 .lines-content { height: 100%; position: relative; }
 .loading-overlay { position: absolute; inset: 0; z-index: 10; background: var(--bg-primary); }
 .scroller { height: 100%; overflow-y: auto; }
-.line { padding-inline: 12px; font-size: 15px; line-height: 1.7; color: var(--text-primary); text-align: justify; position: relative; }
+.line { padding-inline: 12px; font-size: 1em; line-height: 1.7; color: var(--text-primary); text-align: justify; position: relative; }
 .line.selected::after { content: ''; position: absolute; top: 0; bottom: 0; right: 4px; width: 3px; background: var(--accent-color); }
 .line[data-alt-toc]::before { content: attr(data-alt-toc); display: block; font-size: 0.85rem; font-weight: 600; opacity: 0.35; padding-block-end: 2px; }
 .line.placeholder { height: 28px; margin-inline: 12px; margin-block: 4px; border-radius: 4px; background: color-mix(in srgb, var(--text-primary) 5%, transparent); }

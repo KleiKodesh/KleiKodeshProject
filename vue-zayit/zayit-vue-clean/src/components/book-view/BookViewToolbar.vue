@@ -1,12 +1,17 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { IconSearch20Regular, IconTextBulletListTree20Regular, IconLayoutRowTwo20Regular, IconLayoutRowTwoFocusBottom20Filled } from '@iconify-prerendered/vue-fluent'
+import { storeToRefs } from 'pinia'
+import { IconSearch20Regular, IconTextBulletListTree20Regular, IconLayoutRowTwo20Regular, IconLayoutRowTwoFocusBottom20Filled, IconZoomIn20Regular, IconZoomOut20Regular } from '@iconify-prerendered/vue-fluent'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useBookViewStore } from '@/stores/bookViewStore'
+import { ZOOM_CONFIG } from '@/composables/useZoom'
 
 defineProps<{ bottomVisible: boolean; searchVisible: boolean; tocVisible: boolean }>()
 defineEmits<{ toggleBottom: []; toggleSearch: []; toggleToc: [] }>()
 
 const settingsStore = useSettingsStore()
+const bookViewStore = useBookViewStore()
+const { zoom } = storeToRefs(bookViewStore)
 const diacriticsState = computed(() => settingsStore.diacriticsState)
 const diacriticsTitle = computed(() => ['הסר טעמים', 'הסר גם ניקוד', 'שחזר טעמים וניקוד'][diacriticsState.value]!)
 </script>
@@ -18,6 +23,8 @@ const diacriticsTitle = computed(() => ['הסר טעמים', 'הסר גם ניק
     <button :class="{ active: bottomVisible }" title="פאנל תחתון" @click="$emit('toggleBottom')">
       <IconLayoutRowTwoFocusBottom20Filled v-if="bottomVisible" /><IconLayoutRowTwo20Regular v-else />
     </button>
+    <button :title="`הקטן (Ctrl-)\nזום: ${zoom}%\nאיפוס: Ctrl+0`" :disabled="zoom <= ZOOM_CONFIG.MIN" @click="bookViewStore.zoomOut()"><IconZoomOut20Regular /></button>
+    <button :title="`הגדל (Ctrl+)\nזום: ${zoom}%\nאיפוס: Ctrl+0`" :disabled="zoom >= ZOOM_CONFIG.MAX" @click="bookViewStore.zoomIn()"><IconZoomIn20Regular /></button>
     <button :class="['diacritics-btn', { 'state-1': diacriticsState === 1, 'state-2': diacriticsState === 2 }]"
       :title="diacriticsTitle" @click="settingsStore.cycleDiacritics()">
       <svg v-if="diacriticsState === 0" width="16" height="18" viewBox="0 0 126 139" fill="currentColor">

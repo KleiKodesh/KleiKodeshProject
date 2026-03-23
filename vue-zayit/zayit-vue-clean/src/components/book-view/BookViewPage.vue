@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onBeforeUnmount, computed, nextTick } from 'vue'
-import { useEventListener } from '@vueuse/core'
+import { storeToRefs } from 'pinia'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useTabStore } from '@/stores/tabStore'
+import { useZoomHandler } from '@/composables/useZoom'
 import { useToc } from './useToc'
 import { useLines } from './useLines'
 import { useCommentary } from './useCommentary'
@@ -20,6 +21,9 @@ import type { SearchMode } from './BookViewSearchBar.vue'
 
 const bookViewStore = useBookViewStore()
 const tabStore = useTabStore()
+const { zoom, isBookViewActive } = storeToRefs(bookViewStore)
+
+useZoomHandler({ zoom, enabled: isBookViewActive })
 const tabId = tabStore.activeTabId
 const bookId = tabStore.activeTab.bookId
 const bookTitle = tabStore.activeTab.title
@@ -38,9 +42,6 @@ const initialLineIndex = ref<number | undefined>(openTocLineIndex)
 const linesContentRef = ref<InstanceType<typeof BookViewLinesContent> | null>(null)
 const commentaryViewRef = ref<InstanceType<typeof CommentaryView> | null>(null)
 const searchBarRef = ref<InstanceType<typeof BookViewSearchBar> | null>(null)
-const topPaneRef = ref<HTMLElement | null>(null)
-const bottomPaneRef = ref<HTMLElement | null>(null)
-const lastFocusedPane = ref<'content' | 'commentary'>('content')
 
 const { getActiveTocEntry, getTocPath, altTocSections, tocEntries } = useToc(() => bookId, () => bookTitle)
 const { lines } = useLines(() => bookId)
@@ -121,16 +122,6 @@ function openSearch(mode: SearchMode) {
   searchMode.value = mode
 }
 
-useEventListener('keydown', (e: KeyboardEvent) => {
-  if (!e.ctrlKey || e.key !== 'f') return
-  e.preventDefault()
-  const active = document.activeElement
-  const inBottom = bottomPaneRef.value?.contains(active) ?? false
-  const mode = (inBottom || lastFocusedPane.value === 'commentary') && bottomVisible.value ? 'commentary' : 'content'
-  openSearch(mode)
-  nextTick(() => searchBarRef.value?.focus())
-})
-
 function onModeChange(mode: SearchMode) {
   const currentQuery = activeSearch.value.query.value
   contentSearch.clear(); commentarySearch.clear()
@@ -177,11 +168,17 @@ onMounted(async () => {
   if (saved) { bottomVisible.value = saved.bottomVisible; tocVisible.value = saved.tocVisible }
   if (bookId != null) {
     const bookSaved = await tabStore.getBookViewState(tabId, bookId)
-    if (bookSaved?.selectedLineId != null) { selectedLineId.value = bookSaved.selectedLineId; bottomVisible.value = true }
+    const lastRead = await tabStore.getLastReadPos(bookId)
+    console.log('[BookViewPage] onMounted bookSaved=', bookSaved, 'lastRead=', lastRead)
+    const restoredLineId = bookSaved?.selectedLineId ?? lastRead?.selectedLineId
+    console.log('[BookViewPage] restoredLineId=', restoredLineId)
+    if (restoredLineId != null) { selectedLineId.value = restoredLineId; bottomVisible.value = true }
   }
 })
 
 onBeforeUnmount(() => tabStore.updateActiveTab({ tocPath: undefined }))
+
+watch(selectedLineId, val => console.log('[BookViewPage] selectedLineId changed =', val))
 
 watch(bottomVisible, val => tabStore.setTabViewState(tabId, { bottomVisible: val, tocVisible: tocVisible.value }))
 watch(tocVisible, val => tabStore.setTabViewState(tabId, { bottomVisible: bottomVisible.value, tocVisible: val }))
@@ -202,27 +199,24 @@ watch(searchVisible, v => { if (!v) { contentSearch.clear(); commentarySearch.cl
         @next="onSearchNext" @prev="onSearchPrev" @mode-change="onModeChange" />
       <BookViewSplitPane :bottom-visible="bottomVisible">
         <template #top>
-          <div ref="topPaneRef" style="height:100%;display:contents" @pointerdown="lastFocusedPane = 'content'">
           <BookViewLinesContent ref="linesContentRef"
             :alt-toc-label-map="altTocLabelMap" :selected-line-id="selectedLineId"
             :bottom-visible="bottomVisible" :initial-line-index="initialLineIndex"
             :search-query="searchMode === 'content' ? contentSearch.query.value : ''"
             :current-match-line-index="searchMode === 'content' ? contentSearch.currentMatchLineIndex.value : undefined"
             :current-match-occurrence="searchMode === 'content' ? contentSearch.currentMatchOccurrence.value : undefined"
-            @scrolled="onLinesScrolled" @line-selected="selectedLineId = $event" />
-          </div>
+            @scrolled="onLinesScrolled" @line-selected="selectedLineId = $event"
+            @ctrl-f="openSearch('content'); nextTick(() => searchBarRef?.focus())" />
         </template>
         <template #bottom>
-          <div ref="bottomPaneRef" style="height:100%;display:contents" @pointerdown="lastFocusedPane = 'commentary'">
           <CommentaryView ref="commentaryViewRef"
             :selected-line-id="selectedLineId" :groups="groups" :loading="commentaryLoading"
             :search-query="searchMode === 'commentary' ? commentarySearch.query.value : ''"
             :current-match-flat-index="searchMode === 'commentary' ? commentarySearch.currentMatchFlatIndex.value : undefined"
             :current-match-occurrence="searchMode === 'commentary' ? commentarySearch.currentMatchOccurrence.value : undefined"
             @close="bottomVisible = false" @navigate-section="onNavigateSection"
-            @toggle-search="() => openSearch('commentary')"
+            @toggle-search="openSearch('commentary'); nextTick(() => searchBarRef?.focus())"
             @open-book="(bookId, lineIndex) => tabStore.openTab({ title: groups.find(g => g.bookId === bookId)?.bookTitle ?? '', route: '/book-view', bookId, openTocLineIndex: lineIndex })" />
-          </div>
         </template>
       </BookViewSplitPane>
       <BookViewTocTree v-show="tocVisible" :book-id="bookId" :book-title="bookTitle"

@@ -9,6 +9,7 @@ export const PERSIST_KEYS = {
   BOOKS_VIEW: 'app.books.view',
   BOOK_VIEW_TOOLBAR: 'app.bookView.toolbarVisible',
   BOOK_VIEW_SEARCH_BAR_POS: 'app.bookView.searchBarPos',
+  BOOK_VIEW_ZOOM: 'app.bookView.zoom',
 } as const
 
 export function persistGet<T>(key: string, fallback: T): T {

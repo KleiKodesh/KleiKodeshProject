@@ -1,13 +1,10 @@
 import { normalize } from '@/utils/normalize'
 
 export interface BookRow {
-  id: number; categoryId: number; title: string; heShortDesc: string | null
-  orderIndex: number; treeOrder?: number; fullPath?: string; searchPath?: string
-  period?: string          // Chronological period: תנ"ך, ספרות חז"ל, גאונים, ראשונים, אחרונים, etc.
-  rootCategory?: string    // First-tier category title
-  secondaryCategory?: string // Second-tier category title (if exists)
-  rootCategoryOrder?: number
-  secondaryCategoryOrder?: number
+  id: number; categoryId: number; title: string
+  treeOrder?: number; fullPath?: string; searchPath?: string
+  period?: string       // Chronological period: תנ"ך, ספרות חז"ל, גאונים, ראשונים, אחרונים, etc.
+  rootCategory?: string // First-tier category title
 }
 export interface CategoryRow { id: number; parentId: number | null; title: string; level: number; orderIndex: number }
 export interface CategoryNode extends CategoryRow { children: CategoryNode[]; books: BookRow[] }
@@ -46,14 +43,13 @@ function detectPeriod(title: string): string | null {
   return null
 }
 
-/** Single-pass traversal: returns period, root, and secondary category info together. */
+/** Single-pass traversal: returns period and root category info. */
 export function findCategoryMeta(categoryId: number, map: Map<number, CategoryNode>): {
   period: string | null
-  root: string | null; secondary: string | null; rootOrder: number | null; secondaryOrder: number | null
+  root: string | null
 } {
   const visited = new Set<number>()
   let rootCat: CategoryNode | undefined
-  let secondaryCat: CategoryNode | undefined
   let period: string | null = null
 
   function traverse(id: number): void {
@@ -62,8 +58,6 @@ export function findCategoryMeta(categoryId: number, map: Map<number, CategoryNo
     const cat = map.get(id)
     if (!cat) return
     if (cat.parentId == null) { rootCat = cat; return }
-    const parent = map.get(cat.parentId)
-    if (parent?.parentId == null) secondaryCat = cat
     if (!period) period = detectPeriod(cat.title)
     if (cat.parentId) traverse(cat.parentId)
   }
@@ -72,8 +66,5 @@ export function findCategoryMeta(categoryId: number, map: Map<number, CategoryNo
   return {
     period: period ?? (rootCat ? rootCat.title : null),
     root: rootCat?.title ?? null,
-    secondary: secondaryCat?.title ?? null,
-    rootOrder: rootCat?.orderIndex ?? null,
-    secondaryOrder: secondaryCat?.orderIndex ?? null,
   }
 }

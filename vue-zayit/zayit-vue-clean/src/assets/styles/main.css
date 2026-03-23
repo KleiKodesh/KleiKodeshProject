@@ -3,7 +3,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 * { user-select: none; }
-.lines-content * { user-select: text; }
+.lines-content *, .commentary-view * { user-select: text; }
 
 html, body, #app { height: 100%; width: 100%; }
 

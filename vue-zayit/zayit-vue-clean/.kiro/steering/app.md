@@ -198,8 +198,6 @@ Junction tables: `bookId` + respective FK, composite PK.
 | bookId | INTEGER | FK → book |
 | lineIndex | INTEGER | not null |
 | content | TEXT | not null |
-| tocEntryId | INTEGER | nullable |
-| chunk_id | INTEGER | nullable |
 
 #### tocText
 `id` PK, `text` TEXT not null.
@@ -302,9 +300,9 @@ interface BookState { scrollIndex: number; scrollOffset: number; selectedLineId?
 
 **`book-last-read`** store — key: `bookId`, value: `LastReadState`
 ```ts
-interface LastReadState { scrollIndex: number; scrollOffset: number }
+interface LastReadState { scrollIndex: number; scrollOffset: number; selectedLineId?: number | null }
 ```
-Global resume position per book — written on every scroll save, used as fallback when no tab-specific state exists. Never auto-deleted.
+Global resume position per book — written on every scroll save, used as fallback when opening a book in a new tab or after the original tab was closed. Never auto-deleted. Both `book-state` and `book-last-read` are persisted across sessions; the difference is that `book-state` is tied to a specific tab (and wiped when that tab closes), while `book-last-read` is the cross-tab/cross-session fallback.
 
 | `tabStore` function | Description |
 |---|---|

@@ -32,6 +32,7 @@ export interface BookState {
 export interface LastReadState {
   scrollIndex: number
   scrollOffset: number
+  selectedLineId?: number | null
 }
 
 let db: IDBDatabase | null = null

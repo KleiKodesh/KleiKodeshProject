@@ -40,9 +40,6 @@ export const useBooksDataStore = defineStore('booksData', () => {
         if (!meta) { meta = findCategoryMeta(book.categoryId, categoryMap); metaCache.set(book.categoryId, meta) }
         book.period = meta.period ?? 'אחר'
         book.rootCategory = meta.root ?? undefined
-        book.secondaryCategory = meta.secondary ?? undefined
-        book.rootCategoryOrder = meta.rootOrder ?? undefined
-        book.secondaryCategoryOrder = meta.secondaryOrder ?? undefined
       }
 
       ROOT.value = { ...ROOT.value, children }

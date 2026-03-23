@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { onClickOutside } from '@vueuse/core'
-import { IconLineHorizontal320Regular, IconAdd20Regular, IconDismiss20Regular, IconHome20Regular, IconLayoutRowTwo20Regular, IconColor24Regular, IconColor24Filled } from '@iconify-prerendered/vue-fluent'
+import { IconLineHorizontal320Regular, IconAdd20Regular, IconDismiss20Regular, IconHome20Regular, IconOptions24Regular, IconOptions24Filled, IconColor24Regular, IconColor24Filled } from '@iconify-prerendered/vue-fluent'
 import ThemeToggle from '@/theme/ThemeToggle.vue'
 import AppTitleBarTabDropdown from './AppTitleBarTabDropdown.vue'
 import { useTabStore } from '@/stores/tabStore'
@@ -55,11 +55,11 @@ function goHome() {
             <button
         v-if="bookViewStore.isBookViewActive"
         class="bar-btn"
-        :class="{ active: bookViewStore.toolbarVisible }"
-        title="סרגל כלים"
+        :title="bookViewStore.toolbarVisible ? 'הסתר סרגל כלים' : 'הצג סרגל כלים'"
         @click.stop="bookViewStore.toggleToolbar"
       >
-        <IconLayoutRowTwo20Regular />
+        <IconOptions24Filled v-if="bookViewStore.toolbarVisible" />
+        <IconOptions24Regular v-else />
       </button>
       <button
         v-if="isPdfTab"

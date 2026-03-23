@@ -1,12 +1,18 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useScopedKeys } from '@/composables/useScopedKeys'
+import { useScopedCopy } from '@/composables/useScopedCopy'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import CommentaryHeader from './CommentaryHeader.vue'
 import CommentaryHeaderNav from './CommentaryHeaderNav.vue'
 import CommentaryTreePanel from './CommentaryTreePanel.vue'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
+import ContextMenu from '@/components/common/ContextMenu.vue'
+import type { ContextMenuItem } from '@/components/common/ContextMenu.vue'
 import type { CommentaryGroup, CommentaryTreeNode } from './useCommentary'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useBookViewStore } from '@/stores/bookViewStore'
+import { storeToRefs } from 'pinia'
 import { applyDiacriticsFilter, removeDiacriticsForSearch } from '@/utils/hebrewTextProcessing'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { scrollToIndexWithRetry } from '@/utils/scrollToIndexWithRetry'
@@ -15,6 +21,7 @@ const props = defineProps<{ selectedLineId: number | null; groups: CommentaryGro
 const emit = defineEmits<{ close: []; 'navigate-section': [direction: 'next' | 'prev', bookId: number]; 'open-book': [bookId: number, lineIndex: number]; 'toggle-search': [] }>()
 
 const settingsStore = useSettingsStore()
+const { zoom } = storeToRefs(useBookViewStore())
 const diacriticsState = computed(() => settingsStore.diacriticsState)
 
 function highlightMatches(content: string, query: string, isCurrent: boolean, currentOccurrence: number): string {
@@ -69,6 +76,15 @@ const flatItems = computed<FlatItem[]>(() => {
 const scrollerEl = ref<HTMLElement | null>(null)
 const scrollTop = ref(0)
 const treeVisible = ref(false)
+
+const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, { onCtrlF: () => emit('toggle-search') })
+useScopedCopy(scrollerEl, () => props.groups.flatMap(g => g.lines.map(l => l.content)), isSelectAll)
+
+const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
+const contextMenuItems: ContextMenuItem[] = [
+  { label: 'העתק', action: () => document.execCommand('copy') },
+  { label: 'בחר הכל', action: selectAllInContainer },
+]
 let treeInitiatedScroll = false
 
 function onTreeSelect(node: CommentaryTreeNode) {
@@ -140,6 +156,7 @@ defineExpose({ scrollToGroup, scrollToFlatIndex, topVisibleFlatIndex })
 
 <template>
   <div class="commentary-view">
+    <ContextMenu ref="contextMenuRef" :items="contextMenuItems" />
     <div v-if="props.loading" class="state-overlay"><LoadingAnimation /></div>
     <div v-else-if="!flatItems.length" class="state-overlay"><span class="hint">בחר שורה לצפייה בפרשנות</span></div>
     <template v-else>
@@ -150,7 +167,7 @@ defineExpose({ scrollToGroup, scrollToFlatIndex, topVisibleFlatIndex })
           :suppress-scroll="suppressTreeScroll"
           @select="onTreeSelect" />
         <div class="content-col">
-          <div ref="scrollerEl" class="scroller" @scroll="onScroll">
+          <div ref="scrollerEl" class="scroller" tabindex="0" :style="{ fontSize: `${zoom / 100 * 15}px` }" @scroll="onScroll" @contextmenu="contextMenuRef?.show($event)">
             <CommentaryHeaderNav v-if="activeHeader" class="sticky-nav"
               :groups="props.groups"
               :scroll-to-group="scrollToGroup"
@@ -192,7 +209,7 @@ defineExpose({ scrollToGroup, scrollToFlatIndex, topVisibleFlatIndex })
 .content-col { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
 .sticky-nav { position: sticky; top: 0; z-index: 2; height: 32px; }
 .scroller { flex: 1; overflow-y: auto; }
-.line { padding-inline: 12px; padding-block: 2px; font-size: 15px; line-height: 1.7; color: var(--text-primary); text-align: justify; user-select: text; }
+.line { padding-inline: 12px; padding-block: 2px; font-size: 1em; line-height: 1.7; color: var(--text-primary); text-align: justify; }
 .line :deep(mark.search-match) { background: rgba(255, 165, 0, 0.4); color: inherit; border-radius: 2px; }
 .line :deep(mark.search-match.current) { background: rgba(255, 165, 0, 0.9); color: #000; }
 </style>

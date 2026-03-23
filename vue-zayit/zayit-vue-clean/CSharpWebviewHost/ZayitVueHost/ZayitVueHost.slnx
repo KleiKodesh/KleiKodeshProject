@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="ZayitVueHost/ZayitVueHost.csproj" />
+  <Project Path="ZayitVueHostLib/ZayitVueHostLib.csproj" />
+</Solution>
