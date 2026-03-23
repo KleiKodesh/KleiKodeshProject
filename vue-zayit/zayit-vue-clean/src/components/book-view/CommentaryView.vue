@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch, nextTick } from 'vue'
 import { useScopedKeys } from '@/composables/useScopedKeys'
 import { useScopedCopy } from '@/composables/useScopedCopy'
 import { useVirtualizer } from '@tanstack/vue-virtual'
@@ -17,8 +17,8 @@ import { applyDiacriticsFilter, removeDiacriticsForSearch } from '@/utils/hebrew
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { scrollToIndexWithRetry } from '@/utils/scrollToIndexWithRetry'
 
-const props = defineProps<{ selectedLineId: number | null; groups: CommentaryGroup[]; loading: boolean; searchQuery?: string; currentMatchFlatIndex?: number; currentMatchOccurrence?: number }>()
-const emit = defineEmits<{ close: []; 'navigate-section': [direction: 'next' | 'prev', bookId: number]; 'open-book': [bookId: number, lineIndex: number]; 'toggle-search': [] }>()
+const props = defineProps<{ selectedLineId: number | null; groups: CommentaryGroup[]; loading: boolean; searchQuery?: string; currentMatchFlatIndex?: number; currentMatchOccurrence?: number; pinnedBookId?: number | null }>()
+const emit = defineEmits<{ close: []; 'navigate-section': [direction: 'next' | 'prev', bookId: number]; 'open-book': [bookId: number, lineIndex: number]; 'toggle-search': []; 'scroll': [scrollIndex: number, scrollOffset: number] }>()
 
 const settingsStore = useSettingsStore()
 const { zoom } = storeToRefs(useBookViewStore())
@@ -136,7 +136,21 @@ function scrollToGroup(bookId: number) {
   requestAnimationFrame(() => { scrollTop.value = scrollerEl.value?.scrollTop ?? 0 })
 }
 
-function onScroll() { scrollTop.value = scrollerEl.value?.scrollTop ?? 0 }
+function onScroll() {
+  scrollTop.value = scrollerEl.value?.scrollTop ?? 0
+  const pos = captureScrollPos()
+  if (pos) emit('scroll', pos.scrollIndex, pos.scrollOffset)
+}
+
+// When groups reload, scroll back to the pinned book (captured in parent before selectedLineId changes)
+watch(() => props.groups, async (newGroups) => {
+  const pinned = props.pinnedBookId
+  if (!pinned || !newGroups.length) return
+  if (newGroups.some(g => g.bookId === pinned)) {
+    await nextTick()
+    scrollToGroup(pinned)
+  }
+}, { flush: 'post' })
 
 const topVisibleFlatIndex = computed(() => {
   const st = scrollTop.value + NAV_HEIGHT
@@ -151,7 +165,22 @@ function scrollToFlatIndex(flatIndex: number) {
   scrollToIndexWithRetry(virtualizer.value, scrollerEl.value, flatIndex, -52)
 }
 
-defineExpose({ scrollToGroup, scrollToFlatIndex, topVisibleFlatIndex })
+function captureScrollPos(): { scrollIndex: number; scrollOffset: number } | null {
+  const first = virtualizer.value.getVirtualItems()[0]
+  if (!first || !scrollerEl.value) return null
+  return { scrollIndex: first.index, scrollOffset: scrollerEl.value.scrollTop - first.start }
+}
+
+async function restoreCommentaryScrollPos(scrollIndex: number, scrollOffset: number) {
+  virtualizer.value.scrollToIndex(scrollIndex, { align: 'start' })
+  await nextTick()
+  await new Promise(r => setTimeout(r, 500))
+  const item = virtualizer.value.getVirtualItems().find(v => v.index === scrollIndex)
+  if (scrollerEl.value) scrollerEl.value.scrollTop = (item?.start ?? scrollerEl.value.scrollTop) + scrollOffset
+  await new Promise(r => setTimeout(r, 600))
+}
+
+defineExpose({ scrollToGroup, scrollToFlatIndex, topVisibleFlatIndex, activeBookId, captureScrollPos, restoreCommentaryScrollPos })
 </script>
 
 <template>

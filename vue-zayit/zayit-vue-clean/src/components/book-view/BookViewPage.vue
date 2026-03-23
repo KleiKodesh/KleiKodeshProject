@@ -204,12 +204,44 @@ onMounted(async () => {
     const bookSaved = await tabStore.getBookViewState(tabId, bookId)
     const lastRead = await tabStore.getLastReadPos(bookId)
     const restoredLineId = bookSaved?.selectedLineId ?? lastRead?.selectedLineId
+    const si = bookSaved?.commentaryScrollIndex ?? lastRead?.commentaryScrollIndex
+    const so = bookSaved?.commentaryScrollOffset ?? lastRead?.commentaryScrollOffset
     if (restoredLineId != null) { selectedLineId.value = restoredLineId; bottomVisible.value = true }
+    if (si != null && so != null) {
+      const stop = watch(commentaryLoading, async (loading) => {
+        if (loading) return
+        stop()
+        await nextTick()
+        if (commentaryViewRef.value) {
+          commentaryViewRef.value.restoreCommentaryScrollPos(si, so)
+        } else {
+          const stopRef = watch(commentaryViewRef, (ref) => {
+            if (!ref) return
+            stopRef()
+            ref.restoreCommentaryScrollPos(si, so)
+          })
+        }
+      }, { flush: 'sync' })
+    }
   }
 })
 
 onBeforeUnmount(() => tabStore.updateActiveTab({ tocPath: undefined }))
 
+const pinnedCommentaryBookId = ref<number | null>(null)
+const commentaryScrollIndex = ref<number | null>(null)
+const commentaryScrollOffset = ref<number | null>(null)
+
+function onCommentaryScroll(si: number, so: number) {
+  commentaryScrollIndex.value = si
+  commentaryScrollOffset.value = so
+}
+
+watch(selectedLineId, () => {
+  if (commentaryViewRef.value?.activeBookId) {
+    pinnedCommentaryBookId.value = commentaryViewRef.value.activeBookId
+  }
+})
 watch(bottomVisible, val => tabStore.setTabViewState(tabId, { bottomVisible: val, tocVisible: tocVisible.value }))
 watch(tocVisible, val => tabStore.setTabViewState(tabId, { bottomVisible: bottomVisible.value, tocVisible: val }))
 watch(searchVisible, v => { if (!v) { contentSearch.clear(); commentarySearch.clear() } })
@@ -232,6 +264,8 @@ watch(searchVisible, v => { if (!v) { contentSearch.clear(); commentarySearch.cl
           <BookViewLinesContent ref="linesContentRef"
             :alt-toc-label-map="altTocLabelMap" :selected-line-id="selectedLineId"
             :bottom-visible="bottomVisible" :initial-line-index="initialLineIndex"
+            :commentary-scroll-index="commentaryScrollIndex"
+            :commentary-scroll-offset="commentaryScrollOffset"
             :search-query="searchMode === 'content' ? contentSearch.query.value : ''"
             :current-match-line-index="searchMode === 'content' ? contentSearch.currentMatchLineIndex.value : undefined"
             :current-match-occurrence="searchMode === 'content' ? contentSearch.currentMatchOccurrence.value : undefined"
@@ -241,10 +275,12 @@ watch(searchVisible, v => { if (!v) { contentSearch.clear(); commentarySearch.cl
         <template #bottom>
           <CommentaryView ref="commentaryViewRef"
             :selected-line-id="selectedLineId" :groups="groups" :loading="commentaryLoading"
+            :pinned-book-id="pinnedCommentaryBookId"
             :search-query="searchMode === 'commentary' ? commentarySearch.query.value : ''"
             :current-match-flat-index="searchMode === 'commentary' ? commentarySearch.currentMatchFlatIndex.value : undefined"
             :current-match-occurrence="searchMode === 'commentary' ? commentarySearch.currentMatchOccurrence.value : undefined"
             @close="bottomVisible = false" @navigate-section="onNavigateSection"
+            @scroll="onCommentaryScroll"
             @toggle-search="openSearch('commentary'); nextTick(() => searchBarRef?.focus())"
             @open-book="(bookId, lineIndex) => tabStore.openTab({ title: groups.find(g => g.bookId === bookId)?.bookTitle ?? '', route: '/book-view', bookId, openTocLineIndex: lineIndex })" />
         </template>

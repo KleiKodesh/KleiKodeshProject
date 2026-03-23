@@ -83,11 +83,11 @@ export const useTabStore = defineStore('tabs', () => {
 
   // ── Global last-read position per book (IndexedDB) ───────────────────────────
 
-  function getLastReadPos(bookId: number): Promise<{ scrollIndex: number; scrollOffset: number; selectedLineId?: number | null } | null> {
+  function getLastReadPos(bookId: number): Promise<{ scrollIndex: number; scrollOffset: number; selectedLineId?: number | null; commentaryScrollIndex?: number | null; commentaryScrollOffset?: number | null } | null> {
     return getLastRead(bookId)
   }
 
-  function setLastReadPos(bookId: number, pos: { scrollIndex: number; scrollOffset: number; selectedLineId?: number | null }): Promise<void> {
+  function setLastReadPos(bookId: number, pos: { scrollIndex: number; scrollOffset: number; selectedLineId?: number | null; commentaryScrollIndex?: number | null; commentaryScrollOffset?: number | null }): Promise<void> {
     return setLastRead(bookId, pos)
   }
 

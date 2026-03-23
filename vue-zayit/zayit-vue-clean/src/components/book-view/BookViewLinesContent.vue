@@ -20,6 +20,8 @@ const props = defineProps<{
   altTocLabelMap?: Map<number, string>
   selectedLineId?: number | null
   bottomVisible?: boolean
+  commentaryScrollIndex?: number | null
+  commentaryScrollOffset?: number | null
   searchQuery?: string
   currentMatchLineIndex?: number
   currentMatchOccurrence?: number
@@ -160,8 +162,8 @@ function savePos() {
   if (restoring.value) return
   const pos = captureScrollPos()
   if (pos) {
-    tabStore.setBookViewState(tabId, bookId, { ...pos, selectedLineId: props.selectedLineId })
-    tabStore.setLastReadPos(bookId, { ...pos, selectedLineId: props.selectedLineId })
+    tabStore.setBookViewState(tabId, bookId, { ...pos, selectedLineId: props.selectedLineId, commentaryScrollIndex: props.commentaryScrollIndex, commentaryScrollOffset: props.commentaryScrollOffset })
+    tabStore.setLastReadPos(bookId, { ...pos, selectedLineId: props.selectedLineId, commentaryScrollIndex: props.commentaryScrollIndex, commentaryScrollOffset: props.commentaryScrollOffset })
   }
 }
 
@@ -176,6 +178,11 @@ function onScroll() {
 }
 
 watch(() => props.selectedLineId, () => {
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = setTimeout(savePos, 100)
+})
+
+watch(() => [props.commentaryScrollIndex, props.commentaryScrollOffset], () => {
   if (saveTimer) clearTimeout(saveTimer)
   saveTimer = setTimeout(savePos, 100)
 })
@@ -213,7 +220,7 @@ onBeforeUnmount(() => {
   if (saveTimer) clearTimeout(saveTimer)
   if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer)
   const pos = captureScrollPos()
-  if (pos) { tabStore.setBookViewState(tabId, bookId, { ...pos, selectedLineId: props.selectedLineId }); tabStore.setLastReadPos(bookId, { ...pos, selectedLineId: props.selectedLineId }) }
+  if (pos) { tabStore.setBookViewState(tabId, bookId, { ...pos, selectedLineId: props.selectedLineId, commentaryScrollIndex: props.commentaryScrollIndex, commentaryScrollOffset: props.commentaryScrollOffset }); tabStore.setLastReadPos(bookId, { ...pos, selectedLineId: props.selectedLineId, commentaryScrollIndex: props.commentaryScrollIndex, commentaryScrollOffset: props.commentaryScrollOffset }) }
   else tabStore.clearBookViewState(tabId, bookId)
 })
 defineExpose({ scrollToLineId, scrollToLineIndex })
