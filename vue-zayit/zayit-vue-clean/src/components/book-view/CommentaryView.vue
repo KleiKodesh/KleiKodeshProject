@@ -16,6 +16,7 @@ import { storeToRefs } from 'pinia'
 import { applyDiacriticsFilter, removeDiacriticsForSearch } from '@/utils/hebrewTextProcessing'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { scrollToIndexWithRetry } from '@/utils/scrollToIndexWithRetry'
+import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 
 const props = defineProps<{ selectedLineId: number | null; groups: CommentaryGroup[]; loading: boolean; searchQuery?: string; currentMatchFlatIndex?: number; currentMatchOccurrence?: number; pinnedBookId?: number | null }>()
 const emit = defineEmits<{ close: []; 'navigate-section': [direction: 'next' | 'prev', bookId: number]; 'open-book': [bookId: number, lineIndex: number]; 'toggle-search': []; 'scroll': [scrollIndex: number, scrollOffset: number] }>()
@@ -79,6 +80,11 @@ const treeVisible = ref(false)
 
 const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, { onCtrlF: () => emit('toggle-search') })
 useScopedCopy(scrollerEl, () => props.groups.flatMap(g => g.lines.map(l => l.content)), isSelectAll)
+useVirtualScrollerKeys(
+  scrollerEl,
+  () => virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
+  () => flatItems.value.length,
+)
 
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
 const contextMenuItems: ContextMenuItem[] = [

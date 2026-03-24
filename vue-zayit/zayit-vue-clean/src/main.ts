@@ -1,7 +1,6 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
-import router from './router'
 import './assets/styles/main.css'
 import { useWorkspaceStore } from './stores/workspaceStore'
 import { useTabStore } from './stores/tabStore'
@@ -12,7 +11,7 @@ import { loadCustomThemes, initPdfThemeObserver } from './theme/themes'
 import { useBooksDataStore } from './stores/booksDataStore'
 
 const pinia = createPinia()
-const app = createApp(App).use(pinia).use(router)
+const app = createApp(App).use(pinia)
 
 // workspaceStore must init first — tabStore depends on activeId
 await useWorkspaceStore().init()

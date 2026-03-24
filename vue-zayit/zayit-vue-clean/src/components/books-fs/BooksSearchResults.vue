@@ -4,6 +4,7 @@ import { useVirtualizer } from '@tanstack/vue-virtual'
 import { IconBook20Filled } from '@iconify-prerendered/vue-fluent'
 import type { SearchFsItem, TocFsItem } from './useBooksFsSearch'
 import type { BookRow } from './booksFsTree'
+import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 
 const props = defineProps<{ items: SearchFsItem[]; view: 'list' | 'tiles' | 'tree' }>()
 const emit = defineEmits<{ selectBook: [BookRow]; selectToc: [TocFsItem] }>()
@@ -16,6 +17,12 @@ const virtualizer = useVirtualizer(computed(() => ({
   overscan: 10,
 })))
 
+useVirtualScrollerKeys(
+  scrollEl,
+  () => virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
+  () => props.view !== 'tiles' ? props.items.length : 0,
+)
+
 const itemTitle = (item: SearchFsItem) =>
   item.kind === 'toc' ? `${item.book.title} / ${item.tocPath}` : item.book.title
 
@@ -26,7 +33,7 @@ function onSelect(item: SearchFsItem) {
 
 <template>
   <p v-if="!items.length" class="empty">אין תוצאות</p>
-  <div v-else-if="view !== 'tiles'" ref="scrollEl" class="scroller">
+  <div v-else-if="view !== 'tiles'" ref="scrollEl" class="scroller" tabindex="0">
     <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
       <div v-for="vRow in virtualizer.getVirtualItems()" :key="String(vRow.key)"
         :style="{ position: 'absolute', top: 0, left: 0, right: 0, transform: `translateY(${vRow.start}px)` }">

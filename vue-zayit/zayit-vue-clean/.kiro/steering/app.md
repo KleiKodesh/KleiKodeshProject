@@ -134,13 +134,13 @@ Both `CommentaryHeader` and `CommentaryHeaderNav` use `background: var(--bg-prim
 
 ## Database
 
-- All SQLite access goes through `src/db/db.ts` — never call fetch against the DB from a component or composable
-- All raw SQL strings live in `src/db/queries.sql.ts` — no inline SQL anywhere else
+- All SQLite access goes through `src/host/db.ts` — never call fetch against the DB from a component or composable
+- All raw SQL strings live in `src/host/queries.sql.ts` — no inline SQL anywhere else
 - Feature composables call `query()` with strings from `queries.sql.ts`
 
 ```ts
-import { query } from '@/db/db'
-import { SQL } from '@/db/queries.sql'
+import { query } from '@/host/db'
+import { SQL } from '@/host/queries.sql'
 
 const books = await query<Book>(SQL.GET_ALL_BOOKS)
 ```
@@ -322,3 +322,49 @@ Always use `tabStore.setLastReadPos()` — it calls `idbSetLastRead()` which enf
 - Always anchor the top-left corner of a dropdown to the left edge of its toggle — `position: absolute; top: calc(100% + 4px); left: 0` — so it flows rightward and stays within the viewport naturally
 - Never anchor to `right: 0` (that would push it off the left edge of the screen in RTL)
 - Extract every dropdown to its own component — never inline dropdown markup in a parent component
+
+## Virtual Scroller Keyboard Navigation
+
+Every component that uses `useVirtualizer` from `@tanstack/vue-virtual` **must** wire up `useVirtualScrollerKeys` from `@/composables/useVirtualScrollerKeys`.
+
+```ts
+import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
+
+useVirtualScrollerKeys(
+  scrollerEl,
+  () => virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
+  () => items.value.length,
+)
+```
+
+- The scroll container element must have `tabindex="0"` so it can receive keyboard focus.
+- Ctrl+Home scrolls to the first item then sets `scrollTop = 0`.
+- Ctrl+End scrolls to the last item then sets `scrollTop = scrollHeight`.
+- The composable uses `useEventListener` from VueUse and cleans up automatically.
+
+## C# Backend
+
+- Target framework: .NET 4.8, C# 7.3 — no C# 8+ features
+- No `using` declarations (use `using` statements with braces)
+- No switch expressions (use `if/else` chains)
+- No nullable reference types, no records, no default interface members
+
+### Build pipeline
+- Vue builds as a **single-file bundle** via `vite-plugin-singlefile` — all JS/CSS is inlined into one `index.html`, no separate `assets/` folder
+- `ZayitVue.targets` is imported by the `.csproj` and runs `npm run build` after every C# build, then copies `dist/` to `bin/{Config}/kezayit/` via robocopy
+- After any Vue code change, **rebuild the C# project** to get the fresh bundle into `kezayit/` — the WebView serves from that folder
+- If the category tree or any data appears stuck loading in C# mode but works in dev, it is almost always a stale `kezayit/index.html` — rebuild C# first before debugging further
+
+### File picker / dialog rules
+- `WebMessageReceived` fires on the UI thread — calling `Invoke` from inside it deadlocks (the UI thread is already busy)
+- Always use `BeginInvoke` to show any dialog from a message handler — it queues the dialog to run after the handler returns
+- The reply callback fires from inside the `BeginInvoke` delegate, after the user closes the dialog — this is fine, the JS Promise just waits
+- For dialogs that need to send a result back to JS: use a `TaskCompletionSource<bool>` so the RPC `await handler(...)` waits for the dialog to close before the scope exits — otherwise the reply is sent after the message dispatch scope is gone
+
+## C# Host UI in Dev Mode
+
+- All UI that is conditional on running inside the C# WebView host (`isHosted`) must also be visible in browser dev mode
+- `isHosted` and `dbReady` are exported from `src/host/db.ts` as module-level constants/refs — import them from there, never recompute locally in components
+- `isHosted = window.__webviewDbReady !== undefined || import.meta.env.DEV`
+- `dbReady` is a `ref<boolean>` — set to `true` when the user picks a valid DB file; the `__onDbPathPicked` callback in `db.ts` handles this automatically
+- Never use `typeof window.__webviewPickDbPath === 'function'` for host detection — the bridge registers those functions at Vue boot time, which is too late for module-level const evaluation

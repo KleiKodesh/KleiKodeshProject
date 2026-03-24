@@ -1,4 +1,5 @@
 import { computed, ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { refDebounced } from '@vueuse/core'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useBooksFsSearch } from './useBooksFsSearch'
@@ -9,9 +10,10 @@ export type FsItem = { uid: string; kind: 'folder'; node: CategoryNode } | { uid
 
 export function useBooksFs() {
   const store = useBooksDataStore()
-  const path = ref<CategoryNode[]>([store.ROOT])
+  const { loading, error, ROOT } = storeToRefs(store)
+  const path = ref<CategoryNode[]>([ROOT.value])
 
-  watch(() => store.ROOT, (root) => {
+  watch(ROOT, (root) => {
     path.value = path.value.length === 1 ? [root] : [root, ...path.value.slice(1)]
   }, { immediate: true })
 
@@ -31,8 +33,7 @@ export function useBooksFs() {
   function navigateTo(index: number) { path.value = path.value.slice(0, index + 1); searchQuery.value = '' }
 
   return {
-    loading: store.loading,
-    error: store.error,
+    loading, error,
     path, searchQuery, isSearching, treeItems, searchItems, tocSearching,
     load: store.ensureLoaded, enter, navigateTo,
   }

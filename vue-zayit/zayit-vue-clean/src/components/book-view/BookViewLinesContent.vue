@@ -15,6 +15,7 @@ import { useEventListener } from '@vueuse/core'
 import { useScopedKeys } from '@/composables/useScopedKeys'
 import { useScopedCopy } from '@/composables/useScopedCopy'
 import { scrollToIndexWithRetry } from '@/utils/scrollToIndexWithRetry'
+import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 
 const emit = defineEmits<{ scrolled: [number]; lineSelected: [number]; 'ctrl-f': [] }>()
 const props = defineProps<{
@@ -82,6 +83,11 @@ const restoring = ref(false)
 
 const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, { onCtrlF: () => emit('ctrl-f') })
 useScopedCopy(scrollerEl, () => lines.value.map(l => l.content ?? '').filter(Boolean), isSelectAll)
+useVirtualScrollerKeys(
+  scrollerEl,
+  () => virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
+  () => lines.value.length,
+)
 
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
 const contextMenuItems: ContextMenuItem[] = [

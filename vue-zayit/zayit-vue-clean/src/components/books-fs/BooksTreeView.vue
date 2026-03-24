@@ -4,6 +4,7 @@ import { useVirtualizer } from '@tanstack/vue-virtual'
 import { IconBook20Filled, IconFolderOpen20Filled } from '@iconify-prerendered/vue-fluent'
 import type { FsItem } from './useBooksFs'
 import type { CategoryNode, BookRow } from './booksFsTree'
+import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 
 const props = defineProps<{ items: FsItem[]; view: 'list' | 'tiles' }>()
 const emit = defineEmits<{ selectBook: [BookRow]; enterFolder: [CategoryNode] }>()
@@ -16,6 +17,12 @@ const virtualizer = useVirtualizer(computed(() => ({
   overscan: 10,
 })))
 
+useVirtualScrollerKeys(
+  scrollEl,
+  () => virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
+  () => props.view === 'list' ? props.items.length : 0,
+)
+
 function onClickItem(item: FsItem) {
   item.kind === 'folder' ? emit('enterFolder', item.node) : emit('selectBook', item.book)
 }
@@ -27,7 +34,7 @@ function getTitle(item: FsItem) {
 
 <template>
   <p v-if="!items.length" class="empty">אין פריטים</p>
-  <div v-else-if="view === 'list'" ref="scrollEl" class="scroller">
+  <div v-else-if="view === 'list'" ref="scrollEl" class="scroller" tabindex="0">
     <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
       <div v-for="vRow in virtualizer.getVirtualItems()" :key="String(vRow.key)"
         :style="{ position: 'absolute', top: 0, left: 0, right: 0, transform: `translateY(${vRow.start}px)`, height: `${vRow.size}px` }">

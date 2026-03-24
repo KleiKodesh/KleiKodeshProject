@@ -43,7 +43,7 @@ export function useGridLayout(containerRef: Ref<HTMLElement | null>, count: Ref<
   onMounted(() => {
     if (!containerRef.value) return
     ro = new ResizeObserver(([entry]) => {
-      containerWidth.value = entry.contentRect.width
+      if (entry) containerWidth.value = entry.contentRect.width
     })
     ro.observe(containerRef.value)
   })

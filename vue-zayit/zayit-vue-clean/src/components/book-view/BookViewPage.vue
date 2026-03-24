@@ -10,6 +10,8 @@ import { useCommentary } from './useCommentary'
 import { useBookViewSearch } from './useBookViewSearch'
 import { useCommentarySearch } from './useCommentarySearch'
 import { findNextCommentarySection, findPrevCommentarySection, findNextTocCommentarySection, findPrevTocCommentarySection } from '@/utils/commentaryNav'
+import { query } from '@/host/db'
+import { SQL } from '@/host/queries.sql'
 import BookViewToolbar from './BookViewToolbar.vue'
 import BookViewSplitPane from './BookViewSplitPane.vue'
 import BookViewLinesContent from './BookViewLinesContent.vue'
@@ -232,6 +234,14 @@ const pinnedCommentaryBookId = ref<number | null>(null)
 const commentaryScrollIndex = ref<number | null>(null)
 const commentaryScrollOffset = ref<number | null>(null)
 
+// Fetch the first default commentator for this book (used as initial pin when no user selection exists)
+let defaultCommentatorBookId: number | null = null
+if (bookId != null) {
+  query<{ commentatorBookId: number }>(SQL.GET_DEFAULT_COMMENTATOR, [bookId]).then(rows => {
+    defaultCommentatorBookId = rows[0]?.commentatorBookId ?? null
+  })
+}
+
 function onCommentaryScroll(si: number, so: number) {
   commentaryScrollIndex.value = si
   commentaryScrollOffset.value = so
@@ -240,6 +250,8 @@ function onCommentaryScroll(si: number, so: number) {
 watch(selectedLineId, () => {
   if (commentaryViewRef.value?.activeBookId) {
     pinnedCommentaryBookId.value = commentaryViewRef.value.activeBookId
+  } else if (defaultCommentatorBookId != null) {
+    pinnedCommentaryBookId.value = defaultCommentatorBookId
   }
 })
 watch(bottomVisible, val => tabStore.setTabViewState(tabId, { bottomVisible: val }))

@@ -1,6 +1,6 @@
 import { ref, watch } from 'vue'
-import { query } from '@/db/db'
-import { SQL } from '@/db/queries.sql'
+import { query } from '@/host/db'
+import { SQL } from '@/host/queries.sql'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import type { BookRow } from '@/components/books-fs/booksFsTree'
 

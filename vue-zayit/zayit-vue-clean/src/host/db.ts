@@ -1,6 +1,24 @@
+import { ref } from 'vue'
+
 declare global {
   interface Window {
     __webviewQuery?: (sql: string, params: unknown[]) => Promise<{ rows: unknown[] }>
+    __webviewPickDbPath?: () => void
+    __webviewSetDbPath?: (path: string) => Promise<void>
+    __webviewDbPath?: string
+    __webviewDbReady?: boolean
+    __onDbPathPicked?: ((path: string) => void) | null
+  }
+}
+
+export const isHosted = window.__webviewDbReady !== undefined || import.meta.env.DEV
+export const dbReady  = ref(isHosted ? (window.__webviewDbReady ?? import.meta.env.DEV) : true)
+
+// Register the callback once at module load — no component lifecycle needed
+if (isHosted) {
+  window.__onDbPathPicked = (path: string) => {
+    console.log('[db.ts] __onDbPathPicked called, path=', path)
+    dbReady.value = true
   }
 }
 

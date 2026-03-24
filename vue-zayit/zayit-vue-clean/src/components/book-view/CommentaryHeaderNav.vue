@@ -90,7 +90,7 @@ function handleKeydown(e: KeyboardEvent) {
     <div class="sep" />
     <button class="btn c-pointer hover-bg" title="חיפוש במפרשים" @click.stop="emit('toggle-search')"><IconSearch20Regular /></button>
     <button class="btn c-pointer hover-bg" title="פתח ספר זה בלשונית חדשה" @click.stop="openActiveBook()"><IconBookOpen20Regular /></button>
-    <button class="btn c-pointer hover-bg" title="סגור חלונית מפרשים" @click.stop="emit('close')"><IconMinimize20Regular /></button>
+    <button class="btn c-pointer hover-bg close-btn" title="סגור חלונית מפרשים" @click.stop="emit('close')"><IconMinimize20Regular /></button>
   </div>
 </template>
 
@@ -106,4 +106,5 @@ function handleKeydown(e: KeyboardEvent) {
 .search-input { width: 100%; height: 20px; padding-inline: 6px 22px; border: none; border-radius: 6px; background: color-mix(in srgb, var(--text-secondary) 10%, transparent); color: var(--text-primary); font-size: 11px; outline: none; appearance: none; -webkit-appearance: none; }
 .search-input::-webkit-calendar-picker-indicator, .search-input::-webkit-list-button { display: none; opacity: 0; pointer-events: none; }
 .search-input:focus { background: color-mix(in srgb, var(--text-secondary) 15%, transparent); }
+.close-btn { margin-inline-start: auto; }
 </style>

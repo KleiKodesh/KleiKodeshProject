@@ -1,5 +1,5 @@
-import { query } from '@/db/db'
-import { SQL } from '@/db/queries.sql'
+import { query } from '@/host/db'
+import { SQL } from '@/host/queries.sql'
 import type { TocEntry } from '@/components/book-view/useToc'
 
 export interface SectionNavResult { id: number; lineIndex: number }

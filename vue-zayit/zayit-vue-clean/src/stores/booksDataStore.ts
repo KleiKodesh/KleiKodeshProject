@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { query } from '@/db/db'
-import { SQL } from '@/db/queries.sql'
+import { query } from '@/host/db'
+import { SQL } from '@/host/queries.sql'
 import { buildTree, assignFullPaths, findCategoryMeta } from '@/components/books-fs/booksFsTree'
 import type { CategoryNode, CategoryRow, BookRow } from '@/components/books-fs/booksFsTree'
 

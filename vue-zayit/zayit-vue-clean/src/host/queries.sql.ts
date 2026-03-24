@@ -125,6 +125,15 @@ export const SQL = {
     LIMIT 1
   `,
 
+  /** First default commentator for a book (lowest position) */
+  GET_DEFAULT_COMMENTATOR: `
+    SELECT commentatorBookId
+    FROM default_commentator
+    WHERE bookId = ?
+    ORDER BY position ASC
+    LIMIT 1
+  `,
+
   /** Next toc entry (by lineIndex) whose section contains a link to a given commentary book */
   HAS_COMMENTARY_IN_RANGE: `
     SELECT 1

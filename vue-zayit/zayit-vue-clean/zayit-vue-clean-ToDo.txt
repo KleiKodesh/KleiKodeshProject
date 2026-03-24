@@ -11,3 +11,5 @@ settings דף ברירית המחדל
 search i snot highlugting current and civering search perbombkm
 better naming of tabs
 hebrewbooks search ui blocking
+hover over tiles is boring
+reading settings aply to searchpag
