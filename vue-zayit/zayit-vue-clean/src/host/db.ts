@@ -4,7 +4,7 @@ declare global {
   interface Window {
     __webviewQuery?: (sql: string, params: unknown[]) => Promise<{ rows: unknown[] }>
     __webviewPickDbPath?: () => void
-    __webviewSetDbPath?: (path: string) => Promise<void>
+    __webviewSetDbPath?: (path: string) => Promise<{ path: string }>
     __webviewDbPath?: string
     __webviewDbReady?: boolean
     __onDbPathPicked?: ((path: string) => void) | null
@@ -14,11 +14,17 @@ declare global {
 export const isHosted = window.__webviewDbReady !== undefined || import.meta.env.DEV
 export const dbReady  = ref(isHosted ? (window.__webviewDbReady ?? import.meta.env.DEV) : true)
 
+// Called by both the file-picker push event and the manual setDbPath flow
+export function onDbReady(path: string) {
+  window.__webviewDbPath = path
+  dbReady.value = true
+}
+
 // Register the callback once at module load — no component lifecycle needed
 if (isHosted) {
   window.__onDbPathPicked = (path: string) => {
     console.log('[db.ts] __onDbPathPicked called, path=', path)
-    dbReady.value = true
+    onDbReady(path)
   }
 }
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { onClickOutside } from '@vueuse/core'
+import { onClickOutside, useEventListener } from '@vueuse/core'
 import { IconLineHorizontal320Regular, IconAdd20Regular, IconDismiss20Regular, IconHome20Regular, IconOptions24Regular, IconOptions24Filled, IconColor24Regular, IconColor24Filled } from '@iconify-prerendered/vue-fluent'
 import ThemeToggle from '@/theme/ThemeToggle.vue'
 import AppTitleBarTabDropdown from './AppTitleBarTabDropdown.vue'
@@ -47,6 +47,19 @@ function goHome() {
     tabStore.updateActiveTab({ route: '/', title: 'בית' })
   }
 }
+
+useEventListener('keydown', (e: KeyboardEvent) => {
+  if (e.ctrlKey && e.key === 'w') {
+    e.preventDefault()
+    tabStore.closeTab(tabStore.activeTabId)
+  } else if (e.ctrlKey && e.key === 'x') {
+    e.preventDefault()
+    tabStore.closeAllTabs()
+  } else if (e.ctrlKey && e.key === 'b') {
+    e.preventDefault()
+    if (bookViewStore.isBookViewActive) bookViewStore.toggleBottomPanel()
+  }
+})
 </script>
 
 <template>

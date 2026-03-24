@@ -255,6 +255,7 @@ watch(selectedLineId, () => {
   }
 })
 watch(bottomVisible, val => tabStore.setTabViewState(tabId, { bottomVisible: val }))
+watch(() => bookViewStore.toggleBottomPanelSignal, () => { bottomVisible.value = !bottomVisible.value })
 watch(tocVisible, () => { /* tocVisible is local only — not persisted */ })
 watch(searchVisible, v => { if (!v) { contentSearch.clear(); commentarySearch.clear() } })
 </script>

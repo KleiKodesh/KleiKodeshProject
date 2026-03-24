@@ -2,6 +2,7 @@
 import { ref, nextTick } from 'vue'
 import { IconFolderOpen20Regular } from '@iconify-prerendered/vue-fluent'
 import { useSettingsPage } from './useSettingsPage'
+import { onDbReady } from '@/host/db'
 import SettingRow from './SettingRow.vue'
 import SliderSetting from './SliderSetting.vue'
 import ToggleGroup from './ToggleGroup.vue'
@@ -28,9 +29,8 @@ const dbPath = ref(window.__webviewDbPath ?? '')
 const editingPath = ref(false)
 const pathInputRef = ref<HTMLInputElement | null>(null)
 
-async function pickDbPath() {
-  const result = await window.__webviewPickDbPath!()
-  // page reloads on success — nothing to update
+function pickDbPath() {
+  window.__webviewPickDbPath?.()
 }
 
 function startEditing() {
@@ -42,8 +42,8 @@ async function commitPath() {
   editingPath.value = false
   if (!window.__webviewSetDbPath) return
   try {
-    await window.__webviewSetDbPath(dbPath.value)
-    // page reloads on success
+    const result = await window.__webviewSetDbPath(dbPath.value)
+    onDbReady(dbPath.value)
   } catch (e) {
     // path was invalid — revert display to last known good value
     dbPath.value = window.__webviewDbPath ?? ''

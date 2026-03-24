@@ -127,6 +127,18 @@ export const useTabStore = defineStore('tabs', () => {
     if (tabs.value.some(t => t.id === id)) activeTabId.value = id
   }
 
+  function closeAllTabs() {
+    const wsId = useWorkspaceStore().activeId
+    for (const tab of tabs.value) {
+      if (tab.pdfBlobUrl) URL.revokeObjectURL(tab.pdfBlobUrl)
+      idbDelete(KEYS.tab(wsId, tab.id))
+      idbDeleteByPrefix(KEYS.tabPrefix(wsId, tab.id))
+    }
+    const home: Tab = { id: String(++nextId), title: 'בית', route: '/' }
+    tabs.value = [home]
+    activeTabId.value = home.id
+  }
+
   function closeTab(id: string) {
     const idx = tabs.value.findIndex(t => t.id === id)
     if (idx === -1) return
@@ -171,7 +183,7 @@ export const useTabStore = defineStore('tabs', () => {
   return {
     tabs, activeTabId, activeTab,
     init,
-    openTab, switchTab, closeTab, updateActiveTab, openNewHomeTab, navigateToSingleton,
+    openTab, switchTab, closeTab, closeAllTabs, updateActiveTab, openNewHomeTab, navigateToSingleton,
     getBooksView, setBooksView,
     getLastReadPos, setLastReadPos,
     getTabViewState, setTabViewState,
