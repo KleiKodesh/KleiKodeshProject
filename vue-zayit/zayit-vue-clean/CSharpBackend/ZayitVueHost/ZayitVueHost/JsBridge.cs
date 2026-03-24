@@ -1,11 +1,13 @@
-namespace ZayitVueHost.viewer
+namespace ZayitVueHost
 {
     /// <summary>
     /// JavaScript injected before the Vue app loads.
-    /// Registers window.__webviewQuery, __webviewPickDbPath, and __webviewSetDbPath
-    /// as Promise-based wrappers over the WebView2 postMessage channel.
+    /// Exposes three Promise-based functions on window:
+    ///   __webviewQuery(sql, params)  — run a SQL query
+    ///   __webviewSetDbPath(path)     — set the DB path programmatically
+    ///   __webviewPickDbPath()        — open the native file picker
     /// </summary>
-    internal static class WebViewBridge
+    internal static class JsBridge
     {
         public const string Script = @"
 (function () {
@@ -14,15 +16,17 @@ namespace ZayitVueHost.viewer
 
     window.chrome.webview.addEventListener('message', function (e) {
         const msg = e.data;
+
+        // dbPathPicked is a push event, not a reply to a pending call
         if (msg.event === 'dbPathPicked') {
             if (typeof window.__onDbPathPicked === 'function') window.__onDbPathPicked(msg.path);
             return;
         }
-        const callbacks = pending.get(msg.id);
-        if (!callbacks) return;
+
+        const cb = pending.get(msg.id);
+        if (!cb) return;
         pending.delete(msg.id);
-        msg.error ? callbacks.reject(new Error(msg.error))
-                  : callbacks.resolve(msg);
+        msg.error ? cb.reject(new Error(msg.error)) : cb.resolve(msg);
     });
 
     window.__onDbPathPicked = null;
@@ -36,8 +40,8 @@ namespace ZayitVueHost.viewer
     }
 
     window.__webviewQuery      = function (sql, params) { return post({ sql: sql, params: params || [] }).then(function (m) { return { rows: m.rows }; }); };
-    window.__webviewPickDbPath = function ()             { return post({ action: 'pickDbPath' }); };
     window.__webviewSetDbPath  = function (path)         { return post({ action: 'setDbPath', path: path }); };
+    window.__webviewPickDbPath = function ()             { return post({ action: 'pickDbPath' }); };
 })();";
     }
 }
