@@ -342,6 +342,15 @@ useVirtualScrollerKeys(
 - Ctrl+End scrolls to the last item then sets `scrollTop = scrollHeight`.
 - The composable uses `useEventListener` from VueUse and cleans up automatically.
 
+## HebrewBooks Downloads
+
+- HebrewBooks blocks direct HTTP downloads — all downloads **must go through the WebView2 browser engine**
+- Never use `HttpClient` or any direct HTTP fetch to download HebrewBooks PDFs
+- The download URL format is: `https://download.hebrewbooks.org/downloadhandler.ashx?req={bookId}`
+- C# intercepts the browser download via `DownloadStarting` event and redirects the file path
+- Open-in-viewer: redirect to cache folder, suppress dialog, push `hbPdfReady` event when complete
+- Save As: show native `SaveFileDialog` to let user pick destination, browser handles the actual download
+
 ## C# Backend
 
 - Target framework: .NET 4.8, C# 7.3 — no C# 8+ features

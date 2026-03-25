@@ -10,6 +10,7 @@ import { usePdfStore } from '@/stores/pdfStore'
 import { useTabStore } from '@/stores/tabStore'
 import { useGridLayout } from '@/composables/useGridLayout'
 import { isHosted, dbReady } from '@/host/db'
+import { pickFile } from '@/host/bridge'
 
 const pdfStore = usePdfStore()
 const tabStore = useTabStore()
@@ -46,27 +47,20 @@ const gridRef = ref<HTMLElement | null>(null)
 const tileCount = computed(() => tiles.value.length)
 const { cols } = useGridLayout(pageRef, tileCount)
 
-function onTap(label: string) {
+async function onTap(label: string) {
   const route = SINGLETON_ROUTES[label]
   if (route) {
     tabStore.navigateToSingleton(route as any)
   } else if (label === 'פתח קובץ') {
-    const input = Object.assign(document.createElement('input'), {
-      type: 'file',
-      accept: '.pdf,.doc,.docx,.rtf,.txt,.odt,.htm,.html,.xml',
-    })
-    input.onchange = () => {
-      const file = input.files?.[0]
-      if (file?.type === 'application/pdf' || file?.name.endsWith('.pdf'))
-        pdfStore.openPdf(URL.createObjectURL(file), file.name)
-    }
-    input.click()
+    const tabId = tabStore.activeTabId
+    const result = await pickFile()
+    if (result) pdfStore.finishLocalFileConversion(tabId, result)
   } else if (label === 'התקן זית') {
     window.open('https://zayitapp.com/#/download', '_blank')
   } else if (label === 'בחר מסד נתונים') {
     window.__webviewPickDbPath?.()
   } else if (label === 'חיפוש') {
-    tabStore.navigateToSingleton('/kezayit-search' as any)
+    tabStore.navigateToSingleton('/search')
   }
 }
 </script>

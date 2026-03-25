@@ -1,5 +1,16 @@
 # Plan: PDF & HebrewBooks — Vue ↔ C# Integration
 
+## Tasks
+
+- [x] Load PDF through C# (virtual host mapping, file picker, Word conversion)
+- [x] Persist PDF and restore on next session (pdfFilePath / pdfHbBookId persisted, restored via bridge on app init)
+- [x] HebrewBooks — open in viewer (download interception, cache, loading animation)
+- [x] HebrewBooks — save to disk (Save As dialog)
+- [x] Word/HTML conversion wired end-to-end and tested
+- [x] disposePdfHost called correctly on tab close
+
+---
+
 ## How PDF.js gets its file
 
 PDF.js requires a URL. The Vue app itself is already served from a virtual host (`kezayit-vue-app` → app folder). Any file placed inside the app folder is therefore already accessible via that host — no additional virtual host mapping needed for those files.
@@ -39,7 +50,7 @@ HebrewBooks restricts direct HTTP downloads — files must be triggered via the 
 The home "פתח קובץ" tile opens a native file picker. Supported formats are anything Microsoft Word can open (`.docx`, `.doc`, `.rtf`, `.txt`, etc.) plus `.pdf`.
 
 - **PDF files** — opened directly. C# registers a virtual host for the file's parent folder (dictionary + ref count as above), returns the URL to Vue.
-- **Word-compatible files** — C# uses Word Interop to convert the file to PDF, saves the output to the **Word conversion cache** (`<app folder>/cache/word/`), then returns the cache URL to Vue.
+- **Word-compatible files** — C# uses `WordToPdfConverter` to convert the file to PDF, saves the output to the **Word conversion cache** (`<app folder>/cache/word/`), then returns the cache URL to Vue.
 
 ### Word conversion cache
 - Location: `<kezayit folder>/cache/word/` — same `kezayit` folder, served by `kezayit-vue-app`. No extra host needed.
@@ -70,7 +81,7 @@ C# checks whether `<kezayit>/cache/hebrewbooks/{title}-{id}.pdf` exists. If yes,
 ### Type 3 — Local Word-compatible file
 Persisted: `pdfFilePath`
 
-C# checks whether a converted PDF exists in `<kezayit>/cache/word/` for that source path + last-modified timestamp. If yes, returns the cache URL directly. If the converted file has been evicted, C# re-converts via Word Interop and saves to cache before returning the URL.
+C# checks whether a converted PDF exists in `<kezayit>/cache/word/` for that source path + last-modified timestamp. If yes, returns the cache URL directly. If the converted file has been evicted, C# re-converts via `WordToPdfConverter` and saves to cache before returning the URL.
 
 ---
 
@@ -79,16 +90,18 @@ C# checks whether a converted PDF exists in `<kezayit>/cache/word/` for that sou
 A generic `window.__webviewAction(action, args)` is added to `JsBridge.cs`.
 
 - `pickFile` — opens file picker (PDF + Word formats), handles conversion if needed, returns virtual URL + cache key
-- `restorePdf(cacheKey | filePath)` — resolves the URL for a persisted tab on restore
-- `disposePdfHost(folderPath)` — ref-count decrement; clears virtual host mapping when count hits zero
-- Download interception is handled entirely in C# via the WebView2 download event — no bridge action needed for HebrewBooks downloads
+- `restoreLocalPdf(filePath)` — resolves the URL for a persisted local PDF/Word tab on restore
+- `restoreHbPdf(bookId, bookTitle)` — resolves the URL for a persisted HebrewBooks tab on restore
+- `disposePdfHost(filePath)` — ref-count decrement; clears virtual host mapping when count hits zero
+- `triggerHbDownload(bookId, bookTitle, url)` — triggers download in WebView2; C# intercepts and saves to cache, pushes `hbPdfReady` event
+- `triggerHbSaveAs(url)` — triggers download in WebView2; C# intercepts and shows Save As dialog
 
 ## Vue Changes
 
-- New `src/host/bridge.ts` — exports `pickFile()`, `restorePdf()`, `disposePdfHost()`. In dev mode (no C# host), `pickFile` uses a native `<input type="file" accept=".pdf">` element to let the user pick a PDF, creates a blob URL, and passes it directly to PDF.js — no virtual host, no persistence, no Word conversion. All other bridge functions are no-ops in dev mode.
-- `pdfStore.ts` — uses virtual URLs, calls `disposePdfHost` on tab close, calls `restorePdf` on session restore
-- Home "פתח קובץ" tile → `bridge.pickFile()` → `pdfStore.open()`
-- `HebrewBooksPage` — list item click navigates WebView2 to book page; download button triggers the same but with Save As; both result in a push event from C# that Vue handles to open the viewer
+- `src/host/bridge.ts` — exports `pickFile()`, `restoreLocalPdf()`, `restoreHbPdf()`, `disposePdfHost()`. In dev mode, `pickFile` uses a native `<input type="file" accept=".pdf">` — no virtual host, no persistence, no Word conversion.
+- `pdfStore.ts` — uses virtual URLs, calls `disposePdfHost` on tab close, calls restore functions on session restore
+- Home "פתח קובץ" tile → `bridge.pickFile()` → `pdfStore.openLocalFile()`
+- `HebrewBooksPage` — list item click → `triggerHbDownload`; download button → `triggerHbSaveAs`; push event `hbPdfReady` → `pdfStore.openHbBook()`
 
 ---
 

@@ -20,7 +20,7 @@ const diacriticsTitle = computed(() => ['הסר טעמים', 'הסר גם ניק
   <div class="book-view-toolbar">
     <button :class="{ active: searchVisible }" title="חיפוש" @click="$emit('toggleSearch')"><IconSearch20Regular /></button>
     <button :class="{ active: tocVisible }" title="תוכן עניינים" @click="$emit('toggleToc')"><IconTextBulletListTree20Regular class="rtl-flip" /></button>
-    <button :class="{ active: bottomVisible }" title="פאנל תחתון" @click="$emit('toggleBottom')">
+    <button :class="{ active: bottomVisible }" title="פאנל תחתון (Ctrl+J)" @click="$emit('toggleBottom')">
       <IconLayoutRowTwoFocusBottom20Filled v-if="bottomVisible" /><IconLayoutRowTwo20Regular v-else />
     </button>
     <button :title="`הקטן (Ctrl-)\nזום: ${zoom}%\nאיפוס: Ctrl+0`" :disabled="zoom <= ZOOM_CONFIG.MIN" @click="bookViewStore.zoomOut()"><IconZoomOut20Regular /></button>

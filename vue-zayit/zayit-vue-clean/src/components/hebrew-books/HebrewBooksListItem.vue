@@ -87,7 +87,8 @@ const tags = computed(() =>
   align-items: center;
   justify-content: center;
 }
-.dl-btn:hover { background: var(--bg-secondary); color: var(--text-primary); }
+.dl-btn:hover { background: color-mix(in srgb, var(--text-primary) 10%, transparent); color: var(--text-primary); }
+.dl-btn:active { background: color-mix(in srgb, var(--text-primary) 16%, transparent); color: var(--text-primary); transform: scale(0.92); }
 
 .row-bottom {
   display: flex;

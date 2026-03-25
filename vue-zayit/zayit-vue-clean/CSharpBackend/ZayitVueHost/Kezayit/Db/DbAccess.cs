@@ -4,13 +4,13 @@ using System.Data.SQLite;
 using System.Linq;
 using System.Text.RegularExpressions;
 
-namespace ZayitVueHost
+namespace Kezayit.Db
 {
     /// <summary>
     /// Thin wrapper around SQLite. Converts positional ? params to named @p0, @p1, ...
     /// because Dapper requires named parameters.
     /// </summary>
-    internal class DbAccess
+    public class DbAccess
     {
         private readonly string _connectionString;
 
@@ -31,7 +31,7 @@ namespace ZayitVueHost
             using (var conn = new SQLiteConnection(_connectionString))
             {
                 return conn.Query(namedSql, dp)
-                           .Select(row => (IDictionary<string, object>)row)
+                           .Cast<IDictionary<string, object>>()
                            .ToList();
             }
         }

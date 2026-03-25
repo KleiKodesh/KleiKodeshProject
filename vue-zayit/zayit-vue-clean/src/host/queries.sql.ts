@@ -72,6 +72,16 @@ export const SQL = {
     ORDER BY ae.id
   `,
 
+  // ── Search ───────────────────────────────────────────────────────────────────
+
+  /** Get lineIndex and bookId from a line id — used after bloom search to open the book at the right position */
+  GET_LINE_INDEX_FROM_LINE_ID: `
+    SELECT lineIndex, bookId
+    FROM line
+    WHERE id = ?
+    LIMIT 1
+  `,
+
   // ── Lines ────────────────────────────────────────────────────────────────────
 
   /** A page of lines (for virtual scrolling) */

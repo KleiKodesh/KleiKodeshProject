@@ -5,6 +5,7 @@ import { IconLibrary24Filled, IconFolderOpen24Filled, IconBookOpen24Filled, Icon
 import { IconSettings24, IconSearchSparkle24 } from '@iconify-prerendered/vue-fluent-color'
 import { usePdfStore } from '@/stores/pdfStore'
 import { useTabStore } from '@/stores/tabStore'
+import { pickFile } from '@/host/bridge'
 
 const emit = defineEmits<{ close: [] }>()
 
@@ -30,23 +31,16 @@ const SINGLETON_ROUTES: Record<string, string> = {
   'סביבות עבודה':   '/workspaces',
 }
 
-function onTap(label: string) {
+async function onTap(label: string) {
   const route = SINGLETON_ROUTES[label]
   if (route) {
     tabStore.navigateToSingleton(route as any)
   } else if (label === 'חיפוש') {
     tabStore.updateActiveTab({ route: '/search', title: 'חיפוש' } as any)
   } else if (label === 'פתח קובץ') {
-    const input = Object.assign(document.createElement('input'), {
-      type: 'file',
-      accept: '.pdf,.doc,.docx,.rtf,.txt,.odt,.htm,.html,.xml',
-    })
-    input.onchange = () => {
-      const file = input.files?.[0]
-      if (file?.type === 'application/pdf' || file?.name.endsWith('.pdf'))
-        pdfStore.openPdf(URL.createObjectURL(file), file.name)
-    }
-    input.click()
+    const tabId = tabStore.activeTabId
+    const result = await pickFile()
+    if (result) pdfStore.finishLocalFileConversion(tabId, result)
   }
   emit('close')
 }

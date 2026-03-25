@@ -43,8 +43,11 @@ class HebrewBooksService {
     }
   }
 
-  search(term: string): HebrewBook[] {
-    if (!term.trim() || !this.catalogLoaded) return []
+  getPdfUrl(bookId: string): string {
+    return `https://download.hebrewbooks.org/downloadhandler.ashx?req=${bookId}`
+  }
+
+  search(term: string): HebrewBook[] {    if (!term.trim() || !this.catalogLoaded) return []
     const terms = term.toLowerCase().trim().split(' ').filter(t => t.length > 1)
     if (!terms.length) return []
     return this.books

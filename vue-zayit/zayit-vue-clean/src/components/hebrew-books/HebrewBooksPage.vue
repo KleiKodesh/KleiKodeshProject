@@ -6,18 +6,12 @@ import HebrewBooksListItem from './HebrewBooksListItem.vue'
 import { useHebrewBooks } from './useHebrewBooks'
 import type { HebrewBook } from './hebrewBooksService'
 
-const { displayedBooks, isLoading, error, searchTerm, isOnline, load, search, trackAccess } = useHebrewBooks()
+const {
+  displayedBooks, isLoading, error, searchTerm, isOnline,
+  load, search, openBook, downloadBook,
+} = useHebrewBooks()
 
 const searchInputRef = ref<HTMLInputElement>()
-
-function onBookClicked(book: HebrewBook) {
-  trackAccess(book)
-  // TODO: wire up to generic PDF viewer
-}
-
-function onDownloadClicked(_book: HebrewBook) {
-  // TODO: wire up download
-}
 
 function updateOnline() { isOnline.value = navigator.onLine }
 
@@ -47,8 +41,8 @@ onUnmounted(() => {
           v-for="book in displayedBooks"
           :key="book.id"
           :book="book"
-          @book-clicked="onBookClicked"
-          @download-clicked="onDownloadClicked"
+          @book-clicked="openBook"
+          @download-clicked="downloadBook"
         />
       </template>
 
@@ -127,4 +121,14 @@ onUnmounted(() => {
 .search-input::placeholder { color: var(--text-secondary); }
 .search-input:disabled { opacity: 0.5; cursor: not-allowed; }
 .search-input::-webkit-search-cancel-button { filter: grayscale(1) opacity(0.4); }
+
+.downloading-overlay {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--bg-primary) 80%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
 </style>

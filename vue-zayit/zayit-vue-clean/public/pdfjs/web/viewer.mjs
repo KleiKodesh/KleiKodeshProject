@@ -19011,6 +19011,10 @@ PDFPrintServiceFactory.initGlobals(PDFViewerApplication);
     if (fileOrigin === viewerOrigin) {
       return;
     }
+    // Allow any http:// origin (WebView2 virtual hosts for local file serving)
+    if (fileOrigin && fileOrigin.startsWith("http://")) {
+      return;
+    }
     const ex = new Error("file origin does not match viewer's");
     PDFViewerApplication._documentError("pdfjs-loading-error", {
       message: ex.message

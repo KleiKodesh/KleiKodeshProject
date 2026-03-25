@@ -5,35 +5,59 @@ declare global {
     __webviewQuery?: (sql: string, params: unknown[]) => Promise<{ rows: unknown[] }>
     __webviewPickDbPath?: () => void
     __webviewSetDbPath?: (path: string) => Promise<{ path: string }>
+    __webviewAction?: (action: string, args?: object) => Promise<unknown>
     __webviewDbPath?: string
     __webviewDbReady?: boolean
-    __onDbPathPicked?: ((path: string) => void) | null
+    __onWebviewEvent?: ((msg: Record<string, unknown>) => void) | null
   }
 }
 
 export const isHosted = window.__webviewDbReady !== undefined || import.meta.env.DEV
 export const dbReady  = ref(isHosted ? (window.__webviewDbReady ?? import.meta.env.DEV) : true)
 
-// Called by both the file-picker push event and the manual setDbPath flow
+console.log('[db] isHosted:', isHosted, '__webviewDbReady:', window.__webviewDbReady,
+  '__webviewQuery:', typeof window.__webviewQuery,
+  '__webviewAction:', typeof window.__webviewAction)
+
 export function onDbReady(path: string) {
   window.__webviewDbPath = path
   dbReady.value = true
 }
 
-// Register the callback once at module load — no component lifecycle needed
+// ── Push event bus ────────────────────────────────────────────────────────────
+type EventListener = (msg: Record<string, unknown>) => void
+const _listeners: EventListener[] = []
+
+export function onWebviewEvent(fn: EventListener): () => void {
+  _listeners.push(fn)
+  return () => { const i = _listeners.indexOf(fn); if (i !== -1) _listeners.splice(i, 1) }
+}
+
 if (isHosted) {
-  window.__onDbPathPicked = (path: string) => {
-    console.log('[db.ts] __onDbPathPicked called, path=', path)
-    onDbReady(path)
+  window.__onWebviewEvent = (msg) => {
+    console.log('[db] push event received:', msg)
+    for (const fn of _listeners) fn(msg)
   }
+  onWebviewEvent((msg) => {
+    if (msg.event === 'dbPathPicked') onDbReady(msg.path as string)
+  })
 }
 
 const DEV_URL = import.meta.env.VITE_DB_URL ?? 'http://localhost:4000'
 
 export async function query<T = unknown>(sql: string, params: unknown[] = []): Promise<T[]> {
   if (typeof window.__webviewQuery === 'function') {
-    return (await window.__webviewQuery(sql, params)).rows as T[]
+    console.log('[db] query via webview:', sql.slice(0, 60))
+    try {
+      const result = await window.__webviewQuery(sql, params)
+      console.log('[db] query result rows:', result.rows?.length)
+      return result.rows as T[]
+    } catch (err) {
+      console.error('[db] query error:', err)
+      throw err
+    }
   }
+  console.log('[db] query via HTTP:', sql.slice(0, 60))
   const res = await fetch(`${DEV_URL}/query`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

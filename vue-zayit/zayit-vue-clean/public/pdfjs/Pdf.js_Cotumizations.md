@@ -1093,3 +1093,35 @@ pdfFilter: "invert(0.9) hue-rotate(180deg) sepia(0.7) hue-rotate(260deg) saturat
 - [CSS filter property](https://developer.mozilla.org/en-US/docs/Web/CSS/filter)
 - [CSS custom properties](https://developer.mozilla.org/en-US/docs/Web/CSS/--*)
 - [HSL color model](https://en.wikipedia.org/wiki/HSL_and_HSV)
+
+
+## Cross-Origin Virtual Host Access
+
+### Problem
+
+PDF.js validates that the `file=` URL passed to the viewer is same-origin as the viewer itself. When serving local PDF files via WebView2 `SetVirtualHostNameToFolderMapping`, each folder gets its own virtual hostname (e.g. `http://kezayit-pdf-1/`), which is a different origin from the viewer host (`http://kezayit-vue-app/`). PDF.js throws `file origin does not match viewer's` and shows a blank viewer.
+
+### Solution
+
+Patched `validateFileURL` in `viewer.mjs` to allow any `http://` origin through the check. Since PDF.js runs inside a trusted WebView2 host (not a public browser), there is no security concern with this.
+
+### Implementation
+
+**File**: `public/pdfjs/web/viewer.mjs` (inside `validateFileURL` function)
+
+Added before the error throw:
+
+```javascript
+// Allow any http:// origin (WebView2 virtual hosts for local file serving)
+if (fileOrigin && fileOrigin.startsWith("http://")) {
+  return;
+}
+```
+
+### How It Works
+
+WebView2's `SetVirtualHostNameToFolderMapping` maps arbitrary hostnames to local folders. PDF files served this way have a different origin than the viewer. This patch allows any `http://` origin so any virtual host mapping works without restriction.
+
+### Applicability
+
+This patch is intentionally generic — it works for any app using WebView2 virtual host mappings, regardless of the hostname convention used.

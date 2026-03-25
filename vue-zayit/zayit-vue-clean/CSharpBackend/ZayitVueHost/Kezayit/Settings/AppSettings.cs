@@ -2,12 +2,12 @@ using Microsoft.VisualBasic;
 using System;
 using System.IO;
 
-namespace ZayitVueHost
+namespace Kezayit.Settings
 {
     /// <summary>
     /// Persists app settings to the Windows registry via VB Interaction helpers.
     /// </summary>
-    internal static class Settings
+    public static class AppSettings
     {
         private static readonly string DefaultDbPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),

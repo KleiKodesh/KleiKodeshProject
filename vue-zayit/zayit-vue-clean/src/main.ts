@@ -9,6 +9,7 @@ import { useSettingsStore } from './stores/settingsStore'
 import { useThemeStore } from './theme/themeStore'
 import { loadCustomThemes, initPdfThemeObserver } from './theme/themes'
 import { useBooksDataStore } from './stores/booksDataStore'
+import { usePdfStore } from './stores/pdfStore'
 
 const pinia = createPinia()
 const app = createApp(App).use(pinia)
@@ -24,6 +25,15 @@ await Promise.all([
   useThemeStore().init(),
   loadCustomThemes(),
 ])
+
+// Restore any persisted PDF tabs — must run after tabStore.init()
+const pdfStore = usePdfStore()
+const tabStore = useTabStore()
+await Promise.all(
+  tabStore.tabs
+    .filter(t => t.route === '/pdf-view')
+    .map(t => pdfStore.restoreTab(t.id))
+)
 
 app.mount('#app')
 

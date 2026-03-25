@@ -27,7 +27,7 @@ const ROUTE_MAP: Record<string, { title: string; route: TabRoute }> = {
   homepage:         { title: 'בית', route: '/' },
   openfile:         { title: 'ספרים', route: '/books' },
   hebrewbooks:      { title: 'היברו-בוקס', route: '/hebrewbooks' },
-  'kezayit-search': { title: 'חיפוש', route: '/books' },
+  'kezayit-search': { title: 'חיפוש', route: '/search' as TabRoute },
 }
 
 function openNewTab() {
@@ -55,7 +55,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
   } else if (e.ctrlKey && e.key === 'x') {
     e.preventDefault()
     tabStore.closeAllTabs()
-  } else if (e.ctrlKey && e.key === 'b') {
+  } else if (e.ctrlKey && e.key === 'j') {
     e.preventDefault()
     if (bookViewStore.isBookViewActive) bookViewStore.toggleBottomPanel()
   }
@@ -99,7 +99,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
     <div class="bar-end">
       <button class="bar-btn" title="בית" @click.stop="goHome"><IconHome20Regular /></button>
       <button class="bar-btn" title="לשונית חדשה" @click.stop="openNewTab"><IconAdd20Regular /></button>
-      <button class="bar-btn" title="סגור לשונית" @click.stop="tabStore.closeTab(tabStore.activeTabId)"><IconDismiss20Regular /></button>
+      <button class="bar-btn" title="סגור לשונית (Ctrl+W)" @click.stop="tabStore.closeTab(tabStore.activeTabId)"><IconDismiss20Regular /></button>
     </div>
 
     <AppTitleBarTabDropdown
