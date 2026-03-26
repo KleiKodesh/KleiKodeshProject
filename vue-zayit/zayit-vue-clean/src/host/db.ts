@@ -15,10 +15,6 @@ declare global {
 export const isHosted = window.__webviewDbReady !== undefined || import.meta.env.DEV
 export const dbReady  = ref(isHosted ? (window.__webviewDbReady ?? import.meta.env.DEV) : true)
 
-console.log('[db] isHosted:', isHosted, '__webviewDbReady:', window.__webviewDbReady,
-  '__webviewQuery:', typeof window.__webviewQuery,
-  '__webviewAction:', typeof window.__webviewAction)
-
 export function onDbReady(path: string) {
   window.__webviewDbPath = path
   dbReady.value = true
@@ -35,7 +31,6 @@ export function onWebviewEvent(fn: EventListener): () => void {
 
 if (isHosted) {
   window.__onWebviewEvent = (msg) => {
-    console.log('[db] push event received:', msg)
     for (const fn of _listeners) fn(msg)
   }
   onWebviewEvent((msg) => {
@@ -47,17 +42,8 @@ const DEV_URL = import.meta.env.VITE_DB_URL ?? 'http://localhost:4000'
 
 export async function query<T = unknown>(sql: string, params: unknown[] = []): Promise<T[]> {
   if (typeof window.__webviewQuery === 'function') {
-    console.log('[db] query via webview:', sql.slice(0, 60))
-    try {
-      const result = await window.__webviewQuery(sql, params)
-      console.log('[db] query result rows:', result.rows?.length)
-      return result.rows as T[]
-    } catch (err) {
-      console.error('[db] query error:', err)
-      throw err
-    }
+    return (await window.__webviewQuery(sql, params)).rows as T[]
   }
-  console.log('[db] query via HTTP:', sql.slice(0, 60))
   const res = await fetch(`${DEV_URL}/query`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

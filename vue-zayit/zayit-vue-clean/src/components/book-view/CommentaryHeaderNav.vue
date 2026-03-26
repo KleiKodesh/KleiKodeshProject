@@ -85,11 +85,11 @@ function handleKeydown(e: KeyboardEvent) {
     <button class="btn c-pointer hover-bg" :disabled="!hasPrevious" title="מפרש קודם" @click="navigateToGroup(groups[activeIndex - 1]!.bookId)"><IconChevronUp20Regular /></button>
     <button class="btn c-pointer hover-bg" :disabled="!hasNext" title="מפרש הבא" @click="navigateToGroup(groups[activeIndex + 1]!.bookId)"><IconChevronDown20Regular /></button>
     <div class="sep" />
-    <button class="btn c-pointer hover-bg" title="קטע קודם" @click="emit('navigate-section', 'prev', props.activeBookId)"><IconChevronRight20Regular /></button>
-    <button class="btn c-pointer hover-bg" title="קטע הבא" @click="emit('navigate-section', 'next', props.activeBookId)"><IconChevronLeft20Regular /></button>
-    <div class="sep" />
+    <button v-if="!treeVisible" class="btn c-pointer hover-bg" title="קטע קודם" @click="emit('navigate-section', 'prev', props.activeBookId)"><IconChevronRight20Regular /></button>
+    <button v-if="!treeVisible" class="btn c-pointer hover-bg" title="קטע הבא" @click="emit('navigate-section', 'next', props.activeBookId)"><IconChevronLeft20Regular /></button>
+    <div v-if="!treeVisible" class="sep" />
     <button class="btn c-pointer hover-bg" title="חיפוש במפרשים" @click.stop="emit('toggle-search')"><IconSearch20Regular /></button>
-    <button class="btn c-pointer hover-bg" title="פתח ספר זה בלשונית חדשה" @click.stop="openActiveBook()"><IconBookOpen20Regular /></button>
+    <button v-if="!treeVisible" class="btn c-pointer hover-bg" title="פתח ספר זה בלשונית חדשה" @click.stop="openActiveBook()"><IconBookOpen20Regular /></button>
     <button class="btn c-pointer hover-bg close-btn" title="סגור חלונית מפרשים" @click.stop="emit('close')"><IconMinimize20Regular /></button>
   </div>
 </template>

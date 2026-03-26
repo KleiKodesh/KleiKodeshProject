@@ -41,11 +41,22 @@ export function useHebrewBooks() {
 
   /**
    * Open a book in the PDF viewer.
-   * Triggers the hebrewbooks.org download URL in the WebView2 engine.
-   * C# intercepts the download, saves to cache, then sends a push event with the URL.
+   * In hosted mode: triggers the hebrewbooks.org download URL in the WebView2 engine.
+   * In browser mode: opens a file picker so the user can select a locally-downloaded PDF.
    */
   function openBook(book: HebrewBook) {
-    if (!isHosted) return
+    if (!isHosted) {
+      const input = Object.assign(document.createElement('input'), { type: 'file', accept: '.pdf' })
+      input.onchange = () => {
+        const file = input.files?.[0]
+        if (!file) return
+        trackAccess(book)
+        const tabId = useTabStore().activeTabId
+        pdfStore.finishLocalFileConversion(tabId, { url: URL.createObjectURL(file), fileName: file.name, filePath: '' })
+      }
+      input.click()
+      return
+    }
     trackAccess(book)
     // Navigate to pdf-view placeholder immediately
     const tabId = useTabStore().activeTabId

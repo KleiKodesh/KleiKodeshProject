@@ -6,7 +6,6 @@ using Kezayit.Settings;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -34,52 +33,32 @@ namespace Kezayit
 
         private async Task InitAsync()
         {
-            try
-            {
-                Log("InitAsync start");
+            var env = await CoreWebView2Environment.CreateAsync(
+                browserExecutableFolder: null,
+                userDataFolder: Path.Combine(AppDir, "webcache"));
 
-                var env = await CoreWebView2Environment.CreateAsync(
-                    browserExecutableFolder: null,
-                    userDataFolder: Path.Combine(AppDir, "webcache"));
-                Log("CoreWebView2Environment created");
+            await _webView.EnsureCoreWebView2Async(env);
 
-                await _webView.EnsureCoreWebView2Async(env);
-                Log("EnsureCoreWebView2Async done");
+            _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                "kezayit-vue-app", AppDir, CoreWebView2HostResourceAccessKind.Allow);
 
-                _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
-                    "kezayit-vue-app", AppDir, CoreWebView2HostResourceAccessKind.Allow);
-                Log("VirtualHostMapping set");
+            await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(JsBridge.Script);
 
-                await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(JsBridge.Script);
-                Log("JsBridge script injected");
+            string savedPath = AppSettings.LoadDbPath();
+            bool dbReady = File.Exists(savedPath);
+            string escapedPath = savedPath.Replace("\\", "\\\\");
+            await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                "window.__webviewDbPath=\"" + escapedPath + "\";" +
+                "window.__webviewDbReady=" + (dbReady ? "true" : "false") + ";");
 
-                string savedPath = AppSettings.LoadDbPath();
-                bool dbReady = File.Exists(savedPath);
-                Log("DB path: " + savedPath + " | exists: " + dbReady);
+            _bridge = new WebBridge(_webView, this);
+            _db = new DbHandler(_bridge, _webView, savedPath);
+            _pdf = new PdfHandler(_bridge, _webView);
+            _hb = new HebrewBooksHandler(_bridge, _webView, this);
 
-                string escapedPath = savedPath.Replace("\\", "\\\\");
-                await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
-                    "window.__webviewDbPath=\"" + escapedPath + "\";" +
-                    "window.__webviewDbReady=" + (dbReady ? "true" : "false") + ";");
-                Log("Globals script injected");
-
-                _bridge = new WebBridge(_webView, this);
-                _db = new DbHandler(_bridge, _webView, savedPath);
-                _pdf = new PdfHandler(_bridge, _webView);
-                _hb = new HebrewBooksHandler(_bridge, _webView, this);
-                Log("Handlers created");
-
-                _webView.CoreWebView2.WebMessageReceived += OnMessageReceived;
-                _webView.CoreWebView2.DownloadStarting += (s, e) => _hb.OnDownloadStarting(s, e);
-                Log("Events hooked");
-
-                _webView.Source = new Uri("http://kezayit-vue-app/index.html");
-                Log("Source set — init complete");
-            }
-            catch (Exception ex)
-            {
-                Log("InitAsync EXCEPTION: " + ex);
-            }
+            _webView.CoreWebView2.WebMessageReceived += OnMessageReceived;
+            _webView.CoreWebView2.DownloadStarting += (s, e) => _hb.OnDownloadStarting(s, e);
+            _webView.Source = new Uri("http://kezayit-vue-app/index.html");
         }
 
         private async void OnMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)
@@ -87,7 +66,6 @@ namespace Kezayit
             string id = null;
             try
             {
-                Log("Message received: " + e.WebMessageAsJson);
                 using (var doc = JsonDocument.Parse(e.WebMessageAsJson))
                 {
                     var root = doc.RootElement;
@@ -95,8 +73,6 @@ namespace Kezayit
                     string action = root.TryGetProperty("action", out var a)
                         ? a.GetString()
                         : root.TryGetProperty("sql", out _) ? "sql" : null;
-
-                    Log("Dispatching id=" + id + " action=" + action);
 
                     switch (action)
                     {
@@ -111,18 +87,12 @@ namespace Kezayit
                         case "triggerHbSaveAs": _hb.HandleTriggerHbSaveAs(root, id); break;
                         default: _bridge.Reply(id, new { error = "Unknown action: " + action }); break;
                     }
-
-                    Log("Dispatched id=" + id);
                 }
             }
             catch (Exception ex)
             {
-                Log("OnMessageReceived EXCEPTION id=" + id + ": " + ex);
                 if (id != null) _bridge.Reply(id, new { error = ex.Message });
             }
         }
-
-        private static void Log(string msg) =>
-            Debug.WriteLine("[AppViewer] " + msg);
     }
 }

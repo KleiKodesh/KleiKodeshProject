@@ -28,6 +28,7 @@ namespace Zayit.Services
         private Action<string> _onSearchComplete;
         private Action<string> _onSearchCancelled;
         private Action<string, string> _onSearchError;
+        private Action<double, int, int, string> _onIndexingProgress;
 
         private const string VB_APP = "ZayitApp";
         private const string VB_SECTION = "BloomIndex";
@@ -55,14 +56,15 @@ namespace Zayit.Services
         /// </summary>
         private void OnCoordinatorProgress(object sender, IndexProgressChangedEventArgs e)
         {
+            string eta;
             lock (_lock)
             {
                 _progress.ProcessedChunks = e.ProcessedChunks;
                 _progress.TotalChunks = e.TotalChunks;
                 _progress.Percentage = e.Percentage;
                 _progress.Eta = FormatTimeSpan(e.Eta);
-                
-                // Update indexing state based on progress
+                eta = _progress.Eta;
+
                 if (e.Percentage >= 100)
                 {
                     _progress.IsIndexing = false;
@@ -78,6 +80,7 @@ namespace Zayit.Services
             }
 
             Console.WriteLine($"[BloomSearchService] Coordinator progress: {e.Percentage:F1}% ({e.ProcessedChunks}/{e.TotalChunks})");
+            _onIndexingProgress?.Invoke(e.Percentage, e.ProcessedChunks, e.TotalChunks, eta);
         }
 
         /// <summary>
@@ -93,6 +96,14 @@ namespace Zayit.Services
             _onSearchComplete = onComplete;
             _onSearchCancelled = onCancelled;
             _onSearchError = onError;
+        }
+
+        /// <summary>
+        /// Set callback for indexing progress updates pushed to Vue
+        /// </summary>
+        public void SetIndexingProgressCallback(Action<double, int, int, string> onProgress)
+        {
+            _onIndexingProgress = onProgress;
         }
 
         /// <summary>
@@ -380,6 +391,9 @@ namespace Zayit.Services
                         _progress.Percentage = 100;
                     }
 
+                    // Notify Vue that indexing is complete
+                    _onIndexingProgress?.Invoke(100, _progress.TotalChunks, _progress.TotalChunks, "");
+
                     Console.WriteLine("[BloomSearchService] Indexing completed successfully");
                 }
             }
@@ -407,15 +421,18 @@ namespace Zayit.Services
         /// </summary>
         private void OnIndexingProgress(object sender, IndexProgressChangedEventArgs e)
         {
+            string eta;
             lock (_lock)
             {
                 _progress.ProcessedChunks = e.ProcessedChunks;
                 _progress.TotalChunks = e.TotalChunks;
                 _progress.Percentage = e.Percentage;
                 _progress.Eta = FormatTimeSpan(e.Eta);
+                eta = _progress.Eta;
             }
 
             Console.WriteLine($"[BloomSearchService] Indexing progress: {e.Percentage:F1}% ({e.ProcessedChunks}/{e.TotalChunks})");
+            _onIndexingProgress?.Invoke(e.Percentage, e.ProcessedChunks, e.TotalChunks, eta);
         }
 
         /// <summary>

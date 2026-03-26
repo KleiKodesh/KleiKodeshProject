@@ -6,6 +6,7 @@ const props = defineProps<{
   searchQuery: string
   isSearching: boolean
   filterCount: number
+  disabled?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -43,6 +44,7 @@ defineExpose({ focus: () => inputRef.value?.focus() })
         type="text"
         class="search-input"
         placeholder="חיפוש בכל הספרים..."
+        :disabled="disabled"
         @keydown.enter="handleSearch"
         @keydown.esc="handleClear"
       />
@@ -57,7 +59,7 @@ defineExpose({ focus: () => inputRef.value?.focus() })
       <button
         class="bar-btn search-btn"
         :class="{ searching: isSearching }"
-        :disabled="!isSearching && !localQuery.trim()"
+        :disabled="disabled || (!isSearching && !localQuery.trim())"
         :title="isSearching ? 'ביטול חיפוש' : 'חיפוש'"
         @click="isSearching ? $emit('cancel') : handleSearch()"
       >

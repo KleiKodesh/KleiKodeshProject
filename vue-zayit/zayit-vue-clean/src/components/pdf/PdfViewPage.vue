@@ -47,7 +47,7 @@ function cancelConversion() {
 </template>
 
 <style scoped>
-.pdf-page { display: flex; flex-direction: column; height: 100%; }
+.pdf-page { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
 .pdf-iframe { flex: 1; width: 100%; border: none; }
 .pdf-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-secondary); font-size: 14px; }
 

@@ -67,7 +67,7 @@ type FlatItem = { type: 'header'; bookTitle: string; connectionTypes: string[]; 
 
 const flatItems = computed<FlatItem[]>(() => {
   const items: FlatItem[] = []
-  for (const g of props.groups) {
+  for (const g of visibleGroups.value) {
     items.push({ type: 'header', bookTitle: g.bookTitle, connectionTypes: g.connectionTypes, sectionLabel: g.sectionLabel })
     for (const l of g.lines) items.push({ type: 'line', content: l.content, lineId: l.lineId })
   }
@@ -77,9 +77,27 @@ const flatItems = computed<FlatItem[]>(() => {
 const scrollerEl = ref<HTMLElement | null>(null)
 const scrollTop = ref(0)
 const treeVisible = ref(false)
+const hiddenBookIds = ref(new Set<number>())
+const suppressTreeSync = ref(false)
+
+function toggleBookVisibility(bookId: number) {
+  suppressTreeSync.value = true
+  // capture current scroll before visibleGroups changes
+  const savedScrollTop = scrollerEl.value?.scrollTop ?? 0
+  const next = new Set(hiddenBookIds.value)
+  if (next.has(bookId)) next.delete(bookId)
+  else next.add(bookId)
+  hiddenBookIds.value = next
+  nextTick(() => {
+    if (scrollerEl.value) scrollerEl.value.scrollTop = savedScrollTop
+    suppressTreeSync.value = false
+  })
+}
+
+const visibleGroups = computed(() => props.groups.filter(g => !hiddenBookIds.value.has(g.bookId)))
 
 const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, { onCtrlF: () => emit('toggle-search') })
-useScopedCopy(scrollerEl, () => props.groups.flatMap(g => g.lines.map(l => l.content)), isSelectAll)
+useScopedCopy(scrollerEl, () => visibleGroups.value.flatMap(g => g.lines.map(l => l.content)), isSelectAll)
 useVirtualScrollerKeys(
   scrollerEl,
   () => virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
@@ -127,13 +145,19 @@ const stickyHeader = computed(() => {
 const activeHeader = computed(() => stickyHeader.value ?? (flatItems.value.find(i => i.type === 'header') as (FlatItem & { type: 'header' }) | undefined) ?? null)
 
 const activeBookId = computed(() =>
-  props.groups.find(g => g.bookTitle === activeHeader.value?.bookTitle)?.bookId ?? 0
+  visibleGroups.value.find(g => g.bookTitle === activeHeader.value?.bookTitle)?.bookId ?? 0
 )
+
+// Frozen copy of activeBookId — only updates on real scroll, not during checkbox toggles
+const treeSelectedBookId = ref(0)
+watch(activeBookId, (val) => {
+  if (!suppressTreeSync.value) treeSelectedBookId.value = val
+})
 
 const suppressTreeScroll = ref(false)
 
 function scrollToGroup(bookId: number) {
-  const idx = flatItems.value.findIndex(item => item.type === 'header' && props.groups.find(g => g.bookId === bookId && g.bookTitle === item.bookTitle))
+  const idx = flatItems.value.findIndex(item => item.type === 'header' && visibleGroups.value.find(g => g.bookId === bookId && g.bookTitle === item.bookTitle))
   if (idx === -1) return
   virtualizer.value.scrollToIndex(idx, { align: 'start' })
   // scrollToIndex is synchronous for already-measured items — read scrollTop immediately
@@ -157,6 +181,9 @@ watch(() => props.groups, async (newGroups) => {
     scrollToGroup(pinned)
   }
 }, { flush: 'post' })
+
+// Reset hidden books when the line changes (new context)
+watch(() => props.selectedLineId, () => { hiddenBookIds.value = new Set() })
 
 const topVisibleFlatIndex = computed(() => {
   const st = scrollTop.value + NAV_HEIGHT
@@ -192,58 +219,61 @@ defineExpose({ scrollToGroup, scrollToFlatIndex, topVisibleFlatIndex, activeBook
 <template>
   <div class="commentary-view">
     <ContextMenu ref="contextMenuRef" :items="contextMenuItems" />
-    <div v-if="props.loading" class="state-overlay"><LoadingAnimation /></div>
-    <div v-else-if="!flatItems.length" class="state-overlay"><span class="hint">בחר שורה לצפייה במפרשים</span></div>
-    <template v-else>
-      <div class="body">
-        <CommentaryTreePanel v-if="treeVisible" class="tree-panel"
-          :groups="props.groups"
-          :selected-book-id="activeBookId"
-          :suppress-scroll="suppressTreeScroll"
-          @select="onTreeSelect" />
-        <div class="content-col">
-          <div ref="scrollerEl" class="scroller" tabindex="0" :style="{ fontSize: `${zoom / 100 * 15}px` }" @scroll="onScroll" @contextmenu="contextMenuRef?.show($event)">
-            <CommentaryHeaderNav v-if="activeHeader" class="sticky-nav"
-              :groups="props.groups"
-              :scroll-to-group="scrollToGroup"
-              :book-title="activeHeader.bookTitle"
-              :active-book-id="activeBookId"
-              :tree-visible="treeVisible"
-              @update:active-book-id="() => {}"
-              @navigate-section="(d, id) => emit('navigate-section', d, id)"
-              @toggle-search="emit('toggle-search')"
-              @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)"
-              @close="emit('close')"
-              @toggle-tree="treeVisible = !treeVisible" />
-            <div :style="{ height: `${totalSize}px`, position: 'relative' }">
-              <div v-for="vItem in virtualItems" :key="String(vItem.key)"
-                :ref="el => el && virtualizer.measureElement(el as Element)"
-                :data-index="vItem.index"
-                :style="{ position: 'absolute', top: 0, right: 0, left: 0, transform: `translateY(${vItem.start}px)` }">
-                <CommentaryHeader v-if="flatItems[vItem.index]?.type === 'header'"
-                  :book-title="(flatItems[vItem.index] as any).bookTitle"
-                  :section-label="(flatItems[vItem.index] as any).sectionLabel"
-                  :groups="props.groups"
-                  @navigate-section="(d, id) => emit('navigate-section', d, id)"
-                  @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)" />
-                <div v-else class="line" v-html="renderContent((flatItems[vItem.index] as any).content, vItem.index)" />
-              </div>
+    <div class="body">
+      <CommentaryTreePanel v-if="treeVisible && props.groups.length" class="tree-panel"
+        :groups="props.groups"
+        :selected-book-id="treeSelectedBookId"
+        :suppress-scroll="suppressTreeScroll"
+        :hidden-book-ids="hiddenBookIds"
+        @select="onTreeSelect"
+        @toggle="toggleBookVisibility"
+        @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)" />
+      <div class="content-col">
+        <CommentaryHeaderNav class="sticky-nav"
+          :groups="visibleGroups"
+          :scroll-to-group="scrollToGroup"
+          :book-title="activeHeader?.bookTitle ?? ''"
+          :active-book-id="activeBookId"
+          :tree-visible="treeVisible"
+          @update:active-book-id="() => {}"
+          @navigate-section="(d, id) => emit('navigate-section', d, id)"
+          @toggle-search="emit('toggle-search')"
+          @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)"
+          @close="emit('close')"
+          @toggle-tree="treeVisible = !treeVisible" />
+        <div v-if="props.loading" class="state-overlay"><LoadingAnimation /></div>
+        <div v-else-if="!flatItems.length" class="state-overlay">
+          <span class="hint">{{ props.selectedLineId == null ? 'בחר שורה לצפייה במפרשים' : 'אין מפרשים לשורה זו' }}</span>
+        </div>
+        <div v-else ref="scrollerEl" class="scroller" tabindex="0" :style="{ fontSize: `${zoom / 100 * 15}px` }" @scroll="onScroll" @contextmenu="contextMenuRef?.show($event)">
+          <div :style="{ height: `${totalSize}px`, position: 'relative' }">
+            <div v-for="vItem in virtualItems" :key="String(vItem.key)"
+              :ref="el => el && virtualizer.measureElement(el as Element)"
+              :data-index="vItem.index"
+              :style="{ position: 'absolute', top: 0, right: 0, left: 0, transform: `translateY(${vItem.start}px)` }">
+              <CommentaryHeader v-if="flatItems[vItem.index]?.type === 'header'"
+                :book-title="(flatItems[vItem.index] as any).bookTitle"
+                :section-label="(flatItems[vItem.index] as any).sectionLabel"
+                :groups="visibleGroups"
+                @navigate-section="(d, id) => emit('navigate-section', d, id)"
+                @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)" />
+              <div v-else class="line" v-html="renderContent((flatItems[vItem.index] as any).content, vItem.index)" />
             </div>
           </div>
         </div>
       </div>
-    </template>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .commentary-view { height: 100%; display: flex; flex-direction: column; overflow: hidden; }
-.state-overlay { flex: 1; display: flex; align-items: center; justify-content: center; }
-.hint { font-size: 13px; color: var(--text-secondary); }
 .body { flex: 1; display: flex; flex-direction: row; min-height: 0; }
 .tree-panel { width: max-content; max-width: 35%; flex-shrink: 0; border-inline-start: 1px solid var(--border-color); }
-.content-col { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
-.sticky-nav { position: sticky; top: 0; z-index: 2; height: 32px; }
+.content-col { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.sticky-nav { flex-shrink: 0; height: 32px; }
+.state-overlay { flex: 1; display: flex; align-items: center; justify-content: center; }
+.hint { font-size: 13px; color: var(--text-secondary); }
 .scroller { flex: 1; overflow-y: auto; }
 .line { padding-inline: 12px; padding-block: 2px; font-size: 1em; line-height: 1.7; color: var(--text-primary); text-align: justify; }
 .line :deep(mark.search-match) { background: rgba(255, 165, 0, 0.4); color: inherit; border-radius: 2px; }

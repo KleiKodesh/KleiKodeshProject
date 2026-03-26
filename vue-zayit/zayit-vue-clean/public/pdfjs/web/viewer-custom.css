@@ -111,3 +111,9 @@
 #viewsManager .popupMenu button {
   border-radius: 0 !important;
 }
+
+/* Prevent horizontal overflow/scrollbar when viewer is narrow */
+body,
+#outerContainer {
+  overflow-x: hidden !important;
+}

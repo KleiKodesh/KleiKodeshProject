@@ -3,9 +3,11 @@ import { ref, onMounted, nextTick } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import { useBloomSearch } from './useBloomSearch'
 import { useSearch } from './useSearch'
+import { useIndexingStatus } from './useIndexingStatus'
 import SearchBar from './SearchBar.vue'
 import SearchResultsList from './SearchResultsList.vue'
 import SearchFilterPanel from './SearchFilterPanel.vue'
+import SearchIndexingOverlay from './SearchIndexingOverlay.vue'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 
 const booksStore = useBooksDataStore()
@@ -26,8 +28,10 @@ const {
   clearSearch,
 )
 
-const searchBarRef    = ref<InstanceType<typeof SearchBar> | null>(null)
-const filterPanelRef  = ref<HTMLElement | null>(null)
+const { state: indexingState } = useIndexingStatus()
+
+const searchBarRef   = ref<InstanceType<typeof SearchBar> | null>(null)
+const filterPanelRef = ref<HTMLElement | null>(null)
 
 onClickOutside(filterPanelRef, () => { if (isFilterOpen.value) isFilterOpen.value = false })
 
@@ -55,6 +59,7 @@ onMounted(async () => {
       v-model:search-query="searchQuery"
       :is-searching="isSearching"
       :filter-count="checkedBookIds.size"
+      :disabled="indexingState.isIndexing"
       @search="handleSearch"
       @cancel="cancelSearch"
       @toggle-filter="toggleFilter"
@@ -72,6 +77,12 @@ onMounted(async () => {
       @check-all="checkAll"
       @uncheck-all="uncheckAll"
       @close="isFilterOpen = false"
+    />
+
+    <!-- Indexing overlay — shown while bloom index is being built -->
+    <SearchIndexingOverlay
+      v-if="indexingState.isIndexing"
+      :state="indexingState"
     />
   </div>
 </template>

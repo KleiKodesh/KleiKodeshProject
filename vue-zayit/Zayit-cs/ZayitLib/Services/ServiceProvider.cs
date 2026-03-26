@@ -48,6 +48,10 @@ namespace Zayit.Services
                     onCancelled: (searchId) => SendSearchCancelled(searchId),
                     onError: (searchId, error) => SendSearchError(searchId, error)
                 );
+                _bloomSearch.SetIndexingProgressCallback(
+                    onProgress: (percentage, processedChunks, totalChunks, eta) =>
+                        SendIndexingProgress(percentage, processedChunks, totalChunks, eta)
+                );
                 Console.WriteLine("[ServiceProvider] BloomSearch callbacks configured");
 
                 _bloomSearch.Initialize();
@@ -288,6 +292,42 @@ namespace Zayit.Services
             catch (Exception ex)
             {
                 Console.WriteLine($"[ServiceProvider] Error sending search error: {ex}");
+            }
+        }
+
+        // Send indexing progress to Vue via __onWebviewEvent push bus
+        private void SendIndexingProgress(double percentage, int processedChunks, int totalChunks, string eta)
+        {
+            try
+            {
+                var isReady = percentage >= 100;
+                // Escape values for JS string safety
+                var safeEta = (eta ?? "").Replace("'", "\\'");
+                var script = $@"if (window.__onWebviewEvent) {{ window.__onWebviewEvent({{
+                    event: 'bloomIndexProgress',
+                    percentage: {percentage.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)},
+                    processedChunks: {processedChunks},
+                    totalChunks: {totalChunks},
+                    eta: '{safeEta}',
+                    isReady: {(isReady ? "true" : "false")}
+                }}); }}";
+
+                if (_webView.InvokeRequired)
+                {
+                    _webView.BeginInvoke(new Action(async () =>
+                    {
+                        try { await _webView.ExecuteScriptAsync(script); }
+                        catch (Exception ex) { Console.WriteLine($"[ServiceProvider] Error sending indexing progress: {ex.Message}"); }
+                    }));
+                }
+                else
+                {
+                    _ = _webView.ExecuteScriptAsync(script);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ServiceProvider] Error sending indexing progress: {ex}");
             }
         }
 

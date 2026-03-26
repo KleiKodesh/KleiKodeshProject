@@ -4,9 +4,9 @@ import CommentaryTreeViewNode from './CommentaryTreeViewNode.vue'
 import { buildCommentaryTree } from './useCommentary'
 import type { CommentaryGroup, CommentaryTreeNode } from './useCommentary'
 
-const props = defineProps<{ groups: CommentaryGroup[]; selectedBookId?: number; suppressScroll?: boolean }>()
+const props = defineProps<{ groups: CommentaryGroup[]; selectedBookId?: number; suppressScroll?: boolean; hiddenBookIds?: Set<number> }>()
 
-const emit = defineEmits<{ select: [node: CommentaryTreeNode] }>()
+const emit = defineEmits<{ select: [node: CommentaryTreeNode]; toggle: [bookId: number]; 'open-book': [bookId: number, lineIndex: number] }>()
 
 const tree = computed(() => buildCommentaryTree(props.groups))
 const containerRef = ref<HTMLElement | null>(null)
@@ -17,10 +17,8 @@ async function scrollToSelected() {
   await nextTick()
   const el = containerRef.value.querySelector('.tree-node.is-active') as HTMLElement | null
   if (!el) return
-  // Tier 1: get into view without affecting parents
   el.scrollIntoView({ behavior: 'instant', block: 'nearest', inline: 'nearest' })
   await nextTick()
-  // Tier 2: manually center within the container
   const container = containerRef.value
   const containerRect = container.getBoundingClientRect()
   const elRect = el.getBoundingClientRect()
@@ -39,8 +37,8 @@ defineExpose({ scrollToSelected })
   <div ref="containerRef" class="commentary-tree-panel">
     <div v-if="!tree.length" class="empty">אין מפרשים זמינים</div>
     <CommentaryTreeViewNode v-for="node in tree" :key="node.label"
-      :node="node" :selected-book-id="selectedBookId"
-      @select="emit('select', $event)" />
+      :node="node" :selected-book-id="selectedBookId" :hidden-book-ids="hiddenBookIds"
+      @select="emit('select', $event)" @toggle="emit('toggle', $event)" @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)" />
   </div>
 </template>
 

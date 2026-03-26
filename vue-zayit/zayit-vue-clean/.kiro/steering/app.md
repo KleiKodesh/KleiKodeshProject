@@ -117,6 +117,10 @@ These components live inside the split-pane bottom panel and TOC side panel, whe
 | `CommentaryHeaderNav` buttons | 24×24px, 14px icons | same as header |
 | `CommentaryHeaderNav` search input | 20px tall, 11px font | compact pill |
 | TOC search input | 12px font, `padding: 4px 8px` | bottom of TOC panel |
+| `CommentaryTreeViewNode` book row | `height: 28px` fixed | compact secondary nav |
+| `CommentaryTreeViewNode` section header | `height: 28px` fixed | same height as book rows |
+| `CommentaryTreeViewNode` expander button | `width: 24px`, `height: 100%` | no bg, no border, no active effect |
+| `CommentaryTreeViewNode` label | `white-space: nowrap`, ellipsis | never wrap — wrapping breaks fixed row height |
 
 Both `CommentaryHeader` and `CommentaryHeaderNav` use `background: var(--bg-primary)` — same as the commentary view content — so they blend in rather than standing out as a distinct toolbar.
 

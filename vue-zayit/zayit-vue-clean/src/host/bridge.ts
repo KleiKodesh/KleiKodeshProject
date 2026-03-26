@@ -37,7 +37,7 @@ export interface PdfRestoreResult {
  * Returns null if the user cancels.
  */
 export async function pickFile(): Promise<PdfFileResult | null> {
-  if (!isHosted) return devPickPdf()
+  if (typeof window.__webviewAction !== 'function') return devPickPdf()
   const res = await action<{ cancelled?: boolean; url?: string; fileName?: string; filePath?: string; error?: string }>('pickFile')
   if (res.cancelled || res.error || !res.url) return null
   return { url: res.url, fileName: res.fileName!, filePath: res.filePath! }

@@ -1,15 +1,12 @@
 /**
- * Bloom search composable — wraps C# streaming search via the webview event bus.
+ * Bloom search composable — wraps C# streaming search.
  *
- * The new project's bridge uses:
- *   window.__webviewAction('BloomSearchStart', { query }) → searchId
- *   window.__webviewAction('BloomSearchCancel', { searchId })
- *   window.__onWebviewEvent fires with { type, searchId, results?, error? }
+ * C# sends search stream events via PostWebMessageAsString → chrome.webview message events.
+ * C# sends indexing progress via ExecuteScriptAsync → window.__onWebviewEvent.
  *
  * Falls back to sample data in dev when the C# host is not present.
  */
 import { ref } from 'vue'
-import { onWebviewEvent } from '@/host/db'
 import { isHosted } from '@/host/db'
 import { cacheGet, cacheSet } from './searchCache'
 import type { BloomSearchResult } from './searchTypes'
@@ -22,25 +19,61 @@ const DEV_SAMPLES: BloomSearchResult[] = [
   { lineId: 5, bookId: 1, bookTitle: 'בראשית', tocText: 'פרק ב', score: 0.82, proximityScore: 0.8,  snippet: 'ויכלו השמים והארץ וכל צבאם' },
 ]
 
-function callAction<T>(name: string, args?: object): Promise<T> {
+function callAction<T>(name: string, ...params: unknown[]): Promise<T> {
   if (typeof window.__webviewAction !== 'function')
     return Promise.reject(new Error('bridge not available'))
-  return window.__webviewAction(name, args) as Promise<T>
+  // The new project's bridge uses positional params array, not named args object
+  return window.__webviewAction(name, params as unknown as object) as Promise<T>
+}
+
+// ── chrome.webview message listener (search stream events from C#) ────────────
+// C# sends search events via PostWebMessageAsString → chrome.webview message events.
+// We maintain a single shared listener and route by searchId.
+
+type SearchListeners = {
+  onBatch: (results: BloomSearchResult[]) => void
+  onComplete: () => void
+  onCancelled: () => void
+  onError: (err: string) => void
+}
+
+const _searchListeners = new Map<string, SearchListeners>()
+let _webviewListenerSetup = false
+
+function ensureWebviewListener() {
+  if (_webviewListenerSetup || !isHosted) return
+  _webviewListenerSetup = true
+  const wv = (window as any).chrome?.webview
+  if (!wv) return
+  wv.addEventListener('message', (event: MessageEvent) => {
+    try {
+      const msg = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
+      if (!msg?.type || !msg?.searchId) return
+      const listener = _searchListeners.get(msg.searchId)
+      if (!listener) return
+      switch (msg.type) {
+        case 'searchBatch':    listener.onBatch(msg.results ?? []); break
+        case 'searchComplete': listener.onComplete(); _searchListeners.delete(msg.searchId); break
+        case 'searchCancelled':listener.onCancelled(); _searchListeners.delete(msg.searchId); break
+        case 'searchError':    listener.onError(msg.error ?? ''); _searchListeners.delete(msg.searchId); break
+      }
+    } catch { /* ignore malformed messages */ }
+  })
 }
 
 export function useBloomSearch() {
-  const results      = ref<BloomSearchResult[]>([])
-  const isSearching  = ref(false)
-  const hasSearched  = ref(false)
+  const results       = ref<BloomSearchResult[]>([])
+  const isSearching   = ref(false)
+  const hasSearched   = ref(false)
   const executedQuery = ref('')
 
   let currentSearchId: string | null = null
-  let unregisterEvent: (() => void) | null = null
 
   function _cleanup() {
-    unregisterEvent?.()
-    unregisterEvent = null
-    currentSearchId = null
+    if (currentSearchId) {
+      _searchListeners.delete(currentSearchId)
+      currentSearchId = null
+    }
   }
 
   async function cancelSearch() {
@@ -48,29 +81,28 @@ export function useBloomSearch() {
     const id = currentSearchId
     _cleanup()
     isSearching.value = false
-    try { await callAction('BloomSearchCancel', { searchId: id }) } catch { /* ignore */ }
+    try { await callAction('BloomSearchCancel', id) } catch { /* ignore */ }
   }
 
   async function executeSearch(query: string) {
     if (!query.trim()) return
 
-    // Cancel any in-flight search
     if (currentSearchId) await cancelSearch()
 
-    isSearching.value  = true
-    hasSearched.value  = true
-    results.value      = []
+    isSearching.value   = true
+    hasSearched.value   = true
+    results.value       = []
     executedQuery.value = query
 
-    // Dev fallback — no C# host
+    // Dev fallback
     if (!isHosted) {
       await new Promise(r => setTimeout(r, 400))
-      results.value  = DEV_SAMPLES
+      results.value     = DEV_SAMPLES
       isSearching.value = false
       return
     }
 
-    // Check cache first
+    // Cache check
     const cached = await cacheGet(query.trim().toLowerCase())
     if (cached) {
       results.value     = cached
@@ -79,33 +111,34 @@ export function useBloomSearch() {
     }
 
     try {
-      const searchId = await callAction<string>('BloomSearchStart', { query })
+      ensureWebviewListener()
+      const searchId = await callAction<string>('BloomSearchStart', query)
+      if (!searchId) {
+        // Index not ready — caller should check indexing status
+        isSearching.value = false
+        return
+      }
       currentSearchId = searchId
 
-      unregisterEvent = onWebviewEvent((msg) => {
-        if (msg.searchId !== searchId) return
-        if (currentSearchId !== searchId) return   // stale
-
-        switch (msg.type) {
-          case 'searchBatch':
-            results.value = [...results.value, ...(msg.results as BloomSearchResult[])]
-            break
-          case 'searchComplete':
+      _searchListeners.set(searchId, {
+        onBatch: (batch) => {
+          if (currentSearchId === searchId) results.value = [...results.value, ...batch]
+        },
+        onComplete: () => {
+          if (currentSearchId === searchId) {
             isSearching.value = false
             if (results.value.length > 0)
               cacheSet(query.trim().toLowerCase(), results.value).catch(() => {})
             _cleanup()
-            break
-          case 'searchCancelled':
-            isSearching.value = false
-            _cleanup()
-            break
-          case 'searchError':
-            console.error('[useBloomSearch] search error:', msg.error)
-            isSearching.value = false
-            _cleanup()
-            break
-        }
+          }
+        },
+        onCancelled: () => {
+          if (currentSearchId === searchId) { isSearching.value = false; _cleanup() }
+        },
+        onError: (err) => {
+          console.error('[useBloomSearch] search error:', err)
+          if (currentSearchId === searchId) { isSearching.value = false; _cleanup() }
+        },
       })
     } catch (err) {
       console.error('[useBloomSearch] failed to start search:', err)
