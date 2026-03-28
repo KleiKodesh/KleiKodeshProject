@@ -6,97 +6,53 @@ namespace MinimalIndexer
     public sealed class BloomFilterCollectionWriter : IDisposable
     {
         private const int FlushThreshold = 10 * 1024 * 1024;
-        private const int CacheLineSize = 64; // CPU cache line size for alignment
+        private const int CacheLineSize = 64;
 
-        private readonly FileStream fileStream;
-        private readonly MemoryStream buffer;
-        private readonly BinaryWriter writer;
-        private long currentPosition;
+        private readonly FileStream _fs;
+        private readonly MemoryStream _buf;
+        private readonly BinaryWriter _w;
 
         public int Count { get; private set; }
 
         public BloomFilterCollectionWriter(string id, short chunkSize)
         {
-            string dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BloomFilters");
-            Directory.CreateDirectory(dir);
+            string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BloomFilters", $"{id}.dat");
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
 
-            fileStream = new FileStream(
-                Path.Combine(dir, $"{id}.dat"),
-                FileMode.Create,
-                FileAccess.Write,
-                FileShare.None,
-                65536,
+            _fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 65536,
                 FileOptions.SequentialScan | FileOptions.WriteThrough);
 
-            using (var bw = new BinaryWriter(fileStream, System.Text.Encoding.Default, true))
-            {
-                bw.Write(0);          // filter count (patched on dispose)
-                bw.Write(chunkSize);  // chunk size
-            }
+            using (var bw = new BinaryWriter(_fs, System.Text.Encoding.Default, true))
+            { bw.Write(0); bw.Write(chunkSize); }
 
-            currentPosition = 6; // After header (int + short)
-            buffer = new MemoryStream();
-            writer = new BinaryWriter(buffer);
+            _buf = new MemoryStream();
+            _w = new BinaryWriter(_buf);
         }
 
         public void Commit(BloomFilter filter)
         {
-            // Write filter data
-            writer.Write(filter.Size);              // 4 bytes
-            writer.Write(filter.HashFunctions);     // 4 bytes
             var bytes = filter.GetBytes();
             int byteSize = filter.GetByteSize();
-            writer.Write(bytes, 0, byteSize);       // variable bytes
+            _w.Write(filter.Size);
+            _w.Write(filter.HashFunctions);
+            _w.Write(bytes, 0, byteSize);
 
-            // Calculate padding for cache line alignment
-            long entrySize = 8 + byteSize; // metadata + data
-            int padding = CalculatePadding(entrySize);
+            long entrySize = 8 + byteSize;
+            int pad = (int)((CacheLineSize - entrySize % CacheLineSize) % CacheLineSize);
+            for (int i = 0; i < pad; i++) _w.Write((byte)0);
 
-            // Write padding bytes for alignment (improves cache performance during parallel search)
-            if (padding > 0)
-            {
-                // Write zeros for padding
-                for (int i = 0; i < padding; i++)
-                    writer.Write((byte)0);
-            }
-
-            currentPosition += entrySize + padding;
             Count++;
-
-            if (buffer.Length >= FlushThreshold)
-                Flush();
+            if (_buf.Length >= FlushThreshold) Flush();
         }
 
-        private int CalculatePadding(long entrySize)
-        {
-            // Align to cache line boundary to prevent false sharing
-            // and improve cache hit rate during parallel search
-            long remainder = (entrySize % CacheLineSize);
-            return remainder == 0 ? 0 : (int)(CacheLineSize - remainder);
-        }
-
-        private void Flush()
-        {
-            if (buffer.Length == 0)
-                return;
-
-            buffer.Position = 0;
-            buffer.CopyTo(fileStream);
-            buffer.SetLength(0);
-        }
+        private void Flush() { if (_buf.Length == 0) return; _buf.Position = 0; _buf.CopyTo(_fs); _buf.SetLength(0); }
 
         public void Dispose()
         {
             Flush();
-
-            // Patch filter count
-            fileStream.Seek(0, SeekOrigin.Begin);
-            using (var bw = new BinaryWriter(fileStream, System.Text.Encoding.Default, true))
-                bw.Write(Count);
-
-            writer.Dispose();
-            buffer.Dispose();
-            fileStream.Dispose();
+            _fs.Seek(0, SeekOrigin.Begin);
+            using (var bw = new BinaryWriter(_fs, System.Text.Encoding.Default, true)) bw.Write(Count);
+            _w.Dispose(); _buf.Dispose(); _fs.Dispose();
         }
     }
 }

@@ -5,196 +5,101 @@ namespace BloomSearchEngineLib
 {
     public static class SearchEngineMatcher
     {
-        private const double MIN_PROXIMITY_SCORE = 0.2;
+        private const double MinProximity = 0.2;
 
-        /// <summary>
-        /// Matches text against search words, requiring at least minRequiredWords to match.
-        /// </summary>
-        /// <param name="text">The text to search in</param>
-        /// <param name="words">The words to search for</param>
-        /// <param name="minRequiredWords">Minimum number of words that must be found (from Bloom filter score)</param>
-        /// <returns>MatchInfo if at least minRequiredWords are found and proximity is acceptable, null otherwise</returns>
-        public static MatchInfo Match(string text, string[] words, int minRequiredWords)
+        public static MatchInfo Match(string text, string[] words, int minRequired)
         {
-            var matchInfo = new MatchInfo { Words = words };
             var foundWords = new List<string>();
             var foundPositions = new List<List<int>>();
 
-            // Phase 1: Find which words exist and their first occurrence
             for (int i = 0; i < words.Length; i++)
             {
                 int pos = text.IndexOf(words[i], StringComparison.Ordinal);
-                if (pos != -1)
-                {
-                    foundWords.Add(words[i]);
-                    foundPositions.Add(new List<int> { pos });
-                }
+                if (pos != -1) { foundWords.Add(words[i]); foundPositions.Add(new List<int> { pos }); }
             }
 
-            // Check if we have enough matches
-            if (foundWords.Count < minRequiredWords)
-                return null; // Not enough words found
+            if (foundWords.Count < minRequired) return null;
 
-            // Phase 2: Collect all positions for each found word
             for (int i = 0; i < foundWords.Count; i++)
             {
-                int index = foundPositions[i][0] + 1;
-                while ((index = text.IndexOf(foundWords[i], index, StringComparison.Ordinal)) != -1)
-                {
-                    foundPositions[i].Add(index);
-                    index++;
-                }
+                int idx = foundPositions[i][0] + 1;
+                while ((idx = text.IndexOf(foundWords[i], idx, StringComparison.Ordinal)) != -1)
+                { foundPositions[i].Add(idx); idx++; }
             }
 
-            // Store the found words and their positions
-            matchInfo.Words = foundWords.ToArray();
-            matchInfo.AllPositions = foundPositions.ToArray();
-
-            // Phase 3: Calculate proximity score
-            CalculateProximityScore(matchInfo);
-
-            // Filter out matches with low proximity scores
-            if (matchInfo.ProximityScore < MIN_PROXIMITY_SCORE)
-                return null;
-
-            return matchInfo;
+            var info = new MatchInfo { Words = foundWords.ToArray(), AllPositions = foundPositions.ToArray() };
+            CalcProximity(info);
+            return info.ProximityScore < MinProximity ? null : info;
         }
 
-        private static void CalculateProximityScore(MatchInfo matchInfo)
+        private static void CalcProximity(MatchInfo m)
         {
-            if (matchInfo.Words.Length == 1)
+            if (m.Words.Length == 1)
             {
-                matchInfo.ProximityScore = 1.0;
-                matchInfo.ClusterStart = matchInfo.AllPositions[0][0];
-                matchInfo.ClusterEnd = matchInfo.ClusterStart;
+                m.ProximityScore = 1.0;
+                m.ClusterStart = m.ClusterEnd = m.AllPositions[0][0];
                 return;
             }
-
-            var clusterInfo = FindMinimumSpanWindow(matchInfo.AllPositions, matchInfo.Words);
-
-            // Score inversely proportional to span
-            matchInfo.ProximityScore = 1.0 / (1.0 + clusterInfo.Span / 100.0);
-            matchInfo.ClusterStart = clusterInfo.MinPos;
-            matchInfo.ClusterEnd = clusterInfo.MaxPos;
+            var c = FindMinSpan(m.AllPositions, m.Words);
+            m.ProximityScore = 1.0 / (1.0 + c.Span / 100.0);
+            m.ClusterStart = c.Min; m.ClusterEnd = c.Max;
         }
 
-        private struct PositionEntry
+        private struct PosEntry { public int Position, WordIndex; }
+
+        private static (int Span, int Min, int Max) FindMinSpan(List<int>[] positions, string[] words)
         {
-            public int Position;
-            public int WordIndex;
-        }
+            int total = 0;
+            for (int i = 0; i < words.Length; i++) total += positions[i].Count;
 
-        private static (int Span, int MinPos, int MaxPos) FindMinimumSpanWindow(
-            List<int>[] allPositions, string[] words)
-        {
-            int numWords = words.Length;
-
-            int totalPositions = 0;
-            for (int i = 0; i < numWords; i++)
-                totalPositions += allPositions[i].Count;
-
-            var merged = new PositionEntry[totalPositions];
-            int mergedIndex = 0;
-
-            for (int wordIdx = 0; wordIdx < numWords; wordIdx++)
-            {
-                for (int j = 0; j < allPositions[wordIdx].Count; j++)
-                {
-                    merged[mergedIndex++] = new PositionEntry
-                    {
-                        Position = allPositions[wordIdx][j],
-                        WordIndex = wordIdx
-                    };
-                }
-            }
+            var merged = new PosEntry[total];
+            int mi = 0;
+            for (int w = 0; w < words.Length; w++)
+                for (int j = 0; j < positions[w].Count; j++)
+                    merged[mi++] = new PosEntry { Position = positions[w][j], WordIndex = w };
 
             Array.Sort(merged, (a, b) => a.Position.CompareTo(b.Position));
 
-            var wordCount = new int[numWords];
-            int uniqueWords = 0;
-            int left = 0;
-            int minSpan = int.MaxValue;
-            int bestMinPos = -1;
-            int bestMaxPos = -1;
+            var count = new int[words.Length];
+            int unique = 0, left = 0, minSpan = int.MaxValue, bestMin = -1, bestMax = -1;
 
             for (int right = 0; right < merged.Length; right++)
             {
-                int wordIdx = merged[right].WordIndex;
+                int wi = merged[right].WordIndex;
+                if (count[wi]++ == 0) unique++;
 
-                if (wordCount[wordIdx] == 0)
-                    uniqueWords++;
-                wordCount[wordIdx]++;
-
-                while (uniqueWords == numWords)
+                while (unique == words.Length)
                 {
                     int span = merged[right].Position - merged[left].Position;
-
-                    if (span < minSpan)
-                    {
-                        minSpan = span;
-                        bestMinPos = merged[left].Position;
-                        bestMaxPos = merged[right].Position;
-                    }
-
-                    int leftWordIdx = merged[left].WordIndex;
-                    wordCount[leftWordIdx]--;
-
-                    if (wordCount[leftWordIdx] == 0)
-                        uniqueWords--;
-
+                    if (span < minSpan) { minSpan = span; bestMin = merged[left].Position; bestMax = merged[right].Position; }
+                    int lwi = merged[left].WordIndex;
+                    if (--count[lwi] == 0) unique--;
                     left++;
                 }
             }
-
-            return (minSpan, bestMinPos, bestMaxPos);
+            return (minSpan, bestMin, bestMax);
         }
 
-        public static string ExtractSnippetFromCluster(
-            string text, int clusterStart, int clusterEnd, int maxSnippetLength = 500)
+        public static string ExtractSnippetFromCluster(string text, int start, int end, int maxLen = 500)
         {
-            if (string.IsNullOrEmpty(text))
-                return string.Empty;
+            if (string.IsNullOrEmpty(text)) return string.Empty;
+            if (start == -1 || end == -1) return text.Length <= maxLen ? text : text.Substring(0, maxLen) + "...";
 
-            if (clusterStart == -1 || clusterEnd == -1)
-                return text.Length <= maxSnippetLength
-                    ? text
-                    : text.Substring(0, maxSnippetLength) + "...";
+            start = Math.Max(0, Math.Min(start, text.Length - 1));
+            end = Math.Max(0, Math.Min(end, text.Length - 1));
 
-            // Ensure cluster positions are within text bounds
-            clusterStart = Math.Max(0, Math.Min(clusterStart, text.Length - 1));
-            clusterEnd = Math.Max(0, Math.Min(clusterEnd, text.Length - 1));
+            int sStart = Math.Max(0, start - 50);
+            int sEnd = Math.Min(text.Length, end + 50);
 
-            int snippetStart = Math.Max(0, clusterStart - 50);
-            int snippetEnd = Math.Min(text.Length, clusterEnd + 50);
+            if (sStart > 0 && sStart < text.Length) { int wb = text.LastIndexOf(' ', sStart); if (wb > sStart - 20 && wb != -1) sStart = wb + 1; }
+            if (sEnd < text.Length) { int wb = text.IndexOf(' ', sEnd); if (wb != -1 && wb < sEnd + 20) sEnd = wb; }
 
-            // Only search for word boundary if snippetStart > 0 AND < text.Length
-            if (snippetStart > 0 && snippetStart < text.Length)
-            {
-                int wordBoundary = text.LastIndexOf(' ', snippetStart);
-                if (wordBoundary > snippetStart - 20 && wordBoundary != -1)
-                    snippetStart = wordBoundary + 1;
-            }
+            if (sStart >= text.Length) sStart = Math.Max(0, text.Length - 1);
+            if (sEnd <= sStart) sEnd = Math.Min(sStart + 1, text.Length);
 
-            if (snippetEnd < text.Length)
-            {
-                int wordBoundary = text.IndexOf(' ', snippetEnd);
-                if (wordBoundary != -1 && wordBoundary < snippetEnd + 20)
-                    snippetEnd = wordBoundary;
-            }
-
-            // Ensure valid substring range
-            if (snippetStart >= text.Length)
-                snippetStart = Math.Max(0, text.Length - 1);
-            if (snippetEnd <= snippetStart)
-                snippetEnd = Math.Min(snippetStart + 1, text.Length);
-
-            string snippet = text.Substring(snippetStart, snippetEnd - snippetStart);
-
-            if (snippetStart > 0)
-                snippet = "..." + snippet;
-            if (snippetEnd < text.Length)
-                snippet += "...";
-
+            string snippet = text.Substring(sStart, sEnd - sStart);
+            if (sStart > 0) snippet = "..." + snippet;
+            if (sEnd < text.Length) snippet += "...";
             return snippet;
         }
     }
@@ -206,8 +111,6 @@ namespace BloomSearchEngineLib
         public double ProximityScore { get; set; }
         public int ClusterStart { get; set; }
         public int ClusterEnd { get; set; }
-
-        public string Snippet(string text) =>
-            SearchEngineMatcher.ExtractSnippetFromCluster(text, ClusterStart, ClusterEnd);
+        public string Snippet(string text) => SearchEngineMatcher.ExtractSnippetFromCluster(text, ClusterStart, ClusterEnd);
     }
 }

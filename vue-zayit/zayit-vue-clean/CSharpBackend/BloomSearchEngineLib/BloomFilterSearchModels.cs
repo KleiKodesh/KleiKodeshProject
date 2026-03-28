@@ -1,8 +1,7 @@
-﻿
+﻿using System;
+
 namespace BloomSearchEngineLib
 {
-    using System;
-
     public sealed class SearchResultItem
     {
         public int LineId { get; set; }
@@ -22,17 +21,10 @@ namespace BloomSearchEngineLib
         public TimeSpan Elapsed { get; }
         public TimeSpan Eta { get; }
 
-        public IndexProgressChangedEventArgs(
-            int processedChunks,
-            int totalChunks,
-            TimeSpan elapsed,
-            TimeSpan eta)
+        public IndexProgressChangedEventArgs(int processed, int total, TimeSpan elapsed, TimeSpan eta)
         {
-            ProcessedChunks = processedChunks;
-            TotalChunks = totalChunks;
-            Percentage = processedChunks * 100.0 / totalChunks;
-            Elapsed = elapsed;
-            Eta = eta;
+            ProcessedChunks = processed; TotalChunks = total;
+            Percentage = processed * 100.0 / total; Elapsed = elapsed; Eta = eta;
         }
     }
 
@@ -44,18 +36,10 @@ namespace BloomSearchEngineLib
         public TimeSpan Elapsed { get; }
         public TimeSpan Eta { get; }
 
-        public DatabaseInitProgressEventArgs(
-            int processedRows,
-            int totalRows,
-            TimeSpan elapsed,
-            TimeSpan eta)
+        public DatabaseInitProgressEventArgs(int processed, int total, TimeSpan elapsed, TimeSpan eta)
         {
-            ProcessedRows = processedRows;
-            TotalRows = totalRows;
-            Percentage = processedRows * 100.0 / totalRows;
-            Elapsed = elapsed;
-            Eta = eta;
+            ProcessedRows = processed; TotalRows = total;
+            Percentage = processed * 100.0 / total; Elapsed = elapsed; Eta = eta;
         }
     }
-
 }
