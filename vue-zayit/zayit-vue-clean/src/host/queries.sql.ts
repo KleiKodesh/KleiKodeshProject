@@ -86,23 +86,36 @@ export const SQL = {
    * Get the full TOC path for a batch of line ids.
    * Uses a recursive CTE to walk tocEntry.parentId up to the root,
    * then concatenates ancestor texts root→leaf separated by ' / '.
+   * Strips the root segment if it duplicates the book title.
    * Returns one row per lineId — lineId + tocPath.
    */
   GET_TOC_PATHS_FOR_LINES: (count: number) => `
-    WITH RECURSIVE ancestors(lineId, entryId, parentId, text, depth) AS (
-      SELECT lt.lineId, te.id, te.parentId, tt.text, 0
+    WITH RECURSIVE ancestors(lineId, bookId, entryId, parentId, text, depth) AS (
+      SELECT lt.lineId, te.bookId, te.id, te.parentId, tt.text, 0
       FROM line_toc lt
       JOIN tocEntry te ON te.id = lt.tocEntryId
       JOIN tocText tt ON tt.id = te.textId
       WHERE lt.lineId IN (${Array(count).fill('?').join(', ')})
       UNION ALL
-      SELECT a.lineId, te.id, te.parentId, tt.text, a.depth + 1
+      SELECT a.lineId, a.bookId, te.id, te.parentId, tt.text, a.depth + 1
       FROM ancestors a
       JOIN tocEntry te ON te.id = a.parentId
       JOIN tocText tt ON tt.id = te.textId
+    ),
+    ordered AS (
+      SELECT a.lineId, a.text, a.depth,
+             MAX(a.depth) OVER (PARTITION BY a.lineId) AS maxDepth,
+             b.title AS bookTitle
+      FROM ancestors a
+      JOIN book b ON b.id = a.bookId
     )
-    SELECT lineId, group_concat(text, ' / ') AS tocPath
-    FROM (SELECT lineId, text FROM ancestors ORDER BY lineId, depth DESC)
+    SELECT lineId, group_concat(text, ' > ') AS tocPath
+    FROM (
+      SELECT lineId, text
+      FROM ordered
+      WHERE NOT (depth = maxDepth AND text = bookTitle)
+      ORDER BY lineId, depth DESC
+    )
     GROUP BY lineId
   `,
 

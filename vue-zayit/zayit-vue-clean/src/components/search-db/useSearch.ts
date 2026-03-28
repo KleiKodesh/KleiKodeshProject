@@ -94,6 +94,7 @@ export function useSearch(
         bookId: result.bookId,
         openTocLineIndex: lineIndex,
         searchHighlightLineIndex: lineIndex,
+        searchHighlightQuery: executedQuery(),
       })
     } catch (err) {
       console.error('[useSearch] failed to open result:', err)

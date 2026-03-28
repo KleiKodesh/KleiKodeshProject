@@ -8,6 +8,7 @@ import BooksTreeView from './BooksTreeView.vue'
 import BooksFullTree from './BooksFullTree.vue'
 import BooksSearchResults from './BooksSearchResults.vue'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
+import BottomSearchBar from '@/components/common/BottomSearchBar.vue'
 import { useTabStore } from '@/stores/tabStore'
 import type { BookRow } from './booksFsTree'
 import type { TocFsItem } from './useBooksFsSearch'
@@ -72,24 +73,20 @@ function onSearchEnter() {
         </template>
       </template>
     </div>
-    <div class="search-bar">
-      <div class="search-inner">
-        <IconSearch20Regular class="search-icon" />
-        <input ref="searchInputRef" v-model="searchQuery" type="search" class="search-input"
-          :placeholder="placeholder" @keydown.enter="onSearchEnter"
-          @keydown.up.prevent="focusList" @keydown.down.prevent="focusList" @keydown.tab.prevent="focusList" />
-      </div>
-    </div>
+    <BottomSearchBar>
+      <template #left><IconSearch20Regular class="search-icon" /></template>
+      <input ref="searchInputRef" v-model="searchQuery" type="search" class="search-input"
+        :placeholder="placeholder" @keydown.enter="onSearchEnter"
+        @keydown.up.prevent="focusList" @keydown.down.prevent="focusList" @keydown.tab.prevent="focusList" />
+    </BottomSearchBar>
   </div>
 </template>
 
 <style scoped>
 .books-page { display: flex; flex-direction: column; height: 100%; background: var(--bg-primary); }
 .books-content { flex: 1; overflow: hidden; position: relative; }
-.search-bar { padding: 5px 10px 6px; background: var(--bg-secondary); border-top: 1px solid var(--border-color); }
-.search-inner { display: flex; align-items: center; gap: 6px; background: color-mix(in srgb, var(--text-secondary) 12%, transparent); border-radius: 10px; padding: 6px 10px; }
-.search-icon { color: var(--text-secondary); flex-shrink: 0; }
-.search-input { flex: 1; background: none; border: none; outline: none; font-size: 14px; color: var(--text-primary); }
+.search-icon { color: var(--text-secondary); }
+.search-input { flex: 1; background: none; border: none; outline: none; font-size: 13px; color: var(--text-primary); }
 .search-input::placeholder { color: var(--text-secondary); }
 .search-input::-webkit-search-cancel-button { filter: grayscale(1) opacity(0.4); }
 .state.error { padding: 32px 16px; text-align: center; color: #ff3b30; font-size: 15px; }

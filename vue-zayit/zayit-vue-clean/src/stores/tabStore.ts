@@ -25,6 +25,7 @@ export interface Tab {
   openTocEntryId?: number
   openTocLineIndex?: number
   searchHighlightLineIndex?: number
+  searchHighlightQuery?: string
   searchQuery?: string
   searchScrollIndex?: number
   tocPath?: string
@@ -67,7 +68,7 @@ export const useTabStore = defineStore('tabs', () => {
     const wsId = useWorkspaceStore().activeId
     const persistable = tabs.value.filter(t => !SINGLETON_ROUTES.includes(t.route))
     idbTabsSet<PersistedTabList>(KEYS.tabsList(wsId), {
-      tabs: persistable.map(({ pdfVirtualUrl, pdfConverting, pdfLoadingType, openToc, openTocEntryId, openTocLineIndex, searchHighlightLineIndex, ...t }) => t),
+      tabs: persistable.map(({ pdfVirtualUrl, pdfConverting, pdfLoadingType, openToc, openTocEntryId, openTocLineIndex, searchHighlightLineIndex, searchHighlightQuery, ...t }) => t),
       activeTabId: persistable.some(t => t.id === activeTabId.value) ? activeTabId.value : (persistable[0]?.id ?? activeTabId.value),
       nextId,
     })

@@ -32,8 +32,8 @@ const bookTitle = tabStore.activeTab.title
 const openTocEntryId = tabStore.activeTab.openTocEntryId
 const openTocLineIndex = tabStore.activeTab.openTocLineIndex
 const searchHighlightLineIndex = tabStore.activeTab.searchHighlightLineIndex
-const searchHighlightQuery = tabStore.activeTab.searchQuery ?? ''
-if (openTocEntryId != null) tabStore.updateActiveTab({ openTocEntryId: undefined, openTocLineIndex: undefined, searchHighlightLineIndex: undefined })
+const searchHighlightQuery = tabStore.activeTab.searchHighlightQuery ?? ''
+if (openTocEntryId != null) tabStore.updateActiveTab({ openTocEntryId: undefined, openTocLineIndex: undefined, searchHighlightLineIndex: undefined, searchHighlightQuery: undefined })
 
 const bottomVisible = ref(false)
 const searchVisible = ref(false)

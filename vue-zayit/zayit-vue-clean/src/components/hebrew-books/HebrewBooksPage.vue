@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
 import HebrewBooksListItem from './HebrewBooksListItem.vue'
+import BottomSearchBar from '@/components/common/BottomSearchBar.vue'
 import { useHebrewBooks } from './useHebrewBooks'
 import { useListKeys } from '@/composables/useListKeys'
 
@@ -61,25 +62,22 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Search bar -->
-    <div class="search-bar">
-      <div class="search-inner">
-        <IconSearch20Regular class="search-icon" />
-        <input
-          ref="searchInputRef"
-          :value="searchTerm"
-          type="search"
-          :placeholder="isOnline ? 'חפש ספרים, מחברים או נושאים...' : 'נדרש חיבור לאינטרנט'"
-          :disabled="!isOnline"
-          class="search-input"
-          dir="rtl"
-          @input="search(($event.target as HTMLInputElement).value)"
-          @keydown.up.prevent="listEl?.focus()"
-          @keydown.down.prevent="listEl?.focus()"
-          @keydown.tab.prevent="listEl?.focus()"
-        />
-      </div>
-    </div>
+    <BottomSearchBar>
+      <template #left><IconSearch20Regular class="search-icon" /></template>
+      <input
+        ref="searchInputRef"
+        :value="searchTerm"
+        type="search"
+        :placeholder="isOnline ? 'חפש ספרים, מחברים או נושאים...' : 'נדרש חיבור לאינטרנט'"
+        :disabled="!isOnline"
+        class="search-input"
+        dir="rtl"
+        @input="search(($event.target as HTMLInputElement).value)"
+        @keydown.up.prevent="listEl?.focus()"
+        @keydown.down.prevent="listEl?.focus()"
+        @keydown.tab.prevent="listEl?.focus()"
+      />
+    </BottomSearchBar>
   </div>
 </template>
 
@@ -106,26 +104,13 @@ onUnmounted(() => {
 }
 .state-icon { font-size: 40px; opacity: 0.5; }
 
-.search-bar {
-  padding: 5px 10px 6px;
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border-color);
-}
-.search-inner {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: color-mix(in srgb, var(--text-secondary) 12%, transparent);
-  border-radius: 10px;
-  padding: 6px 10px;
-}
-.search-icon { color: var(--text-secondary); flex-shrink: 0; }
+.search-icon { color: var(--text-secondary); }
 .search-input {
   flex: 1;
   background: none;
   border: none;
   outline: none;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-primary);
   direction: rtl;
 }

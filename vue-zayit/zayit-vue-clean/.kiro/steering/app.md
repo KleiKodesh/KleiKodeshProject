@@ -93,17 +93,13 @@ Neither system dominates — VSCode sets the colors and layout, Fluent sets the 
 - Chevrons use `var(--text-secondary)` color, same row height as the row itself
 - No `border-radius` on individual rows — the list container may have rounded corners if needed
 
-### Search Bar
-- Always anchored to bottom of screen, iOS-style — never at top
-- Use `margin-top: auto` or flex column to push it down
-- iOS pill input: `border-radius: 10px`, muted fill `color-mix(in srgb, var(--text-secondary) 12%, transparent)`, icon inline, no outer border
-- Clear button desaturated: `.search-input::-webkit-search-cancel-button { filter: grayscale(1) opacity(0.4) }`
-
 ### Search Inputs
-- All search input containers use `border-radius: 6px` — Windows 11 Fluent style
-- Exception: the bottom search bar in `BooksFsPage` uses `border-radius: 10px` (iOS pill, per its anchored-to-bottom design)
-- Never use `border-radius: 0` on search inputs or their wrapper containers
+- All search input containers use `border-radius: 999px` — Windows 11 pill style, no exceptions
+- Container background: `var(--input-bg)` with `border: 1px solid var(--border-color)`
+- Icon inline inside the container, no outer wrapper border
+- Never use `border-radius: 0` or flat/rectangular corners on any search input container
 - Search inputs never change background color on focus — the visual background lives on the container, not the input itself; `input:focus { background: none !important }` is set globally in `main.css`
+- Clear button desaturated: `.search-input::-webkit-search-cancel-button { filter: grayscale(1) opacity(0.4) }`
 
 ### Book View — Commentary & TOC Compact Sizing
 
@@ -127,7 +123,7 @@ Both `CommentaryHeader` and `CommentaryHeaderNav` use `background: var(--bg-prim
 
 ### Misc UI
 - Use `color-mix()` tinted backgrounds instead of solid fills for icon containers in list contexts
-- Rounded corners: `4px` small controls, `8px` cards, `10–12px` search/input pills, `12px` tile icon containers
+- Rounded corners: `4px` small controls, `8px` cards, `999px` search/input pills, `12px` tile icon containers
 - Secondary toolbars use `var(--bg-toolbar)` — between `--bg-primary` and `--bg-secondary`
 - Split pane divider hover: `color-mix(in srgb, var(--text-secondary) 25%, transparent)` — never accent color
 - Split pane divider visual height is 1px but touch target is 20px via a `::before` pseudo-element (`position: absolute; height: 20px; top: 50%; transform: translateY(-50%)`) — always keep this pattern on any resize handle

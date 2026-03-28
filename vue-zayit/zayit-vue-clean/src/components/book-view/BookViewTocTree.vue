@@ -67,7 +67,7 @@ const hasAlt = computed(() => altTocSections.value.length > 0)
 .toc-panel { position: absolute; top: 0; right: 0; bottom: 0; z-index: 100; display: flex; flex-direction: column; width: fit-content; max-width: min(320px, 85%); background: var(--bg-secondary); border-left: 1px solid var(--border-color); overflow: hidden; --tree-bg: var(--bg-secondary); }
 .toc-body { flex: 1; min-height: 0; }
 .toc-search { padding: 5px 6px 6px; border-top: 1px solid var(--border-color); flex-shrink: 0; box-sizing: border-box; background: var(--tree-bg, var(--bg-primary)); }
-.search-inner { display: flex; align-items: center; background: var(--input-bg); border-radius: 6px; padding: 4px 8px; }
+.search-inner { display: flex; align-items: center; padding: 4px 8px; }
 .search-input { flex: 1; width: 0; min-width: 0; background: none; border: none; outline: none; font-size: 12px; color: var(--text-primary); }
 .search-input::placeholder { color: var(--text-secondary); }
 .search-input::-webkit-search-cancel-button { filter: grayscale(1) opacity(0.4); }

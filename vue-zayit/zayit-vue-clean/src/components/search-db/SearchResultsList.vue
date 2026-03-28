@@ -85,10 +85,10 @@ watch(() => props.results.length, (len) => {
           :data-index="vRow.index"
           :style="{ position: 'absolute', top: 0, left: 0, right: 0, transform: `translateY(${vRow.start}px)` }"
         >
-          <div class="result-item">
+          <div class="result-item" data-nav-item :class="{ 'is-focused': containerFocused && focusedIndex === vRow.index }" @click="focusedIndex = vRow.index">
             <div class="result-header" @click="emit('resultClick', results[vRow.index]!)">
               <span class="book-title">{{ results[vRow.index]!.bookTitle }}</span>
-              <span v-if="results[vRow.index]!.tocText" class="sep">›</span>
+              <span v-if="results[vRow.index]!.tocText" class="sep">></span>
               <span v-if="results[vRow.index]!.tocText" class="toc-text">{{ results[vRow.index]!.tocText }}</span>
             </div>
             <!-- eslint-disable-next-line vue/no-v-html -->
@@ -137,7 +137,10 @@ watch(() => props.results.length, (len) => {
 .result-item {
   padding: 8px 14px;
   border-bottom: 1px solid var(--border-color);
+  transition: background 0.1s;
 }
+.result-item:hover { background: var(--hover-bg); }
+.result-item:active { background: var(--active-bg); }
 
 .result-header {
   display: flex;
@@ -149,6 +152,7 @@ watch(() => props.results.length, (len) => {
   font-size: 13px;
   cursor: pointer;
   width: fit-content;
+  user-select: text;
 }
 
 .result-header:hover .book-title { color: var(--accent-color); }
@@ -171,5 +175,6 @@ watch(() => props.results.length, (len) => {
 .snippet :deep(.match) {
   color: var(--accent-color);
   font-weight: 600;
+  user-select: text;
 }
 </style>

@@ -103,7 +103,7 @@ function handleKeydown(e: KeyboardEvent) {
 .sep { width: 1px; height: 14px; flex-shrink: 0; background: color-mix(in srgb, var(--text-secondary) 20%, transparent); margin-inline: 2px; }
 .search-wrapper { flex: 1; min-width: 0; position: relative; display: flex; align-items: center; }
 .search-icon { position: absolute; left: 4px; width: 12px; height: 12px; color: var(--text-secondary); pointer-events: none; }
-.search-input { width: 100%; height: 20px; padding-inline: 6px 22px; border: none; border-radius: 6px; background: var(--input-bg); color: var(--text-primary); font-size: 11px; outline: none; appearance: none; -webkit-appearance: none; }
+.search-input { width: 100%; height: 20px; padding-inline: 6px 22px; border: 1px solid var(--border-color); border-radius: 999px; background: var(--input-bg); color: var(--text-primary); font-size: 11px; outline: none; appearance: none; -webkit-appearance: none; }
 .search-input::-webkit-calendar-picker-indicator, .search-input::-webkit-list-button { display: none; opacity: 0; pointer-events: none; }
 .close-btn { margin-inline-start: auto; }
 </style>

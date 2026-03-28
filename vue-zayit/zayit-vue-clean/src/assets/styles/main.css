@@ -39,6 +39,18 @@ button:active { transform: scale(0.92); transition: transform 0.1s; }
 
 /* Search inputs never change background on focus — background is always inherited from the container */
 input:focus { background: none !important; }
+
+/* Global search input container — shared shape, color, border */
+.search-inner {
+  display: flex;
+  align-items: center;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+}
+.search-inner input { background: none; border: none; outline: none; color: var(--text-primary); }
+.search-inner input::placeholder { color: var(--text-secondary); }
+.search-inner input::-webkit-search-cancel-button { filter: grayscale(1) opacity(0.4); }
 .hover-bg { transition: background 120ms, color 120ms; }
 .hover-bg:hover { background: var(--hover-bg); }
 

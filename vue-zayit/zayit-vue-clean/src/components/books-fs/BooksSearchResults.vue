@@ -35,7 +35,7 @@ const { focusedIndex: tilesFocused, containerFocused: tilesContainerFocused } = 
 )
 
 const itemTitle = (item: SearchFsItem) =>
-  item.kind === 'toc' ? `${item.book.title} / ${item.tocPath}` : item.book.title
+  item.kind === 'toc' ? `${item.book.title} ${item.tocPath}` : item.book.title
 
 function onSelect(item: SearchFsItem) {
   item.kind === 'toc' ? emit('selectToc', item) : emit('selectBook', item.book)
