@@ -59,7 +59,7 @@ export const useTabStore = defineStore('tabs', () => {
   // ── Singleton routes — never persisted across sessions ───────────────────
 
   const SINGLETON_ROUTES: TabRoute[] = ['/settings', '/books', '/hebrewbooks', '/workspaces']
-  const SINGLETON_TITLES: Record<string, string> = { '/settings': 'הגדרות', '/books': 'ספרים', '/hebrewbooks': 'היברו-בוקס', '/workspaces': 'סביבות עבודה', '/search': 'חיפוש' }
+  const SINGLETON_TITLES: Record<string, string> = { '/settings': 'הגדרות', '/books': 'ספרים', '/hebrewbooks': 'היברו-בוקס', '/workspaces': 'סביבות עבודה' }
 
   // ── Tab list persistence ──────────────────────────────────────────────────
 

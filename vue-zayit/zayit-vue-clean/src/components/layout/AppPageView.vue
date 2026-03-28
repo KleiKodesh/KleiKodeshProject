@@ -7,7 +7,7 @@ import PdfViewPage from '@/components/pdf/PdfViewPage.vue'
 import SettingsPage from '@/components/settings/SettingsPage.vue'
 import HebrewBooksPage from '@/components/hebrew-books/HebrewBooksPage.vue'
 import WorkspaceManagerPage from '@/components/workspace/WorkspaceManagerPage.vue'
-import SearchPage from '@/components/search/SearchPage.vue'
+import SearchPage from '@/components/search-db/SearchPage.vue'
 import { useTabStore } from '@/stores/tabStore'
 
 const tabStore = useTabStore()

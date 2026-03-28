@@ -98,7 +98,7 @@ async function onTap(label: string) {
   } else if (label === 'בחר מסד נתונים') {
     window.__webviewPickDbPath?.()
   } else if (label === 'חיפוש') {
-    tabStore.navigateToSingleton('/search')
+    tabStore.updateActiveTab({ title: 'חיפוש', route: '/search' })
   }
 }
 </script>

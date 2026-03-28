@@ -8,6 +8,8 @@
  */
 import { ref } from 'vue'
 import { isHosted } from '@/host/db'
+import { query } from '@/host/db'
+import { SQL } from '@/host/queries.sql'
 import { cacheGet, cacheSet } from './searchCache'
 import type { BloomSearchResult } from './searchTypes'
 
@@ -61,6 +63,23 @@ function ensureWebviewListener() {
   })
 }
 
+async function enrichTocPaths(batch: BloomSearchResult[]): Promise<void> {
+  const lineIds = [...new Set(batch.map(r => r.lineId))]
+  if (!lineIds.length) return
+  try {
+    const rows = await query<{ lineId: number; tocPath: string }>(
+      SQL.GET_TOC_PATHS_FOR_LINES(lineIds.length), lineIds
+    )
+    const pathMap = new Map(rows.map(r => [r.lineId, r.tocPath]))
+    for (const r of batch) {
+      const path = pathMap.get(r.lineId)
+      if (path) r.tocText = path
+    }
+  } catch (err) {
+    console.error('[useBloomSearch] enrichTocPaths failed:', err)
+  }
+}
+
 export function useBloomSearch() {
   const results       = ref<BloomSearchResult[]>([])
   const isSearching   = ref(false)
@@ -97,6 +116,7 @@ export function useBloomSearch() {
     // Dev fallback
     if (!isHosted) {
       await new Promise(r => setTimeout(r, 400))
+      await enrichTocPaths(DEV_SAMPLES)
       results.value     = DEV_SAMPLES
       isSearching.value = false
       return
@@ -124,8 +144,11 @@ export function useBloomSearch() {
       currentSearchId = searchId
 
       _searchListeners.set(searchId, {
-        onBatch: (batch) => {
-          if (currentSearchId === searchId) results.value = [...results.value, ...batch]
+        onBatch: async (batch) => {
+          if (currentSearchId === searchId) {
+            await enrichTocPaths(batch)
+            results.value = [...results.value, ...batch]
+          }
         },
         onComplete: () => {
           if (currentSearchId === searchId) {

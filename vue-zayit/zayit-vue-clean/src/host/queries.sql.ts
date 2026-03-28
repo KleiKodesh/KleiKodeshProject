@@ -82,6 +82,30 @@ export const SQL = {
     LIMIT 1
   `,
 
+  /**
+   * Get the full TOC path for a batch of line ids.
+   * Uses a recursive CTE to walk tocEntry.parentId up to the root,
+   * then concatenates ancestor texts root→leaf separated by ' / '.
+   * Returns one row per lineId — lineId + tocPath.
+   */
+  GET_TOC_PATHS_FOR_LINES: (count: number) => `
+    WITH RECURSIVE ancestors(lineId, entryId, parentId, text, depth) AS (
+      SELECT lt.lineId, te.id, te.parentId, tt.text, 0
+      FROM line_toc lt
+      JOIN tocEntry te ON te.id = lt.tocEntryId
+      JOIN tocText tt ON tt.id = te.textId
+      WHERE lt.lineId IN (${Array(count).fill('?').join(', ')})
+      UNION ALL
+      SELECT a.lineId, te.id, te.parentId, tt.text, a.depth + 1
+      FROM ancestors a
+      JOIN tocEntry te ON te.id = a.parentId
+      JOIN tocText tt ON tt.id = te.textId
+    )
+    SELECT lineId, group_concat(text, ' / ') AS tocPath
+    FROM (SELECT lineId, text FROM ancestors ORDER BY lineId, depth DESC)
+    GROUP BY lineId
+  `,
+
   // ── Lines ────────────────────────────────────────────────────────────────────
 
   /** A page of lines (for virtual scrolling) */

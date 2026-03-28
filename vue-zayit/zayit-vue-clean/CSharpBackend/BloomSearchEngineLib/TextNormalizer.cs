@@ -21,12 +21,14 @@ namespace BloomSearchEngineLib
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool IsNonSpacingMark(char c)
         {
-            int i = c;
-            return (s_nonSpacingMarkTable[i >> 3] & (1 << (i & 7))) != 0;
+            return (s_nonSpacingMarkTable[c >> 3] & (1 << (c & 7))) != 0;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static bool IsHebrew(char c) => (uint)(c - '\u05D0') <= (uint)('\u05EA' - '\u05D0');
+        private static bool IsHebrew(char c)
+        {
+            return (uint)(c - '\u05D0') <= ('\u05EA' - '\u05D0');
+        }
 
         public static string NormalizeText(this string text)
         {
@@ -35,78 +37,201 @@ namespace BloomSearchEngineLib
 
             char[] buf = new char[text.Length];
 
-            int strippedLen = StripHtmlTags(text, buf);
-            int finalLen = RemoveNonSpacingMarks(buf, strippedLen);
+            int len = StripHtmlTags(text, buf);
+            len = RemoveNonSpacingMarks(buf, len);
 
-            return new string(buf, 0, finalLen);
+            return new string(buf, 0, len);
         }
 
         private static int StripHtmlTags(string src, char[] dst)
         {
             int len = src.Length;
-            int di = 0;
-            int si = 0;
+            int si = 0, di = 0;
 
             while (si < len)
             {
                 char c = src[si];
-                if (c != '<')
+
+                // =========================
+                // FAST PATH (most chars)
+                // =========================
+                if (c != '<' && c != '&')
                 {
                     dst[di++] = c;
                     si++;
                     continue;
                 }
 
-                // Scan for '>' and check for Hebrew
-                int scan = si + 1;
-                bool hasHebrew = false;
-
-                while (scan < len && src[scan] != '>')
+                // =========================
+                // ENTITY
+                // =========================
+                if (c == '&')
                 {
-                    if (IsHebrew(src[scan]))
-                    {
-                        hasHebrew = true;
+                    int start = si;
+                    int scan = si + 1;
+
+                    while (scan < len && scan - start <= 10 && src[scan] != ';')
                         scan++;
-                        while (scan < len && src[scan] != '>') scan++;
-                        break;
+
+                    if (scan < len)
+                    {
+                        int entityLen = scan - start;
+                        char c1 = src[start + 1];
+
+                        // ---- named ----
+                        if (c1 == 'n' && entityLen == 5 &&
+                            src[start + 2] == 'b' &&
+                            src[start + 3] == 's' &&
+                            src[start + 4] == 'p')
+                        {
+                            dst[di++] = ' ';
+                            si = scan + 1;
+                            continue;
+                        }
+
+                        if (c1 == 'a' && entityLen == 4 &&
+                            src[start + 2] == 'm' &&
+                            src[start + 3] == 'p')
+                        {
+                            dst[di++] = '&';
+                            si = scan + 1;
+                            continue;
+                        }
+
+                        if (c1 == 'l' && entityLen == 3 &&
+                            src[start + 2] == 't')
+                        {
+                            dst[di++] = '<';
+                            si = scan + 1;
+                            continue;
+                        }
+
+                        if (c1 == 'g' && entityLen == 3 &&
+                            src[start + 2] == 't')
+                        {
+                            dst[di++] = '>';
+                            si = scan + 1;
+                            continue;
+                        }
+
+                        if (c1 == 'q' && entityLen == 5 &&
+                            src[start + 2] == 'u' &&
+                            src[start + 3] == 'o' &&
+                            src[start + 4] == 't')
+                        {
+                            dst[di++] = '"';
+                            si = scan + 1;
+                            continue;
+                        }
+
+                        // ---- numeric ----
+                        if (c1 == '#')
+                        {
+                            int numStart = start + 2;
+                            int value = 0;
+                            bool isHex = false;
+
+                            if (numStart < scan)
+                            {
+                                char x = src[numStart];
+                                if (x == 'x' || x == 'X')
+                                {
+                                    isHex = true;
+                                    numStart++;
+                                }
+                            }
+
+                            for (int i = numStart; i < scan; i++)
+                            {
+                                char ch = src[i];
+
+                                if (isHex)
+                                {
+                                    int d =
+                                        (ch >= '0' && ch <= '9') ? ch - '0' :
+                                        (ch >= 'a' && ch <= 'f') ? ch - 'a' + 10 :
+                                        (ch >= 'A' && ch <= 'F') ? ch - 'A' + 10 : -1;
+
+                                    if (d < 0) { value = -1; break; }
+                                    value = (value << 4) + d;
+                                }
+                                else
+                                {
+                                    if (ch < '0' || ch > '9') { value = -1; break; }
+                                    value = value * 10 + (ch - '0');
+                                }
+                            }
+
+                            if (value >= 0 && value <= 0x10FFFF)
+                            {
+                                if (value <= 0xFFFF)
+                                {
+                                    dst[di++] = (char)value;
+                                }
+                                else
+                                {
+                                    value -= 0x10000;
+                                    dst[di++] = (char)((value >> 10) + 0xD800);
+                                    dst[di++] = (char)((value & 0x3FF) + 0xDC00);
+                                }
+
+                                si = scan + 1;
+                                continue;
+                            }
+                        }
+
+                        si = scan + 1;
+                        continue;
                     }
-                    scan++;
                 }
 
-                if (scan >= len)
+                // =========================
+                // TAG
+                // =========================
+                int scanTag = si + 1;
+
+                while (scanTag < len && src[scanTag] != '>')
                 {
-                    // No closing '>' — treat '<' as plain text
+                    if (IsHebrew(src[scanTag]))
+                    {
+                        int end = scanTag + 1;
+                        while (end < len && src[end] != '>') end++;
+
+                        if (end < len) end++;
+
+                        while (si < end)
+                            dst[di++] = src[si++];
+
+                        goto ContinueOuter;
+                    }
+                    scanTag++;
+                }
+
+                if (scanTag >= len)
+                {
                     dst[di++] = src[si++];
                     continue;
                 }
 
-                if (hasHebrew)
-                {
-                    // Copy entire tag including < and >
-                    int tagEnd = scan + 1;
-                    while (si < tagEnd)
-                        dst[di++] = src[si++];
-                }
-                else
-                {
-                    // Skip tag
-                    si = scan + 1;
-                }
+                si = scanTag + 1;
+
+            ContinueOuter:;
             }
 
             return di;
         }
 
-        // In-place: output is always <= input index so reads and writes never collide
         private static int RemoveNonSpacingMarks(char[] buf, int len)
         {
             int di = 0;
+
             for (int si = 0; si < len; si++)
             {
                 char c = buf[si];
-                if (!IsNonSpacingMark(c))
+                if ((s_nonSpacingMarkTable[c >> 3] & (1 << (c & 7))) == 0)
                     buf[di++] = c;
             }
+
             return di;
         }
     }

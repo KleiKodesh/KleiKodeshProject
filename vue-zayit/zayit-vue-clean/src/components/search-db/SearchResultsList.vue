@@ -151,12 +151,12 @@ watch(() => props.results.length, (len) => {
   width: fit-content;
 }
 
-.result-header:hover .book-title { text-decoration: underline; }
-.result-header:hover .toc-text   { text-decoration: underline; }
+.result-header:hover .book-title { color: var(--accent-color); }
+.result-header:hover .toc-text   { color: var(--accent-color); }
 
-.book-title { color: var(--accent-color); }
+.book-title { color: var(--text-primary); }
 .sep        { color: var(--text-secondary); font-size: 11px; }
-.toc-text   { color: var(--text-secondary); font-size: 12px; }
+.toc-text   { color: var(--text-primary); font-size: 12px; }
 
 .snippet {
   font-family: var(--text-font);
