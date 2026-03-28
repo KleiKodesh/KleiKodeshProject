@@ -80,6 +80,8 @@ export function useSettingsPage() {
 
   async function resetAll() {
     await tabStore.resetAll()
+    if (typeof window.__webviewAction === 'function')
+      await window.__webviewAction('DeleteBloomIndex', {}).catch(() => {})
     window.location.reload()
   }
 

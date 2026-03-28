@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import HomeTile from './HomePageTile.vue'
 import {
   IconLibrary24Filled, IconFolderOpen24Filled, IconBookOpen24Filled,
@@ -11,6 +11,7 @@ import { useTabStore } from '@/stores/tabStore'
 import { useGridLayout } from '@/composables/useGridLayout'
 import { isHosted, dbReady } from '@/host/db'
 import { pickFile } from '@/host/bridge'
+import { useEventListener } from '@vueuse/core'
 
 const pdfStore = usePdfStore()
 const tabStore = useTabStore()
@@ -47,6 +48,43 @@ const gridRef = ref<HTMLElement | null>(null)
 const tileCount = computed(() => tiles.value.length)
 const { cols } = useGridLayout(pageRef, tileCount)
 
+const tileRefs = ref<InstanceType<typeof HomeTile>[]>([])
+const focusedIndex = ref<number | null>(null)
+
+function focusTile(index: number) {
+  const clamped = Math.max(0, Math.min(index, tiles.value.length - 1))
+  focusedIndex.value = clamped
+  const el = tileRefs.value[clamped]?.$el as HTMLElement | undefined
+  el?.focus()
+}
+
+useEventListener(pageRef, 'keydown', (e: KeyboardEvent) => {
+  const arrows = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']
+  if (!arrows.includes(e.key)) return
+  e.preventDefault()
+
+  if (focusedIndex.value === null) {
+    focusTile(0)
+    return
+  }
+
+  const c = cols.value
+  const current = focusedIndex.value
+  // RTL: ArrowRight moves to previous index (toward start), ArrowLeft moves to next
+  if (e.key === 'ArrowDown') focusTile(current + c)
+  else if (e.key === 'ArrowUp') focusTile(current - c)
+  else if (e.key === 'ArrowLeft') focusTile(current + 1)
+  else if (e.key === 'ArrowRight') focusTile(current - 1)
+})
+
+useEventListener(pageRef, 'focusout', (e: FocusEvent) => {
+  if (!pageRef.value?.contains(e.relatedTarget as Node)) {
+    focusedIndex.value = null
+  }
+})
+
+onMounted(() => pageRef.value?.focus())
+
 async function onTap(label: string) {
   const route = SINGLETON_ROUTES[label]
   if (route) {
@@ -66,9 +104,17 @@ async function onTap(label: string) {
 </script>
 
 <template>
-  <div ref="pageRef" class="home-page">
-    <div ref="gridRef" class="home-grid" :style="{ gridTemplateColumns: `repeat(${cols}, 1fr)` }">
-      <HomeTile v-for="t in tiles" :key="t.label" v-bind="t" @tap="onTap(t.label)" />
+  <div ref="pageRef" class="home-page" tabindex="0">
+    <div ref="gridRef" class="home-grid tiles-grid" :style="{ gridTemplateColumns: `repeat(${cols}, 1fr)` }">
+      <HomeTile
+        v-for="(t, i) in tiles"
+        :key="t.label"
+        ref="tileRefs"
+        v-bind="t"
+        :is-focused="focusedIndex === i"
+        @tap="onTap(t.label)"
+        @focus="focusedIndex = i"
+      />
     </div>
   </div>
 </template>
@@ -80,6 +126,7 @@ async function onTap(label: string) {
   align-items: center;
   justify-content: center;
   height: 100%;
+  outline: none;
 }
 .home-grid {
   display: grid;

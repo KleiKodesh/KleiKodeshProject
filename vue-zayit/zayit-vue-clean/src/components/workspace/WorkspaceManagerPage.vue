@@ -197,7 +197,7 @@ async function confirmDelete(id: string) {
   flex: 1;
   height: 32px;
   padding: 0 10px;
-  background: color-mix(in srgb, var(--text-secondary) 10%, transparent);
+  background: var(--input-bg);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   color: var(--text-primary);

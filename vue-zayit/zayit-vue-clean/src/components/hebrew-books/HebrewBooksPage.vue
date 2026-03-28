@@ -4,7 +4,7 @@ import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
 import HebrewBooksListItem from './HebrewBooksListItem.vue'
 import { useHebrewBooks } from './useHebrewBooks'
-import type { HebrewBook } from './hebrewBooksService'
+import { useListKeys } from '@/composables/useListKeys'
 
 const {
   displayedBooks, isLoading, error, searchTerm, isOnline,
@@ -12,6 +12,13 @@ const {
 } = useHebrewBooks()
 
 const searchInputRef = ref<HTMLInputElement>()
+const listEl = ref<HTMLElement | null>(null)
+
+const { focusedIndex, containerFocused } = useListKeys(
+  listEl,
+  () => displayedBooks.value.length,
+  (i) => openBook(displayedBooks.value[i]!),
+)
 
 function updateOnline() { isOnline.value = navigator.onLine }
 
@@ -31,17 +38,18 @@ onUnmounted(() => {
 <template>
   <div class="hb-page">
     <!-- List -->
-    <div class="hb-list">
+    <div ref="listEl" class="hb-list" tabindex="0">
       <LoadingAnimation v-if="isLoading" />
 
       <div v-else-if="error" class="state">{{ error }}</div>
 
       <template v-else-if="displayedBooks.length">
         <HebrewBooksListItem
-          v-for="book in displayedBooks"
+          v-for="(book, i) in displayedBooks"
           :key="book.id"
           :book="book"
-          @book-clicked="openBook"
+          :focused="containerFocused && focusedIndex === i"
+          @book-clicked="focusedIndex = i; openBook(book)"
           @download-clicked="downloadBook"
         />
       </template>
@@ -66,6 +74,9 @@ onUnmounted(() => {
           class="search-input"
           dir="rtl"
           @input="search(($event.target as HTMLInputElement).value)"
+          @keydown.up.prevent="listEl?.focus()"
+          @keydown.down.prevent="listEl?.focus()"
+          @keydown.tab.prevent="listEl?.focus()"
         />
       </div>
     </div>

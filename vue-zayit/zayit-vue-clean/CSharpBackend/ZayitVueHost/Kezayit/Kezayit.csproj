@@ -102,6 +102,7 @@
     <Compile Include="HebrewBooks\HebrewBooksHandler.cs" />
     <Compile Include="Pdf\PdfHandler.cs" />
     <Compile Include="Pdf\WordToPdfConverter.cs" />
+    <Compile Include="Search\SearchHandler.cs" />
     <Compile Include="Settings\AppSettings.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

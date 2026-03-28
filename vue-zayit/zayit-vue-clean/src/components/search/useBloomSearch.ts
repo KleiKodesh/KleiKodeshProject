@@ -105,14 +105,17 @@ export function useBloomSearch() {
     // Cache check
     const cached = await cacheGet(query.trim().toLowerCase())
     if (cached) {
+      console.log('[useBloomSearch] cache hit for:', query)
       results.value     = cached
       isSearching.value = false
       return
     }
+    console.log('[useBloomSearch] cache miss for:', query)
 
     try {
       ensureWebviewListener()
-      const searchId = await callAction<string>('BloomSearchStart', query)
+      const reply = await callAction<{ searchId: string }>('BloomSearchStart', query)
+      const searchId = reply?.searchId
       if (!searchId) {
         // Index not ready — caller should check indexing status
         isSearching.value = false
@@ -128,7 +131,8 @@ export function useBloomSearch() {
           if (currentSearchId === searchId) {
             isSearching.value = false
             if (results.value.length > 0)
-              cacheSet(query.trim().toLowerCase(), results.value).catch(() => {})
+              cacheSet(query.trim().toLowerCase(), JSON.parse(JSON.stringify(results.value)))
+                .catch(err => console.error('[useBloomSearch] cacheSet failed:', err))
             _cleanup()
           }
         },

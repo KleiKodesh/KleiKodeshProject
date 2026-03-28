@@ -29,6 +29,16 @@ button:hover { background: var(--hover-bg); color: var(--text-primary); }
 button:active { transform: scale(0.92); transition: transform 0.1s; }
 
 .c-pointer { cursor: pointer; }
+
+/* Keyboard nav focus indicator — used by useVirtualListKeys / useListKeys / useTilesKeys */
+[data-nav-item].is-focused { background: color-mix(in srgb, var(--text-primary) 10%, transparent); }
+.tiles-grid [data-nav-item].is-focused { border-radius: 6px; }
+
+/* Suppress browser focus outline on keyboard-navigable scroll containers — focus is shown on individual items instead */
+[tabindex="0"]:focus { outline: none; }
+
+/* Search inputs never change background on focus — background is always inherited from the container */
+input:focus { background: none !important; }
 .hover-bg { transition: background 120ms, color 120ms; }
 .hover-bg:hover { background: var(--hover-bg); }
 

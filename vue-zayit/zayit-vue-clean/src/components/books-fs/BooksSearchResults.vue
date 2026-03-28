@@ -4,23 +4,34 @@ import { useVirtualizer } from '@tanstack/vue-virtual'
 import { IconBook20Filled } from '@iconify-prerendered/vue-fluent'
 import type { SearchFsItem, TocFsItem } from './useBooksFsSearch'
 import type { BookRow } from './booksFsTree'
-import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
+import { useVirtualListKeys } from '@/composables/useVirtualListKeys'
+import { useTilesKeys } from '@/composables/useTilesKeys'
 
 const props = defineProps<{ items: SearchFsItem[]; view: 'list' | 'tiles' | 'tree' }>()
 const emit = defineEmits<{ selectBook: [BookRow]; selectToc: [TocFsItem] }>()
 
 const scrollEl = ref<HTMLElement | null>(null)
+const tilesEl = ref<HTMLElement | null>(null)
+
 const virtualizer = useVirtualizer(computed(() => ({
   count: props.view !== 'tiles' ? props.items.length : 0,
   getScrollElement: () => scrollEl.value,
-  estimateSize: () => props.view === 'tree' ? 44 : 56,
+  estimateSize: () => 44,
   overscan: 10,
+  measureElement: (el: Element) => el.getBoundingClientRect().height,
 })))
 
-useVirtualScrollerKeys(
+const { focusedIndex: listFocused, containerFocused: listContainerFocused } = useVirtualListKeys(
   scrollEl,
   () => virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
   () => props.view !== 'tiles' ? props.items.length : 0,
+  (i) => onSelect(props.items[i]!),
+)
+
+const { focusedIndex: tilesFocused, containerFocused: tilesContainerFocused } = useTilesKeys(
+  tilesEl,
+  () => props.view === 'tiles' ? props.items.length : 0,
+  (i) => onSelect(props.items[i]!),
 )
 
 const itemTitle = (item: SearchFsItem) =>
@@ -29,6 +40,13 @@ const itemTitle = (item: SearchFsItem) =>
 function onSelect(item: SearchFsItem) {
   item.kind === 'toc' ? emit('selectToc', item) : emit('selectBook', item.book)
 }
+
+defineExpose({
+  focusContainer: () => {
+    const el = props.view === 'tiles' ? tilesEl.value : scrollEl.value
+    el?.focus()
+  },
+})
 </script>
 
 <template>
@@ -36,8 +54,10 @@ function onSelect(item: SearchFsItem) {
   <div v-else-if="view !== 'tiles'" ref="scrollEl" class="scroller" tabindex="0">
     <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
       <div v-for="vRow in virtualizer.getVirtualItems()" :key="String(vRow.key)"
+        :ref="el => el && virtualizer.measureElement(el as Element)"
+        :data-index="vRow.index"
         :style="{ position: 'absolute', top: 0, left: 0, right: 0, transform: `translateY(${vRow.start}px)` }">
-        <div class="fs-item" :class="{ 'no-icon': view === 'tree' }" @click="onSelect(items[vRow.index]!)">
+        <div class="fs-item" data-nav-item :class="{ 'no-icon': view === 'tree', 'is-focused': listContainerFocused && listFocused === vRow.index }" @click="listFocused = vRow.index; onSelect(items[vRow.index]!)">
           <span v-if="view !== 'tree'" class="icon"><IconBook20Filled /></span>
           <span class="item-text">
             <span class="item-title">{{ itemTitle(items[vRow.index]!) }}</span>
@@ -47,8 +67,10 @@ function onSelect(item: SearchFsItem) {
       </div>
     </div>
   </div>
-  <div v-else class="tiles-grid">
-    <div v-for="item in items" :key="item.uid" class="tile" :title="itemTitle(item)" @click="onSelect(item)">
+  <div v-else ref="tilesEl" class="tiles-grid" tabindex="0">
+    <div v-for="(item, i) in items" :key="item.uid" class="tile" data-nav-item
+      :class="{ 'is-focused': tilesContainerFocused && tilesFocused === i }"
+      :title="itemTitle(item)" @click="tilesFocused = i; onSelect(item)">
       <div class="tile-icon"><IconBook20Filled /></div>
       <span class="tile-label">{{ itemTitle(item) }}</span>
     </div>
@@ -67,8 +89,8 @@ function onSelect(item: SearchFsItem) {
 .item-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .item-title { font-size: 14px; color: var(--text-primary); line-height: 1.3; }
 .item-path { font-size: 11px; color: var(--text-secondary); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tiles-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 12px; padding: 12px; overflow-x: hidden; overflow-y: auto; height: 100%; box-sizing: border-box; align-content: flex-start; }
-.tile { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 72px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.tiles-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 6px; padding: 12px; overflow-x: hidden; overflow-y: auto; height: 100%; box-sizing: border-box; align-content: flex-start; }
+.tile { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 72px; cursor: pointer; -webkit-tap-highlight-color: transparent; padding-block: 4px; padding-inline: 3px; border-radius: 6px; }
 .tile:hover .tile-icon { transform: scale(1.08); }
 .tile:active .tile-icon { transform: scale(0.95); }
 .tile-icon { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 10px; background: var(--bg-secondary); transition: transform 0.15s; font-size: 22px; }

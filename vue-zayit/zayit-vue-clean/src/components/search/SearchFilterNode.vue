@@ -48,6 +48,7 @@ function setIndeterminate(el: HTMLInputElement | null) {
       class="row"
       :style="{ paddingInlineStart: `${8 + depth * 18}px` }"
       @click="expanded = !expanded"
+      @keydown.enter="expanded = !expanded"
     >
       <IconChevronLeft20Regular
         v-if="category.children.length > 0 || category.books.length > 0"
@@ -84,6 +85,7 @@ function setIndeterminate(el: HTMLInputElement | null) {
           class="row book-row"
           :style="{ paddingInlineStart: `${26 + (depth + 1) * 18}px` }"
           @click="emit('toggleBook', book.id)"
+          @keydown.enter="emit('toggleBook', book.id)"
         >
           <input type="checkbox" class="cb" :checked="checkedBookIds.has(book.id)" @click.stop @change="emit('toggleBook', book.id)" />
           <IconBookOpen20Regular class="book-icon" />

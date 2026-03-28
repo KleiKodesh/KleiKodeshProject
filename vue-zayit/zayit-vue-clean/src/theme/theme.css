@@ -13,6 +13,8 @@
   --accent-color: var(--accent-color-custom, #0078d4);
   --accent-bg: rgba(0, 120, 212, 0.1);
   --accent-bg-light: rgba(0, 120, 212, 0.05);
+  --input-bg: color-mix(in srgb, var(--text-secondary) 10%, transparent);
+  --input-bg-focus: color-mix(in srgb, var(--text-secondary) 15%, transparent);
   --header-font: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
   --text-font: 'Times New Roman', Times, serif;
 }
@@ -32,6 +34,8 @@
   --accent-color: var(--accent-color-custom, #60cdff);
   --accent-bg: rgba(96, 205, 255, 0.15);
   --accent-bg-light: rgba(96, 205, 255, 0.08);
+  --input-bg: color-mix(in srgb, var(--text-secondary) 10%, transparent);
+  --input-bg-focus: color-mix(in srgb, var(--text-secondary) 15%, transparent);
 }
 
 * { 

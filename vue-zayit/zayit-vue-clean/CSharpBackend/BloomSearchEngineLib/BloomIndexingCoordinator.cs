@@ -29,51 +29,26 @@ namespace BloomSearchEngineLib
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[BloomIndexingCoordinator] Failed to create mutex: {ex}");
+                Console.WriteLine("[BloomIndexingCoordinator] Failed to create mutex: " + ex.Message);
             }
         }
 
-        /// <summary>
-        /// Check if indexing is currently in progress (across all instances)
-        /// </summary>
         public static bool IsIndexing
         {
-            get
-            {
-                lock (_lock)
-                {
-                    return _isIndexing;
-                }
-            }
+            get { lock (_lock) { return _isIndexing; } }
         }
 
-        /// <summary>
-        /// Get the last reported progress
-        /// </summary>
         public static IndexProgressChangedEventArgs LastProgress
         {
-            get
-            {
-                lock (_lock)
-                {
-                    return _lastProgress;
-                }
-            }
+            get { lock (_lock) { return _lastProgress; } }
         }
 
-        /// <summary>
-        /// Try to acquire the indexing lock. Returns true if successful.
-        /// Only one instance across all processes can hold the lock.
-        /// </summary>
         public static bool TryAcquireIndexingLock(int timeoutMs = 0)
         {
             try
             {
                 if (_globalMutex == null)
-                {
-                    Console.WriteLine("[BloomIndexingCoordinator] Mutex not available");
                     return false;
-                }
 
                 bool acquired = _globalMutex.WaitOne(timeoutMs);
                 if (acquired)
@@ -93,7 +68,6 @@ namespace BloomSearchEngineLib
             }
             catch (AbandonedMutexException)
             {
-                // Previous process crashed while holding the mutex
                 Console.WriteLine("[BloomIndexingCoordinator] Recovered abandoned mutex");
                 lock (_lock)
                 {
@@ -104,22 +78,16 @@ namespace BloomSearchEngineLib
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[BloomIndexingCoordinator] Error acquiring lock: {ex}");
+                Console.WriteLine("[BloomIndexingCoordinator] Error acquiring lock: " + ex.Message);
                 return false;
             }
         }
 
-        /// <summary>
-        /// Release the indexing lock
-        /// </summary>
         public static void ReleaseIndexingLock()
         {
             try
             {
-                lock (_lock)
-                {
-                    _isIndexing = false;
-                }
+                lock (_lock) { _isIndexing = false; }
 
                 if (_globalMutex != null)
                 {
@@ -129,37 +97,24 @@ namespace BloomSearchEngineLib
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[BloomIndexingCoordinator] Error releasing lock: {ex}");
+                Console.WriteLine("[BloomIndexingCoordinator] Error releasing lock: " + ex.Message);
             }
         }
 
-        /// <summary>
-        /// Notify all subscribed instances of indexing progress
-        /// </summary>
         public static void NotifyProgress(IndexProgressChangedEventArgs progress)
         {
-            lock (_lock)
-            {
-                _lastProgress = progress;
-            }
+            lock (_lock) { _lastProgress = progress; }
 
-            // Raise event on background thread to avoid blocking
             ThreadPool.QueueUserWorkItem(_ =>
             {
-                try
-                {
-                    ProgressChanged?.Invoke(null, progress);
-                }
+                try { ProgressChanged?.Invoke(null, progress); }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[BloomIndexingCoordinator] Error notifying progress: {ex}");
+                    Console.WriteLine("[BloomIndexingCoordinator] Error notifying progress: " + ex.Message);
                 }
             });
         }
 
-        /// <summary>
-        /// Check if another instance is currently indexing
-        /// </summary>
         public static bool IsAnotherInstanceIndexing()
         {
             try
@@ -167,11 +122,9 @@ namespace BloomSearchEngineLib
                 if (_globalMutex == null)
                     return false;
 
-                // Try to acquire with 0 timeout - if we can't, someone else has it
                 bool canAcquire = _globalMutex.WaitOne(0);
                 if (canAcquire)
                 {
-                    // We got it, so release immediately
                     _globalMutex.ReleaseMutex();
                     return false;
                 }
@@ -179,13 +132,12 @@ namespace BloomSearchEngineLib
             }
             catch (AbandonedMutexException)
             {
-                // Previous process crashed - we can take over
                 _globalMutex.ReleaseMutex();
                 return false;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[BloomIndexingCoordinator] Error checking indexing status: {ex}");
+                Console.WriteLine("[BloomIndexingCoordinator] Error checking indexing status: " + ex.Message);
                 return false;
             }
         }

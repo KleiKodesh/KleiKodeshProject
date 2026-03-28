@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import { idbGet, idbSet, idbDelete, idbDeleteByPrefix, idbSetLastRead, idbClearAll, KEYS } from '@/utils/idbPersistence'
+import { idbGet, idbSet, idbTabsGet, idbTabsSet, idbTabsDelete, idbTabsDeleteByPrefix, idbSetLastRead, idbGetLastRead, idbClearAll, KEYS } from '@/utils/idbPersistence'
 import type { TabState, BookState, LastReadState } from '@/utils/idbPersistence'
 import { useWorkspaceStore } from './workspaceStore'
 import { disposePdfHost } from '@/host/bridge'
@@ -24,6 +24,9 @@ export interface Tab {
   openToc?: boolean
   openTocEntryId?: number
   openTocLineIndex?: number
+  searchHighlightLineIndex?: number
+  searchQuery?: string
+  searchScrollIndex?: number
   tocPath?: string
 }
 
@@ -45,7 +48,7 @@ export const useTabStore = defineStore('tabs', () => {
   async function init() {
     const wsStore = useWorkspaceStore()
     const wsId = wsStore.activeId
-    const saved = await idbGet<PersistedTabList>(KEYS.tabsList(wsId))
+    const saved = await idbTabsGet<PersistedTabList>(KEYS.tabsList(wsId))
     if (saved && saved.tabs.length > 0) {
       tabs.value = saved.tabs
       activeTabId.value = saved.activeTabId
@@ -55,7 +58,7 @@ export const useTabStore = defineStore('tabs', () => {
 
   // ── Singleton routes — never persisted across sessions ───────────────────
 
-  const SINGLETON_ROUTES: TabRoute[] = ['/settings', '/books', '/hebrewbooks', '/workspaces', '/search']
+  const SINGLETON_ROUTES: TabRoute[] = ['/settings', '/books', '/hebrewbooks', '/workspaces']
   const SINGLETON_TITLES: Record<string, string> = { '/settings': 'הגדרות', '/books': 'ספרים', '/hebrewbooks': 'היברו-בוקס', '/workspaces': 'סביבות עבודה', '/search': 'חיפוש' }
 
   // ── Tab list persistence ──────────────────────────────────────────────────
@@ -63,8 +66,8 @@ export const useTabStore = defineStore('tabs', () => {
   function persistTabs() {
     const wsId = useWorkspaceStore().activeId
     const persistable = tabs.value.filter(t => !SINGLETON_ROUTES.includes(t.route))
-    idbSet<PersistedTabList>(KEYS.tabsList(wsId), {
-      tabs: persistable.map(({ pdfVirtualUrl, pdfConverting, pdfLoadingType, openToc, openTocEntryId, openTocLineIndex, ...t }) => t),
+    idbTabsSet<PersistedTabList>(KEYS.tabsList(wsId), {
+      tabs: persistable.map(({ pdfVirtualUrl, pdfConverting, pdfLoadingType, openToc, openTocEntryId, openTocLineIndex, searchHighlightLineIndex, ...t }) => t),
       activeTabId: persistable.some(t => t.id === activeTabId.value) ? activeTabId.value : (persistable[0]?.id ?? activeTabId.value),
       nextId,
     })
@@ -78,32 +81,32 @@ export const useTabStore = defineStore('tabs', () => {
 
   function getTabViewState(tabId: string): Promise<TabState | null> {
     const wsId = useWorkspaceStore().activeId
-    return idbGet<TabState>(KEYS.tab(wsId, tabId))
+    return idbTabsGet<TabState>(KEYS.tab(wsId, tabId))
   }
   function setTabViewState(tabId: string, state: TabState): Promise<void> {
     const wsId = useWorkspaceStore().activeId
-    return idbSet(KEYS.tab(wsId, tabId), state)
+    return idbTabsSet(KEYS.tab(wsId, tabId), state)
   }
 
   // ── Per-tab+book state ────────────────────────────────────────────────────
 
   function getBookViewState(tabId: string, bookId: number): Promise<BookState | null> {
     const wsId = useWorkspaceStore().activeId
-    return idbGet<BookState>(KEYS.book(wsId, tabId, bookId))
+    return idbTabsGet<BookState>(KEYS.book(wsId, tabId, bookId))
   }
   function setBookViewState(tabId: string, bookId: number, state: BookState): Promise<void> {
     const wsId = useWorkspaceStore().activeId
-    return idbSet(KEYS.book(wsId, tabId, bookId), state)
+    return idbTabsSet(KEYS.book(wsId, tabId, bookId), state)
   }
   function clearBookViewState(tabId: string, bookId: number): Promise<void> {
     const wsId = useWorkspaceStore().activeId
-    return idbDelete(KEYS.book(wsId, tabId, bookId))
+    return idbTabsDelete(KEYS.book(wsId, tabId, bookId))
   }
 
   // ── Global last-read per book (LRU-capped at 1000) ────────────────────────
 
   function getLastReadPos(bookId: number): Promise<LastReadState | null> {
-    return idbGet<LastReadState>(KEYS.lastread(bookId))
+    return idbGetLastRead(bookId)
   }
   function setLastReadPos(bookId: number, pos: LastReadState): Promise<void> {
     return idbSetLastRead(bookId, pos)
@@ -139,8 +142,8 @@ export const useTabStore = defineStore('tabs', () => {
     const wsId = useWorkspaceStore().activeId
     for (const tab of tabs.value) {
       if (tab.pdfFilePath) disposePdfHost(tab.pdfFilePath)
-      idbDelete(KEYS.tab(wsId, tab.id))
-      idbDeleteByPrefix(KEYS.tabPrefix(wsId, tab.id))
+      idbTabsDelete(KEYS.tab(wsId, tab.id))
+      idbTabsDeleteByPrefix(KEYS.tabPrefix(wsId, tab.id))
     }
     const home: Tab = { id: String(++nextId), title: 'בית', route: '/' }
     tabs.value = [home]
@@ -153,8 +156,8 @@ export const useTabStore = defineStore('tabs', () => {
     const tab = tabs.value[idx]!
     if (tab.pdfFilePath) disposePdfHost(tab.pdfFilePath)
     const wsId = useWorkspaceStore().activeId
-    idbDelete(KEYS.tab(wsId, id))
-    idbDeleteByPrefix(KEYS.tabPrefix(wsId, id))
+    idbTabsDelete(KEYS.tab(wsId, id))
+    idbTabsDeleteByPrefix(KEYS.tabPrefix(wsId, id))
     tabs.value.splice(idx, 1)
     if (activeTabId.value === id)
       activeTabId.value = tabs.value[Math.min(idx, tabs.value.length - 1)]?.id ?? ''

@@ -38,6 +38,14 @@ defineExpose({ focus: () => inputRef.value?.focus() })
 <template>
   <div class="search-bar">
     <div class="search-inner">
+      <button
+        class="bar-btn"
+        :class="{ 'filter-active': filterCount > 0 }"
+        :title="filterCount > 0 ? `סינון: ${filterCount} ספרים` : 'סינון תוצאות'"
+        @click.stop="$emit('toggleFilter')"
+      >
+        <IconFilter24Regular />
+      </button>
       <input
         ref="inputRef"
         v-model="localQuery"
@@ -48,14 +56,6 @@ defineExpose({ focus: () => inputRef.value?.focus() })
         @keydown.enter="handleSearch"
         @keydown.esc="handleClear"
       />
-      <button
-        class="bar-btn"
-        :class="{ 'filter-active': filterCount > 0 }"
-        :title="filterCount > 0 ? `סינון: ${filterCount} ספרים` : 'סינון תוצאות'"
-        @click.stop="$emit('toggleFilter')"
-      >
-        <IconFilter24Regular />
-      </button>
       <button
         class="bar-btn search-btn"
         :class="{ searching: isSearching }"
@@ -87,10 +87,12 @@ defineExpose({ focus: () => inputRef.value?.focus() })
 .search-inner {
   display: flex;
   align-items: center;
-  gap: 2px;
   background: color-mix(in srgb, var(--text-secondary) 12%, transparent);
   border-radius: 6px;
-  padding: 0 4px;
+}
+
+.search-btn {
+  margin-inline-start: 2px;
 }
 
 .search-input {
@@ -116,6 +118,9 @@ defineExpose({ focus: () => inputRef.value?.focus() })
   border-radius: 4px;
   flex-shrink: 0;
 }
+
+.bar-btn.search-btn { margin-inline-start: 2px; }
+.bar-btn:not(.search-btn) { padding: 0; }
 
 .bar-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .filter-active { color: var(--accent-color); }

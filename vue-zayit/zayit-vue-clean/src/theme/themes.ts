@@ -1,7 +1,7 @@
 import themesData from './themes.json'
 import type { ThemePreset, Theme } from './themeTypes'
 import { lighten, darken, hexToRgb, hexToRgbObj } from './themeColorUtils'
-import { idbGet, idbSet, idbDelete, KEYS } from '@/utils/idbPersistence'
+import { idbGet, idbSet, KEYS } from '@/utils/idbPersistence'
 
 export type { ThemePreset, Theme, ThemeColors } from './themeTypes'
 export { lighten, darken, hexToRgb, hexToRgbObj } from './themeColorUtils'

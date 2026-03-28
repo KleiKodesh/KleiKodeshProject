@@ -1,21 +1,18 @@
 /**
- * Unified IndexedDB persistence.
+ * IndexedDB persistence — separate databases per concern.
  *
- * Single object store `app-state` with prefixed string keys:
+ * Databases:
+ *   app-settings  — all scalar settings (one key per setting)
+ *   app-tabs      — tabs list, tab states, book states (workspace-scoped)
+ *   app-lastread  — per-book last-read positions (LRU-capped at 1000)
  *
- *   settings:{key}                    — individual scalar settings (one key per setting)
- *   settings:workspaces               — WorkspaceList (all workspaces + active id)
- *   tabs:{wsId}:list                  — tab list + activeTabId + nextId counter (workspace-scoped)
- *   tab:{wsId}:{tabId}                — TabState (bottomVisible, workspace-scoped)
- *   book:{wsId}:{tabId}:{bookId}      — BookState (scroll, selectedLine, commentary scroll)
- *   lastread:{bookId}                 — LastReadState (global per-book resume, capped at 1000)
+ * Reset: delete all three databases.
  */
 
-const DB_NAME = 'app-state'
-const DB_VERSION = 1
-const STORE = 'app-state'
-
+const STORE = 'data'
 const LASTREAD_MAX = 1000
+
+// ── Shared types ──────────────────────────────────────────────────────────────
 
 export interface TabState {
   bottomVisible: boolean
@@ -37,8 +34,6 @@ export interface LastReadState {
   commentaryScrollOffset?: number | null
 }
 
-// ── Workspace types ───────────────────────────────────────────────────────────
-
 export interface Workspace {
   id: string
   name: string
@@ -50,71 +45,31 @@ export interface WorkspaceList {
   activeId: string
 }
 
-// ── Keys ─────────────────────────────────────────────────────────────────────
+// ── DB handles ────────────────────────────────────────────────────────────────
 
-export const KEYS = {
-  // workspace registry
-  SETTINGS_WORKSPACES: 'settings:workspaces',
+const handles: Record<string, IDBDatabase | null> = {
+  'app-settings': null,
+  'app-tabs': null,
+  'app-lastread': null,
+}
 
-  // bookViewStore settings
-  SETTINGS_BOOKS_VIEW:      'settings:books.view',
-  SETTINGS_TOOLBAR:         'settings:bookView.toolbarVisible',
-  SETTINGS_SEARCH_BAR_POS:  'settings:bookView.searchBarPos',
-  SETTINGS_ZOOM:            'settings:bookView.zoom',
-
-  // settingsStore — one key per setting
-  SETTINGS_CENSOR_DIVINE:   'settings:censorDivineNames',
-  SETTINGS_DIACRITICS:      'settings:diacriticsState',
-  SETTINGS_HEADER_FONT:     'settings:headerFont',
-  SETTINGS_TEXT_FONT:       'settings:textFont',
-  SETTINGS_FONT_SIZE:       'settings:fontSize',
-  SETTINGS_LINE_PADDING:    'settings:linePadding',
-  SETTINGS_COMMENTARY_HEADER_FONT:  'settings:commentaryHeaderFont',
-  SETTINGS_COMMENTARY_TEXT_FONT:    'settings:commentaryTextFont',
-  SETTINGS_COMMENTARY_FONT_SIZE:    'settings:commentaryFontSize',
-  SETTINGS_COMMENTARY_LINE_PADDING: 'settings:commentaryLinePadding',
-  SETTINGS_SEPARATE_COMMENTARY:     'settings:useSeparateCommentarySettings',
-  SETTINGS_APP_ZOOM:        'settings:appZoom',
-  SETTINGS_NEW_TAB_PAGE:    'settings:newTabPage',
-  SETTINGS_PDF_FILTERS:     'settings:pdfPageFilters',
-  SETTINGS_RESUME_LAST_READ:'settings:resumeLastRead',
-
-  // themeStore
-  SETTINGS_THEME:           'settings:theme',
-  SETTINGS_CUSTOM_THEMES:   'settings:customThemes',
-
-  // workspace-scoped keys
-  tabsList: (wsId: string)                              => `tabs:${wsId}:list`,
-  tab:      (wsId: string, tabId: string)               => `tab:${wsId}:${tabId}`,
-  book:     (wsId: string, tabId: string, bookId: number) => `book:${wsId}:${tabId}:${bookId}`,
-  lastread: (bookId: number)                            => `lastread:${bookId}`,
-
-  // prefix helpers for bulk delete
-  wsPrefix:  (wsId: string) => `tabs:${wsId}:`,
-  tabPrefix: (wsId: string, tabId: string) => `book:${wsId}:${tabId}:`,
-} as const
-
-// ── DB open ───────────────────────────────────────────────────────────────────
-
-let db: IDBDatabase | null = null
-
-function open(): Promise<IDBDatabase> {
-  if (db) return Promise.resolve(db)
+function openDb(name: string): Promise<IDBDatabase> {
+  if (handles[name]) return Promise.resolve(handles[name]!)
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION)
+    const req = indexedDB.open(name, 1)
     req.onupgradeneeded = () => {
       if (!req.result.objectStoreNames.contains(STORE))
         req.result.createObjectStore(STORE)
     }
-    req.onsuccess = () => { db = req.result; resolve(db) }
+    req.onsuccess = () => { handles[name] = req.result; resolve(req.result) }
     req.onerror  = () => reject(req.error)
   })
 }
 
 // ── Core get / set / delete ───────────────────────────────────────────────────
 
-export async function idbGet<T>(key: string): Promise<T | null> {
-  const store = (await open()).transaction(STORE).objectStore(STORE)
+async function dbGet<T>(dbName: string, key: string): Promise<T | null> {
+  const store = (await openDb(dbName)).transaction(STORE).objectStore(STORE)
   return new Promise((resolve, reject) => {
     const req = store.get(key)
     req.onsuccess = () => resolve(req.result ?? null)
@@ -122,8 +77,8 @@ export async function idbGet<T>(key: string): Promise<T | null> {
   })
 }
 
-export async function idbSet<T>(key: string, value: T): Promise<void> {
-  const store = (await open()).transaction(STORE, 'readwrite').objectStore(STORE)
+async function dbSet<T>(dbName: string, key: string, value: T): Promise<void> {
+  const store = (await openDb(dbName)).transaction(STORE, 'readwrite').objectStore(STORE)
   return new Promise((resolve, reject) => {
     const req = store.put(value, key)
     req.onsuccess = () => resolve()
@@ -131,8 +86,8 @@ export async function idbSet<T>(key: string, value: T): Promise<void> {
   })
 }
 
-export async function idbDelete(key: string): Promise<void> {
-  const store = (await open()).transaction(STORE, 'readwrite').objectStore(STORE)
+async function dbDelete(dbName: string, key: string): Promise<void> {
+  const store = (await openDb(dbName)).transaction(STORE, 'readwrite').objectStore(STORE)
   return new Promise((resolve, reject) => {
     const req = store.delete(key)
     req.onsuccess = () => resolve()
@@ -140,21 +95,8 @@ export async function idbDelete(key: string): Promise<void> {
   })
 }
 
-// ── Clear all (app reset) ─────────────────────────────────────────────────────
-
-export async function idbClearAll(): Promise<void> {
-  const store = (await open()).transaction(STORE, 'readwrite').objectStore(STORE)
-  return new Promise((resolve, reject) => {
-    const req = store.clear()
-    req.onsuccess = () => resolve()
-    req.onerror  = () => reject(req.error)
-  })
-}
-
-// ── Prefix delete (for tab/workspace cleanup) ─────────────────────────────────
-
-export async function idbDeleteByPrefix(prefix: string): Promise<void> {
-  const idb = await open()
+async function dbDeleteByPrefix(dbName: string, prefix: string): Promise<void> {
+  const idb = await openDb(dbName)
   return new Promise((resolve, reject) => {
     const req = idb.transaction(STORE, 'readwrite').objectStore(STORE).openCursor()
     req.onsuccess = () => {
@@ -167,42 +109,120 @@ export async function idbDeleteByPrefix(prefix: string): Promise<void> {
   })
 }
 
-/**
- * Delete all data for a workspace: tabs list, all tab states, all book states.
- * Does NOT touch settings: or lastread: keys.
- */
+function dropDb(name: string): Promise<void> {
+  handles[name] = null
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.deleteDatabase(name)
+    req.onsuccess = () => resolve()
+    req.onerror  = () => reject(req.error)
+  })
+}
+
+// ── Settings DB ───────────────────────────────────────────────────────────────
+
+export const KEYS = {
+  SETTINGS_WORKSPACES:              'workspaces',
+  SETTINGS_BOOKS_VIEW:              'books.view',
+  SETTINGS_TOOLBAR:                 'bookView.toolbarVisible',
+  SETTINGS_SEARCH_BAR_POS:          'bookView.searchBarPos',
+  SETTINGS_ZOOM:                    'bookView.zoom',
+  SETTINGS_CENSOR_DIVINE:           'censorDivineNames',
+  SETTINGS_DIACRITICS:              'diacriticsState',
+  SETTINGS_HEADER_FONT:             'headerFont',
+  SETTINGS_TEXT_FONT:               'textFont',
+  SETTINGS_FONT_SIZE:               'fontSize',
+  SETTINGS_LINE_PADDING:            'linePadding',
+  SETTINGS_COMMENTARY_HEADER_FONT:  'commentaryHeaderFont',
+  SETTINGS_COMMENTARY_TEXT_FONT:    'commentaryTextFont',
+  SETTINGS_COMMENTARY_FONT_SIZE:    'commentaryFontSize',
+  SETTINGS_COMMENTARY_LINE_PADDING: 'commentaryLinePadding',
+  SETTINGS_SEPARATE_COMMENTARY:     'useSeparateCommentarySettings',
+  SETTINGS_APP_ZOOM:                'appZoom',
+  SETTINGS_NEW_TAB_PAGE:            'newTabPage',
+  SETTINGS_PDF_FILTERS:             'pdfPageFilters',
+  SETTINGS_RESUME_LAST_READ:        'resumeLastRead',
+  SETTINGS_THEME:                   'theme',
+  SETTINGS_CUSTOM_THEMES:           'customThemes',
+
+  // app-tabs keys
+  tabsList: (wsId: string)                               => `tabs:${wsId}`,
+  tab:      (wsId: string, tabId: string)                => `tab:${wsId}:${tabId}`,
+  book:     (wsId: string, tabId: string, bookId: number) => `book:${wsId}:${tabId}:${bookId}`,
+  tabPrefix: (wsId: string, tabId: string)               => `book:${wsId}:${tabId}:`,
+  wsPrefix:  (wsId: string)                              => `tabs:${wsId}`,
+} as const
+
+export function idbGet<T>(key: string): Promise<T | null> {
+  return dbGet<T>('app-settings', key)
+}
+export function idbSet<T>(key: string, value: T): Promise<void> {
+  return dbSet('app-settings', key, value)
+}
+export function idbDelete(key: string): Promise<void> {
+  return dbDelete('app-settings', key)
+}
+
+// ── Tabs DB ───────────────────────────────────────────────────────────────────
+
+export function idbTabsGet<T>(key: string): Promise<T | null> {
+  return dbGet<T>('app-tabs', key)
+}
+export function idbTabsSet<T>(key: string, value: T): Promise<void> {
+  return dbSet('app-tabs', key, value)
+}
+export function idbTabsDelete(key: string): Promise<void> {
+  return dbDelete('app-tabs', key)
+}
+export function idbTabsDeleteByPrefix(prefix: string): Promise<void> {
+  return dbDeleteByPrefix('app-tabs', prefix)
+}
+
 export async function idbDeleteWorkspaceData(wsId: string): Promise<void> {
   await Promise.all([
-    idbDeleteByPrefix(`tabs:${wsId}:`),
-    idbDeleteByPrefix(`tab:${wsId}:`),
-    idbDeleteByPrefix(`book:${wsId}:`),
+    dbDeleteByPrefix('app-tabs', `tabs:${wsId}`),
+    dbDeleteByPrefix('app-tabs', `tab:${wsId}:`),
+    dbDeleteByPrefix('app-tabs', `book:${wsId}:`),
   ])
 }
 
-// ── lastread LRU cap ──────────────────────────────────────────────────────────
-// After writing a lastread entry, if total count exceeds LASTREAD_MAX, delete
-// the oldest entries (by key order, which is insertion order for string keys).
+// ── LastRead DB ───────────────────────────────────────────────────────────────
 
 export async function idbSetLastRead(bookId: number, value: LastReadState): Promise<void> {
-  await idbSet(KEYS.lastread(bookId), value)
+  const key = `lastread:${bookId}`
+  await dbSet('app-lastread', key, value)
 
-  const idb = await open()
-  // Collect all lastread keys
+  const idb = await openDb('app-lastread')
   const keys = await new Promise<string[]>((resolve, reject) => {
-    const keys: string[] = []
+    const acc: string[] = []
     const req = idb.transaction(STORE).objectStore(STORE).openKeyCursor()
     req.onsuccess = () => {
       const cursor = req.result
-      if (!cursor) { resolve(keys); return }
-      if ((cursor.key as string).startsWith('lastread:')) keys.push(cursor.key as string)
+      if (!cursor) { resolve(acc); return }
+      acc.push(cursor.key as string)
       cursor.continue()
     }
     req.onerror = () => reject(req.error)
   })
 
   if (keys.length <= LASTREAD_MAX) return
-
-  // Delete oldest (first in key order) until under cap
   const toDelete = keys.slice(0, keys.length - LASTREAD_MAX)
-  await Promise.all(toDelete.map(k => idbDelete(k)))
+  await Promise.all(toDelete.map(k => dbDelete('app-lastread', k)))
+}
+
+export function idbGetLastRead(bookId: number): Promise<LastReadState | null> {
+  return dbGet<LastReadState>('app-lastread', `lastread:${bookId}`)
+}
+
+// ── Reset all ─────────────────────────────────────────────────────────────────
+
+export async function idbClearAll(): Promise<void> {
+  await Promise.all([
+    dropDb('app-settings'),
+    dropDb('app-tabs'),
+    dropDb('app-lastread'),
+  ])
+}
+
+export async function idbClearSettings(): Promise<void> {
+  await dropDb('app-settings')
 }

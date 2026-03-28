@@ -31,7 +31,9 @@ const bookId = tabStore.activeTab.bookId
 const bookTitle = tabStore.activeTab.title
 const openTocEntryId = tabStore.activeTab.openTocEntryId
 const openTocLineIndex = tabStore.activeTab.openTocLineIndex
-if (openTocEntryId != null) tabStore.updateActiveTab({ openTocEntryId: undefined, openTocLineIndex: undefined })
+const searchHighlightLineIndex = tabStore.activeTab.searchHighlightLineIndex
+const searchHighlightQuery = tabStore.activeTab.searchQuery ?? ''
+if (openTocEntryId != null) tabStore.updateActiveTab({ openTocEntryId: undefined, openTocLineIndex: undefined, searchHighlightLineIndex: undefined })
 
 const bottomVisible = ref(false)
 const searchVisible = ref(false)
@@ -277,6 +279,8 @@ watch(searchVisible, v => { if (!v) { contentSearch.clear(); commentarySearch.cl
           <BookViewLinesContent ref="linesContentRef"
             :alt-toc-label-map="altTocLabelMap" :selected-line-id="selectedLineId"
             :bottom-visible="bottomVisible" :initial-line-index="initialLineIndex"
+            :search-highlight-line-index="searchHighlightLineIndex"
+            :search-highlight-query="searchHighlightQuery"
             :commentary-scroll-index="commentaryScrollIndex"
             :commentary-scroll-offset="commentaryScrollOffset"
             :search-query="searchMode === 'content' ? contentSearch.query.value : ''"

@@ -66,7 +66,7 @@ defineExpose({ focus: () => inputRef.value?.focus() })
 .mode-btn { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 4px; flex-shrink: 0; color: var(--text-secondary); }
 .mode-btn svg { width: 16px; height: 16px; }
 .mode-btn.active { color: var(--accent-color); }
-.search-inner { display: flex; align-items: center; background: color-mix(in srgb, var(--text-secondary) 10%, transparent); border-radius: 6px; padding: 5px 6px; gap: 4px; }
+.search-inner { display: flex; align-items: center; background: var(--input-bg); border-radius: 6px; padding: 5px 6px; gap: 4px; }
 .search-input { width: 120px; border: none; background: none; outline: none; font-size: 13px; color: var(--text-primary); cursor: text; }
 .search-input::placeholder { color: var(--text-secondary); }
 .search-input::-webkit-search-cancel-button { filter: grayscale(1) opacity(0.4); }

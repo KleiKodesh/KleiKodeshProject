@@ -103,6 +103,7 @@ Neither system dominates — VSCode sets the colors and layout, Fluent sets the 
 - All search input containers use `border-radius: 6px` — Windows 11 Fluent style
 - Exception: the bottom search bar in `BooksFsPage` uses `border-radius: 10px` (iOS pill, per its anchored-to-bottom design)
 - Never use `border-radius: 0` on search inputs or their wrapper containers
+- Search inputs never change background color on focus — the visual background lives on the container, not the input itself; `input:focus { background: none !important }` is set globally in `main.css`
 
 ### Book View — Commentary & TOC Compact Sizing
 
@@ -282,30 +283,37 @@ Junction tables: `bookId` + respective FK, composite PK.
 
 ## Persistence
 
-All persistence uses a single **IndexedDB** database (`app-state`, version 1) with one object store and prefixed string keys. No localStorage is used anywhere. No migration code exists.
+Persistence uses three separate IndexedDB databases — one per concern. No localStorage is used anywhere. No migration code exists.
 
-**All IDB access must go through `src/utils/idb.ts` exclusively — no component, composable, or store may import from `indexedDB` directly or call any IDB API directly. This is a hard rule with no exceptions.**
+| Database | Contents |
+|---|---|
+| `app-settings` | All scalar settings (one key per setting, no prefix needed) |
+| `app-tabs` | Tabs list, tab states, book states (workspace-scoped keys) |
+| `app-lastread` | Per-book last-read positions (LRU-capped at 1000) |
 
-Components and composables must never import from `src/utils/idb.ts` directly — they go through a store (`tabStore`, `bookViewStore`, `settingsStore`). Only stores import from `idb.ts`.
+**All IDB access must go through `src/utils/idbPersistence.ts` exclusively — no component, composable, or store may call any IDB API directly. This is a hard rule with no exceptions.**
+
+Components and composables must never import from `src/utils/idbPersistence.ts` directly — they go through a store (`tabStore`, `bookViewStore`, `settingsStore`). Only stores import from `idbPersistence.ts`.
 
 ### Key scheme
 
-| Prefix | Example key | Value | Notes |
-|---|---|---|---|
-| `settings:` | `settings:headerFont` | scalar | One key per setting — never a blob |
-| `tabs:` | `tabs:list` | `PersistedTabList` | Tab list + activeTabId + nextId |
-| `tab:` | `tab:{tabId}` | `TabState` | Per-tab UI state (`bottomVisible` only) |
-| `book:` | `book:{tabId}:{bookId}` | `BookState` | Per-tab+book reading state |
-| `lastread:` | `lastread:{bookId}` | `LastReadState` | Global per-book resume, LRU-capped at 1000 |
+`app-settings` keys are plain strings (no prefix): `headerFont`, `theme`, `customThemes`, etc.
 
-Both `book:` and `lastread:` are persisted across sessions. `book:` is tab-specific (wiped when tab closes). `lastread:` is the fallback when opening a book in a new tab or after the original tab was closed.
+`app-tabs` keys remain workspace-scoped:
+| Key | Value |
+|---|---|
+| `tabs:{wsId}` | `PersistedTabList` |
+| `tab:{wsId}:{tabId}` | `TabState` |
+| `book:{wsId}:{tabId}:{bookId}` | `BookState` |
+
+`app-lastread` keys: `lastread:{bookId}` → `LastReadState`
 
 ### Stores
 
 - `tabStore` — tab lifecycle, navigation, tab/book state, lastread, booksView setting, and `resetAll()`
-- `bookViewStore` — toolbar/zoom/searchBarPos; reads from IDB at init, writes via `idb.ts`
-- `settingsStore` — app settings; each setting has its own `settings:` key, loaded in parallel at init, each watch writes only its own key
-- `themeStore` — theme preset + reading background; stored as one object at `settings:theme`; custom themes at `settings:customThemes` via `themes.ts`
+- `bookViewStore` — toolbar/zoom/searchBarPos; reads from IDB at init, writes via `idbPersistence.ts`
+- `settingsStore` — app settings; each setting has its own key in `app-settings`, loaded in parallel at init, each watch writes only its own key
+- `themeStore` — theme preset + reading background; stored at key `theme`; custom themes at `customThemes` via `themes.ts`
 
 ### lastread LRU cap
 
@@ -313,13 +321,13 @@ Always use `tabStore.setLastReadPos()` — it calls `idbSetLastRead()` which enf
 
 ### App reset
 
-`tabStore.resetAll()` calls `idbClearAll()` then the caller does `window.location.reload()`. The "איפוס האפליקציה" tab in `SettingsPage.vue` triggers this.
+`tabStore.resetAll()` calls `idbClearAll()` which deletes all three databases, then the caller does `window.location.reload()`. The "איפוס האפליקציה" tab in `SettingsPage.vue` triggers this.
 
 ### Adding new persisted state
-- Global scalar setting → add key to `KEYS` in `idb.ts`, expose via the owning store
-- Per-tab UI state → add field to `TabState` in `idb.ts`, expose via `tabStore.getTabViewState/setTabViewState`
-- Per-tab+book state → add field to `BookState` in `idb.ts`, expose via `tabStore.getBookViewState/setBookViewState`
-- Per-book global state → add field to `LastReadState` in `idb.ts`, expose via `tabStore.getLastReadPos/setLastReadPos`
+- Global scalar setting → add key to `KEYS` in `idbPersistence.ts`, expose via the owning store
+- Per-tab UI state → add field to `TabState` in `idbPersistence.ts`, expose via `tabStore.getTabViewState/setTabViewState`
+- Per-tab+book state → add field to `BookState` in `idbPersistence.ts`, expose via `tabStore.getBookViewState/setBookViewState`
+- Per-book global state → add field to `LastReadState` in `idbPersistence.ts`, expose via `tabStore.getLastReadPos/setLastReadPos`
 
 ## Dropdowns
 

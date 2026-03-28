@@ -1,16 +1,21 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import TreeView from '@/components/common/TreeView.vue'
 import type { TreeNodeItem } from '@/components/common/TreeNode.vue'
 import type { TocEntry } from './useToc'
 
 defineProps<{ title: string | null; entries: TocEntry[]; filter: string; activeEntryId?: number; visible?: boolean; suppressScroll?: boolean }>()
 defineEmits<{ select: [TocEntry] }>()
+
+const treeViewRef = ref<InstanceType<typeof TreeView> | null>(null)
+defineExpose({ containerRef: () => treeViewRef.value?.containerRef ?? null })
 </script>
 
 <template>
   <div class="toc-section">
     <div v-if="title" class="section-title">{{ title }}</div>
     <TreeView
+      ref="treeViewRef"
       :nodes="entries as unknown as TreeNodeItem[]"
       :filter="filter"
       :active-node-id="activeEntryId"

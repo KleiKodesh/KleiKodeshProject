@@ -28,6 +28,8 @@ const props = defineProps<{
   currentMatchLineIndex?: number
   currentMatchOccurrence?: number
   initialLineIndex?: number
+  searchHighlightLineIndex?: number
+  searchHighlightQuery?: string
 }>()
 
 const tabStore = useTabStore()
@@ -75,6 +77,8 @@ function lineContent(raw: string | null, lineIndex: number): string | null {
   let content = diacriticsState.value === 0 ? raw : applyDiacriticsFilter(raw, diacriticsState.value)
   if (settingsStore.censorDivineNames) content = censorDivineNames(content)
   if (props.searchQuery?.trim()) content = highlightMatches(raw, content, props.searchQuery, lineIndex === props.currentMatchLineIndex, props.currentMatchOccurrence ?? 0)
+  if (props.searchHighlightQuery?.trim() && lineIndex === props.searchHighlightLineIndex)
+    content = highlightMatches(raw, content, props.searchHighlightQuery, false, -1)
   return content
 }
 
@@ -151,7 +155,16 @@ async function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
 
 watch(loading, async (val) => {
   if (val || !lines.value.length) return
-  if (props.initialLineIndex != null) { await nextTick(); await restoreScrollPos(props.initialLineIndex, 0); return }
+  if (props.initialLineIndex != null) {
+    await nextTick()
+    await restoreScrollPos(props.initialLineIndex, 0)
+    if (props.searchHighlightLineIndex != null && scrollerEl.value) {
+      await nextTick()
+      const mark = scrollerEl.value.querySelector('mark.search-match') as HTMLElement | null
+      mark?.scrollIntoView({ block: 'center' })
+    }
+    return
+  }
   const saved = await tabStore.getBookViewState(tabId, bookId)
   if (saved) {
     await restoreScrollPos(saved.scrollIndex, saved.scrollOffset)
@@ -237,7 +250,7 @@ defineExpose({ scrollToLineId, scrollToLineIndex })
   <div class="lines-content">
     <ContextMenu ref="contextMenuRef" :items="contextMenuItems" />
     <div v-if="loading || restoring" class="loading-overlay"><LoadingAnimation /></div>
-    <div ref="scrollerEl" class="scroller" tabindex="0" :style="{ fontSize: `${zoom / 100 * 15}px` }" @scroll="onScroll" @contextmenu="contextMenuRef?.show($event)">
+    <div ref="scrollerEl" class="scroller" tabindex="0" data-ctrlf-enabled :style="{ fontSize: `${zoom / 100 * 15}px` }" @scroll="onScroll" @contextmenu="contextMenuRef?.show($event)">
       <div :style="{ height: `${totalSize}px`, position: 'relative' }">
         <div v-for="vItem in virtualItems" :key="String(vItem.key)"
           :ref="el => el && virtualizer.measureElement(el as Element)"

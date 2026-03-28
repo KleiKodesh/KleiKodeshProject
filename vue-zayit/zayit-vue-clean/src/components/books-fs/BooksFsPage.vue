@@ -18,7 +18,15 @@ const { loading, error, path, searchQuery, isSearching, treeItems, searchItems, 
 const view = ref<'list' | 'tiles' | 'tree'>('list')
 onMounted(async () => { view.value = await tabStore.getBooksView() })
 const fullTreeRef = ref<InstanceType<typeof BooksFullTree> | null>(null)
+const booksTreeRef = ref<InstanceType<typeof BooksTreeView> | null>(null)
+const searchResultsRef = ref<InstanceType<typeof BooksSearchResults> | null>(null)
 const searchInputRef = ref<HTMLInputElement | null>(null)
+
+function focusList() {
+  if (isSearching.value) { searchResultsRef.value?.focusContainer(); return }
+  if (view.value === 'tree') { fullTreeRef.value?.containerRef?.focus(); return }
+  booksTreeRef.value?.focusContainer()
+}
 
 const PLACEHOLDERS = ['חיפוש ספר...', 'בראשית פרק ד', 'בבלי ברכות דף יד']
 const placeholder = ref(PLACEHOLDERS[0]!)
@@ -57,10 +65,10 @@ function onSearchEnter() {
       <div v-else-if="error" class="state error">{{ error }}</div>
       <template v-else>
         <BooksFullTree ref="fullTreeRef" v-show="view === 'tree' && !isSearching" @select-book="onSelectBook" />
-        <BooksTreeView v-show="view !== 'tree' && !isSearching" :items="treeItems" :view="view === 'tree' ? 'list' : view" @select-book="onSelectBook" @enter-folder="enter" />
+        <BooksTreeView ref="booksTreeRef" v-show="view !== 'tree' && !isSearching" :items="treeItems" :view="view === 'tree' ? 'list' : view" @select-book="onSelectBook" @enter-folder="enter" />
         <template v-if="isSearching">
           <LoadingAnimation v-if="tocSearching" />
-          <BooksSearchResults v-else :items="searchItems" :view="view" @select-book="onSelectBook" @select-toc="onSelectToc" />
+          <BooksSearchResults ref="searchResultsRef" v-else :items="searchItems" :view="view" @select-book="onSelectBook" @select-toc="onSelectToc" />
         </template>
       </template>
     </div>
@@ -68,7 +76,8 @@ function onSearchEnter() {
       <div class="search-inner">
         <IconSearch20Regular class="search-icon" />
         <input ref="searchInputRef" v-model="searchQuery" type="search" class="search-input"
-          :placeholder="placeholder" @keydown.enter="onSearchEnter" />
+          :placeholder="placeholder" @keydown.enter="onSearchEnter"
+          @keydown.up.prevent="focusList" @keydown.down.prevent="focusList" @keydown.tab.prevent="focusList" />
       </div>
     </div>
   </div>

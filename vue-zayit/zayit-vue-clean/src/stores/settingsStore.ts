@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
-import { idbGet, idbSet, idbDeleteByPrefix, KEYS } from '@/utils/idbPersistence'
+import { idbGet, idbSet, idbClearSettings, KEYS } from '@/utils/idbPersistence'
 
 export type NewTabPage = 'homepage' | 'openfile' | 'hebrewbooks' | 'kezayit-search'
 
@@ -125,8 +125,8 @@ export const useSettingsStore = defineStore('settings', () => {
     newTabPage.value = DEFAULTS.newTabPage
     pdfPageFilters.value = DEFAULTS.pdfPageFilters
     resumeLastRead.value = DEFAULTS.resumeLastRead
-    // Delete all settings keys via prefix
-    idbDeleteByPrefix('settings:')
+    // Clear all settings from their dedicated DB
+    idbClearSettings()
     applyCSSVariables()
   }
 

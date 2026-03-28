@@ -2,6 +2,7 @@
 import { ref, nextTick } from 'vue'
 import { IconFolderOpen20Regular } from '@iconify-prerendered/vue-fluent'
 import { useSettingsPage } from './useSettingsPage'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import { onDbReady } from '@/host/db'
 import SettingRow from './SettingRow.vue'
 import SliderSetting from './SliderSetting.vue'
@@ -21,6 +22,29 @@ const {
 } = useSettingsPage()
 
 const activeTab = ref<'general' | 'reading' | 'reset'>('general')
+
+type ConfirmAction = { label: string; desc: string; action: () => Promise<void> | void }
+const pendingConfirm = ref<ConfirmAction | null>(null)
+
+function confirmAction(action: ConfirmAction) {
+  pendingConfirm.value = action
+}
+
+async function runConfirmed() {
+  if (!pendingConfirm.value) return
+  const action = pendingConfirm.value
+  pendingConfirm.value = null
+  await action.action()
+}
+
+function cancelConfirm() {
+  pendingConfirm.value = null
+}
+
+function resetSettingsAndReload() {
+  resetSettings()
+  window.location.reload()
+}
 const bookDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null>(null)
 const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null>(null)
 
@@ -158,10 +182,18 @@ async function commitPath() {
 
     <div v-if="activeTab === 'reset'" class="pane reset-pane">
       <p class="reset-desc">מאפס את כל נתוני האפליקציה — הגדרות, היסטוריית קריאה, מיקומי גלילה, וטאבים פתוחים.</p>
-      <button class="reset-all-btn" @click="resetAll">איפוס מלא</button>
+      <button class="reset-all-btn" @click="confirmAction({ label: 'איפוס מלא', desc: 'פעולה זו תמחק את כל נתוני האפליקציה ותטען אותה מחדש. לא ניתן לבטל פעולה זו.', action: resetAll })">איפוס מלא</button>
       <p class="reset-desc reset-desc-small">מאפס רק את ההגדרות לברירות המחדל — ללא השפעה על היסטוריית הקריאה או הטאבים.</p>
-      <button class="reset-all-btn" @click="resetSettings">איפוס ההגדרות</button>
+      <button class="reset-all-btn" @click="confirmAction({ label: 'איפוס ההגדרות', desc: 'פעולה זו תאפס את כל ההגדרות לברירות המחדל ותטען את האפליקציה מחדש.', action: resetSettingsAndReload })">איפוס ההגדרות</button>
     </div>
+
+    <ConfirmDialog
+      v-if="pendingConfirm"
+      :title="pendingConfirm.label"
+      :desc="pendingConfirm.desc"
+      @confirm="runConfirmed"
+      @cancel="cancelConfirm"
+    />
   </div>
 </template>
 

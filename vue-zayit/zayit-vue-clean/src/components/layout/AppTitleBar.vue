@@ -32,17 +32,23 @@ const ROUTE_MAP: Record<string, { title: string; route: TabRoute }> = {
 
 function openNewTab() {
   const target = ROUTE_MAP[settingsStore.newTabPage] ?? { title: 'בית', route: '/' as TabRoute }
-  tabStore.openTab({ title: target.title, route: target.route })
+  if (target.route === '/') {
+    tabStore.openNewHomeTab()
+  } else {
+    tabStore.openTab({ title: target.title, route: target.route })
+  }
 }
 
 function selectTab(id: string) { tabStore.switchTab(id); dropdownOpen.value = false }
 
 function goHome() {
+  const cur = tabStore.activeTabId
   const existing = tabStore.tabs.find(t => t.route === '/')
   if (existing) {
-    const cur = tabStore.activeTabId
-    tabStore.switchTab(existing.id)
-    if (cur !== existing.id) tabStore.closeTab(cur)
+    if (existing.id !== cur) {
+      tabStore.switchTab(existing.id)
+      tabStore.closeTab(cur)
+    }
   } else {
     tabStore.updateActiveTab({ route: '/', title: 'בית' })
   }
@@ -58,6 +64,9 @@ useEventListener('keydown', (e: KeyboardEvent) => {
   } else if (e.ctrlKey && e.key === 'j') {
     e.preventDefault()
     if (bookViewStore.isBookViewActive) bookViewStore.toggleBottomPanel()
+  } else if (e.ctrlKey && e.key === 'f') {
+    const active = document.activeElement as HTMLElement | null
+    if (!active?.dataset.ctrlfEnabled) e.preventDefault()
   }
 })
 </script>
@@ -108,6 +117,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
       :active-tab-id="tabStore.activeTabId"
       @select="selectTab"
       @close="tabStore.closeTab"
+      @dismiss="dropdownOpen = false"
       @click.stop
     />
   </header>

@@ -93,6 +93,7 @@ export function useSearch(
         route: '/book-view',
         bookId: result.bookId,
         openTocLineIndex: lineIndex,
+        searchHighlightLineIndex: lineIndex,
       })
     } catch (err) {
       console.error('[useSearch] failed to open result:', err)

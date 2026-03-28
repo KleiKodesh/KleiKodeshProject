@@ -13,6 +13,7 @@ const props = defineProps<{
   node: TreeNodeItem
   expanded: boolean
   active: boolean
+  focused: boolean
   filtered: boolean
   indent?: number
   rowHeight?: number
@@ -29,8 +30,10 @@ const fs = () => props.fontSize ?? '0.8rem'
 <template>
   <div
     class="tree-row"
+    data-nav-item
     :style="{ '--rh': rh(), '--fs': fs() }"
-    :class="{ 'is-active': active, 'is-filtered': filtered, 'is-parent': node.hasChildren && !filtered }"
+    :class="{ 'is-active': active, 'is-focused': focused, 'is-filtered': filtered, 'is-parent': node.hasChildren && !filtered }"
+    @keydown.space.prevent="node.hasChildren && !filtered ? $emit('toggle') : $emit('select')"
   >
     <div
       v-if="node.hasChildren && !filtered"

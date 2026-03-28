@@ -1,21 +1,52 @@
 <script setup lang="ts">
-import { IconDismiss20Regular, IconHome20Regular, IconDocument20Regular } from '@iconify-prerendered/vue-fluent'
+import { ref, nextTick } from 'vue'
+import {
+  IconDismiss20Regular,
+  IconHome20Regular,
+  IconDocument20Regular,
+  IconBookOpen20Filled,
+  IconSearch20Regular,
+  IconLibrary20Filled,
+  IconDocumentPdf20Regular,
+  IconApps20Filled,
+} from '@iconify-prerendered/vue-fluent'
+import { useListKeys } from '@/composables/useListKeys'
 import type { Tab } from '@/stores/tabStore'
 
-defineProps<{ tabs: Tab[]; activeTabId: string }>()
-defineEmits<{ select: [id: string]; close: [id: string] }>()
+const props = defineProps<{ tabs: Tab[]; activeTabId: string }>()
+const emit = defineEmits<{ select: [id: string]; close: [id: string]; dismiss: [] }>()
+
+const containerRef = ref<HTMLElement | null>(null)
+const visibleTabs = () => props.tabs.filter(t => t.id !== props.activeTabId && t.route !== '/settings')
+
+const { focusedIndex, containerFocused } = useListKeys(
+  containerRef,
+  () => visibleTabs().length,
+  (i) => emit('select', visibleTabs()[i]!.id),
+)
+
+nextTick(() => containerRef.value?.focus())
 </script>
 
 <template>
-  <div class="tab-dropdown">
+  <div ref="containerRef" class="tab-dropdown" tabindex="0" @keydown.esc.stop="emit('dismiss')">
     <div
-      v-for="tab in tabs.filter(t => t.id !== activeTabId && t.route !== '/settings')"
+      v-for="(tab, i) in visibleTabs()"
       :key="tab.id"
       class="tab-row"
-      @click="$emit('select', tab.id)"
+      data-nav-item
+      :class="{ 'is-focused': containerFocused && focusedIndex === i }"
+      @click="focusedIndex = i; emit('select', tab.id)"
+      @keydown.enter="emit('select', tab.id)"
     >
       <div class="tab-row-start">
         <IconHome20Regular v-if="tab.route === '/'" class="tab-icon" />
+        <IconDocument20Regular v-else-if="tab.route === '/book-view'" class="tab-icon" />
+        <IconDocumentPdf20Regular v-else-if="tab.route === '/pdf-view'" class="tab-icon" />
+        <IconBookOpen20Filled v-else-if="tab.route === '/hebrewbooks'" class="tab-icon" />
+        <IconSearch20Regular v-else-if="tab.route === '/search'" class="tab-icon" />
+        <IconLibrary20Filled v-else-if="tab.route === '/books'" class="tab-icon" />
+        <IconApps20Filled v-else-if="tab.route === '/workspaces'" class="tab-icon" />
         <IconDocument20Regular v-else class="tab-icon" />
       </div>
       <span class="tab-row-title">
@@ -23,7 +54,7 @@ defineEmits<{ select: [id: string]; close: [id: string] }>()
         <span v-if="tab.tocPath" class="tab-toc-path"> · {{ tab.tocPath }}</span>
       </span>
       <div class="tab-row-end">
-        <button class="tab-close" @click.stop="$emit('close', tab.id)" title="סגור">
+        <button class="tab-close" @click.stop="emit('close', tab.id)" title="סגור">
           <IconDismiss20Regular />
         </button>
       </div>

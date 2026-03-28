@@ -245,7 +245,7 @@ defineExpose({ scrollToGroup, scrollToFlatIndex, topVisibleFlatIndex, activeBook
         <div v-else-if="!flatItems.length" class="state-overlay">
           <span class="hint">{{ props.selectedLineId == null ? 'בחר שורה לצפייה במפרשים' : 'אין מפרשים לשורה זו' }}</span>
         </div>
-        <div v-else ref="scrollerEl" class="scroller" tabindex="0" :style="{ fontSize: `${zoom / 100 * 15}px` }" @scroll="onScroll" @contextmenu="contextMenuRef?.show($event)">
+        <div v-else ref="scrollerEl" class="scroller" tabindex="0" data-ctrlf-enabled :style="{ fontSize: `${zoom / 100 * 15}px` }" @scroll="onScroll" @contextmenu="contextMenuRef?.show($event)">
           <div :style="{ height: `${totalSize}px`, position: 'relative' }">
             <div v-for="vItem in virtualItems" :key="String(vItem.key)"
               :ref="el => el && virtualizer.measureElement(el as Element)"
@@ -269,7 +269,7 @@ defineExpose({ scrollToGroup, scrollToFlatIndex, topVisibleFlatIndex, activeBook
 <style scoped>
 .commentary-view { height: 100%; display: flex; flex-direction: column; overflow: hidden; }
 .body { flex: 1; display: flex; flex-direction: row; min-height: 0; }
-.tree-panel { width: max-content; max-width: 35%; flex-shrink: 0; border-inline-start: 1px solid var(--border-color); }
+.tree-panel { width: max-content; max-width: 25%; flex-shrink: 0; border-inline-start: 1px solid var(--border-color); }
 .content-col { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .sticky-nav { flex-shrink: 0; height: 32px; }
 .state-overlay { flex: 1; display: flex; align-items: center; justify-content: center; }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import TreeView from '@/components/common/TreeView.vue'
 import type { TreeNodeItem } from '@/components/common/TreeNode.vue'
@@ -28,7 +28,7 @@ function onSelect(node: TreeNodeItem) {
 }
 
 const reset = () => treeViewRef.value?.reset()
-defineExpose({ reset })
+defineExpose({ reset, containerRef: computed(() => treeViewRef.value?.containerRef ?? null) })
 </script>
 
 <template>

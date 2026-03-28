@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { IconArrowDownload20Regular } from '@iconify-prerendered/vue-fluent'
 import type { HebrewBook } from './hebrewBooksService'
 
-const props = defineProps<{ book: HebrewBook }>()
+const props = defineProps<{ book: HebrewBook; focused?: boolean }>()
 const emit = defineEmits<{
   'book-clicked': [book: HebrewBook]
   'download-clicked': [book: HebrewBook]
@@ -15,7 +15,7 @@ const tags = computed(() =>
 </script>
 
 <template>
-  <div class="item" tabindex="0" @click="emit('book-clicked', book)" @keydown.enter="emit('book-clicked', book)">
+  <div class="item" data-nav-item :class="{ 'is-focused': focused }" @click="emit('book-clicked', book)">
     <div class="row-top">
       <div class="title-line">
         <span class="title">{{ book.title }}</span>
@@ -47,7 +47,6 @@ const tags = computed(() =>
   contain-intrinsic-size: auto 64px;
 }
 .item:hover { background: var(--bg-secondary); }
-.item:focus { outline: none; background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
 
 .row-top {
   display: flex;

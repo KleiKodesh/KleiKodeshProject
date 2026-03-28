@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
 import TreeNode, { type TreeNodeItem } from './TreeNode.vue'
+import { useListKeys } from '@/composables/useListKeys'
 
 const props = defineProps<{
   nodes: TreeNodeItem[]
@@ -67,7 +68,13 @@ function toggle(node: TreeNodeItem) {
 
 function reset() { expanded.value = new Set() }
 
-defineExpose({ toggleNode: toggle, reset })
+defineExpose({ toggleNode: toggle, reset, containerRef })
+
+const { focusedIndex, containerFocused } = useListKeys(
+  containerRef,
+  () => visibleNodes.value.length,
+  (i) => emit('select', visibleNodes.value[i]!),
+)
 
 function getPath(node: TreeNodeItem): string {
   const parts: string[] = []
@@ -98,20 +105,21 @@ const visibleNodes = computed(() => {
 </script>
 
 <template>
-  <div ref="containerRef" class="tree-entries toc-thin-scroll">
+  <div ref="containerRef" class="tree-entries toc-thin-scroll" tabindex="0">
     <TreeNode
-      v-for="node in visibleNodes"
+      v-for="(node, i) in visibleNodes"
       :key="node.id"
       :ref="el => setRowRef(el, node.id)"
       :node="node"
       :expanded="expanded.has(node.id)"
       :active="node.id === activeNodeId"
+      :focused="containerFocused && focusedIndex === i"
       :filtered="!!filter"
       :indent="indent"
       :row-height="rowHeight"
       :font-size="fontSize"
       @toggle="toggle(node)"
-      @select="emit('select', node)"
+      @select="focusedIndex = i; emit('select', node)"
     >
       {{ filter ? getPath(node) : node.text }}
     </TreeNode>

@@ -2,6 +2,7 @@ using Kezayit.Bridge;
 using Kezayit.Db;
 using Kezayit.HebrewBooks;
 using Kezayit.Pdf;
+using Kezayit.Search;
 using Kezayit.Settings;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -23,6 +24,7 @@ namespace Kezayit
         private DbHandler _db;
         private PdfHandler _pdf;
         private HebrewBooksHandler _hb;
+        private SearchHandler _search;
 
         public AppViewer()
         {
@@ -55,10 +57,16 @@ namespace Kezayit
             _db = new DbHandler(_bridge, _webView, savedPath);
             _pdf = new PdfHandler(_bridge, _webView);
             _hb = new HebrewBooksHandler(_bridge, _webView, this);
+            _search = new SearchHandler(_bridge, _webView);
+            _db.OnDbPathPicked = path => _search.OnDbReady(path);
 
             _webView.CoreWebView2.WebMessageReceived += OnMessageReceived;
             _webView.CoreWebView2.DownloadStarting += (s, e) => _hb.OnDownloadStarting(s, e);
             _webView.Source = new Uri("http://kezayit-vue-app/index.html");
+
+            // Start bloom indexing if DB is ready
+            if (dbReady)
+                _search.OnDbReady(savedPath);
         }
 
         private async void OnMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)
@@ -85,6 +93,10 @@ namespace Kezayit
                         case "restoreHbPdf": _hb.HandleRestoreHbPdf(root, id); break;
                         case "triggerHbDownload": _hb.HandleTriggerHbDownload(root, id); break;
                         case "triggerHbSaveAs": _hb.HandleTriggerHbSaveAs(root, id); break;
+                        case "GetBloomIndexingProgress": _search.HandleGetProgress(id); break;
+                        case "BloomSearchStart": _search.HandleSearchStart(root, id); break;
+                        case "BloomSearchCancel": _search.HandleSearchCancel(root, id); break;
+                        case "DeleteBloomIndex": _search.HandleDeleteIndex(id); break;
                         default: _bridge.Reply(id, new { error = "Unknown action: " + action }); break;
                     }
                 }

@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
-defineProps<{ label: string; icon: Component; color?: string }>()
+defineProps<{ label: string; icon: Component; color?: string; isFocused?: boolean }>()
 defineEmits<{ tap: [] }>()
 </script>
 
 <template>
-  <button class="tile" @click="$emit('tap')">
+  <button class="tile" data-nav-item :class="{ 'is-focused': isFocused }" @click="$emit('tap')">
     <div class="tile-icon">
       <component :is="icon" :style="color ? { color } : {}" />
     </div>
@@ -26,6 +26,9 @@ defineEmits<{ tap: [] }>()
   border-radius: 8px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+}
+.tile:focus-visible {
+  outline: none;
 }
 .tile:hover .tile-icon { transform: scale(1.08); }
 .tile:active .tile-icon { transform: scale(0.95); }
