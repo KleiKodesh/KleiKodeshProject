@@ -12,16 +12,23 @@ const { themePreset } = storeToRefs(themeStore)
 type ThemeKey = keyof typeof themesData
 
 const families = Object.entries(
-  Object.entries(themesData).reduce((acc, [key, theme]) => {
-    const f = theme.family
-    if (!acc[f]) acc[f] = []
-    acc[f].push({ key: key as ThemeKey, theme })
-    return acc
-  }, {} as Record<string, { key: ThemeKey; theme: typeof themesData[ThemeKey] }[]>)
+  Object.entries(themesData).reduce(
+    (acc, [key, theme]) => {
+      const f = theme.family
+      if (!acc[f]) acc[f] = []
+      acc[f].push({ key: key as ThemeKey, theme })
+      return acc
+    },
+    {} as Record<string, { key: ThemeKey; theme: (typeof themesData)[ThemeKey] }[]>,
+  ),
 )
 
 const currentTheme = computed(() => themesData[themePreset.value as ThemeKey])
-const currentName = computed(() => currentTheme.value ? `${currentTheme.value.name} — ${currentTheme.value.isDark ? 'כהה' : 'בהיר'}` : themePreset.value)
+const currentName = computed(() =>
+  currentTheme.value
+    ? `${currentTheme.value.name} — ${currentTheme.value.isDark ? 'כהה' : 'בהיר'}`
+    : themePreset.value,
+)
 
 const boxRef = ref<HTMLElement | null>(null)
 const dropdownRef = ref<HTMLElement | null>(null)
@@ -34,7 +41,10 @@ onClickOutside(dropdownRef, (e) => {
 })
 
 async function toggle() {
-  if (isOpen.value) { isOpen.value = false; return }
+  if (isOpen.value) {
+    isOpen.value = false
+    return
+  }
   isOpen.value = true
   await nextTick()
   if (!boxRef.value || !dropdownRef.value) return
@@ -51,25 +61,34 @@ async function toggle() {
     maxHeight: Math.min(320, goUp ? spaceAbove : spaceBelow) + 'px',
     overflowY: 'auto',
     ...(goUp
-      ? { bottom: (window.innerHeight - rect.top + 4) + 'px', top: 'auto' }
-      : { top: (rect.bottom + 4) + 'px', bottom: 'auto' }),
+      ? { bottom: window.innerHeight - rect.top + 4 + 'px', top: 'auto' }
+      : { top: rect.bottom + 4 + 'px', bottom: 'auto' }),
   }
 }
 
-function select(key: ThemeKey) { themePreset.value = key; isOpen.value = false }
+function select(key: ThemeKey) {
+  themePreset.value = key
+  isOpen.value = false
+}
 </script>
 
 <template>
   <div ref="boxRef" class="select-box" @click="toggle" tabindex="0">
-    <span class="swatch-inline" :style="{
-      background: currentTheme?.ui.bgSecondary,
-      borderColor: currentTheme?.ui.borderColor,
-    }">
+    <span
+      class="swatch-inline"
+      :style="{
+        background: currentTheme?.ui.bgSecondary,
+        borderColor: currentTheme?.ui.borderColor,
+      }"
+    >
       <span class="si-bar" :style="{ background: currentTheme?.ui.bgPrimary }" />
       <span class="si-accent" :style="{ background: currentTheme?.ui.accentColor }" />
     </span>
     <span class="select-display">{{ currentName }}</span>
-    <component :is="isOpen ? IconChevronUp20Regular : IconChevronDown20Regular" class="select-chevron" />
+    <component
+      :is="isOpen ? IconChevronUp20Regular : IconChevronDown20Regular"
+      class="select-chevron"
+    />
   </div>
 
   <Teleport to="body">
@@ -79,18 +98,21 @@ function select(key: ThemeKey) { themePreset.value = key; isOpen.value = false }
         <span class="col-label">בהיר</span>
         <span class="col-label">כהה</span>
       </div>
-      <div v-for="([family, variants]) in families" :key="family" class="theme-row">
+      <div v-for="[family, variants] in families" :key="family" class="theme-row">
         <span class="family-name">{{ variants[0]?.theme.name }}</span>
         <template v-for="isDark in [false, true]" :key="String(isDark)">
           <button
-            v-for="{ key, theme } in variants.filter(v => v.theme.isDark === isDark)"
+            v-for="{ key, theme } in variants.filter((v) => v.theme.isDark === isDark)"
             :key="key"
             class="theme-btn"
             :class="{ active: themePreset === key }"
             :title="theme.name + (theme.isDark ? ' — כהה' : ' — בהיר')"
             @click.stop="select(key)"
           >
-            <span class="swatch" :style="{ background: theme.ui.bgSecondary, borderColor: theme.ui.borderColor }">
+            <span
+              class="swatch"
+              :style="{ background: theme.ui.bgSecondary, borderColor: theme.ui.borderColor }"
+            >
               <span class="swatch-bar" :style="{ background: theme.ui.bgPrimary }" />
               <span class="swatch-accent" :style="{ background: theme.ui.accentColor }" />
               <span class="swatch-text" :style="{ background: theme.ui.textPrimary }" />
@@ -104,21 +126,54 @@ function select(key: ThemeKey) { themePreset.value = key; isOpen.value = false }
 
 <style scoped>
 .select-box {
-  flex: 1; display: flex; align-items: center; gap: 8px;
-  height: 28px; padding: 0 8px; cursor: pointer; user-select: none; width: 100%; box-sizing: border-box;
-  background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 8px;
+  cursor: pointer;
+  user-select: none;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
 }
-.select-box:hover { border-color: var(--accent-color); }
-.select-display { flex: 1; font-size: 12px; color: var(--text-primary); }
-.select-chevron { color: var(--text-secondary); flex-shrink: 0; }
+.select-box:hover {
+  border-color: var(--accent-color);
+}
+.select-display {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+.select-chevron {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
 
 .swatch-inline {
-  display: flex; flex-direction: column; gap: 1px;
-  width: 20px; height: 16px; border-radius: 2px; border: 1px solid;
-  padding: 2px; overflow: hidden; flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 20px;
+  height: 16px;
+  border-radius: 2px;
+  border: 1px solid;
+  padding: 2px;
+  overflow: hidden;
+  flex-shrink: 0;
 }
-.si-bar { height: 4px; border-radius: 1px; opacity: 0.6; }
-.si-accent { height: 4px; border-radius: 1px; }
+.si-bar {
+  height: 4px;
+  border-radius: 1px;
+  opacity: 0.6;
+}
+.si-accent {
+  height: 4px;
+  border-radius: 1px;
+}
 </style>
 
 <style>
@@ -126,7 +181,7 @@ function select(key: ThemeKey) { themePreset.value = key; isOpen.value = false }
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 4px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   padding: 8px 12px;
   display: flex;
   flex-direction: column;
@@ -163,14 +218,35 @@ function select(key: ThemeKey) { themePreset.value = key; isOpen.value = false }
   cursor: pointer;
   justify-self: center;
 }
-.theme-btn.active { border-color: var(--accent-color); }
-.theme-btn:hover { border-color: var(--text-secondary); }
-.swatch {
-  display: flex; flex-direction: column; gap: 2px;
-  width: 32px; height: 26px; border-radius: 2px; border: 1px solid;
-  padding: 3px; overflow: hidden;
+.theme-btn.active {
+  border-color: var(--accent-color);
 }
-.swatch-bar  { height: 5px; border-radius: 1px; opacity: 0.7; }
-.swatch-accent { height: 5px; border-radius: 1px; }
-.swatch-text { height: 4px; border-radius: 1px; opacity: 0.5; }
+.theme-btn:hover {
+  border-color: var(--text-secondary);
+}
+.swatch {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 32px;
+  height: 26px;
+  border-radius: 2px;
+  border: 1px solid;
+  padding: 3px;
+  overflow: hidden;
+}
+.swatch-bar {
+  height: 5px;
+  border-radius: 1px;
+  opacity: 0.7;
+}
+.swatch-accent {
+  height: 5px;
+  border-radius: 1px;
+}
+.swatch-text {
+  height: 4px;
+  border-radius: 1px;
+  opacity: 0.5;
+}
 </style>

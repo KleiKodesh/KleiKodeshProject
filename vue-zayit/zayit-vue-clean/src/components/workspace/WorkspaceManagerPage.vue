@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { IconAdd20Regular, IconEdit20Regular, IconDelete20Regular, IconCheckmark20Regular, IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
+import {
+  IconAdd20Regular,
+  IconEdit20Regular,
+  IconDelete20Regular,
+  IconCheckmark20Regular,
+  IconDismiss20Regular,
+} from '@iconify-prerendered/vue-fluent'
 import { useWorkspaceStore } from '@/stores/workspaceStore'
 import type { Workspace } from '@/utils/idbPersistence'
 
@@ -31,7 +37,9 @@ async function commitEdit() {
   editingId.value = null
 }
 
-function cancelEdit() { editingId.value = null }
+function cancelEdit() {
+  editingId.value = null
+}
 
 async function switchTo(id: string) {
   if (id === wsStore.activeId) return
@@ -45,6 +53,11 @@ async function confirmDelete(id: string) {
   // If we deleted the active workspace, the store already switched — reload
   if (wsStore.activeId !== id) return
   window.location.reload()
+}
+
+function startConfirmDelete(id: string) {
+  confirmDeleteId.value = id
+  editingId.value = null
 }
 </script>
 
@@ -65,8 +78,12 @@ async function confirmDelete(id: string) {
             @keydown.escape="cancelEdit"
             autofocus
           />
-          <button class="icon-btn" title="שמור" @click="commitEdit"><IconCheckmark20Regular /></button>
-          <button class="icon-btn" title="ביטול" @click="cancelEdit"><IconDismiss20Regular /></button>
+          <button class="icon-btn" title="שמור" @click="commitEdit">
+            <IconCheckmark20Regular />
+          </button>
+          <button class="icon-btn" title="ביטול" @click="cancelEdit">
+            <IconDismiss20Regular />
+          </button>
         </template>
         <template v-else-if="confirmDeleteId === ws.id">
           <span class="ws-name confirm-text">למחוק את "{{ ws.name }}"?</span>
@@ -77,13 +94,17 @@ async function confirmDelete(id: string) {
           <span class="ws-name" @click="switchTo(ws.id)">{{ ws.name }}</span>
           <span v-if="ws.id === wsStore.activeId" class="active-badge">פעיל</span>
           <div class="ws-actions">
-            <button class="icon-btn" title="שנה שם" @click.stop="startEdit(ws)"><IconEdit20Regular /></button>
+            <button class="icon-btn" title="שנה שם" @click.stop="startEdit(ws)">
+              <IconEdit20Regular />
+            </button>
             <button
               class="icon-btn danger"
               title="מחק"
               :disabled="wsStore.workspaces.length <= 1"
-              @click.stop="confirmDeleteId = ws.id; editingId = null"
-            ><IconDelete20Regular /></button>
+              @click.stop="startConfirmDelete(ws.id)"
+            >
+              <IconDelete20Regular />
+            </button>
           </div>
         </template>
       </div>
@@ -126,8 +147,12 @@ async function confirmDelete(id: string) {
   gap: 6px;
   border-bottom: 1px solid var(--border-color);
 }
-.ws-row:hover { background: color-mix(in srgb, var(--text-primary) 6%, transparent); }
-.ws-row.active { background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
+.ws-row:hover {
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+.ws-row.active {
+  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
+}
 
 .ws-name {
   flex: 1;
@@ -161,7 +186,9 @@ async function confirmDelete(id: string) {
   opacity: 0;
   transition: opacity 100ms;
 }
-.ws-row:hover .ws-actions { opacity: 1; }
+.ws-row:hover .ws-actions {
+  opacity: 1;
+}
 
 .icon-btn {
   display: flex;
@@ -173,10 +200,20 @@ async function confirmDelete(id: string) {
   font-size: 11px;
   padding: 0 6px;
 }
-.icon-btn svg { width: 16px; height: 16px; }
-.icon-btn.danger { color: #e53e3e; }
-.icon-btn.danger:hover { background: color-mix(in srgb, #e53e3e 12%, transparent); }
-.icon-btn:disabled { opacity: 0.3; pointer-events: none; }
+.icon-btn svg {
+  width: 16px;
+  height: 16px;
+}
+.icon-btn.danger {
+  color: #e53e3e;
+}
+.icon-btn.danger:hover {
+  background: color-mix(in srgb, #e53e3e 12%, transparent);
+}
+.icon-btn:disabled {
+  opacity: 0.3;
+  pointer-events: none;
+}
 
 .ws-input-inline {
   flex: 1;
@@ -204,8 +241,12 @@ async function confirmDelete(id: string) {
   font-size: 13px;
   outline: none;
 }
-.ws-input:focus { border-color: var(--accent-color); }
-.ws-input::placeholder { color: var(--text-secondary); }
+.ws-input:focus {
+  border-color: var(--accent-color);
+}
+.ws-input::placeholder {
+  color: var(--text-secondary);
+}
 
 .create-btn {
   display: flex;
@@ -220,7 +261,15 @@ async function confirmDelete(id: string) {
   background: color-mix(in srgb, var(--accent-color) 8%, transparent);
   flex-shrink: 0;
 }
-.create-btn:hover { background: color-mix(in srgb, var(--accent-color) 16%, transparent); }
-.create-btn:disabled { opacity: 0.4; pointer-events: none; }
-.create-btn svg { width: 16px; height: 16px; }
+.create-btn:hover {
+  background: color-mix(in srgb, var(--accent-color) 16%, transparent);
+}
+.create-btn:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.create-btn svg {
+  width: 16px;
+  height: 16px;
+}
 </style>

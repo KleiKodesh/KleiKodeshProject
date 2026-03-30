@@ -1,8 +1,6 @@
 <template>
   <div class="spinner-wrap">
-    <div class="dots">
-      <span /><span /><span />
-    </div>
+    <div class="dots"><span /><span /><span /></div>
   </div>
 </template>
 
@@ -29,11 +27,23 @@
   animation: bounce 1.2s ease-in-out infinite;
 }
 
-.dots span:nth-child(2) { animation-delay: 0.2s; }
-.dots span:nth-child(3) { animation-delay: 0.4s; }
+.dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
 
 @keyframes bounce {
-  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
-  40%            { transform: scale(1);   opacity: 1;   }
+  0%,
+  80%,
+  100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 </style>

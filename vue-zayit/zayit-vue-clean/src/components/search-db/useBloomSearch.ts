@@ -14,11 +14,51 @@ import { cacheGet, cacheSet } from './searchCache'
 import type { BloomSearchResult } from './searchTypes'
 
 const DEV_SAMPLES: BloomSearchResult[] = [
-  { lineId: 1, bookId: 1, bookTitle: 'בראשית', tocText: 'פרק א', score: 0.95, proximityScore: 0.9,  snippet: 'בראשית ברא אלקים את השמים ואת הארץ' },
-  { lineId: 2, bookId: 1, bookTitle: 'בראשית', tocText: 'פרק א', score: 0.92, proximityScore: 0.88, snippet: 'והארץ היתה תהו ובהו וחשך על פני תהום' },
-  { lineId: 3, bookId: 2, bookTitle: 'שמות',   tocText: 'פרק א', score: 0.88, proximityScore: 0.85, snippet: 'ואלה שמות בני ישראל הבאים מצרימה' },
-  { lineId: 4, bookId: 3, bookTitle: 'ויקרא',  tocText: 'פרק א', score: 0.85, proximityScore: 0.82, snippet: 'ויקרא אל משה וידבר אליו מאהל מועד' },
-  { lineId: 5, bookId: 1, bookTitle: 'בראשית', tocText: 'פרק ב', score: 0.82, proximityScore: 0.8,  snippet: 'ויכלו השמים והארץ וכל צבאם' },
+  {
+    lineId: 1,
+    bookId: 1,
+    bookTitle: 'בראשית',
+    tocText: 'פרק א',
+    score: 0.95,
+    proximityScore: 0.9,
+    snippet: 'בראשית ברא אלקים את השמים ואת הארץ',
+  },
+  {
+    lineId: 2,
+    bookId: 1,
+    bookTitle: 'בראשית',
+    tocText: 'פרק א',
+    score: 0.92,
+    proximityScore: 0.88,
+    snippet: 'והארץ היתה תהו ובהו וחשך על פני תהום',
+  },
+  {
+    lineId: 3,
+    bookId: 2,
+    bookTitle: 'שמות',
+    tocText: 'פרק א',
+    score: 0.88,
+    proximityScore: 0.85,
+    snippet: 'ואלה שמות בני ישראל הבאים מצרימה',
+  },
+  {
+    lineId: 4,
+    bookId: 3,
+    bookTitle: 'ויקרא',
+    tocText: 'פרק א',
+    score: 0.85,
+    proximityScore: 0.82,
+    snippet: 'ויקרא אל משה וידבר אליו מאהל מועד',
+  },
+  {
+    lineId: 5,
+    bookId: 1,
+    bookTitle: 'בראשית',
+    tocText: 'פרק ב',
+    score: 0.82,
+    proximityScore: 0.8,
+    snippet: 'ויכלו השמים והארץ וכל צבאם',
+  },
 ]
 
 function callAction<T>(name: string, ...params: unknown[]): Promise<T> {
@@ -54,23 +94,37 @@ function ensureWebviewListener() {
       const listener = _searchListeners.get(msg.searchId)
       if (!listener) return
       switch (msg.type) {
-        case 'searchBatch':    listener.onBatch(msg.results ?? []); break
-        case 'searchComplete': listener.onComplete(); _searchListeners.delete(msg.searchId); break
-        case 'searchCancelled':listener.onCancelled(); _searchListeners.delete(msg.searchId); break
-        case 'searchError':    listener.onError(msg.error ?? ''); _searchListeners.delete(msg.searchId); break
+        case 'searchBatch':
+          listener.onBatch(msg.results ?? [])
+          break
+        case 'searchComplete':
+          listener.onComplete()
+          _searchListeners.delete(msg.searchId)
+          break
+        case 'searchCancelled':
+          listener.onCancelled()
+          _searchListeners.delete(msg.searchId)
+          break
+        case 'searchError':
+          listener.onError(msg.error ?? '')
+          _searchListeners.delete(msg.searchId)
+          break
       }
-    } catch { /* ignore malformed messages */ }
+    } catch {
+      /* ignore malformed messages */
+    }
   })
 }
 
 async function enrichTocPaths(batch: BloomSearchResult[]): Promise<void> {
-  const lineIds = [...new Set(batch.map(r => r.lineId))]
+  const lineIds = [...new Set(batch.map((r) => r.lineId))]
   if (!lineIds.length) return
   try {
     const rows = await query<{ lineId: number; tocPath: string }>(
-      SQL.GET_TOC_PATHS_FOR_LINES(lineIds.length), lineIds
+      SQL.GET_TOC_PATHS_FOR_LINES(lineIds.length),
+      lineIds,
     )
-    const pathMap = new Map(rows.map(r => [r.lineId, r.tocPath]))
+    const pathMap = new Map(rows.map((r) => [r.lineId, r.tocPath]))
     for (const r of batch) {
       const path = pathMap.get(r.lineId)
       if (path) r.tocText = path
@@ -81,9 +135,9 @@ async function enrichTocPaths(batch: BloomSearchResult[]): Promise<void> {
 }
 
 export function useBloomSearch() {
-  const results       = ref<BloomSearchResult[]>([])
-  const isSearching   = ref(false)
-  const hasSearched   = ref(false)
+  const results = ref<BloomSearchResult[]>([])
+  const isSearching = ref(false)
+  const hasSearched = ref(false)
   const executedQuery = ref('')
 
   let currentSearchId: string | null = null
@@ -100,7 +154,11 @@ export function useBloomSearch() {
     const id = currentSearchId
     _cleanup()
     isSearching.value = false
-    try { await callAction('BloomSearchCancel', id) } catch { /* ignore */ }
+    try {
+      await callAction('BloomSearchCancel', id)
+    } catch {
+      /* ignore */
+    }
   }
 
   async function executeSearch(query: string) {
@@ -108,16 +166,16 @@ export function useBloomSearch() {
 
     if (currentSearchId) await cancelSearch()
 
-    isSearching.value   = true
-    hasSearched.value   = true
-    results.value       = []
+    isSearching.value = true
+    hasSearched.value = true
+    results.value = []
     executedQuery.value = query
 
     // Dev fallback
     if (!isHosted) {
-      await new Promise(r => setTimeout(r, 400))
+      await new Promise((r) => setTimeout(r, 400))
       await enrichTocPaths(DEV_SAMPLES)
-      results.value     = DEV_SAMPLES
+      results.value = DEV_SAMPLES
       isSearching.value = false
       return
     }
@@ -126,7 +184,7 @@ export function useBloomSearch() {
     const cached = await cacheGet(query.trim().toLowerCase())
     if (cached) {
       console.log('[useBloomSearch] cache hit for:', query)
-      results.value     = cached
+      results.value = cached
       isSearching.value = false
       return
     }
@@ -154,17 +212,24 @@ export function useBloomSearch() {
           if (currentSearchId === searchId) {
             isSearching.value = false
             if (results.value.length > 0)
-              cacheSet(query.trim().toLowerCase(), JSON.parse(JSON.stringify(results.value)))
-                .catch(err => console.error('[useBloomSearch] cacheSet failed:', err))
+              cacheSet(query.trim().toLowerCase(), JSON.parse(JSON.stringify(results.value))).catch(
+                (err) => console.error('[useBloomSearch] cacheSet failed:', err),
+              )
             _cleanup()
           }
         },
         onCancelled: () => {
-          if (currentSearchId === searchId) { isSearching.value = false; _cleanup() }
+          if (currentSearchId === searchId) {
+            isSearching.value = false
+            _cleanup()
+          }
         },
         onError: (err) => {
           console.error('[useBloomSearch] search error:', err)
-          if (currentSearchId === searchId) { isSearching.value = false; _cleanup() }
+          if (currentSearchId === searchId) {
+            isSearching.value = false
+            _cleanup()
+          }
         },
       })
     } catch (err) {
@@ -174,19 +239,28 @@ export function useBloomSearch() {
   }
 
   function clearSearch() {
-    results.value       = []
-    hasSearched.value   = false
+    results.value = []
+    hasSearched.value = false
     executedQuery.value = ''
   }
 
   async function loadCachedResults(query: string): Promise<boolean> {
     const cached = await cacheGet(query.trim().toLowerCase())
     if (!cached) return false
-    results.value       = cached
+    results.value = cached
     executedQuery.value = query
-    hasSearched.value   = true
+    hasSearched.value = true
     return true
   }
 
-  return { results, isSearching, hasSearched, executedQuery, executeSearch, cancelSearch, clearSearch, loadCachedResults }
+  return {
+    results,
+    isSearching,
+    hasSearched,
+    executedQuery,
+    executeSearch,
+    cancelSearch,
+    clearSearch,
+    loadCachedResults,
+  }
 }

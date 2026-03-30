@@ -17,13 +17,19 @@ const props = defineProps<{ tabs: Tab[]; activeTabId: string }>()
 const emit = defineEmits<{ select: [id: string]; close: [id: string]; dismiss: [] }>()
 
 const containerRef = ref<HTMLElement | null>(null)
-const visibleTabs = () => props.tabs.filter(t => t.id !== props.activeTabId && t.route !== '/settings')
+const visibleTabs = () =>
+  props.tabs.filter((t) => t.id !== props.activeTabId && t.route !== '/settings')
 
 const { focusedIndex, containerFocused } = useListKeys(
   containerRef,
   () => visibleTabs().length,
   (i) => emit('select', visibleTabs()[i]!.id),
 )
+
+function selectTab(i: number, id: string) {
+  focusedIndex.value = i
+  emit('select', id)
+}
 
 nextTick(() => containerRef.value?.focus())
 </script>
@@ -36,7 +42,7 @@ nextTick(() => containerRef.value?.focus())
       class="tab-row"
       data-nav-item
       :class="{ 'is-focused': containerFocused && focusedIndex === i }"
-      @click="focusedIndex = i; emit('select', tab.id)"
+      @click="selectTab(i, tab.id)"
       @keydown.enter="emit('select', tab.id)"
     >
       <div class="tab-row-start">
@@ -84,13 +90,39 @@ nextTick(() => containerRef.value?.focus())
   border-top: 1px solid var(--border-color);
   transition: background 120ms;
 }
-.tab-row:hover { background: var(--hover-bg); }
+.tab-row:hover {
+  background: var(--hover-bg);
+}
 
-.tab-row-start { display: flex; align-items: center; flex: 1; padding-inline-start: 4px; color: var(--text-secondary); }
-.tab-icon { width: 14px; height: 14px; }
-.tab-row-title { font-weight: 400; font-size: 0.82rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.tab-toc-path { color: var(--text-secondary); }
-.tab-row-end { display: flex; align-items: center; justify-content: flex-end; flex: 1; }
+.tab-row-start {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  padding-inline-start: 4px;
+  color: var(--text-secondary);
+}
+.tab-icon {
+  width: 14px;
+  height: 14px;
+}
+.tab-row-title {
+  font-weight: 400;
+  font-size: 0.82rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.tab-toc-path {
+  color: var(--text-secondary);
+}
+.tab-row-end {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 1;
+}
 
 .tab-close {
   display: flex;
@@ -104,6 +136,12 @@ nextTick(() => containerRef.value?.focus())
   color: var(--text-secondary);
   cursor: pointer;
 }
-.tab-close svg { width: 14px; height: 14px; }
-.tab-close:hover { background: var(--hover-bg); color: var(--text-primary); }
+.tab-close svg {
+  width: 14px;
+  height: 14px;
+}
+.tab-close:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
 </style>

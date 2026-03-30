@@ -4,14 +4,18 @@ import { SQL } from '@/host/queries.sql'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import type { BookRow } from '@/components/books-fs/booksFsTree'
 
-export interface CommentaryLine { lineId: number; lineIndex: number; content: string }
+export interface CommentaryLine {
+  lineId: number
+  lineIndex: number
+  content: string
+}
 export interface CommentaryGroup {
   bookId: number
   bookTitle: string
   connectionTypes: string[]
   lines: CommentaryLine[]
-  category?: string      // resolved category label (e.g. ראשונים, תנ"ך)
-  sectionLabel?: string  // display label for header (e.g. מפרשים - ראשונים)
+  category?: string // resolved category label (e.g. ראשונים, תנ"ך)
+  sectionLabel?: string // display label for header (e.g. מפרשים - ראשונים)
 }
 
 export interface CommentaryTreeNode {
@@ -50,9 +54,14 @@ function resolveCategory(book: BookRow | undefined): string {
   return book.rootCategory ?? 'אחר'
 }
 const CATEGORY_ORDER = [
-  'תנ"ך', 'משנה', 'תוספתא', 'תלמוד',
+  'תנ"ך',
+  'משנה',
+  'תוספתא',
+  'תלמוד',
   'מדרש',
-  'גאונים', 'ראשונים', 'אחרונים',
+  'גאונים',
+  'ראשונים',
+  'אחרונים',
   'אחר',
 ]
 
@@ -61,11 +70,16 @@ function categoryRank(cat: string): number {
   return idx === -1 ? CATEGORY_ORDER.length - 1 : idx
 }
 
-function sortCategoryEntries(entries: [string, { bookId: number }[]][]): [string, { bookId: number }[]][] {
+function sortCategoryEntries(
+  entries: [string, { bookId: number }[]][],
+): [string, { bookId: number }[]][] {
   return entries.sort(([catA], [catB]) => categoryRank(catA) - categoryRank(catB))
 }
 
-export function useCommentary(selectedLineId: () => number | null, selectedLineIds: () => number[] | null = () => null) {
+export function useCommentary(
+  selectedLineId: () => number | null,
+  selectedLineIds: () => number[] | null = () => null,
+) {
   const groups = ref<CommentaryGroup[]>([])
   const loading = ref(false)
   const booksDataStore = useBooksDataStore()
@@ -85,40 +99,53 @@ export function useCommentary(selectedLineId: () => number | null, selectedLineI
     try {
       // Ensure book metadata is available before resolving categories
       await booksDataStore.ensureLoaded()
-      const links = await query<{ targetBookId: number; targetLineId: number; connectionType: string }>(
-        SQL.GET_LINKS_FOR_SOURCE_LINE, [lineId]
-      )
+      const links = await query<{
+        targetBookId: number
+        targetLineId: number
+        connectionType: string
+      }>(SQL.GET_LINKS_FOR_SOURCE_LINE, [lineId])
       if (!links.length) return
 
       const byBook = new Map<number, { lineIds: number[]; connectionTypes: Set<string> }>()
       for (const l of links) {
-        if (!byBook.has(l.targetBookId)) byBook.set(l.targetBookId, { lineIds: [], connectionTypes: new Set() })
+        if (!byBook.has(l.targetBookId))
+          byBook.set(l.targetBookId, { lineIds: [], connectionTypes: new Set() })
         const g = byBook.get(l.targetBookId)!
         g.lineIds.push(l.targetLineId)
         g.connectionTypes.add(l.connectionType)
       }
 
       const bookIds = [...byBook.keys()]
-      const lineIds = links.map(l => l.targetLineId)
+      const lineIds = links.map((l) => l.targetLineId)
       const [bookRows, lineRows] = await Promise.all([
-        query<{ id: number; title: string }>(`SELECT id, title FROM book WHERE id IN (${bookIds.map(() => '?').join(',')})`, bookIds),
-        query<{ id: number; lineIndex: number; content: string }>(`SELECT id, lineIndex, content FROM line WHERE id IN (${lineIds.map(() => '?').join(',')})`, lineIds),
+        query<{ id: number; title: string }>(
+          `SELECT id, title FROM book WHERE id IN (${bookIds.map(() => '?').join(',')})`,
+          bookIds,
+        ),
+        query<{ id: number; lineIndex: number; content: string }>(
+          `SELECT id, lineIndex, content FROM line WHERE id IN (${lineIds.map(() => '?').join(',')})`,
+          lineIds,
+        ),
       ])
 
-      const bookTitleMap = new Map(bookRows.map(b => [b.id, b.title]))
-      const lineMap = new Map(lineRows.map(l => [l.id, l]))
+      const bookTitleMap = new Map(bookRows.map((b) => [b.id, b.title]))
+      const lineMap = new Map(lineRows.map((l) => [l.id, l]))
 
       // Build raw groups with category resolved
-      const raw = bookIds.map(bookId => {
+      const raw = bookIds.map((bookId) => {
         const g = byBook.get(bookId)!
-        const book = booksDataStore.allBooks.find(b => b.id === bookId)
+        const book = booksDataStore.allBooks.find((b) => b.id === bookId)
         const ct = [...g.connectionTypes][0] ?? 'OTHER'
         const category = resolveCategory(book)
         return {
           bookId,
           bookTitle: bookTitleMap.get(bookId) ?? String(bookId),
           connectionTypes: [...g.connectionTypes],
-          lines: g.lineIds.map(id => ({ lineId: id, lineIndex: lineMap.get(id)?.lineIndex ?? 0, content: lineMap.get(id)?.content ?? '' })),
+          lines: g.lineIds.map((id) => ({
+            lineId: id,
+            lineIndex: lineMap.get(id)?.lineIndex ?? 0,
+            content: lineMap.get(id)?.content ?? '',
+          })),
           category,
           ct,
         }
@@ -136,7 +163,14 @@ export function useCommentary(selectedLineId: () => number | null, selectedLineI
       const addFlat = (ct: string, label: string) => {
         const items = byType.get(ct) ?? []
         for (const g of items.sort((a, b) => a.bookTitle.localeCompare(b.bookTitle, 'he'))) {
-          result.push({ bookId: g.bookId, bookTitle: g.bookTitle, connectionTypes: g.connectionTypes, lines: g.lines, category: g.category, sectionLabel: label })
+          result.push({
+            bookId: g.bookId,
+            bookTitle: g.bookTitle,
+            connectionTypes: g.connectionTypes,
+            lines: g.lines,
+            category: g.category,
+            sectionLabel: label,
+          })
         }
       }
 
@@ -150,12 +184,21 @@ export function useCommentary(selectedLineId: () => number | null, selectedLineI
           byCat.get(g.category)!.push(g)
         }
         const sorted = sortCategoryEntries(
-          [...byCat.entries()].map(([cat, gs]) => [cat, gs.map(g => ({ bookId: g.bookId }))])
+          [...byCat.entries()].map(([cat, gs]) => [cat, gs.map((g) => ({ bookId: g.bookId }))]),
         )
         for (const [cat] of sorted) {
-          const catItems = byCat.get(cat)!.sort((a, b) => a.bookTitle.localeCompare(b.bookTitle, 'he'))
+          const catItems = byCat
+            .get(cat)!
+            .sort((a, b) => a.bookTitle.localeCompare(b.bookTitle, 'he'))
           for (const g of catItems) {
-            result.push({ bookId: g.bookId, bookTitle: g.bookTitle, connectionTypes: g.connectionTypes, lines: g.lines, category: cat, sectionLabel: cat })
+            result.push({
+              bookId: g.bookId,
+              bookTitle: g.bookTitle,
+              connectionTypes: g.connectionTypes,
+              lines: g.lines,
+              category: cat,
+              sectionLabel: cat,
+            })
           }
         }
       }
@@ -177,39 +220,54 @@ export function useCommentary(selectedLineId: () => number | null, selectedLineI
     groups.value = []
     try {
       await booksDataStore.ensureLoaded()
-      const links = await query<{ targetBookId: number; targetLineId: number; connectionType: string }>(
-        SQL.GET_LINKS_FOR_SOURCE_LINE_RANGE(sourceLineIds.length), sourceLineIds
-      )
+      const links = await query<{
+        targetBookId: number
+        targetLineId: number
+        connectionType: string
+      }>(SQL.GET_LINKS_FOR_SOURCE_LINE_RANGE(sourceLineIds.length), sourceLineIds)
       if (!links.length) return
 
       const byBook = new Map<number, { lineIds: number[]; connectionTypes: Set<string> }>()
       for (const l of links) {
-        if (!byBook.has(l.targetBookId)) byBook.set(l.targetBookId, { lineIds: [], connectionTypes: new Set() })
+        if (!byBook.has(l.targetBookId))
+          byBook.set(l.targetBookId, { lineIds: [], connectionTypes: new Set() })
         const g = byBook.get(l.targetBookId)!
         if (!g.lineIds.includes(l.targetLineId)) g.lineIds.push(l.targetLineId)
         g.connectionTypes.add(l.connectionType)
       }
 
       const bookIds = [...byBook.keys()]
-      const targetLineIds = [...new Set(links.map(l => l.targetLineId))]
+      const targetLineIds = [...new Set(links.map((l) => l.targetLineId))]
       const [bookRows, lineRows] = await Promise.all([
-        query<{ id: number; title: string }>(`SELECT id, title FROM book WHERE id IN (${bookIds.map(() => '?').join(',')})`, bookIds),
-        query<{ id: number; lineIndex: number; content: string }>(`SELECT id, lineIndex, content FROM line WHERE id IN (${targetLineIds.map(() => '?').join(',')})`, targetLineIds),
+        query<{ id: number; title: string }>(
+          `SELECT id, title FROM book WHERE id IN (${bookIds.map(() => '?').join(',')})`,
+          bookIds,
+        ),
+        query<{ id: number; lineIndex: number; content: string }>(
+          `SELECT id, lineIndex, content FROM line WHERE id IN (${targetLineIds.map(() => '?').join(',')})`,
+          targetLineIds,
+        ),
       ])
 
-      const bookTitleMap = new Map(bookRows.map(b => [b.id, b.title]))
-      const lineMap = new Map(lineRows.map(l => [l.id, l]))
+      const bookTitleMap = new Map(bookRows.map((b) => [b.id, b.title]))
+      const lineMap = new Map(lineRows.map((l) => [l.id, l]))
 
-      const raw = bookIds.map(bookId => {
+      const raw = bookIds.map((bookId) => {
         const g = byBook.get(bookId)!
-        const book = booksDataStore.allBooks.find(b => b.id === bookId)
+        const book = booksDataStore.allBooks.find((b) => b.id === bookId)
         const ct = [...g.connectionTypes][0] ?? 'OTHER'
         const category = resolveCategory(book)
         return {
           bookId,
           bookTitle: bookTitleMap.get(bookId) ?? String(bookId),
           connectionTypes: [...g.connectionTypes],
-          lines: g.lineIds.map(id => ({ lineId: id, lineIndex: lineMap.get(id)?.lineIndex ?? 0, content: lineMap.get(id)?.content ?? '' })).sort((a, b) => a.lineIndex - b.lineIndex),
+          lines: g.lineIds
+            .map((id) => ({
+              lineId: id,
+              lineIndex: lineMap.get(id)?.lineIndex ?? 0,
+              content: lineMap.get(id)?.content ?? '',
+            }))
+            .sort((a, b) => a.lineIndex - b.lineIndex),
           category,
           ct,
         }
@@ -225,17 +283,38 @@ export function useCommentary(selectedLineId: () => number | null, selectedLineI
       const addFlat = (ct: string, label: string) => {
         const items = byType.get(ct) ?? []
         for (const g of items.sort((a, b) => a.bookTitle.localeCompare(b.bookTitle, 'he')))
-          result.push({ bookId: g.bookId, bookTitle: g.bookTitle, connectionTypes: g.connectionTypes, lines: g.lines, category: g.category, sectionLabel: label })
+          result.push({
+            bookId: g.bookId,
+            bookTitle: g.bookTitle,
+            connectionTypes: g.connectionTypes,
+            lines: g.lines,
+            category: g.category,
+            sectionLabel: label,
+          })
       }
       const addMergedByCategory = () => {
         const items = [...(byType.get('COMMENTARY') ?? [])]
         if (!items.length) return
         const byCat = new Map<string, typeof items>()
-        for (const g of items) { if (!byCat.has(g.category)) byCat.set(g.category, []); byCat.get(g.category)!.push(g) }
-        const sorted = sortCategoryEntries([...byCat.entries()].map(([cat, gs]) => [cat, gs.map(g => ({ bookId: g.bookId }))]))
+        for (const g of items) {
+          if (!byCat.has(g.category)) byCat.set(g.category, [])
+          byCat.get(g.category)!.push(g)
+        }
+        const sorted = sortCategoryEntries(
+          [...byCat.entries()].map(([cat, gs]) => [cat, gs.map((g) => ({ bookId: g.bookId }))]),
+        )
         for (const [cat] of sorted) {
-          for (const g of byCat.get(cat)!.sort((a, b) => a.bookTitle.localeCompare(b.bookTitle, 'he')))
-            result.push({ bookId: g.bookId, bookTitle: g.bookTitle, connectionTypes: g.connectionTypes, lines: g.lines, category: cat, sectionLabel: cat })
+          for (const g of byCat
+            .get(cat)!
+            .sort((a, b) => a.bookTitle.localeCompare(b.bookTitle, 'he')))
+            result.push({
+              bookId: g.bookId,
+              bookTitle: g.bookTitle,
+              connectionTypes: g.connectionTypes,
+              lines: g.lines,
+              category: cat,
+              sectionLabel: cat,
+            })
         }
       }
       addFlat('SOURCE', 'מקור')
@@ -249,7 +328,14 @@ export function useCommentary(selectedLineId: () => number | null, selectedLineI
     }
   }
 
-  watch(selectedLineId, id => { if (id != null) load(id); else groups.value = [] }, { immediate: true })
+  watch(
+    selectedLineId,
+    (id) => {
+      if (id != null) load(id)
+      else groups.value = []
+    },
+    { immediate: true },
+  )
 
   return { groups, loading }
 }

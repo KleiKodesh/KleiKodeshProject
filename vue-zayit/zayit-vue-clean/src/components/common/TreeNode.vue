@@ -32,7 +32,12 @@ const fs = () => props.fontSize ?? '0.8rem'
     class="tree-row"
     data-nav-item
     :style="{ '--rh': rh(), '--fs': fs() }"
-    :class="{ 'is-active': active, 'is-focused': focused, 'is-filtered': filtered, 'is-parent': node.hasChildren && !filtered }"
+    :class="{
+      'is-active': active,
+      'is-focused': focused,
+      'is-filtered': filtered,
+      'is-parent': node.hasChildren && !filtered,
+    }"
     @keydown.space.prevent="node.hasChildren && !filtered ? $emit('toggle') : $emit('select')"
   >
     <div
@@ -69,13 +74,28 @@ const fs = () => props.fontSize ?? '0.8rem'
   z-index: calc(10 - v-bind('node.level'));
   background: var(--tree-bg, var(--bg-primary));
 }
-.tree-row:hover { background: color-mix(in srgb, var(--text-primary) 6%, transparent); }
-.tree-row.is-parent:hover { background: color-mix(in srgb, var(--text-primary) 6%, var(--tree-bg, var(--bg-primary))); }
-.tree-row:has(.tree-label:active) { background: color-mix(in srgb, var(--text-primary) 10%, transparent); }
-.tree-row.is-parent:has(.tree-label:active) { background: color-mix(in srgb, var(--text-primary) 10%, var(--tree-bg, var(--bg-primary))); }
-.tree-row.is-active { background: color-mix(in srgb, var(--text-primary) 8%, transparent); }
-.tree-row.is-parent.is-active { background: color-mix(in srgb, var(--text-primary) 8%, var(--tree-bg, var(--bg-primary))); }
-.tree-row.is-active .tree-label { color: var(--accent-color, #3478f6); font-weight: 500; }
+.tree-row:hover {
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+.tree-row.is-parent:hover {
+  background: color-mix(in srgb, var(--text-primary) 6%, var(--tree-bg, var(--bg-primary)));
+}
+.tree-row:has(.tree-label:active) {
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
+.tree-row.is-parent:has(.tree-label:active) {
+  background: color-mix(in srgb, var(--text-primary) 10%, var(--tree-bg, var(--bg-primary)));
+}
+.tree-row.is-active {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+.tree-row.is-parent.is-active {
+  background: color-mix(in srgb, var(--text-primary) 8%, var(--tree-bg, var(--bg-primary)));
+}
+.tree-row.is-active .tree-label {
+  color: var(--accent-color, #3478f6);
+  font-weight: 500;
+}
 
 .chevron-btn {
   width: 24px;

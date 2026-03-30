@@ -13,6 +13,13 @@ import AppPageView from '@/components/layout/AppPageView.vue'
 </template>
 
 <style scoped>
-.app-layout { display: flex; flex-direction: column; height: 100%; }
-.app-content { flex: 1; overflow: hidden; }
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.app-content {
+  flex: 1;
+  overflow: hidden;
+}
 </style>

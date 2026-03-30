@@ -2,8 +2,12 @@
 import { ref, computed, onMounted } from 'vue'
 import HomeTile from './HomePageTile.vue'
 import {
-  IconLibrary24Filled, IconFolderOpen24Filled, IconBookOpen24Filled,
-  IconApps24Filled, IconDatabase24Filled, IconArrowDownload24Filled,
+  IconLibrary24Filled,
+  IconFolderOpen24Filled,
+  IconBookOpen24Filled,
+  IconApps24Filled,
+  IconDatabase24Filled,
+  IconArrowDownload24Filled,
 } from '@iconify-prerendered/vue-fluent'
 import { IconSettings24, IconSearchSparkle24 } from '@iconify-prerendered/vue-fluent-color'
 import { usePdfStore } from '@/stores/pdfStore'
@@ -17,30 +21,30 @@ const pdfStore = usePdfStore()
 const tabStore = useTabStore()
 
 const baseTiles = [
-  { label: 'ספרים',        icon: IconLibrary24Filled,    color: '#B5451B' },
-  { label: 'חיפוש',        icon: IconSearchSparkle24 },
-  { label: 'פתח קובץ',     icon: IconFolderOpen24Filled, color: '#f0a500' },
-  { label: 'היברו-בוקס',   icon: IconBookOpen24Filled,   color: '#D94F1E' },
-  { label: 'הגדרות',       icon: IconSettings24 },
-  { label: 'סביבות עבודה', icon: IconApps24Filled,       color: '#6b7fc4' },
+  { label: 'ספרים', icon: IconLibrary24Filled, color: '#B5451B' },
+  { label: 'חיפוש', icon: IconSearchSparkle24 },
+  { label: 'פתח קובץ', icon: IconFolderOpen24Filled, color: '#f0a500' },
+  { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#D94F1E' },
+  { label: 'הגדרות', icon: IconSettings24 },
+  { label: 'סביבות עבודה', icon: IconApps24Filled, color: '#6b7fc4' },
 ]
 
 const noDbTiles = [
-  { label: 'התקן זית',          icon: IconArrowDownload24Filled, color: '#B5451B' },
-  { label: 'בחר מסד נתונים',    icon: IconDatabase24Filled,      color: '#3478f6' },
-  { label: 'פתח קובץ',          icon: IconFolderOpen24Filled,    color: '#f0a500' },
-  { label: 'היברו-בוקס',        icon: IconBookOpen24Filled,      color: '#D94F1E' },
-  { label: 'הגדרות',            icon: IconSettings24 },
-  { label: 'סביבות עבודה',      icon: IconApps24Filled,          color: '#6b7fc4' },
+  { label: 'התקן זית', icon: IconArrowDownload24Filled, color: '#B5451B' },
+  { label: 'בחר מסד נתונים', icon: IconDatabase24Filled, color: '#3478f6' },
+  { label: 'פתח קובץ', icon: IconFolderOpen24Filled, color: '#f0a500' },
+  { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#D94F1E' },
+  { label: 'הגדרות', icon: IconSettings24 },
+  { label: 'סביבות עבודה', icon: IconApps24Filled, color: '#6b7fc4' },
 ]
 
-const tiles = computed(() => (isHosted && !dbReady.value) ? noDbTiles : baseTiles)
+const tiles = computed(() => (isHosted && !dbReady.value ? noDbTiles : baseTiles))
 
 const SINGLETON_ROUTES: Record<string, string> = {
-  'ספרים':         '/books',
-  'הגדרות':        '/settings',
-  'היברו-בוקס':    '/hebrewbooks',
-  'סביבות עבודה':  '/workspaces',
+  ספרים: '/books',
+  הגדרות: '/settings',
+  'היברו-בוקס': '/hebrewbooks',
+  'סביבות עבודה': '/workspaces',
 }
 
 const pageRef = ref<HTMLElement | null>(null)
@@ -105,7 +109,11 @@ async function onTap(label: string) {
 
 <template>
   <div ref="pageRef" class="home-page" tabindex="0">
-    <div ref="gridRef" class="home-grid tiles-grid" :style="{ gridTemplateColumns: `repeat(${cols}, 1fr)` }">
+    <div
+      ref="gridRef"
+      class="home-grid tiles-grid"
+      :style="{ gridTemplateColumns: `repeat(${cols}, 1fr)` }"
+    >
       <HomeTile
         v-for="(t, i) in tiles"
         :key="t.label"

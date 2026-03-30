@@ -14,7 +14,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const workspaces = ref<Workspace[]>([])
   const activeId = ref<string>(DEFAULT_WS_ID)
 
-  const activeWorkspace = computed(() => workspaces.value.find(w => w.id === activeId.value))
+  const activeWorkspace = computed(() => workspaces.value.find((w) => w.id === activeId.value))
 
   async function init() {
     const saved = await idbGet<WorkspaceList>(KEYS.SETTINGS_WORKSPACES)
@@ -32,26 +32,33 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
   function persist() {
     return idbSet<WorkspaceList>(KEYS.SETTINGS_WORKSPACES, {
-      workspaces: toRaw(workspaces.value).map(w => toRaw(w)),
+      workspaces: toRaw(workspaces.value).map((w) => toRaw(w)),
       activeId: activeId.value,
     })
   }
 
   async function createWorkspace(name: string): Promise<Workspace> {
-    const ws: Workspace = { id: makeId(), name: name.trim() || 'סביבת עבודה', createdAt: Date.now() }
+    const ws: Workspace = {
+      id: makeId(),
+      name: name.trim() || 'סביבת עבודה',
+      createdAt: Date.now(),
+    }
     workspaces.value.push(ws)
     await persist()
     return ws
   }
 
   async function renameWorkspace(id: string, name: string) {
-    const ws = workspaces.value.find(w => w.id === id)
-    if (ws) { ws.name = name.trim() || ws.name; await persist() }
+    const ws = workspaces.value.find((w) => w.id === id)
+    if (ws) {
+      ws.name = name.trim() || ws.name
+      await persist()
+    }
   }
 
   async function deleteWorkspace(id: string) {
     if (workspaces.value.length <= 1) return // can't delete last workspace
-    const idx = workspaces.value.findIndex(w => w.id === id)
+    const idx = workspaces.value.findIndex((w) => w.id === id)
     if (idx === -1) return
     workspaces.value.splice(idx, 1)
     // If deleting active, switch to first remaining
@@ -65,13 +72,19 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
   /** Switch active workspace — caller should reload the app */
   async function switchWorkspace(id: string) {
-    if (!workspaces.value.some(w => w.id === id)) return
+    if (!workspaces.value.some((w) => w.id === id)) return
     activeId.value = id
     await persist()
   }
 
   return {
-    workspaces, activeId, activeWorkspace,
-    init, createWorkspace, renameWorkspace, deleteWorkspace, switchWorkspace,
+    workspaces,
+    activeId,
+    activeWorkspace,
+    init,
+    createWorkspace,
+    renameWorkspace,
+    deleteWorkspace,
+    switchWorkspace,
   }
 })

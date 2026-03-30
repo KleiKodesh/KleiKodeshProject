@@ -18,14 +18,33 @@ import { censorDivineNames } from '@/utils/censorDivineNames'
 import { scrollToIndexWithRetry } from '@/utils/scrollToIndexWithRetry'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 
-const props = defineProps<{ selectedLineId: number | null; groups: CommentaryGroup[]; loading: boolean; searchQuery?: string; currentMatchFlatIndex?: number; currentMatchOccurrence?: number; pinnedBookId?: number | null }>()
-const emit = defineEmits<{ close: []; 'navigate-section': [direction: 'next' | 'prev', bookId: number]; 'open-book': [bookId: number, lineIndex: number]; 'toggle-search': []; 'scroll': [scrollIndex: number, scrollOffset: number] }>()
+const props = defineProps<{
+  selectedLineId: number | null
+  groups: CommentaryGroup[]
+  loading: boolean
+  searchQuery?: string
+  currentMatchFlatIndex?: number
+  currentMatchOccurrence?: number
+  pinnedBookId?: number | null
+}>()
+const emit = defineEmits<{
+  close: []
+  'navigate-section': [direction: 'next' | 'prev', bookId: number]
+  'open-book': [bookId: number, lineIndex: number]
+  'toggle-search': []
+  scroll: [scrollIndex: number, scrollOffset: number]
+}>()
 
 const settingsStore = useSettingsStore()
 const { zoom } = storeToRefs(useBookViewStore())
 const diacriticsState = computed(() => settingsStore.diacriticsState)
 
-function highlightMatches(content: string, query: string, isCurrent: boolean, currentOccurrence: number): string {
+function highlightMatches(
+  content: string,
+  query: string,
+  isCurrent: boolean,
+  currentOccurrence: number,
+): string {
   const q = removeDiacriticsForSearch(query.trim())
   if (!q) return content
   const stripped = removeDiacriticsForSearch(content.replace(/<[^>]*>/g, ''))
@@ -33,23 +52,48 @@ function highlightMatches(content: string, query: string, isCurrent: boolean, cu
 
   const matchStarts = new Set<number>()
   let idx = 0
-  while ((idx = stripped.indexOf(q, idx)) !== -1) { matchStarts.add(idx); idx++ }
+  while ((idx = stripped.indexOf(q, idx)) !== -1) {
+    matchStarts.add(idx)
+    idx++
+  }
 
   const out: string[] = []
-  let strippedPos = 0, inTag = false, inMatch = false, matchCount = 0, matchOccurrence = 0
+  let strippedPos = 0,
+    inTag = false,
+    inMatch = false,
+    matchCount = 0,
+    matchOccurrence = 0
   for (let i = 0; i < content.length; i++) {
     const ch = content[i]!
-    if (ch === '<') { inTag = true; out.push(ch); continue }
-    if (ch === '>') { inTag = false; out.push(ch); continue }
-    if (inTag) { out.push(ch); continue }
+    if (ch === '<') {
+      inTag = true
+      out.push(ch)
+      continue
+    }
+    if (ch === '>') {
+      inTag = false
+      out.push(ch)
+      continue
+    }
+    if (inTag) {
+      out.push(ch)
+      continue
+    }
     const isDiacritic = /[\u0591-\u05C7]/.test(ch)
     if (!isDiacritic && matchStarts.has(strippedPos) && !inMatch) {
-      out.push(`<mark class="search-match${isCurrent && matchOccurrence === currentOccurrence ? ' current' : ''}">`)
-      inMatch = true; matchCount = 0
+      out.push(
+        `<mark class="search-match${isCurrent && matchOccurrence === currentOccurrence ? ' current' : ''}">`,
+      )
+      inMatch = true
+      matchCount = 0
     }
     out.push(ch)
     if (!isDiacritic) {
-      if (inMatch && ++matchCount === q.length) { out.push('</mark>'); inMatch = false; matchOccurrence++ }
+      if (inMatch && ++matchCount === q.length) {
+        out.push('</mark>')
+        inMatch = false
+        matchOccurrence++
+      }
       strippedPos++
     }
   }
@@ -57,18 +101,32 @@ function highlightMatches(content: string, query: string, isCurrent: boolean, cu
 }
 
 function renderContent(content: string, flatIndex: number): string {
-  let result = diacriticsState.value === 0 ? content : applyDiacriticsFilter(content, diacriticsState.value)
+  let result =
+    diacriticsState.value === 0 ? content : applyDiacriticsFilter(content, diacriticsState.value)
   if (settingsStore.censorDivineNames) result = censorDivineNames(result)
-  if (props.searchQuery?.trim()) result = highlightMatches(result, props.searchQuery, flatIndex === props.currentMatchFlatIndex, props.currentMatchOccurrence ?? 0)
+  if (props.searchQuery?.trim())
+    result = highlightMatches(
+      result,
+      props.searchQuery,
+      flatIndex === props.currentMatchFlatIndex,
+      props.currentMatchOccurrence ?? 0,
+    )
   return result
 }
 
-type FlatItem = { type: 'header'; bookTitle: string; connectionTypes: string[]; sectionLabel?: string } | { type: 'line'; content: string; lineId: number }
+type FlatItem =
+  | { type: 'header'; bookTitle: string; connectionTypes: string[]; sectionLabel?: string }
+  | { type: 'line'; content: string; lineId: number }
 
 const flatItems = computed<FlatItem[]>(() => {
   const items: FlatItem[] = []
   for (const g of visibleGroups.value) {
-    items.push({ type: 'header', bookTitle: g.bookTitle, connectionTypes: g.connectionTypes, sectionLabel: g.sectionLabel })
+    items.push({
+      type: 'header',
+      bookTitle: g.bookTitle,
+      connectionTypes: g.connectionTypes,
+      sectionLabel: g.sectionLabel,
+    })
     for (const l of g.lines) items.push({ type: 'line', content: l.content, lineId: l.lineId })
   }
   return items
@@ -94,13 +152,20 @@ function toggleBookVisibility(bookId: number) {
   })
 }
 
-const visibleGroups = computed(() => props.groups.filter(g => !hiddenBookIds.value.has(g.bookId)))
+const visibleGroups = computed(() => props.groups.filter((g) => !hiddenBookIds.value.has(g.bookId)))
 
-const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, { onCtrlF: () => emit('toggle-search') })
-useScopedCopy(scrollerEl, () => visibleGroups.value.flatMap(g => g.lines.map(l => l.content)), isSelectAll)
+const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, {
+  onCtrlF: () => emit('toggle-search'),
+})
+useScopedCopy(
+  scrollerEl,
+  () => visibleGroups.value.flatMap((g) => g.lines.map((l) => l.content)),
+  isSelectAll,
+)
 useVirtualScrollerKeys(
   scrollerEl,
-  () => virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
+  () =>
+    virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
   () => flatItems.value.length,
 )
 
@@ -115,15 +180,19 @@ function onTreeSelect(node: CommentaryTreeNode) {
   if (node.bookId == null) return
   suppressTreeScroll.value = true
   scrollToGroup(node.bookId)
-  requestAnimationFrame(() => { suppressTreeScroll.value = false })
+  requestAnimationFrame(() => {
+    suppressTreeScroll.value = false
+  })
 }
 
-const virtualizer = useVirtualizer(computed(() => ({
-  count: flatItems.value.length,
-  getScrollElement: () => scrollerEl.value,
-  estimateSize: i => flatItems.value[i]?.type === 'header' ? 40 : 48,
-  overscan: 10,
-})))
+const virtualizer = useVirtualizer(
+  computed(() => ({
+    count: flatItems.value.length,
+    getScrollElement: () => scrollerEl.value,
+    estimateSize: (i) => (flatItems.value[i]?.type === 'header' ? 40 : 48),
+    overscan: 10,
+  })),
+)
 
 const virtualItems = computed(() => virtualizer.value.getVirtualItems())
 const totalSize = computed(() => virtualizer.value.getTotalSize())
@@ -142,10 +211,17 @@ const stickyHeader = computed(() => {
   return active
 })
 
-const activeHeader = computed(() => stickyHeader.value ?? (flatItems.value.find(i => i.type === 'header') as (FlatItem & { type: 'header' }) | undefined) ?? null)
+const activeHeader = computed(
+  () =>
+    stickyHeader.value ??
+    (flatItems.value.find((i) => i.type === 'header') as
+      | (FlatItem & { type: 'header' })
+      | undefined) ??
+    null,
+)
 
-const activeBookId = computed(() =>
-  visibleGroups.value.find(g => g.bookTitle === activeHeader.value?.bookTitle)?.bookId ?? 0
+const activeBookId = computed(
+  () => visibleGroups.value.find((g) => g.bookTitle === activeHeader.value?.bookTitle)?.bookId ?? 0,
 )
 
 // Frozen copy of activeBookId — only updates on real scroll, not during checkbox toggles
@@ -157,13 +233,19 @@ watch(activeBookId, (val) => {
 const suppressTreeScroll = ref(false)
 
 function scrollToGroup(bookId: number) {
-  const idx = flatItems.value.findIndex(item => item.type === 'header' && visibleGroups.value.find(g => g.bookId === bookId && g.bookTitle === item.bookTitle))
+  const idx = flatItems.value.findIndex(
+    (item) =>
+      item.type === 'header' &&
+      visibleGroups.value.find((g) => g.bookId === bookId && g.bookTitle === item.bookTitle),
+  )
   if (idx === -1) return
   virtualizer.value.scrollToIndex(idx, { align: 'start' })
   // scrollToIndex is synchronous for already-measured items — read scrollTop immediately
   scrollTop.value = scrollerEl.value?.scrollTop ?? 0
   // also update after paint in case the browser deferred the scroll
-  requestAnimationFrame(() => { scrollTop.value = scrollerEl.value?.scrollTop ?? 0 })
+  requestAnimationFrame(() => {
+    scrollTop.value = scrollerEl.value?.scrollTop ?? 0
+  })
 }
 
 function onScroll() {
@@ -173,17 +255,26 @@ function onScroll() {
 }
 
 // When groups reload, scroll back to the pinned book (captured in parent before selectedLineId changes)
-watch(() => props.groups, async (newGroups) => {
-  const pinned = props.pinnedBookId
-  if (!pinned || !newGroups.length) return
-  if (newGroups.some(g => g.bookId === pinned)) {
-    await nextTick()
-    scrollToGroup(pinned)
-  }
-}, { flush: 'post' })
+watch(
+  () => props.groups,
+  async (newGroups) => {
+    const pinned = props.pinnedBookId
+    if (!pinned || !newGroups.length) return
+    if (newGroups.some((g) => g.bookId === pinned)) {
+      await nextTick()
+      scrollToGroup(pinned)
+    }
+  },
+  { flush: 'post' },
+)
 
 // Reset hidden books when the line changes (new context)
-watch(() => props.selectedLineId, () => { hiddenBookIds.value = new Set() })
+watch(
+  () => props.selectedLineId,
+  () => {
+    hiddenBookIds.value = new Set()
+  },
+)
 
 const topVisibleFlatIndex = computed(() => {
   const st = scrollTop.value + NAV_HEIGHT
@@ -195,7 +286,12 @@ const topVisibleFlatIndex = computed(() => {
 
 function scrollToFlatIndex(flatIndex: number) {
   if (!scrollerEl.value) return
-  scrollToIndexWithRetry(virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>, scrollerEl.value, flatIndex, -52)
+  scrollToIndexWithRetry(
+    virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
+    scrollerEl.value,
+    flatIndex,
+    -52,
+  )
 }
 
 function captureScrollPos(): { scrollIndex: number; scrollOffset: number } | null {
@@ -207,29 +303,41 @@ function captureScrollPos(): { scrollIndex: number; scrollOffset: number } | nul
 async function restoreCommentaryScrollPos(scrollIndex: number, scrollOffset: number) {
   virtualizer.value.scrollToIndex(scrollIndex, { align: 'start' })
   await nextTick()
-  await new Promise(r => setTimeout(r, 500))
-  const item = virtualizer.value.getVirtualItems().find(v => v.index === scrollIndex)
-  if (scrollerEl.value) scrollerEl.value.scrollTop = (item?.start ?? scrollerEl.value.scrollTop) + scrollOffset
-  await new Promise(r => setTimeout(r, 600))
+  await new Promise((r) => setTimeout(r, 500))
+  const item = virtualizer.value.getVirtualItems().find((v) => v.index === scrollIndex)
+  if (scrollerEl.value)
+    scrollerEl.value.scrollTop = (item?.start ?? scrollerEl.value.scrollTop) + scrollOffset
+  await new Promise((r) => setTimeout(r, 600))
 }
 
-defineExpose({ scrollToGroup, scrollToFlatIndex, topVisibleFlatIndex, activeBookId, captureScrollPos, restoreCommentaryScrollPos })
+defineExpose({
+  scrollToGroup,
+  scrollToFlatIndex,
+  topVisibleFlatIndex,
+  activeBookId,
+  captureScrollPos,
+  restoreCommentaryScrollPos,
+})
 </script>
 
 <template>
   <div class="commentary-view">
     <ContextMenu ref="contextMenuRef" :items="contextMenuItems" />
     <div class="body">
-      <CommentaryTreePanel v-if="treeVisible && props.groups.length" class="tree-panel"
+      <CommentaryTreePanel
+        v-if="treeVisible && props.groups.length"
+        class="tree-panel"
         :groups="props.groups"
         :selected-book-id="treeSelectedBookId"
         :suppress-scroll="suppressTreeScroll"
         :hidden-book-ids="hiddenBookIds"
         @select="onTreeSelect"
         @toggle="toggleBookVisibility"
-        @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)" />
+        @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)"
+      />
       <div class="content-col">
-        <CommentaryHeaderNav class="sticky-nav"
+        <CommentaryHeaderNav
+          class="sticky-nav"
           :groups="visibleGroups"
           :scroll-to-group="scrollToGroup"
           :book-title="activeHeader?.bookTitle ?? ''"
@@ -240,24 +348,51 @@ defineExpose({ scrollToGroup, scrollToFlatIndex, topVisibleFlatIndex, activeBook
           @toggle-search="emit('toggle-search')"
           @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)"
           @close="emit('close')"
-          @toggle-tree="treeVisible = !treeVisible" />
+          @toggle-tree="treeVisible = !treeVisible"
+        />
         <div v-if="props.loading" class="state-overlay"><LoadingAnimation /></div>
         <div v-else-if="!flatItems.length" class="state-overlay">
-          <span class="hint">{{ props.selectedLineId == null ? 'בחר שורה לצפייה במפרשים' : 'אין מפרשים לשורה זו' }}</span>
+          <span class="hint">{{
+            props.selectedLineId == null ? 'בחר שורה לצפייה במפרשים' : 'אין מפרשים לשורה זו'
+          }}</span>
         </div>
-        <div v-else ref="scrollerEl" class="scroller" tabindex="0" data-ctrlf-enabled :style="{ fontSize: `${zoom / 100 * 15}px` }" @scroll="onScroll" @contextmenu="contextMenuRef?.show($event)">
+        <div
+          v-else
+          ref="scrollerEl"
+          class="scroller"
+          tabindex="0"
+          data-ctrlf-enabled
+          :style="{ fontSize: `${(zoom / 100) * 15}px` }"
+          @scroll="onScroll"
+          @contextmenu="contextMenuRef?.show($event)"
+        >
           <div :style="{ height: `${totalSize}px`, position: 'relative' }">
-            <div v-for="vItem in virtualItems" :key="String(vItem.key)"
-              :ref="el => el && virtualizer.measureElement(el as Element)"
+            <div
+              v-for="vItem in virtualItems"
+              :key="String(vItem.key)"
+              :ref="(el) => el && virtualizer.measureElement(el as Element)"
               :data-index="vItem.index"
-              :style="{ position: 'absolute', top: 0, right: 0, left: 0, transform: `translateY(${vItem.start}px)` }">
-              <CommentaryHeader v-if="flatItems[vItem.index]?.type === 'header'"
+              :style="{
+                position: 'absolute',
+                top: 0,
+                right: 0,
+                left: 0,
+                transform: `translateY(${vItem.start}px)`,
+              }"
+            >
+              <CommentaryHeader
+                v-if="flatItems[vItem.index]?.type === 'header'"
                 :book-title="(flatItems[vItem.index] as any).bookTitle"
                 :section-label="(flatItems[vItem.index] as any).sectionLabel"
                 :groups="visibleGroups"
                 @navigate-section="(d, id) => emit('navigate-section', d, id)"
-                @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)" />
-              <div v-else class="line" v-html="renderContent((flatItems[vItem.index] as any).content, vItem.index)" />
+                @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)"
+              />
+              <div
+                v-else
+                class="line"
+                v-html="renderContent((flatItems[vItem.index] as any).content, vItem.index)"
+              />
             </div>
           </div>
         </div>
@@ -267,15 +402,72 @@ defineExpose({ scrollToGroup, scrollToFlatIndex, topVisibleFlatIndex, activeBook
 </template>
 
 <style scoped>
-.commentary-view { height: 100%; display: flex; flex-direction: column; overflow: hidden; }
-.body { flex: 1; display: flex; flex-direction: row; min-height: 0; }
-.tree-panel { width: max-content; max-width: 25%; flex-shrink: 0; border-inline-start: 1px solid var(--border-color); }
-.content-col { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-.sticky-nav { flex-shrink: 0; height: 32px; }
-.state-overlay { flex: 1; display: flex; align-items: center; justify-content: center; }
-.hint { font-size: 13px; color: var(--text-secondary); }
-.scroller { flex: 1; overflow-y: auto; }
-.line { padding-inline: 12px; padding-block: 2px; font-size: 1em; line-height: 1.7; color: var(--text-primary); text-align: justify; }
-.line :deep(mark.search-match) { background: rgba(255, 165, 0, 0.4); color: inherit; border-radius: 2px; }
-.line :deep(mark.search-match.current) { background: rgba(255, 165, 0, 0.9); color: #000; }
+.commentary-view {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.body {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  min-height: 0;
+}
+.tree-panel {
+  width: max-content;
+  max-width: 20%;
+  flex-shrink: 0;
+  border-inline-start: 1px solid var(--border-color);
+}
+.content-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.sticky-nav {
+  flex-shrink: 0;
+  height: 32px;
+}
+.state-overlay {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.scroller {
+  flex: 1;
+  overflow-y: auto;
+}
+.line {
+  padding-inline: 12px;
+  padding-block: 2px;
+  font-family: var(--commentary-text-font);
+  font-size: var(--commentary-font-size, 100%);
+  line-height: var(--commentary-line-height, 1.7);
+  color: var(--text-primary);
+  text-align: justify;
+}
+.line :deep(h1),
+.line :deep(h2),
+.line :deep(h3),
+.line :deep(h4),
+.line :deep(h5),
+.line :deep(h6) {
+  font-family: var(--commentary-header-font);
+}
+.line :deep(mark.search-match) {
+  background: rgba(255, 165, 0, 0.4);
+  color: inherit;
+  border-radius: 2px;
+}
+.line :deep(mark.search-match.current) {
+  background: rgba(255, 165, 0, 0.9);
+  color: #000;
+}
 </style>

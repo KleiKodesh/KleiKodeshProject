@@ -13,7 +13,9 @@ const PREFIX = 'search:'
 const LRU_KEY = `${PREFIX}lru`
 const MAX = 100
 
-function key(query: string) { return `${PREFIX}${query}` }
+function key(query: string) {
+  return `${PREFIX}${query}`
+}
 
 async function getLru(): Promise<string[]> {
   return (await idbGet<string[]>(LRU_KEY)) ?? []
@@ -28,14 +30,14 @@ export async function cacheGet(query: string): Promise<BloomSearchResult[] | nul
   if (!results) return null
   // bump to most-recent in LRU
   const lru = await getLru()
-  const updated = [...lru.filter(q => q !== query), query]
+  const updated = [...lru.filter((q) => q !== query), query]
   await setLru(updated)
   return results
 }
 
 export async function cacheSet(query: string, results: BloomSearchResult[]): Promise<void> {
   const lru = await getLru()
-  const without = lru.filter(q => q !== query)
+  const without = lru.filter((q) => q !== query)
 
   // evict oldest if at cap
   if (without.length >= MAX) {
@@ -44,16 +46,10 @@ export async function cacheSet(query: string, results: BloomSearchResult[]): Pro
   }
 
   without.push(query)
-  await Promise.all([
-    idbSet(key(query), results),
-    setLru(without),
-  ])
+  await Promise.all([idbSet(key(query), results), setLru(without)])
 }
 
 export async function cacheClear(): Promise<void> {
   const lru = await getLru()
-  await Promise.all([
-    ...lru.map(q => idbDelete(key(q))),
-    idbDelete(LRU_KEY),
-  ])
+  await Promise.all([...lru.map((q) => idbDelete(key(q))), idbDelete(LRU_KEY)])
 }

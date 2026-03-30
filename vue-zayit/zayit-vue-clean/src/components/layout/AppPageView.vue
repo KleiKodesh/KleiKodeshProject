@@ -28,6 +28,6 @@ const pages: Record<string, unknown> = {
 <template>
   <component
     :is="pages[route]"
-    :key="route === '/book-view' ? tabStore.activeTabId : undefined"
+    :key="route === '/book-view' || route === '/search' ? tabStore.activeTabId : undefined"
   />
 </template>

@@ -5,5 +5,10 @@ defineProps<{ selectedLineId: number | null; groups: CommentaryGroup[]; loading:
 defineEmits<{ close: [] }>()
 </script>
 <template>
-  <CommentaryView :selected-line-id="selectedLineId" :groups="groups" :loading="loading" @close="$emit('close')" />
+  <CommentaryView
+    :selected-line-id="selectedLineId"
+    :groups="groups"
+    :loading="loading"
+    @close="$emit('close')"
+  />
 </template>

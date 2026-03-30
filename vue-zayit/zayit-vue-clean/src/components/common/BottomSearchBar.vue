@@ -21,6 +21,15 @@
   gap: 4px;
   padding: 4px 10px;
 }
-.slot-left { display: flex; align-items: center; flex-shrink: 0; }
-.slot-right { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.slot-left {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.slot-right {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
 </style>

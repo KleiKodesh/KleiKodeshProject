@@ -17,7 +17,7 @@ function onDividerPointerDown(e: PointerEvent) {
 function onPointerMove(e: PointerEvent) {
   if (!isDragging.value || !container.value) return
   const rect = container.value.getBoundingClientRect()
-  topFraction.value = Math.min(0.90, Math.max(0.10, (e.clientY - rect.top) / rect.height))
+  topFraction.value = Math.min(0.9, Math.max(0.1, (e.clientY - rect.top) / rect.height))
 }
 
 function onPointerUp() {
@@ -26,12 +26,7 @@ function onPointerUp() {
 </script>
 
 <template>
-  <div
-    ref="container"
-    class="split-pane"
-    @pointermove="onPointerMove"
-    @pointerup="onPointerUp"
-  >
+  <div ref="container" class="split-pane" @pointermove="onPointerMove" @pointerup="onPointerUp">
     <div
       class="pane top-pane"
       :style="bottomVisible ? { height: `${topFraction * 100}%` } : { flex: '1' }"
@@ -62,8 +57,12 @@ function onPointerUp() {
   display: flex;
   flex-direction: column;
 }
-.top-pane { flex-shrink: 0; }
-.bottom-pane { flex: 1; }
+.top-pane {
+  flex-shrink: 0;
+}
+.bottom-pane {
+  flex: 1;
+}
 .divider {
   height: 3px;
   flex-shrink: 0;

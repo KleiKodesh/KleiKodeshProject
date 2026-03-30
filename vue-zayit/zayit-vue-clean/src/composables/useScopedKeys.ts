@@ -3,7 +3,7 @@ import { useEventListener } from '@vueuse/core'
 
 export function useScopedKeys(
   containerRef: Ref<HTMLElement | null>,
-  options?: { onCtrlF?: () => void }
+  options?: { onCtrlF?: () => void },
 ) {
   const isSelectAll = ref(false)
 

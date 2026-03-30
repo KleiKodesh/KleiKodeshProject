@@ -9,7 +9,12 @@ import { useLines } from './useLines'
 import { useCommentary } from './useCommentary'
 import { useBookViewSearch } from './useBookViewSearch'
 import { useCommentarySearch } from './useCommentarySearch'
-import { findNextCommentarySection, findPrevCommentarySection, findNextTocCommentarySection, findPrevTocCommentarySection } from '@/utils/commentaryNav'
+import {
+  findNextCommentarySection,
+  findPrevCommentarySection,
+  findNextTocCommentarySection,
+  findPrevTocCommentarySection,
+} from '@/utils/commentaryNav'
 import { query } from '@/host/db'
 import { SQL } from '@/host/queries.sql'
 import BookViewToolbar from './BookViewToolbar.vue'
@@ -33,7 +38,13 @@ const openTocEntryId = tabStore.activeTab.openTocEntryId
 const openTocLineIndex = tabStore.activeTab.openTocLineIndex
 const searchHighlightLineIndex = tabStore.activeTab.searchHighlightLineIndex
 const searchHighlightQuery = tabStore.activeTab.searchHighlightQuery ?? ''
-if (openTocEntryId != null) tabStore.updateActiveTab({ openTocEntryId: undefined, openTocLineIndex: undefined, searchHighlightLineIndex: undefined, searchHighlightQuery: undefined })
+if (openTocEntryId != null)
+  tabStore.updateActiveTab({
+    openTocEntryId: undefined,
+    openTocLineIndex: undefined,
+    searchHighlightLineIndex: undefined,
+    searchHighlightQuery: undefined,
+  })
 
 const bottomVisible = ref(false)
 const searchVisible = ref(false)
@@ -47,27 +58,45 @@ const linesContentRef = ref<InstanceType<typeof BookViewLinesContent> | null>(nu
 const commentaryViewRef = ref<InstanceType<typeof CommentaryView> | null>(null)
 const searchBarRef = ref<InstanceType<typeof BookViewSearchBar> | null>(null)
 
-const { getActiveTocEntry, getTocPath, altTocSections, tocEntries } = useToc(() => bookId, () => bookTitle)
+const { getActiveTocEntry, getTocPath, altTocSections, tocEntries } = useToc(
+  () => bookId,
+  () => bookTitle,
+)
 const { lines } = useLines(() => bookId)
 
 // When selected line is a toc entry line, collect all line IDs in that section
 const selectedSectionLineIds = computed<number[] | null>(() => {
   if (selectedLineId.value == null || !tocEntries.value.length || !lines.value.length) return null
-  const tocEntry = tocEntries.value.find(e => e.lineId === selectedLineId.value)
+  const tocEntry = tocEntries.value.find((e) => e.lineId === selectedLineId.value)
   if (!tocEntry || tocEntry.lineIndex == null) return null
   // find next toc entry at same or higher level to determine section end
   const idx = tocEntries.value.indexOf(tocEntry)
-  const nextEntry = tocEntries.value.slice(idx + 1).find(e => e.lineIndex != null && e.level <= tocEntry.level)
+  const nextEntry = tocEntries.value
+    .slice(idx + 1)
+    .find((e) => e.lineIndex != null && e.level <= tocEntry.level)
   const fromIndex = tocEntry.lineIndex
   const toIndex = nextEntry?.lineIndex ?? lines.value.length
-  return lines.value.filter(l => l.lineIndex >= fromIndex && l.lineIndex < toIndex).map(l => l.id)
+  return lines.value
+    .filter((l) => l.lineIndex >= fromIndex && l.lineIndex < toIndex)
+    .map((l) => l.id)
 })
 
-const { groups, loading: commentaryLoading } = useCommentary(() => selectedLineId.value, () => selectedSectionLineIds.value)
-const contentSearch = useBookViewSearch(() => lines.value, () => currentScrollLineIndex.value)
-const commentarySearch = useCommentarySearch(() => groups.value, () => commentaryViewRef.value?.topVisibleFlatIndex ?? 0)
+const { groups, loading: commentaryLoading } = useCommentary(
+  () => selectedLineId.value,
+  () => selectedSectionLineIds.value,
+)
+const contentSearch = useBookViewSearch(
+  () => lines.value,
+  () => currentScrollLineIndex.value,
+)
+const commentarySearch = useCommentarySearch(
+  () => groups.value,
+  () => commentaryViewRef.value?.topVisibleFlatIndex ?? 0,
+)
 
-const activeSearch = computed(() => searchMode.value === 'content' ? contentSearch : commentarySearch)
+const activeSearch = computed(() =>
+  searchMode.value === 'content' ? contentSearch : commentarySearch,
+)
 const activeMatchCount = computed(() => activeSearch.value.matchCount.value)
 const activeMatchIdx = computed(() => activeSearch.value.currentMatchIdx.value)
 
@@ -83,9 +112,9 @@ const altTocLabelMap = computed(() => {
 })
 
 if (openTocEntryId != null) {
-  const stop = watch(tocEntries, entries => {
+  const stop = watch(tocEntries, (entries) => {
     if (!entries.length) return
-    const entry = entries.find(e => e.id === openTocEntryId)
+    const entry = entries.find((e) => e.id === openTocEntryId)
     if (entry != null) activeTocEntryId.value = entry.id
     stop()
   })
@@ -113,7 +142,9 @@ function onTocSelect(entry: TocEntry) {
   activeTocEntryId.value = entry.id
   tabStore.updateActiveTab({ tocPath: getTocPath(entry) })
   linesContentRef.value?.scrollToLineId(entry.lineId)
-  tocScrollTimer = setTimeout(() => { tocScrolling = false }, 500)
+  tocScrollTimer = setTimeout(() => {
+    tocScrolling = false
+  }, 500)
 }
 
 function onAltTocSelect(entry: TocEntry) {
@@ -121,7 +152,10 @@ function onAltTocSelect(entry: TocEntry) {
   linesContentRef.value?.scrollToLineId(entry.lineId)
   if (entry.lineIndex != null) {
     const mainEntry = getActiveTocEntry(entry.lineIndex)
-    if (mainEntry) { activeTocEntryId.value = mainEntry.id; tabStore.updateActiveTab({ tocPath: getTocPath(mainEntry) }) }
+    if (mainEntry) {
+      activeTocEntryId.value = mainEntry.id
+      tabStore.updateActiveTab({ tocPath: getTocPath(mainEntry) })
+    }
   }
 }
 
@@ -140,9 +174,29 @@ function openSearch(mode: SearchMode) {
   searchMode.value = mode
 }
 
+function openContentSearch() {
+  openSearch('content')
+  nextTick(() => searchBarRef.value?.focus())
+}
+
+function openCommentarySearch() {
+  openSearch('commentary')
+  nextTick(() => searchBarRef.value?.focus())
+}
+
+function openBookInTab(bookId: number, lineIndex: number | undefined) {
+  tabStore.openTab({
+    title: groups.value.find((g) => g.bookId === bookId)?.bookTitle ?? '',
+    route: '/book-view',
+    bookId,
+    openTocLineIndex: lineIndex,
+  })
+}
+
 function onModeChange(mode: SearchMode) {
   const currentQuery = activeSearch.value.query.value
-  contentSearch.clear(); commentarySearch.clear()
+  contentSearch.clear()
+  commentarySearch.clear()
   searchMode.value = mode
   if (!currentQuery) return
   const target = mode === 'content' ? contentSearch : commentarySearch
@@ -155,17 +209,26 @@ function onQueryChange(q: string) {
   scrollContentMatch()
 }
 
-function onSearchNext() { activeSearch.value.next(); scrollContentMatch() }
-function onSearchPrev() { activeSearch.value.prev(); scrollContentMatch() }
+function onSearchNext() {
+  activeSearch.value.next()
+  scrollContentMatch()
+}
+function onSearchPrev() {
+  activeSearch.value.prev()
+  scrollContentMatch()
+}
 
 let pendingNavStop: (() => void) | null = null
 
 async function onNavigateSection(direction: 'next' | 'prev', commentaryBookId: number) {
   if (selectedLineId.value == null || bookId == null) return
-  if (pendingNavStop) { pendingNavStop(); pendingNavStop = null }
+  if (pendingNavStop) {
+    pendingNavStop()
+    pendingNavStop = null
+  }
 
   // toc mode: navigate to next/prev toc entry at same level that has commentary
-  const currentTocEntry = tocEntries.value.find(e => e.lineId === selectedLineId.value)
+  const currentTocEntry = tocEntries.value.find((e) => e.lineId === selectedLineId.value)
   if (currentTocEntry) {
     const fn = direction === 'next' ? findNextTocCommentarySection : findPrevTocCommentarySection
     const entry = await fn(bookId, commentaryBookId, currentTocEntry, tocEntries.value)
@@ -173,18 +236,23 @@ async function onNavigateSection(direction: 'next' | 'prev', commentaryBookId: n
     selectedLineId.value = entry.lineId
     bottomVisible.value = true
     linesContentRef.value?.scrollToLineId(entry.lineId)
-    const stop = watch(commentaryLoading, (loading) => {
-      if (loading) return
-      if (selectedLineId.value !== entry.lineId) return
-      pendingNavStop = null; stop()
-      nextTick(() => commentaryViewRef.value?.scrollToGroup(commentaryBookId))
-    }, { flush: 'sync' })
+    const stop = watch(
+      commentaryLoading,
+      (loading) => {
+        if (loading) return
+        if (selectedLineId.value !== entry.lineId) return
+        pendingNavStop = null
+        stop()
+        nextTick(() => commentaryViewRef.value?.scrollToGroup(commentaryBookId))
+      },
+      { flush: 'sync' },
+    )
     pendingNavStop = stop
     return
   }
 
   // normal mode: navigate to next/prev line with commentary for this book
-  const currentLine = lines.value.find(l => l.id === selectedLineId.value)
+  const currentLine = lines.value.find((l) => l.id === selectedLineId.value)
   if (currentLine == null) return
   const fn = direction === 'next' ? findNextCommentarySection : findPrevCommentarySection
   const result = await fn(bookId, commentaryBookId, currentLine.lineIndex)
@@ -192,40 +260,54 @@ async function onNavigateSection(direction: 'next' | 'prev', commentaryBookId: n
   selectedLineId.value = result.id
   bottomVisible.value = true
   linesContentRef.value?.scrollToLineId(result.id)
-  const stop = watch(commentaryLoading, (loading) => {
-    if (loading) return
-    if (selectedLineId.value !== result.id) return
-    pendingNavStop = null; stop()
-    nextTick(() => commentaryViewRef.value?.scrollToGroup(commentaryBookId))
-  }, { flush: 'sync' })
+  const stop = watch(
+    commentaryLoading,
+    (loading) => {
+      if (loading) return
+      if (selectedLineId.value !== result.id) return
+      pendingNavStop = null
+      stop()
+      nextTick(() => commentaryViewRef.value?.scrollToGroup(commentaryBookId))
+    },
+    { flush: 'sync' },
+  )
   pendingNavStop = stop
 }
 
 onMounted(async () => {
   const saved = await tabStore.getTabViewState(tabId)
-  if (saved) { bottomVisible.value = saved.bottomVisible }
+  if (saved) {
+    bottomVisible.value = saved.bottomVisible
+  }
   if (bookId != null) {
     const bookSaved = await tabStore.getBookViewState(tabId, bookId)
     const lastRead = await tabStore.getLastReadPos(bookId)
     const restoredLineId = bookSaved?.selectedLineId ?? lastRead?.selectedLineId
     const si = bookSaved?.commentaryScrollIndex ?? lastRead?.commentaryScrollIndex
     const so = bookSaved?.commentaryScrollOffset ?? lastRead?.commentaryScrollOffset
-    if (restoredLineId != null) { selectedLineId.value = restoredLineId; bottomVisible.value = true }
+    if (restoredLineId != null) {
+      selectedLineId.value = restoredLineId
+      bottomVisible.value = true
+    }
     if (si != null && so != null) {
-      const stop = watch(commentaryLoading, async (loading) => {
-        if (loading) return
-        stop()
-        await nextTick()
-        if (commentaryViewRef.value) {
-          commentaryViewRef.value.restoreCommentaryScrollPos(si, so)
-        } else {
-          const stopRef = watch(commentaryViewRef, (ref) => {
-            if (!ref) return
-            stopRef()
-            ref.restoreCommentaryScrollPos(si, so)
-          })
-        }
-      }, { flush: 'sync' })
+      const stop = watch(
+        commentaryLoading,
+        async (loading) => {
+          if (loading) return
+          stop()
+          await nextTick()
+          if (commentaryViewRef.value) {
+            commentaryViewRef.value.restoreCommentaryScrollPos(si, so)
+          } else {
+            const stopRef = watch(commentaryViewRef, (ref) => {
+              if (!ref) return
+              stopRef()
+              ref.restoreCommentaryScrollPos(si, so)
+            })
+          }
+        },
+        { flush: 'sync' },
+      )
     }
   }
 })
@@ -239,7 +321,7 @@ const commentaryScrollOffset = ref<number | null>(null)
 // Fetch the first default commentator for this book (used as initial pin when no user selection exists)
 let defaultCommentatorBookId: number | null = null
 if (bookId != null) {
-  query<{ commentatorBookId: number }>(SQL.GET_DEFAULT_COMMENTATOR, [bookId]).then(rows => {
+  query<{ commentatorBookId: number }>(SQL.GET_DEFAULT_COMMENTATOR, [bookId]).then((rows) => {
     defaultCommentatorBookId = rows[0]?.commentatorBookId ?? null
   })
 }
@@ -256,60 +338,124 @@ watch(selectedLineId, () => {
     pinnedCommentaryBookId.value = defaultCommentatorBookId
   }
 })
-watch(bottomVisible, val => tabStore.setTabViewState(tabId, { bottomVisible: val }))
-watch(() => bookViewStore.toggleBottomPanelSignal, () => { bottomVisible.value = !bottomVisible.value })
-watch(tocVisible, () => { /* tocVisible is local only — not persisted */ })
-watch(searchVisible, v => { if (!v) { contentSearch.clear(); commentarySearch.clear() } })
+watch(bottomVisible, (val) => tabStore.setTabViewState(tabId, { bottomVisible: val }))
+watch(
+  () => bookViewStore.toggleBottomPanelSignal,
+  () => {
+    bottomVisible.value = !bottomVisible.value
+  },
+)
+watch(tocVisible, () => {
+  /* tocVisible is local only — not persisted */
+})
+watch(searchVisible, (v) => {
+  if (!v) {
+    contentSearch.clear()
+    commentarySearch.clear()
+  }
+})
 </script>
 
 <template>
   <div class="book-view">
-    <BookViewToolbar v-if="bookViewStore.toolbarVisible"
-      :bottom-visible="bottomVisible" :search-visible="searchVisible" :toc-visible="tocVisible"
+    <BookViewToolbar
+      v-if="bookViewStore.toolbarVisible"
+      :bottom-visible="bottomVisible"
+      :search-visible="searchVisible"
+      :toc-visible="tocVisible"
       @toggle-bottom="bottomVisible = !bottomVisible"
-      @toggle-search="() => openSearch('content')"
-      @toggle-toc="tocVisible = !tocVisible" />
+      @toggle-search="openContentSearch"
+      @toggle-toc="tocVisible = !tocVisible"
+    />
     <div class="content-area">
-      <BookViewSearchBar ref="searchBarRef" :visible="searchVisible" :toolbar-visible="bookViewStore.toolbarVisible"
-        :match-count="activeMatchCount" :current-match="activeMatchIdx" :commentary-visible="bottomVisible" :mode="searchMode"
-        @close="searchVisible = false" @query-change="onQueryChange"
-        @next="onSearchNext" @prev="onSearchPrev" @mode-change="onModeChange" />
+      <BookViewSearchBar
+        ref="searchBarRef"
+        :visible="searchVisible"
+        :toolbar-visible="bookViewStore.toolbarVisible"
+        :match-count="activeMatchCount"
+        :current-match="activeMatchIdx"
+        :commentary-visible="bottomVisible"
+        :mode="searchMode"
+        @close="searchVisible = false"
+        @query-change="onQueryChange"
+        @next="onSearchNext"
+        @prev="onSearchPrev"
+        @mode-change="onModeChange"
+      />
       <BookViewSplitPane :bottom-visible="bottomVisible">
         <template #top>
-          <BookViewLinesContent ref="linesContentRef"
-            :alt-toc-label-map="altTocLabelMap" :selected-line-id="selectedLineId"
-            :bottom-visible="bottomVisible" :initial-line-index="initialLineIndex"
+          <BookViewLinesContent
+            ref="linesContentRef"
+            :alt-toc-label-map="altTocLabelMap"
+            :selected-line-id="selectedLineId"
+            :bottom-visible="bottomVisible"
+            :initial-line-index="initialLineIndex"
             :search-highlight-line-index="searchHighlightLineIndex"
             :search-highlight-query="searchHighlightQuery"
             :commentary-scroll-index="commentaryScrollIndex"
             :commentary-scroll-offset="commentaryScrollOffset"
             :search-query="searchMode === 'content' ? contentSearch.query.value : ''"
-            :current-match-line-index="searchMode === 'content' ? contentSearch.currentMatchLineIndex.value : undefined"
-            :current-match-occurrence="searchMode === 'content' ? contentSearch.currentMatchOccurrence.value : undefined"
-            @scrolled="onLinesScrolled" @line-selected="selectedLineId = $event"
-            @ctrl-f="openSearch('content'); nextTick(() => searchBarRef?.focus())" />
+            :current-match-line-index="
+              searchMode === 'content' ? contentSearch.currentMatchLineIndex.value : undefined
+            "
+            :current-match-occurrence="
+              searchMode === 'content' ? contentSearch.currentMatchOccurrence.value : undefined
+            "
+            @scrolled="onLinesScrolled"
+            @line-selected="selectedLineId = $event"
+            @ctrl-f="openContentSearch"
+          />
         </template>
         <template #bottom>
-          <CommentaryView ref="commentaryViewRef"
-            :selected-line-id="selectedLineId" :groups="groups" :loading="commentaryLoading"
+          <CommentaryView
+            ref="commentaryViewRef"
+            :selected-line-id="selectedLineId"
+            :groups="groups"
+            :loading="commentaryLoading"
             :pinned-book-id="pinnedCommentaryBookId"
             :search-query="searchMode === 'commentary' ? commentarySearch.query.value : ''"
-            :current-match-flat-index="searchMode === 'commentary' ? commentarySearch.currentMatchFlatIndex.value : undefined"
-            :current-match-occurrence="searchMode === 'commentary' ? commentarySearch.currentMatchOccurrence.value : undefined"
-            @close="bottomVisible = false" @navigate-section="onNavigateSection"
+            :current-match-flat-index="
+              searchMode === 'commentary' ? commentarySearch.currentMatchFlatIndex.value : undefined
+            "
+            :current-match-occurrence="
+              searchMode === 'commentary'
+                ? commentarySearch.currentMatchOccurrence.value
+                : undefined
+            "
+            @close="bottomVisible = false"
+            @navigate-section="onNavigateSection"
             @scroll="onCommentaryScroll"
-            @toggle-search="openSearch('commentary'); nextTick(() => searchBarRef?.focus())"
-            @open-book="(bookId, lineIndex) => tabStore.openTab({ title: groups.find(g => g.bookId === bookId)?.bookTitle ?? '', route: '/book-view', bookId, openTocLineIndex: lineIndex })" />
+            @toggle-search="openCommentarySearch"
+            @open-book="openBookInTab"
+          />
         </template>
       </BookViewSplitPane>
-      <BookViewTocTree v-show="tocVisible" :book-id="bookId" :book-title="bookTitle"
-        :active-toc-entry-id="activeTocEntryId" :visible="tocVisible"
-        @close="tocVisible = false" @select="onTocSelect" @alt-select="onAltTocSelect" />
+      <BookViewTocTree
+        v-show="tocVisible"
+        :book-id="bookId"
+        :book-title="bookTitle"
+        :active-toc-entry-id="activeTocEntryId"
+        :visible="tocVisible"
+        @close="tocVisible = false"
+        @select="onTocSelect"
+        @alt-select="onAltTocSelect"
+      />
     </div>
   </div>
 </template>
 
 <style scoped>
-.book-view { display: flex; flex-direction: column; height: 100%; background: var(--bg-primary); }
-.content-area { position: relative; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.book-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-primary);
+}
+.content-area {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 </style>

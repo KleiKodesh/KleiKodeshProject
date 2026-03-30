@@ -1,2 +1,1 @@
-export function useBookView() {
-}
+export function useBookView() {}

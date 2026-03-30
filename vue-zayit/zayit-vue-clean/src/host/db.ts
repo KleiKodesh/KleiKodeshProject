@@ -13,7 +13,7 @@ declare global {
 }
 
 export const isHosted = window.__webviewDbReady !== undefined || import.meta.env.DEV
-export const dbReady  = ref(isHosted ? (window.__webviewDbReady ?? import.meta.env.DEV) : true)
+export const dbReady = ref(isHosted ? (window.__webviewDbReady ?? import.meta.env.DEV) : true)
 
 export function onDbReady(path: string) {
   window.__webviewDbPath = path
@@ -26,7 +26,10 @@ const _listeners: EventListener[] = []
 
 export function onWebviewEvent(fn: EventListener): () => void {
   _listeners.push(fn)
-  return () => { const i = _listeners.indexOf(fn); if (i !== -1) _listeners.splice(i, 1) }
+  return () => {
+    const i = _listeners.indexOf(fn)
+    if (i !== -1) _listeners.splice(i, 1)
+  }
 }
 
 if (isHosted) {

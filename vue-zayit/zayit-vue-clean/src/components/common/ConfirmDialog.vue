@@ -78,7 +78,9 @@ const emit = defineEmits<{
   color: var(--text-primary);
   border-radius: 4px;
 }
-.confirm-cancel-btn:hover { background: color-mix(in srgb, var(--text-primary) 8%, var(--bg-toolbar)); }
+.confirm-cancel-btn:hover {
+  background: color-mix(in srgb, var(--text-primary) 8%, var(--bg-toolbar));
+}
 
 .confirm-ok-btn {
   height: 30px;
@@ -89,5 +91,7 @@ const emit = defineEmits<{
   background: color-mix(in srgb, #e53e3e 8%, transparent);
   border-radius: 4px;
 }
-.confirm-ok-btn:hover { background: color-mix(in srgb, #e53e3e 16%, transparent); }
+.confirm-ok-btn:hover {
+  background: color-mix(in srgb, #e53e3e 16%, transparent);
+}
 </style>

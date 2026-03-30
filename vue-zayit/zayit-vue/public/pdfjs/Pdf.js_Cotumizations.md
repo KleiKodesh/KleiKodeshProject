@@ -87,102 +87,37 @@ The original Hebrew locale file (`locale/he/viewer.ftl`) was missing translation
 
 ## Theme Synchronization
 
-### PDF.js Native Theme System with Zayit Integration
+### PDF.js Native Theme System
 
-PDF.js has a built-in theme system that we've extended to support Zayit's custom themes:
+PDF.js has a built-in theme system controlled by the `viewerCssTheme` option:
 
 - `0` = Auto (follows system preference)
 - `1` = Light theme
 - `2` = Dark theme
 
-### Zayit Theme Integration
-
-**How it works:**
-
-1. **PDF.js CSS Modified** - `viewer.css` now uses CSS variables with fallbacks:
-
-   ```css
-   --toolbar-bg-color: var(
-     --bg-primary-custom,
-     light-dark(rgb(249 249 250), rgb(56 56 61))
-   );
-   --main-color: var(
-     --text-primary-custom,
-     light-dark(rgb(12 12 13), rgb(249 249 250))
-   );
-   ```
-
-2. **Vue App Injects Variables** - `themes.ts` copies theme variables into PDF.js iframe:
-
-   ```javascript
-   iframeRootStyle.setProperty("--bg-primary-custom", theme.ui.bgPrimary);
-   iframeRootStyle.setProperty("--text-primary-custom", theme.ui.textPrimary);
-   ```
-
-3. **Reactive Updates** - CSS variables are live bindings, so theme changes instantly update PDF.js
-
-### Theme Variables Mapped
-
-| Zayit Variable          | PDF.js Usage                        |
-| ----------------------- | ----------------------------------- |
-| `--bg-primary-custom`   | Toolbar, fields, dialogs            |
-| `--bg-secondary-custom` | Body background, sidebar, dropdowns |
-| `--text-primary-custom` | Main text, icons, buttons           |
-| `--border-color-custom` | Borders, separators                 |
-| `--accent-color-custom` | Progress bar, highlights            |
-| `--hover-bg-custom`     | Button hover states                 |
-
 ### Vue App Integration
 
-The Vue app's theme utility (`zayit-vue/src/utils/themes.ts`) automatically syncs themes by:
+The Vue app's theme utility (`zayit-vue/src/utils/theme.ts`) automatically syncs themes by:
 
 1. **Detecting PDF.js iframes** - Finds all iframes with `/pdfjs/web/viewer.html` in their src
-2. **Setting native theme mode** - Calls `AppOptions.set('viewerCssTheme', themeValue)` for light-dark() support
-3. **Injecting CSS variables** - Copies all `--*-custom` variables from parent document to iframe
-4. **Setting color-scheme** - Sets CSS `color-scheme` property for native light-dark() function
+2. **Accessing PDF.js API** - Uses `window.PDFViewerApplicationOptions` exposed by PDF.js
+3. **Setting theme directly** - Calls `AppOptions.set('viewerCssTheme', themeValue)`
+4. **Applying color-scheme** - Sets CSS `color-scheme` property like PDF.js does internally
 
 ### Implementation Details
 
 ```javascript
-// In Vue app themes.ts
+// In Vue app theme.ts
 const iframeWindow = iframe.contentWindow;
 const AppOptions = iframeWindow.PDFViewerApplicationOptions;
 
-// Set PDF.js native theme mode: 1 = light, 2 = dark
+// Set PDF.js theme: 1 = light, 2 = dark
 const themeValue = isDark ? 2 : 1;
 AppOptions.set("viewerCssTheme", themeValue);
 
-// Set color-scheme for light-dark() CSS function
-const iframeDoc = iframeWindow.document;
-iframeDoc.documentElement.style.setProperty(
-  "color-scheme",
-  isDark ? "dark" : "light",
-);
-
-// Add/remove dark class for scrollbar and UI theming
-if (isDark) {
-  iframeDoc.documentElement.classList.add("dark");
-} else {
-  iframeDoc.documentElement.classList.remove("dark");
-}
-
-// Inject Zayit theme variables
-const themeVars = [
-  "--bg-primary-custom",
-  "--bg-secondary-custom",
-  "--text-primary-custom",
-  "--text-secondary-custom",
-  "--border-color-custom",
-  "--accent-color-custom",
-  "--hover-bg-custom",
-  "--active-bg-custom",
-];
-themeVars.forEach((varName) => {
-  const value = document.documentElement.style.getPropertyValue(varName);
-  if (value) {
-    iframeDoc.documentElement.style.setProperty(varName, value);
-  }
-});
+// Set color-scheme property
+const docStyle = iframeWindow.document.documentElement.style;
+docStyle.setProperty("color-scheme", isDark ? "dark" : "light");
 ```
 
 ### Automatic Sync
@@ -193,54 +128,6 @@ Theme synchronization happens automatically:
 - **On theme toggle** - `toggleTheme()` immediately syncs all PDF viewers
 - **On iframe load** - PDF viewer components call `syncPdfViewerTheme()` when loaded
 - **On dynamic content** - MutationObserver detects new PDF iframes and syncs them
-
-### Benefits
-
-- **100% Theme Matching** - PDF.js uses exact same colors as your Vue app
-- **Real-time Updates** - Theme changes instantly reflect in PDF viewer (no reload needed)
-- **No Hacks** - Clean integration using PDF.js's own CSS variable system
-- **Fallback Support** - PDF.js defaults work if variables aren't injected
-- **All 36 Themes** - Every Zayit theme automatically works in PDF.js
-
-### Complete Theme Coverage
-
-The integration covers all PDF.js UI elements:
-
-1. **Toolbar** - Background, borders, buttons, icons
-2. **Sidebar** - Background, borders, content area
-3. **Dropdown Menus** - Background, text, borders (views manager selector)
-4. **Scrollbars** - Semi-transparent overlays that adapt to theme backgrounds
-5. **Fields & Inputs** - Background, text, borders
-6. **Dialogs** - Background, buttons, hover states
-7. **Progress Bar** - Uses accent color from theme
-
-### Files Modified
-
-**1. viewer.css** (line ~7112-7145)
-
-- Modified `:root` color variables to use `var(--*-custom, fallback)` pattern
-- Maps PDF.js variables to Zayit theme variables
-
-**2. viewer-custom.css**
-
-- Overrides scrollbar variables with semi-transparent rgba values
-- Adds `dark` class support for scrollbar theming
-- Overrides sidebar colors to use theme variables
-- Overrides popup menu colors for dropdown theming
-
-**3. themes.ts** (syncPdfViewerTheme function)
-
-- Sets `color-scheme` property for light-dark() support
-- Adds/removes `dark` class on iframe document element
-- Injects 8 theme CSS variables into iframe:
-  - `--bg-primary-custom`
-  - `--bg-secondary-custom`
-  - `--text-primary-custom`
-  - `--text-secondary-custom`
-  - `--border-color-custom`
-  - `--accent-color-custom`
-  - `--hover-bg-custom`
-  - `--active-bg-custom`
 
 ## Sharpness Enhancement
 
@@ -794,10 +681,7 @@ if (tab?.pdfState?.fileName) {
 ### Rectangle Selection Tool
 
 - **viewer.html** - Added `rectangle-selection.js` script reference
-- **rectangle-selection.js** - New file with rectangle selection implementation (OCR disabled)
-- **locale/he/viewer.ftl** - Added Hebrew translations (`rectangle-selection-button` and `rectangle-selection-button-label`)
-- **locale/en-US/viewer.ftl** - Added English translations (`rectangle-selection-button` and `rectangle-selection-button-label`)
-- **Bug fixes**: Added null check in `onMouseUp` handler, fixed translation ID format
+- **rectangle-selection.js** - New file with rectangle selection implementation
 
 ### Hebrew Localization
 
@@ -860,236 +744,3 @@ Check browser Network tab to verify:
 - **Sharpness Solution**: [StackOverflow - PDF.js Low Resolution Fix](https://stackoverflow.com/questions/49426385/how-to-fix-pdf-documents-from-being-rendered-in-really-low-resolution-blurry)
 - **PDF.js Options**: Built-in `AppOptions` system in PDF.js viewer
 - **Performance Settings**: PDF.js URL parameter documentation
-
-## Dev Mode PDF Loading
-
-### Problem
-
-In development mode (browser without C# WebView2), PDFs loaded via file picker need to work with blob URLs. The initial implementation had issues with blob URL accessibility and memory efficiency.
-
-### Solution
-
-Use blob URLs (created with `URL.createObjectURL()`) instead of data URLs for memory-efficient PDF loading in dev mode.
-
-### Implementation
-
-**Files Modified**:
-
-- `src/components/pdf/PdfViewPage.vue` - File picker uses blob URLs
-- `src/components/home/HomePage.vue` - File picker uses blob URLs
-
-**Why Blob URLs**:
-
-```javascript
-// ✅ GOOD: Memory efficient
-const fileUrl = URL.createObjectURL(file); // Blob URL
-
-// ❌ BAD: Loads entire file into memory as base64
-const reader = new FileReader();
-reader.readAsDataURL(file); // Data URL
-```
-
-### How It Works
-
-1. **File Selection** - User selects PDF file via browser file picker
-2. **Blob URL Creation** - `URL.createObjectURL(file)` creates a blob URL (e.g., `blob:http://localhost:5173/uuid`)
-3. **PDF.js Loading** - Blob URL is passed to PDF.js viewer iframe
-4. **Same-Origin Access** - Blob URLs work across iframe boundaries when both are on same origin (localhost:5173)
-5. **Memory Efficiency** - File stays in browser's blob storage, not duplicated in memory
-
-### Benefits
-
-- **Memory Efficient** - Large PDFs don't consume excessive memory
-- **Fast Loading** - No base64 encoding/decoding overhead
-- **Same-Origin Compatible** - Works across iframe boundaries
-- **Standard Approach** - Uses browser's native blob storage system
-
-### C# Mode vs Dev Mode
-
-| Feature     | C# Mode (WebView2)          | Dev Mode (Browser)   |
-| ----------- | --------------------------- | -------------------- |
-| File Picker | Native Windows dialog       | Browser file input   |
-| URL Type    | Virtual HTTPS URL           | Blob URL             |
-| Persistence | Can recreate from file path | Lost on page reload  |
-| Memory      | Managed by C#               | Browser blob storage |
-
-### References
-
-- [URL.createObjectURL()](https://developer.mozilla.org/en-US/docs/Web/API/URL/createObjectURL)
-- [Blob URLs](https://developer.mozilla.org/en-US/docs/Web/API/Blob)
-
-## PDF Page Filters
-
-### Problem
-
-PDF pages with white backgrounds can be harsh on the eyes, especially in dark themes or when using colored reading backgrounds. Users need the ability to apply color filters to PDF pages to match their theme preferences.
-
-### Solution
-
-Implemented a unified CSS variable-based filter system that automatically calculates appropriate filters based on theme colors, with support for both built-in and custom themes.
-
-### Implementation
-
-**Files Modified**:
-
-- `public/pdfjs/web/viewer-custom.css` - Single CSS rule using CSS variable
-- `zayit-vue/src/utils/themes.ts` - Filter calculation and CSS variable injection
-- `zayit-vue/src/data/themes.json` - Added `pdfFilter` property to all built-in themes
-- `zayit-vue/src/data/themeTypes.ts` - Added optional `pdfFilter` property to Theme interface
-
-### How It Works
-
-**1. CSS Variable System**
-
-All PDF page filters use a single CSS rule:
-
-```css
-:root[data-pdf-filters="true"] .pdfViewer .canvasWrapper canvas {
-  filter: var(--pdf-page-filter, none);
-}
-```
-
-**2. Filter Calculation**
-
-For themes without an explicit `pdfFilter` property, the system automatically calculates an appropriate filter based on theme colors:
-
-```typescript
-function calculatePdfFilter(theme: Theme): string {
-  if (theme.isDark) {
-    // Dark themes: Inversion + color tint based on accent color
-    // Analyzes accent color hue and saturation
-    // More saturated accents get stronger color tints
-    return "invert(0.9) hue-rotate(180deg) sepia(...) saturate(...) brightness(0.8)";
-  } else {
-    // Light themes: Detect warm backgrounds or saturated accents
-    // Apply sepia for warm tones, color tints for saturated accents
-    return "sepia(...) hue-rotate(...) saturate(...)";
-  }
-}
-```
-
-**3. Theme Sync Integration**
-
-The filter is set as a CSS variable when syncing PDF viewer themes:
-
-```typescript
-// In syncPdfViewerTheme()
-if (theme?.pdfFilter) {
-  // Use explicitly defined filter
-  iframeRootStyle.setProperty("--pdf-page-filter", theme.pdfFilter);
-} else if (theme) {
-  // Auto-calculate filter based on theme colors
-  const autoFilter = calculatePdfFilter(theme);
-  iframeRootStyle.setProperty("--pdf-page-filter", autoFilter);
-}
-```
-
-### Filter Calculation Logic
-
-**Dark Themes:**
-
-1. Always use inversion as base: `invert(0.9) hue-rotate(180deg)`
-2. Analyze accent color's hue and saturation
-3. If saturation > 0.3, add color tint matching the accent:
-   - Extract hue angle (0-360°)
-   - Calculate sepia amount based on saturation
-   - Apply hue rotation to match accent color
-   - Increase saturation for vibrant effect
-4. Add brightness and contrast adjustments
-
-**Light Themes:**
-
-1. Check for warm backgrounds (yellowish/sepia tones):
-   - If `r + g > 2 * b` and warmth > 0.2, apply sepia filter
-2. Check for saturated accent colors:
-   - If saturation > 0.4, apply color tint matching accent
-3. Neutral themes get no filter (clean white)
-
-### Built-in Theme Filters
-
-All 36 built-in themes have pre-defined filters optimized for their color schemes:
-
-**Light Themes:**
-
-- Sepia/Warm: `sepia(1) brightness(0.9)`
-- Green: `sepia(0.9) hue-rotate(60deg) saturate(1.5)`
-- Blue: `sepia(0.7) hue-rotate(180deg) saturate(1.5)`
-- Pink/Rose: `sepia(0.9) hue-rotate(300deg) saturate(1.5)`
-- Gray: `saturate(0.2) brightness(0.94)`
-- Fluent: `none` (clean white)
-
-**Dark Themes:**
-
-- All use inversion + color tints: `invert(0.9) hue-rotate(180deg) sepia(...) hue-rotate(...) saturate(...) brightness(0.8) contrast(0.9)`
-- Color tints match the theme family (warm, green, blue, purple, etc.)
-
-### Custom Theme Support
-
-Custom themes automatically get calculated filters based on their colors:
-
-1. **With `pdfFilter` property**: Uses the specified filter
-2. **Without `pdfFilter` property**: Automatically calculates based on:
-   - Background color (warm vs cool)
-   - Accent color (hue and saturation)
-   - Whether it's a dark or light theme
-
-### User Control
-
-Users can toggle PDF page filters on/off via settings:
-
-```typescript
-setPdfPageFilters(enabled: boolean);
-```
-
-This sets the `data-pdf-filters` attribute on the document root, which controls whether the CSS filter is applied.
-
-### Benefits
-
-- **Unified System** - Single CSS variable for all themes
-- **Automatic Calculation** - Custom themes get appropriate filters without manual configuration
-- **Theme Matching** - Filters adapt to theme colors for visual consistency
-- **Performance** - CSS filters are GPU-accelerated
-- **No Observers** - Clean CSS variable approach, no DOM mutation observers needed
-- **Easy Customization** - Themes can override with explicit `pdfFilter` property
-- **Instant Updates** - Filter changes apply immediately via CSS variables
-
-### Technical Details
-
-**Color Analysis:**
-
-- Extracts RGB values from hex colors
-- Calculates HSL (hue, saturation, lightness)
-- Detects warm vs cool tones
-- Measures color saturation for tint intensity
-
-**Filter Composition:**
-
-- Dark themes: `invert` → `hue-rotate` → `sepia` → `hue-rotate` → `saturate` → `brightness` → `contrast`
-- Light themes: `sepia` → `hue-rotate` → `saturate` → `brightness`
-
-**Performance:**
-
-- Filters applied via CSS, GPU-accelerated
-- No JavaScript processing during rendering
-- Calculated once per theme change
-- Minimal performance impact
-
-### Example Filters
-
-```typescript
-// Sepia theme (light)
-pdfFilter: "sepia(1) brightness(0.9)";
-
-// Dracula theme (dark)
-pdfFilter: "invert(0.9) hue-rotate(180deg) sepia(0.7) hue-rotate(260deg) saturate(1.6) brightness(0.8) contrast(0.9)";
-
-// Custom warm theme (auto-calculated)
-// Background: #f4ecd8, Accent: #d4a574
-// Result: "sepia(0.85) brightness(0.89)"
-```
-
-### References
-
-- [CSS filter property](https://developer.mozilla.org/en-US/docs/Web/CSS/filter)
-- [CSS custom properties](https://developer.mozilla.org/en-US/docs/Web/CSS/--*)
-- [HSL color model](https://en.wikipedia.org/wiki/HSL_and_HSV)

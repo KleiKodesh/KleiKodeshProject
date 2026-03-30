@@ -23,12 +23,12 @@ class HebrewBooksService {
     if (this.catalogLoaded || this.catalogLoading) return
     this.catalogLoading = true
     try {
-      const text = await fetch('/HebrewBooks.csv').then(r => r.text())
+      const text = await fetch('/HebrewBooks.csv').then((r) => r.text())
       this.books = text
         .split('\n')
-        .map(line => line.split(','))
-        .filter(row => row.length >= 6 && row[1]?.trim())
-        .map(row => ({
+        .map((line) => line.split(','))
+        .filter((row) => row.length >= 6 && row[1]?.trim())
+        .map((row) => ({
           id: row[0]?.trim() ?? '',
           title: row[1]?.trim() ?? '',
           author: row[2]?.trim() ?? '',
@@ -47,22 +47,30 @@ class HebrewBooksService {
     return `https://download.hebrewbooks.org/downloadhandler.ashx?req=${bookId}`
   }
 
-  search(term: string): HebrewBook[] {    if (!term.trim() || !this.catalogLoaded) return []
-    const terms = term.toLowerCase().trim().split(' ').filter(t => t.length > 1)
+  search(term: string): HebrewBook[] {
+    if (!term.trim() || !this.catalogLoaded) return []
+    const terms = term
+      .toLowerCase()
+      .trim()
+      .split(' ')
+      .filter((t) => t.length > 1)
     if (!terms.length) return []
     return this.books
-      .filter(b => terms.every(t =>
-        b.title.toLowerCase().includes(t) ||
-        b.author.toLowerCase().includes(t) ||
-        b._csvTags.toLowerCase().includes(t)
-      ))
+      .filter((b) =>
+        terms.every(
+          (t) =>
+            b.title.toLowerCase().includes(t) ||
+            b.author.toLowerCase().includes(t) ||
+            b._csvTags.toLowerCase().includes(t),
+        ),
+      )
       .sort((a, b) => a.title.localeCompare(b.title))
   }
 
   async getHistory(): Promise<HebrewBook[]> {
     await this.initDB()
     const entries = await this.getAllHistory()
-    return entries.map(e => ({ ...e }))
+    return entries.map((e) => ({ ...e }))
   }
 
   async trackAccess(book: HebrewBook): Promise<void> {
@@ -76,8 +84,10 @@ class HebrewBooksService {
       if (countReq.result > 25) {
         const all = store.getAll()
         all.onsuccess = () => {
-          const sorted = (all.result as HistoryEntry[]).sort((a, b) => a.lastAccessed - b.lastAccessed)
-          sorted.slice(0, countReq.result - 25).forEach(e => store.delete(e.id))
+          const sorted = (all.result as HistoryEntry[]).sort(
+            (a, b) => a.lastAccessed - b.lastAccessed,
+          )
+          sorted.slice(0, countReq.result - 25).forEach((e) => store.delete(e.id))
         }
       }
     }
@@ -88,8 +98,11 @@ class HebrewBooksService {
     return new Promise((resolve, reject) => {
       const req = indexedDB.open('HBHistory', 1)
       req.onerror = () => reject(req.error)
-      req.onsuccess = () => { this.db = req.result; resolve() }
-      req.onupgradeneeded = e => {
+      req.onsuccess = () => {
+        this.db = req.result
+        resolve()
+      }
+      req.onupgradeneeded = (e) => {
         const db = (e.target as IDBOpenDBRequest).result
         if (!db.objectStoreNames.contains('history')) {
           const s = db.createObjectStore('history', { keyPath: 'id' })
@@ -103,7 +116,8 @@ class HebrewBooksService {
     if (!this.db) return []
     return new Promise((resolve, reject) => {
       const req = this.db!.transaction(['history'], 'readonly').objectStore('history').getAll()
-      req.onsuccess = () => resolve((req.result as HistoryEntry[]).sort((a, b) => b.lastAccessed - a.lastAccessed))
+      req.onsuccess = () =>
+        resolve((req.result as HistoryEntry[]).sort((a, b) => b.lastAccessed - a.lastAccessed))
       req.onerror = () => reject(req.error)
     })
   }

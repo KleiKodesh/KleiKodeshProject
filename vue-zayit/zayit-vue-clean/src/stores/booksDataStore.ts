@@ -11,7 +11,13 @@ export const useBooksDataStore = defineStore('booksData', () => {
   const error = ref<string | null>(null)
   const allBooks = ref<BookRow[]>([])
   const ROOT = ref<CategoryNode>({
-    id: -1, parentId: null, title: '', level: -1, orderIndex: 0, children: [], books: [],
+    id: -1,
+    parentId: null,
+    title: '',
+    level: -1,
+    orderIndex: 0,
+    children: [],
+    books: [],
   })
 
   async function ensureLoaded() {
@@ -29,7 +35,10 @@ export const useBooksDataStore = defineStore('booksData', () => {
       // Build flat category map for hierarchy lookups
       const categoryMap = new Map<number, CategoryNode>()
       const flattenNodes = (nodes: CategoryNode[]) => {
-        for (const node of nodes) { categoryMap.set(node.id, node); flattenNodes(node.children) }
+        for (const node of nodes) {
+          categoryMap.set(node.id, node)
+          flattenNodes(node.children)
+        }
       }
       flattenNodes(children)
 
@@ -37,7 +46,10 @@ export const useBooksDataStore = defineStore('booksData', () => {
       const metaCache = new Map<number, ReturnType<typeof findCategoryMeta>>()
       for (const book of books) {
         let meta = metaCache.get(book.categoryId)
-        if (!meta) { meta = findCategoryMeta(book.categoryId, categoryMap); metaCache.set(book.categoryId, meta) }
+        if (!meta) {
+          meta = findCategoryMeta(book.categoryId, categoryMap)
+          metaCache.set(book.categoryId, meta)
+        }
         book.period = meta.period ?? 'אחר'
         book.rootCategory = meta.root ?? undefined
       }
@@ -47,7 +59,9 @@ export const useBooksDataStore = defineStore('booksData', () => {
       loaded.value = true
     } catch (e) {
       const msg = e instanceof Error ? e.message : ''
-      error.value = msg.toLowerCase().includes('failed to fetch') ? 'שגיאה בטעינת הנתונים — לא ניתן להתחבר לשרת' : (msg || 'שגיאה בטעינת הנתונים')
+      error.value = msg.toLowerCase().includes('failed to fetch')
+        ? 'שגיאה בטעינת הנתונים — לא ניתן להתחבר לשרת'
+        : msg || 'שגיאה בטעינת הנתונים'
     } finally {
       loading.value = false
     }

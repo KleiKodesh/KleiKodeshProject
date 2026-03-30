@@ -9,7 +9,9 @@ defineEmits<{ 'update:modelValue': [T] }>()
     :key="String(opt.value)"
     :class="['toggle-btn', { active: modelValue === opt.value }]"
     @click="$emit('update:modelValue', opt.value)"
-  >{{ opt.label }}</button>
+  >
+    {{ opt.label }}
+  </button>
 </template>
 
 <style scoped>
@@ -25,6 +27,12 @@ defineEmits<{ 'update:modelValue': [T] }>()
   white-space: nowrap;
   border-radius: 4px;
 }
-.toggle-btn:hover { background: var(--hover-bg); }
-.toggle-btn.active { background: var(--accent-color); color: white; border-color: var(--accent-color); }
+.toggle-btn:hover {
+  background: var(--hover-bg);
+}
+.toggle-btn.active {
+  background: var(--accent-color);
+  color: white;
+  border-color: var(--accent-color);
+}
 </style>

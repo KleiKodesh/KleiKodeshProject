@@ -4,7 +4,10 @@ import { idbGet, idbSet, KEYS } from '@/utils/idbPersistence'
 import { applyTheme, getTheme, toggleThemeMode, type ThemePreset } from './themes'
 export type { ThemePreset } from './themes'
 
-interface ThemeState { themePreset: ThemePreset; readingBackground: string }
+interface ThemeState {
+  themePreset: ThemePreset
+  readingBackground: string
+}
 
 export const useThemeStore = defineStore('theme', () => {
   const themePreset = ref<ThemePreset>('fluent-light')
@@ -32,13 +35,18 @@ export const useThemeStore = defineStore('theme', () => {
     }
   }
 
-  function toggleDarkMode() { themePreset.value = toggleThemeMode(themePreset.value) }
+  function toggleDarkMode() {
+    themePreset.value = toggleThemeMode(themePreset.value)
+  }
 
   // Apply defaults immediately (before async init) so the UI doesn't flash
   apply()
 
   watch([themePreset, readingBackground], () => {
-    idbSet<ThemeState>(KEYS.SETTINGS_THEME, { themePreset: themePreset.value, readingBackground: readingBackground.value })
+    idbSet<ThemeState>(KEYS.SETTINGS_THEME, {
+      themePreset: themePreset.value,
+      readingBackground: readingBackground.value,
+    })
     apply()
   })
 

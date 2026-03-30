@@ -25,7 +25,7 @@ export function scrollToIndexWithRetry(
     virtualizer.scrollToIndex(index, { align: 'start' })
 
     requestAnimationFrame(() => {
-      const m = virtualizer.measurementsCache.find(c => c.index === index)
+      const m = virtualizer.measurementsCache.find((c) => c.index === index)
       if (!m) {
         if (++attempts < maxRetries) attempt()
         else scrollCurrentMark()

@@ -20,13 +20,20 @@ function saveCustomThemes() {
   idbSet(KEYS.SETTINGS_CUSTOM_THEMES, customThemes)
 }
 
-export const getTheme = (preset: ThemePreset): Theme | undefined => THEME_PRESETS[preset] ?? customThemes[preset]
+export const getTheme = (preset: ThemePreset): Theme | undefined =>
+  THEME_PRESETS[preset] ?? customThemes[preset]
 export const getAllThemes = (): Record<string, Theme> => ({ ...THEME_PRESETS, ...customThemes })
 export const getCustomThemes = (): Record<string, Theme> => ({ ...customThemes })
 export const isCustomTheme = (preset: ThemePreset): boolean => preset in customThemes
 
-export function addCustomTheme(id: string, theme: Theme) { customThemes[id] = theme; saveCustomThemes() }
-export function deleteCustomTheme(id: string) { delete customThemes[id]; saveCustomThemes() }
+export function addCustomTheme(id: string, theme: Theme) {
+  customThemes[id] = theme
+  saveCustomThemes()
+}
+export function deleteCustomTheme(id: string) {
+  delete customThemes[id]
+  saveCustomThemes()
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -38,7 +45,10 @@ export function toggleThemeMode(current: ThemePreset): ThemePreset {
 }
 
 export function getThemeFamilies() {
-  const families = new Map<string, { name: string; lightPreset: ThemePreset; darkPreset: ThemePreset }>()
+  const families = new Map<
+    string,
+    { name: string; lightPreset: ThemePreset; darkPreset: ThemePreset }
+  >()
   for (const theme of Object.values(THEME_PRESETS)) {
     if (!families.has(theme.family)) {
       families.set(theme.family, {
@@ -109,7 +119,9 @@ function calcPdfFilter(theme: Theme): string {
   if (theme.isDark) {
     const { r, g, b } = hexToRgbObj(theme.reading.accentColor)
     const [rv, gv, bv] = [r / 255, g / 255, b / 255]
-    const max = Math.max(rv, gv, bv), min = Math.min(rv, gv, bv), delta = max - min
+    const max = Math.max(rv, gv, bv),
+      min = Math.min(rv, gv, bv),
+      delta = max - min
     let hue = 0
     if (delta) {
       if (max === rv) hue = 60 * (((gv - bv) / delta) % 6)
@@ -119,7 +131,8 @@ function calcPdfFilter(theme: Theme): string {
     if (hue < 0) hue += 360
     const sat = max === 0 ? 0 : delta / max
     let f = 'invert(0.9) hue-rotate(180deg)'
-    if (sat > 0.3) f += ` sepia(${Math.min(0.9, sat * 1.2)}) hue-rotate(${Math.round(hue)}deg) saturate(${Math.min(1.6, 1.2 + sat * 0.8)})`
+    if (sat > 0.3)
+      f += ` sepia(${Math.min(0.9, sat * 1.2)}) hue-rotate(${Math.round(hue)}deg) saturate(${Math.min(1.6, 1.2 + sat * 0.8)})`
     return f + ' brightness(0.8) contrast(0.9)'
   }
 
@@ -131,7 +144,9 @@ function calcPdfFilter(theme: Theme): string {
   }
   const { r, g, b } = hexToRgbObj(theme.reading.accentColor)
   const [rv, gv, bv] = [r / 255, g / 255, b / 255]
-  const max = Math.max(rv, gv, bv), min = Math.min(rv, gv, bv), delta = max - min
+  const max = Math.max(rv, gv, bv),
+    min = Math.min(rv, gv, bv),
+    delta = max - min
   const sat = max === 0 ? 0 : delta / max
   if (sat > 0.4) {
     let hue = 0
@@ -151,53 +166,68 @@ export function syncPdfViewerTheme(): void {
   const preset = document.documentElement.getAttribute('data-theme-preset')
   const theme = preset ? getTheme(preset as ThemePreset) : null
 
-  document.querySelectorAll<HTMLIFrameElement>('iframe[src*="/pdfjs/web/viewer.html"]').forEach((iframe, i) => {
-    try {
-      const win = iframe.contentWindow as any
-      if (!win?.PDFViewerApplicationOptions) return
-      win.PDFViewerApplicationOptions.set('viewerCssTheme', isDark ? 2 : 1)
+  document
+    .querySelectorAll<HTMLIFrameElement>('iframe[src*="/pdfjs/web/viewer.html"]')
+    .forEach((iframe, i) => {
+      try {
+        const win = iframe.contentWindow as any
+        if (!win?.PDFViewerApplicationOptions) return
+        win.PDFViewerApplicationOptions.set('viewerCssTheme', isDark ? 2 : 1)
 
-      const doc = win.document
-      if (!doc?.documentElement) return
+        const doc = win.document
+        if (!doc?.documentElement) return
 
-      doc.documentElement.style.setProperty('color-scheme', isDark ? 'dark' : 'light')
-      doc.documentElement.classList.toggle('dark', isDark)
+        doc.documentElement.style.setProperty('color-scheme', isDark ? 'dark' : 'light')
+        doc.documentElement.classList.toggle('dark', isDark)
 
-      if (preset) {
-        const family = isCustomTheme(preset as ThemePreset) ? 'custom' : preset.split('-')[0]
-        if (family) doc.documentElement.setAttribute('data-theme-family', family)
-        const filter = theme?.pdfFilter ?? (theme ? calcPdfFilter(theme) : null)
-        if (filter) doc.documentElement.style.setProperty('--pdf-page-filter', filter)
-        else doc.documentElement.style.removeProperty('--pdf-page-filter')
+        if (preset) {
+          const family = isCustomTheme(preset as ThemePreset) ? 'custom' : preset.split('-')[0]
+          if (family) doc.documentElement.setAttribute('data-theme-family', family)
+          const filter = theme?.pdfFilter ?? (theme ? calcPdfFilter(theme) : null)
+          if (filter) doc.documentElement.style.setProperty('--pdf-page-filter', filter)
+          else doc.documentElement.style.removeProperty('--pdf-page-filter')
+        }
+
+        const pdfFilters = document.documentElement.getAttribute('data-pdf-filters')
+        if (pdfFilters) doc.documentElement.setAttribute('data-pdf-filters', pdfFilters)
+
+        const rs = document.documentElement.style
+        const ds = doc.documentElement.style
+        for (const v of [
+          '--bg-primary-custom',
+          '--bg-secondary-custom',
+          '--bg-toolbar-custom',
+          '--text-primary-custom',
+          '--text-secondary-custom',
+          '--border-color-custom',
+          '--accent-color-custom',
+          '--hover-bg-custom',
+          '--active-bg-custom',
+        ]) {
+          const val = rs.getPropertyValue(v)
+          if (val) ds.setProperty(v, val)
+        }
+      } catch (e) {
+        console.warn(`[Theme] Could not access PDF iframe ${i + 1}:`, e)
       }
-
-      const pdfFilters = document.documentElement.getAttribute('data-pdf-filters')
-      if (pdfFilters) doc.documentElement.setAttribute('data-pdf-filters', pdfFilters)
-
-      const rs = document.documentElement.style
-      const ds = doc.documentElement.style
-      for (const v of ['--bg-primary-custom', '--bg-secondary-custom', '--text-primary-custom', '--text-secondary-custom', '--border-color-custom', '--accent-color-custom', '--hover-bg-custom', '--active-bg-custom']) {
-        const val = rs.getPropertyValue(v)
-        if (val) ds.setProperty(v, val)
-      }
-    } catch (e) {
-      console.warn(`[Theme] Could not access PDF iframe ${i + 1}:`, e)
-    }
-  })
+    })
 }
 
 export function initPdfThemeObserver(): void {
   if ((window as any).__pdfThemeObserverSetup) return
   ;(window as any).__pdfThemeObserverSetup = true
 
-  new MutationObserver(mutations => {
+  new MutationObserver((mutations) => {
     for (const { addedNodes } of mutations) {
       for (const node of addedNodes) {
         if (node.nodeType !== Node.ELEMENT_NODE) continue
         const el = node as Element
-        const iframes = el.tagName === 'IFRAME'
-          ? [el as HTMLIFrameElement]
-          : Array.from(el.querySelectorAll?.('iframe[src*="/pdfjs/web/viewer.html"]') ?? []) as HTMLIFrameElement[]
+        const iframes =
+          el.tagName === 'IFRAME'
+            ? [el as HTMLIFrameElement]
+            : (Array.from(
+                el.querySelectorAll?.('iframe[src*="/pdfjs/web/viewer.html"]') ?? [],
+              ) as HTMLIFrameElement[])
         for (const iframe of iframes) {
           if (!iframe.src?.includes('/pdfjs/web/viewer.html')) continue
           iframe.addEventListener('load', () => setTimeout(syncPdfViewerTheme, 500))

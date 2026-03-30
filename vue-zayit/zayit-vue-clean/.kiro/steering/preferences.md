@@ -60,3 +60,13 @@
 ## Git
 
 - Never use git commands unless explicitly asked by the user
+
+## Prettier Compatibility
+
+This project uses Prettier with `printWidth: 100`. The Vue template compiler rejects multiline expressions inside attribute quote strings — Prettier causes this by wrapping long inline handlers across lines.
+
+- Never put multi-statement logic inline in Vue template event handlers — Prettier will reformat them into newline-separated statements inside the quotes, which the Vue template compiler rejects
+- Never use ternary expressions inside Vue template attribute bindings if the full line exceeds ~100 chars — Prettier will wrap them into a multiline form that breaks the parser
+- Never use template literals (backticks) inside Vue template attribute strings
+- The fix in all cases is to extract the logic to a named function or `computed` in `<script setup>` and reference it by name in the template — this is Prettier-safe and also cleaner
+- Arrow functions in `<script setup>` are fine — this rule applies only to inline expressions inside template attribute values

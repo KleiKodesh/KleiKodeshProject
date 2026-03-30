@@ -1,49 +1,63 @@
 <script setup lang="ts">
-import { ref, onMounted, nextTick, watch } from 'vue'
+import { ref, watch, onMounted, nextTick } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import { useBloomSearch } from './useBloomSearch'
 import { useSearch } from './useSearch'
 import { useIndexingStatus } from './useIndexingStatus'
 import { useTabStore } from '@/stores/tabStore'
+import { useBooksDataStore } from '@/stores/booksDataStore'
 import SearchBar from './SearchBar.vue'
 import SearchResultsList from './SearchResultsList.vue'
 import SearchFilterPanel from './SearchFilterPanel.vue'
 import SearchIndexingOverlay from './SearchIndexingOverlay.vue'
-import { useBooksDataStore } from '@/stores/booksDataStore'
 
-const booksStore = useBooksDataStore()
 const tabStore = useTabStore()
+const booksStore = useBooksDataStore()
 
 const {
-  results, isSearching, hasSearched, executedQuery,
-  executeSearch, cancelSearch, clearSearch, loadCachedResults,
+  results,
+  isSearching,
+  hasSearched,
+  executedQuery,
+  executeSearch,
+  cancelSearch,
+  clearSearch,
+  loadCachedResults,
 } = useBloomSearch()
-
 const {
-  searchQuery, isFilterOpen, checkedBookIds, filteredResults, resultCounts,
-  initCheckedBooks, toggleFilter, toggleBook, toggleCategory, checkAll, uncheckAll,
-  handleSearch, handleClearSearch, handleResultClick, setupWatchers,
+  searchQuery,
+  isFilterOpen,
+  checkedBookIds,
+  filteredResults,
+  resultCounts,
+  initCheckedBooks,
+  toggleBook,
+  toggleCategory,
+  checkAll,
+  uncheckAll,
+  handleSearch,
+  handleClearSearch,
+  handleResultClick,
 } = useSearch(
   () => results.value,
   () => executedQuery.value,
   executeSearch,
   clearSearch,
 )
-
 const { state: indexingState } = useIndexingStatus()
 
-const searchBarRef   = ref<InstanceType<typeof SearchBar> | null>(null)
+const searchBarRef = ref<InstanceType<typeof SearchBar> | null>(null)
 const filterPanelRef = ref<HTMLElement | null>(null)
+const resultsListRef = ref<InstanceType<typeof SearchResultsList> | null>(null)
 
-onClickOutside(filterPanelRef, () => { if (isFilterOpen.value) isFilterOpen.value = false })
+onClickOutside(filterPanelRef, () => {
+  if (isFilterOpen.value) isFilterOpen.value = false
+})
 
-setupWatchers(() => hasSearched.value)
-
-async function onSearch(q: string) {
+function onSearch(q: string) {
   tabStore.updateActiveTab({ searchQuery: q })
-  await handleSearch(q)
+  handleSearch(q)
 }
-
 function onClearSearch() {
   tabStore.updateActiveTab({ searchQuery: undefined, searchScrollIndex: undefined })
   handleClearSearch()
@@ -51,10 +65,28 @@ function onClearSearch() {
 
 async function restoreFromTab() {
   const savedQuery = tabStore.activeTab.searchQuery
-  if (savedQuery && !hasSearched.value) {
-    searchQuery.value = savedQuery
-    await loadCachedResults(savedQuery)
+  const savedIndex = tabStore.activeTab.searchScrollIndex
+  if (!savedQuery || !savedIndex) return
+
+  searchQuery.value = savedQuery
+  const fromCache = await loadCachedResults(savedQuery)
+
+  if (!fromCache) {
+    handleSearch(savedQuery)
+    // wait for streaming search to finish
+    await new Promise<void>((resolve) => {
+      const stop = watch(isSearching, (val) => {
+        if (!val) {
+          stop()
+          resolve()
+        }
+      })
+    })
   }
+
+  // wait for results to render into the DOM
+  await nextTick()
+  resultsListRef.value?.scrollToIndex(savedIndex)
 }
 
 onMounted(async () => {
@@ -63,24 +95,16 @@ onMounted(async () => {
   await restoreFromTab()
   nextTick(() => searchBarRef.value?.focus())
 })
-
-// Re-run restore when switching back to this tab
-watch(() => tabStore.activeTabId, async () => {
-  if (tabStore.activeTab.route !== '/search') return
-  await booksStore.ensureLoaded()
-  initCheckedBooks()
-  await restoreFromTab()
-})
 </script>
 
 <template>
   <div class="search-page">
     <SearchResultsList
+      ref="resultsListRef"
       :results="filteredResults"
       :search-query="executedQuery"
       :is-searching="isSearching"
       :has-searched="hasSearched"
-      :initial-scroll-index="tabStore.activeTab.searchScrollIndex"
       @result-click="handleResultClick"
       @scrolled="tabStore.updateActiveTab({ searchScrollIndex: $event })"
     />
@@ -93,7 +117,7 @@ watch(() => tabStore.activeTabId, async () => {
       :disabled="indexingState.isIndexing"
       @search="onSearch"
       @cancel="cancelSearch"
-      @toggle-filter="toggleFilter"
+      @toggle-filter="isFilterOpen = !isFilterOpen"
       @clear="onClearSearch"
     />
 
@@ -110,11 +134,7 @@ watch(() => tabStore.activeTabId, async () => {
       @close="isFilterOpen = false"
     />
 
-    <!-- Indexing overlay — shown while bloom index is being built -->
-    <SearchIndexingOverlay
-      v-if="indexingState.isIndexing"
-      :state="indexingState"
-    />
+    <SearchIndexingOverlay v-if="indexingState.isIndexing" :state="indexingState" />
   </div>
 </template>
 

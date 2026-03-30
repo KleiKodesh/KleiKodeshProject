@@ -38,7 +38,13 @@ export interface PdfRestoreResult {
  */
 export async function pickFile(): Promise<PdfFileResult | null> {
   if (typeof window.__webviewAction !== 'function') return devPickPdf()
-  const res = await action<{ cancelled?: boolean; url?: string; fileName?: string; filePath?: string; error?: string }>('pickFile')
+  const res = await action<{
+    cancelled?: boolean
+    url?: string
+    fileName?: string
+    filePath?: string
+    error?: string
+  }>('pickFile')
   if (res.cancelled || res.error || !res.url) return null
   return { url: res.url, fileName: res.fileName!, filePath: res.filePath! }
 }
@@ -59,9 +65,17 @@ export async function restoreLocalPdf(filePath: string): Promise<PdfRestoreResul
  * C# checks the cache; if evicted, re-downloads.
  * Returns null on failure.
  */
-export async function restoreHbPdf(bookId: string, bookTitle: string, tabId: string): Promise<{ url: string } | { redownload: true } | null> {
+export async function restoreHbPdf(
+  bookId: string,
+  bookTitle: string,
+  tabId: string,
+): Promise<{ url: string } | { redownload: true } | null> {
   if (!isHosted) return null
-  const res = await action<{ url?: string; redownload?: boolean; error?: string }>('restoreHbPdf', { bookId, bookTitle, tabId })
+  const res = await action<{ url?: string; redownload?: boolean; error?: string }>('restoreHbPdf', {
+    bookId,
+    bookTitle,
+    tabId,
+  })
   if (res.error) return null
   if (res.redownload) return { redownload: true }
   if (res.url) return { url: res.url }
@@ -87,7 +101,10 @@ async function devPickPdf(): Promise<PdfFileResult | null> {
     })
     input.onchange = () => {
       const file = input.files?.[0]
-      if (!file) { resolve(null); return }
+      if (!file) {
+        resolve(null)
+        return
+      }
       resolve({ url: URL.createObjectURL(file), fileName: file.name, filePath: '' })
     }
     input.oncancel = () => resolve(null)

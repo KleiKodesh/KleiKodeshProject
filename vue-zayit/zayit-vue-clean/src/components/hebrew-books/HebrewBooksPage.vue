@@ -8,8 +8,15 @@ import { useHebrewBooks } from './useHebrewBooks'
 import { useListKeys } from '@/composables/useListKeys'
 
 const {
-  displayedBooks, isLoading, error, searchTerm, isOnline,
-  load, search, openBook, downloadBook,
+  displayedBooks,
+  isLoading,
+  error,
+  searchTerm,
+  isOnline,
+  load,
+  search,
+  openBook,
+  downloadBook,
 } = useHebrewBooks()
 
 const searchInputRef = ref<HTMLInputElement>()
@@ -21,7 +28,9 @@ const { focusedIndex, containerFocused } = useListKeys(
   (i) => openBook(displayedBooks.value[i]!),
 )
 
-function updateOnline() { isOnline.value = navigator.onLine }
+function updateOnline() {
+  isOnline.value = navigator.onLine
+}
 
 onMounted(() => {
   load()
@@ -34,6 +43,11 @@ onUnmounted(() => {
   window.removeEventListener('online', updateOnline)
   window.removeEventListener('offline', updateOnline)
 })
+
+function onBookClicked(i: number, book: (typeof displayedBooks.value)[number]) {
+  focusedIndex.value = i
+  openBook(book)
+}
 </script>
 
 <template>
@@ -50,7 +64,7 @@ onUnmounted(() => {
           :key="book.id"
           :book="book"
           :focused="containerFocused && focusedIndex === i"
-          @book-clicked="focusedIndex = i; openBook(book)"
+          @book-clicked="onBookClicked(i, book)"
           @download-clicked="downloadBook"
         />
       </template>
@@ -82,7 +96,12 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.hb-page { display: flex; flex-direction: column; height: 100%; background: var(--bg-primary); }
+.hb-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-primary);
+}
 
 .hb-list {
   flex: 1;
@@ -102,9 +121,14 @@ onUnmounted(() => {
   text-align: center;
   padding: 32px;
 }
-.state-icon { font-size: 40px; opacity: 0.5; }
+.state-icon {
+  font-size: 40px;
+  opacity: 0.5;
+}
 
-.search-icon { color: var(--text-secondary); }
+.search-icon {
+  color: var(--text-secondary);
+}
 .search-input {
   flex: 1;
   background: none;
@@ -114,9 +138,16 @@ onUnmounted(() => {
   color: var(--text-primary);
   direction: rtl;
 }
-.search-input::placeholder { color: var(--text-secondary); }
-.search-input:disabled { opacity: 0.5; cursor: not-allowed; }
-.search-input::-webkit-search-cancel-button { filter: grayscale(1) opacity(0.4); }
+.search-input::placeholder {
+  color: var(--text-secondary);
+}
+.search-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.search-input::-webkit-search-cancel-button {
+  filter: grayscale(1) opacity(0.4);
+}
 
 .downloading-overlay {
   position: absolute;

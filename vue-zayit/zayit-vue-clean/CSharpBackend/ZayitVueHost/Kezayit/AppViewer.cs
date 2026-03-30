@@ -7,7 +7,9 @@ using Kezayit.Settings;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using System;
+using System.Drawing;
 using System.IO;
+using System.Reflection;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -26,11 +28,37 @@ namespace Kezayit
         private HebrewBooksHandler _hb;
         private SearchHandler _search;
 
+        private SplashOverlay _splash;
+
         public AppViewer()
         {
             AutoScaleMode = AutoScaleMode.None;
             Controls.Add(_webView);
+            _InitSplash();
             _ = InitAsync();
+        }
+
+        private void _InitSplash()
+        {
+            Image logo = null;
+            using (var stream = Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("KleiKodesh_Main.png"))
+            {
+                if (stream != null)
+                    logo = Image.FromStream(stream);
+            }
+
+            _splash = new SplashOverlay(logo) { Dock = DockStyle.Fill };
+            Controls.Add(_splash);
+            _splash.BringToFront();
+        }
+
+        private void _HideSplash()
+        {
+            if (_splash == null) return;
+            if (InvokeRequired) { Invoke(new Action(_HideSplash)); return; }
+            _splash.FadeOut();
+            _splash = null;
         }
 
         private async Task InitAsync()
@@ -62,11 +90,18 @@ namespace Kezayit
 
             _webView.CoreWebView2.WebMessageReceived += OnMessageReceived;
             _webView.CoreWebView2.DownloadStarting += (s, e) => _hb.OnDownloadStarting(s, e);
+            _webView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
+
             _webView.Source = new Uri("http://kezayit-vue-app/index.html");
 
-            // Start bloom indexing if DB is ready
             if (dbReady)
                 _search.OnDbReady(savedPath);
+        }
+
+        private void OnNavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
+        {
+            _webView.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
+            _HideSplash();
         }
 
         private async void OnMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)

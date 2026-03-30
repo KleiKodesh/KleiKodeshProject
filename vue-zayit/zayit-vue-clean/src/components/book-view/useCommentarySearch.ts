@@ -7,7 +7,10 @@ export interface CommentaryMatch {
   occurrenceInLine: number
 }
 
-export function useCommentarySearch(groups: () => CommentaryGroup[], currentFlatIndex: () => number = () => 0) {
+export function useCommentarySearch(
+  groups: () => CommentaryGroup[],
+  currentFlatIndex: () => number = () => 0,
+) {
   const query = ref('')
   const currentMatchIdx = ref(0)
 
@@ -20,7 +23,8 @@ export function useCommentarySearch(groups: () => CommentaryGroup[], currentFlat
       flatIndex++ // header
       for (const line of g.lines) {
         const stripped = removeDiacriticsForSearch(line.content.replace(/<[^>]*>/g, ''))
-        let idx = 0, occ = 0
+        let idx = 0,
+          occ = 0
         while ((idx = stripped.indexOf(q, idx)) !== -1) {
           results.push({ flatIndex, occurrenceInLine: occ })
           occ++
@@ -33,23 +37,47 @@ export function useCommentarySearch(groups: () => CommentaryGroup[], currentFlat
   })
 
   // keep backward-compat: unique flat indices that have matches
-  const matchFlatIndices = computed(() => [...new Set(matches.value.map(m => m.flatIndex))])
+  const matchFlatIndices = computed(() => [...new Set(matches.value.map((m) => m.flatIndex))])
 
-  watch(matches, (newMatches) => {
-    if (!newMatches.length) { currentMatchIdx.value = 0; return }
-    const cur = currentFlatIndex()
-    const nearestIdx = newMatches.findIndex(m => m.flatIndex >= cur)
-    currentMatchIdx.value = nearestIdx === -1 ? 0 : nearestIdx
-  }, { flush: 'sync' })
+  watch(
+    matches,
+    (newMatches) => {
+      if (!newMatches.length) {
+        currentMatchIdx.value = 0
+        return
+      }
+      const cur = currentFlatIndex()
+      const nearestIdx = newMatches.findIndex((m) => m.flatIndex >= cur)
+      currentMatchIdx.value = nearestIdx === -1 ? 0 : nearestIdx
+    },
+    { flush: 'sync' },
+  )
 
   const matchCount = computed(() => matches.value.length)
   const currentMatch = computed(() => matches.value[currentMatchIdx.value] ?? null)
   const currentMatchFlatIndex = computed(() => currentMatch.value?.flatIndex ?? -1)
   const currentMatchOccurrence = computed(() => currentMatch.value?.occurrenceInLine ?? 0)
 
-  function next() { if (matchCount.value) currentMatchIdx.value = (currentMatchIdx.value + 1) % matchCount.value }
-  function prev() { if (matchCount.value) currentMatchIdx.value = (currentMatchIdx.value - 1 + matchCount.value) % matchCount.value }
-  function clear() { query.value = '' }
+  function next() {
+    if (matchCount.value) currentMatchIdx.value = (currentMatchIdx.value + 1) % matchCount.value
+  }
+  function prev() {
+    if (matchCount.value)
+      currentMatchIdx.value = (currentMatchIdx.value - 1 + matchCount.value) % matchCount.value
+  }
+  function clear() {
+    query.value = ''
+  }
 
-  return { query, matchCount, currentMatchIdx, currentMatchFlatIndex, currentMatchOccurrence, matchFlatIndices, next, prev, clear }
+  return {
+    query,
+    matchCount,
+    currentMatchIdx,
+    currentMatchFlatIndex,
+    currentMatchOccurrence,
+    matchFlatIndices,
+    next,
+    prev,
+    clear,
+  }
 }

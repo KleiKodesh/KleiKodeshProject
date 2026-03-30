@@ -95,6 +95,9 @@
     <Compile Include="AppViewer.cs">
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Include="SplashOverlay.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Include="Bridge\JsBridge.cs" />
     <Compile Include="Bridge\WebBridge.cs" />
     <Compile Include="Db\DbAccess.cs" />
@@ -109,6 +112,11 @@
   <ItemGroup>
     <None Include="app.config" />
     <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="KleiKodesh_Main.png">
+      <LogicalName>KleiKodesh_Main.png</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\BloomSearchEngineLib\BloomSearchEngineLib.csproj">

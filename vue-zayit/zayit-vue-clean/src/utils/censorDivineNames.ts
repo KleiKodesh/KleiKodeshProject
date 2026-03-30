@@ -25,7 +25,10 @@ export function censorDivineNames(text: string): string {
     },
     // אלוהים → אלוקים (not followed by אחרים)
     {
-      regex: new RegExp(`(א${D})(ל${D})(ו${D})(ה${D})(י${D})(ם${D})(?!\\s*א${D}ח${D}ר${D}י${D}ם)`, 'g'),
+      regex: new RegExp(
+        `(א${D})(ל${D})(ו${D})(ה${D})(י${D})(ם${D})(?!\\s*א${D}ח${D}ר${D}י${D}ם)`,
+        'g',
+      ),
       replacement: (_m: string, a: string, l: string, v: string, h: string, y: string, m: string) =>
         a + l + v + h.replace('ה', 'ק') + y + m,
     },
@@ -45,9 +48,10 @@ export function censorDivineNames(text: string): string {
 
   let result = text
   for (const { regex, replacement } of patterns) {
-    result = typeof replacement === 'function'
-      ? result.replace(regex, replacement as (...args: string[]) => string)
-      : result.replace(regex, replacement)
+    result =
+      typeof replacement === 'function'
+        ? result.replace(regex, replacement as (...args: string[]) => string)
+        : result.replace(regex, replacement)
   }
   return result
 }

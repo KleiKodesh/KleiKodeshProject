@@ -49,12 +49,16 @@ export function useVirtualListKeys(
       e.preventDefault()
       focusedIndex.value = 0
       getVirtualizer().scrollToIndex(0, { align: 'start' })
-      requestAnimationFrame(() => { if (scrollerEl.value) scrollerEl.value.scrollTop = 0 })
+      requestAnimationFrame(() => {
+        if (scrollerEl.value) scrollerEl.value.scrollTop = 0
+      })
     } else if (ctrl && e.code === 'End') {
       e.preventDefault()
       focusedIndex.value = count - 1
       getVirtualizer().scrollToIndex(count - 1, { align: 'end' })
-      requestAnimationFrame(() => { if (scrollerEl.value) scrollerEl.value.scrollTop = scrollerEl.value.scrollHeight })
+      requestAnimationFrame(() => {
+        if (scrollerEl.value) scrollerEl.value.scrollTop = scrollerEl.value.scrollHeight
+      })
     }
   })
 

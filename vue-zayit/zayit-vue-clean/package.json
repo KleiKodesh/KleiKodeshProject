@@ -10,7 +10,8 @@
     "dev": "vite",
     "build": "vue-tsc --build && vite build",
     "preview": "vite preview",
-    "type-check": "vue-tsc --noEmit"
+    "type-check": "vue-tsc --noEmit",
+    "format": "prettier --write \"src/**/*.{vue,ts}\""
   },
   "serverDependencies": {
     "better-sqlite3": "^11.0.0"
@@ -32,6 +33,7 @@
     "@vue/tsconfig": "^0.8.1",
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
+    "prettier": "^3.8.1",
     "typescript": "~5.9.0",
     "vite": "^7.0.0",
     "vite-plugin-singlefile": "^2.3.0",

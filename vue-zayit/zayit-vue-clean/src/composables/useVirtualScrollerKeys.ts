@@ -26,14 +26,18 @@ export function useVirtualScrollerKeys(
       event.preventDefault()
       const v = getVirtualizer()
       v.scrollToIndex(0, { align: 'start' })
-      requestAnimationFrame(() => { el.scrollTop = 0 })
+      requestAnimationFrame(() => {
+        el.scrollTop = 0
+      })
     } else if (event.code === 'End') {
       event.preventDefault()
       const count = getCount()
       if (!count) return
       const v = getVirtualizer()
       v.scrollToIndex(count - 1, { align: 'end' })
-      requestAnimationFrame(() => { el.scrollTop = el.scrollHeight })
+      requestAnimationFrame(() => {
+        el.scrollTop = el.scrollHeight
+      })
     }
   })
 }

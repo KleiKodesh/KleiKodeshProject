@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { onClickOutside } from '@vueuse/core'
-import { IconLibrary24Filled, IconFolderOpen24Filled, IconBookOpen24Filled, IconApps24Filled } from '@iconify-prerendered/vue-fluent'
+import {
+  IconLibrary24Filled,
+  IconFolderOpen24Filled,
+  IconBookOpen24Filled,
+  IconApps24Filled,
+} from '@iconify-prerendered/vue-fluent'
 import { IconSettings24, IconSearchSparkle24 } from '@iconify-prerendered/vue-fluent-color'
 import { usePdfStore } from '@/stores/pdfStore'
 import { useTabStore } from '@/stores/tabStore'
@@ -16,19 +21,19 @@ const menuRef = ref<HTMLElement | null>(null)
 onClickOutside(menuRef, () => emit('close'))
 
 const tiles = [
-  { label: 'ספרים',        icon: IconLibrary24Filled,   color: '#B5451B' },
-  { label: 'חיפוש',        icon: IconSearchSparkle24,   color: undefined },
-  { label: 'פתח קובץ',     icon: IconFolderOpen24Filled, color: '#f0a500' },
-  { label: 'היברו-בוקס',   icon: IconBookOpen24Filled,  color: '#D94F1E' },
-  { label: 'הגדרות',       icon: IconSettings24,        color: undefined },
-  { label: 'סביבות עבודה', icon: IconApps24Filled,      color: '#6b7fc4' },
+  { label: 'ספרים', icon: IconLibrary24Filled, color: '#B5451B' },
+  { label: 'חיפוש', icon: IconSearchSparkle24, color: undefined },
+  { label: 'פתח קובץ', icon: IconFolderOpen24Filled, color: '#f0a500' },
+  { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#D94F1E' },
+  { label: 'הגדרות', icon: IconSettings24, color: undefined },
+  { label: 'סביבות עבודה', icon: IconApps24Filled, color: '#6b7fc4' },
 ]
 
 const SINGLETON_ROUTES: Record<string, string> = {
-  'ספרים':          '/books',
-  'הגדרות':         '/settings',
-  'היברו-בוקס':     '/hebrewbooks',
-  'סביבות עבודה':   '/workspaces',
+  ספרים: '/books',
+  הגדרות: '/settings',
+  'היברו-בוקס': '/hebrewbooks',
+  'סביבות עבודה': '/workspaces',
 }
 
 async function onTap(label: string) {
@@ -48,12 +53,7 @@ async function onTap(label: string) {
 
 <template>
   <div ref="menuRef" class="nav-dropdown" @click.stop>
-    <button
-      v-for="tile in tiles"
-      :key="tile.label"
-      class="nav-row"
-      @click="onTap(tile.label)"
-    >
+    <button v-for="tile in tiles" :key="tile.label" class="nav-row" @click="onTap(tile.label)">
       <span class="nav-icon">
         <component :is="tile.icon" :style="tile.color ? { color: tile.color } : {}" />
       </span>
@@ -90,8 +90,12 @@ async function onTap(label: string) {
   cursor: pointer;
   text-align: right;
 }
-.nav-row:hover { background: color-mix(in srgb, var(--text-primary) 6%, transparent); }
-.nav-row:active { background: color-mix(in srgb, var(--text-primary) 10%, transparent); }
+.nav-row:hover {
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+.nav-row:active {
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
 
 .nav-icon {
   display: flex;
@@ -99,7 +103,10 @@ async function onTap(label: string) {
   font-size: 18px;
   flex-shrink: 0;
 }
-.nav-icon svg { width: 18px; height: 18px; }
+.nav-icon svg {
+  width: 18px;
+  height: 18px;
+}
 
 .nav-label {
   font-size: 13px;

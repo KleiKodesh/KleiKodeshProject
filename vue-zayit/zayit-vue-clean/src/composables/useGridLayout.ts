@@ -5,7 +5,12 @@ import { ref, computed, onMounted, onUnmounted, type Ref } from 'vue'
  * picking the column count that produces the least empty cells while
  * keeping each tile at least `minTileWidth` px wide.
  */
-export function useGridLayout(containerRef: Ref<HTMLElement | null>, count: Ref<number>, minTileWidth = 68, gap = 16) {
+export function useGridLayout(
+  containerRef: Ref<HTMLElement | null>,
+  count: Ref<number>,
+  minTileWidth = 68,
+  gap = 16,
+) {
   const containerWidth = ref(0)
 
   const cols = computed(() => {

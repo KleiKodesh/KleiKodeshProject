@@ -9,7 +9,7 @@ export interface TocNode {
 }
 
 export interface TocSearchNode extends TocNode {
-  tocSearchPath: string  // normalized, space-joined, for matching
+  tocSearchPath: string // normalized, space-joined, for matching
   tocDisplayPath: string // original text joined with " / ", for display
 }
 
@@ -31,14 +31,22 @@ export function splitQuery(
 }
 
 /** Normalize a string for TOC search: strip quotes, lowercase, insert spaces around non-letter/digit chars (keeps them as tokens) */
-const normalizeToc = (s: string) => normalize(s).replace(/[^\p{L}\p{N}]+/gu, m => ` ${m} `).replace(/\s+/g, ' ').trim()
+const normalizeToc = (s: string) =>
+  normalize(s)
+    .replace(/[^\p{L}\p{N}]+/gu, (m) => ` ${m} `)
+    .replace(/\s+/g, ' ')
+    .trim()
 
 /** Apply only the TOC-specific tokenization step (for already-normalized strings) */
-const tocTokenize = (s: string) => s.replace(/[^\p{L}\p{N}]+/gu, m => ` ${m} `).replace(/\s+/g, ' ').trim()
+const tocTokenize = (s: string) =>
+  s
+    .replace(/[^\p{L}\p{N}]+/gu, (m) => ` ${m} `)
+    .replace(/\s+/g, ' ')
+    .trim()
 
 /** Normalize an array of TOC query words — input is already normalize()'d, so skip that step */
 export const normalizeTocWords = (words: string[]) =>
-  words.flatMap(w => tocTokenize(w).split(' ')).filter(w => w.length > 0)
+  words.flatMap((w) => tocTokenize(w).split(' ')).filter((w) => w.length > 0)
 /**
  * Build normalized intra-book TOC search paths for all entries.
  * Walks parentId chain to produce:

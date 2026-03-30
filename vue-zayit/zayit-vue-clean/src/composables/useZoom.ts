@@ -63,29 +63,47 @@ export function useZoomHandler(options: ZoomHandlerOptions) {
     }
   })
 
-  useEventListener(target, 'wheel', (event: WheelEvent) => {
-    if (!isEnabled() || !(event.ctrlKey || event.metaKey)) return
-    event.preventDefault()
-    zoom.value = calculateZoom(zoom.value, -event.deltaY * ZOOM_CONFIG.WHEEL_SENSITIVITY)
-  }, { passive: false })
+  useEventListener(
+    target,
+    'wheel',
+    (event: WheelEvent) => {
+      if (!isEnabled() || !(event.ctrlKey || event.metaKey)) return
+      event.preventDefault()
+      zoom.value = calculateZoom(zoom.value, -event.deltaY * ZOOM_CONFIG.WHEEL_SENSITIVITY)
+    },
+    { passive: false },
+  )
 
-  useEventListener(target, 'touchstart', (event: TouchEvent) => {
-    if (!isEnabled() || event.touches.length !== 2) return
-    event.preventDefault()
-    const [t1, t2] = [event.touches[0]!, event.touches[1]!]
-    initialDistance = getTouchDistance(t1, t2)
-    initialZoom = zoom.value
-  }, { passive: false })
+  useEventListener(
+    target,
+    'touchstart',
+    (event: TouchEvent) => {
+      if (!isEnabled() || event.touches.length !== 2) return
+      event.preventDefault()
+      const [t1, t2] = [event.touches[0]!, event.touches[1]!]
+      initialDistance = getTouchDistance(t1, t2)
+      initialZoom = zoom.value
+    },
+    { passive: false },
+  )
 
-  useEventListener(target, 'touchmove', (event: TouchEvent) => {
-    if (!isEnabled() || event.touches.length !== 2 || initialDistance === 0) return
-    event.preventDefault()
-    const [t1, t2] = [event.touches[0]!, event.touches[1]!]
-    const delta = (getTouchDistance(t1, t2) - initialDistance) * ZOOM_CONFIG.PINCH_SENSITIVITY
-    zoom.value = calculateZoom(initialZoom, delta)
-  }, { passive: false })
+  useEventListener(
+    target,
+    'touchmove',
+    (event: TouchEvent) => {
+      if (!isEnabled() || event.touches.length !== 2 || initialDistance === 0) return
+      event.preventDefault()
+      const [t1, t2] = [event.touches[0]!, event.touches[1]!]
+      const delta = (getTouchDistance(t1, t2) - initialDistance) * ZOOM_CONFIG.PINCH_SENSITIVITY
+      zoom.value = calculateZoom(initialZoom, delta)
+    },
+    { passive: false },
+  )
 
   useEventListener(target, 'touchend', (event: TouchEvent) => {
-    if (event.touches.length < 2) { initialDistance = 0; initialZoom = 0 }
+    if (event.touches.length < 2) {
+      initialDistance = 0
+      initialZoom = 0
+    }
   })
 }

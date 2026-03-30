@@ -58,11 +58,13 @@ function openDb(name: string): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(name, 1)
     req.onupgradeneeded = () => {
-      if (!req.result.objectStoreNames.contains(STORE))
-        req.result.createObjectStore(STORE)
+      if (!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE)
     }
-    req.onsuccess = () => { handles[name] = req.result; resolve(req.result) }
-    req.onerror  = () => reject(req.error)
+    req.onsuccess = () => {
+      handles[name] = req.result
+      resolve(req.result)
+    }
+    req.onerror = () => reject(req.error)
   })
 }
 
@@ -73,7 +75,7 @@ async function dbGet<T>(dbName: string, key: string): Promise<T | null> {
   return new Promise((resolve, reject) => {
     const req = store.get(key)
     req.onsuccess = () => resolve(req.result ?? null)
-    req.onerror  = () => reject(req.error)
+    req.onerror = () => reject(req.error)
   })
 }
 
@@ -82,7 +84,7 @@ async function dbSet<T>(dbName: string, key: string, value: T): Promise<void> {
   return new Promise((resolve, reject) => {
     const req = store.put(value, key)
     req.onsuccess = () => resolve()
-    req.onerror  = () => reject(req.error)
+    req.onerror = () => reject(req.error)
   })
 }
 
@@ -91,7 +93,7 @@ async function dbDelete(dbName: string, key: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const req = store.delete(key)
     req.onsuccess = () => resolve()
-    req.onerror  = () => reject(req.error)
+    req.onerror = () => reject(req.error)
   })
 }
 
@@ -101,7 +103,10 @@ async function dbDeleteByPrefix(dbName: string, prefix: string): Promise<void> {
     const req = idb.transaction(STORE, 'readwrite').objectStore(STORE).openCursor()
     req.onsuccess = () => {
       const cursor = req.result
-      if (!cursor) { resolve(); return }
+      if (!cursor) {
+        resolve()
+        return
+      }
       if ((cursor.key as string).startsWith(prefix)) cursor.delete()
       cursor.continue()
     }
@@ -114,42 +119,42 @@ function dropDb(name: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.deleteDatabase(name)
     req.onsuccess = () => resolve()
-    req.onerror  = () => reject(req.error)
+    req.onerror = () => reject(req.error)
   })
 }
 
 // ── Settings DB ───────────────────────────────────────────────────────────────
 
 export const KEYS = {
-  SETTINGS_WORKSPACES:              'workspaces',
-  SETTINGS_BOOKS_VIEW:              'books.view',
-  SETTINGS_TOOLBAR:                 'bookView.toolbarVisible',
-  SETTINGS_SEARCH_BAR_POS:          'bookView.searchBarPos',
-  SETTINGS_ZOOM:                    'bookView.zoom',
-  SETTINGS_CENSOR_DIVINE:           'censorDivineNames',
-  SETTINGS_DIACRITICS:              'diacriticsState',
-  SETTINGS_HEADER_FONT:             'headerFont',
-  SETTINGS_TEXT_FONT:               'textFont',
-  SETTINGS_FONT_SIZE:               'fontSize',
-  SETTINGS_LINE_PADDING:            'linePadding',
-  SETTINGS_COMMENTARY_HEADER_FONT:  'commentaryHeaderFont',
-  SETTINGS_COMMENTARY_TEXT_FONT:    'commentaryTextFont',
-  SETTINGS_COMMENTARY_FONT_SIZE:    'commentaryFontSize',
+  SETTINGS_WORKSPACES: 'workspaces',
+  SETTINGS_BOOKS_VIEW: 'books.view',
+  SETTINGS_TOOLBAR: 'bookView.toolbarVisible',
+  SETTINGS_SEARCH_BAR_POS: 'bookView.searchBarPos',
+  SETTINGS_ZOOM: 'bookView.zoom',
+  SETTINGS_CENSOR_DIVINE: 'censorDivineNames',
+  SETTINGS_DIACRITICS: 'diacriticsState',
+  SETTINGS_HEADER_FONT: 'headerFont',
+  SETTINGS_TEXT_FONT: 'textFont',
+  SETTINGS_FONT_SIZE: 'fontSize',
+  SETTINGS_LINE_PADDING: 'linePadding',
+  SETTINGS_COMMENTARY_HEADER_FONT: 'commentaryHeaderFont',
+  SETTINGS_COMMENTARY_TEXT_FONT: 'commentaryTextFont',
+  SETTINGS_COMMENTARY_FONT_SIZE: 'commentaryFontSize',
   SETTINGS_COMMENTARY_LINE_PADDING: 'commentaryLinePadding',
-  SETTINGS_SEPARATE_COMMENTARY:     'useSeparateCommentarySettings',
-  SETTINGS_APP_ZOOM:                'appZoom',
-  SETTINGS_NEW_TAB_PAGE:            'newTabPage',
-  SETTINGS_PDF_FILTERS:             'pdfPageFilters',
-  SETTINGS_RESUME_LAST_READ:        'resumeLastRead',
-  SETTINGS_THEME:                   'theme',
-  SETTINGS_CUSTOM_THEMES:           'customThemes',
+  SETTINGS_SEPARATE_COMMENTARY: 'useSeparateCommentarySettings',
+  SETTINGS_APP_ZOOM: 'appZoom',
+  SETTINGS_NEW_TAB_PAGE: 'newTabPage',
+  SETTINGS_PDF_FILTERS: 'pdfPageFilters',
+  SETTINGS_RESUME_LAST_READ: 'resumeLastRead',
+  SETTINGS_THEME: 'theme',
+  SETTINGS_CUSTOM_THEMES: 'customThemes',
 
   // app-tabs keys
-  tabsList: (wsId: string)                               => `tabs:${wsId}`,
-  tab:      (wsId: string, tabId: string)                => `tab:${wsId}:${tabId}`,
-  book:     (wsId: string, tabId: string, bookId: number) => `book:${wsId}:${tabId}:${bookId}`,
-  tabPrefix: (wsId: string, tabId: string)               => `book:${wsId}:${tabId}:`,
-  wsPrefix:  (wsId: string)                              => `tabs:${wsId}`,
+  tabsList: (wsId: string) => `tabs:${wsId}`,
+  tab: (wsId: string, tabId: string) => `tab:${wsId}:${tabId}`,
+  book: (wsId: string, tabId: string, bookId: number) => `book:${wsId}:${tabId}:${bookId}`,
+  tabPrefix: (wsId: string, tabId: string) => `book:${wsId}:${tabId}:`,
+  wsPrefix: (wsId: string) => `tabs:${wsId}`,
 } as const
 
 export function idbGet<T>(key: string): Promise<T | null> {
@@ -197,7 +202,10 @@ export async function idbSetLastRead(bookId: number, value: LastReadState): Prom
     const req = idb.transaction(STORE).objectStore(STORE).openKeyCursor()
     req.onsuccess = () => {
       const cursor = req.result
-      if (!cursor) { resolve(acc); return }
+      if (!cursor) {
+        resolve(acc)
+        return
+      }
       acc.push(cursor.key as string)
       cursor.continue()
     }
@@ -206,7 +214,7 @@ export async function idbSetLastRead(bookId: number, value: LastReadState): Prom
 
   if (keys.length <= LASTREAD_MAX) return
   const toDelete = keys.slice(0, keys.length - LASTREAD_MAX)
-  await Promise.all(toDelete.map(k => dbDelete('app-lastread', k)))
+  await Promise.all(toDelete.map((k) => dbDelete('app-lastread', k)))
 }
 
 export function idbGetLastRead(bookId: number): Promise<LastReadState | null> {
@@ -216,11 +224,7 @@ export function idbGetLastRead(bookId: number): Promise<LastReadState | null> {
 // ── Reset all ─────────────────────────────────────────────────────────────────
 
 export async function idbClearAll(): Promise<void> {
-  await Promise.all([
-    dropDb('app-settings'),
-    dropDb('app-tabs'),
-    dropDb('app-lastread'),
-  ])
+  await Promise.all([dropDb('app-settings'), dropDb('app-tabs'), dropDb('app-lastread')])
 }
 
 export async function idbClearSettings(): Promise<void> {

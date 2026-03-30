@@ -1,32 +1,40 @@
 <script setup lang="ts">
 import type { IndexingState } from './useIndexingStatus'
-
 defineProps<{ state: IndexingState }>()
 </script>
 
 <template>
   <div class="overlay">
     <div class="card">
-      <!-- Progress ring -->
       <div class="ring-wrap">
-        <svg class="ring" viewBox="0 0 48 48">
-          <circle class="ring-bg" cx="24" cy="24" r="20" fill="none" stroke-width="3" />
+        <svg viewBox="0 0 48 48" width="64" height="64" style="transform: rotate(-90deg)">
           <circle
-            class="ring-fill"
-            cx="24" cy="24" r="20"
+            cx="24"
+            cy="24"
+            r="20"
             fill="none"
             stroke-width="3"
+            stroke="color-mix(in srgb, var(--text-secondary) 20%, transparent)"
+          />
+          <circle
+            cx="24"
+            cy="24"
+            r="20"
+            fill="none"
+            stroke-width="3"
+            stroke="var(--accent-color)"
             stroke-linecap="round"
             :stroke-dasharray="`${(state.percentage / 100) * 125.66} 125.66`"
+            style="transition: stroke-dasharray 0.4s ease"
           />
         </svg>
         <span class="pct">{{ Math.round(state.percentage) }}%</span>
       </div>
-
       <p class="title">בונה אינדקס חיפוש</p>
       <p class="sub">
-        {{ state.processedChunks }} / {{ state.totalChunks }} קטעים
-        <span v-if="state.eta"> · {{ state.eta }}</span>
+        {{ state.processedChunks }} / {{ state.totalChunks }} קטעים<span v-if="state.eta">
+          · {{ state.eta }}</span
+        >
       </p>
       <p class="note">ניתן לחפש לאחר סיום הבנייה</p>
     </div>
@@ -44,7 +52,6 @@ defineProps<{ state: IndexingState }>()
   background: color-mix(in srgb, var(--bg-primary) 85%, transparent);
   backdrop-filter: blur(4px);
 }
-
 .card {
   display: flex;
   flex-direction: column;
@@ -57,7 +64,6 @@ defineProps<{ state: IndexingState }>()
   min-width: 220px;
   text-align: center;
 }
-
 .ring-wrap {
   position: relative;
   width: 64px;
@@ -66,39 +72,23 @@ defineProps<{ state: IndexingState }>()
   align-items: center;
   justify-content: center;
 }
-
-.ring {
-  width: 64px;
-  height: 64px;
-  transform: rotate(-90deg);
-}
-
-.ring-bg   { stroke: color-mix(in srgb, var(--text-secondary) 20%, transparent); }
-.ring-fill {
-  stroke: var(--accent-color);
-  transition: stroke-dasharray 0.4s ease;
-}
-
 .pct {
   position: absolute;
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
 }
-
 .title {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
   margin: 0;
 }
-
 .sub {
   font-size: 12px;
   color: var(--text-secondary);
   margin: 0;
 }
-
 .note {
   font-size: 11px;
   color: var(--text-secondary);

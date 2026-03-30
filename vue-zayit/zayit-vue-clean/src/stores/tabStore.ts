@@ -1,23 +1,42 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import { idbGet, idbSet, idbTabsGet, idbTabsSet, idbTabsDelete, idbTabsDeleteByPrefix, idbSetLastRead, idbGetLastRead, idbClearAll, KEYS } from '@/utils/idbPersistence'
+import {
+  idbGet,
+  idbSet,
+  idbTabsGet,
+  idbTabsSet,
+  idbTabsDelete,
+  idbTabsDeleteByPrefix,
+  idbSetLastRead,
+  idbGetLastRead,
+  idbClearAll,
+  KEYS,
+} from '@/utils/idbPersistence'
 import type { TabState, BookState, LastReadState } from '@/utils/idbPersistence'
 import { useWorkspaceStore } from './workspaceStore'
 import { disposePdfHost } from '@/host/bridge'
 
-export type TabRoute = '/' | '/pdf-view' | '/settings' | '/books' | '/book-view' | '/hebrewbooks' | '/workspaces' | '/search'
+export type TabRoute =
+  | '/'
+  | '/pdf-view'
+  | '/settings'
+  | '/books'
+  | '/book-view'
+  | '/hebrewbooks'
+  | '/workspaces'
+  | '/search'
 
 export interface Tab {
   id: string
   title: string
   route: TabRoute
   // PDF state
-  pdfVirtualUrl?: string   // in-memory only — not persisted, reconstructed on restore
+  pdfVirtualUrl?: string // in-memory only — not persisted, reconstructed on restore
   pdfFileName?: string
-  pdfFilePath?: string     // persisted — local file path (for local PDF / Word files)
-  pdfHbBookId?: string     // persisted — HebrewBooks book ID (for cache restore / re-download)
-  pdfHbBookTitle?: string  // persisted — HebrewBooks book title (used as cache filename)
-  pdfConverting?: boolean  // in-memory only — true while Word conversion is in progress
+  pdfFilePath?: string // persisted — local file path (for local PDF / Word files)
+  pdfHbBookId?: string // persisted — HebrewBooks book ID (for cache restore / re-download)
+  pdfHbBookTitle?: string // persisted — HebrewBooks book title (used as cache filename)
+  pdfConverting?: boolean // in-memory only — true while Word conversion is in progress
   pdfLoadingType?: 'converting' | 'downloading' // in-memory only — drives placeholder message
   // Book reader state
   bookId?: number
@@ -60,23 +79,44 @@ export const useTabStore = defineStore('tabs', () => {
   // ── Singleton routes — never persisted across sessions ───────────────────
 
   const SINGLETON_ROUTES: TabRoute[] = ['/settings', '/books', '/hebrewbooks', '/workspaces']
-  const SINGLETON_TITLES: Record<string, string> = { '/settings': 'הגדרות', '/books': 'ספרים', '/hebrewbooks': 'היברו-בוקס', '/workspaces': 'סביבות עבודה' }
+  const SINGLETON_TITLES: Record<string, string> = {
+    '/settings': 'הגדרות',
+    '/books': 'ספרים',
+    '/hebrewbooks': 'היברו-בוקס',
+    '/workspaces': 'סביבות עבודה',
+  }
 
   // ── Tab list persistence ──────────────────────────────────────────────────
 
   function persistTabs() {
     const wsId = useWorkspaceStore().activeId
-    const persistable = tabs.value.filter(t => !SINGLETON_ROUTES.includes(t.route))
+    const persistable = tabs.value.filter((t) => !SINGLETON_ROUTES.includes(t.route))
     idbTabsSet<PersistedTabList>(KEYS.tabsList(wsId), {
-      tabs: persistable.map(({ pdfVirtualUrl, pdfConverting, pdfLoadingType, openToc, openTocEntryId, openTocLineIndex, searchHighlightLineIndex, searchHighlightQuery, ...t }) => t),
-      activeTabId: persistable.some(t => t.id === activeTabId.value) ? activeTabId.value : (persistable[0]?.id ?? activeTabId.value),
+      tabs: persistable.map(
+        ({
+          pdfVirtualUrl,
+          pdfConverting,
+          pdfLoadingType,
+          openToc,
+          openTocEntryId,
+          openTocLineIndex,
+          searchHighlightLineIndex,
+          searchHighlightQuery,
+          ...t
+        }) => t,
+      ),
+      activeTabId: persistable.some((t) => t.id === activeTabId.value)
+        ? activeTabId.value
+        : (persistable[0]?.id ?? activeTabId.value),
       nextId,
     })
   }
 
   watch([tabs, activeTabId], persistTabs, { deep: true })
 
-  const activeTab = computed((): Tab => tabs.value.find(t => t.id === activeTabId.value) ?? tabs.value[0]!)
+  const activeTab = computed(
+    (): Tab => tabs.value.find((t) => t.id === activeTabId.value) ?? tabs.value[0]!,
+  )
 
   // ── Per-tab state ─────────────────────────────────────────────────────────
 
@@ -118,7 +158,9 @@ export const useTabStore = defineStore('tabs', () => {
   async function getBooksView(): Promise<'list' | 'tiles' | 'tree'> {
     return (await idbGet<'list' | 'tiles' | 'tree'>(KEYS.SETTINGS_BOOKS_VIEW)) ?? 'list'
   }
-  function setBooksView(v: 'list' | 'tiles' | 'tree') { idbSet(KEYS.SETTINGS_BOOKS_VIEW, v) }
+  function setBooksView(v: 'list' | 'tiles' | 'tree') {
+    idbSet(KEYS.SETTINGS_BOOKS_VIEW, v)
+  }
 
   // ── App reset ─────────────────────────────────────────────────────────────
 
@@ -136,7 +178,7 @@ export const useTabStore = defineStore('tabs', () => {
   }
 
   function switchTab(id: string) {
-    if (tabs.value.some(t => t.id === id)) activeTabId.value = id
+    if (tabs.value.some((t) => t.id === id)) activeTabId.value = id
   }
 
   function closeAllTabs() {
@@ -152,7 +194,7 @@ export const useTabStore = defineStore('tabs', () => {
   }
 
   function closeTab(id: string) {
-    const idx = tabs.value.findIndex(t => t.id === id)
+    const idx = tabs.value.findIndex((t) => t.id === id)
     if (idx === -1) return
     const tab = tabs.value[idx]!
     if (tab.pdfFilePath) disposePdfHost(tab.pdfFilePath)
@@ -170,12 +212,12 @@ export const useTabStore = defineStore('tabs', () => {
   }
 
   function updateActiveTab(patch: Partial<Omit<Tab, 'id'>>) {
-    const tab = tabs.value.find(t => t.id === activeTabId.value)
+    const tab = tabs.value.find((t) => t.id === activeTabId.value)
     if (tab) Object.assign(tab, patch)
   }
 
   function openNewHomeTab() {
-    const existing = tabs.value.find(t => t.route === '/')
+    const existing = tabs.value.find((t) => t.route === '/')
     if (existing) switchTab(existing.id)
     else openTab({ title: 'בית', route: '/' })
   }
@@ -184,22 +226,35 @@ export const useTabStore = defineStore('tabs', () => {
   // These routes are never persisted across sessions — they are always stripped before saving
 
   function navigateToSingleton(route: TabRoute) {
-    const existing = tabs.value.find(t => t.route === route)
+    const existing = tabs.value.find((t) => t.route === route)
     if (existing) {
       switchTab(existing.id)
     } else {
-      updateActiveTab({ route, title: SINGLETON_TITLES[route] ?? route })
+      openTab({ route, title: SINGLETON_TITLES[route] ?? route })
     }
   }
 
   return {
-    tabs, activeTabId, activeTab,
+    tabs,
+    activeTabId,
+    activeTab,
     init,
-    openTab, switchTab, closeTab, closeAllTabs, updateActiveTab, openNewHomeTab, navigateToSingleton,
-    getBooksView, setBooksView,
-    getLastReadPos, setLastReadPos,
-    getTabViewState, setTabViewState,
-    getBookViewState, setBookViewState, clearBookViewState,
+    openTab,
+    switchTab,
+    closeTab,
+    closeAllTabs,
+    updateActiveTab,
+    openNewHomeTab,
+    navigateToSingleton,
+    getBooksView,
+    setBooksView,
+    getLastReadPos,
+    setLastReadPos,
+    getTabViewState,
+    setTabViewState,
+    getBookViewState,
+    setBookViewState,
+    clearBookViewState,
     resetAll,
   }
 })

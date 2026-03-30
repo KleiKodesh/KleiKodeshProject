@@ -9,7 +9,9 @@ import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
 const pdfStore = usePdfStore()
 const tabStore = useTabStore()
 
-function onIframeLoad() { setTimeout(syncPdfViewerTheme, 100) }
+function onIframeLoad() {
+  setTimeout(syncPdfViewerTheme, 100)
+}
 
 const iframeSrc = computed(() => {
   const url = pdfStore.virtualUrl
@@ -26,12 +28,17 @@ function cancelConversion() {
 
 <template>
   <div class="pdf-page">
-
     <div v-if="pdfStore.converting" class="converting">
       <div class="converting-card">
         <LoadingAnimation />
         <div class="converting-name">{{ pdfStore.fileName }}</div>
-        <div class="converting-sub">{{ pdfStore.loadingType === 'downloading' ? 'מוריד את הספר — אנא המתן' : 'ממיר לקובץ PDF — התהליך עשוי לארוך זמן מה' }}</div>
+        <div class="converting-sub">
+          {{
+            pdfStore.loadingType === 'downloading'
+              ? 'מוריד את הספר — אנא המתן'
+              : 'ממיר לקובץ PDF — התהליך עשוי לארוך זמן מה'
+          }}
+        </div>
         <button class="cancel-btn" @click="cancelConversion">
           <IconDismiss20Regular />
           <span>ביטול</span>
@@ -39,17 +46,38 @@ function cancelConversion() {
       </div>
     </div>
 
-    <iframe v-else-if="iframeSrc" :src="iframeSrc" class="pdf-iframe" allowfullscreen @load="onIframeLoad" />
+    <iframe
+      v-else-if="iframeSrc"
+      :src="iframeSrc"
+      class="pdf-iframe"
+      allowfullscreen
+      @load="onIframeLoad"
+    />
 
     <div v-else class="pdf-empty">לא נבחר קובץ</div>
-
   </div>
 </template>
 
 <style scoped>
-.pdf-page { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
-.pdf-iframe { flex: 1; width: 100%; border: none; }
-.pdf-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-secondary); font-size: 14px; }
+.pdf-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+.pdf-iframe {
+  flex: 1;
+  width: 100%;
+  border: none;
+}
+.pdf-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
 
 .converting {
   flex: 1;
@@ -99,5 +127,8 @@ function cancelConversion() {
   border: 1px solid var(--border-color);
   background: var(--bg-primary);
 }
-.cancel-btn:hover { color: var(--text-primary); background: color-mix(in srgb, var(--text-primary) 6%, transparent); }
+.cancel-btn:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
 </style>

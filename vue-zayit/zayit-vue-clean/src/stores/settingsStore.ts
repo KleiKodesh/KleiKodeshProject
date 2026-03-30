@@ -42,9 +42,21 @@ export const useSettingsStore = defineStore('settings', () => {
   // Called from main.ts before mount — loads each setting individually
   async function init() {
     const [
-      censored, diacritics, hFont, tFont, fSize, lPad,
-      cHFont, cTFont, cFSize, cLPad, sepCommentary,
-      aZoom, ntPage, pdfFilters, resumeLast,
+      censored,
+      diacritics,
+      hFont,
+      tFont,
+      fSize,
+      lPad,
+      cHFont,
+      cTFont,
+      cFSize,
+      cLPad,
+      sepCommentary,
+      aZoom,
+      ntPage,
+      pdfFilters,
+      resumeLast,
     ] = await Promise.all([
       idbGet<boolean>(KEYS.SETTINGS_CENSOR_DIVINE),
       idbGet<number>(KEYS.SETTINGS_DIACRITICS),
@@ -63,21 +75,21 @@ export const useSettingsStore = defineStore('settings', () => {
       idbGet<boolean>(KEYS.SETTINGS_RESUME_LAST_READ),
     ])
 
-    if (censored !== null)       censorDivineNames.value = censored
-    if (diacritics !== null)     diacriticsState.value = diacritics
-    if (hFont !== null)          headerFont.value = hFont
-    if (tFont !== null)          textFont.value = tFont
-    if (fSize !== null)          fontSize.value = fSize
-    if (lPad !== null)           linePadding.value = lPad
-    if (cHFont !== null)         commentaryHeaderFont.value = cHFont
-    if (cTFont !== null)         commentaryTextFont.value = cTFont
-    if (cFSize !== null)         commentaryFontSize.value = cFSize
-    if (cLPad !== null)          commentaryLinePadding.value = cLPad
-    if (sepCommentary !== null)  useSeparateCommentarySettings.value = sepCommentary
-    if (aZoom !== null)          appZoom.value = aZoom
-    if (ntPage !== null)         newTabPage.value = ntPage
-    if (pdfFilters !== null)     pdfPageFilters.value = pdfFilters
-    if (resumeLast !== null)     resumeLastRead.value = resumeLast
+    if (censored !== null) censorDivineNames.value = censored
+    if (diacritics !== null) diacriticsState.value = diacritics
+    if (hFont !== null) headerFont.value = hFont
+    if (tFont !== null) textFont.value = tFont
+    if (fSize !== null) fontSize.value = fSize
+    if (lPad !== null) linePadding.value = lPad
+    if (cHFont !== null) commentaryHeaderFont.value = cHFont
+    if (cTFont !== null) commentaryTextFont.value = cTFont
+    if (cFSize !== null) commentaryFontSize.value = cFSize
+    if (cLPad !== null) commentaryLinePadding.value = cLPad
+    if (sepCommentary !== null) useSeparateCommentarySettings.value = sepCommentary
+    if (aZoom !== null) appZoom.value = aZoom
+    if (ntPage !== null) newTabPage.value = ntPage
+    if (pdfFilters !== null) pdfPageFilters.value = pdfFilters
+    if (resumeLast !== null) resumeLastRead.value = resumeLast
 
     applyCSSVariables()
   }
@@ -92,21 +104,36 @@ export const useSettingsStore = defineStore('settings', () => {
     s.setProperty('--commentary-text-font', commentaryTextFont.value)
     s.setProperty('--commentary-font-size', `${commentaryFontSize.value}%`)
     s.setProperty('--commentary-line-height', commentaryLinePadding.value.toString())
-    document.documentElement.setAttribute('data-pdf-filters', pdfPageFilters.value ? 'true' : 'false')
+    document.documentElement.setAttribute(
+      'data-pdf-filters',
+      pdfPageFilters.value ? 'true' : 'false',
+    )
     const app = document.getElementById('app')
     if (app) app.style.zoom = appZoom.value.toString()
   }
 
-  function cycleDiacritics() { diacriticsState.value = (diacriticsState.value + 1) % 3 }
+  function cycleDiacritics() {
+    diacriticsState.value = (diacriticsState.value + 1) % 3
+  }
 
   function togglePdfPageFilters() {
     pdfPageFilters.value = !pdfPageFilters.value
-    document.documentElement.setAttribute('data-pdf-filters', pdfPageFilters.value ? 'true' : 'false')
-    document.querySelectorAll<HTMLIFrameElement>('iframe[src*="/pdfjs/web/viewer.html"]').forEach(iframe => {
-      try {
-        iframe.contentDocument?.documentElement.setAttribute('data-pdf-filters', pdfPageFilters.value ? 'true' : 'false')
-      } catch { /* cross-origin guard */ }
-    })
+    document.documentElement.setAttribute(
+      'data-pdf-filters',
+      pdfPageFilters.value ? 'true' : 'false',
+    )
+    document
+      .querySelectorAll<HTMLIFrameElement>('iframe[src*="/pdfjs/web/viewer.html"]')
+      .forEach((iframe) => {
+        try {
+          iframe.contentDocument?.documentElement.setAttribute(
+            'data-pdf-filters',
+            pdfPageFilters.value ? 'true' : 'false',
+          )
+        } catch {
+          /* cross-origin guard */
+        }
+      })
   }
 
   function reset() {
@@ -131,26 +158,81 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   // Watch each setting individually — only write the changed key
-  watch(censorDivineNames,             v => { idbSet(KEYS.SETTINGS_CENSOR_DIVINE, v);   applyCSSVariables() })
-  watch(diacriticsState,               v => { idbSet(KEYS.SETTINGS_DIACRITICS, v) })
-  watch(headerFont,                    v => { idbSet(KEYS.SETTINGS_HEADER_FONT, v);      applyCSSVariables() })
-  watch(textFont,                      v => { idbSet(KEYS.SETTINGS_TEXT_FONT, v);        applyCSSVariables() })
-  watch(fontSize,                      v => { idbSet(KEYS.SETTINGS_FONT_SIZE, v);        applyCSSVariables() })
-  watch(linePadding,                   v => { idbSet(KEYS.SETTINGS_LINE_PADDING, v);     applyCSSVariables() })
-  watch(commentaryHeaderFont,          v => { idbSet(KEYS.SETTINGS_COMMENTARY_HEADER_FONT, v);  applyCSSVariables() })
-  watch(commentaryTextFont,            v => { idbSet(KEYS.SETTINGS_COMMENTARY_TEXT_FONT, v);    applyCSSVariables() })
-  watch(commentaryFontSize,            v => { idbSet(KEYS.SETTINGS_COMMENTARY_FONT_SIZE, v);    applyCSSVariables() })
-  watch(commentaryLinePadding,         v => { idbSet(KEYS.SETTINGS_COMMENTARY_LINE_PADDING, v); applyCSSVariables() })
-  watch(useSeparateCommentarySettings, v => { idbSet(KEYS.SETTINGS_SEPARATE_COMMENTARY, v) })
-  watch(appZoom,                       v => { idbSet(KEYS.SETTINGS_APP_ZOOM, v);         applyCSSVariables() })
-  watch(newTabPage,                    v => { idbSet(KEYS.SETTINGS_NEW_TAB_PAGE, v) })
-  watch(pdfPageFilters,                v => { idbSet(KEYS.SETTINGS_PDF_FILTERS, v) })
-  watch(resumeLastRead,                v => { idbSet(KEYS.SETTINGS_RESUME_LAST_READ, v) })
+  watch(censorDivineNames, (v) => {
+    idbSet(KEYS.SETTINGS_CENSOR_DIVINE, v)
+    applyCSSVariables()
+  })
+  watch(diacriticsState, (v) => {
+    idbSet(KEYS.SETTINGS_DIACRITICS, v)
+  })
+  watch(headerFont, (v) => {
+    idbSet(KEYS.SETTINGS_HEADER_FONT, v)
+    applyCSSVariables()
+  })
+  watch(textFont, (v) => {
+    idbSet(KEYS.SETTINGS_TEXT_FONT, v)
+    applyCSSVariables()
+  })
+  watch(fontSize, (v) => {
+    idbSet(KEYS.SETTINGS_FONT_SIZE, v)
+    applyCSSVariables()
+  })
+  watch(linePadding, (v) => {
+    idbSet(KEYS.SETTINGS_LINE_PADDING, v)
+    applyCSSVariables()
+  })
+  watch(commentaryHeaderFont, (v) => {
+    idbSet(KEYS.SETTINGS_COMMENTARY_HEADER_FONT, v)
+    applyCSSVariables()
+  })
+  watch(commentaryTextFont, (v) => {
+    idbSet(KEYS.SETTINGS_COMMENTARY_TEXT_FONT, v)
+    applyCSSVariables()
+  })
+  watch(commentaryFontSize, (v) => {
+    idbSet(KEYS.SETTINGS_COMMENTARY_FONT_SIZE, v)
+    applyCSSVariables()
+  })
+  watch(commentaryLinePadding, (v) => {
+    idbSet(KEYS.SETTINGS_COMMENTARY_LINE_PADDING, v)
+    applyCSSVariables()
+  })
+  watch(useSeparateCommentarySettings, (v) => {
+    idbSet(KEYS.SETTINGS_SEPARATE_COMMENTARY, v)
+  })
+  watch(appZoom, (v) => {
+    idbSet(KEYS.SETTINGS_APP_ZOOM, v)
+    applyCSSVariables()
+  })
+  watch(newTabPage, (v) => {
+    idbSet(KEYS.SETTINGS_NEW_TAB_PAGE, v)
+  })
+  watch(pdfPageFilters, (v) => {
+    idbSet(KEYS.SETTINGS_PDF_FILTERS, v)
+  })
+  watch(resumeLastRead, (v) => {
+    idbSet(KEYS.SETTINGS_RESUME_LAST_READ, v)
+  })
 
   return {
-    censorDivineNames, diacriticsState, headerFont, textFont, fontSize, linePadding,
-    commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryLinePadding,
-    useSeparateCommentarySettings, appZoom, newTabPage, pdfPageFilters, resumeLastRead,
-    init, cycleDiacritics, togglePdfPageFilters, reset,
+    censorDivineNames,
+    diacriticsState,
+    headerFont,
+    textFont,
+    fontSize,
+    linePadding,
+    commentaryHeaderFont,
+    commentaryTextFont,
+    commentaryFontSize,
+    commentaryLinePadding,
+    useSeparateCommentarySettings,
+    appZoom,
+    newTabPage,
+    pdfPageFilters,
+    resumeLastRead,
+    init,
+    cycleDiacritics,
+    togglePdfPageFilters,
+    reset,
   }
 })

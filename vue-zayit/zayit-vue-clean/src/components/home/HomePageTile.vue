@@ -30,8 +30,12 @@ defineEmits<{ tap: [] }>()
 .tile:focus-visible {
   outline: none;
 }
-.tile:hover .tile-icon { transform: scale(1.08); }
-.tile:active .tile-icon { transform: scale(0.95); }
+.tile:hover .tile-icon {
+  transform: scale(1.08);
+}
+.tile:active .tile-icon {
+  transform: scale(0.95);
+}
 
 .tile-icon {
   display: flex;

@@ -4,7 +4,6 @@
  */
 
 export const SQL = {
-
   // ── Categories ──────────────────────────────────────────────────────────────
 
   /** All categories flat — used to build the full tree in memory once */
@@ -192,5 +191,4 @@ export const SQL = {
       AND ln.lineIndex < ?
     LIMIT 1
   `,
-
 } as const

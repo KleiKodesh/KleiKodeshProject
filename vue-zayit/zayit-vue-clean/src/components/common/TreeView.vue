@@ -33,7 +33,7 @@ const nodeMap = computed(() => {
 })
 
 function expandAncestors(id: number) {
-  const node = props.nodes.find(n => n.id === id)
+  const node = props.nodes.find((n) => n.id === id)
   if (!node) return
   let current = node
   while (current.parentId != null) {
@@ -51,22 +51,30 @@ function scrollIntoView(id: number) {
   container.scrollTop = el.offsetTop - container.clientHeight / 2 + el.offsetHeight / 2
 }
 
-watch(() => props.activeNodeId, (id) => {
-  if (id == null || props.suppressScroll) return
-  expandAncestors(id)
-  nextTick(() => scrollIntoView(id))
-})
+watch(
+  () => props.activeNodeId,
+  (id) => {
+    if (id == null || props.suppressScroll) return
+    expandAncestors(id)
+    nextTick(() => scrollIntoView(id))
+  },
+)
 
-watch(() => props.visible, (val) => {
-  if (val && props.activeNodeId != null) nextTick(() => scrollIntoView(props.activeNodeId!))
-})
+watch(
+  () => props.visible,
+  (val) => {
+    if (val && props.activeNodeId != null) nextTick(() => scrollIntoView(props.activeNodeId!))
+  },
+)
 
 function toggle(node: TreeNodeItem) {
   if (expanded.value.has(node.id)) expanded.value.delete(node.id)
   else expanded.value.add(node.id)
 }
 
-function reset() { expanded.value = new Set() }
+function reset() {
+  expanded.value = new Set()
+}
 
 defineExpose({ toggleNode: toggle, reset, containerRef })
 
@@ -75,6 +83,11 @@ const { focusedIndex, containerFocused } = useListKeys(
   () => visibleNodes.value.length,
   (i) => emit('select', visibleNodes.value[i]!),
 )
+
+function selectNode(i: number, node: TreeNodeItem) {
+  focusedIndex.value = i
+  emit('select', node)
+}
 
 function getPath(node: TreeNodeItem): string {
   const parts: string[] = []
@@ -87,7 +100,7 @@ function getPath(node: TreeNodeItem): string {
 }
 
 const visibleNodes = computed(() => {
-  if (props.filter) return props.nodes.filter(n => n.text.includes(props.filter!))
+  if (props.filter) return props.nodes.filter((n) => n.text.includes(props.filter!))
 
   const result: TreeNodeItem[] = []
   const hidden = new Set<number>()
@@ -109,7 +122,7 @@ const visibleNodes = computed(() => {
     <TreeNode
       v-for="(node, i) in visibleNodes"
       :key="node.id"
-      :ref="el => setRowRef(el, node.id)"
+      :ref="(el) => setRowRef(el, node.id)"
       :node="node"
       :expanded="expanded.has(node.id)"
       :active="node.id === activeNodeId"
@@ -119,7 +132,7 @@ const visibleNodes = computed(() => {
       :row-height="rowHeight"
       :font-size="fontSize"
       @toggle="toggle(node)"
-      @select="focusedIndex = i; emit('select', node)"
+      @select="selectNode(i, node)"
     >
       {{ filter ? getPath(node) : node.text }}
     </TreeNode>

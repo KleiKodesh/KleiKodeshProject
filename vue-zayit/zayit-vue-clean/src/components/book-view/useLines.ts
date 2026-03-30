@@ -26,9 +26,13 @@ export function useLines(bookId: () => number | undefined) {
     while (fetchQueue.length > 0) {
       if (currentBookId !== bookIdAtStart) break
       const offset = fetchQueue.shift()!
-      const rows = await query<{ id: number; lineIndex: number; content: string }>(SQL.GET_LINES_PAGED, [bookIdAtStart, CHUNK_SIZE, offset])
+      const rows = await query<{ id: number; lineIndex: number; content: string }>(
+        SQL.GET_LINES_PAGED,
+        [bookIdAtStart, CHUNK_SIZE, offset],
+      )
       if (currentBookId !== bookIdAtStart) break
-      for (const row of rows) lines.value[row.lineIndex] = { id: row.id, lineIndex: row.lineIndex, content: row.content }
+      for (const row of rows)
+        lines.value[row.lineIndex] = { id: row.id, lineIndex: row.lineIndex, content: row.content }
     }
     fetching = false
   }
@@ -38,7 +42,10 @@ export function useLines(bookId: () => number | undefined) {
     const offset = Math.floor(lineIndex / CHUNK_SIZE) * CHUNK_SIZE
     const pos = fetchQueue.indexOf(offset)
     if (pos === -1) return
-    if (pos > 0) { fetchQueue.splice(pos, 1); fetchQueue.unshift(offset) }
+    if (pos > 0) {
+      fetchQueue.splice(pos, 1)
+      fetchQueue.unshift(offset)
+    }
     if (!fetching) processQueue()
   }
 
@@ -51,14 +58,24 @@ export function useLines(bookId: () => number | undefined) {
 
     const [book] = await query<{ totalLines: number }>(SQL.GET_BOOK_BY_ID, [id])
     totalLines = book?.totalLines ?? 0
-    lines.value = Array.from({ length: totalLines }, (_, i) => ({ id: -(i + 1), lineIndex: i, content: null }))
+    lines.value = Array.from({ length: totalLines }, (_, i) => ({
+      id: -(i + 1),
+      lineIndex: i,
+      content: null,
+    }))
     loading.value = false
 
     for (let offset = 0; offset < totalLines; offset += CHUNK_SIZE) fetchQueue.push(offset)
     processQueue()
   }
 
-  watch(() => bookId(), (id) => { if (id != null) load(id) }, { immediate: true })
+  watch(
+    () => bookId(),
+    (id) => {
+      if (id != null) load(id)
+    },
+    { immediate: true },
+  )
 
   return { lines, loading, prioritise }
 }

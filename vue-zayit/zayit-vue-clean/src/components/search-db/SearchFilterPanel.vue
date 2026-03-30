@@ -11,27 +11,23 @@ const props = defineProps<{
   resultCounts: Map<number, number>
   hasSearched?: boolean
 }>()
-
 const emit = defineEmits<{
-  toggleBook: [bookId: number]
-  toggleCategory: [category: CategoryNode, checked: boolean]
+  toggleBook: [number]
+  toggleCategory: [CategoryNode, boolean]
   checkAll: []
   uncheckAll: []
   close: []
 }>()
 
 const booksStore = useBooksDataStore()
+const total = computed(() => booksStore.allBooks.length)
+const isAllChecked = computed(() => total.value > 0 && props.checkedBookIds.size === total.value)
+const isIndet = computed(
+  () => props.checkedBookIds.size > 0 && props.checkedBookIds.size < total.value,
+)
 
-const totalBooks = computed(() => booksStore.allBooks.length)
-const isAllChecked = computed(() => totalBooks.value > 0 && props.checkedBookIds.size === totalBooks.value)
-const isIndeterminate = computed(() => props.checkedBookIds.size > 0 && props.checkedBookIds.size < totalBooks.value)
-
-function setRootIndeterminate(el: HTMLInputElement | null) {
-  if (el) el.indeterminate = isIndeterminate.value
-}
-
-function onRootToggle() {
-  isAllChecked.value ? emit('uncheckAll') : emit('checkAll')
+function setIndet(el: HTMLInputElement | null) {
+  if (el) el.indeterminate = isIndet.value
 }
 </script>
 
@@ -42,14 +38,12 @@ function onRootToggle() {
         type="checkbox"
         class="cb"
         :checked="isAllChecked"
-        :ref="el => setRootIndeterminate(el as HTMLInputElement | null)"
-        @change="onRootToggle"
+        :ref="(el) => setIndet(el as HTMLInputElement | null)"
+        @change="isAllChecked ? emit('uncheckAll') : emit('checkAll')"
         title="בחר/בטל הכל"
       />
       <span class="panel-title">סינון תוצאות</span>
-      <button class="close-btn" @click="$emit('close')">
-        <IconDismiss20Regular />
-      </button>
+      <button class="close-btn" @click="emit('close')"><IconDismiss20Regular /></button>
     </div>
     <div class="panel-body">
       <LoadingAnimation v-if="booksStore.loading" />
@@ -83,7 +77,6 @@ function onRootToggle() {
   background: color-mix(in srgb, var(--bg-primary) 97%, transparent);
   border-left: 1px solid var(--border-color);
 }
-
 .panel-header {
   display: flex;
   align-items: center;
@@ -92,20 +85,17 @@ function onRootToggle() {
   border-bottom: 1px solid var(--border-color);
   min-height: 36px;
 }
-
 .cb {
   width: 14px;
   height: 14px;
   flex-shrink: 0;
   cursor: pointer;
 }
-
 .panel-title {
   flex: 1;
   font-size: 13px;
   font-weight: 600;
 }
-
 .close-btn {
   display: flex;
   align-items: center;
@@ -115,15 +105,17 @@ function onRootToggle() {
   padding: 4px;
   border-radius: 4px;
 }
-
 .panel-body {
   flex: 1;
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
 }
-
-.panel-body::-webkit-scrollbar { width: 4px; }
-.panel-body::-webkit-scrollbar-track { background: transparent; }
-.panel-body::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 2px; }
+.panel-body::-webkit-scrollbar {
+  width: 4px;
+}
+.panel-body::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 2px;
+}
 </style>

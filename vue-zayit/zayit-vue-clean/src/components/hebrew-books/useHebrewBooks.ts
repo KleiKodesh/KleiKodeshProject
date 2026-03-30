@@ -29,7 +29,9 @@ export function useHebrewBooks() {
   function search(term: string) {
     searchTerm.value = term
     if (!term.trim()) {
-      hebrewBooksService.getHistory().then(h => { books.value = h })
+      hebrewBooksService.getHistory().then((h) => {
+        books.value = h
+      })
     } else {
       books.value = hebrewBooksService.search(term)
     }
@@ -52,7 +54,11 @@ export function useHebrewBooks() {
         if (!file) return
         trackAccess(book)
         const tabId = useTabStore().activeTabId
-        pdfStore.finishLocalFileConversion(tabId, { url: URL.createObjectURL(file), fileName: file.name, filePath: '' })
+        pdfStore.finishLocalFileConversion(tabId, {
+          url: URL.createObjectURL(file),
+          fileName: file.name,
+          filePath: '',
+        })
       }
       input.click()
       return
@@ -88,7 +94,15 @@ export function useHebrewBooks() {
   })
 
   return {
-    displayedBooks, isLoading, error, searchTerm, isOnline,
-    load, search, trackAccess, openBook, downloadBook,
+    displayedBooks,
+    isLoading,
+    error,
+    searchTerm,
+    isOnline,
+    load,
+    search,
+    trackAccess,
+    openBook,
+    downloadBook,
   }
 }
