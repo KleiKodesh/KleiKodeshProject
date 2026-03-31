@@ -46,7 +46,6 @@ export interface Tab {
   searchHighlightLineIndex?: number
   searchHighlightQuery?: string
   searchQuery?: string
-  searchScrollIndex?: number
   tocPath?: string
 }
 

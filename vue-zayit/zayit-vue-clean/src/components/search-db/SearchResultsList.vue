@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { IconSearchSparkle24 } from '@iconify-prerendered/vue-fluent-color'
 import { useVirtualListKeys } from '@/composables/useVirtualListKeys'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useTabStore } from '@/stores/tabStore'
 import { censorDivineNames } from '@/utils/censorDivineNames'
-import { scrollToIndexWithRetry } from '@/utils/scrollToIndexWithRetry'
 import type { BloomSearchResult } from './searchTypes'
 
 const props = defineProps<{
@@ -13,12 +13,17 @@ const props = defineProps<{
   searchQuery: string
   isSearching: boolean
   hasSearched: boolean
+  initialScrollIndex?: number
+  initialScrollOffset?: number
 }>()
 
 const emit = defineEmits<{ resultClick: [BloomSearchResult]; scrolled: [number] }>()
 
 const settingsStore = useSettingsStore()
+const tabStore = useTabStore()
+const tabId = tabStore.activeTabId
 const scrollEl = ref<HTMLElement | null>(null)
+const restoring = ref(false)
 
 const virtualizer = useVirtualizer(
   computed(() => ({
@@ -27,6 +32,7 @@ const virtualizer = useVirtualizer(
     estimateSize: () => 80,
     overscan: 8,
     measureElement: (el) => el.getBoundingClientRect().height,
+    initialOffset: props.initialScrollIndex ? props.initialScrollIndex * 80 : 0,
   })),
 )
 
@@ -48,22 +54,58 @@ function highlight(snippet: string): string {
   return text
 }
 
-function onScroll() {
+function captureScrollPos() {
   const first = virtualizer.value.getVirtualItems()[0]
-  if (first) emit('scrolled', first.index)
+  if (!first || !scrollEl.value) return null
+  return { scrollIndex: first.index, scrollOffset: scrollEl.value.scrollTop - first.start }
 }
 
-async function scrollToIndex(index: number) {
-  if (!index || !scrollEl.value) return
-  await nextTick()
-  scrollToIndexWithRetry(
-    virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
-    scrollEl.value,
-    index,
-  )
+async function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
+  restoring.value = true
+  try {
+    virtualizer.value.scrollToIndex(scrollIndex, { align: 'start' })
+    await new Promise<void>((resolve) => {
+      function check() {
+        const item = virtualizer.value.getVirtualItems().find((v) => v.index === scrollIndex)
+        if (item) {
+          if (scrollEl.value) scrollEl.value.scrollTop = item.start + scrollOffset
+          resolve()
+        } else {
+          requestAnimationFrame(check)
+        }
+      }
+      requestAnimationFrame(check)
+    })
+  } finally {
+    restoring.value = false
+  }
 }
 
-defineExpose({ scrollToIndex })
+watch(
+  () => props.results.length,
+  async (len) => {
+    if (!len || props.isSearching) return
+    if (props.initialScrollIndex != null)
+      await restoreScrollPos(props.initialScrollIndex, props.initialScrollOffset ?? 0)
+  },
+  { flush: 'post' },
+)
+
+let saveTimer: ReturnType<typeof setTimeout> | null = null
+
+function onScroll() {
+  if (restoring.value) return
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = setTimeout(() => {
+    const pos = captureScrollPos()
+    if (pos)
+      tabStore.setTabViewState(tabId, {
+        bottomVisible: false,
+        searchScrollIndex: pos.scrollIndex,
+        searchScrollOffset: pos.scrollOffset,
+      })
+  }, 100)
+}
 </script>
 
 <template>

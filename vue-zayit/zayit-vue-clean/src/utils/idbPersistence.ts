@@ -16,6 +16,8 @@ const LASTREAD_MAX = 1000
 
 export interface TabState {
   bottomVisible: boolean
+  searchScrollIndex?: number
+  searchScrollOffset?: number
 }
 
 export interface BookState {

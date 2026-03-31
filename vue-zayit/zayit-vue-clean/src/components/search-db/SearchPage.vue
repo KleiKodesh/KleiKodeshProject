@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, nextTick } from 'vue'
+import { ref, onMounted } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import { useBloomSearch } from './useBloomSearch'
 import { useSearch } from './useSearch'
@@ -48,7 +48,8 @@ const { state: indexingState } = useIndexingStatus()
 
 const searchBarRef = ref<InstanceType<typeof SearchBar> | null>(null)
 const filterPanelRef = ref<HTMLElement | null>(null)
-const resultsListRef = ref<InstanceType<typeof SearchResultsList> | null>(null)
+const initialScrollIndex = ref<number | undefined>()
+const initialScrollOffset = ref<number | undefined>()
 
 onClickOutside(filterPanelRef, () => {
   if (isFilterOpen.value) isFilterOpen.value = false
@@ -59,54 +60,42 @@ function onSearch(q: string) {
   handleSearch(q)
 }
 function onClearSearch() {
-  tabStore.updateActiveTab({ searchQuery: undefined, searchScrollIndex: undefined })
+  tabStore.updateActiveTab({ searchQuery: undefined })
   handleClearSearch()
 }
 
 async function restoreFromTab() {
   const savedQuery = tabStore.activeTab.searchQuery
-  const savedIndex = tabStore.activeTab.searchScrollIndex
-  if (!savedQuery || !savedIndex) return
-
+  if (!savedQuery) return
   searchQuery.value = savedQuery
   const fromCache = await loadCachedResults(savedQuery)
-
-  if (!fromCache) {
-    handleSearch(savedQuery)
-    // wait for streaming search to finish
-    await new Promise<void>((resolve) => {
-      const stop = watch(isSearching, (val) => {
-        if (!val) {
-          stop()
-          resolve()
-        }
-      })
-    })
-  }
-
-  // wait for results to render into the DOM
-  await nextTick()
-  resultsListRef.value?.scrollToIndex(savedIndex)
+  if (!fromCache) handleSearch(savedQuery)
 }
 
 onMounted(async () => {
   await booksStore.ensureLoaded()
   initCheckedBooks()
+  // load saved scroll state before results render
+  const saved = await tabStore.getTabViewState(tabStore.activeTabId)
+  if (saved?.searchScrollIndex != null) {
+    initialScrollIndex.value = saved.searchScrollIndex
+    initialScrollOffset.value = saved.searchScrollOffset ?? 0
+  }
   await restoreFromTab()
-  nextTick(() => searchBarRef.value?.focus())
+  searchBarRef.value?.focus()
 })
 </script>
 
 <template>
   <div class="search-page">
     <SearchResultsList
-      ref="resultsListRef"
       :results="filteredResults"
       :search-query="executedQuery"
       :is-searching="isSearching"
       :has-searched="hasSearched"
+      :initial-scroll-index="initialScrollIndex"
+      :initial-scroll-offset="initialScrollOffset"
       @result-click="handleResultClick"
-      @scrolled="tabStore.updateActiveTab({ searchScrollIndex: $event })"
     />
 
     <SearchBar
