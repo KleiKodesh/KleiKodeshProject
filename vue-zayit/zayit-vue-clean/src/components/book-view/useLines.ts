@@ -5,18 +5,16 @@ import { SQL } from '@/host/queries.sql'
 export interface LineItem {
   id: number
   lineIndex: number
-  content: string | null // null = placeholder not yet loaded
+  content: string | null // null = placeholder, not yet loaded
 }
 
 const CHUNK_SIZE = 200
 
 export function useLines(bookId: () => number | undefined) {
   const lines = ref<LineItem[]>([])
-  const loading = ref(false)
 
   let fetchQueue: number[] = []
   let fetching = false
-  let totalLines = 0
   let currentBookId: number | undefined
 
   async function processQueue() {
@@ -37,8 +35,8 @@ export function useLines(bookId: () => number | undefined) {
     fetching = false
   }
 
+  // Moves the chunk containing lineIndex to the front of the queue so it loads next.
   function prioritise(lineIndex: number) {
-    if (!totalLines) return
     const offset = Math.floor(lineIndex / CHUNK_SIZE) * CHUNK_SIZE
     const pos = fetchQueue.indexOf(offset)
     if (pos === -1) return
@@ -51,19 +49,20 @@ export function useLines(bookId: () => number | undefined) {
 
   async function load(id: number) {
     currentBookId = id
-    loading.value = true
     lines.value = []
     fetchQueue = []
     fetching = false
 
     const [book] = await query<{ totalLines: number }>(SQL.GET_BOOK_BY_ID, [id])
-    totalLines = book?.totalLines ?? 0
+    const totalLines = book?.totalLines ?? 0
+
+    // Pre-allocate all slots with placeholders so the virtualizer has the correct count
+    // and scroll height from the start. Content fills in as chunks arrive.
     lines.value = Array.from({ length: totalLines }, (_, i) => ({
       id: -(i + 1),
       lineIndex: i,
       content: null,
     }))
-    loading.value = false
 
     for (let offset = 0; offset < totalLines; offset += CHUNK_SIZE) fetchQueue.push(offset)
     processQueue()
@@ -77,5 +76,5 @@ export function useLines(bookId: () => number | undefined) {
     { immediate: true },
   )
 
-  return { lines, loading, prioritise }
+  return { lines, prioritise }
 }

@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { IconSearchSparkle24 } from '@iconify-prerendered/vue-fluent-color'
-import { useVirtualListKeys } from '@/composables/useVirtualListKeys'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useTabStore } from '@/stores/tabStore'
+import { useEventListener } from '@vueuse/core'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import type { BloomSearchResult } from './searchTypes'
 
@@ -23,7 +23,7 @@ const settingsStore = useSettingsStore()
 const tabStore = useTabStore()
 const tabId = tabStore.activeTabId
 const scrollEl = ref<HTMLElement | null>(null)
-const restoring = ref(false)
+let programmaticScrolling = false
 
 const virtualizer = useVirtualizer(
   computed(() => ({
@@ -32,16 +32,7 @@ const virtualizer = useVirtualizer(
     estimateSize: () => 80,
     overscan: 8,
     measureElement: (el) => el.getBoundingClientRect().height,
-    initialOffset: props.initialScrollIndex ? props.initialScrollIndex * 80 : 0,
   })),
-)
-
-const { focusedIndex, containerFocused } = useVirtualListKeys(
-  scrollEl,
-  () =>
-    virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
-  () => props.results.length,
-  (i) => emit('resultClick', props.results[i]!),
 )
 
 function highlight(snippet: string): string {
@@ -57,55 +48,54 @@ function highlight(snippet: string): string {
 function captureScrollPos() {
   const first = virtualizer.value.getVirtualItems()[0]
   if (!first || !scrollEl.value) return null
-  return { scrollIndex: first.index, scrollOffset: scrollEl.value.scrollTop - first.start }
+  return {
+    scrollIndex: first.index,
+    scrollOffset: Math.max(0, scrollEl.value.scrollTop - first.start),
+  }
 }
 
-async function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
-  restoring.value = true
-  try {
-    virtualizer.value.scrollToIndex(scrollIndex, { align: 'start' })
-    await new Promise<void>((resolve) => {
-      function check() {
-        const item = virtualizer.value.getVirtualItems().find((v) => v.index === scrollIndex)
-        if (item) {
-          if (scrollEl.value) scrollEl.value.scrollTop = item.start + scrollOffset
-          resolve()
-        } else {
-          requestAnimationFrame(check)
-        }
-      }
-      requestAnimationFrame(check)
+function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
+  // Two-rAF pattern: scrollToIndex triggers TanStack's internal correction.
+  // Wait one rAF for it to settle, then set scrollTop directly — TanStack is idle by then.
+  programmaticScrolling = true
+  virtualizer.value.scrollToIndex(scrollIndex, { align: 'start' })
+  requestAnimationFrame(() => {
+    const item = virtualizer.value.measurementsCache.find((m) => m.index === scrollIndex)
+    if (item && scrollEl.value) scrollEl.value.scrollTop = item.start + scrollOffset
+    requestAnimationFrame(() => {
+      programmaticScrolling = false
     })
-  } finally {
-    restoring.value = false
-  }
+  })
 }
 
 watch(
   () => props.results.length,
-  async (len) => {
+  (len) => {
     if (!len || props.isSearching) return
     if (props.initialScrollIndex != null)
-      await restoreScrollPos(props.initialScrollIndex, props.initialScrollOffset ?? 0)
+      restoreScrollPos(props.initialScrollIndex, props.initialScrollOffset ?? 0)
   },
   { flush: 'post' },
 )
 
-let saveTimer: ReturnType<typeof setTimeout> | null = null
-
-function onScroll() {
-  if (restoring.value) return
-  if (saveTimer) clearTimeout(saveTimer)
-  saveTimer = setTimeout(() => {
-    const pos = captureScrollPos()
-    if (pos)
-      tabStore.setTabViewState(tabId, {
-        bottomVisible: false,
-        searchScrollIndex: pos.scrollIndex,
-        searchScrollOffset: pos.scrollOffset,
-      })
-  }, 100)
+function savePos() {
+  if (programmaticScrolling) return
+  const pos = captureScrollPos()
+  if (pos)
+    tabStore.setTabViewState(tabId, {
+      bottomVisible: false,
+      searchScrollIndex: pos.scrollIndex,
+      searchScrollOffset: pos.scrollOffset,
+    })
 }
+
+useEventListener(document, 'visibilitychange', () => {
+  if (document.visibilityState === 'hidden') savePos()
+})
+useEventListener(window, 'beforeunload', savePos)
+onBeforeUnmount(savePos)
+
+function onScroll() {}
 </script>
 
 <template>
@@ -129,15 +119,21 @@ function onScroll() {
             transform: `translateY(${vRow.start}px)`,
           }"
         >
-          <div
-            class="result-item"
-            data-nav-item
-            :class="{ 'is-focused': containerFocused && focusedIndex === vRow.index }"
-            @click="focusedIndex = vRow.index"
-          >
-            <div class="result-header" @click="emit('resultClick', results[vRow.index]!)">
+          <div class="result-item">
+            <div
+              class="result-header"
+              :title="
+                results[vRow.index]!.tocText
+                  ? results[vRow.index]!.bookTitle +
+                    ' › ' +
+                    results[vRow.index]!.tocText +
+                    '\n\nלחץ לניווט למיקום'
+                  : results[vRow.index]!.bookTitle + '\n\nלחץ לניווט למיקום'
+              "
+              @click="emit('resultClick', results[vRow.index]!)"
+            >
               <span class="book-title">{{ results[vRow.index]!.bookTitle }}</span>
-              <span v-if="results[vRow.index]!.tocText" class="sep">></span>
+              <span v-if="results[vRow.index]!.tocText" class="sep">›</span>
               <span v-if="results[vRow.index]!.tocText" class="toc-text">{{
                 results[vRow.index]!.tocText
               }}</span>
@@ -183,13 +179,6 @@ function onScroll() {
 .result-item {
   padding: 8px 14px;
   border-bottom: 1px solid var(--border-color);
-  transition: background 0.1s;
-}
-.result-item:hover {
-  background: var(--hover-bg);
-}
-.result-item:active {
-  background: var(--active-bg);
 }
 .result-header {
   display: flex;
@@ -202,20 +191,21 @@ function onScroll() {
   cursor: pointer;
   width: fit-content;
   user-select: text;
+  color: var(--accent-color);
 }
 .result-header:hover .book-title,
 .result-header:hover .toc-text {
-  color: var(--accent-color);
+  text-decoration: underline;
 }
 .book-title {
-  color: var(--text-primary);
+  color: inherit;
 }
 .sep {
   color: var(--text-secondary);
   font-size: 11px;
 }
 .toc-text {
-  color: var(--text-primary);
+  color: inherit;
   font-size: 12px;
 }
 .snippet {

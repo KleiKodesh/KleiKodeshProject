@@ -4,13 +4,12 @@ import {
   IconDismiss20Regular,
   IconHome20Regular,
   IconDocument20Regular,
-  IconBookOpen20Filled,
+  IconBookOpen20Regular,
   IconSearch20Regular,
-  IconLibrary20Filled,
+  IconLibrary20Regular,
   IconDocumentPdf20Regular,
-  IconApps20Filled,
+  IconApps20Regular,
 } from '@iconify-prerendered/vue-fluent'
-import { useListKeys } from '@/composables/useListKeys'
 import type { Tab } from '@/stores/tabStore'
 
 const props = defineProps<{ tabs: Tab[]; activeTabId: string }>()
@@ -20,39 +19,20 @@ const containerRef = ref<HTMLElement | null>(null)
 const visibleTabs = () =>
   props.tabs.filter((t) => t.id !== props.activeTabId && t.route !== '/settings')
 
-const { focusedIndex, containerFocused } = useListKeys(
-  containerRef,
-  () => visibleTabs().length,
-  (i) => emit('select', visibleTabs()[i]!.id),
-)
-
-function selectTab(i: number, id: string) {
-  focusedIndex.value = i
-  emit('select', id)
-}
-
 nextTick(() => containerRef.value?.focus())
 </script>
 
 <template>
   <div ref="containerRef" class="tab-dropdown" tabindex="0" @keydown.esc.stop="emit('dismiss')">
-    <div
-      v-for="(tab, i) in visibleTabs()"
-      :key="tab.id"
-      class="tab-row"
-      data-nav-item
-      :class="{ 'is-focused': containerFocused && focusedIndex === i }"
-      @click="selectTab(i, tab.id)"
-      @keydown.enter="emit('select', tab.id)"
-    >
+    <div v-for="tab in visibleTabs()" :key="tab.id" class="tab-row" @click="emit('select', tab.id)">
       <div class="tab-row-start">
         <IconHome20Regular v-if="tab.route === '/'" class="tab-icon" />
         <IconDocument20Regular v-else-if="tab.route === '/book-view'" class="tab-icon" />
         <IconDocumentPdf20Regular v-else-if="tab.route === '/pdf-view'" class="tab-icon" />
-        <IconBookOpen20Filled v-else-if="tab.route === '/hebrewbooks'" class="tab-icon" />
+        <IconBookOpen20Regular v-else-if="tab.route === '/hebrewbooks'" class="tab-icon" />
         <IconSearch20Regular v-else-if="tab.route === '/search'" class="tab-icon" />
-        <IconLibrary20Filled v-else-if="tab.route === '/books'" class="tab-icon" />
-        <IconApps20Filled v-else-if="tab.route === '/workspaces'" class="tab-icon" />
+        <IconLibrary20Regular v-else-if="tab.route === '/books'" class="tab-icon" />
+        <IconApps20Regular v-else-if="tab.route === '/workspaces'" class="tab-icon" />
         <IconDocument20Regular v-else class="tab-icon" />
       </div>
       <span class="tab-row-title">
@@ -84,14 +64,14 @@ nextTick(() => containerRef.value?.focus())
 .tab-row {
   display: flex;
   align-items: center;
-  height: 32px;
+  height: 40px;
   padding: 0 4px;
   cursor: pointer;
   border-top: 1px solid var(--border-color);
   transition: background 120ms;
 }
 .tab-row:hover {
-  background: var(--hover-bg);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
 
 .tab-row-start {
@@ -102,13 +82,13 @@ nextTick(() => containerRef.value?.focus())
   color: var(--text-secondary);
 }
 .tab-icon {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 .tab-row-title {
   font-weight: 400;
   font-size: 0.82rem;
-  color: var(--text-primary);
+  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -116,6 +96,7 @@ nextTick(() => containerRef.value?.focus())
 }
 .tab-toc-path {
   color: var(--text-secondary);
+  opacity: 0.7;
 }
 .tab-row-end {
   display: flex;
@@ -128,17 +109,17 @@ nextTick(() => containerRef.value?.focus())
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 3px;
-  border-radius: 0;
+  width: 32px;
+  height: 32px;
+  padding: 6px;
+  border-radius: 4px;
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
 }
 .tab-close svg {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 .tab-close:hover {
   background: var(--hover-bg);

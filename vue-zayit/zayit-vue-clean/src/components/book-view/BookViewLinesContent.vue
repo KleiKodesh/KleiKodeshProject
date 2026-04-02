@@ -5,10 +5,9 @@ import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useTabStore } from '@/stores/tabStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
-import { useLines } from './useLines'
+import type { LineItem } from './useLines'
 import { applyDiacriticsFilter, removeDiacriticsForSearch } from '@/utils/hebrewTextProcessing'
 import { censorDivineNames } from '@/utils/censorDivineNames'
-import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
 import type { ContextMenuItem } from '@/components/common/ContextMenu.vue'
 import { useEventListener } from '@vueuse/core'
@@ -27,7 +26,11 @@ const props = defineProps<{
   searchQuery?: string
   currentMatchLineIndex?: number
   currentMatchOccurrence?: number
+  // TOC / search-result navigation: scroll to this line index on first load
   initialLineIndex?: number
+  // Session restore: scroll to this line index on first load (from persisted state)
+  initialScrollIndex?: number
+  initialScrollOffset?: number
   searchHighlightLineIndex?: number
   searchHighlightQuery?: string
 }>()
@@ -38,9 +41,10 @@ const bookViewStore = useBookViewStore()
 const { zoom } = storeToRefs(bookViewStore)
 const tabId = tabStore.activeTabId
 const bookId = tabStore.activeTab.bookId!
-const { lines, loading, prioritise } = useLines(() => bookId)
+const { lines, prioritise } = useLines(() => bookId)
 
 const diacriticsState = computed(() => settingsStore.diacriticsState)
+const fontPx = computed(() => (zoom.value / 100) * (settingsStore.fontSize / 100) * 15)
 
 function highlightMatches(
   raw: string,
@@ -103,8 +107,7 @@ function highlightMatches(
   return out.join('')
 }
 
-function lineContent(raw: string | null, lineIndex: number): string | null {
-  if (raw === null) return null
+function lineContent(raw: string, lineIndex: number): string {
   let content =
     diacriticsState.value === 0 ? raw : applyDiacriticsFilter(raw, diacriticsState.value)
   if (settingsStore.censorDivineNames) content = censorDivineNames(content)
@@ -122,16 +125,11 @@ function lineContent(raw: string | null, lineIndex: number): string | null {
 }
 
 const scrollerEl = ref<HTMLElement | null>(null)
-const restoring = ref(false)
 
 const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, {
   onCtrlF: () => emit('ctrl-f'),
 })
-useScopedCopy(
-  scrollerEl,
-  () => lines.value.map((l) => l.content ?? '').filter(Boolean),
-  isSelectAll,
-)
+useScopedCopy(scrollerEl, () => lines.value.map((l) => l.content).filter(Boolean), isSelectAll)
 useVirtualScrollerKeys(
   scrollerEl,
   () =>
@@ -148,7 +146,7 @@ const contextMenuItems: ContextMenuItem[] = [
       let joined: string
       if (isSelectAll.value) {
         joined = lines.value
-          .map((l) => l.content ?? '')
+          .map((l) => l.content)
           .filter(Boolean)
           .join(' ')
       } else {
@@ -158,7 +156,6 @@ const contextMenuItems: ContextMenuItem[] = [
         const fragment = range.cloneContents()
         const tmp = document.createElement('div')
         tmp.appendChild(fragment)
-        // flatten: remove block-level wrappers, join with space
         joined = Array.from(tmp.querySelectorAll('.line'))
           .map((el) => el.innerHTML)
           .join(' ')
@@ -191,59 +188,78 @@ const virtualizer = useVirtualizer(
 const virtualItems = computed(() => virtualizer.value.getVirtualItems())
 const totalSize = computed(() => virtualizer.value.getTotalSize())
 
+// ── Scroll capture ────────────────────────────────────────────────────────────
+
 function captureScrollPos() {
   const first = virtualItems.value[0]
   if (!first || !scrollerEl.value) return null
-  return { scrollIndex: first.index, scrollOffset: scrollerEl.value.scrollTop - first.start }
-}
-
-async function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
-  restoring.value = true
-  try {
-    prioritise(scrollIndex)
-    virtualizer.value.scrollToIndex(scrollIndex, { align: 'start' })
-    await nextTick()
-    await new Promise((r) => setTimeout(r, 500))
-    const item = virtualizer.value.getVirtualItems().find((v) => v.index === scrollIndex)
-    if (scrollerEl.value)
-      scrollerEl.value.scrollTop = (item?.start ?? scrollerEl.value.scrollTop) + scrollOffset
-    await new Promise((r) => setTimeout(r, 600))
-  } finally {
-    restoring.value = false
+  // scrollOffset = scrollTop - first.start: how far past the first rendered item we are.
+  // first may be an overscan item above the viewport — that's fine, the offset compensates.
+  return {
+    scrollIndex: first.index,
+    scrollOffset: Math.max(0, scrollerEl.value.scrollTop - first.start),
   }
 }
 
-watch(
-  loading,
-  async (val) => {
-    if (val || !lines.value.length) return
-    if (props.initialLineIndex != null) {
-      await nextTick()
-      await restoreScrollPos(props.initialLineIndex, 0)
-      if (props.searchHighlightLineIndex != null && scrollerEl.value) {
-        await nextTick()
-        const mark = scrollerEl.value.querySelector('mark.search-match') as HTMLElement | null
-        mark?.scrollIntoView({ block: 'center' })
-      }
-      return
-    }
-    const saved = await tabStore.getBookViewState(tabId, bookId)
-    if (saved) {
-      await restoreScrollPos(saved.scrollIndex, saved.scrollOffset)
-    } else {
-      const global = await tabStore.getLastReadPos(bookId)
-      if (global) await restoreScrollPos(global.scrollIndex, global.scrollOffset)
-    }
-  },
-  { flush: 'post' },
-)
+// ── Scroll restore ────────────────────────────────────────────────────────────
 
-let saveTimer: ReturnType<typeof setTimeout> | null = null
 let programmaticScrollTimer: ReturnType<typeof setTimeout> | null = null
 let programmaticScrolling = false
 
+function restoreScrollPos(lineIndex: number, scrollOffset = 0) {
+  // scrollToIndex() uses estimated sizes and triggers TanStack's internal scroll correction.
+  // Wait one rAF for that correction to settle, then set scrollTop directly using the
+  // real measured item.start from measurementsCache — TanStack is idle by then.
+  // programmaticScrolling suppresses savePos during restore.
+  programmaticScrolling = true
+  if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer)
+  virtualizer.value.scrollToIndex(lineIndex, { align: 'start' })
+  requestAnimationFrame(() => {
+    const item = virtualizer.value.measurementsCache.find((m) => m.index === lineIndex)
+    if (item && scrollerEl.value) scrollerEl.value.scrollTop = item.start + scrollOffset
+    requestAnimationFrame(() => {
+      programmaticScrolling = false
+    })
+  })
+}
+
+// ── Initial scroll on load ────────────────────────────────────────────────────
+
+watch(
+  lines,
+  (val) => {
+    if (!val.length) return
+    const targetIndex = props.initialLineIndex ?? props.initialScrollIndex
+    if (targetIndex == null) return
+    // Prioritise the target chunk so it loads before others.
+    prioritise(targetIndex)
+    // Wait until the target line's content is loaded (streaming: starts as null).
+    const stopWatch = watch(
+      () => lines.value[targetIndex]?.content,
+      (content) => {
+        if (content == null) return
+        stopWatch()
+        restoreScrollPos(
+          targetIndex,
+          props.initialScrollIndex != null ? (props.initialScrollOffset ?? 0) : 0,
+        )
+        if (props.searchHighlightLineIndex != null && scrollerEl.value) {
+          nextTick(() => {
+            const mark = scrollerEl.value!.querySelector('mark.search-match') as HTMLElement | null
+            mark?.scrollIntoView({ block: 'center' })
+          })
+        }
+      },
+      { immediate: true, flush: 'post' },
+    )
+  },
+  { flush: 'post', once: true },
+)
+
+// ── Persist scroll position ───────────────────────────────────────────────────
+
 function savePos() {
-  if (restoring.value) return
+  if (programmaticScrolling) return
   const pos = captureScrollPos()
   if (pos) {
     tabStore.setBookViewState(tabId, bookId, {
@@ -251,6 +267,7 @@ function savePos() {
       selectedLineId: props.selectedLineId,
       commentaryScrollIndex: props.commentaryScrollIndex,
       commentaryScrollOffset: props.commentaryScrollOffset,
+      zoom: zoom.value,
     })
     tabStore.setLastReadPos(bookId, {
       ...pos,
@@ -261,31 +278,33 @@ function savePos() {
   }
 }
 
+// Save when the app goes to background (tab switch, WebView losing focus) or on page unload.
+// Not saved on every scroll event — only on these lifecycle boundaries.
+useEventListener(document, 'visibilitychange', () => {
+  if (document.visibilityState === 'hidden') savePos()
+})
+useEventListener(window, 'beforeunload', savePos)
+
+// Save on unmount — covers in-app tab switching where visibility never changes.
+onBeforeUnmount(savePos)
+
+// ── Scroll event ──────────────────────────────────────────────────────────────
+
 function onScroll() {
-  const first = virtualizer.value.getVirtualItems()[0]?.index ?? 0
-  prioritise(first)
-  if (scrollerEl.value && !restoring.value && !programmaticScrolling) {
-    emit('scrolled', first)
+  if (scrollerEl.value && !programmaticScrolling) {
+    // Use the same method as captureScrollPos: find the first item whose bottom edge
+    // is at or below scrollTop — i.e. the first line actually visible in the viewport,
+    // not the first overscan-rendered item which may be above the fold.
+    const scrollTop = scrollerEl.value.scrollTop
+    const items = virtualizer.value.getVirtualItems()
+    const firstVisible = items.find((v) => v.start + v.size > scrollTop) ?? items[0]
+    const lineIndex = firstVisible?.index ?? 0
+    prioritise(lineIndex)
+    emit('scrolled', lineIndex)
   }
-  if (saveTimer) clearTimeout(saveTimer)
-  saveTimer = setTimeout(savePos, 100)
 }
 
-watch(
-  () => props.selectedLineId,
-  () => {
-    if (saveTimer) clearTimeout(saveTimer)
-    saveTimer = setTimeout(savePos, 100)
-  },
-)
-
-watch(
-  () => [props.commentaryScrollIndex, props.commentaryScrollOffset],
-  () => {
-    if (saveTimer) clearTimeout(saveTimer)
-    saveTimer = setTimeout(savePos, 100)
-  },
-)
+// ── Programmatic navigation ───────────────────────────────────────────────────
 
 function setProgrammaticScroll() {
   programmaticScrolling = true
@@ -295,11 +314,13 @@ function setProgrammaticScroll() {
   }, 300)
 }
 
+// Scrolls to a line by id — used for TOC and commentary navigation.
+// Skips scrolling if the line is already fully visible to avoid jarring jumps
+// when the in-app search bar navigates between results on the same screen.
 function scrollToLineId(lineId: number) {
   const lineIndex = lines.value.find((l) => l.id === lineId)?.lineIndex
   if (lineIndex == null) return
   prioritise(lineIndex)
-
   const scroller = scrollerEl.value
   const vItem = virtualItems.value.find((v) => v.index === lineIndex)
   if (vItem && scroller) {
@@ -314,7 +335,6 @@ function scrollToLineId(lineId: number) {
 function scrollToLineIndex(lineIndex: number) {
   if (!scrollerEl.value) return
   setProgrammaticScroll()
-  prioritise(lineIndex)
   scrollToIndexWithRetry(
     virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
     scrollerEl.value,
@@ -324,24 +344,9 @@ function scrollToLineIndex(lineIndex: number) {
 }
 
 onBeforeUnmount(() => {
-  if (saveTimer) clearTimeout(saveTimer)
   if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer)
-  const pos = captureScrollPos()
-  if (pos) {
-    tabStore.setBookViewState(tabId, bookId, {
-      ...pos,
-      selectedLineId: props.selectedLineId,
-      commentaryScrollIndex: props.commentaryScrollIndex,
-      commentaryScrollOffset: props.commentaryScrollOffset,
-    })
-    tabStore.setLastReadPos(bookId, {
-      ...pos,
-      selectedLineId: props.selectedLineId,
-      commentaryScrollIndex: props.commentaryScrollIndex,
-      commentaryScrollOffset: props.commentaryScrollOffset,
-    })
-  } else tabStore.clearBookViewState(tabId, bookId)
 })
+
 defineExpose({ scrollToLineId, scrollToLineIndex })
 
 function onLineClick(index: number) {
@@ -353,13 +358,12 @@ function onLineClick(index: number) {
 <template>
   <div class="lines-content">
     <ContextMenu ref="contextMenuRef" :items="contextMenuItems" />
-    <div v-if="loading || restoring" class="loading-overlay"><LoadingAnimation /></div>
     <div
       ref="scrollerEl"
       class="scroller"
       tabindex="0"
       data-ctrlf-enabled
-      :style="{ fontSize: `${(zoom / 100) * 15}px` }"
+      :style="{ fontSize: `${fontPx}px` }"
       @scroll="onScroll"
       @contextmenu="contextMenuRef?.show($event)"
     >
@@ -378,11 +382,11 @@ function onLineClick(index: number) {
           }"
         >
           <div
-            v-if="lines[vItem.index]?.content !== null"
+            v-if="lines[vItem.index]?.content != null"
             class="line"
             :class="{ selected: props.bottomVisible && selectedLineId === lines[vItem.index]?.id }"
             :data-alt-toc="props.altTocLabelMap?.get(vItem.index)"
-            v-html="lineContent(lines[vItem.index]?.content ?? null, vItem.index)"
+            v-html="lineContent(lines[vItem.index]!.content!, vItem.index)"
             @click="onLineClick(vItem.index)"
           />
           <div v-else class="line placeholder" />
@@ -397,12 +401,6 @@ function onLineClick(index: number) {
   height: 100%;
   position: relative;
 }
-.loading-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 10;
-  background: var(--bg-primary);
-}
 .scroller {
   height: 100%;
   overflow-y: auto;
@@ -415,6 +413,13 @@ function onLineClick(index: number) {
   color: var(--text-primary);
   text-align: justify;
   position: relative;
+}
+.line.placeholder {
+  height: 28px;
+  margin-inline: 12px;
+  margin-block: 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
 }
 .line.selected::after {
   content: '';
@@ -432,13 +437,6 @@ function onLineClick(index: number) {
   font-weight: 600;
   opacity: 0.35;
   padding-block-end: 2px;
-}
-.line.placeholder {
-  height: 28px;
-  margin-inline: 12px;
-  margin-block: 4px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
 }
 .line :deep(h1),
 .line :deep(h2),

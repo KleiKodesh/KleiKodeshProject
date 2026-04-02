@@ -160,10 +160,13 @@ export function useSettingsPage() {
     )
   }
 
-  async function resetAll() {
-    await tabStore.resetAll()
-    if (typeof window.__webviewAction === 'function')
-      await window.__webviewAction('DeleteBloomIndex', {}).catch(() => {})
+  function resetAll() {
+    // Fire-and-forget — don't await, page is about to reload anyway
+    tabStore.resetAll().catch(() => {})
+    if (typeof window.__webviewAction === 'function') {
+      window.__webviewAction('DeleteBloomIndex', {}).catch(() => {})
+      window.__webviewAction('resetSettings', {}).catch(() => {})
+    }
     window.location.reload()
   }
 

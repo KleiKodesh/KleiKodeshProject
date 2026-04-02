@@ -53,12 +53,22 @@ const selectedLineId = ref<number | null>(null)
 const searchMode = ref<SearchMode>('content')
 const activeTocEntryId = ref<number | undefined>(undefined)
 const initialLineIndex = ref<number | undefined>(openTocLineIndex)
+const initialScrollTop = ref<number | undefined>()
+const initialScrollOffset = ref<number>(0)
+const scrollStateReady = ref(openTocLineIndex != null) // if TOC nav, no need to wait for IDB
 
 const linesContentRef = ref<InstanceType<typeof BookViewLinesContent> | null>(null)
 const commentaryViewRef = ref<InstanceType<typeof CommentaryView> | null>(null)
 const searchBarRef = ref<InstanceType<typeof BookViewSearchBar> | null>(null)
 
-const { getActiveTocEntry, getTocPath, altTocSections, tocEntries } = useToc(
+const {
+  getActiveTocEntry,
+  getTocPath,
+  altTocSections,
+  tocEntries,
+  loading: tocLoading,
+  error: tocError,
+} = useToc(
   () => bookId,
   () => bookTitle,
 )
@@ -285,6 +295,18 @@ onMounted(async () => {
     const restoredLineId = bookSaved?.selectedLineId ?? lastRead?.selectedLineId
     const si = bookSaved?.commentaryScrollIndex ?? lastRead?.commentaryScrollIndex
     const so = bookSaved?.commentaryScrollOffset ?? lastRead?.commentaryScrollOffset
+    // restore zoom for this tab+book
+    if (bookSaved?.zoom != null) bookViewStore.setZoom(tabId, bookId, bookSaved.zoom)
+    // restore scroll position — only if not navigating to a specific TOC entry
+    if (openTocLineIndex == null) {
+      const scrollIndex = bookSaved?.scrollIndex ?? lastRead?.scrollIndex
+      const scrollOffset = bookSaved?.scrollOffset ?? lastRead?.scrollOffset
+      if (scrollIndex != null) {
+        initialScrollTop.value = scrollIndex
+        initialScrollOffset.value = scrollOffset ?? 0
+      }
+    }
+    scrollStateReady.value = true
     if (restoredLineId != null) {
       selectedLineId.value = restoredLineId
       bottomVisible.value = true
@@ -385,11 +407,14 @@ watch(searchVisible, (v) => {
       <BookViewSplitPane :bottom-visible="bottomVisible">
         <template #top>
           <BookViewLinesContent
+            v-if="scrollStateReady"
             ref="linesContentRef"
             :alt-toc-label-map="altTocLabelMap"
             :selected-line-id="selectedLineId"
             :bottom-visible="bottomVisible"
             :initial-line-index="initialLineIndex"
+            :initial-scroll-index="initialScrollTop"
+            :initial-scroll-offset="initialScrollOffset"
             :search-highlight-line-index="searchHighlightLineIndex"
             :search-highlight-query="searchHighlightQuery"
             :commentary-scroll-index="commentaryScrollIndex"
@@ -436,6 +461,10 @@ watch(searchVisible, (v) => {
         :book-title="bookTitle"
         :active-toc-entry-id="activeTocEntryId"
         :visible="tocVisible"
+        :toc-entries="tocEntries"
+        :alt-toc-sections="altTocSections"
+        :loading="tocLoading"
+        :error="tocError"
         @close="tocVisible = false"
         @select="onTocSelect"
         @alt-select="onAltTocSelect"

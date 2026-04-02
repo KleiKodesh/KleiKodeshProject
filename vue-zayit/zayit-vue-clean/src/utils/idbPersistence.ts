@@ -26,6 +26,7 @@ export interface BookState {
   selectedLineId?: number | null
   commentaryScrollIndex?: number | null
   commentaryScrollOffset?: number | null
+  zoom?: number
 }
 
 export interface LastReadState {
@@ -117,11 +118,13 @@ async function dbDeleteByPrefix(dbName: string, prefix: string): Promise<void> {
 }
 
 function dropDb(name: string): Promise<void> {
+  handles[name]?.close()
   handles[name] = null
   return new Promise((resolve, reject) => {
     const req = indexedDB.deleteDatabase(name)
     req.onsuccess = () => resolve()
     req.onerror = () => reject(req.error)
+    req.onblocked = () => resolve() // blocked means another tab holds it open; reload will finish the delete
   })
 }
 
@@ -132,7 +135,7 @@ export const KEYS = {
   SETTINGS_BOOKS_VIEW: 'books.view',
   SETTINGS_TOOLBAR: 'bookView.toolbarVisible',
   SETTINGS_SEARCH_BAR_POS: 'bookView.searchBarPos',
-  SETTINGS_ZOOM: 'bookView.zoom',
+
   SETTINGS_CENSOR_DIVINE: 'censorDivineNames',
   SETTINGS_DIACRITICS: 'diacriticsState',
   SETTINGS_HEADER_FONT: 'headerFont',

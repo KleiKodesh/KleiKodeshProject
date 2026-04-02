@@ -1,24 +1,31 @@
 import { ref, computed } from 'vue'
-import { hebrewBooksService, type HebrewBook } from './hebrewBooksService'
+import { hebrewBooksHistory } from './hebrewBooksHistory'
+import { loadHbCatalog, searchHbCatalog, getHbPdfUrl, type HebrewBook } from './hebrewBooksCatalog'
 import { usePdfStore } from '@/stores/pdfStore'
 import { useTabStore } from '@/stores/tabStore'
 import { isHosted } from '@/host/db'
 
-const books = ref<HebrewBook[]>([])
-const isLoading = ref(false)
-const error = ref<string | null>(null)
-const searchTerm = ref('')
-const isOnline = ref(navigator.onLine)
-
 export function useHebrewBooks() {
   const pdfStore = usePdfStore()
+
+  // Catalog lives here — freed automatically when the component unmounts
+  const catalog = ref<HebrewBook[]>([])
+  const books = ref<HebrewBook[]>([])
+  const isLoading = ref(false)
+  const error = ref<string | null>(null)
+  const searchTerm = ref('')
+  const isOnline = ref(navigator.onLine)
 
   async function load() {
     isLoading.value = true
     error.value = null
     try {
-      books.value = await hebrewBooksService.getHistory()
-      hebrewBooksService.loadCatalog() // background
+      const [history, loadedCatalog] = await Promise.all([
+        hebrewBooksHistory.getHistory(),
+        loadHbCatalog(),
+      ])
+      catalog.value = loadedCatalog
+      books.value = history
     } catch {
       error.value = 'שגיאה בטעינת הספרים'
     } finally {
@@ -29,23 +36,18 @@ export function useHebrewBooks() {
   function search(term: string) {
     searchTerm.value = term
     if (!term.trim()) {
-      hebrewBooksService.getHistory().then((h) => {
+      hebrewBooksHistory.getHistory().then((h) => {
         books.value = h
       })
     } else {
-      books.value = hebrewBooksService.search(term)
+      books.value = searchHbCatalog(catalog.value, term)
     }
   }
 
   async function trackAccess(book: HebrewBook) {
-    await hebrewBooksService.trackAccess(book)
+    await hebrewBooksHistory.trackAccess(book)
   }
 
-  /**
-   * Open a book in the PDF viewer.
-   * In hosted mode: triggers the hebrewbooks.org download URL in the WebView2 engine.
-   * In browser mode: opens a file picker so the user can select a locally-downloaded PDF.
-   */
   function openBook(book: HebrewBook) {
     if (!isHosted) {
       const input = Object.assign(document.createElement('input'), { type: 'file', accept: '.pdf' })
@@ -64,27 +66,22 @@ export function useHebrewBooks() {
       return
     }
     trackAccess(book)
-    // Navigate to pdf-view placeholder immediately
     const tabId = useTabStore().activeTabId
     pdfStore.startHbDownload(book.title, tabId)
     window.__webviewAction?.('triggerHbDownload', {
       bookId: book.id,
       bookTitle: book.title,
-      url: hebrewBooksService.getPdfUrl(book.id),
+      url: getHbPdfUrl(book.id),
       tabId,
     })
   }
 
-  /**
-   * Download a book to a user-chosen location (Save As).
-   * Triggers the download URL — C# intercepts and shows a Save As dialog.
-   */
   function downloadBook(book: HebrewBook) {
     if (!isHosted) return
     window.__webviewAction?.('triggerHbSaveAs', {
       bookId: book.id,
       bookTitle: book.title,
-      url: hebrewBooksService.getPdfUrl(book.id),
+      url: getHbPdfUrl(book.id),
     })
   }
 

@@ -1,5 +1,6 @@
 using Kezayit.Bridge;
 using Kezayit.Settings;
+using Microsoft.VisualBasic;
 using Microsoft.Web.WebView2.WinForms;
 using System;
 using System.IO;
@@ -40,6 +41,12 @@ namespace Kezayit.Db
                 _bridge.Reply(id, new { rows });
             }
             catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
+        }
+
+        public void HandleResetSettings(string id)
+        {
+            try { Interaction.DeleteSetting("ZayitApp", "Database"); } catch { }
+            _bridge.Reply(id, new { });
         }
 
         public void HandleSetDbPath(JsonElement root, string id)

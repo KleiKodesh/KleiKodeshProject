@@ -122,6 +122,7 @@ namespace Kezayit
                         case "sql": await _db.HandleSql(root, id); break;
                         case "setDbPath": _db.HandleSetDbPath(root, id); break;
                         case "pickDbPath": _db.HandlePickDbPath(id, this); break;
+                        case "resetSettings": _db.HandleResetSettings(id); break;
                         case "pickFile": _pdf.HandlePickFile(id, this); break;
                         case "restoreLocalPdf": await _pdf.HandleRestoreLocalPdf(root, id); break;
                         case "disposePdfHost": _pdf.HandleDisposePdfHost(root, id); break;

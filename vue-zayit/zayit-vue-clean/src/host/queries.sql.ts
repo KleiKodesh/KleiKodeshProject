@@ -120,7 +120,15 @@ export const SQL = {
 
   // ── Lines ────────────────────────────────────────────────────────────────────
 
-  /** A page of lines (for virtual scrolling) */
+  /** All lines for a book */
+  GET_ALL_LINES: `
+    SELECT id, lineIndex, content
+    FROM line
+    WHERE bookId = ?
+    ORDER BY lineIndex
+  `,
+
+  /** A page of lines for streaming load */
   GET_LINES_PAGED: `
     SELECT id, lineIndex, content
     FROM line

@@ -111,7 +111,24 @@ export const useTabStore = defineStore('tabs', () => {
     })
   }
 
-  watch([tabs, activeTabId], persistTabs, { deep: true })
+  // Only watch the fields that are actually persisted — avoids IDB writes on every
+  // in-memory-only mutation (pdfVirtualUrl, pdfConverting, tocPath, etc.)
+  const _persistedSnapshot = computed(() =>
+    tabs.value
+      .filter((t) => !SINGLETON_ROUTES.includes(t.route))
+      .map((t) => ({
+        id: t.id,
+        title: t.title,
+        route: t.route,
+        pdfFileName: t.pdfFileName,
+        pdfFilePath: t.pdfFilePath,
+        pdfHbBookId: t.pdfHbBookId,
+        pdfHbBookTitle: t.pdfHbBookTitle,
+        bookId: t.bookId,
+        searchQuery: t.searchQuery,
+      })),
+  )
+  watch([_persistedSnapshot, activeTabId], persistTabs)
 
   const activeTab = computed(
     (): Tab => tabs.value.find((t) => t.id === activeTabId.value) ?? tabs.value[0]!,
@@ -227,9 +244,13 @@ export const useTabStore = defineStore('tabs', () => {
   function navigateToSingleton(route: TabRoute) {
     const existing = tabs.value.find((t) => t.route === route)
     if (existing) {
+      // Already open in another tab — switch to it and close the current one
+      const currentId = activeTabId.value
       switchTab(existing.id)
+      if (currentId !== existing.id) closeTab(currentId)
     } else {
-      openTab({ route, title: SINGLETON_TITLES[route] ?? route })
+      // Not open anywhere — navigate in place (replace current tab's content)
+      updateActiveTab({ route, title: SINGLETON_TITLES[route] ?? route })
     }
   }
 

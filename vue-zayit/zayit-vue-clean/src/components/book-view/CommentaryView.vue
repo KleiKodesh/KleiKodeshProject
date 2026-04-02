@@ -38,6 +38,9 @@ const emit = defineEmits<{
 const settingsStore = useSettingsStore()
 const { zoom } = storeToRefs(useBookViewStore())
 const diacriticsState = computed(() => settingsStore.diacriticsState)
+const commentaryFontPx = computed(
+  () => (zoom.value / 100) * (settingsStore.commentaryFontSize / 100) * 15,
+)
 
 function highlightMatches(
   content: string,
@@ -297,17 +300,21 @@ function scrollToFlatIndex(flatIndex: number) {
 function captureScrollPos(): { scrollIndex: number; scrollOffset: number } | null {
   const first = virtualizer.value.getVirtualItems()[0]
   if (!first || !scrollerEl.value) return null
-  return { scrollIndex: first.index, scrollOffset: scrollerEl.value.scrollTop - first.start }
+  return {
+    scrollIndex: first.index,
+    scrollOffset: Math.max(0, scrollerEl.value.scrollTop - first.start),
+  }
 }
 
-async function restoreCommentaryScrollPos(scrollIndex: number, scrollOffset: number) {
+function restoreCommentaryScrollPos(scrollIndex: number, scrollOffset: number) {
+  // Same two-rAF pattern as BookViewLinesContent:
+  // scrollToIndex triggers TanStack's internal correction — wait one rAF for it to settle,
+  // then set scrollTop directly using the real measured item.start.
   virtualizer.value.scrollToIndex(scrollIndex, { align: 'start' })
-  await nextTick()
-  await new Promise((r) => setTimeout(r, 500))
-  const item = virtualizer.value.getVirtualItems().find((v) => v.index === scrollIndex)
-  if (scrollerEl.value)
-    scrollerEl.value.scrollTop = (item?.start ?? scrollerEl.value.scrollTop) + scrollOffset
-  await new Promise((r) => setTimeout(r, 600))
+  requestAnimationFrame(() => {
+    const item = virtualizer.value.measurementsCache.find((m) => m.index === scrollIndex)
+    if (item && scrollerEl.value) scrollerEl.value.scrollTop = item.start + scrollOffset
+  })
 }
 
 defineExpose({
@@ -362,7 +369,7 @@ defineExpose({
           class="scroller"
           tabindex="0"
           data-ctrlf-enabled
-          :style="{ fontSize: `${(zoom / 100) * 15}px` }"
+          :style="{ fontSize: `${commentaryFontPx}px` }"
           @scroll="onScroll"
           @contextmenu="contextMenuRef?.show($event)"
         >

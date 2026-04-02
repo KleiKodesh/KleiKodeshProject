@@ -4,13 +4,13 @@
 
 This app is strictly RTL. Every spatial decision must be understood in physical screen terms:
 
-| Concept | Physical screen position |
-|---|---|
-| inline-start | RIGHT side of screen |
-| inline-end | LEFT side of screen |
-| Reading direction | Right → Left |
-| First item in a row | Appears on the RIGHT |
-| Tree/list indentation | Shifts toward the LEFT |
+| Concept               | Physical screen position |
+| --------------------- | ------------------------ |
+| inline-start          | RIGHT side of screen     |
+| inline-end            | LEFT side of screen      |
+| Reading direction     | Right → Left             |
+| First item in a row   | Appears on the RIGHT     |
+| Tree/list indentation | Shifts toward the LEFT   |
 
 ### Rules for positioning and direction
 
@@ -49,11 +49,94 @@ This app is strictly RTL. Every spatial decision must be understood in physical 
 - `openTab` is reserved for explicitly creating a second tab (e.g. a "new tab" button)
 - Mirrors iOS navigation: forward replaces the view, back via tab history (not yet implemented)
 
+### Tab interface (`Tab`)
+
+Each tab carries both routing and in-memory state:
+
+```ts
+interface Tab {
+  id: string
+  title: string
+  route: TabRoute // '/' | '/book-view' | '/search' | '/pdf-view' | '/settings' | '/books' | '/hebrewbooks' | '/workspaces'
+
+  // Book reader
+  bookId?: number
+  tocPath?: string // current TOC breadcrumb — updated on scroll, cleared on unmount
+  openToc?: boolean // in-memory only — not persisted
+  openTocEntryId?: number // consumed on mount, cleared immediately after
+  openTocLineIndex?: number // consumed on mount, cleared immediately after
+  searchHighlightLineIndex?: number // consumed on mount, cleared immediately after
+  searchHighlightQuery?: string // consumed on mount, cleared immediately after
+  searchQuery?: string
+
+  // PDF viewer
+  pdfVirtualUrl?: string // in-memory only — reconstructed on restore
+  pdfFileName?: string
+  pdfFilePath?: string // persisted — local file path
+  pdfHbBookId?: string // persisted — HebrewBooks book ID
+  pdfHbBookTitle?: string // persisted — HebrewBooks book title (used as cache filename)
+  pdfConverting?: boolean // in-memory only
+  pdfLoadingType?: 'converting' | 'downloading' // in-memory only
+}
+```
+
+Fields marked "in-memory only" are stripped before writing to IDB. Fields marked "consumed on mount" are read once by the page component then immediately cleared via `updateActiveTab({ field: undefined })` so they don't re-trigger on re-render.
+
+### Tab store API
+
+```ts
+tabStore.updateActiveTab(patch) // navigate in-place — primary navigation method
+tabStore.openTab(partial) // create a new tab and switch to it
+tabStore.switchTab(id) // switch to an existing tab by id
+tabStore.closeTab(id) // close a tab; cleans up its IDB keys
+tabStore.closeAllTabs() // close all tabs; resets to a single home tab
+tabStore.openNewHomeTab() // switch to existing '/' tab or open one
+tabStore.navigateToSingleton(route) // singleton-safe navigation (see below)
+```
+
+### Component keying — when pages remount
+
+`AppPageView` renders the active tab's page component. The `:key` behaviour controls when a page fully remounts vs reuses its instance:
+
+- `/book-view` and `/search` — keyed by `activeTabId`: remount whenever the active tab changes, so each tab gets its own isolated component instance with its own state
+- All other routes — no key: the component instance is reused across tab switches (singleton pages like `/settings`, `/books` share one instance)
+
+This means `/book-view` and `/search` components can safely read `tabStore.activeTabId` and `tabStore.activeTab` at setup time — those values are stable for the lifetime of that instance.
+
 ### Singleton pages
 
-The routes `/settings`, `/books`, and `/hebrewbooks` are **singleton tabs** — only one tab of each may exist at a time. Always navigate to them via `tabStore.navigateToSingleton(route)`, never `updateActiveTab` or `openTab` directly. If a tab with that route already exists, it switches to it; otherwise the current tab is replaced.
+The routes `/settings`, `/books`, `/hebrewbooks`, and `/workspaces` are **singleton tabs** — only one tab of each may exist at a time. Always navigate to them via `tabStore.navigateToSingleton(route)`, never `updateActiveTab` or `openTab` directly.
+
+`navigateToSingleton` behaviour:
+
+- If a tab with that route already exists in another tab → switch to it and close the current tab
+- If not open anywhere → replace the current tab's content in-place (`updateActiveTab`)
 
 These routes are also **never persisted** across sessions — `persistTabs` strips them before writing to IDB, so they will not be restored on next launch.
+
+### Tab persistence
+
+`watch([tabs, activeTabId], persistTabs, { deep: true })` — the tab list is written to IDB on every change.
+
+What is stripped before persisting:
+
+- All singleton-route tabs (`/settings`, `/books`, `/hebrewbooks`, `/workspaces`)
+- `pdfVirtualUrl`, `pdfConverting`, `pdfLoadingType` (in-memory only)
+- `openToc`, `openTocEntryId`, `openTocLineIndex`, `searchHighlightLineIndex`, `searchHighlightQuery` (consumed on mount)
+
+If the active tab was a singleton (and thus stripped), `persistedActiveTabId` falls back to the first remaining tab.
+
+### Scroll position save/restore for `/book-view`
+
+Scroll state is saved to IDB (`BookState`) at three points:
+
+1. `visibilitychange` → hidden (app backgrounded / WebView loses focus)
+2. `beforeunload`
+3. `onBeforeUnmount` — covers in-app tab switching where visibility never changes
+
+On mount, `BookViewPage` reads `BookState` (tab+book scoped) and falls back to `LastReadState` (book-scoped global). Scroll is not restored if the tab was opened via TOC navigation (`openTocLineIndex` takes priority).
+
+The emitted scroll index for TOC tracking uses the first _visible_ line (bottom edge past `scrollTop`), not the first _rendered_ item — overscan items above the fold are excluded.
 
 ## Design Language
 
@@ -72,21 +155,25 @@ Neither system dominates — VSCode sets the colors and layout, Fluent sets the 
 - Font: `Segoe UI Variable` → `Segoe UI` → `system-ui` — the native Windows 11 typeface
 
 ### Buttons & Motion
+
 - Global button `border-radius: 4px` — Fluent feel, defined in `main.css`, applies everywhere
 - Global active shrink: `button:active { transform: scale(0.92) }` defined in `main.css`
 - Global button defaults (hover bg, text color, active shrink) live in `main.css` — do not repeat `background`, `border`, `cursor`, `transition`, `color`, `:hover`, or `:active` in component styles; only add layout props (`width`, `height`, `padding`, `display`) and `.active` color locally
 - Motion: scale transitions on tiles 150ms; background/color transitions 100–150ms
 
 ### Home Tiles
+
 - Container: solid `var(--bg-secondary)`, `border-radius: 12px`, filled icon with explicit color, label below 11px
 - Tile colors: ספרים `#C1440E`, חיפוש `#3478f6`, פתח קובץ `#f0a500`, הגדרות uses `IconSettings24` from `vue-fluent-color`
 - Hover: `transform: scale(1.08)` on icon container, active `scale(0.95)` — no background color change on tile
 
 ### List Rows (FS Browser)
+
 - No icon container — plain filled icon inline, always colored (folders `#f0a500`, books `#C1440E`)
 - No color change on hover — background highlight only on hover/active
 
 ### Flat List & Tree Design
+
 - All flat lists and treeviews use flat design — no rounded corners on rows, no card treatment
 - Hover/active state: full-width background tint only — `color-mix(in srgb, var(--text-primary) 6%, transparent)` hover, `10%` active
 - Row height 32px for dense trees, 44px for touch-primary lists
@@ -94,6 +181,7 @@ Neither system dominates — VSCode sets the colors and layout, Fluent sets the 
 - No `border-radius` on individual rows — the list container may have rounded corners if needed
 
 ### Search Inputs
+
 - All search input containers use `border-radius: 999px` — Windows 11 pill style, no exceptions
 - Container background: `var(--input-bg)` with `border: 1px solid var(--border-color)`
 - Icon inline inside the container, no outer wrapper border
@@ -105,23 +193,24 @@ Neither system dominates — VSCode sets the colors and layout, Fluent sets the 
 
 These components live inside the split-pane bottom panel and TOC side panel, where vertical space is at a premium. They intentionally use tighter sizing than the rest of the app:
 
-| Element | Size | Notes |
-|---|---|---|
-| `CommentaryHeader` row height | 32px | vs 40px title bar |
-| `CommentaryHeader` buttons | 24×24px, 14px icons | vs 32×32px elsewhere |
-| `CommentaryHeader` title font | 13px | vs 14px standard |
-| `CommentaryHeaderNav` row height | 32px | matches header |
-| `CommentaryHeaderNav` buttons | 24×24px, 14px icons | same as header |
-| `CommentaryHeaderNav` search input | 20px tall, 11px font | compact pill |
-| TOC search input | 12px font, `padding: 4px 8px` | bottom of TOC panel |
-| `CommentaryTreeViewNode` book row | `height: 28px` fixed | compact secondary nav |
-| `CommentaryTreeViewNode` section header | `height: 28px` fixed | same height as book rows |
-| `CommentaryTreeViewNode` expander button | `width: 24px`, `height: 100%` | no bg, no border, no active effect |
-| `CommentaryTreeViewNode` label | `white-space: nowrap`, ellipsis | never wrap — wrapping breaks fixed row height |
+| Element                                  | Size                            | Notes                                         |
+| ---------------------------------------- | ------------------------------- | --------------------------------------------- |
+| `CommentaryHeader` row height            | 32px                            | vs 40px title bar                             |
+| `CommentaryHeader` buttons               | 24×24px, 14px icons             | vs 32×32px elsewhere                          |
+| `CommentaryHeader` title font            | 13px                            | vs 14px standard                              |
+| `CommentaryHeaderNav` row height         | 32px                            | matches header                                |
+| `CommentaryHeaderNav` buttons            | 24×24px, 14px icons             | same as header                                |
+| `CommentaryHeaderNav` search input       | 20px tall, 11px font            | compact pill                                  |
+| TOC search input                         | 12px font, `padding: 4px 8px`   | bottom of TOC panel                           |
+| `CommentaryTreeViewNode` book row        | `height: 28px` fixed            | compact secondary nav                         |
+| `CommentaryTreeViewNode` section header  | `height: 28px` fixed            | same height as book rows                      |
+| `CommentaryTreeViewNode` expander button | `width: 24px`, `height: 100%`   | no bg, no border, no active effect            |
+| `CommentaryTreeViewNode` label           | `white-space: nowrap`, ellipsis | never wrap — wrapping breaks fixed row height |
 
 Both `CommentaryHeader` and `CommentaryHeaderNav` use `background: var(--bg-primary)` — same as the commentary view content — so they blend in rather than standing out as a distinct toolbar.
 
 ### Misc UI
+
 - Use `color-mix()` tinted backgrounds instead of solid fills for icon containers in list contexts
 - Rounded corners: `4px` small controls, `8px` cards, `999px` search/input pills, `12px` tile icon containers
 - Secondary toolbars use `var(--bg-toolbar)` — between `--bg-primary` and `--bg-secondary`
@@ -147,6 +236,7 @@ const books = await query<Book>(SQL.GET_ALL_BOOKS)
 ```
 
 ### Transports (auto-selected at runtime)
+
 1. C# WebView host — when `window.__webviewQuery` is injected by the host before app boots
 2. HTTP dev server — fallback for browser dev
 
@@ -155,15 +245,17 @@ Dev server: `npm run dev:server` — `DB_PATH` sets the `.db` file (default `./d
 ### Schema Reference
 
 #### category
-| column | type | notes |
-|---|---|---|
-| id | INTEGER | PK |
-| parentId | INTEGER | nullable, self-ref |
-| title | TEXT | not null |
-| level | INTEGER | not null, default 0 |
+
+| column     | type    | notes                 |
+| ---------- | ------- | --------------------- |
+| id         | INTEGER | PK                    |
+| parentId   | INTEGER | nullable, self-ref    |
+| title      | TEXT    | not null              |
+| level      | INTEGER | not null, default 0   |
 | orderIndex | INTEGER | not null, default 999 |
 
 #### category_closure
+
 Closure table for category hierarchy.
 | column | type | notes |
 |---|---|---|
@@ -171,121 +263,137 @@ Closure table for category hierarchy.
 | descendantId | INTEGER | PK (composite) |
 
 #### author / topic / pub_place / pub_date / source
+
 Simple lookup tables: `id` PK, `name` TEXT not null.
 
 #### book
-| column | type | notes |
-|---|---|---|
-| id | INTEGER | PK |
-| categoryId | INTEGER | FK → category |
-| sourceId | INTEGER | FK → source |
-| title | TEXT | not null |
-| heShortDesc | TEXT | nullable |
-| notesContent | TEXT | nullable |
-| orderIndex | INTEGER | default 999 |
-| totalLines | INTEGER | default 0 |
-| isBaseBook | INTEGER | 0/1 bool |
-| hasTargumConnection | INTEGER | 0/1 bool |
-| hasReferenceConnection | INTEGER | 0/1 bool |
-| hasSourceConnection | INTEGER | 0/1 bool |
-| hasCommentaryConnection | INTEGER | 0/1 bool |
-| hasOtherConnection | INTEGER | 0/1 bool |
-| hasAltStructures | INTEGER | 0/1 bool |
-| hasTeamim | INTEGER | 0/1 bool |
-| hasNekudot | INTEGER | 0/1 bool |
-| externalLibraryId | INTEGER | nullable |
+
+| column                  | type    | notes         |
+| ----------------------- | ------- | ------------- |
+| id                      | INTEGER | PK            |
+| categoryId              | INTEGER | FK → category |
+| sourceId                | INTEGER | FK → source   |
+| title                   | TEXT    | not null      |
+| heShortDesc             | TEXT    | nullable      |
+| notesContent            | TEXT    | nullable      |
+| orderIndex              | INTEGER | default 999   |
+| totalLines              | INTEGER | default 0     |
+| isBaseBook              | INTEGER | 0/1 bool      |
+| hasTargumConnection     | INTEGER | 0/1 bool      |
+| hasReferenceConnection  | INTEGER | 0/1 bool      |
+| hasSourceConnection     | INTEGER | 0/1 bool      |
+| hasCommentaryConnection | INTEGER | 0/1 bool      |
+| hasOtherConnection      | INTEGER | 0/1 bool      |
+| hasAltStructures        | INTEGER | 0/1 bool      |
+| hasTeamim               | INTEGER | 0/1 bool      |
+| hasNekudot              | INTEGER | 0/1 bool      |
+| externalLibraryId       | INTEGER | nullable      |
 
 #### book_pub_place / book_pub_date / book_topic / book_author
+
 Junction tables: `bookId` + respective FK, composite PK.
 
 #### line
-| column | type | notes |
-|---|---|---|
-| id | INTEGER | PK |
-| bookId | INTEGER | FK → book |
-| lineIndex | INTEGER | not null |
-| content | TEXT | not null |
+
+| column    | type    | notes     |
+| --------- | ------- | --------- |
+| id        | INTEGER | PK        |
+| bookId    | INTEGER | FK → book |
+| lineIndex | INTEGER | not null  |
+| content   | TEXT    | not null  |
 
 #### tocText
+
 `id` PK, `text` TEXT not null.
 
 #### tocEntry
-| column | type | notes |
-|---|---|---|
-| id | INTEGER | PK |
-| bookId | INTEGER | FK → book |
-| parentId | INTEGER | nullable, self-ref |
-| textId | INTEGER | FK → tocText |
-| level | INTEGER | not null |
-| lineId | INTEGER | nullable, FK → line |
-| isLastChild | INTEGER | 0/1 bool |
-| hasChildren | INTEGER | 0/1 bool |
+
+| column      | type    | notes               |
+| ----------- | ------- | ------------------- |
+| id          | INTEGER | PK                  |
+| bookId      | INTEGER | FK → book           |
+| parentId    | INTEGER | nullable, self-ref  |
+| textId      | INTEGER | FK → tocText        |
+| level       | INTEGER | not null            |
+| lineId      | INTEGER | nullable, FK → line |
+| isLastChild | INTEGER | 0/1 bool            |
+| hasChildren | INTEGER | 0/1 bool            |
 
 #### connection_type
+
 `id` PK, `name` TEXT not null.
 
 #### link
-| column | type | notes |
-|---|---|---|
-| id | INTEGER | PK |
-| sourceBookId | INTEGER | FK → book |
-| targetBookId | INTEGER | FK → book |
-| sourceLineId | INTEGER | FK → line |
-| targetLineId | INTEGER | FK → line |
+
+| column           | type    | notes                |
+| ---------------- | ------- | -------------------- |
+| id               | INTEGER | PK                   |
+| sourceBookId     | INTEGER | FK → book            |
+| targetBookId     | INTEGER | FK → book            |
+| sourceLineId     | INTEGER | FK → line            |
+| targetLineId     | INTEGER | FK → line            |
 | connectionTypeId | INTEGER | FK → connection_type |
 
 #### book_has_links
-| column | type | notes |
-|---|---|---|
-| bookId | INTEGER | PK |
+
+| column         | type    | notes    |
+| -------------- | ------- | -------- |
+| bookId         | INTEGER | PK       |
 | hasSourceLinks | INTEGER | 0/1 bool |
 | hasTargetLinks | INTEGER | 0/1 bool |
 
 #### line_toc
+
 `lineId` PK, `tocEntryId` FK → tocEntry.
 
 #### alt_toc_structure
-| column | type | notes |
-|---|---|---|
-| id | INTEGER | PK |
-| bookId | INTEGER | FK → book |
-| key | TEXT | not null |
-| title | TEXT | nullable |
-| heTitle | TEXT | nullable |
+
+| column  | type    | notes     |
+| ------- | ------- | --------- |
+| id      | INTEGER | PK        |
+| bookId  | INTEGER | FK → book |
+| key     | TEXT    | not null  |
+| title   | TEXT    | nullable  |
+| heTitle | TEXT    | nullable  |
 
 #### alt_toc_entry
-| column | type | notes |
-|---|---|---|
-| id | INTEGER | PK |
+
+| column      | type    | notes                  |
+| ----------- | ------- | ---------------------- |
+| id          | INTEGER | PK                     |
 | structureId | INTEGER | FK → alt_toc_structure |
-| parentId | INTEGER | nullable, self-ref |
-| textId | INTEGER | FK → tocText |
-| level | INTEGER | not null |
-| lineId | INTEGER | nullable, FK → line |
-| isLastChild | INTEGER | 0/1 bool |
-| hasChildren | INTEGER | 0/1 bool |
+| parentId    | INTEGER | nullable, self-ref     |
+| textId      | INTEGER | FK → tocText           |
+| level       | INTEGER | not null               |
+| lineId      | INTEGER | nullable, FK → line    |
+| isLastChild | INTEGER | 0/1 bool               |
+| hasChildren | INTEGER | 0/1 bool               |
 
 #### line_alt_toc
+
 `lineId` + `structureId` composite PK, `altTocEntryId` FK → alt_toc_entry.
 
 #### book_acronym
+
 `bookId` + `term` composite PK.
 
 #### default_commentator / default_targum
+
 `bookId` + `commentatorBookId`/`targumBookId` composite PK, `position` INTEGER not null.
 
 #### bloom_metadata
+
 `id` PK, `chunk_size` INTEGER not null.
 
 ## Persistence
 
 Persistence uses three separate IndexedDB databases — one per concern. No localStorage is used anywhere. No migration code exists.
 
-| Database | Contents |
-|---|---|
+| Database       | Contents                                                    |
+| -------------- | ----------------------------------------------------------- |
 | `app-settings` | All scalar settings (one key per setting, no prefix needed) |
-| `app-tabs` | Tabs list, tab states, book states (workspace-scoped keys) |
-| `app-lastread` | Per-book last-read positions (LRU-capped at 1000) |
+| `app-tabs`     | Tabs list, tab states, book states (workspace-scoped keys)  |
+| `app-lastread` | Per-book last-read positions (LRU-capped at 1000)           |
 
 **All IDB access must go through `src/utils/idbPersistence.ts` exclusively — no component, composable, or store may call any IDB API directly. This is a hard rule with no exceptions.**
 
@@ -320,6 +428,7 @@ Always use `tabStore.setLastReadPos()` — it calls `idbSetLastRead()` which enf
 `tabStore.resetAll()` calls `idbClearAll()` which deletes all three databases, then the caller does `window.location.reload()`. The "איפוס האפליקציה" tab in `SettingsPage.vue` triggers this.
 
 ### Adding new persisted state
+
 - Global scalar setting → add key to `KEYS` in `idbPersistence.ts`, expose via the owning store
 - Per-tab UI state → add field to `TabState` in `idbPersistence.ts`, expose via `tabStore.getTabViewState/setTabViewState`
 - Per-tab+book state → add field to `BookState` in `idbPersistence.ts`, expose via `tabStore.getBookViewState/setBookViewState`
@@ -340,7 +449,8 @@ import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 
 useVirtualScrollerKeys(
   scrollerEl,
-  () => virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
+  () =>
+    virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
   () => items.value.length,
 )
 ```
@@ -367,12 +477,14 @@ useVirtualScrollerKeys(
 - No nullable reference types, no records, no default interface members
 
 ### Build pipeline
+
 - Vue builds as a **single-file bundle** via `vite-plugin-singlefile` — all JS/CSS is inlined into one `index.html`, no separate `assets/` folder
 - `ZayitVue.targets` is imported by the `.csproj` and runs `npm run build` after every C# build, then copies `dist/` to `bin/{Config}/kezayit/` via robocopy
 - After any Vue code change, **rebuild the C# project** to get the fresh bundle into `kezayit/` — the WebView serves from that folder
 - If the category tree or any data appears stuck loading in C# mode but works in dev, it is almost always a stale `kezayit/index.html` — rebuild C# first before debugging further
 
 ### File picker / dialog rules
+
 - `WebMessageReceived` fires on the UI thread — calling `Invoke` from inside it deadlocks (the UI thread is already busy)
 - Always use `BeginInvoke` to show any dialog from a message handler — it queues the dialog to run after the handler returns
 - The reply callback fires from inside the `BeginInvoke` delegate, after the user closes the dialog — this is fine, the JS Promise just waits

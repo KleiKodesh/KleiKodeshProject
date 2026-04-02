@@ -10,15 +10,14 @@ import {
   IconArrowDownload24Filled,
 } from '@iconify-prerendered/vue-fluent'
 import { IconSettings24, IconSearchSparkle24 } from '@iconify-prerendered/vue-fluent-color'
-import { usePdfStore } from '@/stores/pdfStore'
 import { useTabStore } from '@/stores/tabStore'
 import { useGridLayout } from '@/composables/useGridLayout'
 import { isHosted, dbReady } from '@/host/db'
-import { pickFile } from '@/host/bridge'
 import { useEventListener } from '@vueuse/core'
+import { useAppNavigation } from '@/composables/useAppNavigation'
 
-const pdfStore = usePdfStore()
 const tabStore = useTabStore()
+const { navigate } = useAppNavigation()
 
 const baseTiles = [
   { label: 'ספרים', icon: IconLibrary24Filled, color: '#B5451B' },
@@ -39,13 +38,6 @@ const noDbTiles = [
 ]
 
 const tiles = computed(() => (isHosted && !dbReady.value ? noDbTiles : baseTiles))
-
-const SINGLETON_ROUTES: Record<string, string> = {
-  ספרים: '/books',
-  הגדרות: '/settings',
-  'היברו-בוקס': '/hebrewbooks',
-  'סביבות עבודה': '/workspaces',
-}
 
 const pageRef = ref<HTMLElement | null>(null)
 const gridRef = ref<HTMLElement | null>(null)
@@ -90,20 +82,7 @@ useEventListener(pageRef, 'focusout', (e: FocusEvent) => {
 onMounted(() => pageRef.value?.focus())
 
 async function onTap(label: string) {
-  const route = SINGLETON_ROUTES[label]
-  if (route) {
-    tabStore.navigateToSingleton(route as any)
-  } else if (label === 'פתח קובץ') {
-    const tabId = tabStore.activeTabId
-    const result = await pickFile()
-    if (result) pdfStore.finishLocalFileConversion(tabId, result)
-  } else if (label === 'התקן זית') {
-    window.open('https://zayitapp.com/#/download', '_blank')
-  } else if (label === 'בחר מסד נתונים') {
-    window.__webviewPickDbPath?.()
-  } else if (label === 'חיפוש') {
-    tabStore.updateActiveTab({ title: 'חיפוש', route: '/search' })
-  }
+  await navigate(label)
 }
 </script>
 

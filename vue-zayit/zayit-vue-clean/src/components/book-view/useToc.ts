@@ -37,6 +37,23 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
   const altTocSections = ref<AltTocSection[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
+  // Pre-built map from entry id → full path string, rebuilt whenever tocEntries changes.
+  const tocPathMap = ref<Map<number, string>>(new Map())
+
+  function buildPathMap(entries: TocEntry[]): Map<number, string> {
+    const byId = new Map(entries.map((e) => [e.id, e]))
+    const cache = new Map<number, string>()
+    function pathFor(entry: TocEntry): string {
+      const cached = cache.get(entry.id)
+      if (cached !== undefined) return cached
+      const parent = entry.parentId != null ? byId.get(entry.parentId) : undefined
+      const path = parent ? `${pathFor(parent)} / ${entry.text}` : entry.text
+      cache.set(entry.id, path)
+      return path
+    }
+    for (const e of entries) pathFor(e)
+    return cache
+  }
 
   async function load(id: number) {
     loading.value = true
@@ -46,7 +63,9 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
         query<TocEntry>(SQL.GET_ALL_TOC_ENTRIES, [id]),
         query<AltTocStructure>(SQL.GET_ALT_TOC_STRUCTURES, [id]),
       ])
-      tocEntries.value = stripBookTitleRoot(entries, bookTitle?.())
+      const stripped = stripBookTitleRoot(entries, bookTitle?.())
+      tocEntries.value = stripped
+      tocPathMap.value = buildPathMap(stripped)
       altTocSections.value = await Promise.all(
         structures.map(async (s) => ({
           structure: s,
@@ -79,15 +98,8 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
   }
 
   function getTocPath(entry: TocEntry): string {
-    const map = new Map(tocEntries.value.map((e) => [e.id, e]))
-    const parts: string[] = []
-    let cur: TocEntry | undefined = entry
-    while (cur) {
-      parts.unshift(cur.text)
-      cur = cur.parentId != null ? map.get(cur.parentId) : undefined
-    }
-    return parts.join(' / ')
+    return tocPathMap.value.get(entry.id) ?? entry.text
   }
 
-  return { tocEntries, altTocSections, loading, error, getActiveTocEntry, getTocPath }
+  return { tocEntries, altTocSections, loading, error, tocPathMap, getActiveTocEntry, getTocPath }
 }

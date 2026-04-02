@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, watch } from 'vue'
 import { onClickOutside } from '@vueuse/core'
-import { useToc, type TocEntry } from './useToc'
+import type { TocEntry, AltTocSection } from './useToc'
 import BookViewTocTreeSection from './BookViewTocTreeSection.vue'
 import SplitPane from '@/components/common/SplitPane.vue'
 
@@ -10,6 +10,10 @@ const props = defineProps<{
   bookTitle?: string
   activeTocEntryId?: number
   visible?: boolean
+  tocEntries: TocEntry[]
+  altTocSections: AltTocSection[]
+  loading: boolean
+  error: string | null
 }>()
 const emit = defineEmits<{ close: []; select: [TocEntry]; altSelect: [TocEntry] }>()
 
@@ -19,18 +23,16 @@ const tocSectionRef = ref<InstanceType<typeof BookViewTocTreeSection> | null>(nu
 const searchQuery = ref('')
 const justSelected = ref(false)
 
-const { tocEntries, altTocSections, loading, error } = useToc(
-  () => props.bookId,
-  () => props.bookTitle,
+watch(
+  () => props.loading,
+  (val) => {
+    if (!val) nextTick(() => searchRef.value?.focus())
+  },
 )
-
-watch(loading, (val) => {
-  if (!val) nextTick(() => searchRef.value?.focus())
-})
 watch(
   () => props.visible,
   (val) => {
-    if (val && !loading.value) setTimeout(() => searchRef.value?.focus(), 0)
+    if (val && !props.loading) setTimeout(() => searchRef.value?.focus(), 0)
   },
 )
 onClickOutside(panelRef, () => {
@@ -50,8 +52,8 @@ function onSelect(entry: TocEntry) {
   })
 }
 
-const hasToc = computed(() => tocEntries.value.length > 0)
-const hasAlt = computed(() => altTocSections.value.length > 0)
+const hasToc = computed(() => props.tocEntries.length > 0)
+const hasAlt = computed(() => props.altTocSections.length > 0)
 </script>
 
 <template>

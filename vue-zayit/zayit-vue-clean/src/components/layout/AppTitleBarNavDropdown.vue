@@ -8,14 +8,11 @@ import {
   IconApps24Filled,
 } from '@iconify-prerendered/vue-fluent'
 import { IconSettings24, IconSearchSparkle24 } from '@iconify-prerendered/vue-fluent-color'
-import { usePdfStore } from '@/stores/pdfStore'
-import { useTabStore } from '@/stores/tabStore'
-import { pickFile } from '@/host/bridge'
+import { useAppNavigation } from '@/composables/useAppNavigation'
 
 const emit = defineEmits<{ close: [] }>()
 
-const pdfStore = usePdfStore()
-const tabStore = useTabStore()
+const { navigate } = useAppNavigation()
 
 const menuRef = ref<HTMLElement | null>(null)
 onClickOutside(menuRef, () => emit('close'))
@@ -29,24 +26,8 @@ const tiles = [
   { label: 'סביבות עבודה', icon: IconApps24Filled, color: '#6b7fc4' },
 ]
 
-const SINGLETON_ROUTES: Record<string, string> = {
-  ספרים: '/books',
-  הגדרות: '/settings',
-  'היברו-בוקס': '/hebrewbooks',
-  'סביבות עבודה': '/workspaces',
-}
-
 async function onTap(label: string) {
-  const route = SINGLETON_ROUTES[label]
-  if (route) {
-    tabStore.navigateToSingleton(route as any)
-  } else if (label === 'חיפוש') {
-    tabStore.updateActiveTab({ route: '/search', title: 'חיפוש' } as any)
-  } else if (label === 'פתח קובץ') {
-    const tabId = tabStore.activeTabId
-    const result = await pickFile()
-    if (result) pdfStore.finishLocalFileConversion(tabId, result)
-  }
+  await navigate(label)
   emit('close')
 }
 </script>

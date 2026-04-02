@@ -32,11 +32,12 @@ const isPdfTab = computed(
   () => activeTab.value?.route === '/pdf-view' || activeTab.value?.route === '/hebrewbooks',
 )
 
-const barTitle = computed(() =>
-  activeTab.value?.tocPath
+const barTitle = computed(() => {
+  const full = activeTab.value?.tocPath
     ? activeTab.value.title + ' · ' + activeTab.value.tocPath
-    : activeTab.value?.title,
-)
+    : activeTab.value?.title
+  return full ? full + '\n(לחץ להצגת רשימת הלשוניות)' : '(לחץ להצגת רשימת הלשוניות)'
+})
 
 const toolbarTitle = computed(() =>
   bookViewStore.toolbarVisible ? 'הסתר סרגל כלים' : 'הצג סרגל כלים',
@@ -160,6 +161,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
       </button>
     </div>
 
+    <!-- Tab list dropdown — opens on click anywhere on the title bar; all icons use Regular (non-filled) variants -->
     <AppTitleBarTabDropdown
       v-if="dropdownOpen"
       :tabs="tabStore.tabs"
