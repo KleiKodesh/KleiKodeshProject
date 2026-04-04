@@ -10,7 +10,7 @@ import { ref } from 'vue'
 import { isHosted } from '@/host/db'
 import { query } from '@/host/db'
 import { SQL } from '@/host/queries.sql'
-import { cacheGet, cacheSet } from './searchCache'
+import { useSearchCacheStore } from '@/stores/searchCacheStore'
 import type { BloomSearchResult } from './searchTypes'
 
 const DEV_SAMPLES: BloomSearchResult[] = [
@@ -135,6 +135,7 @@ async function enrichTocPaths(batch: BloomSearchResult[]): Promise<void> {
 }
 
 export function useBloomSearch() {
+  const cache = useSearchCacheStore()
   const results = ref<BloomSearchResult[]>([])
   const isSearching = ref(false)
   const hasSearched = ref(false)
@@ -181,7 +182,7 @@ export function useBloomSearch() {
     }
 
     // Cache check
-    const cached = await cacheGet(query.trim().toLowerCase())
+    const cached = await cache.get(query.trim().toLowerCase())
     if (cached) {
       console.log('[useBloomSearch] cache hit for:', query)
       results.value = cached
@@ -212,9 +213,9 @@ export function useBloomSearch() {
           if (currentSearchId === searchId) {
             isSearching.value = false
             if (results.value.length > 0)
-              cacheSet(query.trim().toLowerCase(), JSON.parse(JSON.stringify(results.value))).catch(
-                (err) => console.error('[useBloomSearch] cacheSet failed:', err),
-              )
+              cache
+                .set(query.trim().toLowerCase(), JSON.parse(JSON.stringify(results.value)))
+                .catch((err) => console.error('[useBloomSearch] cacheSet failed:', err))
             _cleanup()
           }
         },
@@ -245,7 +246,7 @@ export function useBloomSearch() {
   }
 
   async function loadCachedResults(query: string): Promise<boolean> {
-    const cached = await cacheGet(query.trim().toLowerCase())
+    const cached = await cache.get(query.trim().toLowerCase())
     if (!cached) return false
     results.value = cached
     executedQuery.value = query

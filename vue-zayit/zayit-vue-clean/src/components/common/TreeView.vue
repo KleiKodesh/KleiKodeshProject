@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
 import TreeNode, { type TreeNodeItem } from './TreeNode.vue'
-import { useListKeys } from '@/composables/useListKeys'
+import { useListKeys } from '@/composables/useListKeyNav'
 
 const props = defineProps<{
   nodes: TreeNodeItem[]

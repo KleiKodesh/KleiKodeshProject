@@ -57,6 +57,10 @@
 - Prefer `Regular` weight by default; use `Filled` for active/selected states
 - Never use the fluent color package for icons that don't have a color variant — fall back to filled + explicit color instead
 
+## Steering Files
+
+- No code samples in steering files — describe rules and patterns in plain prose only
+
 ## Git
 
 - Never use git commands unless explicitly asked by the user

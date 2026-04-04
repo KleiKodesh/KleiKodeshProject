@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick } from 'vue'
-import { useScopedKeys } from '@/composables/useScopedKeys'
-import { useScopedCopy } from '@/composables/useScopedCopy'
+import { useScopedKeys } from '@/composables/useTextSelectionKeys'
+import { useScopedCopy } from '@/composables/useLineCopy'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import CommentaryHeader from './CommentaryHeader.vue'
 import CommentaryHeaderNav from './CommentaryHeaderNav.vue'
@@ -103,7 +103,24 @@ function highlightMatches(
   return out.join('')
 }
 
+// Cache rendered HTML per flat index — avoids re-running applyDiacriticsFilter (DOM TreeWalker)
+// and censorDivineNames (6 regexes) on every render cycle for unchanged commentary lines.
+const renderCache = new Map<number, string>()
+let renderCacheKey = ''
+
+function getRenderCacheKey(): string {
+  return `${diacriticsState.value}|${settingsStore.censorDivineNames}|${props.searchQuery ?? ''}|${props.currentMatchFlatIndex ?? -1}|${props.currentMatchOccurrence ?? 0}`
+}
+
 function renderContent(content: string, flatIndex: number): string {
+  const key = getRenderCacheKey()
+  if (key !== renderCacheKey) {
+    renderCache.clear()
+    renderCacheKey = key
+  }
+  const cached = renderCache.get(flatIndex)
+  if (cached !== undefined) return cached
+
   let result =
     diacriticsState.value === 0 ? content : applyDiacriticsFilter(content, diacriticsState.value)
   if (settingsStore.censorDivineNames) result = censorDivineNames(result)
@@ -114,6 +131,8 @@ function renderContent(content: string, flatIndex: number): string {
       flatIndex === props.currentMatchFlatIndex,
       props.currentMatchOccurrence ?? 0,
     )
+
+  renderCache.set(flatIndex, result)
   return result
 }
 
@@ -134,6 +153,16 @@ const flatItems = computed<FlatItem[]>(() => {
   }
   return items
 })
+
+// Invalidate render cache when groups change (new line content loaded)
+watch(
+  () => props.groups,
+  () => {
+    renderCache.clear()
+    renderCacheKey = ''
+  },
+  { flush: 'sync' },
+)
 
 const scrollerEl = ref<HTMLElement | null>(null)
 const scrollTop = ref(0)

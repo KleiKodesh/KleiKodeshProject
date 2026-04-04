@@ -1,35 +1,19 @@
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
-import { IconFolderOpen20Regular } from '@iconify-prerendered/vue-fluent'
+import { ref } from 'vue'
 import { useSettingsPage } from './useSettingsPage'
+import { useSettingsStore } from '@/stores/settingsStore'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
-import { onDbReady } from '@/host/db'
-import SettingRow from './SettingRow.vue'
-import SliderSetting from './SliderSetting.vue'
-import ToggleGroup from './ToggleGroup.vue'
-import ThemePicker from './ThemePicker.vue'
-import FontDisplaySettings from './FontDisplaySettings.vue'
+import SettingsGeneralPane from './SettingsGeneralPane.vue'
+import SettingsReadingPane from './SettingsReadingPane.vue'
+import { resetting } from '@/utils/resetState'
 
-const {
-  availableFonts,
-  censorDivineNames,
-  headerFont,
-  textFont,
-  fontSize,
-  linePadding,
-  commentaryHeaderFont,
-  commentaryTextFont,
-  commentaryFontSize,
-  commentaryLinePadding,
-  useSeparateCommentarySettings,
-  appZoom,
-  newTabPage,
-  resumeLastRead,
-  resetSettings,
-  resetAll,
-} = useSettingsPage()
+const { resetSettings, resetAll } = useSettingsPage()
+const settings = useSettingsStore()
 
 const activeTab = ref<'general' | 'reading' | 'reset'>('general')
+
+const tabIndexMap = { general: 0, reading: 1, reset: 2 } as const
+const tabCount = 3
 
 type ConfirmAction = { label: string; desc: string; action: () => Promise<void> | void }
 const pendingConfirm = ref<ConfirmAction | null>(null)
@@ -50,57 +34,36 @@ function cancelConfirm() {
 }
 
 function resetSettingsAndReload() {
+  resetting.value = true
   resetSettings()
+  settings.completeSetup()
   window.location.reload()
 }
 function confirmResetAll() {
   confirmAction({
-    label: 'איפוס מלא',
-    desc: 'פעולה זו תמחק את כל נתוני האפליקציה ותטען אותה מחדש. לא ניתן לבטל פעולה זו.',
-    action: resetAll,
+    label: 'איפוס האפליקציה',
+    desc: 'פעולה זו תמחק את כל נתוני האפליקציה ואינדקס החיפוש ותטען אותה מחדש. לא ניתן לבטל פעולה זו.',
+    action: () => {
+      resetting.value = true
+      resetAll()
+    },
   })
 }
-
 function confirmResetSettings() {
   confirmAction({
     label: 'איפוס ההגדרות',
-    desc: 'פעולה זו תאפס את כל ההגדרות לברירות המחדל ותטען את האפליקציה מחדש.',
+    desc: 'פעולה זו תאפס את הגדרות התצוגה והקריאה לברירות המחדל. מסד הנתונים והיסטוריית הקריאה לא יושפעו.',
     action: resetSettingsAndReload,
   })
-}
-const bookDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null>(null)
-const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null>(null)
-
-const isHosted = window.__webviewDbReady !== undefined || import.meta.env.DEV
-const dbPath = ref(window.__webviewDbPath ?? '')
-const editingPath = ref(false)
-const pathInputRef = ref<HTMLInputElement | null>(null)
-
-function pickDbPath() {
-  window.__webviewPickDbPath?.()
-}
-
-function startEditing() {
-  editingPath.value = true
-  nextTick(() => pathInputRef.value?.focus())
-}
-
-async function commitPath() {
-  editingPath.value = false
-  if (!window.__webviewSetDbPath) return
-  try {
-    const result = await window.__webviewSetDbPath(dbPath.value)
-    onDbReady(dbPath.value)
-  } catch (e) {
-    // path was invalid — revert display to last known good value
-    dbPath.value = window.__webviewDbPath ?? ''
-  }
 }
 </script>
 
 <template>
   <div class="settings-page">
-    <div class="tab-bar">
+    <div
+      class="tab-bar"
+      :style="{ '--tab-index': tabIndexMap[activeTab], '--tab-count': tabCount }"
+    >
       <button
         :class="['tab-btn', { active: activeTab === 'general' }]"
         @click="activeTab = 'general'"
@@ -113,132 +76,30 @@ async function commitPath() {
       >
         קריאה
       </button>
-      <button
-        :class="['tab-btn tab-btn-reset', { active: activeTab === 'reset' }]"
-        @click="activeTab = 'reset'"
-      >
-        איפוס האפליקציה
+      <button :class="['tab-btn', { active: activeTab === 'reset' }]" @click="activeTab = 'reset'">
+        איפוס
       </button>
     </div>
 
     <div v-if="activeTab === 'general'" class="pane">
-      <SettingRow label="ערכת נושא">
-        <ThemePicker />
-      </SettingRow>
-
-      <SliderSetting label="זום האפליקציה" v-model="appZoom" :min="0.5" :max="1.5" :step="0.05" />
-
-      <SettingRow label="כיסוי שם ה'">
-        <ToggleGroup
-          v-model="censorDivineNames"
-          :options="[
-            { label: 'כתיב מלא', value: false },
-            { label: 'כיסוי (ה→ק)', value: true },
-          ]"
-        />
-      </SettingRow>
-
-      <SettingRow label="פתח טאב חדש אל:" wrap>
-        <ToggleGroup
-          v-model="newTabPage"
-          :options="[
-            { label: 'דף הבית', value: 'homepage' },
-            { label: 'פתיחת ספר', value: 'openfile' },
-            { label: 'היברו בוקס', value: 'hebrewbooks' },
-            { label: 'חיפוש', value: 'kezayit-search' },
-          ]"
-        />
-      </SettingRow>
-
-      <SettingRow
-        label="זכור מיקום אחרון בספר"
-        title="בפתיחת ספר מחדש, האפליקציה תחזור אוטומטית למקום שבו הפסקת לקרוא"
-      >
-        <ToggleGroup
-          v-model="resumeLastRead"
-          :options="[
-            { label: 'כן', value: true },
-            { label: 'לא', value: false },
-          ]"
-        />
-      </SettingRow>
-
-      <template v-if="isHosted">
-        <div class="db-path-row">
-          <span class="db-path-label">נתיב מסד הנתונים</span>
-          <div class="db-path-field" :class="{ editing: editingPath }">
-            <input
-              v-if="editingPath"
-              ref="pathInputRef"
-              v-model="dbPath"
-              class="db-path-input"
-              dir="ltr"
-              @blur="commitPath"
-              @keydown.enter="commitPath"
-              @keydown.escape="editingPath = false"
-            />
-            <span
-              v-else
-              class="db-path-text"
-              :class="{ placeholder: !dbPath }"
-              @click="startEditing"
-            >
-              {{ dbPath || 'לא נבחר נתיב' }}
-            </span>
-            <button class="folder-btn" @click="pickDbPath" title="בחר קובץ">
-              <IconFolderOpen20Regular />
-            </button>
-          </div>
-        </div>
-      </template>
+      <SettingsGeneralPane />
     </div>
 
     <div v-if="activeTab === 'reading'" class="pane">
-      <div class="section-header">תצוגת ספר</div>
-
-      <FontDisplaySettings
-        ref="bookDisplayRef"
-        :available-fonts="availableFonts"
-        v-model:header-font="headerFont"
-        v-model:text-font="textFont"
-        v-model:font-size="fontSize"
-        v-model:line-padding="linePadding"
-        @close-other="commentaryDisplayRef?.closeDropdowns()"
-      />
-
-      <div class="section-header">תצוגת פירושים</div>
-
-      <SettingRow>
-        <ToggleGroup
-          v-model="useSeparateCommentarySettings"
-          :options="[
-            { label: 'זהה לתצוגת ספר', value: false },
-            { label: 'הגדרות נפרדות', value: true },
-          ]"
-        />
-      </SettingRow>
-
-      <FontDisplaySettings
-        v-if="useSeparateCommentarySettings"
-        ref="commentaryDisplayRef"
-        :available-fonts="availableFonts"
-        v-model:header-font="commentaryHeaderFont"
-        v-model:text-font="commentaryTextFont"
-        v-model:font-size="commentaryFontSize"
-        v-model:line-padding="commentaryLinePadding"
-        @close-other="bookDisplayRef?.closeDropdowns()"
-      />
+      <SettingsReadingPane />
     </div>
 
     <div v-if="activeTab === 'reset'" class="pane reset-pane">
       <p class="reset-desc">
-        מאפס את כל נתוני האפליקציה — הגדרות, היסטוריית קריאה, מיקומי גלילה, וטאבים פתוחים.
-      </p>
-      <button class="reset-all-btn" @click="confirmResetAll">איפוס מלא</button>
-      <p class="reset-desc reset-desc-small">
-        מאפס רק את ההגדרות לברירות המחדל — ללא השפעה על היסטוריית הקריאה או הטאבים.
+        מאפס רק את הגדרות התצוגה והקריאה לברירות המחדל. מסד הנתונים, היסטוריית הקריאה, והטאבים
+        הפתוחים נשמרים.
       </p>
       <button class="reset-all-btn" @click="confirmResetSettings">איפוס ההגדרות</button>
+      <p class="reset-desc">
+        מוחק את כל נתוני האפליקציה — הגדרות, היסטוריית קריאה, מיקומי גלילה, טאבים פתוחים, ואינדקס
+        החיפוש. לא ניתן לבטל פעולה זו.
+      </p>
+      <button class="reset-all-btn" @click="confirmResetAll">איפוס האפליקציה</button>
     </div>
 
     <ConfirmDialog
@@ -265,6 +126,19 @@ async function commitPath() {
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-toolbar);
+  position: relative;
+}
+
+.tab-bar::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  height: 2px;
+  background: var(--accent-color);
+  width: calc(100% / var(--tab-count));
+  /* RTL: tab 0 is on the right, so index 0 = right edge */
+  right: calc(var(--tab-index) * 100% / var(--tab-count));
+  transition: right 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .tab-btn {
@@ -283,20 +157,12 @@ async function commitPath() {
   background: var(--hover-bg);
   color: var(--text-primary);
 }
+.tab-btn:active {
+  transform: none;
+}
 .tab-btn.active {
   color: var(--text-primary);
-  border-bottom-color: var(--accent-color);
-}
-.tab-btn-reset {
-  border-bottom: none;
-}
-.tab-btn-reset:hover {
-  color: #e53e3e;
-  background: color-mix(in srgb, #e53e3e 8%, transparent);
-}
-.tab-btn-reset.active {
-  color: #e53e3e;
-  border-bottom-color: #e53e3e;
+  border-bottom-color: transparent;
 }
 
 .reset-pane {
@@ -310,9 +176,6 @@ async function commitPath() {
   color: var(--text-secondary);
   line-height: 1.5;
   margin: 0;
-}
-.reset-desc-small {
-  font-size: 11px;
 }
 .reset-all-btn {
   width: 140px;
@@ -331,101 +194,5 @@ async function commitPath() {
   overflow-y: auto;
   overflow-x: hidden;
   padding: 12px 16px;
-}
-
-.section-header {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-primary);
-  padding: 4px 0;
-  margin-top: 16px;
-  margin-bottom: 10px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.db-path-row {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 10px;
-}
-
-.db-path-label {
-  font-size: 11px;
-  color: var(--text-secondary);
-}
-
-.db-path-field {
-  display: flex;
-  align-items: center;
-  height: 32px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  background: var(--bg-secondary);
-  overflow: hidden;
-  transition: border-color 0.1s;
-}
-.db-path-field:hover {
-  border-color: color-mix(in srgb, var(--text-secondary) 50%, transparent);
-}
-.db-path-field.editing {
-  border-color: var(--accent-color);
-}
-
-.db-path-text {
-  flex: 1;
-  padding: 0 8px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  direction: ltr;
-  text-align: left;
-  cursor: text;
-  min-width: 0;
-}
-.db-path-text:hover {
-  color: var(--text-primary);
-}
-.db-path-text.placeholder {
-  direction: rtl;
-  text-align: right;
-  color: var(--text-secondary);
-  opacity: 0.6;
-}
-
-.db-path-input {
-  flex: 1;
-  height: 100%;
-  padding: 0 8px;
-  font-size: 11px;
-  direction: ltr;
-  text-align: left;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: var(--text-primary);
-  min-width: 0;
-}
-
-.folder-btn {
-  flex-shrink: 0;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-inline-start: 1px solid var(--border-color);
-  border-radius: 0;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 16px;
-}
-.folder-btn:hover {
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
 </style>

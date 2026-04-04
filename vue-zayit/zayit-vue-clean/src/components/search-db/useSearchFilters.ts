@@ -4,7 +4,7 @@ import { SQL } from '@/host/queries.sql'
 import { useTabStore } from '@/stores/tabStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import type { BloomSearchResult } from './searchTypes'
-import type { CategoryNode } from '@/components/books-fs/booksFsTree'
+import type { CategoryNode } from '@/components/books-fs/booksCategoryTree'
 
 export function useSearch(
   results: () => BloomSearchResult[],

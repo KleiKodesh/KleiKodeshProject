@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import { useBloomSearch } from './useBloomSearch'
-import { useSearch } from './useSearch'
+import { useSearch } from './useSearchFilters'
 import { useIndexingStatus } from './useIndexingStatus'
 import { useTabStore } from '@/stores/tabStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'

@@ -10,6 +10,7 @@ import {
   idbSetLastRead,
   idbGetLastRead,
   idbClearAll,
+  idbScheduleReset,
   KEYS,
 } from '@/utils/idbPersistence'
 import type { TabState, BookState, LastReadState } from '@/utils/idbPersistence'
@@ -112,7 +113,7 @@ export const useTabStore = defineStore('tabs', () => {
   }
 
   // Only watch the fields that are actually persisted — avoids IDB writes on every
-  // in-memory-only mutation (pdfVirtualUrl, pdfConverting, tocPath, etc.)
+  // in-memory-only mutation (pdfVirtualUrl, pdfConverting, etc.)
   const _persistedSnapshot = computed(() =>
     tabs.value
       .filter((t) => !SINGLETON_ROUTES.includes(t.route))
@@ -126,6 +127,7 @@ export const useTabStore = defineStore('tabs', () => {
         pdfHbBookTitle: t.pdfHbBookTitle,
         bookId: t.bookId,
         searchQuery: t.searchQuery,
+        tocPath: t.tocPath,
       })),
   )
   watch([_persistedSnapshot, activeTabId], persistTabs)
@@ -147,13 +149,19 @@ export const useTabStore = defineStore('tabs', () => {
 
   // ── Per-tab+book state ────────────────────────────────────────────────────
 
+  // Pending save promise — onMounted on the incoming tab awaits this before reading,
+  // so the outgoing tab's async IDB write is guaranteed to have committed first.
+  let pendingBookStateSave: Promise<void> | null = null
+
   function getBookViewState(tabId: string, bookId: number): Promise<BookState | null> {
     const wsId = useWorkspaceStore().activeId
-    return idbTabsGet<BookState>(KEYS.book(wsId, tabId, bookId))
+    const read = () => idbTabsGet<BookState>(KEYS.book(wsId, tabId, bookId))
+    return pendingBookStateSave ? pendingBookStateSave.then(read) : read()
   }
   function setBookViewState(tabId: string, bookId: number, state: BookState): Promise<void> {
     const wsId = useWorkspaceStore().activeId
-    return idbTabsSet(KEYS.book(wsId, tabId, bookId), state)
+    pendingBookStateSave = idbTabsSet(KEYS.book(wsId, tabId, bookId), state)
+    return pendingBookStateSave
   }
   function clearBookViewState(tabId: string, bookId: number): Promise<void> {
     const wsId = useWorkspaceStore().activeId
@@ -162,11 +170,15 @@ export const useTabStore = defineStore('tabs', () => {
 
   // ── Global last-read per book (LRU-capped at 1000) ────────────────────────
 
+  let pendingLastReadSave: Promise<void> | null = null
+
   function getLastReadPos(bookId: number): Promise<LastReadState | null> {
-    return idbGetLastRead(bookId)
+    const read = () => idbGetLastRead(bookId)
+    return pendingLastReadSave ? pendingLastReadSave.then(read) : read()
   }
   function setLastReadPos(bookId: number, pos: LastReadState): Promise<void> {
-    return idbSetLastRead(bookId, pos)
+    pendingLastReadSave = idbSetLastRead(bookId, pos)
+    return pendingLastReadSave
   }
 
   // ── Books view setting ────────────────────────────────────────────────────
@@ -180,8 +192,8 @@ export const useTabStore = defineStore('tabs', () => {
 
   // ── App reset ─────────────────────────────────────────────────────────────
 
-  function resetAll(): Promise<void> {
-    return idbClearAll()
+  function resetAll(): void {
+    idbScheduleReset()
   }
 
   // ── Tab lifecycle ─────────────────────────────────────────────────────────

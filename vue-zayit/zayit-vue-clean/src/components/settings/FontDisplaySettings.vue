@@ -4,7 +4,6 @@ import FontSelectorCmp from './FontSelector.vue'
 import SliderSetting from './SliderSetting.vue'
 
 const props = defineProps<{
-  availableFonts: string[]
   headerFont: string
   textFont: string
   fontSize: number
@@ -45,7 +44,6 @@ function onTextToggle() {
     ref="headerFontRef"
     label="גופן כותרות"
     :model-value="headerFont"
-    :available-fonts="availableFonts"
     font-type="sans-serif"
     @update:model-value="emit('update:headerFont', $event)"
     @toggle="onHeaderToggle"
@@ -54,7 +52,6 @@ function onTextToggle() {
     ref="textFontRef"
     label="גופן טקסט"
     :model-value="textFont"
-    :available-fonts="availableFonts"
     font-type="serif"
     @update:model-value="emit('update:textFont', $event)"
     @toggle="onTextToggle"

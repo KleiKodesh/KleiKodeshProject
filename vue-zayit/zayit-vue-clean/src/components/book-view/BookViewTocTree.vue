@@ -32,7 +32,7 @@ watch(
 watch(
   () => props.visible,
   (val) => {
-    if (val && !props.loading) setTimeout(() => searchRef.value?.focus(), 0)
+    if (val && !props.loading) nextTick(() => searchRef.value?.focus())
   },
 )
 onClickOutside(panelRef, () => {

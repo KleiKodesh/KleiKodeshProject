@@ -36,7 +36,7 @@ export function useAppNavigation() {
       if (result) pdfStore.finishLocalFileConversion(tabId, result)
       return
     }
-    if (label === 'התקן זית') {
+    if (label === 'התקן כזית') {
       window.open('https://zayitapp.com/#/download', '_blank')
       return
     }

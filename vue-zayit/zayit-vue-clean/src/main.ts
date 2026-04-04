@@ -10,6 +10,10 @@ import { useThemeStore } from './theme/themeStore'
 import { loadCustomThemes, initPdfThemeObserver } from './theme/themes'
 import { useBooksDataStore } from './stores/booksDataStore'
 import { usePdfStore } from './stores/pdfStore'
+import { idbCheckAndExecReset } from './utils/idbPersistence'
+
+// Run before any store reads — clears all DBs if a reset was scheduled last session
+await idbCheckAndExecReset()
 
 const pinia = createPinia()
 const app = createApp(App).use(pinia)

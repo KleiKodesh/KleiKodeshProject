@@ -33,11 +33,12 @@ export const usePdfStore = defineStore('pdf', () => {
     }
   })
 
-  // Watch for tabs being closed or navigated away — cancel any in-progress conversion/download
+  // Watch for tabs being closed or navigated away — cancel any in-progress conversion/download.
+  // No deep:true needed — the mapped array of primitives already produces a new reference
+  // on any tab id/route change, so Vue detects it without deep traversal.
   watch(
     () => tabStore.tabs.map((t) => ({ id: t.id, route: t.route })),
-    (current, prev) => {
-      if (!prev) return
+    (current) => {
       const currentIds = new Set(current.map((t) => t.id))
       for (const tabId of Array.from(_converting)) {
         const wasRemoved = !currentIds.has(tabId)
@@ -45,7 +46,6 @@ export const usePdfStore = defineStore('pdf', () => {
         if (wasRemoved || navigatedAway) _converting.delete(tabId)
       }
     },
-    { deep: true },
   )
 
   /** Navigate the active tab to /pdf-view immediately, showing the converting placeholder. */

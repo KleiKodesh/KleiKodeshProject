@@ -16,6 +16,7 @@ namespace Kezayit.Search
         private readonly WebView2 _webView;
         private volatile bool _isReady = false;
         private volatile bool _isIndexing = false;
+        private string _dbPath;
         private readonly ConcurrentDictionary<string, CancellationTokenSource> _searches
             = new ConcurrentDictionary<string, CancellationTokenSource>();
         private int _nextSearchId = 1;
@@ -33,50 +34,71 @@ namespace Kezayit.Search
 
         public void OnDbReady(string dbPath)
         {
-            if (!File.Exists(dbPath)) return;
+            Console.WriteLine("[SearchHandler] OnDbReady called, dbPath=" + dbPath);
+            if (!File.Exists(dbPath)) { Console.WriteLine("[SearchHandler] OnDbReady: file does not exist, aborting"); return; }
+            _dbPath = dbPath;
 
-            if (File.Exists(BloomFilePath) &&
-                File.GetLastWriteTimeUtc(BloomFilePath) >= File.GetLastWriteTimeUtc(dbPath))
+            var bloomInfo = new FileInfo(BloomFilePath);
+            Console.WriteLine("[SearchHandler] BloomFilePath=" + BloomFilePath + " exists=" + bloomInfo.Exists + " size=" + (bloomInfo.Exists ? bloomInfo.Length : 0));
+            if (bloomInfo.Exists &&
+                bloomInfo.Length > 64 &&
+                bloomInfo.LastWriteTimeUtc >= File.GetLastWriteTimeUtc(dbPath))
             {
+                Console.WriteLine("[SearchHandler] Bloom file is up-to-date, marking ready");
                 _isReady = true;
                 PushProgress(true, false, 100, 0, 0, "");
                 return;
             }
 
+            Console.WriteLine("[SearchHandler] Starting indexing...");
             StartIndexing();
+        }
+
+        /// <summary>Cancel any running indexing, delete the bloom file, optionally restart with a new DB path.</summary>
+        public void ResetAndReindex(string newDbPath)
+        {
+            Console.WriteLine("[SearchHandler] ResetAndReindex called, newDbPath=" + newDbPath);
+            StopIndexing();
+            try { if (File.Exists(BloomFilePath)) { File.Delete(BloomFilePath); Console.WriteLine("[SearchHandler] Deleted bloom file"); } } catch (Exception ex) { Console.WriteLine("[SearchHandler] Delete bloom file failed: " + ex.Message); }
+            _isReady = false;
+            if (!string.IsNullOrEmpty(newDbPath) && File.Exists(newDbPath))
+                OnDbReady(newDbPath);
+        }
+
+        public void StopIndexing()
+        {
+            Console.WriteLine("[SearchHandler] StopIndexing called, _isIndexing=" + _isIndexing);
+            _isIndexing = false;
+            BloomIndexingCoordinator.CancelIndexing();
         }
 
         private void StartIndexing()
         {
-            if (_isIndexing) return;
+            Console.WriteLine("[SearchHandler] StartIndexing called, _isIndexing=" + _isIndexing);
+            if (_isIndexing) { Console.WriteLine("[SearchHandler] Already indexing, skipping"); return; }
             _isIndexing = true;
             _isReady = false;
 
+            // Remove any stale/empty bloom file so the writer starts clean
+            try { if (File.Exists(BloomFilePath)) { File.Delete(BloomFilePath); Console.WriteLine("[SearchHandler] Deleted stale bloom file"); } } catch (Exception ex) { Console.WriteLine("[SearchHandler] Failed to delete bloom file: " + ex.Message); }
+
             Task.Run(() =>
             {
+                Console.WriteLine("[SearchHandler] Task.Run started, BloomIndexingCoordinator.IsIndexing=" + BloomIndexingCoordinator.IsIndexing);
                 try
                 {
-                    if (!BloomIndexingCoordinator.IsIndexing)
-                    {
-                        var indexer = new BloomFilterIndexer("lines", 100, 0.01);
-                        indexer.IndexProgressChanged += (s, e) => PushIndexProgress(e);
-                        indexer.CreateBloomFilters();
-                    }
-                    else
-                    {
-                        while (BloomIndexingCoordinator.IsIndexing)
-                        {
-                            var p = BloomIndexingCoordinator.LastProgress;
-                            if (p != null) PushIndexProgress(p);
-                            Thread.Sleep(1000);
-                        }
-                    }
+                    Console.WriteLine("[SearchHandler] Creating BloomFilterIndexer with dbPath=" + _dbPath);
+                    var indexer = new BloomFilterIndexer("lines", (short)100, 0.01, _dbPath);
+                    indexer.IndexProgressChanged += (s, e) => PushIndexProgress(e);
+                    indexer.CreateBloomFilters();
+                    Console.WriteLine("[SearchHandler] CreateBloomFilters completed");
                 }
-                catch (Exception ex) { Console.WriteLine("[SearchHandler] " + ex.Message); }
+                catch (Exception ex) { Console.WriteLine("[SearchHandler] EXCEPTION: " + ex); }
                 finally
                 {
                     _isIndexing = false;
                     _isReady = File.Exists(BloomFilePath);
+                    Console.WriteLine("[SearchHandler] Indexing done, _isReady=" + _isReady + " bloom exists=" + File.Exists(BloomFilePath));
                     PushProgress(_isReady, false, 100, 0, 0, "");
                 }
             });
@@ -119,6 +141,7 @@ namespace Kezayit.Search
                 if (File.Exists(BloomFilePath))
                     File.Delete(BloomFilePath);
                 _isReady = false;
+                _isIndexing = false;
             }
             catch (Exception ex) { Console.WriteLine("[SearchHandler] Delete index error: " + ex.Message); }
             _bridge.Reply(id, new { });

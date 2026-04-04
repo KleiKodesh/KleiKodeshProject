@@ -10,7 +10,7 @@ import BooksSearchResults from './BooksSearchResults.vue'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
 import BottomSearchBar from '@/components/common/BottomSearchBar.vue'
 import { useTabStore } from '@/stores/tabStore'
-import type { BookRow } from './booksFsTree'
+import type { BookRow } from './booksCategoryTree'
 import type { TocFsItem } from './useBooksFsSearch'
 
 const tabStore = useTabStore()

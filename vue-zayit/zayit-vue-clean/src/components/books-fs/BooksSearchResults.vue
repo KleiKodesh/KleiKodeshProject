@@ -3,9 +3,9 @@ import { ref, computed } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { IconBook20Filled } from '@iconify-prerendered/vue-fluent'
 import type { SearchFsItem, TocFsItem } from './useBooksFsSearch'
-import type { BookRow } from './booksFsTree'
-import { useVirtualListKeys } from '@/composables/useVirtualListKeys'
-import { useTilesKeys } from '@/composables/useTilesKeys'
+import type { BookRow } from './booksCategoryTree'
+import { useVirtualListKeys } from '@/composables/useVirtualListKeyNav'
+import { useTilesKeys } from '@/composables/useTileGridKeys'
 
 const props = defineProps<{ items: SearchFsItem[]; view: 'list' | 'tiles' | 'tree' }>()
 const emit = defineEmits<{ selectBook: [BookRow]; selectToc: [TocFsItem] }>()

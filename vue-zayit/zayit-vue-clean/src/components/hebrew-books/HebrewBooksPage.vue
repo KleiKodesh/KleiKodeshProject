@@ -5,7 +5,7 @@ import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
 import HebrewBooksListItem from './HebrewBooksListItem.vue'
 import BottomSearchBar from '@/components/common/BottomSearchBar.vue'
 import { useHebrewBooks } from './useHebrewBooks'
-import { useListKeys } from '@/composables/useListKeys'
+import { useListKeys } from '@/composables/useListKeyNav'
 
 const {
   displayedBooks,

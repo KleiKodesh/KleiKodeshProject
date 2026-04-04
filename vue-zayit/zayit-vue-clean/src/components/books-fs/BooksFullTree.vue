@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import TreeView from '@/components/common/TreeView.vue'
 import type { TreeNodeItem } from '@/components/common/TreeNode.vue'
-import type { CategoryNode, BookRow } from './booksFsTree'
+import type { CategoryNode, BookRow } from './booksCategoryTree'
 
 const emit = defineEmits<{ selectBook: [BookRow] }>()
 const store = useBooksDataStore()

@@ -3,7 +3,7 @@ import { storeToRefs } from 'pinia'
 import { refDebounced } from '@vueuse/core'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useBooksFsSearch } from './useBooksFsSearch'
-import type { CategoryNode, BookRow } from './booksFsTree'
+import type { CategoryNode, BookRow } from './booksCategoryTree'
 
 export type { BookFsItem, TocFsItem, SearchFsItem } from './useBooksFsSearch'
 export type FsItem =

@@ -2,7 +2,7 @@ import { ref, watch } from 'vue'
 import { query } from '@/host/db'
 import { SQL } from '@/host/queries.sql'
 import { useBooksDataStore } from '@/stores/booksDataStore'
-import type { BookRow } from '@/components/books-fs/booksFsTree'
+import type { BookRow } from '@/components/books-fs/booksCategoryTree'
 
 export interface CommentaryLine {
   lineId: number
@@ -118,23 +118,22 @@ export function useCommentary(
       const bookIds = [...byBook.keys()]
       const lineIds = links.map((l) => l.targetLineId)
       const [bookRows, lineRows] = await Promise.all([
-        query<{ id: number; title: string }>(
-          `SELECT id, title FROM book WHERE id IN (${bookIds.map(() => '?').join(',')})`,
-          bookIds,
-        ),
+        query<{ id: number; title: string }>(SQL.GET_BOOKS_BY_IDS(bookIds.length), bookIds),
         query<{ id: number; lineIndex: number; content: string }>(
-          `SELECT id, lineIndex, content FROM line WHERE id IN (${lineIds.map(() => '?').join(',')})`,
+          SQL.GET_LINES_BY_IDS(lineIds.length),
           lineIds,
         ),
       ])
 
       const bookTitleMap = new Map(bookRows.map((b) => [b.id, b.title]))
       const lineMap = new Map(lineRows.map((l) => [l.id, l]))
+      // Build a Map for O(1) book lookups instead of O(n) allBooks.find per bookId
+      const allBooksMap = new Map(booksDataStore.allBooks.map((b) => [b.id, b]))
 
       // Build raw groups with category resolved
       const raw = bookIds.map((bookId) => {
         const g = byBook.get(bookId)!
-        const book = booksDataStore.allBooks.find((b) => b.id === bookId)
+        const book = allBooksMap.get(bookId)
         const ct = [...g.connectionTypes][0] ?? 'OTHER'
         const category = resolveCategory(book)
         return {
@@ -239,22 +238,21 @@ export function useCommentary(
       const bookIds = [...byBook.keys()]
       const targetLineIds = [...new Set(links.map((l) => l.targetLineId))]
       const [bookRows, lineRows] = await Promise.all([
-        query<{ id: number; title: string }>(
-          `SELECT id, title FROM book WHERE id IN (${bookIds.map(() => '?').join(',')})`,
-          bookIds,
-        ),
+        query<{ id: number; title: string }>(SQL.GET_BOOKS_BY_IDS(bookIds.length), bookIds),
         query<{ id: number; lineIndex: number; content: string }>(
-          `SELECT id, lineIndex, content FROM line WHERE id IN (${targetLineIds.map(() => '?').join(',')})`,
+          SQL.GET_LINES_BY_IDS(targetLineIds.length),
           targetLineIds,
         ),
       ])
 
       const bookTitleMap = new Map(bookRows.map((b) => [b.id, b.title]))
       const lineMap = new Map(lineRows.map((l) => [l.id, l]))
+      // Build a Map for O(1) book lookups instead of O(n) allBooks.find per bookId
+      const allBooksMap = new Map(booksDataStore.allBooks.map((b) => [b.id, b]))
 
       const raw = bookIds.map((bookId) => {
         const g = byBook.get(bookId)!
-        const book = booksDataStore.allBooks.find((b) => b.id === bookId)
+        const book = allBooksMap.get(bookId)
         const ct = [...g.connectionTypes][0] ?? 'OTHER'
         const category = resolveCategory(book)
         return {

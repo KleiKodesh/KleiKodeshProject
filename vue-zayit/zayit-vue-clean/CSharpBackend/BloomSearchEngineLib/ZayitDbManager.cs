@@ -8,11 +8,17 @@ public sealed class ZayitDbManager : IDisposable
 {
     public readonly SQLiteConnection _connection;
 
-    public ZayitDbManager()
+    public ZayitDbManager() : this(null) { }
+
+    public ZayitDbManager(string dbPath)
     {
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        string defaultPath = Path.Combine(appData, "io.github.kdroidfilter.seforimapp", "databases", "seforim.db");
-        string dbPath = Interaction.GetSetting("ZayitApp", "Database", "Path", defaultPath);
+        if (dbPath == null)
+        {
+            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            string defaultPath = Path.Combine(appData, "io.github.kdroidfilter.seforimapp", "databases", "seforim.db");
+            dbPath = Interaction.GetSetting("ZayitApp", "Database", "Path", defaultPath);
+        }
+        Console.WriteLine("[ZayitDbManager] Opening DB at: " + dbPath + " exists=" + File.Exists(dbPath));
         if (!File.Exists(dbPath)) return;
 
         _connection = new SQLiteConnection($"Data Source={dbPath};Version=3;Cache Size=10000;Page Size=4096;");

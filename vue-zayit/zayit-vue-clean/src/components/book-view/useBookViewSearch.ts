@@ -1,6 +1,7 @@
 import { ref, computed, watch } from 'vue'
+import { refDebounced } from '@vueuse/core'
 import { removeDiacriticsForSearch } from '@/utils/hebrewTextProcessing'
-import type { LineItem } from './useLines'
+import type { LineItem } from './useLinesTable'
 
 export interface BookViewMatch {
   lineIndex: number
@@ -12,10 +13,13 @@ export function useBookViewSearch(
   currentLineIndex: () => number = () => 0,
 ) {
   const query = ref('')
+  // Debounce the scan — avoids O(n) full-lines scan on every keystroke while
+  // lines are still streaming in chunk by chunk (each chunk arrival re-triggers lines()).
+  const debouncedQuery = refDebounced(query, 150)
   const currentMatchIdx = ref(0)
 
   const matches = computed<BookViewMatch[]>(() => {
-    const q = removeDiacriticsForSearch(query.value.trim())
+    const q = removeDiacriticsForSearch(debouncedQuery.value.trim())
     if (!q) return []
     const results: BookViewMatch[] = []
     for (const line of lines()) {

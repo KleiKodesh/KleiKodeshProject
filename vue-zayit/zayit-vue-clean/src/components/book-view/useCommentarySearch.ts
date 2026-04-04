@@ -1,4 +1,5 @@
 import { ref, computed, watch } from 'vue'
+import { refDebounced } from '@vueuse/core'
 import { removeDiacriticsForSearch } from '@/utils/hebrewTextProcessing'
 import type { CommentaryGroup } from './useCommentary'
 
@@ -12,10 +13,12 @@ export function useCommentarySearch(
   currentFlatIndex: () => number = () => 0,
 ) {
   const query = ref('')
+  // Debounce the scan — avoids re-scanning all commentary lines on every keystroke.
+  const debouncedQuery = refDebounced(query, 150)
   const currentMatchIdx = ref(0)
 
   const matches = computed<CommentaryMatch[]>(() => {
-    const q = removeDiacriticsForSearch(query.value.trim())
+    const q = removeDiacriticsForSearch(debouncedQuery.value.trim())
     if (!q) return []
     const results: CommentaryMatch[] = []
     let flatIndex = 0

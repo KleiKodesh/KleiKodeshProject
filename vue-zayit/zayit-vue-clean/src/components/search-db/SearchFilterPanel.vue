@@ -4,7 +4,7 @@ import { IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
 import SearchFilterNode from './SearchFilterNode.vue'
-import type { CategoryNode } from '@/components/books-fs/booksFsTree'
+import type { CategoryNode } from '@/components/books-fs/booksCategoryTree'
 
 const props = defineProps<{
   checkedBookIds: Set<number>

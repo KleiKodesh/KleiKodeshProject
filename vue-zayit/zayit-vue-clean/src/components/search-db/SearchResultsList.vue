@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { IconSearchSparkle24 } from '@iconify-prerendered/vue-fluent-color'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useTabStore } from '@/stores/tabStore'
 import { useEventListener } from '@vueuse/core'
 import { censorDivineNames } from '@/utils/censorDivineNames'
+import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 import type { BloomSearchResult } from './searchTypes'
 
 const props = defineProps<{
@@ -68,15 +69,21 @@ function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
   })
 }
 
-watch(
-  () => props.results.length,
-  (len) => {
-    if (!len || props.isSearching) return
-    if (props.initialScrollIndex != null)
-      restoreScrollPos(props.initialScrollIndex, props.initialScrollOffset ?? 0)
-  },
-  { flush: 'post' },
-)
+{
+  const stopWatch = watch(
+    () => props.results.length,
+    (len) => {
+      if (!len || props.isSearching) return
+      if (props.initialScrollIndex == null) {
+        stopWatch()
+        return
+      }
+      stopWatch()
+      nextTick(() => restoreScrollPos(props.initialScrollIndex!, props.initialScrollOffset ?? 0))
+    },
+    { flush: 'post', immediate: true },
+  )
+}
 
 function savePos() {
   if (programmaticScrolling) return
@@ -93,7 +100,18 @@ useEventListener(document, 'visibilitychange', () => {
   if (document.visibilityState === 'hidden') savePos()
 })
 useEventListener(window, 'beforeunload', savePos)
-onBeforeUnmount(savePos)
+onBeforeUnmount(() => {
+  // Force-clear the programmatic flag so savePos is never silently skipped at unmount.
+  programmaticScrolling = false
+  savePos()
+})
+
+useVirtualScrollerKeys(
+  scrollEl,
+  () =>
+    virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
+  () => props.results.length,
+)
 
 function onScroll() {}
 </script>

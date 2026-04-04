@@ -34,10 +34,14 @@ export function onWebviewEvent(fn: EventListener): () => void {
 
 if (isHosted) {
   window.__onWebviewEvent = (msg) => {
+    console.log('[db.ts] webview event:', msg.event, msg)
     for (const fn of _listeners) fn(msg)
   }
   onWebviewEvent((msg) => {
-    if (msg.event === 'dbPathPicked') onDbReady(msg.path as string)
+    if (msg.event === 'dbPathPicked') {
+      console.log('[db.ts] dbPathPicked, path=', msg.path)
+      onDbReady(msg.path as string)
+    }
   })
 }
 

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { onMounted, onUnmounted } from 'vue'
+
 defineProps<{
   title: string
   desc?: string
@@ -8,6 +10,20 @@ const emit = defineEmits<{
   confirm: []
   cancel: []
 }>()
+
+function onKey(e: KeyboardEvent) {
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    emit('confirm')
+  }
+  if (e.key === 'Escape') {
+    e.preventDefault()
+    emit('cancel')
+  }
+}
+
+onMounted(() => window.addEventListener('keydown', onKey))
+onUnmounted(() => window.removeEventListener('keydown', onKey))
 </script>
 
 <template>
@@ -17,8 +33,8 @@ const emit = defineEmits<{
         <p class="confirm-title">{{ title }}</p>
         <p v-if="desc" class="confirm-desc">{{ desc }}</p>
         <div class="confirm-actions">
-          <button class="confirm-cancel-btn" @click="emit('cancel')">ביטול</button>
           <button class="confirm-ok-btn" @click="emit('confirm')">אישור</button>
+          <button class="confirm-cancel-btn" @click="emit('cancel')">ביטול</button>
         </div>
       </div>
     </div>
@@ -40,12 +56,12 @@ const emit = defineEmits<{
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  padding: 20px 16px 14px;
-  width: 280px;
+  padding: 20px 20px 14px;
+  width: 320px;
   direction: rtl;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .confirm-title {
@@ -59,14 +75,18 @@ const emit = defineEmits<{
   margin: 0;
   font-size: 12px;
   color: var(--text-secondary);
-  line-height: 1.5;
+  line-height: 1.6;
+  text-align: justify;
 }
 
 .confirm-actions {
   display: flex;
+  flex-direction: row-reverse;
   justify-content: flex-start;
   gap: 8px;
-  margin-top: 4px;
+  padding-top: 10px;
+  margin-top: 2px;
+  border-top: 1px solid var(--border-color);
 }
 
 .confirm-cancel-btn {

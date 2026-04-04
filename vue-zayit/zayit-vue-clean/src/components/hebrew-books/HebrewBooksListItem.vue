@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { IconArrowDownload20Regular } from '@iconify-prerendered/vue-fluent'
-import type { HebrewBook } from './hebrewBooksService'
+import type { HebrewBook } from './hebrewBooksCatalog'
 
 const props = defineProps<{ book: HebrewBook; focused?: boolean }>()
 const emit = defineEmits<{
@@ -12,7 +12,7 @@ const emit = defineEmits<{
 const tags = computed(() =>
   (props.book._csvTags || '')
     .split(';')
-    .map((t) => t.trim())
+    .map((t: string) => t.trim())
     .filter(Boolean),
 )
 </script>

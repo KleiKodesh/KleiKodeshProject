@@ -5,19 +5,22 @@ import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useTabStore } from '@/stores/tabStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
-import type { LineItem } from './useLines'
+import type { LineItem } from './useLinesTable'
 import { applyDiacriticsFilter, removeDiacriticsForSearch } from '@/utils/hebrewTextProcessing'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import ContextMenu from '@/components/common/ContextMenu.vue'
 import type { ContextMenuItem } from '@/components/common/ContextMenu.vue'
 import { useEventListener } from '@vueuse/core'
-import { useScopedKeys } from '@/composables/useScopedKeys'
-import { useScopedCopy } from '@/composables/useScopedCopy'
+import { useScopedKeys } from '@/composables/useTextSelectionKeys'
+import { useScopedCopy } from '@/composables/useLineCopy'
 import { scrollToIndexWithRetry } from '@/utils/scrollToIndexWithRetry'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 
 const emit = defineEmits<{ scrolled: [number]; lineSelected: [number]; 'ctrl-f': [] }>()
 const props = defineProps<{
+  // lines + prioritise passed from BookViewPage (single useLines call, no duplicate fetch)
+  lines: LineItem[]
+  prioritise: (lineIndex: number) => void
   altTocLabelMap?: Map<number, string>
   selectedLineId?: number | null
   bottomVisible?: boolean
@@ -41,10 +44,11 @@ const bookViewStore = useBookViewStore()
 const { zoom } = storeToRefs(bookViewStore)
 const tabId = tabStore.activeTabId
 const bookId = tabStore.activeTab.bookId!
-const { lines, prioritise } = useLines(() => bookId)
 
 const diacriticsState = computed(() => settingsStore.diacriticsState)
 const fontPx = computed(() => (zoom.value / 100) * (settingsStore.fontSize / 100) * 15)
+
+// ── Render helpers ────────────────────────────────────────────────────────────
 
 function highlightMatches(
   raw: string,
@@ -107,7 +111,25 @@ function highlightMatches(
   return out.join('')
 }
 
+// Cache rendered HTML per line — avoids re-running applyDiacriticsFilter (DOM TreeWalker)
+// and censorDivineNames (6 regexes) on every render cycle for unchanged lines.
+// The cache is invalidated as a whole whenever any rendering input changes.
+const renderCache = new Map<number, string>()
+let renderCacheKey = ''
+
+function getRenderCacheKey(): string {
+  return `${diacriticsState.value}|${settingsStore.censorDivineNames}|${props.searchQuery ?? ''}|${props.currentMatchLineIndex ?? -1}|${props.currentMatchOccurrence ?? 0}|${props.searchHighlightLineIndex ?? -1}|${props.searchHighlightQuery ?? ''}`
+}
+
 function lineContent(raw: string, lineIndex: number): string {
+  const key = getRenderCacheKey()
+  if (key !== renderCacheKey) {
+    renderCache.clear()
+    renderCacheKey = key
+  }
+  const cached = renderCache.get(lineIndex)
+  if (cached !== undefined) return cached
+
   let content =
     diacriticsState.value === 0 ? raw : applyDiacriticsFilter(raw, diacriticsState.value)
   if (settingsStore.censorDivineNames) content = censorDivineNames(content)
@@ -121,20 +143,28 @@ function lineContent(raw: string, lineIndex: number): string {
     )
   if (props.searchHighlightQuery?.trim() && lineIndex === props.searchHighlightLineIndex)
     content = highlightMatches(raw, content, props.searchHighlightQuery, false, -1)
+
+  renderCache.set(lineIndex, content)
   return content
 }
+
+// ── Scroller setup ────────────────────────────────────────────────────────────
 
 const scrollerEl = ref<HTMLElement | null>(null)
 
 const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, {
   onCtrlF: () => emit('ctrl-f'),
 })
-useScopedCopy(scrollerEl, () => lines.value.map((l) => l.content).filter(Boolean), isSelectAll)
+useScopedCopy(
+  scrollerEl,
+  () => props.lines.map((l) => l.content).filter(Boolean) as string[],
+  isSelectAll,
+)
 useVirtualScrollerKeys(
   scrollerEl,
   () =>
     virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
-  () => lines.value.length,
+  () => props.lines.length,
 )
 
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
@@ -145,7 +175,7 @@ const contextMenuItems: ContextMenuItem[] = [
     action: () => {
       let joined: string
       if (isSelectAll.value) {
-        joined = lines.value
+        joined = props.lines
           .map((l) => l.content)
           .filter(Boolean)
           .join(' ')
@@ -178,7 +208,7 @@ const contextMenuItems: ContextMenuItem[] = [
 
 const virtualizer = useVirtualizer(
   computed(() => ({
-    count: lines.value.length,
+    count: props.lines.length,
     getScrollElement: () => scrollerEl.value,
     estimateSize: () => 32,
     overscan: 10,
@@ -193,8 +223,6 @@ const totalSize = computed(() => virtualizer.value.getTotalSize())
 function captureScrollPos() {
   const first = virtualItems.value[0]
   if (!first || !scrollerEl.value) return null
-  // scrollOffset = scrollTop - first.start: how far past the first rendered item we are.
-  // first may be an overscan item above the viewport — that's fine, the offset compensates.
   return {
     scrollIndex: first.index,
     scrollOffset: Math.max(0, scrollerEl.value.scrollTop - first.start),
@@ -207,10 +235,6 @@ let programmaticScrollTimer: ReturnType<typeof setTimeout> | null = null
 let programmaticScrolling = false
 
 function restoreScrollPos(lineIndex: number, scrollOffset = 0) {
-  // scrollToIndex() uses estimated sizes and triggers TanStack's internal scroll correction.
-  // Wait one rAF for that correction to settle, then set scrollTop directly using the
-  // real measured item.start from measurementsCache — TanStack is idle by then.
-  // programmaticScrolling suppresses savePos during restore.
   programmaticScrolling = true
   if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer)
   virtualizer.value.scrollToIndex(lineIndex, { align: 'start' })
@@ -225,50 +249,90 @@ function restoreScrollPos(lineIndex: number, scrollOffset = 0) {
 
 // ── Initial scroll on load ────────────────────────────────────────────────────
 
-watch(
-  lines,
-  (val) => {
-    if (!val.length) return
-    const targetIndex = props.initialLineIndex ?? props.initialScrollIndex
-    if (targetIndex == null) return
-    // Prioritise the target chunk so it loads before others.
-    prioritise(targetIndex)
-    // Wait until the target line's content is loaded (streaming: starts as null).
-    const stopWatch = watch(
-      () => lines.value[targetIndex]?.content,
-      (content) => {
-        if (content == null) return
-        stopWatch()
-        restoreScrollPos(
-          targetIndex,
-          props.initialScrollIndex != null ? (props.initialScrollOffset ?? 0) : 0,
-        )
-        if (props.searchHighlightLineIndex != null && scrollerEl.value) {
+// ── Initial scroll on load ────────────────────────────────────────────────────
+// Waits for lines to be non-empty, then waits for the target line's content to load,
+// then restores scroll. The outer watch stops itself after the first successful restore
+// so it doesn't re-trigger on subsequent lines updates.
+{
+  let restored = false
+  const stopLinesWatch = watch(
+    () => props.lines,
+    (val) => {
+      if (!val.length) return
+      const targetIndex = props.initialLineIndex ?? props.initialScrollIndex
+      if (targetIndex == null) {
+        stopLinesWatch()
+        return
+      }
+      console.log(
+        '[ScrollRestore] lines watch — will restore to index:',
+        targetIndex,
+        'lines.length:',
+        val.length,
+      )
+      console.log(
+        '[ScrollRestore] lines watch — will restore to index:',
+        targetIndex,
+        'lines.length:',
+        val.length,
+      )
+      props.prioritise(targetIndex)
+      const stopContentWatch = watch(
+        () => props.lines[targetIndex]?.content,
+        (content) => {
+          if (content == null) return
+          if (restored) {
+            stopContentWatch()
+            return
+          }
+          restored = true
+          stopContentWatch()
+          stopLinesWatch()
           nextTick(() => {
-            const mark = scrollerEl.value!.querySelector('mark.search-match') as HTMLElement | null
-            mark?.scrollIntoView({ block: 'center' })
+            restoreScrollPos(
+              targetIndex,
+              props.initialScrollIndex != null ? (props.initialScrollOffset ?? 0) : 0,
+            )
+            if (props.searchHighlightLineIndex != null && scrollerEl.value) {
+              nextTick(() => {
+                const mark = scrollerEl.value!.querySelector(
+                  'mark.search-match',
+                ) as HTMLElement | null
+                mark?.scrollIntoView({ block: 'center' })
+              })
+            }
           })
-        }
-      },
-      { immediate: true, flush: 'post' },
-    )
-  },
-  { flush: 'post', once: true },
-)
+        },
+        { immediate: true, flush: 'post' },
+      )
+    },
+    { flush: 'post', immediate: true },
+  )
+}
 
 // ── Persist scroll position ───────────────────────────────────────────────────
 
+// Last known good position — updated on every scroll so unmount always has fresh data
+// even if the DOM is already detached when onBeforeUnmount fires (WebView2 behaviour).
+let lastKnownPos: { scrollIndex: number; scrollOffset: number } | null = null
+
 function savePos() {
-  if (programmaticScrolling) return
-  const pos = captureScrollPos()
+  if (programmaticScrolling) {
+    console.log('[ScrollSave] skipped — programmaticScrolling is true')
+    return
+  }
+  const pos = lastKnownPos ?? captureScrollPos()
+  console.log('[ScrollSave] savePos called', { pos, lastKnownPos, tabId, bookId })
   if (pos) {
-    tabStore.setBookViewState(tabId, bookId, {
-      ...pos,
-      selectedLineId: props.selectedLineId,
-      commentaryScrollIndex: props.commentaryScrollIndex,
-      commentaryScrollOffset: props.commentaryScrollOffset,
-      zoom: zoom.value,
-    })
+    tabStore
+      .setBookViewState(tabId, bookId, {
+        ...pos,
+        selectedLineId: props.selectedLineId,
+        commentaryScrollIndex: props.commentaryScrollIndex,
+        commentaryScrollOffset: props.commentaryScrollOffset,
+        zoom: zoom.value,
+      })
+      .then(() => console.log('[ScrollSave] IDB write committed', pos))
     tabStore.setLastReadPos(bookId, {
       ...pos,
       selectedLineId: props.selectedLineId,
@@ -278,30 +342,37 @@ function savePos() {
   }
 }
 
-// Save when the app goes to background (tab switch, WebView losing focus) or on page unload.
-// Not saved on every scroll event — only on these lifecycle boundaries.
 useEventListener(document, 'visibilitychange', () => {
   if (document.visibilityState === 'hidden') savePos()
 })
 useEventListener(window, 'beforeunload', savePos)
-
-// Save on unmount — covers in-app tab switching where visibility never changes.
-onBeforeUnmount(savePos)
-
-// ── Scroll event ──────────────────────────────────────────────────────────────
+onBeforeUnmount(() => {
+  console.log(
+    '[ScrollSave] onBeforeUnmount — programmaticScrolling:',
+    programmaticScrolling,
+    'lastKnownPos:',
+    lastKnownPos,
+    'captureScrollPos:',
+    captureScrollPos(),
+  )
+  // Force-clear the programmatic flag so savePos is never silently skipped at unmount.
+  programmaticScrolling = false
+  if (programmaticScrollTimer) {
+    clearTimeout(programmaticScrollTimer)
+    programmaticScrollTimer = null
+  }
+  savePos()
+})
 
 function onScroll() {
-  if (scrollerEl.value && !programmaticScrolling) {
-    // Use the same method as captureScrollPos: find the first item whose bottom edge
-    // is at or below scrollTop — i.e. the first line actually visible in the viewport,
-    // not the first overscan-rendered item which may be above the fold.
-    const scrollTop = scrollerEl.value.scrollTop
-    const items = virtualizer.value.getVirtualItems()
-    const firstVisible = items.find((v) => v.start + v.size > scrollTop) ?? items[0]
-    const lineIndex = firstVisible?.index ?? 0
-    prioritise(lineIndex)
-    emit('scrolled', lineIndex)
-  }
+  if (!scrollerEl.value || programmaticScrolling) return
+  const scrollTop = scrollerEl.value.scrollTop
+  const items = virtualizer.value.getVirtualItems()
+  const firstVisible = items.find((v) => v.start + v.size > scrollTop) ?? items[0]
+  const lineIndex = firstVisible?.index ?? 0
+  lastKnownPos = captureScrollPos()
+  props.prioritise(lineIndex)
+  emit('scrolled', lineIndex)
 }
 
 // ── Programmatic navigation ───────────────────────────────────────────────────
@@ -314,13 +385,10 @@ function setProgrammaticScroll() {
   }, 300)
 }
 
-// Scrolls to a line by id — used for TOC and commentary navigation.
-// Skips scrolling if the line is already fully visible to avoid jarring jumps
-// when the in-app search bar navigates between results on the same screen.
 function scrollToLineId(lineId: number) {
-  const lineIndex = lines.value.find((l) => l.id === lineId)?.lineIndex
+  const lineIndex = props.lines.find((l) => l.id === lineId)?.lineIndex
   if (lineIndex == null) return
-  prioritise(lineIndex)
+  props.prioritise(lineIndex)
   const scroller = scrollerEl.value
   const vItem = virtualItems.value.find((v) => v.index === lineIndex)
   if (vItem && scroller) {
@@ -343,14 +411,10 @@ function scrollToLineIndex(lineIndex: number) {
   )
 }
 
-onBeforeUnmount(() => {
-  if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer)
-})
-
 defineExpose({ scrollToLineId, scrollToLineIndex })
 
 function onLineClick(index: number) {
-  const line = lines.value[index]
+  const line = props.lines[index]
   if (props.bottomVisible && line && line.id > 0) emit('lineSelected', line.id)
 }
 </script>

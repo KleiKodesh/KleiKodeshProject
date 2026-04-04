@@ -3,9 +3,9 @@ import { ref, computed } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { IconBook20Filled, IconFolderOpen20Filled } from '@iconify-prerendered/vue-fluent'
 import type { FsItem } from './useBooksFs'
-import type { CategoryNode, BookRow } from './booksFsTree'
-import { useVirtualListKeys } from '@/composables/useVirtualListKeys'
-import { useTilesKeys } from '@/composables/useTilesKeys'
+import type { CategoryNode, BookRow } from './booksCategoryTree'
+import { useVirtualListKeys } from '@/composables/useVirtualListKeyNav'
+import { useTilesKeys } from '@/composables/useTileGridKeys'
 
 const props = defineProps<{ items: FsItem[]; view: 'list' | 'tiles' }>()
 const emit = defineEmits<{ selectBook: [BookRow]; enterFolder: [CategoryNode] }>()

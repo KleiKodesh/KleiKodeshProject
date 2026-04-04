@@ -12,7 +12,7 @@ const isDark = computed(() => store.themePreset.includes('-dark'))
 
 <template>
   <button
-    class="theme-toggle"
+    class="bar-btn"
     :title="isDark ? 'עבור למצב בהיר' : 'עבור למצב כהה'"
     @click="store.toggleDarkMode()"
   >
@@ -20,19 +20,3 @@ const isDark = computed(() => store.themePreset.includes('-dark'))
     <IconBrightnessHigh20Regular v-else />
   </button>
 </template>
-
-<style scoped>
-.theme-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 6px;
-  border-radius: 0;
-}
-.theme-toggle svg {
-  width: 16px;
-  height: 16px;
-}
-</style>

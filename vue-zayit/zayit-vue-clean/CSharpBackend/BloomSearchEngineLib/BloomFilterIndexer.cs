@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 
 namespace BloomSearchEngineLib
 {
@@ -10,27 +11,40 @@ namespace BloomSearchEngineLib
         private readonly string _id;
         private readonly short _chunkSize;
         private readonly double _fpRate;
+        private readonly string _dbPath;
         private const int ReportIntervalMs = 1000;
 
         public event EventHandler<IndexProgressChangedEventArgs> IndexProgressChanged;
 
-        public BloomFilterIndexer(string id = "lines", short chunkSize = 100, double falsePositiveRate = 0.01)
+        public BloomFilterIndexer(string id = "lines", short chunkSize = 100, double falsePositiveRate = 0.01, string dbPath = null)
         {
-            _id = id; _chunkSize = chunkSize; _fpRate = falsePositiveRate;
+            _id = id; _chunkSize = chunkSize; _fpRate = falsePositiveRate; _dbPath = dbPath;
         }
 
         public void CreateBloomFilters()
         {
-            if (!BloomIndexingCoordinator.TryAcquireIndexingLock(0)) return;
+            Console.WriteLine("[BloomFilterIndexer] CreateBloomFilters called, dbPath=" + _dbPath);
+            CancellationToken ct;
+            if (!BloomIndexingCoordinator.TryAcquireIndexingLock(0, out ct))
+            {
+                Console.WriteLine("[BloomFilterIndexer] Could not acquire lock, aborting");
+                return;
+            }
             try
             {
-                using (var db = new ZayitDbManager())
+                using (var db = new ZayitDbManager(_dbPath))
                 using (var writer = new BloomFilterCollectionWriter(_id, _chunkSize))
                 {
-                    if (db._connection == null || db._connection.IsCanceled()) return;
+                    Console.WriteLine("[BloomFilterIndexer] ZayitDbManager created, connection=" + (db._connection == null ? "NULL" : "OK"));
+                    if (db._connection == null || db._connection.IsCanceled())
+                    {
+                        Console.WriteLine("[BloomFilterIndexer] DB connection null or cancelled, aborting");
+                        return;
+                    }
 
                     int totalLines = db.GetLineCount();
                     int totalChunks = (totalLines + _chunkSize - 1) / _chunkSize;
+                    Console.WriteLine("[BloomFilterIndexer] totalLines=" + totalLines + " totalChunks=" + totalChunks);
                     var sw = Stopwatch.StartNew();
                     var lastReport = sw.Elapsed;
                     var chunk = new List<string>(_chunkSize);
@@ -40,8 +54,6 @@ namespace BloomSearchEngineLib
                     void Commit()
                     {
                         var terms = extractor.ExtractTermsFromLines(chunk);
-                        // Always write a filter — even an empty one — so filter index N always maps to chunk N.
-                        // An empty filter will never match any term, which is correct for an all-whitespace chunk.
                         var filter = new BloomFilter(Math.Max(1, terms.Count), _fpRate);
                         foreach (var t in terms) filter.Add(t);
                         writer.Commit(filter);
@@ -63,14 +75,18 @@ namespace BloomSearchEngineLib
 
                     foreach (var line in db.GetAllLineContents())
                     {
+                        if (ct.IsCancellationRequested) { Console.WriteLine("[BloomFilterIndexer] Cancelled during indexing"); return; }
                         chunk.Add(line);
                         if (chunk.Count == _chunkSize) Commit();
                     }
-                    if (chunk.Count > 0) Commit();
+                    if (chunk.Count > 0 && !ct.IsCancellationRequested) Commit();
 
-                    var final = new IndexProgressChangedEventArgs(processed, totalChunks, sw.Elapsed, TimeSpan.Zero);
-                    IndexProgressChanged?.Invoke(this, final);
-                    BloomIndexingCoordinator.NotifyProgress(final);
+                    if (!ct.IsCancellationRequested)
+                    {
+                        var final = new IndexProgressChangedEventArgs(processed, totalChunks, sw.Elapsed, TimeSpan.Zero);
+                        IndexProgressChanged?.Invoke(this, final);
+                        BloomIndexingCoordinator.NotifyProgress(final);
+                    }
                 }
             }
             finally { BloomIndexingCoordinator.ReleaseIndexingLock(); }

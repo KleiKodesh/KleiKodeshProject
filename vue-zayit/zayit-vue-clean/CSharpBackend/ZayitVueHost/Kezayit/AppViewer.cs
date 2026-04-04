@@ -27,6 +27,7 @@ namespace Kezayit
         private PdfHandler _pdf;
         private HebrewBooksHandler _hb;
         private SearchHandler _search;
+        private string _dbInjectionScriptId;
 
         private SplashOverlay _splash;
 
@@ -77,7 +78,7 @@ namespace Kezayit
             string savedPath = AppSettings.LoadDbPath();
             bool dbReady = File.Exists(savedPath);
             string escapedPath = savedPath.Replace("\\", "\\\\");
-            await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+            _dbInjectionScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
                 "window.__webviewDbPath=\"" + escapedPath + "\";" +
                 "window.__webviewDbReady=" + (dbReady ? "true" : "false") + ";");
 
@@ -86,7 +87,7 @@ namespace Kezayit
             _pdf = new PdfHandler(_bridge, _webView);
             _hb = new HebrewBooksHandler(_bridge, _webView, this);
             _search = new SearchHandler(_bridge, _webView);
-            _db.OnDbPathPicked = path => _search.OnDbReady(path);
+            _db.OnDbPathPicked = path => _search.ResetAndReindex(path);
 
             _webView.CoreWebView2.WebMessageReceived += OnMessageReceived;
             _webView.CoreWebView2.DownloadStarting += (s, e) => _hb.OnDownloadStarting(s, e);
@@ -94,14 +95,47 @@ namespace Kezayit
 
             _webView.Source = new Uri("http://kezayit-vue-app/index.html");
 
+            Console.WriteLine("[AppViewer] InitAsync: savedPath=" + savedPath + " dbReady=" + dbReady);
             if (dbReady)
+            {
+                Console.WriteLine("[AppViewer] Calling _search.OnDbReady");
                 _search.OnDbReady(savedPath);
+            }
+            else
+            {
+                Console.WriteLine("[AppViewer] Skipping OnDbReady — no DB file at path");
+            }
         }
 
         private void OnNavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
         {
             _webView.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
             _HideSplash();
+        }
+
+        private async Task HandleReload()
+        {
+            // Remove the stale db-path injection script and register a fresh one
+            // with the current registry values before navigating.
+            if (_dbInjectionScriptId != null)
+                _webView.CoreWebView2.RemoveScriptToExecuteOnDocumentCreated(_dbInjectionScriptId);
+
+            string savedPath = AppSettings.LoadDbPath();
+            bool dbReady = File.Exists(savedPath);
+            string escapedPath = savedPath.Replace("\\", "\\\\");
+            _dbInjectionScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                "window.__webviewDbPath=\"" + escapedPath + "\";" +
+                "window.__webviewDbReady=" + (dbReady ? "true" : "false") + ";");
+
+            // Re-init the DB handler; keep the existing search handler and its index state
+            _db = new DbHandler(_bridge, _webView, savedPath);
+            _db.OnDbPathPicked = path => _search.ResetAndReindex(path);
+
+            // Only kick off indexing if the DB changed or bloom is missing/stale
+            if (dbReady)
+                _search.OnDbReady(savedPath);
+
+            _webView.CoreWebView2.Navigate("http://kezayit-vue-app/index.html");
         }
 
         private async void OnMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)
@@ -123,6 +157,7 @@ namespace Kezayit
                         case "setDbPath": _db.HandleSetDbPath(root, id); break;
                         case "pickDbPath": _db.HandlePickDbPath(id, this); break;
                         case "resetSettings": _db.HandleResetSettings(id); break;
+                        case "reload": _bridge.Reply(id, new { }); await HandleReload(); break;
                         case "pickFile": _pdf.HandlePickFile(id, this); break;
                         case "restoreLocalPdf": await _pdf.HandleRestoreLocalPdf(root, id); break;
                         case "disposePdfHost": _pdf.HandleDisposePdfHost(root, id); break;

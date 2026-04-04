@@ -2,11 +2,11 @@
 import { ref, computed, nextTick } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import { IconChevronDown20Regular, IconChevronUp20Regular } from '@iconify-prerendered/vue-fluent'
+import { detectAvailableFonts } from '@/utils/detectFonts'
 
 const props = defineProps<{
   label: string
   modelValue: string
-  availableFonts: string[]
   fontType: 'sans-serif' | 'serif'
 }>()
 const emit = defineEmits<{ 'update:modelValue': [string]; toggle: [] }>()
@@ -15,6 +15,7 @@ const boxRef = ref<HTMLElement | null>(null)
 const dropdownRef = ref<HTMLElement | null>(null)
 const isOpen = ref(false)
 const dropdownStyle = ref<Record<string, string>>({})
+const availableFonts = ref<string[]>([])
 
 onClickOutside(dropdownRef, (e) => {
   if (boxRef.value?.contains(e.target as Node)) return
@@ -26,12 +27,13 @@ async function toggle() {
     isOpen.value = false
     return
   }
+  // Rescan fonts each time the dropdown opens
+  availableFonts.value = detectAvailableFonts()
   isOpen.value = true
   emit('toggle')
   await nextTick()
   if (!boxRef.value || !dropdownRef.value) return
   const rect = boxRef.value.getBoundingClientRect()
-  const dropH = dropdownRef.value.offsetHeight
   const spaceBelow = window.innerHeight - rect.bottom - 8
   const spaceAbove = rect.top - 8
   const goUp = spaceAbove > spaceBelow
@@ -149,6 +151,8 @@ defineExpose({ isOpen })
   border: 1px solid var(--border-color);
   border-radius: 4px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
 }
 .select-option {
   display: flex;

@@ -29,6 +29,20 @@ export const SQL = {
     WHERE id = ?
   `,
 
+  /** Multiple books by id list — used by commentary loader */
+  GET_BOOKS_BY_IDS: (count: number) => `
+    SELECT id, title
+    FROM book
+    WHERE id IN (${Array(count).fill('?').join(',')})
+  `,
+
+  /** Multiple lines by id list — used by commentary loader */
+  GET_LINES_BY_IDS: (count: number) => `
+    SELECT id, lineIndex, content
+    FROM line
+    WHERE id IN (${Array(count).fill('?').join(',')})
+  `,
+
   // ── TOC ──────────────────────────────────────────────────────────────────────
 
   /** All TOC entries for a book, flat — build tree in memory */

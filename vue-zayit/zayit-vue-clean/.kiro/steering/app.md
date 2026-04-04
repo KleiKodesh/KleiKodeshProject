@@ -1,30 +1,5 @@
 # App Specification
 
-## RTL Layout — Ground Rules
-
-This app is strictly RTL. Every spatial decision must be understood in physical screen terms:
-
-| Concept               | Physical screen position |
-| --------------------- | ------------------------ |
-| inline-start          | RIGHT side of screen     |
-| inline-end            | LEFT side of screen      |
-| Reading direction     | Right → Left             |
-| First item in a row   | Appears on the RIGHT     |
-| Tree/list indentation | Shifts toward the LEFT   |
-
-### Rules for positioning and direction
-
-- "Right" always means the physical right side of the screen
-- "Left" always means the physical left side of the screen — no ambiguity, no exceptions
-- Side panel on the right: `position: absolute; right: 0`
-- Side panel on the left: `position: absolute; left: 0`
-- Slide in from right: start at `translateX(100%)`, animate to `translateX(0)`
-- Slide in from left: start at `translateX(-100%)`, animate to `translateX(0)`
-- Tree chevrons: collapsed → `IconChevronLeft` (points left toward children); expanded → `IconChevronDown`
-- `IconTextBulletListTree` must always have `class="rtl-flip"` (`transform: scaleX(-1)`) — it's an LTR-designed icon
-- Use physical `left`/`right` for absolutely/fixed positioned overlays and panels — not `inset-inline-start/end`
-- Use logical properties (`padding-inline-start`, `margin-inline-end`, etc.) only for flow content
-
 ## Overview
 
 - Hebrew book reader — mobile-first, tabbed navigation
@@ -42,108 +17,49 @@ This app is strictly RTL. Every spatial decision must be understood in physical 
 - Shared pure utils: `src/utils/`
 - Pinia stores: `src/stores/` — never under `src/data/` or elsewhere
 
+## RTL Layout
+
+This app is strictly RTL. Every spatial decision must be understood in physical screen terms:
+
+| Concept               | Physical screen position |
+| --------------------- | ------------------------ |
+| inline-start          | RIGHT side of screen     |
+| inline-end            | LEFT side of screen      |
+| Reading direction     | Right → Left             |
+| First item in a row   | Appears on the RIGHT     |
+| Tree/list indentation | Shifts toward the LEFT   |
+
+- "Right" always means the physical right side of the screen — no ambiguity, no exceptions
+- "Left" always means the physical left side of the screen — no ambiguity, no exceptions
+- `inline-start` = physical RIGHT. `inline-end` = physical LEFT.
+- Use logical properties (`padding-inline-start`, `margin-inline-end`, etc.) for flow content
+- Use physical `left`/`right` for `position: absolute/fixed` overlays and panels — not `inset-inline-start/end`
+- Side panel on the right: `position: absolute; right: 0`
+- Side panel on the left: `position: absolute; left: 0`
+- Slide in from right: start at `translateX(100%)`, animate to `translateX(0)`
+- Slide in from left: start at `translateX(-100%)`, animate to `translateX(0)`
+- Tree chevrons: collapsed → `IconChevronLeft` (points left toward children); expanded → `IconChevronDown`
+- `IconTextBulletListTree` must always have `class="rtl-flip"` (`transform: scaleX(-1)`) — it's an LTR-designed icon
+
 ## Navigation
 
 - Page-navigation app — navigating replaces the current tab's content in-place
 - Always use `tabStore.updateActiveTab({ title, route, ...data })` for navigation — never `openTab`
 - `openTab` is reserved for explicitly creating a second tab (e.g. a "new tab" button)
-- Mirrors iOS navigation: forward replaces the view, back via tab history (not yet implemented)
-
-### Tab interface (`Tab`)
-
-Each tab carries both routing and in-memory state:
-
-```ts
-interface Tab {
-  id: string
-  title: string
-  route: TabRoute // '/' | '/book-view' | '/search' | '/pdf-view' | '/settings' | '/books' | '/hebrewbooks' | '/workspaces'
-
-  // Book reader
-  bookId?: number
-  tocPath?: string // current TOC breadcrumb — updated on scroll, cleared on unmount
-  openToc?: boolean // in-memory only — not persisted
-  openTocEntryId?: number // consumed on mount, cleared immediately after
-  openTocLineIndex?: number // consumed on mount, cleared immediately after
-  searchHighlightLineIndex?: number // consumed on mount, cleared immediately after
-  searchHighlightQuery?: string // consumed on mount, cleared immediately after
-  searchQuery?: string
-
-  // PDF viewer
-  pdfVirtualUrl?: string // in-memory only — reconstructed on restore
-  pdfFileName?: string
-  pdfFilePath?: string // persisted — local file path
-  pdfHbBookId?: string // persisted — HebrewBooks book ID
-  pdfHbBookTitle?: string // persisted — HebrewBooks book title (used as cache filename)
-  pdfConverting?: boolean // in-memory only
-  pdfLoadingType?: 'converting' | 'downloading' // in-memory only
-}
-```
-
-Fields marked "in-memory only" are stripped before writing to IDB. Fields marked "consumed on mount" are read once by the page component then immediately cleared via `updateActiveTab({ field: undefined })` so they don't re-trigger on re-render.
-
-### Tab store API
-
-```ts
-tabStore.updateActiveTab(patch) // navigate in-place — primary navigation method
-tabStore.openTab(partial) // create a new tab and switch to it
-tabStore.switchTab(id) // switch to an existing tab by id
-tabStore.closeTab(id) // close a tab; cleans up its IDB keys
-tabStore.closeAllTabs() // close all tabs; resets to a single home tab
-tabStore.openNewHomeTab() // switch to existing '/' tab or open one
-tabStore.navigateToSingleton(route) // singleton-safe navigation (see below)
-```
-
-### Component keying — when pages remount
-
-`AppPageView` renders the active tab's page component. The `:key` behaviour controls when a page fully remounts vs reuses its instance:
-
-- `/book-view` and `/search` — keyed by `activeTabId`: remount whenever the active tab changes, so each tab gets its own isolated component instance with its own state
-- All other routes — no key: the component instance is reused across tab switches (singleton pages like `/settings`, `/books` share one instance)
-
-This means `/book-view` and `/search` components can safely read `tabStore.activeTabId` and `tabStore.activeTab` at setup time — those values are stable for the lifetime of that instance.
+- `/book-view` and `/search` are keyed by `activeTabId` in `AppPageView` — they fully remount on tab switch, so setup-time reads of `tabStore.activeTabId` / `activeTab` are stable for the component's lifetime; all other routes share one instance
 
 ### Singleton pages
 
-The routes `/settings`, `/books`, `/hebrewbooks`, and `/workspaces` are **singleton tabs** — only one tab of each may exist at a time. Always navigate to them via `tabStore.navigateToSingleton(route)`, never `updateActiveTab` or `openTab` directly.
+The routes `/settings`, `/books`, `/hebrewbooks`, and `/workspaces` are singleton tabs — only one tab of each may exist at a time. Always navigate to them via `tabStore.navigateToSingleton(route)`, never `updateActiveTab` or `openTab` directly. If a tab with that route already exists it switches to it (closing the current tab); otherwise the current tab is replaced in-place.
 
-`navigateToSingleton` behaviour:
-
-- If a tab with that route already exists in another tab → switch to it and close the current tab
-- If not open anywhere → replace the current tab's content in-place (`updateActiveTab`)
-
-These routes are also **never persisted** across sessions — `persistTabs` strips them before writing to IDB, so they will not be restored on next launch.
-
-### Tab persistence
-
-`watch([tabs, activeTabId], persistTabs, { deep: true })` — the tab list is written to IDB on every change.
-
-What is stripped before persisting:
-
-- All singleton-route tabs (`/settings`, `/books`, `/hebrewbooks`, `/workspaces`)
-- `pdfVirtualUrl`, `pdfConverting`, `pdfLoadingType` (in-memory only)
-- `openToc`, `openTocEntryId`, `openTocLineIndex`, `searchHighlightLineIndex`, `searchHighlightQuery` (consumed on mount)
-
-If the active tab was a singleton (and thus stripped), `persistedActiveTabId` falls back to the first remaining tab.
-
-### Scroll position save/restore for `/book-view`
-
-Scroll state is saved to IDB (`BookState`) at three points:
-
-1. `visibilitychange` → hidden (app backgrounded / WebView loses focus)
-2. `beforeunload`
-3. `onBeforeUnmount` — covers in-app tab switching where visibility never changes
-
-On mount, `BookViewPage` reads `BookState` (tab+book scoped) and falls back to `LastReadState` (book-scoped global). Scroll is not restored if the tab was opened via TOC navigation (`openTocLineIndex` takes priority).
-
-The emitted scroll index for TOC tracking uses the first _visible_ line (bottom edge past `scrollTop`), not the first _rendered_ item — overscan items above the fold are excluded.
+These routes are also never persisted across sessions — `persistTabs` strips them before writing to IDB.
 
 ## Design Language
 
 The visual style is a deliberate blend of two design systems:
 
-- **VSCode** provides the structural foundation: color palette, flat chrome, thin borders, muted text hierarchy, and overall density
-- **Windows 11 Fluent** provides the interaction feel: `4px` rounded corners on controls, subtle depth via `color-mix()` tints, smooth motion, touch-friendly sizing, and Fluent icons throughout
+- VSCode provides the structural foundation: color palette, flat chrome, thin borders, muted text hierarchy, and overall density
+- Windows 11 Fluent provides the interaction feel: `4px` rounded corners on controls, subtle depth via `color-mix()` tints, smooth motion, touch-friendly sizing, and Fluent icons throughout
 
 Neither system dominates — VSCode sets the colors and layout, Fluent sets the shape language and tactile quality. The result is clean and editor-like, but warm and touch-friendly rather than purely utilitarian.
 
@@ -217,23 +133,40 @@ Both `CommentaryHeader` and `CommentaryHeaderNav` use `background: var(--bg-prim
 - Split pane divider hover: `color-mix(in srgb, var(--text-secondary) 25%, transparent)` — never accent color
 - Split pane divider visual height is 1px but touch target is 20px via a `::before` pseudo-element (`position: absolute; height: 20px; top: 50%; transform: translateY(-50%)`) — always keep this pattern on any resize handle
 
+## Dropdowns
+
+Dropdown anchor depends on which physical side of the screen the toggle button sits on — there is no single universal rule:
+
+| Toggle button location                    | Correct anchor | Reason                                                  |
+| ----------------------------------------- | -------------- | ------------------------------------------------------- |
+| Physical right side (inline-start in RTL) | `left: 0`      | Dropdown opens leftward, stays on screen                |
+| Physical left side (inline-end in RTL)    | `right: 0`     | Dropdown opens rightward toward center, stays on screen |
+
+- `AppTitleBarNavDropdown` — hamburger is on the physical left → `right: 0`
+- Most other dropdowns (commentary type, filter panels) — toggle is on the physical right → `left: 0`
+- Always ask: "will this dropdown go off-screen?" and anchor toward the center
+- Extract every dropdown to its own component — never inline dropdown markup in a parent component
+- All dropdown lists that scroll must use `scrollbar-width: thin; scrollbar-color: var(--border-color) transparent` — never the default fat scrollbar
+
 ## Vue Patterns
 
 - Prefer `nextTick` over `setTimeout` when waiting for the DOM to update after a reactive change — `nextTick` is deterministic and tied to Vue's render cycle
 - Example: focusing an input after a panel opens → `onMounted(() => nextTick(() => inputRef.value?.focus()))`
 
+## Virtual Scroller Keyboard Navigation
+
+Every component that uses `useVirtualizer` from `@tanstack/vue-virtual` must wire up `useVirtualScrollerKeys` from `@/composables/useVirtualScrollerKeys`, passing the scroller element ref, a virtualizer getter, and an item count getter.
+
+- The scroll container element must have `tabindex="0"` so it can receive keyboard focus
+- Ctrl+Home scrolls to the first item then sets `scrollTop = 0`
+- Ctrl+End scrolls to the last item then sets `scrollTop = scrollHeight`
+- The composable uses `useEventListener` from VueUse and cleans up automatically
+
 ## Database
 
 - All SQLite access goes through `src/host/db.ts` — never call fetch against the DB from a component or composable
 - All raw SQL strings live in `src/host/queries.sql.ts` — no inline SQL anywhere else
-- Feature composables call `query()` with strings from `queries.sql.ts`
-
-```ts
-import { query } from '@/host/db'
-import { SQL } from '@/host/queries.sql'
-
-const books = await query<Book>(SQL.GET_ALL_BOOKS)
-```
+- Feature composables call `query()` with a SQL constant from `queries.sql.ts` and a params array
 
 ### Transports (auto-selected at runtime)
 
@@ -257,9 +190,10 @@ Dev server: `npm run dev:server` — `DB_PATH` sets the `.db` file (default `./d
 #### category_closure
 
 Closure table for category hierarchy.
-| column | type | notes |
-|---|---|---|
-| ancestorId | INTEGER | PK (composite) |
+
+| column       | type    | notes          |
+| ------------ | ------- | -------------- |
+| ancestorId   | INTEGER | PK (composite) |
 | descendantId | INTEGER | PK (composite) |
 
 #### author / topic / pub_place / pub_date / source
@@ -395,7 +329,7 @@ Persistence uses three separate IndexedDB databases — one per concern. No loca
 | `app-tabs`     | Tabs list, tab states, book states (workspace-scoped keys)  |
 | `app-lastread` | Per-book last-read positions (LRU-capped at 1000)           |
 
-**All IDB access must go through `src/utils/idbPersistence.ts` exclusively — no component, composable, or store may call any IDB API directly. This is a hard rule with no exceptions.**
+All IDB access must go through `src/utils/idbPersistence.ts` exclusively — no component, composable, or store may call any IDB API directly. This is a hard rule with no exceptions.
 
 Components and composables must never import from `src/utils/idbPersistence.ts` directly — they go through a store (`tabStore`, `bookViewStore`, `settingsStore`). Only stores import from `idbPersistence.ts`.
 
@@ -404,11 +338,12 @@ Components and composables must never import from `src/utils/idbPersistence.ts` 
 `app-settings` keys are plain strings (no prefix): `headerFont`, `theme`, `customThemes`, etc.
 
 `app-tabs` keys remain workspace-scoped:
-| Key | Value |
-|---|---|
-| `tabs:{wsId}` | `PersistedTabList` |
-| `tab:{wsId}:{tabId}` | `TabState` |
-| `book:{wsId}:{tabId}:{bookId}` | `BookState` |
+
+| Key                            | Value              |
+| ------------------------------ | ------------------ |
+| `tabs:{wsId}`                  | `PersistedTabList` |
+| `tab:{wsId}:{tabId}`           | `TabState`         |
+| `book:{wsId}:{tabId}:{bookId}` | `BookState`        |
 
 `app-lastread` keys: `lastread:{bookId}` → `LastReadState`
 
@@ -434,35 +369,9 @@ Always use `tabStore.setLastReadPos()` — it calls `idbSetLastRead()` which enf
 - Per-tab+book state → add field to `BookState` in `idbPersistence.ts`, expose via `tabStore.getBookViewState/setBookViewState`
 - Per-book global state → add field to `LastReadState` in `idbPersistence.ts`, expose via `tabStore.getLastReadPos/setLastReadPos`
 
-## Dropdowns
-
-- Always anchor the top-left corner of a dropdown to the left edge of its toggle — `position: absolute; top: calc(100% + 4px); left: 0` — so it flows rightward and stays within the viewport naturally
-- Never anchor to `right: 0` (that would push it off the left edge of the screen in RTL)
-- Extract every dropdown to its own component — never inline dropdown markup in a parent component
-
-## Virtual Scroller Keyboard Navigation
-
-Every component that uses `useVirtualizer` from `@tanstack/vue-virtual` **must** wire up `useVirtualScrollerKeys` from `@/composables/useVirtualScrollerKeys`.
-
-```ts
-import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
-
-useVirtualScrollerKeys(
-  scrollerEl,
-  () =>
-    virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
-  () => items.value.length,
-)
-```
-
-- The scroll container element must have `tabindex="0"` so it can receive keyboard focus.
-- Ctrl+Home scrolls to the first item then sets `scrollTop = 0`.
-- Ctrl+End scrolls to the last item then sets `scrollTop = scrollHeight`.
-- The composable uses `useEventListener` from VueUse and cleans up automatically.
-
 ## HebrewBooks Downloads
 
-- HebrewBooks blocks direct HTTP downloads — all downloads **must go through the WebView2 browser engine**
+- HebrewBooks blocks direct HTTP downloads — all downloads must go through the WebView2 browser engine
 - Never use `HttpClient` or any direct HTTP fetch to download HebrewBooks PDFs
 - The download URL format is: `https://download.hebrewbooks.org/downloadhandler.ashx?req={bookId}`
 - C# intercepts the browser download via `DownloadStarting` event and redirects the file path
@@ -478,9 +387,9 @@ useVirtualScrollerKeys(
 
 ### Build pipeline
 
-- Vue builds as a **single-file bundle** via `vite-plugin-singlefile` — all JS/CSS is inlined into one `index.html`, no separate `assets/` folder
+- Vue builds as a single-file bundle via `vite-plugin-singlefile` — all JS/CSS is inlined into one `index.html`, no separate `assets/` folder
 - `ZayitVue.targets` is imported by the `.csproj` and runs `npm run build` after every C# build, then copies `dist/` to `bin/{Config}/kezayit/` via robocopy
-- After any Vue code change, **rebuild the C# project** to get the fresh bundle into `kezayit/` — the WebView serves from that folder
+- After any Vue code change, rebuild the C# project to get the fresh bundle into `kezayit/` — the WebView serves from that folder
 - If the category tree or any data appears stuck loading in C# mode but works in dev, it is almost always a stale `kezayit/index.html` — rebuild C# first before debugging further
 
 ### File picker / dialog rules

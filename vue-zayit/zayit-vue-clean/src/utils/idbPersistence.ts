@@ -54,6 +54,7 @@ const handles: Record<string, IDBDatabase | null> = {
   'app-settings': null,
   'app-tabs': null,
   'app-lastread': null,
+  'app-hb-history': null,
 }
 
 function openDb(name: string): Promise<IDBDatabase> {
@@ -153,6 +154,7 @@ export const KEYS = {
   SETTINGS_RESUME_LAST_READ: 'resumeLastRead',
   SETTINGS_THEME: 'theme',
   SETTINGS_CUSTOM_THEMES: 'customThemes',
+  SETTINGS_SETUP_DONE: 'setupDone',
 
   // app-tabs keys
   tabsList: (wsId: string) => `tabs:${wsId}`,
@@ -228,10 +230,105 @@ export function idbGetLastRead(bookId: number): Promise<LastReadState | null> {
 
 // ── Reset all ─────────────────────────────────────────────────────────────────
 
+const RESET_FLAG_KEY = '__pendingReset'
+
 export async function idbClearAll(): Promise<void> {
-  await Promise.all([dropDb('app-settings'), dropDb('app-tabs'), dropDb('app-lastread')])
+  await Promise.all([
+    dropDb('app-settings'),
+    dropDb('app-tabs'),
+    dropDb('app-lastread'),
+    dropDb('app-hb-history'),
+  ])
 }
 
 export async function idbClearSettings(): Promise<void> {
   await dropDb('app-settings')
+}
+
+/** Write a reset flag and return immediately — actual deletion happens on next boot. */
+export function idbScheduleReset(): void {
+  // Use a raw IDB open so we don't go through the async openDb helper —
+  // we want this to fire-and-forget as fast as possible before navigation.
+  const req = indexedDB.open('app-settings', 1)
+  req.onupgradeneeded = () => {
+    if (!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE)
+  }
+  req.onsuccess = () => {
+    const db = req.result
+    db.transaction(STORE, 'readwrite').objectStore(STORE).put(true, RESET_FLAG_KEY)
+    db.close()
+  }
+}
+
+/** Call once at boot before any store reads. If the reset flag exists, wipes all DBs. */
+export async function idbCheckAndExecReset(): Promise<void> {
+  const flag = await idbGet<boolean>(RESET_FLAG_KEY)
+  if (!flag) return
+  await idbClearAll()
+}
+
+// ── HebrewBooks history DB ────────────────────────────────────────────────────
+// Separate database — keyed by book id, stores HebrewBook + lastAccessed timestamp.
+// LRU-capped at 25 entries (oldest evicted on insert).
+
+const HB_HISTORY_DB = 'app-hb-history'
+const HB_HISTORY_MAX = 25
+
+export interface HbHistoryEntry {
+  id: string
+  title: string
+  author: string
+  printingPlace: string
+  printingYear: string
+  pages: string
+  _csvTags: string
+  lastAccessed: number
+}
+
+function openHbHistoryDb(): Promise<IDBDatabase> {
+  if (handles[HB_HISTORY_DB]) return Promise.resolve(handles[HB_HISTORY_DB]!)
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(HB_HISTORY_DB, 1)
+    req.onupgradeneeded = () => {
+      const db = req.result
+      if (!db.objectStoreNames.contains('history')) {
+        const s = db.createObjectStore('history', { keyPath: 'id' })
+        s.createIndex('lastAccessed', 'lastAccessed')
+      }
+    }
+    req.onsuccess = () => {
+      handles[HB_HISTORY_DB] = req.result
+      resolve(req.result)
+    }
+    req.onerror = () => reject(req.error)
+  })
+}
+
+export async function idbHbGetHistory(): Promise<HbHistoryEntry[]> {
+  const db = await openHbHistoryDb()
+  return new Promise((resolve, reject) => {
+    const req = db.transaction('history', 'readonly').objectStore('history').getAll()
+    req.onsuccess = () =>
+      resolve((req.result as HbHistoryEntry[]).sort((a, b) => b.lastAccessed - a.lastAccessed))
+    req.onerror = () => reject(req.error)
+  })
+}
+
+export async function idbHbTrackAccess(entry: HbHistoryEntry): Promise<void> {
+  const db = await openHbHistoryDb()
+  const tx = db.transaction('history', 'readwrite')
+  const store = tx.objectStore('history')
+  store.put(entry)
+  const countReq = store.count()
+  countReq.onsuccess = () => {
+    if (countReq.result > HB_HISTORY_MAX) {
+      const all = store.getAll()
+      all.onsuccess = () => {
+        const sorted = (all.result as HbHistoryEntry[]).sort(
+          (a, b) => a.lastAccessed - b.lastAccessed,
+        )
+        sorted.slice(0, countReq.result - HB_HISTORY_MAX).forEach((e) => store.delete(e.id))
+      }
+    }
+  }
 }

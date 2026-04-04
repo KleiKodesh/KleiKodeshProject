@@ -55,7 +55,7 @@ function navigateToCt(ct: string) {
   overflow-y: auto;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 0;
+  border-radius: 4px;
   box-shadow: 0 2px 6px color-mix(in srgb, var(--text-primary) 15%, transparent);
   z-index: 1000;
   padding-block: 2px;
@@ -70,6 +70,6 @@ function navigateToCt(ct: string) {
   text-align: right;
   color: var(--text-primary);
   white-space: nowrap;
-  border-radius: 0;
+  border-radius: 4px;
 }
 </style>

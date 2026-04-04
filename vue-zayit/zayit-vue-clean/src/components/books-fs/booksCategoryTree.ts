@@ -1,4 +1,4 @@
-import { normalize } from '@/utils/normalize'
+import { normalize } from '@/utils/normalizeText'
 
 export interface BookRow {
   id: number

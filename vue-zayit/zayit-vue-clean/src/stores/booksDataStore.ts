@@ -2,8 +2,12 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { query } from '@/host/db'
 import { SQL } from '@/host/queries.sql'
-import { buildTree, assignFullPaths, findCategoryMeta } from '@/components/books-fs/booksFsTree'
-import type { CategoryNode, CategoryRow, BookRow } from '@/components/books-fs/booksFsTree'
+import {
+  buildTree,
+  assignFullPaths,
+  findCategoryMeta,
+} from '@/components/books-fs/booksCategoryTree'
+import type { CategoryNode, CategoryRow, BookRow } from '@/components/books-fs/booksCategoryTree'
 
 export const useBooksDataStore = defineStore('booksData', () => {
   const loaded = ref(false)

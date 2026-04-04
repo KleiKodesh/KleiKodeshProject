@@ -38,6 +38,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const newTabPage = ref<NewTabPage>(DEFAULTS.newTabPage)
   const pdfPageFilters = ref(DEFAULTS.pdfPageFilters)
   const resumeLastRead = ref(DEFAULTS.resumeLastRead)
+  const setupDone = ref(false)
 
   // Called from main.ts before mount — loads each setting individually
   async function init() {
@@ -57,6 +58,7 @@ export const useSettingsStore = defineStore('settings', () => {
       ntPage,
       pdfFilters,
       resumeLast,
+      setup,
     ] = await Promise.all([
       idbGet<boolean>(KEYS.SETTINGS_CENSOR_DIVINE),
       idbGet<number>(KEYS.SETTINGS_DIACRITICS),
@@ -73,6 +75,7 @@ export const useSettingsStore = defineStore('settings', () => {
       idbGet<NewTabPage>(KEYS.SETTINGS_NEW_TAB_PAGE),
       idbGet<boolean>(KEYS.SETTINGS_PDF_FILTERS),
       idbGet<boolean>(KEYS.SETTINGS_RESUME_LAST_READ),
+      idbGet<boolean>(KEYS.SETTINGS_SETUP_DONE),
     ])
 
     if (censored !== null) censorDivineNames.value = censored
@@ -90,6 +93,7 @@ export const useSettingsStore = defineStore('settings', () => {
     if (ntPage !== null) newTabPage.value = ntPage
     if (pdfFilters !== null) pdfPageFilters.value = pdfFilters
     if (resumeLast !== null) resumeLastRead.value = resumeLast
+    if (setup !== null) setupDone.value = setup
 
     applyCSSVariables()
   }
@@ -134,6 +138,11 @@ export const useSettingsStore = defineStore('settings', () => {
           /* cross-origin guard */
         }
       })
+  }
+
+  function completeSetup() {
+    setupDone.value = true
+    idbSet(KEYS.SETTINGS_SETUP_DONE, true)
   }
 
   function reset() {
@@ -234,5 +243,7 @@ export const useSettingsStore = defineStore('settings', () => {
     cycleDiacritics,
     togglePdfPageFilters,
     reset,
+    setupDone,
+    completeSetup,
   }
 })

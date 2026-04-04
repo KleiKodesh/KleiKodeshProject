@@ -5,7 +5,7 @@ import { useBookViewStore } from '@/stores/bookViewStore'
 import { useTabStore } from '@/stores/tabStore'
 import { useZoomHandler } from '@/composables/useZoom'
 import { useToc } from './useToc'
-import { useLines } from './useLines'
+import { useLines } from './useLinesTable'
 import { useCommentary } from './useCommentary'
 import { useBookViewSearch } from './useBookViewSearch'
 import { useCommentarySearch } from './useCommentarySearch'
@@ -72,7 +72,7 @@ const {
   () => bookId,
   () => bookTitle,
 )
-const { lines } = useLines(() => bookId)
+const { lines, prioritise } = useLines(() => bookId)
 
 // When selected line is a toc entry line, collect all line IDs in that section
 const selectedSectionLineIds = computed<number[] | null>(() => {
@@ -367,9 +367,6 @@ watch(
     bottomVisible.value = !bottomVisible.value
   },
 )
-watch(tocVisible, () => {
-  /* tocVisible is local only — not persisted */
-})
 watch(searchVisible, (v) => {
   if (!v) {
     contentSearch.clear()
@@ -409,6 +406,8 @@ watch(searchVisible, (v) => {
           <BookViewLinesContent
             v-if="scrollStateReady"
             ref="linesContentRef"
+            :lines="lines"
+            :prioritise="prioritise"
             :alt-toc-label-map="altTocLabelMap"
             :selected-line-id="selectedLineId"
             :bottom-visible="bottomVisible"

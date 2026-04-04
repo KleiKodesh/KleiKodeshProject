@@ -1,17 +1,17 @@
 import { ref, watch } from 'vue'
 import { refDebounced } from '@vueuse/core'
-import { normalize } from '@/utils/normalize'
+import { normalize } from '@/utils/normalizeText'
 import {
   splitQuery,
   buildTocSearchPaths,
   matchWords,
   normalizeTocWords,
-} from '@/utils/tocSearchSplit'
+} from '@/utils/tocSearchUtils'
 import { query } from '@/host/db'
 import { SQL } from '@/host/queries.sql'
 import { useBooksDataStore } from '@/stores/booksDataStore'
-import type { BookRow } from './booksFsTree'
-import type { TocSearchNode } from '@/utils/tocSearchSplit'
+import type { BookRow } from './booksCategoryTree'
+import type { TocSearchNode } from '@/utils/tocSearchUtils'
 
 export type BookFsItem = { uid: string; kind: 'book'; book: BookRow }
 export type TocFsItem = {
