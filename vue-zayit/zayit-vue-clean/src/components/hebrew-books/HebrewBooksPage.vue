@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useVirtualizer } from '@tanstack/vue-virtual'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
 import HebrewBooksListItem from './HebrewBooksListItem.vue'
 import BottomSearchBar from '@/components/common/BottomSearchBar.vue'
 import { useHebrewBooks } from './useHebrewBooks'
-import { useListKeys } from '@/composables/useListKeyNav'
+import { useVirtualListKeys } from '@/composables/useVirtualListKeyNav'
+import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 
 const {
   displayedBooks,
@@ -20,12 +22,30 @@ const {
 } = useHebrewBooks()
 
 const searchInputRef = ref<HTMLInputElement>()
-const listEl = ref<HTMLElement | null>(null)
+const scrollEl = ref<HTMLElement | null>(null)
 
-const { focusedIndex, containerFocused } = useListKeys(
-  listEl,
+const virtualizer = useVirtualizer(
+  computed(() => ({
+    count: displayedBooks.value.length,
+    getScrollElement: () => scrollEl.value,
+    estimateSize: () => 64,
+    overscan: 8,
+  })),
+)
+
+const { focusedIndex, containerFocused } = useVirtualListKeys(
+  scrollEl,
+  () =>
+    virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
   () => displayedBooks.value.length,
   (i) => openBook(displayedBooks.value[i]!),
+)
+
+useVirtualScrollerKeys(
+  scrollEl,
+  () =>
+    virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
+  () => displayedBooks.value.length,
 )
 
 function updateOnline() {
@@ -52,21 +72,34 @@ function onBookClicked(i: number, book: (typeof displayedBooks.value)[number]) {
 
 <template>
   <div class="hb-page">
-    <!-- List -->
-    <div ref="listEl" class="hb-list" tabindex="0">
+    <div ref="scrollEl" class="hb-list" tabindex="0">
       <LoadingAnimation v-if="isLoading" />
 
       <div v-else-if="error" class="state">{{ error }}</div>
 
       <template v-else-if="displayedBooks.length">
-        <HebrewBooksListItem
-          v-for="(book, i) in displayedBooks"
-          :key="book.id"
-          :book="book"
-          :focused="containerFocused && focusedIndex === i"
-          @book-clicked="onBookClicked(i, book)"
-          @download-clicked="downloadBook"
-        />
+        <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
+          <div
+            v-for="vRow in virtualizer.getVirtualItems()"
+            :key="String(vRow.key)"
+            :ref="(el) => el && virtualizer.measureElement(el as Element)"
+            :data-index="vRow.index"
+            :style="{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              transform: `translateY(${vRow.start}px)`,
+            }"
+          >
+            <HebrewBooksListItem
+              :book="displayedBooks[vRow.index]!"
+              :focused="containerFocused && focusedIndex === vRow.index"
+              @book-clicked="onBookClicked(vRow.index, displayedBooks[vRow.index]!)"
+              @download-clicked="downloadBook"
+            />
+          </div>
+        </div>
       </template>
 
       <div v-else class="state">
@@ -87,9 +120,9 @@ function onBookClicked(i: number, book: (typeof displayedBooks.value)[number]) {
         class="search-input"
         dir="rtl"
         @input="search(($event.target as HTMLInputElement).value)"
-        @keydown.up.prevent="listEl?.focus()"
-        @keydown.down.prevent="listEl?.focus()"
-        @keydown.tab.prevent="listEl?.focus()"
+        @keydown.up.prevent="scrollEl?.focus()"
+        @keydown.down.prevent="scrollEl?.focus()"
+        @keydown.tab.prevent="scrollEl?.focus()"
       />
     </BottomSearchBar>
   </div>
@@ -107,6 +140,7 @@ function onBookClicked(i: number, book: (typeof displayedBooks.value)[number]) {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+  outline: none;
 }
 
 .state {
@@ -147,15 +181,5 @@ function onBookClicked(i: number, book: (typeof displayedBooks.value)[number]) {
 }
 .search-input::-webkit-search-cancel-button {
   filter: grayscale(1) opacity(0.4);
-}
-
-.downloading-overlay {
-  position: absolute;
-  inset: 0;
-  background: color-mix(in srgb, var(--bg-primary) 80%, transparent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10;
 }
 </style>

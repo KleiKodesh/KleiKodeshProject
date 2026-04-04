@@ -56,8 +56,6 @@ const tags = computed(() =>
   padding: 10px 16px;
   cursor: pointer;
   border-bottom: 1px solid var(--border-color);
-  content-visibility: auto;
-  contain-intrinsic-size: auto 64px;
 }
 .item:hover {
   background: var(--bg-secondary);

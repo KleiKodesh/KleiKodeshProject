@@ -1,4 +1,5 @@
 import { ref, computed } from 'vue'
+import { useDebounceFn } from '@vueuse/core'
 import { hebrewBooksHistory } from './hebrewBooksHistory'
 import { loadHbCatalog, searchHbCatalog, getHbPdfUrl, type HebrewBook } from './hebrewBooksCatalog'
 import { usePdfStore } from '@/stores/pdfStore'
@@ -33,8 +34,7 @@ export function useHebrewBooks() {
     }
   }
 
-  function search(term: string) {
-    searchTerm.value = term
+  const runSearch = useDebounceFn((term: string) => {
     if (!term.trim()) {
       hebrewBooksHistory.getHistory().then((h) => {
         books.value = h
@@ -42,6 +42,11 @@ export function useHebrewBooks() {
     } else {
       books.value = searchHbCatalog(catalog.value, term)
     }
+  }, 200)
+
+  function search(term: string) {
+    searchTerm.value = term
+    runSearch(term)
   }
 
   async function trackAccess(book: HebrewBook) {

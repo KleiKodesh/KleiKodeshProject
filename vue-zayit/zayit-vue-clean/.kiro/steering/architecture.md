@@ -11,6 +11,22 @@ The root layout is `App.vue`, which stacks two elements vertically:
 
 `AppPageView` maps `tabStore.activeTab.route` to a page component. Routes `/book-view` and `/search` are keyed by `activeTabId` so they fully remount on tab switch. All other routes share a single instance.
 
+## Setup Wizard
+
+`SetupWizard.vue` is a full-screen onboarding overlay rendered in `App.vue` when `settingsStore.setupDone` is `false`. It covers the entire app until the user completes or skips it.
+
+Steps (in order):
+
+1. `welcome` — always shown; app logo, intro text
+2. `db` — only shown when `isHosted && !dbReady`; lets the user download Zayit/Otzaria or pick an existing `.db` file via `window.__webviewPickDbPath`
+3. `theme` — theme picker + app zoom slider
+4. `general` — divine name censoring, resume-last-read, new-tab destination
+5. `book-display` — header/text fonts, font size, line padding; optional separate commentary settings
+
+Navigation: forward/back buttons with a slide transition; a "skip" button calls `settings.completeSetup()` immediately. Progress is shown as a top-edge accent bar.
+
+Completion: `settings.completeSetup()` sets `setupDone = true` and persists it to IDB at key `setupDone` (via `KEYS.SETTINGS_SETUP_DONE` in `idbPersistence.ts`). Once set, the wizard never shows again.
+
 ## Title Bar
 
 `AppTitleBar.vue` is the app's only persistent chrome.
@@ -112,11 +128,12 @@ Full-text search using Bloom filters. Supports category/book filters and caches 
 
 ### settings/
 
-App settings across three tabs: general, reading, and reset.
+App settings across three tabs: general, reading, and reset. Also contains the setup wizard.
 
 - `SettingsPage.vue`, `SettingRow.vue`, `SliderSetting.vue`, `ToggleGroup.vue`
 - `ThemePicker.vue`, `FontDisplaySettings.vue`, `FontSelector.vue`
 - `useSettingsPage.ts`
+- `SetupWizard.vue` — first-launch onboarding wizard
 
 ### hebrew-books/
 

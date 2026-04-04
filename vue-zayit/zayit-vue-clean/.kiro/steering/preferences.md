@@ -60,6 +60,7 @@
 ## Steering Files
 
 - No code samples in steering files — describe rules and patterns in plain prose only
+- Whenever the architecture changes — new components, composables, stores, routes, or feature folders added or removed — update `architecture.md` to reflect the change
 
 ## Git
 

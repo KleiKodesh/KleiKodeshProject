@@ -1,3 +1,5 @@
+import { normalize } from '@/utils/normalizeText'
+
 export interface HebrewBook {
   id: string
   title: string
@@ -31,20 +33,17 @@ export async function loadHbCatalog(): Promise<HebrewBook[]> {
 }
 
 export function searchHbCatalog(catalog: HebrewBook[], term: string): HebrewBook[] {
-  const terms = term
-    .toLowerCase()
+  const terms = normalize(term)
     .trim()
     .split(' ')
-    .filter((t) => t.length > 1)
+    .filter((t) => t.length > 0)
   if (!terms.length) return []
   return catalog
-    .filter((b) =>
-      terms.every(
-        (t) =>
-          b.title.toLowerCase().includes(t) ||
-          b.author.toLowerCase().includes(t) ||
-          b._csvTags.toLowerCase().includes(t),
-      ),
-    )
+    .filter((b) => {
+      const title = normalize(b.title)
+      const author = normalize(b.author)
+      const tags = normalize(b._csvTags)
+      return terms.every((t) => title.includes(t) || author.includes(t) || tags.includes(t))
+    })
     .sort((a, b) => a.title.localeCompare(b.title))
 }
