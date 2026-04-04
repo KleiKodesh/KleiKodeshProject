@@ -22,5 +22,17 @@ namespace Kezayit.Settings
         {
             Interaction.SaveSetting("ZayitApp", "Database", "Path", path);
         }
+
+        public static DateTime LoadHbCsvLastUpdated()
+        {
+            string raw = Interaction.GetSetting("ZayitApp", "HebrewBooks", "CsvLastUpdated", "");
+            if (DateTime.TryParse(raw, out DateTime dt)) return dt;
+            return DateTime.MinValue;
+        }
+
+        public static void SaveHbCsvLastUpdated(DateTime utcDate)
+        {
+            Interaction.SaveSetting("ZayitApp", "HebrewBooks", "CsvLastUpdated", utcDate.ToString("o"));
+        }
     }
 }

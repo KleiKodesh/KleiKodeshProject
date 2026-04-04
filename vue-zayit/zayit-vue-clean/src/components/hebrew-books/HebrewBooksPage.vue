@@ -28,7 +28,7 @@ const virtualizer = useVirtualizer(
   computed(() => ({
     count: displayedBooks.value.length,
     getScrollElement: () => scrollEl.value,
-    estimateSize: () => 64,
+    estimateSize: () => 48,
     overscan: 8,
   })),
 )

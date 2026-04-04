@@ -53,60 +53,59 @@ const tags = computed(() =>
 
 <style scoped>
 .item {
-  padding: 10px 16px;
+  padding: 6px 12px;
   cursor: pointer;
   border-bottom: 1px solid var(--border-color);
 }
 .item:hover {
-  background: var(--bg-secondary);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+.item:active {
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
 }
 
 .row-top {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 4px;
+  gap: 6px;
+  margin-bottom: 2px;
 }
 .title-line {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: baseline;
   gap: 6px;
   min-width: 0;
+  overflow: hidden;
 }
 .title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
   direction: rtl;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .author {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .dl-btn {
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  padding: 4px;
-  background: none;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  color: var(--text-secondary);
+  width: 24px;
+  height: 24px;
+  padding: 2px;
   display: flex;
   align-items: center;
   justify-content: center;
+  color: var(--text-secondary);
 }
 .dl-btn:hover {
-  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
   color: var(--text-primary);
-}
-.dl-btn:active {
-  background: color-mix(in srgb, var(--text-primary) 16%, transparent);
-  color: var(--text-primary);
-  transform: scale(0.92);
 }
 
 .row-bottom {
@@ -119,7 +118,7 @@ const tags = computed(() =>
 }
 .tags {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   flex-wrap: nowrap;
   overflow: hidden;
 }
@@ -128,12 +127,12 @@ const tags = computed(() =>
 }
 .tag:not(:last-child)::after {
   content: ' •';
-  margin-left: 4px;
+  margin-inline-start: 2px;
   opacity: 0.5;
 }
 .meta {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   flex-shrink: 0;
 }
 .meta span {

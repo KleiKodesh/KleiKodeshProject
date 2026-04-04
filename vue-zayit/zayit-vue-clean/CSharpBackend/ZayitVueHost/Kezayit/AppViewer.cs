@@ -26,6 +26,7 @@ namespace Kezayit
         private DbHandler _db;
         private PdfHandler _pdf;
         private HebrewBooksHandler _hb;
+        private HebrewBooksCsvUpdater _hbCsvUpdater;
         private SearchHandler _search;
         private string _dbInjectionScriptId;
 
@@ -86,6 +87,7 @@ namespace Kezayit
             _db = new DbHandler(_bridge, _webView, savedPath);
             _pdf = new PdfHandler(_bridge, _webView);
             _hb = new HebrewBooksHandler(_bridge, _webView, this);
+            _hbCsvUpdater = new HebrewBooksCsvUpdater();
             _search = new SearchHandler(_bridge, _webView);
             _db.OnDbPathPicked = path => _search.ResetAndReindex(path);
 
@@ -100,6 +102,7 @@ namespace Kezayit
             {
                 Console.WriteLine("[AppViewer] Calling _search.OnDbReady");
                 _search.OnDbReady(savedPath);
+                _hbCsvUpdater.RunIfDue();
             }
             else
             {

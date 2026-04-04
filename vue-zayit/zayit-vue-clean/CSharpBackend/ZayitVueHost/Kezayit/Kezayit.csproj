@@ -39,6 +39,9 @@
     <Reference Include="Dapper, Version=2.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\Dapper.2.1.72\lib\net461\Dapper.dll</HintPath>
     </Reference>
+    <Reference Include="HtmlAgilityPack, Version=1.12.4.0, Culture=neutral, PublicKeyToken=bd319b19eaf3b43a, processorArchitecture=MSIL">
+      <HintPath>..\packages\HtmlAgilityPack.1.12.4\lib\Net45\HtmlAgilityPack.dll</HintPath>
+    </Reference>
     <Reference Include="Microsoft.Bcl.AsyncInterfaces, Version=10.0.0.5, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
       <HintPath>..\packages\Microsoft.Bcl.AsyncInterfaces.10.0.5\lib\net462\Microsoft.Bcl.AsyncInterfaces.dll</HintPath>
     </Reference>
@@ -103,6 +106,7 @@
     <Compile Include="Db\DbAccess.cs" />
     <Compile Include="Db\DbHandler.cs" />
     <Compile Include="HebrewBooks\HebrewBooksHandler.cs" />
+    <Compile Include="HebrewBooks\HebrewBooksCsvUpdater.cs" />
     <Compile Include="Pdf\PdfHandler.cs" />
     <Compile Include="Pdf\WordToPdfConverter.cs" />
     <Compile Include="Search\SearchHandler.cs" />
