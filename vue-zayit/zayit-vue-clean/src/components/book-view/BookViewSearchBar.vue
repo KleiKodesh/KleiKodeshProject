@@ -97,6 +97,7 @@ defineExpose({ focus: () => inputRef.value?.focus() })
           ref="inputRef"
           v-model="inputValue"
           type="search"
+          name="book-search"
           class="search-input"
           :placeholder="placeholder"
           @keydown.enter.exact="emit('next')"

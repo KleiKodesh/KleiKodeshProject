@@ -24,6 +24,7 @@ const display = computed(() =>
     </div>
     <input
       type="range"
+      :name="label"
       :value="modelValue"
       :min="min"
       :max="max"

@@ -9,7 +9,7 @@ import CommentaryTreePanel from './CommentaryTreePanel.vue'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
 import type { ContextMenuItem } from '@/components/common/ContextMenu.vue'
-import type { CommentaryGroup, CommentaryTreeNode } from './useCommentary'
+import type { CommentaryGroup } from './useCommentary'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { storeToRefs } from 'pinia'
@@ -168,10 +168,8 @@ const scrollerEl = ref<HTMLElement | null>(null)
 const scrollTop = ref(0)
 const treeVisible = ref(false)
 const hiddenBookIds = ref(new Set<number>())
-const suppressTreeSync = ref(false)
 
 function toggleBookVisibility(bookId: number) {
-  suppressTreeSync.value = true
   // capture current scroll before visibleGroups changes
   const savedScrollTop = scrollerEl.value?.scrollTop ?? 0
   const next = new Set(hiddenBookIds.value)
@@ -180,7 +178,6 @@ function toggleBookVisibility(bookId: number) {
   hiddenBookIds.value = next
   nextTick(() => {
     if (scrollerEl.value) scrollerEl.value.scrollTop = savedScrollTop
-    suppressTreeSync.value = false
   })
 }
 
@@ -206,16 +203,6 @@ const contextMenuItems: ContextMenuItem[] = [
   { label: 'העתק', action: () => document.execCommand('copy') },
   { label: 'בחר הכל', action: selectAllInContainer },
 ]
-let treeInitiatedScroll = false
-
-function onTreeSelect(node: CommentaryTreeNode) {
-  if (node.bookId == null) return
-  suppressTreeScroll.value = true
-  scrollToGroup(node.bookId)
-  requestAnimationFrame(() => {
-    suppressTreeScroll.value = false
-  })
-}
 
 const virtualizer = useVirtualizer(
   computed(() => ({
@@ -255,12 +242,6 @@ const activeHeader = computed(
 const activeBookId = computed(
   () => visibleGroups.value.find((g) => g.bookTitle === activeHeader.value?.bookTitle)?.bookId ?? 0,
 )
-
-// Frozen copy of activeBookId — only updates on real scroll, not during checkbox toggles
-const treeSelectedBookId = ref(0)
-watch(activeBookId, (val) => {
-  if (!suppressTreeSync.value) treeSelectedBookId.value = val
-})
 
 const suppressTreeScroll = ref(false)
 
@@ -362,14 +343,10 @@ defineExpose({
     <div class="body">
       <CommentaryTreePanel
         v-if="treeVisible && props.groups.length"
-        class="tree-panel"
         :groups="props.groups"
-        :selected-book-id="treeSelectedBookId"
-        :suppress-scroll="suppressTreeScroll"
         :hidden-book-ids="hiddenBookIds"
-        @select="onTreeSelect"
         @toggle="toggleBookVisibility"
-        @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)"
+        @close="treeVisible = false"
       />
       <div class="content-col">
         <CommentaryHeaderNav
@@ -378,7 +355,6 @@ defineExpose({
           :scroll-to-group="scrollToGroup"
           :book-title="activeHeader?.bookTitle ?? ''"
           :active-book-id="activeBookId"
-          :tree-visible="treeVisible"
           @update:active-book-id="() => {}"
           @navigate-section="(d, id) => emit('navigate-section', d, id)"
           @toggle-search="emit('toggle-search')"
@@ -449,12 +425,7 @@ defineExpose({
   display: flex;
   flex-direction: row;
   min-height: 0;
-}
-.tree-panel {
-  width: max-content;
-  max-width: 20%;
-  flex-shrink: 0;
-  border-inline-start: 1px solid var(--border-color);
+  position: relative;
 }
 .content-col {
   flex: 1;

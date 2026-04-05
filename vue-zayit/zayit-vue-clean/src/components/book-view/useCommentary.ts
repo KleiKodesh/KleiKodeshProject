@@ -15,7 +15,8 @@ export interface CommentaryGroup {
   connectionTypes: string[]
   lines: CommentaryLine[]
   category?: string // resolved category label (e.g. ראשונים, תנ"ך)
-  sectionLabel?: string // display label for header (e.g. מפרשים - ראשונים)
+  sectionLabel?: string // top-level section label (e.g. מפרשים, מקור)
+  subSectionLabel?: string // sub-section label under sectionLabel (e.g. ראשונים under מפרשים)
 }
 
 export interface CommentaryTreeNode {
@@ -29,20 +30,40 @@ export interface CommentaryTreeNode {
 export function buildCommentaryTree(groups: CommentaryGroup[]): CommentaryTreeNode[] {
   const root: CommentaryTreeNode[] = []
   let currentSection: CommentaryTreeNode | null = null
+  let currentSubSection: CommentaryTreeNode | null = null
 
   for (const g of groups) {
-    const label = g.sectionLabel ?? g.bookTitle
-    if (!currentSection || currentSection.label !== label) {
-      currentSection = { type: 'section', label, children: [] }
+    const sectionLabel = g.sectionLabel ?? g.bookTitle
+    const subLabel = g.subSectionLabel ?? null
+
+    if (!currentSection || currentSection.label !== sectionLabel) {
+      currentSection = { type: 'section', label: sectionLabel, children: [] }
+      currentSubSection = null
       root.push(currentSection)
     }
-    currentSection.children.push({
-      type: 'book',
-      label: g.bookTitle,
-      bookId: g.bookId,
-      firstLineIndex: g.lines[0]?.lineIndex,
-      children: [],
-    })
+
+    if (subLabel) {
+      if (!currentSubSection || currentSubSection.label !== subLabel) {
+        currentSubSection = { type: 'section', label: subLabel, children: [] }
+        currentSection.children.push(currentSubSection)
+      }
+      currentSubSection.children.push({
+        type: 'book',
+        label: g.bookTitle,
+        bookId: g.bookId,
+        firstLineIndex: g.lines[0]?.lineIndex,
+        children: [],
+      })
+    } else {
+      currentSubSection = null
+      currentSection.children.push({
+        type: 'book',
+        label: g.bookTitle,
+        bookId: g.bookId,
+        firstLineIndex: g.lines[0]?.lineIndex,
+        children: [],
+      })
+    }
   }
 
   return root
@@ -147,6 +168,7 @@ export function useCommentary(
           })),
           category,
           ct,
+          treeOrder: book?.treeOrder ?? 999999,
         }
       })
 
@@ -158,10 +180,10 @@ export function useCommentary(
 
       const result: CommentaryGroup[] = []
 
-      // Helper: add flat groups sorted by title
+      // Helper: add flat groups sorted by tree order
       const addFlat = (ct: string, label: string) => {
         const items = byType.get(ct) ?? []
-        for (const g of items.sort((a, b) => a.bookTitle.localeCompare(b.bookTitle, 'he'))) {
+        for (const g of items.sort((a, b) => a.treeOrder - b.treeOrder)) {
           result.push({
             bookId: g.bookId,
             bookTitle: g.bookTitle,
@@ -173,9 +195,9 @@ export function useCommentary(
         }
       }
 
-      // Group COMMENTARY only by resolved category
-      const addMergedByCategory = () => {
-        const items = [...(byType.get('COMMENTARY') ?? [])]
+      // Group COMMENTARY under מפרשים with category as sub-section
+      const addMergedByCategory = (ct: string, sectionLabel: string) => {
+        const items = [...(byType.get(ct) ?? [])]
         if (!items.length) return
         const byCat = new Map<string, typeof items>()
         for (const g of items) {
@@ -186,9 +208,7 @@ export function useCommentary(
           [...byCat.entries()].map(([cat, gs]) => [cat, gs.map((g) => ({ bookId: g.bookId }))]),
         )
         for (const [cat] of sorted) {
-          const catItems = byCat
-            .get(cat)!
-            .sort((a, b) => a.bookTitle.localeCompare(b.bookTitle, 'he'))
+          const catItems = byCat.get(cat)!.sort((a, b) => a.treeOrder - b.treeOrder)
           for (const g of catItems) {
             result.push({
               bookId: g.bookId,
@@ -196,7 +216,8 @@ export function useCommentary(
               connectionTypes: g.connectionTypes,
               lines: g.lines,
               category: cat,
-              sectionLabel: cat,
+              sectionLabel,
+              subSectionLabel: cat,
             })
           }
         }
@@ -204,8 +225,8 @@ export function useCommentary(
 
       addFlat('SOURCE', 'מקור')
       addFlat('TARGUM', 'תרגומים')
-      addMergedByCategory()
-      addFlat('OTHER', 'מראי מקומות')
+      addMergedByCategory('COMMENTARY', 'מפרשים')
+      addMergedByCategory('OTHER', 'קשרים')
       addFlat('REFERENCE', 'ציונים')
 
       groups.value = result
@@ -268,6 +289,7 @@ export function useCommentary(
             .sort((a, b) => a.lineIndex - b.lineIndex),
           category,
           ct,
+          treeOrder: book?.treeOrder ?? 999999,
         }
       })
 
@@ -280,7 +302,7 @@ export function useCommentary(
       const result: CommentaryGroup[] = []
       const addFlat = (ct: string, label: string) => {
         const items = byType.get(ct) ?? []
-        for (const g of items.sort((a, b) => a.bookTitle.localeCompare(b.bookTitle, 'he')))
+        for (const g of items.sort((a, b) => a.treeOrder - b.treeOrder))
           result.push({
             bookId: g.bookId,
             bookTitle: g.bookTitle,
@@ -290,8 +312,8 @@ export function useCommentary(
             sectionLabel: label,
           })
       }
-      const addMergedByCategory = () => {
-        const items = [...(byType.get('COMMENTARY') ?? [])]
+      const addMergedByCategory = (ct: string, sectionLabel: string) => {
+        const items = [...(byType.get(ct) ?? [])]
         if (!items.length) return
         const byCat = new Map<string, typeof items>()
         for (const g of items) {
@@ -302,23 +324,22 @@ export function useCommentary(
           [...byCat.entries()].map(([cat, gs]) => [cat, gs.map((g) => ({ bookId: g.bookId }))]),
         )
         for (const [cat] of sorted) {
-          for (const g of byCat
-            .get(cat)!
-            .sort((a, b) => a.bookTitle.localeCompare(b.bookTitle, 'he')))
+          for (const g of byCat.get(cat)!.sort((a, b) => a.treeOrder - b.treeOrder))
             result.push({
               bookId: g.bookId,
               bookTitle: g.bookTitle,
               connectionTypes: g.connectionTypes,
               lines: g.lines,
               category: cat,
-              sectionLabel: cat,
+              sectionLabel,
+              subSectionLabel: cat,
             })
         }
       }
       addFlat('SOURCE', 'מקור')
       addFlat('TARGUM', 'תרגומים')
-      addMergedByCategory()
-      addFlat('OTHER', 'מראי מקומות')
+      addMergedByCategory('COMMENTARY', 'מפרשים')
+      addMergedByCategory('OTHER', 'קשרים')
       addFlat('REFERENCE', 'ציונים')
       groups.value = result
     } finally {

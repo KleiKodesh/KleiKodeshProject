@@ -90,7 +90,12 @@ function selectTileItem(i: number) {
         >
           <span v-if="view !== 'tree'" class="icon"><IconBook20Filled /></span>
           <span class="item-text">
-            <span class="item-title">{{ itemTitle(items[vRow.index]!) }}</span>
+            <span class="item-title-row">
+              <span class="item-title">{{ itemTitle(items[vRow.index]!) }}</span>
+              <span v-if="items[vRow.index]!.book.authors" class="item-author-tag">{{
+                items[vRow.index]!.book.authors
+              }}</span>
+            </span>
             <span v-if="items[vRow.index]!.book.fullPath" class="item-path">{{
               items[vRow.index]!.book.fullPath!.split(' / ').slice(0, -1).join(' / ')
             }}</span>
@@ -170,6 +175,25 @@ function selectTileItem(i: number) {
   font-size: 14px;
   color: var(--text-primary);
   line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.item-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  overflow: hidden;
+}
+.item-author-tag {
+  font-size: 10px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--text-secondary) 12%, transparent);
+  border-radius: 4px;
+  padding: 1px 5px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .item-path {
   font-size: 11px;

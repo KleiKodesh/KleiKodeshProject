@@ -73,6 +73,7 @@ function startConfirmDelete(id: string) {
         <template v-if="editingId === ws.id">
           <input
             v-model="editingName"
+            name="workspace-name-edit"
             class="ws-input ws-input-inline"
             @keydown.enter="commitEdit"
             @keydown.escape="cancelEdit"
@@ -113,6 +114,7 @@ function startConfirmDelete(id: string) {
     <div class="ws-create">
       <input
         v-model="newName"
+        name="workspace-name-new"
         class="ws-input"
         placeholder="שם סביבת עבודה חדשה"
         @keydown.enter="create"

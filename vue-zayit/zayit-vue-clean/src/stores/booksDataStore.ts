@@ -14,6 +14,7 @@ export const useBooksDataStore = defineStore('booksData', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
   const allBooks = ref<BookRow[]>([])
+  const categoryMap = ref(new Map<number, CategoryNode>())
   const ROOT = ref<CategoryNode>({
     id: -1,
     parentId: null,
@@ -37,21 +38,22 @@ export const useBooksDataStore = defineStore('booksData', () => {
       assignFullPaths(children)
 
       // Build flat category map for hierarchy lookups
-      const categoryMap = new Map<number, CategoryNode>()
+      const map = new Map<number, CategoryNode>()
       const flattenNodes = (nodes: CategoryNode[]) => {
         for (const node of nodes) {
-          categoryMap.set(node.id, node)
+          map.set(node.id, node)
           flattenNodes(node.children)
         }
       }
       flattenNodes(children)
+      categoryMap.value = map
 
       // Assign period and category hierarchy to all books (cached per categoryId)
       const metaCache = new Map<number, ReturnType<typeof findCategoryMeta>>()
       for (const book of books) {
         let meta = metaCache.get(book.categoryId)
         if (!meta) {
-          meta = findCategoryMeta(book.categoryId, categoryMap)
+          meta = findCategoryMeta(book.categoryId, map)
           metaCache.set(book.categoryId, meta)
         }
         book.period = meta.period ?? 'אחר'
@@ -71,5 +73,5 @@ export const useBooksDataStore = defineStore('booksData', () => {
     }
   }
 
-  return { loaded, loading, error, allBooks, ensureLoaded, ROOT }
+  return { loaded, loading, error, allBooks, categoryMap, ensureLoaded, ROOT }
 })

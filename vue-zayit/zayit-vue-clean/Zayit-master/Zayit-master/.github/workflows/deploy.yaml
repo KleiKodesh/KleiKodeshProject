@@ -1,0 +1,294 @@
+name: Build and Release Compose Desktop App
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          # Linux x64 (DEB) - GraalVM
+          - os: ubuntu-latest
+            arch: amd64
+            pkg: deb
+            graalvm: true
+
+          # Linux ARM64 (DEB) - GraalVM
+          - os: ubuntu-24.04-arm
+            arch: arm64
+            pkg: deb
+            graalvm: true
+
+          # Linux x64 (RPM) - GraalVM
+          - os: ubuntu-latest
+            arch: amd64
+            pkg: rpm
+            graalvm: true
+
+          # Linux ARM64 (RPM) - GraalVM
+          - os: ubuntu-24.04-arm
+            arch: arm64
+            pkg: rpm
+            graalvm: true
+
+          # Windows x64 - GraalVM
+          - os: windows-latest
+            arch: amd64
+            rust_target: x86_64-pc-windows-msvc
+            graalvm: true
+
+          # Windows ARM64 - JBR (no Liberica NIK available)
+          - os: windows-11-arm
+            arch: arm64
+            rust_target: aarch64-pc-windows-msvc
+            graalvm: false
+
+          # macOS Apple Silicon (ARM64) - GraalVM
+          - os: macos-26
+            jdk_arch: aarch64
+            graalvm: true
+
+          # macOS Intel (x64) - GraalVM
+          - os: macos-26-intel
+            jdk_arch: x64
+            graalvm: true
+
+    steps:
+      - name: Checkout source (with submodules)
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Normalize version for manual runs
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag=$(git describe --tags --abbrev=0)
+          echo "Using latest tag for version: $tag"
+          echo "GITHUB_REF=refs/tags/$tag" >> "$GITHUB_ENV"
+
+      - name: Setup Nucleus
+        uses: kdroidFilter/Nucleus/.github/actions/setup-nucleus@main
+
+      - name: Setup GraalVM (Liberica NIK)
+        if: matrix.graalvm
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          distribution: 'liberica'
+
+      # Linux builds
+      - name: Build Linux .deb
+        if: startsWith(matrix.os, 'ubuntu') && matrix.pkg == 'deb' && matrix.graalvm
+        run: ./gradlew :SeforimApp:packageGraalvmDeb
+
+      - name: Build Linux .rpm
+        if: startsWith(matrix.os, 'ubuntu') && matrix.pkg == 'rpm' && matrix.graalvm
+        run: ./gradlew :SeforimApp:packageGraalvmRpm
+
+      # Windows GraalVM build (x64)
+      - name: Build Windows NSIS installer (GraalVM)
+        if: startsWith(matrix.os, 'windows') && matrix.graalvm
+        shell: pwsh
+        run: .\gradlew.bat :SeforimApp:packageGraalvmNsis
+
+      # Windows JBR build (ARM64)
+      - name: Build Windows NSIS installer (JBR)
+        if: startsWith(matrix.os, 'windows') && !matrix.graalvm
+        shell: pwsh
+        run: .\gradlew.bat :SeforimApp:createReleaseDistributable :SeforimApp:packageReleaseNsis
+
+      # Build Rust installer for Windows
+      - name: Install Rust toolchain
+        if: startsWith(matrix.os, 'windows')
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Build Windows installer (.exe)
+        if: startsWith(matrix.os, 'windows')
+        shell: pwsh
+        run: |
+          cd installer
+
+          # Create resources directory
+          New-Item -ItemType Directory -Force -Path resources | Out-Null
+
+          # Copy splash image
+          Copy-Item "..\SeforimApp\src\jvmMain\assets\common\splash.png" "resources\splash.png"
+
+          # Find NSIS installer (GraalVM or Release path)
+          $nsisFile = Get-ChildItem "..\SeforimApp\build\compose\binaries\main\graalvm-nsis\zayit-*-nsis.exe","..\SeforimApp\build\compose\binaries\main-release\nsis\zayit-*-nsis.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $nsisFile) {
+            Write-Error "NSIS installer not found"
+            exit 1
+          }
+          Copy-Item $nsisFile.FullName "resources\zayit-nsis.exe"
+          $nsisBaseName = $nsisFile.BaseName
+          Write-Host "Found NSIS: $nsisBaseName"
+
+          # Build Rust installer
+          cargo build --release --target ${{ matrix.rust_target }}
+
+          # Rename exe to match NSIS name
+          $exeName = "$nsisBaseName.exe"
+          Move-Item "target\${{ matrix.rust_target }}\release\zayit-installer.exe" "target\${{ matrix.rust_target }}\release\$exeName"
+          Write-Host "Built installer: $exeName"
+
+      # macOS builds (GraalVM)
+      - name: Build macOS .dmg + .zip
+        if: startsWith(matrix.os, 'macos')
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew :SeforimApp:packageGraalvmDmg
+          APP_DIR="SeforimApp/build/compose/binaries/main/graalvm-app"
+          APP_BUNDLE=$(find "$APP_DIR" -mindepth 1 -maxdepth 1 -type d -name '*.app' | head -n 1 || true)
+          if [ -z "$APP_BUNDLE" ]; then
+            echo "No .app bundle found in $APP_DIR"
+            exit 1
+          fi
+          echo "Found app bundle at: $APP_BUNDLE"
+          ARCH="${{ matrix.jdk_arch }}"
+          BASENAME="$(basename "$APP_BUNDLE" .app)"
+          ZIP_NAME="${BASENAME}-mac-${ARCH}.zip"
+          echo "Creating ZIP $ZIP_NAME from $(basename "$APP_BUNDLE") in $(dirname "$APP_BUNDLE")"
+          (cd "$(dirname "$APP_BUNDLE")" && zip -r "$ZIP_NAME" "$(basename "$APP_BUNDLE")")
+
+      # Upload Artifacts
+      - name: Upload Linux .deb (amd64/arm64)
+        if: startsWith(matrix.os, 'ubuntu') && matrix.pkg == 'deb'
+        uses: actions/upload-artifact@v6
+        with:
+          name: linux-deb-${{ matrix.arch }}
+          path: SeforimApp/build/compose/binaries/main/graalvm-deb/*.deb
+          if-no-files-found: error
+
+      - name: Upload Linux .rpm (amd64/arm64)
+        if: startsWith(matrix.os, 'ubuntu') && matrix.pkg == 'rpm'
+        uses: actions/upload-artifact@v6
+        with:
+          name: linux-rpm-${{ matrix.arch }}
+          path: SeforimApp/build/compose/binaries/main/graalvm-rpm/*.rpm
+          if-no-files-found: error
+
+      - name: Upload Windows .exe installer (amd64/arm64)
+        if: startsWith(matrix.os, 'windows')
+        uses: actions/upload-artifact@v6
+        with:
+          name: windows-exe-${{ matrix.arch }}
+          path: installer/target/${{ matrix.rust_target }}/release/*.exe
+          if-no-files-found: error
+
+      - name: Upload macOS .dmg
+        if: startsWith(matrix.os, 'macos')
+        uses: actions/upload-artifact@v6
+        with:
+          name: macos-dmg-${{ matrix.jdk_arch }}
+          path: SeforimApp/build/compose/binaries/main/graalvm-dmg/*.dmg
+          if-no-files-found: error
+
+      - name: Upload macOS .zip
+        if: startsWith(matrix.os, 'macos')
+        uses: actions/upload-artifact@v6
+        with:
+          name: macos-zip-${{ matrix.jdk_arch }}
+          path: SeforimApp/build/compose/binaries/main/graalvm-app/*.zip
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout (for tag/notes context)
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Get release tag and version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            TAG=$(git describe --tags --abbrev=0)
+          fi
+          echo "TAG=$TAG" >> $GITHUB_ENV
+          # Remove 'v' prefix for the title (v0.4.4 -> 0.4.4)
+          VERSION="${TAG#v}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Create draft release
+        run: |
+          gh release create "${{ env.TAG }}" \
+            --draft \
+            --generate-notes \
+            --title "${{ env.VERSION }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      # Download Artifacts
+      - name: Download Linux DEB artefacts (amd64 + arm64)
+        uses: actions/download-artifact@v7
+        with:
+          pattern: linux-deb-*
+          merge-multiple: true
+
+      - name: Download Linux RPM artefacts (amd64 + arm64)
+        uses: actions/download-artifact@v7
+        with:
+          pattern: linux-rpm-*
+          merge-multiple: true
+
+      - name: Download Windows EXE artefacts (amd64 + arm64)
+        uses: actions/download-artifact@v7
+        with:
+          pattern: windows-exe-*
+          merge-multiple: true
+
+      - name: Download macOS dmg artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: macos-dmg-*
+          merge-multiple: true
+
+      - name: Download macOS zip artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: macos-zip-*
+          merge-multiple: true
+
+      # List files
+      - name: List downloaded files
+        run: ls -R
+
+      # Upload to release (attach to the correct tag)
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          files: |
+            *.deb
+            *.rpm
+            *.exe
+            *.dmg
+            *.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Publish the release (convert from draft to published)
+      - name: Publish Release
+        run: |
+          gh release edit "${{ env.TAG }}" --draft=false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

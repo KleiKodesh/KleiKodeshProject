@@ -8,9 +8,8 @@ import {
   IconSearch20Regular,
   IconMinimize20Regular,
   IconBookOpen20Regular,
-  IconPanelRight20Regular,
-  IconPanelRight20Filled,
 } from '@iconify-prerendered/vue-fluent'
+import IconTreeRtl from '@/components/common/IconTreeRtl.vue'
 import type { CommentaryGroup } from './useCommentary'
 
 const props = defineProps<{
@@ -18,7 +17,6 @@ const props = defineProps<{
   scrollToGroup: (bookId: number) => void
   bookTitle: string
   activeBookId: number
-  treeVisible?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -37,7 +35,7 @@ onMounted(() => nextTick(() => inputRef.value?.focus()))
 
 const CT_LABELS: Record<string, string> = {
   SOURCE: 'מקור',
-  OTHER: 'מראי מקומות',
+  OTHER: 'קשרים',
   COMMENTARY: 'מפרשים',
   TARGUM: 'תרגום',
   REFERENCE: 'הפניה',
@@ -85,20 +83,16 @@ function handleKeydown(e: KeyboardEvent) {
 
 <template>
   <div class="nav">
-    <button
-      class="btn c-pointer hover-bg"
-      :class="{ active: treeVisible }"
-      :title="treeVisible ? 'הסתר עץ מפרשים' : 'הצג עץ מפרשים'"
-      @click.stop="emit('toggle-tree')"
-    >
-      <IconPanelRight20Filled v-if="treeVisible" /><IconPanelRight20Regular v-else />
+    <button class="btn c-pointer hover-bg" title="הצג עץ מפרשים" @click.stop="emit('toggle-tree')">
+      <IconTreeRtl />
     </button>
     <div class="sep" />
-    <div v-if="!treeVisible" class="search-wrapper">
+    <div class="search-wrapper">
       <IconChevronDown20Regular class="search-icon" />
       <input
         ref="inputRef"
         type="text"
+        name="commentary-search"
         class="search-input"
         :list="`commentary-list-${componentId}`"
         :placeholder="bookTitle || 'חפש מפרש...'"
@@ -127,7 +121,6 @@ function handleKeydown(e: KeyboardEvent) {
     </button>
     <div class="sep" />
     <button
-      v-if="!treeVisible"
       class="btn c-pointer hover-bg"
       title="קטע קודם"
       @click="emit('navigate-section', 'prev', props.activeBookId)"
@@ -135,14 +128,13 @@ function handleKeydown(e: KeyboardEvent) {
       <IconChevronRight20Regular />
     </button>
     <button
-      v-if="!treeVisible"
       class="btn c-pointer hover-bg"
       title="קטע הבא"
       @click="emit('navigate-section', 'next', props.activeBookId)"
     >
       <IconChevronLeft20Regular />
     </button>
-    <div v-if="!treeVisible" class="sep" />
+    <div class="sep" />
     <button
       class="btn c-pointer hover-bg"
       title="חיפוש במפרשים"
@@ -151,7 +143,6 @@ function handleKeydown(e: KeyboardEvent) {
       <IconSearch20Regular />
     </button>
     <button
-      v-if="!treeVisible"
       class="btn c-pointer hover-bg"
       title="פתח ספר זה בלשונית חדשה"
       @click.stop="openActiveBook()"
@@ -196,9 +187,6 @@ function handleKeydown(e: KeyboardEvent) {
 .btn:disabled {
   opacity: 0.3;
   pointer-events: none;
-}
-.btn.active {
-  color: var(--accent-color);
 }
 .sep {
   width: 1px;

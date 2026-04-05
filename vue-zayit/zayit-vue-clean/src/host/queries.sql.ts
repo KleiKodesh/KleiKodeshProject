@@ -13,11 +13,15 @@ export const SQL = {
     ORDER BY level, orderIndex
   `,
 
-  /** All books flat — attached to tree nodes by categoryId */
+  /** All books flat — attached to tree nodes by categoryId, with aggregated author names */
   GET_ALL_BOOKS: `
-    SELECT id, categoryId, title
-    FROM book
-    ORDER BY orderIndex
+    SELECT b.id, b.categoryId, b.title,
+           group_concat(a.name, ', ') AS authors
+    FROM book b
+    LEFT JOIN book_author ba ON ba.bookId = b.id
+    LEFT JOIN author a ON a.id = ba.authorId
+    GROUP BY b.id
+    ORDER BY b.orderIndex
   `,
 
   // ── Books ────────────────────────────────────────────────────────────────────

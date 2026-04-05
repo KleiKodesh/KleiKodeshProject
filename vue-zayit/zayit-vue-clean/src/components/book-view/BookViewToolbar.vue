@@ -3,12 +3,12 @@ import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import {
   IconSearch20Regular,
-  IconTextBulletListTree20Regular,
   IconLayoutRowTwo20Regular,
   IconLayoutRowTwoFocusBottom20Filled,
   IconZoomIn20Regular,
   IconZoomOut20Regular,
 } from '@iconify-prerendered/vue-fluent'
+import IconTreeRtl from '@/components/common/IconTreeRtl.vue'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { ZOOM_CONFIG } from '@/composables/useZoom'
@@ -31,7 +31,7 @@ const diacriticsTitle = computed(
       <IconSearch20Regular />
     </button>
     <button :class="{ active: tocVisible }" title="תוכן עניינים" @click="$emit('toggleToc')">
-      <IconTextBulletListTree20Regular class="rtl-flip" />
+      <IconTreeRtl />
     </button>
     <button
       :class="{ active: bottomVisible }"

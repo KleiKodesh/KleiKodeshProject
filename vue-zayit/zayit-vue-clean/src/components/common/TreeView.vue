@@ -12,6 +12,7 @@ const props = defineProps<{
   rowHeight?: number
   fontSize?: string
   suppressScroll?: boolean
+  stickyHeaders?: boolean
 }>()
 
 const emit = defineEmits<{ select: [node: TreeNodeItem] }>()
@@ -131,6 +132,7 @@ const visibleNodes = computed(() => {
       :indent="indent"
       :row-height="rowHeight"
       :font-size="fontSize"
+      :sticky-headers="stickyHeaders !== false"
       @toggle="toggle(node)"
       @select="selectNode(i, node)"
     >

@@ -264,18 +264,6 @@ function restoreScrollPos(lineIndex: number, scrollOffset = 0) {
         stopLinesWatch()
         return
       }
-      console.log(
-        '[ScrollRestore] lines watch — will restore to index:',
-        targetIndex,
-        'lines.length:',
-        val.length,
-      )
-      console.log(
-        '[ScrollRestore] lines watch — will restore to index:',
-        targetIndex,
-        'lines.length:',
-        val.length,
-      )
       props.prioritise(targetIndex)
       const stopContentWatch = watch(
         () => props.lines[targetIndex]?.content,
@@ -317,22 +305,16 @@ function restoreScrollPos(lineIndex: number, scrollOffset = 0) {
 let lastKnownPos: { scrollIndex: number; scrollOffset: number } | null = null
 
 function savePos() {
-  if (programmaticScrolling) {
-    console.log('[ScrollSave] skipped — programmaticScrolling is true')
-    return
-  }
+  if (programmaticScrolling) return
   const pos = lastKnownPos ?? captureScrollPos()
-  console.log('[ScrollSave] savePos called', { pos, lastKnownPos, tabId, bookId })
   if (pos) {
-    tabStore
-      .setBookViewState(tabId, bookId, {
-        ...pos,
-        selectedLineId: props.selectedLineId,
-        commentaryScrollIndex: props.commentaryScrollIndex,
-        commentaryScrollOffset: props.commentaryScrollOffset,
-        zoom: zoom.value,
-      })
-      .then(() => console.log('[ScrollSave] IDB write committed', pos))
+    tabStore.setBookViewState(tabId, bookId, {
+      ...pos,
+      selectedLineId: props.selectedLineId,
+      commentaryScrollIndex: props.commentaryScrollIndex,
+      commentaryScrollOffset: props.commentaryScrollOffset,
+      zoom: zoom.value,
+    })
     tabStore.setLastReadPos(bookId, {
       ...pos,
       selectedLineId: props.selectedLineId,
@@ -347,14 +329,6 @@ useEventListener(document, 'visibilitychange', () => {
 })
 useEventListener(window, 'beforeunload', savePos)
 onBeforeUnmount(() => {
-  console.log(
-    '[ScrollSave] onBeforeUnmount — programmaticScrolling:',
-    programmaticScrolling,
-    'lastKnownPos:',
-    lastKnownPos,
-    'captureScrollPos:',
-    captureScrollPos(),
-  )
   // Force-clear the programmatic flag so savePos is never silently skipped at unmount.
   programmaticScrolling = false
   if (programmaticScrollTimer) {

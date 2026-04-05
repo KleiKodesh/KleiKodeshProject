@@ -60,6 +60,7 @@ defineExpose({ focus: () => inputRef.value?.focus() })
       ref="inputRef"
       v-model="localQuery"
       type="text"
+      name="full-text-search"
       class="search-input"
       placeholder="הזן טקסט לחיפוש..."
       :disabled="disabled"

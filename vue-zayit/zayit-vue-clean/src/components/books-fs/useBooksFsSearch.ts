@@ -89,7 +89,9 @@ export function useBooksFsSearch(searchQuery: ReturnType<typeof ref<string>>) {
   const searching = ref(false)
 
   function filterBooks(words: string[]) {
-    return store.allBooks.filter((b) => words.every((w) => (b.searchPath ?? '').includes(w)))
+    return store.allBooks
+      .filter((b) => words.every((w) => (b.searchPath ?? '').includes(w)))
+      .sort((a, b) => (a.treeOrder ?? 0) - (b.treeOrder ?? 0))
   }
 
   // Phase 1: instant book match

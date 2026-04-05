@@ -93,6 +93,7 @@ const hasAlt = computed(() => props.altTocSections.length > 0)
               ref="searchRef"
               v-model="searchQuery"
               type="search"
+              name="toc-search"
               class="search-input"
               placeholder="חיפוש..."
               @keydown.up.prevent="focusTocList"

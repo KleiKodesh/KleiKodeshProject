@@ -167,6 +167,7 @@ Shared reusable components used across features.
 - `TreeView.vue`, `TreeNode.vue` — generic tree
 - `SplitPane.vue` — resizable split pane
 - `BottomSearchBar.vue`, `ContextMenu.vue`, `ConfirmDialog.vue`, `LoadingAnimation.vue`
+- `IconTreeRtl.vue` — `IconTextBulletListTree` pre-flipped for RTL layout
 
 ## Pinia Stores (`src/stores/`)
 

@@ -4,6 +4,7 @@ export interface BookRow {
   id: number
   categoryId: number
   title: string
+  authors?: string | null
   treeOrder?: number
   fullPath?: string
   searchPath?: string
@@ -38,7 +39,8 @@ export function assignFullPaths(nodes: CategoryNode[], parentPath = '', counter 
     for (const book of node.books) {
       book.treeOrder = counter.n++
       book.fullPath = `${nodePath} / ${book.title}`
-      book.searchPath = normalize(book.fullPath)
+      const authorPart = book.authors ? ` ${normalize(book.authors)}` : ''
+      book.searchPath = normalize(book.fullPath) + authorPart
     }
     assignFullPaths(node.children, nodePath, counter)
   }
@@ -61,7 +63,8 @@ function detectPeriod(title: string): string | null {
   return null
 }
 
-/** Single-pass traversal: returns period and root category info. */
+/** Single-pass traversal: returns a meaningful commentary group label and root category.
+ *  Mirrors Zayit's resolveGroupLabel logic so the result is computed once at catalog load. */
 export function findCategoryMeta(
   categoryId: number,
   map: Map<number, CategoryNode>,
@@ -71,24 +74,62 @@ export function findCategoryMeta(
 } {
   const visited = new Set<number>()
   let rootCat: CategoryNode | undefined
-  let period: string | null = null
+  let mifarsheimParentTitle: string | null = null
+  let fallbackPeriod: string | null = null
 
-  function traverse(id: number): void {
-    if (visited.has(id)) return
-    visited.add(id)
-    const cat = map.get(id)
-    if (!cat) return
+  let currentId: number | null | undefined = categoryId
+  while (currentId != null) {
+    if (visited.has(currentId)) break
+    visited.add(currentId)
+    const cat = map.get(currentId)
+    if (!cat) break
+
     if (cat.parentId == null) {
       rootCat = cat
-      return
+      break
     }
-    if (!period) period = detectPeriod(cat.title)
-    if (cat.parentId) traverse(cat.parentId)
+
+    const title = cat.title
+
+    // חברותא
+    if (title === 'ביאור חברותא' || title === 'הערות על ביאור חברותא')
+      return { period: 'חברותא', root: rootCat?.title ?? null }
+
+    // "על ה..." commentary buckets
+    if (
+      title.includes('על התנ״ך') ||
+      title.includes('על התנ"ך') ||
+      title.includes('על התלמוד') ||
+      title.includes('על המשנה') ||
+      title.includes('על המשניות') ||
+      title.includes('על הש"ס') ||
+      title.includes('על השס')
+    )
+      return { period: title, root: rootCat?.title ?? null }
+
+    // Broad families
+    if (title.includes('חסידות')) return { period: 'חסידות', root: rootCat?.title ?? null }
+    if (title.includes('מילונים')) return { period: 'מילונים', root: rootCat?.title ?? null }
+    if (title === 'מחברי זמננו') return { period: 'מחברי זמננו', root: rootCat?.title ?? null }
+    if (title === 'ראשונים') return { period: 'ראשונים', root: rootCat?.title ?? null }
+
+    // מפרשים → "מפרשים על <parent>" — capture once, keep walking for a more specific match
+    if (title === 'מפרשים' && mifarsheimParentTitle === null) {
+      const parent = cat.parentId != null ? map.get(cat.parentId) : null
+      mifarsheimParentTitle = parent?.title ?? ''
+    }
+
+    // Classic period fallback
+    if (!fallbackPeriod) fallbackPeriod = detectPeriod(title)
+
+    currentId = cat.parentId
   }
 
-  traverse(categoryId)
+  if (mifarsheimParentTitle !== null)
+    return { period: `מפרשים על ${mifarsheimParentTitle}`, root: rootCat?.title ?? null }
+
   return {
-    period: period ?? (rootCat ? rootCat.title : null),
+    period: fallbackPeriod ?? (rootCat ? rootCat.title : null),
     root: rootCat?.title ?? null,
   }
 }

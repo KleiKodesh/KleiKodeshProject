@@ -56,6 +56,7 @@ defineExpose({ reset, containerRef: computed(() => treeViewRef.value?.containerR
     ref="treeViewRef"
     :nodes="flatNodes"
     :row-height="38"
+    :sticky-headers="false"
     font-size="14px"
     @select="onSelect"
   />

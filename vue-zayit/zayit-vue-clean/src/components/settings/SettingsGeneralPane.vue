@@ -88,6 +88,7 @@ async function commitPath() {
             v-if="editingPath"
             ref="pathInputRef"
             v-model="dbPath"
+            name="db-path"
             class="db-path-input"
             dir="ltr"
             @blur="commitPath"
