@@ -135,13 +135,13 @@ function handleKeydown(e: KeyboardEvent) {
       <IconChevronLeft20Regular />
     </button>
     <div class="sep" />
-    <button
+    <!-- <button
       class="btn c-pointer hover-bg"
       title="חיפוש במפרשים"
       @click.stop="emit('toggle-search')"
     >
       <IconSearch20Regular />
-    </button>
+    </button> -->
     <button
       class="btn c-pointer hover-bg"
       title="פתח ספר זה בלשונית חדשה"

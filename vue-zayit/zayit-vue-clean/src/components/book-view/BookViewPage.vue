@@ -383,24 +383,10 @@ watch(searchVisible, (v) => {
       :search-visible="searchVisible"
       :toc-visible="tocVisible"
       @toggle-bottom="bottomVisible = !bottomVisible"
-      @toggle-search="openContentSearch"
+      @toggle-search="searchVisible = !searchVisible"
       @toggle-toc="tocVisible = !tocVisible"
     />
     <div class="content-area">
-      <BookViewSearchBar
-        ref="searchBarRef"
-        :visible="searchVisible"
-        :toolbar-visible="bookViewStore.toolbarVisible"
-        :match-count="activeMatchCount"
-        :current-match="activeMatchIdx"
-        :commentary-visible="bottomVisible"
-        :mode="searchMode"
-        @close="searchVisible = false"
-        @query-change="onQueryChange"
-        @next="onSearchNext"
-        @prev="onSearchPrev"
-        @mode-change="onModeChange"
-      />
       <BookViewSplitPane :bottom-visible="bottomVisible">
         <template #top>
           <BookViewLinesContent
@@ -454,6 +440,19 @@ watch(searchVisible, (v) => {
           />
         </template>
       </BookViewSplitPane>
+      <BookViewSearchBar
+        ref="searchBarRef"
+        :visible="searchVisible"
+        :match-count="activeMatchCount"
+        :current-match="activeMatchIdx"
+        :commentary-visible="bottomVisible"
+        :mode="searchMode"
+        @close="searchVisible = false"
+        @query-change="onQueryChange"
+        @next="onSearchNext"
+        @prev="onSearchPrev"
+        @mode-change="onModeChange"
+      />
       <BookViewTocTree
         v-show="tocVisible"
         :book-id="bookId"

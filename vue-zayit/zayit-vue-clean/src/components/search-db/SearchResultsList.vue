@@ -207,7 +207,8 @@ function onScroll() {}
   font-weight: 500;
   font-size: 13px;
   cursor: pointer;
-  width: fit-content;
+  min-width: 0;
+  overflow: hidden;
   user-select: text;
   color: var(--accent-color);
 }
@@ -217,14 +218,23 @@ function onScroll() {}
 }
 .book-title {
   color: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
 }
 .sep {
   color: var(--text-secondary);
   font-size: 11px;
+  flex-shrink: 0;
 }
 .toc-text {
   color: inherit;
   font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 .snippet {
   font-family: var(--text-font);

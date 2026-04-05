@@ -1,7 +1,5 @@
 <script setup lang="ts">
 import { ref, watch, computed, nextTick } from 'vue'
-import { useDraggable } from '@vueuse/core'
-import { useBookViewStore } from '@/stores/bookViewStore'
 import {
   IconChevronUp20Regular,
   IconChevronDown20Regular,
@@ -14,7 +12,6 @@ export type SearchMode = 'content' | 'commentary'
 
 const props = defineProps<{
   visible: boolean
-  toolbarVisible: boolean
   matchCount: number
   currentMatch: number
   commentaryVisible: boolean
@@ -28,8 +25,6 @@ const emit = defineEmits<{
   modeChange: [SearchMode]
 }>()
 
-const bookViewStore = useBookViewStore()
-const barRef = ref<HTMLElement | null>(null)
 const inputRef = ref<HTMLInputElement | null>(null)
 const inputValue = ref('')
 const searchMode = ref<SearchMode>(props.mode)
@@ -66,21 +61,6 @@ const matchLabel = computed(() =>
   props.matchCount === 0 ? '0 / 0' : `${props.currentMatch + 1} / ${props.matchCount}`,
 )
 
-const APP_TITLE_BAR = 40,
-  BOOK_TOOLBAR = 32,
-  BAR_WIDTH = 260
-function defaultPosition() {
-  return {
-    x: window.innerWidth / 2 - BAR_WIDTH / 2,
-    y: APP_TITLE_BAR + (props.toolbarVisible ? BOOK_TOOLBAR : 0) + 4,
-  }
-}
-
-const { x, y, style } = useDraggable(barRef, {
-  initialValue: bookViewStore.searchBarPos ?? defaultPosition(),
-})
-watch([x, y], ([nx, ny]) => bookViewStore.setSearchBarPos({ x: nx, y: ny }))
-
 function onClose() {
   inputValue.value = ''
   emit('close')
@@ -91,7 +71,7 @@ defineExpose({ focus: () => inputRef.value?.focus() })
 
 <template>
   <Transition name="search-bar">
-    <div v-if="visible" ref="barRef" class="search-bar" :style="style">
+    <div v-if="visible" class="search-bar">
       <div class="search-inner">
         <input
           ref="inputRef"
@@ -134,26 +114,15 @@ defineExpose({ focus: () => inputRef.value?.focus() })
 
 <style scoped>
 .search-bar {
-  position: fixed;
-  z-index: 9999;
   display: flex;
   align-items: center;
   gap: 2px;
-  width: fit-content;
-  padding: 5px 6px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
+  padding: 4px 8px;
+  background: var(--bg-toolbar);
+  border-top: 1px solid var(--border-color);
   box-sizing: border-box;
   user-select: none;
-  touch-action: none;
-  cursor: grab;
-  box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.4),
-    0 1px 3px rgba(0, 0, 0, 0.25);
-}
-.search-bar:active {
-  cursor: grabbing;
+  flex-shrink: 0;
 }
 .mode-btn {
   display: flex;
@@ -175,11 +144,16 @@ defineExpose({ focus: () => inputRef.value?.focus() })
 .search-inner {
   display: flex;
   align-items: center;
-  padding: 5px 6px;
-  gap: 4px;
+  flex: 1;
+  padding: 3px 8px;
+  gap: 6px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
 }
 .search-input {
-  width: 120px;
+  flex: 1;
+  min-width: 0;
   border: none;
   background: none;
   outline: none;
@@ -240,6 +214,6 @@ defineExpose({ focus: () => inputRef.value?.focus() })
 .search-bar-enter-from,
 .search-bar-leave-to {
   opacity: 0;
-  transform: translateY(-6px);
+  transform: translateY(100%);
 }
 </style>

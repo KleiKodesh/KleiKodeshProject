@@ -18,18 +18,25 @@ const bookId = computed(
   () => props.groups.find((g) => g.bookTitle === props.bookTitle)?.bookId ?? 0,
 )
 
-onLongPress(
-  headerEl,
-  () => {
-    const group = props.groups.find((g) => g.bookTitle === props.bookTitle)
-    if (group?.lines[0] != null) emit('open-book', group.bookId, group.lines[0].lineIndex)
-  },
-  { delay: 500 },
-)
+function openBook() {
+  const group = props.groups.find((g) => g.bookTitle === props.bookTitle)
+  if (group?.lines[0] != null) emit('open-book', group.bookId, group.lines[0].lineIndex)
+}
+
+onLongPress(headerEl, openBook, { delay: 500 })
+
+function onHeaderClick(e: MouseEvent) {
+  if (e.ctrlKey) openBook()
+}
 </script>
 
 <template>
-  <div ref="headerEl" class="commentary-header" title="לחץ ממושכות לפתיחת הספר בלשונית חדשה">
+  <div
+    ref="headerEl"
+    class="commentary-header"
+    title="Ctrl+לחיצה (או לחיצה ממושכת במסך מגע) לפתיחת הספר בלשונית חדשה"
+    @click="onHeaderClick"
+  >
     <div class="title-block">
       <span class="book-title">{{
         sectionLabel ? `${sectionLabel} > ${bookTitle}` : bookTitle
@@ -104,7 +111,7 @@ onLongPress(
   height: 24px;
   border-radius: 4px;
   color: var(--text-secondary);
-  opacity: 0.4;
+  opacity: 0.2;
 }
 .commentary-header:hover .action-btn {
   opacity: 1;

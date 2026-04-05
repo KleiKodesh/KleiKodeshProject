@@ -17,7 +17,6 @@ export const useBookViewStore = defineStore('bookView', () => {
   function toggleBottomPanel() {
     toggleBottomPanelSignal.value++
   }
-  const searchBarPos = ref<{ x: number; y: number } | null>(null)
   const isBookViewActive = computed(() => tabStore.activeTab.route === '/book-view')
 
   // Per-tab+book zoom map: key = `${tabId}:${bookId}`
@@ -51,22 +50,13 @@ export const useBookViewStore = defineStore('bookView', () => {
 
   // Called from main.ts after tabStore.init()
   async function init() {
-    const [toolbar, pos] = await Promise.all([
-      idbGet<boolean>(KEYS.SETTINGS_TOOLBAR),
-      idbGet<{ x: number; y: number }>(KEYS.SETTINGS_SEARCH_BAR_POS),
-    ])
+    const toolbar = await idbGet<boolean>(KEYS.SETTINGS_TOOLBAR)
     if (toolbar !== null) toolbarVisible.value = toolbar
-    if (pos !== null) searchBarPos.value = pos
   }
 
   function toggleToolbar() {
     toolbarVisible.value = !toolbarVisible.value
     idbSet(KEYS.SETTINGS_TOOLBAR, toolbarVisible.value)
-  }
-
-  function setSearchBarPos(pos: { x: number; y: number }) {
-    searchBarPos.value = pos
-    idbSet(KEYS.SETTINGS_SEARCH_BAR_POS, pos)
   }
 
   function zoomIn() {
@@ -83,14 +73,12 @@ export const useBookViewStore = defineStore('bookView', () => {
     toolbarVisible,
     toggleBottomPanelSignal,
     toggleBottomPanel,
-    searchBarPos,
     isBookViewActive,
     zoom,
     getZoom,
     setZoom,
     init,
     toggleToolbar,
-    setSearchBarPos,
     zoomIn,
     zoomOut,
     resetZoom,

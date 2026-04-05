@@ -75,3 +75,13 @@ This project uses Prettier with `printWidth: 100`. The Vue template compiler rej
 - Never use template literals (backticks) inside Vue template attribute strings
 - The fix in all cases is to extract the logic to a named function or `computed` in `<script setup>` and reference it by name in the template — this is Prettier-safe and also cleaner
 - Arrow functions in `<script setup>` are fine — this rule applies only to inline expressions inside template attribute values
+
+## Documentation
+
+- Every folder in the app (`src/components/*`, `src/composables/`, `src/utils/`, `src/stores/`, `src/host/`, `src/theme/`) must have its own `README.md`
+- When the user says "add documentation" or "document this", they mean: create or update the local `README.md` in the relevant folder
+- READMEs must be purely functional and concise — describe what each file does, where to add new code, what to import from where, and what patterns or constraints to follow
+- READMEs are written to help an AI agent make correct decisions without reading every file — they should answer "where does this go?" and "what should I use for this?"
+- No code samples in READMEs — prose only
+- No padding, no intros, no summaries — every sentence must carry information
+- Whenever functionality changes — files added, removed, renamed, or behavior meaningfully altered — update the README of the affected folder immediately

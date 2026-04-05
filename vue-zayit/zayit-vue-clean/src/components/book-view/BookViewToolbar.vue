@@ -27,7 +27,11 @@ const diacriticsTitle = computed(
 
 <template>
   <div class="book-view-toolbar">
-    <button :class="{ active: searchVisible }" title="חיפוש" @click="$emit('toggleSearch')">
+    <button
+      :class="{ active: searchVisible }"
+      title="חיפוש (Ctrl+F)"
+      @click="$emit('toggleSearch')"
+    >
       <IconSearch20Regular />
     </button>
     <button :class="{ active: tocVisible }" title="תוכן עניינים" @click="$emit('toggleToc')">
