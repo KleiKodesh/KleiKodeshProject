@@ -255,27 +255,29 @@ function restoreScrollPos(lineIndex: number, scrollOffset = 0) {
 // so it doesn't re-trigger on subsequent lines updates.
 {
   let restored = false
-  const stopLinesWatch = watch(
+  let stop: (() => void) | null = null
+  stop = watch(
     () => props.lines,
     (val) => {
       if (!val.length) return
       const targetIndex = props.initialLineIndex ?? props.initialScrollIndex
       if (targetIndex == null) {
-        stopLinesWatch()
+        stop?.()
         return
       }
       props.prioritise(targetIndex)
-      const stopContentWatch = watch(
+      let stopContentWatch: (() => void) | null = null
+      stopContentWatch = watch(
         () => props.lines[targetIndex]?.content,
         (content) => {
           if (content == null) return
           if (restored) {
-            stopContentWatch()
+            stopContentWatch?.()
             return
           }
           restored = true
-          stopContentWatch()
-          stopLinesWatch()
+          stopContentWatch?.()
+          stop?.()
           nextTick(() => {
             restoreScrollPos(
               targetIndex,
@@ -314,6 +316,7 @@ function savePos() {
       commentaryScrollIndex: props.commentaryScrollIndex,
       commentaryScrollOffset: props.commentaryScrollOffset,
       zoom: zoom.value,
+      bottomVisible: props.bottomVisible,
     })
     tabStore.setLastReadPos(bookId, {
       ...pos,

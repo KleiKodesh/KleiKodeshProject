@@ -7,13 +7,24 @@ import {
 } from '@iconify-prerendered/vue-fluent'
 import type { CommentaryGroup } from './useCommentary'
 
-const props = defineProps<{ bookTitle: string; sectionLabel?: string; groups: CommentaryGroup[] }>()
+const props = defineProps<{
+  bookTitle: string
+  sectionLabel?: string
+  subSectionLabel?: string
+  groups: CommentaryGroup[]
+}>()
 const emit = defineEmits<{
   'navigate-section': [direction: 'next' | 'prev', bookId: number]
   'open-book': [bookId: number, lineIndex: number]
 }>()
 
 const headerEl = ref<HTMLElement | null>(null)
+
+const fullPath = computed(() => {
+  const group = props.groups.find((g) => g.bookTitle === props.bookTitle)
+  return group?.path ?? props.bookTitle
+})
+
 const bookId = computed(
   () => props.groups.find((g) => g.bookTitle === props.bookTitle)?.bookId ?? 0,
 )
@@ -34,13 +45,11 @@ function onHeaderClick(e: MouseEvent) {
   <div
     ref="headerEl"
     class="commentary-header"
-    title="Ctrl+לחיצה (או לחיצה ממושכת במסך מגע) לפתיחת הספר בלשונית חדשה"
+    :title="fullPath + '\nCtrl+לחיצה (או לחיצה ממושכת במסך מגע) לפתיחת הספר בלשונית חדשה'"
     @click="onHeaderClick"
   >
     <div class="title-block">
-      <span class="book-title">{{
-        sectionLabel ? `${sectionLabel} > ${bookTitle}` : bookTitle
-      }}</span>
+      <span class="book-title">{{ fullPath }}</span>
     </div>
     <div class="header-actions" @click.stop>
       <button
@@ -80,7 +89,8 @@ function onHeaderClick(e: MouseEvent) {
 .title-block {
   flex: 1;
   display: flex;
-  align-items: center;
+  align-items: baseline;
+  gap: 6px;
   min-width: 0;
   overflow: hidden;
 }
@@ -92,6 +102,7 @@ function onHeaderClick(e: MouseEvent) {
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
+  flex-shrink: 1;
   user-select: text;
 }
 .header-actions {

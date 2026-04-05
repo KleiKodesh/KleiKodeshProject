@@ -5,7 +5,7 @@ import { useScopedCopy } from '@/composables/useLineCopy'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import CommentaryHeader from './CommentaryHeader.vue'
 import CommentaryHeaderNav from './CommentaryHeaderNav.vue'
-import CommentaryTreePanel from './CommentaryTreePanel.vue'
+import CommentaryTreePanel from './CommentaryFilterPanel.vue'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
 import type { ContextMenuItem } from '@/components/common/ContextMenu.vue'
@@ -137,7 +137,13 @@ function renderContent(content: string, flatIndex: number): string {
 }
 
 type FlatItem =
-  | { type: 'header'; bookTitle: string; connectionTypes: string[]; sectionLabel?: string }
+  | {
+      type: 'header'
+      bookTitle: string
+      connectionTypes: string[]
+      sectionLabel?: string
+      subSectionLabel?: string
+    }
   | { type: 'line'; content: string; lineId: number }
 
 const flatItems = computed<FlatItem[]>(() => {
@@ -148,6 +154,7 @@ const flatItems = computed<FlatItem[]>(() => {
       bookTitle: g.bookTitle,
       connectionTypes: g.connectionTypes,
       sectionLabel: g.sectionLabel,
+      subSectionLabel: g.subSectionLabel,
     })
     for (const l of g.lines) items.push({ type: 'line', content: l.content, lineId: l.lineId })
   }
@@ -353,7 +360,6 @@ defineExpose({
           class="sticky-nav"
           :groups="visibleGroups"
           :scroll-to-group="scrollToGroup"
-          :book-title="activeHeader?.bookTitle ?? ''"
           :active-book-id="activeBookId"
           @update:active-book-id="() => {}"
           @navigate-section="(d, id) => emit('navigate-section', d, id)"
@@ -396,6 +402,7 @@ defineExpose({
                 v-if="flatItems[vItem.index]?.type === 'header'"
                 :book-title="(flatItems[vItem.index] as any).bookTitle"
                 :section-label="(flatItems[vItem.index] as any).sectionLabel"
+                :sub-section-label="(flatItems[vItem.index] as any).subSectionLabel"
                 :groups="visibleGroups"
                 @navigate-section="(d, id) => emit('navigate-section', d, id)"
                 @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)"

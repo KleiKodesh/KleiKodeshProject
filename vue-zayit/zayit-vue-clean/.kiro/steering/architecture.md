@@ -2,6 +2,8 @@
 
 This is a functional architecture map of the app — a Hebrew book reader, mobile-first, strictly RTL.
 
+Every folder described here has a `README.md` that goes deeper: which file to edit for a given task, what to import from where, and what constraints apply. When working in any folder, read its README first.
+
 ## App Shell
 
 The root layout is `App.vue`, which stacks two elements vertically:
@@ -102,7 +104,7 @@ The main book reader. Orchestrates a split pane (text above, commentary below), 
 - `CommentaryView.vue` — commentary display grouped by book
 - `CommentaryHeader.vue` — commentary book header (type selector, nav)
 - `CommentaryHeaderNav.vue` — prev/next section navigation
-- `CommentaryTreePanel.vue` — commentary TOC tree
+- `CommentaryFilterPanel.vue` — commentary filter panel
 - `CommentaryTreeViewNode.vue` — commentary TOC node
 - `CommentaryTypeDropdown.vue` — commentary type selector
 - `useToc.ts` — loads TOC entries and alt TOC structures for a book; builds a path map (entry id → full breadcrumb string); exposes `getActiveTocEntry` and `getTocPath`

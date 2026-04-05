@@ -59,6 +59,33 @@ const DEV_SAMPLES: BloomSearchResult[] = [
     proximityScore: 0.8,
     snippet: 'ויכלו השמים והארץ וכל צבאם',
   },
+  {
+    lineId: 6,
+    bookId: 4,
+    bookTitle: 'משנה תורה להרמב"ם - ספר המדע',
+    tocText: 'הלכות יסודי התורה › פרק ראשון › הלכה א',
+    score: 0.78,
+    proximityScore: 0.75,
+    snippet: 'יסוד היסודות ועמוד החכמות לידע שיש שם מצוי ראשון',
+  },
+  {
+    lineId: 7,
+    bookId: 5,
+    bookTitle: 'שולחן ערוך עם כל הנושאי כלים - אורח חיים',
+    tocText: 'סימן א › סעיף א',
+    score: 0.75,
+    proximityScore: 0.72,
+    snippet: 'יתגבר כארי לעמוד בבוקר לעבודת בוראו שיהא הוא מעורר השחר',
+  },
+  {
+    lineId: 8,
+    bookId: 6,
+    bookTitle: 'תלמוד בבלי - מסכת ברכות',
+    tocText: 'פרק ראשון - מאימתי › דף ב עמוד א',
+    score: 0.72,
+    proximityScore: 0.7,
+    snippet: 'מאימתי קורין את שמע בערבין משעה שהכהנים נכנסים לאכול בתרומתן',
+  },
 ]
 
 function callAction<T>(name: string, ...params: unknown[]): Promise<T> {
@@ -172,10 +199,9 @@ export function useBloomSearch() {
     results.value = []
     executedQuery.value = query
 
-    // Dev fallback
-    if (!isHosted) {
+    // Dev fallback — bridge not available in browser dev
+    if (!isHosted || typeof window.__webviewAction !== 'function') {
       await new Promise((r) => setTimeout(r, 400))
-      await enrichTocPaths(DEV_SAMPLES)
       results.value = DEV_SAMPLES
       isSearching.value = false
       return

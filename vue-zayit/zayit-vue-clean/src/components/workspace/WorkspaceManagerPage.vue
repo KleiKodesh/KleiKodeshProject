@@ -153,7 +153,13 @@ function startConfirmDelete(id: string) {
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
 .ws-row.active {
-  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-inline-start: 2px solid var(--accent-color);
+  padding-inline-start: 10px;
+}
+.ws-row.active .ws-name {
+  color: var(--accent-color);
+  font-weight: 500;
 }
 
 .ws-name {

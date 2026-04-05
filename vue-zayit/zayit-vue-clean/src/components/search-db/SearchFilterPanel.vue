@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconMinimize20Regular } from '@iconify-prerendered/vue-fluent'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
 import SearchFilterNode from './SearchFilterNode.vue'
@@ -25,25 +25,25 @@ const isAllChecked = computed(() => total.value > 0 && props.checkedBookIds.size
 const isIndet = computed(
   () => props.checkedBookIds.size > 0 && props.checkedBookIds.size < total.value,
 )
-
-function setIndet(el: HTMLInputElement | null) {
-  if (el) el.indeterminate = isIndet.value
-}
 </script>
 
 <template>
   <div class="panel">
     <div class="panel-header">
-      <input
-        type="checkbox"
-        class="cb"
-        :checked="isAllChecked"
-        :ref="(el) => setIndet(el as HTMLInputElement | null)"
-        @change="isAllChecked ? emit('uncheckAll') : emit('checkAll')"
-        title="בחר/בטל הכל"
-      />
-      <span class="panel-title">סינון תוצאות</span>
-      <button class="close-btn" @click="emit('close')"><IconDismiss20Regular /></button>
+      <div
+        class="header-check"
+        :class="{ checked: isAllChecked, indet: isIndet }"
+        @click="isAllChecked ? emit('uncheckAll') : emit('checkAll')"
+      >
+        <span class="check-col">
+          <span class="check-mark">✓</span>
+          <span class="dash-mark">–</span>
+        </span>
+        <span class="panel-title">הצג הכל</span>
+      </div>
+      <button class="close-btn c-pointer hover-bg" title="סגור" @click.stop="emit('close')">
+        <IconMinimize20Regular />
+      </button>
     </div>
     <div class="panel-body">
       <LoadingAnimation v-if="booksStore.loading" />
@@ -72,50 +72,70 @@ function setIndet(el: HTMLInputElement | null) {
   z-index: 10;
   display: flex;
   flex-direction: column;
-  min-width: 200px;
-  max-width: 320px;
-  background: color-mix(in srgb, var(--bg-primary) 97%, transparent);
+  min-width: 180px;
+  max-width: 300px;
+  background: var(--bg-secondary);
   border-left: 1px solid var(--border-color);
 }
 .panel-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 6px 4px 4px;
+  height: 26px;
   border-bottom: 1px solid var(--border-color);
-  min-height: 36px;
-}
-.cb {
-  width: 14px;
-  height: 14px;
   flex-shrink: 0;
+}
+.header-check {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  height: 26px;
   cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.header-check:hover {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+.check-col {
+  width: 28px;
+  height: 26px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--accent-color);
+}
+.check-mark {
+  display: none;
+}
+.dash-mark {
+  display: none;
+}
+.header-check.checked .check-mark {
+  display: block;
+}
+.header-check.indet .dash-mark {
+  display: block;
 }
 .panel-title {
   flex: 1;
-  font-size: 13px;
-  font-weight: 600;
 }
 .close-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 4px;
-  border-radius: 4px;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: 0;
+  color: var(--text-secondary);
 }
 .panel-body {
   flex: 1;
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
-}
-.panel-body::-webkit-scrollbar {
-  width: 4px;
-}
-.panel-body::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 2px;
 }
 </style>

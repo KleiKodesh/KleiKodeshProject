@@ -15,7 +15,6 @@ const LASTREAD_MAX = 1000
 // ── Shared types ──────────────────────────────────────────────────────────────
 
 export interface TabState {
-  bottomVisible: boolean
   searchScrollIndex?: number
   searchScrollOffset?: number
 }
@@ -27,6 +26,7 @@ export interface BookState {
   commentaryScrollIndex?: number | null
   commentaryScrollOffset?: number | null
   zoom?: number
+  bottomVisible?: boolean
 }
 
 export interface LastReadState {

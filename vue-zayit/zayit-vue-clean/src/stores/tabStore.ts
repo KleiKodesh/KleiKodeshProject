@@ -230,12 +230,12 @@ export const useTabStore = defineStore('tabs', () => {
     idbTabsDelete(KEYS.tab(wsId, id))
     idbTabsDeleteByPrefix(KEYS.tabPrefix(wsId, id))
     tabs.value.splice(idx, 1)
-    if (activeTabId.value === id)
-      activeTabId.value = tabs.value[Math.min(idx, tabs.value.length - 1)]?.id ?? ''
     if (tabs.value.length === 0) {
       const home: Tab = { id: String(++nextId), title: 'בית', route: '/' }
       tabs.value.push(home)
       activeTabId.value = home.id
+    } else if (activeTabId.value === id) {
+      activeTabId.value = tabs.value[Math.min(idx, tabs.value.length - 1)]!.id
     }
   }
 

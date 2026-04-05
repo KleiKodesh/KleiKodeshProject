@@ -49,13 +49,53 @@ namespace Kezayit.Pdf
                     if (ext == ".pdf")
                     {
                         string url = RegisterFolder(filePath);
-                        _bridge.Reply(id, new { cancelled = false, url, fileName = Path.GetFileName(filePath), filePath });
+                        _bridge.PushEvent(new { @event = "localPdfReady", url, fileName = Path.GetFileName(filePath), filePath });
+                        _bridge.Reply(id, new { cancelled = false });
                     }
                     else
                     {
                         string displayName = Path.GetFileNameWithoutExtension(filePath) + ".pdf";
+                        string destPath = GetCachePath(filePath);
+                        string destFileName = Path.GetFileName(destPath);
                         _bridge.PushEvent(new { @event = "conversionStarted", fileName = displayName, filePath });
+
+                        // Watch for the output PDF to appear — fires as soon as ExportAsFixedFormat
+                        // writes the file, before Word has finished closing. This lets the tab
+                        // update immediately without waiting for app.Quit() to return.
+                        Directory.CreateDirectory(WordCacheDir);
+                        FileSystemWatcher watcher = null;
+                        if (!File.Exists(destPath))
+                        {
+                            watcher = new FileSystemWatcher(WordCacheDir, destFileName)
+                            {
+                                NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
+                                EnableRaisingEvents = true,
+                            };
+                            FileSystemEventHandler onReady = null;
+                            bool fired = false;
+                            onReady = (s, e) =>
+                            {
+                                // Wait until the file is fully written and no longer locked
+                                if (!IsFileReady(e.FullPath)) return;
+                                if (fired) return;
+                                fired = true;
+                                watcher.EnableRaisingEvents = false;
+                                watcher.Dispose();
+                                string url2 = "http://kezayit-vue-app/cache/word/" + destFileName;
+                                _bridge.PushEvent(new { @event = "conversionReady", url = url2, fileName = displayName, filePath });
+                            };
+                            watcher.Created += onReady;
+                            watcher.Changed += onReady;
+                        }
+
                         string cached = await ConvertToPdfAsync(filePath);
+
+                        if (watcher != null)
+                        {
+                            watcher.EnableRaisingEvents = false;
+                            watcher.Dispose();
+                        }
+
                         if (cached == null) { _bridge.Reply(id, new { error = "לא ניתן להמיר את הקובץ. ודא ש-Microsoft Word מותקן." }); return; }
                         string url = "http://kezayit-vue-app/cache/word/" + Path.GetFileName(cached);
                         _bridge.Reply(id, new { cancelled = false, url, fileName = displayName, filePath });
@@ -154,6 +194,16 @@ namespace Kezayit.Pdf
         {
             foreach (char c in Path.GetInvalidFileNameChars()) name = name.Replace(c, '_');
             return name.Length > 80 ? name.Substring(0, 80) : name;
+        }
+
+        private static bool IsFileReady(string path)
+        {
+            try
+            {
+                using (var fs = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.None))
+                    return fs.Length > 0;
+            }
+            catch { return false; }
         }
     }
 }

@@ -31,9 +31,20 @@ export function useAppNavigation() {
       return
     }
     if (label === 'פתח קובץ') {
-      const tabId = tabStore.activeTabId
       const result = await pickFile()
-      if (result) pdfStore.finishLocalFileConversion(tabId, result)
+      // In hosted mode, both PDFs (localPdfReady) and Word files (conversionReady) are
+      // handled via push events — pickFile() returns null. In dev mode it returns the
+      // blob URL directly, so we navigate here.
+      if (result) {
+        tabStore.updateActiveTab({
+          route: '/pdf-view',
+          title: result.fileName,
+          pdfFileName: result.fileName,
+          pdfFilePath: result.filePath,
+          pdfVirtualUrl: result.url,
+          pdfConverting: false,
+        })
+      }
       return
     }
     if (label === 'התקן כזית') {

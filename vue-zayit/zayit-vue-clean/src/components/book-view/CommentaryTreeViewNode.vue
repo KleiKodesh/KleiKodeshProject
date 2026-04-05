@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import { IconChevronLeft20Regular, IconChevronDown20Regular } from '@iconify-prerendered/vue-fluent'
+import { ref, computed } from 'vue'
+import { IconChevronDown20Regular } from '@iconify-prerendered/vue-fluent'
 import type { CommentaryTreeNode } from './useCommentary'
 
 const props = defineProps<{
@@ -8,13 +8,10 @@ const props = defineProps<{
   hiddenBookIds?: Set<number>
   depth?: number
 }>()
-const emit = defineEmits<{
-  toggle: [bookId: number]
-}>()
+const emit = defineEmits<{ toggle: [bookId: number] }>()
 
 const expanded = ref(false)
 
-// Collect all leaf bookIds recursively under a node
 function collectBookIds(node: CommentaryTreeNode): number[] {
   if (node.type === 'book' && node.bookId != null) return [node.bookId]
   return node.children.flatMap(collectBookIds)
@@ -35,23 +32,12 @@ const sectionState = computed<'checked' | 'unchecked' | 'indeterminate'>(() => {
   return 'indeterminate'
 })
 
-const sectionCbEl = ref<HTMLInputElement | null>(null)
-watch(
-  sectionState,
-  (s) => {
-    if (sectionCbEl.value) sectionCbEl.value.indeterminate = s === 'indeterminate'
-  },
-  { immediate: true, flush: 'post' },
-)
-
 function toggleCheck(e: MouseEvent) {
   e.stopPropagation()
   if (props.node.type === 'section') {
     if (sectionState.value === 'indeterminate') {
-      // show all hidden leaves
       leafIds.value.filter((id) => props.hiddenBookIds?.has(id)).forEach((id) => emit('toggle', id))
     } else {
-      // toggle all leaves
       leafIds.value.forEach((id) => emit('toggle', id))
     }
   } else if (props.node.bookId != null) {
@@ -61,25 +47,20 @@ function toggleCheck(e: MouseEvent) {
 </script>
 
 <template>
-  <div role="treeitem" style="display: contents">
-    <!-- section header row -->
-    <div v-if="node.type === 'section'" class="section-row" @click.stop="toggleCheck($event)">
-      <button class="expander" @click.stop="expanded = !expanded">
-        <IconChevronDown20Regular v-if="expanded" />
-        <IconChevronLeft20Regular v-else />
+  <div style="display: contents">
+    <div v-if="node.type === 'section'" class="row section-row" :class="sectionState">
+      <button class="expander" :class="{ open: expanded }" @click.stop="expanded = !expanded">
+        <span class="expander-icon"><IconChevronDown20Regular /></span>
       </button>
-      <input
-        ref="sectionCbEl"
-        type="checkbox"
-        class="row-checkbox"
-        :checked="sectionState === 'checked'"
-        @click.stop="toggleCheck($event)"
-        @change.stop
-      />
-      <span class="section-label">{{ node.label }}</span>
+      <div class="row-body" @click="toggleCheck($event)">
+        <span class="check-col">
+          <span class="check-mark">✓</span>
+          <span class="dash-mark">–</span>
+        </span>
+        <span class="row-label">{{ node.label }}</span>
+      </div>
     </div>
 
-    <!-- children (sub-sections or books) shown when expanded -->
     <template v-if="node.type === 'section' && expanded">
       <CommentaryTreeViewNode
         v-for="child in node.children"
@@ -87,120 +68,113 @@ function toggleCheck(e: MouseEvent) {
         :node="child"
         :depth="(depth ?? 0) + 1"
         :hidden-book-ids="hiddenBookIds"
-        :class="{ 'sub-section': child.type === 'section' }"
         @toggle="emit('toggle', $event)"
       />
     </template>
 
-    <!-- book leaf -->
-    <div v-if="node.type === 'book'" class="book-row">
+    <div v-if="node.type === 'book'" class="row book-row" :class="{ unchecked: !isChecked }">
       <span class="expander-placeholder" />
-      <input
-        type="checkbox"
-        class="row-checkbox"
-        :checked="isChecked"
-        @click.stop="toggleCheck($event)"
-        @change.stop
-      />
-      <span class="book-label" :class="{ dimmed: !isChecked }">{{ node.label }}</span>
+      <div class="row-body" @click="toggleCheck($event)">
+        <span class="check-col">
+          <span class="check-mark">✓</span>
+        </span>
+        <span class="row-label" :class="{ dimmed: !isChecked }">{{ node.label }}</span>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* ── section header ── */
-.section-row {
+.row {
+  display: flex;
+  align-items: stretch;
+  height: 26px;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+.row-body {
+  flex: 1;
   display: flex;
   align-items: center;
-  min-height: 28px;
-  padding: 0;
-  padding-inline-end: 8px;
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border-color);
-  direction: rtl;
-  margin-top: 4px;
-  color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 700;
   cursor: pointer;
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  gap: 6px;
+  min-width: 0;
 }
-.section-row:first-child {
-  margin-top: 0;
+.row-body:hover {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
-.section-row:hover {
-  background: color-mix(in srgb, var(--text-primary) 6%, var(--bg-secondary));
-}
-
-/* sub-section rows are indented and lighter */
-.sub-section .section-row {
-  padding-inline-end: 8px;
+.section-row {
+  font-size: 12px;
   font-weight: 600;
+}
+.book-row {
   font-size: 11px;
   color: var(--text-secondary);
-  position: static;
-  margin-top: 0;
-  border-top: none;
+}
+
+.check-col {
+  width: 28px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--accent-color);
+}
+.check-mark {
+  display: none;
+}
+.dash-mark {
+  display: none;
+}
+.section-row.checked .check-mark {
+  display: block;
+}
+.section-row.indeterminate .dash-mark {
+  display: block;
+}
+.book-row:not(.unchecked) .check-mark {
+  display: block;
+}
+
+.row-label {
+  flex: 1;
+  padding-inline-end: 8px;
+}
+.dimmed {
+  opacity: 0.4;
 }
 
 .expander {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 26px;
   flex-shrink: 0;
+  align-self: stretch;
   color: var(--text-secondary);
   padding: 0;
+  margin: 0;
   border-radius: 0;
 }
-
-.section-label {
-  flex: 1;
-  word-break: break-word;
+.expander:hover {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
-
-/* ── book leaf ── */
-.book-row {
+.expander:active {
+  transform: none !important;
+}
+.expander-icon {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 28px;
-  padding-block: 4px;
-  padding-inline-start: 0;
-  padding-inline-end: 8px;
-  direction: rtl;
-  transition: background 120ms;
-  color: var(--text-secondary);
-  font-size: 11px;
+  transition: transform 200ms ease;
+}
+.expander.open .expander-icon {
+  transform: rotate(180deg);
+}
+.expander :deep(svg) {
+  width: 12px;
+  height: 12px;
 }
 .expander-placeholder {
-  width: 28px;
-  height: 28px;
+  width: 26px;
   flex-shrink: 0;
-}
-.book-row:hover {
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
-}
-
-.book-label {
-  flex: 1;
-  word-break: break-word;
-  line-height: 1.3;
-}
-.book-label.dimmed {
-  opacity: 0.35;
-}
-
-.row-checkbox {
-  flex-shrink: 0;
-  width: 13px;
-  height: 13px;
-  margin: 0;
-  cursor: pointer;
-  accent-color: var(--accent-color);
 }
 </style>

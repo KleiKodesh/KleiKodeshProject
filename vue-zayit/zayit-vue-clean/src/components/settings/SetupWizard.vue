@@ -63,7 +63,7 @@ const stepDescs: Record<Step, string> = {
 const bookDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null>(null)
 const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null>(null)
 
-const dbPath = ref(window.__webviewDbPath ?? '')
+const dbPath = ref(dbReady.value ? (window.__webviewDbPath ?? '') : '')
 const dismissed = ref(false)
 
 onMounted(() => {
@@ -277,7 +277,7 @@ const progressPct = computed(() => Math.round((stepIndex.value / (steps.value.le
       <button class="skip-btn" @click="skip">דלג</button>
       <div class="nav-btns">
         <button v-if="stepIndex > 0" class="back-btn" @click="back">הקודם</button>
-        <button class="next-btn" @click="next">
+        <button class="next-btn" :disabled="currentStep === 'db' && !dbReady" @click="next">
           {{ currentStep === 'welcome' ? 'התחל' : isLast ? 'סיום' : 'הבא' }}
         </button>
       </div>
@@ -545,6 +545,10 @@ const progressPct = computed(() => Math.round((stepIndex.value / (steps.value.le
 }
 .next-btn:hover {
   background: color-mix(in srgb, var(--accent-color) 82%, #000);
+}
+.next-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .back-btn {

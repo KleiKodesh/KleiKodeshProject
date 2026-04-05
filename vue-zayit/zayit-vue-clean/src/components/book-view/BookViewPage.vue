@@ -285,10 +285,6 @@ async function onNavigateSection(direction: 'next' | 'prev', commentaryBookId: n
 }
 
 onMounted(async () => {
-  const saved = await tabStore.getTabViewState(tabId)
-  if (saved) {
-    bottomVisible.value = saved.bottomVisible
-  }
   if (bookId != null) {
     const bookSaved = await tabStore.getBookViewState(tabId, bookId)
     const lastRead = await tabStore.getLastReadPos(bookId)
@@ -297,6 +293,8 @@ onMounted(async () => {
     const so = bookSaved?.commentaryScrollOffset ?? lastRead?.commentaryScrollOffset
     // restore zoom for this tab+book
     if (bookSaved?.zoom != null) bookViewStore.setZoom(tabId, bookId, bookSaved.zoom)
+    // restore bottom panel visibility
+    if (bookSaved?.bottomVisible != null) bottomVisible.value = bookSaved.bottomVisible
     // restore scroll position — only if not navigating to a specific TOC entry
     if (openTocLineIndex == null) {
       const scrollIndex = bookSaved?.scrollIndex ?? lastRead?.scrollIndex
@@ -340,11 +338,11 @@ const pinnedCommentaryBookId = ref<number | null>(null)
 const commentaryScrollIndex = ref<number | null>(null)
 const commentaryScrollOffset = ref<number | null>(null)
 
-// Fetch the first default commentator for this book (used as initial pin when no user selection exists)
-let defaultCommentatorBookId: number | null = null
+// Fetch all default commentators for this book ordered by position (used as fallback pin when no user selection exists)
+let defaultCommentatorBookIds: number[] = []
 if (bookId != null) {
-  query<{ commentatorBookId: number }>(SQL.GET_DEFAULT_COMMENTATOR, [bookId]).then((rows) => {
-    defaultCommentatorBookId = rows[0]?.commentatorBookId ?? null
+  query<{ commentatorBookId: number }>(SQL.GET_DEFAULT_COMMENTATORS, [bookId]).then((rows) => {
+    defaultCommentatorBookIds = rows.map((r) => r.commentatorBookId)
   })
 }
 
@@ -356,11 +354,20 @@ function onCommentaryScroll(si: number, so: number) {
 watch(selectedLineId, () => {
   if (commentaryViewRef.value?.activeBookId) {
     pinnedCommentaryBookId.value = commentaryViewRef.value.activeBookId
-  } else if (defaultCommentatorBookId != null) {
-    pinnedCommentaryBookId.value = defaultCommentatorBookId
+  } else if (defaultCommentatorBookIds.length > 0) {
+    pinnedCommentaryBookId.value = defaultCommentatorBookIds[0]!
   }
 })
-watch(bottomVisible, (val) => tabStore.setTabViewState(tabId, { bottomVisible: val }))
+
+// When groups load, if the pinned default has no links for this line, fall back to the next default that does
+watch(groups, (newGroups) => {
+  if (!newGroups.length || !defaultCommentatorBookIds.length) return
+  // Only apply fallback when the pin came from defaults (not a user selection)
+  const currentPin = pinnedCommentaryBookId.value
+  if (currentPin == null || !defaultCommentatorBookIds.includes(currentPin)) return
+  const available = defaultCommentatorBookIds.find((id) => newGroups.some((g) => g.bookId === id))
+  if (available != null) pinnedCommentaryBookId.value = available
+})
 watch(
   () => bookViewStore.toggleBottomPanelSignal,
   () => {

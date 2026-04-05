@@ -8,14 +8,13 @@ import {
   IconSearch20Regular,
   IconMinimize20Regular,
   IconBookOpen20Regular,
+  IconFilter20Regular,
 } from '@iconify-prerendered/vue-fluent'
-import IconTreeRtl from '@/components/common/IconTreeRtl.vue'
 import type { CommentaryGroup } from './useCommentary'
 
 const props = defineProps<{
   groups: CommentaryGroup[]
   scrollToGroup: (bookId: number) => void
-  bookTitle: string
   activeBookId: number
 }>()
 
@@ -33,19 +32,7 @@ const componentId = Math.random().toString(36).slice(2)
 
 onMounted(() => nextTick(() => inputRef.value?.focus()))
 
-const CT_LABELS: Record<string, string> = {
-  SOURCE: 'מקור',
-  OTHER: 'קשרים',
-  COMMENTARY: 'מפרשים',
-  TARGUM: 'תרגום',
-  REFERENCE: 'הפניה',
-}
-
-const groupLabel = (g: CommentaryGroup) => {
-  const section =
-    g.sectionLabel ?? CT_LABELS[g.connectionTypes[0] ?? ''] ?? g.connectionTypes[0] ?? ''
-  return section ? `${section} > ${g.bookTitle}` : g.bookTitle
-}
+const groupLabel = (g: CommentaryGroup) => g.path
 
 function navigateToGroup(bookId: number) {
   props.scrollToGroup(bookId)
@@ -83,8 +70,8 @@ function handleKeydown(e: KeyboardEvent) {
 
 <template>
   <div class="nav">
-    <button class="btn c-pointer hover-bg" title="הצג עץ מפרשים" @click.stop="emit('toggle-tree')">
-      <IconTreeRtl />
+    <button class="btn c-pointer hover-bg" title="סנן מפרשים" @click.stop="emit('toggle-tree')">
+      <IconFilter20Regular />
     </button>
     <div class="sep" />
     <div class="search-wrapper">
@@ -95,7 +82,7 @@ function handleKeydown(e: KeyboardEvent) {
         name="commentary-search"
         class="search-input"
         :list="`commentary-list-${componentId}`"
-        :placeholder="bookTitle || 'חפש מפרש...'"
+        :placeholder="groups.find((g) => g.bookId === activeBookId)?.path || 'חפש מפרש...'"
         @change="handleSelect"
         @keydown="handleKeydown"
       />
@@ -204,7 +191,7 @@ function handleKeydown(e: KeyboardEvent) {
 }
 .search-icon {
   position: absolute;
-  left: 4px;
+  left: 2px;
   width: 12px;
   height: 12px;
   color: var(--text-secondary);
@@ -213,15 +200,20 @@ function handleKeydown(e: KeyboardEvent) {
 .search-input {
   width: 100%;
   height: 20px;
-  padding-inline: 6px 22px;
+  padding-inline: 6px 0;
   border: 1px solid var(--border-color);
   border-radius: 999px;
-  background: var(--input-bg);
+  background: transparent;
   color: var(--text-primary);
   font-size: 11px;
   outline: none;
   appearance: none;
   -webkit-appearance: none;
+}
+.search-input::placeholder {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .search-input::-webkit-calendar-picker-indicator,
 .search-input::-webkit-list-button {

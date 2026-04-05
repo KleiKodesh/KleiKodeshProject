@@ -64,13 +64,15 @@ function onPointerUp() {
   flex: 1;
 }
 .divider {
-  height: 3px;
+  height: 2px;
   flex-shrink: 0;
   background: var(--border-color);
-  cursor: row-resize;
+  cursor:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M12 3 L8 7 L10 7 L10 11 L14 11 L14 7 L16 7 Z' fill='%23ffffff' stroke='%23000000' stroke-width='0.5'/%3E%3Cpath d='M12 21 L8 17 L10 17 L10 13 L14 13 L14 17 L16 17 Z' fill='%23ffffff' stroke='%23000000' stroke-width='0.5'/%3E%3C/svg%3E")
+      12 12,
+    row-resize;
   touch-action: none;
   position: relative;
-  transition: background 120ms;
 }
 .divider::before {
   content: '';
@@ -79,9 +81,21 @@ function onPointerUp() {
   right: 0;
   top: 50%;
   transform: translateY(-50%);
-  height: 20px;
+  height: 44px;
 }
-.divider:hover {
-  background: color-mix(in srgb, var(--text-secondary) 25%, transparent);
+.divider::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 2px;
+  background: var(--border-color);
+  transition: height 120ms;
+}
+.divider:hover::after {
+  height: 6px;
+  background: color-mix(in srgb, var(--accent-color) 5%, var(--border-color));
 }
 </style>

@@ -5,7 +5,6 @@
   --toolbar-bg-color: var(--bg-toolbar-custom, rgb(240, 240, 240)) !important;
   --toolbar-border-color: var(--border-color-custom, rgb(229, 229, 229)) !important;
   --sidebar-toolbar-bg-color: var(--bg-secondary-custom, rgb(243, 243, 243)) !important;
-  --body-bg-color: var(--bg-primary-custom, rgb(255, 255, 255)) !important;
   --scrollbar-color: color-mix(in srgb, var(--text-secondary-custom, #5a5a5a) 30%, transparent) !important;
   --scrollbar-bg-color: transparent !important;
 }
@@ -14,7 +13,6 @@
   --toolbar-bg-color: var(--bg-toolbar-custom, rgb(37, 37, 37)) !important;
   --toolbar-border-color: var(--border-color-custom, rgb(59, 59, 59)) !important;
   --sidebar-toolbar-bg-color: var(--bg-secondary-custom, rgb(45, 45, 45)) !important;
-  --body-bg-color: var(--bg-primary-custom, rgb(30, 30, 30)) !important;
   --scrollbar-color: color-mix(in srgb, var(--text-secondary-custom, #a6a6a6) 30%, transparent) !important;
   --scrollbar-bg-color: transparent !important;
 }

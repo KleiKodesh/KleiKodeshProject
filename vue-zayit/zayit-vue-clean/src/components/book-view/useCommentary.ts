@@ -12,11 +12,12 @@ export interface CommentaryLine {
 export interface CommentaryGroup {
   bookId: number
   bookTitle: string
+  path: string // full display path e.g. "ברטנורא על התורה · מפרשים · ראשונים"
   connectionTypes: string[]
   lines: CommentaryLine[]
-  category?: string // resolved category label (e.g. ראשונים, תנ"ך)
-  sectionLabel?: string // top-level section label (e.g. מפרשים, מקור)
-  subSectionLabel?: string // sub-section label under sectionLabel (e.g. ראשונים under מפרשים)
+  category?: string
+  sectionLabel?: string
+  subSectionLabel?: string
 }
 
 export interface CommentaryTreeNode {
@@ -69,10 +70,15 @@ export function buildCommentaryTree(groups: CommentaryGroup[]): CommentaryTreeNo
   return root
 }
 
+function truncateAtAl(label: string): string {
+  const idx = label.indexOf(' על')
+  return idx !== -1 ? label.slice(0, idx) : label
+}
+
 function resolveCategory(book: BookRow | undefined): string {
   if (!book) return 'אחר'
-  if (book.period && book.period !== 'אחר') return book.period
-  return book.rootCategory ?? 'אחר'
+  if (book.period && book.period !== 'אחר') return truncateAtAl(book.period)
+  return truncateAtAl(book.rootCategory ?? 'אחר')
 }
 const CATEGORY_ORDER = [
   'תנ"ך',
@@ -187,6 +193,7 @@ export function useCommentary(
           result.push({
             bookId: g.bookId,
             bookTitle: g.bookTitle,
+            path: `${g.bookTitle} · ${label}`,
             connectionTypes: g.connectionTypes,
             lines: g.lines,
             category: g.category,
@@ -213,6 +220,7 @@ export function useCommentary(
             result.push({
               bookId: g.bookId,
               bookTitle: g.bookTitle,
+              path: `${g.bookTitle} · ${sectionLabel} · ${cat}`,
               connectionTypes: g.connectionTypes,
               lines: g.lines,
               category: cat,
@@ -306,6 +314,7 @@ export function useCommentary(
           result.push({
             bookId: g.bookId,
             bookTitle: g.bookTitle,
+            path: `${g.bookTitle} · ${label}`,
             connectionTypes: g.connectionTypes,
             lines: g.lines,
             category: g.category,
@@ -328,6 +337,7 @@ export function useCommentary(
             result.push({
               bookId: g.bookId,
               bookTitle: g.bookTitle,
+              path: `${g.bookTitle} · ${sectionLabel} · ${cat}`,
               connectionTypes: g.connectionTypes,
               lines: g.lines,
               category: cat,

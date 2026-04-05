@@ -179,12 +179,14 @@ function selectTileItem(i: number) {
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
+  flex-shrink: 1;
 }
 .item-title-row {
   display: flex;
   align-items: baseline;
   gap: 6px;
   overflow: hidden;
+  justify-content: space-between;
 }
 .item-author-tag {
   font-size: 10px;

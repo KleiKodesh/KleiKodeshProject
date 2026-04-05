@@ -49,7 +49,7 @@ function focusList() {
   booksTreeRef.value?.focusContainer()
 }
 
-const PLACEHOLDERS = ['חיפוש ספר...', 'בראשית פרק ד', 'בבלי ברכות דף יד']
+const PLACEHOLDERS = ['בראשית פרק ד', 'בבלי ברכות דף יד', 'רמב"ם משנה תורה']
 const placeholder = ref(PLACEHOLDERS[0]!)
 let phraseIdx = 0,
   charIdx = 0,

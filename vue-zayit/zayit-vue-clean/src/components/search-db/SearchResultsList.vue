@@ -90,7 +90,6 @@ function savePos() {
   const pos = captureScrollPos()
   if (pos)
     tabStore.setTabViewState(tabId, {
-      bottomVisible: false,
       searchScrollIndex: pos.scrollIndex,
       searchScrollOffset: pos.scrollOffset,
     })
@@ -206,15 +205,15 @@ function onScroll() {}
   font-family: var(--header-font);
   font-weight: 500;
   font-size: 13px;
-  cursor: pointer;
   min-width: 0;
   overflow: hidden;
   user-select: text;
   color: var(--accent-color);
+  transition: color 120ms;
 }
-.result-header:hover .book-title,
-.result-header:hover .toc-text {
-  text-decoration: underline;
+.result-header:hover {
+  color: color-mix(in srgb, var(--accent-color) 60%, white);
+  cursor: pointer;
 }
 .book-title {
   color: inherit;
@@ -222,6 +221,7 @@ function onScroll() {}
   overflow: hidden;
   text-overflow: ellipsis;
   flex-shrink: 1;
+  min-width: 0;
 }
 .sep {
   color: var(--text-secondary);
@@ -234,6 +234,7 @@ function onScroll() {}
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex-shrink: 2;
   min-width: 0;
 }
 .snippet {

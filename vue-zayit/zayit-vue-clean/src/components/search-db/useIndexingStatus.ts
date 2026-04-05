@@ -32,7 +32,7 @@ export function useIndexingStatus() {
 
   onMounted(async () => {
     console.log('[useIndexingStatus] mounted, isHosted=', isHosted)
-    if (!isHosted) {
+    if (!isHosted || typeof window.__webviewAction !== 'function') {
       // Dev simulation: 0→100% over ~3s
       state.value = { ...IDLE, isIndexing: true, totalChunks: 100, eta: '3s' }
       let pct = 0

@@ -20,6 +20,34 @@ export const usePdfStore = defineStore('pdf', () => {
     if (msg.event === 'conversionStarted') {
       startLocalFileConversion(msg.fileName as string, msg.filePath as string)
     }
+    if (msg.event === 'localPdfReady') {
+      const tabId = tabStore.activeTabId
+      tabStore.updateActiveTab({
+        route: '/pdf-view',
+        title: msg.fileName as string,
+        pdfFileName: msg.fileName as string,
+        pdfFilePath: msg.filePath as string,
+        pdfVirtualUrl: msg.url as string,
+        pdfConverting: false,
+      })
+      // Ensure the tab is tracked so finishLocalFileConversion no-ops if called again
+      _converting.delete(tabId)
+    }
+    if (msg.event === 'conversionReady') {
+      // Find the tab that started this conversion — it's the one still in _converting
+      // with pdfLoadingType 'converting'. Only one Word conversion runs at a time.
+      const convertingTabId = Array.from(_converting).find((tid) => {
+        const t = tabStore.tabs.find((x) => x.id === tid)
+        return t?.pdfLoadingType === 'converting'
+      })
+      if (convertingTabId) {
+        finishLocalFileConversion(convertingTabId, {
+          url: msg.url as string,
+          fileName: msg.fileName as string,
+          filePath: msg.filePath as string,
+        })
+      }
+    }
     if (msg.event === 'hbPdfReady') {
       finishHbDownload(
         msg.tabId as string,
@@ -71,8 +99,11 @@ export const usePdfStore = defineStore('pdf', () => {
     const tab = tabStore.tabs.find((t) => t.id === tabId)
     if (!tab) return
 
+    // Bail if already finished (e.g. conversionReady fired before the RPC reply)
+    if (!tab.pdfConverting) return
+
     // For Word conversions, check the cancellation set
-    if (tab.pdfConverting && !_converting.has(tabId)) return
+    if (!_converting.has(tabId)) return
 
     _converting.delete(tabId)
 
