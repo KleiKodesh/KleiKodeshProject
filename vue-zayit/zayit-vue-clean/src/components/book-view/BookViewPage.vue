@@ -28,7 +28,7 @@ import type { SearchMode } from './BookViewSearchBar.vue'
 
 const bookViewStore = useBookViewStore()
 const tabStore = useTabStore()
-const { zoom, isBookViewActive } = storeToRefs(bookViewStore)
+const { zoom, isBookViewActive, toolbarPosition } = storeToRefs(bookViewStore)
 
 useZoomHandler({ zoom, enabled: isBookViewActive })
 const tabId = tabStore.activeTabId
@@ -384,8 +384,9 @@ watch(searchVisible, (v) => {
 
 <template>
   <div class="book-view">
+    <!-- Top toolbar -->
     <BookViewToolbar
-      v-if="bookViewStore.toolbarVisible"
+      v-if="bookViewStore.toolbarVisible && toolbarPosition === 'top'"
       :bottom-visible="bottomVisible"
       :search-visible="searchVisible"
       :toc-visible="tocVisible"
@@ -393,88 +394,122 @@ watch(searchVisible, (v) => {
       @toggle-search="searchVisible = !searchVisible"
       @toggle-toc="tocVisible = !tocVisible"
     />
-    <div class="content-area">
-      <BookViewSplitPane :bottom-visible="bottomVisible">
-        <template #top>
-          <BookViewLinesContent
-            v-if="scrollStateReady"
-            ref="linesContentRef"
-            :lines="lines"
-            :prioritise="prioritise"
-            :alt-toc-label-map="altTocLabelMap"
-            :selected-line-id="selectedLineId"
-            :bottom-visible="bottomVisible"
-            :initial-line-index="initialLineIndex"
-            :initial-scroll-index="initialScrollTop"
-            :initial-scroll-offset="initialScrollOffset"
-            :search-highlight-line-index="searchHighlightLineIndex"
-            :search-highlight-query="searchHighlightQuery"
-            :commentary-scroll-index="commentaryScrollIndex"
-            :commentary-scroll-offset="commentaryScrollOffset"
-            :search-query="searchMode === 'content' ? contentSearch.query.value : ''"
-            :current-match-line-index="
-              searchMode === 'content' ? contentSearch.currentMatchLineIndex.value : undefined
-            "
-            :current-match-occurrence="
-              searchMode === 'content' ? contentSearch.currentMatchOccurrence.value : undefined
-            "
-            @scrolled="onLinesScrolled"
-            @line-selected="selectedLineId = $event"
-            @ctrl-f="openContentSearch"
-          />
-        </template>
-        <template #bottom>
-          <CommentaryView
-            ref="commentaryViewRef"
-            :selected-line-id="selectedLineId"
-            :groups="groups"
-            :loading="commentaryLoading"
-            :pinned-book-id="pinnedCommentaryBookId"
-            :search-query="searchMode === 'commentary' ? commentarySearch.query.value : ''"
-            :current-match-flat-index="
-              searchMode === 'commentary' ? commentarySearch.currentMatchFlatIndex.value : undefined
-            "
-            :current-match-occurrence="
-              searchMode === 'commentary'
-                ? commentarySearch.currentMatchOccurrence.value
-                : undefined
-            "
-            @close="bottomVisible = false"
-            @navigate-section="onNavigateSection"
-            @scroll="onCommentaryScroll"
-            @toggle-search="openCommentarySearch"
-            @open-book="openBookInTab"
-          />
-        </template>
-      </BookViewSplitPane>
-      <BookViewSearchBar
-        ref="searchBarRef"
-        :visible="searchVisible"
-        :match-count="activeMatchCount"
-        :current-match="activeMatchIdx"
-        :commentary-visible="bottomVisible"
-        :mode="searchMode"
-        @close="searchVisible = false"
-        @query-change="onQueryChange"
-        @next="onSearchNext"
-        @prev="onSearchPrev"
-        @mode-change="onModeChange"
+    <!-- Middle row: left toolbar + content + right toolbar -->
+    <div class="body-row">
+      <BookViewToolbar
+        v-if="bookViewStore.toolbarVisible && toolbarPosition === 'left'"
+        :bottom-visible="bottomVisible"
+        :search-visible="searchVisible"
+        :toc-visible="tocVisible"
+        @toggle-bottom="bottomVisible = !bottomVisible"
+        @toggle-search="searchVisible = !searchVisible"
+        @toggle-toc="tocVisible = !tocVisible"
       />
-      <BookViewTocTree
-        v-show="tocVisible"
-        :book-id="bookId"
-        :book-title="bookTitle"
-        :active-toc-entry-id="activeTocEntryId"
-        :visible="tocVisible"
-        :toc-entries="tocEntries"
-        :alt-toc-sections="altTocSections"
-        :loading="tocLoading"
-        :error="tocError"
-        @close="tocVisible = false"
-        @select="onTocSelect"
-        @alt-select="onAltTocSelect"
+      <div class="content-area">
+        <BookViewSplitPane :bottom-visible="bottomVisible">
+          <template #top>
+            <BookViewLinesContent
+              v-if="scrollStateReady"
+              ref="linesContentRef"
+              :lines="lines"
+              :prioritise="prioritise"
+              :alt-toc-label-map="altTocLabelMap"
+              :selected-line-id="selectedLineId"
+              :bottom-visible="bottomVisible"
+              :initial-line-index="initialLineIndex"
+              :initial-scroll-index="initialScrollTop"
+              :initial-scroll-offset="initialScrollOffset"
+              :search-highlight-line-index="searchHighlightLineIndex"
+              :search-highlight-query="searchHighlightQuery"
+              :commentary-scroll-index="commentaryScrollIndex"
+              :commentary-scroll-offset="commentaryScrollOffset"
+              :search-query="searchMode === 'content' ? contentSearch.query.value : ''"
+              :current-match-line-index="
+                searchMode === 'content' ? contentSearch.currentMatchLineIndex.value : undefined
+              "
+              :current-match-occurrence="
+                searchMode === 'content' ? contentSearch.currentMatchOccurrence.value : undefined
+              "
+              @scrolled="onLinesScrolled"
+              @line-selected="selectedLineId = $event"
+              @ctrl-f="openContentSearch"
+            />
+          </template>
+          <template #bottom>
+            <CommentaryView
+              ref="commentaryViewRef"
+              :selected-line-id="selectedLineId"
+              :groups="groups"
+              :loading="commentaryLoading"
+              :pinned-book-id="pinnedCommentaryBookId"
+              :search-query="searchMode === 'commentary' ? commentarySearch.query.value : ''"
+              :current-match-flat-index="
+                searchMode === 'commentary'
+                  ? commentarySearch.currentMatchFlatIndex.value
+                  : undefined
+              "
+              :current-match-occurrence="
+                searchMode === 'commentary'
+                  ? commentarySearch.currentMatchOccurrence.value
+                  : undefined
+              "
+              @close="bottomVisible = false"
+              @navigate-section="onNavigateSection"
+              @scroll="onCommentaryScroll"
+              @toggle-search="openCommentarySearch"
+              @open-book="openBookInTab"
+            />
+          </template>
+        </BookViewSplitPane>
+        <BookViewSearchBar
+          ref="searchBarRef"
+          :visible="searchVisible"
+          :toolbar-visible="bookViewStore.toolbarVisible"
+          :match-count="activeMatchCount"
+          :current-match="activeMatchIdx"
+          :commentary-visible="bottomVisible"
+          :mode="searchMode"
+          @close="searchVisible = false"
+          @query-change="onQueryChange"
+          @next="onSearchNext"
+          @prev="onSearchPrev"
+          @mode-change="onModeChange"
+        />
+        <BookViewTocTree
+          v-show="tocVisible"
+          :book-id="bookId"
+          :book-title="bookTitle"
+          :active-toc-entry-id="activeTocEntryId"
+          :visible="tocVisible"
+          :toc-entries="tocEntries"
+          :alt-toc-sections="altTocSections"
+          :loading="tocLoading"
+          :error="tocError"
+          @close="tocVisible = false"
+          @select="onTocSelect"
+          @alt-select="onAltTocSelect"
+        />
+      </div>
+      <BookViewToolbar
+        v-if="bookViewStore.toolbarVisible && toolbarPosition === 'right'"
+        :bottom-visible="bottomVisible"
+        :search-visible="searchVisible"
+        :toc-visible="tocVisible"
+        @toggle-bottom="bottomVisible = !bottomVisible"
+        @toggle-search="searchVisible = !searchVisible"
+        @toggle-toc="tocVisible = !tocVisible"
       />
     </div>
+    <!-- Bottom toolbar -->
+    <BookViewToolbar
+      v-if="bookViewStore.toolbarVisible && toolbarPosition === 'bottom'"
+      :bottom-visible="bottomVisible"
+      :search-visible="searchVisible"
+      :toc-visible="tocVisible"
+      @toggle-bottom="bottomVisible = !bottomVisible"
+      @toggle-search="searchVisible = !searchVisible"
+      @toggle-toc="tocVisible = !tocVisible"
+    />
   </div>
 </template>
 
@@ -484,6 +519,12 @@ watch(searchVisible, (v) => {
   flex-direction: column;
   height: 100%;
   background: var(--bg-primary);
+}
+.body-row {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
 }
 .content-area {
   position: relative;

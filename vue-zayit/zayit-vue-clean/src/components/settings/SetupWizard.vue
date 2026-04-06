@@ -7,6 +7,7 @@ import SettingRow from './SettingRow.vue'
 import SliderSetting from './SliderSetting.vue'
 import ToggleGroup from './ToggleGroup.vue'
 import ThemePicker from './ThemePicker.vue'
+import { useBookViewStore } from '@/stores/bookViewStore'
 import FontDisplaySettings from './FontDisplaySettings.vue'
 import {
   IconFolderOpen20Regular,
@@ -29,6 +30,9 @@ const {
   commentaryLinePadding,
   useSeparateCommentarySettings,
 } = storeToRefs(settings)
+
+const bookViewStore = useBookViewStore()
+const { toolbarPosition } = storeToRefs(bookViewStore)
 
 type Step = 'welcome' | 'db' | 'theme' | 'general' | 'book-display'
 
@@ -212,6 +216,18 @@ const progressPct = computed(() => Math.round((stepIndex.value / (steps.value.le
                     { label: 'היברו בוקס', value: 'hebrewbooks' },
                     { label: 'חיפוש', value: 'kezayit-search' },
                   ]"
+                />
+              </SettingRow>
+              <SettingRow label="מיקום סרגל הכלים" wrap>
+                <ToggleGroup
+                  v-model="toolbarPosition"
+                  :options="[
+                    { label: 'למעלה', value: 'top' },
+                    { label: 'למטה', value: 'bottom' },
+                    { label: 'שמאל', value: 'left' },
+                    { label: 'ימין', value: 'right' },
+                  ]"
+                  @update:model-value="bookViewStore.setToolbarPosition($event)"
                 />
               </SettingRow>
             </div>

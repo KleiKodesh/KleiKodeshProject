@@ -1,47 +1,40 @@
 import type { Virtualizer } from '@tanstack/vue-virtual'
 
 /**
- * Scrolls a virtualizer to a target index, retries if the item isn't visible
- * (estimated sizes), then scrolls the actual `.search-match.current` mark into
- * view so the highlighted match itself is always visible.
+ * Scrolls a virtualizer to a target index using 'auto' alignment (only scrolls
+ * if the item is not already visible). Retries if the item hasn't rendered yet.
  */
 export function scrollToIndexWithRetry(
   virtualizer: Virtualizer<Element, Element>,
   scrollerEl: HTMLElement,
   index: number,
-  offset = 0,
+  _offset = 0,
   maxRetries = 3,
 ): void {
   let attempts = 0
 
-  function scrollCurrentMark() {
-    const mark = scrollerEl.querySelector('mark.search-match.current') as HTMLElement | null
-    if (mark) {
-      mark.scrollIntoView({ block: 'nearest' })
-    }
-  }
-
   function attempt() {
-    virtualizer.scrollToIndex(index, { align: 'start' })
+    virtualizer.scrollToIndex(index, { align: 'auto' })
 
     requestAnimationFrame(() => {
       const m = virtualizer.measurementsCache.find((c) => c.index === index)
       if (!m) {
         if (++attempts < maxRetries) attempt()
-        else scrollCurrentMark()
         return
       }
 
-      const target = m.start + offset
       const viewTop = scrollerEl.scrollTop
       const viewBottom = viewTop + scrollerEl.clientHeight
-      const isVisible = target >= viewTop && target < viewBottom
+      const isVisible = m.start >= viewTop && m.end <= viewBottom
 
       if (!isVisible && ++attempts < maxRetries) {
         attempt()
       } else {
-        // line is in view — now scroll the actual mark into view
-        requestAnimationFrame(scrollCurrentMark)
+        // line is in view — scroll the actual mark into view in case the line is long
+        requestAnimationFrame(() => {
+          const mark = scrollerEl.querySelector('mark.search-match.current') as HTMLElement | null
+          mark?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+        })
       }
     })
   }

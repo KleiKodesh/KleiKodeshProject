@@ -12,7 +12,7 @@ import { useAppNavigation } from '@/composables/useAppNavigation'
 
 const emit = defineEmits<{ close: [] }>()
 
-const { navigate } = useAppNavigation()
+const { navigateInNewTab } = useAppNavigation()
 
 const menuRef = ref<HTMLElement | null>(null)
 onClickOutside(menuRef, () => emit('close'))
@@ -27,7 +27,7 @@ const tiles = [
 ]
 
 async function onTap(label: string) {
-  await navigate(label)
+  await navigateInNewTab(label)
   emit('close')
 }
 </script>

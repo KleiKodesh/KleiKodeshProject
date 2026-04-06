@@ -1,61 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useSettingsPage } from './useSettingsPage'
-import { useSettingsStore } from '@/stores/settingsStore'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import SettingsGeneralPane from './SettingsGeneralPane.vue'
 import SettingsReadingPane from './SettingsReadingPane.vue'
-import { resetting } from '@/utils/resetState'
+import SettingsAdvancedPane from './SettingsAdvancedPane.vue'
 
-const { resetSettings, resetAll } = useSettingsPage()
-const settings = useSettingsStore()
-
-const activeTab = ref<'general' | 'reading' | 'reset'>('general')
-
-const tabIndexMap = { general: 0, reading: 1, reset: 2 } as const
+const activeTab = ref<'general' | 'reading' | 'advanced'>('general')
+const tabIndexMap = { general: 0, reading: 1, advanced: 2 } as const
 const tabCount = 3
-
-type ConfirmAction = { label: string; desc: string; action: () => Promise<void> | void }
-const pendingConfirm = ref<ConfirmAction | null>(null)
-
-function confirmAction(action: ConfirmAction) {
-  pendingConfirm.value = action
-}
-
-async function runConfirmed() {
-  if (!pendingConfirm.value) return
-  const action = pendingConfirm.value
-  pendingConfirm.value = null
-  await action.action()
-}
-
-function cancelConfirm() {
-  pendingConfirm.value = null
-}
-
-function resetSettingsAndReload() {
-  resetting.value = true
-  resetSettings()
-  settings.completeSetup()
-  window.location.reload()
-}
-function confirmResetAll() {
-  confirmAction({
-    label: 'איפוס האפליקציה',
-    desc: 'פעולה זו תמחק את כל נתוני האפליקציה ואינדקס החיפוש ותטען אותה מחדש. לא ניתן לבטל פעולה זו.',
-    action: () => {
-      resetting.value = true
-      resetAll()
-    },
-  })
-}
-function confirmResetSettings() {
-  confirmAction({
-    label: 'איפוס ההגדרות',
-    desc: 'פעולה זו תאפס את הגדרות התצוגה והקריאה לברירות המחדל. מסד הנתונים והיסטוריית הקריאה לא יושפעו.',
-    action: resetSettingsAndReload,
-  })
-}
 </script>
 
 <template>
@@ -76,8 +27,11 @@ function confirmResetSettings() {
       >
         קריאה
       </button>
-      <button :class="['tab-btn', { active: activeTab === 'reset' }]" @click="activeTab = 'reset'">
-        איפוס
+      <button
+        :class="['tab-btn', { active: activeTab === 'advanced' }]"
+        @click="activeTab = 'advanced'"
+      >
+        מתקדם
       </button>
     </div>
 
@@ -89,26 +43,9 @@ function confirmResetSettings() {
       <SettingsReadingPane />
     </div>
 
-    <div v-if="activeTab === 'reset'" class="pane reset-pane">
-      <p class="reset-desc">
-        מאפס רק את הגדרות התצוגה והקריאה לברירות המחדל. מסד הנתונים, היסטוריית הקריאה, והטאבים
-        הפתוחים נשמרים.
-      </p>
-      <button class="reset-all-btn" @click="confirmResetSettings">איפוס ההגדרות</button>
-      <p class="reset-desc">
-        מוחק את כל נתוני האפליקציה — הגדרות, היסטוריית קריאה, מיקומי גלילה, טאבים פתוחים, ואינדקס
-        החיפוש. לא ניתן לבטל פעולה זו.
-      </p>
-      <button class="reset-all-btn" @click="confirmResetAll">איפוס האפליקציה</button>
+    <div v-if="activeTab === 'advanced'" class="pane">
+      <SettingsAdvancedPane />
     </div>
-
-    <ConfirmDialog
-      v-if="pendingConfirm"
-      :title="pendingConfirm.label"
-      :desc="pendingConfirm.desc"
-      @confirm="runConfirmed"
-      @cancel="cancelConfirm"
-    />
   </div>
 </template>
 
@@ -163,30 +100,6 @@ function confirmResetSettings() {
 .tab-btn.active {
   color: var(--text-primary);
   border-bottom-color: transparent;
-}
-
-.reset-pane {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 12px;
-}
-.reset-desc {
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.5;
-  margin: 0;
-}
-.reset-all-btn {
-  width: 140px;
-  height: 32px;
-  font-size: 13px;
-  color: #e53e3e;
-  border: 1px solid color-mix(in srgb, #e53e3e 40%, transparent);
-  background: color-mix(in srgb, #e53e3e 8%, transparent);
-}
-.reset-all-btn:hover {
-  background: color-mix(in srgb, #e53e3e 16%, transparent);
 }
 
 .pane {

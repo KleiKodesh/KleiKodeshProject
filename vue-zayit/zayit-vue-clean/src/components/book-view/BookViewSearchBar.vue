@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed, nextTick } from 'vue'
+import { useDraggable } from '@vueuse/core'
+import { useBookViewStore } from '@/stores/bookViewStore'
 import {
   IconChevronUp20Regular,
   IconChevronDown20Regular,
@@ -12,6 +14,7 @@ export type SearchMode = 'content' | 'commentary'
 
 const props = defineProps<{
   visible: boolean
+  toolbarVisible: boolean
   matchCount: number
   currentMatch: number
   commentaryVisible: boolean
@@ -25,6 +28,8 @@ const emit = defineEmits<{
   modeChange: [SearchMode]
 }>()
 
+const bookViewStore = useBookViewStore()
+const barRef = ref<HTMLElement | null>(null)
 const inputRef = ref<HTMLInputElement | null>(null)
 const inputValue = ref('')
 const searchMode = ref<SearchMode>(props.mode)
@@ -54,6 +59,23 @@ watch(
   },
 )
 
+const APP_TITLE_BAR = 40
+const BOOK_TOOLBAR = 32
+const BAR_WIDTH = 260
+
+function defaultPosition() {
+  return {
+    x: window.innerWidth / 2 - BAR_WIDTH / 2,
+    y: APP_TITLE_BAR + (props.toolbarVisible ? BOOK_TOOLBAR : 0) + 4,
+  }
+}
+
+const { x, y, style } = useDraggable(barRef, {
+  initialValue: bookViewStore.searchBarPos ?? defaultPosition(),
+})
+
+watch([x, y], ([nx, ny]) => bookViewStore.setSearchBarPos({ x: nx, y: ny }))
+
 const placeholder = computed(() =>
   searchMode.value === 'content' ? 'חיפוש בטקסט...' : 'חיפוש במפרשים...',
 )
@@ -71,7 +93,7 @@ defineExpose({ focus: () => inputRef.value?.focus() })
 
 <template>
   <Transition name="search-bar">
-    <div v-if="visible" class="search-bar">
+    <div v-if="visible" ref="barRef" class="search-bar" :style="style">
       <div class="search-inner">
         <input
           ref="inputRef"
@@ -114,22 +136,33 @@ defineExpose({ focus: () => inputRef.value?.focus() })
 
 <style scoped>
 .search-bar {
+  position: fixed;
+  z-index: 9999;
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 4px 8px;
-  background: var(--bg-toolbar);
-  border-top: 1px solid var(--border-color);
+  width: fit-content;
+  padding: 1px 3px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
   box-sizing: border-box;
   user-select: none;
-  flex-shrink: 0;
+  touch-action: none;
+  cursor: grab;
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.4),
+    0 1px 3px rgba(0, 0, 0, 0.25);
+}
+.search-bar:active {
+  cursor: grabbing;
 }
 .mode-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border-radius: 4px;
   flex-shrink: 0;
   color: var(--text-secondary);
@@ -144,16 +177,11 @@ defineExpose({ focus: () => inputRef.value?.focus() })
 .search-inner {
   display: flex;
   align-items: center;
-  flex: 1;
-  padding: 3px 8px;
-  gap: 6px;
-  background: var(--input-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 999px;
+  padding: 1px 6px;
+  gap: 4px;
 }
 .search-input {
-  flex: 1;
-  min-width: 0;
+  width: 120px;
   border: none;
   background: none;
   outline: none;
@@ -190,8 +218,8 @@ defineExpose({ focus: () => inputRef.value?.focus() })
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
   border-radius: 4px;
   cursor: pointer;
@@ -214,6 +242,6 @@ defineExpose({ focus: () => inputRef.value?.focus() })
 .search-bar-enter-from,
 .search-bar-leave-to {
   opacity: 0;
-  transform: translateY(100%);
+  transform: translateY(-6px);
 }
 </style>

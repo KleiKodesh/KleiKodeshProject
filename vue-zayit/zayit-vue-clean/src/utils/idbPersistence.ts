@@ -135,6 +135,7 @@ export const KEYS = {
   SETTINGS_WORKSPACES: 'workspaces',
   SETTINGS_BOOKS_VIEW: 'books.view',
   SETTINGS_TOOLBAR: 'bookView.toolbarVisible',
+  SETTINGS_TOOLBAR_POSITION: 'bookView.toolbarPosition',
   SETTINGS_SEARCH_BAR_POS: 'bookView.searchBarPos',
 
   SETTINGS_CENSOR_DIVINE: 'censorDivineNames',

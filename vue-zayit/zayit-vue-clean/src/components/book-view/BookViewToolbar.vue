@@ -18,7 +18,8 @@ defineEmits<{ toggleBottom: []; toggleSearch: []; toggleToc: [] }>()
 
 const settingsStore = useSettingsStore()
 const bookViewStore = useBookViewStore()
-const { zoom } = storeToRefs(bookViewStore)
+const { zoom, toolbarPosition } = storeToRefs(bookViewStore)
+
 const diacriticsState = computed(() => settingsStore.diacriticsState)
 const diacriticsTitle = computed(
   () => ['הסר טעמים', 'הסר גם ניקוד', 'שחזר טעמים וניקוד'][diacriticsState.value]!,
@@ -26,7 +27,7 @@ const diacriticsTitle = computed(
 </script>
 
 <template>
-  <div class="book-view-toolbar">
+  <div class="book-view-toolbar" :class="`toolbar-${toolbarPosition}`">
     <button
       :class="{ active: searchVisible }"
       title="חיפוש (Ctrl+F)"
@@ -42,10 +43,12 @@ const diacriticsTitle = computed(
       title="פאנל תחתון (Ctrl+J)"
       @click="$emit('toggleBottom')"
     >
-      <IconLayoutRowTwoFocusBottom20Filled v-if="bottomVisible" /><IconLayoutRowTwo20Regular
-        v-else
-      />
+      <IconLayoutRowTwoFocusBottom20Filled v-if="bottomVisible" />
+      <IconLayoutRowTwo20Regular v-else />
     </button>
+
+    <div class="separator" />
+
     <button
       :title="`הקטן (Ctrl-)\nזום: ${zoom}%\nאיפוס: Ctrl+0`"
       :disabled="zoom <= ZOOM_CONFIG.MIN"
@@ -60,6 +63,9 @@ const diacriticsTitle = computed(
     >
       <IconZoomIn20Regular />
     </button>
+
+    <div class="separator" />
+
     <button
       :class="[
         'diacritics-btn',
@@ -123,17 +129,45 @@ const diacriticsTitle = computed(
 
 <style scoped>
 .book-view-toolbar {
-  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0;
-  padding-inline: 4px;
+  padding: 2px 4px;
   background: var(--bg-toolbar);
-  border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
   transition: background 120ms;
 }
+
+/* ── Orientation ── */
+.toolbar-top,
+.toolbar-bottom {
+  flex-direction: row;
+  height: 32px;
+}
+.toolbar-left,
+.toolbar-right {
+  flex-direction: column;
+  width: 40px;
+  height: auto;
+  padding: 4px 2px;
+}
+
+/* ── Borders ── */
+.toolbar-top {
+  border-bottom: 1px solid var(--border-color);
+}
+.toolbar-bottom {
+  border-top: 1px solid var(--border-color);
+}
+.toolbar-left {
+  border-right: 1px solid var(--border-color);
+}
+.toolbar-right {
+  border-left: 1px solid var(--border-color);
+}
+
+/* ── Buttons ── */
 button {
   display: flex;
   align-items: center;
@@ -142,6 +176,7 @@ button {
   height: 32px;
   padding: 6px;
   border-radius: 4px;
+  flex-shrink: 0;
 }
 button svg {
   width: 16px;
@@ -150,13 +185,34 @@ button svg {
 button.active {
   color: var(--accent-color);
 }
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Separators ── */
+.separator {
+  background: var(--border-color);
+  flex-shrink: 0;
+}
+.toolbar-top .separator,
+.toolbar-bottom .separator {
+  width: 1px;
+  height: 18px;
+  margin: 0 2px;
+}
+.toolbar-left .separator,
+.toolbar-right .separator {
+  width: 18px;
+  height: 1px;
+  margin: 2px 0;
+}
+
+/* ── Diacritics ── */
 .diacritics-btn.state-1 {
   color: #ff8c00;
 }
 .diacritics-btn.state-2 {
   color: #ff4500;
-}
-.rtl-flip {
-  transform: scaleX(-1);
 }
 </style>

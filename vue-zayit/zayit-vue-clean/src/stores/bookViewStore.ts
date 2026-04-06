@@ -8,15 +8,25 @@ import {
   zoomOut as zoomOutUtil,
   resetZoom as resetZoomUtil,
 } from '@/composables/useZoom'
+import type { ToolbarPosition } from '@/composables/useToolbarPosition'
+
+export interface SearchBarPos {
+  x: number
+  y: number
+}
 
 export const useBookViewStore = defineStore('bookView', () => {
   const tabStore = useTabStore()
 
   const toolbarVisible = ref(true)
+  const toolbarPosition = ref<ToolbarPosition>('top')
   const toggleBottomPanelSignal = ref(0)
+  const searchBarPos = ref<SearchBarPos | null>(null)
+
   function toggleBottomPanel() {
     toggleBottomPanelSignal.value++
   }
+
   const isBookViewActive = computed(() => tabStore.activeTab.route === '/book-view')
 
   // Per-tab+book zoom map: key = `${tabId}:${bookId}`
@@ -34,7 +44,6 @@ export const useBookViewStore = defineStore('bookView', () => {
     zoomMap.value.set(zoomKey(tabId, bookId), value)
   }
 
-  // Reactive zoom for the currently active tab+book (used by toolbar and zoom handler)
   const zoom = computed({
     get() {
       const tab = tabStore.activeTab
@@ -48,15 +57,28 @@ export const useBookViewStore = defineStore('bookView', () => {
     },
   })
 
-  // Called from main.ts after tabStore.init()
   async function init() {
     const toolbar = await idbGet<boolean>(KEYS.SETTINGS_TOOLBAR)
     if (toolbar !== null) toolbarVisible.value = toolbar
+    const pos = await idbGet<ToolbarPosition>(KEYS.SETTINGS_TOOLBAR_POSITION)
+    if (pos !== null) toolbarPosition.value = pos
+    const sbPos = await idbGet<SearchBarPos>(KEYS.SETTINGS_SEARCH_BAR_POS)
+    if (sbPos !== null) searchBarPos.value = sbPos
   }
 
   function toggleToolbar() {
     toolbarVisible.value = !toolbarVisible.value
     idbSet(KEYS.SETTINGS_TOOLBAR, toolbarVisible.value)
+  }
+
+  function setToolbarPosition(pos: ToolbarPosition) {
+    toolbarPosition.value = pos
+    idbSet(KEYS.SETTINGS_TOOLBAR_POSITION, pos)
+  }
+
+  function setSearchBarPos(pos: SearchBarPos) {
+    searchBarPos.value = pos
+    idbSet(KEYS.SETTINGS_SEARCH_BAR_POS, pos)
   }
 
   function zoomIn() {
@@ -71,14 +93,18 @@ export const useBookViewStore = defineStore('bookView', () => {
 
   return {
     toolbarVisible,
+    toolbarPosition,
     toggleBottomPanelSignal,
     toggleBottomPanel,
     isBookViewActive,
     zoom,
     getZoom,
     setZoom,
+    searchBarPos,
+    setSearchBarPos,
     init,
     toggleToolbar,
+    setToolbarPosition,
     zoomIn,
     zoomOut,
     resetZoom,
