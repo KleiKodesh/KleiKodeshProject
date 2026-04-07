@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <!-- 
-    ZayitVue.targets - Vue Build Integration
+    kezayit.targets - Vue Build Integration
 
     Builds the Vue project and copies the entire dist/ folder into
     {OutputDir}/frontend/ for both Debug and Release configurations.
 
     Usage:
       Add to your .csproj before the closing </Project> tag:
-        <Import Project="ZayitVue.targets" />
+        <Import Project="kezayit.targets" />
 
     Requirements:
       - Vue project root at ../../ relative to this file
@@ -16,7 +16,7 @@
   -->
 
   <PropertyGroup>
-    <VueProjectDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\'))</VueProjectDir>
+    <VueProjectDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\'))</VueProjectDir>
     <VueDistDir>$(VueProjectDir)dist</VueDistDir>
     <VueFrontendOut>$(OutDir)kezayit</VueFrontendOut>
   </PropertyGroup>
@@ -26,6 +26,7 @@
     <Message Text="[Vue] Building for $(MSBuildProjectName) ($(Configuration))" Importance="high" />
     <Message Text="========================================" Importance="high" />
 
+    <Message Text="[Vue] VueProjectDir = $(VueProjectDir)" Importance="high" />
     <Message Text="[1/3] Running npm run build..." Importance="high" />
     <Exec Command="npm run build" WorkingDirectory="$(VueProjectDir)" ContinueOnError="false" />
 
