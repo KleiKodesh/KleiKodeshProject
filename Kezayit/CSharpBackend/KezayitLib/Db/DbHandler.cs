@@ -16,7 +16,6 @@ namespace KezayitLib.Db
     public class DbHandler
     {
         private readonly WebBridge _bridge;
-        private readonly WebView2 _webView;
         private DbAccess _db;
 
         public Action<string> OnDbPathPicked { get; set; }
@@ -24,7 +23,6 @@ namespace KezayitLib.Db
         public DbHandler(WebBridge bridge, WebView2 webView, string savedPath)
         {
             _bridge = bridge;
-            _webView = webView;
             if (File.Exists(savedPath))
                 _db = new DbAccess(savedPath);
         }
@@ -71,8 +69,7 @@ namespace KezayitLib.Db
                     AppSettings.SaveDbPath(dlg.FileName);
                     _db = new DbAccess(dlg.FileName);
                     string escaped = dlg.FileName.Replace("\\", "\\\\");
-                    _webView.CoreWebView2.PostWebMessageAsJson(
-                        "{\"event\":\"dbPathPicked\",\"path\":\"" + escaped + "\"}");
+                    _bridge.PushEvent(new { @event = "dbPathPicked", path = dlg.FileName });
                     OnDbPathPicked?.Invoke(dlg.FileName);
                 }
             }));
