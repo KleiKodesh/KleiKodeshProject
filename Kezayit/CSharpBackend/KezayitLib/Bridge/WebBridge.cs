@@ -36,10 +36,26 @@ namespace KezayitLib.Bridge
 
         private void Post(string json)
         {
-            if (_control.InvokeRequired)
-                _control.Invoke(new Action(() => _webView.CoreWebView2.PostWebMessageAsJson(json)));
-            else
-                _webView.CoreWebView2.PostWebMessageAsJson(json);
+            if (_control.IsDisposed || _webView.IsDisposed) return;
+
+            void Send()
+            {
+                try
+                {
+                    if (!_control.IsDisposed && !_webView.IsDisposed && _webView.CoreWebView2 != null)
+                        _webView.CoreWebView2.PostWebMessageAsJson(json);
+                }
+                catch (Exception) { /* WebView2 torn down during shutdown */ }
+            }
+
+            try
+            {
+                if (_control.InvokeRequired)
+                    _control.Invoke(new Action(Send));
+                else
+                    Send();
+            }
+            catch (Exception) { /* Control disposed between check and invoke */ }
         }
     }
 }

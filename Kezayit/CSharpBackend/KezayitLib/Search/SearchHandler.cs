@@ -13,7 +13,6 @@ namespace KezayitLib.Search
     public class SearchHandler
     {
         private readonly WebBridge _bridge;
-        private readonly WebView2 _webView;
         private volatile bool _isReady = false;
         private volatile bool _isIndexing = false;
         private string _dbPath;
@@ -29,7 +28,6 @@ namespace KezayitLib.Search
         public SearchHandler(WebBridge bridge, WebView2 webView)
         {
             _bridge = bridge;
-            _webView = webView;
         }
 
         public void OnDbReady(string dbPath)
@@ -243,11 +241,7 @@ namespace KezayitLib.Search
 
         private void PostSearch(object payload)
         {
-            string json = JsonSerializer.Serialize(payload);
-            if (_webView.InvokeRequired)
-                _webView.Invoke(new Action(() => _webView.CoreWebView2.PostWebMessageAsString(json)));
-            else
-                _webView.CoreWebView2.PostWebMessageAsString(json);
+            _bridge.PushEvent(payload);
         }
     }
 }
