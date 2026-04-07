@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="BloomSearchEngineLib/BloomSearchEngineLib.csproj" Id="0f7c9226-2c18-4cb8-8f39-a3a539b7122a" />
+  <Project Path="KezayitLib/KezayitLib.csproj" Id="A1B2C3D4-E5F6-7890-ABCD-EF1234567890" />
+  <Project Path="KezayitDemoApp/KezayitDemoApp.csproj" Id="2b6e5acb-2062-4281-aacb-c46681fcfe42" />
+</Solution>
