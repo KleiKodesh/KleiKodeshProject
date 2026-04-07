@@ -45,9 +45,8 @@ namespace KezayitLib.HebrewBooks
 
             // Cache miss — must re-download through the browser (direct HTTP is blocked by HebrewBooks)
             _bridge.Reply(id, new { redownload = true });
-            string downloadUrl = "https://download.hebrewbooks.org/downloadhandler.ashx?req=" + bookId;
             _pendingDownload = new HbDownloadInfo { BookId = bookId, BookTitle = bookTitle, TabId = tabId };
-            _owner.Invoke(new Action(() => _webView.CoreWebView2.Navigate(downloadUrl)));
+            NavigateSafe("https://download.hebrewbooks.org/downloadhandler.ashx?req=" + bookId);
         }
 
         public void HandleTriggerHbDownload(JsonElement root, string id)
@@ -63,7 +62,7 @@ namespace KezayitLib.HebrewBooks
 
             Log("Navigating to: " + url);
             _pendingDownload = new HbDownloadInfo { BookId = bookId, BookTitle = bookTitle, TabId = tabId };
-            _owner.Invoke(new Action(() => _webView.CoreWebView2.Navigate(url)));
+            NavigateSafe(url);
         }
 
         public void HandleTriggerHbSaveAs(JsonElement root, string id)
@@ -74,7 +73,7 @@ namespace KezayitLib.HebrewBooks
             string url       = root.GetProperty("url").GetString();
 
             _pendingSaveAs = new HbSaveAsInfo { BookId = bookId, BookTitle = bookTitle };
-            _owner.Invoke(new Action(() => _webView.CoreWebView2.Navigate(url)));
+            NavigateSafe(url);
         }
 
         public void OnDownloadStarting(object sender, CoreWebView2DownloadStartingEventArgs e)
@@ -127,7 +126,7 @@ namespace KezayitLib.HebrewBooks
                     EvictCache();
                     _owner.Invoke(new Action(() =>
                     {
-                        _webView.CoreWebView2.CloseDefaultDownloadDialog();
+                        CloseDownloadDialogSafe();
                         _bridge.PushEvent(new { @event = "hbPdfReady", url = CacheUrl(cacheDest), bookId = info.BookId, bookTitle = info.BookTitle, tabId = info.TabId });
                     }));
                 }
@@ -135,7 +134,7 @@ namespace KezayitLib.HebrewBooks
                 {
                     _owner.Invoke(new Action(() =>
                     {
-                        _webView.CoreWebView2.CloseDefaultDownloadDialog();
+                        CloseDownloadDialogSafe();
                         _bridge.PushEvent(new { @event = "hbPdfCancelled", tabId = info.TabId });
                     }));
                 }
@@ -143,6 +142,31 @@ namespace KezayitLib.HebrewBooks
         }
 
         private static void Log(string msg) => System.Diagnostics.Debug.WriteLine("[HbHandler] " + msg);
+
+        private void NavigateSafe(string url)
+        {
+            if (_owner.IsDisposed || _webView.IsDisposed) return;
+            try
+            {
+                _owner.Invoke(new Action(() =>
+                {
+                    if (!_owner.IsDisposed && !_webView.IsDisposed && _webView.CoreWebView2 != null)
+                        _webView.CoreWebView2.Navigate(url);
+                }));
+            }
+            catch (Exception) { }
+        }
+
+        private void CloseDownloadDialogSafe()
+        {
+            if (_owner.IsDisposed || _webView.IsDisposed) return;
+            try
+            {
+                if (!_owner.IsDisposed && !_webView.IsDisposed && _webView.CoreWebView2 != null)
+                    _webView.CoreWebView2.CloseDefaultDownloadDialog();
+            }
+            catch (Exception) { }
+        }
 
         private static string GetCachePath(string bookId, string bookTitle)
         {
