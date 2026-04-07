@@ -51,7 +51,7 @@ namespace KleiKodesh.Ribbon
                 switch (id)
                 {
                     case "Kezayit":
-                        TaskPaneManager.Show(new Zayit.Viewer.ZayitViewerHost(), "כזית", 610, popOutBehavior: true);
+                        TaskPaneManager.Show(new KezayitLib.AppViewer(), "כזית", 610, popOutBehavior: true);
                         break;
                     case "WebSites":
                         WpfTaskPane.Show(new WebSitesLib2.WebSitesView(), "דרך האתרים", 510);

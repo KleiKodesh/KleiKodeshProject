@@ -14,7 +14,7 @@ namespace KleiKodesh
         private void ThisAddIn_Startup(object sender, System.EventArgs e)
         {
             // Set Word Application for PDF conversion (VSTO mode)
-            Zayit.Services.WordToPdfConverter.WordApp = this.Application;
+            //Zayit.Services.WordToPdfConverter.WordApp = this.Application;
 
             // Add-in startup - no automatic update checks here
             // Updates are checked when user opens taskpanes

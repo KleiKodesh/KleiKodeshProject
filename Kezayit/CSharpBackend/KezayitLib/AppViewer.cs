@@ -195,5 +195,10 @@ namespace KezayitLib
         /// Set by the host to handle the popout toggle.
         /// </summary>
         public Action TogglePopOut { get; set; }
+
+        /// <summary>
+        /// Called by TaskPaneManager via reflection to wire up the popout toggle.
+        /// </summary>
+        public void SetPopOutToggleAction(Action action) => TogglePopOut = action;
     }
 }
