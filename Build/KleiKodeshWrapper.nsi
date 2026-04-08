@@ -65,8 +65,13 @@ LangString MSG_UNINSTALL_CONFIRM ${LANG_ENGLISH} "Are you sure you want to compl
 Icon "..\KleiKodeshVstoInstallerWpf\KleiKodesh_Main.ico"
 UninstallIcon "..\KleiKodeshVstoInstallerWpf\KleiKodesh_Main.ico"
 
+; Output directory - passed from build script, defaults to releases subfolder
+!ifndef OUTPUT_DIR
+  !define OUTPUT_DIR "releases"
+!endif
+
 Name "מתקין ${PRODUCT_NAME}"
-OutFile "KleiKodeshSetup-${PRODUCT_VERSION}.exe"
+OutFile "${OUTPUT_DIR}\KleiKodeshSetup-${PRODUCT_VERSION}.exe"
 InstallDir "$LOCALAPPDATA\KleiKodesh"
 RequestExecutionLevel user
 SilentInstall silent

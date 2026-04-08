@@ -258,10 +258,16 @@ if (-not (Test-Path $nsisPath)) {
     }
 }
 
-# Build NSIS wrapper with version parameter
+# Ensure releases output folder exists (gitignored)
+$releasesDir = Join-Path $scriptDir "releases"
+if (!(Test-Path $releasesDir)) {
+    New-Item -ItemType Directory -Path $releasesDir -Force | Out-Null
+}
+
+# Build NSIS wrapper with version parameter, output to releases subfolder
 Write-Host "Building NSIS wrapper with version $version..." -ForegroundColor Yellow
 $nsisScriptPath = Join-Path $scriptDir "KleiKodeshWrapper.nsi"
-& $nsisPath "/DPRODUCT_VERSION=$version" $nsisScriptPath
+& $nsisPath "/DPRODUCT_VERSION=$version" "/DOUTPUT_DIR=$releasesDir" $nsisScriptPath
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: NSIS build failed" -ForegroundColor Red
@@ -269,7 +275,7 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-$installerPath = Join-Path $scriptDir "KleiKodeshSetup-$version.exe"
+$installerPath = Join-Path $releasesDir "KleiKodeshSetup-$version.exe"
 if (-not (Test-Path $installerPath)) {
     Write-Host "ERROR: Installer not created at $installerPath" -ForegroundColor Red
     if (-not $NoWait) { Read-Host "Press Enter to continue" }
