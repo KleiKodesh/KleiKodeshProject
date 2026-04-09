@@ -15,6 +15,7 @@
 [⬇️ הורד עכשיו](https://github.com/KleiKodesh/KleiKodeshProject/releases/latest) &nbsp;|&nbsp;
 [📧 הירשם לעדכונים](https://docs.google.com/forms/d/e/1FAIpQLSfPw8cwUTSSH4bQkvIVaX_Cv1M2pdn53pJE16o9VFb0oW0gkg/viewform) &nbsp;|&nbsp;
 [🐛 דיווח באגים](https://github.com/KleiKodesh/KleiKodeshProject/issues)
+[💬 פוסט במתמחים](https://mitmachim.top/post/966405)
 
 </div>
 
