@@ -41,16 +41,6 @@
 | [📄 תוסף עיצוב תורני לוורד](https://github.com/KleiKodesh/kleikodesh.github.io/releases/tag/Files)   | תוסף עיצוב ייעודי לספרי קודש  |
 
 ---
-
-## 🔗 קישורים
-
-- 🌐 [אתר הפרויקט](https://kleikodesh.github.io)
-- 💾 [Google Drive](https://drive.google.com/drive/folders/1UcAlBJU1nW-uzG8J8DLgETIEnMNhsV3O?usp=sharing)
-- 💬 [פוסט במתמחים](https://mitmachim.top/post/966405)
-- 🐛 [דיווח באגים ובקשות](https://github.com/KleiKodesh/KleiKodeshProject/issues)
-
----
-
 ## 📜 רישיון
 
 התוסף הוא **חינמי לחלוטין** ומופץ תחת רישיון קוד פתוח.  
