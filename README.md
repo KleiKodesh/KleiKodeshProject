@@ -14,7 +14,7 @@
 [🌐 אתר הפרויקט](https://kleikodesh.github.io) &nbsp;|&nbsp;
 [⬇️ הורד עכשיו](https://github.com/KleiKodesh/KleiKodeshProject/releases/latest) &nbsp;|&nbsp;
 [📧 הירשם לעדכונים](https://docs.google.com/forms/d/e/1FAIpQLSfPw8cwUTSSH4bQkvIVaX_Cv1M2pdn53pJE16o9VFb0oW0gkg/viewform) &nbsp;|&nbsp;
-[🐛 דיווח באגים](https://github.com/KleiKodesh/KleiKodeshProject/issues)  &nbsp;|&nbsp;
+[🐛 דיווח באגים](https://github.com/KleiKodesh/KleiKodeshProject/issues) &nbsp;|&nbsp;
 [💬 פוסט במתמחים](https://mitmachim.top/post/966405)
 
 </div>
@@ -41,37 +41,26 @@
 | [📄 תוסף עיצוב תורני לוורד](https://github.com/KleiKodesh/kleikodesh.github.io/releases/tag/Files)   | תוסף עיצוב ייעודי לספרי קודש  |
 
 ---
+
+## 🔗 פרויקטים קשורים
+
+| פרויקט                            | תיאור                                                     |
+| --------------------------------- | --------------------------------------------------------- |
+| [אוצריא](https://www.otzaria.org) | ספריה תורנית דיגיטלית חינמית ופתוחה עם אלפי ספרים         |
+| [זית](https://zayitapp.com)       | אפליקציית הספרייה התורנית המשמשת את כלי קודש לגישה לספרים |
+
+---
+
 ## 📜 רישיון
 
 התוסף הוא **חינמי לחלוטין** ומופץ תחת רישיון קוד פתוח.  
 אתם מוזמנים להפיץ, לשתף ולהשתמש בתוסף ללא כל עלות.  
 הקוד המלא זמין ב-[GitHub](https://github.com/KleiKodesh) ואתם מוזמנים לתרום, לדווח על באגים ולהציע שיפורים.
 
-</div>
-
 ---
- ## 🖼️ תמונות מסך
-כזית
-<img width="303" height="497" alt="image" src="https://github.com/user-attachments/assets/75f47572-b32c-46a3-9225-391881139e43" />
-<img width="305" height="371" alt="image" src="https://github.com/user-attachments/assets/ea97e64c-dd4e-4fb2-b0d7-829fbd716c2e" />
 
-דרך האתרים
-<img width="253" height="368" alt="image" src="https://github.com/user-attachments/assets/7b73ba7e-3c1c-4f50-9098-7b68ca34cbcb" />
-<img width="256" height="373" alt="image" src="https://github.com/user-attachments/assets/bdc4bda8-4c47-4454-b5af-19c944ab8abe" />
+## 🖼️ תמונות מסך
 
-עיצוב תורני
-<img width="268" height="368" alt="image" src="https://github.com/user-attachments/assets/79ce0081-2258-465d-a2fb-c1c604bb2298" />
-
-חיפוש רגקס בוורד
-<img width="1919" height="761" alt="image" src="https://github.com/user-attachments/assets/93081076-6f1a-4b11-9e88-96a07d090379" />
-
-
-
-
-
-
-
-
-
+[לצפייה בתמונות מסך של התוסף](https://kleikodesh.github.io?gallery)
 
 </div>
