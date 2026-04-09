@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="WordInteropDemo/WordInteropDemo.csproj" Id="b1234567-abcd-1234-abcd-123456789abc" />
+  <Project Path="WordToPdfDemo/WordToPdfDemo.csproj" Id="21623d61-9856-401b-9698-5262b3f5a36f" />
+  <Project Path="WordToPdfLib/WordToPdfLib.csproj" Id="40cf25b7-bab1-4a6d-a195-be1344f63f30" />
+  <Project Path="WordToPdfTest/WordToPdfTest.csproj" />
+</Solution>

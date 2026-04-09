@@ -1,4 +1,5 @@
 ﻿using KleiKodesh.Ribbon;
+using KezayitLib.Pdf;
 using UpdateCheckerLib;
 using Office = Microsoft.Office.Core;
 
@@ -13,15 +14,12 @@ namespace KleiKodesh
 
         private void ThisAddIn_Startup(object sender, System.EventArgs e)
         {
-            // Set Word Application for PDF conversion (VSTO mode)
-            //Zayit.Services.WordToPdfConverter.WordApp = this.Application;
-
-            // Add-in startup - no automatic update checks here
-            // Updates are checked when user opens taskpanes
+            WordToPdfConverter.HostApplication = this.Application;
         }
 
         private void ThisAddIn_Shutdown(object sender, System.EventArgs e)
         {
+            WordToPdfConverter.CancelHostConversions();
             // Run any pending installer that was deferred during update process
             UpdateChecker.RunPendingInstaller();
 
