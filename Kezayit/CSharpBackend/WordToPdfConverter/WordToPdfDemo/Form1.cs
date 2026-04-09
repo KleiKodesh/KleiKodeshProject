@@ -30,30 +30,21 @@ namespace WordToPdfDemo
                 lblStatus.Text  = "Converting...";
                 Refresh();
 
-                try
+                // Write PDF next to the docx as a temp file
+                _tempPdfPath = Path.Combine(
+                    Path.GetTempPath(),
+                    Path.GetFileNameWithoutExtension(docxPath) + "_preview.pdf");
+
+                new WordToPdfConverter().Convert(docxPath, _tempPdfPath);
+
+                lblStatus.Text = "Done. Opening PDF...";
+
+                // Open in default system viewer
+                Process.Start(new ProcessStartInfo
                 {
-                    // Write PDF next to the docx as a temp file
-                    _tempPdfPath = Path.Combine(
-                        Path.GetTempPath(),
-                        Path.GetFileNameWithoutExtension(docxPath) + "_preview.pdf");
-
-                    new WordToPdfConverter().Convert(docxPath, _tempPdfPath);
-
-                    lblStatus.Text = "Done. Opening PDF...";
-
-                    // Open in default system viewer
-                    Process.Start(new ProcessStartInfo
-                    {
-                        FileName        = _tempPdfPath,
-                        UseShellExecute = true
-                    });
-                }
-                catch (Exception ex)
-                {
-                    lblStatus.Text = "Error: " + ex.Message;
-                    MessageBox.Show(ex.Message, "Conversion failed",
-                        MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
+                    FileName        = _tempPdfPath,
+                    UseShellExecute = true
+                });
             }
         }
 

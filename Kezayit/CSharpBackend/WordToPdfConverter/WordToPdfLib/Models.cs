@@ -13,6 +13,8 @@ namespace WordToPdfLib
         public bool Strikethrough { get; set; }
         public bool Superscript { get; set; }
         public bool Subscript { get; set; }
+        public bool Vanish { get; set; }         // w:vanish — hidden text, skip rendering
+        public float? VerticalOffset { get; set; } // w:position in points (positive = up)
         public string Color { get; set; }
         public string Highlight { get; set; }
         public float? FontSize { get; set; }

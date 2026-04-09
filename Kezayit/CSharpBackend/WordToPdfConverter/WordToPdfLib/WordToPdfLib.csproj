@@ -129,7 +129,15 @@
     <Compile Include="Models.cs" />
     <Compile Include="ConversionOptions.cs" />
     <Compile Include="DocxReader.cs" />
+    <Compile Include="DocxReader.Styles.cs" />
+    <Compile Include="DocxReader.Numbering.cs" />
+    <Compile Include="DocxReader.Paragraph.cs" />
     <Compile Include="PdfWriter.cs" />
+    <Compile Include="PdfWriter.Paragraph.cs" />
+    <Compile Include="PdfWriter.Drawing.cs" />
+    <Compile Include="PdfWriter.Fonts.cs" />
+    <Compile Include="PdfWriter.Footnotes.cs" />
+    <Compile Include="PdfWriter.Helpers.cs" />
     <Compile Include="WordToPdfConverter.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
