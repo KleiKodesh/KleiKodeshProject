@@ -16,7 +16,6 @@ export interface CategoryRow {
   parentId: number | null
   title: string
   level: number
-  orderIndex: number
 }
 export interface CategoryNode extends CategoryRow {
   children: CategoryNode[]

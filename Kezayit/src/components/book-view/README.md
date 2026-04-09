@@ -16,19 +16,19 @@ Main book reader. Split pane with text above and commentary below, TOC side pane
 
 **BookViewTocTreeSection.vue** — section header separating main and alternate TOC structures.
 
+**BookViewCommentaryPanel.vue** — thin wrapper that passes props from `BookViewPage` into `CommentaryView`. Do not add logic here.
+
 **CommentaryView.vue** — commentary display grouped by book.
 
 **CommentaryHeader.vue** — header for a commentary book group with connection type selector and navigation.
 
 **CommentaryHeaderNav.vue** — previous/next section navigation within a commentary book.
 
-**CommentaryTreePanel.vue** — TOC tree for the commentary.
+**CommentaryFilterPanel.vue** — dropdown panel for toggling individual commentary books on/off. Anchored to the top-right of the commentary header. Uses `buildCommentaryTree` from `useCommentary.ts` to render the tree.
 
-**CommentaryTreeViewNode.vue** — single node in the commentary TOC tree.
+**CommentaryTreeViewNode.vue** — single node in the commentary filter tree.
 
 **CommentaryTypeDropdown.vue** — dropdown for selecting the commentary connection type.
-
-**CommentaryPanel.vue** — container holding `CommentaryView` and `CommentaryTreePanel`.
 
 **useToc.ts** — loads TOC entries and alternate structures for a book. Builds an entry-id-to-breadcrumb path map. Use `getActiveTocEntry` and `getTocPath` rather than computing paths manually.
 

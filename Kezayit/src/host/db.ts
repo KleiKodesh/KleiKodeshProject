@@ -15,10 +15,22 @@ declare global {
 export const isHosted = window.__webviewDbReady !== undefined || import.meta.env.DEV
 export const dbReady = ref(isHosted ? (window.__webviewDbReady ?? import.meta.env.DEV) : true)
 
+/** True once detected; false means the column doesn't exist or detection hasn't run yet. */
+export let categoryHasOrderIndex = false
+
+async function detectCategorySchema() {
+  const cols = await query<{ name: string }>('PRAGMA table_info(category)', [])
+  categoryHasOrderIndex = cols.some((c) => c.name === 'orderIndex')
+}
+
 export function onDbReady(path: string) {
   window.__webviewDbPath = path
   dbReady.value = true
+  detectCategorySchema()
 }
+
+// If DB is already ready at boot (C# host with DB pre-loaded), detect immediately
+if (dbReady.value) detectCategorySchema()
 
 // ── Push event bus ────────────────────────────────────────────────────────────
 type EventListener = (msg: Record<string, unknown>) => void

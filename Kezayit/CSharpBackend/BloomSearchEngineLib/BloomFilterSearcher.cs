@@ -33,7 +33,7 @@ namespace BloomSearchEngineLib
 
                 Task.Run(() =>
                 {
-                    ProcessHits(hits, terms, reader.ChunkSize, terms.Length, perfectMatches, partialMatches);
+                    ProcessHits(hits, terms, terms.Length, perfectMatches, partialMatches);
                     done.Set();
                 });
 
@@ -90,14 +90,13 @@ namespace BloomSearchEngineLib
         private void ProcessHits(
             SearchResult[] hits,
             string[] terms,
-            short chunkSize,
             int maxScore,
             ConcurrentQueue<SearchResultItem> perfectMatches,
             TopNPartialMatches partialMatches)
         {
             var queue = new BlockingCollection<SearchResult>(boundedCapacity: 2);
 
-            var consumer = Task.Run(() => ConsumeChunks(queue, terms, chunkSize, maxScore, perfectMatches, partialMatches));
+            var consumer = Task.Run(() => ConsumeChunks(queue, terms, maxScore, perfectMatches, partialMatches));
 
             foreach (var hit in hits) queue.Add(hit);
             queue.CompleteAdding();
@@ -107,7 +106,6 @@ namespace BloomSearchEngineLib
         private static void ConsumeChunks(
             BlockingCollection<SearchResult> queue,
             string[] terms,
-            short chunkSize,
             int maxScore,
             ConcurrentQueue<SearchResultItem> perfectMatches,
             TopNPartialMatches partialMatches)
@@ -117,7 +115,7 @@ namespace BloomSearchEngineLib
                 int chunksProcessed = 0;
                 foreach (var hit in queue.GetConsumingEnumerable())
                 {
-                    ProcessChunk(db, hit, terms, chunkSize, maxScore, perfectMatches, partialMatches);
+                    ProcessChunk(db, hit, terms, maxScore, perfectMatches, partialMatches);
 
                     if (++chunksProcessed % 50 == 0 && GC.GetTotalMemory(false) > 300_000_000)
                         GC.Collect(1, GCCollectionMode.Optimized, false);
@@ -129,12 +127,11 @@ namespace BloomSearchEngineLib
             ZayitDbManager db,
             SearchResult hit,
             string[] terms,
-            short chunkSize,
             int maxScore,
             ConcurrentQueue<SearchResultItem> perfectMatches,
             TopNPartialMatches partialMatches)
         {
-            foreach (var (lineId, content) in db.GetLineContentsChunk(hit.Id, chunkSize))
+            foreach (var (lineId, content) in db.GetLineContentsChunk(hit.FirstLineId, hit.LastLineId))
             {
                 string norm = content.NormalizeText();
                 var match = SearchEngineMatcher.Match(norm, terms, hit.Score);

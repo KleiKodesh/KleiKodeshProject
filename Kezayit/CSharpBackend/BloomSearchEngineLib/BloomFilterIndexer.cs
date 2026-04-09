@@ -50,14 +50,16 @@ namespace BloomSearchEngineLib
                     var chunk = new List<string>(_chunkSize);
                     int processed = 0;
                     var extractor = new TermExtractor();
+                    int chunkFirstId = -1, chunkLastId = -1;
 
                     void Commit()
                     {
                         var terms = extractor.ExtractTermsFromLines(chunk);
                         var filter = new BloomFilter(Math.Max(1, terms.Count), _fpRate);
                         foreach (var t in terms) filter.Add(t);
-                        writer.Commit(filter);
+                        writer.Commit(filter, chunkFirstId, chunkLastId);
                         chunk.Clear();
+                        chunkFirstId = -1; chunkLastId = -1;
                         processed++;
 
                         var now = sw.Elapsed;
@@ -73,9 +75,11 @@ namespace BloomSearchEngineLib
                         }
                     }
 
-                    foreach (var line in db.GetAllLineContents())
+                    foreach (var (lineId, line) in db.GetAllLineContents())
                     {
                         if (ct.IsCancellationRequested) { Console.WriteLine("[BloomFilterIndexer] Cancelled during indexing"); return; }
+                        if (chunkFirstId == -1) chunkFirstId = lineId;
+                        chunkLastId = lineId;
                         chunk.Add(line);
                         if (chunk.Count == _chunkSize) Commit();
                     }

@@ -79,13 +79,16 @@ export function useSearch(
       ])
       const lineIndex = rows[0]?.lineIndex
       if (lineIndex == null) return
+      const q = executedQuery()
       tabStore.openTab({
         title: result.bookTitle,
         route: '/book-view',
         bookId: result.bookId,
         openTocLineIndex: lineIndex,
         searchHighlightLineIndex: lineIndex,
-        searchHighlightQuery: executedQuery(),
+        searchHighlightQuery: q,
+        searchHighlightSnippet: result.snippet,
+        searchHighlightTerms: q.trim().split(/\s+/).filter(Boolean),
       })
     } catch (err) {
       console.error('[useSearch] failed to open result:', err)

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { query } from '@/host/db'
+import { query, categoryHasOrderIndex } from '@/host/db'
 import { SQL } from '@/host/queries.sql'
 import {
   buildTree,
@@ -20,7 +20,6 @@ export const useBooksDataStore = defineStore('booksData', () => {
     parentId: null,
     title: '',
     level: -1,
-    orderIndex: 0,
     children: [],
     books: [],
   })
@@ -31,7 +30,7 @@ export const useBooksDataStore = defineStore('booksData', () => {
     error.value = null
     try {
       const [categories, books] = await Promise.all([
-        query<CategoryRow>(SQL.GET_ALL_CATEGORIES),
+        query<CategoryRow>(SQL.GET_ALL_CATEGORIES(categoryHasOrderIndex)),
         query<BookRow>(SQL.GET_ALL_BOOKS),
       ])
       const children = buildTree(categories, books)

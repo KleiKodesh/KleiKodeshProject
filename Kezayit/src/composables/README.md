@@ -19,3 +19,5 @@ Only create a file here if the composable is used by two or more features. Singl
 **useVirtualListKeyNav.ts** — arrow-key and `Ctrl+Home`/`Ctrl+End` for `@tanstack/vue-virtual` lists. Use this instead of `useVirtualScrollerKeys` when the list also needs arrow-key item navigation.
 
 **useLineCopy.ts** — intercepts the browser `copy` event on a scroller. Writes lines as block elements in `text/html` and strips HTML for `text/plain` so copied text has no inline line breaks.
+
+**useToolbarPosition.ts** — exports the `ToolbarPosition` type (`'top' | 'bottom' | 'left' | 'right'`). Import this type wherever toolbar position values are needed. The actual position state lives in `bookViewStore`.

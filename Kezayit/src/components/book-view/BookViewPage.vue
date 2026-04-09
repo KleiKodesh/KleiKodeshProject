@@ -38,12 +38,16 @@ const openTocEntryId = tabStore.activeTab.openTocEntryId
 const openTocLineIndex = tabStore.activeTab.openTocLineIndex
 const searchHighlightLineIndex = tabStore.activeTab.searchHighlightLineIndex
 const searchHighlightQuery = tabStore.activeTab.searchHighlightQuery ?? ''
+const searchHighlightSnippet = tabStore.activeTab.searchHighlightSnippet
+const searchHighlightTerms = tabStore.activeTab.searchHighlightTerms
 if (openTocEntryId != null)
   tabStore.updateActiveTab({
     openTocEntryId: undefined,
     openTocLineIndex: undefined,
     searchHighlightLineIndex: undefined,
     searchHighlightQuery: undefined,
+    searchHighlightSnippet: undefined,
+    searchHighlightTerms: undefined,
   })
 
 const bottomVisible = ref(false)
@@ -457,6 +461,8 @@ watch(searchVisible, (v) => {
               :initial-scroll-offset="initialScrollOffset"
               :search-highlight-line-index="searchHighlightLineIndex"
               :search-highlight-query="searchHighlightQuery"
+              :search-highlight-snippet="searchHighlightSnippet"
+              :search-highlight-terms="searchHighlightTerms"
               :commentary-scroll-index="commentaryScrollIndex"
               :commentary-scroll-offset="commentaryScrollOffset"
               :search-query="searchMode === 'content' ? contentSearch.query.value : ''"

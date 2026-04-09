@@ -38,25 +38,24 @@ public sealed class ZayitDbManager : IDisposable
         catch (Exception ex) { Console.WriteLine("[ZayitDbManager] GetLineCount: " + ex.Message); return 0; }
     }
 
-    public IEnumerable<string> GetAllLineContents()
+    public IEnumerable<(int id, string content)> GetAllLineContents()
     {
         SQLiteCommand cmd = null;
         SQLiteDataReader reader = null;
-        try { cmd = _connection.CreateCommand(); cmd.CommandText = "SELECT content FROM line ORDER BY id"; reader = cmd.ExecuteReader(); }
+        try { cmd = _connection.CreateCommand(); cmd.CommandText = "SELECT id, content FROM line ORDER BY id"; reader = cmd.ExecuteReader(); }
         catch (Exception ex) { Console.WriteLine("[ZayitDbManager] GetAllLineContents: " + ex.Message); cmd?.Dispose(); yield break; }
-        using (reader) using (cmd) { while (reader.Read()) yield return reader.GetString(0); }
+        using (reader) using (cmd) { while (reader.Read()) yield return (reader.GetInt32(0), reader.GetString(1)); }
     }
 
-    public IEnumerable<(int id, string content)> GetLineContentsChunk(int chunkNumber, int chunkSize)
+    public IEnumerable<(int id, string content)> GetLineContentsChunk(int firstLineId, int lastLineId)
     {
-        int startId = chunkNumber * chunkSize, endId = startId + chunkSize - 1;
         var cmd = _connection.CreateCommand();
         cmd.CommandText = "SELECT id, content FROM line WHERE id BETWEEN @s AND @e ORDER BY id";
-        cmd.Parameters.AddWithValue("@s", startId);
-        cmd.Parameters.AddWithValue("@e", endId);
+        cmd.Parameters.AddWithValue("@s", firstLineId);
+        cmd.Parameters.AddWithValue("@e", lastLineId);
         SQLiteDataReader reader = null;
         try { reader = cmd.ExecuteReader(); }
-        catch (Exception ex) { Console.WriteLine("[ZayitDbManager] GetLineContentsChunk " + chunkNumber + ": " + ex.Message); cmd.Dispose(); yield break; }
+        catch (Exception ex) { Console.WriteLine("[ZayitDbManager] GetLineContentsChunk firstId=" + firstLineId + ": " + ex.Message); cmd.Dispose(); yield break; }
         using (reader) using (cmd) { while (reader.Read()) yield return (reader.GetInt32(0), reader.GetString(1)); }
     }
 

@@ -171,6 +171,10 @@ namespace KezayitLib
                         case "BloomSearchStart": _search.HandleSearchStart(root, id); break;
                         case "BloomSearchCancel": _search.HandleSearchCancel(root, id); break;
                         case "DeleteBloomIndex": _search.HandleDeleteIndex(id); break;
+                        case "ConfirmReindex":
+                            bool confirm = root.TryGetProperty("confirm", out var cv) && cv.GetBoolean();
+                            _search.HandleConfirmReindex(confirm, id);
+                            break;
                         case "TogglePopOut": HandleTogglePopOut(id); break;
                         default: _bridge.Reply(id, new { error = "Unknown action: " + action }); break;
                     }

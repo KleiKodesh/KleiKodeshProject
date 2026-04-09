@@ -100,12 +100,12 @@ The main book reader. Orchestrates a split pane (text above, commentary below), 
 - `BookViewSearchBar.vue` — floating search (query, mode, match navigation)
 - `BookViewTocTree.vue` — TOC side panel (main + alt structures)
 - `BookViewTocTreeSection.vue` — TOC section header
-- `BookViewCommentaryPanel.vue` — commentary panel container
+- `BookViewCommentaryPanel.vue` — thin wrapper passing props into `CommentaryView`
 - `CommentaryView.vue` — commentary display grouped by book
 - `CommentaryHeader.vue` — commentary book header (type selector, nav)
 - `CommentaryHeaderNav.vue` — prev/next section navigation
-- `CommentaryFilterPanel.vue` — commentary filter panel
-- `CommentaryTreeViewNode.vue` — commentary TOC node
+- `CommentaryFilterPanel.vue` — dropdown to toggle individual commentary books on/off
+- `CommentaryTreeViewNode.vue` — node in the commentary filter tree
 - `CommentaryTypeDropdown.vue` — commentary type selector
 - `useToc.ts` — loads TOC entries and alt TOC structures for a book; builds a path map (entry id → full breadcrumb string); exposes `getActiveTocEntry` and `getTocPath`
 - `useLinesTable.ts` — paginated line fetching from the `line` table in chunks of 200; pre-allocates placeholder slots so the virtualizer has the correct total height immediately, then fills content as chunks arrive; exposes `prioritise(lineIndex)` to move a chunk to the front of the fetch queue
@@ -130,9 +130,13 @@ Full-text search using Bloom filters. Supports category/book filters and caches 
 
 ### settings/
 
-App settings across three tabs: general, reading, and reset. Also contains the setup wizard.
+App settings across three tabs: general, reading, and advanced. Also contains the setup wizard.
 
-- `SettingsPage.vue`, `SettingRow.vue`, `SliderSetting.vue`, `ToggleGroup.vue`
+- `SettingsPage.vue` — three-tab page shell
+- `SettingsGeneralPane.vue` — general tab: theme, zoom, toolbar position, reading behavior, divine name censoring
+- `SettingsReadingPane.vue` — reading tab: book and commentary font/size/padding settings
+- `SettingsAdvancedPane.vue` — advanced tab: database path picker (hosted only), reset settings, full app reset
+- `SettingRow.vue`, `HintIcon.vue`, `SliderSetting.vue`, `ToggleGroup.vue`
 - `ThemePicker.vue`, `FontDisplaySettings.vue`, `FontSelector.vue`
 - `useSettingsPage.ts`
 - `SetupWizard.vue` — first-launch onboarding wizard
@@ -205,6 +209,8 @@ Shared reusable components used across features.
 
 **useLineCopy.ts** — intercepts the browser `copy` event on a scroller element; when the user has selected all, writes each line as a `<div>` in `text/html` and strips HTML tags for `text/plain`, so copied text has no inline line breaks.
 
+**useToolbarPosition.ts** — exports the `ToolbarPosition` type (`'top' | 'bottom' | 'left' | 'right'`). The actual position state lives in `bookViewStore`.
+
 ## Host & Database (`src/host/`)
 
 ### db.ts
@@ -241,7 +247,11 @@ All raw SQL strings live here. No inline SQL anywhere else in the codebase.
 
 **normalizeText.ts** — strips ASCII and Hebrew quote characters and lowercases; used as the base normalization step for all search comparisons.
 
+**fuzzyMatch.ts** — word-based fuzzy matching for book and HebrewBooks search. `scoreMatch` returns a numeric score (0 = all exact, Infinity = no match). Hebrew acronyms are never fuzzy-matched to avoid false positives.
+
 **tocSearchUtils.ts** — TOC search path building (`buildTocSearchPaths`), query splitting (`splitQuery`), and ordered subsequence word matching (`matchWords`).
+
+**detectFonts.ts** — `detectAvailableFonts()` uses canvas measurement to detect which Hebrew and general fonts are installed. Used by `FontSelector.vue`.
 
 **scrollToIndexWithRetry.ts** — virtual scroller scroll-to-index with retry for async rendering.
 

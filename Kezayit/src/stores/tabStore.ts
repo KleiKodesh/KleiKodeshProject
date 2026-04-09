@@ -46,6 +46,8 @@ export interface Tab {
   openTocLineIndex?: number
   searchHighlightLineIndex?: number
   searchHighlightQuery?: string
+  searchHighlightSnippet?: string
+  searchHighlightTerms?: string[]
   searchQuery?: string
   tocPath?: string
 }

@@ -395,9 +395,11 @@ if (-not $NoRelease) {
                 }
             }
             
+            $headCommit = git rev-parse HEAD
             gh release create $version $installerPath `
                 --title "KleiKodesh $version" `
-                --notes $releaseNotes
+                --notes $releaseNotes `
+                --target $headCommit
             
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "SUCCESS: GitHub release $version created!" -ForegroundColor Green

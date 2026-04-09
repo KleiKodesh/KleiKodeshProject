@@ -36,6 +36,8 @@ const props = defineProps<{
   initialScrollOffset?: number
   searchHighlightLineIndex?: number
   searchHighlightQuery?: string
+  searchHighlightSnippet?: string
+  searchHighlightTerms?: string[]
 }>()
 
 const tabStore = useTabStore()
@@ -111,6 +113,160 @@ function highlightMatches(
   return out.join('')
 }
 
+/**
+ * Highlight search-result terms within the snippet region of a line.
+ *
+ * The C# backend strips HTML and all diacritics (Unicode Non-Spacing Marks) before
+ * matching, so both the snippet and the terms are plain stripped text. We need to:
+ *   1. Find where the snippet sits inside the stripped line text (with retry).
+ *   2. Within that region, highlight each term using the same HTML-aware / diacritic-aware
+ *      walk that highlightMatches uses.
+ *
+ * Retry strategy: if the full snippet isn't found, progressively drop words from both
+ * ends (alternating) until at least 2 words remain. This handles edge cases where the
+ * C# snippet was trimmed mid-word or the line content differs slightly.
+ */
+function highlightSearchResult(
+  raw: string,
+  content: string,
+  snippet: string,
+  terms: string[],
+): string {
+  if (!snippet || !terms.length) return content
+
+  // Use raw (pre-censoring) for region detection — the C# snippet was built from uncensored text.
+  // Use content (post-censoring) for the output walk so the displayed text is correct.
+  const strippedContent = removeDiacriticsForSearch(raw.replace(/<[^>]*>/g, ''))
+  const strippedSnippet = removeDiacriticsForSearch(snippet)
+
+  // Find the snippet region in the stripped content, with word-dropping retry.
+  const region = findSnippetRegion(strippedContent, strippedSnippet)
+  if (!region) return content
+
+  const { start: regionStart, end: regionEnd } = region
+
+  // Build a set of (strippedPos, length) pairs for each term occurrence within the region.
+  const matchRanges: Array<{ start: number; len: number }> = []
+  for (const term of terms) {
+    const t = removeDiacriticsForSearch(term)
+    if (!t) continue
+    let idx = regionStart
+    while (idx < regionEnd && (idx = strippedContent.indexOf(t, idx)) !== -1 && idx < regionEnd) {
+      matchRanges.push({ start: idx, len: t.length })
+      idx++
+    }
+  }
+  if (!matchRanges.length) return content
+
+  // Sort by start position so we can walk left-to-right.
+  matchRanges.sort((a, b) => a.start - b.start)
+
+  // Walk the content HTML-aware + diacritic-aware, inserting <mark> tags at match boundaries.
+  const out: string[] = []
+  let strippedPos = 0
+  let inTag = false
+  let inMatch = false
+  let matchEndPos = 0
+  let rangeIdx = 0
+
+  for (let i = 0; i < content.length; i++) {
+    const ch = content[i]!
+
+    if (ch === '<') {
+      inTag = true
+      out.push(ch)
+      continue
+    }
+    if (ch === '>') {
+      inTag = false
+      out.push(ch)
+      continue
+    }
+    if (inTag) {
+      out.push(ch)
+      continue
+    }
+
+    const isDiacritic = /[\u0591-\u05C7]/.test(ch)
+
+    if (!isDiacritic) {
+      // Close any open match that has ended.
+      if (inMatch && strippedPos >= matchEndPos) {
+        out.push('</mark>')
+        inMatch = false
+      }
+
+      // Skip overlapping/consumed ranges.
+      while (rangeIdx < matchRanges.length && matchRanges[rangeIdx]!.start < strippedPos) {
+        rangeIdx++
+      }
+
+      // Open a new match if we're at a range start and not already inside one.
+      if (
+        !inMatch &&
+        rangeIdx < matchRanges.length &&
+        matchRanges[rangeIdx]!.start === strippedPos
+      ) {
+        out.push('<mark class="search-match">')
+        matchEndPos = strippedPos + matchRanges[rangeIdx]!.len
+        inMatch = true
+        rangeIdx++
+      }
+    }
+
+    out.push(ch)
+    if (!isDiacritic) strippedPos++
+  }
+
+  if (inMatch) out.push('</mark>')
+  return out.join('')
+}
+
+/**
+ * Find the start/end positions (in stripped-text coordinates) of the snippet within the line.
+ * Retries by progressively dropping words from the edges if the full snippet isn't found.
+ * Returns null if no match found with at least 2 words.
+ */
+function findSnippetRegion(
+  strippedLine: string,
+  strippedSnippet: string,
+): { start: number; end: number } | null {
+  // Strip leading/trailing ellipsis that C# adds when snippet is a substring.
+  const clean = strippedSnippet
+    .replace(/^\.{2,}/, '')
+    .replace(/\.{2,}$/, '')
+    .trim()
+  if (!clean) return null
+
+  // Try the full snippet first, then progressively drop words from edges.
+  const words = clean.split(/\s+/).filter(Boolean)
+  if (!words.length) return null
+
+  // Try substrings: full → drop last → drop first → drop both → ...
+  // We alternate dropping from end and start, keeping at least 2 words.
+  const candidates: string[] = []
+  let lo = 0,
+    hi = words.length
+  candidates.push(words.slice(lo, hi).join(' '))
+  while (hi - lo > 2) {
+    // drop from end
+    hi--
+    candidates.push(words.slice(lo, hi).join(' '))
+    if (hi - lo <= 2) break
+    // drop from start
+    lo++
+    candidates.push(words.slice(lo, hi).join(' '))
+  }
+
+  for (const candidate of candidates) {
+    const idx = strippedLine.indexOf(candidate)
+    if (idx !== -1) {
+      return { start: idx, end: idx + candidate.length }
+    }
+  }
+  return null
+}
+
 // Cache rendered HTML per line — avoids re-running applyDiacriticsFilter (DOM TreeWalker)
 // and censorDivineNames (6 regexes) on every render cycle for unchanged lines.
 // The cache is invalidated as a whole whenever any rendering input changes.
@@ -118,7 +274,7 @@ const renderCache = new Map<number, string>()
 let renderCacheKey = ''
 
 function getRenderCacheKey(): string {
-  return `${diacriticsState.value}|${settingsStore.censorDivineNames}|${props.searchQuery ?? ''}|${props.currentMatchLineIndex ?? -1}|${props.currentMatchOccurrence ?? 0}|${props.searchHighlightLineIndex ?? -1}|${props.searchHighlightQuery ?? ''}`
+  return `${diacriticsState.value}|${settingsStore.censorDivineNames}|${props.searchQuery ?? ''}|${props.currentMatchLineIndex ?? -1}|${props.currentMatchOccurrence ?? 0}|${props.searchHighlightLineIndex ?? -1}|${props.searchHighlightQuery ?? ''}|${props.searchHighlightSnippet ?? ''}|${props.searchHighlightTerms?.join(',') ?? ''}`
 }
 
 function lineContent(raw: string, lineIndex: number): string {
@@ -141,8 +297,18 @@ function lineContent(raw: string, lineIndex: number): string {
       lineIndex === props.currentMatchLineIndex,
       props.currentMatchOccurrence ?? 0,
     )
-  if (props.searchHighlightQuery?.trim() && lineIndex === props.searchHighlightLineIndex)
-    content = highlightMatches(raw, content, props.searchHighlightQuery, false, -1)
+  if (lineIndex === props.searchHighlightLineIndex) {
+    if (props.searchHighlightSnippet && props.searchHighlightTerms?.length) {
+      content = highlightSearchResult(
+        raw,
+        content,
+        props.searchHighlightSnippet,
+        props.searchHighlightTerms,
+      )
+    } else if (props.searchHighlightQuery?.trim()) {
+      content = highlightMatches(raw, content, props.searchHighlightQuery, false, -1)
+    }
+  }
 
   renderCache.set(lineIndex, content)
   return content

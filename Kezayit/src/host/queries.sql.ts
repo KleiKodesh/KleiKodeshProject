@@ -7,11 +7,10 @@ export const SQL = {
   // ── Categories ──────────────────────────────────────────────────────────────
 
   /** All categories flat — used to build the full tree in memory once */
-  GET_ALL_CATEGORIES: `
-    SELECT id, parentId, title, level, orderIndex
-    FROM category
-    ORDER BY level, orderIndex
-  `,
+  GET_ALL_CATEGORIES: (hasOrderIndex: boolean) =>
+    hasOrderIndex
+      ? `SELECT id, parentId, title, level FROM category ORDER BY level, orderIndex`
+      : `SELECT id, parentId, title, level FROM category ORDER BY level`,
 
   /** All books flat — attached to tree nodes by categoryId, with aggregated author names */
   GET_ALL_BOOKS: `

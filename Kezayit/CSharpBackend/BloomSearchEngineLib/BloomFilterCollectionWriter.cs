@@ -29,15 +29,17 @@ namespace MinimalIndexer
             _w = new BinaryWriter(_buf);
         }
 
-        public void Commit(BloomFilter filter)
+        public void Commit(BloomFilter filter, int firstLineId, int lastLineId)
         {
             var bytes = filter.GetBytes();
             int byteSize = filter.GetByteSize();
             _w.Write(filter.Size);
             _w.Write(filter.HashFunctions);
+            _w.Write(firstLineId);
+            _w.Write(lastLineId);
             _w.Write(bytes, 0, byteSize);
 
-            long entrySize = 8 + byteSize;
+            long entrySize = 16 + byteSize;
             int pad = (int)((CacheLineSize - entrySize % CacheLineSize) % CacheLineSize);
             for (int i = 0; i < pad; i++) _w.Write((byte)0);
 

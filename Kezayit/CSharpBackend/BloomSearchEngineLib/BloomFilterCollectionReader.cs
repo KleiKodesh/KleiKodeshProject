@@ -26,9 +26,10 @@ namespace MinimalIndexer
                 for (int i = 0; i < _count; i++)
                 {
                     int bits = r.ReadInt32(), hashes = r.ReadInt32();
+                    int firstLineId = r.ReadInt32(), lastLineId = r.ReadInt32();
                     int byteLen = (bits + 7) / 8;
-                    _filters[i] = new BloomFilterData { Filter = new BloomFilter(r.ReadBytes(byteLen), bits, hashes), Id = i };
-                    int pad = (int)((CacheLineSize - (8 + byteLen) % CacheLineSize) % CacheLineSize);
+                    _filters[i] = new BloomFilterData { Filter = new BloomFilter(r.ReadBytes(byteLen), bits, hashes), Id = i, FirstLineId = firstLineId, LastLineId = lastLineId };
+                    int pad = (int)((CacheLineSize - (16 + byteLen) % CacheLineSize) % CacheLineSize);
                     if (pad > 0) r.ReadBytes(pad);
                 }
             }
@@ -64,11 +65,11 @@ namespace MinimalIndexer
 
                 if (score == maxScore)
                 {
-                    perfect.Add(new SearchResult { Id = _filters[i].Id, Score = score });
+                    perfect.Add(new SearchResult { Id = _filters[i].Id, Score = score, FirstLineId = _filters[i].FirstLineId, LastLineId = _filters[i].LastLineId });
                 }
                 else if (score > 0)
                 {
-                    TryAddPartial(partial, ref lowestPartial, new SearchResult { Id = _filters[i].Id, Score = score });
+                    TryAddPartial(partial, ref lowestPartial, new SearchResult { Id = _filters[i].Id, Score = score, FirstLineId = _filters[i].FirstLineId, LastLineId = _filters[i].LastLineId });
                 }
             }
 
@@ -137,7 +138,7 @@ namespace MinimalIndexer
         public void Dispose() { }
     }
 
-    public struct BloomFilterData { public BloomFilter Filter; public int Id; }
+    public struct BloomFilterData { public BloomFilter Filter; public int Id; public int FirstLineId; public int LastLineId; }
     public class ThreadSearchResults { public List<SearchResult> PerfectMatches; public List<SearchResult> PartialMatches; }
-    public struct SearchResult { public int Id; public int Score; }
+    public struct SearchResult { public int Id; public int Score; public int FirstLineId; public int LastLineId; }
 }

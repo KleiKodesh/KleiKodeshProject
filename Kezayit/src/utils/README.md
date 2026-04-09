@@ -18,4 +18,6 @@ Pure utility functions. No Vue, no Pinia, no reactivity. If a utility needs a re
 
 **scrollToIndexWithRetry.ts** — scroll-to-index for `@tanstack/vue-virtual` that retries until the target item has rendered. Use this instead of calling `scrollToIndex` directly when the list may not have rendered the target yet.
 
+**detectFonts.ts** — `detectAvailableFonts()` uses canvas measurement to detect which Hebrew and general fonts are installed on the user's system. Returns an array of font family name strings. Used by `FontSelector.vue` to populate the font picker with only fonts that are actually available.
+
 **resetState.ts** — exports a single `resetting` ref set to `true` just before an app reset. Check this before any interaction that should be blocked during reset.

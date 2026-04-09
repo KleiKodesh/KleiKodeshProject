@@ -80,6 +80,15 @@ export function useIndexingStatus() {
     }
 
     unregister = onWebviewEvent((msg) => {
+      if (msg.event === 'bloomIndexVersionMismatch') {
+        const oldVer = msg.oldVersion as string
+        const newVer = msg.newVersion as string
+        const rebuild = window.confirm(
+          `הגרסה של האפליקציה עודכנה (${oldVer} ← ${newVer}).\nהאם לבנות מחדש את אינדקס החיפוש?`,
+        )
+        callAction('ConfirmReindex', { confirm: rebuild }).catch(() => {})
+        return
+      }
       if (msg.event !== 'bloomIndexProgress') return
       console.log('[useIndexingStatus] bloomIndexProgress event:', msg)
       state.value = {
