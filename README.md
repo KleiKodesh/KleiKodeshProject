@@ -2,7 +2,7 @@
 
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/KleiKodesh/KleiKodeshProject/master/kleikodesh.github.io/Klei_Kodesh.png" alt="כלי קודש לוורד" width="100" />
+<img width="100" alt="כלי קודש לוורד" src="https://github.com/user-attachments/assets/0d528a83-c124-47de-bfcc-ceb87342a2e0" />
 
 # כלי קודש לוורד
 
