@@ -31,22 +31,6 @@
 
 ---
 
-## 🖼️ תמונות מסך
-
-<div align="center">
-
-| זית - ספריית אוצריא                                                                                                 | חיפוש רגקס                                                                                                             | עיצוב תורני                                                                                                              |
-| ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| ![זית](https://raw.githubusercontent.com/KleiKodesh/KleiKodeshProject/master/kleikodesh.github.io/images/zayit.png) | ![רגקס](https://raw.githubusercontent.com/KleiKodesh/KleiKodeshProject/master/kleikodesh.github.io/images/regex-3.png) | ![עיצוב](https://raw.githubusercontent.com/KleiKodesh/KleiKodeshProject/master/kleikodesh.github.io/images/DocSefer.png) |
-
-| דרך האתרים                                                                                                                   | דרך האתרים - דפדפן                                                                                                           |
-| ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| ![אתרים 1](https://raw.githubusercontent.com/KleiKodesh/KleiKodeshProject/master/kleikodesh.github.io/images/websites-1.png) | ![אתרים 2](https://raw.githubusercontent.com/KleiKodesh/KleiKodeshProject/master/kleikodesh.github.io/images/websites-2.png) |
-
-</div>
-
----
-
 ## ⬇️ הורדות נוספות
 
 | קובץ                                                                                                 | תיאור                         |
@@ -71,5 +55,19 @@
 התוסף הוא **חינמי לחלוטין** ומופץ תחת רישיון קוד פתוח.  
 אתם מוזמנים להפיץ, לשתף ולהשתמש בתוסף ללא כל עלות.  
 הקוד המלא זמין ב-[GitHub](https://github.com/KleiKodesh) ואתם מוזמנים לתרום, לדווח על באגים ולהציע שיפורים.
+
+</div>
+
+ 🖼️ תמונות מסך
+
+<div align="center">
+
+| זית - ספריית אוצריא                                                                                                 | חיפוש רגקס                                                                                                             | עיצוב תורני                                                                                                              |
+| ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| ![זית](https://raw.githubusercontent.com/KleiKodesh/KleiKodeshProject/master/kleikodesh.github.io/images/zayit.png) | ![רגקס](https://raw.githubusercontent.com/KleiKodesh/KleiKodeshProject/master/kleikodesh.github.io/images/regex-3.png) | ![עיצוב](https://raw.githubusercontent.com/KleiKodesh/KleiKodeshProject/master/kleikodesh.github.io/images/DocSefer.png) |
+
+| דרך האתרים                                                                                                                   | דרך האתרים - דפדפן                                                                                                           |
+| ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| ![אתרים 1](https://raw.githubusercontent.com/KleiKodesh/KleiKodeshProject/master/kleikodesh.github.io/images/websites-1.png) | ![אתרים 2](https://raw.githubusercontent.com/KleiKodesh/KleiKodeshProject/master/kleikodesh.github.io/images/websites-2.png) |
 
 </div>
