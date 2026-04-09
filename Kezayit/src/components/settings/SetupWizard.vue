@@ -29,6 +29,7 @@ const {
   commentaryFontSize,
   commentaryLinePadding,
   useSeparateCommentarySettings,
+  defaultAutoSyncCommentary,
 } = storeToRefs(settings)
 
 const bookViewStore = useBookViewStore()
