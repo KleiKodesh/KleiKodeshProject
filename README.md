@@ -2,7 +2,7 @@
 
 <div align="center">
 
-<img src="kleikodesh.github.io/Klei_Kodesh.png" alt="כלי קודש לוורד" width="100" />
+<img src="https://raw.githubusercontent.com/KleiKodesh/KleiKodeshProject/master/kleikodesh.github.io/Klei_Kodesh.png" alt="כלי קודש לוורד" width="100" />
 
 # כלי קודש לוורד
 
@@ -10,7 +10,6 @@
 
 [![הורד](https://img.shields.io/github/v/release/KleiKodesh/KleiKodeshProject?label=הורד&color=7c3aed&style=for-the-badge)](https://github.com/KleiKodesh/KleiKodeshProject/releases/latest)
 [![רישיון](https://img.shields.io/github/license/KleiKodesh/KleiKodeshProject?label=רישיון&style=for-the-badge&color=7c3aed)](LICENSE)
-[![GitHub Stars](https://img.shields.io/github/stars/KleiKodesh/KleiKodeshProject?style=for-the-badge&color=7c3aed)](https://github.com/KleiKodesh/KleiKodeshProject/stargazers)
 
 [🌐 אתר הפרויקט](https://kleikodesh.github.io) &nbsp;|&nbsp;
 [⬇️ הורד עכשיו](https://github.com/KleiKodesh/KleiKodeshProject/releases/latest) &nbsp;|&nbsp;
@@ -36,13 +35,13 @@
 
 <div align="center">
 
-| זית - ספריית אוצריא                           | חיפוש רגקס                                       | עיצוב תורני                                        |
-| --------------------------------------------- | ------------------------------------------------ | -------------------------------------------------- |
-| ![זית](kleikodesh.github.io/images/zayit.png) | ![רגקס](kleikodesh.github.io/images/regex-3.png) | ![עיצוב](kleikodesh.github.io/images/DocSefer.png) |
+| זית - ספריית אוצריא                                                                                                 | חיפוש רגקס                                                                                                             | עיצוב תורני                                                                                                              |
+| ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| ![זית](https://raw.githubusercontent.com/KleiKodesh/KleiKodeshProject/master/kleikodesh.github.io/images/zayit.png) | ![רגקס](https://raw.githubusercontent.com/KleiKodesh/KleiKodeshProject/master/kleikodesh.github.io/images/regex-3.png) | ![עיצוב](https://raw.githubusercontent.com/KleiKodesh/KleiKodeshProject/master/kleikodesh.github.io/images/DocSefer.png) |
 
-| דרך האתרים                                             | דרך האתרים - דפדפן                                     |
-| ------------------------------------------------------ | ------------------------------------------------------ |
-| ![אתרים 1](kleikodesh.github.io/images/websites-1.png) | ![אתרים 2](kleikodesh.github.io/images/websites-2.png) |
+| דרך האתרים                                                                                                                   | דרך האתרים - דפדפן                                                                                                           |
+| ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| ![אתרים 1](https://raw.githubusercontent.com/KleiKodesh/KleiKodeshProject/master/kleikodesh.github.io/images/websites-1.png) | ![אתרים 2](https://raw.githubusercontent.com/KleiKodesh/KleiKodeshProject/master/kleikodesh.github.io/images/websites-2.png) |
 
 </div>
 
