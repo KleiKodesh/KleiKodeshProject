@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Wordprocessing;
 
 namespace WordToPdfLib
@@ -39,6 +40,20 @@ namespace WordToPdfLib
             dp.PageBreakBefore = pp?.PageBreakBefore != null;
             if (pp?.ContextualSpacing != null) dp.ContextualSpacing = true;
 
+            // Inline sectPr = section break — the inline sectPr defines THIS section ending here.
+            // The NEXT section's columns come from the document's final sectPr (passed via docRtl context).
+            // We store the inline sectPr's cols as the CURRENT section, and the caller will
+            // switch to the final sectPr's cols after this paragraph.
+            var inlineSectPr = pp?.Elements<SectionProperties>().FirstOrDefault();
+            if (inlineSectPr != null)
+            {
+                dp.IsSectionBreak = true;
+                // SectionColumns = columns for the NEXT section (stored on the break para for the renderer)
+                // We don't know the next section here, so set to 0 = "use document default"
+                dp.SectionColumns   = 0;
+                dp.SectionColumnGap = 36f;
+            }
+
             var jc = pp?.Justification?.Val;
             if (jc != null)
             {
@@ -61,10 +76,18 @@ namespace WordToPdfLib
                 if (spc.After?.Value  != null && int.TryParse(spc.After.Value,  out int sa)) dp.SpaceAfter  = sa / 20f;
                 if (spc.Line?.Value   != null && int.TryParse(spc.Line.Value,   out int ls) && ls > 0)
                 {
-                    var lineRule = spc.LineRule?.Value.ToString() ?? "auto";
-                    dp.LineSpacing = (lineRule == "exact" || lineRule == "atLeast")
-                        ? (ls / 20f) / 12f
-                        : ls / 240f;
+                    // Read lineRule from raw XML attribute since SDK enum .ToString() may vary
+                    var lineRuleRaw = spc.GetAttribute("lineRule", "http://schemas.openxmlformats.org/wordprocessingml/2006/main");
+                    var lineRuleStr = string.IsNullOrEmpty(lineRuleRaw.Value)
+                        ? (spc.LineRule?.Value.ToString()?.ToLower() ?? "auto")
+                        : lineRuleRaw.Value.ToLower();
+                    if (lineRuleStr == "exact" || lineRuleStr == "atleast")
+                    {
+                        dp.LineSpacing      = ls / 20f;
+                        dp.LineSpacingExact = true;
+                    }
+                    else
+                        dp.LineSpacing = ls / 240f;
                 }
             }
 
@@ -92,6 +115,10 @@ namespace WordToPdfLib
                 else if (numId != null) dp.ListPrefix = "•";
             }
 
+            // Paragraph-level run properties (from pPr/rPr) — apply as defaults to all runs
+            var paraRpr = pp?.ParagraphMarkRunProperties;
+            string paraRStyle = paraRpr?.Elements<RunStyle>().FirstOrDefault()?.Val?.Value;
+
             foreach (var run in para.Elements<Run>())
             {
                 var rp = run.RunProperties;
@@ -106,10 +133,22 @@ namespace WordToPdfLib
                 bool isSup = va != null && va.Value == VerticalPositionValues.Superscript;
                 bool isSub = va != null && va.Value == VerticalPositionValues.Subscript;
 
+                // w:b/w:bCs: present with no val or val="1"/"true" = bold; val="0"/"false" = not bold
+                bool runBold   = IsBoolPropTrue(rp?.Bold) || IsBoolPropTrue(rp?.BoldComplexScript);
+                bool runItalic = IsBoolPropTrue(rp?.Italic) || IsBoolPropTrue(rp?.ItalicComplexScript);
+
+                // Character style from rStyle — apply its bold/italic/color/font
+                string runStyleId = rp?.RunStyle?.Val?.Value ?? paraRStyle;
+                if (runStyleId != null && styleMap.TryGetValue(runStyleId, out var charSi))
+                {
+                    if (charSi.Bold   && !HasExplicitFalse(rp?.Bold)   && !HasExplicitFalse(rp?.BoldComplexScript))   runBold   = true;
+                    if (charSi.Italic && !HasExplicitFalse(rp?.Italic) && !HasExplicitFalse(rp?.ItalicComplexScript)) runItalic = true;
+                }
+
                 var tr = new TextRun
                 {
-                    Bold           = rp?.Bold != null || rp?.BoldComplexScript != null,
-                    Italic         = rp?.Italic != null || rp?.ItalicComplexScript != null,
+                    Bold           = runBold,
+                    Italic         = runItalic,
                     Underline      = rp?.Underline != null,
                     Strikethrough  = rp?.Strike != null,
                     Superscript    = isSup,
@@ -125,12 +164,20 @@ namespace WordToPdfLib
 
                 if (!string.IsNullOrEmpty(tr.Text) && !tr.Vanish)
                 {
+                    // Apply paragraph style properties
                     if (styleMap.TryGetValue(styleId, out var runSi))
                     {
                         if (string.IsNullOrEmpty(tr.Color)    && !string.IsNullOrEmpty(runSi.Color))    tr.Color    = runSi.Color;
                         if (string.IsNullOrEmpty(tr.FontName) && !string.IsNullOrEmpty(runSi.FontName)) tr.FontName = runSi.FontName;
                         if (tr.FontSize == null && runSi.FontSize.HasValue)                              tr.FontSize = runSi.FontSize;
-                        if (dp.Type != ParagraphType.Normal && runSi.Bold && !tr.Bold)                  tr.Bold     = true;
+                        if (dp.Type != ParagraphType.Normal && runSi.Bold && !HasExplicitFalse(rp?.Bold)) tr.Bold = true;
+                    }
+                    // Apply character style color/font if not overridden by run
+                    if (runStyleId != null && styleMap.TryGetValue(runStyleId, out var csi))
+                    {
+                        if (string.IsNullOrEmpty(tr.Color)    && !string.IsNullOrEmpty(csi.Color))    tr.Color    = csi.Color;
+                        if (string.IsNullOrEmpty(tr.FontName) && !string.IsNullOrEmpty(csi.FontName)) tr.FontName = csi.FontName;
+                        if (tr.FontSize == null && csi.FontSize.HasValue)                              tr.FontSize = csi.FontSize;
                     }
                     dp.Runs.Add(tr);
                 }
@@ -140,13 +187,34 @@ namespace WordToPdfLib
             {
                 log.WriteLine($"[Para {paraIdx}] type={dp.Type} rtl={dp.IsRtl} align={dp.Alignment} " +
                     $"indL={dp.IndentLeft:F1} indR={dp.IndentRight:F1} hang={dp.HangingIndent:F1} " +
-                    $"spB={dp.SpaceBefore:F1} spA={dp.SpaceAfter:F1} ls={dp.LineSpacing} ctxSpc={dp.ContextualSpacing} prefix='{dp.ListPrefix}'");
+                    $"spB={dp.SpaceBefore:F1} spA={dp.SpaceAfter:F1} ls={dp.LineSpacing}(exact={dp.LineSpacingExact}) ctxSpc={dp.ContextualSpacing} " +
+                    $"sectBreak={dp.IsSectionBreak}(cols={dp.SectionColumns}) prefix='{dp.ListPrefix}'");
                 foreach (var r in dp.Runs)
                     log.WriteLine($"  run: sz={r.FontSize?.ToString("F1") ?? "def"} bold={r.Bold} italic={r.Italic} " +
                         $"ul={r.Underline} sup={r.Superscript} color={r.Color} font={r.FontName} | '{r.Text}'");
             }
 
             return dp;
+        }
+
+        // Returns true if the toggle property element is present and not explicitly set to false
+        private static bool IsBoolPropTrue(OpenXmlElement el)
+        {
+            if (el == null) return false;
+            var val = el.GetAttributes().FirstOrDefault(a => a.LocalName == "val");
+            if (val.Value == null) return true;  // present with no val = true
+            var v = val.Value.ToLower();
+            return v != "0" && v != "false" && v != "off";
+        }
+
+        // Returns true if the element is explicitly set to false (val="0"/"false")
+        private static bool HasExplicitFalse(OpenXmlElement el)
+        {
+            if (el == null) return false;
+            var val = el.GetAttributes().FirstOrDefault(a => a.LocalName == "val");
+            if (val.Value == null) return false;
+            var v = val.Value.ToLower();
+            return v == "0" || v == "false" || v == "off";
         }
     }
 }

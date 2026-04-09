@@ -26,9 +26,11 @@ export const SQL = {
 
   // ── Books ────────────────────────────────────────────────────────────────────
 
-  /** Single book by id — only totalLines needed for virtual scroll init */
+  /** Single book by id — totalLines for virtual scroll init + has* flags for toolbar */
   GET_BOOK_BY_ID: `
-    SELECT totalLines
+    SELECT totalLines,
+           hasTargumConnection, hasReferenceConnection, hasSourceConnection,
+           hasCommentaryConnection, hasOtherConnection
     FROM book
     WHERE id = ?
   `,

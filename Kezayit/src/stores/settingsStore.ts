@@ -20,6 +20,7 @@ const DEFAULTS = {
   newTabPage: 'homepage' as NewTabPage,
   pdfPageFilters: false,
   resumeLastRead: true,
+  defaultAutoSyncCommentary: false,
 }
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -38,6 +39,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const newTabPage = ref<NewTabPage>(DEFAULTS.newTabPage)
   const pdfPageFilters = ref(DEFAULTS.pdfPageFilters)
   const resumeLastRead = ref(DEFAULTS.resumeLastRead)
+  const defaultAutoSyncCommentary = ref(DEFAULTS.defaultAutoSyncCommentary)
   const setupDone = ref(false)
 
   // Called from main.ts before mount — loads each setting individually
@@ -59,6 +61,7 @@ export const useSettingsStore = defineStore('settings', () => {
       pdfFilters,
       resumeLast,
       setup,
+      defaultAutoSync,
     ] = await Promise.all([
       idbGet<boolean>(KEYS.SETTINGS_CENSOR_DIVINE),
       idbGet<number>(KEYS.SETTINGS_DIACRITICS),
@@ -76,6 +79,7 @@ export const useSettingsStore = defineStore('settings', () => {
       idbGet<boolean>(KEYS.SETTINGS_PDF_FILTERS),
       idbGet<boolean>(KEYS.SETTINGS_RESUME_LAST_READ),
       idbGet<boolean>(KEYS.SETTINGS_SETUP_DONE),
+      idbGet<boolean>(KEYS.SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY),
     ])
 
     if (censored !== null) censorDivineNames.value = censored
@@ -94,6 +98,7 @@ export const useSettingsStore = defineStore('settings', () => {
     if (pdfFilters !== null) pdfPageFilters.value = pdfFilters
     if (resumeLast !== null) resumeLastRead.value = resumeLast
     if (setup !== null) setupDone.value = setup
+    if (defaultAutoSync !== null) defaultAutoSyncCommentary.value = defaultAutoSync
 
     applyCSSVariables()
   }
@@ -161,6 +166,7 @@ export const useSettingsStore = defineStore('settings', () => {
     newTabPage.value = DEFAULTS.newTabPage
     pdfPageFilters.value = DEFAULTS.pdfPageFilters
     resumeLastRead.value = DEFAULTS.resumeLastRead
+    defaultAutoSyncCommentary.value = DEFAULTS.defaultAutoSyncCommentary
     // Clear all settings from their dedicated DB
     idbClearSettings()
     applyCSSVariables()
@@ -222,6 +228,9 @@ export const useSettingsStore = defineStore('settings', () => {
   watch(resumeLastRead, (v) => {
     idbSet(KEYS.SETTINGS_RESUME_LAST_READ, v)
   })
+  watch(defaultAutoSyncCommentary, (v) => {
+    idbSet(KEYS.SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY, v)
+  })
 
   return {
     censorDivineNames,
@@ -239,6 +248,7 @@ export const useSettingsStore = defineStore('settings', () => {
     newTabPage,
     pdfPageFilters,
     resumeLastRead,
+    defaultAutoSyncCommentary,
     init,
     cycleDiacritics,
     togglePdfPageFilters,

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading.Tasks;
 using System.Windows;
 
 namespace KleiKodeshVstoInstallerWpf
@@ -11,6 +12,9 @@ namespace KleiKodeshVstoInstallerWpf
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
+
+            // Kick off old installation cleanup immediately in the background
+            _ = Task.Run(() => OldInstallationCleaner.CheckAndRemoveOldInstallations());
 
             // Check for silent installation argument
             bool silentMode = false;

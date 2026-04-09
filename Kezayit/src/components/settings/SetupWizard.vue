@@ -32,7 +32,7 @@ const {
 } = storeToRefs(settings)
 
 const bookViewStore = useBookViewStore()
-const { toolbarPosition } = storeToRefs(bookViewStore)
+const { toolbarPosition, autoSelectTopLine } = storeToRefs(bookViewStore)
 
 type Step = 'welcome' | 'db' | 'theme' | 'general' | 'book-display'
 
@@ -228,6 +228,15 @@ const progressPct = computed(() => Math.round((stepIndex.value / (steps.value.le
                     { label: 'ימין', value: 'right' },
                   ]"
                   @update:model-value="bookViewStore.setToolbarPosition($event)"
+                />
+              </SettingRow>
+              <SettingRow label="סנכרן מפרשים — ברירת מחדל">
+                <ToggleGroup
+                  v-model="defaultAutoSyncCommentary"
+                  :options="[
+                    { label: 'כן', value: true },
+                    { label: 'לא', value: false },
+                  ]"
                 />
               </SettingRow>
             </div>

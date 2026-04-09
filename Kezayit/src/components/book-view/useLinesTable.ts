@@ -12,6 +12,7 @@ const CHUNK_SIZE = 200
 
 export function useLines(bookId: () => number | undefined) {
   const lines = ref<LineItem[]>([])
+  const hasCommentaries = ref(false)
 
   let fetchQueue: number[] = []
   let fetching = false
@@ -53,8 +54,22 @@ export function useLines(bookId: () => number | undefined) {
     fetchQueue = []
     fetching = false
 
-    const [book] = await query<{ totalLines: number }>(SQL.GET_BOOK_BY_ID, [id])
+    const [book] = await query<{
+      totalLines: number
+      hasTargumConnection: number
+      hasReferenceConnection: number
+      hasSourceConnection: number
+      hasCommentaryConnection: number
+      hasOtherConnection: number
+    }>(SQL.GET_BOOK_BY_ID, [id])
     const totalLines = book?.totalLines ?? 0
+    hasCommentaries.value = !!(
+      book?.hasTargumConnection ||
+      book?.hasReferenceConnection ||
+      book?.hasSourceConnection ||
+      book?.hasCommentaryConnection ||
+      book?.hasOtherConnection
+    )
 
     // Pre-allocate all slots with placeholders so the virtualizer has the correct count
     // and scroll height from the start. Content fills in as chunks arrive.
@@ -76,5 +91,5 @@ export function useLines(bookId: () => number | undefined) {
     { immediate: true },
   )
 
-  return { lines, prioritise }
+  return { lines, prioritise, hasCommentaries }
 }

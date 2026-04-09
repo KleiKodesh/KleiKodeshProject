@@ -15,7 +15,12 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { ZOOM_CONFIG } from '@/composables/useZoom'
 
-defineProps<{ bottomVisible: boolean; searchVisible: boolean; tocVisible: boolean }>()
+defineProps<{
+  bottomVisible: boolean
+  searchVisible: boolean
+  tocVisible: boolean
+  hasCommentaries: boolean
+}>()
 defineEmits<{ toggleBottom: []; toggleSearch: []; toggleToc: [] }>()
 
 const settingsStore = useSettingsStore()
@@ -41,6 +46,7 @@ const diacriticsTitle = computed(
       <IconTreeRtl />
     </button>
     <button
+      v-if="hasCommentaries"
       :class="{ active: bottomVisible }"
       title="פאנל תחתון (Ctrl+J)"
       @click="$emit('toggleBottom')"
@@ -49,9 +55,13 @@ const diacriticsTitle = computed(
       <IconLayoutRowTwo20Regular v-else />
     </button>
     <button
-      v-if="bottomVisible"
+      v-if="hasCommentaries && bottomVisible"
       :class="{ active: autoSelectTopLine }"
-      title="בחר שורה עליונה אוטומטית"
+      :title="
+        autoSelectTopLine
+          ? 'סנכרן מפרשים\nלחץ לכיבוי הסנכרון האוטומטי'
+          : 'סנכרן מפרשים\nמפרשים יתעדכנו אוטומטית לפי השורה העליונה'
+      "
       @click="bookViewStore.toggleAutoSelectTopLine()"
     >
       <IconTimeline20Filled v-if="autoSelectTopLine" />

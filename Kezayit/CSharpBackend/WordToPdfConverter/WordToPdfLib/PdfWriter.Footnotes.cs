@@ -12,7 +12,7 @@ namespace WordToPdfLib
             foreach (var p in fn.Paragraphs)
             {
                 var text  = string.Concat(p.Runs.Select(r => r.Text));
-                var lines = WrapTextSimple(text, font, _contentWidth);
+                var lines = WrapTextSimple(text, font, _totalContentWidth);
                 h += lines.Count * font.GetHeight() * _opts.LineSpacing + _opts.ParagraphSpacing;
             }
             return h + 10;
@@ -24,8 +24,8 @@ namespace WordToPdfLib
 
             bool rtl    = _opts.DefaultRtl;
             double sepY = _page.Height.Point - _opts.MarginBottom - _footnoteAreaHeight - 8;
-            double lx1  = rtl ? _opts.MarginLeft + _contentWidth - 60 : _opts.MarginLeft;
-            double lx2  = rtl ? _opts.MarginLeft + _contentWidth      : _opts.MarginLeft + 60;
+            double lx1  = rtl ? _opts.MarginLeft + _totalContentWidth - 60 : _opts.MarginLeft;
+            double lx2  = rtl ? _opts.MarginLeft + _totalContentWidth      : _opts.MarginLeft + 60;
             _gfx.DrawLine(XPens.Black, lx1, sepY, lx2, sepY);
 
             double fnY  = sepY + 6;
@@ -39,7 +39,7 @@ namespace WordToPdfLib
                     var text = string.Concat(para.Runs.Select(r => r.Text));
                     if (string.IsNullOrWhiteSpace(text)) continue;
 
-                    var lines = WrapTextSimple(text, fnFont, _contentWidth - 20);
+                    var lines = WrapTextSimple(text, fnFont, _totalContentWidth - 20);
                     bool first = true;
                     foreach (var line in lines)
                     {
@@ -51,7 +51,7 @@ namespace WordToPdfLib
                             LineAlignment = XLineAlignment.Near
                         };
                         _gfx.DrawString(rendered, fnFont, XBrushes.Black,
-                            new XRect(_opts.MarginLeft, fnY, _contentWidth, fnFont.GetHeight() * 2), fmt);
+                            new XRect(_opts.MarginLeft, fnY, _totalContentWidth, fnFont.GetHeight() * 2), fmt);
                         fnY  += fnFont.GetHeight() * _opts.LineSpacing;
                         first = false;
                     }

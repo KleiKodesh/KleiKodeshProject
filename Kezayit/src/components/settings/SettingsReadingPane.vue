@@ -25,7 +25,7 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
 
 <template>
   <div class="reading-pane">
-    <div class="section-header">תצוגת ספר</div>
+    <div class="section-label">תצוגת ספר</div>
 
     <FontDisplaySettings
       ref="bookDisplayRef"
@@ -36,9 +36,9 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
       @close-other="commentaryDisplayRef?.closeDropdowns()"
     />
 
-    <div class="section-header">תצוגת פירושים</div>
+    <div class="section-label">תצוגת פירושים</div>
 
-    <SettingRow>
+    <SettingRow hint="האם להשתמש בהגדרות גופן נפרדות לפירושים, או לרשת את הגדרות הספר">
       <ToggleGroup
         v-model="useSeparateCommentarySettings"
         :options="[
@@ -64,13 +64,15 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
 .reading-pane {
   display: contents;
 }
-.section-header {
+.section-label {
   font-size: 12px;
   font-weight: 700;
   color: var(--text-primary);
   padding: 4px 0;
-  margin-top: 16px;
   margin-bottom: 10px;
   border-bottom: 1px solid var(--border-color);
+}
+.section-label:not(:first-child) {
+  margin-top: 16px;
 }
 </style>

@@ -14,8 +14,9 @@ function devSqlitePlugin(): Plugin {
     apply: 'serve',
 
     configureServer(server) {
+      // loadEnv with prefix '' loads all vars including non-VITE_ ones
       const env = loadEnv('development', process.cwd(), '')
-      const dbPath = env.DB_PATH ?? process.env.DB_PATH ?? './data.db'
+      const dbPath = process.env.DB_PATH ?? env.DB_PATH ?? './data.db'
       try {
         db = new Database(path.resolve(dbPath))
         console.log(`[dev-sqlite] opened ${dbPath}`)
@@ -25,9 +26,12 @@ function devSqlitePlugin(): Plugin {
       }
 
       server.middlewares.use((req, res, next) => {
-        if (req.url !== '/query' || req.method !== 'POST') { next(); return }
+        if (req.url !== '/query' || req.method !== 'POST') {
+          next()
+          return
+        }
         let body = ''
-        req.on('data', chunk => (body += chunk))
+        req.on('data', (chunk) => (body += chunk))
         req.on('end', () => {
           try {
             const { sql, params = [] } = JSON.parse(body)
@@ -41,8 +45,6 @@ function devSqlitePlugin(): Plugin {
         })
       })
     },
-
-
   }
 }
 
@@ -50,16 +52,16 @@ export default defineConfig({
   plugins: [devSqlitePlugin(), vue(), viteSingleFile()],
   resolve: {
     alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url))
-    }
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
   },
   build: {
     assetsInlineLimit: Number.MAX_SAFE_INTEGER,
     cssCodeSplit: false,
     rollupOptions: {
       output: {
-        inlineDynamicImports: true
-      }
-    }
-  }
+        inlineDynamicImports: true,
+      },
+    },
+  },
 })

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import HintIcon from './HintIcon.vue'
 
 const props = defineProps<{
   label: string
@@ -8,6 +9,7 @@ const props = defineProps<{
   max: number
   step: number
   suffix?: string
+  hint?: string
 }>()
 const emit = defineEmits<{ 'update:modelValue': [number] }>()
 
@@ -19,7 +21,7 @@ const display = computed(() =>
 <template>
   <div class="setting-row">
     <div class="setting-header">
-      <label class="setting-label">{{ label }}</label>
+      <label class="setting-label">{{ label }}<HintIcon v-if="hint" :hint="hint" /></label>
       <span class="value">{{ display }}</span>
     </div>
     <input
@@ -49,6 +51,9 @@ const display = computed(() =>
 .setting-label {
   font-size: 11px;
   color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 .value {
   font-size: 12px;

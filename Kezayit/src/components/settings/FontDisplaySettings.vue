@@ -43,6 +43,7 @@ function onTextToggle() {
   <FontSelectorCmp
     ref="headerFontRef"
     label="גופן כותרות"
+    hint="הגופן שישמש לכותרות הפרקים והסעיפים"
     :model-value="headerFont"
     font-type="sans-serif"
     @update:model-value="emit('update:headerFont', $event)"
@@ -51,6 +52,7 @@ function onTextToggle() {
   <FontSelectorCmp
     ref="textFontRef"
     label="גופן טקסט"
+    hint="הגופן שישמש לגוף הטקסט של הספר"
     :model-value="textFont"
     font-type="serif"
     @update:model-value="emit('update:textFont', $event)"
@@ -58,6 +60,7 @@ function onTextToggle() {
   />
   <SliderSetting
     label="גודל גופן"
+    hint="גודל הטקסט ביחס לברירת המחדל"
     :model-value="fontSize"
     :min="50"
     :max="200"
@@ -67,6 +70,7 @@ function onTextToggle() {
   />
   <SliderSetting
     label="ריווח בין שורות"
+    hint="המרחק האנכי בין שורות הטקסט"
     :model-value="linePadding"
     :min="1.2"
     :max="3.0"

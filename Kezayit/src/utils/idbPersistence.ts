@@ -27,6 +27,7 @@ export interface BookState {
   commentaryScrollOffset?: number | null
   zoom?: number
   bottomVisible?: boolean
+  autoSelectTopLine?: boolean
 }
 
 export interface LastReadState {
@@ -138,6 +139,7 @@ export const KEYS = {
   SETTINGS_TOOLBAR_POSITION: 'bookView.toolbarPosition',
   SETTINGS_SEARCH_BAR_POS: 'bookView.searchBarPos',
   SETTINGS_AUTO_SELECT_TOP_LINE: 'bookView.autoSelectTopLine',
+  SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY: 'defaultAutoSyncCommentary',
 
   SETTINGS_CENSOR_DIVINE: 'censorDivineNames',
   SETTINGS_DIACRITICS: 'diacriticsState',

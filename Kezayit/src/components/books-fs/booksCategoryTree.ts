@@ -23,6 +23,13 @@ export interface CategoryNode extends CategoryRow {
   books: BookRow[]
 }
 
+/** Custom (user-defined) entries have negative IDs and always sort after DB entries. */
+function customLast(a: { id: number }, b: { id: number }): number {
+  const aCustom = a.id < 0 ? 1 : 0
+  const bCustom = b.id < 0 ? 1 : 0
+  return aCustom - bCustom
+}
+
 export function buildTree(categories: CategoryRow[], books: BookRow[]): CategoryNode[] {
   const map = new Map<number, CategoryNode>()
   for (const cat of categories) map.set(cat.id, { ...cat, children: [], books: [] })
@@ -30,6 +37,12 @@ export function buildTree(categories: CategoryRow[], books: BookRow[]): Category
   const roots: CategoryNode[] = []
   for (const node of map.values())
     node.parentId == null ? roots.push(node) : map.get(node.parentId)?.children.push(node)
+  // Sort custom entries (negative IDs) to the end at every level
+  for (const node of map.values()) {
+    node.children.sort(customLast)
+    node.books.sort(customLast)
+  }
+  roots.sort(customLast)
   return roots
 }
 

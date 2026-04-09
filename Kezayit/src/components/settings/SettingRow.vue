@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { IconInfo16Regular } from '@iconify-prerendered/vue-fluent'
+import HintIcon from './HintIcon.vue'
 defineProps<{ label?: string; wrap?: boolean; hint?: string }>()
 </script>
 
 <template>
   <div class="setting-row" :class="{ wrap }">
-    <span v-if="label" class="setting-label" :title="hint">
-      {{ label }}<IconInfo16Regular v-if="hint" class="hint-icon" />
+    <span v-if="label" class="setting-label">
+      {{ label }}<HintIcon v-if="hint" :hint="hint" />
     </span>
     <div class="setting-control">
       <slot />
@@ -28,10 +28,6 @@ defineProps<{ label?: string; wrap?: boolean; hint?: string }>()
   align-items: center;
   gap: 4px;
   cursor: default;
-}
-.hint-icon {
-  opacity: 0.5;
-  flex-shrink: 0;
 }
 .setting-control {
   display: flex;

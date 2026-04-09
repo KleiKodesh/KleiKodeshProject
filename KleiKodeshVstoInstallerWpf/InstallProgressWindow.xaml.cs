@@ -21,7 +21,7 @@ namespace KleiKodeshVstoInstallerWpf
     {
         const string AppName = "KleiKodesh";
         const string AppDisplayName = "כלי קודש";
-        const string Version = "v3.0.1";
+        const string Version = "v2.8.4";
         const string InstallFolderName = "KleiKodesh";
         const string ZipResourceName = "KleiKodesh.zip";
         const string VstoFileName = "KleiKodesh.vsto";
@@ -92,9 +92,6 @@ namespace KleiKodeshVstoInstallerWpf
         {
             try
             {
-                // Old installation cleanup removed - uninstaller now handles all cleanup
-                // await OldInstallationCleaner.CheckAndRemoveOldInstallations();
-
                 if (!Directory.Exists(InstallPath))
                     Directory.CreateDirectory(InstallPath);
 

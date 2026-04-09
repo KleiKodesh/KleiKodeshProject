@@ -25,6 +25,20 @@ namespace WordToPdfLib
                     content.PageLayout.MarginLeft   = (pgMar.Left?.Value   ?? 1800) / 20f;
                     content.PageLayout.MarginRight  = (pgMar.Right?.Value  ?? 1800) / 20f;
                 }
+                var pgSz = sectPr?.Elements<PageSize>().FirstOrDefault();
+                if (pgSz != null)
+                {
+                    if (pgSz.Width?.Value  != null) content.PageLayout.PageWidth  = pgSz.Width.Value  / 20f;
+                    if (pgSz.Height?.Value != null) content.PageLayout.PageHeight = pgSz.Height.Value / 20f;
+                }
+                var cols = sectPr?.Elements<Columns>().FirstOrDefault();
+                if (cols != null)
+                {
+                    // This is the FINAL sectPr — store as FinalColumnCount
+                    content.FinalColumnCount = (int)(cols.ColumnCount?.Value ?? 1);
+                    if (cols.Space?.Value != null && int.TryParse(cols.Space.Value, out int colSpace))
+                        content.FinalColumnGap = colSpace / 20f;
+                }
                 log?.WriteLine($"[Layout] margins L={content.PageLayout.MarginLeft} R={content.PageLayout.MarginRight} T={content.PageLayout.MarginTop} B={content.PageLayout.MarginBottom}");
 
                 bool docRtl = sectPr?.Elements<BiDi>().Any() == true;
@@ -61,6 +75,19 @@ namespace WordToPdfLib
                 var listCounters = new Dictionary<string, int>();
                 var body = doc.MainDocumentPart?.Document?.Body;
                 if (body == null) return content;
+
+                // Initialize column count from the FIRST inline sectPr (defines section 1 = title area)
+                var firstInlineSectPr = body.Elements<Paragraph>()
+                    .Select(p => p.ParagraphProperties?.Elements<SectionProperties>().FirstOrDefault())
+                    .FirstOrDefault(s => s != null);
+                if (firstInlineSectPr != null)
+                {
+                    var firstCols = firstInlineSectPr.Elements<Columns>().FirstOrDefault();
+                    content.PageLayout.ColumnCount = (int)(firstCols?.ColumnCount?.Value ?? 1);
+                    if (firstCols?.Space?.Value != null && int.TryParse(firstCols.Space.Value, out int fcs))
+                        content.PageLayout.ColumnGap = fcs / 20f;
+                }
+                log?.WriteLine($"[Layout] initial cols={content.PageLayout.ColumnCount} final cols={content.FinalColumnCount}");
 
                 int paraIdx = 0;
                 foreach (var para in body.Elements<Paragraph>())

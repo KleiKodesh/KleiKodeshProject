@@ -41,7 +41,7 @@ namespace WordToPdfLib
                 default: xAlign = rtl ? XStringAlignment.Far : XStringAlignment.Near; break;
             }
 
-            double lineX  = _opts.MarginLeft + indentLeft;
+            double lineX  = _columnLeft + indentLeft;
             double totalW = 0;
             for (int i = 0; i < words.Count; i++)
             {

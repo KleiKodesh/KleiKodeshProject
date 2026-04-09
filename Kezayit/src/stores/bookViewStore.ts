@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useTabStore } from './tabStore'
+import { useSettingsStore } from './settingsStore'
 import { idbGet, idbSet, KEYS } from '@/utils/idbPersistence'
 import {
   ZOOM_CONFIG,
@@ -67,6 +68,7 @@ export const useBookViewStore = defineStore('bookView', () => {
     if (sbPos !== null) searchBarPos.value = sbPos
     const autoSelect = await idbGet<boolean>(KEYS.SETTINGS_AUTO_SELECT_TOP_LINE)
     if (autoSelect !== null) autoSelectTopLine.value = autoSelect
+    else autoSelectTopLine.value = useSettingsStore().defaultAutoSyncCommentary
   }
 
   function toggleToolbar() {
@@ -87,6 +89,11 @@ export const useBookViewStore = defineStore('bookView', () => {
   function toggleAutoSelectTopLine() {
     autoSelectTopLine.value = !autoSelectTopLine.value
     idbSet(KEYS.SETTINGS_AUTO_SELECT_TOP_LINE, autoSelectTopLine.value)
+  }
+
+  function setAutoSelectTopLine(value: boolean) {
+    autoSelectTopLine.value = value
+    idbSet(KEYS.SETTINGS_AUTO_SELECT_TOP_LINE, value)
   }
 
   function zoomIn() {
@@ -112,6 +119,7 @@ export const useBookViewStore = defineStore('bookView', () => {
     setSearchBarPos,
     autoSelectTopLine,
     toggleAutoSelectTopLine,
+    setAutoSelectTopLine,
     init,
     toggleToolbar,
     setToolbarPosition,

@@ -36,9 +36,13 @@ namespace WordToPdfLib
         public float SpaceBefore { get; set; }
         public float SpaceAfter { get; set; }
         public float? LineSpacing { get; set; }
+        public bool   LineSpacingExact { get; set; }
         public string ListPrefix { get; set; }
-        public bool ContextualSpacing { get; set; }  // suppress spacing between adjacent same-style paras
+        public bool ContextualSpacing { get; set; }
         public string FootnoteId { get; set; }
+        public bool IsSectionBreak { get; set; }  // paragraph ends a section (has inline sectPr)
+        public int  SectionColumns  { get; set; } // column count for the NEW section after this break
+        public float SectionColumnGap { get; set; }
     }
 
     public class DocFootnote
@@ -58,6 +62,10 @@ namespace WordToPdfLib
         public float  DefaultFontSize   { get; set; } = 12f;
         public float  DefaultSpaceAfter { get; set; } = 8f;
         public float  DefaultLineSpacing{ get; set; } = 1.15f;
+        public int    ColumnCount       { get; set; } = 1;
+        public float  ColumnGap         { get; set; } = 36f;
+        public float  PageWidth         { get; set; } = 595.3f;
+        public float  PageHeight        { get; set; } = 841.9f;
     }
 
     public class DocContent
@@ -65,5 +73,7 @@ namespace WordToPdfLib
         public List<DocParagraph> Paragraphs { get; set; } = new List<DocParagraph>();
         public Dictionary<string, DocFootnote> Footnotes { get; set; } = new Dictionary<string, DocFootnote>();
         public DocPageLayout PageLayout { get; set; } = new DocPageLayout();
+        public int  FinalColumnCount { get; set; } = 1;   // columns for the last/main section
+        public float FinalColumnGap  { get; set; } = 36f;
     }
 }

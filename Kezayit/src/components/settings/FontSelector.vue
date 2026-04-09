@@ -3,11 +3,13 @@ import { ref, computed, nextTick } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import { IconChevronDown20Regular, IconChevronUp20Regular } from '@iconify-prerendered/vue-fluent'
 import { detectAvailableFonts } from '@/utils/detectFonts'
+import HintIcon from './HintIcon.vue'
 
 const props = defineProps<{
   label: string
   modelValue: string
   fontType: 'sans-serif' | 'serif'
+  hint?: string
 }>()
 const emit = defineEmits<{ 'update:modelValue': [string]; toggle: [] }>()
 
@@ -62,7 +64,7 @@ defineExpose({ isOpen })
 
 <template>
   <div class="setting-row">
-    <label class="setting-label">{{ label }}</label>
+    <label class="setting-label">{{ label }}<HintIcon v-if="hint" :hint="hint" /></label>
     <div ref="boxRef" class="select-box" @click="toggle" tabindex="0">
       <span class="select-display">{{ displayName }}</span>
       <span class="select-preview" :style="{ fontFamily: modelValue }">אבג דהו</span>
@@ -104,6 +106,9 @@ defineExpose({ isOpen })
 .setting-label {
   font-size: 11px;
   color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .select-box {

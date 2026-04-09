@@ -41,7 +41,7 @@ const props = defineProps<{
 const tabStore = useTabStore()
 const settingsStore = useSettingsStore()
 const bookViewStore = useBookViewStore()
-const { zoom } = storeToRefs(bookViewStore)
+const { zoom, autoSelectTopLine } = storeToRefs(bookViewStore)
 const tabId = tabStore.activeTabId
 const bookId = tabStore.activeTab.bookId!
 
@@ -317,6 +317,7 @@ function savePos() {
       commentaryScrollOffset: props.commentaryScrollOffset,
       zoom: zoom.value,
       bottomVisible: props.bottomVisible,
+      autoSelectTopLine: autoSelectTopLine.value,
     })
     tabStore.setLastReadPos(bookId, {
       ...pos,
@@ -466,7 +467,7 @@ function onLineClick(index: number) {
   border-radius: 4px;
   background: color-mix(in srgb, var(--text-primary) 5%, transparent);
 }
-.line.selected::after {
+.line::after {
   content: '';
   position: absolute;
   top: 0;
@@ -474,6 +475,11 @@ function onLineClick(index: number) {
   right: 4px;
   width: 3px;
   background: var(--accent-color);
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+.line.selected::after {
+  opacity: 1;
 }
 .line[data-alt-toc]::before {
   content: attr(data-alt-toc);

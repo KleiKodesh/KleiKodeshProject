@@ -17,7 +17,10 @@ namespace WordToPdfLib
             if (para.Runs.Count == 0)
             {
                 var ef = GetFont(para, null, isFootnote);
-                _cursorY += ef.GetHeight() * (para.LineSpacing ?? _opts.LineSpacing) * 0.5;
+                double emptyLineH = para.LineSpacingExact && para.LineSpacing.HasValue
+                    ? para.LineSpacing.Value
+                    : ef.GetHeight() * (para.LineSpacing ?? _opts.LineSpacing) * 0.5;
+                _cursorY += emptyLineH;
                 _cursorY += suppressSpaceAfter ? 0 : (para.SpaceAfter > 0 ? para.SpaceAfter : _opts.ParagraphSpacing);
                 return;
             }
@@ -42,7 +45,7 @@ namespace WordToPdfLib
             var segments    = BuildSegments(para);
             var wrappedLines = WrapSegments(segments, para, isFootnote, textUsableW);
 
-            _log?.WriteLine($"[Render Para] prefix='{para.ListPrefix}' prefixW={prefixW:F1} indL={para.IndentLeft:F1} indR={para.IndentRight:F1} hang={para.HangingIndent:F1} textUsableW={textUsableW:F1} rtl={rtl} lines={wrappedLines.Count}");
+            _log?.WriteLine($"[Render Para] col={_currentColumn}/{_columnCount} colLeft={_columnLeft:F1} textUsableW={textUsableW:F1} rtl={rtl} lines={wrappedLines.Count} prefix='{para.ListPrefix}'");
 
             bool firstLine = true;
             foreach (var lineSegs in wrappedLines)
@@ -51,9 +54,12 @@ namespace WordToPdfLib
 
                 var lineFonts = lineSegs.Select(s => GetFont(para, para.Runs[s.RunIdx], isFootnote)).ToList();
                 double maxFontH = lineFonts.Max(f => f.GetHeight());
-                double lineH    = maxFontH * (para.LineSpacing ?? _opts.LineSpacing);
+                // LineSpacing: if exact, use the stored point value directly; otherwise multiply by font height
+                double lineH = para.LineSpacingExact && para.LineSpacing.HasValue
+                    ? para.LineSpacing.Value
+                    : maxFontH * (para.LineSpacing ?? _opts.LineSpacing);
 
-                if (_cursorY + lineH > BottomLimit) NewPage();
+                if (_cursorY + lineH > BottomLimit) OverflowToNext();
                 double baseline = _cursorY + maxFontH;
 
                 if (firstLine && hasPrefix)
@@ -62,7 +68,7 @@ namespace WordToPdfLib
                     double actualPrefixW = _gfx.MeasureString(para.ListPrefix, prefixFont).Width;
                     if (rtl)
                     {
-                        double colLeft = _opts.MarginLeft + _contentWidth - para.IndentRight - prefixW;
+                        double colLeft = _columnLeft + _contentWidth - para.IndentRight - prefixW;
                         double prefixX = colLeft + (prefixW - actualPrefixW) / 2;
                         _gfx.DrawString(para.ListPrefix, prefixFont, GetBrush(para.Runs.Count > 0 ? para.Runs[0] : null),
                             new XRect(prefixX, prefixTop, actualPrefixW + 2, prefixFont.GetHeight() * 2),
@@ -71,7 +77,7 @@ namespace WordToPdfLib
                     }
                     else
                     {
-                        double prefixX = _opts.MarginLeft + para.IndentLeft - prefixW + (prefixW - actualPrefixW) / 2;
+                        double prefixX = _columnLeft + para.IndentLeft - prefixW + (prefixW - actualPrefixW) / 2;
                         _gfx.DrawString(para.ListPrefix, prefixFont, GetBrush(para.Runs.Count > 0 ? para.Runs[0] : null),
                             new XRect(prefixX, prefixTop, actualPrefixW + 2, prefixFont.GetHeight() * 2),
                             new XStringFormat { Alignment = XStringAlignment.Near, LineAlignment = XLineAlignment.Near });
