@@ -51,15 +51,27 @@
 
 ---
  ## 🖼️ תמונות מסך
+כזית
+<img width="303" height="497" alt="image" src="https://github.com/user-attachments/assets/75f47572-b32c-46a3-9225-391881139e43" />
+<img width="305" height="371" alt="image" src="https://github.com/user-attachments/assets/ea97e64c-dd4e-4fb2-b0d7-829fbd716c2e" />
 
-<div align="center">
+דרך האתרים
+<img width="253" height="368" alt="image" src="https://github.com/user-attachments/assets/7b73ba7e-3c1c-4f50-9098-7b68ca34cbcb" />
+<img width="256" height="373" alt="image" src="https://github.com/user-attachments/assets/bdc4bda8-4c47-4454-b5af-19c944ab8abe" />
 
-| זית - ספריית אוצריא                                                                                                 | חיפוש רגקס                                                                                                             | עיצוב תורני                                                                                                              |
-| ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| ![זית](https://raw.githubusercontent.com/KleiKodesh/KleiKodeshProject/master/kleikodesh.github.io/images/zayit.png) | ![רגקס](https://raw.githubusercontent.com/KleiKodesh/KleiKodeshProject/master/kleikodesh.github.io/images/regex-3.png) | ![עיצוב](https://raw.githubusercontent.com/KleiKodesh/KleiKodeshProject/master/kleikodesh.github.io/images/DocSefer.png) |
+עיצוב תורני
+<img width="268" height="368" alt="image" src="https://github.com/user-attachments/assets/79ce0081-2258-465d-a2fb-c1c604bb2298" />
 
-| דרך האתרים                                                                                                                   | דרך האתרים - דפדפן                                                                                                           |
-| ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| ![אתרים 1](https://raw.githubusercontent.com/KleiKodesh/KleiKodeshProject/master/kleikodesh.github.io/images/websites-1.png) | ![אתרים 2](https://raw.githubusercontent.com/KleiKodesh/KleiKodeshProject/master/kleikodesh.github.io/images/websites-2.png) |
+חיפוש רגקס בוורד
+<img width="1919" height="761" alt="image" src="https://github.com/user-attachments/assets/93081076-6f1a-4b11-9e88-96a07d090379" />
+
+
+
+
+
+
+
+
+
 
 </div>
