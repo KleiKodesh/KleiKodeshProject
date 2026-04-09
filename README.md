@@ -61,6 +61,6 @@
 
 ## 🖼️ תמונות מסך
 
-[לצפייה בתמונות מסך של התוסף](https://kleikodesh.github.io?gallery)
+<a href="https://kleikodesh.github.io?gallery" target="_blank">לצפייה בתמונות מסך של התוסף</a>
 
 </div>
