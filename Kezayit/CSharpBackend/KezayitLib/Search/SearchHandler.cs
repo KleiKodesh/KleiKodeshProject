@@ -62,6 +62,36 @@ namespace KezayitLib.Search
             catch { }
         }
 
+        /// <summary>
+        /// Reads the resume state from the sentinel file.
+        /// Format: "lastCommittedLineId:chunkCount"
+        /// Returns (0, 0) if the file is missing, empty, or unparseable (fresh start).
+        /// </summary>
+        private static (int lastLineId, int chunkCount) ReadSentinel()
+        {
+            try
+            {
+                if (!File.Exists(IndexingSentinelPath)) return (0, 0);
+                string text = File.ReadAllText(IndexingSentinelPath).Trim();
+                string[] parts = text.Split(':');
+                if (parts.Length == 2 &&
+                    int.TryParse(parts[0], out int lineId) &&
+                    int.TryParse(parts[1], out int count))
+                    return (lineId, count);
+            }
+            catch { }
+            return (0, 0);
+        }
+
+        /// <summary>
+        /// Writes resume state to the sentinel after each successfully committed chunk.
+        /// </summary>
+        internal static void UpdateSentinel(int lastCommittedLineId, int chunkCount)
+        {
+            try { File.WriteAllText(IndexingSentinelPath, lastCommittedLineId + ":" + chunkCount); }
+            catch (Exception ex) { Console.WriteLine("[SearchHandler] UpdateSentinel failed: " + ex.Message); }
+        }
+
         public SearchHandler(WebBridge bridge, WebView2 webView)
         {
             _bridge = bridge;
@@ -73,59 +103,71 @@ namespace KezayitLib.Search
             if (!File.Exists(dbPath)) { Console.WriteLine("[SearchHandler] OnDbReady: file does not exist, aborting"); return; }
             _dbPath = dbPath;
 
-            // If a sentinel file exists, the previous indexing run was interrupted — force reindex
-            if (File.Exists(IndexingSentinelPath))
+            // Read resume state from sentinel (if present)
+            var (resumeLineId, resumeChunkCount) = ReadSentinel();
+            bool hasResume = resumeChunkCount > 0;
+
+            if (hasResume)
             {
-                Console.WriteLine("[SearchHandler] Indexing sentinel found — previous run was interrupted, forcing reindex");
-                try { if (File.Exists(BloomFilePath)) File.Delete(BloomFilePath); } catch { }
-                try { File.Delete(IndexingSentinelPath); } catch { }
+                Console.WriteLine("[SearchHandler] Sentinel found — resuming from lineId=" + resumeLineId + " chunkCount=" + resumeChunkCount);
+                // Bloom file must exist and be non-empty to resume; otherwise fall through to fresh start
+                var bloomInfo = new FileInfo(BloomFilePath);
+                if (!bloomInfo.Exists || bloomInfo.Length <= 64)
+                {
+                    Console.WriteLine("[SearchHandler] Bloom file missing or empty despite sentinel — forcing fresh start");
+                    hasResume = false;
+                    resumeLineId = 0;
+                    resumeChunkCount = 0;
+                    try { File.Delete(IndexingSentinelPath); } catch { }
+                }
             }
 
-            var bloomInfo = new FileInfo(BloomFilePath);
-            Console.WriteLine("[SearchHandler] BloomFilePath=" + BloomFilePath + " exists=" + bloomInfo.Exists + " size=" + (bloomInfo.Exists ? bloomInfo.Length : 0));
-            if (bloomInfo.Exists &&
-                bloomInfo.Length > 64 &&
-                bloomInfo.LastWriteTimeUtc >= File.GetLastWriteTimeUtc(dbPath))
+            if (!hasResume)
             {
-                // Check if the app was updated since the index was built
-                string installedVersion = GetInstalledAppVersion();
-                string stampedVersion = ReadVersionStamp();
-                Console.WriteLine("[SearchHandler] Version check — installed=" + installedVersion + " stamped=" + stampedVersion);
-
-                if (!string.IsNullOrEmpty(installedVersion) &&
-                    !string.IsNullOrEmpty(stampedVersion) &&
-                    !string.Equals(installedVersion, stampedVersion, StringComparison.OrdinalIgnoreCase))
+                var bloomInfo = new FileInfo(BloomFilePath);
+                Console.WriteLine("[SearchHandler] BloomFilePath=" + BloomFilePath + " exists=" + bloomInfo.Exists + " size=" + (bloomInfo.Exists ? bloomInfo.Length : 0));
+                if (bloomInfo.Exists &&
+                    bloomInfo.Length > 64 &&
+                    bloomInfo.LastWriteTimeUtc >= File.GetLastWriteTimeUtc(dbPath))
                 {
-                    Console.WriteLine("[SearchHandler] App version changed — asking user whether to rebuild index");
-                    _bridge.PushEvent(new
+                    string installedVersion = GetInstalledAppVersion();
+                    string stampedVersion = ReadVersionStamp();
+                    Console.WriteLine("[SearchHandler] Version check — installed=" + installedVersion + " stamped=" + stampedVersion);
+
+                    if (!string.IsNullOrEmpty(installedVersion) &&
+                        !string.IsNullOrEmpty(stampedVersion) &&
+                        !string.Equals(installedVersion, stampedVersion, StringComparison.OrdinalIgnoreCase))
                     {
-                        @event = "bloomIndexVersionMismatch",
-                        oldVersion = stampedVersion,
-                        newVersion = installedVersion
-                    });
-                    // Keep existing index usable while user decides
+                        Console.WriteLine("[SearchHandler] App version changed — asking user whether to rebuild index");
+                        _bridge.PushEvent(new
+                        {
+                            @event = "bloomIndexVersionMismatch",
+                            oldVersion = stampedVersion,
+                            newVersion = installedVersion
+                        });
+                        _isReady = true;
+                        PushProgress(true, false, 100, 0, 0, "");
+                        return;
+                    }
+
+                    Console.WriteLine("[SearchHandler] Bloom file is up-to-date, marking ready");
                     _isReady = true;
                     PushProgress(true, false, 100, 0, 0, "");
                     return;
                 }
-
-                Console.WriteLine("[SearchHandler] Bloom file is up-to-date, marking ready");
-                _isReady = true;
-                PushProgress(true, false, 100, 0, 0, "");
-                return;
             }
 
-            Console.WriteLine("[SearchHandler] Starting indexing...");
-            StartIndexing();
+            Console.WriteLine("[SearchHandler] Starting indexing" + (hasResume ? " (resuming)" : "") + "...");
+            StartIndexing(resumeLineId, resumeChunkCount);
         }
 
-        /// <summary>Cancel any running indexing, delete the bloom file, optionally restart with a new DB path.</summary>
         public void ResetAndReindex(string newDbPath)
         {
             Console.WriteLine("[SearchHandler] ResetAndReindex called, newDbPath=" + newDbPath);
             StopIndexing();
             try { if (File.Exists(BloomFilePath)) { File.Delete(BloomFilePath); Console.WriteLine("[SearchHandler] Deleted bloom file"); } } catch (Exception ex) { Console.WriteLine("[SearchHandler] Delete bloom file failed: " + ex.Message); }
             try { if (File.Exists(IndexingSentinelPath)) File.Delete(IndexingSentinelPath); } catch { }
+            try { if (File.Exists(BloomVersionStampPath)) File.Delete(BloomVersionStampPath); } catch { }
             _isReady = false;
             if (!string.IsNullOrEmpty(newDbPath) && File.Exists(newDbPath))
                 OnDbReady(newDbPath);
@@ -138,34 +180,38 @@ namespace KezayitLib.Search
             BloomIndexingCoordinator.CancelIndexing();
         }
 
-        private void StartIndexing()
+        private void StartIndexing(int resumeAfterLineId = 0, int resumeChunkCount = 0)
         {
-            Console.WriteLine("[SearchHandler] StartIndexing called, _isIndexing=" + _isIndexing);
+            Console.WriteLine("[SearchHandler] StartIndexing called, _isIndexing=" + _isIndexing
+                + " resumeAfterLineId=" + resumeAfterLineId + " resumeChunkCount=" + resumeChunkCount);
             if (_isIndexing) { Console.WriteLine("[SearchHandler] Already indexing, skipping"); return; }
             _isIndexing = true;
             _isReady = false;
 
-            // Remove any stale/empty bloom file so the writer starts clean
-            try { if (File.Exists(BloomFilePath)) { File.Delete(BloomFilePath); Console.WriteLine("[SearchHandler] Deleted stale bloom file"); } } catch (Exception ex) { Console.WriteLine("[SearchHandler] Failed to delete bloom file: " + ex.Message); }
-
-            // Write sentinel before starting — if the process is killed mid-index, OnDbReady will detect this on next launch
-            try
+            bool isFreshStart = resumeChunkCount == 0;
+            if (isFreshStart)
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(IndexingSentinelPath));
-                File.WriteAllText(IndexingSentinelPath, DateTime.UtcNow.ToString("o"));
-                Console.WriteLine("[SearchHandler] Indexing sentinel written");
+                // Remove any stale bloom file, version stamp, and write a blank sentinel so a kill
+                // before the first chunk is committed still triggers a fresh start next launch
+                try { if (File.Exists(BloomFilePath)) { File.Delete(BloomFilePath); Console.WriteLine("[SearchHandler] Deleted stale bloom file"); } } catch (Exception ex) { Console.WriteLine("[SearchHandler] Failed to delete bloom file: " + ex.Message); }
+                try { if (File.Exists(BloomVersionStampPath)) { File.Delete(BloomVersionStampPath); Console.WriteLine("[SearchHandler] Deleted version stamp"); } } catch (Exception ex) { Console.WriteLine("[SearchHandler] Failed to delete version stamp: " + ex.Message); }
+                try
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(IndexingSentinelPath));
+                    File.WriteAllText(IndexingSentinelPath, "0:0");
+                    Console.WriteLine("[SearchHandler] Indexing sentinel initialised");
+                }
+                catch (Exception ex) { Console.WriteLine("[SearchHandler] Failed to write sentinel: " + ex.Message); }
             }
-            catch (Exception ex) { Console.WriteLine("[SearchHandler] Failed to write sentinel: " + ex.Message); }
 
             Task.Run(() =>
             {
-                Console.WriteLine("[SearchHandler] Task.Run started, BloomIndexingCoordinator.IsIndexing=" + BloomIndexingCoordinator.IsIndexing);
+                Console.WriteLine("[SearchHandler] Task.Run started, resumeAfterLineId=" + resumeAfterLineId);
                 try
                 {
-                    Console.WriteLine("[SearchHandler] Creating BloomFilterIndexer with dbPath=" + _dbPath);
                     var indexer = new BloomFilterIndexer("lines", (short)100, 0.01, _dbPath);
                     indexer.IndexProgressChanged += (s, e) => PushIndexProgress(e);
-                    indexer.CreateBloomFilters();
+                    indexer.CreateBloomFilters(resumeAfterLineId, resumeChunkCount);
                     Console.WriteLine("[SearchHandler] CreateBloomFilters completed");
                 }
                 catch (Exception ex) { Console.WriteLine("[SearchHandler] EXCEPTION: " + ex); }
@@ -173,11 +219,10 @@ namespace KezayitLib.Search
                 {
                     _isIndexing = false;
                     _isReady = File.Exists(BloomFilePath);
-                    // Delete sentinel only on successful completion (bloom file exists)
+                    // Delete sentinel only on successful completion
                     if (_isReady)
                     {
                         try { File.Delete(IndexingSentinelPath); Console.WriteLine("[SearchHandler] Indexing sentinel deleted"); } catch { }
-                        // Stamp the current app version so we can detect future updates
                         string ver = GetInstalledAppVersion();
                         if (!string.IsNullOrEmpty(ver)) WriteVersionStamp(ver);
                     }
@@ -221,10 +266,9 @@ namespace KezayitLib.Search
         {
             try
             {
-                if (File.Exists(BloomFilePath))
-                    File.Delete(BloomFilePath);
-                if (File.Exists(IndexingSentinelPath))
-                    File.Delete(IndexingSentinelPath);
+                if (File.Exists(BloomFilePath)) File.Delete(BloomFilePath);
+                if (File.Exists(IndexingSentinelPath)) File.Delete(IndexingSentinelPath);
+                if (File.Exists(BloomVersionStampPath)) File.Delete(BloomVersionStampPath);
                 _isReady = false;
                 _isIndexing = false;
             }
