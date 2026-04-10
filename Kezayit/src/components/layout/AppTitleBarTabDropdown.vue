@@ -4,7 +4,7 @@ import {
   IconDismiss20Regular,
   IconHome20Regular,
   IconDocument20Regular,
-  IconBookOpen20Regular,
+  IconBook20Filled,
   IconSearch20Regular,
   IconLibrary20Regular,
   IconDocumentPdf20Regular,
@@ -27,9 +27,9 @@ nextTick(() => containerRef.value?.focus())
     <div v-for="tab in visibleTabs()" :key="tab.id" class="tab-row" @click="emit('select', tab.id)">
       <div class="tab-row-start">
         <IconHome20Regular v-if="tab.route === '/'" class="tab-icon" />
-        <IconDocument20Regular v-else-if="tab.route === '/book-view'" class="tab-icon" />
+        <IconBook20Filled v-else-if="tab.route === '/book-view'" class="tab-icon book-icon" />
         <IconDocumentPdf20Regular v-else-if="tab.route === '/pdf-view'" class="tab-icon" />
-        <IconBookOpen20Regular v-else-if="tab.route === '/hebrewbooks'" class="tab-icon" />
+        <IconBook20Filled v-else-if="tab.route === '/hebrewbooks'" class="tab-icon book-icon" />
         <IconSearch20Regular v-else-if="tab.route === '/search'" class="tab-icon" />
         <IconLibrary20Regular v-else-if="tab.route === '/books'" class="tab-icon" />
         <IconApps20Regular v-else-if="tab.route === '/workspaces'" class="tab-icon" />
@@ -84,6 +84,10 @@ nextTick(() => containerRef.value?.focus())
 .tab-icon {
   width: 16px;
   height: 16px;
+}
+.book-icon {
+  transform: scaleX(-1);
+  color: #c1440e;
 }
 .tab-row-title {
   font-weight: 400;

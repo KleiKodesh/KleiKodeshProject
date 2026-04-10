@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
-import { IconSearchSparkle24 } from '@iconify-prerendered/vue-fluent-color'
+import { IconSearch24Regular } from '@iconify-prerendered/vue-fluent'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useTabStore } from '@/stores/tabStore'
 import { useEventListener } from '@vueuse/core'
@@ -118,7 +118,7 @@ function onScroll() {}
 <template>
   <div class="results-wrap">
     <div v-if="!hasSearched || (!results.length && !isSearching)" class="empty-state">
-      <IconSearchSparkle24 class="empty-icon" />
+      <IconSearch24Regular class="empty-icon" />
       <span v-if="hasSearched && !results.length" class="empty-msg">לא נמצאו תוצאות</span>
     </div>
     <div v-else ref="scrollEl" class="scroller" tabindex="0" @scroll="onScroll">

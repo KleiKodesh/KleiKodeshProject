@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import {
   IconLibrary24Filled,
-  IconFolderOpen24Filled,
+  IconFolder24Filled,
   IconBookOpen24Filled,
   IconApps24Filled,
   IconOpen28Regular,
@@ -23,7 +23,7 @@ onClickOutside(menuRef, () => emit('close'))
 const tiles = [
   { label: 'ספרים', icon: IconLibrary24Filled, color: '#B5451B' },
   { label: 'חיפוש', icon: IconSearchSparkle24, color: undefined },
-  { label: 'פתח קובץ', icon: IconFolderOpen24Filled, color: '#f0a500' },
+  { label: 'פתח קובץ', icon: IconFolder24Filled, color: '#f0a500' },
   { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#D94F1E' },
   { label: 'הגדרות', icon: IconSettings24, color: undefined },
   { label: 'סביבות עבודה', icon: IconApps24Filled, color: '#6b7fc4' },
@@ -104,6 +104,9 @@ function onPopOut() {
 .nav-icon svg {
   width: 18px;
   height: 18px;
+}
+.nav-icon .rtl-flip {
+  transform: scaleX(-1);
 }
 
 .nav-label {

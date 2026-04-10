@@ -211,6 +211,7 @@ namespace KezayitLib.Search
                 {
                     var indexer = new BloomFilterIndexer("lines", (short)100, 0.01, _dbPath);
                     indexer.IndexProgressChanged += (s, e) => PushIndexProgress(e);
+                    indexer.OnChunkCommitted = (lastLineId, chunkCount) => UpdateSentinel(lastLineId, chunkCount);
                     indexer.CreateBloomFilters(resumeAfterLineId, resumeChunkCount);
                     Console.WriteLine("[SearchHandler] CreateBloomFilters completed");
                 }

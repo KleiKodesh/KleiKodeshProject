@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
-import { IconBook20Filled, IconFolderOpen20Filled } from '@iconify-prerendered/vue-fluent'
+import { IconBook20Filled, IconFolder20Filled } from '@iconify-prerendered/vue-fluent'
 import type { FsItem } from './useBooksFs'
 import type { CategoryNode, BookRow } from './booksCategoryTree'
 import { useVirtualListKeys } from '@/composables/useVirtualListKeyNav'
@@ -89,7 +89,7 @@ function selectTileItem(i: number) {
             class="icon"
             :class="items[vRow.index]!.kind === 'folder' ? 'folder-icon' : 'book-icon'"
           >
-            <IconFolderOpen20Filled v-if="items[vRow.index]!.kind === 'folder'" /><IconBook20Filled
+            <IconFolder20Filled v-if="items[vRow.index]!.kind === 'folder'" /><IconBook20Filled
               v-else
             />
           </span>
@@ -109,7 +109,7 @@ function selectTileItem(i: number) {
       @click="selectTileItem(i)"
     >
       <div class="tile-icon" :class="item.kind === 'folder' ? 'folder-icon' : 'book-icon'">
-        <IconFolderOpen20Filled v-if="item.kind === 'folder'" /><IconBook20Filled v-else />
+        <IconFolder20Filled v-if="item.kind === 'folder'" /><IconBook20Filled v-else />
       </div>
       <span class="tile-label">{{
         item.kind === 'folder' ? item.node.title : item.book.title
@@ -157,6 +157,7 @@ function selectTileItem(i: number) {
 }
 .book-icon svg {
   color: #c1440e;
+  transform: scaleX(-1);
 }
 .title {
   font-size: 14px;
@@ -213,6 +214,7 @@ function selectTileItem(i: number) {
 }
 .tile .book-icon svg {
   color: #c1440e;
+  transform: scaleX(-1);
 }
 .tile-label {
   font-size: 11px;

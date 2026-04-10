@@ -16,6 +16,12 @@ namespace BloomSearchEngineLib
 
         public event EventHandler<IndexProgressChangedEventArgs> IndexProgressChanged;
 
+        /// <summary>
+        /// Called after each chunk is committed: (lastLineId, chunkCount).
+        /// Allows the caller to persist a resume sentinel without creating a circular dependency.
+        /// </summary>
+        public Action<int, int> OnChunkCommitted;
+
         public BloomFilterIndexer(string id = "lines", short chunkSize = 100, double falsePositiveRate = 0.01, string dbPath = null)
         {
             _id = id; _chunkSize = chunkSize; _fpRate = falsePositiveRate; _dbPath = dbPath;
@@ -69,7 +75,7 @@ namespace BloomSearchEngineLib
                         foreach (var t in terms) filter.Add(t);
                         writer.Commit(filter, chunkFirstId, chunkLastId);
                         // Sentinel updated AFTER the chunk is fully written — mid-chunk kill redoes this chunk
-                        KezayitLib.Search.SearchHandler.UpdateSentinel(chunkLastId, writer.Count);
+                        OnChunkCommitted?.Invoke(chunkLastId, writer.Count);
                         chunk.Clear();
                         chunkFirstId = NotSet; chunkLastId = NotSet;
                         processed++;

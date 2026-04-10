@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import HomeTile from './HomePageTile.vue'
 import {
   IconLibrary24Filled,
-  IconFolderOpen24Filled,
+  IconFolder24Filled,
   IconBookOpen24Filled,
   IconApps24Filled,
   IconDatabase24Filled,
@@ -21,7 +21,7 @@ const { navigate } = useAppNavigation()
 const baseTiles = [
   { label: 'ספרים', icon: IconLibrary24Filled, color: '#B5451B' },
   { label: 'חיפוש', icon: IconSearchSparkle24 },
-  { label: 'פתח קובץ', icon: IconFolderOpen24Filled, color: '#f0a500' },
+  { label: 'פתח קובץ', icon: IconFolder24Filled, color: '#f0a500' },
   { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#D94F1E' },
   { label: 'סביבות עבודה', icon: IconApps24Filled, color: '#6b7fc4' },
   { label: 'הגדרות', icon: IconSettings24 },
@@ -30,7 +30,7 @@ const baseTiles = [
 const noDbTiles = [
   { label: 'התקן כזית', icon: IconArrowDownload24Filled, color: '#B5451B' },
   { label: 'בחר מסד נתונים', icon: IconDatabase24Filled, color: '#3478f6' },
-  { label: 'פתח קובץ', icon: IconFolderOpen24Filled, color: '#f0a500' },
+  { label: 'פתח קובץ', icon: IconFolder24Filled, color: '#f0a500' },
   { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#D94F1E' },
   { label: 'סביבות עבודה', icon: IconApps24Filled, color: '#6b7fc4' },
   { label: 'הגדרות', icon: IconSettings24 },
