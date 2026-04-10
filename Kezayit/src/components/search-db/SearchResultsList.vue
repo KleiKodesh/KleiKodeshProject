@@ -222,11 +222,13 @@ function onScroll() {}
   text-overflow: ellipsis;
   flex-shrink: 1;
   min-width: 0;
+  user-select: text;
 }
 .sep {
   color: var(--text-secondary);
   font-size: 11px;
   flex-shrink: 0;
+  user-select: text;
 }
 .toc-text {
   color: inherit;
@@ -236,6 +238,7 @@ function onScroll() {}
   text-overflow: ellipsis;
   flex-shrink: 2;
   min-width: 0;
+  user-select: text;
 }
 .snippet {
   font-family: var(--text-font);

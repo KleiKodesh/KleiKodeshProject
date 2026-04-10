@@ -20,11 +20,15 @@ export function useSearch(
   const checkedBookIds = ref<Set<number>>(new Set())
   const initialized = ref(false)
 
-  const filteredResults = computed(() =>
-    checkedBookIds.value.size === 0
-      ? results()
-      : results().filter((r) => checkedBookIds.value.has(r.bookId)),
-  )
+  const allBookCount = computed(() => booksStore.allBooks.length)
+
+  const filteredResults = computed(() => {
+    // All checked (or not yet initialized) → show everything
+    if (checkedBookIds.value.size === allBookCount.value) return results()
+    // None checked → show nothing
+    if (checkedBookIds.value.size === 0) return []
+    return results().filter((r) => checkedBookIds.value.has(r.bookId))
+  })
 
   const resultCounts = computed(() => {
     const m = new Map<number, number>()
