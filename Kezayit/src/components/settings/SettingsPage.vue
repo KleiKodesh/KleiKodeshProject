@@ -35,15 +35,15 @@ const tabCount = 3
       </button>
     </div>
 
-    <div v-if="activeTab === 'general'" class="pane">
+    <div v-show="activeTab === 'general'" class="pane">
       <SettingsGeneralPane />
     </div>
 
-    <div v-if="activeTab === 'reading'" class="pane">
+    <div v-show="activeTab === 'reading'" class="pane">
       <SettingsReadingPane />
     </div>
 
-    <div v-if="activeTab === 'advanced'" class="pane">
+    <div v-show="activeTab === 'advanced'" class="pane">
       <SettingsAdvancedPane />
     </div>
   </div>

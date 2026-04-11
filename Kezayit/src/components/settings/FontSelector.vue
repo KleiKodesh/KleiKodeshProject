@@ -17,6 +17,9 @@ const boxRef = ref<HTMLElement | null>(null)
 const dropdownRef = ref<HTMLElement | null>(null)
 const isOpen = ref(false)
 const dropdownStyle = ref<Record<string, string>>({})
+
+// Detected once per session — installed fonts don't change at runtime
+let cachedFonts: string[] | null = null
 const availableFonts = ref<string[]>([])
 
 onClickOutside(dropdownRef, (e) => {
@@ -29,8 +32,9 @@ async function toggle() {
     isOpen.value = false
     return
   }
-  // Rescan fonts each time the dropdown opens
-  availableFonts.value = detectAvailableFonts()
+  // Detect fonts once per session and cache the result
+  if (!cachedFonts) cachedFonts = await detectAvailableFonts()
+  availableFonts.value = cachedFonts
   isOpen.value = true
   emit('toggle')
   await nextTick()

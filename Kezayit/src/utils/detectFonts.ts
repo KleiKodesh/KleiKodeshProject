@@ -1,3 +1,5 @@
+import { isHosted } from '@/host/db'
+
 const CANDIDATES = [
   // Culmus
   'Frank Ruehl CLM',
@@ -106,7 +108,15 @@ const CANDIDATES = [
   'Gentium Plus',
 ]
 
-export function detectAvailableFonts(): string[] {
+export async function detectAvailableFonts(): Promise<string[]> {
+  if (isHosted) {
+    const result = await window.__webviewAction('getFonts')
+    return (result as { fonts: string[] }).fonts
+  }
+  return _detectByCanvas()
+}
+
+function _detectByCanvas(): string[] {
   const canvas = document.createElement('canvas')
   const ctx = canvas.getContext('2d')
   if (!ctx) return []

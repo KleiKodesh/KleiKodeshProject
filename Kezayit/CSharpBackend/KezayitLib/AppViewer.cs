@@ -9,6 +9,7 @@ using Microsoft.Web.WebView2.WinForms;
 using System;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -176,6 +177,7 @@ namespace KezayitLib
                             _search.HandleConfirmReindex(confirm, id);
                             break;
                         case "TogglePopOut": HandleTogglePopOut(id); break;
+                        case "getFonts": HandleGetFonts(id); break;
                         default: _bridge.Reply(id, new { error = "Unknown action: " + action }); break;
                     }
                 }
@@ -193,6 +195,12 @@ namespace KezayitLib
                 Invoke(new Action(() => TogglePopOut?.Invoke()));
             else
                 TogglePopOut?.Invoke();
+        }
+
+        private void HandleGetFonts(string id)
+        {
+            string[] fonts = FontFamily.Families.Select(f => f.Name).ToArray();
+            _bridge.Reply(id, new { fonts = fonts });
         }
 
         /// <summary>

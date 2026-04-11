@@ -30,10 +30,8 @@ defineEmits<{ tap: [] }>()
 .tile:focus-visible {
   outline: none;
 }
-.tile.is-focused .tile-icon {
-  background: color-mix(in srgb, var(--accent-color) 20%, var(--bg-secondary));
-  outline: 2px solid var(--accent-color);
-  outline-offset: 1px;
+.tile.is-focused {
+  background: var(--hover-bg);
 }
 .tile:hover .tile-icon {
   transform: scale(1.08);

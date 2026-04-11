@@ -38,7 +38,7 @@ const tiles = computed(() => (isHosted && !dbReady.value ? noDbTiles : baseTiles
 
 const pageRef = ref<HTMLElement | null>(null)
 
-const { focusedIndex } = useTilesKeys(
+const { focusedIndex, containerFocused } = useTilesKeys(
   pageRef,
   () => tiles.value.length,
   (i) => navigate(tiles.value[i].label),
@@ -58,7 +58,7 @@ async function onTap(label: string) {
         v-for="(t, i) in tiles"
         :key="t.label"
         v-bind="t"
-        :is-focused="focusedIndex === i"
+        :is-focused="containerFocused && focusedIndex === i"
         @tap="onTap(t.label)"
       />
     </div>
