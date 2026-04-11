@@ -203,17 +203,46 @@ export async function idbDeleteWorkspaceData(wsId: string): Promise<void> {
 
 // ── LastRead DB ───────────────────────────────────────────────────────────────
 
+// In-memory count of lastread entries — avoids a full DB key scan on every scroll save.
+// Initialised to -1 (unknown); first write counts the real value via a cursor.
+let _lastReadCount = -1
+
 export async function idbSetLastRead(bookId: number, value: LastReadState): Promise<void> {
   const key = `lastread:${bookId}`
+  const idb = await openDb('app-lastread')
+
+  // Check if this key already exists — if so, count stays the same
+  const existing = await new Promise<boolean>((resolve, reject) => {
+    const req = idb.transaction(STORE).objectStore(STORE).getKey(key)
+    req.onsuccess = () => resolve(req.result !== undefined)
+    req.onerror = () => reject(req.error)
+  })
+
   await dbSet('app-lastread', key, value)
 
-  const idb = await openDb('app-lastread')
-  const keys = await new Promise<string[]>((resolve, reject) => {
+  if (!existing) {
+    if (_lastReadCount === -1) {
+      // First write after boot — count the real number of entries once
+      _lastReadCount = await new Promise<number>((resolve, reject) => {
+        const req = idb.transaction(STORE).objectStore(STORE).count()
+        req.onsuccess = () => resolve(req.result)
+        req.onerror = () => reject(req.error)
+      })
+    } else {
+      _lastReadCount++
+    }
+  }
+
+  if (_lastReadCount <= LASTREAD_MAX) return
+
+  // Over the cap — evict the oldest entries via a cursor (only runs when cap is exceeded)
+  const toEvict = _lastReadCount - LASTREAD_MAX
+  const keysToDelete = await new Promise<string[]>((resolve, reject) => {
     const acc: string[] = []
     const req = idb.transaction(STORE).objectStore(STORE).openKeyCursor()
     req.onsuccess = () => {
       const cursor = req.result
-      if (!cursor) {
+      if (!cursor || acc.length >= toEvict) {
         resolve(acc)
         return
       }
@@ -222,10 +251,8 @@ export async function idbSetLastRead(bookId: number, value: LastReadState): Prom
     }
     req.onerror = () => reject(req.error)
   })
-
-  if (keys.length <= LASTREAD_MAX) return
-  const toDelete = keys.slice(0, keys.length - LASTREAD_MAX)
-  await Promise.all(toDelete.map((k) => dbDelete('app-lastread', k)))
+  await Promise.all(keysToDelete.map((k) => dbDelete('app-lastread', k)))
+  _lastReadCount -= keysToDelete.length
 }
 
 export function idbGetLastRead(bookId: number): Promise<LastReadState | null> {

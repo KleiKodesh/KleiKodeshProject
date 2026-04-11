@@ -154,8 +154,8 @@ export function useCommentary(
 
       const bookTitleMap = new Map(bookRows.map((b) => [b.id, b.title]))
       const lineMap = new Map(lineRows.map((l) => [l.id, l]))
-      // Build a Map for O(1) book lookups instead of O(n) allBooks.find per bookId
-      const allBooksMap = new Map(booksDataStore.allBooks.map((b) => [b.id, b]))
+      // Use the store's pre-built map — avoids O(n) rebuild on every commentary load
+      const allBooksMap = booksDataStore.allBooksMap
 
       // Build raw groups with category resolved
       const raw = bookIds.map((bookId) => {
@@ -276,8 +276,8 @@ export function useCommentary(
 
       const bookTitleMap = new Map(bookRows.map((b) => [b.id, b.title]))
       const lineMap = new Map(lineRows.map((l) => [l.id, l]))
-      // Build a Map for O(1) book lookups instead of O(n) allBooks.find per bookId
-      const allBooksMap = new Map(booksDataStore.allBooks.map((b) => [b.id, b]))
+      // Use the store's pre-built map — avoids O(n) rebuild on every commentary load
+      const allBooksMap = booksDataStore.allBooksMap
 
       const raw = bookIds.map((bookId) => {
         const g = byBook.get(bookId)!

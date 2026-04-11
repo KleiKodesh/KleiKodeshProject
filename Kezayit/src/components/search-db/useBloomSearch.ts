@@ -240,7 +240,7 @@ export function useBloomSearch() {
             isSearching.value = false
             if (results.value.length > 0)
               cache
-                .set(query.trim().toLowerCase(), JSON.parse(JSON.stringify(results.value)))
+                .set(query.trim().toLowerCase(), results.value)
                 .catch((err) => console.error('[useBloomSearch] cacheSet failed:', err))
             _cleanup()
           }

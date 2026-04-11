@@ -15,6 +15,8 @@ export const useBooksDataStore = defineStore('booksData', () => {
   const error = ref<string | null>(null)
   const allBooks = ref<BookRow[]>([])
   const categoryMap = ref(new Map<number, CategoryNode>())
+  // Cached map for O(1) book lookups — built once alongside allBooks, never rebuilt
+  const allBooksMap = ref(new Map<number, BookRow>())
   const ROOT = ref<CategoryNode>({
     id: -1,
     parentId: null,
@@ -61,6 +63,7 @@ export const useBooksDataStore = defineStore('booksData', () => {
 
       ROOT.value = { ...ROOT.value, children }
       allBooks.value = books.slice().sort((a, b) => (a.treeOrder ?? 0) - (b.treeOrder ?? 0))
+      allBooksMap.value = new Map(allBooks.value.map((b) => [b.id, b]))
       loaded.value = true
     } catch (e) {
       const msg = e instanceof Error ? e.message : ''
@@ -72,5 +75,5 @@ export const useBooksDataStore = defineStore('booksData', () => {
     }
   }
 
-  return { loaded, loading, error, allBooks, categoryMap, ensureLoaded, ROOT }
+  return { loaded, loading, error, allBooks, allBooksMap, categoryMap, ensureLoaded, ROOT }
 })
