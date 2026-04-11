@@ -1,5 +1,4 @@
 import { normalize } from '@/utils/normalizeText'
-import { scoreMatch } from '@/utils/fuzzyMatch'
 
 export interface HebrewBook {
   id: string
@@ -40,11 +39,10 @@ export function searchHbCatalog(catalog: HebrewBook[], term: string): HebrewBook
     .filter((t) => t.length > 0)
   if (!words.length) return []
   return catalog
-    .flatMap((b) => {
+    .filter((b) => {
       const path = `${normalize(b.title)} ${normalize(b.author)} ${normalize(b._csvTags)}`
-      const score = scoreMatch(path, words)
-      return score < Infinity ? [{ b, score }] : []
+      const pathWords = path.split(/\s+/)
+      return words.every((qw) => pathWords.some((pw) => pw === qw || pw.includes(qw)))
     })
-    .sort((a, b) => a.score - b.score || a.b.title.localeCompare(b.b.title))
-    .map(({ b }) => b)
+    .sort((a, b) => a.title.localeCompare(b.title))
 }

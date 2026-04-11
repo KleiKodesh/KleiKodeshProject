@@ -245,9 +245,7 @@ All raw SQL strings live here. No inline SQL anywhere else in the codebase.
 
 **censorDivineNames.ts** — divine name censoring (replaces ה with ק).
 
-**normalizeText.ts** — strips ASCII and Hebrew quote characters and lowercases; used as the base normalization step for all search comparisons.
-
-**fuzzyMatch.ts** — word-based fuzzy matching for book and HebrewBooks search. `scoreMatch` returns a numeric score (0 = all exact, Infinity = no match). Hebrew acronyms are never fuzzy-matched to avoid false positives.
+**normalizeText.ts** — `normalize(s)`: lowercases and strips Hebrew/ASCII quote characters. Import this as the base normalization step before any search comparison.
 
 **tocSearchUtils.ts** — TOC search path building (`buildTocSearchPaths`), query splitting (`splitQuery`), and ordered subsequence word matching (`matchWords`).
 

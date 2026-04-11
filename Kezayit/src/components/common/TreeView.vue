@@ -2,6 +2,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import TreeNode, { type TreeNodeItem } from './TreeNode.vue'
 import { useListKeys } from '@/composables/useListKeyNav'
+import { scoreWords } from '@/utils/tocSearchUtils'
 
 const props = defineProps<{
   nodes: TreeNodeItem[]
@@ -109,14 +110,17 @@ const pathMap = computed(() => {
 
 const visibleNodes = computed(() => {
   if (props.filter) {
-    const words = props.filter.trim().split(/\s+/).filter(Boolean)
+    const words = props.filter.trim().toLowerCase().split(/\s+/).filter(Boolean)
     const pm = pathMap.value
     return props.nodes
-      .filter((n) => {
-        const path = pm.get(n.id) ?? n.text
-        return words.every((w) => path.includes(w))
+      .flatMap((n) => {
+        const path = (pm.get(n.id) ?? n.text).toLowerCase()
+        const score = scoreWords(path, words)
+        return score === Infinity ? [] : [{ n, score }]
       })
+      .sort((a, b) => a.score - b.score)
       .slice(0, 100)
+      .map(({ n }) => n)
   }
 
   const result: TreeNodeItem[] = []

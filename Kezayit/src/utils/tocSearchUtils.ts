@@ -30,7 +30,7 @@ export function splitQuery(
   return null
 }
 
-/** Normalize a string for TOC search: strip quotes, lowercase, insert spaces around non-letter/digit chars (keeps them as tokens) */
+/** Normalize a string for TOC search: strip quotes, lowercase, tokenize punctuation */
 const normalizeToc = (s: string) =>
   normalize(s)
     .replace(/[^\p{L}\p{N}]+/gu, (m) => ` ${m} `)
@@ -88,4 +88,44 @@ export function matchWords(path: string, words: string[]): boolean {
     pos += m.index + m[0].length
   }
   return true
+}
+
+/**
+ * Score how tightly query words match a path.
+ * Tokenizes the path (splitting on whitespace and " / " separators) into an indexed
+ * token array, finds the earliest whole-word match position for each query word in
+ * order, then sums the token-index distances between consecutive matched pairs.
+ *
+ * Lower score = tighter match (words closer together in the path).
+ * Returns Infinity if any query word has no whole-word match.
+ *
+ * Examples (token distance between consecutive matched pairs):
+ *   query "פרק ד", path "פרק ד"          → positions [0,1] → distance 1 → score 1
+ *   query "פרק ד", path "פרק א / פסוק ד" → positions [0,3] → distance 3 → score 3
+ *   query "בראשית פרק ד", path "בראשית רמב"ן / פרק ד"
+ *                                          → positions [0,2,3] → distances 2+1 → score 3
+ */
+export function scoreWords(path: string, words: string[]): number {
+  // Tokenize: split on any run of non-letter/non-digit chars (covers spaces and " / ")
+  const tokens = path.split(/[^\p{L}\p{N}]+/u).filter((t) => t.length > 0)
+  const matchedPositions: number[] = []
+  let searchFrom = 0
+  for (const w of words) {
+    let found = -1
+    for (let i = searchFrom; i < tokens.length; i++) {
+      if (tokens[i]!.startsWith(w)) {
+        found = i
+        break
+      }
+    }
+    if (found === -1) return Infinity
+    matchedPositions.push(found)
+    searchFrom = found + 1
+  }
+  if (matchedPositions.length < 2) return 0
+  let score = 0
+  for (let i = 1; i < matchedPositions.length; i++) {
+    score += matchedPositions[i]! - matchedPositions[i - 1]!
+  }
+  return score
 }

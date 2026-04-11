@@ -1,7 +1,6 @@
 import { ref, watch } from 'vue'
 import { refDebounced } from '@vueuse/core'
 import { normalize } from '@/utils/normalizeText'
-import { scoreMatch } from '@/utils/fuzzyMatch'
 import {
   splitQuery,
   buildTocSearchPaths,
@@ -91,12 +90,11 @@ export function useBooksFsSearch(searchQuery: ReturnType<typeof ref<string>>) {
 
   function filterBooks(words: string[]) {
     return store.allBooks
-      .flatMap((b) => {
-        const score = scoreMatch(b.searchPath ?? '', words)
-        return score < Infinity ? [{ b, score }] : []
+      .filter((b) => {
+        const pathWords = (b.searchPath ?? '').split(/\s+/)
+        return words.every((qw) => pathWords.some((pw) => pw === qw || pw.includes(qw)))
       })
-      .sort((a, b) => a.score - b.score || (a.b.treeOrder ?? 0) - (b.b.treeOrder ?? 0))
-      .map(({ b }) => b)
+      .sort((a, b) => (a.treeOrder ?? 0) - (b.treeOrder ?? 0))
   }
 
   // Phase 1: instant book match

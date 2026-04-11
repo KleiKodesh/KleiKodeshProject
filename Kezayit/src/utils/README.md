@@ -2,11 +2,9 @@
 
 Pure utility functions. No Vue, no Pinia, no reactivity. If a utility needs a ref or a store, it belongs elsewhere.
 
-**normalizeText.ts** — `normalize(s)`: lowercases a string. Import this as the base normalization step before any search comparison. Do not add quote-stripping back here — that responsibility moved to `fuzzyMatch.ts`.
+**normalizeText.ts** — `normalize(s)`: lowercases and strips Hebrew/ASCII quote characters. Import this as the base normalization step before any search comparison.
 
-**fuzzyMatch.ts** — word-based fuzzy matching for book and HebrewBooks search. Use `scoreMatch` to get a numeric score (0 = all exact, higher = more fuzzy, Infinity = no match) and sort results by it. Use `fuzzyMatchWords` when you only need a boolean. Key design rule: words containing quote characters are treated as Hebrew acronyms and never fuzzy-matched — only exact or quote-stripped — because acronyms like `רשב"א`, `רשב"ם`, and `ריב"א` are all edit-distance 1 from each other and fuzzy-matching them produces false positives.
-
-**tocSearchUtils.ts** — TOC-specific search used by the books-fs two-tier search. Use `splitQuery` to split a multi-word query into a book part and a TOC part, `buildTocSearchPaths` to build normalized paths from flat TOC rows, and `matchWords` for ordered subsequence matching. Exact matching only — do not introduce fuzzy logic here.
+**tocSearchUtils.ts** — TOC-specific search used by the books-fs two-tier search. Use `splitQuery` to split a multi-word query into a book part and a TOC part, `buildTocSearchPaths` to build normalized paths from flat TOC rows (also strips nikud for חסר spelling tolerance), and `matchWords` for ordered subsequence matching.
 
 **idbPersistence.ts** — the only file in the app that touches IndexedDB. All IDB reads and writes go through here. Do not call any IDB API from anywhere else. Stores import from here; components and composables do not.
 
