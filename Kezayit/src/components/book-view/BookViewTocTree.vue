@@ -2,6 +2,7 @@
 import { ref, computed, nextTick, watch } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import type { TocEntry, AltTocSection } from './useToc'
+import type { SearchableTree } from '@/utils/tocSearchUtils'
 import BookViewTocTreeSection from './BookViewTocTreeSection.vue'
 import SplitPane from '@/components/common/SplitPane.vue'
 
@@ -14,7 +15,7 @@ const props = defineProps<{
   altTocSections: AltTocSection[]
   loading: boolean
   error: string | null
-  tocPathMap?: Map<number, string>
+  tocSearchTree?: SearchableTree
 }>()
 const emit = defineEmits<{ close: []; select: [TocEntry]; altSelect: [TocEntry] }>()
 
@@ -74,7 +75,7 @@ const hasAlt = computed(() => props.altTocSections.length > 0)
               :active-entry-id="activeTocEntryId"
               :visible="props.visible"
               :suppress-scroll="justSelected"
-              :path-map="tocPathMap"
+              :search-tree="tocSearchTree"
               @select="onSelect"
             />
           </template>
@@ -85,7 +86,7 @@ const hasAlt = computed(() => props.altTocSections.length > 0)
               :title="null"
               :entries="section.entries"
               :filter="searchQuery"
-              :path-map="section.pathMap"
+              :search-tree="section.searchTree"
               @select="emit('altSelect', $event)"
             />
           </template>

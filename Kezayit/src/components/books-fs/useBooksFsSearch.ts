@@ -1,17 +1,11 @@
 import { ref, watch } from 'vue'
 import { refDebounced } from '@vueuse/core'
 import { normalize } from '@/utils/normalizeText'
-import {
-  splitQuery,
-  buildTocSearchPaths,
-  matchWords,
-  normalizeTocWords,
-} from '@/utils/tocSearchUtils'
+import { splitQuery, SearchableTree } from '@/utils/tocSearchUtils'
 import { query } from '@/host/db'
 import { SQL } from '@/host/queries.sql'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import type { BookRow } from './booksCategoryTree'
-import type { TocSearchNode } from '@/utils/tocSearchUtils'
 
 export type BookFsItem = { uid: string; kind: 'book'; book: BookRow }
 export type TocFsItem = {
@@ -33,7 +27,7 @@ type TocRow = {
   lineIndex: number | null
 }
 
-let tocCache: { key: string; nodes: TocSearchNode[] } | null = null
+let tocCache: { key: string; tree: SearchableTree; rows: TocRow[] } | null = null
 
 function chunkIds(ids: number[]): number[][] {
   const size = Math.max(1, Math.ceil(Math.sqrt(ids.length)))
@@ -49,31 +43,6 @@ function stripRoots(rows: TocRow[], bookTitles: Map<number, string>): TocRow[] {
   return rows
     .filter((r) => !rootIds.has(r.id))
     .map((r) => (rootIds.has(r.parentId!) ? { ...r, parentId: null } : r))
-}
-
-async function matchNodes(
-  nodes: TocSearchNode[],
-  tocWords: string[],
-  bookMap: Map<number, BookRow>,
-): Promise<TocFsItem[]> {
-  const normalized = normalizeTocWords(tocWords)
-  const out: TocFsItem[] = []
-  for (let i = 0; i < nodes.length; i++) {
-    if (i > 0 && i % 200 === 0) await Promise.resolve()
-    const node = nodes[i]!
-    const book = matchWords(node.tocSearchPath, normalized) ? bookMap.get(node.bookId) : undefined
-    if (book)
-      out.push({
-        uid: `toc-${node.bookId}-${node.id}`,
-        kind: 'toc',
-        book,
-        tocEntryId: node.id,
-        tocLineIndex: node.lineIndex,
-        tocTitle: node.text,
-        tocPath: node.tocDisplayPath,
-      })
-  }
-  return out
 }
 
 function toWords(raw: string) {
@@ -131,6 +100,7 @@ export function useBooksFsSearch(searchQuery: ReturnType<typeof ref<string>>) {
       }
 
       const { bookWords, tocWords } = split
+      if (!tocWords.length) return
       const candidateBooks = filterBooks(bookWords)
       if (!candidateBooks.length) {
         results.value = []
@@ -143,12 +113,28 @@ export function useBooksFsSearch(searchQuery: ReturnType<typeof ref<string>>) {
         .sort((a, b) => (a.treeOrder ?? 0) - (b.treeOrder ?? 0))
         .map((b) => b.id)
       const cacheKey = ids.join(',')
+      const tocQuery = tocWords.join(' ')
 
       if (tocCache?.key === cacheKey) {
         searching.value = true
         try {
-          const r = await matchNodes(tocCache.nodes, tocWords, bookMap)
-          if (r.length) results.value = r
+          const matched = tocCache.tree.search(tocCache.rows, tocQuery)
+          const items = matched.flatMap((node) => {
+            const book = bookMap.get((node as TocRow).bookId)
+            if (!book) return []
+            return [
+              {
+                uid: `toc-${(node as TocRow).bookId}-${node.id}`,
+                kind: 'toc' as const,
+                book,
+                tocEntryId: node.id,
+                tocLineIndex: (node as TocRow).lineIndex,
+                tocTitle: node.text,
+                tocPath: tocCache!.tree.displayPaths.get(node.id) ?? node.text,
+              },
+            ]
+          })
+          if (items.length) results.value = items
         } finally {
           searching.value = false
         }
@@ -157,21 +143,39 @@ export function useBooksFsSearch(searchQuery: ReturnType<typeof ref<string>>) {
 
       searching.value = true
       results.value = []
-      const allNodes: TocSearchNode[] = []
+      const allRows: TocRow[] = []
       const bookTitles = new Map(candidateBooks.map((b) => [b.id, b.title]))
       try {
         for (const batch of chunkIds(ids)) {
           const rows = await query<TocRow>(SQL.GET_TOC_TITLES_FOR_BOOKS(batch.length), batch)
-          const batchNodes = buildTocSearchPaths(stripRoots(rows, bookTitles))
-          batchNodes.sort(
+          const stripped = stripRoots(rows, bookTitles)
+          stripped.sort(
             (a, b) =>
               (bookMap.get(a.bookId)?.treeOrder ?? 0) - (bookMap.get(b.bookId)?.treeOrder ?? 0),
           )
-          allNodes.push(...batchNodes)
-          const r = await matchNodes(batchNodes, tocWords, bookMap)
-          if (r.length) results.value = [...(results.value as TocFsItem[]), ...r]
+          allRows.push(...stripped)
+          // yield to keep UI responsive
+          await Promise.resolve()
         }
-        tocCache = { key: cacheKey, nodes: allNodes }
+        const tree = new SearchableTree(allRows)
+        tocCache = { key: cacheKey, tree, rows: allRows }
+        const matched = tree.search(allRows, tocQuery)
+        const items = matched.flatMap((node) => {
+          const book = bookMap.get((node as TocRow).bookId)
+          if (!book) return []
+          return [
+            {
+              uid: `toc-${(node as TocRow).bookId}-${node.id}`,
+              kind: 'toc' as const,
+              book,
+              tocEntryId: node.id,
+              tocLineIndex: (node as TocRow).lineIndex,
+              tocTitle: node.text,
+              tocPath: tree.displayPaths.get(node.id) ?? node.text,
+            },
+          ]
+        })
+        if (items.length) results.value = items
       } finally {
         searching.value = false
       }

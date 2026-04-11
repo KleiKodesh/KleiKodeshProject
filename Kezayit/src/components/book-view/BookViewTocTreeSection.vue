@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import TreeView from '@/components/common/TreeView.vue'
 import type { TreeNodeItem } from '@/components/common/TreeNode.vue'
 import type { TocEntry } from './useToc'
+import type { SearchableTree } from '@/utils/tocSearchUtils'
 
 defineProps<{
   title: string | null
@@ -11,7 +12,7 @@ defineProps<{
   activeEntryId?: number
   visible?: boolean
   suppressScroll?: boolean
-  pathMap?: Map<number, string>
+  searchTree?: SearchableTree
 }>()
 defineEmits<{ select: [TocEntry] }>()
 
@@ -29,7 +30,7 @@ defineExpose({ containerRef: () => treeViewRef.value?.containerRef ?? null })
       :active-node-id="activeEntryId"
       :visible="visible"
       :suppress-scroll="suppressScroll"
-      :path-map="pathMap"
+      :search-tree="searchTree"
       @select="$emit('select', $event as unknown as TocEntry)"
     />
   </div>

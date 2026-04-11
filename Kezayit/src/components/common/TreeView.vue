@@ -2,7 +2,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import TreeNode, { type TreeNodeItem } from './TreeNode.vue'
 import { useListKeys } from '@/composables/useListKeyNav'
-import { scoreWords } from '@/utils/tocSearchUtils'
+import { SearchableTree } from '@/utils/tocSearchUtils'
 
 const props = defineProps<{
   nodes: TreeNodeItem[]
@@ -14,7 +14,7 @@ const props = defineProps<{
   fontSize?: string
   suppressScroll?: boolean
   stickyHeaders?: boolean
-  pathMap?: Map<number, string>
+  searchTree?: SearchableTree
 }>()
 
 const emit = defineEmits<{ select: [node: TreeNodeItem] }>()
@@ -92,35 +92,14 @@ function selectNode(i: number, node: TreeNodeItem) {
   emit('select', node)
 }
 
-const pathMap = computed(() => {
-  if (props.pathMap) return props.pathMap
-  const map = new Map<number, string>()
-  const nm = nodeMap.value
-  function pathFor(node: TreeNodeItem): string {
-    const cached = map.get(node.id)
-    if (cached !== undefined) return cached
-    const parent = node.parentId != null ? nm.get(node.parentId) : undefined
-    const path = parent ? `${pathFor(parent)} / ${node.text}` : node.text
-    map.set(node.id, path)
-    return path
-  }
-  for (const n of props.nodes) pathFor(n)
-  return map
-})
+// Use the passed-in SearchableTree or build one from the current nodes.
+// The internally-built tree is rebuilt whenever nodes change.
+const internalTree = computed(() => new SearchableTree(props.nodes))
+const activeTree = computed(() => props.searchTree ?? internalTree.value)
 
 const visibleNodes = computed(() => {
   if (props.filter) {
-    const words = props.filter.trim().toLowerCase().split(/\s+/).filter(Boolean)
-    const pm = pathMap.value
-    return props.nodes
-      .flatMap((n) => {
-        const path = (pm.get(n.id) ?? n.text).toLowerCase()
-        const score = scoreWords(path, words)
-        return score === Infinity ? [] : [{ n, score }]
-      })
-      .sort((a, b) => a.score - b.score)
-      .slice(0, 100)
-      .map(({ n }) => n)
+    return activeTree.value.search(props.nodes, props.filter, 100)
   }
 
   const result: TreeNodeItem[] = []
@@ -156,7 +135,7 @@ const visibleNodes = computed(() => {
       @toggle="toggle(node)"
       @select="selectNode(i, node)"
     >
-      {{ filter ? (pathMap.get(node.id) ?? node.text) : node.text }}
+      {{ filter ? (activeTree.displayPaths.get(node.id) ?? node.text) : node.text }}
     </TreeNode>
   </div>
 </template>

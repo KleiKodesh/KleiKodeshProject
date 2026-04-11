@@ -1,6 +1,7 @@
 import { ref, watch } from 'vue'
 import { query } from '@/host/db'
 import { SQL } from '@/host/queries.sql'
+import { SearchableTree } from '@/utils/tocSearchUtils'
 
 export interface TocEntry {
   id: number
@@ -20,7 +21,7 @@ export interface AltTocStructure {
 export interface AltTocSection {
   structure: AltTocStructure
   entries: TocEntry[]
-  pathMap: Map<number, string>
+  searchTree: SearchableTree
 }
 
 function stripBookTitleRoot(entries: TocEntry[], bookTitle: string | undefined): TocEntry[] {
@@ -38,23 +39,7 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
   const altTocSections = ref<AltTocSection[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
-  // Pre-built map from entry id → full path string, rebuilt whenever tocEntries changes.
-  const tocPathMap = ref<Map<number, string>>(new Map())
-
-  function buildPathMap(entries: TocEntry[]): Map<number, string> {
-    const byId = new Map(entries.map((e) => [e.id, e]))
-    const cache = new Map<number, string>()
-    function pathFor(entry: TocEntry): string {
-      const cached = cache.get(entry.id)
-      if (cached !== undefined) return cached
-      const parent = entry.parentId != null ? byId.get(entry.parentId) : undefined
-      const path = parent ? `${pathFor(parent)} / ${entry.text}` : entry.text
-      cache.set(entry.id, path)
-      return path
-    }
-    for (const e of entries) pathFor(e)
-    return cache
-  }
+  const tocSearchTree = ref<SearchableTree>(new SearchableTree([]))
 
   async function load(id: number) {
     loading.value = true
@@ -66,11 +51,11 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
       ])
       const stripped = stripBookTitleRoot(entries, bookTitle?.())
       tocEntries.value = stripped
-      tocPathMap.value = buildPathMap(stripped)
+      tocSearchTree.value = new SearchableTree(stripped)
       altTocSections.value = await Promise.all(
         structures.map(async (s) => {
           const entries = await query<TocEntry>(SQL.GET_ALL_ALT_TOC_ENTRIES, [s.id])
-          return { structure: s, entries, pathMap: buildPathMap(entries) }
+          return { structure: s, entries, searchTree: new SearchableTree(entries) }
         }),
       )
     } catch (e) {
@@ -99,8 +84,16 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
   }
 
   function getTocPath(entry: TocEntry): string {
-    return tocPathMap.value.get(entry.id) ?? entry.text
+    return tocSearchTree.value.displayPaths.get(entry.id) ?? entry.text
   }
 
-  return { tocEntries, altTocSections, loading, error, tocPathMap, getActiveTocEntry, getTocPath }
+  return {
+    tocEntries,
+    altTocSections,
+    loading,
+    error,
+    tocSearchTree,
+    getActiveTocEntry,
+    getTocPath,
+  }
 }
