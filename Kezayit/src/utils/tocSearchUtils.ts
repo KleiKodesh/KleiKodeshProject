@@ -269,8 +269,16 @@ export class SearchableTree {
    * Returns Infinity if any word has no match.
    * Score = sum of intra-segment token distances between consecutive matched pairs
    * that land in the same segment. Cross-segment pairs cost 0.
+   *
+   * When lastWordExact is true, the final query word must match a token exactly
+   * rather than as a prefix. Used to prefer exact matches before falling back to
+   * prefix matching (e.g. "פרק ל" should not surface "פרק לא" when "פרק ל" exists).
    */
-  private _score(nodeId: number, words: string[]): { score: number; segIndices: number[] } {
+  private _score(
+    nodeId: number,
+    words: string[],
+    lastWordExact = false,
+  ): { score: number; segIndices: number[] } {
     const segs = this.segments.get(nodeId)
     if (!segs) return { score: Infinity, segIndices: [] }
 
@@ -278,13 +286,15 @@ export class SearchableTree {
     const tokenIndices: number[] = [] // which token index within that segment
     let segFrom = 0
 
-    for (const w of words) {
+    for (let wi = 0; wi < words.length; wi++) {
+      const w = words[wi]!
+      const exact = lastWordExact && wi === words.length - 1
       let found = false
       for (let si = segFrom; si < segs.length; si++) {
         const seg = segs[si]!
-        // search within this segment for a token that starts with w
+        // search within this segment for a token that starts with w (or equals w if exact)
         for (let ti = 0; ti < seg.length; ti++) {
-          if (seg[ti]!.startsWith(w)) {
+          if (exact ? seg[ti] === w : seg[ti]!.startsWith(w)) {
             segIndices.push(si)
             tokenIndices.push(ti)
             segFrom = si // next word may match same or later segment
@@ -323,12 +333,20 @@ export class SearchableTree {
     const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
     if (!words.length) return []
 
-    // Pass 1: score all nodes
-    const scored: { node: SearchableNode; score: number; segIndices: number[] }[] = []
-    for (const node of nodes) {
-      const { score, segIndices } = this._score(node.id, words)
-      if (score !== Infinity) scored.push({ node, score, segIndices })
+    // Pass 1: score all nodes — try exact match on last word first, fall back to prefix if empty.
+    // This prevents "פרק ל" from surfacing "פרק לא" when an exact "פרק ל" entry exists,
+    // while still returning prefix matches when no exact match is found.
+    const scoreAll = (lastWordExact: boolean) => {
+      const out: { node: SearchableNode; score: number; segIndices: number[] }[] = []
+      for (const node of nodes) {
+        const { score, segIndices } = this._score(node.id, words, lastWordExact)
+        if (score !== Infinity) out.push({ node, score, segIndices })
+      }
+      return out
     }
+
+    let scored = scoreAll(true)
+    if (!scored.length) scored = scoreAll(false)
     if (!scored.length) return []
 
     scored.sort((a, b) => a.score - b.score)
