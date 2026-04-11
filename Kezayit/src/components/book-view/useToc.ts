@@ -20,6 +20,7 @@ export interface AltTocStructure {
 export interface AltTocSection {
   structure: AltTocStructure
   entries: TocEntry[]
+  pathMap: Map<number, string>
 }
 
 function stripBookTitleRoot(entries: TocEntry[], bookTitle: string | undefined): TocEntry[] {
@@ -67,10 +68,10 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
       tocEntries.value = stripped
       tocPathMap.value = buildPathMap(stripped)
       altTocSections.value = await Promise.all(
-        structures.map(async (s) => ({
-          structure: s,
-          entries: await query<TocEntry>(SQL.GET_ALL_ALT_TOC_ENTRIES, [s.id]),
-        })),
+        structures.map(async (s) => {
+          const entries = await query<TocEntry>(SQL.GET_ALL_ALT_TOC_ENTRIES, [s.id])
+          return { structure: s, entries, pathMap: buildPathMap(entries) }
+        }),
       )
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'שגיאה בטעינת תוכן עניינים'

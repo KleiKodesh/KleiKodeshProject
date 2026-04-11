@@ -14,6 +14,7 @@ const props = defineProps<{
   altTocSections: AltTocSection[]
   loading: boolean
   error: string | null
+  tocPathMap?: Map<number, string>
 }>()
 const emit = defineEmits<{ close: []; select: [TocEntry]; altSelect: [TocEntry] }>()
 
@@ -73,6 +74,7 @@ const hasAlt = computed(() => props.altTocSections.length > 0)
               :active-entry-id="activeTocEntryId"
               :visible="props.visible"
               :suppress-scroll="justSelected"
+              :path-map="tocPathMap"
               @select="onSelect"
             />
           </template>
@@ -83,6 +85,7 @@ const hasAlt = computed(() => props.altTocSections.length > 0)
               :title="null"
               :entries="section.entries"
               :filter="searchQuery"
+              :path-map="section.pathMap"
               @select="emit('altSelect', $event)"
             />
           </template>
@@ -117,7 +120,7 @@ const hasAlt = computed(() => props.altTocSections.length > 0)
   display: flex;
   flex-direction: column;
   width: fit-content;
-  max-width: min(320px, 85%);
+  max-width: 30%;
   background: var(--bg-secondary);
   border-left: 1px solid var(--border-color);
   overflow: hidden;

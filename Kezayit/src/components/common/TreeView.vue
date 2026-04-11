@@ -13,6 +13,7 @@ const props = defineProps<{
   fontSize?: string
   suppressScroll?: boolean
   stickyHeaders?: boolean
+  pathMap?: Map<number, string>
 }>()
 
 const emit = defineEmits<{ select: [node: TreeNodeItem] }>()
@@ -90,18 +91,33 @@ function selectNode(i: number, node: TreeNodeItem) {
   emit('select', node)
 }
 
-function getPath(node: TreeNodeItem): string {
-  const parts: string[] = []
-  let current: TreeNodeItem | undefined = node
-  while (current) {
-    parts.unshift(current.text)
-    current = current.parentId != null ? nodeMap.value.get(current.parentId) : undefined
+const pathMap = computed(() => {
+  if (props.pathMap) return props.pathMap
+  const map = new Map<number, string>()
+  const nm = nodeMap.value
+  function pathFor(node: TreeNodeItem): string {
+    const cached = map.get(node.id)
+    if (cached !== undefined) return cached
+    const parent = node.parentId != null ? nm.get(node.parentId) : undefined
+    const path = parent ? `${pathFor(parent)} / ${node.text}` : node.text
+    map.set(node.id, path)
+    return path
   }
-  return parts.join(' / ')
-}
+  for (const n of props.nodes) pathFor(n)
+  return map
+})
 
 const visibleNodes = computed(() => {
-  if (props.filter) return props.nodes.filter((n) => n.text.includes(props.filter!))
+  if (props.filter) {
+    const words = props.filter.trim().split(/\s+/).filter(Boolean)
+    const pm = pathMap.value
+    return props.nodes
+      .filter((n) => {
+        const path = pm.get(n.id) ?? n.text
+        return words.every((w) => path.includes(w))
+      })
+      .slice(0, 100)
+  }
 
   const result: TreeNodeItem[] = []
   const hidden = new Set<number>()
@@ -136,7 +152,7 @@ const visibleNodes = computed(() => {
       @toggle="toggle(node)"
       @select="selectNode(i, node)"
     >
-      {{ filter ? getPath(node) : node.text }}
+      {{ filter ? (pathMap.get(node.id) ?? node.text) : node.text }}
     </TreeNode>
   </div>
 </template>
@@ -148,5 +164,18 @@ const visibleNodes = computed(() => {
   overflow: auto;
   min-height: 0;
   background: var(--tree-bg, var(--bg-primary));
+}
+</style>
+
+<style>
+.tree-entries .tree-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 28px;
+}
+.tree-entries .tree-row.is-sticky {
+  content-visibility: visible;
+}
+.tree-entries .tree-row.is-filtered {
+  contain-intrinsic-size: auto 56px;
 }
 </style>

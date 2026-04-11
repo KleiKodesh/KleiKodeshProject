@@ -71,6 +71,7 @@ const {
   getTocPath,
   altTocSections,
   tocEntries,
+  tocPathMap,
   loading: tocLoading,
   error: tocError,
 } = useToc(
@@ -524,6 +525,7 @@ watch(searchVisible, (v) => {
           :active-toc-entry-id="activeTocEntryId"
           :visible="tocVisible"
           :toc-entries="tocEntries"
+          :toc-path-map="tocPathMap"
           :alt-toc-sections="altTocSections"
           :loading="tocLoading"
           :error="tocError"

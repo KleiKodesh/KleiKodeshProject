@@ -65,8 +65,8 @@ const fs = () => props.fontSize ?? '0.8rem'
 <style scoped>
 .tree-row {
   display: flex;
-  align-items: center;
-  height: var(--rh, 28px);
+  align-items: flex-start;
+  min-height: var(--rh, 28px);
   min-width: 100%;
   padding-inline-end: 8px;
 }
@@ -124,25 +124,22 @@ const fs = () => props.fontSize ?? '0.8rem'
 .tree-label {
   flex: 1;
   min-width: 0;
-  height: var(--rh, 28px);
+  height: auto;
+  min-height: var(--rh, 28px);
   line-height: var(--rh, 28px);
   padding-inline-end: 4px;
   font-size: var(--fs, 0.8rem);
   color: var(--text-primary);
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
   cursor: pointer;
 }
 
 .tree-row.is-filtered {
-  height: auto;
-  align-items: flex-start;
   padding-inline-start: 12px;
 }
 .tree-row.is-filtered .tree-label {
-  height: auto;
   line-height: 1.4;
   padding-block: 8px;
-  white-space: normal;
-  word-break: break-word;
 }
 </style>

@@ -11,6 +11,7 @@ defineProps<{
   activeEntryId?: number
   visible?: boolean
   suppressScroll?: boolean
+  pathMap?: Map<number, string>
 }>()
 defineEmits<{ select: [TocEntry] }>()
 
@@ -28,6 +29,7 @@ defineExpose({ containerRef: () => treeViewRef.value?.containerRef ?? null })
       :active-node-id="activeEntryId"
       :visible="visible"
       :suppress-scroll="suppressScroll"
+      :path-map="pathMap"
       @select="$emit('select', $event as unknown as TocEntry)"
     />
   </div>
