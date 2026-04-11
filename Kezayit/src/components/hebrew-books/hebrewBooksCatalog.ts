@@ -9,6 +9,7 @@ export interface HebrewBook {
   pages: string
   _csvTags: string
   lastAccessed?: number
+  _searchPath?: string // pre-normalized search string, built once at catalog load
 }
 
 export function getHbPdfUrl(bookId: string): string {
@@ -21,15 +22,21 @@ export async function loadHbCatalog(): Promise<HebrewBook[]> {
     .split('\n')
     .map((line) => line.split(','))
     .filter((row) => row.length >= 6 && row[1]?.trim())
-    .map((row) => ({
-      id: row[0]?.trim() ?? '',
-      title: row[1]?.trim() ?? '',
-      author: row[2]?.trim() ?? '',
-      printingPlace: row[3]?.trim() ?? '',
-      printingYear: row[4]?.trim() ?? '',
-      pages: row[5]?.trim() ?? '',
-      _csvTags: row[6]?.trim() ?? '',
-    }))
+    .map((row) => {
+      const title = row[1]?.trim() ?? ''
+      const author = row[2]?.trim() ?? ''
+      const csvTags = row[6]?.trim() ?? ''
+      return {
+        id: row[0]?.trim() ?? '',
+        title,
+        author,
+        printingPlace: row[3]?.trim() ?? '',
+        printingYear: row[4]?.trim() ?? '',
+        pages: row[5]?.trim() ?? '',
+        _csvTags: csvTags,
+        _searchPath: `${normalize(title)} ${normalize(author)} ${normalize(csvTags)}`,
+      }
+    })
 }
 
 export function searchHbCatalog(catalog: HebrewBook[], term: string): HebrewBook[] {
@@ -40,8 +47,7 @@ export function searchHbCatalog(catalog: HebrewBook[], term: string): HebrewBook
   if (!words.length) return []
   return catalog
     .filter((b) => {
-      const path = `${normalize(b.title)} ${normalize(b.author)} ${normalize(b._csvTags)}`
-      const pathWords = path.split(/\s+/)
+      const pathWords = (b._searchPath ?? '').split(/\s+/)
       return words.every((qw) => pathWords.some((pw) => pw === qw || pw.includes(qw)))
     })
     .sort((a, b) => a.title.localeCompare(b.title))

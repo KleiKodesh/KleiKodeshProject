@@ -5,7 +5,6 @@ import {
   IconChevronUp20Regular,
   IconChevronRight20Regular,
   IconChevronLeft20Regular,
-  IconSearch20Regular,
   IconMinimize20Regular,
   IconBookOpen20Regular,
   IconFilter20Regular,
@@ -122,13 +121,6 @@ function handleKeydown(e: KeyboardEvent) {
       <IconChevronLeft20Regular />
     </button>
     <div class="sep" />
-    <!-- <button
-      class="btn c-pointer hover-bg"
-      title="חיפוש במפרשים"
-      @click.stop="emit('toggle-search')"
-    >
-      <IconSearch20Regular />
-    </button> -->
     <button
       class="btn c-pointer hover-bg"
       title="פתח ספר זה בלשונית חדשה"

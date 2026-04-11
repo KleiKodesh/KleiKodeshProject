@@ -10,12 +10,10 @@ import {
   IconArrowDownload24Filled,
 } from '@iconify-prerendered/vue-fluent'
 import { IconSettings24, IconSearchSparkle24 } from '@iconify-prerendered/vue-fluent-color'
-import { useTabStore } from '@/stores/tabStore'
 import { isHosted, dbReady } from '@/host/db'
-import { useEventListener } from '@vueuse/core'
 import { useAppNavigation } from '@/composables/useAppNavigation'
+import { useTilesKeys } from '@/composables/useTileGridKeys'
 
-const tabStore = useTabStore()
 const { navigate } = useAppNavigation()
 
 const baseTiles = [
@@ -39,38 +37,12 @@ const noDbTiles = [
 const tiles = computed(() => (isHosted && !dbReady.value ? noDbTiles : baseTiles))
 
 const pageRef = ref<HTMLElement | null>(null)
-const tileRefs = ref<InstanceType<typeof HomeTile>[]>([])
-const focusedIndex = ref<number | null>(null)
 
-function focusTile(index: number) {
-  const clamped = Math.max(0, Math.min(index, tiles.value.length - 1))
-  focusedIndex.value = clamped
-  const el = tileRefs.value[clamped]?.$el as HTMLElement | undefined
-  el?.focus()
-}
-
-useEventListener(pageRef, 'keydown', (e: KeyboardEvent) => {
-  const arrows = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']
-  if (!arrows.includes(e.key)) return
-  e.preventDefault()
-
-  if (focusedIndex.value === null) {
-    focusTile(0)
-    return
-  }
-
-  const current = focusedIndex.value
-  if (e.key === 'ArrowLeft') focusTile(current + 1)
-  else if (e.key === 'ArrowRight') focusTile(current - 1)
-  else if (e.key === 'ArrowDown') focusTile(current + 4)
-  else if (e.key === 'ArrowUp') focusTile(current - 4)
-})
-
-useEventListener(pageRef, 'focusout', (e: FocusEvent) => {
-  if (!pageRef.value?.contains(e.relatedTarget as Node)) {
-    focusedIndex.value = null
-  }
-})
+const { focusedIndex } = useTilesKeys(
+  pageRef,
+  () => tiles.value.length,
+  (i) => navigate(tiles.value[i].label),
+)
 
 onMounted(() => pageRef.value?.focus())
 
@@ -85,11 +57,9 @@ async function onTap(label: string) {
       <HomeTile
         v-for="(t, i) in tiles"
         :key="t.label"
-        ref="tileRefs"
         v-bind="t"
         :is-focused="focusedIndex === i"
         @tap="onTap(t.label)"
-        @focus="focusedIndex = i"
       />
     </div>
   </div>

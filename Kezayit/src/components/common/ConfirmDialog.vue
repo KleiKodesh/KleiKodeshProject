@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
+import { useEventListener } from '@vueuse/core'
 
 defineProps<{
   title: string
@@ -11,7 +11,7 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
-function onKey(e: KeyboardEvent) {
+useEventListener('keydown', (e: KeyboardEvent) => {
   if (e.key === 'Enter') {
     e.preventDefault()
     emit('confirm')
@@ -20,10 +20,7 @@ function onKey(e: KeyboardEvent) {
     e.preventDefault()
     emit('cancel')
   }
-}
-
-onMounted(() => window.addEventListener('keydown', onKey))
-onUnmounted(() => window.removeEventListener('keydown', onKey))
+})
 </script>
 
 <template>

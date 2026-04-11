@@ -16,8 +16,9 @@ const props = defineProps<{ tabs: Tab[]; activeTabId: string }>()
 const emit = defineEmits<{ select: [id: string]; close: [id: string]; dismiss: [] }>()
 
 const containerRef = ref<HTMLElement | null>(null)
-const visibleTabs = () =>
-  props.tabs.filter((t) => t.id !== props.activeTabId && t.route !== '/settings')
+const visibleTabs = computed(() =>
+  props.tabs.filter((t) => t.id !== props.activeTabId && t.route !== '/settings'),
+)
 
 nextTick(() => containerRef.value?.focus())
 </script>

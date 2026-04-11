@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { isHosted, dbReady, onWebviewEvent } from '@/host/db'
@@ -72,9 +72,10 @@ const dbPath = ref(dbReady.value ? (window.__webviewDbPath ?? '') : '')
 const dismissed = ref(false)
 
 onMounted(() => {
-  onWebviewEvent((msg) => {
+  const unregister = onWebviewEvent((msg) => {
     if (msg.event === 'dbPathPicked') dbPath.value = msg.path as string
   })
+  onUnmounted(unregister)
 })
 
 function pickDbPath() {

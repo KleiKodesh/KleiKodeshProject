@@ -2,7 +2,7 @@ import { ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import type { Ref } from 'vue'
 
-const TILE_WIDTH = 72 + 6 // tile width + gap (matches .tiles-grid CSS)
+const TILE_WIDTH = 72 + 20 // tile width + gap (matches .home-grid CSS)
 
 export function useTilesKeys(
   containerEl: Ref<HTMLElement | null>,
@@ -14,7 +14,9 @@ export function useTilesKeys(
 
   function getColumns(): number {
     if (!containerEl.value) return 1
-    return Math.max(1, Math.floor(containerEl.value.clientWidth / TILE_WIDTH))
+    const grid = containerEl.value.querySelector('.home-grid') as HTMLElement | null
+    const measured = grid ?? containerEl.value
+    return Math.max(1, Math.floor(measured.clientWidth / TILE_WIDTH))
   }
 
   function scrollItemIntoView(index: number) {

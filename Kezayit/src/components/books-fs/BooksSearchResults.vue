@@ -96,8 +96,8 @@ function selectTileItem(i: number) {
                 items[vRow.index]!.book.authors
               }}</span>
             </span>
-            <span v-if="items[vRow.index]!.book.fullPath" class="item-path">{{
-              items[vRow.index]!.book.fullPath!.split(' / ').slice(0, -1).join(' / ')
+            <span v-if="items[vRow.index]!.book.parentPath" class="item-path">{{
+              items[vRow.index]!.book.parentPath
             }}</span>
           </span>
         </div>

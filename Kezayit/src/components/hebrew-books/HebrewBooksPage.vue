@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
@@ -8,6 +8,7 @@ import BottomSearchBar from '@/components/common/BottomSearchBar.vue'
 import { useHebrewBooks } from './useHebrewBooks'
 import { useVirtualListKeys } from '@/composables/useVirtualListKeyNav'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
+import { useEventListener } from '@vueuse/core'
 
 const {
   displayedBooks,
@@ -54,15 +55,11 @@ function updateOnline() {
 
 onMounted(() => {
   load()
-  window.addEventListener('online', updateOnline)
-  window.addEventListener('offline', updateOnline)
   searchInputRef.value?.focus()
 })
 
-onUnmounted(() => {
-  window.removeEventListener('online', updateOnline)
-  window.removeEventListener('offline', updateOnline)
-})
+useEventListener(window, 'online', updateOnline)
+useEventListener(window, 'offline', updateOnline)
 
 function onBookClicked(i: number, book: (typeof displayedBooks.value)[number]) {
   focusedIndex.value = i

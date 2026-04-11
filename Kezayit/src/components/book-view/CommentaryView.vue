@@ -342,6 +342,13 @@ defineExpose({
   captureScrollPos,
   restoreCommentaryScrollPos,
 })
+
+function asHeader(item: FlatItem | undefined) {
+  return item?.type === 'header' ? item : null
+}
+function asLine(item: FlatItem | undefined) {
+  return item?.type === 'line' ? item : null
+}
 </script>
 
 <template>
@@ -400,9 +407,9 @@ defineExpose({
             >
               <CommentaryHeader
                 v-if="flatItems[vItem.index]?.type === 'header'"
-                :book-title="(flatItems[vItem.index] as any).bookTitle"
-                :section-label="(flatItems[vItem.index] as any).sectionLabel"
-                :sub-section-label="(flatItems[vItem.index] as any).subSectionLabel"
+                :book-title="asHeader(flatItems[vItem.index])!.bookTitle"
+                :section-label="asHeader(flatItems[vItem.index])!.sectionLabel"
+                :sub-section-label="asHeader(flatItems[vItem.index])!.subSectionLabel"
                 :groups="visibleGroups"
                 @navigate-section="(d, id) => emit('navigate-section', d, id)"
                 @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)"
@@ -410,7 +417,7 @@ defineExpose({
               <div
                 v-else
                 class="line"
-                v-html="renderContent((flatItems[vItem.index] as any).content, vItem.index)"
+                v-html="renderContent(asLine(flatItems[vItem.index])!.content, vItem.index)"
               />
             </div>
           </div>
