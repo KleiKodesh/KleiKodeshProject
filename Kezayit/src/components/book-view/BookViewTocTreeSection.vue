@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import TreeView from '@/components/common/TreeView.vue'
-import type { TreeNodeItem } from '@/components/common/TreeNode.vue'
 import type { TocEntry } from './useToc'
 import type { SearchableTree } from '@/utils/tocSearchUtils'
 
@@ -25,13 +24,13 @@ defineExpose({ containerRef: () => treeViewRef.value?.containerRef ?? null })
     <div v-if="title" class="section-title">{{ title }}</div>
     <TreeView
       ref="treeViewRef"
-      :nodes="entries as unknown as TreeNodeItem[]"
+      :nodes="entries"
       :filter="filter"
       :active-node-id="activeEntryId"
       :visible="visible"
       :suppress-scroll="suppressScroll"
       :search-tree="searchTree"
-      @select="$emit('select', $event as unknown as TocEntry)"
+      @select="$emit('select', $event as TocEntry)"
     />
   </div>
 </template>

@@ -41,12 +41,7 @@ export function useBookViewSearch(
     return results
   })
 
-  // keep backward-compat: unique line indices that have matches
-  const matchLineIndices = computed(() => {
-    const seen = new Set<number>()
-    for (const m of matches.value) seen.add(m.lineIndex)
-    return seen
-  })
+  // keep backward-compat: unique line indices that have matches — removed (unused)
 
   watch(
     matches,
@@ -84,7 +79,6 @@ export function useBookViewSearch(
     currentMatchIdx,
     currentMatchLineIndex,
     currentMatchOccurrence,
-    matchLineIndices,
     next,
     prev,
     clear,

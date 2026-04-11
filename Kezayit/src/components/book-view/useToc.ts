@@ -2,15 +2,11 @@ import { ref, watch } from 'vue'
 import { query } from '@/host/db'
 import { SQL } from '@/host/queries.sql'
 import { SearchableTree, stripTocTitleRoots } from '@/utils/tocSearchUtils'
+import type { TreeNodeItem } from '@/components/common/TreeNode.vue'
 
-export interface TocEntry {
-  id: number
-  parentId: number | null
-  level: number
+export interface TocEntry extends TreeNodeItem {
   lineId: number | null
   lineIndex: number | null
-  hasChildren: number
-  text: string
 }
 export interface AltTocStructure {
   id: number

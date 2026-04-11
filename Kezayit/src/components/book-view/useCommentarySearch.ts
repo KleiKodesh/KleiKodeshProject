@@ -39,12 +39,7 @@ export function useCommentarySearch(
     return results
   })
 
-  // keep backward-compat: unique flat indices that have matches
-  const matchFlatIndices = computed(() => {
-    const seen = new Set<number>()
-    for (const m of matches.value) seen.add(m.flatIndex)
-    return seen
-  })
+  // keep backward-compat: unique flat indices that have matches — removed (unused)
 
   watch(
     matches,
@@ -82,7 +77,6 @@ export function useCommentarySearch(
     currentMatchIdx,
     currentMatchFlatIndex,
     currentMatchOccurrence,
-    matchFlatIndices,
     next,
     prev,
     clear,
