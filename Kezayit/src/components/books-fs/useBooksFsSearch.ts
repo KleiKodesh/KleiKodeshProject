@@ -58,10 +58,14 @@ export function useBooksFsSearch(searchQuery: ReturnType<typeof ref<string>>) {
   const searching = ref(false)
 
   function filterBooks(words: string[]) {
+    const exactWords = words.slice(0, -1)
+    const prefixWord = words[words.length - 1]!
     return store.allBooks
       .filter((b) => {
         const pathWords = (b.searchPath ?? '').split(/\s+/)
-        return words.every((qw) => pathWords.some((pw) => pw === qw || pw.includes(qw)))
+        const exactOk = exactWords.every((qw) => pathWords.some((pw) => pw === qw))
+        const prefixOk = pathWords.some((pw) => pw.includes(prefixWord))
+        return exactOk && prefixOk
       })
       .sort((a, b) => (a.treeOrder ?? 0) - (b.treeOrder ?? 0))
   }
