@@ -13,16 +13,21 @@ export function useBookViewSearch(
   currentLineIndex: () => number = () => 0,
 ) {
   const query = ref('')
-  // Debounce the scan — avoids O(n) full-lines scan on every keystroke while
-  // lines are still streaming in chunk by chunk (each chunk arrival re-triggers lines()).
+  // Debounce the query — avoids re-scanning on every keystroke.
+  // Also debounce lines so chunk-by-chunk arrivals during book load don't trigger
+  // a full re-scan on every chunk when a search query is already active.
   const debouncedQuery = refDebounced(query, 150)
+  const debouncedLines = refDebounced(
+    computed(() => (debouncedQuery.value ? lines() : [])),
+    150,
+  )
   const currentMatchIdx = ref(0)
 
   const matches = computed<BookViewMatch[]>(() => {
     const q = removeDiacriticsForSearch(debouncedQuery.value.trim())
     if (!q) return []
     const results: BookViewMatch[] = []
-    for (const line of lines()) {
+    for (const line of debouncedLines.value) {
       if (line.content === null) continue
       const stripped = removeDiacriticsForSearch(line.content.replace(/<[^>]*>/g, ''))
       let idx = 0,
@@ -37,7 +42,11 @@ export function useBookViewSearch(
   })
 
   // keep backward-compat: unique line indices that have matches
-  const matchLineIndices = computed(() => [...new Set(matches.value.map((m) => m.lineIndex))])
+  const matchLineIndices = computed(() => {
+    const seen = new Set<number>()
+    for (const m of matches.value) seen.add(m.lineIndex)
+    return seen
+  })
 
   watch(
     matches,

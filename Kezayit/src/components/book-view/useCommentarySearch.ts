@@ -40,7 +40,11 @@ export function useCommentarySearch(
   })
 
   // keep backward-compat: unique flat indices that have matches
-  const matchFlatIndices = computed(() => [...new Set(matches.value.map((m) => m.flatIndex))])
+  const matchFlatIndices = computed(() => {
+    const seen = new Set<number>()
+    for (const m of matches.value) seen.add(m.flatIndex)
+    return seen
+  })
 
   watch(
     matches,

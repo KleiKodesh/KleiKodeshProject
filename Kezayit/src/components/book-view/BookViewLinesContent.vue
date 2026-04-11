@@ -445,9 +445,12 @@ function restoreScrollPos(lineIndex: number, scrollOffset = 0) {
           stopContentWatch?.()
           stop?.()
           nextTick(() => {
-            restoreScrollPos(
-              targetIndex,
-              props.initialScrollIndex != null ? (props.initialScrollOffset ?? 0) : 0,
+            const offset = props.initialScrollIndex != null ? (props.initialScrollOffset ?? 0) : 0
+            restoreScrollPos(targetIndex, offset)
+            // Emit scrolled after the programmatic restore so TOC tracking picks up
+            // the correct position even if tocEntries weren't loaded yet during onScroll.
+            requestAnimationFrame(() =>
+              requestAnimationFrame(() => emit('scrolled', targetIndex, targetIndex)),
             )
             if (props.searchHighlightLineIndex != null && scrollerEl.value) {
               nextTick(() => {

@@ -131,8 +131,25 @@ if (openTocEntryId != null) {
   const stop = watch(tocEntries, (entries) => {
     if (!entries.length) return
     const entry = entries.find((e) => e.id === openTocEntryId)
-    if (entry != null) activeTocEntryId.value = entry.id
+    if (entry != null) {
+      activeTocEntryId.value = entry.id
+      tabStore.updateActiveTab({ tocPath: getTocPath(entry) })
+    }
     stop()
+  })
+} else {
+  // On reload: tocEntries may arrive after the initial scroll event, so the
+  // first onLinesScrolled call finds no entry and tocPath is never set.
+  // Once entries load, derive the active entry from the current scroll position.
+  const stop = watch(tocEntries, (entries) => {
+    if (!entries.length) return
+    stop()
+    if (activeTocEntryId.value != null) return // already set by a scroll event
+    const entry = getActiveTocEntry(currentScrollLineIndex.value)
+    if (entry) {
+      activeTocEntryId.value = entry.id
+      tabStore.updateActiveTab({ tocPath: getTocPath(entry) })
+    }
   })
 }
 

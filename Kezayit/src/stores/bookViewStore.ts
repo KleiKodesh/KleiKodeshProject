@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useTabStore } from './tabStore'
 import { useSettingsStore } from './settingsStore'
 import { idbGet, idbSet, KEYS } from '@/utils/idbPersistence'
@@ -45,6 +45,18 @@ export const useBookViewStore = defineStore('bookView', () => {
   function setZoom(tabId: string, bookId: number, value: number) {
     zoomMap.value.set(zoomKey(tabId, bookId), value)
   }
+
+  // Prune zoom entries for tabs that no longer exist
+  watch(
+    () => tabStore.tabs.map((t) => t.id),
+    (currentIds) => {
+      const idSet = new Set(currentIds)
+      for (const key of zoomMap.value.keys()) {
+        const tabId = key.split(':')[0]!
+        if (!idSet.has(tabId)) zoomMap.value.delete(key)
+      }
+    },
+  )
 
   const zoom = computed({
     get() {
