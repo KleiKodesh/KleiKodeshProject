@@ -4,7 +4,7 @@ Pure utility functions. No Vue, no Pinia, no reactivity. If a utility needs a re
 
 **normalizeText.ts** — `normalize(s)`: lowercases and strips Hebrew/ASCII quote characters. Import this as the base normalization step before any search comparison.
 
-**tocSearchUtils.ts** — TOC-specific search used by the books-fs two-tier search. Use `splitQuery` to split a multi-word query into a book part and a TOC part, `buildTocSearchPaths` to build normalized paths from flat TOC rows (also strips nikud for חסר spelling tolerance), and `matchWords` for ordered subsequence matching.
+**tocSearchUtils.ts** — TOC-specific search used by the books-fs two-tier search. Use `splitQuery` to split a multi-word query into a book part and a TOC part, `buildTocSearchPaths` to build normalized paths from flat TOC rows (also strips nikud for חסר spelling tolerance), `matchWords` for ordered subsequence matching, and `stripTocTitleRoots` to remove root TOC entries that merely repeat the book title (pass `singleRootOnly: true` for strict single-root mode; omit for multi-book batch stripping). Nodes with a `level` field have it decremented automatically when their parent root is removed.
 
 **idbPersistence.ts** — the only file in the app that touches IndexedDB. All IDB reads and writes go through here. Do not call any IDB API from anywhere else. Stores import from here; components and composables do not.
 

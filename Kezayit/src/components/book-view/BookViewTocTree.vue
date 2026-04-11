@@ -2,7 +2,7 @@
 import { ref, computed, nextTick, watch } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import type { TocEntry, AltTocSection } from './useToc'
-import type { SearchableTree } from '@/utils/tocSearchUtils'
+import { SearchableTree } from '@/utils/tocSearchUtils'
 import BookViewTocTreeSection from './BookViewTocTreeSection.vue'
 import SplitPane from '@/components/common/SplitPane.vue'
 
@@ -56,6 +56,16 @@ function onSelect(entry: TocEntry) {
 
 const hasToc = computed(() => props.tocEntries.length > 0)
 const hasAlt = computed(() => props.altTocSections.length > 0)
+
+// Build alt TOC search trees lazily — only when the user actually types a search query
+watch(searchQuery, (q) => {
+  if (!q) return
+  for (const section of props.altTocSections) {
+    if (section.searchTree == null) {
+      section.searchTree = new SearchableTree(section.entries)
+    }
+  }
+})
 </script>
 
 <template>
@@ -86,7 +96,7 @@ const hasAlt = computed(() => props.altTocSections.length > 0)
               :title="null"
               :entries="section.entries"
               :filter="searchQuery"
-              :search-tree="section.searchTree"
+              :search-tree="section.searchTree ?? undefined"
               @select="emit('altSelect', $event)"
             />
           </template>

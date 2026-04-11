@@ -29,19 +29,16 @@ function setRowRef(el: unknown, id: number) {
   else rowRefs.value.delete(id)
 }
 
-const nodeMap = computed(() => {
+function expandAncestors(id: number) {
+  // Build a local map on demand — only called on active-entry change, not on every render
   const map = new Map<number, TreeNodeItem>()
   for (const n of props.nodes) map.set(n.id, n)
-  return map
-})
-
-function expandAncestors(id: number) {
-  const node = props.nodes.find((n) => n.id === id)
+  const node = map.get(id)
   if (!node) return
   let current = node
   while (current.parentId != null) {
     expanded.value.add(current.parentId)
-    const parent = nodeMap.value.get(current.parentId)
+    const parent = map.get(current.parentId)
     if (!parent) break
     current = parent
   }
@@ -92,10 +89,12 @@ function selectNode(i: number, node: TreeNodeItem) {
   emit('select', node)
 }
 
-// Use the passed-in SearchableTree or build one from the current nodes.
-// The internally-built tree is rebuilt whenever nodes change.
-const internalTree = computed(() => new SearchableTree(props.nodes))
-const activeTree = computed(() => props.searchTree ?? internalTree.value)
+// Use the passed-in SearchableTree or build one lazily only when a filter is active
+// and no external tree was provided — avoids constructing segment maps on every load.
+const internalTree = computed(() =>
+  !props.searchTree && props.filter ? new SearchableTree(props.nodes) : null,
+)
+const activeTree = computed(() => props.searchTree ?? internalTree.value ?? new SearchableTree([]))
 
 const visibleNodes = computed(() => {
   if (props.filter) {

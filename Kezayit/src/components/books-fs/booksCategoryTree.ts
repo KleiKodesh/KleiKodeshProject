@@ -8,6 +8,7 @@ export interface BookRow {
   treeOrder?: number
   fullPath?: string
   searchPath?: string
+  searchWords?: string[] // pre-split searchPath tokens — avoids re-splitting on every keystroke
   period?: string // Chronological period: תנ"ך, ספרות חז"ל, גאונים, ראשונים, אחרונים, etc.
   rootCategory?: string // First-tier category title
 }
@@ -53,6 +54,7 @@ export function assignFullPaths(nodes: CategoryNode[], parentPath = '', counter 
       book.fullPath = `${nodePath} / ${book.title}`
       const authorPart = book.authors ? ` ${normalize(book.authors)}` : ''
       book.searchPath = normalize(book.fullPath) + authorPart
+      book.searchWords = book.searchPath.split(/\s+/).filter((w) => w.length > 0)
     }
     assignFullPaths(node.children, nodePath, counter)
   }

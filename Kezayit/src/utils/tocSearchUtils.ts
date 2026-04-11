@@ -1,4 +1,4 @@
-import { normalize } from './normalizeText'
+﻿import { normalize } from './normalizeText'
 
 export interface TocNode {
   id: number
@@ -11,6 +11,75 @@ export interface TocNode {
 export interface TocSearchNode extends TocNode {
   tocSearchPath: string // normalized, space-joined, for matching
   tocDisplayPath: string // original text joined with " / ", for display
+}
+
+// Chars stripped before fuzzy title comparison: Hebrew geresh/gershayim, ASCII/curly quotes, maqaf, hyphen
+const TITLE_STRIP_RE = /["\u05f4\u05f3\u201c\u201d\u2018\u2019\u05be\-]/g
+
+// Minimum ratio: shorter word-set must be >= this fraction of the longer one
+const TITLE_RATIO = 0.6
+
+/**
+ * Bookids whose root TOC entry is a genuine title variant that the fuzzy rule
+ * misses (ratio too low because the root drops a long subtitle like "על שולחן ערוך").
+ * Extend this list when new books with the same pattern arrive.
+ */
+const FORCE_STRIP_BOOK_IDS = new Set([
+  6036, // אמרי בינה על שולחן ערוך אורח חיים  →  אמרי בינה אורח חיים
+  6037, // אמרי בינה על שולחן ערוך יורה דעה   →  אמרי בינה יורה דעה
+  6042, // חידושי הרי"ם על שולחן ערוך אבן העזר →  חידושי הרי"ם אבן העזר
+  6043, // חידושי הרי"ם על שולחן ערוך חושן משפט חלק א  →  חידושי הרי"ם חושן משפט חלק א
+  6044, // חידושי הרי"ם על שולחן ערוך חושן משפט חלק ב  →  חידושי הרי"ם חושן משפט חלק ב
+])
+
+function normTitle(s: string): string[] {
+  return s.replace(TITLE_STRIP_RE, '').split(/\s+/).filter(Boolean)
+}
+
+function isTitleVariant(bookTitle: string, rootText: string): boolean {
+  const bt = normTitle(bookTitle)
+  const rt = normTitle(rootText)
+  if (!bt.length || !rt.length) return false
+  const [shorter, longer] = bt.length <= rt.length ? [bt, rt] : [rt, bt]
+  if (shorter.length < longer.length * TITLE_RATIO) return false
+  return shorter.every((w) => longer.includes(w))
+}
+
+/**
+ * Remove root TOC entries whose text is a title variant of the book title.
+ * Matching is fuzzy: strips quotes/maqaf, then checks that the shorter word-set
+ * is a subset of the longer one with a minimum overlap ratio of 0.6.
+ * A small static list of bookIds covers known cases the ratio rule misses.
+ *
+ * When a root is removed its direct children are re-parented to null.
+ * If nodes carry a `level` field it is decremented by 1 for affected descendants.
+ *
+ * Pass `singleRootOnly: true` to only strip when there is exactly one root.
+ */
+export function stripTocTitleRoots<T extends { id: number; parentId: number | null; text: string }>(
+  nodes: T[],
+  bookTitle: string,
+  options: { singleRootOnly?: boolean; bookId?: number } = {},
+): T[] {
+  if (!bookTitle || !nodes.length) return nodes
+  const roots = nodes.filter((n) => n.parentId === null)
+  if (options.singleRootOnly && roots.length !== 1) return nodes
+  const forceStrip = options.bookId != null && FORCE_STRIP_BOOK_IDS.has(options.bookId)
+  const rootIds = new Set(
+    roots.filter((r) => forceStrip || isTitleVariant(bookTitle, r.text)).map((r) => r.id),
+  )
+  if (!rootIds.size) return nodes
+  const hasLevel = 'level' in nodes[0]!
+  return nodes
+    .filter((n) => !rootIds.has(n.id))
+    .map((n) => {
+      const parentWasRoot = n.parentId !== null && rootIds.has(n.parentId)
+      const updated = parentWasRoot ? { ...n, parentId: null } : n
+      if (hasLevel && parentWasRoot) {
+        return { ...updated, level: (updated as unknown as { level: number }).level - 1 }
+      }
+      return updated
+    })
 }
 
 /**
@@ -30,19 +99,26 @@ export function splitQuery(
   return null
 }
 
-/** Normalize a string for TOC search: strip quotes, lowercase, tokenize punctuation */
-const normalizeToc = (s: string) =>
-  normalize(s)
-    .replace(/[^\p{L}\p{N}]+/gu, (m) => ` ${m} `)
+/**
+ * Replace non-alphanumeric chars with spaces, but keep . and : attached to a preceding
+ * letter/digit (e.g. י. or י: as in דף י. / דף י:).
+ */
+function tokenizePunctuation(s: string): string {
+  return s
+    .replace(/([^\p{L}\p{N}])/gu, (ch, _m, offset, str) => {
+      if ((ch === '.' || ch === ':') && offset > 0 && /[\p{L}\p{N}]/u.test(str[offset - 1]!))
+        return ch
+      return ' '
+    })
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+/** Normalize a string for TOC search: strip quotes, lowercase, tokenize punctuation */
+const normalizeToc = (s: string) => tokenizePunctuation(normalize(s))
 
 /** Apply only the TOC-specific tokenization step (for already-normalized strings) */
-const tocTokenize = (s: string) =>
-  s
-    .replace(/[^\p{L}\p{N}]+/gu, (m) => ` ${m} `)
-    .replace(/\s+/g, ' ')
-    .trim()
+const tocTokenize = (s: string) => tokenizePunctuation(s)
 
 /** Normalize an array of TOC query words — input is already normalize()'d, so skip that step */
 export const normalizeTocWords = (words: string[]) =>
@@ -82,7 +158,9 @@ export function buildTocSearchPaths(nodes: TocNode[]): TocSearchNode[] {
 export function matchWords(path: string, words: string[]): boolean {
   let pos = 0
   for (const w of words) {
-    const re = new RegExp(`(?:^|\\s)${w}(?:\\s|$)`)
+    // Escape regex special chars so e.g. "י." does not treat "." as a wildcard
+    const escaped = w.replace(/[$()*+.?[\\\]^{|}]/g, (c) => ['\\', c].join(''))
+    const re = new RegExp('(?:^|\\s)' + escaped + '(?:\\s|$)')
     const slice = path.slice(pos)
     const m = re.exec(slice)
     if (!m) return false
@@ -148,7 +226,13 @@ export class SearchableTree {
     const tokenize = (text: string): string[] =>
       text
         .toLowerCase()
-        .split(/[^\p{L}\p{N}]+/u)
+        // Keep . and : attached to a preceding letter/digit (e.g. י. י:)
+        .replace(/([^\p{L}\p{N}])/gu, (ch, _m, offset, str) => {
+          if ((ch === '.' || ch === ':') && offset > 0 && /[\p{L}\p{N}]/u.test(str[offset - 1]!))
+            return ch
+          return ' '
+        })
+        .split(/\s+/)
         .filter((t) => t.length > 0)
 
     const getSegments = (id: number): string[][] => {

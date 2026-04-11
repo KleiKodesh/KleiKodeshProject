@@ -1,7 +1,7 @@
 import { ref, watch } from 'vue'
 import { query } from '@/host/db'
 import { SQL } from '@/host/queries.sql'
-import { SearchableTree } from '@/utils/tocSearchUtils'
+import { SearchableTree, stripTocTitleRoots } from '@/utils/tocSearchUtils'
 
 export interface TocEntry {
   id: number
@@ -21,17 +21,16 @@ export interface AltTocStructure {
 export interface AltTocSection {
   structure: AltTocStructure
   entries: TocEntry[]
-  searchTree: SearchableTree
+  searchTree: SearchableTree | null // built lazily on first search use
 }
 
-function stripBookTitleRoot(entries: TocEntry[], bookTitle: string | undefined): TocEntry[] {
-  if (!bookTitle || !entries.length) return entries
-  const roots = entries.filter((e) => e.parentId === null)
-  if (roots.length !== 1 || roots[0]!.text !== bookTitle) return entries
-  const rootId = roots[0]!.id
-  return entries
-    .filter((e) => e.id !== rootId)
-    .map((e) => ({ ...e, parentId: e.parentId === rootId ? null : e.parentId, level: e.level - 1 }))
+function stripBookTitleRoot(
+  entries: TocEntry[],
+  bookTitle: string | undefined,
+  bookId: number | undefined,
+): TocEntry[] {
+  if (!bookTitle) return entries
+  return stripTocTitleRoots(entries, bookTitle, { singleRootOnly: true, bookId })
 }
 
 export function useToc(bookId: () => number | undefined, bookTitle?: () => string | undefined) {
@@ -49,13 +48,13 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
         query<TocEntry>(SQL.GET_ALL_TOC_ENTRIES, [id]),
         query<AltTocStructure>(SQL.GET_ALT_TOC_STRUCTURES, [id]),
       ])
-      const stripped = stripBookTitleRoot(entries, bookTitle?.())
+      const stripped = stripBookTitleRoot(entries, bookTitle?.(), id)
       tocEntries.value = stripped
       tocSearchTree.value = new SearchableTree(stripped)
       altTocSections.value = await Promise.all(
         structures.map(async (s) => {
           const entries = await query<TocEntry>(SQL.GET_ALL_ALT_TOC_ENTRIES, [s.id])
-          return { structure: s, entries, searchTree: new SearchableTree(entries) }
+          return { structure: s, entries, searchTree: null }
         }),
       )
     } catch (e) {
@@ -74,13 +73,37 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
   )
 
   function getActiveTocEntry(lineIndex: number): TocEntry | null {
-    let active: TocEntry | null = null
-    for (const e of tocEntries.value) {
-      if (e.lineIndex == null) continue
-      if (e.lineIndex <= lineIndex) active = e
-      else break
+    const entries = tocEntries.value
+    if (!entries.length) return null
+    // Binary search for the last entry with lineIndex <= the given lineIndex.
+    // Entries without a lineIndex are skipped; the array is ordered by lineIndex.
+    let lo = 0
+    let hi = entries.length - 1
+    let result: TocEntry | null = null
+    while (lo <= hi) {
+      const mid = (lo + hi) >>> 1
+      const e = entries[mid]!
+      if (e.lineIndex == null) {
+        // scan outward to find a comparable entry
+        let found = false
+        for (let i = mid - 1; i >= lo; i--) {
+          if (entries[i]!.lineIndex != null) {
+            hi = i
+            found = true
+            break
+          }
+        }
+        if (!found) lo = mid + 1
+        continue
+      }
+      if (e.lineIndex <= lineIndex) {
+        result = e
+        lo = mid + 1
+      } else {
+        hi = mid - 1
+      }
     }
-    return active
+    return result
   }
 
   function getTocPath(entry: TocEntry): string {
