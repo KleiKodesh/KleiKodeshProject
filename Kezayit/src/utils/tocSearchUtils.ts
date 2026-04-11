@@ -123,10 +123,16 @@ export interface SearchableNode {
  *   pairs that landed in the same segment. Any result where a bonded pair lands
  *   in different segments is filtered out.
  *   This ensures "פרק ד" (bonded in top result) rejects "פרק א / פסוק ד".
+ *
+ * Pass 3 — ancestry deduplication:
+ *   If a node matched, all its descendants are suppressed. So "פרק ד" matching
+ *   prevents "פרק ד / פסוק א", "פרק ד / פסוק ב" etc. from also appearing.
  */
 export class SearchableTree {
   /** segments[nodeId] = array of segments, each segment = array of lowercase tokens */
   private segments: Map<number, string[][]> = new Map()
+  /** parentId per node, for ancestry deduplication */
+  private parentIds: Map<number, number | null> = new Map()
   /** display path per node id, for rendering */
   readonly displayPaths: Map<number, string> = new Map()
 
@@ -170,6 +176,7 @@ export class SearchableTree {
     for (const node of nodes) {
       this.segments.set(node.id, getSegments(node.id))
       this.displayPaths.set(node.id, getDisplay(node.id))
+      this.parentIds.set(node.id, node.parentId)
     }
   }
 
@@ -254,6 +261,20 @@ export class SearchableTree {
       bonded.every((isBonded, i) => !isBonded || segIndices[i] === segIndices[i + 1]),
     )
 
-    return filtered.slice(0, limit === Infinity ? filtered.length : limit).map(({ node }) => node)
+    // Pass 3: ancestry deduplication — if a node matched, suppress all its descendants.
+    // e.g. if "פרק ד" matched, don't also return "פרק ד / פסוק א", "פרק ד / פסוק ב", etc.
+    const matchedIds = new Set(filtered.map(({ node }) => node.id))
+    const deduplicated = filtered.filter(({ node }) => {
+      let parentId = this.parentIds.get(node.id) ?? null
+      while (parentId !== null) {
+        if (matchedIds.has(parentId)) return false
+        parentId = this.parentIds.get(parentId) ?? null
+      }
+      return true
+    })
+
+    return deduplicated
+      .slice(0, limit === Infinity ? deduplicated.length : limit)
+      .map(({ node }) => node)
   }
 }
