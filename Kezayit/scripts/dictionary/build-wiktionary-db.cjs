@@ -43,7 +43,7 @@ const Database    = require('better-sqlite3')
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const DUMP_URL  = 'https://dumps.wikimedia.org/hewiktionary/latest/hewiktionary-latest-pages-articles.xml.bz2'
+const DUMP_URL  = 'https://dumps.wikimedia.org/other/mediawiki_content_current/hewiktionary/2026-04-01/xml/bzip2/hewiktionary-2026-04-01-p2p64178.xml.bz2'
 const DUMP_FILE = path.resolve(__dirname, 'hewiktionary-dump.xml.bz2')
 const OUT_DB    = path.resolve(__dirname, '../../public/wiktionary.db')
 const TMP_DB    = OUT_DB + '.tmp'
