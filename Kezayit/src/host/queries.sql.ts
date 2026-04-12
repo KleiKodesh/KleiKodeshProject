@@ -201,6 +201,61 @@ export const SQL = {
     ORDER BY position ASC
   `,
 
+  // ── Dictionary ───────────────────────────────────────────────────────────────
+
+  /**
+   * All books under the reference/dictionary top-level categories:
+   * cat 75 (מילונים וספרי יעץ) and cat 1220 (ספרות עזר), including all their sub-categories.
+   * Returns books with author names, grouped by sub-category.
+   */
+  GET_DICTIONARY_BOOKS: `
+    SELECT b.id, b.title, b.totalLines, b.categoryId,
+           c.title AS categoryTitle,
+           group_concat(a.name, ', ') AS authors
+    FROM book b
+    JOIN category c ON c.id = b.categoryId
+    LEFT JOIN book_author ba ON ba.bookId = b.id
+    LEFT JOIN author a ON a.id = ba.authorId
+    WHERE b.categoryId IN (
+      SELECT id FROM category WHERE id IN (75, 1220) OR parentId IN (75, 1220)
+    )
+    GROUP BY b.id
+    ORDER BY c.parentId, c.id, b.orderIndex
+  `,
+
+  /**
+   * Search dict_entry by headword — contains match, ordered exact-first then prefix-first.
+   * Params: [containsPattern, exactTerm, prefixPattern, prefixPattern]
+   * e.g. ['%אבב%', 'אבב', 'אבב%', 'אבב%']
+   */
+  SEARCH_DICTIONARY_ENTRIES: `
+    SELECT de.id, de.bookId, de.lineId, de.lineIndex, de.headword, b.title AS bookTitle
+    FROM dict_entry de
+    JOIN book b ON b.id = de.bookId
+    WHERE de.headword LIKE ?
+    ORDER BY
+      CASE WHEN de.headword = ?    THEN 0
+           WHEN de.headword LIKE ? THEN 1
+           ELSE                         2
+      END,
+      de.headword,
+      de.bookId
+    LIMIT 200
+  `,
+
+  /**
+   * Fetch the full content of a dictionary entry.
+   * For ספר הערוך / הפלאה שבערכין / אוצר לעזי רשי: the entry is a single line.
+   * For ספר השרשים: the entry is 2 lines (h3 header + content line).
+   * Returns up to 2 lines starting at lineIndex.
+   */
+  GET_DICTIONARY_ENTRY_LINES: `
+    SELECT lineIndex, content
+    FROM line
+    WHERE bookId = ? AND lineIndex >= ? AND lineIndex < ?
+    ORDER BY lineIndex
+  `,
+
   /** Next toc entry (by lineIndex) whose section contains a link to a given commentary book */
   HAS_COMMENTARY_IN_RANGE: `
     SELECT 1

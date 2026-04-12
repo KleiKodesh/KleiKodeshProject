@@ -253,6 +253,11 @@ export function useHebrewCalendar() {
     displayHebYear.value = hebYear
   }
 
+  function reset() {
+    displayHebMonth.value = new HDate(new Date()).getMonth()
+    displayHebYear.value = new HDate(new Date()).getFullYear()
+  }
+
   const todayHebrewLabel = computed(() => {
     const hd = new HDate(today)
     const parts = hd.renderGematriya().split(' ')
@@ -296,6 +301,7 @@ export function useHebrewCalendar() {
     hebrewMonthLabel,
     gregorianMonthLabel,
     jumpToHebrew,
+    reset,
     todayHebrewLabel,
     todayHolidays,
     parasha,

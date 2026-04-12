@@ -7,6 +7,7 @@ import {
   IconBookOpen24Filled,
   IconApps24Filled,
   IconOpen28Regular,
+  IconBookLetter24Filled,
 } from '@iconify-prerendered/vue-fluent'
 import { IconSettings24, IconSearchSparkle24 } from '@iconify-prerendered/vue-fluent-color'
 import { useAppNavigation } from '@/composables/useAppNavigation'
@@ -25,6 +26,7 @@ const tiles = [
   { label: 'חיפוש', icon: IconSearchSparkle24, color: undefined },
   { label: 'פתח קובץ', icon: IconFolder24Filled, color: '#f0a500' },
   { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#D94F1E' },
+  { label: 'מילונים', icon: IconBookLetter24Filled, color: '#7b5ea7' },
   { label: 'הגדרות', icon: IconSettings24, color: undefined },
   { label: 'סביבות עבודה', icon: IconApps24Filled, color: '#6b7fc4' },
 ]
@@ -72,7 +74,10 @@ function onPopOut() {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
   min-width: 160px;
   direction: rtl;
-  overflow: hidden;
+  max-height: calc(100vh - 60px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
 }
 
 .nav-row {

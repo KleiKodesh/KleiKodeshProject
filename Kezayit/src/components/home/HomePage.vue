@@ -9,6 +9,7 @@ import {
   IconDatabase24Filled,
   IconArrowDownload24Filled,
   IconCalendarRtl24Filled,
+  IconBookLetter24Filled,
 } from '@iconify-prerendered/vue-fluent'
 import { IconSettings24, IconSearchSparkle24 } from '@iconify-prerendered/vue-fluent-color'
 import { isHosted, dbReady } from '@/host/db'
@@ -27,8 +28,9 @@ const baseTiles = [
   { label: 'חיפוש', icon: IconSearchSparkle24 },
   { label: 'פתח קובץ', icon: IconFolder24Filled, color: '#f0a500' },
   { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#D94F1E' },
-  { label: 'סביבות עבודה', icon: IconApps24Filled, color: '#6b7fc4' },
+  { label: 'מילונים', icon: IconBookLetter24Filled, color: '#7b5ea7' },
   { label: 'לוח שנה', icon: IconCalendarRtl24Filled, color: '#2e7d32' },
+  { label: 'סביבות עבודה', icon: IconApps24Filled, color: '#6b7fc4' },
   { label: 'הגדרות', icon: IconSettings24 },
 ]
 
@@ -60,14 +62,16 @@ async function onTap(label: string) {
 
 <template>
   <div ref="pageRef" class="home-page" tabindex="0">
-    <div class="home-grid">
-      <HomeTile
-        v-for="(t, i) in tiles"
-        :key="t.label"
-        v-bind="t"
-        :is-focused="containerFocused && focusedIndex === i"
-        @tap="onTap(t.label)"
-      />
+    <div class="home-inner">
+      <div class="home-grid">
+        <HomeTile
+          v-for="(t, i) in tiles"
+          :key="t.label"
+          v-bind="t"
+          :is-focused="containerFocused && focusedIndex === i"
+          @tap="onTap(t.label)"
+        />
+      </div>
     </div>
 
     <div class="date-bar">
@@ -96,11 +100,19 @@ async function onTap(label: string) {
 .home-page {
   display: flex;
   flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+  outline: none;
+}
+
+.home-inner {
+  display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100%;
-  padding-inline: 24px;
-  outline: none;
+  flex: 1;
+  min-height: min-content;
+  padding: 24px 24px 56px;
 }
 
 .home-grid {

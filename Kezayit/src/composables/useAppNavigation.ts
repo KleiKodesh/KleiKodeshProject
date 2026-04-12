@@ -19,6 +19,7 @@ export function useAppNavigation() {
     'היברו-בוקס': '/hebrewbooks',
     'סביבות עבודה': '/workspaces',
     'לוח שנה': '/hebrew-calendar',
+    מילונים: '/dictionary',
   }
 
   async function navigate(label: string) {

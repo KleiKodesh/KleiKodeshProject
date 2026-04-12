@@ -381,6 +381,10 @@ export function useWeeklyCalendar(city: { value: City }) {
     },
   )
 
+  function reset() {
+    weekOffset.value = 0
+  }
+
   return {
     week,
     weekOffset,
@@ -388,6 +392,7 @@ export function useWeeklyCalendar(city: { value: City }) {
     prevWeek,
     nextWeek,
     goToToday,
+    reset,
     hebrewLabel: computed(() => week.value.hebrewRangeLabel),
     gregLabel: computed(() => week.value.gregRangeLabel),
   }

@@ -21,6 +21,7 @@ const pages: Record<string, unknown> = {
   '/hebrew-calendar': defineAsyncComponent(
     () => import('@/components/hebrew-calendar/HebrewCalendarPage.vue'),
   ),
+  '/dictionary': defineAsyncComponent(() => import('@/components/dictionary/DictionaryPage.vue')),
 }
 </script>
 

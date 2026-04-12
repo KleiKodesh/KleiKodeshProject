@@ -33,7 +33,13 @@ function onToday() {
   viewMode.value === 'weekly' ? weekly.goToToday() : monthly.goToToday()
 }
 
-onMounted(() => initZmanim())
+onMounted(() => {
+  // Reset to today's week/month on every visit — no stale navigation state
+  viewMode.value = 'weekly'
+  weekly.reset()
+  monthly.reset()
+  initZmanim()
+})
 </script>
 
 <template>
