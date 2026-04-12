@@ -8,6 +8,18 @@
 - Avoid indirection — every extra layer is a file someone has to find and open. Only abstract when it genuinely helps navigation and understanding
 - Architecture evolves: simple component → logic grows → extract composable
 
+## File Length & Refactoring Thresholds
+
+These thresholds exist so that agentic AI can reliably read, edit, and reason about any file without losing context or making partial edits.
+
+- Vue single-file components (`.vue`): soft limit 250 lines, hard limit 350 lines. Above 350, the component must be split — extract sub-components or move logic into a composable before adding more code.
+- Composables (`.ts` in `composables/` or feature folders): soft limit 200 lines, hard limit 300 lines. Above 300, split by concern — each composable should own one clearly named behavior.
+- Utility files (`src/utils/*.ts`): soft limit 150 lines, hard limit 250 lines. Above 250, group related functions into a new util file with a descriptive name.
+- Store files (`src/stores/*.ts`): soft limit 200 lines, hard limit 300 lines. Above 300, extract a focused sub-store or move derived logic into a composable.
+- When a file crosses its hard limit during an edit session, refactor it before completing the task — do not leave the file over the limit.
+- Refactoring means splitting into smaller files with clear single responsibilities, not just moving code around. Every extracted file must have a name that describes exactly what it does.
+- After any split, update the `README.md` of the affected folder and update `architecture.md` if the split introduces a new composable, component, or utility that belongs in the architecture map.
+
 ## Components
 
 - Components are dumb — no business logic, no data fetching, just props in, template out

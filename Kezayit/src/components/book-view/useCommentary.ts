@@ -12,7 +12,7 @@ export interface CommentaryLine {
 export interface CommentaryGroup {
   bookId: number
   bookTitle: string
-  path: string // full display path e.g. "ברטנורא על התורה · מפרשים · ראשונים"
+  path: string
   connectionTypes: string[]
   lines: CommentaryLine[]
   category?: string
@@ -80,6 +80,7 @@ function resolveCategory(book: BookRow | undefined): string {
   if (book.period && book.period !== 'אחר') return truncateAtAl(book.period)
   return truncateAtAl(book.rootCategory ?? 'אחר')
 }
+
 const CATEGORY_ORDER = [
   'תנ"ך',
   'משנה',
@@ -103,43 +104,76 @@ function sortCategoryEntries(
   return entries.sort(([catA], [catB]) => categoryRank(catA) - categoryRank(catB))
 }
 
-type RawGroup = {
-  bookId: number
-  bookTitle: string
-  connectionTypes: string[]
-  lines: CommentaryLine[]
-  category: string
-  ct: string
-  treeOrder: number
-}
+// ─── Shared core ────────────────────────────────────────────────────────────
 
-function buildGroups(raw: RawGroup[]): CommentaryGroup[] {
-  const byType = new Map<string, RawGroup[]>()
+type ByBookMap = Map<number, { lineIds: Set<number>; connectionTypes: Set<string> }>
+
+async function buildCommentaryGroups(
+  byBook: ByBookMap,
+  allBooksMap: Map<number, BookRow>,
+): Promise<CommentaryGroup[]> {
+  const bookIds = [...byBook.keys()]
+  const lineIds = [...new Set([...byBook.values()].flatMap((g) => [...g.lineIds]))]
+
+  const [bookRows, lineRows] = await Promise.all([
+    query<{ id: number; title: string }>(SQL.GET_BOOKS_BY_IDS(bookIds.length), bookIds),
+    query<{ id: number; lineIndex: number; content: string }>(
+      SQL.GET_LINES_BY_IDS(lineIds.length),
+      lineIds,
+    ),
+  ])
+
+  const bookTitleMap = new Map(bookRows.map((b) => [b.id, b.title]))
+  const lineMap = new Map(lineRows.map((l) => [l.id, l]))
+
+  const raw = bookIds.map((bookId) => {
+    const g = byBook.get(bookId)!
+    const book = allBooksMap.get(bookId)
+    const ct = [...g.connectionTypes][0] ?? 'OTHER'
+    return {
+      bookId,
+      bookTitle: bookTitleMap.get(bookId) ?? String(bookId),
+      connectionTypes: [...g.connectionTypes],
+      lines: [...g.lineIds]
+        .map((id) => ({
+          lineId: id,
+          lineIndex: lineMap.get(id)?.lineIndex ?? 0,
+          content: lineMap.get(id)?.content ?? '',
+        }))
+        .sort((a, b) => a.lineIndex - b.lineIndex),
+      category: resolveCategory(book),
+      ct,
+      treeOrder: book?.treeOrder ?? 999999,
+    }
+  })
+
+  const byType = new Map<string, typeof raw>()
   for (const g of raw) {
     if (!byType.has(g.ct)) byType.set(g.ct, [])
     byType.get(g.ct)!.push(g)
   }
 
   const result: CommentaryGroup[] = []
+  const byTreeOrder = (a: { treeOrder: number }, b: { treeOrder: number }) =>
+    a.treeOrder - b.treeOrder
 
-  const addFlat = (ct: string, label: string) => {
-    const items = byType.get(ct) ?? []
-    for (const g of items.sort((a, b) => a.treeOrder - b.treeOrder))
+  const addFlat = (ct: string, sectionLabel: string) => {
+    for (const g of (byType.get(ct) ?? []).sort(byTreeOrder))
       result.push({
         bookId: g.bookId,
         bookTitle: g.bookTitle,
-        path: `${g.bookTitle} · ${label}`,
+        path: `${g.bookTitle} · ${sectionLabel}`,
         connectionTypes: g.connectionTypes,
         lines: g.lines,
         category: g.category,
-        sectionLabel: label,
+        sectionLabel,
       })
   }
 
   const addMergedByCategory = (ct: string, sectionLabel: string) => {
-    const items = [...(byType.get(ct) ?? [])]
+    const items = byType.get(ct) ?? []
     if (!items.length) return
-    const byCat = new Map<string, RawGroup[]>()
+    const byCat = new Map<string, typeof items>()
     for (const g of items) {
       if (!byCat.has(g.category)) byCat.set(g.category, [])
       byCat.get(g.category)!.push(g)
@@ -148,7 +182,7 @@ function buildGroups(raw: RawGroup[]): CommentaryGroup[] {
       [...byCat.entries()].map(([cat, gs]) => [cat, gs.map((g) => ({ bookId: g.bookId }))]),
     )
     for (const [cat] of sorted) {
-      for (const g of byCat.get(cat)!.sort((a, b) => a.treeOrder - b.treeOrder))
+      for (const g of byCat.get(cat)!.sort(byTreeOrder))
         result.push({
           bookId: g.bookId,
           bookTitle: g.bookTitle,
@@ -167,8 +201,11 @@ function buildGroups(raw: RawGroup[]): CommentaryGroup[] {
   addMergedByCategory('COMMENTARY', 'מפרשים')
   addMergedByCategory('OTHER', 'קשרים')
   addFlat('REFERENCE', 'ציונים')
+
   return result
 }
+
+// ─── Composable ─────────────────────────────────────────────────────────────
 
 export function useCommentary(
   selectedLineId: () => number | null,
@@ -179,246 +216,35 @@ export function useCommentary(
   const booksDataStore = useBooksDataStore()
 
   async function load(lineId: number) {
-    const lineIds = selectedLineIds()
-    if (lineIds && lineIds.length > 0) {
-      await loadMultiple(lineIds)
-    } else {
-      await loadSingle(lineId)
-    }
-  }
-
-  async function loadSingle(lineId: number) {
-    loading.value = true
-    groups.value = []
-    try {
-      // Ensure book metadata is available before resolving categories
-      await booksDataStore.ensureLoaded()
-      const links = await query<{
-        targetBookId: number
-        targetLineId: number
-        connectionType: string
-      }>(SQL.GET_LINKS_FOR_SOURCE_LINE, [lineId])
-      if (!links.length) return
-
-      const byBook = new Map<number, { lineIds: number[]; connectionTypes: Set<string> }>()
-      for (const l of links) {
-        if (!byBook.has(l.targetBookId))
-          byBook.set(l.targetBookId, { lineIds: [], connectionTypes: new Set() })
-        const g = byBook.get(l.targetBookId)!
-        g.lineIds.push(l.targetLineId)
-        g.connectionTypes.add(l.connectionType)
-      }
-
-      const bookIds = [...byBook.keys()]
-      const lineIds = links.map((l) => l.targetLineId)
-      const [bookRows, lineRows] = await Promise.all([
-        query<{ id: number; title: string }>(SQL.GET_BOOKS_BY_IDS(bookIds.length), bookIds),
-        query<{ id: number; lineIndex: number; content: string }>(
-          SQL.GET_LINES_BY_IDS(lineIds.length),
-          lineIds,
-        ),
-      ])
-
-      const bookTitleMap = new Map(bookRows.map((b) => [b.id, b.title]))
-      const lineMap = new Map(lineRows.map((l) => [l.id, l]))
-      // Use the store's pre-built map — avoids O(n) rebuild on every commentary load
-      const allBooksMap = booksDataStore.allBooksMap
-
-      // Build raw groups with category resolved
-      const raw = bookIds.map((bookId) => {
-        const g = byBook.get(bookId)!
-        const book = allBooksMap.get(bookId)
-        const ct = [...g.connectionTypes][0] ?? 'OTHER'
-        const category = resolveCategory(book)
-        return {
-          bookId,
-          bookTitle: bookTitleMap.get(bookId) ?? String(bookId),
-          connectionTypes: [...g.connectionTypes],
-          lines: g.lineIds.map((id) => ({
-            lineId: id,
-            lineIndex: lineMap.get(id)?.lineIndex ?? 0,
-            content: lineMap.get(id)?.content ?? '',
-          })),
-          category,
-          ct,
-          treeOrder: book?.treeOrder ?? 999999,
-        }
-      })
-
-      const byType = new Map<string, typeof raw>()
-      for (const g of raw) {
-        if (!byType.has(g.ct)) byType.set(g.ct, [])
-        byType.get(g.ct)!.push(g)
-      }
-
-      const result: CommentaryGroup[] = []
-
-      // Helper: add flat groups sorted by tree order
-      const addFlat = (ct: string, label: string) => {
-        const items = byType.get(ct) ?? []
-        for (const g of items.sort((a, b) => a.treeOrder - b.treeOrder)) {
-          result.push({
-            bookId: g.bookId,
-            bookTitle: g.bookTitle,
-            path: `${g.bookTitle} · ${label}`,
-            connectionTypes: g.connectionTypes,
-            lines: g.lines,
-            category: g.category,
-            sectionLabel: label,
-          })
-        }
-      }
-
-      // Group COMMENTARY under מפרשים with category as sub-section
-      const addMergedByCategory = (ct: string, sectionLabel: string) => {
-        const items = [...(byType.get(ct) ?? [])]
-        if (!items.length) return
-        const byCat = new Map<string, typeof items>()
-        for (const g of items) {
-          if (!byCat.has(g.category)) byCat.set(g.category, [])
-          byCat.get(g.category)!.push(g)
-        }
-        const sorted = sortCategoryEntries(
-          [...byCat.entries()].map(([cat, gs]) => [cat, gs.map((g) => ({ bookId: g.bookId }))]),
-        )
-        for (const [cat] of sorted) {
-          const catItems = byCat.get(cat)!.sort((a, b) => a.treeOrder - b.treeOrder)
-          for (const g of catItems) {
-            result.push({
-              bookId: g.bookId,
-              bookTitle: g.bookTitle,
-              path: `${g.bookTitle} · ${sectionLabel} · ${cat}`,
-              connectionTypes: g.connectionTypes,
-              lines: g.lines,
-              category: cat,
-              sectionLabel,
-              subSectionLabel: cat,
-            })
-          }
-        }
-      }
-
-      addFlat('SOURCE', 'מקור')
-      addFlat('TARGUM', 'תרגומים')
-      addMergedByCategory('COMMENTARY', 'מפרשים')
-      addMergedByCategory('OTHER', 'קשרים')
-      addFlat('REFERENCE', 'ציונים')
-
-      groups.value = result
-    } finally {
-      loading.value = false
-    }
-  }
-
-  async function loadMultiple(sourceLineIds: number[]) {
     loading.value = true
     groups.value = []
     try {
       await booksDataStore.ensureLoaded()
+
+      const multiIds = selectedLineIds()
+      const isMulti = multiIds && multiIds.length > 0
+      const sql = isMulti
+        ? SQL.GET_LINKS_FOR_SOURCE_LINE_RANGE(multiIds.length)
+        : SQL.GET_LINKS_FOR_SOURCE_LINE
+      const params = isMulti ? multiIds : [lineId]
+
       const links = await query<{
         targetBookId: number
         targetLineId: number
         connectionType: string
-      }>(SQL.GET_LINKS_FOR_SOURCE_LINE_RANGE(sourceLineIds.length), sourceLineIds)
+      }>(sql, params)
       if (!links.length) return
 
-      const byBook = new Map<number, { lineIds: number[]; connectionTypes: Set<string> }>()
+      const byBook: ByBookMap = new Map()
       for (const l of links) {
         if (!byBook.has(l.targetBookId))
-          byBook.set(l.targetBookId, { lineIds: [], connectionTypes: new Set() })
+          byBook.set(l.targetBookId, { lineIds: new Set(), connectionTypes: new Set() })
         const g = byBook.get(l.targetBookId)!
-        if (!g.lineIds.includes(l.targetLineId)) g.lineIds.push(l.targetLineId)
+        g.lineIds.add(l.targetLineId)
         g.connectionTypes.add(l.connectionType)
       }
 
-      const bookIds = [...byBook.keys()]
-      const targetLineIds = [...new Set(links.map((l) => l.targetLineId))]
-      const [bookRows, lineRows] = await Promise.all([
-        query<{ id: number; title: string }>(SQL.GET_BOOKS_BY_IDS(bookIds.length), bookIds),
-        query<{ id: number; lineIndex: number; content: string }>(
-          SQL.GET_LINES_BY_IDS(targetLineIds.length),
-          targetLineIds,
-        ),
-      ])
-
-      const bookTitleMap = new Map(bookRows.map((b) => [b.id, b.title]))
-      const lineMap = new Map(lineRows.map((l) => [l.id, l]))
-      // Use the store's pre-built map — avoids O(n) rebuild on every commentary load
-      const allBooksMap = booksDataStore.allBooksMap
-
-      const raw = bookIds.map((bookId) => {
-        const g = byBook.get(bookId)!
-        const book = allBooksMap.get(bookId)
-        const ct = [...g.connectionTypes][0] ?? 'OTHER'
-        const category = resolveCategory(book)
-        return {
-          bookId,
-          bookTitle: bookTitleMap.get(bookId) ?? String(bookId),
-          connectionTypes: [...g.connectionTypes],
-          lines: g.lineIds
-            .map((id) => ({
-              lineId: id,
-              lineIndex: lineMap.get(id)?.lineIndex ?? 0,
-              content: lineMap.get(id)?.content ?? '',
-            }))
-            .sort((a, b) => a.lineIndex - b.lineIndex),
-          category,
-          ct,
-          treeOrder: book?.treeOrder ?? 999999,
-        }
-      })
-
-      const byType = new Map<string, typeof raw>()
-      for (const g of raw) {
-        if (!byType.has(g.ct)) byType.set(g.ct, [])
-        byType.get(g.ct)!.push(g)
-      }
-
-      const result: CommentaryGroup[] = []
-      const addFlat = (ct: string, label: string) => {
-        const items = byType.get(ct) ?? []
-        for (const g of items.sort((a, b) => a.treeOrder - b.treeOrder))
-          result.push({
-            bookId: g.bookId,
-            bookTitle: g.bookTitle,
-            path: `${g.bookTitle} · ${label}`,
-            connectionTypes: g.connectionTypes,
-            lines: g.lines,
-            category: g.category,
-            sectionLabel: label,
-          })
-      }
-      const addMergedByCategory = (ct: string, sectionLabel: string) => {
-        const items = [...(byType.get(ct) ?? [])]
-        if (!items.length) return
-        const byCat = new Map<string, typeof items>()
-        for (const g of items) {
-          if (!byCat.has(g.category)) byCat.set(g.category, [])
-          byCat.get(g.category)!.push(g)
-        }
-        const sorted = sortCategoryEntries(
-          [...byCat.entries()].map(([cat, gs]) => [cat, gs.map((g) => ({ bookId: g.bookId }))]),
-        )
-        for (const [cat] of sorted) {
-          for (const g of byCat.get(cat)!.sort((a, b) => a.treeOrder - b.treeOrder))
-            result.push({
-              bookId: g.bookId,
-              bookTitle: g.bookTitle,
-              path: `${g.bookTitle} · ${sectionLabel} · ${cat}`,
-              connectionTypes: g.connectionTypes,
-              lines: g.lines,
-              category: cat,
-              sectionLabel,
-              subSectionLabel: cat,
-            })
-        }
-      }
-      addFlat('SOURCE', 'מקור')
-      addFlat('TARGUM', 'תרגומים')
-      addMergedByCategory('COMMENTARY', 'מפרשים')
-      addMergedByCategory('OTHER', 'קשרים')
-      addFlat('REFERENCE', 'ציונים')
-      groups.value = result
+      groups.value = await buildCommentaryGroups(byBook, booksDataStore.allBooksMap)
     } finally {
       loading.value = false
     }

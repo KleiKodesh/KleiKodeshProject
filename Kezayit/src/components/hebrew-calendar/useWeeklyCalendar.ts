@@ -2,6 +2,7 @@ import { ref, computed, watch } from 'vue'
 import { HDate, HebrewCalendar, flags, Location, Zmanim, GeoLocation } from '@hebcal/core'
 import { getDailyLearning } from '@/utils/hebrewLearning'
 import type { City } from './useZmanim'
+export type { City } from './useZmanim'
 
 // ── Hebrew helpers ────────────────────────────────────────────────────────────
 
