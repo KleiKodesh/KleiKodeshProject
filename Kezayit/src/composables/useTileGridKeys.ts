@@ -34,13 +34,16 @@ export function useTilesKeys(
 
   useEventListener(containerEl, 'focusin', () => {
     containerFocused.value = true
-    if (focusedIndex.value < 0 && getCount() > 0) moveTo(0)
   })
 
   useEventListener(containerEl, 'focusout', (e: FocusEvent) => {
     if (!containerEl.value?.contains(e.relatedTarget as Node)) {
       containerFocused.value = false
     }
+  })
+
+  useEventListener(containerEl, 'pointerdown', () => {
+    focusedIndex.value = -1
   })
 
   useEventListener(containerEl, 'keydown', (e: KeyboardEvent) => {

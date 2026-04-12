@@ -12,12 +12,12 @@ const { censorDivineNames, appZoom, newTabPage, resumeLastRead, defaultAutoSyncC
   storeToRefs(settings)
 
 const bookViewStore = useBookViewStore()
-const { toolbarPosition, autoSelectTopLine } = storeToRefs(bookViewStore)
+const { toolbarPosition } = storeToRefs(bookViewStore)
 </script>
 
 <template>
   <div class="general-pane">
-    <div class="section-label">מראה</div>
+    <div class="section-label">אפליקציה</div>
 
     <SettingRow label="ערכת נושא" hint="צבעי הממשק של האפליקציה">
       <ThemePicker />
@@ -32,7 +32,9 @@ const { toolbarPosition, autoSelectTopLine } = storeToRefs(bookViewStore)
       hint="משנה את גודל כל ממשק האפליקציה"
     />
 
-    <SettingRow label="מיקום סרגל הכלים" hint="היכן יוצג סרגל הכלים בתצוגת הספר" wrap>
+    <div class="section-label">ניווט</div>
+
+    <SettingRow label="מיקום סרגל הכלים בתצוגת ספר" wrap>
       <ToggleGroup
         v-model="toolbarPosition"
         :options="[
@@ -42,6 +44,18 @@ const { toolbarPosition, autoSelectTopLine } = storeToRefs(bookViewStore)
           { label: 'ימין', value: 'right' },
         ]"
         @update:model-value="bookViewStore.setToolbarPosition($event)"
+      />
+    </SettingRow>
+
+    <SettingRow label="פתח טאב חדש אל" hint="הדף שיפתח בלחיצה על טאב חדש" wrap>
+      <ToggleGroup
+        v-model="newTabPage"
+        :options="[
+          { label: 'דף הבית', value: 'homepage' },
+          { label: 'פתיחת ספר', value: 'openfile' },
+          { label: 'היברו בוקס', value: 'hebrewbooks' },
+          { label: 'חיפוש', value: 'kezayit-search' },
+        ]"
       />
     </SettingRow>
 
@@ -61,21 +75,7 @@ const { toolbarPosition, autoSelectTopLine } = storeToRefs(bookViewStore)
     </SettingRow>
 
     <SettingRow
-      label="סנכרן מפרשים אוטומטית"
-      hint="בפתיחת פאנל המפרשים, יסונכרנו אוטומטית לפי השורה העליונה הנראית"
-    >
-      <ToggleGroup
-        v-model="autoSelectTopLine"
-        :options="[
-          { label: 'כן', value: true },
-          { label: 'לא', value: false },
-        ]"
-        @update:model-value="bookViewStore.setAutoSelectTopLine($event)"
-      />
-    </SettingRow>
-
-    <SettingRow
-      label="סנכרן מפרשים — ברירת מחדל"
+      label="סנכרן מפרשים כברירת מחדל"
       hint="ניתן לשנות לכל ספר בנפרד דרך כפתור סנכרן מפרשים בסרגל הכלים"
     >
       <ToggleGroup
@@ -86,20 +86,6 @@ const { toolbarPosition, autoSelectTopLine } = storeToRefs(bookViewStore)
         ]"
       />
     </SettingRow>
-
-    <SettingRow label="פתח טאב חדש אל" hint="הדף שיפתח בלחיצה על טאב חדש" wrap>
-      <ToggleGroup
-        v-model="newTabPage"
-        :options="[
-          { label: 'דף הבית', value: 'homepage' },
-          { label: 'פתיחת ספר', value: 'openfile' },
-          { label: 'היברו בוקס', value: 'hebrewbooks' },
-          { label: 'חיפוש', value: 'kezayit-search' },
-        ]"
-      />
-    </SettingRow>
-
-    <div class="section-label">תוכן</div>
 
     <SettingRow label="כיסוי שם ה'" hint="מחליף את האות ה׳ בשמות הקודש באות ק׳">
       <ToggleGroup

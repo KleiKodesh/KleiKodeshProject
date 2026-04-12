@@ -8,7 +8,9 @@ import {
 import { useWeeklyCalendar } from './useWeeklyCalendar'
 import type { City, WeekDay } from './useWeeklyCalendar'
 
-const props = defineProps<{ city: City }>()
+const props = defineProps<{ city: City; cities: City[] }>()
+const emit = defineEmits<{ (e: 'city-change', city: City): void }>()
+
 const cityRef = {
   get value() {
     return props.city
@@ -438,6 +440,15 @@ const ZMANIM_LABELS: Array<{ key: keyof WeekDay['zmanim']; label: string }> = [
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
+}
+.zmanim-extra {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 0 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 40%, transparent);
+  margin-bottom: 4px;
 }
 .zmanim-extra {
   grid-column: 1 / -1;

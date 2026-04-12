@@ -130,11 +130,19 @@ export function useZmanim() {
             nearest = city
           }
         }
+        console.log(
+          `[zmanim] geolocation resolved — coords: (${latitude.toFixed(4)}, ${longitude.toFixed(4)}), nearest city: ${nearest.name}`,
+        )
         geoCity.value = nearest
         locationStatus.value = 'geo'
+        // Persist as default so the setting is visible in the UI
+        idbSet(KEYS.SETTINGS_ZMANIM_CITY, nearest.name)
       },
-      () => {
+      (err) => {
         // Permission denied or error — use Jerusalem fallback
+        console.log(
+          `[zmanim] geolocation failed (code ${err.code}: ${err.message}), falling back to ירושלים`,
+        )
         locationStatus.value = 'fallback'
       },
       { timeout: 8000, maximumAge: 60 * 60 * 1000 },

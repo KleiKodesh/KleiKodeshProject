@@ -3,14 +3,14 @@ import { onMounted } from 'vue'
 import WeeklyCalendarList from './WeeklyCalendarList.vue'
 import { useZmanim } from './useZmanim'
 
-const { activeCity, init: initZmanim } = useZmanim()
+const { activeCity, cities, setCity, init: initZmanim } = useZmanim()
 
 onMounted(() => initZmanim())
 </script>
 
 <template>
   <div class="cal-page">
-    <WeeklyCalendarList :city="activeCity" />
+    <WeeklyCalendarList :city="activeCity" :cities="cities" @city-change="setCity" />
   </div>
 </template>
 
