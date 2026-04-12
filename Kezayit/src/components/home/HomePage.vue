@@ -18,21 +18,23 @@ import { useTilesKeys } from '@/composables/useTileGridKeys'
 import { getHomeDateInfo } from './useHomeDateInfo'
 import { navigateToDafYomi } from './useDafYomiNavigation'
 import { useTabStore } from '@/stores/tabStore'
+import { useOnlineStatus } from '@/utils/useOnlineStatus'
 
 const { navigate } = useAppNavigation()
 const tabStore = useTabStore()
 const dateInfo = getHomeDateInfo()
+const isOnline = useOnlineStatus()
 
-const baseTiles = [
+const baseTiles = computed(() => [
   { label: 'ספרים', icon: IconLibrary24Filled, color: '#B5451B' },
   { label: 'חיפוש', icon: IconSearchSparkle24 },
   { label: 'פתח קובץ', icon: IconFolder24Filled, color: '#f0a500' },
   { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#D94F1E' },
-  { label: 'מילונים', icon: IconBookLetter24Filled, color: '#7b5ea7' },
+  ...(isOnline.value ? [{ label: 'מילון', icon: IconBookLetter24Filled, color: '#7b5ea7' }] : []),
   { label: 'לוח שנה', icon: IconCalendarRtl24Filled, color: '#2e7d32' },
   { label: 'סביבות עבודה', icon: IconApps24Filled, color: '#6b7fc4' },
   { label: 'הגדרות', icon: IconSettings24 },
-]
+])
 
 const noDbTiles = [
   { label: 'התקן כזית', icon: IconArrowDownload24Filled, color: '#B5451B' },
@@ -43,7 +45,7 @@ const noDbTiles = [
   { label: 'הגדרות', icon: IconSettings24 },
 ]
 
-const tiles = computed(() => (isHosted && !dbReady.value ? noDbTiles : baseTiles))
+const tiles = computed(() => (isHosted && !dbReady.value ? noDbTiles : baseTiles.value))
 
 const pageRef = ref<HTMLElement | null>(null)
 

@@ -236,17 +236,18 @@ export const SQL = {
    * so roots shorter than the query are also returned.
    */
   SEARCH_DICTIONARY_ENTRIES: `
-    SELECT e.id, e.bookId, e.lineIndex, e.headword, e.nikud, e.definition, e.type, e.source
-    FROM entry e
-    WHERE e.headword LIKE ?
-       OR (e.type = 'aramaic' AND length(e.headword) >= 3 AND ? LIKE (e.headword || '%'))
-    ORDER BY
+    SELECT e.id, e.bookId, e.lineIndex, e.headword, e.nikud, e.definition, e.type, e.source,
       CASE WHEN e.headword = ?                                                          THEN 0
            WHEN e.headword LIKE ?                                                       THEN 1
            WHEN e.type = 'aramaic' AND length(e.headword) >= 3
                 AND ? LIKE (e.headword || '%')                                          THEN 2
            ELSE                                                                              3
-      END,
+      END AS matchTier
+    FROM entry e
+    WHERE e.headword LIKE ?
+       OR (e.type = 'aramaic' AND length(e.headword) >= 3 AND ? LIKE (e.headword || '%'))
+    ORDER BY
+      matchTier,
       CASE WHEN e.type = 'aramaic' AND length(e.headword) >= 3
                 AND ? LIKE (e.headword || '%') THEN length(e.headword) ELSE 0 END DESC,
       e.headword,

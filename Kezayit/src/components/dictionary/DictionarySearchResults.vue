@@ -29,7 +29,7 @@ const virtualizer = useVirtualizer(
   computed(() => ({
     count: props.filteredResults.length,
     getScrollElement: () => scrollEl.value,
-    estimateSize: () => 36,
+    estimateSize: () => 72,
     overscan: 5,
     measureElement: (el: Element) => el.getBoundingClientRect().height,
   })),
@@ -42,12 +42,35 @@ useVirtualScrollerKeys(
   () => props.filteredResults.length,
 )
 
-// Re-measure all rows when expanded content loads in (heights change)
 watch(
   () => props.expandedEntries,
   () => virtualizer.value.measure(),
   { deep: true },
 )
+
+/** Type label shown as a badge */
+function typeLabel(entry: DictEntry): string {
+  if (entry.type === 'abbrev') return 'ר"ת'
+  if (entry.type === 'wiktionary') return 'ויקי'
+  if (entry.type === 'book') return ''
+  return 'ארמית'
+}
+
+/** First sense preview text (for book entries shown before expand) */
+function bookPreview(entry: DictEntry): string {
+  const raw = entry.definition ?? ''
+  // Strip HTML tags for preview
+  const plain = raw
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return plain.length > 120 ? plain.slice(0, 120) + '…' : plain
+}
+
+/** Whether this entry has inline content to show (non-book types) */
+function hasInlineContent(entry: DictEntry): boolean {
+  return entry.type !== 'book'
+}
 </script>
 
 <template>
@@ -73,11 +96,13 @@ watch(
       </button>
     </div>
 
-    <!-- List -->
+    <!-- States -->
     <div v-if="searching" class="dict-state-msg">מחפש...</div>
     <div v-else-if="hasSearched && filteredResults.length === 0" class="dict-state-msg">
       לא נמצאו תוצאות
     </div>
+
+    <!-- Results list -->
     <div v-else ref="scrollEl" class="dict-scroll" tabindex="0">
       <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
         <div
@@ -93,19 +118,20 @@ watch(
             transform: `translateY(${vRow.start}px)`,
           }"
         >
-          <div class="dict-result-item">
-            <div class="dict-result-row">
-              <button
-                class="dict-result-toggle"
-                @click="emit('toggle', filteredResults[vRow.index]!)"
-              >
-                <span class="dict-result-headword">
+          <div class="dict-card">
+            <!-- Card header: headword + badges + open button -->
+            <div class="dict-card-header">
+              <div class="dict-card-title">
+                <span class="dict-headword">
                   {{ filteredResults[vRow.index]!.nikud ?? filteredResults[vRow.index]!.headword }}
                 </span>
-                <span class="dict-result-source">
+                <span v-if="typeLabel(filteredResults[vRow.index]!)" class="dict-type-badge">
+                  {{ typeLabel(filteredResults[vRow.index]!) }}
+                </span>
+                <span class="dict-source-badge">
                   {{ filteredResults[vRow.index]!.bookTitle }}
                 </span>
-              </button>
+              </div>
               <button
                 v-if="filteredResults[vRow.index]!.bookId !== null"
                 class="dict-open-btn"
@@ -115,10 +141,8 @@ watch(
               </button>
             </div>
 
-            <div
-              v-if="expandedEntries.has(filteredResults[vRow.index]!.id)"
-              class="dict-result-body"
-            >
+            <!-- Inline content for non-book entries (always visible) -->
+            <div v-if="hasInlineContent(filteredResults[vRow.index]!)" class="dict-card-body">
               <div
                 v-if="expandedEntries.get(filteredResults[vRow.index]!.id) === null"
                 class="dict-entry-loading"
@@ -130,6 +154,31 @@ watch(
                 :entry="expandedEntries.get(filteredResults[vRow.index]!.id)!"
               />
             </div>
+
+            <!-- Book entries: preview + expand toggle -->
+            <template v-else>
+              <div class="dict-card-preview">
+                {{ bookPreview(filteredResults[vRow.index]!) }}
+              </div>
+              <button class="dict-expand-btn" @click="emit('toggle', filteredResults[vRow.index]!)">
+                {{ expandedEntries.has(filteredResults[vRow.index]!.id) ? 'הסתר' : 'הצג הכל' }}
+              </button>
+              <div
+                v-if="expandedEntries.has(filteredResults[vRow.index]!.id)"
+                class="dict-card-expanded"
+              >
+                <div
+                  v-if="expandedEntries.get(filteredResults[vRow.index]!.id) === null"
+                  class="dict-entry-loading"
+                >
+                  טוען...
+                </div>
+                <DictionaryEntryView
+                  v-else-if="expandedEntries.get(filteredResults[vRow.index]!.id)"
+                  :entry="expandedEntries.get(filteredResults[vRow.index]!.id)!"
+                />
+              </div>
+            </template>
           </div>
         </div>
       </div>
@@ -142,6 +191,7 @@ watch(
   display: contents;
 }
 
+/* ── Filter bar ── */
 .dict-filter-bar {
   display: flex;
   align-items: center;
@@ -185,6 +235,7 @@ watch(
   opacity: 0.65;
 }
 
+/* ── Scroll container ── */
 .dict-scroll {
   flex: 1;
   overflow-y: auto;
@@ -205,78 +256,114 @@ watch(
   color: var(--text-secondary);
 }
 
-.dict-result-item {
+/* ── Card ── */
+.dict-card {
   border-bottom: 1px solid var(--border-color);
-}
-
-.dict-result-row {
-  display: flex;
-  align-items: center;
   direction: rtl;
-  width: 100%;
-  height: 36px;
+  padding: 6px 0 0;
 }
 
-.dict-result-toggle {
+/* ── Card header ── */
+.dict-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 0 10px 4px;
+}
+
+.dict-card-title {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
   flex: 1;
-  height: 36px;
-  padding: 0 10px;
-  gap: 6px;
-  background: none;
-  border: none;
-  border-radius: 0;
-  cursor: pointer;
-  text-align: start;
-  direction: rtl;
+  min-width: 0;
 }
 
-.dict-result-toggle:hover {
-  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
-}
-
-.dict-result-toggle:active {
-  background: color-mix(in srgb, var(--text-primary) 9%, transparent);
-}
-
-.dict-result-headword {
-  font-size: 13px;
-  font-weight: 600;
+.dict-headword {
+  font-size: 14px;
+  font-weight: 700;
   color: var(--text-primary);
-  flex: 1;
-  line-height: 1;
+  line-height: 1.2;
 }
 
-.dict-result-source {
+.dict-type-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-color) 30%, transparent);
+  border-radius: 999px;
+  padding: 0 5px;
+  line-height: 16px;
+  flex-shrink: 0;
+}
+
+.dict-source-badge {
   font-size: 10px;
   color: var(--text-secondary);
+  background: color-mix(in srgb, var(--text-secondary) 10%, transparent);
+  border-radius: 999px;
+  padding: 0 5px;
+  line-height: 16px;
   flex-shrink: 0;
   white-space: nowrap;
-  background: color-mix(in srgb, var(--text-secondary) 12%, transparent);
-  padding: 1px 5px;
-  border-radius: 999px;
-  line-height: 1;
 }
 
 .dict-open-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
   color: var(--text-secondary);
-  border-inline-start: 1px solid var(--border-color);
+  border-radius: 4px;
 }
 
 .dict-open-btn:hover {
   color: var(--accent-color);
-  background: color-mix(in srgb, var(--accent-color) 8%, transparent);
+  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
 }
 
-.dict-result-body {
-  border-top: 1px solid var(--border-color);
+/* ── Card body (inline content) ── */
+.dict-card-body {
+  padding: 0 10px 8px;
+}
+
+/* ── Book preview ── */
+.dict-card-preview {
+  padding: 0 10px 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.dict-expand-btn {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 10px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: var(--accent-color);
+  background: none;
+  border: none;
+  cursor: pointer;
+  border-radius: 0;
+}
+
+.dict-expand-btn:hover {
+  text-decoration: underline;
+  background: none;
+}
+
+.dict-card-expanded {
+  border-top: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
   background: var(--bg-secondary);
 }
 
@@ -284,7 +371,7 @@ watch(
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 12px 16px;
+  padding: 10px 16px;
   font-size: 12px;
   color: var(--text-secondary);
 }

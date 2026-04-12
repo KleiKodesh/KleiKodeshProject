@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import {
   IconLibrary24Filled,
@@ -13,23 +13,25 @@ import { IconSettings24, IconSearchSparkle24 } from '@iconify-prerendered/vue-fl
 import { useAppNavigation } from '@/composables/useAppNavigation'
 import { isHosted } from '@/host/db'
 import { togglePopOut } from '@/host/bridge'
+import { useOnlineStatus } from '@/utils/useOnlineStatus'
 
 const emit = defineEmits<{ close: [] }>()
 
 const { navigateInNewTab } = useAppNavigation()
+const isOnline = useOnlineStatus()
 
 const menuRef = ref<HTMLElement | null>(null)
 onClickOutside(menuRef, () => emit('close'))
 
-const tiles = [
+const tiles = computed(() => [
   { label: 'ספרים', icon: IconLibrary24Filled, color: '#B5451B' },
   { label: 'חיפוש', icon: IconSearchSparkle24, color: undefined },
   { label: 'פתח קובץ', icon: IconFolder24Filled, color: '#f0a500' },
   { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#D94F1E' },
-  { label: 'מילונים', icon: IconBookLetter24Filled, color: '#7b5ea7' },
+  ...(isOnline.value ? [{ label: 'מילון', icon: IconBookLetter24Filled, color: '#7b5ea7' }] : []),
   { label: 'הגדרות', icon: IconSettings24, color: undefined },
   { label: 'סביבות עבודה', icon: IconApps24Filled, color: '#6b7fc4' },
-]
+])
 
 async function onTap(label: string) {
   await navigateInNewTab(label)
@@ -46,11 +48,7 @@ function onPopOut() {
   <div ref="menuRef" class="nav-dropdown" @click.stop>
     <button v-for="tile in tiles" :key="tile.label" class="nav-row" @click="onTap(tile.label)">
       <span class="nav-icon">
-        <component
-          :is="tile.icon"
-          :class="{ 'rtl-flip': tile.flip }"
-          :style="tile.color ? { color: tile.color } : {}"
-        />
+        <component :is="tile.icon" :style="tile.color ? { color: tile.color } : {}" />
       </span>
       <span class="nav-label">{{ tile.label }}</span>
     </button>

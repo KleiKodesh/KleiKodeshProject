@@ -26,8 +26,6 @@ namespace KezayitLib
         private readonly WebView2 _webView = new WebView2 { Dock = DockStyle.Fill };
         private WebBridge _bridge;
         private DbHandler _db;
-        private DictionaryHandler _dictHandler;
-        private DictionaryIndexer _dictIndexer;
         private PdfHandler _pdf;
         private HebrewBooksHandler _hb;
         private HebrewBooksCsvUpdater _hbCsvUpdater;
@@ -90,10 +88,6 @@ namespace KezayitLib
             _bridge = new WebBridge(_webView, this);
             _db = new DbHandler(_bridge, _webView, savedPath);
 
-            string dictDbPath = Path.Combine(AppDir, "dictionary.db");
-            _dictHandler = new DictionaryHandler(_bridge, dictDbPath);
-            _dictIndexer = new DictionaryIndexer(dictDbPath, savedPath);
-
             _pdf = new PdfHandler(_bridge, _webView);
             _hb = new HebrewBooksHandler(_bridge, _webView, this);
             _hbCsvUpdater = new HebrewBooksCsvUpdater();
@@ -101,8 +95,6 @@ namespace KezayitLib
             _db.OnDbPathPicked = path =>
             {
                 _search.ResetAndReindex(path);
-                _dictIndexer = new DictionaryIndexer(dictDbPath, path);
-                _dictIndexer.RunIfNeeded();
             };
 
             _webView.CoreWebView2.WebMessageReceived += OnMessageReceived;
@@ -117,7 +109,6 @@ namespace KezayitLib
                 Console.WriteLine("[AppViewer] Calling _search.OnDbReady");
                 _search.OnDbReady(savedPath);
                 _hbCsvUpdater.RunIfDue();
-                _dictIndexer.RunIfNeeded();
             }
             else
             {
@@ -150,9 +141,6 @@ namespace KezayitLib
             _db.OnDbPathPicked = path =>
             {
                 _search.ResetAndReindex(path);
-                string dp = Path.Combine(AppDir, "dictionary.db");
-                _dictIndexer = new DictionaryIndexer(dp, path);
-                _dictIndexer.RunIfNeeded();
             };
 
             // Only kick off indexing if the DB changed or bloom is missing/stale
@@ -178,7 +166,6 @@ namespace KezayitLib
                     switch (action)
                     {
                         case "sql": await _db.HandleSql(root, id); break;
-                        case "dictQuery": await _dictHandler.HandleQuery(root, id); break;
                         case "setDbPath": _db.HandleSetDbPath(root, id); break;
                         case "pickDbPath": _db.HandlePickDbPath(id, this); break;
                         case "resetSettings": _db.HandleResetSettings(id); break;

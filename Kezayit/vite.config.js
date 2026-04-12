@@ -11,25 +11,31 @@ function devSqlitePlugin() {
         name: 'dev-sqlite',
         apply: 'serve',
         configureServer(server) {
+            // loadEnv with prefix '' loads all vars including non-VITE_ ones
             const env = loadEnv('development', process.cwd(), '');
             const dbPath = process.env.DB_PATH ?? env.DB_PATH ?? './data.db';
             const dictDbPath = path.resolve('./public/dictionary.db');
             try {
                 db = new Database(path.resolve(dbPath));
                 console.log(`[dev-sqlite] opened ${dbPath}`);
-            } catch (err) {
+            }
+            catch (err) {
                 console.error(`[dev-sqlite] failed to open DB at ${dbPath}:`, err);
             }
             try {
                 dictDb = new Database(dictDbPath, { readonly: true });
                 console.log(`[dev-sqlite] opened dictionary.db`);
-            } catch (err) {
+            }
+            catch (err) {
                 console.error(`[dev-sqlite] failed to open dictionary.db:`, err);
             }
             server.middlewares.use((req, res, next) => {
                 const isQuery = req.url === '/query' && req.method === 'POST';
                 const isDictQuery = req.url === '/query-dict' && req.method === 'POST';
-                if (!isQuery && !isDictQuery) { next(); return; }
+                if (!isQuery && !isDictQuery) {
+                    next();
+                    return;
+                }
                 const target = isDictQuery ? dictDb : db;
                 if (!target) {
                     res.writeHead(503, { 'Content-Type': 'application/json' });
@@ -44,7 +50,8 @@ function devSqlitePlugin() {
                         const rows = target.prepare(sql).all(...params);
                         res.writeHead(200, { 'Content-Type': 'application/json' });
                         res.end(JSON.stringify({ rows }));
-                    } catch (err) {
+                    }
+                    catch (err) {
                         res.writeHead(500, { 'Content-Type': 'application/json' });
                         res.end(JSON.stringify({ error: err.message }));
                     }
@@ -58,6 +65,15 @@ export default defineConfig({
     resolve: {
         alias: {
             '@': fileURLToPath(new URL('./src', import.meta.url)),
+        },
+    },
+    server: {
+        proxy: {
+            '/wiktionary-api': {
+                target: 'https://he.wiktionary.org',
+                changeOrigin: true,
+                rewrite: (path) => path.replace(/^\/wiktionary-api/, '/w/api.php'),
+            },
         },
     },
     build: {

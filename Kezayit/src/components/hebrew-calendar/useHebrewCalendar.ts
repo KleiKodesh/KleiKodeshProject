@@ -178,16 +178,24 @@ export function useHebrewCalendar() {
   })
 
   const gregorianMonthLabel = computed(() => {
-    // Show the Gregorian month(s) that this Hebrew month spans
     const first = new HDate(1, displayHebMonth.value, displayHebYear.value).greg()
     const last = new HDate(
       daysInHebMonth(displayHebMonth.value, displayHebYear.value),
       displayHebMonth.value,
       displayHebYear.value,
     ).greg()
-    const firstLabel = first.toLocaleDateString('he-IL', { month: 'long', year: 'numeric' })
-    const lastLabel = last.toLocaleDateString('he-IL', { month: 'long', year: 'numeric' })
-    return firstLabel === lastLabel ? firstLabel : `${lastLabel} – ${firstLabel}`
+    const firstMonth = GREG_MONTH_LIST[first.getMonth()] ?? ''
+    const lastMonth = GREG_MONTH_LIST[last.getMonth()] ?? ''
+    const firstYear = first.getFullYear()
+    const lastYear = last.getFullYear()
+    if (firstMonth === lastMonth && firstYear === lastYear) {
+      return `${firstMonth} ${firstYear}`
+    }
+    if (firstYear === lastYear) {
+      // same year — show year only once on the right (earlier month in RTL display)
+      return `${lastMonth} – ${firstMonth} ${firstYear}`
+    }
+    return `${lastMonth} ${lastYear} – ${firstMonth} ${firstYear}`
   })
 
   const weeks = computed((): CalendarWeek[] => {

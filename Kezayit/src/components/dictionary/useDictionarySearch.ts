@@ -14,6 +14,7 @@ const SOURCE_BOOK_TITLES: Record<number, string> = {
   17: 'עין זוכר',
   20: 'מצודת ציון',
   23: 'מלבים באור המילות',
+  25: 'ויקימילון',
 }
 
 const TWO_LINE_BOOKS = new Set([6105])
@@ -28,6 +29,8 @@ export interface DictEntry {
   type: string
   source: number
   bookTitle: string
+  /** 0 = exact, 1 = prefix, 2 = root, 3 = contains */
+  matchTier: number
 }
 
 export interface DictEntryContent {
@@ -51,15 +54,15 @@ function levenshtein(a: string, b: string): number {
     n = b.length
   const dp: number[] = Array.from({ length: n + 1 }, (_, i) => i)
   for (let i = 1; i <= m; i++) {
-    let prev = dp[0]
+    let prev = dp[0]!
     dp[0] = i
     for (let j = 1; j <= n; j++) {
-      const temp = dp[j]
-      dp[j] = a[i - 1] === b[j - 1] ? prev : 1 + Math.min(prev, dp[j], dp[j - 1])
+      const temp = dp[j]!
+      dp[j] = a[i - 1] === b[j - 1] ? prev : 1 + Math.min(prev, dp[j]!, dp[j - 1]!)
       prev = temp
     }
   }
-  return dp[n]
+  return dp[n]!
 }
 
 export function useDictionarySearch() {
@@ -143,30 +146,31 @@ export function useDictionarySearch() {
     try {
       type RawRow = Omit<DictEntry, 'bookTitle'>
       const rows = await queryDict<RawRow>(SQL.SEARCH_DICTIONARY_ENTRIES, [
-        `%${trimmed}%`,
-        trimmed,
-        trimmed,
-        `${trimmed}%`,
-        trimmed,
-        trimmed,
+        trimmed, // matchTier exact
+        `${trimmed}%`, // matchTier prefix
+        trimmed, // matchTier root
+        `%${trimmed}%`, // WHERE contains
+        trimmed, // WHERE root
+        trimmed, // ORDER BY root length
       ])
       const mapped = rows.map((r) => ({
         ...r,
         bookTitle: resolveBookTitle(r.source, r.type),
       }))
+      // SQL already orders by matchTier; stable-sort within same headword by source
       mapped.sort((a, b) => {
-        const da = levenshtein(a.headword, trimmed)
-        const db = levenshtein(b.headword, trimmed)
-        if (da !== db) return da - db
-        return a.bookTitle.localeCompare(b.bookTitle, 'he')
+        if (a.matchTier !== b.matchTier) return a.matchTier - b.matchTier
+        if (a.headword !== b.headword) return a.headword.localeCompare(b.headword, 'he')
+        return a.source - b.source
       })
       results.value = mapped
       if (activeSource.value.size > 0) {
         const validTitles = new Set(mapped.map((r) => r.bookTitle))
         activeSource.value = new Set([...activeSource.value].filter((s) => validTitles.has(s)))
       }
-      // Auto-expand all results
-      if (mapped.length > 0) mapped.forEach((e) => fetchAndExpand(e))
+      // Auto-expand only exact matches (tier 0) — inflections are shown as clickable links
+      if (mapped.length > 0)
+        mapped.filter((e) => e.matchTier === 0).forEach((e) => fetchAndExpand(e))
     } finally {
       searching.value = false
     }
@@ -208,6 +212,7 @@ export function useDictionarySearch() {
     hasSearched,
     activeSource,
     bookCounts,
+    lastTerm: computed(() => searchQuery.value.trim()),
     search,
     toggleEntry,
     toggleSource,

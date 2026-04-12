@@ -189,15 +189,29 @@ async function main() {
     for (const r of rows) ins.run(r.headword, r.nikud, r.definition)
   })
 
+  let apfrom = apcontinue  // use apfrom for resume (stable page title)
+  let apcontToken = ''     // use apcontinue token within a session
+
   while (true) {
-    // 1. Get a batch of page titles
     await sleep(DELAY)
-    const listUrl = `${API}?action=query&list=allpages&apnamespace=0&aplimit=${BATCH}` +
-      `&apcontinue=${encodeURIComponent(apcontinue)}&format=json`
+    // Use apfrom for initial/resume, apcontinue token for subsequent pages
+    const contParam = apcontToken
+      ? `&apcontinue=${encodeURIComponent(apcontToken)}`
+      : `&apfrom=${encodeURIComponent(apfrom)}`
+    const listUrl = `${API}?action=query&list=allpages&apnamespace=0&aplimit=${BATCH}${contParam}&format=json`
 
     let listData
     try { listData = await get(listUrl) }
-    catch (e) { console.error('\nList error:', e.message); await sleep(2000); continue }
+    catch (e) { 
+      console.error('\nList error:', e.message)
+      await sleep(5000)
+      continue
+    }
+    if (!listData?.query) {
+      console.error('\nInvalid response, retrying...')
+      await sleep(5000)
+      continue
+    }
 
     const pages = listData?.query?.allpages || []
     if (pages.length === 0) { console.log('\nNo pages returned for:', apcontinue); break }
@@ -205,11 +219,14 @@ async function main() {
     // Filter to Hebrew-titled pages only
     const hePages = pages.filter(p => containsHebrew(p.title))
     if (hePages.length === 0) {
-      // Advance continue and skip
       const next = listData?.continue?.apcontinue || ''
+      process.stdout.write(`\r  Skipping non-Hebrew batch, next="${next.substring(0,15)}"`)
       if (!next) break
-      apcontinue = next
-      db.prepare(`INSERT OR REPLACE INTO meta (key,value) VALUES ('wiktionary_apcontinue',?)`).run(next)
+      apcontToken = next
+      apfrom = ''
+      db.prepare(`INSERT OR REPLACE INTO meta (key,value) VALUES ('wiktionary_apcontinue',?)`).run(
+        pages[pages.length - 1]?.title || next
+      )
       continue
     }
 
@@ -256,14 +273,16 @@ async function main() {
     totalPages += hePages.length
     batchNum++
 
-    // Advance continue pointer
     const next = listData?.continue?.apcontinue || ''
-    db.prepare(`INSERT OR REPLACE INTO meta (key,value) VALUES ('wiktionary_apcontinue',?)`).run(next)
+    apcontToken = next
+    apfrom = ''  // once we have a continue token, use that
+    db.prepare(`INSERT OR REPLACE INTO meta (key,value) VALUES ('wiktionary_apcontinue',?)`).run(
+      pages[pages.length - 1]?.title || next  // save last page title as stable resume point
+    )
 
     process.stdout.write(`\r  Batch ${batchNum}: ${totalPages} pages, ${totalImported} entries | next="${next.substring(0,12)}"`)
 
     if (!next) break
-    apcontinue = next
   }
 
   console.log(`\n\nDone! Imported ${totalImported} entries from Wiktionary.`)

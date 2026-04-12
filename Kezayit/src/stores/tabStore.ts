@@ -96,7 +96,7 @@ export const useTabStore = defineStore('tabs', () => {
     '/hebrewbooks': 'היברו-בוקס',
     '/workspaces': 'סביבות עבודה',
     '/hebrew-calendar': 'לוח שנה',
-    '/dictionary': 'מילונים',
+    '/dictionary': 'מילון',
   }
 
   // ── Tab list persistence ──────────────────────────────────────────────────

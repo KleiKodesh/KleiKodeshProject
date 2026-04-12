@@ -12,6 +12,14 @@ node scripts/dictionary/build-dictionary-db.cjs
 
 Output: `public/dictionary.db` (~6.7 MB, ~22,598 entries). The script writes to `public/dictionary.db.tmp` first then renames atomically.
 
+To import Wiktionary data (source 25, requires internet access):
+
+```
+node scripts/dictionary/import-wiktionary.cjs
+```
+
+This script is resumable — run it multiple times if interrupted. Progress is saved in the `meta` table under key `wiktionary_apcontinue`. It fetches from `he.wiktionary.org` via the MediaWiki API (CC BY-SA 4.0). May be blocked on filtered networks — just run again when unblocked.
+
 ## Files in this folder
 
 `build-dictionary-db.cjs` — the only script you need to run.

@@ -167,5 +167,17 @@
     "Description": "בינה מלאכותית.",
     "Url": "https://auth.openai.com/log-in",
     "IsVisible": false
+  },
+  {
+    "Name": "ויקי שיבה",
+    "Description": "ויקי ישיבה - אנציקלופדיה תורנית שיתופית.",
+    "Url": "https://wiki.yeshiva.co",
+    "IsVisible": true
+  },
+  {
+    "Name": "ויקי מילון",
+    "Description": "ויקימילון - המילון החופשי בעברית.",
+    "Url": "https://he.wiktionary.org",
+    "IsVisible": true
   }
 ]

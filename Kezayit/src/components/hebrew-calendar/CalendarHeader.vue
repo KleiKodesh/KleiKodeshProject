@@ -136,11 +136,12 @@ function selectGregYear(y: number) {
 <template>
   <div class="cal-header">
     <!-- Physical RIGHT: Hebrew label -->
-    <div class="header-side header-he">
+    <div class="header-he">
       <div class="picker-wrap">
         <span
           ref="hebMonthBtnRef"
           class="header-label-btn"
+          :title="hebLabelMonth(hebLabel)"
           @click="showHebMonthDrop = !showHebMonthDrop"
         >
           {{ hebLabelMonth(hebLabel) }}
@@ -207,11 +208,12 @@ function selectGregYear(y: number) {
     </div>
 
     <!-- Physical LEFT: Gregorian label -->
-    <div class="header-side header-greg">
+    <div class="header-greg">
       <div class="picker-wrap">
         <span
           ref="gregMonthBtnRef"
           class="header-label-btn"
+          :title="gregLabelMonth(gregLabel)"
           @click="showGregMonthDrop = !showGregMonthDrop"
         >
           {{ gregLabelMonth(gregLabel) }}
@@ -256,31 +258,36 @@ function selectGregYear(y: number) {
 
 <style scoped>
 .cal-header {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  padding: 5px 10px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0;
-}
-
-.header-side {
   display: flex;
   align-items: center;
   gap: 2px;
-}
-.header-he {
-  justify-content: flex-start;
-}
-.header-greg {
-  justify-content: flex-end;
+  padding: 3px 6px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  min-width: 0;
 }
 
-.header-label {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-primary);
+/* Hebrew label — physical right, grows to fill available space */
+.header-he {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex: 1 1 0;
+  min-width: 0;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+
+/* Gregorian label — physical left, grows to fill available space */
+.header-greg {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex: 1 1 0;
+  min-width: 0;
+  justify-content: flex-end;
+  overflow: hidden;
 }
 
 .header-nav {
@@ -289,6 +296,7 @@ function selectGregYear(y: number) {
   justify-content: center;
   gap: 0;
   direction: ltr;
+  flex-shrink: 0;
 }
 .nav-btn {
   display: flex;
@@ -314,16 +322,21 @@ function selectGregYear(y: number) {
 /* ── Picker ──────────────────────────────────────────────────────────────── */
 .picker-wrap {
   position: relative;
+  min-width: 0;
+  overflow: hidden;
 }
 .header-label-btn {
-  display: inline-block;
-  font-size: 14px;
+  display: block;
+  font-size: 11px;
   font-weight: 700;
   color: var(--text-primary);
   cursor: pointer;
   border-radius: 4px;
-  padding: 2px 5px;
+  padding: 2px 3px;
   user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .header-label-btn:hover {
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);

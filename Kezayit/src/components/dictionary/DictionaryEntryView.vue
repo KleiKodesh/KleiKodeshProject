@@ -7,72 +7,76 @@ const props = defineProps<{ entry: DictEntryContent }>()
 interface Sense {
   nikud: string | null
   text: string
+  expansion: string | null
 }
 
-/**
- * Parse the definition string into one or more senses.
- * Handles:
- *   - *** separator between multiple forms/meanings
- *   - {nikud} at the start of each segment
- *   - (=...) abbreviation expansions
- *   - Raw HTML from book entries (passed through as-is)
- */
+/** Parse *** separated senses, extracting inline {nikud} and (=expansion) */
 const senses = computed<Sense[]>(() => {
   const raw = props.entry.html
 
-  // Book entries contain HTML — render as-is, single sense
+  // Book entries contain HTML — single sense, render as-is
   if (raw.includes('<') && raw.includes('>')) {
-    return [{ nikud: props.entry.nikud, text: raw.replace(/\n/g, '<br>') }]
+    return [{ nikud: props.entry.nikud, text: raw.replace(/\n/g, '<br>'), expansion: null }]
   }
 
-  // Split on *** to get multiple senses
   const parts = raw
     .split('***')
     .map((s) => s.trim())
     .filter(Boolean)
 
   return parts.map((part) => {
-    // Each part may start with {nikud}
     const nikudMatch = part.match(/^\{([^}]+)\}\s*(.*)$/)
-    if (nikudMatch) {
-      return { nikud: nikudMatch[1], text: nikudMatch[2].trim() }
+    const text = nikudMatch ? (nikudMatch[2] ?? '').trim() : part
+    const nikud = nikudMatch ? (nikudMatch[1] ?? null) : null
+
+    const abbrevMatch = text.match(/^\(=([^)]+)\)\s*(.*)$/)
+    return {
+      nikud,
+      text: abbrevMatch ? (abbrevMatch[2] ?? '').trim() : text,
+      expansion: abbrevMatch ? (abbrevMatch[1] ?? null) : null,
     }
-    // First part uses the entry-level nikud if no inline nikud
-    return { nikud: null, text: part }
   })
 })
 
-// For abbreviations: extract the (=expansion) if present
-function formatAbbrevExpansion(text: string): { expansion: string | null; rest: string } {
-  const m = text.match(/^\(=([^)]+)\)\s*(.*)$/)
-  if (m) return { expansion: m[1], rest: m[2].trim() }
-  return { expansion: null, rest: text }
-}
+/** "ראה גם: X" cross-reference entries */
+const crossRef = computed(() => {
+  const raw = props.entry.html.trim()
+  const m = raw.match(/^ראה גם:\s*(.+)$/)
+  return m ? (m[1] ?? '').trim() : null
+})
+
+const isHtml = computed(() => props.entry.html.includes('<') && props.entry.html.includes('>'))
 </script>
 
 <template>
   <div class="entry-view">
-    <!-- Senses -->
-    <div class="entry-body">
+    <!-- Cross-reference (ראה גם) -->
+    <div v-if="crossRef" class="entry-crossref">
+      <span class="crossref-label">ראה גם:</span>
+      <span class="crossref-target">{{ crossRef }}</span>
+    </div>
+
+    <!-- Abbreviation expansion -->
+    <div v-else-if="entry.type === 'abbrev'" class="entry-abbrev">
+      <div v-for="(sense, i) in senses" :key="i" class="abbrev-sense">
+        <span v-if="sense.expansion" class="abbrev-expansion">{{ sense.expansion }}</span>
+        <span v-if="sense.text" class="abbrev-rest">{{ sense.text }}</span>
+      </div>
+    </div>
+
+    <!-- HTML book entry -->
+    <div v-else-if="isHtml" class="entry-html-body">
+      <div v-for="(sense, i) in senses" :key="i" class="sense-html" v-html="sense.text" />
+    </div>
+
+    <!-- Regular senses (aramaic / wiktionary) -->
+    <div v-else class="entry-senses">
       <div v-for="(sense, i) in senses" :key="i" class="entry-sense">
-        <!-- Sense nikud (for *** segments with their own form) -->
+        <span v-if="senses.length > 1" class="sense-num">{{ i + 1 }}.</span>
         <span v-if="sense.nikud && sense.nikud !== entry.nikud" class="sense-nikud">
           {{ sense.nikud }}
         </span>
-
-        <!-- Abbreviation expansion -->
-        <template v-if="entry.type === 'abbrev'">
-          <span v-if="formatAbbrevExpansion(sense.text).expansion" class="sense-expansion">
-            {{ formatAbbrevExpansion(sense.text).expansion }}
-          </span>
-          <span v-if="formatAbbrevExpansion(sense.text).rest" class="sense-text">
-            {{ formatAbbrevExpansion(sense.text).rest }}
-          </span>
-        </template>
-
-        <!-- Regular definition or HTML content -->
-        <span v-else-if="sense.text.includes('<')" class="sense-html" v-html="sense.text" />
-        <span v-else class="sense-text">{{ sense.text }}</span>
+        <span class="sense-text">{{ sense.text }}</span>
       </div>
     </div>
   </div>
@@ -80,64 +84,54 @@ function formatAbbrevExpansion(text: string): { expansion: string | null; rest: 
 
 <style scoped>
 .entry-view {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
+  padding: 6px 10px 8px;
   direction: rtl;
 }
 
-/* ── Senses ── */
-.entry-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 6px 10px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
+/* ── Cross-reference ── */
+.entry-crossref {
   display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.entry-sense {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0;
-  padding: 4px 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 40%, transparent);
-}
-
-.entry-sense:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-
-.sense-nikud {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--accent-color);
-}
-
-.sense-expansion {
+  align-items: center;
+  gap: 4px;
   font-size: 12px;
   color: var(--text-secondary);
-  font-style: italic;
+}
+.crossref-label {
+  color: var(--text-secondary);
+}
+.crossref-target {
+  color: var(--accent-color);
+  font-weight: 600;
 }
 
-.sense-text {
+/* ── Abbreviation ── */
+.entry-abbrev {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.abbrev-sense {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+}
+.abbrev-expansion {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.abbrev-rest {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ── HTML book entry ── */
+.entry-html-body {
   font-size: 13px;
   color: var(--text-primary);
-  line-height: 1.5;
-  text-align: justify;
+  line-height: 1.55;
 }
-
-.sense-html {
-  font-size: 13px;
-  color: var(--text-primary);
-  line-height: 1.5;
-  text-align: justify;
-}
-
 .sense-html :deep(b) {
   font-weight: 700;
 }
@@ -147,10 +141,10 @@ function formatAbbrevExpansion(text: string): { expansion: string | null; rest: 
   color: var(--accent-color);
 }
 .sense-html :deep(h3) {
-  font-size: 1.1em;
+  font-size: 1.05em;
   font-weight: 700;
   color: var(--accent-color);
-  margin: 0 0 4px;
+  margin: 0 0 3px;
 }
 .sense-html :deep(small) {
   font-size: 0.85em;
@@ -161,5 +155,35 @@ function formatAbbrevExpansion(text: string): { expansion: string | null; rest: 
   display: inline-block;
   color: var(--text-secondary);
   font-style: italic;
+}
+
+/* ── Regular senses ── */
+.entry-senses {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.entry-sense {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.sense-num {
+  font-size: 11px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  min-width: 14px;
+}
+.sense-nikud {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-color);
+  flex-shrink: 0;
+}
+.sense-text {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.5;
 }
 </style>
