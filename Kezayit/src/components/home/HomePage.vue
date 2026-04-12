@@ -73,14 +73,6 @@ async function onTap(label: string) {
       <span v-if="dateInfo.dafYomi" class="bar-item"
         ><span class="bar-lbl">דף יומי:</span> {{ dateInfo.dafYomi }}</span
       >
-      <template v-if="dateInfo.mishnaYomi">
-        <span class="bar-sep">·</span>
-        <span class="bar-item"><span class="bar-lbl">משנה:</span> {{ dateInfo.mishnaYomi }}</span>
-      </template>
-      <template v-if="dateInfo.nachYomi">
-        <span class="bar-sep">·</span>
-        <span class="bar-item"><span class="bar-lbl">נ״ך:</span> {{ dateInfo.nachYomi }}</span>
-      </template>
     </div>
   </div>
 </template>
