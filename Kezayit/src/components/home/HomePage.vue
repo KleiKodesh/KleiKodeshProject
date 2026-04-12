@@ -15,8 +15,11 @@ import { isHosted, dbReady } from '@/host/db'
 import { useAppNavigation } from '@/composables/useAppNavigation'
 import { useTilesKeys } from '@/composables/useTileGridKeys'
 import { getHomeDateInfo } from './useHomeDateInfo'
+import { navigateToDafYomi } from './useDafYomiNavigation'
+import { useTabStore } from '@/stores/tabStore'
 
 const { navigate } = useAppNavigation()
+const tabStore = useTabStore()
 const dateInfo = getHomeDateInfo()
 
 const baseTiles = [
@@ -68,9 +71,21 @@ async function onTap(label: string) {
     </div>
 
     <div class="date-bar">
-      <span class="date-hebrew">{{ dateInfo.hebrewDate }}</span>
+      <button
+        class="date-hebrew date-hebrew--btn"
+        @click="tabStore.navigateToSingleton('/hebrew-calendar')"
+      >
+        {{ dateInfo.hebrewDate }}
+      </button>
       <span class="bar-sep">·</span>
-      <span v-if="dateInfo.dafYomi" class="bar-item"
+      <button
+        v-if="dateInfo.dafYomi && dbReady"
+        class="bar-item bar-item--btn"
+        @click="navigateToDafYomi(dateInfo.dafYomi)"
+      >
+        <span class="bar-lbl">דף יומי:</span> {{ dateInfo.dafYomi }}
+      </button>
+      <span v-else-if="dateInfo.dafYomi" class="bar-item"
         ><span class="bar-lbl">דף יומי:</span> {{ dateInfo.dafYomi }}</span
       >
     </div>
@@ -115,6 +130,19 @@ async function onTap(label: string) {
   font-weight: 600;
   color: var(--text-primary);
 }
+.date-hebrew--btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+.date-hebrew--btn:hover {
+  color: var(--accent-color);
+}
 .bar-sep {
   color: var(--text-secondary);
   opacity: 0.4;
@@ -126,5 +154,21 @@ async function onTap(label: string) {
 .bar-lbl {
   font-weight: 600;
   color: var(--text-primary);
+}
+.bar-item--btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.bar-item--btn:hover {
+  color: var(--accent-color);
+}
+.bar-item--btn:hover .bar-lbl {
+  color: inherit;
 }
 </style>

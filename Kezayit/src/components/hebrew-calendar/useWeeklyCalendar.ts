@@ -381,5 +381,14 @@ export function useWeeklyCalendar(city: { value: City }) {
     },
   )
 
-  return { week, weekOffset, isCurrentWeek, prevWeek, nextWeek, goToToday }
+  return {
+    week,
+    weekOffset,
+    isCurrentWeek,
+    prevWeek,
+    nextWeek,
+    goToToday,
+    hebrewLabel: computed(() => week.value.hebrewRangeLabel),
+    gregLabel: computed(() => week.value.gregRangeLabel),
+  }
 }

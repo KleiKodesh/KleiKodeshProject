@@ -1,24 +1,16 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import {
-  IconChevronLeft20Regular,
-  IconChevronRight20Regular,
-  IconHome20Regular,
-} from '@iconify-prerendered/vue-fluent'
-import { useWeeklyCalendar } from './useWeeklyCalendar'
 import type { City, WeekDay } from './useWeeklyCalendar'
+import type { useWeeklyCalendar } from './useWeeklyCalendar'
 
-const props = defineProps<{ city: City; cities: City[] }>()
+const props = defineProps<{
+  city: City
+  cities: City[]
+  weekly: ReturnType<typeof useWeeklyCalendar>
+}>()
 const emit = defineEmits<{ (e: 'city-change', city: City): void }>()
 
-const cityRef = {
-  get value() {
-    return props.city
-  },
-}
-const { week, prevWeek, nextWeek, goToToday } = useWeeklyCalendar(cityRef)
-
-defineExpose({ scrollToToday: goToToday })
+const { week } = props.weekly
 
 const expandedDay = ref<number | null>(null)
 function toggleDay(dow: number) {
@@ -47,19 +39,6 @@ const ZMANIM_LABELS: Array<{ key: keyof WeekDay['zmanim']; label: string }> = [
 
 <template>
   <div class="cal-wrap">
-    <!-- Week header: Hebrew range right, Gregorian left, arrows on edges -->
-    <div class="week-header">
-      <!-- physical right (inline-start) = Hebrew label -->
-      <span class="header-he">{{ week.hebrewRangeLabel }}</span>
-      <div class="header-nav">
-        <button class="nav-btn" @click="nextWeek"><IconChevronRight20Regular /></button>
-        <button class="nav-btn" @click="goToToday" title="היום"><IconHome20Regular /></button>
-        <button class="nav-btn" @click="prevWeek"><IconChevronLeft20Regular /></button>
-      </div>
-      <!-- physical left (inline-end) = Gregorian label -->
-      <span class="header-greg">{{ week.gregRangeLabel }}</span>
-    </div>
-
     <!-- Day rows -->
     <div class="days-list" :class="{ 'has-expanded': expandedDay !== null }">
       <div
@@ -79,7 +58,7 @@ const ZMANIM_LABELS: Array<{ key: keyof WeekDay['zmanim']; label: string }> = [
             <span class="heb-day-name" :class="{ accent: day.isShabbat }">{{
               day.hebrewDayName
             }}</span>
-            <span class="heb-day-gem" :class="{ accent: day.isShabbat || day.isToday }">{{
+            <span class="heb-day-gem" :class="{ accent: day.isShabbat && !day.isToday }">{{
               day.hebrewDayGem
             }}</span>
           </div>
@@ -96,11 +75,10 @@ const ZMANIM_LABELS: Array<{ key: keyof WeekDay['zmanim']; label: string }> = [
               <span v-if="day.chanukahCandles" class="event-chanukah">{{
                 day.chanukahCandles
               }}</span>
-            </div>
-            <div class="bottom-line">
-              <span v-if="day.havdalah" class="havdalah-line">צאת שבת: {{ day.havdalah }}</span>
-              <span v-if="day.candleLighting" class="candle-line"
-                >הדלקת נרות: {{ day.candleLighting }}</span
+              <span
+                v-if="day.parasha || day.holidays.length || day.chanukahCandles"
+                class="event-sep"
+                >·</span
               >
               <button
                 class="zmanim-link"
@@ -127,6 +105,8 @@ const ZMANIM_LABELS: Array<{ key: keyof WeekDay['zmanim']; label: string }> = [
           <!-- Extra day info -->
           <div
             v-if="
+              day.havdalah ||
+              day.candleLighting ||
               day.omer ||
               day.shabbatMevarchim ||
               day.molad ||
@@ -139,6 +119,10 @@ const ZMANIM_LABELS: Array<{ key: keyof WeekDay['zmanim']; label: string }> = [
             "
             class="zmanim-extra"
           >
+            <span v-if="day.havdalah" class="havdalah-line">צאת שבת: {{ day.havdalah }}</span>
+            <span v-if="day.candleLighting" class="candle-line"
+              >הדלקת נרות: {{ day.candleLighting }}</span
+            >
             <span v-if="day.omer" class="event-omer">{{ day.omer }}</span>
             <span v-if="day.yomKippurKatan" class="event-holiday">{{ day.yomKippurKatan }}</span>
             <span v-if="day.fastStart" class="event-fast-time">{{ day.fastStart }}</span>
@@ -173,48 +157,6 @@ const ZMANIM_LABELS: Array<{ key: keyof WeekDay['zmanim']; label: string }> = [
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding-inline: 4px;
-}
-
-/* ── Week header ─────────────────────────────────────────────────────────── */
-.week-header {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  padding: 5px 10px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0;
-}
-/* first child = physical right in RTL */
-.header-he {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-primary);
-  text-align: start;
-}
-.header-nav {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  justify-content: center;
-}
-/* last child = physical left in RTL */
-.header-greg {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-primary);
-  text-align: end;
-}
-.nav-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 3px;
-  color: var(--text-secondary);
-  font-size: 13px;
 }
 
 /* ── Days list ───────────────────────────────────────────────────────────── */
@@ -245,14 +187,14 @@ const ZMANIM_LABELS: Array<{ key: keyof WeekDay['zmanim']; label: string }> = [
 .zmanim-link {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 600;
   color: var(--accent-color, #0078d4);
   opacity: 0.7;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   border-radius: 4px;
-  padding: 2px 6px;
+  padding: 2px 4px;
 }
 .zmanim-link:hover {
   opacity: 1;
@@ -267,13 +209,17 @@ const ZMANIM_LABELS: Array<{ key: keyof WeekDay['zmanim']; label: string }> = [
   background: color-mix(in srgb, var(--text-secondary) 6%, transparent);
 }
 .day-tile.is-today {
-  background: color-mix(in srgb, var(--accent-color, #0078d4) 8%, transparent);
+  border-inline-start: 3px solid var(--accent-color, #0078d4);
+}
+.day-tile.is-today.has-holiday {
+  border-inline-start: 3px solid var(--accent-color, #0078d4);
+  background: color-mix(in srgb, #f0a500 6%, transparent);
 }
 .day-tile.has-holiday {
   background: color-mix(in srgb, #f0a500 6%, transparent);
 }
 .day-tile.is-today.has-holiday {
-  background: color-mix(in srgb, var(--accent-color, #0078d4) 8%, transparent);
+  background: color-mix(in srgb, #f0a500 6%, transparent);
 }
 
 /* ── Main row — RTL flex, 4 columns ─────────────────────────────────────── */
@@ -325,54 +271,53 @@ const ZMANIM_LABELS: Array<{ key: keyof WeekDay['zmanim']; label: string }> = [
 }
 .events-line {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 4px;
   overflow: hidden;
-  white-space: nowrap;
   max-width: 100%;
 }
 .event-sep {
   color: var(--text-secondary);
   opacity: 0.5;
-  font-size: 11px;
+  font-size: 12px;
 }
 .event-parasha {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
 }
 .event-holiday {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: #f0a500;
 }
 .event-omer {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text-secondary);
 }
 .event-chanukah {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: #e8a020;
 }
 .event-mevarchim {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text-secondary);
   font-style: italic;
 }
 .event-molad {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text-secondary);
 }
 .event-fast-time {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-secondary);
 }
 .event-learning {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-secondary);
 }
 .learning-label {

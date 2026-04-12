@@ -18,13 +18,55 @@ const MONTH_NAMES: Record<number, string> = {
   13: 'אדר ב׳',
 }
 
+// Standard 12-month list (no leap month) for the picker
+export const HEB_MONTH_LIST = [
+  { num: 7, name: 'תשרי' },
+  { num: 8, name: 'חשון' },
+  { num: 9, name: 'כסלו' },
+  { num: 10, name: 'טבת' },
+  { num: 11, name: 'שבט' },
+  { num: 12, name: 'אדר' },
+  { num: 1, name: 'ניסן' },
+  { num: 2, name: 'אייר' },
+  { num: 3, name: 'סיון' },
+  { num: 4, name: 'תמוז' },
+  { num: 5, name: 'אב' },
+  { num: 6, name: 'אלול' },
+]
+
+// Convert a Hebrew year number to gematriya string (e.g. 5786 → "תשפ״ו")
+export function hebYearToGematriya(year: number): string {
+  try {
+    const hd = new HDate(1, 7, year)
+    const parts = hd.renderGematriya().split(' ')
+    return parts[parts.length - 1] ?? String(year)
+  } catch {
+    return String(year)
+  }
+}
+
+export const GREG_MONTH_LIST = [
+  'ינואר',
+  'פברואר',
+  'מרץ',
+  'אפריל',
+  'מאי',
+  'יוני',
+  'יולי',
+  'אוגוסט',
+  'ספטמבר',
+  'אוקטובר',
+  'נובמבר',
+  'דצמבר',
+]
+
 export const DAY_NAMES = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת']
 
 export interface CalendarDay {
   date: Date
-  hebrewDayStr: string // gematriya of the day number only
+  hebrewDayStr: string
   isToday: boolean
-  isCurrentMonth: boolean
+  isCurrentMonth: boolean // true when day's Hebrew month === displayed Hebrew month
   isShabbat: boolean
   holidays: string[]
 }
@@ -33,14 +75,11 @@ export interface CalendarWeek {
   days: CalendarDay[]
 }
 
-// renderGematriya() returns "כ״ה נִיסָן תשפ״ו" — first token is the day gematriya
 function dayGematriya(hd: HDate): string {
   return hd.renderGematriya().split(' ')[0] ?? String(hd.getDate())
 }
 
-// Strip niqqud from Hebrew text for cleaner display
 function stripNiqqud(s: string): string {
-  // Preserve U+05BE (מקף — Hebrew hyphen used in double-parasha names)
   return s.replace(/[\u0591-\u05BD\u05BF-\u05C7]/g, '')
 }
 
@@ -67,14 +106,153 @@ function getHolidayNames(date: Date): string[] {
   }
 }
 
+// Number of days in a Hebrew month
+function daysInHebMonth(month: number, year: number): number {
+  return HDate.daysInMonth(month, year)
+}
+
+// Advance Hebrew month by +1 or -1, wrapping year correctly
+function advanceHebMonth(
+  month: number,
+  year: number,
+  delta: 1 | -1,
+): { month: number; year: number } {
+  const months = HDate.monthsInYear(year)
+  let m = month + delta
+  let y = year
+  if (m > months) {
+    m = 1
+    y++
+  }
+  if (m < 1) {
+    y--
+    m = HDate.monthsInYear(y)
+  }
+  return { month: m, year: y }
+}
+
 export function useHebrewCalendar() {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
-  const displayYear = ref(today.getFullYear())
-  const displayMonth = ref(today.getMonth()) // 0-indexed Gregorian
+  const todayHeb = new HDate(today)
 
-  // Today's full Hebrew date label e.g. "כ״ה ניסן תשפ״ו"
+  // State: current Hebrew month + year
+  const displayHebMonth = ref(todayHeb.getMonth())
+  const displayHebYear = ref(todayHeb.getFullYear())
+
+  // Expose as displayMonth/displayYear (Gregorian) for the header Gregorian pickers
+  // These are derived from the 1st of the Hebrew month
+  const displayMonth = computed({
+    get() {
+      return new HDate(1, displayHebMonth.value, displayHebYear.value).greg().getMonth()
+    },
+    set(m: number) {
+      // When Gregorian month picker selects, derive Hebrew month from mid of that greg month
+      const mid = new Date(displayYear.value, m, 15)
+      const hd = new HDate(mid)
+      displayHebMonth.value = hd.getMonth()
+      displayHebYear.value = hd.getFullYear()
+    },
+  })
+
+  const displayYear = computed({
+    get() {
+      return new HDate(1, displayHebMonth.value, displayHebYear.value).greg().getFullYear()
+    },
+    set(y: number) {
+      const mid = new Date(y, displayMonth.value, 15)
+      const hd = new HDate(mid)
+      displayHebMonth.value = hd.getMonth()
+      displayHebYear.value = hd.getFullYear()
+    },
+  })
+
+  const currentHebMonth = computed(() => displayHebMonth.value)
+  const currentHebYear = computed(() => displayHebYear.value)
+
+  const hebrewMonthLabel = computed(() => {
+    const monthName = MONTH_NAMES[displayHebMonth.value] ?? ''
+    const yearStr = hebYearToGematriya(displayHebYear.value)
+    return `${monthName} ${yearStr}`
+  })
+
+  const gregorianMonthLabel = computed(() => {
+    // Show the Gregorian month(s) that this Hebrew month spans
+    const first = new HDate(1, displayHebMonth.value, displayHebYear.value).greg()
+    const last = new HDate(
+      daysInHebMonth(displayHebMonth.value, displayHebYear.value),
+      displayHebMonth.value,
+      displayHebYear.value,
+    ).greg()
+    const firstLabel = first.toLocaleDateString('he-IL', { month: 'long', year: 'numeric' })
+    const lastLabel = last.toLocaleDateString('he-IL', { month: 'long', year: 'numeric' })
+    return firstLabel === lastLabel ? firstLabel : `${lastLabel} – ${firstLabel}`
+  })
+
+  const weeks = computed((): CalendarWeek[] => {
+    const hebMonth = displayHebMonth.value
+    const hebYear = displayHebYear.value
+
+    // First and last Gregorian dates of this Hebrew month
+    const firstGreg = new HDate(1, hebMonth, hebYear).greg()
+    const lastDay = daysInHebMonth(hebMonth, hebYear)
+    const lastGreg = new HDate(lastDay, hebMonth, hebYear).greg()
+
+    // Pad to Sunday at start, Saturday at end
+    const startDate = new Date(firstGreg)
+    startDate.setDate(startDate.getDate() - startDate.getDay())
+    startDate.setHours(0, 0, 0, 0)
+
+    const endDate = new Date(lastGreg)
+    endDate.setDate(endDate.getDate() + (6 - endDate.getDay()))
+    endDate.setHours(0, 0, 0, 0)
+
+    const days: CalendarDay[] = []
+    const cur = new Date(startDate)
+    while (cur <= endDate) {
+      const d = new Date(cur)
+      const hd = new HDate(d)
+      days.push({
+        date: d,
+        hebrewDayStr: dayGematriya(hd),
+        isToday: d.getTime() === today.getTime(),
+        isCurrentMonth: hd.getMonth() === hebMonth,
+        isShabbat: d.getDay() === 6,
+        holidays: getHolidayNames(d),
+      })
+      cur.setDate(cur.getDate() + 1)
+    }
+
+    const result: CalendarWeek[] = []
+    for (let i = 0; i < days.length; i += 7) {
+      result.push({ days: days.slice(i, i + 7) })
+    }
+    return result
+  })
+
+  function prevMonth() {
+    const { month, year } = advanceHebMonth(displayHebMonth.value, displayHebYear.value, -1)
+    displayHebMonth.value = month
+    displayHebYear.value = year
+  }
+
+  function nextMonth() {
+    const { month, year } = advanceHebMonth(displayHebMonth.value, displayHebYear.value, 1)
+    displayHebMonth.value = month
+    displayHebYear.value = year
+  }
+
+  function goToToday() {
+    displayHebMonth.value = todayHeb.getMonth()
+    displayHebYear.value = todayHeb.getFullYear()
+  }
+
+  function jumpToHebrew(hebYear: number, hebMonth: number) {
+    displayHebMonth.value = hebMonth
+    displayHebYear.value = hebYear
+  }
+
   const todayHebrewLabel = computed(() => {
     const hd = new HDate(today)
     const parts = hd.renderGematriya().split(' ')
@@ -86,10 +264,8 @@ export function useHebrewCalendar() {
 
   const todayHolidays = computed(() => getHolidayNames(today))
 
-  // Parasha of the current week (shown on Shabbat and the preceding days)
   const parasha = computed(() => {
     try {
-      // Look ahead up to 7 days to find the upcoming Shabbat's parasha
       for (let offset = 0; offset <= 6; offset++) {
         const d = new Date(today)
         d.setDate(d.getDate() + offset)
@@ -110,84 +286,16 @@ export function useHebrewCalendar() {
     }
   })
 
-  // Month header labels
-  const hebrewMonthLabel = computed(() => {
-    const mid = new Date(displayYear.value, displayMonth.value, 15)
-    const hd = new HDate(mid)
-    const parts = hd.renderGematriya().split(' ')
-    const year = parts[parts.length - 1] ?? ''
-    const monthName = MONTH_NAMES[hd.getMonth()] ?? ''
-    return `${monthName} ${year}`
-  })
-
-  const gregorianMonthLabel = computed(() =>
-    new Date(displayYear.value, displayMonth.value, 1).toLocaleDateString('he-IL', {
-      month: 'long',
-      year: 'numeric',
-    }),
-  )
-
-  const weeks = computed((): CalendarWeek[] => {
-    const year = displayYear.value
-    const month = displayMonth.value
-    const firstDay = new Date(year, month, 1)
-    const startDow = firstDay.getDay() // 0=Sun
-
-    const startDate = new Date(firstDay)
-    startDate.setDate(startDate.getDate() - startDow)
-
-    const days: CalendarDay[] = []
-    for (let i = 0; i < 42; i++) {
-      const d = new Date(startDate)
-      d.setDate(startDate.getDate() + i)
-      d.setHours(0, 0, 0, 0)
-
-      const hd = new HDate(d)
-      days.push({
-        date: d,
-        hebrewDayStr: dayGematriya(hd),
-        isToday: d.getTime() === today.getTime(),
-        isCurrentMonth: d.getMonth() === month,
-        isShabbat: d.getDay() === 6,
-        holidays: getHolidayNames(d),
-      })
-    }
-
-    const result: CalendarWeek[] = []
-    for (let w = 0; w < 6; w++) {
-      result.push({ days: days.slice(w * 7, w * 7 + 7) })
-    }
-    return result
-  })
-
-  function prevMonth() {
-    if (displayMonth.value === 0) {
-      displayMonth.value = 11
-      displayYear.value--
-    } else {
-      displayMonth.value--
-    }
-  }
-
-  function nextMonth() {
-    if (displayMonth.value === 11) {
-      displayMonth.value = 0
-      displayYear.value++
-    } else {
-      displayMonth.value++
-    }
-  }
-
-  function goToToday() {
-    displayYear.value = today.getFullYear()
-    displayMonth.value = today.getMonth()
-  }
-
   return {
     weeks,
     dayNames: DAY_NAMES,
+    displayMonth,
+    displayYear,
+    currentHebMonth,
+    currentHebYear,
     hebrewMonthLabel,
     gregorianMonthLabel,
+    jumpToHebrew,
     todayHebrewLabel,
     todayHolidays,
     parasha,

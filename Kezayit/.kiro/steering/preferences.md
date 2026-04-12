@@ -61,6 +61,7 @@ These thresholds exist so that agentic AI can reliably read, edit, and reason ab
 
 - Always prefer the most compact layout that still meets the 44px touch target rule
 - Reduce padding, margins, and font sizes to the minimum that remains comfortable — never add whitespace for aesthetics alone
+- Dropdown list items (pickers, selects, year/month lists) use `height: 26px`, `font-size: 12px`, `padding: 0`, `line-height: 1` — this is the established balance between touch usability and compactness; do not increase item height in dropdowns without a specific reason
 
 ## Icons
 
@@ -73,6 +74,10 @@ These thresholds exist so that agentic AI can reliably read, edit, and reason ab
 
 - No code samples in steering files — describe rules and patterns in plain prose only
 - Whenever the architecture changes — new components, composables, stores, routes, or feature folders added or removed — update `architecture.md` to reflect the change
+
+## Navigation Controls (RTL)
+
+In RTL layout, the leftmost button is always the "next/advance" button. For prev/next navigation pairs, always use `IconChevronLeft` for next (advance) and `IconChevronRight` for prev (back). The correct button order reading left→right on screen is: `<` (next) · `>` (prev) · home · toggle. Never reverse this — the chevron icon direction matches the reading direction, not the semantic direction.
 
 ## Git
 
