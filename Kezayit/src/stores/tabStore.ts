@@ -26,6 +26,7 @@ export type TabRoute =
   | '/hebrewbooks'
   | '/workspaces'
   | '/search'
+  | '/hebrew-calendar'
 
 export interface Tab {
   id: string
@@ -80,12 +81,19 @@ export const useTabStore = defineStore('tabs', () => {
 
   // ── Singleton routes — never persisted across sessions ───────────────────
 
-  const SINGLETON_ROUTES: TabRoute[] = ['/settings', '/books', '/hebrewbooks', '/workspaces']
+  const SINGLETON_ROUTES: TabRoute[] = [
+    '/settings',
+    '/books',
+    '/hebrewbooks',
+    '/workspaces',
+    '/hebrew-calendar',
+  ]
   const SINGLETON_TITLES: Record<string, string> = {
     '/settings': 'הגדרות',
     '/books': 'ספרים',
     '/hebrewbooks': 'היברו-בוקס',
     '/workspaces': 'סביבות עבודה',
+    '/hebrew-calendar': 'לוח שנה',
   }
 
   // ── Tab list persistence ──────────────────────────────────────────────────

@@ -25,6 +25,7 @@ type TocRow = {
   bookId: number
   text: string
   lineIndex: number | null
+  hasChildren: number | boolean
 }
 
 function chunkIds(ids: number[]): number[][] {

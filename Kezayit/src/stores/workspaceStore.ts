@@ -3,6 +3,8 @@ import { ref, computed, toRaw } from 'vue'
 import { idbGet, idbSet, idbDeleteWorkspaceData, KEYS } from '@/utils/idbPersistence'
 import type { Workspace, WorkspaceList } from '@/utils/idbPersistence'
 
+export type { Workspace } from '@/utils/idbPersistence'
+
 const DEFAULT_WS_ID = 'default'
 const DEFAULT_WS_NAME = 'ברירת מחדל'
 

@@ -159,6 +159,7 @@ export const KEYS = {
   SETTINGS_THEME: 'theme',
   SETTINGS_CUSTOM_THEMES: 'customThemes',
   SETTINGS_SETUP_DONE: 'setupDone',
+  SETTINGS_ZMANIM_CITY: 'zmanim.city',
 
   // app-tabs keys
   tabsList: (wsId: string) => `tabs:${wsId}`,

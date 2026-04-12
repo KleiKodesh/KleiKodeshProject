@@ -210,12 +210,10 @@ export function useBloomSearch() {
     // Cache check
     const cached = await cache.get(query.trim().toLowerCase())
     if (cached) {
-      console.log('[useBloomSearch] cache hit for:', query)
       results.value = cached
       isSearching.value = false
       return
     }
-    console.log('[useBloomSearch] cache miss for:', query)
 
     try {
       ensureWebviewListener()

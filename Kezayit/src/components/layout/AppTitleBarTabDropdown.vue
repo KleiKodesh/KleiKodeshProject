@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import {
   IconDismiss20Regular,
   IconHome20Regular,
@@ -25,7 +25,7 @@ nextTick(() => containerRef.value?.focus())
 
 <template>
   <div ref="containerRef" class="tab-dropdown" tabindex="0" @keydown.esc.stop="emit('dismiss')">
-    <div v-for="tab in visibleTabs()" :key="tab.id" class="tab-row" @click="emit('select', tab.id)">
+    <div v-for="tab in visibleTabs" :key="tab.id" class="tab-row" @click="emit('select', tab.id)">
       <div class="tab-row-start">
         <IconHome20Regular v-if="tab.route === '/'" class="tab-icon" />
         <IconBook20Filled v-else-if="tab.route === '/book-view'" class="tab-icon book-icon" />

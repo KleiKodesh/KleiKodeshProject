@@ -18,6 +18,7 @@ export function useAppNavigation() {
     הגדרות: '/settings',
     'היברו-בוקס': '/hebrewbooks',
     'סביבות עבודה': '/workspaces',
+    'לוח שנה': '/hebrew-calendar',
   }
 
   async function navigate(label: string) {

@@ -13,6 +13,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text.Json;
 using System.Threading.Tasks;
+using System.Windows.Media;
 using System.Windows.Forms;
 
 namespace KezayitLib
@@ -199,8 +200,21 @@ namespace KezayitLib
 
         private void HandleGetFonts(string id)
         {
-            string[] fonts = FontFamily.Families.Select(f => f.Name).ToArray();
+            string[] fonts = Fonts.SystemFontFamilies
+                .Where(f => HasHebCharacters(f))
+                .Select(f => f.Source)
+                .OrderBy(n => n)
+                .ToArray();
             _bridge.Reply(id, new { fonts = fonts });
+        }
+
+        private bool HasHebCharacters(System.Windows.Media.FontFamily family)
+        {
+            return family.GetTypefaces().Any(typeface =>
+            {
+                GlyphTypeface glyph;
+                return typeface.TryGetGlyphTypeface(out glyph) && glyph.CharacterToGlyphMap.ContainsKey('א');
+            });
         }
 
         /// <summary>

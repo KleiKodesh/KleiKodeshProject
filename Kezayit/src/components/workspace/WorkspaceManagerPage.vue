@@ -8,7 +8,7 @@ import {
   IconDismiss20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import { useWorkspaceStore } from '@/stores/workspaceStore'
-import type { Workspace } from '@/utils/idbPersistence'
+import type { Workspace } from '@/stores/workspaceStore'
 
 const wsStore = useWorkspaceStore()
 

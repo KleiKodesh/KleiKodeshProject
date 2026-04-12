@@ -31,7 +31,6 @@ export function useIndexingStatus() {
   let devTimer: ReturnType<typeof setTimeout> | null = null
 
   onMounted(async () => {
-    console.log('[useIndexingStatus] mounted, isHosted=', isHosted)
     if (!isHosted || typeof window.__webviewAction !== 'function') {
       // Dev simulation: 0→100% over ~3s
       state.value = { ...IDLE, isIndexing: true, totalChunks: 100, eta: '3s' }
@@ -65,7 +64,6 @@ export function useIndexingStatus() {
 
     try {
       const p = await callAction<IndexingState>('GetBloomIndexingProgress')
-      console.log('[useIndexingStatus] GetBloomIndexingProgress response:', p)
       if (p)
         state.value = {
           isReady: p.isReady,
@@ -90,7 +88,6 @@ export function useIndexingStatus() {
         return
       }
       if (msg.event !== 'bloomIndexProgress') return
-      console.log('[useIndexingStatus] bloomIndexProgress event:', msg)
       state.value = {
         isReady: msg.isReady as boolean,
         isIndexing: msg.isIndexing as boolean,

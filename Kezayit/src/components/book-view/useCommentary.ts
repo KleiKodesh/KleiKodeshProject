@@ -103,6 +103,73 @@ function sortCategoryEntries(
   return entries.sort(([catA], [catB]) => categoryRank(catA) - categoryRank(catB))
 }
 
+type RawGroup = {
+  bookId: number
+  bookTitle: string
+  connectionTypes: string[]
+  lines: CommentaryLine[]
+  category: string
+  ct: string
+  treeOrder: number
+}
+
+function buildGroups(raw: RawGroup[]): CommentaryGroup[] {
+  const byType = new Map<string, RawGroup[]>()
+  for (const g of raw) {
+    if (!byType.has(g.ct)) byType.set(g.ct, [])
+    byType.get(g.ct)!.push(g)
+  }
+
+  const result: CommentaryGroup[] = []
+
+  const addFlat = (ct: string, label: string) => {
+    const items = byType.get(ct) ?? []
+    for (const g of items.sort((a, b) => a.treeOrder - b.treeOrder))
+      result.push({
+        bookId: g.bookId,
+        bookTitle: g.bookTitle,
+        path: `${g.bookTitle} · ${label}`,
+        connectionTypes: g.connectionTypes,
+        lines: g.lines,
+        category: g.category,
+        sectionLabel: label,
+      })
+  }
+
+  const addMergedByCategory = (ct: string, sectionLabel: string) => {
+    const items = [...(byType.get(ct) ?? [])]
+    if (!items.length) return
+    const byCat = new Map<string, RawGroup[]>()
+    for (const g of items) {
+      if (!byCat.has(g.category)) byCat.set(g.category, [])
+      byCat.get(g.category)!.push(g)
+    }
+    const sorted = sortCategoryEntries(
+      [...byCat.entries()].map(([cat, gs]) => [cat, gs.map((g) => ({ bookId: g.bookId }))]),
+    )
+    for (const [cat] of sorted) {
+      for (const g of byCat.get(cat)!.sort((a, b) => a.treeOrder - b.treeOrder))
+        result.push({
+          bookId: g.bookId,
+          bookTitle: g.bookTitle,
+          path: `${g.bookTitle} · ${sectionLabel} · ${cat}`,
+          connectionTypes: g.connectionTypes,
+          lines: g.lines,
+          category: cat,
+          sectionLabel,
+          subSectionLabel: cat,
+        })
+    }
+  }
+
+  addFlat('SOURCE', 'מקור')
+  addFlat('TARGUM', 'תרגומים')
+  addMergedByCategory('COMMENTARY', 'מפרשים')
+  addMergedByCategory('OTHER', 'קשרים')
+  addFlat('REFERENCE', 'ציונים')
+  return result
+}
+
 export function useCommentary(
   selectedLineId: () => number | null,
   selectedLineIds: () => number[] | null = () => null,

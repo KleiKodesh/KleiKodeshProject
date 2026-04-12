@@ -98,7 +98,7 @@ const activeTree = computed(() => props.searchTree ?? internalTree.value ?? new 
 
 const visibleNodes = computed(() => {
   if (props.filter) {
-    return activeTree.value.search(props.nodes, props.filter, 100)
+    return activeTree.value.search(props.nodes, props.filter, 100) as TreeNodeItem[]
   }
 
   const result: TreeNodeItem[] = []

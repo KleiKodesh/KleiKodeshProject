@@ -1,4 +1,4 @@
-import { ref, watch } from 'vue'
+import { ref, shallowRef, watch } from 'vue'
 import { query } from '@/host/db'
 import { SQL } from '@/host/queries.sql'
 import { SearchableTree, stripTocTitleRoots } from '@/utils/tocSearchUtils'
@@ -31,10 +31,10 @@ function stripBookTitleRoot(
 
 export function useToc(bookId: () => number | undefined, bookTitle?: () => string | undefined) {
   const tocEntries = ref<TocEntry[]>([])
-  const altTocSections = ref<AltTocSection[]>([])
+  const altTocSections = shallowRef<AltTocSection[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
-  const tocSearchTree = ref<SearchableTree>(new SearchableTree([]))
+  const tocSearchTree = shallowRef<SearchableTree>(new SearchableTree([]))
 
   async function load(id: number) {
     loading.value = true

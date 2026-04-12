@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
-import { hebrewBooksHistory } from './hebrewBooksHistory'
+import { useHebrewBooksHistoryStore } from '@/stores/hebrewBooksHistoryStore'
 import { loadHbCatalog, searchHbCatalog, getHbPdfUrl, type HebrewBook } from './hebrewBooksCatalog'
 import { usePdfStore } from '@/stores/pdfStore'
 import { useTabStore } from '@/stores/tabStore'
@@ -8,6 +8,7 @@ import { isHosted } from '@/host/db'
 
 export function useHebrewBooks() {
   const pdfStore = usePdfStore()
+  const history = useHebrewBooksHistoryStore()
 
   // Catalog lives here — freed automatically when the component unmounts
   const catalog = ref<HebrewBook[]>([])
@@ -21,12 +22,12 @@ export function useHebrewBooks() {
     isLoading.value = true
     error.value = null
     try {
-      const [history, loadedCatalog] = await Promise.all([
-        hebrewBooksHistory.getHistory(),
+      const [historyBooks, loadedCatalog] = await Promise.all([
+        history.getHistory(),
         loadHbCatalog(),
       ])
       catalog.value = loadedCatalog
-      books.value = history
+      books.value = historyBooks
     } catch {
       error.value = 'שגיאה בטעינת הספרים'
     } finally {
@@ -36,7 +37,7 @@ export function useHebrewBooks() {
 
   const runSearch = useDebounceFn((term: string) => {
     if (!term.trim()) {
-      hebrewBooksHistory.getHistory().then((h) => {
+      history.getHistory().then((h) => {
         books.value = h
       })
     } else {
@@ -50,7 +51,7 @@ export function useHebrewBooks() {
   }
 
   async function trackAccess(book: HebrewBook) {
-    await hebrewBooksHistory.trackAccess(book)
+    await history.trackAccess(book)
   }
 
   function openBook(book: HebrewBook) {

@@ -110,7 +110,7 @@ const CANDIDATES = [
 
 export async function detectAvailableFonts(): Promise<string[]> {
   if (isHosted) {
-    const result = await window.__webviewAction('getFonts')
+    const result = await window.__webviewAction!('getFonts')
     return (result as { fonts: string[] }).fonts
   }
   return _detectByCanvas()

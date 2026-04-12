@@ -177,7 +177,7 @@ export interface SearchableNode {
   id: number
   parentId: number | null
   text: string
-  hasChildren: number
+  hasChildren: number | boolean
 }
 
 /**

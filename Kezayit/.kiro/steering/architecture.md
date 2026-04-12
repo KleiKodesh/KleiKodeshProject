@@ -56,16 +56,17 @@ Multi-instance routes (`/book-view`, `/search`, `/pdf-view`) can have multiple t
 
 ## Pages & Routes
 
-| Route          | Component                  | Kind                            |
-| -------------- | -------------------------- | ------------------------------- |
-| `/`            | `HomePage.vue`             | shared instance                 |
-| `/books`       | `BooksFsPage.vue`          | singleton                       |
-| `/book-view`   | `BookViewPage.vue`         | multi-instance (keyed by tabId) |
-| `/search`      | `SearchPage.vue`           | multi-instance (keyed by tabId) |
-| `/settings`    | `SettingsPage.vue`         | singleton                       |
-| `/hebrewbooks` | `HebrewBooksPage.vue`      | singleton                       |
-| `/pdf-view`    | `PdfViewPage.vue`          | multi-instance                  |
-| `/workspaces`  | `WorkspaceManagerPage.vue` | singleton                       |
+| Route              | Component                  | Kind                            |
+| ------------------ | -------------------------- | ------------------------------- |
+| `/`                | `HomePage.vue`             | shared instance                 |
+| `/books`           | `BooksFsPage.vue`          | singleton                       |
+| `/book-view`       | `BookViewPage.vue`         | multi-instance (keyed by tabId) |
+| `/search`          | `SearchPage.vue`           | multi-instance (keyed by tabId) |
+| `/settings`        | `SettingsPage.vue`         | singleton                       |
+| `/hebrewbooks`     | `HebrewBooksPage.vue`      | singleton                       |
+| `/pdf-view`        | `PdfViewPage.vue`          | multi-instance                  |
+| `/workspaces`      | `WorkspaceManagerPage.vue` | singleton                       |
+| `/hebrew-calendar` | `HebrewCalendarPage.vue`   | singleton                       |
 
 ## Feature Folders (`src/components/`)
 
@@ -159,6 +160,13 @@ PDF and Word document viewer. Embeds a PDF.js iframe.
 Workspace CRUD UI.
 
 - `WorkspaceManagerPage.vue`
+
+### hebrew-calendar/
+
+Hebrew calendar page. Displays a monthly grid with Hebrew dates (gematriya), holidays, and the weekly parasha. Singleton route.
+
+- `HebrewCalendarPage.vue`
+- `useHebrewCalendar.ts` — Hebrew date calculations, holiday detection, parasha lookup via `@hebcal/core`
 
 ### layout/
 

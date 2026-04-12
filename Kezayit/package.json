@@ -17,6 +17,8 @@
     "better-sqlite3": "^11.0.0"
   },
   "dependencies": {
+    "@hebcal/core": "^6.1.0",
+    "@hebcal/learning": "^6.8.0",
     "@iconify-prerendered/vue-fluent": "latest",
     "@iconify-prerendered/vue-fluent-color": "latest",
     "@tanstack/vue-virtual": "^3.13.23",

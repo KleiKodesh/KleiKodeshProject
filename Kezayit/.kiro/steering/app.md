@@ -32,6 +32,17 @@ This app is strictly RTL. Every spatial decision must be understood in physical 
 - "Right" always means the physical right side of the screen — no ambiguity, no exceptions
 - "Left" always means the physical left side of the screen — no ambiguity, no exceptions
 - `inline-start` = physical RIGHT. `inline-end` = physical LEFT.
+- **CRITICAL — border/padding/margin direction cheatsheet in RTL:**
+  - `border-inline-start` = border on the physical RIGHT edge
+  - `border-inline-end` = border on the physical LEFT edge
+  - `padding-inline-start` = padding on the physical RIGHT side
+  - `padding-inline-end` = padding on the physical LEFT side
+  - `margin-inline-start` = margin on the physical RIGHT side
+  - `margin-inline-end` = margin on the physical LEFT side
+  - In a flex row, `flex-start` = physical RIGHT, `flex-end` = physical LEFT
+  - In a flex row, the **first child** renders on the physical RIGHT
+  - `align-items: flex-start` on a column = aligns to physical RIGHT
+  - `align-items: flex-end` on a column = aligns to physical LEFT
 - Use logical properties (`padding-inline-start`, `margin-inline-end`, etc.) for flow content
 - Use physical `left`/`right` for `position: absolute/fixed` overlays and panels — not `inset-inline-start/end`
 - Side panel on the right: `position: absolute; right: 0`

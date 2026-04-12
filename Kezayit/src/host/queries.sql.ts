@@ -140,12 +140,7 @@ export const SQL = {
   // ── Lines ────────────────────────────────────────────────────────────────────
 
   /** All lines for a book */
-  GET_ALL_LINES: `
-    SELECT id, lineIndex, content
-    FROM line
-    WHERE bookId = ?
-    ORDER BY lineIndex
-  `,
+  // GET_ALL_LINES is intentionally omitted — use GET_LINES_PAGED for streaming load
 
   /** A page of lines for streaming load */
   GET_LINES_PAGED: `

@@ -18,6 +18,9 @@ const pages: Record<string, unknown> = {
     () => import('@/components/workspace/WorkspaceManagerPage.vue'),
   ),
   '/search': defineAsyncComponent(() => import('@/components/search-db/SearchPage.vue')),
+  '/hebrew-calendar': defineAsyncComponent(
+    () => import('@/components/hebrew-calendar/HebrewCalendarPage.vue'),
+  ),
 }
 </script>
 
