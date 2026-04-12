@@ -337,46 +337,97 @@ FunctionEnd
 Section Uninstall
   ; Check if Word is running after user confirms uninstall
   Call un.HandleWordRunning
-  
+
   ; Show progress with hardcoded Hebrew messages
   DetailPrint "מתחיל הסרת כלי קודש..."
-  
-  ; Remove exact files and directories created by WPF installer
-  ; WPF installer extracts to $LOCALAPPDATA\KleiKodesh
+
+  ; ── File system ──────────────────────────────────────────────────────────────
   DetailPrint "מסיר קבצי התוכנה..."
+  ; Current install location (v1.0.24+)
   RMDir /r "$LOCALAPPDATA\KleiKodesh"
-  
-  ; Remove old installation paths (Program Files)
-  DetailPrint "מסיר התקנות ישנות..."
+  ; Old install locations — English name (v1.0.x through ~v1.0.23)
   RMDir /r "$PROGRAMFILES\KleiKodesh"
   RMDir /r "$PROGRAMFILES32\KleiKodesh"
-  
-  ; Remove exact registry entries created by WPF installer
-  ; Office Add-in registry cleanup (Word only, current user registry)
-  ; The WPF installer creates these in HKCU
-  DetailPrint "מנקה רישומי רישום של Office..."
+  ; Old install locations — Hebrew name (very first public release)
+  RMDir /r "$PROGRAMFILES\כלי קודש"
+  RMDir /r "$PROGRAMFILES32\כלי קודש"
+  ; Old AppData\Roaming folder (old addin wrote RibbonSettings.csv here)
+  RMDir /r "$APPDATA\KleiKodesh"
+  ; Old standalone WebView2 cache (pre-v3.x)
+  RMDir /r "$LOCALAPPDATA\WebView2SharedCache"
+
+  ; ── Office Add-in registry — HKCU ────────────────────────────────────────────
+  DetailPrint "מנקה רישומי Office..."
   DeleteRegKey HKCU "Software\Microsoft\Office\Word\Addins\KleiKodesh"
+  DeleteRegKey HKCU "Software\Microsoft\Office\Word\Addins\Klei Kodesh"
+  DeleteRegKey HKCU "Software\Microsoft\Office\Word\Addins\כלי קודש"
+  DeleteRegKey HKCU "Software\Microsoft\Office\Word\Addins\כליקודש"
   DeleteRegKey HKCU "Software\Microsoft\Office\Word\AddinsData\KleiKodesh"
-  
-  ; Clean up old HKLM registry entries (from old installations)
+  DeleteRegKey HKCU "Software\Microsoft\Office\Word\AddinsData\Klei Kodesh"
+  DeleteRegKey HKCU "Software\Microsoft\Office\Word\AddinsData\כלי קודש"
+  DeleteRegKey HKCU "Software\Microsoft\Office\Word\AddinsData\כליקודש"
+
+  ; ── Office Add-in registry — HKLM (old versions, may need elevation) ─────────
   DeleteRegKey HKLM "Software\Microsoft\Office\Word\Addins\KleiKodesh"
+  DeleteRegKey HKLM "Software\Microsoft\Office\Word\Addins\Klei Kodesh"
+  DeleteRegKey HKLM "Software\Microsoft\Office\Word\Addins\כלי קודש"
+  DeleteRegKey HKLM "Software\Microsoft\Office\Word\Addins\כליקודש"
   DeleteRegKey HKLM "Software\WOW6432Node\Microsoft\Office\Word\Addins\KleiKodesh"
-  
-  ; Version registry cleanup (created by SaveVersionToRegistry in HKCU)
+  DeleteRegKey HKLM "Software\WOW6432Node\Microsoft\Office\Word\Addins\Klei Kodesh"
+  DeleteRegKey HKLM "Software\WOW6432Node\Microsoft\Office\Word\Addins\כלי קודש"
+  DeleteRegKey HKLM "Software\WOW6432Node\Microsoft\Office\Word\Addins\כליקודש"
+  DeleteRegKey HKLM "Software\WOW6432Node\Microsoft\Office\Word\AddinsData\KleiKodesh"
+
+  ; ── Version stamp ─────────────────────────────────────────────────────────────
   DetailPrint "מנקה הגדרות תוכנה..."
   DeleteRegKey HKCU "SOFTWARE\KleiKodesh"
-  
-  ; Remove VSTO security registry entries
-  ; These are created with base64-encoded keys, so we need to enumerate and remove them
+
+  ; ── Runtime settings (VB Program Settings) ───────────────────────────────────
+  DeleteRegKey HKCU "Software\VB and VBA Program Settings\KleiKodesh"
+  DeleteRegKey HKCU "Software\VB and VBA Program Settings\ZayitApp"
+
+  ; ── Word per-addin metadata values ───────────────────────────────────────────
+  ; Delete the KleiKodesh-named values from Word's per-addin tracking keys.
+  ; These are individual values (not subkeys), named by the add-in's key name.
+  !macro DeleteWordAddinValues OFFVER
+    DeleteRegValue HKCU "Software\Microsoft\Office\${OFFVER}\Word\AddInLoadTimes" "KleiKodesh"
+    DeleteRegValue HKCU "Software\Microsoft\Office\${OFFVER}\Word\AddinEventTimes\Connect" "KleiKodesh"
+    DeleteRegValue HKCU "Software\Microsoft\Office\${OFFVER}\Word\AddinEventTimes\Shutdown" "KleiKodesh"
+    DeleteRegValue HKCU "Software\Microsoft\Office\${OFFVER}\Word\NotifiedAddins" "KleiKodesh"
+    DeleteRegValue HKCU "Software\Microsoft\Office\${OFFVER}\Common\CustomUIValidationCache" "KleiKodesh.Microsoft.Word.Document"
+  !macroend
+  !insertmacro DeleteWordAddinValues "12.0"
+  !insertmacro DeleteWordAddinValues "14.0"
+  !insertmacro DeleteWordAddinValues "15.0"
+  !insertmacro DeleteWordAddinValues "16.0"
+
+  ; ── VSTO Security entries (base64-keyed, requires enumeration) ────────────────
   DetailPrint "מנקה הגדרות אבטחה של VSTO..."
   Call un.CleanupVSTOSecurityEntries
-  
-  ; Remove uninstaller registry entries (created by NSIS)
+
+  ; ── Uninstall entries — current version (HKCU) ───────────────────────────────
   DetailPrint "מסיר רישומי הסרה..."
   DeleteRegKey ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}"
-  
+
+  ; ── Uninstall entries — old versions (HKLM, Hebrew key name) ─────────────────
+  ; The old GitHub repo installer (v2.0.x) wrote to HKLM with key = "כלי קודש"
+  ; DisplayName was "כלי קודש v{version}" — this is the second entry users see
+  ; in Programs & Features. Removing it here eliminates the dual-app appearance.
+  DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\כלי קודש"
+  DeleteRegKey HKLM "Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\כלי קודש"
+  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\כלי קודש"
+  DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Klei Kodesh"
+  DeleteRegKey HKLM "Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Klei Kodesh"
+
+  ; ── Shortcuts ─────────────────────────────────────────────────────────────────
+  DetailPrint "מסיר קיצורי דרך..."
+  Delete "$DESKTOP\כלי קודש.lnk"
+  Delete "$DESKTOP\KleiKodesh.lnk"
+  RMDir /r "$SMPROGRAMS\כלי קודש"
+  RMDir /r "$SMPROGRAMS\KleiKodesh"
+
   DetailPrint "הסרת כלי קודש הושלמה בהצלחה!"
-  
+
   ; Close silently when completed
   SetAutoClose true
 SectionEnd

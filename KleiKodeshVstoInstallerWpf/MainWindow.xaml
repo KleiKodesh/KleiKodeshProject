@@ -113,6 +113,8 @@
                     <ColumnDefinition/>
                     <ColumnDefinition Width="10"/>
                     <ColumnDefinition/>
+                    <ColumnDefinition Width="10"/>
+                    <ColumnDefinition/>
                 </Grid.ColumnDefinitions>
                 <Grid.Resources>
                     <Style TargetType="Button">
@@ -138,12 +140,18 @@
                         </ToolTip>
                     </Button.ToolTip>
                 </Button>
-                <Button x:Name="CancelButton" Grid.Column="2"
+                <Button x:Name="RepairButton" Grid.Column="2"
+                        Content="תיקון"
+                        Background="Transparent"
+                        BorderThickness="0.5"
+                        ToolTip="מחיקת כל שאריות כלי קודש מהמחשב (קבצים + רגיסטרי)"
+                        Click="RepairButton_Click"/>
+                <Button x:Name="CancelButton" Grid.Column="4"
                         Content="ביטול"
                         Background="Transparent"
                         BorderThickness="0.5"
                         Click="CancelButton_Click"/>
-                <Button x:Name="InstallButton" Grid.Column="4"
+                <Button x:Name="InstallButton" Grid.Column="6"
                         Content="התקן"
                         Background="#FF7333FF"
                         Foreground="White"

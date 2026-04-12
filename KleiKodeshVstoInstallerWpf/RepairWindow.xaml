@@ -1,0 +1,198 @@
+<Window x:Class="KleiKodeshVstoInstallerWpf.RepairWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        WindowStyle="None"
+        WindowStartupLocation="CenterScreen"
+        FlowDirection="RightToLeft"
+        SizeToContent="WidthAndHeight"
+        FontFamily="Segoe UI"
+        FontSize="16"
+        Title="תיקון כלי קודש"
+        MouseDown="Window_MouseDown"
+        TouchDown="Window_TouchDown">
+
+    <Grid>
+        <!-- Same watermark background as MainWindow -->
+        <Image Source="/KleiKodesh_Main.ico"
+               Opacity="0.05"
+               Height="400"
+               Width="450"
+               Margin="-40"
+               Stretch="Fill"/>
+
+        <Grid Margin="35,30"
+              Opacity="0.8"
+              MinWidth="460">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="auto"/>
+                <RowDefinition Height="16"/>
+                <RowDefinition Height="auto"/>
+                <RowDefinition Height="12"/>
+                <RowDefinition Height="auto"/>
+                <RowDefinition Height="12"/>
+                <!-- Live log -->
+                <RowDefinition Height="auto"/>
+                <RowDefinition Height="12"/>
+                <!-- Buttons -->
+                <RowDefinition Height="auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header — same style as MainWindow -->
+            <StackPanel Grid.Row="0" HorizontalAlignment="Center">
+                <TextBlock Text="תיקון כלי קודש"
+                           FontSize="26"
+                           FontWeight="SemiBold"
+                           HorizontalAlignment="Center"/>
+                <TextBlock Text="ניקוי מלא של כל שאריות התוסף מהמחשב"
+                           FontWeight="SemiBold"
+                           Opacity="0.9"
+                           HorizontalAlignment="Center"/>
+            </StackPanel>
+
+            <!-- Warning -->
+            <Border Grid.Row="2"
+                    Background="#FFF3CD"
+                    BorderBrush="#FFC107"
+                    BorderThickness="1"
+                    CornerRadius="3"
+                    Padding="10,7">
+                <TextBlock TextWrapping="Wrap" Foreground="#856404">
+                    <Run FontWeight="SemiBold">⚠ פעולה זו עשויה לקחת מספר דקות ולהאט את המחשב.</Run>
+                    <LineBreak/>
+                    הכלי יסרוק קבצים, תיקיות ורגיסטרי לאיתור כל שאריות כלי קודש
+                    (גרסאות ישנות, ClickOnce, שמות עבריים ואנגליים) — ולאחר מכן יתקין מחדש.
+                </TextBlock>
+            </Border>
+
+            <!-- What will be cleaned -->
+            <GroupBox Grid.Row="4" Padding="10,6">
+                <GroupBox.Header>
+                    <TextBlock Text="מה יימחק" FontWeight="SemiBold"/>
+                </GroupBox.Header>
+                <StackPanel>
+                    <TextBlock Margin="0,2">📁  תיקיות: AppData\Local\KleiKodesh, AppData\Roaming\KleiKodesh, Program Files</TextBlock>
+                    <TextBlock Margin="0,2">📁  מטמון WebView2, מטמון PDF, מטמון ספרים, ClickOnce cache</TextBlock>
+                    <TextBlock Margin="0,2">🗝  רגיסטרי: Addins\KleiKodesh + Addins\כלי קודש — HKLM + HKCU</TextBlock>
+                    <TextBlock Margin="0,2">🗝  רגיסטרי: Uninstall, VSTO Security, VSTO SolutionMetadata, ClickOnce SideBySide</TextBlock>
+                    <TextBlock Margin="0,2">🗝  רגיסטרי: הגדרות זמן-ריצה (KleiKodesh, ZayitApp)</TextBlock>
+                    <TextBlock Margin="0,2">🗝  רגיסטרי: Word AddInLoadTimes, AddinEventTimes, NotifiedAddins, CustomUICache</TextBlock>
+                    <TextBlock Margin="0,2">🗝  רגיסטרי: Word Resiliency — רק אם מכיל כלי קודש</TextBlock>
+                    <TextBlock Margin="0,2">🔗  קיצורי דרך בתפריט התחל ובשולחן העבודה</TextBlock>
+                </StackPanel>
+            </GroupBox>
+
+            <!-- Live log — always visible once started -->
+            <Grid Grid.Row="6">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="auto"/>
+                    <RowDefinition Height="6"/>
+                    <RowDefinition Height="auto"/>
+                    <RowDefinition Height="6"/>
+                    <RowDefinition Height="auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Progress bar + current step -->
+                <StackPanel Grid.Row="0"
+                            x:Name="ProgressPanel"
+                            Visibility="Collapsed">
+                    <TextBlock x:Name="StepText"
+                               Text=""
+                               FontWeight="SemiBold"
+                               Margin="0,0,0,4"
+                               TextWrapping="Wrap"/>
+                    <ProgressBar x:Name="ProgressBar"
+                                 Height="14"
+                                 Minimum="0"
+                                 Maximum="100"
+                                 Value="0"
+                                 Foreground="#FF7333FF"/>
+                </StackPanel>
+
+                <!-- Live detail log -->
+                <Border Grid.Row="2"
+                        x:Name="LogPanel"
+                        Visibility="Collapsed"
+                        BorderThickness="0.5"
+                        BorderBrush="#CCCCCC"
+                        CornerRadius="3"
+                        Background="#F8F8F8">
+                    <ScrollViewer x:Name="LogScroller"
+                                  Height="180"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  Padding="8,6">
+                        <TextBox x:Name="LogBox"
+                                 IsReadOnly="True"
+                                 BorderThickness="0"
+                                 Background="Transparent"
+                                 FontFamily="Consolas"
+                                 FontSize="12"
+                                 TextWrapping="Wrap"
+                                 FlowDirection="LeftToRight"
+                                 Text=""/>
+                    </ScrollViewer>
+                </Border>
+
+                <!-- Done summary line -->
+                <TextBlock Grid.Row="4"
+                           x:Name="SummaryText"
+                           Visibility="Collapsed"
+                           FontWeight="SemiBold"
+                           TextWrapping="Wrap"
+                           HorizontalAlignment="Center"/>
+            </Grid>
+
+            <!-- Buttons -->
+            <Grid Grid.Row="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition/>
+                    <ColumnDefinition Width="10"/>
+                    <ColumnDefinition/>
+                </Grid.ColumnDefinitions>
+                <Grid.Resources>
+                    <Style TargetType="Button">
+                        <Setter Property="Padding" Value="20,2"/>
+                        <Setter Property="Cursor" Value="Hand"/>
+                    </Style>
+                </Grid.Resources>
+
+                <Button x:Name="CancelButton"
+                        Grid.Column="0"
+                        Content="סגור"
+                        Background="Transparent"
+                        BorderThickness="0.5"
+                        Click="CancelButton_Click"/>
+                <Button x:Name="RunButton"
+                        Grid.Column="2"
+                        Content="הפעל תיקון מלא"
+                        Background="#FF7333FF"
+                        Foreground="White"
+                        BorderThickness="0"
+                        Click="RunButton_Click"/>
+            </Grid>
+        </Grid>
+
+        <!-- Close X — same as MainWindow -->
+        <Button x:Name="CloseButton"
+                FontSize="10"
+                Click="CancelButton_Click"
+                Background="Transparent"
+                BorderThickness="0"
+                Width="25"
+                Height="25"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Top"
+                Margin="5"
+                Cursor="Hand">
+            <Path Stroke="Black"
+                  Stretch="Uniform"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  Margin="7"
+                  Data="M7 17L16.8995 7.10051 M7 7.00001L16.8995 16.8995"/>
+        </Button>
+    </Grid>
+</Window>

@@ -93,12 +93,15 @@ namespace WpfLib.Helpers
 
         static bool IsUpdateTime()
         {
-            string domainName = AppDomain.CurrentDomain.FriendlyName;
-            string nextUpdateString = Interaction.GetSetting(domainName, "Updates", "NextUpdateCheck", DateTime.Now.ToString("yyyy-MM-dd"));
+            // Use a fixed app name so settings go to HKCU\...\KleiKodesh\Updates\
+            // instead of WINWORD\Updates\ (AppDomain.CurrentDomain.FriendlyName
+            // resolves to "WINWORD" when loaded as a VSTO add-in inside Word).
+            const string appName = "KleiKodesh";
+            string nextUpdateString = Interaction.GetSetting(appName, "Updates", "NextUpdateCheck", DateTime.Now.ToString("yyyy-MM-dd"));
             DateTime nextUpdateCheck = DateTime.Parse(nextUpdateString);
 
-            DateTime nextCheckDate = DateTime.Now.AddDays(updateInterval); // Save setting to check for updates again in set interval
-            Interaction.SaveSetting(domainName, "Updates", "NextUpdateCheck", nextCheckDate.ToString("yyyy-MM-dd"));
+            DateTime nextCheckDate = DateTime.Now.AddDays(updateInterval);
+            Interaction.SaveSetting(appName, "Updates", "NextUpdateCheck", nextCheckDate.ToString("yyyy-MM-dd"));
 
             return DateTime.Now >= nextUpdateCheck;
         }

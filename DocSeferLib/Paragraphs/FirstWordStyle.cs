@@ -86,7 +86,7 @@ namespace DocSeferLib.Paragraphs
             {
                 if (listView.SelectedItem != null)
                 {
-                    Interaction.SaveSetting(AppDomain.CurrentDomain.FriendlyName, "Settings", "FirstWordStyle", listView.SelectedItem.ToString());
+                    Interaction.SaveSetting("KleiKodesh", "Settings", "FirstWordStyle", listView.SelectedItem.ToString());
                     window.Close();
                 }
             };
@@ -97,7 +97,7 @@ namespace DocSeferLib.Paragraphs
 
         public Style CreateFirstWordStyle()
         {
-            string targetStyleName = Interaction.GetSetting(AppDomain.CurrentDomain.FriendlyName, "Settings", "FirstWordStyle", "מילה ראשונה");
+            string targetStyleName = Interaction.GetSetting("KleiKodesh", "Settings", "FirstWordStyle", "מילה ראשונה");
             if (string.IsNullOrEmpty(targetStyleName))
                 targetStyleName = "מילה ראשונה";
 

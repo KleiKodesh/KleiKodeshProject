@@ -79,7 +79,7 @@ namespace WebSitesLib
             if (Items.Count > 0) return;
 
             string lastPage = Interaction.GetSetting(
-                AppDomain.CurrentDomain.FriendlyName,
+                "KleiKodesh",
                 "History",
                 "LastPage",
                 "https://kleikodesh.github.io/");
@@ -127,7 +127,7 @@ namespace WebSitesLib
         private void OnTabPageNavigated(string url)
         {
             Interaction.SaveSetting(
-                AppDomain.CurrentDomain.FriendlyName,
+                "KleiKodesh",
                 "History",
                 "LastPage",
                 url);

@@ -13,9 +13,6 @@ namespace KleiKodeshVstoInstallerWpf
         {
             base.OnStartup(e);
 
-            // Kick off old installation cleanup immediately in the background
-            _ = Task.Run(() => OldInstallationCleaner.CheckAndRemoveOldInstallations());
-
             // Check for silent installation argument
             bool silentMode = false;
             foreach (string arg in e.Args)

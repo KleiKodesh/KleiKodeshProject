@@ -66,9 +66,12 @@ namespace KleiKodesh.Common
                 if (_sharedEnvironment != null) return _sharedEnvironment;
             }
 
+            // Keep WebView2 cache inside the install folder so the entire KleiKodesh
+            // footprint lives under one root (%LocalAppData%\KleiKodesh) and is fully
+            // removed when the installer deletes that folder.
             string userDataFolder = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "WebView2SharedCache");
+                "KleiKodesh", "WebView2Cache");
 
             var env = await CoreWebView2Environment.CreateAsync(userDataFolder: userDataFolder);
 

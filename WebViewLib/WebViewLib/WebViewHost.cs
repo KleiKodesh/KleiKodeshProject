@@ -109,7 +109,11 @@ namespace WebViewLib
 
         async void SetCore(bool iPhoneMode = true)
         {
-            string tempWebCacheDir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            // Keep WebView2 user data inside the KleiKodesh install folder so the
+            // entire app footprint lives under one root (%LocalAppData%\KleiKodesh).
+            string tempWebCacheDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "KleiKodesh", "WebView2Cache");
             _environment = await CoreWebView2Environment.CreateAsync(userDataFolder: tempWebCacheDir);
         }
 

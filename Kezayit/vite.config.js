@@ -67,15 +67,6 @@ export default defineConfig({
             '@': fileURLToPath(new URL('./src', import.meta.url)),
         },
     },
-    server: {
-        proxy: {
-            '/wiktionary-api': {
-                target: 'https://he.wiktionary.org',
-                changeOrigin: true,
-                rewrite: (path) => path.replace(/^\/wiktionary-api/, '/w/api.php'),
-            },
-        },
-    },
     build: {
         assetsInlineLimit: Number.MAX_SAFE_INTEGER,
         cssCodeSplit: false,

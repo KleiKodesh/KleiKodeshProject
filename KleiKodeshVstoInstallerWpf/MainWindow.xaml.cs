@@ -84,6 +84,11 @@ namespace KleiKodeshVstoInstallerWpf
             Install();
         }
 
+        private void RepairButton_Click(object sender, RoutedEventArgs e)
+        {
+            new RepairWindow().ShowDialog();
+        }
+
         private void Hyperlink_RequestNavigate(object sender, RequestNavigateEventArgs e)
         {
             var email = e.Uri.AbsoluteUri.Replace("mailto:", "");

@@ -3,6 +3,7 @@ using Microsoft.Web.WebView2.WinForms;
 using System;
 using System.Diagnostics;
 using System.Drawing;
+using System.IO;
 using System.Reflection;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -73,7 +74,10 @@ namespace KleiKodesh.RibbonSettings
         {
             if (_environment == null)
             {
-                string tempWebCacheDir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                // Keep WebView2 user data inside the KleiKodesh install folder.
+                string tempWebCacheDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "KleiKodesh", "WebView2Cache");
                 _environment = await CoreWebView2Environment.CreateAsync(userDataFolder: tempWebCacheDir);
             }
 
