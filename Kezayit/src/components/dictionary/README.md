@@ -10,6 +10,8 @@ Dictionary and reference books browser. Singleton route `/dictionary`, navigated
 
 `useDictionary.ts` — loads all reference books from categories 75 and 1220 (and their sub-categories) for the book shelf shown when no search is active. Groups into `DictionarySection[]` by sub-category title.
 
+`DictionarySearchResults.vue` — the search results panel. Owns the filter tabs and the scrollable result list. Each row expands inline on click to show the full entry via `DictionaryEntryView`. Emits `toggle`, `update:activeSource`, and `openInViewer` — no navigation logic inside.
+
 `DictionaryEntryView.vue` — renders a single entry's HTML content with styled `<b>`, `<big>`, `<h3>`, `<small>`, and `<span dir="ltr">` tags. Has a toolbar showing the source book name and an "open in viewer" button.
 
 `DictionaryBookShelf.vue` — the empty-state book list. Shows all reference books grouped by category. Clicking a book emits `open(bookId, title)` which the page handles by navigating to `/book-view`.

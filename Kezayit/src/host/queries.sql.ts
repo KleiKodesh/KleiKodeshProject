@@ -224,22 +224,33 @@ export const SQL = {
   `,
 
   /**
-   * Search dict_entry by headword — contains match, ordered exact-first then prefix-first.
-   * Params: [containsPattern, exactTerm, prefixPattern, prefixPattern]
-   * e.g. ['%אבב%', 'אבב', 'אבב%', 'אבב%']
+   * Search dict_entry by headword.
+   * Ordering: exact → prefix of query → query contains headword → headword is root of query
+   * "Root match": headword is a prefix of the search term (e.g. ברא matches בראשית)
+   * Params: [containsPattern, term, prefixPattern, prefixPattern, rootPattern]
+   *   containsPattern = '%term%'
+   *   term            = 'term'        (exact)
+   *   prefixPattern   = 'term%'       (headword starts with term)
+   *   rootPattern     = 'term%'       (reused for ORDER BY)
+   * The WHERE clause uses LIKE '%term%' OR the term LIKE headword||'%'
+   * so roots shorter than the query are also returned.
    */
   SEARCH_DICTIONARY_ENTRIES: `
-    SELECT de.id, de.bookId, de.lineId, de.lineIndex, de.headword, b.title AS bookTitle
-    FROM dict_entry de
-    JOIN book b ON b.id = de.bookId
-    WHERE de.headword LIKE ?
+    SELECT e.id, e.bookId, e.lineIndex, e.headword, e.nikud, e.definition, e.type, e.source
+    FROM entry e
+    WHERE e.headword LIKE ?
+       OR (e.type = 'aramaic' AND length(e.headword) >= 3 AND ? LIKE (e.headword || '%'))
     ORDER BY
-      CASE WHEN de.headword = ?    THEN 0
-           WHEN de.headword LIKE ? THEN 1
-           ELSE                         2
+      CASE WHEN e.headword = ?                                                          THEN 0
+           WHEN e.headword LIKE ?                                                       THEN 1
+           WHEN e.type = 'aramaic' AND length(e.headword) >= 3
+                AND ? LIKE (e.headword || '%')                                          THEN 2
+           ELSE                                                                              3
       END,
-      de.headword,
-      de.bookId
+      CASE WHEN e.type = 'aramaic' AND length(e.headword) >= 3
+                AND ? LIKE (e.headword || '%') THEN length(e.headword) ELSE 0 END DESC,
+      e.headword,
+      e.source
     LIMIT 200
   `,
 

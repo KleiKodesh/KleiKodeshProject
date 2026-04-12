@@ -1,24 +1,79 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { IconOpen24Regular } from '@iconify-prerendered/vue-fluent'
 import type { DictEntryContent } from './useDictionarySearch'
 
 const props = defineProps<{ entry: DictEntryContent }>()
-const emit = defineEmits<{ openInViewer: [] }>()
 
-// ספר השרשים entries are 2 lines joined with \n — render as separate blocks
-const html = computed(() => props.entry.html.replace(/\n/g, '<br><br>'))
+interface Sense {
+  nikud: string | null
+  text: string
+}
+
+/**
+ * Parse the definition string into one or more senses.
+ * Handles:
+ *   - *** separator between multiple forms/meanings
+ *   - {nikud} at the start of each segment
+ *   - (=...) abbreviation expansions
+ *   - Raw HTML from book entries (passed through as-is)
+ */
+const senses = computed<Sense[]>(() => {
+  const raw = props.entry.html
+
+  // Book entries contain HTML — render as-is, single sense
+  if (raw.includes('<') && raw.includes('>')) {
+    return [{ nikud: props.entry.nikud, text: raw.replace(/\n/g, '<br>') }]
+  }
+
+  // Split on *** to get multiple senses
+  const parts = raw
+    .split('***')
+    .map((s) => s.trim())
+    .filter(Boolean)
+
+  return parts.map((part) => {
+    // Each part may start with {nikud}
+    const nikudMatch = part.match(/^\{([^}]+)\}\s*(.*)$/)
+    if (nikudMatch) {
+      return { nikud: nikudMatch[1], text: nikudMatch[2].trim() }
+    }
+    // First part uses the entry-level nikud if no inline nikud
+    return { nikud: null, text: part }
+  })
+})
+
+// For abbreviations: extract the (=expansion) if present
+function formatAbbrevExpansion(text: string): { expansion: string | null; rest: string } {
+  const m = text.match(/^\(=([^)]+)\)\s*(.*)$/)
+  if (m) return { expansion: m[1], rest: m[2].trim() }
+  return { expansion: null, rest: text }
+}
 </script>
 
 <template>
   <div class="entry-view">
-    <div class="entry-headword">{{ entry.headword }}</div>
-    <div class="entry-content" dir="rtl" v-html="html" />
-    <div class="entry-footer">
-      <button class="entry-open-btn" @click="emit('openInViewer')">
-        <IconOpen24Regular />
-        <span>פתח בקורא</span>
-      </button>
+    <!-- Senses -->
+    <div class="entry-body">
+      <div v-for="(sense, i) in senses" :key="i" class="entry-sense">
+        <!-- Sense nikud (for *** segments with their own form) -->
+        <span v-if="sense.nikud && sense.nikud !== entry.nikud" class="sense-nikud">
+          {{ sense.nikud }}
+        </span>
+
+        <!-- Abbreviation expansion -->
+        <template v-if="entry.type === 'abbrev'">
+          <span v-if="formatAbbrevExpansion(sense.text).expansion" class="sense-expansion">
+            {{ formatAbbrevExpansion(sense.text).expansion }}
+          </span>
+          <span v-if="formatAbbrevExpansion(sense.text).rest" class="sense-text">
+            {{ formatAbbrevExpansion(sense.text).rest }}
+          </span>
+        </template>
+
+        <!-- Regular definition or HTML content -->
+        <span v-else-if="sense.text.includes('<')" class="sense-html" v-html="sense.text" />
+        <span v-else class="sense-text">{{ sense.text }}</span>
+      </div>
     </div>
   </div>
 </template>
@@ -28,78 +83,83 @@ const html = computed(() => props.entry.html.replace(/\n/g, '<br><br>'))
   display: flex;
   flex-direction: column;
   height: 100%;
-}
-
-.entry-headword {
-  padding: 16px 16px 4px;
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--accent-color);
   direction: rtl;
-  flex-shrink: 0;
 }
 
-.entry-content {
+/* ── Senses ── */
+.entry-body {
   flex: 1;
-  padding: 20px 16px;
-  font-size: 16px;
-  line-height: 1.8;
-  color: var(--text-primary);
   overflow-y: auto;
+  padding: 6px 10px;
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
-.entry-content :deep(b) {
-  font-weight: 700;
+.entry-sense {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  padding: 4px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 40%, transparent);
 }
 
-.entry-content :deep(big) {
-  font-size: 1.25em;
-  font-weight: 700;
+.entry-sense:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.sense-nikud {
+  font-size: 13px;
+  font-weight: 600;
   color: var(--accent-color);
 }
 
-.entry-content :deep(h3) {
-  font-size: 1.3em;
-  font-weight: 700;
-  color: var(--accent-color);
-  margin: 0 0 12px;
+.sense-expansion {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-style: italic;
 }
 
-.entry-content :deep(small) {
-  font-size: 0.82em;
+.sense-text {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  text-align: justify;
+}
+
+.sense-html {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  text-align: justify;
+}
+
+.sense-html :deep(b) {
+  font-weight: 700;
+}
+.sense-html :deep(big) {
+  font-size: 1.1em;
+  font-weight: 700;
+  color: var(--accent-color);
+}
+.sense-html :deep(h3) {
+  font-size: 1.1em;
+  font-weight: 700;
+  color: var(--accent-color);
+  margin: 0 0 4px;
+}
+.sense-html :deep(small) {
+  font-size: 0.85em;
   color: var(--text-secondary);
 }
-
-.entry-content :deep(span[dir='ltr']) {
+.sense-html :deep(span[dir='ltr']) {
   direction: ltr;
   display: inline-block;
   color: var(--text-secondary);
   font-style: italic;
-  font-size: 0.9em;
-}
-
-.entry-footer {
-  flex-shrink: 0;
-  padding: 10px 16px;
-  border-top: 1px solid var(--border-color);
-  background: var(--bg-secondary);
-}
-
-.entry-open-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 40px;
-  padding: 0 14px;
-  border-radius: 4px;
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.entry-open-btn:hover {
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
 </style>

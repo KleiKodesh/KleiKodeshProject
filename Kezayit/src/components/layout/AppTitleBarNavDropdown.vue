@@ -46,7 +46,11 @@ function onPopOut() {
   <div ref="menuRef" class="nav-dropdown" @click.stop>
     <button v-for="tile in tiles" :key="tile.label" class="nav-row" @click="onTap(tile.label)">
       <span class="nav-icon">
-        <component :is="tile.icon" :style="tile.color ? { color: tile.color } : {}" />
+        <component
+          :is="tile.icon"
+          :class="{ 'rtl-flip': tile.flip }"
+          :style="tile.color ? { color: tile.color } : {}"
+        />
       </span>
       <span class="nav-label">{{ tile.label }}</span>
     </button>

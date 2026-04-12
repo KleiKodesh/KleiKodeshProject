@@ -42,6 +42,7 @@ namespace KezayitLib.Bridge
     }
 
     window.__webviewQuery      = function (sql, params) { return post({ sql: sql, params: params || [] }).then(function (m) { return { rows: m.rows }; }); };
+    window.__webviewDictQuery  = function (sql, params) { return post({ action: 'dictQuery', sql: sql, params: params || [] }).then(function (m) { return { rows: m.rows }; }); };
     window.__webviewSetDbPath  = function (path)         { return post({ action: 'setDbPath', path: path }); };
     window.__webviewPickDbPath = function ()             { window.chrome.webview.postMessage({ id: '0', action: 'pickDbPath' }); };
     window.__webviewAction     = function (action, args) { return post(Object.assign({ action: action }, args || {})); };

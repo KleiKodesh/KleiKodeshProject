@@ -8,6 +8,7 @@ import path from 'node:path'
 
 function devSqlitePlugin(): Plugin {
   let db: InstanceType<typeof Database>
+  let dictDb: InstanceType<typeof Database>
 
   return {
     name: 'dev-sqlite',
@@ -17,25 +18,41 @@ function devSqlitePlugin(): Plugin {
       // loadEnv with prefix '' loads all vars including non-VITE_ ones
       const env = loadEnv('development', process.cwd(), '')
       const dbPath = process.env.DB_PATH ?? env.DB_PATH ?? './data.db'
+      const dictDbPath = path.resolve('./public/dictionary.db')
       try {
         db = new Database(path.resolve(dbPath))
         console.log(`[dev-sqlite] opened ${dbPath}`)
       } catch (err) {
         console.error(`[dev-sqlite] failed to open DB at ${dbPath}:`, err)
-        return
+      }
+      try {
+        dictDb = new Database(dictDbPath, { readonly: true })
+        console.log(`[dev-sqlite] opened dictionary.db`)
+      } catch (err) {
+        console.error(`[dev-sqlite] failed to open dictionary.db:`, err)
       }
 
       server.middlewares.use((req, res, next) => {
-        if (req.url !== '/query' || req.method !== 'POST') {
+        const isQuery = req.url === '/query' && req.method === 'POST'
+        const isDictQuery = req.url === '/query-dict' && req.method === 'POST'
+        if (!isQuery && !isDictQuery) {
           next()
           return
         }
+
+        const target = isDictQuery ? dictDb : db
+        if (!target) {
+          res.writeHead(503, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: 'Database not available' }))
+          return
+        }
+
         let body = ''
         req.on('data', (chunk) => (body += chunk))
         req.on('end', () => {
           try {
             const { sql, params = [] } = JSON.parse(body)
-            const rows = db.prepare(sql).all(...params)
+            const rows = target.prepare(sql).all(...params)
             res.writeHead(200, { 'Content-Type': 'application/json' })
             res.end(JSON.stringify({ rows }))
           } catch (err: unknown) {

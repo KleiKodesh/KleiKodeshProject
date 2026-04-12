@@ -11,11 +11,16 @@
 import Database from 'better-sqlite3'
 import http from 'node:http'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const DB_PATH = process.env.DB_PATH ?? './data.db'
+const DICT_DB_PATH = process.env.DICT_DB_PATH ?? path.join(__dirname, '../public/dictionary.db')
 const PORT = process.env.PORT ?? 4000
 
 const db = new Database(path.resolve(DB_PATH))
+const dictDb = new Database(path.resolve(DICT_DB_PATH), { readonly: true })
 
 const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -27,7 +32,7 @@ const server = http.createServer((req, res) => {
     return
   }
 
-  if (req.method !== 'POST' || req.url !== '/query') {
+  if (req.method !== 'POST' || (req.url !== '/query' && req.url !== '/query-dict')) {
     res.writeHead(404)
     res.end()
     return
@@ -38,7 +43,8 @@ const server = http.createServer((req, res) => {
   req.on('end', () => {
     try {
       const { sql, params = [] } = JSON.parse(body)
-      const rows = db.prepare(sql).all(...params)
+      const target = req.url === '/query-dict' ? dictDb : db
+      const rows = target.prepare(sql).all(...params)
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ rows }))
     } catch (err) {

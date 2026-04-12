@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
-defineProps<{ label: string; icon: Component; color?: string; isFocused?: boolean }>()
+defineProps<{
+  label: string
+  icon: Component
+  color?: string
+  isFocused?: boolean
+  flip?: boolean
+}>()
 defineEmits<{ tap: [] }>()
 </script>
 
