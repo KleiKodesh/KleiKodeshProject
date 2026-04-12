@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 import { IconOpen20Regular } from '@iconify-prerendered/vue-fluent'
@@ -40,6 +40,13 @@ useVirtualScrollerKeys(
   () =>
     virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
   () => props.filteredResults.length,
+)
+
+// Re-measure all rows when expanded content loads in (heights change)
+watch(
+  () => props.expandedEntries,
+  () => virtualizer.value.measure(),
+  { deep: true },
 )
 </script>
 

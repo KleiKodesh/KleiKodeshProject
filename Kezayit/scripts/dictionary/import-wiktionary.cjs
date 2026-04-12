@@ -200,7 +200,7 @@ async function main() {
     catch (e) { console.error('\nList error:', e.message); await sleep(2000); continue }
 
     const pages = listData?.query?.allpages || []
-    if (pages.length === 0) break
+    if (pages.length === 0) { console.log('\nNo pages returned for:', apcontinue); break }
 
     // Filter to Hebrew-titled pages only
     const hePages = pages.filter(p => containsHebrew(p.title))
