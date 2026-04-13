@@ -96,11 +96,11 @@ Write-Host "Incrementing version..." -ForegroundColor Yellow
 # Get absolute paths
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectRoot = Split-Path -Parent $scriptDir
-$progressWindowPath = Join-Path $projectRoot "KleiKodeshVstoInstallerWpf\InstallProgressWindow.xaml.cs"
+$progressWindowPath = Join-Path $projectRoot "KleiKodeshVstoInstallerWpf\Helpers\AddinInstaller.cs"
 $updateVersionScript = Join-Path $projectRoot "KleiKodeshVstoInstallerWpf\UpdateVersion.ps1"
 
 Write-Host "Project root: $projectRoot" -ForegroundColor Gray
-Write-Host "Progress window path: $progressWindowPath" -ForegroundColor Gray
+Write-Host "AddinInstaller path: $progressWindowPath" -ForegroundColor Gray
 
 # Delete VSTO Release folder first to ensure clean build
 Write-Host "Deleting VSTO Release folder..." -ForegroundColor Yellow
@@ -116,12 +116,12 @@ if (Test-Path $vstoReleasePath) {
 & powershell -ExecutionPolicy Bypass -File $updateVersionScript -FilePath $progressWindowPath -IncrementType $VersionIncrement
 
 # Now get the updated version from the file
-$versionMatch = Select-String -Path $progressWindowPath -Pattern 'const string Version = "([^"]+)"'
+$versionMatch = Select-String -Path $progressWindowPath -Pattern 'const string Version\s*=\s*"([^"]+)"'
 if ($versionMatch) {
     $version = $versionMatch.Matches[0].Groups[1].Value
     Write-Host "Using version: $version" -ForegroundColor Cyan
 } else {
-    Write-Host "ERROR: Could not detect version from InstallProgressWindow.xaml.cs" -ForegroundColor Red
+    Write-Host "ERROR: Could not detect version from AddinInstaller.cs" -ForegroundColor Red
     if (-not $NoWait) { Read-Host "Press Enter to continue" }
     exit 1
 }

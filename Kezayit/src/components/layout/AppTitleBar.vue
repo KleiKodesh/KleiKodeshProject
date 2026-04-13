@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { onClickOutside, useEventListener } from '@vueuse/core'
+import { useEventListener } from '@vueuse/core'
+import { useDropdownClose } from '@/composables/useDropdownClose'
 import {
   IconLineHorizontal320Regular,
   IconAdd20Regular,
@@ -47,7 +48,7 @@ const pdfFilterTitle = computed(() =>
   settingsStore.pdfPageFilters ? 'ביטול פילטרים לעמודי PDF' : 'החלת פילטרים לעמודי PDF',
 )
 
-onClickOutside(barRef, () => {
+useDropdownClose(barRef, () => {
   dropdownOpen.value = false
 })
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, nextTick } from 'vue'
-import { onClickOutside } from '@vueuse/core'
+import { useDropdownClose } from '@/composables/useDropdownClose'
 import { IconChevronDown20Regular, IconChevronUp20Regular } from '@iconify-prerendered/vue-fluent'
 import themesData from '@/theme/themes.json'
 import { useThemeStore } from '@/theme/themeStore'
@@ -35,10 +35,14 @@ const dropdownRef = ref<HTMLElement | null>(null)
 const isOpen = ref(false)
 const dropdownStyle = ref<Record<string, string>>({})
 
-onClickOutside(dropdownRef, (e) => {
-  if (boxRef.value?.contains(e.target as Node)) return
-  isOpen.value = false
-})
+useDropdownClose(
+  dropdownRef,
+  (e) => {
+    if (boxRef.value?.contains((e as MouseEvent).target as Node)) return
+    isOpen.value = false
+  },
+  { ignore: [boxRef] },
+)
 
 async function toggle() {
   if (isOpen.value) {

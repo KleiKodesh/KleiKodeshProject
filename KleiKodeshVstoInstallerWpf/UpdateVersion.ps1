@@ -45,9 +45,9 @@ try {
     Write-Host "New version for this build: $newVersion"
     
     # Update the version in the file
-    $content = Get-Content $FilePath
-    $newContent = $content -replace 'const string Version = "v[^"]*";', "const string Version = `"$newVersion`";"
-    Set-Content $FilePath -Value $newContent
+    $content = Get-Content $FilePath -Raw
+    $newContent = $content -replace '(const string Version\s*=\s*)"v[^"]*"', "`$1`"$newVersion`""
+    Set-Content $FilePath -Value $newContent -NoNewline
     
     Write-Host "Version updated successfully to $newVersion"
 } catch {
@@ -55,7 +55,7 @@ try {
     Write-Host "Using fallback version v1.0.16"
     
     # Fallback version update
-    $content = Get-Content $FilePath
-    $newContent = $content -replace 'const string Version = "v[^"]*";', 'const string Version = "v1.0.16";'
-    Set-Content $FilePath -Value $newContent
+    $content = Get-Content $FilePath -Raw
+    $newContent = $content -replace '(const string Version\s*=\s*)"v[^"]*"', '$1"v1.0.16"'
+    Set-Content $FilePath -Value $newContent -NoNewline
 }

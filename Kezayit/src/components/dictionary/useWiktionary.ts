@@ -73,6 +73,21 @@ const KNOWN_SECTIONS = new Set([
 
 const KEEP_LANGS = new Set(['אנגלית', 'ערבית', 'ארמית'])
 
+// Layers that are inappropriate for an Orthodox Jewish audience
+const BLOCKED_LAYERS = new Set([
+  'גס',
+  'גסות',
+  'גסה', // vulgar
+  'סלנג',
+  'סלנג ישראלי', // slang
+  'מדובר',
+  'דיבורי', // colloquial/spoken
+  'ארגו',
+  "ז'רגון", // jargon/argot
+  'פוגעני',
+  'גנאי', // offensive/derogatory
+])
+
 // ── Parser ────────────────────────────────────────────────────────────────────
 
 export function parseWikitext(title: string, wikitext: string): WiktionarySense[] {
@@ -155,6 +170,8 @@ export function parseWikitext(title: string, wikitext: string): WiktionarySense[
     if (!curSection && /^#{1,2}[^:#*]/.test(line)) {
       const layerMatch = line.match(/\{\{(?:מקרא|רובד|משלב)\|([^|}]+)/)
       const layer = layerMatch ? (layerMatch[1] ?? '').trim() : null
+      // Skip definitions with blocked layer tags
+      if (layer && BLOCKED_LAYERS.has(layer)) continue
       const text = cleanWiki(line.replace(/^#+\s*/, ''))
       if (text && text.length > 1) {
         cur.definitions.push({ text, layer, examples: [] })

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick } from 'vue'
-import { onClickOutside } from '@vueuse/core'
+import { useDropdownClose } from '@/composables/useDropdownClose'
 import type { CommentaryGroup } from './useCommentary'
 
 const props = defineProps<{ groups: CommentaryGroup[]; ctLabels: Record<string, string> }>()
@@ -25,7 +25,7 @@ onMounted(() =>
   }),
 )
 
-onClickOutside(dropdownEl, () => emit('close'))
+useDropdownClose(dropdownEl, () => emit('close'))
 
 function navigateToCt(ct: string) {
   const first = props.groups.find((g) => g.connectionTypes[0] === ct)

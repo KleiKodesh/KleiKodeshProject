@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { onClickOutside } from '@vueuse/core'
+import { useDropdownClose } from '@/composables/useDropdownClose'
 import CommentaryTreeViewNode from './CommentaryTreeViewNode.vue'
 import { buildCommentaryTree } from './useCommentary'
 import type { CommentaryGroup } from './useCommentary'
@@ -16,7 +16,7 @@ const emit = defineEmits<{
 }>()
 
 const panelEl = ref<HTMLElement | null>(null)
-onClickOutside(panelEl, () => emit('close'))
+useDropdownClose(panelEl, () => emit('close'))
 
 const tree = computed(() => buildCommentaryTree(props.groups))
 const allBookIds = computed(() => props.groups.map((g) => g.bookId))

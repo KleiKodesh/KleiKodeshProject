@@ -21,3 +21,5 @@ Only create a file here if the composable is used by two or more features. Singl
 **useLineCopy.ts** — intercepts the browser `copy` event on a scroller. Writes lines as block elements in `text/html` and strips HTML for `text/plain` so copied text has no inline line breaks.
 
 **useToolbarPosition.ts** — exports the `ToolbarPosition` type (`'top' | 'bottom' | 'left' | 'right'`). Import this type wherever toolbar position values are needed. The actual position state lives in `bookViewStore`.
+
+**useDropdownClose.ts** — drop-in replacement for `onClickOutside` that also closes the dropdown when the browser window loses focus (e.g. clicking into a WebView iframe). Use this on every dropdown instead of `onClickOutside` directly. Accepts the same target and handler arguments, plus an optional `ignore` list.

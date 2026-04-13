@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { onClickOutside } from '@vueuse/core'
+import { useDropdownClose } from '@/composables/useDropdownClose'
 import {
   IconLibrary24Filled,
   IconFolder24Filled,
@@ -21,7 +21,7 @@ const { navigateInNewTab } = useAppNavigation()
 const isOnline = useOnlineStatus()
 
 const menuRef = ref<HTMLElement | null>(null)
-onClickOutside(menuRef, () => emit('close'))
+useDropdownClose(menuRef, () => emit('close'))
 
 const tiles = computed(() => [
   { label: 'ספרים', icon: IconLibrary24Filled, color: '#B5451B' },

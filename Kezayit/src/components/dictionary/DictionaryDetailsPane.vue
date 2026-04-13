@@ -71,7 +71,7 @@ function isFirstAramaic(index: number): boolean {
         <!-- Senses -->
         <template v-for="(sense, i) in allSenses" :key="`${sense.headword}-${i}`">
           <div v-if="isFirstAramaic(i)" class="dict-section-divider">
-            <span>מילון ארמי</span>
+            <span>מקורות נוספים</span>
           </div>
           <WiktionaryEntry
             :sense="sense"

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { onClickOutside } from '@vueuse/core'
+import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBloomSearch } from './useBloomSearch'
 import { useSearch } from './useSearchFilters'
 import { useIndexingStatus } from './useIndexingStatus'
@@ -51,7 +51,7 @@ const filterPanelRef = ref<HTMLElement | null>(null)
 const initialScrollIndex = ref<number | undefined>()
 const initialScrollOffset = ref<number | undefined>()
 
-onClickOutside(filterPanelRef, () => {
+useDropdownClose(filterPanelRef, () => {
   if (isFilterOpen.value) isFilterOpen.value = false
 })
 

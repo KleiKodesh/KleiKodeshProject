@@ -116,7 +116,7 @@ async function loadFullSenses(word: string): Promise<WiktionarySense[]> {
     return {
       headword: rs.headword,
       nikud: rs.nikud,
-      pos: rs.pos ?? (rs.source_label ? 'ארמית' : null),
+      pos: rs.pos ?? (rs.source_label?.startsWith('תורת אמת') ? 'ארמית' : null),
       binyan: rs.binyan,
       shoresh: rs.shoresh,
       ktivMale: rs.ktiv_male,

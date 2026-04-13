@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, watch } from 'vue'
-import { onClickOutside } from '@vueuse/core'
+import { useDropdownClose } from '@/composables/useDropdownClose'
 import type { TocEntry, AltTocSection } from './useToc'
 import { SearchableTree } from '@/utils/tocSearchUtils'
 import BookViewTocTreeSection from './BookViewTocTreeSection.vue'
@@ -37,7 +37,7 @@ watch(
     if (val && !props.loading) nextTick(() => searchRef.value?.focus())
   },
 )
-onClickOutside(panelRef, () => {
+useDropdownClose(panelRef, () => {
   if (!justSelected.value) emit('close')
 })
 

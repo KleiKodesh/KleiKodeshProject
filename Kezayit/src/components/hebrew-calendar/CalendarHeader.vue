@@ -7,7 +7,7 @@ import {
   IconCalendarAgenda20Regular,
   IconCalendarMonth20Regular,
 } from '@iconify-prerendered/vue-fluent'
-import { onClickOutside } from '@vueuse/core'
+import { useDropdownClose } from '@/composables/useDropdownClose'
 import { HEB_MONTH_LIST, GREG_MONTH_LIST, hebYearToGematriya } from './useHebrewCalendar'
 
 const props = defineProps<{
@@ -59,20 +59,28 @@ const HEB_YEARS = Array.from({ length: 200 }, (_, i) => TODAY_YEAR + 3760 - 100 
 const showHebMonthDrop = ref(false)
 const hebMonthBtnRef = ref<HTMLElement | null>(null)
 const hebMonthDropRef = ref<HTMLElement | null>(null)
-onClickOutside(hebMonthDropRef, (e) => {
-  if (hebMonthBtnRef.value?.contains(e.target as Node)) return
-  showHebMonthDrop.value = false
-})
+useDropdownClose(
+  hebMonthDropRef,
+  (e) => {
+    if (hebMonthBtnRef.value?.contains((e as MouseEvent).target as Node)) return
+    showHebMonthDrop.value = false
+  },
+  { ignore: [hebMonthBtnRef] },
+)
 
 // ── Hebrew year ───────────────────────────────────────────────────────────
 const showHebYearDrop = ref(false)
 const hebYearBtnRef = ref<HTMLElement | null>(null)
 const hebYearDropRef = ref<HTMLElement | null>(null)
 const hebYearListRef = ref<HTMLElement | null>(null)
-onClickOutside(hebYearDropRef, (e) => {
-  if (hebYearBtnRef.value?.contains(e.target as Node)) return
-  showHebYearDrop.value = false
-})
+useDropdownClose(
+  hebYearDropRef,
+  (e) => {
+    if (hebYearBtnRef.value?.contains((e as MouseEvent).target as Node)) return
+    showHebYearDrop.value = false
+  },
+  { ignore: [hebYearBtnRef] },
+)
 function openHebYearDrop() {
   showHebYearDrop.value = true
   nextTick(() => {
@@ -89,20 +97,28 @@ function openHebYearDrop() {
 const showGregMonthDrop = ref(false)
 const gregMonthBtnRef = ref<HTMLElement | null>(null)
 const gregMonthDropRef = ref<HTMLElement | null>(null)
-onClickOutside(gregMonthDropRef, (e) => {
-  if (gregMonthBtnRef.value?.contains(e.target as Node)) return
-  showGregMonthDrop.value = false
-})
+useDropdownClose(
+  gregMonthDropRef,
+  (e) => {
+    if (gregMonthBtnRef.value?.contains((e as MouseEvent).target as Node)) return
+    showGregMonthDrop.value = false
+  },
+  { ignore: [gregMonthBtnRef] },
+)
 
 // ── Gregorian year ────────────────────────────────────────────────────────
 const showGregYearDrop = ref(false)
 const gregYearBtnRef = ref<HTMLElement | null>(null)
 const gregYearDropRef = ref<HTMLElement | null>(null)
 const gregYearListRef = ref<HTMLElement | null>(null)
-onClickOutside(gregYearDropRef, (e) => {
-  if (gregYearBtnRef.value?.contains(e.target as Node)) return
-  showGregYearDrop.value = false
-})
+useDropdownClose(
+  gregYearDropRef,
+  (e) => {
+    if (gregYearBtnRef.value?.contains((e as MouseEvent).target as Node)) return
+    showGregYearDrop.value = false
+  },
+  { ignore: [gregYearBtnRef] },
+)
 function openGregYearDrop() {
   showGregYearDrop.value = true
   nextTick(() => {

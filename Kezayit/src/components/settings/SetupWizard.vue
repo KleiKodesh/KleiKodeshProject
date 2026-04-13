@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
-import { onClickOutside } from '@vueuse/core'
+import { useDropdownClose } from '@/composables/useDropdownClose'
 import { IconChevronDown20Regular, IconChevronUp20Regular } from '@iconify-prerendered/vue-fluent'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { isHosted, dbReady, onWebviewEvent } from '@/host/db'
@@ -45,10 +45,14 @@ const cityDropdownRef = ref<HTMLElement | null>(null)
 const cityOpen = ref(false)
 const cityDropdownStyle = ref<Record<string, string>>({})
 
-onClickOutside(cityDropdownRef, (e) => {
-  if (cityBoxRef.value?.contains(e.target as Node)) return
-  cityOpen.value = false
-})
+useDropdownClose(
+  cityDropdownRef,
+  (e) => {
+    if (cityBoxRef.value?.contains((e as MouseEvent).target as Node)) return
+    cityOpen.value = false
+  },
+  { ignore: [cityBoxRef] },
+)
 
 async function toggleCityDropdown() {
   if (cityOpen.value) {

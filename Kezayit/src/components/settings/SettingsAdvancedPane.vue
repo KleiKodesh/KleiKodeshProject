@@ -5,7 +5,7 @@ import {
   IconChevronDown20Regular,
   IconChevronUp20Regular,
 } from '@iconify-prerendered/vue-fluent'
-import { onClickOutside } from '@vueuse/core'
+import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useSettingsPage } from './useSettingsPage'
 import { useSettingsStore } from '@/stores/settingsStore'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -93,10 +93,14 @@ const cityDropdownRef = ref<HTMLElement | null>(null)
 const cityOpen = ref(false)
 const cityDropdownStyle = ref<Record<string, string>>({})
 
-onClickOutside(cityDropdownRef, (e) => {
-  if (cityBoxRef.value?.contains(e.target as Node)) return
-  cityOpen.value = false
-})
+useDropdownClose(
+  cityDropdownRef,
+  (e) => {
+    if (cityBoxRef.value?.contains((e as MouseEvent).target as Node)) return
+    cityOpen.value = false
+  },
+  { ignore: [cityBoxRef] },
+)
 
 async function toggleCityDropdown() {
   if (cityOpen.value) {

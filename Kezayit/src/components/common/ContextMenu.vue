@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, nextTick } from 'vue'
-import { onClickOutside } from '@vueuse/core'
+import { useDropdownClose } from '@/composables/useDropdownClose'
 
 export interface ContextMenuItem {
   label: string
@@ -15,7 +15,7 @@ const y = ref(0)
 const menuRef = ref<HTMLElement>()
 const menuStyle = computed(() => ({ left: `${x.value}px`, top: `${y.value}px` }))
 
-onClickOutside(menuRef, () => {
+useDropdownClose(menuRef, () => {
   visible.value = false
 })
 
