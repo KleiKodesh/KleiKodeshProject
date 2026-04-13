@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBloomSearch } from './useBloomSearch'
 import { useSearch } from './useSearchFilters'
@@ -51,9 +51,13 @@ const filterPanelRef = ref<HTMLElement | null>(null)
 const initialScrollIndex = ref<number | undefined>()
 const initialScrollOffset = ref<number | undefined>()
 
-useDropdownClose(filterPanelRef, () => {
-  if (isFilterOpen.value) isFilterOpen.value = false
-})
+useDropdownClose(
+  filterPanelRef,
+  () => {
+    if (isFilterOpen.value) isFilterOpen.value = false
+  },
+  { toggleButton: computed(() => searchBarRef.value?.filterBtnRef ?? null) },
+)
 
 function onSearch(q: string) {
   tabStore.updateActiveTab({ searchQuery: q })

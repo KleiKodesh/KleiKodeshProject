@@ -37,26 +37,35 @@ namespace KleiKodeshVstoInstallerWpf
             base.OnStartup(e);
 
             bool silentMode = false;
+            bool repairMode = false;
             foreach (string arg in e.Args)
             {
-                if (arg.Equals("--silent", StringComparison.OrdinalIgnoreCase) ||
-                    arg.Equals("/silent", StringComparison.OrdinalIgnoreCase))
-                {
+                if (arg.Equals("--silent",  StringComparison.OrdinalIgnoreCase) ||
+                    arg.Equals("/silent",   StringComparison.OrdinalIgnoreCase) ||
+                    arg.Equals("--install", StringComparison.OrdinalIgnoreCase) ||
+                    arg.Equals("/install",  StringComparison.OrdinalIgnoreCase))
                     silentMode = true;
-                    break;
-                }
+
+                if (arg.Equals("--repair", StringComparison.OrdinalIgnoreCase) ||
+                    arg.Equals("/repair",  StringComparison.OrdinalIgnoreCase))
+                    repairMode = true;
             }
 
+            MainWindow mainWindow;
             if (silentMode)
             {
-                var mainWindow = new MainWindow(startInstallImmediately: true);
-                mainWindow.Show();
+                // Go straight to install progress page — no landing, no UI chrome.
+                // Exits with code 0 on success, 1 on failure.
+                // Used by: auto-updater (DownloadManager), NSIS --silent passthrough.
+                mainWindow = new MainWindow(startInstallImmediately: true);
             }
             else
             {
-                var mainWindow = new MainWindow();
-                mainWindow.Show();
+                mainWindow = new MainWindow();
+                if (repairMode)
+                    mainWindow.NavigateToRepairOnLoad();
             }
+            mainWindow.Show();
         }
     }
 }

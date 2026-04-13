@@ -36,7 +36,7 @@ The details tab (פרטים) shows the full entry for the searched word. The ה�
 
 ## Data sources
 
-**Live Wiktionary** (`he.wiktionary.org`) — Hebrew words. No caching — fetched fresh on every search.
+**Live Wiktionary** (`he.wiktionary.org`) — Hebrew words. No caching — fetched fresh on every search. Definitions with inappropriate layer tags are filtered out before display — see Content filtering section below.
 
 **Aramaic DB** (`public/dictionary.db`) — 7,754 senses from 6,987 entries across 4 Aramaic dictionaries, imported from `FinalDictionary.txt` in the ToratEmet installation. `***` separators in the source data are split into separate sense rows at import time. `(=expansion)` prefixes are extracted into the `etymology` column. Schema: `source → sense → definition / example / section / section_item / translation`.
 
@@ -50,3 +50,23 @@ The details tab (פרטים) shows the full entry for the searched word. The ה�
 
 `node scripts/import-aramaic.cjs` — reads from `FinalDictionary.txt`, rebuilds the DB. Idempotent.
 `node scripts/create-dictionary-db.cjs` — drops and recreates the schema from scratch.
+
+## Content filtering (Wiktionary)
+
+`useWiktionary.ts` filters out definitions that carry inappropriate layer tags before returning results. The `BLOCKED_LAYERS` set lists the tags that are silently dropped: `גס` (vulgar), `סלנג` (slang), `מדובר`/`דיבורי` (colloquial), `ארגו`/`ז'רגון` (jargon), `פוגעני`/`גנאי` (offensive). Untagged definitions — which covers the vast majority of biblical, Talmudic, and rabbinic Hebrew — pass through unchanged. If all definitions in a sense are blocked, the entire sense is dropped automatically. To add or remove blocked tags, edit `BLOCKED_LAYERS` in `useWiktionary.ts`.
+
+## Planned features
+
+### Custom dictionary quotes tab
+
+A new tab in the dictionary page for displaying quotes from the main app DB books. When a word is searched, this tab would show relevant passages from books like מלבים באור המילות (source 23) and מצודת ציון (source 20) that contain or define the word. These books already exist in the main app DB and are accessible via `useDictionarySearch.ts` (sources 20 and 23 are already mapped there). The tab would use the existing `DictionarySearchResults` / `DictionaryEntryView` infrastructure to render the HTML book content.
+
+### מקורות tab
+
+A dedicated tab showing results from classical Jewish lexicographic sources available in the main app DB. Planned sources:
+
+- מלבים באור המילות (source 23) — Malbim's lexicon of biblical Hebrew
+- מצודת ציון (source 20) — Metzudat Zion, biblical word definitions
+- Additional sources from categories 75 and 1220 (מילונים וספרי יעץ, ספרות עזר) as they become available
+
+This tab would reuse `useDictionarySearch` with a filter limiting results to these specific source IDs, and render via the existing `DictionarySearchResults` component. The "open in viewer" button on each result would navigate to the book at the relevant line.

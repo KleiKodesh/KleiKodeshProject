@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import {
   IconSearch20Regular,
@@ -31,6 +31,9 @@ const diacriticsState = computed(() => settingsStore.diacriticsState)
 const diacriticsTitle = computed(
   () => ['הסר טעמים', 'הסר גם ניקוד', 'שחזר טעמים וניקוד'][diacriticsState.value]!,
 )
+
+const tocBtnRef = ref<HTMLElement | null>(null)
+defineExpose({ tocBtnRef })
 </script>
 
 <template>
@@ -42,7 +45,12 @@ const diacriticsTitle = computed(
     >
       <IconSearch20Regular />
     </button>
-    <button :class="{ active: tocVisible }" title="תוכן עניינים" @click="$emit('toggleToc')">
+    <button
+      ref="tocBtnRef"
+      :class="{ active: tocVisible }"
+      title="תוכן עניינים"
+      @click="$emit('toggleToc')"
+    >
       <IconTreeRtl />
     </button>
     <button

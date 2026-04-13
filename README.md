@@ -1,66 +1,54 @@
-<div dir="rtl">
+# KleiKodesh — כלי קודש
 
-<div align="center">
+A Microsoft Word add-in suite for Torah document authoring and seforim research.
 
-<img width="100" alt="כלי קודש לוורד" src="https://github.com/user-attachments/assets/0d528a83-c124-47de-bfcc-ceb87342a2e0" />
+## Projects
 
-# כלי קודש לוורד
+| Folder                                                                                               | Type                  | Purpose                                           |
+| ---------------------------------------------------------------------------------------------------- | --------------------- | ------------------------------------------------- |
+| [`KleiKodeshVstoInstallerWpf`](KleiKodeshVstoInstallerWpf/README.md)                                 | WPF (.NET)            | **Main app** — installs the VSTO add-in into Word |
+| [`KleiKodeshVsto`](KleiKodeshVsto/README.md)                                                         | VSTO (.NET Framework) | Word add-in — ribbon, task panes, all tools       |
+| [`DocSeferLib`](DocSeferLib/README.md)                                                               | WPF class library     | Torah document formatting tools (עיצוב תורני)     |
+| [`Kezayit`](Kezayit/README.md)                                                                       | Vue 3 + TypeScript    | Seforim viewer frontend (runs in WebView2)        |
+| [`Kezayit/CSharpBackend/KezayitLib`](Kezayit/CSharpBackend/KezayitLib/README.md)                     | .NET class library    | C# backend bridging the Vue app to Windows APIs   |
+| [`Kezayit/CSharpBackend/BloomSearchEngineLib`](Kezayit/CSharpBackend/BloomSearchEngineLib/README.md) | .NET class library    | Bloom-filter full-text search engine for seforim  |
+| [`kleikodesh.github.io`](kleikodesh.github.io/README.md)                                             | Static HTML/CSS/JS    | Public project website and download page          |
 
-### ארגז כלים לעורך התורני
+## Architecture
 
-[![הורד](https://img.shields.io/github/v/release/KleiKodesh/KleiKodeshProject?label=הורד&color=7c3aed&style=for-the-badge)](https://github.com/KleiKodesh/KleiKodeshProject/releases/latest)
-[![רישיון](https://img.shields.io/github/license/KleiKodesh/KleiKodeshProject?label=רישיון&style=for-the-badge&color=7c3aed)](LICENSE)
+```
+User runs installer
+        ↓
+KleiKodeshVstoInstallerWpf  ──extracts & registers──▶  KleiKodeshVsto (Word add-in)
+                                                                │
+                              ┌─────────────────────────────────┤
+                              │                                 │
+                        Ribbon buttons                    Task Panes
+                              │
+              ┌───────────────┼───────────────┐
+              │               │               │
+          Kezayit         DocSeferLib      RegexFind / WebSites
+       (WebView2 Vue)    (WPF formatting)   (HTML / WPF)
+              │
+        KezayitLib (C# backend)
+              │
+    BloomSearchEngineLib + SQLite DB
+```
 
-[🌐 אתר הפרויקט](https://kleikodesh.github.io) &nbsp;|&nbsp;
-[⬇️ הורד עכשיו](https://github.com/KleiKodesh/KleiKodeshProject/releases/latest) &nbsp;|&nbsp;
-[📧 הירשם לעדכונים](https://docs.google.com/forms/d/e/1FAIpQLSfPw8cwUTSSH4bQkvIVaX_Cv1M2pdn53pJE16o9VFb0oW0gkg/viewform) &nbsp;|&nbsp;
-[🐛 דיווח באגים](https://github.com/KleiKodesh/KleiKodeshProject/issues) &nbsp;|&nbsp;
-[💬 פוסט במתמחים](https://mitmachim.top/post/966405)
+## Build
 
-</div>
+- **Full solution (MSBuild):**
+  ```
+  & "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe" KleiKodeshProject.slnx /m /nologo /verbosity:minimal
+  ```
+- **SDK-style projects only (dotnet):**
+  ```
+  dotnet build
+  ```
+  Works for `KleiKodeshVstoInstallerWpf`, `KezayitLib`, `BloomSearchEngineLib`.  
+  Old-style projects (`KleiKodeshVsto`, `DocSeferLib`) require MSBuild from Visual Studio.
 
----
+## Version
 
-## 📦 מה התוסף כולל
-
-|     | תכונה                   | תיאור                                                                                 |
-| --- | ----------------------- | ------------------------------------------------------------------------------------- |
-| 📚  | **זית - ספרייה תורנית** | גישה מלאה למאגר הספרים של זית בתוך וורד, עם ממשק קומפקטי ונוח                         |
-| 🔍  | **חיפוש רגקס בוורד**    | חיפוש והחלפה עם ביטויים רגולריים מעבר ליכולות החיפוש המתקדם של וורד                   |
-| ✍️  | **עיצוב תורני**         | כלים לעיצוב מסמכים כפי שמקובל בספרי קודש                                              |
-| 🌐  | **דרך האתרים**          | גישה נוחה לאתרים תורניים ישירות מתוך וורד, כגון: נקדנית דיקטה, אוצר החכמה המקוון ועוד |
-
----
-
-## ⬇️ הורדות נוספות
-
-| קובץ                                                                                                 | תיאור                         |
-| ---------------------------------------------------------------------------------------------------- | ----------------------------- |
-| [📄 טיפים לעבודה נכונה בוורד](https://github.com/KleiKodesh/kleikodesh.github.io/releases/tag/Files) | מדריך מעשי לעבודה יעילה בוורד |
-| [📄 מדריך חיפוש והחלפה בוורד](https://github.com/KleiKodesh/kleikodesh.github.io/releases/tag/Files) | מדריך מקיף לחיפוש והחלפה      |
-| [📄 תוסף עיצוב תורני לוורד](https://github.com/KleiKodesh/kleikodesh.github.io/releases/tag/Files)   | תוסף עיצוב ייעודי לספרי קודש  |
-
----
-
-## 🔗 פרויקטים קשורים
-
-| פרויקט                            | תיאור                                                     |
-| --------------------------------- | --------------------------------------------------------- |
-| [אוצריא](https://www.otzaria.org) | ספריה תורנית דיגיטלית חינמית ופתוחה עם אלפי ספרים         |
-| [זית](https://zayitapp.com)       | אפליקציית הספרייה התורנית המשמשת את כלי קודש לגישה לספרים |
-
----
-
-## 📜 רישיון
-
-התוסף הוא **חינמי לחלוטין** ומופץ תחת רישיון קוד פתוח.  
-אתם מוזמנים להפיץ, לשתף ולהשתמש בתוסף ללא כל עלות.  
-הקוד המלא זמין ב-[GitHub](https://github.com/KleiKodesh) ואתם מוזמנים לתרום, לדווח על באגים ולהציע שיפורים.
-
----
-
-## 🖼️ תמונות מסך
-
-<a href="https://kleikodesh.github.io?gallery" target="_blank">לצפייה בתמונות מסך של התוסף</a>
-
-</div>
+App version is defined in `KleiKodeshVstoInstallerWpf/Helpers/AddinInstaller.cs` as `const string Version`.  
+After install it is written to the registry at `HKEY_CURRENT_USER\SOFTWARE\KleiKodesh` → `Version`.

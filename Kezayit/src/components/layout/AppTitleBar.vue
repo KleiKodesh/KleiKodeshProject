@@ -28,6 +28,7 @@ const activeTab = computed(() => tabStore.activeTab)
 const dropdownOpen = ref(false)
 const navDropdownOpen = ref(false)
 const barRef = ref<HTMLElement | null>(null)
+const navBtnRef = ref<HTMLElement | null>(null)
 
 const isPdfTab = computed(
   () => activeTab.value?.route === '/pdf-view' || activeTab.value?.route === '/hebrewbooks',
@@ -48,7 +49,7 @@ const pdfFilterTitle = computed(() =>
   settingsStore.pdfPageFilters ? 'ביטול פילטרים לעמודי PDF' : 'החלת פילטרים לעמודי PDF',
 )
 
-useDropdownClose(barRef, () => {
+const { justClosed } = useDropdownClose(barRef, () => {
   dropdownOpen.value = false
 })
 
@@ -57,6 +58,11 @@ const ROUTE_MAP: Record<string, { title: string; route: TabRoute }> = {
   openfile: { title: 'ספרים', route: '/books' },
   hebrewbooks: { title: 'היברו-בוקס', route: '/hebrewbooks' },
   'kezayit-search': { title: 'חיפוש', route: '/search' as TabRoute },
+}
+
+function toggleTabDropdown() {
+  if (justClosed.value) return
+  dropdownOpen.value = !dropdownOpen.value
 }
 
 function toggleNavDropdown() {
@@ -109,14 +115,15 @@ useEventListener('keydown', (e: KeyboardEvent) => {
 </script>
 
 <template>
-  <header ref="barRef" class="title-bar" @click="dropdownOpen = !dropdownOpen">
+  <header ref="barRef" class="title-bar" @click="toggleTabDropdown">
     <div class="bar-start">
       <div class="nav-btn-wrap">
-        <button class="bar-btn" @click.stop="toggleNavDropdown">
+        <button ref="navBtnRef" class="bar-btn" @click.stop="toggleNavDropdown">
           <IconLineHorizontal320Regular />
         </button>
         <AppTitleBarNavDropdown
           v-if="navDropdownOpen"
+          :toggle-button-el="navBtnRef"
           @close="navDropdownOpen = false"
           @click.stop
         />

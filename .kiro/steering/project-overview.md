@@ -48,3 +48,19 @@ On startup (`SearchHandler.OnDbReady`), if the installed app version (from regis
 ```
 
 **Rule:** Any project that transitively depends on SQLite (via a project reference chain) must explicitly include these `Content` items. Pure managed NuGet packages (Dapper, HtmlAgilityPack, GongSolutions.WPF.DragDrop, System.Text.Json, etc.) do **not** have this problem — they copy normally through project references.
+
+## README Files
+
+Each project folder contains a `README.md` describing its purpose, folder structure, and how it integrates with the VSTO add-in. When exploring or modifying a project, read its README first for orientation.
+
+| README                                                                                                               | Covers                                                             |
+| -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| [`README.md`](../../README.md)                                                                                       | Root overview, architecture diagram, build instructions            |
+| [`KleiKodeshVstoInstallerWpf/README.md`](../../KleiKodeshVstoInstallerWpf/README.md)                                 | WPF installer: extraction, registry keys, version management       |
+| [`KleiKodeshVsto/README.md`](../../KleiKodeshVsto/README.md)                                                         | VSTO add-in: ribbon, task panes, helpers                           |
+| [`DocSeferLib/README.md`](../../DocSeferLib/README.md)                                                               | Torah formatting library: Columns, Paragraphs, Spacing             |
+| [`Kezayit/README.md`](../../Kezayit/README.md)                                                                       | Vue 3 frontend: components, stores, host bridge, build             |
+| [`Kezayit/CSharpBackend/README.md`](../../Kezayit/CSharpBackend/README.md)                                           | C# backend projects overview                                       |
+| [`Kezayit/CSharpBackend/KezayitLib/README.md`](../../Kezayit/CSharpBackend/KezayitLib/README.md)                     | WebView2 host, message bridge, all handlers                        |
+| [`Kezayit/CSharpBackend/BloomSearchEngineLib/README.md`](../../Kezayit/CSharpBackend/BloomSearchEngineLib/README.md) | Bloom filter search engine: indexing, searching, version detection |
+| [`kleikodesh.github.io/README.md`](../../kleikodesh.github.io/README.md)                                             | Public website (GitHub Pages)                                      |

@@ -176,6 +176,7 @@ watch(
 const scrollerEl = ref<HTMLElement | null>(null)
 const scrollTop = ref(0)
 const treeVisible = ref(false)
+const headerNavRef = ref<InstanceType<typeof CommentaryHeaderNav> | null>(null)
 
 function toggleBookVisibility(bookId: number) {
   // capture current scroll before visibleGroups changes
@@ -352,11 +353,13 @@ function asLine(item: FlatItem | undefined) {
         v-if="treeVisible && props.groups.length"
         :groups="props.groups"
         :hidden-book-ids="props.hiddenBookIds"
+        :toggle-button-el="headerNavRef?.filterBtnRef ?? null"
         @toggle="toggleBookVisibility"
         @close="treeVisible = false"
       />
       <div class="content-col">
         <CommentaryHeaderNav
+          ref="headerNavRef"
           class="sticky-nav"
           :groups="visibleGroups"
           :scroll-to-group="scrollToGroup"

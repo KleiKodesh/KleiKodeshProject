@@ -26,7 +26,10 @@ const emit = defineEmits<{
   'update:activeBookId': [bookId: number]
 }>()
 
+const filterBtnRef = ref<HTMLElement | null>(null)
 const inputRef = ref<HTMLInputElement | null>(null)
+
+defineExpose({ filterBtnRef })
 const componentId = Math.random().toString(36).slice(2)
 
 onMounted(() => nextTick(() => inputRef.value?.focus()))
@@ -69,7 +72,12 @@ function handleKeydown(e: KeyboardEvent) {
 
 <template>
   <div class="nav">
-    <button class="btn c-pointer hover-bg" title="סנן מפרשים" @click.stop="emit('toggle-tree')">
+    <button
+      ref="filterBtnRef"
+      class="btn c-pointer hover-bg"
+      title="סנן מפרשים"
+      @click.stop="emit('toggle-tree')"
+    >
       <IconFilter20Regular />
     </button>
     <div class="sep" />

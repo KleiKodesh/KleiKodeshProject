@@ -69,5 +69,19 @@ namespace KleiKodeshVstoInstallerWpf
             MainFrame.Navigate(new InstallPage());
             MainFrame.NavigationService.RemoveBackEntry();
         }
+
+        /// <summary>
+        /// Used when relaunched as admin via --repair: navigate straight to repair
+        /// and auto-trigger the cleanup run (skip the confirm dialog since user already confirmed).
+        /// </summary>
+        public void NavigateToRepairOnLoad()
+        {
+            Loaded += (_, __) =>
+            {
+                var page = new RepairPage(this, autoRun: true);
+                MainFrame.Navigate(page);
+                MainFrame.NavigationService.RemoveBackEntry();
+            };
+        }
     }
 }

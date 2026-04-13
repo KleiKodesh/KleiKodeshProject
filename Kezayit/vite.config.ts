@@ -32,15 +32,27 @@ function devSqlitePlugin(): Plugin {
         console.error(`[dev-sqlite] failed to open dictionary.db:`, err)
       }
 
+      let wikiDictDb: InstanceType<typeof Database> | undefined
+      const wikiDictDbPath = path.resolve('./public/wikidictionary.db')
+      try {
+        wikiDictDb = new Database(wikiDictDbPath, { readonly: true })
+        console.log(`[dev-sqlite] opened wikidictionary.db`)
+      } catch {
+        console.warn(
+          `[dev-sqlite] wikidictionary.db not found — run: node scripts/import-wiktionary.cjs`,
+        )
+      }
+
       server.middlewares.use((req, res, next) => {
         const isQuery = req.url === '/query' && req.method === 'POST'
         const isDictQuery = req.url === '/query-dict' && req.method === 'POST'
-        if (!isQuery && !isDictQuery) {
+        const isWikiDictQuery = req.url === '/query-wikidict' && req.method === 'POST'
+        if (!isQuery && !isDictQuery && !isWikiDictQuery) {
           next()
           return
         }
 
-        const target = isDictQuery ? dictDb : db
+        const target = isDictQuery ? dictDb : isWikiDictQuery ? wikiDictDb : db
         if (!target) {
           res.writeHead(503, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ error: 'Database not available' }))

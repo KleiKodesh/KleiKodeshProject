@@ -16,6 +16,7 @@ const props = defineProps<{
   loading: boolean
   error: string | null
   tocSearchTree?: SearchableTree
+  toggleButtonEl?: HTMLElement | null
 }>()
 const emit = defineEmits<{ close: []; select: [TocEntry]; altSelect: [TocEntry] }>()
 
@@ -37,9 +38,13 @@ watch(
     if (val && !props.loading) nextTick(() => searchRef.value?.focus())
   },
 )
-useDropdownClose(panelRef, () => {
-  if (!justSelected.value) emit('close')
-})
+useDropdownClose(
+  panelRef,
+  () => {
+    if (!justSelected.value) emit('close')
+  },
+  { toggleButton: computed(() => props.toggleButtonEl ?? null) },
+)
 
 function focusTocList() {
   const el = tocSectionRef.value?.containerRef?.()

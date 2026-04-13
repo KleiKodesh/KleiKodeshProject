@@ -22,6 +22,7 @@ const emit = defineEmits<{
 }>()
 
 const inputRef = ref<HTMLInputElement | null>(null)
+const filterBtnRef = ref<HTMLElement | null>(null)
 const localQuery = ref(props.searchQuery)
 
 watch(
@@ -41,13 +42,14 @@ function handleClear() {
   inputRef.value?.focus()
 }
 
-defineExpose({ focus: () => inputRef.value?.focus() })
+defineExpose({ focus: () => inputRef.value?.focus(), filterBtnRef })
 </script>
 
 <template>
   <BottomSearchBar>
     <template #left>
       <button
+        ref="filterBtnRef"
         class="bar-btn"
         :class="{ 'filter-active': filterCount > 0 }"
         :title="filterCount > 0 ? `סינון: ${filterCount} ספרים` : 'סינון תוצאות'"

@@ -145,16 +145,15 @@ namespace UpdateCheckerLib
             }
         }
 
-        // ✅ NO BAT FILE
-        // ✅ NO POWERSHELL
-        // ✅ UAC handled correctly
+        // Launch with ShellExecute so Windows handles UAC correctly per the
+        // manifest's RequestExecutionLevel (NSIS wrapper is user-level, no elevation needed)
         private static void LaunchInstaller(string installerPath)
         {
             var psi = new ProcessStartInfo
             {
-                FileName = installerPath,
-                UseShellExecute = true,      // required for UAC
-                Verb = "runas",              // elevate
+                FileName         = installerPath,
+                Arguments        = "--silent",   // skip landing page, go straight to install, exit 0 on done
+                UseShellExecute  = true,
                 WorkingDirectory = Path.GetDirectoryName(installerPath)
             };
 

@@ -115,10 +115,26 @@ namespace BloomSearchEngineLib
         private static int TrySkipTag(string src, int si, int len, char[] dst, ref int di)
         {
             int st = si + 1;
-            while (st < len && src[st] != '>')
+            char quote = '\0';
+            while (st < len)
             {
-                // Hebrew inside a '<...>' means it's not a real tag — copy everything up to and including '>'
-                if (src[st] >= '\u05D0' && src[st] <= '\u05EA')
+                char c = src[st];
+
+                // Track entry/exit of quoted attribute values
+                if (quote != '\0')
+                {
+                    if (c == quote) quote = '\0';
+                    st++;
+                    continue;
+                }
+
+                if (c == '"' || c == '\'') { quote = c; st++; continue; }
+
+                if (c == '>')
+                    break;
+
+                // Hebrew outside of quotes means it's not a real tag — copy everything up to and including '>'
+                if (c >= '\u05D0' && c <= '\u05EA')
                 {
                     int end = st + 1;
                     while (end < len && src[end] != '>') end++;
@@ -127,6 +143,7 @@ namespace BloomSearchEngineLib
                     for (int i = si; i < end; i++) dst[di++] = src[i];
                     return count;
                 }
+
                 st++;
             }
 

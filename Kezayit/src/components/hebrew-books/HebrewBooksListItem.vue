@@ -15,6 +15,17 @@ const tags = computed(() =>
     .map((t: string) => t.trim())
     .filter(Boolean),
 )
+
+const tooltip = computed(() => {
+  const lines: string[] = []
+  if (props.book.title) lines.push(props.book.title)
+  if (props.book.author) lines.push(props.book.author)
+  if (tags.value.length) lines.push(tags.value.join(' • '))
+  if (props.book.pages) lines.push(`📄 ${props.book.pages}`)
+  if (props.book.printingYear) lines.push(`📅 ${props.book.printingYear}`)
+  if (props.book.printingPlace) lines.push(`📍 ${props.book.printingPlace}`)
+  return lines.join('\n')
+})
 </script>
 
 <template>
@@ -22,6 +33,7 @@ const tags = computed(() =>
     class="item"
     data-nav-item
     :class="{ 'is-focused': focused }"
+    :title="tooltip"
     @click="emit('book-clicked', book)"
   >
     <div class="row-top">
@@ -73,26 +85,30 @@ const tags = computed(() =>
 }
 .title-line {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 6px;
+  gap: 2px 6px;
   min-width: 0;
-  overflow: hidden;
 }
 .title {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
-  direction: rtl;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex-shrink: 0;
+  max-width: 100%;
 }
 .author {
   font-size: 11px;
   color: var(--text-secondary);
   white-space: nowrap;
-  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 100%;
 }
 .dl-btn {
   flex-shrink: 0;

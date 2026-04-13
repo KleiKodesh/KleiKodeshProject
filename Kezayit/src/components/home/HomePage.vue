@@ -10,6 +10,7 @@ import {
   IconArrowDownload24Filled,
   IconCalendarRtl24Filled,
   IconBookLetter24Filled,
+  IconRuler24Filled,
 } from '@iconify-prerendered/vue-fluent'
 import { IconSettings24, IconSearchSparkle24 } from '@iconify-prerendered/vue-fluent-color'
 import { isHosted, dbReady } from '@/host/db'
@@ -32,6 +33,7 @@ const baseTiles = computed(() => [
   { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#D94F1E' },
   ...(isOnline.value ? [{ label: 'מילון', icon: IconBookLetter24Filled, color: '#7b5ea7' }] : []),
   { label: 'לוח שנה', icon: IconCalendarRtl24Filled, color: '#2e7d32' },
+  { label: 'מידות ושיעורים', icon: IconRuler24Filled, color: '#8b6914' },
   { label: 'סביבות עבודה', icon: IconApps24Filled, color: '#6b7fc4' },
   { label: 'הגדרות', icon: IconSettings24 },
 ])

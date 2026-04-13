@@ -131,12 +131,16 @@
 
     <Grid>
         <Grid.RowDefinitions>
+            <RowDefinition Height="3"/>    <!-- top accent bar -->
             <RowDefinition Height="*"/>    <!-- centred content -->
             <RowDefinition Height="auto"/> <!-- footer -->
         </Grid.RowDefinitions>
 
+        <!-- Top accent bar -->
+        <Border Grid.Row="0" Background="#7333FF"/>
+
         <!-- Centred content -->
-        <StackPanel Grid.Row="0"
+        <StackPanel Grid.Row="1"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     Width="280"
@@ -177,7 +181,7 @@
         </StackPanel>
 
         <!-- Footer -->
-        <Border Grid.Row="1"
+        <Border Grid.Row="2"
                 Background="#F0F0F0"
                 BorderBrush="#E5E5E5"
                 BorderThickness="0,1,0,0"

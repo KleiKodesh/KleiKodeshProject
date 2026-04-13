@@ -8,6 +8,7 @@ import type { CommentaryGroup } from './useCommentary'
 const props = defineProps<{
   groups: CommentaryGroup[]
   hiddenBookIds?: Set<number>
+  toggleButtonEl?: HTMLElement | null
 }>()
 
 const emit = defineEmits<{
@@ -16,7 +17,9 @@ const emit = defineEmits<{
 }>()
 
 const panelEl = ref<HTMLElement | null>(null)
-useDropdownClose(panelEl, () => emit('close'))
+useDropdownClose(panelEl, () => emit('close'), {
+  toggleButton: computed(() => props.toggleButtonEl ?? null),
+})
 
 const tree = computed(() => buildCommentaryTree(props.groups))
 const allBookIds = computed(() => props.groups.map((g) => g.bookId))

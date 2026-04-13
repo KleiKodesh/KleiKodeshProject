@@ -55,6 +55,7 @@ if (openTocEntryId != null)
 const bottomVisible = ref(false)
 const searchVisible = ref(false)
 const tocVisible = ref(false)
+const toolbarRef = ref<InstanceType<typeof BookViewToolbar> | null>(null)
 const selectedLineId = ref<number | null>(null)
 const commentaryLineId = ref<number | null>(null)
 const hiddenCommentaryBookIds = ref(new Set<number>())
@@ -451,6 +452,7 @@ watch(searchVisible, (v) => {
     <!-- Top toolbar -->
     <BookViewToolbar
       v-if="bookViewStore.toolbarVisible && toolbarPosition === 'top'"
+      ref="toolbarRef"
       :bottom-visible="bottomVisible"
       :search-visible="searchVisible"
       :toc-visible="tocVisible"
@@ -463,6 +465,7 @@ watch(searchVisible, (v) => {
     <div class="body-row">
       <BookViewToolbar
         v-if="bookViewStore.toolbarVisible && toolbarPosition === 'right'"
+        ref="toolbarRef"
         :bottom-visible="bottomVisible"
         :search-visible="searchVisible"
         :toc-visible="tocVisible"
@@ -557,6 +560,7 @@ watch(searchVisible, (v) => {
           :alt-toc-sections="altTocSections"
           :loading="tocLoading"
           :error="tocError"
+          :toggle-button-el="toolbarRef?.tocBtnRef ?? null"
           @close="tocVisible = false"
           @select="onTocSelect"
           @alt-select="onAltTocSelect"
@@ -564,6 +568,7 @@ watch(searchVisible, (v) => {
       </div>
       <BookViewToolbar
         v-if="bookViewStore.toolbarVisible && toolbarPosition === 'left'"
+        ref="toolbarRef"
         :bottom-visible="bottomVisible"
         :search-visible="searchVisible"
         :toc-visible="tocVisible"
@@ -576,6 +581,7 @@ watch(searchVisible, (v) => {
     <!-- Bottom toolbar -->
     <BookViewToolbar
       v-if="bookViewStore.toolbarVisible && toolbarPosition === 'bottom'"
+      ref="toolbarRef"
       :bottom-visible="bottomVisible"
       :search-visible="searchVisible"
       :toc-visible="tocVisible"

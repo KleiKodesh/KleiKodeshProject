@@ -20,6 +20,7 @@ export function useAppNavigation() {
     'סביבות עבודה': '/workspaces',
     'לוח שנה': '/hebrew-calendar',
     מילון: '/dictionary',
+    'מידות ושיעורים': '/midot',
   }
 
   async function navigate(label: string) {
