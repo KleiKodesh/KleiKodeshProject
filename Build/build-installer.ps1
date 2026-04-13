@@ -2,8 +2,6 @@ param(
     [switch]$NoWait,
     [switch]$NoRelease,
     [switch]$NoClean,
-    [ValidateSet("AnyCPU", "x64")]
-    [string]$Platform,
     [ValidateSet("major", "minor", "patch")]
     [string]$VersionIncrement,
     [ValidateSet("commits", "file", "both")]
@@ -87,39 +85,10 @@ if ($ReleaseNotesSource) {
 Write-Host "Release notes source: $ReleaseNotesSource" -ForegroundColor Cyan
 Write-Host ""
 
-# Check if platform was provided as parameter
-if ($Platform) {
-    $Configuration = "Release"
-    Write-Host "Using command line parameter: Release|$Platform" -ForegroundColor Cyan
-} else {
-    # Show platform selection menu
-    Write-Host "Select VSTO build configuration:" -ForegroundColor Yellow
-    Write-Host "1. Release|AnyCPU (Recommended)" -ForegroundColor White
-    Write-Host "2. Release|x64" -ForegroundColor White
-    Write-Host ""
-
-    do {
-        $choice = Read-Host "Enter your choice (1-2)"
-        switch ($choice) {
-            "1" { 
-                $Configuration = "Release"
-                $Platform = "AnyCPU"
-                $valid = $true
-            }
-            "2" { 
-                $Configuration = "Release"
-                $Platform = "x64"
-                $valid = $true
-            }
-            default { 
-                Write-Host "Invalid choice. Please enter 1 or 2." -ForegroundColor Red
-                $valid = $false
-            }
-        }
-    } while (-not $valid)
-}
-
-Write-Host "Selected: $Configuration|$Platform" -ForegroundColor Cyan
+# Platform is always AnyCPU
+$Configuration = "Release"
+$Platform = "AnyCPU"
+Write-Host "Platform: Release|AnyCPU" -ForegroundColor Cyan
 
 # Increment version first, before building
 Write-Host "Incrementing version..." -ForegroundColor Yellow
@@ -234,11 +203,7 @@ $wpfProjectPath = Join-Path $projectRoot "KleiKodeshVstoInstallerWpf\KleiKodeshV
 Write-Host "Build command: dotnet build" -ForegroundColor Gray
 Write-Host "Starting WPF build..." -ForegroundColor Yellow
 
-if ($Platform -eq "x64") {
-    dotnet build $wpfProjectPath -c Release --arch x64 -p:VstoConfiguration=$Configuration -p:VstoPlatform=$Platform --verbosity normal
-} else {
-    dotnet build $wpfProjectPath -c Release -p:VstoConfiguration=$Configuration -p:VstoPlatform=$Platform --verbosity normal
-}
+dotnet build $wpfProjectPath -c Release -p:VstoConfiguration=$Configuration -p:VstoPlatform=$Platform --verbosity normal
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: Failed to build WPF installer (VSTO build is handled by prebuild event)" -ForegroundColor Red

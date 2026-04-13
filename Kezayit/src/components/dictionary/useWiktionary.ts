@@ -16,14 +16,13 @@ export interface WiktionarySense {
   binyan: string | null
   shoresh: string | null
   ktivMale: string | null
+  /** Etymology/expansion note — extracted at import time from (=...) prefix, e.g. 'על לב' for אליבא */
+  etymology?: string | null
   definitions: WiktionaryDefinition[]
   sections: Record<string, string[]>
   translations: { lang: string; words: string[] }[]
-}
-
-export interface WiktionaryResult {
-  title: string
-  senses: WiktionarySense[]
+  /** Source label — set for DB entries (e.g. 'מילון ארמי א'), null for live Wiktionary */
+  sourceLabel?: string | null
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -241,7 +240,8 @@ async function fetchSuggestions(term: string): Promise<string[]> {
 export function useWiktionary() {
   const searchQuery = ref('')
   const debouncedQuery = useDebounce(searchQuery, 350)
-  const result = ref<WiktionaryResult | null>(null)
+  const senses = ref<WiktionarySense[]>([])
+  const title = ref<string | null>(null)
   const suggestions = ref<string[]>([])
   const searching = ref(false)
   const hasSearched = ref(false)
@@ -267,7 +267,8 @@ export function useWiktionary() {
   async function search(term: string) {
     const trimmed = term.trim()
     if (!trimmed) {
-      result.value = null
+      senses.value = []
+      title.value = null
       hasSearched.value = false
       notFound.value = false
       error.value = null
@@ -277,19 +278,21 @@ export function useWiktionary() {
     hasSearched.value = true
     notFound.value = false
     error.value = null
-    result.value = null
+    senses.value = []
+    title.value = null
     try {
       const fetched = await fetchWikitext(trimmed)
       if (!fetched) {
         notFound.value = true
         return
       }
-      const senses = parseWikitext(fetched.title, fetched.wikitext)
-      if (senses.length === 0) {
+      const parsed = parseWikitext(fetched.title, fetched.wikitext)
+      if (parsed.length === 0) {
         notFound.value = true
         return
       }
-      result.value = { title: fetched.title, senses }
+      title.value = fetched.title
+      senses.value = parsed
     } catch {
       error.value = 'שגיאה בטעינת הנתונים'
     } finally {
@@ -306,7 +309,8 @@ export function useWiktionary() {
   return {
     searchQuery,
     debouncedQuery,
-    result,
+    senses,
+    title,
     suggestions,
     searching,
     hasSearched,

@@ -26,6 +26,7 @@ const props = defineProps<{
   bottomVisible?: boolean
   commentaryScrollIndex?: number | null
   commentaryScrollOffset?: number | null
+  hiddenCommentaryBookIds?: Set<number>
   searchQuery?: string
   currentMatchLineIndex?: number
   currentMatchOccurrence?: number
@@ -484,6 +485,9 @@ function savePos() {
       selectedLineId: props.selectedLineId,
       commentaryScrollIndex: props.commentaryScrollIndex,
       commentaryScrollOffset: props.commentaryScrollOffset,
+      hiddenCommentaryBookIds: props.hiddenCommentaryBookIds
+        ? Array.from(props.hiddenCommentaryBookIds)
+        : undefined,
       zoom: zoom.value,
       bottomVisible: props.bottomVisible,
       autoSelectTopLine: autoSelectTopLine.value,
@@ -493,6 +497,9 @@ function savePos() {
       selectedLineId: props.selectedLineId,
       commentaryScrollIndex: props.commentaryScrollIndex,
       commentaryScrollOffset: props.commentaryScrollOffset,
+      hiddenCommentaryBookIds: props.hiddenCommentaryBookIds
+        ? Array.from(props.hiddenCommentaryBookIds)
+        : undefined,
     })
   }
 }

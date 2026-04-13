@@ -3,190 +3,78 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:KleiKodeshVstoInstallerWpf"
         mc:Ignorable="d"
         WindowStyle="None"
+        Background="White"
         WindowStartupLocation="CenterScreen"
+        Width="400"
+        Height="460"
         FlowDirection="RightToLeft"
-        SizeToContent="WidthAndHeight"
         FontFamily="Segoe UI"
-        FontSize="16"
         Title="התקנת כלי קודש"
         PreviewKeyDown="Window_PreviewKeyDown"
-        MouseDown="Window_MouseDown"
-        TouchDown="Window_TouchDown">
+        PreviewMouseMove="Window_PreviewMouseMove">
+
     <Grid>
+        <Frame x:Name="MainFrame"
+               NavigationUIVisibility="Hidden"
+               Background="Transparent"
+               HorizontalContentAlignment="Stretch"
+               VerticalContentAlignment="Stretch">
+            <!-- Disable Frame's built-in ScrollViewer so pages get a bounded height -->
+            <Frame.Template>
+                <ControlTemplate TargetType="Frame">
+                    <ContentPresenter/>
+                </ControlTemplate>
+            </Frame.Template>
+        </Frame>
 
-        <Image Source="/KleiKodesh_Main.ico"
-               Opacity="0.05"
-               Height="400"
-               Width="450"
-               Margin="-40"
-               Stretch="Fill"/>
-
-        <Grid Margin="35,30"
-              Opacity="0.8">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="auto"/>
-                <RowDefinition Height="16"/>
-                <RowDefinition Height="auto"/>
-                <RowDefinition Height="16"/>
-                <RowDefinition Height="auto"/>
-                <RowDefinition Height="auto"/>
-            </Grid.RowDefinitions>
-
-            <StackPanel x:Name="HeaderPanel"
-                        HorizontalAlignment="Center">
-                <TextBlock VerticalAlignment="Center"
-                           Text="כלי קודש לוורד"
-                           FontSize="26"
-                           FontWeight="SemiBold"/>
-
-                <TextBlock VerticalAlignment="Center"
-                           Text="ארגז כלים לעורך התורני"
-                           FontWeight="SemiBold"
-                           Opacity="0.9"/>
-            </StackPanel>
-
-            <Grid x:Name="OptionsGrid"
-                  Grid.Row="2">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition/>
-                    <ColumnDefinition Width="35"/>
-                    <ColumnDefinition/>
-                </Grid.ColumnDefinitions>
-
-                <Grid.Resources>
-                    <Style TargetType="GroupBox">
-                        <Setter Property="Padding" Value="10"/>
-                    </Style>
-                    <Style TargetType="CheckBox">
-                        <Setter Property="Margin" Value="4"/>
-                        <Setter Property="VerticalContentAlignment" Value="Center"/>
-                        <Setter Property="Cursor" Value="Hand"/>
-                    </Style>
-                    <Style TargetType="RadioButton">
-                        <Setter Property="Margin" Value="4"/>
-                        <Setter Property="VerticalContentAlignment" Value="Center"/>
-                        <Setter Property="Cursor" Value="Hand"/>
-                    </Style>
-                </Grid.Resources>
-
-                <GroupBox Padding="10">
-                    <GroupBox.Header>
-                        <TextBlock Text="רכיבים זמינים"
-                                   FontWeight="SemiBold"/>
-                    </GroupBox.Header>
-                    <StackPanel x:Name="VisibleSettingsPanel">
-                        <CheckBox x:Name="Kezayit_Visible"  Content="ספריית כזית"/>
-                        <!--<CheckBox x:Name="HebrewBooks_Visible"  Content="היברו בוקס"/>-->
-                        <CheckBox x:Name="WebSites_Visible"  Content="דרך האתרים"/>
-                        <CheckBox x:Name="KleiKodesh_Visible"  Content="עיצוב תורני"/>
-                        <CheckBox x:Name="RegexFind_Visible"  Content="חיפוש רגקס בוורד"/>
-                    </StackPanel>
-                </GroupBox>
-
-                <GroupBox Grid.Column="2"
-                          Padding="10">
-                    <GroupBox.Header>
-                        <TextBlock Text="לחצן ראשי"
-                                   FontWeight="SemiBold"/>
-                    </GroupBox.Header>
-                    <StackPanel x:Name="OptionsSettingsPanel">
-                        <RadioButton x:Name="Kezayit_Option" Content="ספריית כזית"/>
-                        <!--<RadioButton x:Name="HebrewBooks_Option" Content="היברו בוקס"/>-->
-                        <RadioButton x:Name="WebSites_Option" Content="דרך האתרים"/>
-                        <RadioButton x:Name="KleiKodesh_Option" Content="עיצוב תורני"/>
-                        <RadioButton x:Name="RegexFind_Option" Content="חיפוש רגקס בוורד"/>
-                        <RadioButton x:Name="Settings_Option" Content="הגדרות"/>
-                    </StackPanel>
-                </GroupBox>
-
-
-            </Grid>
-
-            <Grid x:Name="ButtonsPanel"
-                  Grid.Row="4">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition/>
-                    <ColumnDefinition Width="10"/>
-                    <ColumnDefinition/>
-                    <ColumnDefinition Width="10"/>
-                    <ColumnDefinition/>
-                </Grid.ColumnDefinitions>
-                <Grid.Resources>
-                    <Style TargetType="Button">
-                        <Setter Property="Padding" Value="20,2"/>
-                        <Setter Property="Cursor" Value="Hand"/>
-                    </Style>
-                </Grid.Resources>
-                <Button x:Name="ZayitDbButton" Grid.Column="0"
-                        Content="הגדר מסד נתונים לכזית"
-                        Background="Transparent"
-                        BorderThickness="0.5"
-                        Click="ZayitDbButton_Click">
-                    <Button.ToolTip>
-                        <ToolTip>
-                            <StackPanel>
-                                <!-- SuperTip body -->
-                                <TextBlock TextAlignment="Center">
-                                    <Run FontWeight="Bold">בחר מיקום מותאם אישית עבור מסד הנתונים של ספריית כזית</Run>
-                                    <LineBreak/>
-                                    יש להתעלם מאפשרות זו בכדי להשתמש בברירת המחדל
-                                </TextBlock>
-                            </StackPanel>
-                        </ToolTip>
-                    </Button.ToolTip>
-                </Button>
-                <Button x:Name="RepairButton" Grid.Column="2"
-                        Content="תיקון"
-                        Background="Transparent"
-                        BorderThickness="0.5"
-                        ToolTip="מחיקת כל שאריות כלי קודש מהמחשב (קבצים + רגיסטרי)"
-                        Click="RepairButton_Click"/>
-                <Button x:Name="CancelButton" Grid.Column="4"
-                        Content="ביטול"
-                        Background="Transparent"
-                        BorderThickness="0.5"
-                        Click="CancelButton_Click"/>
-                <Button x:Name="InstallButton" Grid.Column="6"
-                        Content="התקן"
-                        Background="#FF7333FF"
-                        Foreground="White"
-                        BorderThickness="0"
-                        Click="InstallButton_Click"/>
-            </Grid>
-        </Grid>
-
-        <TextBlock x:Name="EmailTextBlock"
-                   VerticalAlignment="Bottom"
-                   HorizontalAlignment="Left"
-                   FontSize="10"
-                   Padding="10">
-            <Hyperlink NavigateUri="mailto:kleikodeshproject@gmail.com"
-                       RequestNavigate="Hyperlink_RequestNavigate">
-                kleikodeshproject@gmail.com
-            </Hyperlink>
-        </TextBlock>
-
-        <Button x:Name="Closebutton"
-                FontSize="10"
-                Click="CancelButton_Click"
-                Background="Transparent"
-                BorderThickness="0"
-                Width="25"
-                Height="25"
+        <!-- Close button — top-right in RTL -->
+        <Button x:Name="CloseBtn"
+                Click="CloseButton_Click"
+                Width="28" Height="28"
                 HorizontalAlignment="Right"
                 VerticalAlignment="Top"
-                Margin="5">
-            <Path Stroke="Black"
-                  Stretch="Uniform"
-                  HorizontalAlignment="Center"
-                  VerticalAlignment="Center"
-                  Margin="7"
-                  Data="M7 17L16.8995 7.10051 M7 7.00001L16.8995 16.8995"/>
+                Margin="4"
+                Cursor="Hand"
+                ToolTip="סגור">
+            <Button.Style>
+                <Style TargetType="Button">
+                    <Setter Property="Background"      Value="Transparent"/>
+                    <Setter Property="BorderThickness" Value="0"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Bd"
+                                        Background="{TemplateBinding Background}"
+                                        CornerRadius="4"
+                                        Width="28" Height="28">
+                                    <Viewbox Width="12" Height="12"
+                                             HorizontalAlignment="Center"
+                                             VerticalAlignment="Center"
+                                             FlowDirection="LeftToRight">
+                                        <Path x:Name="X"
+                                              Data="M0,0 L10,10 M10,0 L0,10"
+                                              Stroke="#AAAAAA"
+                                              StrokeThickness="1.5"
+                                              StrokeStartLineCap="Round"
+                                              StrokeEndLineCap="Round"/>
+                                    </Viewbox>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#F0F0F0"/>
+                                        <Setter TargetName="X"  Property="Stroke"     Value="#555555"/>
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#E0E0E0"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </Button.Style>
         </Button>
     </Grid>
 </Window>

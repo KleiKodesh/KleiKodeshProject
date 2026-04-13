@@ -46,6 +46,11 @@ function stripNikud(s: string): string {
       שורש: <span class="shoresh-val">{{ sense.shoresh }}</span>
     </div>
 
+    <!-- Etymology (=expansion) — extracted at import from Aramaic entries -->
+    <div v-if="sense.etymology" class="entry-etymology">
+      מקור: <span class="etymology-val">{{ sense.etymology }}</span>
+    </div>
+
     <!-- Definitions -->
     <div v-if="sense.definitions.length" class="entry-defs">
       <div v-for="(def, di) in sense.definitions" :key="di" class="def-row">
@@ -151,6 +156,17 @@ function stripNikud(s: string): string {
   line-height: 16px;
 }
 
+/* ── Source label (Aramaic DB entries) ── */
+.entry-source {
+  font-size: 10px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--text-secondary) 10%, transparent);
+  border-radius: 999px;
+  padding: 0 6px;
+  line-height: 16px;
+  margin-inline-start: auto;
+}
+
 /* ── שורש ── */
 .entry-shoresh {
   font-size: 12px;
@@ -161,6 +177,17 @@ function stripNikud(s: string): string {
   font-weight: 600;
   color: var(--text-primary);
   letter-spacing: 0.05em;
+}
+
+/* ── Etymology ── */
+.entry-etymology {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding-inline-start: 8px;
+}
+.etymology-val {
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 /* ── Definitions ── */

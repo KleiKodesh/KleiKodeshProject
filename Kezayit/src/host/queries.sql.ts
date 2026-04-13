@@ -201,7 +201,109 @@ export const SQL = {
     ORDER BY position ASC
   `,
 
-  // ── Dictionary ───────────────────────────────────────────────────────────────
+  // ── Dictionary (new schema — public/dictionary.db) ───────────────────────────
+
+  /**
+   * Search Aramaic entries by headword prefix or exact match.
+   * Returns senses with their first definition text.
+   * Params: [term, prefixPattern, term]  e.g. ['אבא', 'אבא%', 'אבא']
+   */
+  SEARCH_DICT_SENSES: `
+    SELECT s.id, s.headword, s.nikud, s.pos, s.etymology, src.label AS source_label,
+           d.text AS definition
+    FROM sense s
+    LEFT JOIN source src ON src.id = s.source_id
+    JOIN definition d ON d.sense_id = s.id AND d.def_order = 0
+    WHERE s.headword = ? OR s.headword LIKE ?
+    ORDER BY
+      CASE WHEN s.headword = ? THEN 0 ELSE 1 END,
+      length(s.headword),
+      s.headword
+    LIMIT 100
+  `,
+
+  /**
+   * Autosuggest: one row per (headword, source) combination, with all definitions
+   * for that source concatenated. Uses contains match (%word%) — negligible perf
+   * difference vs prefix at this data size, and the index is still used.
+   * Ordered: prefix matches first, then contains, then alphabetical within each.
+   * Params: [containsPattern, term]  e.g. ['%דיל%', 'דיל']
+   */
+  DICT_SUGGEST: `
+    SELECT s.headword, src.label AS source_label,
+           GROUP_CONCAT(d.text, ', ') AS definition
+    FROM sense s
+    LEFT JOIN source src ON src.id = s.source_id
+    JOIN definition d ON d.sense_id = s.id
+    WHERE s.headword LIKE ?
+    GROUP BY s.headword, s.source_id
+    ORDER BY
+      CASE WHEN s.headword LIKE ? THEN 0 ELSE 1 END,
+      s.headword
+    LIMIT 50
+  `,
+
+  /**
+   * All senses for a headword, with source label joined.
+   * pos is NULL for Aramaic entries — language is derivable from source_id IS NOT NULL.
+   */
+  GET_DICT_SENSES_FOR_WORD: `
+    SELECT s.id, s.headword, s.nikud, s.pos, s.binyan, s.shoresh, s.ktiv_male,
+           s.etymology, src.label AS source_label, s.sense_order
+    FROM sense s
+    LEFT JOIN source src ON src.id = s.source_id
+    WHERE s.headword = ?
+    ORDER BY s.sense_order
+  `,
+
+  /**
+   * Bulk fetch all definitions for a set of sense ids.
+   * Pass the ids array as the single param — the function expands the placeholders.
+   * Returns: id, sense_id, text, layer, def_order
+   */
+  GET_DICT_ALL_DEFINITIONS: (ids: number[]) => `
+    SELECT id, sense_id, text, layer, def_order
+    FROM definition
+    WHERE sense_id IN (${ids.map(() => '?').join(',')})
+    ORDER BY sense_id, def_order
+  `,
+
+  /**
+   * Bulk fetch all examples for all definitions belonging to a set of sense ids.
+   * Returns: definition_id, text, source
+   */
+  GET_DICT_ALL_EXAMPLES: (ids: number[]) => `
+    SELECT e.definition_id, e.text, e.source
+    FROM example e
+    JOIN definition d ON d.id = e.definition_id
+    WHERE d.sense_id IN (${ids.map(() => '?').join(',')})
+    ORDER BY e.definition_id, e.id
+  `,
+
+  /**
+   * Bulk fetch all section items for a set of sense ids.
+   * Returns: sense_id, section_name, item_text, item_order
+   */
+  GET_DICT_ALL_SECTIONS: (ids: number[]) => `
+    SELECT s.sense_id, s.name AS section_name, si.text AS item_text, si.item_order
+    FROM section s
+    JOIN section_item si ON si.section_id = s.id
+    WHERE s.sense_id IN (${ids.map(() => '?').join(',')})
+    ORDER BY s.sense_id, s.id, si.item_order
+  `,
+
+  /**
+   * Bulk fetch all translations for a set of sense ids.
+   * Returns: sense_id, lang, word
+   */
+  GET_DICT_ALL_TRANSLATIONS: (ids: number[]) => `
+    SELECT sense_id, lang, word
+    FROM translation
+    WHERE sense_id IN (${ids.map(() => '?').join(',')})
+    ORDER BY sense_id, lang, id
+  `,
+
+  // ── Dictionary (old schema — main app DB) ────────────────────────────────────
 
   /**
    * All books under the reference/dictionary top-level categories:

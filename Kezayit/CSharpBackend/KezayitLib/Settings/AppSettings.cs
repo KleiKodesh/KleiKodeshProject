@@ -23,6 +23,23 @@ namespace KezayitLib.Settings
             Interaction.SaveSetting("ZayitApp", "Database", "Path", path);
         }
 
+        public static System.Drawing.Rectangle LoadPopoutBounds()
+        {
+            int x = int.Parse(Interaction.GetSetting("ZayitApp", "Popout", "X", "-1"));
+            int y = int.Parse(Interaction.GetSetting("ZayitApp", "Popout", "Y", "-1"));
+            int w = int.Parse(Interaction.GetSetting("ZayitApp", "Popout", "W", "900"));
+            int h = int.Parse(Interaction.GetSetting("ZayitApp", "Popout", "H", "750"));
+            return new System.Drawing.Rectangle(x, y, w, h);
+        }
+
+        public static void SavePopoutBounds(System.Drawing.Rectangle bounds)
+        {
+            Interaction.SaveSetting("ZayitApp", "Popout", "X", bounds.X.ToString());
+            Interaction.SaveSetting("ZayitApp", "Popout", "Y", bounds.Y.ToString());
+            Interaction.SaveSetting("ZayitApp", "Popout", "W", bounds.Width.ToString());
+            Interaction.SaveSetting("ZayitApp", "Popout", "H", bounds.Height.ToString());
+        }
+
         public static DateTime LoadHbCsvLastUpdated()
         {
             string raw = Interaction.GetSetting("ZayitApp", "HebrewBooks", "CsvLastUpdated", "");

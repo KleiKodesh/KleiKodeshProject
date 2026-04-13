@@ -2,114 +2,133 @@
 import { ref, watch } from 'vue'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import BottomSearchBar from '@/components/common/BottomSearchBar.vue'
-import WiktionaryEntry from './WiktionaryEntry.vue'
+import TabStrip from '@/components/common/TabStrip.vue'
+import DictionaryListPane from './DictionaryListPane.vue'
+import DictionaryDetailsPane from './DictionaryDetailsPane.vue'
 import { useWiktionary } from './useWiktionary'
+import { useAramaicSearch } from './useAramaicSearch'
+import { useDictSuggestions } from './useDictSuggestions'
 import { useTabStore } from '@/stores/tabStore'
-import { useListKeys } from '@/composables/useListKeyNav'
+import { computed } from 'vue'
 
 const tabStore = useTabStore()
+
+const TABS = [
+  { key: 'list', label: 'רשימה' },
+  { key: 'details', label: 'פרטים' },
+]
+
+const activeTab = ref('list')
+
+// ── Search sources ────────────────────────────────────────────────────────────
 
 const {
   searchQuery,
   debouncedQuery,
-  result,
-  suggestions,
-  searching,
+  senses: wikiSenses,
+  title: wikiTitle,
+  suggestions: wikiSuggestions,
+  searching: wikiSearching,
   hasSearched,
-  notFound,
   error,
-  search,
-  searchWord,
-  loadSuggestions,
-  clearSuggestions,
+  search: wikiSearch,
+  searchWord: wikiSearchWord,
+  loadSuggestions: loadWikiSuggestions,
+  clearSuggestions: clearWikiSuggestions,
 } = useWiktionary()
 
-watch(debouncedQuery, (q) => {
-  search(q)
-  loadSuggestions(q)
-})
+const {
+  results: aramaicSenses,
+  searching: aramaicSearching,
+  search: aramaicSearch,
+  getSuggestions: getAramaicSuggestions,
+} = useAramaicSearch()
 
-watch(result, (r) => {
-  tabStore.updateActiveTab({ title: r ? `מילון · ${r.title}` : 'מילון' })
-})
+// ── Suggestions composable ────────────────────────────────────────────────────
 
-// ── Keyboard nav for suggestions ──────────────────────────────────────────────
-
-const suggestionsEl = ref<HTMLElement | null>(null)
-const inputEl = ref<HTMLInputElement | null>(null)
-
-const { focusedIndex } = useListKeys(
-  suggestionsEl,
-  () => suggestions.value.length,
-  (i) => {
-    const s = suggestions.value[i]
-    if (s) pickSuggestion(s)
-  },
-  { itemSelector: '.dict-suggestion-item' },
+const { suggestions, clearSuggestions: clearAramaicSuggestions } = useDictSuggestions(
+  wikiSuggestions,
+  getAramaicSuggestions,
+  debouncedQuery,
 )
 
-function pickSuggestion(word: string) {
-  searchWord(word)
+// ── Merged results ────────────────────────────────────────────────────────────
+
+const searching = computed(() => wikiSearching.value || aramaicSearching.value)
+const allSenses = computed(() => [...wikiSenses.value, ...aramaicSenses.value])
+const notFound = computed(
+  () => hasSearched.value && !searching.value && allSenses.value.length === 0 && !error.value,
+)
+
+watch(debouncedQuery, (q) => {
+  wikiSearch(q)
+  aramaicSearch(q)
+  loadWikiSuggestions(q)
+})
+
+watch(wikiTitle, (t) => {
+  tabStore.updateActiveTab({ title: t ? `מילון · ${t}` : 'מילון' })
+})
+
+// ── Actions ───────────────────────────────────────────────────────────────────
+
+const listPaneRef = ref<InstanceType<typeof DictionaryListPane> | null>(null)
+const inputEl = ref<HTMLInputElement | null>(null)
+
+function fillFromSuggestion(word: string) {
+  searchQuery.value = word
+  clearWikiSuggestions()
+  clearAramaicSuggestions()
+  activeTab.value = 'details'
   inputEl.value?.focus()
 }
 
+function handleSearchWord(word: string) {
+  wikiSearchWord(word)
+  aramaicSearch(word)
+  activeTab.value = 'details'
+}
+
 function onInputKeydown(e: KeyboardEvent) {
+  if (e.code === 'Escape') {
+    clearWikiSuggestions()
+    clearAramaicSuggestions()
+    return
+  }
   if (!suggestions.value.length) return
   if (e.code === 'ArrowDown' || e.code === 'ArrowUp' || e.code === 'Tab') {
     e.preventDefault()
-    suggestionsEl.value?.focus()
+    listPaneRef.value?.focus()
   }
-  if (e.code === 'Escape') clearSuggestions()
 }
 </script>
 
 <template>
   <div class="dict-page">
-    <!-- Results area -->
-    <div class="dict-scroll">
-      <div v-if="searching" class="dict-state">מחפש...</div>
-      <div v-else-if="error" class="dict-state dict-error">{{ error }}</div>
-      <div v-else-if="hasSearched && notFound" class="dict-state">לא נמצא</div>
+    <TabStrip v-model="activeTab" :tabs="TABS" />
 
-      <!-- Suggestions while typing -->
-      <div
-        v-else-if="suggestions.length > 0"
-        ref="suggestionsEl"
-        class="dict-suggestions"
-        tabindex="0"
-      >
-        <button
-          v-for="(s, i) in suggestions"
-          :key="s"
-          class="dict-suggestion-item"
-          :class="{ focused: focusedIndex === i }"
-          @click="pickSuggestion(s)"
-        >
-          {{ s }}
-        </button>
-      </div>
+    <DictionaryListPane
+      v-if="activeTab === 'list'"
+      ref="listPaneRef"
+      :suggestions="suggestions"
+      @pick="fillFromSuggestion"
+    />
 
-      <div v-else-if="result" class="dict-document">
-        <WiktionaryEntry
-          v-for="(sense, i) in result.senses"
-          :key="i"
-          :sense="sense"
-          :index="i"
-          :total="result.senses.length"
-          @search-word="searchWord"
-        />
-        <div class="dict-attribution">
-          מקור: <a href="https://he.wiktionary.org" target="_blank" rel="noopener">ויקימילון</a>
-          · רישיון CC BY-SA 4.0
-        </div>
-      </div>
+    <DictionaryDetailsPane
+      v-else
+      :searching="searching"
+      :error="error"
+      :not-found="notFound"
+      :all-senses="allSenses"
+      :wiki-senses-count="wikiSenses.length"
+      :aramaic-senses-count="aramaicSenses.length"
+      :suggestions="suggestions"
+      :query-length="searchQuery.length"
+      :has-wiki-attribution="wikiSenses.length > 0"
+      @pick="fillFromSuggestion"
+      @search-word="handleSearchWord"
+    />
 
-      <div v-else class="dict-empty">
-        <IconSearch20Regular class="dict-empty-icon" />
-      </div>
-    </div>
-
-    <!-- Search bar -->
     <BottomSearchBar>
       <template #left>
         <IconSearch20Regular class="search-icon" />
@@ -123,7 +142,7 @@ function onInputKeydown(e: KeyboardEvent) {
         dir="rtl"
         autofocus
         @keydown="onInputKeydown"
-        @keydown.enter="clearSuggestions"
+        @keydown.enter="activeTab = 'details'"
       />
     </BottomSearchBar>
   </div>
@@ -139,87 +158,6 @@ function onInputKeydown(e: KeyboardEvent) {
   direction: rtl;
 }
 
-.dict-scroll {
-  flex: 1;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
-  user-select: text;
-}
-
-/* ── States ── */
-.dict-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  font-size: 13px;
-  color: var(--text-secondary);
-  padding: 40px 20px;
-}
-.dict-error {
-  color: color-mix(in srgb, red 60%, var(--text-secondary));
-}
-
-/* ── Empty ── */
-.dict-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: var(--text-secondary);
-  opacity: 0.5;
-}
-.dict-empty-icon {
-  width: 48px;
-  height: 48px;
-}
-
-/* ── Document ── */
-.dict-document {
-  padding: 14px 16px 32px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-/* ── Attribution ── */
-.dict-attribution {
-  font-size: 10px;
-  color: var(--text-secondary);
-  opacity: 0.6;
-  padding-top: 8px;
-  border-top: 1px solid var(--border-color);
-}
-.dict-attribution a {
-  color: var(--accent-color);
-  text-decoration: none;
-}
-
-/* ── Suggestions ── */
-.dict-suggestions {
-  display: flex;
-  flex-direction: column;
-}
-.dict-suggestion-item {
-  height: 44px;
-  padding: 0 14px;
-  text-align: start;
-  font-size: 13px;
-  color: var(--text-primary);
-  background: none;
-  border: none;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
-  cursor: pointer;
-  direction: rtl;
-  flex-shrink: 0;
-}
-.dict-suggestion-item:hover,
-.dict-suggestion-item.focused {
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
-}
-
-/* ── Search bar ── */
 .search-icon {
   color: var(--text-secondary);
 }

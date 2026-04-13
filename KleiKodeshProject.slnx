@@ -1,7 +1,6 @@
 <Solution>
   <Configurations>
     <Platform Name="Any CPU" />
-    <Platform Name="x64" />
   </Configurations>
   <Project Path="DocSeferLib/DocSeferLib.csproj" Id="74e59bc0-41e5-475a-85cb-eacdc2ef6415" />
   <Project Path="Kezayit/CSharpBackend/BloomSearchEngineLib/BloomSearchEngineLib.csproj" Id="0f7c9226-2c18-4cb8-8f39-a3a539b7122a" />
@@ -12,10 +11,6 @@
   <Project Path="TestUpdateCheck/TestUpdateCheck.csproj" Id="c1d2e3f4-5a6b-7c8d-9e0f-1a2b3c4d5e6f" />
   <Project Path="UpdateCheckerLib/UpdateCheckerLib.csproj" Id="b8f3e2a1-4c5d-4e6f-8a9b-1c2d3e4f5a6b" />
   <Project Path="WebSitesLib/WebSitesLib2/WebSitesLib2.csproj" Id="8100c454-b34e-45a2-98b5-7f766487c9ff" />
-  <Project Path="WebViewLib/WebViewLib/WebViewLib.csproj" Id="a50d2909-20e5-4142-9392-3546812c916a">
-    <Platform Solution="*|x64" Project="x64" />
-  </Project>
-  <Project Path="WpfLib/WpfLib/WpfLib.csproj" Id="494b02c1-54f2-4244-9a90-23c9984970e7">
-    <Platform Solution="*|x64" Project="x64" />
-  </Project>
+  <Project Path="WebViewLib/WebViewLib/WebViewLib.csproj" Id="a50d2909-20e5-4142-9392-3546812c916a" />
+  <Project Path="WpfLib/WpfLib/WpfLib.csproj" Id="494b02c1-54f2-4244-9a90-23c9984970e7" />
 </Solution>

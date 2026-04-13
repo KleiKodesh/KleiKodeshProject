@@ -1,4 +1,5 @@
 using KezayitLib;
+using KezayitLib.Settings;
 using System;
 using System.Windows.Forms;
 
@@ -33,16 +34,31 @@ namespace KezayitDemoApp
         {
             Controls.Remove(_viewer);
 
+            var saved = AppSettings.LoadPopoutBounds();
+            bool hasSaved = saved.X != -1 && saved.Y != -1;
+
             _popoutWindow = new Form
             {
                 Text = "זית",
-                Size = new System.Drawing.Size(900, 750),
-                StartPosition = FormStartPosition.CenterScreen,
+                Size = new System.Drawing.Size(saved.Width, saved.Height),
+                StartPosition = hasSaved ? FormStartPosition.Manual : FormStartPosition.CenterScreen,
             };
+            if (hasSaved)
+                _popoutWindow.Location = new System.Drawing.Point(saved.X, saved.Y);
+
             _viewer.Dock = DockStyle.Fill;
             _popoutWindow.Controls.Add(_viewer);
             _popoutWindow.FormClosing += OnPopoutClosing;
+            _popoutWindow.ResizeEnd += OnPopoutBoundsChanged;
+            _popoutWindow.Move += OnPopoutBoundsChanged;
             _popoutWindow.Show();
+        }
+
+        private void OnPopoutBoundsChanged(object sender, EventArgs e)
+        {
+            if (_popoutWindow == null || _popoutWindow.IsDisposed) return;
+            if (_popoutWindow.WindowState != FormWindowState.Normal) return;
+            AppSettings.SavePopoutBounds(_popoutWindow.Bounds);
         }
 
         private void PopIn()
@@ -61,6 +77,9 @@ namespace KezayitDemoApp
 
         private void OnPopoutClosing(object sender, FormClosingEventArgs e)
         {
+            if (_popoutWindow != null && !_popoutWindow.IsDisposed &&
+                _popoutWindow.WindowState == FormWindowState.Normal)
+                AppSettings.SavePopoutBounds(_popoutWindow.Bounds);
             PopIn();
         }
 

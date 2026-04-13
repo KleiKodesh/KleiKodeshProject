@@ -5,7 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace KleiKodeshVstoInstallerWpf
+namespace KleiKodeshVstoInstallerWpf.Helpers
 {
     /// <summary>
     /// Nuclear cleaner — mirrors a "Forced Uninstall" approach with source-code-verified locations.

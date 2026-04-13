@@ -6,7 +6,9 @@
     <UseWPF>true</UseWPF>
     <ApplicationIcon>KleiKodesh_Main.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Platforms>AnyCPU;x64</Platforms>
+    <Platforms>AnyCPU</Platforms>
+    <!-- Prevent dependency DLLs from being copied to output — they are embedded as resources -->
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,9 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="KleiKodesh_Main.ico">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    <Resource Include="KleiKodesh_Main.ico"/>
   </ItemGroup>
 
   <!-- Prebuild event to update version, build KleiKodeshVsto VSTO and create zip package -->
@@ -81,8 +81,16 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3856.49" />
-    <PackageReference Include="System.Text.Json" Version="10.0.5" />
   </ItemGroup>
+
+  <!-- Embed all dependency DLLs into the exe as resources -->
+  <Target Name="EmbedDependencies" AfterTargets="ResolveReferences">
+    <ItemGroup>
+      <EmbeddedResource Include="@(ReferenceCopyLocalPaths)"
+                        Condition="'%(ReferenceCopyLocalPaths.Extension)' == '.dll'">
+        <LogicalName>%(ReferenceCopyLocalPaths.DestinationSubDirectory)%(ReferenceCopyLocalPaths.Filename)%(ReferenceCopyLocalPaths.Extension)</LogicalName>
+      </EmbeddedResource>
+    </ItemGroup>
+  </Target>
 
 </Project>

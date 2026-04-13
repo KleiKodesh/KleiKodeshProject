@@ -3,6 +3,7 @@ import { ref, watch, onMounted, onBeforeUnmount, computed, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useTabStore } from '@/stores/tabStore'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { useZoomHandler } from '@/composables/useZoom'
 import { useToc } from './useToc'
 import { useLines } from './useLinesTable'
@@ -28,6 +29,7 @@ import type { SearchMode } from './BookViewSearchBar.vue'
 
 const bookViewStore = useBookViewStore()
 const tabStore = useTabStore()
+const settingsStore = useSettingsStore()
 const { zoom, isBookViewActive, toolbarPosition, autoSelectTopLine } = storeToRefs(bookViewStore)
 
 useZoomHandler({ zoom, enabled: isBookViewActive })
@@ -55,6 +57,7 @@ const searchVisible = ref(false)
 const tocVisible = ref(false)
 const selectedLineId = ref<number | null>(null)
 const commentaryLineId = ref<number | null>(null)
+const hiddenCommentaryBookIds = ref(new Set<number>())
 const searchMode = ref<SearchMode>('content')
 const activeTocEntryId = ref<number | undefined>(undefined)
 const initialLineIndex = ref<number | undefined>(openTocLineIndex)
@@ -350,6 +353,11 @@ onMounted(async () => {
     if (bookSaved?.autoSelectTopLine != null) {
       bookViewStore.autoSelectTopLine = bookSaved.autoSelectTopLine
     }
+    // restore commentary filter — BookState takes priority; fall back to lastRead if resumeLastRead is on
+    const savedFilter =
+      bookSaved?.hiddenCommentaryBookIds ??
+      (settingsStore.resumeLastRead ? lastRead?.hiddenCommentaryBookIds : undefined)
+    if (savedFilter?.length) hiddenCommentaryBookIds.value = new Set(savedFilter)
     // restore scroll position — only if not navigating to a specific TOC entry
     if (openTocLineIndex == null) {
       const scrollIndex = bookSaved?.scrollIndex ?? lastRead?.scrollIndex
@@ -451,10 +459,10 @@ watch(searchVisible, (v) => {
       @toggle-search="searchVisible = !searchVisible"
       @toggle-toc="tocVisible = !tocVisible"
     />
-    <!-- Middle row: left toolbar + content + right toolbar -->
+    <!-- Middle row: right toolbar + content + left toolbar (RTL: first child = physical right) -->
     <div class="body-row">
       <BookViewToolbar
-        v-if="bookViewStore.toolbarVisible && toolbarPosition === 'left'"
+        v-if="bookViewStore.toolbarVisible && toolbarPosition === 'right'"
         :bottom-visible="bottomVisible"
         :search-visible="searchVisible"
         :toc-visible="tocVisible"
@@ -483,6 +491,7 @@ watch(searchVisible, (v) => {
               :search-highlight-terms="searchHighlightTerms"
               :commentary-scroll-index="commentaryScrollIndex"
               :commentary-scroll-offset="commentaryScrollOffset"
+              :hidden-commentary-book-ids="hiddenCommentaryBookIds"
               :search-query="searchMode === 'content' ? contentSearch.query.value : ''"
               :current-match-line-index="
                 searchMode === 'content' ? contentSearch.currentMatchLineIndex.value : undefined
@@ -501,6 +510,7 @@ watch(searchVisible, (v) => {
               :selected-line-id="selectedLineId"
               :groups="groups"
               :loading="commentaryLoading"
+              :hidden-book-ids="hiddenCommentaryBookIds"
               :pinned-book-id="pinnedCommentaryBookId"
               :search-query="searchMode === 'commentary' ? commentarySearch.query.value : ''"
               :current-match-flat-index="
@@ -518,6 +528,7 @@ watch(searchVisible, (v) => {
               @scroll="onCommentaryScroll"
               @toggle-search="openCommentarySearch"
               @open-book="openBookInTab"
+              @update:hidden-book-ids="hiddenCommentaryBookIds = $event"
             />
           </template>
         </BookViewSplitPane>
@@ -552,7 +563,7 @@ watch(searchVisible, (v) => {
         />
       </div>
       <BookViewToolbar
-        v-if="bookViewStore.toolbarVisible && toolbarPosition === 'right'"
+        v-if="bookViewStore.toolbarVisible && toolbarPosition === 'left'"
         :bottom-visible="bottomVisible"
         :search-visible="searchVisible"
         :toc-visible="tocVisible"

@@ -1,38 +1,52 @@
 # dictionary/
 
-Dictionary and reference books browser. Singleton route `/dictionary`, navigated via `tabStore.navigateToSingleton('/dictionary')`.
+Dictionary page. Singleton route `/dictionary`. Queries two sources simultaneously: the live Hebrew Wiktionary API and the local Aramaic dictionary DB (`public/dictionary.db`).
 
 ## Files
 
-`DictionaryPage.vue` — the page. Split layout: 220px left panel (search results or book shelf) + right panel (entry content). Header has a search input. Filter tabs appear above the split when results exist.
+`DictionaryPage.vue` — orchestrator only. Wires `useWiktionary`, `useAramaicSearch`, and `useDictSuggestions` together. Owns the tab state, search bar, and routes actions between the two panes.
 
-`useDictionarySearch.ts` — all search logic. Debounces the query (300ms), runs `SQL.SEARCH_DICTIONARY_ENTRIES` with a LIKE param, extracts headwords from raw HTML content per book format, manages `activeBookId` filter, fetches full entry lines on selection. Returns reactive state directly (no `.value` needed in templates).
+`DictionaryListPane.vue` — the רשימה tab. Shows one row per source entry — the same headword appears multiple times if it exists in multiple Aramaic dictionaries, each with its own definition. This is intentional: each row represents a distinct meaning from a distinct source.
 
-`useDictionary.ts` — loads all reference books from categories 75 and 1220 (and their sub-categories) for the book shelf shown when no search is active. Groups into `DictionarySection[]` by sub-category title.
+`DictionaryDetailsPane.vue` — the פרטים tab. Shows the full entry for the current search term. At the top, a "הצעות" chip strip shows nearby headwords (within 2 chars of the query length) — deduplicated by headword so each word appears once regardless of how many sources it has. Chips are shown even when no results were found for the current word.
 
-`DictionarySearchResults.vue` — the search results panel. Owns the filter tabs and the scrollable result list. Each row expands inline on click to show the full entry via `DictionaryEntryView`. Emits `toggle`, `update:activeSource`, and `openInViewer` — no navigation logic inside.
+`useDictSuggestions.ts` — composable that owns the merged autosuggest list. Takes the wiki suggestions ref, the aramaic getter, and the debounced query as inputs (shares the same composable instances from the parent — no duplicate fetches). Filters to Hebrew-only headwords. Returns `suggestions` (one entry per source, for the list tab) and `clearSuggestions`.
 
-`DictionaryEntryView.vue` — renders a single entry's HTML content with styled `<b>`, `<big>`, `<h3>`, `<small>`, and `<span dir="ltr">` tags. Has a toolbar showing the source book name and an "open in viewer" button.
+`useWiktionary.ts` — live Wiktionary lookup. Fetches wikitext from `he.wiktionary.org/w/api.php`, parses it into `WiktionarySense[]`. Exposes `senses`, `title`, `suggestions` (from OpenSearch), and search actions.
 
-`DictionaryBookShelf.vue` — the empty-state book list. Shows all reference books grouped by category. Clicking a book emits `open(bookId, title)` which the page handles by navigating to `/book-view`.
+`useAramaicSearch.ts` — Aramaic DB lookup via `queryDict()`. `search(term)` loads full senses in 5 queries (bulk, no N+1). `getSuggestions(prefix)` returns one row per `(headword, source)` combination with all definitions for that source concatenated.
 
-## Searchable books and entry formats
+`WiktionaryEntry.vue` — renders a single `WiktionarySense`: headword, nikud, pos badge, binyan, etymology, shoresh, definitions with examples, named sections, and translations.
 
-| Book             | id   | Entry format                                  | Headword extraction |
-| ---------------- | ---- | --------------------------------------------- | ------------------- |
-| ספר הערוך        | 473  | One line, `<b><big>WORD</big></b> ...`        | `<big>` content     |
-| הפלאה שבערכין    | 471  | One line, `<b>WORD</b> ...`                   | first `<b>` content |
-| ספר השרשים לרד"ק | 6105 | Two lines: `<h3>ROOT</h3>` + content          | `<h3>` content      |
-| אוצר לעזי רש"י   | 472  | One line, `N / (source) / <b>WORD</b><br>...` | first `<b>` content |
+`DictionaryEntryView.vue` — renders entries from the old book-based dictionary (HTML content).
 
-## SQL queries
+`DictionarySearchResults.vue` — virtual-scrolled results list for the old book-based dictionary search.
 
-`SQL.SEARCH_DICTIONARY_ENTRIES` — parameterized LIKE search across all four books, returns up to 200 results ordered by book then lineIndex.
+`DictionaryBookShelf.vue` — book shelf shown when no search is active.
 
-`SQL.GET_DICTIONARY_ENTRY_LINES` — fetches 1 or 2 lines by bookId + lineIndex range (2 lines for ספר השרשים, 1 for all others).
+`useDictionarySearch.ts` — search logic for the old book-based dictionary.
 
-`SQL.GET_DICTIONARY_BOOKS` — all books under cats 75 and 1220 with authors, for the shelf.
+`useDictionary.ts` — loads reference books for the shelf.
 
-## Navigation
+## List tab vs Details tab — key difference
 
-Clicking "open in viewer" calls `tabStore.updateActiveTab({ route: '/book-view', bookId, openTocLineIndex })` — navigates in-place to the book at the entry's line position.
+The list tab (רשימה) shows one row per `(headword, source)` pair. דילמא appears 3 times because it exists in 3 different Aramaic dictionaries with 3 different definitions. Clicking a row fills the search input and switches to the details tab.
+
+The details tab (פרטים) shows the full entry for the searched word. The הצעות chip strip at the top is deduplicated by headword — דילמא appears once as a chip even though it has 3 source entries. Clicking a chip searches for that word.
+
+## Data sources
+
+**Live Wiktionary** (`he.wiktionary.org`) — Hebrew words. No caching — fetched fresh on every search.
+
+**Aramaic DB** (`public/dictionary.db`) — 7,754 senses from 6,987 entries across 4 Aramaic dictionaries, imported from `FinalDictionary.txt` in the ToratEmet installation. `***` separators in the source data are split into separate sense rows at import time. `(=expansion)` prefixes are extracted into the `etymology` column. Schema: `source → sense → definition / example / section / section_item / translation`.
+
+## SQL queries (`public/dictionary.db`)
+
+- `DICT_SUGGEST` — one row per `(headword, source)` with all definitions concatenated, for the list tab
+- `GET_DICT_SENSES_FOR_WORD` — all senses for a headword with source label joined
+- `GET_DICT_ALL_DEFINITIONS/EXAMPLES/SECTIONS/TRANSLATIONS` — bulk fetches for all senses at once (no N+1)
+
+## Re-importing Aramaic data
+
+`node scripts/import-aramaic.cjs` — reads from `FinalDictionary.txt`, rebuilds the DB. Idempotent.
+`node scripts/create-dictionary-db.cjs` — drops and recreates the schema from scratch.

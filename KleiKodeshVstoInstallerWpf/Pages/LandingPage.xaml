@@ -1,0 +1,250 @@
+<Page x:Class="KleiKodeshVstoInstallerWpf.LandingPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+      mc:Ignorable="d"
+      Background="#FFFFFF"
+      FlowDirection="RightToLeft"
+      FontFamily="Segoe UI">
+
+    <Page.Resources>
+        <!-- PrimaryButton -->
+        <Style x:Key="PrimaryButton" TargetType="Button">
+            <Setter Property="Foreground"      Value="White"/>
+            <Setter Property="Background"      Value="#7333FF"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding"         Value="16,0"/>
+            <Setter Property="Height"          Value="28"/>
+            <Setter Property="FontSize"        Value="12"/>
+            <Setter Property="FontWeight"      Value="SemiBold"/>
+            <Setter Property="Cursor"          Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="4"
+                                Padding="{TemplateBinding Padding}" Height="{TemplateBinding Height}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#5E1FE8"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#4A0FD4"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Background" Value="#CCCCCC"/>
+                                <Setter Property="Foreground" Value="#888888"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- SecondaryButton -->
+        <Style x:Key="SecondaryButton" TargetType="Button">
+            <Setter Property="Foreground"      Value="#5A5A5A"/>
+            <Setter Property="Background"      Value="Transparent"/>
+            <Setter Property="BorderBrush"     Value="#E5E5E5"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding"         Value="12,0"/>
+            <Setter Property="Height"          Value="28"/>
+            <Setter Property="FontSize"        Value="12"/>
+            <Setter Property="Cursor"          Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4" Padding="{TemplateBinding Padding}"
+                                Height="{TemplateBinding Height}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#F0F0F0"/>
+                                <Setter Property="Foreground" Value="#1F1F1F"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#E8E8E8"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="#AAAAAA"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- GhostButton -->
+        <Style x:Key="GhostButton" TargetType="Button">
+            <Setter Property="Foreground"      Value="#5A5A5A"/>
+            <Setter Property="Background"      Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding"         Value="8,0"/>
+            <Setter Property="Height"          Value="28"/>
+            <Setter Property="FontSize"        Value="12"/>
+            <Setter Property="Cursor"          Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="4"
+                                Padding="{TemplateBinding Padding}" Height="{TemplateBinding Height}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#0F000000"/>
+                                <Setter Property="Foreground" Value="#1F1F1F"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#17000000"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- AccentProgress -->
+        <Style x:Key="AccentProgress" TargetType="ProgressBar">
+            <Setter Property="Height"          Value="3"/>
+            <Setter Property="Foreground"      Value="#7333FF"/>
+            <Setter Property="Background"      Value="#E5E5E5"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ProgressBar">
+                        <Grid>
+                            <Border Background="{TemplateBinding Background}"/>
+                            <Border x:Name="PART_Track"/>
+                            <Border x:Name="PART_Indicator"
+                                    Background="{TemplateBinding Foreground}"
+                                    HorizontalAlignment="Left"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Page.Resources>
+
+    <!-- Wizard layout: progress bar / content / footer -->
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="3"/>    <!-- accent progress bar -->
+            <RowDefinition Height="*"/>    <!-- scrollable content -->
+            <RowDefinition Height="auto"/> <!-- footer -->
+        </Grid.RowDefinitions>
+
+        <!-- Top accent bar -->
+        <Border Grid.Row="0" Background="#7333FF"/>
+
+        <!-- Welcome content -->
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <StackPanel HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Margin="28,40,28,24"
+                        Width="300">
+
+                <!-- Logo -->
+                <Image Source="/KleiKodesh_Main.ico"
+                       Width="72" Height="72"
+                       HorizontalAlignment="Center"
+                       Margin="0,0,0,16"
+                       RenderOptions.BitmapScalingMode="HighQuality"/>
+
+                <!-- Title -->
+                <TextBlock Text="כלי קודש לוורד"
+                           FontSize="24"
+                           FontWeight="Bold"
+                           Foreground="#1F1F1F"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center"
+                           Margin="0,0,0,6"/>
+
+                <!-- Subtitle -->
+                <TextBlock Text="ארגז כלים לעורך התורני"
+                           FontSize="13"
+                           Foreground="#5A5A5A"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center"
+                           LineHeight="20"
+                           Margin="0,0,0,20"/>
+
+                <!-- Description -->
+                <TextBlock FontSize="13"
+                           Foreground="#5A5A5A"
+                           TextWrapping="Wrap"
+                           TextAlignment="Center"
+                           LineHeight="22"
+                           Margin="0,0,0,8">
+                    התוסף יותקן בתיקיית המשתמש וירשם אוטומטית ב-Word.
+                    לאחר ההתקנה פתח את Word כדי להתחיל.
+                </TextBlock>
+
+                <!-- Small note -->
+                <TextBlock FontSize="11"
+                           Foreground="#5A5A5A"
+                           Opacity="0.65"
+                           TextWrapping="Wrap"
+                           TextAlignment="Center"
+                           LineHeight="18">
+                    ניתן לשנות הגדרות לפני ההתקנה דרך כפתור ״הגדרות״
+                </TextBlock>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Footer -->
+        <Border Grid.Row="2"
+                Background="#F0F0F0"
+                BorderBrush="#E5E5E5"
+                BorderThickness="0,1,0,0">
+            <Grid Margin="10,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="auto"/>  <!-- right side: cancel + settings -->
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="auto"/>  <!-- left side: repair + install -->
+                </Grid.ColumnDefinitions>
+
+                <!-- Right group (RTL: visually right) -->
+                <StackPanel Grid.Column="0"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right">
+                    <Button x:Name="CancelButton"
+                            Content="ביטול"
+                            Style="{StaticResource GhostButton}"
+                            MinWidth="72"
+                            Margin="0,0,4,0"
+                            Click="CancelButton_Click"/>
+                    <Button x:Name="SettingsButton"
+                            Content="הגדרות"
+                            Style="{StaticResource GhostButton}"
+                            MinWidth="72"
+                            Click="SettingsButton_Click"/>
+                </StackPanel>
+
+                <!-- Left group (RTL: visually left) -->
+                <StackPanel Grid.Column="2"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Left">
+                    <Button x:Name="RepairButton"
+                            Content="תיקון"
+                            Style="{StaticResource GhostButton}"
+                            MinWidth="72"
+                            Margin="0,0,8,0"
+                            ToolTip="מחיקת כל שאריות כלי קודש מהמחשב"
+                            Click="RepairButton_Click"/>
+                    <Button x:Name="InstallButton"
+                            Style="{StaticResource PrimaryButton}"
+                            Content="התקן"
+                            MinWidth="72"
+                            Click="InstallButton_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Page>

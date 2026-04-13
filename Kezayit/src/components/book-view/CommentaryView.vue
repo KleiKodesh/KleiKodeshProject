@@ -22,6 +22,7 @@ const props = defineProps<{
   selectedLineId: number | null
   groups: CommentaryGroup[]
   loading: boolean
+  hiddenBookIds: Set<number>
   searchQuery?: string
   currentMatchFlatIndex?: number
   currentMatchOccurrence?: number
@@ -33,6 +34,7 @@ const emit = defineEmits<{
   'open-book': [bookId: number, lineIndex: number]
   'toggle-search': []
   scroll: [scrollIndex: number, scrollOffset: number]
+  'update:hiddenBookIds': [value: Set<number>]
 }>()
 
 const settingsStore = useSettingsStore()
@@ -174,21 +176,20 @@ watch(
 const scrollerEl = ref<HTMLElement | null>(null)
 const scrollTop = ref(0)
 const treeVisible = ref(false)
-const hiddenBookIds = ref(new Set<number>())
 
 function toggleBookVisibility(bookId: number) {
   // capture current scroll before visibleGroups changes
   const savedScrollTop = scrollerEl.value?.scrollTop ?? 0
-  const next = new Set(hiddenBookIds.value)
+  const next = new Set(props.hiddenBookIds)
   if (next.has(bookId)) next.delete(bookId)
   else next.add(bookId)
-  hiddenBookIds.value = next
+  emit('update:hiddenBookIds', next)
   nextTick(() => {
     if (scrollerEl.value) scrollerEl.value.scrollTop = savedScrollTop
   })
 }
 
-const visibleGroups = computed(() => props.groups.filter((g) => !hiddenBookIds.value.has(g.bookId)))
+const visibleGroups = computed(() => props.groups.filter((g) => !props.hiddenBookIds.has(g.bookId)))
 
 const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, {
   onCtrlF: () => emit('toggle-search'),
@@ -288,14 +289,6 @@ watch(
   { flush: 'post' },
 )
 
-// Reset hidden books when the line changes (new context)
-watch(
-  () => props.selectedLineId,
-  () => {
-    hiddenBookIds.value = new Set()
-  },
-)
-
 const topVisibleFlatIndex = computed(() => {
   const st = scrollTop.value + NAV_HEIGHT
   for (const m of virtualizer.value.measurementsCache) {
@@ -358,7 +351,7 @@ function asLine(item: FlatItem | undefined) {
       <CommentaryTreePanel
         v-if="treeVisible && props.groups.length"
         :groups="props.groups"
-        :hidden-book-ids="hiddenBookIds"
+        :hidden-book-ids="props.hiddenBookIds"
         @toggle="toggleBookVisibility"
         @close="treeVisible = false"
       />

@@ -59,7 +59,7 @@ function onPopOut() {
       @click="onPopOut"
     >
       <span class="nav-icon"><IconOpen28Regular /></span>
-      <span class="nav-label">הצג בחלונית</span>
+      <span class="nav-label">חלון עצמאי / חלונית</span>
     </button>
   </div>
 </template>

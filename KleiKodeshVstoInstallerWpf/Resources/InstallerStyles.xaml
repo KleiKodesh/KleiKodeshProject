@@ -1,0 +1,148 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        Kezayit wizard-inspired style
+        Accent  : #7333FF  (KleiKodesh purple)
+        BgPrim  : #FFFFFF
+        BgSec   : #F8F8F8
+        Toolbar : #F0F0F0
+        Border  : #E5E5E5
+        TextPri : #1F1F1F
+        TextSec : #5A5A5A
+    -->
+
+    <!-- Primary button — accent fill, 28px, 4px radius -->
+    <Style x:Key="PrimaryButton" TargetType="Button">
+        <Setter Property="Foreground"      Value="White"/>
+        <Setter Property="Background"      Value="#7333FF"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding"         Value="16,0"/>
+        <Setter Property="Height"          Value="28"/>
+        <Setter Property="FontSize"        Value="12"/>
+        <Setter Property="FontWeight"      Value="SemiBold"/>
+        <Setter Property="Cursor"          Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="4"
+                            Padding="{TemplateBinding Padding}"
+                            Height="{TemplateBinding Height}">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#5E1FE8"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#4A0FD4"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Bd" Property="Background" Value="#CCCCCC"/>
+                            <Setter Property="Foreground" Value="#888888"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Secondary button — transparent with border -->
+    <Style x:Key="SecondaryButton" TargetType="Button">
+        <Setter Property="Foreground"      Value="#5A5A5A"/>
+        <Setter Property="Background"      Value="Transparent"/>
+        <Setter Property="BorderBrush"     Value="#E5E5E5"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding"         Value="12,0"/>
+        <Setter Property="Height"          Value="28"/>
+        <Setter Property="FontSize"        Value="12"/>
+        <Setter Property="Cursor"          Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="4"
+                            Padding="{TemplateBinding Padding}"
+                            Height="{TemplateBinding Height}">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="rgba(0,0,0,0.06)"/>
+                            <Setter Property="Foreground" Value="#1F1F1F"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#E8E8E8"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground" Value="#AAAAAA"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Ghost button — no border, text only -->
+    <Style x:Key="GhostButton" TargetType="Button">
+        <Setter Property="Foreground"      Value="#5A5A5A"/>
+        <Setter Property="Background"      Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding"         Value="8,0"/>
+        <Setter Property="Height"          Value="28"/>
+        <Setter Property="FontSize"        Value="12"/>
+        <Setter Property="Cursor"          Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="4"
+                            Padding="{TemplateBinding Padding}"
+                            Height="{TemplateBinding Height}">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#0F000000"/>
+                            <Setter Property="Foreground" Value="#1F1F1F"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#17000000"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Slim accent progress bar -->
+    <Style x:Key="AccentProgress" TargetType="ProgressBar">
+        <Setter Property="Height"          Value="3"/>
+        <Setter Property="Foreground"      Value="#7333FF"/>
+        <Setter Property="Background"      Value="#E5E5E5"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ProgressBar">
+                    <Grid>
+                        <Border Background="{TemplateBinding Background}"/>
+                        <Border x:Name="PART_Track"/>
+                        <Border x:Name="PART_Indicator"
+                                Background="{TemplateBinding Foreground}"
+                                HorizontalAlignment="Left"/>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>
