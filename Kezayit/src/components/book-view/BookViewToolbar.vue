@@ -39,13 +39,6 @@ defineExpose({ tocBtnRef })
 <template>
   <div class="book-view-toolbar" :class="`toolbar-${toolbarPosition}`">
     <button
-      :class="{ active: searchVisible }"
-      title="חיפוש (Ctrl+F)"
-      @click="$emit('toggleSearch')"
-    >
-      <IconSearch20Regular />
-    </button>
-    <button
       ref="tocBtnRef"
       :class="{ active: tocVisible }"
       title="תוכן עניינים"
@@ -74,6 +67,13 @@ defineExpose({ tocBtnRef })
     >
       <IconTimeline20Filled v-if="autoSelectTopLine" />
       <IconTimeline20Regular v-else />
+    </button>
+    <button
+      :class="{ active: searchVisible }"
+      title="חיפוש (Ctrl+F)"
+      @click="$emit('toggleSearch')"
+    >
+      <IconSearch20Regular />
     </button>
 
     <div class="separator" />

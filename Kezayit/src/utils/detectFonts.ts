@@ -110,8 +110,13 @@ const CANDIDATES = [
 
 export async function detectAvailableFonts(): Promise<string[]> {
   if (isHosted) {
-    const result = await window.__webviewAction!('getFonts')
-    return (result as { fonts: string[] }).fonts
+    try {
+      const result = await window.__webviewAction!('getFonts')
+      const fonts = (result as { fonts: string[] }).fonts
+      if (Array.isArray(fonts) && fonts.length > 0) return fonts
+    } catch {
+      // C# action unavailable — fall through to canvas detection
+    }
   }
   return _detectByCanvas()
 }

@@ -46,10 +46,37 @@ The details tab (פרטים) shows the full entry for the searched word. The ה�
 - `GET_DICT_SENSES_FOR_WORD` — all senses for a headword with source label joined
 - `GET_DICT_ALL_DEFINITIONS/EXAMPLES/SECTIONS/TRANSLATIONS` — bulk fetches for all senses at once (no N+1)
 
+## SQL queries (`public/wikidictionary.db`)
+
+- `WIKIDICT_SUGGEST` — one row per headword with first definition, for autosuggest
+- `GET_WIKIDICT_SENSES_FOR_WORD` — all senses for a headword with source label joined
+- `GET_WIKIDICT_ALL_DEFINITIONS` — bulk fetch; includes `filter_tag` column for content filtering
+- `GET_WIKIDICT_ALL_EXAMPLES/SECTIONS/TRANSLATIONS` — bulk fetches (no N+1)
+
 ## Re-importing Aramaic data
 
 `node scripts/import-aramaic.cjs` — reads from `FinalDictionary.txt`, rebuilds the DB. Idempotent.
 `node scripts/create-dictionary-db.cjs` — drops and recreates the schema from scratch.
+
+## Wiktionary offline DB (`public/wikidictionary.db`)
+
+A second local SQLite DB built from the kaikki.org Hebrew Wiktionary JSONL dump. Same normalized schema as `dictionary.db` with one addition: `definition.filter_tag` stores the raw layer tag string from the wikitext (e.g. `גס`, `סלנג`, `ספרות`, `עברית מקראית`). NULL means untagged — the vast majority of entries. The tag is stored at import time so filtering rules can be changed without re-importing.
+
+Queried via `queryWikiDict()` from `src/host/db.ts`. SQL constants live in `src/host/queries.sql.ts` under the `WIKIDICT_*` prefix.
+
+### Building the wiki dict DB
+
+```
+npm run wikidict:import
+```
+
+This downloads the kaikki.org dump to `data/kaikki-hewiktionary.jsonl` (one-time, ~50MB), recreates the schema, and imports all Hebrew entries. Idempotent — safe to re-run.
+
+To use a local dump file: `DUMP_PATH=/path/to/file.jsonl npm run wikidict:import`
+
+### Deploying to C#
+
+Copy `public/wikidictionary.db` to `CSharpBackend/KezayitLib/bin/{Config}/kezayit/wikidictionary.db` alongside `dictionary.db`. The C# host opens it read-only at startup via `AppViewer._wikiDictDb` and handles `wikidict-sql` actions from JS.
 
 ## Content filtering (Wiktionary)
 

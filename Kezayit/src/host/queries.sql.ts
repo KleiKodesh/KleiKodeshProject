@@ -382,4 +382,85 @@ export const SQL = {
       AND ln.lineIndex < ?
     LIMIT 1
   `,
+
+  // ── Wiktionary offline DB (public/wikidictionary.db) ─────────────────────────
+
+  /**
+   * Autosuggest for wikidictionary.db.
+   * Returns one row per headword (senses are merged at display time).
+   * Ordered: prefix matches first, then alphabetical.
+   * Params: [containsPattern, prefixPattern]  e.g. ['%שלום%', 'שלום%']
+   */
+  WIKIDICT_SUGGEST: `
+    SELECT s.headword,
+           d.text AS definition
+    FROM sense s
+    JOIN definition d ON d.sense_id = s.id AND d.def_order = 0
+    WHERE s.headword LIKE ?
+    GROUP BY s.headword
+    ORDER BY
+      CASE WHEN s.headword LIKE ? THEN 0 ELSE 1 END,
+      s.headword
+    LIMIT 50
+  `,
+
+  /**
+   * All senses for a headword in wikidictionary.db.
+   * Returns one row per sense with source label joined.
+   */
+  GET_WIKIDICT_SENSES_FOR_WORD: `
+    SELECT s.id, s.headword, s.nikud, s.pos, s.binyan, s.shoresh, s.ktiv_male,
+           s.etymology, src.label AS source_label, s.sense_order
+    FROM sense s
+    JOIN source src ON src.id = s.source_id
+    WHERE s.headword = ?
+    ORDER BY s.sense_order
+  `,
+
+  /**
+   * Bulk fetch all definitions for a set of sense ids from wikidictionary.db.
+   * Includes filter_tag so the caller can apply content filtering.
+   * Returns: id, sense_id, text, filter_tag, def_order
+   */
+  GET_WIKIDICT_ALL_DEFINITIONS: (ids: number[]) => `
+    SELECT id, sense_id, text, filter_tag, def_order
+    FROM definition
+    WHERE sense_id IN (${ids.map(() => '?').join(',')})
+    ORDER BY sense_id, def_order
+  `,
+
+  /**
+   * Bulk fetch all examples for a set of sense ids from wikidictionary.db.
+   * Returns: definition_id, text, source
+   */
+  GET_WIKIDICT_ALL_EXAMPLES: (ids: number[]) => `
+    SELECT e.definition_id, e.text, e.source
+    FROM example e
+    JOIN definition d ON d.id = e.definition_id
+    WHERE d.sense_id IN (${ids.map(() => '?').join(',')})
+    ORDER BY e.definition_id, e.id
+  `,
+
+  /**
+   * Bulk fetch all section items for a set of sense ids from wikidictionary.db.
+   * Returns: sense_id, section_name, item_text, item_order
+   */
+  GET_WIKIDICT_ALL_SECTIONS: (ids: number[]) => `
+    SELECT s.sense_id, s.name AS section_name, si.text AS item_text, si.item_order
+    FROM section s
+    JOIN section_item si ON si.section_id = s.id
+    WHERE s.sense_id IN (${ids.map(() => '?').join(',')})
+    ORDER BY s.sense_id, s.id, si.item_order
+  `,
+
+  /**
+   * Bulk fetch all translations for a set of sense ids from wikidictionary.db.
+   * Returns: sense_id, lang, word
+   */
+  GET_WIKIDICT_ALL_TRANSLATIONS: (ids: number[]) => `
+    SELECT sense_id, lang, word
+    FROM translation
+    WHERE sense_id IN (${ids.map(() => '?').join(',')})
+    ORDER BY sense_id, lang, id
+  `,
 } as const

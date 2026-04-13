@@ -35,7 +35,7 @@ namespace KezayitLib.Db
             string sql = root.GetProperty("sql").GetString();
             try
             {
-                var rows = await Task.Run(() => _db.Query(sql, ParseParams(root)));
+                var rows = await Task.Run(() => _db.Query(sql, ParseParamsStatic(root)));
                 _bridge.Reply(id, new { rows });
             }
             catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
@@ -75,7 +75,11 @@ namespace KezayitLib.Db
             }));
         }
 
-        private static object[] ParseParams(JsonElement root)
+        /// <summary>
+        /// Parses the "params" array from a JSON message into a typed object array.
+        /// Public so AppViewer can reuse it for dict/wikidict SQL handlers.
+        /// </summary>
+        public static object[] ParseParamsStatic(JsonElement root)
         {
             if (!root.TryGetProperty("params", out var el) || el.ValueKind != JsonValueKind.Array)
                 return Array.Empty<object>();

@@ -30,6 +30,8 @@ namespace KezayitLib
         private HebrewBooksHandler _hb;
         private HebrewBooksCsvUpdater _hbCsvUpdater;
         private SearchHandler _search;
+        private DbAccess _dictDb;
+        private DbAccess _wikiDictDb;
         private string _dbInjectionScriptId;
 
         private SplashOverlay _splash;
@@ -92,6 +94,16 @@ namespace KezayitLib
             _hb = new HebrewBooksHandler(_bridge, _webView, this);
             _hbCsvUpdater = new HebrewBooksCsvUpdater();
             _search = new SearchHandler(_bridge, _webView);
+
+            // Wire up wiki dictionary DB (read-only, fixed path next to the app)
+            string wikiDictPath = Path.Combine(AppDir, "wikidictionary.db");
+            if (File.Exists(wikiDictPath))
+                _wikiDictDb = new DbAccess(wikiDictPath);
+
+            // Wire up Aramaic dictionary DB (read-only, fixed path next to the app)
+            string dictPath = Path.Combine(AppDir, "dictionary.db");
+            if (File.Exists(dictPath))
+                _dictDb = new DbAccess(dictPath);
             _db.OnDbPathPicked = path =>
             {
                 _search.ResetAndReindex(path);
@@ -166,6 +178,8 @@ namespace KezayitLib
                     switch (action)
                     {
                         case "sql": await _db.HandleSql(root, id); break;
+                        case "dict-sql": await HandleDictSql(root, id, _dictDb); break;
+                        case "wikidict-sql": await HandleDictSql(root, id, _wikiDictDb); break;
                         case "setDbPath": _db.HandleSetDbPath(root, id); break;
                         case "pickDbPath": _db.HandlePickDbPath(id, this); break;
                         case "resetSettings": _db.HandleResetSettings(id); break;
@@ -222,6 +236,18 @@ namespace KezayitLib
                 GlyphTypeface glyph;
                 return typeface.TryGetGlyphTypeface(out glyph) && glyph.CharacterToGlyphMap.ContainsKey('א');
             });
+        }
+
+        private async Task HandleDictSql(JsonElement root, string id, DbAccess db)
+        {
+            if (db == null) { _bridge.Reply(id, new { error = "Dictionary database not available" }); return; }
+            string sql = root.GetProperty("sql").GetString();
+            try
+            {
+                var rows = await Task.Run(() => db.Query(sql, DbHandler.ParseParamsStatic(root)));
+                _bridge.Reply(id, new { rows });
+            }
+            catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
         }
 
         /// <summary>

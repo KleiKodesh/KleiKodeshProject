@@ -1,26 +1,29 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { convert, toMetric, formatResult } from './midot'
-import { LENGTH, VOLUME, WEIGHT, COINS, TIME } from './midotDefinitions'
-import TabStrip from '@/components/common/TabStrip.vue'
+import { LENGTH, AREA, VOLUME, WEIGHT, COINS, TIME } from './units'
 import { IconArrowSwap24Regular } from '@iconify-prerendered/vue-fluent'
-import type { MetricOpinion } from './midot'
+import type { OpinionKey } from './units'
 
 const TABS = [
   { key: 'length', label: 'אורך' },
+  { key: 'area', label: 'שטח' },
   { key: 'volume', label: 'נפח' },
   { key: 'weight', label: 'משקל' },
   { key: 'coins', label: 'מטבעות' },
   { key: 'time', label: 'זמן' },
 ]
 
-const OPINION_TABS = [
+const OPINION_TABS: { key: OpinionKey; label: string }[] = [
   { key: 'naeh', label: 'ר׳ ח׳ נאה' },
+  { key: 'aruchHashulchan', label: 'ערוה"ש' },
+  { key: 'ravMoshe', label: 'ר׳ מ׳ פיינשטיין' },
   { key: 'chazonIsh', label: 'חזון איש' },
 ]
 
 const DEFAULTS: Record<string, { from: string; to: string }> = {
   length: { from: 'אמה', to: 'ס"מ' },
+  area: { from: 'אמה מרובעת', to: 'ס"מ²' },
   volume: { from: 'לוג', to: 'מ"ל' },
   weight: { from: 'שקל', to: 'גרם' },
   coins: { from: 'סלע', to: 'דינר' },
@@ -29,19 +32,24 @@ const DEFAULTS: Record<string, { from: string; to: string }> = {
 
 const UNIT_MAPS: Record<string, Record<string, unknown>> = {
   length: LENGTH,
+  area: AREA,
   volume: VOLUME,
   weight: WEIGHT,
   coins: COINS,
   time: TIME,
 }
 
+// Systems that have metric hints and opinion selector
+const HAS_METRIC = new Set(['length', 'area', 'volume', 'weight'])
+
 const activeSystem = ref('length')
-const opinion = ref<MetricOpinion>('naeh')
-const fromUnit = ref('אמה')
-const toUnit = ref('טפח')
+const opinion = ref<OpinionKey>('naeh')
+const fromUnit = ref(DEFAULTS['length']!.from)
+const toUnit = ref(DEFAULTS['length']!.to)
 const inputValue = ref('1')
 
 const units = computed(() => Object.keys(UNIT_MAPS[activeSystem.value]!))
+const hasMetric = computed(() => HAS_METRIC.has(activeSystem.value))
 
 function onSystemChange(key: string) {
   activeSystem.value = key
@@ -68,7 +76,7 @@ const result = computed(() => {
 
 const fromMetric = computed(() => {
   const n = parseFloat(inputValue.value)
-  if (!inputValue.value || isNaN(n)) return null
+  if (!inputValue.value || isNaN(n) || !hasMetric.value) return null
   try {
     const m = toMetric(n, fromUnit.value, opinion.value)
     if (!m) return null
@@ -80,7 +88,7 @@ const fromMetric = computed(() => {
 
 const toMetricDisplay = computed(() => {
   const n = parseFloat(inputValue.value)
-  if (!inputValue.value || isNaN(n)) return null
+  if (!inputValue.value || isNaN(n) || !hasMetric.value) return null
   try {
     const converted = convert(n, fromUnit.value, toUnit.value, opinion.value)
     const m = toMetric(converted, toUnit.value, opinion.value)
@@ -90,30 +98,26 @@ const toMetricDisplay = computed(() => {
     return null
   }
 })
-
-const hasMetric = computed(() => activeSystem.value !== 'time' && activeSystem.value !== 'coins')
 </script>
 
 <template>
   <div class="midot-page">
-    <TabStrip v-model="activeSystem" :tabs="TABS" @update:model-value="onSystemChange" />
+    <div class="top-bar">
+      <div class="top-bar-inner">
+        <select
+          class="system-select"
+          :value="activeSystem"
+          @change="onSystemChange(($event.target as HTMLSelectElement).value)"
+        >
+          <option v-for="tab in TABS" :key="tab.key" :value="tab.key">{{ tab.label }}</option>
+        </select>
+        <select v-if="hasMetric" v-model="opinion" class="opinion-select">
+          <option v-for="op in OPINION_TABS" :key="op.key" :value="op.key">{{ op.label }}</option>
+        </select>
+      </div>
+    </div>
 
     <div class="converter">
-      <!-- Opinion toggle — only for systems with metric -->
-      <div v-if="hasMetric" class="opinion-row">
-        <span class="opinion-label">שיטה:</span>
-        <div class="opinion-toggle">
-          <button
-            v-for="op in OPINION_TABS"
-            :key="op.key"
-            :class="{ active: opinion === op.key }"
-            @click="opinion = op.key as MetricOpinion"
-          >
-            {{ op.label }}
-          </button>
-        </div>
-      </div>
-
       <!-- From block -->
       <div class="conv-block">
         <select v-model="fromUnit" class="unit-select">
@@ -126,7 +130,7 @@ const hasMetric = computed(() => activeSystem.value !== 'time' && activeSystem.v
           inputmode="decimal"
           placeholder="0"
         />
-        <div v-if="hasMetric && fromMetric" class="metric-hint">≈ {{ fromMetric }}</div>
+        <div v-if="fromMetric" class="metric-hint">≈ {{ fromMetric }}</div>
       </div>
 
       <!-- Swap -->
@@ -144,7 +148,7 @@ const hasMetric = computed(() => activeSystem.value !== 'time' && activeSystem.v
           <option v-for="u in units" :key="u" :value="u">{{ u }}</option>
         </select>
         <div class="result-value">{{ result || '—' }}</div>
-        <div v-if="hasMetric && toMetricDisplay" class="metric-hint">≈ {{ toMetricDisplay }}</div>
+        <div v-if="toMetricDisplay" class="metric-hint">≈ {{ toMetricDisplay }}</div>
       </div>
     </div>
   </div>
@@ -160,11 +164,47 @@ const hasMetric = computed(() => activeSystem.value !== 'time' && activeSystem.v
   background: var(--bg-primary);
 }
 
+/* Top bar — system + opinion selects side by side */
+.top-bar {
+  display: flex;
+  justify-content: center;
+  background: var(--bg-toolbar);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+.top-bar-inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px clamp(16px, 4vw, 32px);
+  max-width: 480px;
+  width: 100%;
+}
+
+.system-select {
+  flex: 1;
+  height: 28px;
+  padding: 0 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  direction: rtl;
+  cursor: pointer;
+  outline: none;
+  font-weight: 600;
+}
+.system-select:focus {
+  border-color: var(--accent-color);
+}
+
 .converter {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: clamp(8px, 2vh, 20px) 16px;
+  padding: clamp(16px, 3vh, 32px) clamp(16px, 4vw, 32px);
   max-width: 480px;
   width: 100%;
   align-self: center;
@@ -172,41 +212,26 @@ const hasMetric = computed(() => activeSystem.value !== 'time' && activeSystem.v
   gap: clamp(4px, 1vh, 8px);
 }
 
-/* Opinion toggle */
-.opinion-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-.opinion-label {
-  font-size: 11px;
-  color: var(--text-secondary);
-}
-.opinion-toggle {
-  display: flex;
+/* Opinion selector */
+.opinion-select {
+  height: 28px;
+  padding: 0 8px;
+  background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 4px;
-  overflow: hidden;
-}
-.opinion-toggle button {
-  height: 26px;
-  padding: 0 10px;
-  font-size: 11px;
-  background: var(--bg-secondary);
-  border: none;
-  border-radius: 0;
   color: var(--text-secondary);
+  font-size: 11px;
+  font-family: inherit;
+  direction: rtl;
+  cursor: pointer;
+  outline: none;
+  flex-shrink: 0;
 }
-.opinion-toggle button + button {
-  border-right: 1px solid var(--border-color);
-}
-.opinion-toggle button.active {
-  background: var(--accent-color);
-  color: #fff;
+.opinion-select:focus {
+  border-color: var(--accent-color);
 }
 
-/* Each from/to block */
+/* Converter blocks */
 .conv-block {
   flex: 1;
   min-height: 0;
