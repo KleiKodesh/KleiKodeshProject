@@ -40,8 +40,21 @@ export function useDictSuggestions(
 
     const aramaicItems = aramaicSuggestions.value.filter((s) => hebrewOnly.test(s.headword))
 
-    // Aramaic first (already ordered by SQL: prefix then alpha), then wiki-only
-    return [...aramaicItems, ...wikiOnly].slice(0, 60)
+    // Order: prefix match → alpha → source (Aramaic last as tiebreaker)
+    // SQL already handles this for Aramaic; merge wiki-only into the same order
+    const all = [...aramaicItems, ...wikiOnly]
+    all.sort((a, b) => {
+      const aPrefix = a.headword.startsWith(query) ? 0 : 1
+      const bPrefix = b.headword.startsWith(query) ? 0 : 1
+      if (aPrefix !== bPrefix) return aPrefix - bPrefix
+      const alpha = a.headword.localeCompare(b.headword, 'he')
+      if (alpha !== 0) return alpha
+      // Same headword: Aramaic (has definition) after wiki-only (no definition)
+      const aDef = a.definition ? 1 : 0
+      const bDef = b.definition ? 1 : 0
+      return aDef - bDef
+    })
+    return all.slice(0, 60)
   })
 
   function clearSuggestions() {

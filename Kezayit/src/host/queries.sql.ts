@@ -226,7 +226,7 @@ export const SQL = {
    * Autosuggest: one row per (headword, source) combination, with all definitions
    * for that source concatenated. Uses contains match (%word%) — negligible perf
    * difference vs prefix at this data size, and the index is still used.
-   * Ordered: prefix matches first, then contains, then alphabetical within each.
+   * Ordered: prefix matches first, then alphabetical, then by source.
    * Params: [containsPattern, term]  e.g. ['%דיל%', 'דיל']
    */
   DICT_SUGGEST: `
@@ -239,7 +239,8 @@ export const SQL = {
     GROUP BY s.headword, s.source_id
     ORDER BY
       CASE WHEN s.headword LIKE ? THEN 0 ELSE 1 END,
-      s.headword
+      s.headword,
+      s.source_id
     LIMIT 50
   `,
 

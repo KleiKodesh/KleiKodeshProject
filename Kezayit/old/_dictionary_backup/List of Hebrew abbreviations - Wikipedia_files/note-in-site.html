@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<!-- saved from url=(0786)https://netfree.link/misc/note-in-site#%7B%22noteSite%22:%22%D7%96%D7%94%D7%99%D7%A8%D7%95%D7%AA%21%20%D7%95%D7%99%D7%A7%D7%99%D7%A4%D7%93%D7%99%D7%94%20%D7%9E%D7%9B%D7%99%D7%9C%D7%94%20%D7%A2%D7%A8%D7%9B%D7%99%D7%9D%20%D7%94%D7%9E%D7%A1%D7%95%D7%9C%D7%A4%D7%99%D7%9D%20%D7%91%D7%9B%D7%95%D7%95%D7%A0%D7%94%20%D7%AA%D7%97%D7%99%D7%9C%D7%94%2C%20%5B%5B%D7%95%D7%99%D7%A7%D7%99%D7%A4%D7%93%D7%99%D7%94_%D7%94%D7%A2%D7%91%D7%A8%D7%99%D7%AA_%D7%91%D7%A0%D7%98%D7%A4%D7%A8%D7%99%7C%D7%9C%D7%A4%D7%A8%D7%98%D7%99%D7%9D%20%D7%A0%D7%95%D7%A1%D7%A4%D7%99%D7%9D%20%D7%9C%D7%97%D7%A5%20%D7%9B%D7%90%D7%9F%5D%5D%22%2C%22noteSiteEn%22:%22Caution%21%20Wikipedia%20contains%20intentionally%20misleading%20entries%2C%20%5B%5BHebrew_Wikipedia_in_NetFree%7Cfor%20more%20details%20click%20here%5D%5D%22%7D -->
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+     
+    <meta name="viewport" content="width=device-width, initial-scale=1"> 
+    <style>    
+        .body {
+            overflow: hidden;
+            direction: rtl;
+        }
+        #msg {
+            text-align: center;
+        }
+
+        #logo {
+            position: fixed;
+            left: 0;
+            top: 0;
+            bottom: 0px;
+            height: 81%;
+            margin: auto;
+            margin-left: 17px;
+        }
+    </style>
+    <link rel="stylesheet" href="./main.css" type="text/css">
+</head>
+<body> 
+    <img src="./netfree_full_logo.svg" id="logo">
+    <div id="msg">Caution! Wikipedia contains intentionally misleading entries, <a href="https://netfree.link/wiki/Hebrew_Wikipedia_in_NetFree" target="_blank">for more details click here</a></div>
+
+    <script>
+        function getCookie(name) {
+            var nameEQ = name + "=";
+            var ca = document.cookie.split(';');
+            for(var i=0;i < ca.length;i++) {
+                var c = ca[i];
+                while (c.charAt(0)==' ') c = c.substring(1,c.length);
+                if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length,c.length);
+            }
+            return null;
+        }
+
+        function isLang(lang){
+            var saveLang = getCookie('locale');
+            if (saveLang) return saveLang.toLowerCase().includes(lang.toLowerCase());
+
+            var navigatorLang = window.navigator.language || window.navigator.browserLanguage || "";
+            return navigatorLang.toLowerCase().includes(lang.toLowerCase());
+        };
+
+
+        const data = JSON.parse(decodeURIComponent(location.hash.substr(1)));
+        const msgElm = document.createElement("msg");
+        const elm = document.createElement("div");
+        if (data.noteSiteEn && isLang('en')) {
+            elm.textContent = data.noteSiteEn;
+        } else {
+            elm.textContent = data.noteSite;
+        }
+        msg.innerHTML = elm.innerHTML.replace(/\[\[([^\]]+)\]\]/g, (all, value) => {
+            let [href, name] = value.split(/\|/g).map(a => a.trim());
+            name = name || href;
+            href = `/wiki/${encodeURIComponent(href)}`;
+            return `<a href="${href}" target="_blank">${name}</a>`
+        });
+    </script>
+
+ </body></html>

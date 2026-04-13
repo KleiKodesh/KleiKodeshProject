@@ -1,0 +1,1355 @@
+Sorting order
+The entries are sorted according to the Hebrew alphabet. Prefixes indicating prepositions, conjunctions and articles (such as ב, ד, ה, ו, כ, ל, ש) have generally been removed, with the following exceptions:
+
+Where the acronym is incomprehensible or meaningless without the prefix.
+Where the prefix is so integral to the acronym that variants without it rarely, if ever, occur.
+In addition, suffixes modifying abbreviations have been removed using the same guidelines. When searching for an abbreviation ending in a plural, adjectival, or possessive suffix like ית, ים, י, ה, ו, ות, the suffix should be removed if not an integral part of the abbreviation, as described in regard to prefixes above. Depending on the typography, note that the gershayim (״) may either:
+
+Move to the penultimate position, even if the mark falls in the modifying suffix and not the abbreviation proper; or
+Remain in its place within said proper and not shift with the added suffix. Sometimes, depending on style, the suffix is marked with a geresh (׳), so that for example the plural of ש״ץ would be ש״צי׳ם.
+Partially-abbreviated phrases
+Where only part of a term is abbreviated (for example, תנא דבי אליהו abbreviates as תנא דב״א), the entry is sorted on the abbreviated portion (דב״א), and the unabbreviated portion appears in square brackets ([תנא]) to produce תנא] דב״א].
+
+Abbreviations with numerical elements
+Some abbreviations included here are actually gematria (Hebrew numeronyms), but the number is so closely associated with some noun that it is grammatically used as a noun and is synonymous with it, for example ב״ן Ban.
+
+Other abbreviations contain a variable gematria component alongside other words, such as the chapter references פי״א (perek yud-alef, chapter 11) and פ״ט (perek tet, chapter 9). Rather than list separate entries for every possible gematria, or use only one example number, the gematria component is replaced with [x] to produce (for example) [x]פ״.
+
+Abbreviations from other Jewish languages
+Some Aramaic and Yiddish abbreviations may not be included here; more may be found in the List of Aramaic acronyms and the List of Yiddish abbreviations, respectively.
+
+Many of the abbreviations here may be similar or identical to those in the other lists of acronyms. In fact, a work written in Hebrew may have Aramaic acronyms interspersed throughout (ex. Tanya), much as an Aramaic work may borrow from Hebrew (ex. Talmud, midrash, Zohar). Although much less common than Aramaic abbreviations, some Hebrew material contains Yiddish abbreviations too (for example, Hasidic responsa, commentaries, and other material).
+
+Abbreviation-like non-abbreviations
+Not all lexemes containing a geresh (׳) or gershayim (״) are abbreviations, and such non-abbreviations do not appear in this list. Therefore, if after much effort an abbreviation still cannot be deciphered, it is sometimes helpful to try an alternate mode of interpretation. For instance, aside from abbreviations, the geresh and gershayim marks may also be used:
+
+To indicate a number using Hebrew letters. This is likely when the letters are in reverse alef-beit order, or when the abbreviation consists of a single letter followed by a geresh. For example, the year תשע״ד or [5]774 AM, or the ד׳ רוּחוֹת four directions.
+To indicate a double meaning, where both the gematria of the word or phrase should be taken, as well as the plain meaning. For example, to give chai חַ״י (meaning "life" as pronounced, and "eighteen" as a gematria) dollars to tzedakah means to give eighteen dollars to tzedakah, thereby giving another person life, and drawing the blessings of life in return upon the donor.[1]
+In Modern Hebrew, to modify the sounds of certain letters, as in the names George ג׳וֹרג׳ and Charlie צָ׳רלִי.
+When transliterating foreign words into Hebrew. For example, Rashi often uses Hebrew letters to write French translations of Biblical Hebrew, marking it with a gershayim like an abbreviation (ex. אפייצימנ״טו appaisement, cf. "And thou wast pleased with me," Gen. 33:10). He usually appends בְּלַעַ״ז ("in the local language") afterwards.
+In anagrams, i.e., rearranging letters in a word or phrase. This is especially common in Kabbalah. For example, the first sefira, חָכמַה (inspiration), can be rearranged to read כֹּ״חַ מָ״ה ("the potential of the indefinite"). The rearranged words are marked with gershayim.
+When listing the letters themselves. For example, ְמְנַצְפַּ״ך menatzpach lists all the Hebrew letters having special final forms at the ends of words.
+When spelling out a letter. In this way, אַלֶ״ף spells out alef א, and יוּ״ד spells out yud י. When using this method, gematria may also be significant, as above.
+List
+[x]
+״ט[x] ,טפחים [x] ([x] tefachim) - (Halachah) [x] handbreadths
+״פ[x] ,פעמים [x] ([x] p'amim) - [x] times. Often appears as a prayerbook instruction
+א
+א·א
+אברהם אבינו, א״א (Avraham Avinu) - our forefather Abraham
+אדוני אבי/אדונינו אבינו, א״א (adoni avi/adoneinu avinu) - 1) My master, my father. 2) Our master, our father
+אִי אֶפְשָׁר, א״א (ee efshar/ey efshar) - it is impossible; it would be impossible
+אין אומרים, א״א (ein om'rim) - 1) Not recited. Often as a prayerbook instruction. 2) We do not say [that] ...
+איש אלקי, א״א (ish eloki) - the Godly man
+אשת איש, א״א (eishet ish) - a married woman; lit. the wife of a man
+אי אמרת בשלמא, אא״ב (i/ei amart beshelama) - (Aramaic, Talmud) if you say [that the logic is] complete. Introduces an idea that will be contradicted
+אֶלָּא אִם כֵּן, אא״כ (ela im kein) - unless
+אוֹר אֵין סוֹף, אא״ס (Or Ein Sof) - (Kabbalah) The Light of the Infinite One; the emanated life force of the Infinite One. See also אוא״ס. Compare א״ס
+אברהם אבינו עליו השלום ,אאע״ה (Avraham Avinu, Alav Hashalom) - our forefather Abraham, peace on him. See also א״א
+א·ב
+אב בית דין, אב״ד (av beit din) - leader of the court; lit. father of the house of judgment. See also ב״ד
+אב בית דין קודש, אבד״ק (av beit din kodesh) - leader of the holy court; lit. father of the holy house of judgment. See also ב״ד
+אצילות בריאה יצירה עשיה, אבי״ע (Abiya, Atzilut, Beriah, Yetzirah, Asiah) - (Aramaic, Kabbalah) the Four Worlds. See also בי״ע
+א·ג
+אגרת הקדש, אגה״ק (Iggeret HaQodesh) - 1) (Hasidism) Holy Letter; a volume of the 'Tanya'. 2) A treatise by the Nahmanides on marriage
+אגרת התשובה, אגה״ת (Iggeret HaT'shuvah) - (Hasidism) "Letter of Repentance"; a volume of the Tanya
+אג״ק, אִגָּרוֹת קֹדֶשׁ (iggarot qodesh) - 'Letters of the Holy'. Usually authored by the citer's rebbe, unless specified otherwise
+א·ד
+אָדוֹן, אד׳ (Adon) - (Modern Hebrew) Mr. (prepended to the name)
+אדני, אד׳ (Adni) - (Kabbalah) the Name of God spelled א-ד-נ-י and pronounced Ado-nai in the course of prayer, meaning My Lord
+איכא דאמרי,א״ד (Ika De'amri) - (Talmud) There are some that say. Used to present an alternative explanation.
+אדמו״ר האמצעי, אדהאמ״צ (Admor Ha'Emtza'i) - (Chabad) lit. our Middle Master, Teacher and Rebbe; Dovber Schneuri, a.k.a. the Mitteler Rebbe, the second leader of the Chabad court. See also אדמו״ר
+אדמו״ר הזקן, אדה״ז (Admor HaZakein) - (Chabad) lit. our Elder Master, Teacher and Rebbe; Shneur Zalman of Liadi, first leader of Chabad Hasidism. See also אדמו״ר
+אדם הראשון, אדה״ר (Adam HaRishon) - Adam the first
+אדוננו מורנו ורבינו הזקן, אדמוה״ז (Admohaz, Adoneinu Moreinu V'Rabeinu HaZakein) - (Chabad) our Elder Master, Teacher and Rebbe; Shneur Zalman of Liadi
+אדוננו מורנו ורבינו, אדמו״ר (Admor, Adoneinu Moreinu V'Rabeinu) - (Hasidism) our Master, Teacher and Rebbe. For rebbes, used alone or prepended to the name
+אדרא זוטא, אדר״ז (Idra Zuta) - (Aramaic, Kabbalah) Idra Zuta; a part of the Zohar
+א·ה
+אי הכי, א״ה (i-hachi) - (Aramaic, Talmud) if so
+אהבה ויראה, אהוי״ר (ahava veyir'ah) - (Kabbalah) love and fear
+ארץ הקודש, אה״ק (Eretz HaKodesh) - the Holy Land; i.e. Israel
+אהבה רבה, אה״ר (ahavah rabah) - (Kabbalah) great love; a level of love for God
+א·ו
+אוֹמֵר, או׳ (omer) - say; it says
+אומרים, או׳ (om'rim) - we/they say
+אבא ואמא, או״א (aba v'ima) - 1) Father and mother. 2) (Kabbalah) [the partsufim of] Aba and Imma
+אלוקינו ואלוקי אבותינו, או״א (Elokeinu V'elokei avoteinu) - (Liturgy) our God and God of our forefathers
+אחד ואחד, או״א (Echad V'echad) - Each and every
+אוֹר אֵין סוֹף, אוא״ס (Or Ein Sof) - (Kabbalah) The Light of the Infinite One; the emanated life-force of the Infinite One. See also אא״ס. Compare א״ס
+אוֹגוּסְט, אוג׳ (Ogust) - (Modern Hebrew) August
+איסור והתר, או״ה (isur v'heter) - (Halachah) [the religious laws of what is] forbidden and permitted
+אוהל מועד, אוה״מ (Ohel Mo'eid) - (Chumash) the Tent of Meeting
+אומות העולם, אוה״ע (umot ha'olam) - the nations of the world
+אור התורה, אוה״ת (Ohr HaTorah) - The Light of the Torah. A commentary on the Tanach (?)
+אוֹר חוֹזֵר, או״ח (or chozer) - (Kabbalah) reflected light. Contrast או״י
+אורח חיים, או״ח (Orach Chaim) - the first section of the Tur; lit. the Way of Life
+אוֹר יָשָׁר, או״י (or yashar) - (Kabbalah) direct light. Contrast או״ח
+אורות וכלים, או״כ (orot vekeilim) - (Kabbalah) lights and vessels
+אומות המאוחדות, או״ם (Um, Umot HaMe'uchdot) - (Modern Hebrew) the United Nations
+אור מקיף, או״מ (or makif) - (Kabbalah) encompassing light. Contrast או״פ
+אור פנימי, או״פ (or p'nimi) - (Kabbalah) inner light. Contrast או״מ
+אוצרות חיים, אוצ״ח (Otz'rot Chaim) - Treasuries of Life; part of the first book of Eitz Chaim by Chaim Vital. See ע״ח
+אותות, אותו׳ (otot) - signs; testimonies
+אוֹתִיּוֹת, אותיו׳ (otiot) - letters [of the Alef bet]
+א·ז
+את זה/זאת, א״ז (et ze/zot) - this
+א·ח
+אֵשֶׁת חַיִל, א״ח (eishet chayil) - woman of valor (Proverbs 31:10)
+אחינו בני ישראל, אחב״י (acheinu b'nei Yisrael) - our brethren, the children of Israel
+אחר זה, אח״ז (achar zeh) - after this
+אַחַר כָּךְ, אח״כ (achar kach) - after this; afterwards; lit. after such; later
+א·י
+ארץ ישראל, א״י (Eretz Yisrael) - the Land of Israel
+איתא, אי׳ (ita) - (Aramaic) 1) There is. 2) It is
+איש ירא אלקים, אי״א (ish y'rei Elokim) - God-fearing man
+אין זה, אי״ז (ein zeh) - 1) This does not. 2) This is not
+אמן יהא שמה רבא, איש״ר (amein, y'hei sh'meih raba [m'varach l'alam ul'al'mei al'maya]) - (Aramaic, Liturgy) the core words of the Kaddish; lit. amen, may His Great Name [be blessed forever and to all eternity]
+א·כ
+אִם כֵּן, א״כ (im kein) - if so
+אמן כן יהי רצון, אכי״ר (amein kein y'hi ratzon) - (Liturgy) amen, so may it be [His] Will
+אַנְשֵׁי כְּנֶסֶת הַגְּדוֹלָה, אכנה״ג (anshei k'neset hag'dola) - the Men of the Great Assembly
+א·ל
+אָמַר/אמרה/אָמְרוּ לוֹ/לָהּ/להם/לָכֶם, א״ל (amru/amar lo/lah/lahem) - he/she/they said to him/her/them/you
+אָמַר לֵיהּ, א״ל (amar leih) - (Aramaic, Talmud) he said to him
+אֵלִיָּהוּ, אלי׳ (Eliyahu) - Elijah [the prophet]
+אם לא כן, אל״כ (im lo kein) - if not; if this were not so
+אלקות, אלק׳ (Elokut) - (Kabbalah) Godliness
+אֱלֹקִים ,אלקי׳ (Elokim) - God. Indicates severity, judgement and (in Kabbalah) tzimtzum
+א·מ
+אור מקיף, א״מ (or makif) - (Kabbalah) encompassing light. Contrast א״פ
+אֱלֹקֵינוּ מֶלֶך הָעוֹלָם, אמ״ה (Elokeinu melech ha'olam) - (Liturgy) our God, King of the Universe
+אוי מה היה לנו, אמה״ל (oy meh hayah lanu) - (9th of Av liturgy) Woe! What has happened to us!
+אמרין, אמרי׳ (amrin) - (Aramaic) [we/you/they] say
+א·נ
+אנשי שלומינו, אנ״ש (anash, anshe shelomeinu) 'people of our peace' - (Hasidism) people of our court
+א·ס
+אֵין סוֹף, א״ס (Ein Sof) - (Kabbalah) [The One Who Has] No End; the Infinite One
+א·ע
+אין ערוך, א״ע (ein aroch) - nothing compares
+אֶת עַצְמוֹ/עצמם, א״ע (et atzmo/atzmam) - 1) Itself. 2) Himself. 3) Themselves
+אף על גב, אע"ג (af al gav) - even though; lit. even on back of
+אַף עַל פִּי, אע״פ (af al pi) - even though; lit. even by mouth of
+אַף עַל פִּי כֵן, אעפ״כ (af al pi chein) - even so; lit. even by mouth of this
+א·פ
+אור פנימי, א״פ (or p'nimi) - (Kabbalah) inner light. Contrast א״מ
+אֲפִילּוּ הָכִי, אפ״ה (afilu hachi) - (Aramaic, Talmud) even so; nevertheless
+אֲפִילוּ, אפי׳ (afilu) - 1) Even. 2) Even if
+אפשר לומר, אפ״ל (efshar lomar) - it is possible to say
+אַפְּרִיל, אפר׳ (April) - (Modern Hebrew) April
+אֶפְשַׁר, אפש׳ (efshar) - possible; possibly
+א·צ
+אֵין צָרִיךְ, א״צ (ein tzarich) - 1) Does not need. 2) Unnecessary
+אישה צנועה, א״צ (isha tzenu'a) - modest/humble lady
+אצילות, אצי׳ (Atzilut) - (Kabbalah) the highest of the Four Worlds. See אבי״ע
+אצילות, אצילו׳ (Atzilut) - (Kabbalah) the highest of the Four Worlds. See אבי״ע
+אין צריך לומר, אצ״ל (ein tzarich lomar) - needless to say
+ארגון הצבאי הלאומי [בארץ ישראל], אצ״ל (Etzel, Irgun HaTzeva'i HaLe'umi [Be'Eretz Yisra'el]) - (Modern Hebrew) National Military Organization [in the Land of Israel], the Irgun
+א·ק
+אדם קדמון, א״ק (Ak, Adam Kadmon) - (Kabbalah) Primordial Man; a spiritual level transcending Atzilut
+א·ר
+אָמַר רַבִּי/רַב, א״ר (amar Rabbi/Rav) - Rabbi [x] said. "Rabbi" is used for a Tanna of the Mishna, and "Rav" for an Amora of the Gemara. If no name is specified, the reference is usually to Judah the Prince.
+אֶרֶץ, אר׳ (eretz) - 1) Land. 2) The earth. 3) The physical universe
+ארצות הברית, ארה״ב (Ar-tzot HaBrit) - (Modern Hebrew) the United States; lit. Lands of the Covenant
+ארץ הקודש, ארה״ק (Eretz HaKodesh) - the Land of Israel; lit. the Holy Land. Contrast חו״ל
+אמרו רז״ל, ארז״ל (amru razal) - our Rabbis of blessed memory said. See also רז״ל
+האדון/האלהי/האשכנזי/אדוננו רבי יצחק, אר״י (HaAri) -Isaac Luria (abbr.) lit. The Lion; (in full) lit. The Master/The Godly/Our Master Yitzchak; major elucidator of Kabbalah. See also אריז״ל
+האדון/האלהי/האשכנזי/אדוננו רבי יצחק ז״ל, אריז״ל (Isaac Luria) - Rabbi Yitzchak ben Shlomo Luria; (abbr.) lit. The Lion, of blessed memory; (in full) lit. The Master/Godly/Ashkenazi/Our Master Rabbi Yitzchak of blessed memory; major elucidator of Kabbalah. See also אר״י, ז״ל
+כתר] ארם צובה, [כתר] אר״ץ] ([Keter] Aram Tzova) - (Tanach) the Aleppo Codex; lit. the Crown of Aram Tzovah
+א·ת
+אל תקרי, א״ת (al tikrei) - (Aramaic, Talmud) an additional reading; lit. do not read (but note traditional sources regarding this phrase, as in the Ashkenaz Artscroll Siddur, footnote, p. 329, citing Etz Yosef, emphasis theirs: "As in all cases where the Sages use this expression they do not seek to change the Masoretic text, but to suggest an additional implication.")
+אתגליה, אתגלי׳ (itgalya) - (Aramaic, Kabbalah) revealed. Contrast אתכסי׳
+אתכסיה, אתכסי׳ (itkasya) - (Aramaic, Kabbalah) hidden. Contrast אתגלי׳
+אִתְעָרוּתָא דִּלְעֵילָא, אתעדל״ע (it-aruta dil'eila) - (Aramaic, Kabbalah) arousal [of blessing] from Above; i.e. from Heaven by Divine kindness. Contrast אתעדל״ת
+אִתְעָרוּתָא דִּלְתַתָּא, אתעדל״ת (it-aruta dil'tata) - (Aramaic, Kabbalah) arousal [of blessing] from Below; i.e. by human efforts in Torah and mitzvot. Contrast אתעדל״ע
+ב
+ב·א
+בְּנֵי אָדָם, ב״א (b'nei adam) - 1) Mankind; lit. descendants of Adam. 2) People 3) Cherished sect.
+בן אדוני אבי, בא״א (ben adoni avi) - the son of my master, my father
+באר היטב, באה״ט - Ba'er Hetev, a commentary on the Shulchan Aruch. The sections on Orach Chaim and Even HaEzer were written by R. Yehudah ben Shimon Ashkenazi; the sections on Choshen Mishpat and Yoreh De'ah by Zechariah Mendel ben Aryeh Leib
+בָּרוּךְ אַתָּה ה׳, בא״ה (baruch atah Hashem) - (Liturgy) lit. blessed are You, Lord; the beginning formula of many blessings
+בָּרוּךְ אַתָּה ה׳, בא״י (baruch atah Hashem) - (Liturgy) lit. blessed are You, Lord; the beginning formula of many blessings
+בָּרוּךְ אַתָּה ה׳ אֱלֹקינוּ מֶלֶךְ הָעוֹלָם, באהאמ״ה (baruch atah Hashem Elokaynu Melech Haolam) - (Liturgy) lit. Blessed are You, Lord, our God, King of the Universe; the beginning formula of many blessings
+ב·ב
+בבא בתרא, ב״ב (Bava Batra) - (Aramaic) the tractate Bava Batra of the Talmud; lit. final gate
+בִּמְהֵרָה בְיָמֵינוּ, ב״ב (bim'heira v'yameinu) - speedily in our days
+בִּמְהֵרָה בְיָמֵינוּ אָמֵן, בב״א (bim'heira v'yameinu amein) - speedily in our days, amen
+בשר בחלב, בב״ח (basar b'chalav) - (Halachah) 1) A [forbidden mixture] of meat and milk. 2) The laws concerning this
+ב·ג
+נשמתו] בגנזי מרומים ,[נשמתו] בג״מ] ([nish'mato] b'gin'zei m'romim) - [his soul] is in the supernal treasuries. An epitaph appended to a name
+בגר״ז (Bogoraz, Ben HaRav Zalman) - son of Rabbi Zalman [Teitelbaum]
+ב·ד
+בֵּית דִּין, ב״ד (beit din) - 1) A [Jewish] court; lit. house of judgment. 2) A group of at least three adult Jewish men acting as a Halachic judiciary body. 3) A non-Jewish court. See also בי״ד
+במה דברים אמורים, בד״א (bameh d'varim amurim) - in what context does this apply?; lit. with what were [these] words said?
+ברוך דיין האמת, בד״ה (baruch dayan ha'emet) - lit. "Blessed is the true judge"; recited upon receiving news of a death
+בדרך כלל, בד״כ (b'derech k'lal) - generally; lit. "by the way of [nearly] all" or "as a rule"
+ב·ה
+בֵּית הִלֵּל, ב״ה (Beit Hillel) - the academy of Hillel; lit. the house of Hillel
+בעזרת השם, ב״ה (b'ezrat Hashem) - with the help of God. Often at the top of a written or printed sheet. See also בס״ד
+בָּרוּךְ הוּא, ב״ה (baruch Hu) - may He be blessed. Appended to a mention of the Divinity
+ברוך השם, ב״ה (baruch Hashem) - thank God; lit. God be blessed
+בית הכנסת, בהכ״נ (beit hak'neset) - the synagogue; the shul; lit. the house of gathering
+ברכת המזון, בה״מ (Birkat Hamazon) - Blessing/grace after meals; lit. blessing of food
+ברכת המזון, בהמ״ז (Birkat Hamazon) - Blessing/grace after meals; lit. blessing of food
+בֵּית הַמִּקְדָּשׁ, בהמ״ק (Beit HaMikdash) - the Temple in Jerusalem; lit. the Sanctified House
+ב·ו
+בשר ודם, ב״ו (basar vadam) - human; lit. flesh and blood
+בו׳ קצוות, בו״ק (b'vav k'tzavot) - 1) In the six directions [right, left, front, up, down, back]. 2) (Kabbalah) lit. in the six extremities; indicating chesed, gevurah, tiferet, netzach, hod and yesod
+ב·ז
+בִּזְמַן/בַּזְּמַן הַזֶּה, בזה״ז (biz'man/baz'man hazeh) - 1) Lit. At this time. 2) On this day. 3) In this era; nowadays
+ב·ח
+בית חדש, ב״ח (Bach, Bayit Chadash) - (Halachah) 1) Lit. A New House; a commentary on the Tur. 2) The author of this work, Rabbi Yoel Sirkis of Cracow
+בַּעֲִל חוֹב, ב״ח (ba'al chov) - (Halachah) creditor
+בְּחִינַת/בְּחִינָה, בחי׳ (b'chinat/b'chinah) - (Kabbalah) 1) Level (of). 2) Aspect (of)
+ב·י
+בורא יתברך, ב״י (Borei yitbareich) - the blessed Creator
+בית יוסף, ב״י (Beit Yosef) - (Halachah) 1) House of Joseph; a commentary on the Arba'ah Turim. 2) The author of this work, Rabbi Yosef Caro
+בֵּית דִּין, בי״ד (beit din) - 1) A [Jewish] court; lit. house of judgment. 2) A group of at least three adult Jewish men acting as a Halachic judiciary body. 3) A non-Jewish court. See also בי״ד
+בית הכנסת, ביהכנ״ס (beit hak'neset) - the synagogue; lit. the house of gathering
+בית הספר, ביה״ס (beit hasefer) - school; lit. house of the book[s]
+בין השמשות, ביה״ש (bein hash'mashot) - twilight
+בית יעקב לכו ונלכה, ביל״ו (Bilu, Beit Ya'akov L'chu V'Nelchah) - (Modern Hebrew) an early Zionist movement to settle Palestine, lit. House of Jacob, let us go (Isaiah 2:5)
+בְּרִיאָה יְצִירָה עֲשִׂיָּה, בי״ע (Biya, Beriah, Yetzirah, Asiah) - (Aramaic, Kabbalah) the three nethermost of the Four Worlds, where the denizens thereof are aware of their own existence. See אבי״ע
+ברית יוסף תרומפלדור, בית״ר (Beitar, Brit Yosef Trumpeldor) - (Modern Hebrew) a militant, Zionist group that fought against the Nazis in Warsaw and later alongside the Irgun for independence from the British Empire; 'Alliance of Joseph Trumpeldor'. (Abbr.) The ancient fortress of Betar that fell to the Roman Empire in the Bar Kochba revolt
+ב·כ
+בְּכָל זֶּה/זֹאת, בכ״ז (b'chol zeh/zot) - 1) Despite all this. 2) Lit. in/with all this
+ב·מ
+בבא מציעא, ב״מ (Bava Metzia) - (Aramaic) tractate Bava Metzia of the Talmud; lit. Middle Gate
+ביטול מצות לא תעשה, במל״ת (bitul mitzvat lo ta'aseh) - neglect of a negative commandment. See also מל״ת
+ביטול מצות עשה, במ״ע (bitul mitzvat asei) - neglect of a positive commandment. See also מ״ע
+ב·נ
+בן נוח, ב״נ (ben Noach) - a descendant of Noah; a Noahide
+בַּ״ן (Ban) - (Kabbalah) a spelling-out of the Tetragrammaton numerically equal to 52, the gematria of ב״ן. Usually appears as שם ב״ן
+בנדון דידן, בנדו״ד (b'nidon didan) - in our case; in the topic under discussion; lit. in our discussion
+בְּנֵי יִשְׂרָאֵל, בנ״י (B'nei Yisrael) - the Children of Israel; Jews
+בורא נפשות רבות, בנ״ר (borei n'fashot rabot) - the bracha after finishing foods that are neither one of the five grains (wheat, oats, barley, spelt, and rye), nor one of the Seven Species, nor wine. Lit. Creator of many souls
+ב·ס
+בסיעטא דשמיא, בס״ד (b'siyata dish'maya) - (Aramaic) with the help of Heaven. Typically at the top right corner of a printed or written page. See also ב״ה
+ב·ע
+בַּעֲלֵי/בַּעֲל גְּבוּל, בע״ג (ba'al(ei) gevul) - finite being(s); lit. possessor(s) of limits
+בעל הרצון, בעהר״צ (ba'al haratzon) - 1) One with a will; lit. master of will. 2) Willingly
+בַּעֲל הַבָּיִת, בעה״ב (ba'al habayit) - 1) Lit. Master of the house; homeowner. 2) Master; boss
+בעל הטורים, בעה״ט (Ba'al HaTurim) - 1) (Halachah) Lit. Master of the Rows; Rabbi Yaakov ben Asher, the author of the Arba'ah Turim. 2) (Kabbalah) [Rimzei] Ba'al HaTurim; lit. Allusions of the Baal HaTurim; his Kabbalistic commentary on the Pentateuch
+בעהמ"ח (Ba'al HaMechaber) lit. the composing master; the author [of the book...]
+בעזרת השם יתברך, בעזה״י (b'ezrat Hashem yitbarach) - with the help of God, may He be blessed
+בַּעֲִל חוֹב, בע״ח (ba'al chov) - (Halachah) creditor
+בעל(י) חי(ים), בע״ח (ba'al chai/ba'alei chayim) - living being(s); lit. possessor(s) of life
+בערבון מוגבל, בע״מ (b'eravon mugbal) - (Modern Hebrew, business) Ltd., lit. with/by limited warranty[2]
+בְּעַל פֶּה, בע״פ (b'al peh) - 1) Lit. Oral; orally. 2) By heart
+בעל שם טוב, בעש״ט (Besht, Ba'al Shem Tov) - Lit. Good Master of the [Divine] Name; alt. Master of the Good Name; Rabbi Yisrael Baal Shem Tov. See also ריב״ש
+ב·פ
+בורא פרי הגפן, בפה״ג (borei p'ri hagefen/hagafen) - the bracha on wine. Lit. Creator of the fruit of the vine.
+בורא פרי האדמה, בפה״א (borei p'ri ha'adama) - the bracha on vegetables. Lit. Creator of the fruit of the earth.
+בְּפוֹעַל מַמָּשׁ, בפו״מ (b'fo'al mamash) - (Hasidic Judaism) in physical action; in actual deed
+בְּפוֹעַל מַמָּשׁ, בפ״מ (b'fo'al mamash) - (Hasidic Judaism) in physical action; in actual deed
+בפני עצמו/עצמה/עצמם/עצמן, בפנ״ע (bifnei atzmo/atzmah/atzmam/atman) - on its/his/her/their own
+בפני עצמו/עצמה/עצמם/עצמן, בפ״ע (bifnei atzmo/atzmah/atzmam/atman) - on its/his/her/their own
+ב·ק
+בבא קמא, ב״ק (Bava Kama) - (Aramaic) the tractate Bava Kama of the Talmud; lit. First Gate
+בַּת-קוֹל, ב״ק (bat kol) - a Heavenly voice (a lesser level of prophecy); lit. daughter of a sound
+ב·ר
+בְּרֵאשִׁית רַבָּה, ב״ר (B'reishit Rabah) - Bereishit Rabbah. A part of the Midrash.
+בְּרֵאשִׁית, ברא׳ (B'reishit) - 1) The Book of Genesis. 2) Creation; lit. "In the beginning of..." (Gen. 1:1)
+בְּרֵאשִׁית, בראשי׳ (B'reishit) - 1) The Book of Genesis. 2) Creation; lit. "In the beginning of..." (Gen. 1:1)
+ברית המועצות, ברה״ם (Brit HaMu'a-tzot) - (Modern Hebrew) the Soviet Union; lit. Alliance of Councils
+בְּרִיאַת הָעוֹלָם, ברה״ע (b'riyat ha'olam) - the creation of the world
+בריאה, ברי׳ (b'riyah) - creature
+ברית מילה, ברמ״ל (brit milah) - circumcision; lit. covenant of circumcision
+ב·ש
+בית שמאי, ב״ש (Beit Shammai) - the academy of Shammai; lit. the house of Shammai
+בָּרוּךְ שְׁמוֹ, ב״ש (baruch sh'mo) - blessed be His Name
+בשורות טובות, בשו״ט (b'surot tovot) - good tidings
+בָּרוּךְ שֵׁם כְּבוֹד מַלְכוּתוֹ לְעוֹלָם וָעֶד, בשכמל״ו (baruch sheim k'vod [mal'chuto l'olam va'ed]) - (Liturgy) blessed is the name of His glorious kingdom forever and ever. The second sentence of the recital of the Shema, also said after accidentally making an incorrect or unnecessary bracha
+ב·ת
+בל תשקצו, ב״ת (bal t'shakeitzu) - [the commandment to] not make yourselves repulsive (Leviticus 11:43)
+בתוך כל ישראל, בתכ״י (b'toch kol Yisrael) - among all of Israel
+בתוך כל ישראל אמן, בתכי״א (b'toch kol Yisrael amein) - among all of Israel, amen
+בתי כנסיות, בתכנ״ס (batei k'neisiyot) - synagogues; lit. houses of gathering
+ג
+גְּבֶרֶת, גב׳ (G'veret) - (Modern Hebrew) Ms./Mrs. Prepended to a name
+גִ׳יגָה בַּיְט, ג״ב (jiga byte) - (Modern Hebrew, Technology) gigabyte
+גְּבוּל, גבו׳ (g'vul) - 1) Boundary. 2) Limit
+גומר(ה), גו׳ (gomra/gomer) - etcetera
+גִּימַטְרְיָא, גימ׳ (gimatr'ya) - gematria
+גַּם כֵּן, ג״כ (gam kein) - 1) As well; also. 2) Lit. so too
+גְּמָרָא, גמ׳ (G'mara) - (Aramaic, Talmud) Gemara; the explanation and discussion of the Mishna as printed in the Talmud
+גמילות חסדים, גמ״ח (gemach) - a fund or bank for interest-free lending of items such as tefillin, wedding gowns, and similar items, in the spirit of (lit.) gemilut chasadim. See next entry
+גמילות חסדים, גמ״ח (gemilut chasadim) - deeds of loving kindness. Esp. citing Mishna, Tractate Avot 1:2
+גַּן עֵדֶן, ג״ע (Gan Eiden) - the Garden of Eden
+גן עדן העליון, געה״ע (Gan Eiden Ha'Elyon) - (Kabbalah) the Supernal Garden of Eden. Compare געה״ט
+גַן עֵדֶן הַתַּחְתּוֹן, געה״ת (Gan Eiden HaTachton) - (Kabbalah) the Nether Garden of Eden. Compare געה״ע
+גְּדוֹלִים פּוֹלִישׁ, ג״פ (G'dolim Polish) - (Currency) large, Polish [coins]
+ג׳ ראשונות, ג״ר (gimel rishonot) - (Kabbalah) the three first [sefirot]
+גאון רבינו אליהו, גר״א (Gra) - The Gaon Rabbi Eliyahu [ben Shlomo Zalmen]; a.k.a. the Vilna Gaon, the great Talmudical scholar and Halachic decisor of Ashkenazic Jewry
+גאון רבי יצחק זאב, גרי״ז (Griz, Gaon Rabbi Yitzchak Ze'ev) - Yitzchok Zev Soleveitchik; rosh yeshiva of the Brisk yeshiva, which he re-established in Jerusalem
+גר(ים) תושב(ים), ג״ת (ger toshav/gerim toshavim) - resident alien; a Gentile who has accepted the Seven Laws of Noah and is halachically permitted to live in the Land of Israel
+ד
+ד
+דַּף, ד׳ (daf) - 1) Page. 2) Folio; sheet. Since a sheet consists of two sides, the side is also often indicated; the first side is side A or amud alef and the second side is side B or amud bet. See also ע׳
+הַשֵּׁם, ד׳ (Hashem) - God. Note the slightly uncommon substitution of the ד for the ה
+ד·א
+ד׳ אַמּוֹת, ד״א (dalet amot) - four amot; four cubits
+דָּבָר אַחֵר, ד״א (davar acher) - 1) Lit. Something else. 2) Another version. 3) a pig.
+הוי׳ אלוקיכם, ד״א (Havayeh Elokeichem) - the Lord your God. Note the slightly uncommon substitution of dalet ד in place of the hei ה
+דברי אלוקים חיים, דא״ח dach, divre Elokim Chaim 'words of the Living God' - (Hasidism) Hasidic philosophy
+ד·ב
+תנא] דבי אליהו, [תנא] דב״א] (Tana Devei Eliyahu)- [So] Taught the Seekers of Elijah; the name of a midrash
+דְּבָרִים, דברי׳ (devarim) - 1) Statements; words. 2) Things.
+ד·ה
+דִּבְרֵי הַיָּמִים, ד״ה (Divrei HaYamim) - the Books of Chronicles
+דיבור המתחיל, ד״ה (dibur hamatchil) - the statement beginning with
+דִּבְרֵי הַיָּמִים א׳, דה״א (Divrei Hayamim Alef) - I Chronicles
+דִּבְרֵי הַיָּמִים ב׳, דה״ב (Divrei Hayamim Bet) - II Chronicles
+דוד המלך עליו השלום, דהמע״ה (David HaMelech Alav HaShalom) - King David, peace on him
+דוד המלך עליו השלום, דהע״ה (David HaMelech Alav HaShalom) - King David, peace on him
+ד·ו
+דין וחשבון, דו״ח (duch, du'ach, din vecheshbon) - 1) Lit. Judgment and accounting. 2) (Modern Hebrew) Report
+דְחִילוּ וּרְחִימוּ, דו״ר (d'chilu ur'chimu) - (Aramaic) fear and love
+ד·ח
+דברי חז״ל, דחז״ל (divrei hazal) - 'words of the Hazal, may their memory be for a blessing'. See also חז״ל
+ד·מ
+דֶּרֶךְ מָשָׁל, ד״מ (derech mashal) - by way of analogy
+ד·ס
+דִבְרֵי סוֹפְרִים, ד״ס (divrei soferim) - 1) Words of the sages; lit. words of the counters. To learn the laws, they counted them, cf. "There are four main categories of damaging agents" (Bava Kamma 2b), "On three things the world is sustained" (Pirkei Avot 1:2), etc. 2) Rabbinical law
+ד·ע
+דַּעַת עֶלְיוֹן, ד״ע (da'at elyon) - (Kabbalah) Supernal knowledge. See also ד״ת
+ד·צ
+דומם צומח חי, דצ״ח (detzach/domeim tzomei'ach chai) - silent, growing [and] living [creatures]; referring to all species of Creation aside from mankind
+דומם צומח חי מדבר, דצח״ם (datzcham(?)/domeim tzomei'ach chai medabeir) - silent, growing, living [and] speaking [creatures]; the four levels of created beings in the physical world
+דְּצַ״ךְ עֲדַ״שׁ בְּאַחַ״ב, דָּם צְפַרְדֵּעַ כִּנִּים עָרוֹב דֶּבֶר שְׁחִין בָּרָד אַרְבֶּה חֹשֶׁךְ [מַכַּת] בְּכוֹרוֹת, (deṣakh ʿadaš beʾaḥav) - (Haggadah) the Ten Plagues; lit. blood, frogs, lice, wild beasts, pestilence, boils, hail, locust, darkness, [striking of the] firstborn
+
+ד·ק
+דקות, דק׳ (dakot) - minutes
+ד·ר
+דָּרוֹם, דר׳- South
+דברי רז״ל, דרז״ל- the words of our Rabbis, may their memory be for blessing. See also רז״ל
+ד·ש
+דברי ירמיהו, שמעו דבר ה׳, חזון ישעיהו, דש״ח (dešaḥ) - (Haftorah) [the three haftorahs of punishment read in the weeks before the 9th of Av,] "The words of Jeremiah" (Jer. 1:1), "Hear the word of Hashem" (Jer. 2:4), "The Vision of Isaiah" (Is. 1:1)
+ד·ת
+דִּבְרֵי תוֹרָה, ד״ת (divre Torah) - words of Torah
+דַּעַת תַּחְתּוֹן, ד״ת (da'at tachton) - (Kabbalah) lower knowledge. See also ד״ע
+ה
+[x]·ה
+[x]ה״ ,[x] הֲלָכָה (halachah [x]) - law [x]
+ה
+הַשֵּׁם, ה׳ (Hashem) - God; lit. the Name. Usually refers to the Tetragrammaton
+ה·א
+ה׳ אֱלוֹקֶיךָ, ה״א (Hashem Elokecha) - Hashem your God
+הָאָרֶץ, האר׳ (ha'aretz) - 1) The land. 2) The earth. 3) The [physical] universe
+ה·ג
+ה׳ גבורות, ה״ג (hei gevurot) - (Kabbalah) the five severities; i.e. binah, gevurah, hod, yesod and malchut
+הגהות המחבר, הגה״מ (hagahot hamechaber) - 1) Lit. Notes of the compiler. 2) Notes of the author
+ה·ד
+הד׳ יסודות (hadalet yesodot) - the four elements; i.e. fire, air, water and earth
+ה·ה
+הרי הוא, ה״ה (harei hu) - 1) It is. 2) He is. 3) This is
+הרי הם, ה״ה (harei heim) - 1) They are. 2) These are
+הוא הדין, ה״ה (hu hadin) - This/that is the ruling
+הַר הַבַּיִת, הה״ב (Hehav) Mount of the House - the Temple Mount
+הרב המגיד, הה״מ (HaRav HaMagid) - (Hasidism) 'the Rabbi the Preacher', the Maggid of Mezeritch; the successor of the Ba'al Shem Tov
+ה·ו
+הַוָיָה, הוי׳ (Havayeh) - (Kabbalah) A rearrangement of the letters indicating the Tetragrammaton. Indicates kindness, mercy and revelation
+הַוָה לֵיהּ לְמֵימַר, הול״ל (hava leh lememar) - (Aramaic) shouldn't he have said
+הוא ענין, הו״ע (hu inyan) - this is the idea
+הושנה רבה, הו״ר - Hoshana Rabbah; the 7th day of Sukkot
+ה·ז
+הרי זה, ה״ז (hare ze) - this is
+ה·ח
+ה׳ חסדים, ה״ח (he hasadim) - (Kabbalah) the five kindnesses; i.e. keter, chochmah, chesed, tiferet and netzach
+ה·י
+הָיָה, הי׳ (hayah) - was. Contrast והי׳
+הַשֵׁם יִשְׁמְרֵנוּ, ה״י (Hashem yishmerenu) - may God protect us
+ה·כ
+הריני כפרת משכבו/משכבה, הכ״מ (hareini kaparat mishkavo/mishkavah) - I am an atonement for his/her resting place. Added after the name of a parent who has deceased less than 12 months prior (Kiddushin 31a)
+ה·ל
+הלכות, הל׳ (hilchot) - (Halachah) the laws of. Usually as a part of a section or chapter title
+הלכה למשה מסיני, הל״מ - (halacha l'Moshe miSinai) - (Halachah) an [unwritten] law of Moses from Sinai
+ה·מ
+הני מילי, ה״מ (hanei milei) - (Aramaic) 1) This statement. 2) Lit. These words
+המסכלת, המסכל׳ (hamaskelet) - 1) Intellectual. 2) Logical
+המוציא מחבירו עליו הראיה, המע״ה (hamotzi mei-chaveiro alav haraya) - (Halachah) one who [sues to] take from his fellow must provide the proof; lit. one who takes from his fellow, the proof is on him
+ה·נ
+הָכִי נַמִי, ה״נ (hachi nami) - (Aramaic, Talmud) here also
+הנגלות, הנגלו׳ (hanig-lot) - 1) Revealed. 2) The revealed things
+ה·ע
+הוא עצמו, ה״ע (hu atzmo) - he himself/it itself
+הֶעָרָה, הע׳ (he'arah) - [foot]note
+ה·פ
+הפסק טהרה, הפס״ט (hefsek taharah) - (Halachah, Niddah) pause [to initiate] purity
+ה·ק
+הקטן, הק׳ (hakatan) - the insignificant. Usually in autographs, preceding a signature
+לשון] הקודש, [לשון] הק׳] (Lashon HaKodesh) - the Holy Tongue; i.e. Hebrew
+לשונו] הקודש, [לשונו] הק׳] (leshono hakodesh) - his holy words
+הַקָּדוֹשׁ בָּרוּךְ הוּא, הקב״ה (HaKadosh Baruch Hu) - The Holy One, blessed be He
+ה·ר
+הרב הגאון, הרה״ג (harav hagaon) - the brilliant rabbi. An epithet prefixed to a name
+הרב החסיד, הרה״ח (harav hachasid) - 1) The pious rabbi. 2) (Hasidism) The rabbi, the chasid. An epithet prefixed to a name
+הרב הצדיק, הרה״צ (harav hatzadik) - 1) The righteous rabbi. 2) The rabbi, the tzaddik. An epithet prefixed to a name
+הרב התמים, הרה״ת (harav hatamim) - (Chabad) the rabbi, the Tamim; i.e. a graduate of Tomchei Temimim
+הרב רבי, הר״ר (harav Rabi) - the rabbi, Rabbi ...
+ה·ש
+השם יתברך, השי״ת (Hashem yitbarach) - Hashem, may He be blessed
+השתחוואת, השתחוואו׳ (hishtachava'ot) - prostrations. Ex. in the Amidah
+ה·ת
+התמים, הת׳ (hatamim) - (Chabad) the Tomim; one who studies or studied in Tomchei Temimim; lit. the pure/unblemished
+התהוות, התהוו׳ (hit-havut) - [the process of] becoming
+ו
+כל אחד] ואחד, [כל אחד] וא׳] ([kol echad] ve'echad) - 1) Every individual. 2) Each one
+ואם תאמר ,וא״ת (v'im tomar) - and if you would say
+ובלאו הכי, ובלא״ה (uv'lav hachi) - (Aramaic) - 1) Lit. And if not so. 2) Regardless / anyway
+וְדַי לַמֵּבִין, וד״ל (v'dai lameivin) - and [this is] sufficient for the understanding
+וְהָיָה, והי׳ (v'hayah) - will be. Contrast הי׳
+ויקרא רבה, ויק״ר (Vayikra Rabah) - a work of Midrash on the Book of Leviticus
+וְיִתְעַלֶּה, וית׳ (v'yit-aleh) - and may [His great Name] be exalted. Usu. after יתברך, yitbareich/yitbarach
+וכן הוא, וכ״ה (v'chein hu) - 1) And it is this way. 2) Lit. And so it is
+וְכַיּוֹצֵא בָּזֶה, וכיו״ב (v'chayotzei bazeh) - and the like
+ונראה, ונר׳ (v'nir-eh) - and it appears
+ועוד יש לומר, ועוי״ל (v'od yeish lomar) - and furthermore we can say
+ז
+ז
+זָכָר, ז׳ (zachar) - 1) Lit. A male. 2) Also lit. Masculine
+ז·א
+.זאת אומרת, ז. א (zot omeret) - this means; lit. this says
+זְעֵיר אַנְפִּין, ז״א (Za/Z'eir Anpin) - (Aramaic, Kabbalah) the manifestation of God within the six emotional sefirot, corresponding to Yetzirah and immediately followed below by Asiyah; lit. Small Faces. Compare to Arich Anpin, א״א
+זה את זה, זא״ז (zeh et zeh) - each other
+ז·ב
+זה בזה, זב״ז (zeh b'zeh) - this with that
+ז·ה
+זוהר הקודש, זה״ק (Zohar HaKodesh) - the Holy Zohar; the fundamental tome of Kabbalah
+ז·ו
+זוהר חדש, זו״ח (Zohar Chadash) - New Zohar; a section of the Zohar
+ז·ח
+[x]זח״ ,[x] זֹּהַר חֵלֶק (Zohar Cheilek [x]) - the Zohar, part [x]
+ז·י
+ז׳ ימים, ז״י (sheva/zayin yamim) - (Halachah, Niddah) seven [clean] days
+זכרונו יגן עלינו, זי״ע (Ziya) - may his memory protect us. Appended to a name
+זכרונו יגן עלינו אמן, זיע״א (Ziya) - may his memory protect us, Amen
+ז·ל
+זה לשונו, ז״ל (zeh leshono) - begin quote; lit. this is his language. See also עכ״ל
+זכרונו/זכרונם לברכה, ז״ל (Zal) - of blessed memory; lit. his memory for blessing. Appended to the name
+ז·מ
+ז׳ מדות, ז״מ (sheva/zayin midot) - (Kabbalah) the seven [emotional] attributes; i.e. the sefirot from chesed to malchut
+ז·נ
+ז׳ נקיים, ז״נ (sheva/zayin nekiyim) - (Halachah, Niddah) seven clean [days]
+ז·צ
+זכר צדיק לברכה, זצ״ל (Zatsal) - may the memory of a saint be for a blessing. An epitaph appended to a name
+זכר צדיק וקדוש לברכה, זצוק״ל (Zakutzal) - may the memory of the saint and holy person be for a blessing. An epitaph appended to a name
+ז·ק
+זרע קדוש, ז״ק (Zak, Zera Kodesh) – holy seed. A surname (Isaiah 6:13)
+זיהוי קורבנות אסון, זק״א (ZAKA, Zihuy Korbanot Ason) - (Modern Hebrew) a religious rescue and recovery organization that also specializes in identifying and burying the dead after a disaster; lit. Disaster Victim Identification
+זכר קדוש לברכה, זק״ל (Zakal) - may the memory of the holy be for a blessing. Used for martyrs, appended to a name
+זכר קדוש צדיק לברכה, זקצ״ל (Zakatzal) - may the memory of the holy righteous be for a blessing. An epitaph appended to a name
+ז·ש
+זהו שאמר, ז״ש (zehu she'amar) - this is as [it/he] states
+זה שכתוב, ז״ש (zeh shekatuv) - this is as it is written
+זה שאמרו רז״ל, זשארז״ל (zeh she'amru razal) - this is as our Rabbis, of blessed memory, said. See also רז״ל
+זהו שאמר הכתוב, זש״ה (zehu she'amar hakatuv) - this is as the verse states
+ז·ת
+ז׳ תחתונות, ז״ת (zayin tachtonot) - (Kabbalah) the seven lower [sefirot]
+ח
+[x]·ח
+[x]ח״ ,[x] חֵלֶק (cheilek [x]) - part [x]
+ח·ב
+חָכְמָה בִּינָה דַעַת, חב״ד (Chabad, Chochmah, Binah, Da'at) - 1) (Kabbalah) The three intellectual sefirot: lit. knowledge, wisdom and understanding. 2) (Hasidic Judaism) The Chabad court. 3) (Hasidic Judaism) Any of the historical Hasidic courts emphasizing intellectual comprehension of spirituality. Compare חג״ת
+ח·ג
+חֶסֶד גְּבוּרָה תִּפְאֶרֶת, חג״ת (chagat, chesed, gevurah, tiferet) - 1) (Kabbalah) the three inner emotional sefirot: (lit.) loving-kindness, severity and harmony. 2) (Kabbalah) The emotional sefirot in general, which include and descend from chagat. 3) (Hasidic Judaism) Of or pertaining to courts that emphasize emotional attachment to the Divine. Compare חב״ד
+ח·ה
+חַג הַסּוּכּוֹת, חה״ס (Chag HaSukot) - the festival of Sukkot
+חַג הַפֶּסַח, חה״פ (Chag HaPesach) - the festival of Pesach
+חַג הַשָּׁבֻעוֹת, חה״ש (Chag HaShavuot) - the festival of Shavuot
+ח·ו
+חַס וְשָׁלוֹם, ח״ו (chas v'shalom) - Heaven forbid; lit. compassion and peace
+חכמה ובינה, חו״ב (chuv, chochmah v'binah) - (Kabbalah) lit. Chochmah and Binah; the first two sefirot. These sefirot being the "Father" and "Mother," this term also often includes their "children"
+חסד וגבורה, חו״ג (chug, chesed ugevurah) - (Kabbalah) lit. Chesed and Gevurah; the first two emotional sefirot. This term sometimes also includes the "branches" of these sefirot
+חֹל הַמּוֹעֵד, חוה״מ (Chol HaMo'ed) - the "weekday" of the festival [when certain types of melacha are permitted]
+חֹל הַמּוֹעֵד סֻכּוֹת, חוהמ״ס (Chol HaMo'ed Sukot) - the Chol HaMo'ed of Sukot. See חוה״מ
+חֹל הַמּוֹעֵד פֶּסַח, חוהמ״פ (Chol HaMo'ed Pesach) - the Chol HaMo'ed of Pesach. See חוה״מ
+חוּץ-לָאָרֶץ, חו״ל (Chutz LaAretz) - the Diaspora; lit. outside the [Holy] Land. Contrast ארה״ק
+חורין וסדקין, חו״ס (chorin u-sedakin) - (Aramaic, Halachah, Niddah) hollows and crevices
+ח·ז
+חכמינו זכרונם לברכה, חז״ל (Chazal) - lit. Our Sages, of blessed memory; Jewish sages of previous generations. See also רז״ל
+ח·י
+ח״י (chai) - 18; the gematria of chai, life. Commonly used to specify dates and currency amounts for tzedakah (ex. double-chai, chai times chai, etc.)
+חידושי, חי׳ (chidushei) - innovations [of Torah thought from/by]
+חיה, חי׳ (chayah) - (Kabbalah) [the soul-level of] chayah; the first aspect of the soul to emanate from the Ein Sof
+חיה יחידה, ח״י (chayah yechidah) - (Kabbalah) chayah [and] yechidah; the two highest levels of the soul, which are unified with God and perceive no other existence aside from His. See also נרנח״י
+חיים יוסף דוד אזולאי, חיד״א (Chida, Chaim Yosef David Azulai) - Jerusalemite Halachist, Kabbalist and Talmudist, a prolific author
+חיי אדם, חיי״א (Chayei Adam) - lit. The Life of Man; a post-Acharonic collection of Jewish Law by Rabbi Avraham Danzig on certain laws in Orach Chaim
+חתימת יד קדשו, חי״ק (chatimat yad kadsho) - his holy signature; lit. seal of his holy hand
+ח·כ
+חכמת אדם, חכ״א (Chochmat Adam) - lit. Wisdom of Man; a post-Acharonic collection of Jewish Law by Rabbi Avraham Danzig on certain laws in Yoreh De'ah, Even HaEzer and Choshen Mishpat
+חכמה עילאה, חכ״ע (chochmah ila'ah) - (Kabbalah) lit. Supernal Wisdom; the first emanation of the sefirah of Chochmah. See also ח״ע
+ח·נ
+חכמה נסתרה, ח״ן (chein, chochmah nistarah) - (Kabbalah) lit. hidden wisdom; i.e. the field of Kabbalah in general; (abbr.) grace
+חיים נחמן ביאליק, חנ״ב (Hayim Nahman Bialik) - a prominent Jewish modern poet c. 1873-1934
+חֲתִּיכָה נַעֲשִׂית נְבֵילָה, חנ״ן (chanan, chatichah na'asit neveilah) - (Halachah, Kashrut) a cut-off piece became un-kosher [itself, as opposed to being considered part-kosher, part-non-kosher]. Ex. a large piece of cheese that falls into a small pot of meat stew - the entire mixture is חנ״ן.
+ח·ע
+חכמה עילאה, ח״ע (chochmah ila'ah) - (Kabbalah) lit. Supernal Wisdom; the first emanation of the sefirah of Chochmah. See also חכ״ע
+ח·ק
+חֲצִי קַדִּישׁ, ח״ק (chatzi kadish) - (Liturgy) Half Kaddish; a kaddish starting from the usual preamble "Yitgadal v'yitkadash" and continuing until "L'eila min kol birchata... da'amiran b'al'ma, v'im'ru amein." Recited only by the prayer leader
+ח·ת
+חידושי תורת משה סופר, חת״ם סופר, חת״ס (Chatam Sofer, Chidushei Torat Moshe Sofer) - (Halachah) 1) The Chatam Sofer. This is a partial expansion, which still contains an abbreviation, however, the abbreviation also spells out the word for "Seal": lit. Seal of the Scribe. In full, lit. The Innovations of Moses Sofer's Teachings; a book written by Rabbi Moses Sofer containing novellae on the Talmud. 2) The author of this work
+חומש תהלים תניא, חת״ת (Chitas, Chumash, Tehillim, Tanya) - (Chabad) 1) The Five Books of Moses, the Psalms and the Tanya. 2) The daily study schedule for these three books. 3) A single volume containing these three books bound together
+ט
+[x]ט״ ,[x] טור (Tur [x]) - 1) Row [x]. 2) Column [x]
+טלית גדול, ט״ג (talit gadol) - (Halachah) the large talit
+טעם ודעת, טו״ד (ta'am veda'at) - reason and logic
+וְתֵן] טַל וּמָטָר, [ותן] טו״מ] ([v'tein] tal umatar) - (Liturgy) and give dew and rain
+טועים, טועי׳ (to'im) - [we/they/you] err; are mistaken
+טוֹב וָרָע, טו״ר (tov vara) - good and evil
+טור שולחן ערוך, טושו״ע (Tur Shulchan Aruch) - the Arba'ah Turim; an extremely famous halachic work by R. Yaakov ben Asher, who is a.k.a. the Baal HaTurim after this work
+טלית ותפילין, טו״ת (talit ut'filin) - tallit and tefillin
+טורי זהב, ט״ז (Taz, Turei Zahav) - (Halacha) 1) Lit. Rows of Gold; a commentary on the Shulchan Aruch. 2) The author of this commentary
+טחת ידי, טח״י (tachat yadi) - in my possession; lit. under my hand
+טעיות סופרים, ט״ס (ta'uyot sof'rim) - printer's/copyist's errors
+טלית קטן, ט״ק (talit katan) - (Halachah) the small talit
+י
+י
+לשון] יחיד, [לשון] י׳] (lashon yachid) - (grammar) singular; lit. singular language
+י·א
+יש אומרים, י״א (yeish om'rim) - there are those who say
+יארצייט, יא״צ (yartzeit) - (Yiddish) anniversary of someone's passing; lit. time of year
+יארצייט, יאצ״ט (yartzeit) - (Yiddish) anniversary of someone's passing; lit. time of year
+י·ג
+י״ג מדות, יג״מ (yud gimel midot) - 1) Thirteen Attributes [of Mercy]. 2) Thirteen Principles [of Exegesis]
+י·ה
+יִהְיֶה, יהי׳ (yihyeh) - will be
+י·ו
+יוֹם הַכִּפּוּרִים, יוה״כ (Yom HaKipurim) - Yom Kippur; lit. the Day of Atonement
+יוֹם טוֹב, יו״ט (Yom Tov) - festival; lit. good day
+היועץ המשפטי לממשלה, היועמ"ש (yoa'amash) - Attorney General of Israel, the 'ha' prefix is equivalent to 'the' and isn't part of the acronym
+יוֹשֵׁב רֹאשׁ, יו״ר (yosheiv rosh) - (Modern Hebrew) chairman, lit. one who sits at the head
+י·ח
+יצא] ידי חובתו, [יצא] י״ח] ([yatza] y'dei chovato) - (Halachah) fulfilled his obligation
+יוֹדְעֵי חֵן, י״ח (yod'ei chein) - (Kabbalah) those who know Kabbalah; lit. those who know grace ("grace", ח״ן, being the acronym for "hidden wisdom", חכמה נסתרה)
+שְׁמוֹנֶה עֶשְׂרֵה, י״ח (Shemoneh Esrei) - (Liturgy) the Amidah; standing prayer; lit. [the order of] 18 [blessings]. See also ש״ע
+יחודא עילאה, יחו״ע (yichuda ila'a) - (Aramaic, Kabbalah) Supernal unity
+יחודא תתאה, יחו״ת (yichuda tata'a) - (Aramaic, Kabbalah) nether unity
+י·ט
+יו״ד טפחים, י״ט (yud tefachim) - (Halachah) ten handbreadths; usu. the space from that height to the ground
+יום טוב, י״ט (Yom Tov) - 1) Lit. [Have a] good day. Used as a parting greeting in Modern Hebrew. 2) A holy day.
+י·י
+השם, י״י (Hashem) - God
+י·ל
+יש לומר, י״ל (yeish lomar) - it might be said
+יש להקדים, ילה״ק (yeish lehakdim) - we must first explain; lit. we must preface
+ילקוט שמעוני, ילק״ש (Yalkut Shimoni) - Midrashic commentary on the Tanakh
+י·מ
+ימות המשיח, ימוה״מ (yemot haMashiach) - the Messianic era; lit. the days of the Messiah
+ימות המשיח, ימוהמ״ש (yemot haMashiach) - the Messianic era; lit. the days of the Messiah
+י·ס
+יוּ״ד סְפִירוֹת, י״ס (yud sefirot) - (Kabbalah) ten sefirot. See also ע״ס
+יסודי התורה, יסוה״ת (Yesodei HaTorah) - [the section of the Mishneh Torah titled] Yesodei HaTorah; lit. Foundations of the Torah
+י·ע
+יגן עליה אלקים, יע״א (yagen aleha Elokim) - may God shield her/it
+יעוין שם, יעו״ש (ye'uyan sham) - see there; lit. investigate there
+י·פ
+יפת תואר, יפ״ת (yefat to'ar) - (Halachah) a [wartime captive woman of] beautiful appearance [whose infatuated captor has special laws and obligations regarding her treatment before he may marry her]
+י·צ
+יצר הטוב, יצה״ט (yetzer hatov) - the good inclination. See also יצ״ט
+יֵצֶר הָרַע, יצה״ר (yetzer hara) - the evil inclination
+יברכם צורנו וישמרם, יצ״ו (yevarcheim tzureinu veyishmereim) - may [God] our Stronghold bless them and protect them
+יֵצֶר טוֹב, יצ״ט (yetzer tov) - good inclination. See also יצה״ט
+יְצִיאַת מִצְרָיִם, יצי״מ (y'tziat Mitzrayim) - the Exodus from Egypt. See also יצ״מ
+יְצִיאַת מִצְרָיִם, יצ״מ (y'tziat Mitzrayim) - the Exodus from Egypt. See also יצי״מ
+י·ק
+יין קידוש נר הבדלה זמן, יקנה״ז (yaknahaz, yayin kiddush neir havdalah z'man) - [the blessings for the] wine, kiddush, candle, havdalah, [and the] time [of year]; the order of blessings recited when the second day of a holiday begins as soon as Shabbat ends
+י·ר
+ירושלים של מטה, ירושמ״ט (Yerushalayim shel matah) - (Kabbalah) the nether (usu. physical) Jerusalem
+ירושלים של מעלה, ירושמ״ע (Yerushalayim shel ma'alah) - (Kabbalah) the Supernal Jerusalem
+ירא שמים, יר״ש (yarei shamayim) - [one who] fears Heaven
+יראת שמים, יר״ש (yir'at shamayim) - fear of Heaven
+י·ש
+יראת שמים, י״ש (yir'at shamayim) - fear of Heaven
+ימח שמו, יש"ו (yimach shemo) - may his name be erased
+י·ת
+יִתְבָּרַךְ, ית׳ (yitbareich/yitbarach) - may He be blessed
+יִתְבָּרַךְ, יתב׳ (yitbareich/yitbarach) - may He be blessed
+יתברך שמו, ית״ש (yitbarach Shemo) - may His Name be blessed
+כ
+כ
+כְּתִיב, כ׳ (k'tiv) - written. Often regarding a keri uchetiv. See also ק׳
+כ·א
+כִּי אִם, כ״א (ki im) - 1) Unless. 2) Except. 3) But rather
+כָּל אֶחָד, כ״א (kol echad) - 1) Each one. 2) Everyone
+כָּל אֶחָד וְאֶחָד, כאו״א (kol echad va'echad) - each and every one; lit. each one and one
+כתבי אר״י, כאר״י (kitvei Ari) - writings of the Arizal
+כִּתְבֵי אֲרִיזַ״ל, כאריז״ל (kitvei Arizal) - writings of the Arizal
+כ·ב
+כָּל בְּנֵי בֵּיתוֹ, כב״ב (kol b'nei beito) - all the members of household; lit. all the children of his house
+כִּבְיָכוֹל, כבי׳ (kiv'yachol) - as it were; lit. as if it could be
+כ·ג
+כֹּהֵן גָדוֹל, כ״ג (kohein gadol) - the High Priest
+כ·ד
+כל דרגא, כ״ד (kol darga) - (Aramaic) every level
+כ·ה
+כֵּן הוּא/הִיא, כ״ה (kein hu/hee) - 1) It is so; so it is. 2) So too
+כהאי גוונא, כה״ג (k'hai gavna) - (Aramaic) the like; etcetera
+כהן גדול, כה״ג (kohein gadol) - high priest; lit. great priest
+מְלֹא] כָל הָאָרֶץ כְּבוֹדוֹ, [מלא] כה״כ] ([m'lo] chol ha'aretz k'vodo) - the entire earth [is filled] with His glory (Isaiah 6:2)
+כ·ו
+כוּלֵהּ, כו׳ (chuleih) - etcetera
+כַּמֶּה וְכַמָּה, כו״כ (kame v'chama) - many; lit. several and several
+כּוֹכָבִים וּמַזָּלוֹת, כו״מ (kochavim umazalot) - 1) Idolatry. 2) Lit. Stars and constellations
+כֻּלֵּי עָלְמָא, כו״ע (kulei alma) - (Aramaic) all hold [the opinion]
+כ·ז
+כל זה, כ״ז (kol zeh) - all this
+כָּל זְמַן, כ״ז (kol z'man) - 1) The entire duration of; lit. the entire time. 2) Whenever
+כ·ח
+כל חד, כ״ח (kol chad) - (Aramaic) each one
+כתר חכמה בינה, כח״ב (keter chochmah bina) - (Kabbalah) [the first three sefirot,] keter, chochmah [and] bina
+כ·י
+כל יחיד, כ״י (kol yachid) - everyone; lit. each individual
+כתבי יד, כ״י (kitvei yad) - 1) manuscripts. 2) handwritten.
+כ·כ
+כל כך, כ״כ (kol kach) - to such an extent
+כמו כן, כ״כ (k'mo chein) - similarly; lit. like so
+כן כתב, כ״כ (ken katav) – [so-and-so] also wrote like this
+כ·ל
+כלויה, כלו׳ (k'luya) - including
+כ·מ
+כְּמַאן דְּאָמַר, כמ״ד (k'man d'amar) - (Aramaic, Talmud) according to the one who says
+כמה מקומות, כ״מ (kama m'komot) - many places
+כמו דאמרי(נ)ן, כמ״ד (k'mo de'amrin(an)) - (Aramaic) as they/we say
+כְּמוֹ שֶׁכָּתוּב, כמ״ש (k'mo shekatuv) - as it is written
+כמו שאמר, כמ״ש (k'mo she'amar) - as it/he said
+כמו שיתבאר, כמשי״ת (k'mo sheyitba'er) - as will be explained
+כְּמוֹ שֶׁנִּתְבָּאֵר, כמשנ״ת (k'mo shenitba'er) - as was explained
+כְּמוֹ שֶׁנִּתְבָּאֵר לְעֵיל, כמשנת״ל (k'mo shen'tal, k'mo shenitba'er la'eil) - as was explained above. See also נת״ל
+כְּמוֹ שֶׁכָּתוּב שָׁם, כמש״ש (k'mo shekatuv sham) - as it is written there
+כ·נ
+כנסת ישראל, כנ״י (k'neset Yisrael) - lit. the collective of Israel; the Jewish people
+כנזכר לעיל, כנ״ל (k'nal, kanizkar la'eil) - as mentioned above
+כ·ע
+כל עלמין, כ״ע (kol almin) - (Aramaic, Kabbalah) all worlds
+כ·צ
+כהן צדק, כּ״ץ (Katz, Kohen Tzedek) – righteous priest. Used as a surname for Kohanim
+כ·ק
+כבוד קדושת, כ״ק (Kavod Qedushat) - His Holy Honor. For tzadikim and rebbes, prepended to the name, and sometimes also to Admor. See also אדמו״ר
+כבוד קדושת שם תפארתו, כקש״ת (K'vod K'dushat Sheim Tifarto) - His Holy Honor, His Glorious Name being. For tzadikim, prepended to the name
+כ·ש
+כל שכן, כ״ש (kol shekein) - all the more so. Compare ק״ו
+כ·ת
+כתבי יד, כת״י (kitvei yad) - writings; lit. manuscripts. Try also ת״י
+כְּתִיב, כתי׳ (k'tiv) - (Aramaic) it is written
+כתבי יד קדשו, כתי״ק (kitvei yad kadsho) - his holy manuscripts; lit. writings of his holy hand
+ל
+ל
+לָשׁוֹן, ל׳ (lashon) - 1) Wording. 2) Terminology. 3) Relating to. Used to indicate etymology or a definition. 4) Lit. Tongue/language
+ל·א
+לָשׁוֹן אִידִישׁ, ל״א (Lashon Idish) - the Yiddish language
+לאו הכי, לא״ה (lav hachi) - (Aramaic) not so
+ל·ב
+להבורא יתברך, לבוי״ת (leHaBorei Yitbareich) - to the blessed Creator
+ל·ג
+[ל״ג [בעומר (Lag Be'Omer) - the thirty-third (gematria of ל״ג Lag) day of the Omer
+ל·ד
+לדברי/לדעת הכל, לד״ה (ledivrei/ledaat hakol) - according to all opinions
+ל·ה
+להד״​מ​ (lahada"m), לא ה​י​ו ד​ב​ר​י​ם מ​ע​ו​ל​ם (lo hayu dvarim meolam) - transl. such things never were, no way
+להיות, להיו׳ (lihiyot) - to be (pl.)
+xxxxxx xxxxxxx xxxxxxxxxxx xxxxxxx xxxxx xxxxxxxxxx xxxxxxxx xxxxxxxxxxxxx xxxxxxxxx x xxxxxxx xxxxxxx xxxx
+ל·ו
+ל״ו (Lamed Vov, also Lamed Vovniks) - the 36 (gematria of ל״ו) hidden tzadikim alive in any generation and time, on whose merit the world is sustained
+ל·ח
+לוחמי חרות ישראל, לח״י (Lechi, Lochamei Cheirut Yisra'el) - (Modern Hebrew) a militant Zionist group that fought against the British Empire for Israel's independence; lit. Fighters for the Freedom of Israel
+לחם משנה, לח״מ (Lechem Mishneh) - a commentary on the Mishneh Torah by Rabbi Abraham de Boton
+ל·י
+ליה, לי׳ (lei) - (Aramaic) 1) It. 2) Him
+ל·כ
+לכאורה, לכאו׳ (li-che'ora) - on the contrary
+לְכִדְתָנָא, לכדתנ׳ (l'chid'tana) - (Aramaic, Talmud) as was taught
+ל·מ
+לְמַאן דְּאָמַר, למ״ד (leman de'amar) - (Aramaic, Talmud) according to the one who says
+לְמַעְלָה, למע׳ (lema'lah) - above
+ל·ע
+לא עלינו, ל״ע (lo aleinu) - may we be spared; lit. [may it] not be upon us
+זה] לעומת זה, [זה] לעו״ז] ([zeh] le'umat zeh) - lit. [He made them this] opposite that (Ecclesiastes 7:14); meaning, for all things that were created on the side of holiness, a corresponding thing exists in the realms of impurity
+לשון עם זו, לע״ז (la'az, lashon am zu) - the local language; lit. language of this people
+לשון עם זר, לע״ז (la'az, lashon am zar) - foreign language; lit. language of a foreign people
+לעתיד לבא, לע״ל (le'al, le'atid lavo) - the future; lit. the time to come
+לעניות דעתי, לענ״ד (le'aniyut da'ati) - in my humble understanding; lit. in the poorness of my understanding
+ל·פ
+לפני הצמצום, לפה״צ (lifnei ha-tzimtzum) - (Kabbalah) before the tzimtzum
+לפי זה, לפ״ז (lefi zeh) - according to this; lit. by the mouth of this. See also ע״פ and לפי״ז
+לפי זה, לפי״ז (lefi zeh) - according to this; lit. by the mouth of this. See also ע״פ and לפ״ז
+לפי מה שכתוב, לפמ״ש (lefi mah shekatuv) - according to what is written
+לפני זה, לפנ״ז (lifnei zeh) - before that
+לפרט קטן, לפ״ק (lifrat katan) - of the sixth millennium of Creation; lit. of the small specification. Used to specify the last three digits of the Hebrew year.
+ל·ק
+לִקּוּטֵי אֲמָרִים, לק״א (Likkutei Amarim) - 1) Lit. Collected Discourses; the Tanya by Rabbi Schneur Zalman of Liadi. 2) The first part thereof
+לקוטי שיחות, לקו״ש (Likkutei Sichot) - (Chabad) lit. Collected Sermons; the sermons delivered and edited by Rabbi Menachem Mendel Schneersohn, in Yiddish and Hebrew.
+לקוטי תורה, לקו״ת (Likkutei Torah) - Lit. A Torah Anthology. 1) (Kabbalah) A work of the Arizal, recorded by his student Rabbi Chaim Vital. 2) (Chabad) A Hasidicwork by Rabbi Schneur Zalman of Liadi
+ל·ת
+לֹא תַעֲשֶׂה, ל״ת (lo ta'aseh) - (Halachah) 1) Prohibition[s of the Torah]. 2) Prohibitory. 3) Lit. Do not do/make
+מ
+[x]·מ
+[x] מ׳/[x]מ״, [x] משנה (mishnah [x]) - teaching [x]. Often used when citing the Mishnah and the Jerusalem Talmud, where each chapter or perek is composed of many teachings, or mishnayot.
+מ·א
+מדרש אגדה, מ״א (midrash aggadah) - Midrashic interpretation
+מ·ב
+מֶגָה בַּיְט, מ״ב (mega byte) - (Modern Hebrew, Technology) megabyte
+משנה ברורה, מ״ב (Mishnah Berurah) - Clarified Mishnah; a condensed work of Halacha for the layman written by the Chafetz Chaim. See also משנ״ב
+מברכים ראש החדש, מברה״ח (mevarchim rosh hachodesh) - (Liturgy) the beginning of the incumbent Hebrew month is blessed (during the Shabbat service); lit. we bless the head of the month
+מ·ג
+מקראות גדולות, מ״ג (Mikraot G'dolot) - the Great Scriptures; the Tanach with traditional commentaries and Targumim (Aramaic translation-commentaries)
+מְגִלַּת אֶסְתֵּר, מג״א (Megilat Ester) - the Megillah of Esther; the Book of Esther
+מָגֵן אַבְרָהָם, מג״א (Magen Avraham) - (Halachah) 1) Lit. Shield of Abraham; a commentary on the Shulchan Aruch. 2) Its author, the Polish Talmudist Rabbi Avraham Abele Gombiner
+מ·ד
+מיין דכורין, מַ״ד (mad/mayin dechurin) - (Aramaic, Kabbalah) lit. "masculine" waters; Heavenly action
+מגן דוד אדום, מד״א (Mada, Magen David Adom) - (Modern Hebrew) the Israeli Emergency Service; lit. Red Shield of David
+י״ג] מדות הרחמים, [י״ג] מדה״ר] ([yud gimel] midot harachamim) - the [13] Attributes of Mercy
+מדרש רבה, מד״ר (Midrash Rabah) - Great Midrash
+מַדְרֵיגָה/מַדְרֵיגַת, מדרי׳ (madreigah/madreigat) - rung (of); level (of)
+מ·ה
+מ״ה (Mah) - (Kabbalah) a spelling-out of the Tetragrammaton numerically equal to 45, the gematria of מ״ה. Usually appears as שם מ״ה
+[x]מהד״, [x] מהדורא (mahadura [x]) - [x]-th edition
+מהדורא קמא, מהדו״ק (mahadura kama) - (Aramaic) first edition; editio princeps
+מהות ענין, מהו״ע (mahut inyan) - what the idea is
+מורינו הרב ליואי/ליוא/ליווא, מהר״ל Maharal - lit. our teacher, the Rebbe Löwe; Judah Loew ben Bezalel of Prague, a great commentator on the Torah, Talmudic scholar and Kabbalist
+מלך המשיח, מה״מ (melech hamashiach) - King Moshiach
+מורינו הרב מרטנבורג, מהר״ם (Maharam, Moreinu HaRav MiRotenburg) - Meir of Rothenburg; major author of the Tosafot to Rashi on the Talmud, and Ashkenazi posek
+[מורינו הרב משה שיק, מהר״ם [שיק (Maharam Shik, Moreinu Harav Moshe Shik) - our teacher Rabbi Moses Shik; Hungarian posek and commentator on the Shulchan Aruch
+מורינו הרב משה שיק, מהרמ״ש (Maharam Shik, Moreinu Harav Moshe Shik) - our teacher Rabbi Moses Shik; Hungarian posek and commentator on the Shulchan Aruch
+מורינו הרב שמואל, מהר״ש (Maharash, Moreinu HaRav Shmu'el) - (Chabad) lit. Our Teacher, Rabbi Shmuel; Shmuel Schneersohn, the fourth rebbe of Chabad
+מלאכי השרת, מה״ש (malachei hashareit) - ministering angels
+מ·ו
+מורינו ורבינו הרב יוסף יצחק, מוהריי״צ (Moharayatz, moreinu verabeinu harav Yosef Yitzchak) - (Chabad) lit. our teacher and our rabbi, Yosef Yitzchak; Yosef Yitzchak Schneersohn, sixth rebbe of Chabad. See also ריי״ץ
+מורינו ורבינו הרב רבי, מוהר״ר (Moharar) - (Hasidic) our teacher and Rebbe, Rabbi ... For Hasidic rebbes, prepended to the name
+מורנו ורבינו הרבי שלום בער, מוהרש״ב (Moharashab, moreinu verabeinu harav Sholom Ber) - (Chabad) our teacher and Rebbe, Rabbi Sholom Ber; the Rashab, the fifth Rebbe of Chabad. See also רש״ב
+מוֹצָאֵי שַׁבָּת, מוצ״ש (Motzei Shabbat) - after Shabbat; lit. the exit of Shabbat
+מורינו ורבינו, מו״ר (moreinu verabeinu) - our teacher and rabbi. Prepended immediately before a name, or used alone
+מוֹצָאֵי שַׁבָּת קֹדֶשׁ, מוש״ק (Motzei Shabbat kodesh) - after the holy Shabbat; lit. the exit of the holy Shabbat
+מ·ז
+מִזְרָח, מז׳ (mizrach) - East
+מחשבה זרה, מ״ז (machshava zara) - alien thought
+מַחֲשָׁבוֹת זָרוֹת, מ״ז (machashavot zarot) - alien thoughts
+מַזָּל טוֹב, מז״ט (mazal tov) - congratulations; lit. [may there be] a good efflux [of blessing from Above]
+מ·ח
+מחשבה דיבור ומעשה, מחדו״מ (machshava dibur vema'aseh) - (Kabbalah) thought, speech and action
+מחשבה דיבור ומעשה, מחדומ״ע (machshava dibur vema'aseh) - (Kabbalah) thought, speech and action
+מֶחֱצָה, מחצ׳ (mechetza) - half
+מ·ט
+מַאי טַעְמָא, מ״ט (mai tama) - (Aramaic, Talmud) what is the reason
+מטי ולא מטי, מטול״מ (mati v'lo mati) - (Aramaic, Kabbalah) touching and not touching
+מטטרון, מט״ט (Matat, Metatron) - (Kabbalah) [the angel] Metatron. He is referred to as "Matat" to avoid the taboo of pronouncing the names of angels (the taboo does not apply to angels whose names are also human names, like Rafael and Gavriel)
+מ·כ
+מי כמוך באלים ה׳, מכב״י (Makabi, mi kamocha ba'eilim Hashem) - (abbr.) a Maccabee; (in full) Who among the gods is like You, Hashem? (Exodus 15:11)
+מלא כל הארץ כבודו, מכה״כ (m'lo kol ha'aretz k'vodo) - the entire earth is filled with His glory (Isaiah 6:2)
+מכל זה, מכ״ז (mikol zeh) - from all this
+מכל שכן, מכ״ש (mikol shekein) - all the more so; lit. via [the logical device of] a kol shekein. See also כ״ש
+מ·ל
+מלכות, מ״ל - (malchut) - see מל׳
+מלכות, מל׳ - (malchut) - 1) Kingdom; dominion. 2) (Kabbalah) The last of the ten sefirot, which receives from all the other sefirot and expresses them
+מאיר לייבוש בן יחיאל מיכל, מלבי״ם (Malbim) - [Rabbi] Meir Leibush ben Yechiel Michel [Weiser]; Russian commentator on the Torah
+מלאכי השרת, מלה״ש (malachei hashareit) - ministering angels
+מועצה לביטחון לאומי, מל״ל (malal, moatza lebitahon leumi) - Israel's security council/committee
+מלמטה למעלה, מלמטלמ״ע (milematah lema'alah) - (Kabbalah) from Below to Above
+מלמעלה למטה, מלמעלמ״ט (milema'alah lematah) - (Kabbalah) from Above to Below
+מלפני זה, מלפנ״ז (mi'lifnei ze) - 1) Than before this. 2) Since before this
+מצו(ו)ת לא תעשה, מל״ת (mitzvot/mitzvat lo ta'aseh) - negative commandment(s); prohibition(s); lit. commandment(s) not to do
+מ·מ
+מִכָּל מָקוֹם, מ״מ (mikol makom) - 1) In any case. 2) Lit. From any place
+מנחם מענדל, מ״מ (Menachem Mendel) - a given name
+מפקד מחלקה, מ״מ (mefaked machlaka) - platoon commander
+ממלא מקום, מ״מ (memale makom) - (Hebrew) substitute, stand-in, deputy
+מלך מלכי המלכים, ממה״מ (Melech malchei hamelachim) - the King Who reigns over kings
+ממלא כל עלמין, ממכ״ע (memaleh kol almin) - (Aramaic, Kabbalah) immanent in creation; lit. filling all worlds. Compare סוכ״ע
+מַמָּשׁוּת, ממשו׳ (mamashut) - realness; tangibility; lit. the capability of being touched
+מ·נ
+מַיִין נוּקְבִין, מַ״ן (man/mayin nukvin) - (Aramaic, Kabbalah) "feminine" waters; human action
+מנחם אב, מנ״א (Menachem Av) - [the Hebrew month of] Menachem Av
+מנחת חינוך, מנ״ח (Minchat Chinuch) - lit. Meal-Offering of Education; a commentary on Sefer HaChinuch written by Rabeinu Yosef Babad
+מ·ס
+מספר סידורי, מס״ד (mispar siduri) - (Modern Hebrew) serial number
+מסירת נפש, מסנ״פ (mesirut nefesh) - self-sacrifice; lit. giving over [one's] spirit
+מ·ע
+מַעֲרָב, מע׳ (ma'arav) - West
+מִצְוַת/מִצְווֹת עֲשֵׂה, מ״ע (mitzvat/mitzvot asei) - positive commandment(s); lit. commandment(s) [to] do. See also רמ״ח
+מַעֲשֶׂה/מַעֲשֵׂה בְּרֵאשִׁית, מע״ב (ma'aseh/ma'asei Bereishit) - the work of Creation
+מַעֲשִׂים טוֹבִים, מע״ט (ma'asim tovim) - good deeds
+מעבר לדף, מע״ל (mei-eiver ledaf) - on the other side of the page
+מעת לעת, מע״ל (mei-eit la-eit) - (Halachah, Kashrut) 24 hours; lit. from a time to [the same] time
+מעבר לדף, מעל״ד (mei-eiver ledaf) - on the other side of the page
+מעת לעת, מעל״ע (mei-eit la-eit) - (Halachah, Kashrut) 24 hours; lit. from a time to [the same] time
+מ·פ
+מפרש, מפ׳ (mefareish) - (Aramaic) it is explained
+מ·צ
+מצורף בזאת, מצו״ב (m'tzuraf b'zot) - (Modern Hebrew, communication) attached to this
+מצורף פה, מצו"פ (m'tzuraf po) attached here
+מ·ק
+מקום פנוי, מקו״פ (makom panui) - (Kabbalah) empty space
+מספר קטלוגי, מק״ט (mispar katalogi) - lit. catalogue number; serial number
+מִקְדָּשׁ מֶלֵֶךְ, מק״מ (Mikdash Melech) - (Kabbalah) Lit. Sanctuary of the King; a commentary on the Zohar
+מ·ר
+מַרְאִית עַיִן, מר״ע (marit ayin) - (Halachah) appearance to the eye
+מורינו הרב שמואל קאידנוור, מרש״ק (Marshak, Moreinu HaRav Shmuel Kaidanover) – lit. our teacher Rabbi Samuel Kaidanover; Aharon Shmuel ben Israel Kaidanover
+מ·ש
+מה שכתב, מ״ש (mah shekatav) - what [he] wrote
+מַה שֶׁכָּתוּב, מ״ש (mah shekatuv) - that which is written
+מוצאי שבת, מ״ש (motzei Shabbat) - 1) Saturday night. 2) The night after Shabbat ends. Lit. The exit of Shabbat
+מַה שֶּׁאֵין כֵּן, משא״כ (mashe'ak, mah she'ein kein) - which is not so
+משום הכי, מש״ה (mishum hachi) - because of this
+משום זה, משו״ז (mishum zeh) - because of this
+משיחא, משיח׳ (meshicha) - (Aramaic) 1) The Messiah. 2) Lit. [One who was] anointed. This may indicate a king, a kohen, or even a member of the Jewish people regardless of particular lineage
+מה שכתב, מש״כ (mah shekatav) - what [he] wrote
+מַה שֶׁכָּתוּב, מש״כ (mah shekatuv) - that which was written
+משנה ברורה, משנ״ב (Mishnah Berurah) - (Halachah) lit. Clarified Mishnah; a condensed work of Halacha for the layman written by the Chafetz Chaim. See also מ״ב
+מה שנתבאר לעיל, משנת״ל (mah shenetal, mah shenitba'er le'eil) - that which was explained above. See also נת״ל
+מֹשֶׁה רַבֵּינוּ עָלָיו הַשָּׁלוֹם, משרע״ה (Moshe rabeinu alav hashalom) - our teacher Moses, peace on him
+מַה שֶּׁכָּתוּב שָׁם, מש״ש (mah shekatuv sham) - what is written there
+מ·ת
+מתן תורה, מ״ת (matan Torah) - the giving of the Torah [at Mount Sinai]
+מַתְנִיתִין, מתני׳ (matnitin) - (Aramaic, Talmud) it was taught [in the Mishnah]
+נ
+נ·א
+נֶאֱמַר, נא׳ (nomar/ne'emar) - is/was said
+נוסח אחר, נ״א (nusach acher) - another version
+נ·ב
+נשמתו בגנזי מרומים, נבג״מ (Nishmato BeGinzei Meromim) - his soul is in the treasuries of Heaven. Appended to a name
+נברא העולם, נבה״ע (nivra ha'olam) - the world was created
+נ·ד
+נדון דידן, נדו״ד (nidon didan) - our case; the topic under discussion; lit. our discussion
+נדון זה, נדו״ז (nidon zeh) - our case; the topic under discussion; lit. this discussion
+נ·ה
+נפש האלוקית, נה״א (nefesh ha'elokit) - (Kabbalah) the Divine soul
+נפש הבהמית, נה״ב (nefesh habehamit) - (Kabbalah) animal soul
+נצח הוד יסוד, נה״י (nahi, netzach, hod, yesod) - (Kabbalah) [the three outer emotional sefirot of] netzach (victory), hod (glory), and yesod (bonding-foundation)
+נצח הוד יסוד מלכות, נהי״מ (nahim, netzach hod yesod malchut) - (Kabbalah) [the four lower sefirot of] netzach (victory), hod (glory), yesod (bonding) and malchut (sovereignty)
+נ·ו
+נצח והוד, נו״ה (netzach vehod) - (Kabbalah) [the sefirot of] netzach (victory) and hod (glory)
+נוקבא, נוק׳ (nukva) - (Aramaic) 1) Lit. a female. 2) Also lit. Feminine. 3) (Kabbalah) The partsuf of Nukvah; i.e. the sefirah of malchut
+נ·ח
+נביאים וכתובים, נ״ח (Nach) - the parts of the Tanakh aside from the Pentateuch; lit. Prophets and Writings. See also תנ״ח
+נר חנוכה, נ״ח (neir Chanukah) - the light of Chanukah
+נחיה, נחי׳ (nichye) - let us live
+נחת רוח, נ״ר (nachat ru'ach) - see נח״ר
+נחת רוח, נח״ר (nachat ru'ach) - pleasure; contentment; lit. restfulness of spirit
+נדוי, חרם, שמתא, נח״ש (nidui, cheirem, shamta) - (Aramaic) [Rabbinic] rebuke, excommunication, injunction; (abbr.) snake
+נ·ט
+נותן טעם, נ״ט (nat, notein ta'am) - (Halacha, Kashrut) [a thing that] imparts a taste
+נגד טנקים, נ״ט (neged tankim) - (Modern Hebrew) anti-tank
+נטילת ידים, נט״י (netilat yadayim) - ritual washing of the hands; lit. taking the hands. The hands are raised after ritual rinsing; this avoids water becoming impure from the unwashed forearms and dripping onto the hands, making them impure again
+נ·י
+נטילת ידים, נ״י (n'tilat yadayim) - [ritual] rinsing of the hands; lit. taking the hands
+נר ישראל, נ״י (neir Yisra'el) - the light of Israel; i.e. a leader and sage (cf. Bava Batra 3b-4a). Prepended to a name
+נ·ל
+נזכר לעיל, נ״ל (nal, nizkar la'eil) - mentioned above
+נראה לי, נ״ל (nireh li) - it appears to me
+נ·ס
+נצח סלה ועד, נס״ו (netzach sela va'ed) - forever and ever
+נ·ע
+נשמתו עדן, נ״ע (Nishmato Eiden) - his soul is [in] Eden. Appended to a name
+נ·פ
+נפקא מינא, נפ״מ (nafka mina) - (Aramaic) the upshot; lit. that which is taken from it
+נ·צ
+נפתלי צבי יהודה ברלין, נצי״ב (Netziv, Naftali Zvi Yehuda Berlin) - the dean of the Volozhin Yeshiva, lived 1816-1893
+נ·ק
+נְּקֵבָה, נק׳ (n'keiva) - 1) Lit. A female. 2) Also lit. Feminine
+נִקְרָא, נק׳ (nikra) - it/he is called
+נ·ר
+נֶפֶשׁ רוּחַ נְשָׁמָה, נר״ן (naran, nefesh, ruach, neshamah) - (Kabbalah) [the soul levels of] nefesh, ruach, [and] neshamah; the three lower aspects of the soul that are aware of their own existence. See also נרנח״י
+נפש רוח נשמה חיה יחידה, נרנח״י (naranchi, nefesh, ruach, neshamah, chayah, yechidah) - (Kabbalah) [the soul levels of] nefesh, ruach, neshamah, chayah, [and] yechidah; all five levels of the soul, from the coarsest to the most transcendent. See also נר״ן and ח״י
+נ·ש
+נ׳ שערי בינה, נש״ב (nun sha'arei binah) - (Kabbalah) the fifty gates of understanding (7 middot × 7 middot + 1)
+נשמות ישראל, נש״י (nishmot Yisrael) - lit. the souls of Israel; Jewish souls
+נרות שבת קדש, נש״ק (neshek, neirot Shabbat kodesh) - 1) Lit. holy Shabbat lights. 2) (Chabad) The campaign spearheaded by Rabbi Menachem Mendel Schneerson to encourage girls and women to light Shabbat candles. Abbr. weapon [against spiritual darkness]
+נ·ת
+נמל התעופה בן גוריון, נתב״ג (Natbag, Namal HaTe'ufa Ben Gurion) – (Modern Hebrew) Ben Gurion International Airport
+נָעוּץ תְּחִילָּתָן בְּסוֹפָן, נתב״ס (na'utz techilatan besofan) - (Aramaic, Kabbalah) their beginning is wedged in their end; a quotation from Sefer Yetzirah 1:7, referring to how the sefirah of malchut becomes keter for a "lower" tree of sefirot
+נתבאר לעיל, נת״ל (netal, nitba'er la'eil) - that which was explained above
+ס
+[x]·ס
+[x]ס״ ,[x] סִימָן (siman [x]) - 1) Chapter [x]; lit. sign. 2) Section [x]
+[x]ס״ ,[x] סְעִיף (s'if [x]) - Paragraph [x].
+ס
+סָבַר, ס׳ (savar) - [he] reasons
+ס·א
+סטרא אחרא, ס״א (sitra achara) - (Aramaic, Kabbalah) the side of unholiness; lit. other side
+ספרים אחרים, ס״א (sefarim acheirim) - other books
+סתרי אותיות, ס״א (Sitrei Oti'ot) - (Kabbalah) a section of the Zohar; lit. Secrets of the [Hebrew] Letters
+ס·ג
+ס״ג (Sag) - (Kabbalah) a spelling-out of the Tetragrammaton with the numerical value of 63, the gematria of ס״ג, corresponding to the world of Adam Kadmon
+ס·ד
+סַלְקָא דַּעְתָּךְ, ס״ד (salka datach) - (Aramaic, Talmud) you might have thought. Introduces and idea that will be refuted
+סַלְקָא דַּעְתָּךְ אֲמִינָא, סד״א (salka datach amina) - (Aramaic, Talmud) you might have thought to say. Introduces an idea that will be refuted
+ס·ה
+ספירת העומר, ס״ה (Sefirat HaOmer) - the counting of the Omer; occurring on the days between Pesach and Shavuot
+ספר המאמרים, סה״מ (Seifer HaMa'amarim) - (Chabad) Book of [Mystical] Discourses. Usually, with a year specified
+ספר המנהגים, סהמ״ן (Seifer HaMinhagim) - (Halachah) Book of Minhagim; a book describing the customs of a particular Jewish community
+ס·ו
+המשך] ס״ו] (Hemshech Samech Vov) - (Chabad) The Series of '66; the series of discourses beginning with "Yom Tov Shel Rosh HaShanah" delivered over a period of three years starting in 5666 (ה׳תשסו) by the Rebbe Rashab
+סוף כל דרגין, סוכ״ד (sof kol dargin) - (Aramaic, Kabbalah) last of all levels. Contrast ריכ״ד
+סובב כל עלמין, סוכ״ע (sovev kol almin) - (Aramaic, Kabbalah) transcending all creation; lit. surrounding all the worlds. See also ממכ״ע
+סוֹף סוֹף, סו״ס (sof sof) - ultimately; lit. end of end
+ס·ט
+סטרא אחרא, סט״א (sitra achra) - (Aramaic, Kabbalah) the side of unholiness and the Kelipot; lit. the other side
+ס·י
+[x] סי׳ ,[x] סִימָן (siman [x]) - section [x]
+סֵפֶר יְצִירָה, ס״י (Seifer Yetzirah) - (Kabbalah) The Book of Formation; an early, foundational Kabbalistic work
+ס·כ
+סכין כף ומזלג, סכו״ם (sekum, sakin, kaf umazleg) - (Modern Hebrew) knife, spoon and fork
+ס·ל
+סברי ליה, ס״ל (savrei lei) - (Aramaic) to reason; lit. to reason themselves (reflexive)
+ס·מ
+ספר מצוות גדול, סמ״ג (Semag) - The Great Book of Commandments; a codification of the 613 biblical commandments by Rabbi Moshe ben Yaakov of Coucy
+ס·ע
+[x]סע״ ,[x] סוף עמוד (sof amud [x]) - 1) End of side/page [x]. 2) Lit. End of column [x]
+ס·פ
+סוֹף פֶּרֶק, ס״פ (sof perek) - end of chapter
+[x]ספ״ ,[x] סוֹף פֶּרֶק (sof perek [x]) - end of chapter [x]
+סֶפְּטֶמְבֶּר, ספט׳ (September) - (Modern Hebrew) September
+ספירות, ספי׳ (sefirot) - (Kabbalah) the sefirot
+ס·ש
+ספר של בינונים, סש״ב (Sefer shel Beinonim) - (Hasidic Judaism) The Book of the Intermediates; another name for the Tanya, also known as Likutei Amarim
+ס·ת
+סֵפֶר תּוֹרָה, ס״ת (Seifer Torah) - a Torah scroll [of the Pentateuch]
+ע
+ע
+עַמּוּד, ע׳ (amud) - 1) Side. 2) Page. 3) Lit. Column. See also עמ׳
+ע·א
+עַל אַחַת כַּמָּה וְכַמָּה, עאכו״כ (al achat cama vechama) - certainly all the more so; lit. [this being so] regarding one - [it is certainly so with] several and several
+ע·ב
+ע״ב (ayin beit) - (Kabbalah) 1) The spelling-out of the Tetragrammaton with four yuds י, having the gematria of 72. 2) The Great Name of 72 three-letter combinations formed from verses describing the Splitting of the Reed Sea (Exodus 14:19-21)
+ע·ג
+על גבי, ע״ג (al gabei) - 1) Lit. On the back of. 2) On top of
+ע·ד
+על דבר, ע״ד (al davar) - 1) Regarding the thing; lit. on the thing/word. 2) Because of
+עַל דֶּרֶךְ, ע״ד (al derech) - lit. by way of; through; via
+עלמא דאתגליה, עדאת״ג (alma de'itgalya) - (Aramaic, Kabbalah) the revealed world
+עלמא דאתכסיה, עדאת״כ (alma de'itkasya) - (Aramaic, Kabbalah) the concealed world
+עַל דֶּרֶךְ זֶה, עד״ז (al derech zeh) - in this way
+עַל דֶּרֶךְ מָשָׁל, עד״מ (al derech mashal) - by way of analogy
+ע·ה
+עָלָיו/עליה הַשָּׁלוֹם, ע״ה (Alav/Aleha HaShalom) - peace be upon him/her. Appended to a name
+עמוד הימני, ע״ה (amud ha'yemani) - (Kabbalah) the great expounder; lit. the pillar of the right [side, i.e. of revelation]. Prepended to a name
+עמוד השחר, ע״ה (amud hashachar) - the break of dawn; when the sky begins to lighten; lit. the beam of morning
+עשרת הדברות, ע״ה (aseret hadibrot) - the Ten Commandments
+עץ הדעת, עה״ד (eitz hada'at) - the Tree of Knowledge
+על הכתוב, עה״כ (al hakatuv) - 1) Regarding the verse. 2) Lit. Regarding that which was written
+על הפסוק, עה״פ (al hapasuk) - regarding the verse
+עבודת הקודש, עה״ק (Avodat HaKodesh) - The Holy Service; a Kabbalistic work by Rabbi Meir ben Ezekiel ibn Gabbai
+ערוך השולחן, עה״ש (Aruch HaShulchan) - The Setting of the Table; a Halachic restatement of the Shulchan Aruch with citations from the Talmud and references to related rulings
+על התורה, עה״ת (al hatorah) - on the Torah
+ע·ו
+עובד(י) גלולים, עו״ג (ovdei/oveid gilulim) - idol-worshipper(s); lit. those/one who serve(s) excrement. So termed to recall the disgusting method of worship of Ba'al Pe'or
+עונותינו (עוונותינו) הרבים, עו״ה (avonoteinu harabim) - our numerous sins
+עולם הבא, עוה״ב (olam haba) - the World to Come. Compare עוה״ז
+עוֹלָם הַזֶּה, עוה״ז (olam hazeh) - This World. Compare עוה״ב
+עוד הפעם, עוה״פ (od hapa'am) - another time; again
+עונותינו (עוונותינו) הרבים, עוה״ר (avonoteinu harabim) - our numerous sins
+עוד יש לומר, עוי״ל (od yeish lomar) - it can further be said that
+עובדי עבודה זרה, עוע״ז (ovdei avodah zarah) - idolaters; lit. those who serve alien worship
+ע·ז
+עבודה זרה, ע״ז (avodah zarah) - 1) Idolatry; lit. alien worship. 2) (Talmud) The tractate of the Talmud titled Avodah Zarah
+על זה, ע״ז (al zeh) - 1) Regarding this. 2) Above/on top of this
+על זה אמר, עז״א (al zeh amar) - regarding this he said
+על זה נאמר, עז״נ (al zeh ne'emar) - regarding this it is said
+ע·ח
+עֵץ חַיִּים, ע״ח (Eitz Chaim) - (Kabbalah) Tree of Life; an eight-volume work of Kabbalah by the Arizal
+ע·ט
+אישת חיל] עטרת בעלה, [א״ח] עט״ב] ([eishet chayil] ateret ba'alah) - (Liturgy, Kabbalah) [a valorous woman is] the crown of her husband. Indicates that an action from below on the part of humankind (the "woman") results in a light transcending Zeir Anpin (the "husband" here being the channel of Godly manifestation through which the life of the universe flows). Occurs in the hymn "Lecha Dodi", which speaks of how Shabbat (malchut) blesses the other days of the week (Zeir Anpin)
+ע·י
+על ידו/ידה/ידיו/ידיהם/ידיכם, ע״י (al yado/yadah/yadav/yedeihem/yedeichem) - 1) Because of him/her/them/you. 2) Lit. By his/her/their/your hand(s)
+עַל יְדֵי, ע״י (al yedei) - 1) Because of. 2) Through agency of. 3) Lit. By the hand of
+עבד ישראל, ע"י, (eved yisrael) A Jewish slave (an Israelite slave)
+עתיק יומין, ע״י (atik yomin) - (Aramaic, Kabbalah) the Ancient of Days. Corresponds to the inner aspect of keter
+עיר הקודש, עיה״ק (Ir HaKodesh) - Jerusalem; lit. the Holy City
+על ידי זה, עי״ז (al yedei zeh) - through this; lit. by the hand of this. See also ע״י
+ערב יום טוב, עי״ט (erev yom tov) - 1) Eve of a Jewish Holiday. Lit. good day eve. 2) Evening of a Jewish Holiday. Lit. good day evening.
+עיין ענין, עיי״ע (ayein inyan) - see the topic [of]
+עַיֵּין שָׁם, עיי״ש (ayein sham) - see there; lit. eye/investigate there
+עשרת ימי תשובה, עי״ת (Aseret Yemei Teshuvah) - the Ten Days of Repentance [from Rosh Hashanah to Yom Kippur]
+ע·כ
+עד כאן, ע״כ (ad kan) - 1) Lit. Until here. 2) End quote. See also (ז״ל (זה לשונו
+על כך, ע״כ (al kach) - 1) Thus. 2) About this. 3) Lit. On this/such
+עַל כֵּן, ע״כ (al kein) - therefore
+עַל כָּרְחֲךָ, ע״כ (al karchacha) - 1) Against your will; lit. on your compulsion. 2) We are forced [to conclude]; perforce
+עובדי כוכבים (ומזלות), עכו״ם (akum) - idolaters; lit. those who serve the stars (and constellations)
+עם כל זה, עכ״ז (im kol zeh) - despite all this; lit. with all this
+עד כאן לשונו, עכ״ל (akel, ad kan leshono) - end quote; lit. until here his language
+על כל פנים, עכ״פ (al kol panim) - in any case; lit. on all sides
+עד כאן תוכן דבריו, עכת״ד (ad kan tochan d'varav) - end quote; lit. until here is the content of his words
+ע·ל
+עליה, עלי׳ (aliyah) - ascent
+עליונים, עליוני׳ (elyonim) - 1) The ones above. 2) Above. 3) (Kabbalah) The Supernal ones. 4) (Kabbalah) Supernal
+ע·מ
+עַל מְנָת, ע״מ (al menat) - 1) On condition that. 2) In order that. 3) In order to
+עַמּוּד, עמ׳ (amud) - 1) Side. 2) Page. 3) Lit. Column. See also ע׳
+עיין מה שכתוב, עמ״ש (ayein mah shekatuv) - see what is written
+עיין מה שכתוב לעיל, עמש״ל (ayein mah shekatuv la'eil) - see what is written above
+ע·נ
+עַל נְטִילַת יָדָיִם, ענט״י (al netilat yadayim) - (Liturgy) 1) Concerning the rinsing of the hands; lit. on taking/raising the hands. Phrasing from the blessing recited on netilat yadayim. The hands are raised after ritual rinsing; this avoids water becoming impure from the unwashed forearms and dripping onto the hands, making them impure again. 2) The ritual rinsing of the hands, usually with a blessing
+ע·ס
+עשר ספירות, ע״ס (eser sefirot) - (Kabbalah) the ten sefirot. See also י״ס
+ע·ע
+על עצמו/עצמה/עצמם, ע״ע (al atzmo/atzmah/atzmam) - upon itself/himself/herself/themselves
+ע·פ
+עַל פִּי, ע״פ (al pi) - 1) According to. 2) By command of. 3) Lit. By the mouth of
+על פסוק, ע״פ (al pasuk) - regarding the verse
+ערב פסח, ע״פ (erev pesach) - 1) The day before Pesach. Lit. Passover eve. 2) Pesach evening. Lit. Passover evening
+על פי זה, עפ״ז (al pi zeh) - according to this; lit. by the mouth of this
+עַל פִּי, עפ״י (al pi) - 1) According to. 2) By command of. 3) Lit. By the mouth of
+על פי מה שכתוב, עפמ״ש (al pi mah shekatuv) - according to what is written; lit. by the mouth of that which is written
+על פי מה שכתוב, עפמש״כ (al pi mah shekatuv) - according to what is written; lit. by the mouth of that which is written
+ע·צ
+עצמיות, עצמי׳ (atzmiyut) - essence
+עצמיים/עצמית, עצמי׳ (atzmiyim/atzmit) - essential
+ע·ר
+ערב ראש חודש, ער״ח (Erev Rosh Chodesh) - the eve of the head of the month
+ע·ש
+עַל שֵׁם, ע״ש (al sheim) - 1) So termed because. 2) For the sake of. 3) By name of; lit. on the name
+עיין שם, ע"ש (iyein sham) - the matter is discussed there; lit. consider there
+עֲשִׂיָּה, עשי׳ (asiyah) - 1) Lit. Action; deed. 2) (Kabbalah) [the world of] Asiyah
+עשרת ימי תשובה, עשי״ת (Aseret Yemei Teshuvah) - the Ten Days of Teshuvah
+ערב שבת קודש, עש״ק (Erev Shabat Kodesh) - lit. the Eve of the Holy Shabbat; Friday
+פ
+[x]·פ
+[x] פ׳/[x]פ״, [x] פֶּרֶק (perek [x]) - chapter [x]. But, see פ״ק
+פ
+פָּסוּק, פ׳ (pasuk) - the verse [in Scripture]
+פַּרְשַׁת, פ׳ (parshat) - the [weekly Torah] portion of
+פ·א
+פַּעַם אַחַת, פ״א (p'am achat) - once
+פ·ב
+פָּנִים בְּפָנִים, פב״פ (panim b'fanim) - face-to-face (Deuteronomy 5:4)
+פ·ה
+פטיש החזק, פ״ה (patish hachazak) - the strong hammer. Prepended to a name, styl. cit. Berachot 28b
+פ·ו
+פוסקים, פוסקי׳ (poskim) - (Halachah) 1) The poskim; halachic decisors. 2) [They/We] rule [that]
+פיריה ורביה, פו״ר (pirya verivya) - [the commandment to] be fruitful and multiply (Gen. 1:28)
+פ·ט
+פֹּה טָמוּן, פ״ט (po tamún) - here is buried. Found on tombstones
+פ·י
+פֵּירוּשׁ/פִּירוּשׁ, פי׳ (peirush/pirush) - 1) Lit. Explanation. 2) Explains. 3) Which means. 4) Commentary
+פִּירוּשׁוֹ, פי׳ (pirusho) - his commentary
+פִּירְשׁוּ, פי׳ (pirshu) - they explain
+פירוש המילות, פיה״מ (pirush hamilot) - [an understanding of] the explanation of the words. Esp. with regard to prayer in Hebrew
+פירוש המשנה, פיה״מ (pirush hamishna) - the elucidation of the Mishnaic passage
+פ·נ
+פֹּה נִקְבַּר, פ״נ (po nikbar) - here is buried. Found on tombstones
+פִּדְיוֹן נֶפֶשׁ ,פ״נ (pan, pidyon nefesh) - prayer for major salvation from illness or the like; lit. redemption of the soul/life
+פ·ס
+פסק(י) דין, פס״ד (p'sak din/piskei din) - (Halachah) lit. legal conclusion(s); Halachic decision(s)
+פסוקי דזמרה, פסוד״ז (Pesukei DeZimra) - (Liturgy) lit. Verses of Song; a preparatory section of the morning Shacharit service recited before the Shema and the Amidah
+פסיק רישא, פס״ר (pesik reisha) - (Aramaic) obvious conclusion; lit. [if] the head is separated, [is it not dead?]
+פ·פ
+פרשת פרה, פ״פ (Parshat Parah) - Lit. Portion of the [Red] Cow. 1) The maftir portion of the Red Heifer (Numbers 19), read in the weeks preceding Pesach. 2) The corresponding haftorah (Ezekiel 36:16-18)
+פ·ק
+פֶּרֶק קַמָא, פ״ק (perek kama) - (Aramaic) the first chapter. See also [x] פ׳
+פ·ר
+פרקי דרבי דאליעזר ,פרד״א (Pirkei DeRabbi Eliezer) - lit. Sayings of Rabbi Eliezer; a book of Aggada and Midrash by Rabbi Eliezer ben Hyrcanus. See also פרדר״א
+פשט רמז דרוש סוד, פרד״ס (Pardeis, peshat remez drush sod) - [the four levels of understanding the Torah:] plain meaning, allusion, [deep] explanation, and [mystic] secret; i.e. Kabbalah; (abbr.) garden
+פרקי דרבי אליעזר,פרדר״א (Pirkei DeRabbi Eliezer) - Sayings of Rabbi Eliezer; a book of Aggada and Midrash by Rabbi Eliezer ben Hyrcanus. See also פרד״א
+פרי מגדים, פרמ״ג (Pri Megadim) - (Halachah) 1) Lit. Choice Fruit; a commentary on Orach Chaim. 2) Its author, Rabbi Joseph ben Mein Teomim, the Galician halachist
+פירוש רש״י, פרש״י (pirush Rashi) - 1) Rashi explains. 2) Rashi's explanation. See also רש״י
+פירוש תוספות, פר״ת (pirush Tosafot) - (Talmud) 1) The Tosafot explain. 2) Lit. The Tosafot's explanation/commentary
+צ
+צדיקים, צדיקי׳ (tzadikim) - 1) Saints. 2) Righteous; just
+צבא ההגנה לישראל, צה״ל (Tzahal, Tzava HaHaganah LeYisrael) – (Modern Hebrew) Israel Defense Forces
+צריך להבין, צ״ל (tzarich lehavin) - needs to be understood
+צריך להיות, צ״ל (tzarich lihiyot) - should/must be. Can be used to indicate a textual correction
+צריך להבין, צלה״ב (tzarich lehavin) - needs to be understood
+צריך להבין תחילה, צל״ת (tzarich lehavin techilah) - [we] must first understand
+צריך עיון, צ״ע (tzarich iyun) - [this] requires investigation. See also צע״ק
+צריך עיון גדול, צע״ג (tzarich iyun gadol) - [this] requires great investigation. See also צ״ע
+צריך עיון קצת, צע״ק (tzarich iyun ketzat) - [this] requires a little investigation. See also צ״ע
+צָפוֹן, צפ׳ (tzafon) - North
+צמח צדק, צ״צ (Tzemach Tzedek) - 1) (Chabad) [The Rebbe, Rabbi] Menachem Mendel Schneersohn; the third rebbe of Chabad. 2) (Halachah) Lit. The Righteous Sprout (which he authored)
+ק
+ק
+קרי, ק׳ (keri) - pronounced; read; lit. called out. Often regarding a keri uchetiv). See also כ׳
+קץ, ק׳ (keitz) - end; limit
+ק·א
+.קאפיטל/קאפיטלעך, קאפ (kapitel/kapitlech) - (Yiddish) chapter(s); esp. of the Book of Psalms
+ק·ב
+קִילוֹ בַּיְט, ק״ב (kilo byte) - (Modern Hebrew, Technology) kilobyte
+[קבלת [שבת], קבל׳ [שבת (Kabalat Shabbat) - (Liturgy) Welcoming the Sabbath; the service preceding the evening prayer on Friday nights
+קבלת עול, קב״ע (kabalat ol) - acceptance of the yoke [of the sovereignty of Heaven]
+קבלת עול מלכות שמים, קבעמ״ש (kabalat ol malchut shamayim) accepting the yoke of the sovereignty of Heaven
+ק·ה
+קרני הוד תורה, קה״ת (Kehot, Karnei Hod Torah) - Glorious Pillars of Torah; the publications branch of Chabad
+ק·ו
+קוץ, קו׳ (kotz) - thorn; e.g. (Kabbalah) the "thorn" on top of the yud of the Tetragrammaton
+קַל וָחוֹמֶר, ק״ו (kal vachomer) - all the more so; at least as much so; lit. light and weighty. Conclusions drawn using this method are just as stringent as the precedent, and may not be more or less stringent. Compare כ״ש
+קונטטרס אחרון, קו״א (Kuntres Acharon) - (Halachah) Final Tract; the last section of Shulchan Aruch HaRav, explaining the sources of the rulings
+קוּדְשָׁא בְּרִיךְ הוּא, קוב״ה (Kudsha Brich Hu) - (Aramaic) the Blessed Holy One
+קהילה וחזן, קו״ח (kehilah vechazan) - [both] the congregation and the prayer-leader. Usu. a prayerbook instruction
+ק·י
+קדיש יתום, ק״י (kadish yatom) - (Liturgy) Mourner's [lit. Orphan's] Kaddish; starting with the usual preamble "Yitgadal v'yitkadash" to "...da'amiran b'al'ma, v'im'ru amein," the paragraph "Y'hei sh'lama raba," and concluding with "Oseh shalom bim'romav...." Recited only by mourners with the prayer leader
+קַיְימָא לָן, קי״ל (kaima lan) - (Aramaic, Talmud) we have established; lit. established for us
+ק·ל
+קליפה, קליפ׳ (kelipah) - (Aramaic) 1) (Kabbalah) Unholiness; lit. shell; which conceals the "fruit," i.e. the spark of Holiness that gives all things their existence. 2) Lit. shell
+קיימא לן, Kayama Lan - (Aramaic) It was upheld
+
+ק·מ
+קָא מַשְׁמַע לָן, קמ״ל (ka mashma lan) - (Aramaic, Talmud) it comes to inform us. Concludes a refutation, and indicates the correct conclusion
+ק·ס
+קא סלקא דעתך, קס״ד (ka salka da'atach) - (Aramaic, Talmud) 1) One might think; lit. it enters your mind. Indicates an initial impression that will be disproven. 2) Initial [false] impression
+ק·ק
+קהילה קדישא, ק״ק (kehilah kadisha) - the holy congregation; i.e. a synagogue
+ק·ש
+קדיש שלם, ק״ש (kadish shaleim) - (Liturgy) Complete Kaddish; starting with the usual preamble "Yitgadal v'yitkadash" to "...da'amiran b'al'ma, v'im'ru amein," and concluding with the paragraphs "Titkabeil," "Y'hei sh'lama raba," and "Oseh shalom bim'romav...." Recited only by the prayer leader.
+קְרִיאַת שְׁמַע, ק״ש (keriat shema) - reading of the Shema
+קִיצּוּר שׁוּלְחָן עָרוּךְ, קשו״ע (Kitzur Shulchan Aruch) - the Condensed Shulchan Aruch; a highly compressed work of Halachah written by R. Shlomo Ganzfried for the layman. See שו״ע
+ק·ת
+קריאת תורה, ק״ת (keriat Torah) - [public] Torah reading
+ר
+ר
+רַבִּי/רַב/רַבָּן, ר׳ (Rabi/Rav/Raban) - Rabbi. Prepended to the name
+ר·א
+רַבִּי אֱלִיעֶזֶר/אֶלְעָזָר, ר״א (Rabi Eliezer/Elazar) - Rabbi Eliezer/Elazar
+רבינו אברהם בן דוד, ראב״ד (Ra'avad, Rabeinu Avraham ben David) - Rabbi Abraham ben David; early Provençal Kabbalist, Halachist and Talmudist
+רבי אברהם בן עזרא, ראב״ע (Rabi Avraham ben Ezra) - Ibn Ezra; a famous commentator on the Torah and Kabbalist
+רבי אהרון הלוי, רא״ה (Ra'ah, Rabi Aharon HaLevi) - Rabbi Aharon ben Joseph HaLevi of Gerona; a Spanish Talmudist
+ראיה, ראי׳ (raya) - proof
+ראש השנה, ראה״ש (Rosh HaShanah) - the beginning of the year
+רבי אליהו מזרחי, רא״ם (Re'em, Rabi Eliyahu Mizrachi) - Rabbi Elijah Mizrachi; Turkish Talmudist and Halachist, known for Sefer HaMizrachi, a supercommentary on Rashi's commentary on the Torah
+רבינו אשר, רא״ש (Rosh) - our Rabbi Asher; Rabbi Asher ben Yechiel; a very influential Talmudist among the Rishonim
+ראשון לציון, ראשל״צ (Rishon LeTziyon) - fourth-largest city in Israel, south of Tel Aviv; lit. First to Zion
+ר·ב
+רבינו הקדוש, רבה״ק (Rabeinu HaKadosh) - our Holy Rabbi; Rabbi Yehudah HaNasi; compiler of the Mishna
+רבונו של עולם, רבש״ע (Ribono Shel Olam) - Master of the World
+ר·ד
+רבי דוד קמחי, רד״ק (Radak, Rabi David Kimchi) - Rabbi David Kimchi; biblical commentator and grammarian, defender of Rambam, known for his commentary on the Prophets
+ר·ה
+ראש השנה, ר״ה (Rosh HaShanah) - 1) [The holiday of] Rosh HaShanah; lit. head of the year. 2) (Talmud) Tractate Rosh Hashanah; a tractate of the Talmud
+רֹאשׁ הַמֶּמְשָׁלָה, רה״מ (Rosh HaMemshala) - (Modern Hebrew) Prime Minister of Israel; lit. Head of Government
+רבינו המגיד, רה״מ (Rabeinu HaMagid) - (Hasidism) our Rebbe the Maggid [of Mezeritch]; the successor of the Ba'al Shem Tov
+ראש השנה, רה״ש (Rosh HaShanah) - the beginning of the year
+ר·ו
+רוח הקודש, רוה״ק (ru'ach hakodesh) - Divine inspiration; lit. holy spirit
+רוחניות, רוחניו׳ (ruchniyut) - spirituality
+רצוא ושוב, רו״ש (ratzo veshov) - (Kabbalah) running and returning; the states of [wanting to] be on high then being within. See also רצו״ש
+ר·ז
+רב זלמן אהרן, רז״א (Raza, Rav Zalmen Aharon) - (Chabad) Rabbi Zalmen Aharon; the older brother of the Rebbe Rashab
+רַבּוֹתֵינוּ זִכְרוֹנָם לִבְרָכָה, רַזַ״ל (Razal) - Our Rabbis, may their memory be for blessing; the Jewish sages of previous generations. See also חז״ל
+ר·ח
+ראש חודש, ר״ח (Rosh Chodesh) - the beginning of the month; lit. head of the month
+ראשית חכמה, ר״ח (Reishit Chochmah) - (Kabbalah) an introduction to Kabbalah by Rabbi Eliyahu de Vidas; lit. The Beginning of Wisdom (Psalms 111:10)
+רחוב, רח׳ (rechov) - (Modern Hebrew) street; road; avenue; drive; way; boulevard
+רב חיים ויטאל, רח״ו (Rav Chaim Vital) - Rabbi Chaim Vital; kabbalist and student of the Arizal
+רחמים רבים, רח״ר (rachamim rabim) - abundant mercy
+ר·י
+רבי יצחק/ישראל/יוסף/ ... , ר״י (Rabi Yitzchak/Yisra'el/Yosef/ ... ) - Lit. Rabbi Y. 1) (Talmud) Rabbi Yehuda [bar Ilai], the most oft-quoted Tanna in the Talmud. 2) (Talmud) Rabbi Yehoshua [ben Hananiah], a Tanna who led the Jewish people during the reign of Hadrian. 3) (Halacha) Rabbi Yosef [Caro], author of the Shulchan Aruch
+רבי יהושע בן לוי, ריב״ל (Rival, Rabi Yehoshua ben Leivi) - (Talmud) Joshua ben Levi; an Amora of the Talmud
+רבי ישראל בעל שם טוב, ריבעש״ט (Rabi Yisrael Baal Shem Tov) - Rabbi Yisrael Baal Shem Tov. See also ריב״ש and בעש״ט
+רבי ישראל בעל שם, ריב״ש (Rivash, Rabi Yisrael Baal Shem) - Rabbi Yisrael Baal Shem; the Baal Shem Tov. See also בעש״ט
+רב יצחק בן ששת, ריב״ש (Rivash, Rav Yitzchak ben Sheshet) - Rabbi Yitzchak ben Sheshet; Spanish talmudic authority
+רבי יהודה הלוי, ריה״ל (Rihal) - Rabbi Judah Halevi, a prominent Jewish poet from Spain c.1075 – 1141
+רבינו ירוחם, רי״ו (Rabeinu Yerucham) - our Rabbi Yerucham; a French Talmudist, student of Rabbi Asher ben Yechiel
+רבי יום טוב בן אברהם, ריטב״א (Ritva, Rabi Yom Tov ben Avraham) - Rabbi Yom Tov Asevilli; a Spanish Talmudic commentator and student of the Rashba and Ra'ah
+רבי יוסף יצחק, ריי״ץ (Rayatz, Rabi Yosef Yitzchak) - (Chabad) Rebbe Yosef Yitzchok [Schneersohn]; sixth Rebbe of Chabad
+ריש כל דרגין, ריכ״ד (reish kol dargin) - (Aramaic, Kabbalah) lit. head of all levels; highest of all levels. Contrast סוכ״ד
+רבי יצחק אל פסי, רי״ף (Rif, Rabi Yitzchak al-Fasi) - Rabbi Isaac Alfasi; author Seifer HaHalachot
+ר·ל
+רַחֲמָנָא לִצְּלַן, ר״ל (Rachamana litz'lan) - (Aramaic) Heaven forbid; lit. may the Merciful One spare us
+רֵישׁ לָקִישׁ, ר״ל (Reish Lakish) - an Amora of the Talmud
+רצה לומר, ר״ל (rotzeh/ratzah lomar) - meaning to say; lit. desired to say
+[רבי לוי יצחק מבארדיטשוב, רל״י [מבארדיטשוב - (Rebbe Levi-Yitzchak MiBarditshuv) - (Hasidism) the Rebbe Levi-Yitzchok of Berditchev; the "defense attorney" of the Jewish people, famous for many Hasidic teachings and several nigunim
+ר·מ
+רַעֲיָא מְהֵימְנָא, ר״מ (Ra'aya Mehemna) - (Aramaic) a section of the Zohar; lit. The Faithful Shepherd
+רבי משה איסרליש, רמ״א (Rema/Rama, Rabi Moshe Isserles) - Rabbi Moses Isserles; a Talmudist and Halachic decisor known for his commentaries and glosses on the Tur Shulchan Aruch
+רבי משה בן מימון, רמב״ם (Rambam, Rabi Moshe ben Maimon) - Rabbi Moshe ben Maimon; Maimonides; compiler of the Sefer HaMitzvot and the Mishneh Torah
+רבי משה בן נחמן, רמב״ן (Ramban, Rabi Moshe ben Nachman) - Rabbi Moshe ben Nachman; Nahmanides; kabbalist and commentator on the Torah
+רבי מאיר הלבי, רמ״ה (Ramah, Rabi Meir HaLevi) - Rabbi Meir the Levite; Meir Abulafia; Talmudist and Kabbalist, known for his leadership of the Jewish community in Spain, and his argument with the Rambam
+רב מרדכי וויליג, רמ״ו (Ramu, Rav Mordechai Willig) - Rabbi Mordechai Willig; rabbi and spiritual leader at the Young Israel of Riverdale Synagogue in the Bronx, Rosh Yeshiva at Yeshiva University in Washington Heights, Manhattan, Dayan of the Beth Din of America, and Rosh Kollel at Camp Morasha
+רב משה זכותו, רמ״ז (Ramaz, Rav Moshe Zacuto) - (Kabbalah) Rabbi Moshe [Ben Mordecai] Zacuto; an Italian Kabbalist
+רמ״ח (ramach) - 1) The 248 positive mitzvot. 2) The 248 limbs of the human body. See also תרי״ג and שס״ה
+רב משה חיים לוצאטו, רמח״ל (Ramchal, Rav Moshe Chaim Luzzatto) - Rabbi Moses Chaim Luzzatto; the Italian Kabbalist and ethicist
+ראש המטה הכללי, רמטכ״ל (Ramatkal, Rosh HaMateh HaKlali) - (Modern Hebrew) Chief of the General Staff
+רב מנחם שנאורסון, רמ״ש (Ramash, Rav Menachem Schneerson) - (Chabad) Rabbi Menachem Schneerson. This respectful moniker was used before he became the seventh Lubavitcher Rebbe
+ר·נ
+רבינו נסים, ר״ן (Ran, Rabeinu Nissim) - our Rabbi, Nissim; a very influential Talmudist among the Rishonim
+רב נחמן ב״ר יעקב, רנב״י (Ranbi, Rav Nachman bar Ya'akov) - (Talmud) Rabbi Nachman; an Amora of the Talmud
+ר·ס
+רבינו סעדיה [בן יוסף אלפיומי] גאון, רס״ג (Rasag, Rabeinu Rabeinu Sa'adiah [ben Yosef al-Fayyumi] Gaon) - our Rabbi, the Saadia Gaon; rabbi from the Geonic period, halachist and Jewish philosopher
+רב סרן, רס״ן (rasan, rav seren) - (Modern Hebrew, military) major; lit. great captain
+ר·ע
+רַבִּי עֲקִיבָא, ר״ע (Rabi Akiva) - (Talmud) Rabbi Akiva
+רעותא דלבא, רעו״ד (re'uta deliba) - (Aramaic) arousal of the heart
+ר·פ
+[x]רפ״, [x] ראש פרק (rosh perek [x]) - beginning of chapter [x]
+רפ״ח (rapach) - (Kabbalah) the 288 sparks resulting from the Shattering of the Vessels of the world of Tohu
+ר·צ
+רצון העליון, רצה״ע (ratzon ha'elyon) - (Kabbalah) Supernal Will
+רצוא ושוב, רצו״ש (ratzo veshov) - (Kabbalah) running and returning; the states of [wanting to] be on high then being within. See also רו״ש
+ר·ר
+רחמים רבים, ר״ר (rachamim rabim) - abundant compassion
+ר·ש
+רבי שמעון, ר״ש (Rabi Shimon) - (Talmud) Rabbi Shimon
+רבינו שמואל [דו]בער, רש״ב (Rashab, Rabeinu Shalom [Dov-]Ber) - (Chabad) our Rebbe, Shalom [Dov-]Ber; the fifth rebbe of Chabad
+רַבָּן שִׁמְעוֹן בֶּן גַּמְלִיאֵל, רשב״ג (Rashbag, Rabban Shim'on ben Gamlieil) - (Talmud) Rabban Shimon ben Gamliel; a tanna and nasi of the Sanhedrin
+רבי שמואל בן מאיר, רשב״ם (Rashbam) - Rabbi Shmu'el ben Meir; Talmudist and commentator on the Tanakh
+רב שמואל בר נחמני, רשב״נ (Rav Shmuel bar Nachmani) - (Talmud) Rav Samuel ben Nachman; an amora of the Talmud
+רב שמואל בצלל, רשב״ץ (Rashbatz, Rav Shmuel Betzalel) - (Chabad) Rabbi Samuel Betzalel; a chasid of the Tzemach Tzedek
+רב שמריהו גוררי, רש״ג (Rashag, Rav Shemaryahu Gurari) - (Chabad) Rabbi Shemaryahu Gurary; once a potential candidate to be the seventh Lubavitcher Rebbe, and brother-in-law to Rabbi Menachem Mendel Schneerson
+רבי שלמה יצחקי, רש״י (Rashi, Rabi Shlomo Yitzchaki) - Rabbi Shlomo Yitzhaki; commentator on the Torah par excellence, one of the Rishonim
+רב שלום שרבי, רש״ש (Rashash, Rav Shalom Sharabi) - (Kabbalah) Rabbi Shalom Sharabi; the Yemenite Kabbalist and Halachist
+רב שמואל שטראשון, רש״ש (Rashash, Rav Shmuel Strashun) - Rabbi Samuel Strashun; the Russian Talmudist
+ר·ת
+ראשי תיבות, ר״ת - (roshei teivot) - acronym; lit. heads of words
+רבינו תם, ר״ת (Rabeinu Tam) - our Rabbi, Tam; (alt.) our Pure Rabbi; famous French halachist among the Rishonim, known for his legal debates with his grandfather Rashi. Often appears as תפילין דר״ת
+ש
+[x]·ש
+[x]ש״ ,[x] שׁוּרָה (shura [x]) - line [x]
+[x]ש״ ,[x] שַׁעַר (sha'ar [x]) - (Kabbalah) gate [x]. Used to indicate a chapter in a book
+ש
+שֵם, ש׳ - (sheim) - name
+ש·א
+שמואל א׳, ש״א (Sh'mu'el Alef) - [the Book of] Samuel I
+שאם כן, שא״כ (she'im kein) - because if this were so
+ש·ב
+שמואל ב׳, ש״ב (Sh'mu'el Beit) - [the Book of] Samuel II
+שבועות, שבועו׳ (Shevu'ot) - (Talmud) Oaths; a tractate of the Talmud
+שרות ביטחון כללי, שב״כ (Shabak, Sherut Bitachon Klali) – (Modern Hebrew) the Shin Bet; the Israel Security Agency; lit. Ministry of General Security
+תִּנוֹקוֹת] שֶׁל בֵּית רַבָּן, [תינוקות] שב״ר] ([tinokot] shel beit raban) - schoolchildren; lit. children of their teacher's house
+ש·ד
+שלוחא דרבנן, שד״ר (shadar, shlucha d’rabanan) - (Aramaic) emissary of the rabbis. In modern usage, often an authorized traveling fundraising officer for charity causes.
+ש·ה
+שִׁיר הֵשִּׁירִים, שה״ש (Shir HaShirim) - the Song of Songs
+ש·ו
+שֻׁלְחָן עָרוּךְ, שו״ע (Shulchan Aruch) - (Halachah) the Code of Jewish Law; lit. The Set Table
+שֻׁלְחָן עָרוּךְ, שוע״ר (Shulchan Aruch) - (Halachah) the Code of Jewish Law; lit. The Set Table
+שאלות ותשובות, שו״ת (shut, sha'alot uteshuvot) - responsa; lit. questions and replies
+ש·ח
+פֶּרֶק] שָׁנוּ חֲכָמִים, [פֶּרֶק] ש״ח] ([perek] shanu chachamim) - [the chapter of] "The sages taught;" the sixth chapter of Pirkei Avot
+ש·ט
+שֵׁם טוֹב, ש״ט (shem tov) - a good reputation; lit. good name. Esp. as כתר ש״ט "the crown of a good name" (citing Mishna, Tractate Avot 4:17)
+ש·י
+שיחיה/שיחיו, שי׳ (sheyichyeh/sheyichyu) - may he/they live. Added after mentioning a person
+ששת ימי בראשית, שי״ב (sheishet yemei bereishit) - six days of Creation
+שיחיה, שיחי׳ (sheyichyeh) - may he live. Added after mentioning a person
+ש·ל
+שני לוחות הברית, של״ה (Shelah, Shnei Luchot HaBrit) - 1) [The author of] Shnei Luchot HaBrit; the kabbalist Rabbi Isaiah Horowitz. 2) Two Tablets of the Covenant; the compilation of ethics, mysticism, customs and laws by Rabbi Isaiah Horowitz
+שיזכה לימים טובים וארוכים, שליט״א (Shlita, sheyizkeh l'yamim tovim v'aruchim) - may he merit good and long life. Appended to a name
+עד] שלא נברא העולם, [עד] שלנב״ה] (['ad] shelo nivra ha'olam) - [before] the world was created; lit. [as long as] the world had not been created
+ש·מ
+שְׁמַע מִינָּהּ, ש״מ (sh'ma minah) - (Aramaic, Talmud) derive it from this
+שִׂמְחַת תּוֹרָה, שמח״ת (Simchat Torah) - the celebration of [the giving of] the Torah
+שָׁמַיִם, שמי׳ (shamayim) - 1) Heaven. 2) The celestial realm. 3) The sky.
+שְׁמִינִי עֲצֶֽרֶת, שמ״ע (Shemini Atzeret) - Shemini Atzeret; lit. Eighth [day] is [a day of] Assembly (Numbers 29:12). See also שמע״צ
+שְׁמִינִי עֲצֶֽרֶת, שמע״צ (Shemini Atzeret) - Shemini Atzeret; lit. Eighth [day] is [a day of] Assembly (Numbers 29:12). See also שמ״ע
+ש·נ
+שֶׁנֶּאֱמַר, שנא׳ (shene'emar) - as it says
+ש·ס
+שישה סדרים, ש״ס (Shas, Shisha Sedarim) - the Talmud; lit. the Six Orders [of the Mishna with the accompanying Gemara]
+שס״ה (shesah) - 1) The 365 negative mitzvot or prohibitions (Makkot 23b, end). 2) The 365 veins and sinews of the human body (Zohar I, 170b). 3) The 365 days of the solar year (Makkot 23b). See also תרי״ג and רמ״ח
+ש·ע
+של עולם, ש״ע (shel olam) - of the world; of the universe
+שמנה עשרה, ש״ע (Shemoneh Esrei) - (Liturgy) the Shemoneh Esrei; lit. [the order of] 18 [blessings]. See also י״ח
+ש·צ
+שְׁלִיחַ צִבּוּר, ש״ץ (shatz/sh'li'ach tzibur) - prayer leader; lit. emissary of the community
+ש·ק
+שַׁבָּת קֹדֶשׁ, ש״ק (Shabat Kodesh) - the Holy Shabbat
+שקלא וטריא, שקו״ט (shakla vetarya) - (Aramaic, Talmud) discussion; give and take; lit. take and give
+ש·ש
+שֵׁם שָמַיִם, ש״ש (sheim shomayim) - 1) the sake of Heaven. 2) God's Name; lit. Heaven's Name
+ש·ת
+שתחיה, שתחי׳ (shetichyeh) - may she live. Added after mentioning a person
+ת
+ת·א
+תורה אור, ת״א (Torah Or) - (Hasidic Judaism) Torah is Light; a collection of mystical discourses arranged according to the weekly Torah portion and the Jewish holidays from the beginning of the Book of Genesis to the end of the Book of Exodus and Purim by Rabbi Schneur Zalman of Liadi, the first Rebbe of Chabad
+ת·ב
+[לֵית מַחֲשָׁבָה] תְּפִיסָא בָךְ [כְּלָל], [לית מחשבה] ת״ב [כלל] ([leit machashavah] t'fisa vach [k'lal]) - (Aramaic, Kabbalah) [no thought] can grasp You [at all] (Patach Eliyahu)
+תשעה באב, ת״ב (Tishah B'av) - the ninth of Av; the anniversary of the destruction of the first and second Temples in Jerusalem
+ת·ד
+י״ג] תיקוני דיקנא, [י״ג] ת״ד] ([yud gimel] tikunei dikna) - (Aramaic, Kabbalah) [13] tufts of the beard (corresponding to the 13 attributes of mercy); lit. rectifications of the beard
+ת·ה
+תהלים, תה׳ (Tehilim) - the Book of Psalms
+ת·ו
+תבנה ותכונן, ת״ו (tibaneh vetikonein) - may it be [re]built and [re]established. Regarding the Holy Land, and Jerusalem in particular
+תבנה ותכונן במהרה בימינו אמן, תובב״א (tibaneh vetikonein bimeheira be'yameinu amein) - may it be [re]built and [re]established speedily in our days, amen. Regarding the Holy Land and Jerusalem in particular
+תוספות דבר המתחיל, תוד״ה (tosafot davar hamatchil) - Tosafot['s commentary on the Talmud], the statement beginning with
+תּוֹרַת חַיִּים, תו״ח (Torat Chaim) - Teachings of Life; a book of discourses by the Mitteler Rebbe of Lubavitch
+תורת כהנים, תו״כ (Torat Kohanim) - the Teaching of Kohanim; an alternate name for Leviticus
+תורה ומצוות, תומ״צ (Torah umitzvot) - Torah and mitzvot
+תוספות, תוס׳ (Tosafot) - (Talmud) 1) The Tosafot; a commentary on the Talmud; lit. Additions. 2) The sages who wrote an elucidation of the Talmud by the same name
+תוספת, תוס׳ (tosefet) - 1) Additional. 2) Addition of/to
+[תּוֹרָה עֲבוֹדָה [וּגְמִילוּת חֲסָדִים], תו״ע [וגמ״ח (Torah, avoda[, ugemilut chasadim]) - Torah, [the sacrificial] service[, and deeds of kindness]; the "three things on which the world stands" (Pirkei Avot 1:2)
+תורה שבכתב, תושב״כ (Torah SheBichtav) - the Written Torah. Also, תשב״כ. Compare תושבע״פ.
+תורה שבעל פה, תושבע״פ (Torah SheBe'al Peh) the Oral Torah. See also תושב״כ
+תם ונשלם שבח לאל בורא עולם, תושלב״ע (tushlaba) - finished and complete with the help of God, Creator of the World. Appears at the end of a large work
+ת·ז
+תקוני זהר, ת״ז (Tikunei Zohar) - (Kabbalah) Rectifications of the Zohar; a section of the Zohar
+ת·ח
+תלמידי חכמים, ת״ח (talmidei chachamim) - Torah scholars; lit. students of [holy] wisdom
+תשאות חן, ת״ח (teshuot chein) - shouts of "Grace!" (Zechariah 4:7). An expression of approval or admiration
+תחיית המתים, תחה״מ (techiyat hameitim) - the Resurrection of the Dead
+ת·י
+תרגום יונתן [בן עוזיאל], ת״י (Targum Yonatan [ben Uziel]) - (Tanach) Jonathan [ben Uziel]'s Translation [of the Scriptures into Aramaic]
+תרגום ירושלמי, ת״י (Targum Yerushalmi) - (Tanach) the Jerusalem Translation [of the Megillot into Aramaic]
+ת·ל
+תַּלְמוּד לוֹמַר, ת״ל (talmud lomar) - (Aramaic, Talmud) the Torah teaches [otherwise]. This phrase introduces a refutation of the proposition that came just prior
+תלויה, תלוי׳ (teluyah) - dependent; lit. hanging
+ת·נ
+תהי נשמתו/ה צרורה בצרור [החיים], תנצ״ב (tehei nishmato/nishmatah tserurah bitsror [hachayim]) - may his/her soul be bound with the bond [of life]. From the prayer אֵל מָלֵא רַחֲמִים (El Malei Rachamim, transl. God full of Mercy). Said about the deceased, a wish that their example, teachings and accomplishments live on forever. Often the last line on a gravestone.
+תורה נביאים וכתובים, תנ״ך (Tanakh) - the Bible; lit. Torah [five books of Moses], Prophets and Writings. See also נ״ח and תושב״כ
+ת·ע
+תבוא עליו ברכה, תע״ב (tavo 'alav b'racha) - (Halachah) blessing should come upon him. Indicates a pious practice beyond the basic requirement of the law
+תענית, תענ׳ (Ta'anit) - fast
+ת·פ
+תפוח זהב, תפו״ז (tapuz, tapu'ach zahav) - (Modern Hebrew) orange; lit. golden apple
+תְּפִלָּה, תפל׳ (tefilah) - prayer
+תפארת למשה, תפל״מ (Tiferet L'Moshe) - (Halachah) lit. Harmony to Moses; a commentary on the Tur by Rabbi Moshe ben Avraham MiGeza Tz'vi
+ת·ק
+תק', תקופה (tkufa) - (Hebrew) a period, an era
+תנא קמא, ת״ק (Tanna kama) - (Aramaic) the first Tanna [mentioned]
+תקוני זהר, תקו״ז (Tikunei Zohar) - (Kabbalah) Rectifications of the Zohar; a section of the Zohar
+תקונים חדשים, תק״ח (Tikunim Chadashim) - (Kabbalah) New Rectifications; a section of the Zohar
+ת·ר
+תרי״ג (taryag) - 1) The 613 mitzvot. 2) The 613 corresponding organs and veins of the human body. See also רמ״ח and שס״ה
+תקיעה תרועה תקיעה, תר״ת (tarat, tekiah, teruah, tekiah) - a series of shofar blasts
+ת·ש
+תָּא שְׂמַע, ת״ש (ta sh'ma) - (Aramaic, Talmud) this implies; lit. come and hear/understand
+תורה שבכתב, תשב״כ (Torah SheBichtav) - the Written Torah. Also, תושב״כ. Compare תושבע״פ.
+תפילה של יד, תש״י (tefilah shel yad) - the arm tefillin
+תפילה של ראש, תש״ר (tefilah shel rosh) - the head tefillin
+תקיעה שברים-תרועה תקיעה, תשר״ת (tashrat, tekiah, shevarim-teruah, tekiah) - a series of shofar blasts
+תשמיש המיטה, תשה"מ (tashmish hamitah) - marital relations; lit. use of the bed
+תקיעה שברים תקיעה, תש״ת (tashat, tekiah, shevarim, tekiah) - a series of shofar blasts
+ת·ת
+תַּלְמוּד תּוֹרָה, ת״ת (talmud Torah) - 1) [The act of] learning Torah. 2) [The wisdom from] Torah learning
+Other lists of Hebrew abbreviations
+In modern editions of many Hebrew books with technical jargon, it is common to find lists of the abbreviations used in the work, for example, in the back near the index, or sometimes near the table of contents.
+
+Kizur: Online Dictionary of Hebrew Abbreviations and Acronyms
+Hebrew or Aramaic Abbreviations, from Jastrow's Dictionary of Targumim, Talmud and Midrashic Literature
+Milon Likutei Sichos: Likutei Sichos Dictionary by Schneer Zalman Goldstein, 5th ed 2010. [ISBN unspecified]
+Roshei Teivot VeKitzurim BeIvrit, "Acronyms and Abbreviations in Hebrew", from Abbreviations.com
+Common Hebrew Abbreviations, from hebrew4christians.com
+Lu'ach Roshei Teivot, "Table of Abbreviations", an appendix to the Tanya
+Lu'ach Roshei Teivot, "Table of Abbreviations", appendices to each volume of the Badei HaShulchan on the Shulchan Aruch
+Lu'ach Roshei Teivot, "Table of Abbreviations", an appendix to Sefer Taharat Yisrael by R. Yisrael Yitzhak b. Eliyahu of Prague
+Reshimat Roshei Teivot, "List of Abbreviations," an appendix to Likkutei Torah, 177a onwards
+Frank, Yitzhak. "Acronyms and Abbreviations Used in this Dictionary: Hebrew." pp. XX-XXI. And, "Acronyms in the Talmud." pp. 271–94. The Practical Talmud Dictionary. 2001: Jerusalem, The Ariel Institute.
+Doctor, Ronald D. "Reading Hebrew Matzevot: Key Words, Abbreviations, & Acronyms" (PDF)
+Bibliography
+While the other above lists of abbreviations played a supporting role in the creation of this list, most of these abbreviations were encountered in and added directly from primary and secondary sources. It is impractical to cite the source of every item in the list above in its original place. Instead, an effort will be made here to list the sources where these abbreviations were found and expanded from their originally published form, or repeated in their source in their expansion, often with explanations, annotations and translations:
+
+Arutz Sheva: Israel National News. Hebrew. Online newspaper.
+Baruchovitch, Schneur Zalman. Seder Tefilot Mikol Hashanah. Brooklyn: Kehot Publication Society, 1965. Print. Hebrew.
+Baruchovitch, Schneur Zalman. Sefer Likkutei Amarim - Tanya. Trans. Nissen Mangel, Nissan Mindel, Jacob Immanuel. Schochet, and Zalman I. Posner. Brooklyn: Kehot Publication Society, 1965. Print.
+Baruchovitch, Schneur Zalman. Sefer Likkutei Torah. Brooklyn: Kehot Publication Society, 2006. Print. Hebrew.
+Baruchovitch, Schneur Zalman. Sefer Torah Or. Brooklyn: Kehot Publication Society, 1991. Print. Hebrew.
+Forst, Binyomin. Laws of Kashrus, The. Brooklyn: Mesorah Publications, 1993. Print.
+Ganzfried, Shlomo ben Yosef. The Metsudah Kitzur Shulchan Aruch. Trans. Avrohom Davis. Brookline: Metsudah Publications, 1987. Print.
+Goldman, Michoel, ed. Chayenu: Daily Torah Study. New York. Print magazine.
+Goldwurm, Hersh, Yisroel Simcha Schorr, et al. eds. Talmud Bavli - The Gemara. Trans. Hillel Danziger, Yosaif Asher Weiss, et al. Brooklyn: Mesorah Publications, 2003. Print.
+Haaretz. Hebrew. Online newspaper.
+Kaplan, Aryeh. Sefer Yetzirah (The Book of Creation): In Theory and Practice. York Beach, Maine: Samuel Weiser, 1997. Print.
+Rashi. The Pentateuch and Rashi's Commentary: A Linear Translation into English. Trans. Abraham Ben-Isaiah and Benjamin Sharfman. Brooklyn: S.S. & R. Pub., 1949. Print.
+Rashi. Rashi - The Sapirstein Edition. Trans. Yisrael Isser Zvi. Herczeg, Yosef Kamenetsky, and Yaakov Petroff. Ed. Nosson Scherman, Meir Zlotowitz, and Avie Gold. Brooklyn: Mesorah Publications, 1995. Print.
+Schneersohn, Shalom Dovber. Kuntreis Eitz HaChayim. Brooklyn: Kehot Publication Society, 2010. Print. Hebrew.
+Schneerson, Menachem Mendel. Likkutei Sichos. Brooklyn: Kehot Publication Society, 2000. Print. Hebrew.
+Schneersohn, Shalom Dovber. Yom Tov Shel Rosh Hashanah 5666. Brooklyn: Kehot Publication Society, 2010. Print. Hebrew.
+Schneersohn, Yosef Yitzchak, and Menachem Mendel Schneerson. HaYom Yom: From Day to Day. Trans. Zalman I. Posner, Yitschak M. Kagan, and Sholom B. Wineberg. Brooklyn: Kehot Publication Society, 2005. Print.
+Schneersohn, Yitzchak Dovber. Seder Tefilah Im Pirush Maharid. Machon Chabad, Israel: Machon Ohalei Sheim Lubavitch, 1991. Print. Hebrew.
+Weiner, Moshe. Sefer Sheva Mitzvot Hashem: Shulchan Aruch L'Kol Hilchot B'nei Noach. Ed. Zalman Nechemiah Goldberg. Jerusalem: Ask Noah International, 2008. Print. Hebrew.
+Wineberg, Yosef. Lessons in Tanya. Trans. Sholom B. Wineberg. Brooklyn: Kehot Publication Society, 1997. Lessons in Tanya - Text of the Tanya. Chabad.org. Web. 20 May 2016.
+Yisrael Ba'al Shem Tov. Keter Shem Tov. Ed. Jacob Immanuel. Schochet. Brooklyn: Kehot Publication Society, 2008. Print. Hebrew.
+In addition, Kehot's Chabad Heritage Series of translated, elucidated and vowelized maamorim of the Rebbes of Lubavitch were extremely helpful.
+
+References
+ E.g. "And charity will save from death" (Proverbs 10:2); "So is charity for life" (Proverbs 11:19); see also Tanya, Igeret HaTeshuvah, Epistle 21.
+ Proz.com: בע''מ > בערבון מוגבל מנת [sic], accessed 3 July 2012.
+External links

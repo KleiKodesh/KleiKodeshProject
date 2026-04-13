@@ -1,0 +1,92 @@
+@import url(/fonts/Assistant/stylesheet.css);
+@import url(/fonts/font-awesome-4.3.0/css/font-awesome.css);
+body {
+  font-family: "Assistant", Helvetica, Arial, sans-serif;
+}
+.top-loading {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: white;
+}
+.top-loading:after {
+  content: '';
+  display: block;
+  width: 30%;
+  height: 100%;
+  background-color: #1ed68d;
+  position: absolute;
+  left: 0%;
+  -webkit-animation: kfs-loading 2s infinite linear;
+  /* Chrome, Safari, Opera */
+  -moz-animation: kfs-loading 2s infinite linear;
+  animation: kfs-loading 2s infinite linear;
+}
+/* Chrome, Safari, Opera */
+@-webkit-keyframes kfs-loading {
+  0% {
+    left: -30%;
+  }
+  100% {
+    left: 130%;
+  }
+}
+/* Standard syntax */
+@keyframes kfs-loading {
+  0% {
+    left: -30%;
+  }
+  100% {
+    left: 130%;
+  }
+}
+.btn {
+  background-color: #2FA7E2;
+  background: -webkit-linear-gradient(top, #2FA7E2 0, #335C85 100%);
+  border: none;
+  border-radius: 2px;
+  color: white;
+  cursor: pointer;
+  font-size: 15px;
+  padding: 6px 15px;
+}
+.btn:hover {
+  background-color: #54B4E4;
+  background: -webkit-linear-gradient(top, #54B4E4 0, #406E9B 100%);
+}
+.btn-mid {
+  display: block;
+  margin: 20px auto;
+}
+.clear-fix:after {
+  content: '';
+  display: block;
+  clear: both;
+}
+.link {
+  color: white;
+  text-decoration: none;
+  font-size: 16px;
+  margin-left: 25px;
+}
+.link:hover {
+  border-bottom: 1px dotted #cccccc;
+}
+.link-brd-btm {
+  text-decoration: none;
+  border-bottom: 1px dotted #cccccc;
+}
+.btn-b {
+  border: none;
+  background: none;
+  color: #2d6790;
+  border-bottom: 1px dotted #336b93;
+  cursor: pointer;
+  padding: 0;
+}
+.btn-b:hover {
+  color: #6b96ab;
+  border-bottom: 1px dotted #6b96ab;
+}

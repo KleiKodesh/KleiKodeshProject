@@ -24,13 +24,21 @@ const emit = defineEmits<{
 
 const detailChips = computed(() => {
   const seen = new Set<string>()
-  return props.suggestions
+  const filtered = props.suggestions
     .filter((s) => s.headword.length <= props.queryLength + 2)
     .filter((s) => {
       if (seen.has(s.headword)) return false
       seen.add(s.headword)
       return true
     })
+  // If the length filter leaves nothing, show all suggestions (deduplicated)
+  if (filtered.length > 0) return filtered
+  const seen2 = new Set<string>()
+  return props.suggestions.filter((s) => {
+    if (seen2.has(s.headword)) return false
+    seen2.add(s.headword)
+    return true
+  })
 })
 
 function isFirstAramaic(index: number): boolean {

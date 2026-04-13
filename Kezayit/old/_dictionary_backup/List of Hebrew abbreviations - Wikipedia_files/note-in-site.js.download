@@ -1,0 +1,118 @@
+(function () {
+
+    
+    const addElm = document.createElement("div");
+    addElm.innerHTML =
+    `
+    <style>
+    #netfree-note-site-main {
+        position: fixed;
+        transition: top 0.5s ease 0s;
+        top: -40px;
+        right: 0px;
+        left: 0px;
+        z-index: 9999999999999;
+        height: 40px;
+    }
+
+    #netfree-note-site-main.active {
+        top: 0px;
+    }
+    #netfree-note-site-bubble {
+        width: 14px;
+        height: 14px;
+        background: #ff0000;
+        border-radius: 50%;
+        position: absolute;
+        bottom: -20px;
+        right: 5%;
+        border: #aeaeae 2px solid;
+        display: none;
+    }
+    #netfree-note-site-iframe {
+        position: absolute;
+        top: 0px;
+        left: 0px;
+        right: 0px;
+        bottom: 0px;
+        width: 100%;
+        height: 100%;
+        border: 0;
+        background: #fff2d6eb;
+        border-bottom: 1px solid #c2c2c2;   
+    }
+
+    #netfree-note-site-close-now,
+    #netfree-note-site-close-forever {
+        position: absolute;
+        top: 0px;
+        right: 0px;
+        width: 18px;
+        height: 18px;
+        padding: 0;
+        background: #ffffff;
+        border: 0px solid #fff;
+        border-radius: 50%;
+        color: #637174;
+        font-size: 16px;
+    }
+
+    #netfree-note-site-close-now {
+        
+    }
+
+    #netfree-note-site-close-forever {
+        top: 19px;
+    }
+
+    #netfree-note-site-close-now svg,
+    #netfree-note-site-close-forever svg{
+
+    }
+
+    </style>
+    <div id="netfree-note-site-main">
+        <div id="netfree-note-site-bubble"></div>
+        <iframe id="netfree-note-site-iframe"></iframe>
+        <button id="netfree-note-site-close-now" title="סגור">
+            <svg aria-hidden="true" focusable="false" data-prefix="fas" data-icon="minus-circle" class="svg-inline--fa fa-minus-circle fa-w-16" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M256 8C119 8 8 119 8 256s111 248 248 248 248-111 248-248S393 8 256 8zM124 296c-6.6 0-12-5.4-12-12v-56c0-6.6 5.4-12 12-12h264c6.6 0 12 5.4 12 12v56c0 6.6-5.4 12-12 12H124z"></path></svg>
+
+        </button>
+        <button id="netfree-note-site-close-forever" title="סגור לתמיד">
+            <svg aria-hidden="true" focusable="false" data-prefix="fas" data-icon="times-circle" class="svg-inline--fa fa-times-circle fa-w-16" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M256 8C119 8 8 119 8 256s111 248 248 248 248-111 248-248S393 8 256 8zm121.6 313.1c4.7 4.7 4.7 12.3 0 17L338 377.6c-4.7 4.7-12.3 4.7-17 0L256 312l-65.1 65.6c-4.7 4.7-12.3 4.7-17 0L134.4 338c-4.7-4.7-4.7-12.3 0-17l65.6-65-65.6-65.1c-4.7-4.7-4.7-12.3 0-17l39.6-39.6c4.7-4.7 12.3-4.7 17 0l65 65.7 65.1-65.6c4.7-4.7 12.3-4.7 17 0l39.6 39.6c4.7 4.7 4.7 12.3 0 17L312 256l65.6 65.1z"></path></svg>
+
+        </button>
+    </div>
+    `;
+    document.documentElement.appendChild(addElm);
+
+    const bubbleElm = document.getElementById("netfree-note-site-bubble");
+    const mainElm = document.getElementById("netfree-note-site-main");
+    const frameElm = document.getElementById("netfree-note-site-iframe");
+    bubbleElm.addEventListener('click', ev => {
+        mainElm.classList.toggle("active");
+    });
+
+    const jselm = document.getElementById("netfree-note-site")
+    if (!jselm) return;
+
+    const valueSiteNote = jselm.attributes.getNamedItem('jsondata').value;
+    frameElm.src = "https://netfree.link/misc/note-in-site#" + valueSiteNote;
+ 
+    const closeNowElm = document.getElementById("netfree-note-site-close-now");
+    const closeForeverElm = document.getElementById("netfree-note-site-close-forever");
+    closeNowElm.addEventListener('click', ev => {
+        mainElm.classList.remove("active");
+        window.sessionStorage.setItem('netfree-note-site-value', valueSiteNote)
+    });
+    closeForeverElm.addEventListener('click', ev => {
+        mainElm.classList.remove("active");
+        window.localStorage.setItem('netfree-note-site-value', valueSiteNote)
+    });
+
+    if (window.localStorage.getItem('netfree-note-site-value') != valueSiteNote &&
+        window.sessionStorage.getItem('netfree-note-site-value') != valueSiteNote ) {
+        mainElm.classList.add("active");
+    }
+ 
+})();
