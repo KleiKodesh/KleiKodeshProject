@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
-import { idbGet, idbSet, KEYS } from '@/utils/idbPersistence'
+import { lsGet, lsSet, KEYS } from '@/utils/persistence'
 import { applyTheme, getTheme, toggleThemeMode, type ThemePreset } from './themes'
 export type { ThemePreset } from './themes'
 
@@ -13,8 +13,9 @@ export const useThemeStore = defineStore('theme', () => {
   const themePreset = ref<ThemePreset>('fluent-light')
   const readingBackground = ref('default')
 
-  async function init() {
-    const saved = await idbGet<ThemeState>(KEYS.SETTINGS_THEME)
+  // Synchronous — theme is in localStorage
+  function init() {
+    const saved = lsGet<ThemeState>(KEYS.SETTINGS_THEME)
     if (saved?.themePreset && getTheme(saved.themePreset)) themePreset.value = saved.themePreset
     if (saved?.readingBackground) readingBackground.value = saved.readingBackground
     apply()
@@ -43,7 +44,7 @@ export const useThemeStore = defineStore('theme', () => {
   apply()
 
   watch([themePreset, readingBackground], () => {
-    idbSet<ThemeState>(KEYS.SETTINGS_THEME, {
+    lsSet<ThemeState>(KEYS.SETTINGS_THEME, {
       themePreset: themePreset.value,
       readingBackground: readingBackground.value,
     })

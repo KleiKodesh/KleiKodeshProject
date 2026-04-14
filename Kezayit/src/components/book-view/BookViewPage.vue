@@ -341,8 +341,10 @@ async function onNavigateSection(direction: 'next' | 'prev', commentaryBookId: n
 
 onMounted(async () => {
   if (bookId != null) {
-    const bookSaved = await tabStore.getBookViewState(tabId, bookId)
-    const lastRead = await tabStore.getLastReadPos(bookId)
+    const [bookSaved, lastRead] = await Promise.all([
+      tabStore.getBookViewState(tabId, bookId),
+      tabStore.getLastReadPos(bookId),
+    ])
     const restoredLineId = bookSaved?.selectedLineId ?? lastRead?.selectedLineId
     const si = bookSaved?.commentaryScrollIndex ?? lastRead?.commentaryScrollIndex
     const so = bookSaved?.commentaryScrollOffset ?? lastRead?.commentaryScrollOffset

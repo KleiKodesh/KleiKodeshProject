@@ -3,8 +3,8 @@
  * Sole owner of app-hb-history IDB access — no other file may import from idbPersistence for this DB.
  */
 import { defineStore } from 'pinia'
-import { idbHbGetHistory, idbHbTrackAccess } from '@/utils/idbPersistence'
-import type { HbHistoryEntry } from '@/utils/idbPersistence'
+import { idbHbGetHistory, idbHbTrackAccess } from '@/utils/persistence'
+import type { HbHistoryEntry } from '@/utils/persistence'
 import type { HebrewBook } from '@/components/hebrew-books/hebrewBooksCatalog'
 
 export const useHebrewBooksHistoryStore = defineStore('hebrewBooksHistory', () => {

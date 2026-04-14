@@ -332,7 +332,7 @@ Junction tables: `bookId` + respective FK, composite PK.
 
 ## Persistence
 
-Persistence uses three separate IndexedDB databases plus one localStorage key — all access goes through `src/utils/idbPersistence.ts`.
+Persistence uses three separate IndexedDB databases plus one localStorage key — all access goes through `src/utils/persistence.ts`.
 
 ### Why localStorage exists here
 
@@ -342,30 +342,50 @@ Opening an IndexedDB database has a measurable async cost (~65ms cold on WebView
 
 Every IDB open has a real async cost, especially cold on WebView2. Before adding any new boot-time IDB read, ask whether it can be deferred until after mount, batched into an existing transaction, or replaced with a synchronous localStorage read. Never add a new `await idbGet()` call to the startup sequence without justification.
 
+For runtime hot paths (opening a book, switching tabs, every search), prefer an in-memory cache in front of IDB. The pattern is: check the cache first, read IDB on miss, populate the cache, return. Writes update the cache immediately and write to IDB fire-and-forget or via the existing pending-save promise chain.
+
+### In-memory cache rules
+
+When adding an in-memory cache in front of IDB, always answer these questions before shipping:
+
+- What is the maximum number of entries this cache can hold? If unbounded, add an explicit cap.
+- When are entries evicted? Every cache tied to a lifecycle (tab, session, workspace) must evict when that lifecycle ends — e.g. `_bookStateCache` entries are evicted when their tab is closed. Caches not tied to a lifecycle must have a size cap with FIFO or LRU eviction.
+- Does the cache stay consistent with IDB writes? Every write path must update the cache before or alongside the IDB write — never write to IDB without also updating the cache.
+- Is the cached value large? Never cache result sets, arrays of objects, or anything that scales with user data — only cache scalars, small structs, and key lists. Large data belongs in IDB only.
+
+Current caches and their caps:
+
+- `_bookStateCache` in `tabStore` — one entry per open tab×book; evicted on `closeTab` / `closeAllTabs`
+- `_lastReadCache` in `tabStore` — capped at 200 entries, FIFO eviction
+- `_booksView` in `tabStore` — single scalar, no cap needed
+- `_mem` in `searchCacheStore` — **not cached in memory** — search results can be hundreds of items with snippet strings; only the LRU key list (`_lru`) is kept in memory
+
 ### localStorage rules
 
-- All localStorage access must go through `src/utils/idbPersistence.ts` — never call `localStorage` directly anywhere else in the codebase
+- All localStorage access must go through `src/utils/persistence.ts` — never call `localStorage` directly anywhere else in the codebase
 - The only current localStorage key is `__pendingReset` (the app-reset flag)
-- When adding a new localStorage key, add it as a named constant in `idbPersistence.ts` alongside the IDB keys
+- When adding a new localStorage key, add it as a named constant in `persistence.ts` alongside the IDB keys
 - App reset (`idbClearAll`) must also call `localStorage.clear()` or explicitly remove every known localStorage key — reset must leave no state behind
 
 ### IDB databases
 
-| Database       | Contents                                                    |
-| -------------- | ----------------------------------------------------------- |
-| `app-settings` | All scalar settings (one key per setting, no prefix needed) |
-| `app-tabs`     | Tabs list, tab states, book states (workspace-scoped keys)  |
-| `app-lastread` | Per-book last-read positions (LRU-capped at 1000)           |
+| Database            | Contents                                                         |
+| ------------------- | ---------------------------------------------------------------- |
+| `app-tabs`          | Tabs list, tab states, book states (workspace-scoped keys)       |
+| `app-lastread`      | Per-book last-read positions (LRU-capped at 1000)                |
+| `app-search-cache`  | Bloom search result cache (LRU-capped at 100 queries)            |
 
-All IDB access must go through `src/utils/idbPersistence.ts` exclusively — no component, composable, or store may call any IDB API directly. This is a hard rule with no exceptions.
+All scalar settings (fonts, zoom, theme, toolbar state, workspaces, calendar prefs, etc.) live in localStorage via `lsGet`/`lsSet` — synchronous, zero async cost. IDB is only used for data that is too large or structured for localStorage (custom themes, tab/book state, last-read positions, search cache).
 
-Components and composables must never import from `src/utils/idbPersistence.ts` directly — they go through a store (`tabStore`, `bookViewStore`, `settingsStore`). Only stores import from `idbPersistence.ts`.
+All persistence access must go through `src/utils/persistence.ts` exclusively — no component, composable, or store may call `localStorage` or any IDB API directly. This is a hard rule with no exceptions.
+
+Components and composables must never import from `src/utils/persistence.ts` directly — they go through a store (`tabStore`, `bookViewStore`, `settingsStore`). Only stores import from `persistence.ts`.
 
 ### Key scheme
 
-`app-settings` keys are plain strings (no prefix): `headerFont`, `theme`, `customThemes`, etc.
+localStorage keys are prefixed with `zayit.` automatically by `lsGet`/`lsSet`. The `KEYS` constants in `persistence.ts` are the unprefixed names.
 
-`app-tabs` keys remain workspace-scoped:
+`app-tabs` keys are workspace-scoped:
 
 | Key                            | Value              |
 | ------------------------------ | ------------------ |
@@ -378,9 +398,10 @@ Components and composables must never import from `src/utils/idbPersistence.ts` 
 ### Stores
 
 - `tabStore` — tab lifecycle, navigation, tab/book state, lastread, booksView setting, and `resetAll()`
-- `bookViewStore` — toolbar/zoom/searchBarPos; reads from IDB at init, writes via `idbPersistence.ts`
-- `settingsStore` — app settings; each setting has its own key in `app-settings`, loaded in parallel at init, each watch writes only its own key
-- `themeStore` — theme preset + reading background; stored at key `theme`; custom themes at `customThemes` via `themes.ts`
+- `bookViewStore` — toolbar/searchBarPos; reads from localStorage at init (synchronous)
+- `settingsStore` — all app settings in localStorage; `init()` is synchronous
+- `themeStore` — theme preset + reading background in localStorage; custom themes in IDB via `themes.ts`
+- `workspaceStore` — workspace list in localStorage; `init()` is synchronous
 
 ### lastread LRU cap
 
@@ -388,15 +409,15 @@ Always use `tabStore.setLastReadPos()` — it calls `idbSetLastRead()` which enf
 
 ### App reset
 
-`tabStore.resetAll()` calls `idbScheduleReset()` which writes the `__pendingReset` localStorage flag, then `window.location.reload()`. On next boot, `idbCheckAndExecReset()` sees the flag synchronously, clears all IDB databases and all localStorage keys, then reloads again into a clean state.
+`tabStore.resetAll()` calls `idbScheduleReset()` which writes the `__pendingReset` localStorage flag, then `window.location.reload()`. On next boot, `idbCheckAndExecReset()` sees the flag synchronously, calls `lsClearAll()` to wipe all localStorage keys, deletes all IDB databases, then reloads into a clean state.
 
 ### Adding new persisted state
 
-- Global scalar setting → add key to `KEYS` in `idbPersistence.ts`, expose via the owning store
-- Per-tab UI state → add field to `TabState` in `idbPersistence.ts`, expose via `tabStore.getTabViewState/setTabViewState`
-- Per-tab+book state → add field to `BookState` in `idbPersistence.ts`, expose via `tabStore.getBookViewState/setBookViewState`
-- Per-book global state → add field to `LastReadState` in `idbPersistence.ts`, expose via `tabStore.getLastReadPos/setLastReadPos`
-- Boot-time flag that must be synchronous → use localStorage via `idbPersistence.ts`, add a named constant, and ensure `idbClearAll` removes it
+- Global scalar setting → add key to `KEYS` in `persistence.ts`, expose via the owning store
+- Per-tab UI state → add field to `TabState` in `persistence.ts`, expose via `tabStore.getTabViewState/setTabViewState`
+- Per-tab+book state → add field to `BookState` in `persistence.ts`, expose via `tabStore.getBookViewState/setBookViewState`
+- Per-book global state → add field to `LastReadState` in `persistence.ts`, expose via `tabStore.getLastReadPos/setLastReadPos`
+- Boot-time flag that must be synchronous → use localStorage via `persistence.ts`, add a named constant, and ensure `idbClearAll` removes it
 
 ## HebrewBooks Downloads
 

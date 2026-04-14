@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import {
-  idbGet,
-  idbSet,
+  lsGet,
+  lsSet,
   idbTabsGet,
   idbTabsSet,
   idbTabsDelete,
@@ -12,8 +12,8 @@ import {
   idbClearAll,
   idbScheduleReset,
   KEYS,
-} from '@/utils/idbPersistence'
-import type { TabState, BookState, LastReadState } from '@/utils/idbPersistence'
+} from '@/utils/persistence'
+import type { TabState, BookState, LastReadState } from '@/utils/persistence'
 import { useWorkspaceStore } from './workspaceStore'
 import { disposePdfHost } from '@/host/bridge'
 
@@ -70,10 +70,11 @@ export const useTabStore = defineStore('tabs', () => {
 
   // ── Init (called once from main.ts before mount) ──────────────────────────
 
-  async function init() {
+  // Synchronous — tab list is in localStorage
+  function init() {
     const wsStore = useWorkspaceStore()
     const wsId = wsStore.activeId
-    const saved = await idbTabsGet<PersistedTabList>(KEYS.tabsList(wsId))
+    const saved = lsGet<PersistedTabList>(KEYS.tabsList(wsId))
     if (saved && saved.tabs.length > 0) {
       tabs.value = saved.tabs
       activeTabId.value = saved.activeTabId
@@ -107,7 +108,7 @@ export const useTabStore = defineStore('tabs', () => {
   function persistTabs() {
     const wsId = useWorkspaceStore().activeId
     const persistable = tabs.value.filter((t) => !SINGLETON_ROUTES.includes(t.route))
-    idbTabsSet<PersistedTabList>(KEYS.tabsList(wsId), {
+    lsSet<PersistedTabList>(KEYS.tabsList(wsId), {
       tabs: persistable.map(
         ({
           pdfVirtualUrl,
@@ -165,22 +166,37 @@ export const useTabStore = defineStore('tabs', () => {
 
   // ── Per-tab+book state ────────────────────────────────────────────────────
 
+  // In-memory cache: key = `${wsId}:${tabId}:${bookId}`
+  const _bookStateCache = new Map<string, BookState | null>()
+  // In-memory cache: key = bookId
+  const _lastReadCache = new Map<number, LastReadState | null>()
+
   // Pending save promise — onMounted on the incoming tab awaits this before reading,
   // so the outgoing tab's async IDB write is guaranteed to have committed first.
   let pendingBookStateSave: Promise<void> | null = null
 
   function getBookViewState(tabId: string, bookId: number): Promise<BookState | null> {
     const wsId = useWorkspaceStore().activeId
-    const read = () => idbTabsGet<BookState>(KEYS.book(wsId, tabId, bookId))
+    const cacheKey = `${wsId}:${tabId}:${bookId}`
+    if (_bookStateCache.has(cacheKey)) return Promise.resolve(_bookStateCache.get(cacheKey)!)
+    const read = async () => {
+      const val = await idbTabsGet<BookState>(KEYS.book(wsId, tabId, bookId))
+      _bookStateCache.set(cacheKey, val)
+      return val
+    }
     return pendingBookStateSave ? pendingBookStateSave.then(read) : read()
   }
   function setBookViewState(tabId: string, bookId: number, state: BookState): Promise<void> {
     const wsId = useWorkspaceStore().activeId
+    const cacheKey = `${wsId}:${tabId}:${bookId}`
+    _bookStateCache.set(cacheKey, state)
     pendingBookStateSave = idbTabsSet(KEYS.book(wsId, tabId, bookId), state)
     return pendingBookStateSave
   }
   function clearBookViewState(tabId: string, bookId: number): Promise<void> {
     const wsId = useWorkspaceStore().activeId
+    const cacheKey = `${wsId}:${tabId}:${bookId}`
+    _bookStateCache.delete(cacheKey)
     return idbTabsDelete(KEYS.book(wsId, tabId, bookId))
   }
 
@@ -189,21 +205,34 @@ export const useTabStore = defineStore('tabs', () => {
   let pendingLastReadSave: Promise<void> | null = null
 
   function getLastReadPos(bookId: number): Promise<LastReadState | null> {
-    const read = () => idbGetLastRead(bookId)
+    if (_lastReadCache.has(bookId)) return Promise.resolve(_lastReadCache.get(bookId)!)
+    const read = async () => {
+      const val = await idbGetLastRead(bookId)
+      _lastReadCache.set(bookId, val)
+      return val
+    }
     return pendingLastReadSave ? pendingLastReadSave.then(read) : read()
   }
   function setLastReadPos(bookId: number, pos: LastReadState): Promise<void> {
+    _lastReadCache.set(bookId, pos)
+    // Keep in-memory cache from growing unbounded — evict oldest entry when over 200
+    if (_lastReadCache.size > 200) _lastReadCache.delete(_lastReadCache.keys().next().value!)
     pendingLastReadSave = idbSetLastRead(bookId, pos)
     return pendingLastReadSave
   }
 
   // ── Books view setting ────────────────────────────────────────────────────
 
+  let _booksView: 'list' | 'tiles' | 'tree' | null = null
+
   async function getBooksView(): Promise<'list' | 'tiles' | 'tree'> {
-    return (await idbGet<'list' | 'tiles' | 'tree'>(KEYS.SETTINGS_BOOKS_VIEW)) ?? 'list'
+    if (_booksView !== null) return _booksView
+    _booksView = lsGet<'list' | 'tiles' | 'tree'>(KEYS.SETTINGS_BOOKS_VIEW) ?? 'list'
+    return _booksView
   }
   function setBooksView(v: 'list' | 'tiles' | 'tree') {
-    idbSet(KEYS.SETTINGS_BOOKS_VIEW, v)
+    _booksView = v
+    lsSet(KEYS.SETTINGS_BOOKS_VIEW, v)
   }
 
   // ── App reset ─────────────────────────────────────────────────────────────
@@ -232,6 +261,7 @@ export const useTabStore = defineStore('tabs', () => {
       idbTabsDelete(KEYS.tab(wsId, tab.id))
       idbTabsDeleteByPrefix(KEYS.tabPrefix(wsId, tab.id))
     }
+    _bookStateCache.clear()
     const home: Tab = { id: String(++nextId), title: 'בית', route: '/' }
     tabs.value = [home]
     activeTabId.value = home.id
@@ -245,6 +275,10 @@ export const useTabStore = defineStore('tabs', () => {
     const wsId = useWorkspaceStore().activeId
     idbTabsDelete(KEYS.tab(wsId, id))
     idbTabsDeleteByPrefix(KEYS.tabPrefix(wsId, id))
+    // Evict all book state cache entries for this tab
+    for (const key of _bookStateCache.keys()) {
+      if (key.startsWith(`${wsId}:${id}:`)) _bookStateCache.delete(key)
+    }
     tabs.value.splice(idx, 1)
     if (tabs.value.length === 0) {
       const home: Tab = { id: String(++nextId), title: 'בית', route: '/' }

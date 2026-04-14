@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
-import { idbGet, idbSet, KEYS } from '@/utils/idbPersistence'
+import { lsGet, lsSet, KEYS } from '@/utils/persistence'
 import { useZmanim } from './useZmanim'
 import { useWeeklyView } from './useWeeklyView'
 import { useMonthlyView } from './useMonthlyView'
@@ -11,7 +11,7 @@ import MonthlyView from './MonthlyView.vue'
 type ViewMode = 'weekly' | 'monthly'
 
 const viewMode = ref<ViewMode>('weekly')
-watch(viewMode, (v) => idbSet(KEYS.SETTINGS_CALENDAR_VIEW, v))
+watch(viewMode, (v) => lsSet(KEYS.SETTINGS_CALENDAR_VIEW, v))
 
 const { activeCity, init: initZmanim } = useZmanim()
 
@@ -33,12 +33,12 @@ function onToday() {
   viewMode.value === 'weekly' ? weekly.goToday() : monthly.goToday()
 }
 
-onMounted(async () => {
-  const saved = await idbGet<ViewMode>(KEYS.SETTINGS_CALENDAR_VIEW)
-  viewMode.value = saved === 'monthly' ? 'monthly' : 'weekly'
+onMounted(() => {
+  const savedView = lsGet<ViewMode>(KEYS.SETTINGS_CALENDAR_VIEW)
+  viewMode.value = savedView === 'monthly' ? 'monthly' : 'weekly'
   weekly.reset()
   monthly.reset()
-  initZmanim()
+  initZmanim(lsGet<string>(KEYS.SETTINGS_ZMANIM_CITY) ?? undefined)
 })
 </script>
 

@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { useTabStore } from './tabStore'
 import { useSettingsStore } from './settingsStore'
-import { idbGetMany, idbSet, KEYS } from '@/utils/idbPersistence'
+import { lsGet, lsSet, KEYS } from '@/utils/persistence'
 import {
   ZOOM_CONFIG,
   zoomIn as zoomInUtil,
@@ -71,43 +71,42 @@ export const useBookViewStore = defineStore('bookView', () => {
     },
   })
 
-  async function init() {
-    const data = await idbGetMany([
-      KEYS.SETTINGS_TOOLBAR,
-      KEYS.SETTINGS_TOOLBAR_POSITION,
-      KEYS.SETTINGS_SEARCH_BAR_POS,
-      KEYS.SETTINGS_AUTO_SELECT_TOP_LINE,
-    ])
-    if (data[KEYS.SETTINGS_TOOLBAR] != null) toolbarVisible.value = data[KEYS.SETTINGS_TOOLBAR] as boolean
-    if (data[KEYS.SETTINGS_TOOLBAR_POSITION] != null) toolbarPosition.value = data[KEYS.SETTINGS_TOOLBAR_POSITION] as ToolbarPosition
-    if (data[KEYS.SETTINGS_SEARCH_BAR_POS] != null) searchBarPos.value = data[KEYS.SETTINGS_SEARCH_BAR_POS] as SearchBarPos
-    if (data[KEYS.SETTINGS_AUTO_SELECT_TOP_LINE] != null) autoSelectTopLine.value = data[KEYS.SETTINGS_AUTO_SELECT_TOP_LINE] as boolean
+  // Synchronous — all bookView settings are in localStorage
+  function init() {
+    const toolbar = lsGet<boolean>(KEYS.SETTINGS_TOOLBAR)
+    if (toolbar != null) toolbarVisible.value = toolbar
+    const pos = lsGet<ToolbarPosition>(KEYS.SETTINGS_TOOLBAR_POSITION)
+    if (pos != null) toolbarPosition.value = pos
+    const sbPos = lsGet<SearchBarPos>(KEYS.SETTINGS_SEARCH_BAR_POS)
+    if (sbPos != null) searchBarPos.value = sbPos
+    const autoSelect = lsGet<boolean>(KEYS.SETTINGS_AUTO_SELECT_TOP_LINE)
+    if (autoSelect != null) autoSelectTopLine.value = autoSelect
     else autoSelectTopLine.value = useSettingsStore().defaultAutoSyncCommentary
   }
 
   function toggleToolbar() {
     toolbarVisible.value = !toolbarVisible.value
-    idbSet(KEYS.SETTINGS_TOOLBAR, toolbarVisible.value)
+    lsSet(KEYS.SETTINGS_TOOLBAR, toolbarVisible.value)
   }
 
   function setToolbarPosition(pos: ToolbarPosition) {
     toolbarPosition.value = pos
-    idbSet(KEYS.SETTINGS_TOOLBAR_POSITION, pos)
+    lsSet(KEYS.SETTINGS_TOOLBAR_POSITION, pos)
   }
 
   function setSearchBarPos(pos: SearchBarPos) {
     searchBarPos.value = pos
-    idbSet(KEYS.SETTINGS_SEARCH_BAR_POS, pos)
+    lsSet(KEYS.SETTINGS_SEARCH_BAR_POS, pos)
   }
 
   function toggleAutoSelectTopLine() {
     autoSelectTopLine.value = !autoSelectTopLine.value
-    idbSet(KEYS.SETTINGS_AUTO_SELECT_TOP_LINE, autoSelectTopLine.value)
+    lsSet(KEYS.SETTINGS_AUTO_SELECT_TOP_LINE, autoSelectTopLine.value)
   }
 
   function setAutoSelectTopLine(value: boolean) {
     autoSelectTopLine.value = value
-    idbSet(KEYS.SETTINGS_AUTO_SELECT_TOP_LINE, value)
+    lsSet(KEYS.SETTINGS_AUTO_SELECT_TOP_LINE, value)
   }
 
   function zoomIn() {

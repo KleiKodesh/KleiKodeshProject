@@ -1,7 +1,7 @@
 import { ref, computed, watch } from 'vue'
 import { GeoLocation } from '@hebcal/noaa'
 import { Zmanim } from '@hebcal/core/dist/esm/zmanim'
-import { idbGet, idbSet, KEYS } from '@/utils/idbPersistence'
+import { lsGet, lsSet, KEYS } from '@/utils/persistence'
 import type { City } from './calendarTypes'
 
 export type { City }
@@ -97,10 +97,10 @@ export function useZmanim() {
 
   const activeCity = computed(() => manualCity.value ?? geoCity.value ?? JERUSALEM)
 
-  watch(manualCity, (c) => idbSet(KEYS.SETTINGS_ZMANIM_CITY, c?.name ?? null))
+  watch(manualCity, (c) => lsSet(KEYS.SETTINGS_ZMANIM_CITY, c?.name ?? null))
 
-  async function init() {
-    const saved = await idbGet<string>(KEYS.SETTINGS_ZMANIM_CITY)
+  async function init(preloadedCity?: string) {
+    const saved = preloadedCity ?? lsGet<string>(KEYS.SETTINGS_ZMANIM_CITY)
     if (saved) {
       const found = CITIES.find((c) => c.name === saved)
       if (found) {
@@ -117,7 +117,7 @@ export function useZmanim() {
       ({ coords }) => {
         geoCity.value = nearestCity(coords.latitude, coords.longitude)
         status.value = 'geo'
-        idbSet(KEYS.SETTINGS_ZMANIM_CITY, geoCity.value.name)
+        lsSet(KEYS.SETTINGS_ZMANIM_CITY, geoCity.value.name)
       },
       () => {
         status.value = 'fallback'

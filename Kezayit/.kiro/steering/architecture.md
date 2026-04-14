@@ -27,7 +27,7 @@ Steps (in order):
 
 Navigation: forward/back buttons with a slide transition; a "skip" button calls `settings.completeSetup()` immediately. Progress is shown as a top-edge accent bar.
 
-Completion: `settings.completeSetup()` sets `setupDone = true` and persists it to IDB at key `setupDone` (via `KEYS.SETTINGS_SETUP_DONE` in `idbPersistence.ts`). Once set, the wizard never shows again.
+Completion: `settings.completeSetup()` sets `setupDone = true` and persists it to IDB at key `setupDone` (via `KEYS.SETTINGS_SETUP_DONE` in `persistence.ts`). Once set, the wizard never shows again.
 
 ## Title Bar
 
@@ -245,7 +245,7 @@ All raw SQL strings live here. No inline SQL anywhere else in the codebase.
 
 ## Utilities (`src/utils/`)
 
-**idbPersistence.ts** — the only file that touches IndexedDB directly. All stores import from here; components and composables never do. Manages 3 databases, all key patterns, LRU cap for lastread, and the app reset mechanism.
+**persistence.ts** — the only file that touches IndexedDB and localStorage directly. All stores import from here; components and composables never do. Manages 3 IDB databases, all key patterns, LRU cap for lastread, the app reset mechanism, and the `__pendingReset` localStorage flag.
 
 **commentaryNav.ts** — commentary section navigation (next/prev section, TOC-aware).
 

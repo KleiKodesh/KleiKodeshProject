@@ -1,16 +1,52 @@
 /**
- * IndexedDB persistence — separate databases per concern.
+ * Persistence layer — localStorage for scalar settings, IndexedDB for large/structured data.
  *
- * Databases:
- *   app-settings  — all scalar settings (one key per setting)
- *   app-tabs      — tabs list, tab states, book states (workspace-scoped)
- *   app-lastread  — per-book last-read positions (LRU-capped at 1000)
+ * localStorage (synchronous, zero async cost):
+ *   All scalar app settings, theme, workspaces, UI state flags
  *
- * Reset: delete all three databases.
+ * IndexedDB databases:
+ *   app-tabs          — tabs list, tab states, book states (workspace-scoped)
+ *   app-lastread      — per-book last-read positions (LRU-capped at 1000)
+ *   app-hb-history    — HebrewBooks download history
+ *   app-search-cache  — Bloom search result cache (LRU-capped at 100 queries)
+ *
+ * Reset: clear all localStorage keys + delete all IDB databases.
  */
 
 const STORE = 'data'
 const LASTREAD_MAX = 1000
+
+// ── localStorage helpers (synchronous) ───────────────────────────────────────
+
+const LS_PREFIX = 'zayit.'
+
+export function lsGet<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(LS_PREFIX + key)
+    if (raw === null) return null
+    return JSON.parse(raw) as T
+  } catch { return null }
+}
+
+export function lsSet<T>(key: string, value: T): void {
+  try { localStorage.setItem(LS_PREFIX + key, JSON.stringify(value)) } catch {}
+}
+
+export function lsDelete(key: string): void {
+  try { localStorage.removeItem(LS_PREFIX + key) } catch {}
+}
+
+/** Remove all zayit.* keys from localStorage (used during reset). */
+export function lsClearAll(): void {
+  try {
+    const toRemove: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (k?.startsWith(LS_PREFIX) || k === RESET_LS_KEY) toRemove.push(k)
+    }
+    toRemove.forEach((k) => localStorage.removeItem(k))
+  } catch {}
+}
 
 // ── Shared types ──────────────────────────────────────────────────────────────
 
@@ -54,10 +90,10 @@ export interface WorkspaceList {
 // ── DB handles ────────────────────────────────────────────────────────────────
 
 const handles: Record<string, IDBDatabase | null> = {
-  'app-settings': null,
   'app-tabs': null,
   'app-lastread': null,
   'app-hb-history': null,
+  'app-search-cache': null,
 }
 
 function openDb(name: string): Promise<IDBDatabase> {
@@ -132,9 +168,8 @@ function dropDb(name: string): Promise<void> {
   })
 }
 
-// ── Settings DB ───────────────────────────────────────────────────────────────
-
 export const KEYS = {
+  // localStorage keys (used with lsGet/lsSet)
   SETTINGS_WORKSPACES: 'workspaces',
   SETTINGS_BOOKS_VIEW: 'books.view',
   SETTINGS_TOOLBAR: 'bookView.toolbarVisible',
@@ -142,7 +177,6 @@ export const KEYS = {
   SETTINGS_SEARCH_BAR_POS: 'bookView.searchBarPos',
   SETTINGS_AUTO_SELECT_TOP_LINE: 'bookView.autoSelectTopLine',
   SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY: 'defaultAutoSyncCommentary',
-
   SETTINGS_CENSOR_DIVINE: 'censorDivineNames',
   SETTINGS_DIACRITICS: 'diacriticsState',
   SETTINGS_HEADER_FONT: 'headerFont',
@@ -159,48 +193,29 @@ export const KEYS = {
   SETTINGS_PDF_FILTERS: 'pdfPageFilters',
   SETTINGS_RESUME_LAST_READ: 'resumeLastRead',
   SETTINGS_THEME: 'theme',
-  SETTINGS_CUSTOM_THEMES: 'customThemes',
   SETTINGS_SETUP_DONE: 'setupDone',
   SETTINGS_ZMANIM_CITY: 'zmanim.city',
   SETTINGS_CALENDAR_VIEW: 'calendar.viewMode',
   SETTINGS_MIDOT_DISCLAIMER: 'midot.disclaimerAccepted',
-
-  // app-tabs keys
+  // tab list is also localStorage (small JSON, needed synchronously at boot)
   tabsList: (wsId: string) => `tabs:${wsId}`,
+
+  // app-tabs IDB keys (per-tab and per-book state — can accumulate, stays in IDB)
   tab: (wsId: string, tabId: string) => `tab:${wsId}:${tabId}`,
   book: (wsId: string, tabId: string, bookId: number) => `book:${wsId}:${tabId}:${bookId}`,
   tabPrefix: (wsId: string, tabId: string) => `book:${wsId}:${tabId}:`,
-  wsPrefix: (wsId: string) => `tabs:${wsId}`,
 } as const
 
+// ── Search cache DB ───────────────────────────────────────────────────────────
+
 export function idbGet<T>(key: string): Promise<T | null> {
-  return dbGet<T>('app-settings', key)
+  return dbGet<T>('app-search-cache', key)
 }
 export function idbSet<T>(key: string, value: T): Promise<void> {
-  return dbSet('app-settings', key, value)
+  return dbSet('app-search-cache', key, value)
 }
 export function idbDelete(key: string): Promise<void> {
-  return dbDelete('app-settings', key)
-}
-
-/** Read multiple settings keys in a single IDB transaction — much faster than N separate reads. */
-export async function idbGetMany(keys: string[]): Promise<Record<string, unknown>> {
-  const idb = await openDb('app-settings')
-  return new Promise((resolve, reject) => {
-    const result: Record<string, unknown> = {}
-    const tx = idb.transaction(STORE, 'readonly')
-    const store = tx.objectStore(STORE)
-    let pending = keys.length
-    if (pending === 0) { resolve(result); return }
-    for (const key of keys) {
-      const req = store.get(key)
-      req.onsuccess = () => {
-        if (req.result !== undefined) result[key] = req.result
-        if (--pending === 0) resolve(result)
-      }
-      req.onerror = () => reject(req.error)
-    }
-  })
+  return dbDelete('app-search-cache', key)
 }
 
 // ── Tabs DB ───────────────────────────────────────────────────────────────────
@@ -218,12 +233,14 @@ export function idbTabsDeleteByPrefix(prefix: string): Promise<void> {
   return dbDeleteByPrefix('app-tabs', prefix)
 }
 
-export async function idbDeleteWorkspaceData(wsId: string): Promise<void> {
-  await Promise.all([
-    dbDeleteByPrefix('app-tabs', `tabs:${wsId}`),
+export function idbDeleteWorkspaceData(wsId: string): Promise<void> {
+  // Tab list is in localStorage — remove it synchronously
+  lsDelete(KEYS.tabsList(wsId))
+  // Tab/book states are in IDB
+  return Promise.all([
     dbDeleteByPrefix('app-tabs', `tab:${wsId}:`),
     dbDeleteByPrefix('app-tabs', `book:${wsId}:`),
-  ])
+  ]).then(() => {})
 }
 
 // ── LastRead DB ───────────────────────────────────────────────────────────────
@@ -289,16 +306,13 @@ export function idbGetLastRead(bookId: number): Promise<LastReadState | null> {
 const RESET_LS_KEY = '__pendingReset'
 
 export async function idbClearAll(): Promise<void> {
+  lsClearAll()
   await Promise.all([
-    dropDb('app-settings'),
     dropDb('app-tabs'),
     dropDb('app-lastread'),
     dropDb('app-hb-history'),
+    dropDb('app-search-cache'),
   ])
-}
-
-export async function idbClearSettings(): Promise<void> {
-  await dropDb('app-settings')
 }
 
 /** Schedule a full reset on next boot — synchronous localStorage write, zero IDB cost. */

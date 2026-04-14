@@ -1,39 +1,15 @@
 import themesData from './themes.json'
 import type { ThemePreset, Theme } from './themeTypes'
 import { lighten, darken, hexToRgb, hexToRgbObj } from './themeColorUtils'
-import { idbGet, idbSet, KEYS } from '@/utils/idbPersistence'
 
 export type { ThemePreset, Theme, ThemeColors } from './themeTypes'
 export { lighten, darken, hexToRgb, hexToRgbObj } from './themeColorUtils'
 
 export const THEME_PRESETS: Record<ThemePreset, Theme> = themesData as Record<ThemePreset, Theme>
 
-// ── Custom themes ────────────────────────────────────────────────────────────
-
-let customThemes: Record<string, Theme> = {}
-
-export async function loadCustomThemes() {
-  customThemes = (await idbGet<Record<string, Theme>>(KEYS.SETTINGS_CUSTOM_THEMES)) ?? {}
-}
-
-function saveCustomThemes() {
-  idbSet(KEYS.SETTINGS_CUSTOM_THEMES, customThemes)
-}
-
-export const getTheme = (preset: ThemePreset): Theme | undefined =>
-  THEME_PRESETS[preset] ?? customThemes[preset]
-export const getAllThemes = (): Record<string, Theme> => ({ ...THEME_PRESETS, ...customThemes })
-export const getCustomThemes = (): Record<string, Theme> => ({ ...customThemes })
-export const isCustomTheme = (preset: ThemePreset): boolean => preset in customThemes
-
-export function addCustomTheme(id: string, theme: Theme) {
-  customThemes[id] = theme
-  saveCustomThemes()
-}
-export function deleteCustomTheme(id: string) {
-  delete customThemes[id]
-  saveCustomThemes()
-}
+export const getTheme = (preset: ThemePreset): Theme | undefined => THEME_PRESETS[preset]
+export const getAllThemes = (): Record<ThemePreset, Theme> => ({ ...THEME_PRESETS })
+export const isCustomTheme = (_preset: ThemePreset): boolean => false
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

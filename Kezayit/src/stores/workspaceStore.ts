@@ -1,9 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref, computed, toRaw } from 'vue'
-import { idbGet, idbSet, idbDeleteWorkspaceData, KEYS } from '@/utils/idbPersistence'
-import type { Workspace, WorkspaceList } from '@/utils/idbPersistence'
+import { lsGet, lsSet, idbDeleteWorkspaceData, KEYS } from '@/utils/persistence'
+import type { Workspace, WorkspaceList } from '@/utils/persistence'
 
-export type { Workspace } from '@/utils/idbPersistence'
+export type { Workspace } from '@/utils/persistence'
 
 const DEFAULT_WS_ID = 'default'
 const DEFAULT_WS_NAME = 'ברירת מחדל'
@@ -18,22 +18,22 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
   const activeWorkspace = computed(() => workspaces.value.find((w) => w.id === activeId.value))
 
-  async function init() {
-    const saved = await idbGet<WorkspaceList>(KEYS.SETTINGS_WORKSPACES)
+  // Synchronous — workspaces list is in localStorage
+  function init() {
+    const saved = lsGet<WorkspaceList>(KEYS.SETTINGS_WORKSPACES)
     if (saved && saved.workspaces.length > 0) {
       workspaces.value = saved.workspaces
       activeId.value = saved.activeId
     } else {
-      // First launch — create default workspace
       const def: Workspace = { id: DEFAULT_WS_ID, name: DEFAULT_WS_NAME, createdAt: Date.now() }
       workspaces.value = [def]
       activeId.value = DEFAULT_WS_ID
-      await persist()
+      persist()
     }
   }
 
   function persist() {
-    return idbSet<WorkspaceList>(KEYS.SETTINGS_WORKSPACES, {
+    lsSet<WorkspaceList>(KEYS.SETTINGS_WORKSPACES, {
       workspaces: toRaw(workspaces.value).map((w) => toRaw(w)),
       activeId: activeId.value,
     })
@@ -46,7 +46,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       createdAt: Date.now(),
     }
     workspaces.value.push(ws)
-    await persist()
+    persist()
     return ws
   }
 
@@ -54,29 +54,26 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     const ws = workspaces.value.find((w) => w.id === id)
     if (ws) {
       ws.name = name.trim() || ws.name
-      await persist()
+      persist()
     }
   }
 
   async function deleteWorkspace(id: string) {
-    if (workspaces.value.length <= 1) return // can't delete last workspace
+    if (workspaces.value.length <= 1) return
     const idx = workspaces.value.findIndex((w) => w.id === id)
     if (idx === -1) return
     workspaces.value.splice(idx, 1)
-    // If deleting active, switch to first remaining
     if (activeId.value === id) {
       activeId.value = workspaces.value[0]!.id
     }
-    await persist()
-    // Clean up all IDB data for the deleted workspace
+    persist()
     await idbDeleteWorkspaceData(id)
   }
 
-  /** Switch active workspace — caller should reload the app */
   async function switchWorkspace(id: string) {
     if (!workspaces.value.some((w) => w.id === id)) return
     activeId.value = id
-    await persist()
+    persist()
   }
 
   return {
