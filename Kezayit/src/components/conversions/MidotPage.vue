@@ -5,6 +5,9 @@ import type { ConversionExplanation } from './midot'
 import { LENGTH, AREA, VOLUME, WEIGHT, COINS, TIME } from './units'
 import type { Unit, UnitSource, OpinionKey } from './units'
 import { IconArrowSwap24Regular } from '@iconify-prerendered/vue-fluent'
+import { useSettingsStore } from '@/stores/settingsStore'
+
+const settings = useSettingsStore()
 
 // ── Source helpers ────────────────────────────────────────────────────────────
 // Pick the single best source to display:
@@ -33,6 +36,7 @@ const OPINION_LABELS: Record<string, string> = {
   aruchHashulchan: 'ערוה"ש',
   ravMoshe: 'ר"מ פיינשטיין',
   chazonIsh: 'חזו"א',
+  midotHatoraMeduyakot: 'מידות התורה המדויקות',
 }
 
 const HAMICHLOL_SOURCE: UnitSource = {
@@ -112,6 +116,7 @@ const OPINION_TABS: { key: OpinionKey; label: string }[] = [
   { key: 'aruchHashulchan', label: 'ערוה"ש' },
   { key: 'ravMoshe', label: 'ר"מ פיינשטיין' },
   { key: 'chazonIsh', label: 'חזו"א' },
+  { key: 'midotHatoraMeduyakot', label: 'מידות המדויקות' },
 ]
 
 const DEFAULTS: Record<string, { from: string; to: string }> = {
@@ -244,7 +249,21 @@ const toMetricDisplay = computed(() => {
       </div>
     </div>
 
-    <div class="converter">
+    <!-- First-use disclaimer — shown instead of converter -->
+    <div v-if="!settings.midotDisclaimerAccepted" class="disclaimer-wrap">
+      <div class="disclaimer-box">
+        <p class="disclaimer-title">שימו לב</p>
+        <p class="disclaimer-body">
+          המידות והשיעורים המוצגים כאן מבוססים על מקורות שונים ועל שיטות פוסקים שונות. ייתכנו
+          אי-דיוקים, מחלוקות, ופרשנויות שונות בין הפוסקים.
+        </p>
+        <p class="disclaimer-body">השימוש בכלי זה הוא באחריות המשתמש בלבד.</p>
+        <p class="disclaimer-body">לכל שאלה הלכתית יש לפנות לרב מוסמך.</p>
+        <button class="disclaimer-btn" @click="settings.acceptMidotDisclaimer()">הבנתי, המשך</button>
+      </div>
+    </div>
+
+    <div v-else class="converter">
       <!-- From block -->
       <div class="conv-block">
         <select v-model="fromUnit" class="unit-select">
@@ -279,23 +298,23 @@ const toMetricDisplay = computed(() => {
         <div v-if="toMetricDisplay" class="metric-hint">≈ {{ toMetricDisplay }}</div>
         <div v-if="toUnitInfo?.disputed" class="unit-disputed">{{ toUnitInfo.disputed }}</div>
       </div>
-    </div>
 
-    <!-- Explanation panel — bottom of page -->
-    <div v-if="explanation" class="explanation-bar">
-      <span class="explanation-calc">{{ explanation.calc }}</span>
-      <span class="explanation-sep"> · </span>
-      <span class="explanation-source">
-        <a
-          v-if="explanation.source.url"
-          :href="explanation.source.url"
-          target="_blank"
-          rel="noopener"
-          class="source-link"
-          >{{ explanation.source.label }}</a
-        >
-        <span v-else>{{ explanation.source.label }}</span>
-      </span>
+      <!-- Explanation — sits directly below the result -->
+      <div v-if="explanation" class="explanation-bar">
+        <span class="explanation-calc">{{ explanation.calc }}</span>
+        <span class="explanation-sep"> · </span>
+        <span class="explanation-source">
+          <a
+            v-if="explanation.source.url"
+            :href="explanation.source.url"
+            target="_blank"
+            rel="noopener"
+            class="source-link"
+            >{{ explanation.source.label }}</a
+          >
+          <span v-else>{{ explanation.source.label }}</span>
+        </span>
+      </div>
     </div>
   </div>
 </template>
@@ -305,7 +324,7 @@ const toMetricDisplay = computed(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow: hidden;
+  overflow-y: auto;
   direction: rtl;
   background: var(--bg-primary);
 }
@@ -330,7 +349,7 @@ const toMetricDisplay = computed(() => {
 .system-select {
   flex: 1;
   height: 28px;
-  padding: 0 8px;
+  padding: 0 8px 0 24px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 4px;
@@ -347,21 +366,19 @@ const toMetricDisplay = computed(() => {
 }
 
 .converter {
-  flex: 1;
   display: flex;
   flex-direction: column;
   padding: clamp(16px, 3vh, 32px) clamp(16px, 4vw, 32px);
   max-width: 480px;
   width: 100%;
   align-self: center;
-  min-height: 0;
   gap: clamp(4px, 1vh, 8px);
 }
 
 /* Opinion selector */
 .opinion-select {
   height: 28px;
-  padding: 0 8px;
+  padding: 0 8px 0 24px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 4px;
@@ -398,8 +415,6 @@ const toMetricDisplay = computed(() => {
 
 /* Converter blocks */
 .conv-block {
-  flex: 1;
-  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--bg-secondary);
@@ -413,7 +428,7 @@ const toMetricDisplay = computed(() => {
   display: block;
   width: 100%;
   height: 32px;
-  padding: 0 10px;
+  padding: 0 10px 0 28px;
   background: var(--bg-toolbar);
   border: none;
   border-bottom: 1px solid var(--border-color);
@@ -429,15 +444,14 @@ const toMetricDisplay = computed(() => {
 }
 
 .value-input {
-  flex: 1;
-  min-height: 0;
   display: block;
   width: 100%;
+  height: 72px;
   padding: 0 14px;
   background: none;
   border: none;
   outline: none;
-  font-size: clamp(18px, 3.5vh, 34px);
+  font-size: clamp(24px, 4vh, 36px);
   font-family: inherit;
   color: var(--text-primary);
   text-align: right;
@@ -453,13 +467,12 @@ const toMetricDisplay = computed(() => {
 }
 
 .result-value {
-  flex: 1;
-  min-height: 0;
+  height: 72px;
   padding: 0 14px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  font-size: clamp(18px, 3.5vh, 34px);
+  font-size: clamp(24px, 4vh, 36px);
   color: var(--accent-color);
   font-weight: 600;
   direction: ltr;
@@ -486,25 +499,18 @@ const toMetricDisplay = computed(() => {
 }
 
 .explanation-bar {
-  flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
+  flex-wrap: wrap;
   gap: 4px;
-  padding: 6px 16px;
-  background: var(--bg-toolbar);
-  border-top: 1px solid var(--border-color);
+  padding: 8px 2px 0;
   font-size: 11px;
   color: var(--text-secondary);
   direction: rtl;
-  overflow: hidden;
 }
 .explanation-calc {
   font-weight: 600;
   color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .explanation-sep {
   opacity: 0.4;
@@ -512,7 +518,6 @@ const toMetricDisplay = computed(() => {
 }
 .explanation-source {
   white-space: nowrap;
-  flex-shrink: 0;
 }
 .source-label {
   font-weight: 600;
@@ -563,5 +568,53 @@ const toMetricDisplay = computed(() => {
 .swap-btn:hover {
   color: var(--text-primary);
   border-color: var(--text-secondary);
+}
+
+/* Disclaimer */
+.disclaimer-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px clamp(16px, 4vw, 32px);
+}
+.disclaimer-box {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 20px;
+  max-width: 360px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  direction: rtl;
+}
+.disclaimer-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+.disclaimer-body {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin: 0;
+}
+.disclaimer-btn {
+  margin-top: 4px;
+  height: 36px;
+  background: var(--accent-color);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.disclaimer-btn:hover {
+  opacity: 0.9;
 }
 </style>

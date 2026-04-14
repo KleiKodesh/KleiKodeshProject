@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
-import { idbGet, idbSet, idbClearSettings, KEYS } from '@/utils/idbPersistence'
+import { idbGetMany, idbSet, idbClearSettings, KEYS } from '@/utils/idbPersistence'
 
 export type NewTabPage = 'homepage' | 'openfile' | 'hebrewbooks' | 'kezayit-search'
 
@@ -41,64 +41,50 @@ export const useSettingsStore = defineStore('settings', () => {
   const resumeLastRead = ref(DEFAULTS.resumeLastRead)
   const defaultAutoSyncCommentary = ref(DEFAULTS.defaultAutoSyncCommentary)
   const setupDone = ref(false)
+  const midotDisclaimerAccepted = ref(false)
 
-  // Called from main.ts before mount — loads each setting individually
+  // Called from main.ts before mount — loads all settings in a single IDB transaction
   async function init() {
-    const [
-      censored,
-      diacritics,
-      hFont,
-      tFont,
-      fSize,
-      lPad,
-      cHFont,
-      cTFont,
-      cFSize,
-      cLPad,
-      sepCommentary,
-      aZoom,
-      ntPage,
-      pdfFilters,
-      resumeLast,
-      setup,
-      defaultAutoSync,
-    ] = await Promise.all([
-      idbGet<boolean>(KEYS.SETTINGS_CENSOR_DIVINE),
-      idbGet<number>(KEYS.SETTINGS_DIACRITICS),
-      idbGet<string>(KEYS.SETTINGS_HEADER_FONT),
-      idbGet<string>(KEYS.SETTINGS_TEXT_FONT),
-      idbGet<number>(KEYS.SETTINGS_FONT_SIZE),
-      idbGet<number>(KEYS.SETTINGS_LINE_PADDING),
-      idbGet<string>(KEYS.SETTINGS_COMMENTARY_HEADER_FONT),
-      idbGet<string>(KEYS.SETTINGS_COMMENTARY_TEXT_FONT),
-      idbGet<number>(KEYS.SETTINGS_COMMENTARY_FONT_SIZE),
-      idbGet<number>(KEYS.SETTINGS_COMMENTARY_LINE_PADDING),
-      idbGet<boolean>(KEYS.SETTINGS_SEPARATE_COMMENTARY),
-      idbGet<number>(KEYS.SETTINGS_APP_ZOOM),
-      idbGet<NewTabPage>(KEYS.SETTINGS_NEW_TAB_PAGE),
-      idbGet<boolean>(KEYS.SETTINGS_PDF_FILTERS),
-      idbGet<boolean>(KEYS.SETTINGS_RESUME_LAST_READ),
-      idbGet<boolean>(KEYS.SETTINGS_SETUP_DONE),
-      idbGet<boolean>(KEYS.SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY),
+    const data = await idbGetMany([
+      KEYS.SETTINGS_CENSOR_DIVINE,
+      KEYS.SETTINGS_DIACRITICS,
+      KEYS.SETTINGS_HEADER_FONT,
+      KEYS.SETTINGS_TEXT_FONT,
+      KEYS.SETTINGS_FONT_SIZE,
+      KEYS.SETTINGS_LINE_PADDING,
+      KEYS.SETTINGS_COMMENTARY_HEADER_FONT,
+      KEYS.SETTINGS_COMMENTARY_TEXT_FONT,
+      KEYS.SETTINGS_COMMENTARY_FONT_SIZE,
+      KEYS.SETTINGS_COMMENTARY_LINE_PADDING,
+      KEYS.SETTINGS_SEPARATE_COMMENTARY,
+      KEYS.SETTINGS_APP_ZOOM,
+      KEYS.SETTINGS_NEW_TAB_PAGE,
+      KEYS.SETTINGS_PDF_FILTERS,
+      KEYS.SETTINGS_RESUME_LAST_READ,
+      KEYS.SETTINGS_SETUP_DONE,
+      KEYS.SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY,
+      KEYS.SETTINGS_MIDOT_DISCLAIMER,
     ])
 
-    if (censored !== null) censorDivineNames.value = censored
-    if (diacritics !== null) diacriticsState.value = diacritics
-    if (hFont !== null) headerFont.value = hFont
-    if (tFont !== null) textFont.value = tFont
-    if (fSize !== null) fontSize.value = fSize
-    if (lPad !== null) linePadding.value = lPad
-    if (cHFont !== null) commentaryHeaderFont.value = cHFont
-    if (cTFont !== null) commentaryTextFont.value = cTFont
-    if (cFSize !== null) commentaryFontSize.value = cFSize
-    if (cLPad !== null) commentaryLinePadding.value = cLPad
-    if (sepCommentary !== null) useSeparateCommentarySettings.value = sepCommentary
-    if (aZoom !== null) appZoom.value = aZoom
-    if (ntPage !== null) newTabPage.value = ntPage
-    if (pdfFilters !== null) pdfPageFilters.value = pdfFilters
-    if (resumeLast !== null) resumeLastRead.value = resumeLast
-    if (setup !== null) setupDone.value = setup
-    if (defaultAutoSync !== null) defaultAutoSyncCommentary.value = defaultAutoSync
+    const g = data
+    if (g[KEYS.SETTINGS_CENSOR_DIVINE] != null) censorDivineNames.value = g[KEYS.SETTINGS_CENSOR_DIVINE] as boolean
+    if (g[KEYS.SETTINGS_DIACRITICS] != null) diacriticsState.value = g[KEYS.SETTINGS_DIACRITICS] as number
+    if (g[KEYS.SETTINGS_HEADER_FONT] != null) headerFont.value = g[KEYS.SETTINGS_HEADER_FONT] as string
+    if (g[KEYS.SETTINGS_TEXT_FONT] != null) textFont.value = g[KEYS.SETTINGS_TEXT_FONT] as string
+    if (g[KEYS.SETTINGS_FONT_SIZE] != null) fontSize.value = g[KEYS.SETTINGS_FONT_SIZE] as number
+    if (g[KEYS.SETTINGS_LINE_PADDING] != null) linePadding.value = g[KEYS.SETTINGS_LINE_PADDING] as number
+    if (g[KEYS.SETTINGS_COMMENTARY_HEADER_FONT] != null) commentaryHeaderFont.value = g[KEYS.SETTINGS_COMMENTARY_HEADER_FONT] as string
+    if (g[KEYS.SETTINGS_COMMENTARY_TEXT_FONT] != null) commentaryTextFont.value = g[KEYS.SETTINGS_COMMENTARY_TEXT_FONT] as string
+    if (g[KEYS.SETTINGS_COMMENTARY_FONT_SIZE] != null) commentaryFontSize.value = g[KEYS.SETTINGS_COMMENTARY_FONT_SIZE] as number
+    if (g[KEYS.SETTINGS_COMMENTARY_LINE_PADDING] != null) commentaryLinePadding.value = g[KEYS.SETTINGS_COMMENTARY_LINE_PADDING] as number
+    if (g[KEYS.SETTINGS_SEPARATE_COMMENTARY] != null) useSeparateCommentarySettings.value = g[KEYS.SETTINGS_SEPARATE_COMMENTARY] as boolean
+    if (g[KEYS.SETTINGS_APP_ZOOM] != null) appZoom.value = g[KEYS.SETTINGS_APP_ZOOM] as number
+    if (g[KEYS.SETTINGS_NEW_TAB_PAGE] != null) newTabPage.value = g[KEYS.SETTINGS_NEW_TAB_PAGE] as NewTabPage
+    if (g[KEYS.SETTINGS_PDF_FILTERS] != null) pdfPageFilters.value = g[KEYS.SETTINGS_PDF_FILTERS] as boolean
+    if (g[KEYS.SETTINGS_RESUME_LAST_READ] != null) resumeLastRead.value = g[KEYS.SETTINGS_RESUME_LAST_READ] as boolean
+    if (g[KEYS.SETTINGS_SETUP_DONE] != null) setupDone.value = g[KEYS.SETTINGS_SETUP_DONE] as boolean
+    if (g[KEYS.SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY] != null) defaultAutoSyncCommentary.value = g[KEYS.SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY] as boolean
+    if (g[KEYS.SETTINGS_MIDOT_DISCLAIMER] != null) midotDisclaimerAccepted.value = g[KEYS.SETTINGS_MIDOT_DISCLAIMER] as boolean
 
     applyCSSVariables()
   }
@@ -148,6 +134,11 @@ export const useSettingsStore = defineStore('settings', () => {
   function completeSetup() {
     setupDone.value = true
     idbSet(KEYS.SETTINGS_SETUP_DONE, true)
+  }
+
+  function acceptMidotDisclaimer() {
+    midotDisclaimerAccepted.value = true
+    idbSet(KEYS.SETTINGS_MIDOT_DISCLAIMER, true)
   }
 
   function reset() {
@@ -255,5 +246,7 @@ export const useSettingsStore = defineStore('settings', () => {
     reset,
     setupDone,
     completeSetup,
+    midotDisclaimerAccepted,
+    acceptMidotDisclaimer,
   }
 })

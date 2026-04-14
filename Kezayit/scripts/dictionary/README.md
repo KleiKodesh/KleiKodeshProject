@@ -29,6 +29,14 @@ Imports Aramaic entries from `FinalDictionary.txt` (ToratEmet installation) into
 npm run dict:import-aramaic
 ```
 
+### `import-jewishbooks-abbrev.cjs`
+
+Fetches the abbreviations table from `wiki.jewishbooks.org.il` (ראשי תיבות וקיצורים) and imports it into `public/dictionary.db` as source `ויקי ספרי יהדות - ראשי תיבות`. 476 entries, 858 senses (multiple expansions per abbreviation). Idempotent — clears and re-imports on each run.
+
+```
+npm run dict:import-jewishbooks
+```
+
 ### `create-wikidictionary-db.cjs`
 
 Drops and recreates `public/wikidictionary.db` with a clean schema. Called automatically by `import-wiktionary.cjs` — you rarely need to run this directly.

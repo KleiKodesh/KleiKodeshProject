@@ -9,6 +9,11 @@ const H: UnitSource = { label: 'הידורי המידות' }
 const B: UnitSource = { label: 'בניש, מידות ושיעורי תורה' }
 const SI: UnitSource = { label: 'SI' }
 
+const MIDOT_MEDUYAKOT: UnitSource = {
+  label: 'מידות התורה המדויקות — שלמה ב.ד הכהן',
+  url: 'https://tora-forum.co.il/attachments/מידות-התורה-המדויקות-pdf.101762/',
+}
+
 const PESACHIM: UnitSource = { label: 'תלמוד בבלי פסחים קט א' }
 const ERUVIN83: UnitSource = { label: 'תלמוד בבלי עירובין פג א' }
 const RAMBAM_M: UnitSource = { label: 'רמב"ם, הקדמה למנחות' }
@@ -155,6 +160,30 @@ export const VOLUME: Record<string, Unit> = {
     heDesc: '40 סאות',
     talmudSource: { label: 'תלמוד בבלי עירובין ד ב' },
     refSource: M,
+  },
+  // ── שיעורי כתמים ונגעים (מידות התורה המדויקות) ───────────────────────────
+  // אלו שיעורי שטח המבוטאים כקוטר עיגול; anchor = נפח ביחס לכביצה (נאה-space)
+  // גריס הקלקי: קוטר 13.537 מ"מ → שטח 143.9 מ"מ² → נפח ≈ 0.25 כביצה (לצורך המרה)
+  'גריס הקלקי': {
+    anchor: 0.25,
+    system: 'volume',
+    heDesc: 'קוטר 13.537 מ"מ — שיעור כתמים ונגעים',
+    talmudSource: { label: 'רמב"ם, הלכות אבות הטומאות ב:יז; נגעים א:ז' },
+    refSource: MIDOT_MEDUYAKOT,
+  },
+  'גריס סתם': {
+    anchor: 0.114,
+    system: 'volume',
+    heDesc: 'קוטר 6.52 מ"מ — גריס רגיל (לתליה במאכולת)',
+    talmudSource: { label: 'תלמוד בבלי נדה נח ב' },
+    refSource: MIDOT_MEDUYAKOT,
+  },
+  תורמוס: {
+    anchor: 0.153,
+    system: 'volume',
+    heDesc: 'קוטר 9.2 מ"מ',
+    talmudSource: { label: 'תלמוד בבלי' },
+    refSource: MIDOT_MEDUYAKOT,
   },
   'מ"ל': { anchor: 1 / 57.6, system: 'volume', heDesc: 'מיליליטר', refSource: SI },
   "ל'": { anchor: 1000 / 57.6, system: 'volume', heDesc: 'ליטר', refSource: SI },

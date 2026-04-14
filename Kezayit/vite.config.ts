@@ -18,7 +18,7 @@ function devSqlitePlugin(): Plugin {
       // loadEnv with prefix '' loads all vars including non-VITE_ ones
       const env = loadEnv('development', process.cwd(), '')
       const dbPath = process.env.DB_PATH ?? env.DB_PATH ?? './data.db'
-      const dictDbPath = path.resolve('./public/dictionary.db')
+      const dictDbPath = path.resolve('./public/dicts/dictionary.db')
       try {
         db = new Database(path.resolve(dbPath))
         console.log(`[dev-sqlite] opened ${dbPath}`)
@@ -33,7 +33,7 @@ function devSqlitePlugin(): Plugin {
       }
 
       let wikiDictDb: InstanceType<typeof Database> | undefined
-      const wikiDictDbPath = path.resolve('./public/wikidictionary.db')
+      const wikiDictDbPath = path.resolve('./public/dicts/wikidictionary.db')
       try {
         wikiDictDb = new Database(wikiDictDbPath, { readonly: true })
         console.log(`[dev-sqlite] opened wikidictionary.db`)

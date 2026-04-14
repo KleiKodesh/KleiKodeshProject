@@ -43,9 +43,9 @@
     <Error Text="ERROR: PDF.js not found in frontend output!"
            Condition="!Exists('$(VueFrontendOut)\pdfjs\build\pdf.mjs')" />
     <Error Text="ERROR: dictionary.db not found in frontend output!"
-           Condition="!Exists('$(VueFrontendOut)\dictionary.db')" />
+           Condition="!Exists('$(VueFrontendOut)\dicts\dictionary.db')" />
     <Error Text="ERROR: wikidictionary.db not found in frontend output!"
-           Condition="!Exists('$(VueFrontendOut)\wikidictionary.db')" />
+           Condition="!Exists('$(VueFrontendOut)\dicts\wikidictionary.db')" />
 
     <Message Text="========================================" Importance="high" />
     <Message Text="[Vue] Done — frontend at $(VueFrontendOut)" Importance="high" />

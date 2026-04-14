@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { useTabStore } from './tabStore'
 import { useSettingsStore } from './settingsStore'
-import { idbGet, idbSet, KEYS } from '@/utils/idbPersistence'
+import { idbGetMany, idbSet, KEYS } from '@/utils/idbPersistence'
 import {
   ZOOM_CONFIG,
   zoomIn as zoomInUtil,
@@ -72,14 +72,16 @@ export const useBookViewStore = defineStore('bookView', () => {
   })
 
   async function init() {
-    const toolbar = await idbGet<boolean>(KEYS.SETTINGS_TOOLBAR)
-    if (toolbar !== null) toolbarVisible.value = toolbar
-    const pos = await idbGet<ToolbarPosition>(KEYS.SETTINGS_TOOLBAR_POSITION)
-    if (pos !== null) toolbarPosition.value = pos
-    const sbPos = await idbGet<SearchBarPos>(KEYS.SETTINGS_SEARCH_BAR_POS)
-    if (sbPos !== null) searchBarPos.value = sbPos
-    const autoSelect = await idbGet<boolean>(KEYS.SETTINGS_AUTO_SELECT_TOP_LINE)
-    if (autoSelect !== null) autoSelectTopLine.value = autoSelect
+    const data = await idbGetMany([
+      KEYS.SETTINGS_TOOLBAR,
+      KEYS.SETTINGS_TOOLBAR_POSITION,
+      KEYS.SETTINGS_SEARCH_BAR_POS,
+      KEYS.SETTINGS_AUTO_SELECT_TOP_LINE,
+    ])
+    if (data[KEYS.SETTINGS_TOOLBAR] != null) toolbarVisible.value = data[KEYS.SETTINGS_TOOLBAR] as boolean
+    if (data[KEYS.SETTINGS_TOOLBAR_POSITION] != null) toolbarPosition.value = data[KEYS.SETTINGS_TOOLBAR_POSITION] as ToolbarPosition
+    if (data[KEYS.SETTINGS_SEARCH_BAR_POS] != null) searchBarPos.value = data[KEYS.SETTINGS_SEARCH_BAR_POS] as SearchBarPos
+    if (data[KEYS.SETTINGS_AUTO_SELECT_TOP_LINE] != null) autoSelectTopLine.value = data[KEYS.SETTINGS_AUTO_SELECT_TOP_LINE] as boolean
     else autoSelectTopLine.value = useSettingsStore().defaultAutoSyncCommentary
   }
 

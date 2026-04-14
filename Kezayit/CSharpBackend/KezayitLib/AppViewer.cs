@@ -96,12 +96,12 @@ namespace KezayitLib
             _search = new SearchHandler(_bridge, _webView);
 
             // Wire up wiki dictionary DB (read-only, fixed path next to the app)
-            string wikiDictPath = Path.Combine(AppDir, "wikidictionary.db");
+            string wikiDictPath = Path.Combine(AppDir, "dicts", "wikidictionary.db");
             if (File.Exists(wikiDictPath))
                 _wikiDictDb = new DbAccess(wikiDictPath);
 
             // Wire up Aramaic dictionary DB (read-only, fixed path next to the app)
-            string dictPath = Path.Combine(AppDir, "dictionary.db");
+            string dictPath = Path.Combine(AppDir, "dicts", "dictionary.db");
             if (File.Exists(dictPath))
                 _dictDb = new DbAccess(dictPath);
             _db.OnDbPathPicked = path =>

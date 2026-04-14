@@ -188,6 +188,10 @@ export function explainConversion(
     aruchHashulchan: { label: 'ערוך השולחן YD רפו:כא' },
     ravMoshe: { label: 'ר"מ פיינשטיין, אגרות משה OC א:קלו' },
     chazonIsh: { label: 'חזו"א / סטייפלר, שיעורין של תורה עמ׳ 3' },
+    midotHatoraMeduyakot: {
+      label: 'מידות התורה המדויקות — שלמה ב.ד הכהן',
+      url: 'https://tora-forum.co.il/attachments/מידות-התורה-המדויקות-pdf.101762/',
+    },
   }
 
   // ── Both modern: pure SI math ──────────────────────────────────────────────

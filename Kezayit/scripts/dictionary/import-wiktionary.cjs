@@ -18,7 +18,7 @@ const http     = require('http')
 const path     = require('path')
 const Database = require('better-sqlite3')
 
-const DST_DB     = path.resolve(__dirname, '../../public/wikidictionary.db')
+const DST_DB     = path.resolve(__dirname, '../../public/dicts/wikidictionary.db')
 const EXPORT_URL = 'https://he.wiktionary.org/wiki/%D7%9E%D7%99%D7%95%D7%97%D7%93:%D7%99%D7%99%D7%A6%D7%95%D7%90'
 const API_URL    = 'https://he.wiktionary.org/w/api.php'
 const BATCH      = 20

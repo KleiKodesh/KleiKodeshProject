@@ -148,12 +148,30 @@ export const MARGOLIN: MetricFactors = {
   rounded: { lengthCmPerEtzba: 1.9, volumeMlPerBeitza: 50, weightGramsPerGerah: 0.48 },
 }
 
+/**
+ * מידות התורה המדויקות — שלמה ב.ד הכהן (תשפ"ג)
+ * https://tora-forum.co.il/attachments/מידות-התורה-המדויקות-pdf.101762/
+ *
+ * אצבע (אגודל) = 1.94 ס"מ (ממוצע טווח 1.84–2.04) → טפח = 7.77 ס"מ → אמה = 46.63 ס"מ
+ * כביצה = 52.82 מ"ל (מהטבלה המסכמת; נגזר: 7.2 × 1.94³ ≈ 52.57)
+ * גרה = 0.73392 גרם (שקל = 14.6784 גרם = 20 גרות → גרה = 14.6784/20)
+ *   שיטת המשקל שונה לחלוטין מכל שאר הדעות — מבוססת על מחקר עצמאי של המחבר
+ */
+export const MIDOT_HATORA_MEDUYAKOT: MetricFactors = {
+  lengthCmPerEtzba: 1.94,
+  volumeMlPerBeitza: 52.82,
+  weightGramsPerGerah: 0.73392,
+  // טווח: אצבע 1.84–2.04, כביצה ~50.1–55.4 מ"ל
+  rounded: { lengthCmPerEtzba: 1.94, volumeMlPerBeitza: 52.82, weightGramsPerGerah: 0.73392 },
+}
+
 export const ALL_OPINIONS = {
   naeh: NAEH,
   margolin: MARGOLIN,
   aruchHashulchan: ARUCH_HASHULCHAN,
   ravMoshe: RAV_MOSHE,
   chazonIsh: CHAZON_ISH,
+  midotHatoraMeduyakot: MIDOT_HATORA_MEDUYAKOT,
 } as const
 
 export type OpinionKey = keyof typeof ALL_OPINIONS

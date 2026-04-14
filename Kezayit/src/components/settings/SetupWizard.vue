@@ -175,7 +175,7 @@ const progressPct = computed(() => Math.round((stepIndex.value / (steps.value.le
         <div :key="currentStep" class="step-root">
           <!-- WELCOME -->
           <div v-if="currentStep === 'welcome'" class="step-welcome">
-            <img src="/KleiKodesh_Main.png" class="welcome-logo" alt="" />
+            <img src="/images/KleiKodesh_Main.png" class="welcome-logo" alt="" />
             <h1 class="welcome-title">ברוכים הבאים לכזית</h1>
             <p class="welcome-body">
               אשף זה ילווה אותך בהגדרת האפליקציה בכמה צעדים קצרים. ניתן לשנות הכל בהמשך.

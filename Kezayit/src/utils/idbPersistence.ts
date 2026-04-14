@@ -163,6 +163,7 @@ export const KEYS = {
   SETTINGS_SETUP_DONE: 'setupDone',
   SETTINGS_ZMANIM_CITY: 'zmanim.city',
   SETTINGS_CALENDAR_VIEW: 'calendar.viewMode',
+  SETTINGS_MIDOT_DISCLAIMER: 'midot.disclaimerAccepted',
 
   // app-tabs keys
   tabsList: (wsId: string) => `tabs:${wsId}`,
@@ -180,6 +181,26 @@ export function idbSet<T>(key: string, value: T): Promise<void> {
 }
 export function idbDelete(key: string): Promise<void> {
   return dbDelete('app-settings', key)
+}
+
+/** Read multiple settings keys in a single IDB transaction — much faster than N separate reads. */
+export async function idbGetMany(keys: string[]): Promise<Record<string, unknown>> {
+  const idb = await openDb('app-settings')
+  return new Promise((resolve, reject) => {
+    const result: Record<string, unknown> = {}
+    const tx = idb.transaction(STORE, 'readonly')
+    const store = tx.objectStore(STORE)
+    let pending = keys.length
+    if (pending === 0) { resolve(result); return }
+    for (const key of keys) {
+      const req = store.get(key)
+      req.onsuccess = () => {
+        if (req.result !== undefined) result[key] = req.result
+        if (--pending === 0) resolve(result)
+      }
+      req.onerror = () => reject(req.error)
+    }
+  })
 }
 
 // ── Tabs DB ───────────────────────────────────────────────────────────────────

@@ -6,6 +6,10 @@ const M: UnitSource = {
 }
 const TC: UnitSource = { label: 'TorahCalc', url: 'https://www.torahcalc.com/info/biblical-units/' }
 const SI: UnitSource = { label: 'SI' }
+const MIDOT_MEDUYAKOT: UnitSource = {
+  label: 'מידות התורה המדויקות — שלמה ב.ד הכהן',
+  url: 'https://tora-forum.co.il/attachments/מידות-התורה-המדויקות-pdf.101762/',
+}
 
 const LUACH: UnitSource = { label: 'לוח העיבור העברי' }
 
@@ -44,4 +48,26 @@ export const TIME: Record<string, Unit> = {
   'שעה (מודרנית)': { anchor: HOUR, system: 'time', heDesc: '60 דקות', refSource: SI },
   'יום (מודרני)': { anchor: DAY, system: 'time', heDesc: '24 שעות', refSource: SI },
   שבוע_מ: { anchor: DAY * 7, system: 'time', heDesc: '7 ימים', refSource: SI },
+  // ── שיעורי זמן מעשיים (מידות התורה המדויקות) ─────────────────────────────
+  'כדי אכילת כזית': {
+    anchor: SEC * 20,
+    system: 'time',
+    heDesc: '~20 שניות',
+    talmudSource: { label: 'תלמוד בבלי' },
+    refSource: MIDOT_MEDUYAKOT,
+  },
+  'כדי אכילת פרס': {
+    anchor: MIN * 12,
+    system: 'time',
+    heDesc: '~12 דקות (פת בלפתן)',
+    talmudSource: { label: 'משנה נגעים יג:ט; תלמוד בבלי עירובין ד א' },
+    refSource: MIDOT_MEDUYAKOT,
+  },
+  'כדי הילוך מיל': {
+    anchor: MIN * 22.5,
+    system: 'time',
+    heDesc: '~22.5 דקות (הליכה בינונית)',
+    talmudSource: { label: 'רמב"ם, פירוש המשנה פסחים פ"ג; פ"ט' },
+    refSource: MIDOT_MEDUYAKOT,
+  },
 }
