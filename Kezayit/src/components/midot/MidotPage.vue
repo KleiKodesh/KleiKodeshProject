@@ -2,8 +2,20 @@
 import { ref, computed } from 'vue'
 import { convert, toMetric, formatResult } from './midot'
 import { LENGTH, AREA, VOLUME, WEIGHT, COINS, TIME } from './units'
+import type { Unit, UnitSource, OpinionKey } from './units'
 import { IconArrowSwap24Regular } from '@iconify-prerendered/vue-fluent'
-import type { OpinionKey } from './units'
+
+// ── Source helpers ────────────────────────────────────────────────────────────
+// Pick the single best source to display:
+// 1. First source that has a URL (linkable)
+// 2. Otherwise first source in the list
+
+function normalizeSources(source: Unit['source']): UnitSource | null {
+  if (!source) return null
+  const list: UnitSource[] =
+    typeof source === 'string' ? [{ label: source }] : Array.isArray(source) ? source : [source]
+  return list.find((s) => s.url) ?? list[0] ?? null
+}
 
 const TABS = [
   { key: 'length', label: 'אורך' },
@@ -14,11 +26,91 @@ const TABS = [
   { key: 'time', label: 'זמן' },
 ]
 
+const OPINION_LABELS: Record<string, string> = {
+  naeh: 'ר"ח נאה',
+  margolin: 'הידורי המידות',
+  aruchHashulchan: 'ערוה"ש',
+  ravMoshe: 'ר"מ פיינשטיין',
+  chazonIsh: 'חזו"א',
+}
+
+const HAMICHLOL_SOURCE: UnitSource = {
+  label: 'המכלול',
+  url: 'https://www.hamichlol.org.il/רשימת_מידות,_שיעורים_ומשקלות_בהלכה',
+}
+
+// Returns the source of the *conversion* between two units:
+// - If crossing Talmudic ↔ modern: the opinion (e.g. "ר"ח נאה")
+// - If both Talmudic: the unit's own source (the chain)
+// - If both modern: SI
+function conversionSource(
+  from: string,
+  to: string,
+  opinionKey: string,
+  fromInfo: Unit | undefined,
+): UnitSource | null {
+  const MODERN_KEYS = new Set([
+    'מ"מ',
+    'ס"מ',
+    "מ'",
+    'ק"מ',
+    "אינץ'",
+    'רגל',
+    'יארד',
+    'מייל',
+    'מ"מ²',
+    'ס"מ²',
+    "מ'²",
+    'דונם',
+    'הקטאר',
+    "אינץ'²",
+    'רגל²',
+    'יארד²',
+    'אקר',
+    'מ"ל',
+    "ל'",
+    'כפית',
+    'כף',
+    'fl oz',
+    'כוס',
+    'פינט',
+    'קווארט',
+    'גלון',
+    'UK fl oz',
+    'UK פינט',
+    'UK קווארט',
+    'UK גאלון',
+    'גרם',
+    'ק"ג',
+    'טון',
+    'אונס',
+    'ליברה',
+    'סטון',
+    'אונקיה טרוי',
+    'שנייה',
+    'דקה',
+    'שעה (מודרנית)',
+    'יום (מודרני)',
+    'שבוע_מ',
+  ])
+  const fromModern = MODERN_KEYS.has(from)
+  const toModern = MODERN_KEYS.has(to)
+
+  if (fromModern && toModern) return { label: 'SI' }
+  if (fromModern !== toModern) {
+    // crossing Talmudic ↔ modern — source is the opinion
+    return { label: OPINION_LABELS[opinionKey] ?? opinionKey }
+  }
+  // both Talmudic — source is the unit chain
+  return normalizeSources(fromInfo?.source) ?? HAMICHLOL_SOURCE
+}
+
 const OPINION_TABS: { key: OpinionKey; label: string }[] = [
-  { key: 'naeh', label: 'ר׳ ח׳ נאה' },
+  { key: 'naeh', label: 'ר"ח נאה' },
+  { key: 'margolin', label: 'דרהם קטן' },
   { key: 'aruchHashulchan', label: 'ערוה"ש' },
-  { key: 'ravMoshe', label: 'ר׳ מ׳ פיינשטיין' },
-  { key: 'chazonIsh', label: 'חזון איש' },
+  { key: 'ravMoshe', label: 'ר"מ פיינשטיין' },
+  { key: 'chazonIsh', label: 'חזו"א' },
 ]
 
 const DEFAULTS: Record<string, { from: string; to: string }> = {
@@ -44,12 +136,28 @@ const HAS_METRIC = new Set(['length', 'area', 'volume', 'weight'])
 
 const activeSystem = ref('length')
 const opinion = ref<OpinionKey>('naeh')
+const useRounded = ref(false)
 const fromUnit = ref(DEFAULTS['length']!.from)
 const toUnit = ref(DEFAULTS['length']!.to)
 const inputValue = ref('1')
 
 const units = computed(() => Object.keys(UNIT_MAPS[activeSystem.value]!))
 const hasMetric = computed(() => HAS_METRIC.has(activeSystem.value))
+
+function getUnit(name: string): Unit | undefined {
+  const map = UNIT_MAPS[activeSystem.value] as Record<string, Unit>
+  return map?.[name]
+}
+
+const fromUnitInfo = computed(() => getUnit(fromUnit.value))
+const toUnitInfo = computed(() => getUnit(toUnit.value))
+
+// Single source for the whole conversion — shown once at the swap row
+const convSource = computed((): UnitSource | null => {
+  const src = conversionSource(fromUnit.value, toUnit.value, opinion.value, fromUnitInfo.value)
+  if (src?.label === 'SI') return null // modern↔modern: pure math, no source needed
+  return src
+})
 
 function onSystemChange(key: string) {
   activeSystem.value = key
@@ -68,7 +176,7 @@ const result = computed(() => {
   const n = parseFloat(inputValue.value)
   if (!inputValue.value || isNaN(n)) return ''
   try {
-    return formatResult(convert(n, fromUnit.value, toUnit.value, opinion.value))
+    return formatResult(convert(n, fromUnit.value, toUnit.value, opinion.value, useRounded.value))
   } catch {
     return ''
   }
@@ -78,7 +186,7 @@ const fromMetric = computed(() => {
   const n = parseFloat(inputValue.value)
   if (!inputValue.value || isNaN(n) || !hasMetric.value) return null
   try {
-    const m = toMetric(n, fromUnit.value, opinion.value)
+    const m = toMetric(n, fromUnit.value, opinion.value, useRounded.value)
     if (!m) return null
     return `${formatResult(m.value)} ${m.metricUnit}`
   } catch {
@@ -90,8 +198,8 @@ const toMetricDisplay = computed(() => {
   const n = parseFloat(inputValue.value)
   if (!inputValue.value || isNaN(n) || !hasMetric.value) return null
   try {
-    const converted = convert(n, fromUnit.value, toUnit.value, opinion.value)
-    const m = toMetric(converted, toUnit.value, opinion.value)
+    const converted = convert(n, fromUnit.value, toUnit.value, opinion.value, useRounded.value)
+    const m = toMetric(converted, toUnit.value, opinion.value, useRounded.value)
     if (!m) return null
     return `${formatResult(m.value)} ${m.metricUnit}`
   } catch {
@@ -114,6 +222,15 @@ const toMetricDisplay = computed(() => {
         <select v-if="hasMetric" v-model="opinion" class="opinion-select">
           <option v-for="op in OPINION_TABS" :key="op.key" :value="op.key">{{ op.label }}</option>
         </select>
+        <button
+          v-if="hasMetric"
+          class="rounded-toggle"
+          :class="{ active: useRounded }"
+          :title="useRounded ? 'ערכים מעוגלים (כספרים)' : 'ערכים מדויקים'"
+          @click="useRounded = !useRounded"
+        >
+          {{ useRounded ? 'מעוגל' : 'מדויק' }}
+        </button>
       </div>
     </div>
 
@@ -131,15 +248,28 @@ const toMetricDisplay = computed(() => {
           placeholder="0"
         />
         <div v-if="fromMetric" class="metric-hint">≈ {{ fromMetric }}</div>
+        <div v-if="fromUnitInfo?.disputed" class="unit-disputed">{{ fromUnitInfo.disputed }}</div>
       </div>
 
-      <!-- Swap -->
+      <!-- Swap + single conversion source -->
       <div class="swap-row">
         <div class="swap-line" />
         <button class="swap-btn" @click="swap">
           <IconArrowSwap24Regular />
         </button>
         <div class="swap-line" />
+      </div>
+      <div v-if="convSource" class="conv-source">
+        <span class="source-label">מקור: </span>
+        <a
+          v-if="convSource.url"
+          :href="convSource.url"
+          target="_blank"
+          rel="noopener"
+          class="source-link"
+          >{{ convSource.label }}</a
+        >
+        <span v-else>{{ convSource.label }}</span>
       </div>
 
       <!-- To block -->
@@ -149,6 +279,7 @@ const toMetricDisplay = computed(() => {
         </select>
         <div class="result-value">{{ result || '—' }}</div>
         <div v-if="toMetricDisplay" class="metric-hint">≈ {{ toMetricDisplay }}</div>
+        <div v-if="toUnitInfo?.disputed" class="unit-disputed">{{ toUnitInfo.disputed }}</div>
       </div>
     </div>
   </div>
@@ -231,6 +362,25 @@ const toMetricDisplay = computed(() => {
   border-color: var(--accent-color);
 }
 
+.rounded-toggle {
+  height: 28px;
+  padding: 0 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.rounded-toggle.active {
+  background: color-mix(in srgb, var(--accent-color) 15%, var(--bg-secondary));
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+
 /* Converter blocks */
 .conv-block {
   flex: 1;
@@ -305,11 +455,48 @@ const toMetricDisplay = computed(() => {
 
 .metric-hint {
   flex-shrink: 0;
-  padding: 0 14px 6px;
+  padding: 0 14px 4px;
   font-size: 11px;
   color: var(--text-secondary);
   text-align: left;
   direction: ltr;
+}
+
+.unit-source {
+  display: none; /* removed — source now shown at swap row */
+}
+
+.conv-source {
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 10px;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 14px;
+}
+.source-label {
+  font-weight: 600;
+}
+.source-link {
+  color: var(--accent-color);
+  text-decoration: none;
+  opacity: 0.85;
+}
+.source-link:hover {
+  text-decoration: underline;
+  opacity: 1;
+}
+
+.unit-disputed {
+  flex-shrink: 0;
+  padding: 0 14px 6px;
+  font-size: 10px;
+  color: color-mix(in srgb, var(--accent-color) 80%, var(--text-secondary));
+  text-align: right;
+  direction: rtl;
 }
 
 /* Swap row */

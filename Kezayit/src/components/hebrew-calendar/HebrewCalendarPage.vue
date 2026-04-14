@@ -1,16 +1,19 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import CalendarHeader from './CalendarHeader.vue'
 import WeeklyCalendarList from './WeeklyCalendarList.vue'
 import MonthlyCalendarGrid from './MonthlyCalendarGrid.vue'
 import { useZmanim } from './useZmanim'
 import { useHebrewCalendar } from './useHebrewCalendar'
 import { useWeeklyCalendar } from './useWeeklyCalendar'
+import { idbGet, idbSet, KEYS } from '@/utils/idbPersistence'
 
 const { activeCity, cities, setCity, init: initZmanim } = useZmanim()
 
 type ViewMode = 'weekly' | 'monthly'
 const viewMode = ref<ViewMode>('weekly')
+
+watch(viewMode, (v) => idbSet(KEYS.SETTINGS_CALENDAR_VIEW, v))
 
 // Monthly composable — always alive so pickers work
 const monthly = useHebrewCalendar()
@@ -33,9 +36,9 @@ function onToday() {
   viewMode.value === 'weekly' ? weekly.goToToday() : monthly.goToToday()
 }
 
-onMounted(() => {
-  // Reset to today's week/month on every visit — no stale navigation state
-  viewMode.value = 'weekly'
+onMounted(async () => {
+  const saved = await idbGet<ViewMode>(KEYS.SETTINGS_CALENDAR_VIEW)
+  viewMode.value = saved === 'monthly' ? 'monthly' : 'weekly'
   weekly.reset()
   monthly.reset()
   initZmanim()

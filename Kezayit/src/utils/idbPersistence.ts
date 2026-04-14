@@ -162,6 +162,7 @@ export const KEYS = {
   SETTINGS_CUSTOM_THEMES: 'customThemes',
   SETTINGS_SETUP_DONE: 'setupDone',
   SETTINGS_ZMANIM_CITY: 'zmanim.city',
+  SETTINGS_CALENDAR_VIEW: 'calendar.viewMode',
 
   // app-tabs keys
   tabsList: (wsId: string) => `tabs:${wsId}`,

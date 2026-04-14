@@ -9,6 +9,26 @@ import {
   MishnaYomiEvent,
   NachYomiIndex,
   NachYomiEvent,
+  YerushalmiYomiEvent,
+  yerushalmiYomi,
+  vilna,
+  DailyRambamEvent,
+  dailyRambam1,
+  DailyRambam3Event,
+  dailyRambam3,
+  KitzurShulchanAruchEvent,
+  kitzurShulchanAruch,
+  ChofetzChaimEvent,
+  chofetzChaim,
+  PsalmsEvent,
+  dailyPsalms,
+  SeferHaMitzvotEvent,
+  seferHaMitzvot,
+  PerekYomiEvent,
+  perekYomi,
+  ArukhHaShulchanYomiEvent,
+  arukhHaShulchanYomi,
+  DirshuAmudYomiEvent,
 } from '@hebcal/learning'
 
 // ── Hebrew tractate names ─────────────────────────────────────────────────────
@@ -124,12 +144,32 @@ export interface DailyLearning {
   dafYomi: string | null
   mishnaYomi: string | null
   nachYomi: string | null
+  yerushalmiVilna: string | null
+  rambam1: string | null
+  rambam3: string | null
+  kitzurShulchanAruch: string | null
+  chofetzChaim: string | null
+  psalms: string | null
+  seferHaMitzvot: string | null
+  perekYomi: string | null
+  arukhHaShulchan: string | null
+  dirshuAmudYomi: string | null
 }
 
 export function getDailyLearning(hd: HDate): DailyLearning {
   let dafYomi: string | null = null
   let mishnaYomi: string | null = null
   let nachYomi: string | null = null
+  let yerushalmiVilna: string | null = null
+  let rambam1: string | null = null
+  let rambam3: string | null = null
+  let kitzurShulchanAruchVal: string | null = null
+  let chofetzChaimVal: string | null = null
+  let psalms: string | null = null
+  let seferHaMitzvotVal: string | null = null
+  let perekYomiVal: string | null = null
+  let arukhHaShulchan: string | null = null
+  let dirshuAmudYomi: string | null = null
 
   try {
     dafYomi = clean(new DafYomi(hd).render('he'))
@@ -142,6 +182,52 @@ export function getDailyLearning(hd: HDate): DailyLearning {
     const nyIdx = new NachYomiIndex()
     nachYomi = clean(new NachYomiEvent(hd, nyIdx.lookup(hd)).render('he'))
   } catch {}
+  try {
+    const reading = yerushalmiYomi(hd, vilna)
+    if (reading) yerushalmiVilna = clean(new YerushalmiYomiEvent(hd, reading).renderBrief('he'))
+  } catch {}
+  try {
+    rambam1 = clean(new DailyRambamEvent(hd, dailyRambam1(hd)).render('he'))
+  } catch {}
+  try {
+    rambam3 = clean(new DailyRambam3Event(hd, dailyRambam3(hd)).render('he'))
+  } catch {}
+  try {
+    const r = kitzurShulchanAruch(hd)
+    if (r) kitzurShulchanAruchVal = clean(new KitzurShulchanAruchEvent(hd, r).renderBrief('he'))
+  } catch {}
+  try {
+    chofetzChaimVal = clean(new ChofetzChaimEvent(hd, chofetzChaim(hd)).renderBrief('he'))
+  } catch {}
+  try {
+    psalms = clean(new PsalmsEvent(hd, dailyPsalms(hd)).render('he'))
+  } catch {}
+  try {
+    seferHaMitzvotVal = clean(new SeferHaMitzvotEvent(hd, seferHaMitzvot(hd)).render('he'))
+  } catch {}
+  try {
+    perekYomiVal = clean(new PerekYomiEvent(hd, perekYomi(hd)).render('he'))
+  } catch {}
+  try {
+    arukhHaShulchan = clean(new ArukhHaShulchanYomiEvent(hd, arukhHaShulchanYomi(hd)).render('he'))
+  } catch {}
+  try {
+    dirshuAmudYomi = clean(new DirshuAmudYomiEvent(hd).renderBrief('he'))
+  } catch {}
 
-  return { dafYomi, mishnaYomi, nachYomi }
+  return {
+    dafYomi,
+    mishnaYomi,
+    nachYomi,
+    yerushalmiVilna,
+    rambam1,
+    rambam3,
+    kitzurShulchanAruch: kitzurShulchanAruchVal,
+    chofetzChaim: chofetzChaimVal,
+    psalms,
+    seferHaMitzvot: seferHaMitzvotVal,
+    perekYomi: perekYomiVal,
+    arukhHaShulchan,
+    dirshuAmudYomi,
+  }
 }

@@ -207,19 +207,19 @@ function selectGregYear(y: number) {
       <div class="nav-sep" />
       <button
         class="nav-btn"
-        :class="{ active: viewMode === 'weekly' }"
-        title="תצוגה שבועית"
-        @click="emit('set-view', 'weekly')"
-      >
-        <IconCalendarAgenda20Regular />
-      </button>
-      <button
-        class="nav-btn"
         :class="{ active: viewMode === 'monthly' }"
         title="תצוגה חודשית"
         @click="emit('set-view', 'monthly')"
       >
         <IconCalendarMonth20Regular />
+      </button>
+      <button
+        class="nav-btn"
+        :class="{ active: viewMode === 'weekly' }"
+        title="תצוגה שבועית"
+        @click="emit('set-view', 'weekly')"
+      >
+        <IconCalendarAgenda20Regular />
       </button>
     </div>
 

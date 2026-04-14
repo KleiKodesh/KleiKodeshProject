@@ -138,7 +138,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="3"/>
             <RowDefinition Height="auto"/>
-            <RowDefinition Height="auto"/>
+            <RowDefinition Height="*"/>
             <RowDefinition Height="auto"/>
         </Grid.RowDefinitions>
 
@@ -159,8 +159,11 @@
                        Margin="0,4,0,0"/>
         </StackPanel>
 
-        <!-- Content — no scrollers, just stacks -->
-        <StackPanel Grid.Row="2" Margin="28,0,28,12">
+        <!-- Content — scrollable -->
+        <ScrollViewer Grid.Row="2"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="28,0,28,12">
 
             <!-- Admin elevation banner (hidden when already elevated) -->
             <Border x:Name="AdminBanner"
@@ -399,6 +402,7 @@
                        TextWrapping="Wrap"
                        HorizontalAlignment="Center"/>
         </StackPanel>
+        </ScrollViewer>
 
         <!-- Footer -->
         <Border Grid.Row="3"

@@ -72,6 +72,16 @@ export interface WeekDay {
   dafYomi: string | null
   mishnaYomi: string | null
   nachYomi: string | null
+  yerushalmiVilna: string | null
+  rambam1: string | null
+  rambam3: string | null
+  kitzurShulchanAruch: string | null
+  chofetzChaim: string | null
+  psalms: string | null
+  seferHaMitzvot: string | null
+  perekYomi: string | null
+  arukhHaShulchan: string | null
+  dirshuAmudYomi: string | null
   sunrise: string | null
   sunset: string | null
   zmanim: {
@@ -207,7 +217,7 @@ function buildWeek(
     for (const e of dayEvents) {
       const f = e.getFlags()
       if (f & flags.PARSHA_HASHAVUA) {
-        parasha = stripNiqqud(e.render('he'))
+        parasha = stripNiqqud(e.render('he')).replace(/^פרשת\s+/, '')
       } else if (f & flags.LIGHT_CANDLES) {
         candleLighting = (e as any).eventTimeStr ?? null
       } else if (f & flags.YOM_TOV_ENDS || f & flags.LIGHT_CANDLES_TZEIS) {
@@ -241,7 +251,21 @@ function buildWeek(
     }
 
     // Daily learning
-    const { dafYomi, mishnaYomi, nachYomi } = getDailyLearning(hd)
+    const {
+      dafYomi,
+      mishnaYomi,
+      nachYomi,
+      yerushalmiVilna,
+      rambam1,
+      rambam3,
+      kitzurShulchanAruch,
+      chofetzChaim,
+      psalms,
+      seferHaMitzvot,
+      perekYomi,
+      arukhHaShulchan,
+      dirshuAmudYomi,
+    } = getDailyLearning(hd)
 
     let sunrise: string | null = null
     let sunset: string | null = null
@@ -305,6 +329,16 @@ function buildWeek(
       dafYomi,
       mishnaYomi,
       nachYomi,
+      yerushalmiVilna,
+      rambam1,
+      rambam3,
+      kitzurShulchanAruch,
+      chofetzChaim,
+      psalms,
+      seferHaMitzvot,
+      perekYomi,
+      arukhHaShulchan,
+      dirshuAmudYomi,
       sunrise,
       sunset,
       zmanim,

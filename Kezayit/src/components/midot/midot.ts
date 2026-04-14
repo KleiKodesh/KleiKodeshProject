@@ -12,6 +12,8 @@ import type { MeasurementSystem, MetricFactors, OpinionKey } from './units'
 
 export type { OpinionKey }
 
+export type MetricOpinion = 'naeh' | 'chazonIsh'
+
 // ── All units in one lookup map ───────────────────────────────────────────────
 
 const ALL_UNITS = { ...LENGTH, ...AREA, ...VOLUME, ...WEIGHT, ...COINS, ...TIME }
@@ -21,9 +23,28 @@ const ALL_UNITS = { ...LENGTH, ...AREA, ...VOLUME, ...WEIGHT, ...COINS, ...TIME 
 const MODERN: Partial<Record<MeasurementSystem, Set<string>>> = {
   length: new Set(['מ"מ', 'ס"מ', "מ'", 'ק"מ', "אינץ'", 'רגל', 'יארד', 'מייל']),
   area: new Set(['מ"מ²', 'ס"מ²', "מ'²", 'דונם', 'הקטאר', "אינץ'²", 'רגל²', 'יארד²', 'אקר']),
-  volume: new Set(['מ"ל', "ל'", 'כפית', 'כף', 'fl oz', 'כוס', 'פינט', 'קווארט', 'גלון']),
-  weight: new Set(['גרם', 'ק"ג', 'טון', 'אונס', 'ליברה', 'סטון']),
+  volume: new Set([
+    'מ"ל',
+    "ל'",
+    'כפית',
+    'כף',
+    'fl oz',
+    'כוס',
+    'פינט',
+    'קווארט',
+    'גלון',
+    'UK fl oz',
+    'UK פינט',
+    'UK קווארט',
+    'UK גאלון',
+  ]),
+  weight: new Set(['גרם', 'ק"ג', 'טון', 'אונס', 'ליברה', 'סטון', 'אונקיה טרוי']),
   time: new Set(['שנייה', 'דקה', 'שעה (מודרנית)', 'יום (מודרני)', 'שבוע_מ']),
+}
+
+function getFactors(opinion: OpinionKey, useRounded: boolean): MetricFactors {
+  const f = ALL_OPINIONS[opinion]
+  return useRounded && f.rounded ? f.rounded : f
 }
 
 function isModern(unit: string, system: MeasurementSystem): boolean {
@@ -37,11 +58,16 @@ function isModern(unit: string, system: MeasurementSystem): boolean {
 //   effective_anchor(talmudic) = anchor × (O_factor / Naeh_factor)
 // Modern units keep their anchor unchanged.
 
-function effectiveAnchor(unit: string, system: MeasurementSystem, opinion: OpinionKey): number {
+function effectiveAnchor(
+  unit: string,
+  system: MeasurementSystem,
+  opinion: OpinionKey,
+  useRounded: boolean,
+): number {
   const u = ALL_UNITS[unit]!
   if (isModern(unit, system) || opinion === 'naeh') return u.anchor
 
-  const f: MetricFactors = ALL_OPINIONS[opinion]
+  const f: MetricFactors = getFactors(opinion, useRounded)
   switch (system) {
     case 'length':
       return u.anchor * (f.lengthCmPerEtzba / NAEH.lengthCmPerEtzba)
@@ -63,6 +89,7 @@ export function convert(
   from: string,
   to: string,
   opinion: OpinionKey = 'naeh',
+  useRounded = false,
 ): number {
   if (from === to) return value
 
@@ -75,8 +102,8 @@ export function convert(
     throw new Error(`לא ניתן להמיר בין ${fromUnit.system} ל-${toUnit.system}`)
 
   return (
-    (value * effectiveAnchor(from, fromUnit.system, opinion)) /
-    effectiveAnchor(to, toUnit.system, opinion)
+    (value * effectiveAnchor(from, fromUnit.system, opinion, useRounded)) /
+    effectiveAnchor(to, toUnit.system, opinion, useRounded)
   )
 }
 
@@ -86,12 +113,13 @@ export function toMetric(
   value: number,
   unit: string,
   opinion: OpinionKey,
+  useRounded = false,
 ): { value: number; metricUnit: string } | null {
   const u = ALL_UNITS[unit]
   if (!u) return null
-  if (isModern(unit, u.system)) return null // already a real-world unit
+  if (isModern(unit, u.system)) return null
 
-  const f = ALL_OPINIONS[opinion]
+  const f = getFactors(opinion, useRounded)
 
   switch (u.system) {
     case 'length': {

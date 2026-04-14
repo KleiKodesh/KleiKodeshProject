@@ -1,10 +1,8 @@
 'use strict'
 /**
  * Creates public/wikidictionary.db with the same normalized schema as dictionary.db,
- * plus a `filter_tag` column on `definition` to store the raw layer tag from wikitext.
- *
- * The filter_tag preserves the original tag string (e.g. 'גס', 'סלנג', 'ספרות') so
- * the app can apply or relax filtering rules in the future without re-importing.
+ * plus a `filter_tag` column on `definition` to store the raw layer tag from wikitext,
+ * and a `period_tag` column on `sense` for language-period filtering.
  *
  * Usage: node scripts/create-wikidictionary-db.cjs
  */
@@ -12,7 +10,10 @@
 const Database = require('better-sqlite3')
 const path = require('path')
 
-const db = new Database(path.resolve(__dirname, '../public/wikidictionary.db'))
+const DB_PATH = path.resolve(__dirname, '../public/wikidictionary.db')
+const db = new Database(DB_PATH)
+db.pragma('journal_mode = DELETE')
+db.pragma('foreign_keys = OFF')
 db.pragma('journal_mode = WAL')
 db.pragma('foreign_keys = OFF')
 
@@ -24,6 +25,7 @@ db.exec(`
   DROP TABLE IF EXISTS translation;
   DROP TABLE IF EXISTS sense;
   DROP TABLE IF EXISTS source;
+  DROP TABLE IF EXISTS _meta;
 `)
 
 db.exec(`
@@ -43,6 +45,10 @@ db.exec(`
   -- shoresh: root letters (שרש template), e.g. 'ש-ל-מ'.
   -- ktiv_male: full spelling without nikud, if given.
   -- etymology: (=expansion) note or גיזרון section text.
+  -- period_tag: dominant language-period of this sense, derived from definition
+  --   filter_tags. Values: 'מקרא' | 'חז"ל' | 'ביניים' | 'חדשה' | NULL.
+  --   NULL = untagged (modern standard Hebrew, always shown).
+  --   Used for future filtering by language register/period.
   -- source_id: always points to the single 'ויקימילון' source row.
   -- sense_order: 0-based index within the headword (multiple == blocks).
   CREATE TABLE sense (
@@ -54,6 +60,7 @@ db.exec(`
     shoresh     TEXT,
     ktiv_male   TEXT,
     etymology   TEXT,
+    period_tag  TEXT,             -- dominant period: מקרא|חז"ל|ביניים|חדשה|NULL
     source_id   INTEGER NOT NULL,
     sense_order INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (source_id) REFERENCES source(id),
@@ -62,6 +69,7 @@ db.exec(`
 
   CREATE INDEX idx_sense_headword ON sense(headword, sense_order);
   CREATE INDEX idx_sense_source   ON sense(source_id);
+  CREATE INDEX idx_sense_period   ON sense(period_tag);
 
   -- ── definition ────────────────────────────────────────────────────────────
   -- filter_tag: the raw layer tag string from the wikitext (e.g. 'גס', 'סלנג',
@@ -127,6 +135,10 @@ db.exec(`
   );
 
   CREATE INDEX idx_translation_sense ON translation(sense_id, lang);
+
+  -- ── _meta ─────────────────────────────────────────────────────────────────
+  -- Internal import progress tracking (resume support).
+  CREATE TABLE _meta (key TEXT PRIMARY KEY, value TEXT);
 `)
 
 db.pragma('foreign_keys = ON')
