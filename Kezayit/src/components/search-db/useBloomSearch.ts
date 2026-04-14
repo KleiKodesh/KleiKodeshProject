@@ -100,11 +100,14 @@ function callAction<T>(name: string, ...params: unknown[]): Promise<T> {
 // We maintain a single shared listener and route by searchId.
 
 type SearchListeners = {
-  onBatch: (results: BloomSearchResult[]) => void
-  onComplete: () => void
+  onBatch: (results: BloomSearchResult[]) => Promise<void>
+  onComplete: () => Promise<void>
   onCancelled: () => void
   onError: (err: string) => void
 }
+
+// Tracks in-flight onBatch promises so onComplete waits for all enrichment to finish
+const _pendingBatches = new Map<string, Promise<void>>()
 
 const _searchListeners = new Map<string, SearchListeners>()
 let _webviewListenerSetup = false
@@ -121,18 +124,30 @@ function ensureWebviewListener() {
       const listener = _searchListeners.get(msg.searchId)
       if (!listener) return
       switch (msg.type) {
-        case 'searchBatch':
-          listener.onBatch(msg.results ?? [])
+        case 'searchBatch': {
+          // Chain onto any in-flight batch promise so enrichment is always sequential
+          const prev = _pendingBatches.get(msg.searchId) ?? Promise.resolve()
+          const next = prev.then(() => listener.onBatch(msg.results ?? []))
+          _pendingBatches.set(msg.searchId, next)
           break
+        }
         case 'searchComplete':
-          listener.onComplete()
-          _searchListeners.delete(msg.searchId)
+          // Wait for all in-flight batches to finish enrichment before completing
+          ;(_pendingBatches.get(msg.searchId) ?? Promise.resolve())
+            .then(() => {
+              _pendingBatches.delete(msg.searchId)
+              _searchListeners.delete(msg.searchId)
+              return listener.onComplete()
+            })
+            .catch((err) => console.error('[useBloomSearch] onComplete failed:', err))
           break
         case 'searchCancelled':
+          _pendingBatches.delete(msg.searchId)
           listener.onCancelled()
           _searchListeners.delete(msg.searchId)
           break
         case 'searchError':
+          _pendingBatches.delete(msg.searchId)
           listener.onError(msg.error ?? '')
           _searchListeners.delete(msg.searchId)
           break
@@ -173,6 +188,7 @@ export function useBloomSearch() {
   function _cleanup() {
     if (currentSearchId) {
       _searchListeners.delete(currentSearchId)
+      _pendingBatches.delete(currentSearchId)
       currentSearchId = null
     }
   }
@@ -233,13 +249,18 @@ export function useBloomSearch() {
             results.value = [...results.value, ...batch]
           }
         },
-        onComplete: () => {
+        onComplete: async () => {
           if (currentSearchId === searchId) {
             isSearching.value = false
-            if (results.value.length > 0)
-              cache
-                .set(query.trim().toLowerCase(), results.value)
-                .catch((err) => console.error('[useBloomSearch] cacheSet failed:', err))
+            if (results.value.length > 0) {
+              const cacheKey = query.trim().toLowerCase()
+              try {
+                // Structured clone strips Vue reactive proxies before IDB write
+                await cache.set(cacheKey, JSON.parse(JSON.stringify(results.value)))
+              } catch (err) {
+                console.error('[useBloomSearch] cacheSet failed:', err)
+              }
+            }
             _cleanup()
           }
         },

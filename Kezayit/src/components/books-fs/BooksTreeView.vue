@@ -105,7 +105,7 @@ function selectTileItem(i: number) {
       class="tile"
       data-nav-item
       :class="{ 'is-focused': containerFocused && tilesFocused === i }"
-      :title="item.kind === 'book' ? item.book.title : undefined"
+      :title="item.kind === 'book' ? item.book.title : item.node.title"
       @click="selectTileItem(i)"
     >
       <div class="tile-icon" :class="item.kind === 'folder' ? 'folder-icon' : 'book-icon'">
@@ -188,6 +188,7 @@ function selectTileItem(i: number) {
   padding-block: 4px;
   padding-inline: 3px;
   border-radius: 6px;
+  position: relative;
 }
 .tile:hover .tile-icon {
   transform: scale(1.08);
@@ -225,5 +226,8 @@ function selectTileItem(i: number) {
   overflow: hidden;
   white-space: normal;
   word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
 }
 </style>

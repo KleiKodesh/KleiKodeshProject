@@ -7,7 +7,7 @@ import TabStrip from '@/components/common/TabStrip.vue'
 import DictionaryListPane from './DictionaryListPane.vue'
 import DictionaryDetailsPane from './DictionaryDetailsPane.vue'
 import { useWiktionary } from './useWiktionary'
-import { useAramaicSearch } from './useAramaicSearch'
+import { useKezayitDictionary } from './useKezayitDictionary'
 import { useDictSuggestions } from './useDictSuggestions'
 import { useTabStore } from '@/stores/tabStore'
 
@@ -16,6 +16,7 @@ const tabStore = useTabStore()
 const TABS = [
   { key: 'list', label: 'רשימה' },
   { key: 'details', label: 'פרטים' },
+  { key: 'sources', label: 'מקורות' },
 ]
 
 const activeTab = ref('list')
@@ -38,7 +39,7 @@ const {
   searching: aramaicSearching,
   search: aramaicSearch,
   getSuggestions: getAramaicSuggestions,
-} = useAramaicSearch()
+} = useKezayitDictionary()
 
 // ── Suggestions ───────────────────────────────────────────────────────────────
 
@@ -110,6 +111,18 @@ function onInputKeydown(e: KeyboardEvent) {
       @pick="fillFromSuggestion"
     />
 
+    <div v-else-if="activeTab === 'sources'" class="sources-pane">
+      <div class="sources-placeholder">
+        <p class="sources-title">תכונה עתידית</p>
+        <p class="sources-body">
+          כאן יופיעו מקורות נוספים למילון — כגון ספרי מילונים מהספרייה, מלבי"ם ביאור המילות, ומצודות.
+        </p>
+        <p class="sources-invite">
+          נשמח לשמוע מה היית רוצה שתכונה זו תכלול!
+        </p>
+      </div>
+    </div>
+
     <DictionaryDetailsPane
       v-else
       :searching="searching"
@@ -125,7 +138,7 @@ function onInputKeydown(e: KeyboardEvent) {
       @search-word="handleSearchWord"
     />
 
-    <BottomSearchBar>
+    <BottomSearchBar v-if="activeTab !== 'sources'">
       <template #left>
         <IconSearch20Regular class="search-icon" />
       </template>
@@ -172,5 +185,38 @@ function onInputKeydown(e: KeyboardEvent) {
 }
 .dict-search-input::-webkit-search-cancel-button {
   filter: grayscale(1) opacity(0.4);
+}
+
+/* ── Sources placeholder ── */
+.sources-pane {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 20px;
+  overflow-y: auto;
+}
+.sources-placeholder {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 320px;
+  text-align: center;
+  direction: rtl;
+}
+.sources-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.sources-body {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.sources-invite {
+  font-size: 12px;
+  color: var(--accent-color);
+  line-height: 1.5;
 }
 </style>

@@ -201,7 +201,7 @@ export const SQL = {
     ORDER BY position ASC
   `,
 
-  // ── Dictionary (new schema — public/dictionary.db) ───────────────────────────
+  // ── Kezayit Dictionary (public/dicts/kezayit_dictionary.db) ─────────────────
 
   /**
    * Search Aramaic entries by headword prefix or exact match.
@@ -209,7 +209,7 @@ export const SQL = {
    * Params: [term, prefixPattern, term]  e.g. ['אבא', 'אבא%', 'אבא']
    */
   SEARCH_DICT_SENSES: `
-    SELECT s.id, s.headword, s.nikud, s.pos, s.etymology, src.label AS source_label,
+    SELECT s.id, s.headword, s.nikud, s.pos, src.label AS source_label,
            d.text AS definition
     FROM sense s
     LEFT JOIN source src ON src.id = s.source_id
@@ -231,10 +231,10 @@ export const SQL = {
    */
   DICT_SUGGEST: `
     SELECT s.headword, src.label AS source_label,
-           GROUP_CONCAT(d.text, ', ') AS definition
+           d.text AS definition
     FROM sense s
     LEFT JOIN source src ON src.id = s.source_id
-    JOIN definition d ON d.sense_id = s.id
+    JOIN definition d ON d.sense_id = s.id AND d.def_order = 0
     WHERE s.headword LIKE ?
     GROUP BY s.headword, s.source_id
     ORDER BY
@@ -250,7 +250,7 @@ export const SQL = {
    */
   GET_DICT_SENSES_FOR_WORD: `
     SELECT s.id, s.headword, s.nikud, s.pos, s.binyan, s.shoresh, s.ktiv_male,
-           s.etymology, src.label AS source_label, s.sense_order
+           src.label AS source_label, s.sense_order
     FROM sense s
     LEFT JOIN source src ON src.id = s.source_id
     WHERE s.headword = ?
@@ -263,7 +263,7 @@ export const SQL = {
    * Returns: id, sense_id, text, layer, def_order
    */
   GET_DICT_ALL_DEFINITIONS: (ids: number[]) => `
-    SELECT id, sense_id, text, filter_tag, def_order
+    SELECT id, sense_id, text, def_order
     FROM definition
     WHERE sense_id IN (${ids.map(() => '?').join(',')})
     ORDER BY sense_id, def_order
@@ -291,17 +291,6 @@ export const SQL = {
     JOIN section_item si ON si.section_id = s.id
     WHERE s.sense_id IN (${ids.map(() => '?').join(',')})
     ORDER BY s.sense_id, s.id, si.item_order
-  `,
-
-  /**
-   * Bulk fetch all translations for a set of sense ids.
-   * Returns: sense_id, lang, word
-   */
-  GET_DICT_ALL_TRANSLATIONS: (ids: number[]) => `
-    SELECT sense_id, lang, word
-    FROM translation
-    WHERE sense_id IN (${ids.map(() => '?').join(',')})
-    ORDER BY sense_id, lang, id
   `,
 
   // ── Dictionary (old schema — main app DB) ────────────────────────────────────
@@ -388,18 +377,19 @@ export const SQL = {
   /**
    * Autosuggest for wikidictionary.db.
    * Returns one row per headword (senses are merged at display time).
+   * Matches headword OR ktiv_male (alternative spelling).
    * Ordered: prefix matches first, then alphabetical.
-   * Params: [containsPattern, prefixPattern]  e.g. ['%שלום%', 'שלום%']
+   * Params: [containsPattern, containsPattern, prefixPattern, prefixPattern]
    */
   WIKIDICT_SUGGEST: `
     SELECT s.headword,
            d.text AS definition
     FROM sense s
     JOIN definition d ON d.sense_id = s.id AND d.def_order = 0
-    WHERE s.headword LIKE ?
+    WHERE s.headword LIKE ? OR s.ktiv_male LIKE ?
     GROUP BY s.headword
     ORDER BY
-      CASE WHEN s.headword LIKE ? THEN 0 ELSE 1 END,
+      CASE WHEN s.headword LIKE ? OR s.ktiv_male LIKE ? THEN 0 ELSE 1 END,
       s.headword
     LIMIT 50
   `,
@@ -410,10 +400,10 @@ export const SQL = {
    */
   GET_WIKIDICT_SENSES_FOR_WORD: `
     SELECT s.id, s.headword, s.nikud, s.pos, s.binyan, s.shoresh, s.ktiv_male,
-           s.etymology, src.label AS source_label, s.sense_order
+           src.label AS source_label, s.sense_order
     FROM sense s
     JOIN source src ON src.id = s.source_id
-    WHERE s.headword = ?
+    WHERE s.headword = ? OR s.ktiv_male = ?
     ORDER BY s.sense_order
   `,
 
@@ -423,7 +413,7 @@ export const SQL = {
    * Returns: id, sense_id, text, filter_tag, def_order
    */
   GET_WIKIDICT_ALL_DEFINITIONS: (ids: number[]) => `
-    SELECT id, sense_id, text, filter_tag, def_order
+    SELECT id, sense_id, text, def_order
     FROM definition
     WHERE sense_id IN (${ids.map(() => '?').join(',')})
     ORDER BY sense_id, def_order
@@ -453,14 +443,4 @@ export const SQL = {
     ORDER BY s.sense_id, s.id, si.item_order
   `,
 
-  /**
-   * Bulk fetch all translations for a set of sense ids from wikidictionary.db.
-   * Returns: sense_id, lang, word
-   */
-  GET_WIKIDICT_ALL_TRANSLATIONS: (ids: number[]) => `
-    SELECT sense_id, lang, word
-    FROM translation
-    WHERE sense_id IN (${ids.map(() => '?').join(',')})
-    ORDER BY sense_id, lang, id
-  `,
 } as const

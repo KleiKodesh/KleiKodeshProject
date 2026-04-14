@@ -55,7 +55,6 @@ function stripNikud(s: string): string {
     <div v-if="sense.definitions.length" class="entry-defs">
       <div v-for="(def, di) in sense.definitions" :key="di" class="def-row">
         <span v-if="sense.definitions.length > 1" class="def-num">{{ di + 1 }}.</span>
-        <span v-if="def.layer" class="def-layer">{{ def.layer }}</span>
         <span class="def-text">{{ maybeFilter(def.text) }}</span>
         <div v-if="def.examples.length" class="def-examples">
           <div v-for="(ex, ei) in def.examples" :key="ei" class="def-example">
@@ -91,16 +90,6 @@ function stripNikud(s: string): string {
       </div>
     </template>
 
-    <!-- Translations -->
-    <div v-if="sense.translations.length" class="entry-section">
-      <span class="sec-label">תרגום</span>
-      <div class="sec-body">
-        <span v-for="tr in sense.translations" :key="tr.lang" class="trans-item">
-          <span class="trans-lang">{{ tr.lang }}:</span>
-          {{ tr.words.join(', ') }}
-        </span>
-      </div>
-    </div>
   </div>
 </template>
 

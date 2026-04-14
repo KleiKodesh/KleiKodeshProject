@@ -1,6 +1,6 @@
 import { ref, computed, watch } from 'vue'
 import type { Ref } from 'vue'
-import type { DictSuggestion } from './useAramaicSearch'
+import type { DictSuggestion } from './useKezayitDictionary'
 
 /**
  * Manages the merged autosuggest list from both offline sources:
@@ -8,12 +8,22 @@ import type { DictSuggestion } from './useAramaicSearch'
  *
  * Both sources return DictSuggestion[] so they merge cleanly.
  */
+function stripTags(text: string | null): string | null {
+  if (!text) return null
+  const cleaned = text
+    .replace(/\[\[([^\]|]+\|)?([^\]]+)\]\]/g, '$2') // [[link|text]] -> text
+    .replace(/'{2,3}/g, '')                           // wiki bold/italic
+    .replace(/\s+/g, ' ')
+    .trim()
+  return cleaned.length > 120 ? cleaned.slice(0, 120) + '…' : cleaned || null
+}
+
 export function useDictSuggestions(
-  getWikiSuggestions: (term: string) => Promise<string[]>,
+  getWikiSuggestions: (term: string) => Promise<{ headword: string; definition: string | null }[]>,
   getAramaicSuggestions: (term: string) => Promise<DictSuggestion[]>,
   debouncedQuery: Ref<string>,
 ) {
-  const wikiSuggestions = ref<string[]>([])
+  const wikiSuggestions = ref<{ headword: string; definition: string | null }[]>([])
   const aramaicSuggestions = ref<DictSuggestion[]>([])
 
   watch(debouncedQuery, async (q) => {
@@ -23,32 +33,25 @@ export function useDictSuggestions(
       return
     }
     const [wiki, aramaic] = await Promise.all([getWikiSuggestions(q), getAramaicSuggestions(q)])
-    wikiSuggestions.value = wiki
-    aramaicSuggestions.value = aramaic
+    wikiSuggestions.value = wiki.map(s => ({ ...s, definition: stripTags(s.definition) }))
+    aramaicSuggestions.value = aramaic.map(s => ({ ...s, definition: stripTags(s.definition) }))
   })
-
-  const hebrewOnly = /[\u05D0-\u05EA]/
 
   const suggestions = computed<DictSuggestion[]>(() => {
     const query = debouncedQuery.value.trim()
     const aramaicHeadwords = new Set(aramaicSuggestions.value.map((s) => s.headword))
 
-    // Wiki headwords not already covered by Aramaic
+    // Wiki suggestions not already covered by Aramaic
     const wikiOnly = wikiSuggestions.value
-      .filter((hw) => hebrewOnly.test(hw) && !aramaicHeadwords.has(hw))
-      .map((hw) => ({ headword: hw, definition: null }))
+      .filter((s) => !aramaicHeadwords.has(s.headword))
+      .map((s) => ({ headword: s.headword, definition: s.definition }))
 
-    const aramaicItems = aramaicSuggestions.value.filter((s) => hebrewOnly.test(s.headword))
-
-    const all = [...aramaicItems, ...wikiOnly]
+    const all = [...aramaicSuggestions.value, ...wikiOnly]
     all.sort((a, b) => {
       const aPrefix = a.headword.startsWith(query) ? 0 : 1
       const bPrefix = b.headword.startsWith(query) ? 0 : 1
       if (aPrefix !== bPrefix) return aPrefix - bPrefix
-      const alpha = a.headword.localeCompare(b.headword, 'he')
-      if (alpha !== 0) return alpha
-      // Entries with definitions (Aramaic) after bare headwords (wiki)
-      return (a.definition ? 1 : 0) - (b.definition ? 1 : 0)
+      return a.headword.localeCompare(b.headword, 'he')
     })
     return all.slice(0, 60)
   })

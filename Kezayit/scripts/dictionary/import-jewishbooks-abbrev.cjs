@@ -21,7 +21,7 @@ const https    = require('https')
 const Database = require('better-sqlite3')
 const path     = require('path')
 
-const DST_DB   = path.resolve(__dirname, '../../public/dicts/dictionary.db')
+const DST_DB   = path.resolve(__dirname, '../../public/dicts/kezayit_dictionary.db')
 const API      = 'https://wiki.jewishbooks.org.il/mediawiki/api.php'
 const PAGE     = 'ראשי_תיבות_וקיצורים'
 const SOURCE_LABEL = 'ויקי ספרי יהדות - ראשי תיבות'

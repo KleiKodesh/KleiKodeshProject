@@ -1,125 +1,121 @@
-# scripts/dictionary/
+# Dictionary Scripts
 
-Scripts for building and maintaining the two offline dictionary databases shipped with the app.
+Scripts for building and maintaining the two dictionary databases used by the app.
 
 ## Databases
 
-| File                       | Size   | Content                                                                   |
-| -------------------------- | ------ | ------------------------------------------------------------------------- |
-| `public/dictionary.db`     | ~22 MB | Aramaic dictionaries (ToratEmet) + Hebrew abbreviations (ויקיפדיה, קיצור) |
-| `public/wikidictionary.db` | ~28 MB | Hebrew Wiktionary (ויקימילון) — all Hebrew word definitions               |
+Both databases live in `public/dicts/`:
 
-Both DBs share an identical schema so results can be merged directly without column mapping. The only intentional difference is `cache_entry` which exists only in `dictionary.db`.
+| File | Size | Description |
+|------|------|-------------|
+| `kezayit_dictionary.db` | ~2.4MB | Aramaic dictionaries + Hebrew abbreviations |
+| `wikidictionary.db` | ~19.3MB | Hebrew Wiktionary (filtered for Orthodox Torah use) |
 
-## Scripts
+Original unfiltered backup of wikidictionary is in `data/dictionaries/`.
 
-### `create-dictionary-db.cjs`
+---
 
-Drops and recreates `public/dictionary.db` with a clean schema. Run this before re-importing Aramaic data. Does not import any data.
+## kezayit_dictionary.db
 
+Built from multiple sources:
+- Aramaic entries from ToratEmet installation (`FinalDictionary.txt`)
+- Hebrew abbreviations from wiki.jewishbooks.org.il
+- Additional sources via `create-dictionary-db.cjs`
+
+Schema: `source → sense → definition` (no examples, sections, or translations)
+
+### Rebuild scripts
+- `create-dictionary-db.cjs` — drops and recreates schema from scratch
+- `import-aramaic.cjs` — imports Aramaic entries from FinalDictionary.txt
+- `import-jewishbooks-abbrev.cjs` — imports Hebrew abbreviations
+
+---
+
+## wikidictionary.db
+
+Built from Hebrew Wiktionary (he.wiktionary.org) via Special:Export API.
+
+### Build pipeline
+1. `create-wikidictionary-db.cjs` — creates empty schema
+2. `import-wiktionary.cjs` — fetches and imports all Hebrew Wiktionary entries
+3. `fetch-wiktionary-api.ps1` — PowerShell helper for fetching
+4. `rebuild-wiki.cjs` — **main rebuild script** — filters + compacts from backup
+
+### Filtering applied (in `rebuild-wiki.cjs`)
+The rebuild script applies all filtering in one pass from the original backup:
+
+**Senses excluded:**
+- `netfree_blocked = 1` — words blocked by NetFree filter (checked via milog.co.il)
+- Senses with blocked `filter_tag`: סלנג, עממי, כינוי גנאי, משלב חסר, שפת הדיבור, לשון מדוברת, דיבור, עגה צה"לית, עגה ירושלמית, צה"ל, צבא, נצרות, מיתולוגיה, אידאולוגיות
+- Senses tagged `period_tag = 'חדשה'` with no Torah sense for the same headword
+
+**Columns dropped from final DB:**
+- `sense`: `netfree_blocked`, `heuristic_blocked`, `etymology`, `cross_ref`, `period_tag`
+- `definition`: `filter_tag`
+- `translation` table: dropped entirely (English/Arabic translations not needed)
+
+**Post-build cleaning scripts** (run once after rebuild, results baked in):
+- `clean-ktiv-male.cjs` — nulls out `ktiv_male` where identical to headword; strips wiki markup
+- `strip-refs-from-db.cjs` — strips `<ref>` tags, URLs, wiki markup from all text fields
+- `remove-modern-examples.cjs` — removes examples with non-Torah citation sources
+- `remove-remaining-modern.cjs` — second pass removing remaining modern sources
+- `cleanup-inappropriate.cjs` — removes/cleans inappropriate sexual/explicit content
+- `cleanup2.cjs` — removes modern ideology, contraception, drugs, smoking terms
+- `cleanup3.cjs` — removes modern politics, entertainment, media, sport terms
+- `cleanup4.cjs` — removes remaining modern anatomy, media, sport, drug terms
+
+### Content policy
+The database is filtered for **Orthodox Jewish Torah study**:
+- Keeps: Biblical Hebrew, Talmudic/Rabbinic Hebrew, Medieval Hebrew, standard modern Hebrew
+- Keeps: Torah/halacha terms (even if explicit, with clean definitions)
+- Removes: Sexual/inappropriate content, modern entertainment, sports, fashion, technology, secular ideology, drugs, smoking, gambling
+- Removes: Modern political terms (democracy, communism, Zionism, etc.)
+- Removes: Non-Torah citation examples (modern literature, songs, etc.)
+
+### Maintenance
+To rebuild from scratch:
 ```
-npm run dict:create
-```
-
-### `import-aramaic.cjs`
-
-Imports Aramaic entries from `FinalDictionary.txt` (ToratEmet installation) into `public/dictionary.db`. Idempotent — safe to re-run. Requires the ToratEmet installation at the hardcoded path `C:\Users\Admin\Documents\ToratEmetInstall\Dictionaries\FinalDictionary.txt`.
-
-```
-npm run dict:import-aramaic
-```
-
-### `import-jewishbooks-abbrev.cjs`
-
-Fetches the abbreviations table from `wiki.jewishbooks.org.il` (ראשי תיבות וקיצורים) and imports it into `public/dictionary.db` as source `ויקי ספרי יהדות - ראשי תיבות`. 476 entries, 858 senses (multiple expansions per abbreviation). Idempotent — clears and re-imports on each run.
-
-```
-npm run dict:import-jewishbooks
-```
-
-### `create-wikidictionary-db.cjs`
-
-Drops and recreates `public/wikidictionary.db` with a clean schema. Called automatically by `import-wiktionary.cjs` — you rarely need to run this directly.
-
-```
-npm run wikidict:create
-```
-
-### `fetch-wiktionary-api.ps1`
-
-PowerShell script that downloads all Hebrew Wiktionary pages via the MediaWiki API and saves them to `data/hewiktionary-pages.jsonl`. Must be run via PowerShell because Node.js HTTPS is blocked by NetFree on this network. Resumable — re-run after interruption, it picks up from where it left off using `data/hewiktionary-meta.json`.
-
-```
-npm run wikidict:fetch
-```
-
-This takes several hours for the full ~50k pages. Progress is printed as `N saved, M skipped | last: word`.
-
-### `import-wiktionary.cjs`
-
-Imports Hebrew Wiktionary pages into `public/wikidictionary.db`. Uses `Special:Export` (POST) to fetch wikitext in batches of 20, with an alphabet-iteration fallback when the allpages API is blocked. Recreates the schema fresh on every run. Resumable via `_meta` table inside the DB.
-
-```
-npm run wikidict:import
-```
-
-Takes ~2 hours for the full import. If interrupted, re-run — it resumes from the saved `apfrom` position.
-
-### `check-wikidict.cjs`
-
-Prints stats and sample data from `public/wikidictionary.db`. Useful for verifying a completed import.
-
-```
-node scripts/dictionary/check-wikidict.cjs
-```
-
-## Schema (both DBs)
-
-```
-source      id, label, lang, url
-sense       id, headword, nikud, pos, binyan, shoresh, ktiv_male, etymology,
-            cross_ref, period_tag, source_id, sense_order
-definition  id, sense_id, text, filter_tag, def_order
-example     id, definition_id, text, source
-section     id, sense_id, name
-section_item id, section_id, text, item_order
-translation id, sense_id, lang, word
-_meta       key, value  (import resume state)
-```
-
-### Key fields for filtering
-
-`definition.filter_tag` — raw layer tag from wikitext (e.g. `גס`, `סלנג`, `המקרא`, `חז"ל`, `עברית חדשה`). NULL = untagged (always shown). Stored at import time so filtering rules can be changed without re-importing.
-
-`sense.period_tag` — derived from `filter_tag` values, bucketed into 4 canonical periods: `מקרא` / `חז"ל` / `ביניים` / `חדשה` / NULL. NULL = modern standard Hebrew. Use this for efficient sense-level period filtering without scanning definitions.
-
-`source.lang` — content language: `ארמית` / `ראשי תיבות` / `עברית`.
-
-`source.url` — source URL. NULL for ToratEmet (physical files).
-
-`sense.cross_ref` — abbreviation that was resolved at import time (Aramaic abbrev entries only). NULL in wikidictionary.db.
-
-## Rebuilding from scratch
-
-### dictionary.db
-
-1. `npm run dict:create` — recreate schema
-2. `npm run dict:import-aramaic` — import Aramaic + abbreviations
-
-### wikidictionary.db
-
-The import script handles schema creation internally, so just run:
-
-```
-npm run wikidict:import
+node scripts/dictionary/rebuild-wiki.cjs
+node scripts/dictionary/clean-ktiv-male.cjs
+node scripts/dictionary/strip-refs-from-db.cjs
+node scripts/dictionary/remove-modern-examples.cjs
+node scripts/dictionary/remove-remaining-modern.cjs
+node scripts/dictionary/cleanup-inappropriate.cjs
+node scripts/dictionary/cleanup2.cjs
+node scripts/dictionary/cleanup3.cjs
+node scripts/dictionary/cleanup4.cjs
 ```
 
-If the network blocks the API (418 errors), the script falls back to alphabet iteration automatically. If it gets stuck, stop and re-run — it resumes.
+### Verification
+```
+node scripts/dictionary/validate-queries.cjs   # verify all SQL queries work
+node scripts/dictionary/verify-dbs.cjs         # verify DB health and row counts
+```
 
-## Network notes
+---
 
-This machine is behind NetFree which blocks binary file downloads from wikimedia.org and blocks Node.js HTTPS to some endpoints. The workarounds already in place:
+## npm scripts
 
-- `fetch-wiktionary-api.ps1` uses PowerShell's WinHTTP stack (not blocked)
-- `import-wiktionary.cjs` uses `Special:Export` POST + alphabet fallback (not blocked)
-- Direct dump downloads (`.xml.bz2`) from dumps.wikimedia.org are blocked for GET but HEAD works
+| Script | Description |
+|--------|-------------|
+| `dict:create` | Recreate kezayit_dictionary.db schema |
+| `dict:import-aramaic` | Import Aramaic entries |
+| `dict:import-jewishbooks` | Import Hebrew abbreviations |
+| `wikidict:create` | Recreate wikidictionary.db schema |
+| `wikidict:fetch` | Fetch Wiktionary data (PowerShell) |
+| `wikidict:import` | Import Wiktionary data |
+| `wikidict:filter` | Create filtered wikidictionary from backup |
+| `wikidict:orthodox` | Create orthodox-filtered wikidictionary |
+| `wikidict:netfree` | Tag words blocked by NetFree (milog.co.il) |
+| `wikidict:netfree-xml` | Tag words via Wiktionary XML export |
+| `wikidict:tag-heuristic` | Tag words by Torah heuristic |
+
+---
+
+## C# deployment
+
+Copy both DB files to `CSharpBackend/KezayitLib/bin/{Config}/kezayit/dicts/`:
+- `kezayit_dictionary.db`
+- `wikidictionary.db`
+
+The C# host opens both read-only at startup via `AppViewer._dictDb` and `AppViewer._wikiDictDb`.

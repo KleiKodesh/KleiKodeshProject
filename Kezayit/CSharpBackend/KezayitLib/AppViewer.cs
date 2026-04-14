@@ -82,14 +82,9 @@ namespace KezayitLib
 
         private async Task InitAsync()
         {
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            Console.WriteLine("[Timing] InitAsync start");
-
             var env = await GetSharedEnv();
-            Console.WriteLine("[Timing] CreateAsync: " + sw.ElapsedMilliseconds + "ms");
 
             await _webView.EnsureCoreWebView2Async(env);
-            Console.WriteLine("[Timing] EnsureCoreWebView2Async: " + sw.ElapsedMilliseconds + "ms");
 
             _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                 "kezayit-vue-app", AppDir, CoreWebView2HostResourceAccessKind.Allow);
@@ -105,7 +100,6 @@ namespace KezayitLib
                 "window.__webviewDbReady=" + (dbReady ? "true" : "false") + ";";
             _dbInjectionScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
                 JsBridge.Script + "\n" + dbScript);
-            Console.WriteLine("[Timing] AddScripts: " + sw.ElapsedMilliseconds + "ms");
 
             _bridge = new WebBridge(_webView, this);
             _db = new DbHandler(_bridge, _webView, savedPath);
@@ -121,7 +115,7 @@ namespace KezayitLib
                 _wikiDictDb = new DbAccess(wikiDictPath);
 
             // Wire up Aramaic dictionary DB (read-only, fixed path next to the app)
-            string dictPath = Path.Combine(AppDir, "dicts", "dictionary.db");
+            string dictPath = Path.Combine(AppDir, "dicts", "kezayit_dictionary.db");
             if (File.Exists(dictPath))
                 _dictDb = new DbAccess(dictPath);
             _db.OnDbPathPicked = path =>
@@ -134,7 +128,6 @@ namespace KezayitLib
             _webView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
 
             _webView.Source = new Uri("http://kezayit-vue-app/index.html");
-            Console.WriteLine("[Timing] Navigate set: " + sw.ElapsedMilliseconds + "ms");
             if (dbReady)
             {
                 _search.OnDbReady(savedPath);
@@ -145,7 +138,6 @@ namespace KezayitLib
         private void OnNavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
         {
             _webView.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
-            Console.WriteLine("[Timing] NavigationCompleted (splash hide)");
             _HideSplash();
         }
 

@@ -18,8 +18,7 @@
     "wikidict:create": "node scripts/dictionary/create-wikidictionary-db.cjs",
     "wikidict:fetch": "powershell -ExecutionPolicy Bypass -File scripts/dictionary/fetch-wiktionary-api.ps1",
     "wikidict:import": "node scripts/dictionary/import-wiktionary.cjs",
-    "wikidict:netfree": "node scripts/dictionary/add-netfree-flag.cjs",
-    "wikidict:netfree-xml": "node scripts/dictionary/netfree-xml-check.cjs",
+    "wikidict:rebuild": "node scripts/dictionary/rebuild-wiki.cjs",
     "wikidict:filter": "node scripts/dictionary/create-filtered-wikidict.cjs"
   },
   "serverDependencies": {

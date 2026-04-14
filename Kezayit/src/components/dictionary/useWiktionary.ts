@@ -6,13 +6,12 @@ import { SQL } from '@/host/queries.sql'
 
 export interface WiktionaryDefinition {
   text: string
-  layer: string | null
   examples: { text: string; source: string | null }[]
 }
 
 export interface WiktionarySense {
-  nikud: string | null
   headword: string
+  nikud: string | null
   pos: string | null
   binyan: string | null
   shoresh: string | null
@@ -20,25 +19,9 @@ export interface WiktionarySense {
   etymology?: string | null
   definitions: WiktionaryDefinition[]
   sections: Record<string, string[]>
-  translations: { lang: string; words: string[] }[]
+  translations?: { lang: string; text: string }[]
   sourceLabel?: string | null
 }
-
-// ── Blocked layer tags (same set as before — now filtered at query time) ───────
-
-export const BLOCKED_LAYERS = new Set([
-  'גס',
-  'גסות',
-  'גסה',
-  'סלנג',
-  'סלנג ישראלי',
-  'מדובר',
-  'דיבורי',
-  'ארגו',
-  "ז'רגון",
-  'פוגעני',
-  'גנאי',
-])
 
 // ── Raw DB row types ──────────────────────────────────────────────────────────
 
@@ -50,7 +33,6 @@ interface RawSense {
   binyan: string | null
   shoresh: string | null
   ktiv_male: string | null
-  etymology: string | null
   source_label: string | null
   sense_order: number
 }
@@ -59,7 +41,6 @@ interface RawDefinition {
   id: number
   sense_id: number
   text: string
-  filter_tag: string | null
   def_order: number
 }
 
@@ -76,25 +57,18 @@ interface RawSectionRow {
   item_order: number
 }
 
-interface RawTranslation {
-  sense_id: number
-  lang: string
-  word: string
-}
-
-// ── Offline DB lookup — same 5-query pattern as useAramaicSearch ──────────────
+// ── Offline DB lookup ─────────────────────────────────────────────────────────
 
 async function loadFullSenses(word: string): Promise<WiktionarySense[]> {
-  const rawSenses = await queryWikiDict<RawSense>(SQL.GET_WIKIDICT_SENSES_FOR_WORD, [word])
+  const rawSenses = await queryWikiDict<RawSense>(SQL.GET_WIKIDICT_SENSES_FOR_WORD, [word, word])
   if (!rawSenses.length) return []
 
   const senseIds = rawSenses.map((s) => s.id)
 
-  const [rawDefs, rawExamples, rawSections, rawTranslations] = await Promise.all([
+  const [rawDefs, rawExamples, rawSections] = await Promise.all([
     queryWikiDict<RawDefinition>(SQL.GET_WIKIDICT_ALL_DEFINITIONS(senseIds), senseIds),
     queryWikiDict<RawExample>(SQL.GET_WIKIDICT_ALL_EXAMPLES(senseIds), senseIds),
     queryWikiDict<RawSectionRow>(SQL.GET_WIKIDICT_ALL_SECTIONS(senseIds), senseIds),
-    queryWikiDict<RawTranslation>(SQL.GET_WIKIDICT_ALL_TRANSLATIONS(senseIds), senseIds),
   ])
 
   const defsBySense = new Map<number, RawDefinition[]>()
@@ -115,25 +89,15 @@ async function loadFullSenses(word: string): Promise<WiktionarySense[]> {
     sectionsBySense.get(s.sense_id)!.push(s)
   }
 
-  const translationsBySense = new Map<number, RawTranslation[]>()
-  for (const t of rawTranslations) {
-    if (!translationsBySense.has(t.sense_id)) translationsBySense.set(t.sense_id, [])
-    translationsBySense.get(t.sense_id)!.push(t)
-  }
-
   return rawSenses
     .map((rs) => {
-      // Filter blocked layer tags
-      const definitions: WiktionaryDefinition[] = (defsBySense.get(rs.id) ?? [])
-        .filter((rd) => !rd.filter_tag || !BLOCKED_LAYERS.has(rd.filter_tag))
-        .map((rd) => ({
-          text: rd.text,
-          layer: rd.filter_tag,
-          examples: (examplesByDef.get(rd.id) ?? []).map((e) => ({
-            text: e.text,
-            source: e.source,
-          })),
-        }))
+      const definitions: WiktionaryDefinition[] = (defsBySense.get(rs.id) ?? []).map((rd) => ({
+        text: rd.text,
+        examples: (examplesByDef.get(rd.id) ?? []).map((e) => ({
+          text: e.text,
+          source: e.source,
+        })),
+      }))
 
       if (!definitions.length) return null
 
@@ -143,12 +107,6 @@ async function loadFullSenses(word: string): Promise<WiktionarySense[]> {
         sections[row.section_name]!.push(row.item_text)
       }
 
-      const transMap = new Map<string, string[]>()
-      for (const t of translationsBySense.get(rs.id) ?? []) {
-        if (!transMap.has(t.lang)) transMap.set(t.lang, [])
-        transMap.get(t.lang)!.push(t.word)
-      }
-
       return {
         headword: rs.headword,
         nikud: rs.nikud,
@@ -156,14 +114,12 @@ async function loadFullSenses(word: string): Promise<WiktionarySense[]> {
         binyan: rs.binyan,
         shoresh: rs.shoresh,
         ktivMale: rs.ktiv_male,
-        etymology: rs.etymology ?? null,
         definitions,
         sections,
-        translations: [...transMap.entries()].map(([lang, words]) => ({ lang, words })),
         sourceLabel: rs.source_label ?? 'ויקימילון',
-      } as WiktionarySense
+      } satisfies WiktionarySense
     })
-    .filter((s): s is WiktionarySense => s !== null)
+    .filter((s): s is NonNullable<typeof s> => s !== null)
 }
 
 // ── Composable ────────────────────────────────────────────────────────────────
@@ -203,27 +159,19 @@ export function useWiktionary() {
     }
   }
 
-  async function getSuggestions(term: string): Promise<string[]> {
+  async function getSuggestions(term: string): Promise<{ headword: string; definition: string | null }[]> {
     const trimmed = term.trim()
     if (!trimmed) return []
     try {
-      const rows = await queryWikiDict<{ headword: string }>(SQL.WIKIDICT_SUGGEST, [
-        `%${trimmed}%`,
-        `${trimmed}%`,
-      ])
-      return rows.map((r) => r.headword)
+      const rows = await queryWikiDict<{ headword: string; definition: string | null }>(
+        SQL.WIKIDICT_SUGGEST,
+        [`%${trimmed}%`, `%${trimmed}%`, `${trimmed}%`, `${trimmed}%`],
+      )
+      return rows.map((r) => ({ headword: r.headword, definition: r.definition ?? null }))
     } catch {
       return []
     }
   }
 
-  return {
-    senses,
-    searching,
-    hasSearched,
-    notFound,
-    error,
-    search,
-    getSuggestions,
-  }
+  return { senses, searching, hasSearched, notFound, error, search, getSuggestions }
 }

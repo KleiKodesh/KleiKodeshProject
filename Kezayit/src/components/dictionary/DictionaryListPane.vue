@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import { useListKeys } from '@/composables/useListKeyNav'
-import type { DictSuggestion } from './useAramaicSearch'
+import type { DictSuggestion } from './useKezayitDictionary'
 
 const props = defineProps<{ suggestions: DictSuggestion[] }>()
 const emit = defineEmits<{ pick: [word: string] }>()
@@ -19,6 +19,8 @@ const { focusedIndex } = useListKeys(
   { itemSelector: '.dict-suggestion-item' },
 )
 
+// Data is pre-cleaned in useDictSuggestions
+
 defineExpose({ focus: () => listEl.value?.focus() })
 </script>
 
@@ -33,8 +35,10 @@ defineExpose({ focus: () => listEl.value?.focus() })
         @click="emit('pick', s.headword)"
       >
         <span class="sugg-headword">{{ s.headword }}</span>
-        <span v-if="s.definition" class="sugg-sep">-</span>
-        <span v-if="s.definition" class="sugg-def">{{ s.definition }}</span>
+        <template v-if="s.definition">
+          <span class="sugg-sep">-</span>
+          <span class="sugg-def">{{ s.definition }}</span>
+        </template>
       </div>
     </div>
     <div v-else class="dict-empty">
@@ -69,18 +73,15 @@ defineExpose({ focus: () => listEl.value?.focus() })
   flex-direction: column;
 }
 .dict-suggestion-item {
-  height: 44px;
-  padding: 0 14px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  min-height: 44px;
+  padding: 8px 14px;
+  display: block;
   font-size: 13px;
   color: var(--text-primary);
   border-bottom: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
   cursor: pointer;
   direction: rtl;
-  flex-shrink: 0;
-  overflow: hidden;
+  line-height: 1.5;
 }
 .dict-suggestion-item:hover,
 .dict-suggestion-item.focused {
@@ -88,19 +89,13 @@ defineExpose({ focus: () => listEl.value?.focus() })
 }
 .sugg-headword {
   font-weight: 600;
-  flex-shrink: 0;
 }
 .sugg-sep {
   color: var(--text-secondary);
-  flex-shrink: 0;
+  margin-inline: 4px;
 }
 .sugg-def {
   color: var(--text-secondary);
   font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-  flex: 1;
 }
 </style>

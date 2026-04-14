@@ -14,7 +14,7 @@ function devSqlitePlugin() {
             // loadEnv with prefix '' loads all vars including non-VITE_ ones
             const env = loadEnv('development', process.cwd(), '');
             const dbPath = process.env.DB_PATH ?? env.DB_PATH ?? './data.db';
-            const dictDbPath = path.resolve('./public/dicts/dictionary.db');
+            const dictDbPath = path.resolve('./public/dicts/kezayit_dictionary.db');
             try {
                 db = new Database(path.resolve(dbPath));
                 console.log(`[dev-sqlite] opened ${dbPath}`);
@@ -24,10 +24,10 @@ function devSqlitePlugin() {
             }
             try {
                 dictDb = new Database(dictDbPath, { readonly: true });
-                console.log(`[dev-sqlite] opened dictionary.db`);
+                console.log(`[dev-sqlite] opened kezayit_dictionary.db`);
             }
             catch (err) {
-                console.error(`[dev-sqlite] failed to open dictionary.db:`, err);
+                console.error(`[dev-sqlite] failed to open kezayit_dictionary.db:`, err);
             }
             let wikiDictDb;
             const wikiDictDbPath = path.resolve('./public/dicts/wikidictionary.db');
@@ -62,6 +62,7 @@ function devSqlitePlugin() {
                         res.end(JSON.stringify({ rows }));
                     }
                     catch (err) {
+                        console.error('[dev-sqlite] query error:', err.message);
                         res.writeHead(500, { 'Content-Type': 'application/json' });
                         res.end(JSON.stringify({ error: err.message }));
                     }

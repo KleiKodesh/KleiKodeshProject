@@ -20,7 +20,6 @@ interface RawSense {
   binyan: string | null
   shoresh: string | null
   ktiv_male: string | null
-  etymology: string | null
   source_label: string | null
   sense_order: number
 }
@@ -29,27 +28,7 @@ interface RawDefinition {
   id: number
   sense_id: number
   text: string
-  filter_tag: string | null
   def_order: number
-}
-
-interface RawExample {
-  definition_id: number
-  text: string
-  source: string | null
-}
-
-interface RawSectionRow {
-  sense_id: number
-  section_name: string
-  item_text: string
-  item_order: number
-}
-
-interface RawTranslation {
-  sense_id: number
-  lang: string
-  word: string
 }
 
 // ── Single-word full load — 5 queries total regardless of sense/def count ─────
@@ -60,12 +39,7 @@ async function loadFullSenses(word: string): Promise<WiktionarySense[]> {
 
   const senseIds = rawSenses.map((s) => s.id)
 
-  const [rawDefs, rawExamples, rawSections, rawTranslations] = await Promise.all([
-    queryDict<RawDefinition>(SQL.GET_DICT_ALL_DEFINITIONS(senseIds), senseIds),
-    queryDict<RawExample>(SQL.GET_DICT_ALL_EXAMPLES(senseIds), senseIds),
-    queryDict<RawSectionRow>(SQL.GET_DICT_ALL_SECTIONS(senseIds), senseIds),
-    queryDict<RawTranslation>(SQL.GET_DICT_ALL_TRANSLATIONS(senseIds), senseIds),
-  ])
+  const rawDefs = await queryDict<RawDefinition>(SQL.GET_DICT_ALL_DEFINITIONS(senseIds), senseIds)
 
   const defsBySense = new Map<number, RawDefinition[]>()
   for (const d of rawDefs) {
@@ -73,45 +47,12 @@ async function loadFullSenses(word: string): Promise<WiktionarySense[]> {
     defsBySense.get(d.sense_id)!.push(d)
   }
 
-  const examplesByDef = new Map<number, RawExample[]>()
-  for (const e of rawExamples) {
-    if (!examplesByDef.has(e.definition_id)) examplesByDef.set(e.definition_id, [])
-    examplesByDef.get(e.definition_id)!.push(e)
-  }
-
-  const sectionsBySense = new Map<number, RawSectionRow[]>()
-  for (const s of rawSections) {
-    if (!sectionsBySense.has(s.sense_id)) sectionsBySense.set(s.sense_id, [])
-    sectionsBySense.get(s.sense_id)!.push(s)
-  }
-
-  const translationsBySense = new Map<number, RawTranslation[]>()
-  for (const t of rawTranslations) {
-    if (!translationsBySense.has(t.sense_id)) translationsBySense.set(t.sense_id, [])
-    translationsBySense.get(t.sense_id)!.push(t)
-  }
-
   return rawSenses.map((rs) => {
     const definitions: WiktionaryDefinition[] = (defsBySense.get(rs.id) ?? []).map((rd) => ({
       text: rd.text,
-      layer: rd.filter_tag,
-      examples: (examplesByDef.get(rd.id) ?? []).map((e) => ({
-        text: e.text,
-        source: e.source,
-      })),
+      layer: null,
+      examples: [],
     }))
-
-    const sections: Record<string, string[]> = {}
-    for (const row of sectionsBySense.get(rs.id) ?? []) {
-      if (!sections[row.section_name]) sections[row.section_name] = []
-      sections[row.section_name]!.push(row.item_text)
-    }
-
-    const transMap = new Map<string, string[]>()
-    for (const t of translationsBySense.get(rs.id) ?? []) {
-      if (!transMap.has(t.lang)) transMap.set(t.lang, [])
-      transMap.get(t.lang)!.push(t.word)
-    }
 
     return {
       headword: rs.headword,
@@ -120,10 +61,10 @@ async function loadFullSenses(word: string): Promise<WiktionarySense[]> {
       binyan: rs.binyan,
       shoresh: rs.shoresh,
       ktivMale: rs.ktiv_male,
-      etymology: rs.etymology,
+      etymology: null,
       definitions,
-      sections,
-      translations: [...transMap.entries()].map(([lang, words]) => ({ lang, words })),
+      sections: {},
+      translations: [],
       sourceLabel: rs.source_label ?? null,
     } satisfies WiktionarySense
   })
@@ -131,7 +72,7 @@ async function loadFullSenses(word: string): Promise<WiktionarySense[]> {
 
 // ── Composable ────────────────────────────────────────────────────────────────
 
-export function useAramaicSearch() {
+export function useKezayitDictionary() {
   const results = ref<WiktionarySense[]>([])
   const searching = ref(false)
 

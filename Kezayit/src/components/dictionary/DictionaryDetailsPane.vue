@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import WiktionaryEntry from './WiktionaryEntry.vue'
 import type { WiktionarySense } from './useWiktionary'
-import type { DictSuggestion } from './useAramaicSearch'
+import type { DictSuggestion } from './useKezayitDictionary'
 
 const props = defineProps<{
   searching: boolean

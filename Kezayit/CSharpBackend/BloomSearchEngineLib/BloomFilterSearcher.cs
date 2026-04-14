@@ -55,11 +55,7 @@ namespace BloomSearchEngineLib
 
         private static SearchResult[] RunBloomSearch(BloomFilterCollectionReader reader, string[] terms)
         {
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            var hits = reader.Search(terms);
-            sw.Stop();
-            Console.WriteLine("Bloom completed in {0:F3}s, found {1} hits", sw.Elapsed.TotalSeconds, hits.Length);
-            return hits;
+            return reader.Search(terms);
         }
 
         private static IEnumerable<SearchResultItem> HydratePartialMatches(TopNPartialMatches partialMatches, int perfectCount)

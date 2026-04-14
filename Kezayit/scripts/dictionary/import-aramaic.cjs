@@ -23,7 +23,7 @@ const path = require('path')
 const iconv = require('iconv-lite')
 
 const SRC_FILE = 'C:\\Users\\Admin\\Documents\\ToratEmetInstall\\Dictionaries\\FinalDictionary.txt'
-const DST_DB = path.resolve(__dirname, '../../public/dictionary.db')
+const DST_DB = path.resolve(__dirname, '../../public/dicts/kezayit_dictionary.db')
 
 const SOURCE_LABELS = {
   0: 'תורת אמת - מילון ארמי',
