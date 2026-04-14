@@ -263,7 +263,7 @@ export const SQL = {
    * Returns: id, sense_id, text, layer, def_order
    */
   GET_DICT_ALL_DEFINITIONS: (ids: number[]) => `
-    SELECT id, sense_id, text, layer, def_order
+    SELECT id, sense_id, text, filter_tag, def_order
     FROM definition
     WHERE sense_id IN (${ids.map(() => '?').join(',')})
     ORDER BY sense_id, def_order

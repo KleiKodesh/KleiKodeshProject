@@ -29,7 +29,7 @@ interface RawDefinition {
   id: number
   sense_id: number
   text: string
-  layer: string | null
+  filter_tag: string | null
   def_order: number
 }
 
@@ -94,7 +94,7 @@ async function loadFullSenses(word: string): Promise<WiktionarySense[]> {
   return rawSenses.map((rs) => {
     const definitions: WiktionaryDefinition[] = (defsBySense.get(rs.id) ?? []).map((rd) => ({
       text: rd.text,
-      layer: rd.layer,
+      layer: rd.filter_tag,
       examples: (examplesByDef.get(rd.id) ?? []).map((e) => ({
         text: e.text,
         source: e.source,

@@ -36,9 +36,9 @@ The details tab (פרטים) shows the full entry for the searched word. The ה�
 
 ## Data sources
 
-**Live Wiktionary** (`he.wiktionary.org`) — Hebrew words. No caching — fetched fresh on every search. Definitions with inappropriate layer tags are filtered out before display — see Content filtering section below.
+**Offline Wiktionary** (`public/wikidictionary.db`) — Hebrew words. Queried via `queryWikiDict()`. Definitions with inappropriate layer tags are filtered out before display — see `BLOCKED_LAYERS` in `useWiktionary.ts`. No network required.
 
-**Aramaic DB** (`public/dictionary.db`) — 7,754 senses from 6,987 entries across 4 Aramaic dictionaries, imported from `FinalDictionary.txt` in the ToratEmet installation. `***` separators in the source data are split into separate sense rows at import time. `(=expansion)` prefixes are extracted into the `etymology` column. Schema: `source → sense → definition / example / section / section_item / translation`.
+**Aramaic DB** (`public/dictionary.db`) — 7,754 senses from 6,987 entries across 4 Aramaic dictionaries + abbreviations, imported from `FinalDictionary.txt` in the ToratEmet installation. `***` separators in the source data are split into separate sense rows at import time. `(=expansion)` prefixes are extracted into the `etymology` column. Schema: `source → sense → definition / example / section / section_item / translation`.
 
 ## SQL queries (`public/dictionary.db`)
 
@@ -55,8 +55,8 @@ The details tab (פרטים) shows the full entry for the searched word. The ה�
 
 ## Re-importing Aramaic data
 
-`node scripts/import-aramaic.cjs` — reads from `FinalDictionary.txt`, rebuilds the DB. Idempotent.
-`node scripts/create-dictionary-db.cjs` — drops and recreates the schema from scratch.
+`node scripts/dictionary/import-aramaic.cjs` — reads from `FinalDictionary.txt`, rebuilds the DB. Idempotent.
+`node scripts/dictionary/create-dictionary-db.cjs` — drops and recreates the schema from scratch.
 
 ## Wiktionary offline DB (`public/wikidictionary.db`)
 
@@ -78,9 +78,9 @@ To use a local dump file: `DUMP_PATH=/path/to/file.jsonl npm run wikidict:import
 
 Copy `public/wikidictionary.db` to `CSharpBackend/KezayitLib/bin/{Config}/kezayit/wikidictionary.db` alongside `dictionary.db`. The C# host opens it read-only at startup via `AppViewer._wikiDictDb` and handles `wikidict-sql` actions from JS.
 
-## Content filtering (Wiktionary)
+## Content filtering (Wiktionary offline)
 
-`useWiktionary.ts` filters out definitions that carry inappropriate layer tags before returning results. The `BLOCKED_LAYERS` set lists the tags that are silently dropped: `גס` (vulgar), `סלנג` (slang), `מדובר`/`דיבורי` (colloquial), `ארגו`/`ז'רגון` (jargon), `פוגעני`/`גנאי` (offensive). Untagged definitions — which covers the vast majority of biblical, Talmudic, and rabbinic Hebrew — pass through unchanged. If all definitions in a sense are blocked, the entire sense is dropped automatically. To add or remove blocked tags, edit `BLOCKED_LAYERS` in `useWiktionary.ts`.
+`useWiktionary.ts` filters out definitions that carry inappropriate layer tags before returning results. The `BLOCKED_LAYERS` set lists the tags that are silently dropped: `גס` (vulgar), `סלנג` (slang), `מדובר`/`דיבורי` (colloquial), `ארגו`/`ז'רגון` (jargon), `פוגעני`/`גנאי` (offensive). These are stored in `definition.filter_tag` in `wikidictionary.db`. Untagged definitions — which covers the vast majority of biblical, Talmudic, and rabbinic Hebrew — pass through unchanged. If all definitions in a sense are blocked, the entire sense is dropped automatically. To add or remove blocked tags, edit `BLOCKED_LAYERS` in `useWiktionary.ts`.
 
 ## Planned features
 

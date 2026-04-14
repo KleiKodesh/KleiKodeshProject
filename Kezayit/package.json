@@ -11,12 +11,7 @@
     "build": "vue-tsc --build && vite build",
     "preview": "vite preview",
     "type-check": "vue-tsc --noEmit",
-    "format": "prettier --write \"src/**/*.{vue,ts}\"",
-    "dict:create": "node scripts/create-dictionary-db.cjs",
-    "dict:import-aramaic": "node scripts/import-aramaic.cjs",
-    "wikidict:create": "node scripts/create-wikidictionary-db.cjs",
-    "wikidict:fetch": "powershell -ExecutionPolicy Bypass -File scripts/fetch-wiktionary-api.ps1",
-    "wikidict:import": "node scripts/import-wiktionary.cjs"
+    "format": "prettier --write \"src/**/*.{vue,ts}\""
   },
   "serverDependencies": {
     "better-sqlite3": "^11.0.0"

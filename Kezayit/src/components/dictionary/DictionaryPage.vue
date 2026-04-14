@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
+import { useDebounce } from '@vueuse/core'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import BottomSearchBar from '@/components/common/BottomSearchBar.vue'
 import TabStrip from '@/components/common/TabStrip.vue'
@@ -9,7 +10,6 @@ import { useWiktionary } from './useWiktionary'
 import { useAramaicSearch } from './useAramaicSearch'
 import { useDictSuggestions } from './useDictSuggestions'
 import { useTabStore } from '@/stores/tabStore'
-import { computed } from 'vue'
 
 const tabStore = useTabStore()
 
@@ -19,22 +19,18 @@ const TABS = [
 ]
 
 const activeTab = ref('list')
+const searchQuery = ref('')
+const debouncedQuery = useDebounce(searchQuery, 350)
 
-// ── Search sources ────────────────────────────────────────────────────────────
+// ── Search sources (both offline) ─────────────────────────────────────────────
 
 const {
-  searchQuery,
-  debouncedQuery,
   senses: wikiSenses,
-  title: wikiTitle,
-  suggestions: wikiSuggestions,
   searching: wikiSearching,
   hasSearched,
   error,
   search: wikiSearch,
-  searchWord: wikiSearchWord,
-  loadSuggestions: loadWikiSuggestions,
-  clearSuggestions: clearWikiSuggestions,
+  getSuggestions: getWikiSuggestions,
 } = useWiktionary()
 
 const {
@@ -44,10 +40,10 @@ const {
   getSuggestions: getAramaicSuggestions,
 } = useAramaicSearch()
 
-// ── Suggestions composable ────────────────────────────────────────────────────
+// ── Suggestions ───────────────────────────────────────────────────────────────
 
-const { suggestions, clearSuggestions: clearAramaicSuggestions } = useDictSuggestions(
-  wikiSuggestions,
+const { suggestions, clearSuggestions } = useDictSuggestions(
+  getWikiSuggestions,
   getAramaicSuggestions,
   debouncedQuery,
 )
@@ -63,11 +59,12 @@ const notFound = computed(
 watch(debouncedQuery, (q) => {
   wikiSearch(q)
   aramaicSearch(q)
-  loadWikiSuggestions(q)
 })
 
-watch(wikiTitle, (t) => {
-  tabStore.updateActiveTab({ title: t ? `מילון · ${t}` : 'מילון' })
+watch(allSenses, (s) => {
+  const first = s[0]
+  if (first) tabStore.updateActiveTab({ title: `מילון · ${first.headword}` })
+  else tabStore.updateActiveTab({ title: 'מילון' })
 })
 
 // ── Actions ───────────────────────────────────────────────────────────────────
@@ -77,22 +74,21 @@ const inputEl = ref<HTMLInputElement | null>(null)
 
 function fillFromSuggestion(word: string) {
   searchQuery.value = word
-  clearWikiSuggestions()
-  clearAramaicSuggestions()
+  clearSuggestions()
   activeTab.value = 'details'
   inputEl.value?.focus()
 }
 
 function handleSearchWord(word: string) {
-  wikiSearchWord(word)
+  searchQuery.value = word
+  wikiSearch(word)
   aramaicSearch(word)
   activeTab.value = 'details'
 }
 
 function onInputKeydown(e: KeyboardEvent) {
   if (e.code === 'Escape') {
-    clearWikiSuggestions()
-    clearAramaicSuggestions()
+    clearSuggestions()
     return
   }
   if (!suggestions.value.length) return

@@ -125,6 +125,10 @@ function convertVerseHe(v: string): string {
   return v.replace(/\d+/g, (m) => numToHe(parseInt(m)))
 }
 
+function numsToGem(s: string): string {
+  return clean(s).replace(/\d+/g, (m) => numToHe(parseInt(m)))
+}
+
 function formatMishnaYomi(entry: Array<{ k: string; v: string }>): string {
   if (!entry.length) return ''
   const tractate = TRACTATE_HE[entry[0]!.k] ?? entry[0]!.k
@@ -190,21 +194,19 @@ export function getDailyLearning(hd: HDate): DailyLearning {
     rambam1 = clean(new DailyRambamEvent(hd, dailyRambam1(hd)).render('he'))
   } catch {}
   try {
-    rambam3 = clean(new DailyRambam3Event(hd, dailyRambam3(hd)).render('he'))
+    rambam3 = numsToGem(new DailyRambam3Event(hd, dailyRambam3(hd)).render('he'))
   } catch {}
   try {
     const r = kitzurShulchanAruch(hd)
     if (r) kitzurShulchanAruchVal = clean(new KitzurShulchanAruchEvent(hd, r).renderBrief('he'))
   } catch {}
   try {
-    chofetzChaimVal = clean(new ChofetzChaimEvent(hd, chofetzChaim(hd)).renderBrief('he'))
+    chofetzChaimVal = numsToGem(new ChofetzChaimEvent(hd, chofetzChaim(hd)).renderBrief('he'))
   } catch {}
   try {
-    psalms = clean(new PsalmsEvent(hd, dailyPsalms(hd)).render('he'))
+    psalms = numsToGem(new PsalmsEvent(hd, dailyPsalms(hd)).render('he'))
   } catch {}
-  try {
-    seferHaMitzvotVal = clean(new SeferHaMitzvotEvent(hd, seferHaMitzvot(hd)).render('he'))
-  } catch {}
+  // SeferHaMitzvot has no Hebrew translation — omitted intentionally
   try {
     perekYomiVal = clean(new PerekYomiEvent(hd, perekYomi(hd)).render('he'))
   } catch {}

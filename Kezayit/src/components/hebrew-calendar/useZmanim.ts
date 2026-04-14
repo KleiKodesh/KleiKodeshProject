@@ -1,14 +1,9 @@
 import { ref, computed, watch } from 'vue'
-import { Zmanim, GeoLocation } from '@hebcal/core'
+import { GeoLocation, Zmanim } from '@hebcal/core'
 import { idbGet, idbSet, KEYS } from '@/utils/idbPersistence'
+import type { City } from './calendarTypes'
 
-export interface City {
-  name: string
-  lat: number
-  lng: number
-  elevation: number
-  tzid: string
-}
+export type { City }
 
 export const CITIES: City[] = [
   { name: 'ירושלים', lat: 31.7683, lng: 35.2137, elevation: 800, tzid: 'Asia/Jerusalem' },
@@ -35,132 +30,106 @@ export const CITIES: City[] = [
 
 const JERUSALEM = CITIES[0]!
 
-export interface ZmanimEntry {
-  label: string
-  time: Date | null
+function nearestCity(lat: number, lng: number): City {
+  let best = JERUSALEM
+  let bestDist = Infinity
+  for (const c of CITIES) {
+    const d = (c.lat - lat) ** 2 + (c.lng - lng) ** 2
+    if (d < bestDist) {
+      bestDist = d
+      best = c
+    }
+  }
+  return best
 }
 
-function zdtToDate(zdt: { epochMilliseconds: number } | null): Date | null {
-  if (!zdt) return null
-  return new Date(zdt.epochMilliseconds)
+export function makeGloc(city: City): InstanceType<typeof GeoLocation> {
+  return new GeoLocation(city.name, city.lat, city.lng, city.elevation, city.tzid)
 }
 
-function calcZmanim(city: City, date: Date): ZmanimEntry[] {
+export function fmtTime(d: Date | null): string | null {
+  if (!d || isNaN(d.getTime())) return null
+  return d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', hour12: false })
+}
+
+export function calcDayZmanim(city: City, date: Date) {
   try {
-    const gloc = new GeoLocation(city.name, city.lat, city.lng, city.elevation, city.tzid)
-    const z = new Zmanim(gloc, date, false)
-    return [
-      { label: 'עלות השחר (72 דק׳)', time: zdtToDate(z.alotHaShachar72zdt()) },
-      { label: 'עלות השחר', time: z.alotHaShachar() },
-      { label: 'משיכיר', time: z.misheyakir() },
-      { label: 'הנץ החמה', time: z.sunrise() },
-      { label: 'סוף זמן ק״ש (גר״א)', time: z.sofZmanShma() },
-      { label: 'סוף זמן ק״ש (מג״א)', time: z.sofZmanShmaMGA() },
-      { label: 'סוף זמן תפילה (גר״א)', time: z.sofZmanTfilla() },
-      { label: 'סוף זמן תפילה (מג״א)', time: z.sofZmanTfillaMGA() },
-      { label: 'חצות', time: z.chatzot() },
-      { label: 'מנחה גדולה', time: z.minchaGedola() },
-      { label: 'מנחה קטנה', time: z.minchaKetana() },
-      { label: 'פלג המנחה', time: z.plagHaMincha() },
-      { label: 'שקיעה', time: z.sunset() },
-      { label: 'צאת הכוכבים', time: z.tzeit() },
-      { label: 'צאת הכוכבים (72 דק׳)', time: zdtToDate(z.tzeit72()) },
-    ]
+    const z = new Zmanim(makeGloc(city), date, false)
+    return {
+      alot: fmtTime(z.alotHaShachar()),
+      misheyakir: fmtTime(z.misheyakir()),
+      sunrise: fmtTime(z.sunrise()),
+      sofShmaGra: fmtTime(z.sofZmanShma()),
+      sofShmaMga: fmtTime(z.sofZmanShmaMGA()),
+      sofTfillaGra: fmtTime(z.sofZmanTfilla()),
+      sofTfillaMga: fmtTime(z.sofZmanTfillaMGA()),
+      chatzot: fmtTime(z.chatzot()),
+      minchaGedola: fmtTime(z.minchaGedola()),
+      minchaKetana: fmtTime(z.minchaKetana()),
+      plag: fmtTime(z.plagHaMincha()),
+      sunset: fmtTime(z.sunset()),
+      tzeit: fmtTime(z.tzeit()),
+    }
   } catch {
-    return []
+    return {
+      alot: null,
+      misheyakir: null,
+      sunrise: null,
+      sofShmaGra: null,
+      sofShmaMga: null,
+      sofTfillaGra: null,
+      sofTfillaMga: null,
+      chatzot: null,
+      minchaGedola: null,
+      minchaKetana: null,
+      plag: null,
+      sunset: null,
+      tzeit: null,
+    }
   }
 }
 
-function formatTime(date: Date | null): string {
-  if (!date || isNaN(date.getTime())) return '—'
-  return date.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', hour12: false })
-}
-
 export function useZmanim() {
-  const selectedCity = ref<City | null>(null) // null = using geolocation
-  const geoCity = ref<City | null>(null) // resolved from geolocation
-  const locationStatus = ref<'loading' | 'geo' | 'manual' | 'fallback'>('loading')
+  const manualCity = ref<City | null>(null)
+  const geoCity = ref<City | null>(null)
+  const status = ref<'loading' | 'geo' | 'manual' | 'fallback'>('loading')
 
-  const activeCity = computed(() => selectedCity.value ?? geoCity.value ?? JERUSALEM)
+  const activeCity = computed(() => manualCity.value ?? geoCity.value ?? JERUSALEM)
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
-  const entries = computed(() => calcZmanim(activeCity.value, today))
-
-  const formattedEntries = computed(() =>
-    entries.value.map((e) => ({ label: e.label, time: formatTime(e.time) })),
-  )
-
-  // Persist manual city selection
-  watch(selectedCity, (city) => {
-    idbSet(KEYS.SETTINGS_ZMANIM_CITY, city ? city.name : null)
-  })
+  watch(manualCity, (c) => idbSet(KEYS.SETTINGS_ZMANIM_CITY, c?.name ?? null))
 
   async function init() {
-    // Restore saved city preference
-    const savedName = await idbGet<string | null>(KEYS.SETTINGS_ZMANIM_CITY)
-    if (savedName) {
-      const found = CITIES.find((c) => c.name === savedName)
+    const saved = await idbGet<string>(KEYS.SETTINGS_ZMANIM_CITY)
+    if (saved) {
+      const found = CITIES.find((c) => c.name === saved)
       if (found) {
-        selectedCity.value = found
-        locationStatus.value = 'manual'
+        manualCity.value = found
+        status.value = 'manual'
         return
       }
     }
-
-    // Try geolocation
     if (!navigator.geolocation) {
-      locationStatus.value = 'fallback'
+      status.value = 'fallback'
       return
     }
-
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        // Find nearest city by straight-line distance
-        const { latitude, longitude } = pos.coords
-        let nearest = JERUSALEM
-        let minDist = Infinity
-        for (const city of CITIES) {
-          const d =
-            (city.lat - latitude) * (city.lat - latitude) +
-            (city.lng - longitude) * (city.lng - longitude)
-          if (d < minDist) {
-            minDist = d
-            nearest = city
-          }
-        }
-        console.log(
-          `[zmanim] geolocation resolved — coords: (${latitude.toFixed(4)}, ${longitude.toFixed(4)}), nearest city: ${nearest.name}`,
-        )
-        geoCity.value = nearest
-        locationStatus.value = 'geo'
-        // Persist as default so the setting is visible in the UI
-        idbSet(KEYS.SETTINGS_ZMANIM_CITY, nearest.name)
+      ({ coords }) => {
+        geoCity.value = nearestCity(coords.latitude, coords.longitude)
+        status.value = 'geo'
+        idbSet(KEYS.SETTINGS_ZMANIM_CITY, geoCity.value.name)
       },
-      (err) => {
-        // Permission denied or error — use Jerusalem fallback
-        console.log(
-          `[zmanim] geolocation failed (code ${err.code}: ${err.message}), falling back to ירושלים`,
-        )
-        locationStatus.value = 'fallback'
+      () => {
+        status.value = 'fallback'
       },
-      { timeout: 8000, maximumAge: 60 * 60 * 1000 },
+      { timeout: 8000, maximumAge: 3_600_000 },
     )
   }
 
   function setCity(city: City | null) {
-    selectedCity.value = city
-    locationStatus.value = city ? 'manual' : locationStatus.value === 'geo' ? 'geo' : 'fallback'
+    manualCity.value = city
+    if (!city) status.value = geoCity.value ? 'geo' : 'fallback'
+    else status.value = 'manual'
   }
 
-  return {
-    activeCity,
-    selectedCity,
-    locationStatus,
-    formattedEntries,
-    cities: CITIES,
-    init,
-    setCity,
-  }
+  return { activeCity, manualCity, status, cities: CITIES, init, setCity }
 }

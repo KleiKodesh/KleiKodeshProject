@@ -1,5 +1,6 @@
 import { ref } from 'vue'
-import { useDebounce } from '@vueuse/core'
+import { queryWikiDict } from '@/host/db'
+import { SQL } from '@/host/queries.sql'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -16,276 +17,168 @@ export interface WiktionarySense {
   binyan: string | null
   shoresh: string | null
   ktivMale: string | null
-  /** Etymology/expansion note — extracted at import time from (=...) prefix, e.g. 'על לב' for אליבא */
   etymology?: string | null
   definitions: WiktionaryDefinition[]
   sections: Record<string, string[]>
   translations: { lang: string; words: string[] }[]
-  /** Source label — set for DB entries (e.g. 'מילון ארמי א'), null for live Wiktionary */
   sourceLabel?: string | null
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Blocked layer tags (same set as before — now filtered at query time) ───────
 
-function stripNikud(s: string): string {
-  return s.replace(/[\u05B0-\u05C7\u05F0-\u05F4\uFB1D-\uFB4E]/g, '').trim()
-}
-
-function containsHebrew(s: string): boolean {
-  return /[\u05D0-\u05EA]/.test(s)
-}
-
-function cleanWiki(s: string): string {
-  return s
-    .replace(/\{\{[^{}]*\}\}/g, '')
-    .replace(/\{\{[^{}]*\}\}/g, '')
-    .replace(/\[\[([^\]|]+\|)?([^\]]+)\]\]/g, '$2')
-    .replace(/'{2,3}/g, '')
-    .replace(/<ref[^>]*>[\s\S]*?<\/ref>/g, '')
-    .replace(/<[^>]+>/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-function extractFromTemplate(block: string, key: string): string | null {
-  const m = block.match(new RegExp(`\\|${key}\\s*=\\s*([^\\n|]+)`))
-  return m ? (m[1] ?? '').trim() : null
-}
-
-function extractShoresh(block: string): string | null {
-  const m3 = block.match(/\{\{שרש3\|([^|]+)\|([^|]+)\|([^|]+)/)
-  if (m3) return `${m3[1] ?? ''}-${m3[2] ?? ''}-${m3[3] ?? ''}`
-  const m1 = block.match(/\{\{שרש\|([^|}\s]+)/)
-  if (m1) return m1[1] ?? null
-  return null
-}
-
-const KNOWN_SECTIONS = new Set([
-  'גיזרון',
-  'נגזרות',
-  'מילים נרדפות',
-  'ניגודים',
-  'צירופים',
-  'מידע נוסף',
-  'ראו גם',
-  'הערות שוליים',
-])
-
-const KEEP_LANGS = new Set(['אנגלית', 'ערבית', 'ארמית'])
-
-// Layers that are inappropriate for an Orthodox Jewish audience
-const BLOCKED_LAYERS = new Set([
+export const BLOCKED_LAYERS = new Set([
   'גס',
   'גסות',
-  'גסה', // vulgar
+  'גסה',
   'סלנג',
-  'סלנג ישראלי', // slang
+  'סלנג ישראלי',
   'מדובר',
-  'דיבורי', // colloquial/spoken
+  'דיבורי',
   'ארגו',
-  "ז'רגון", // jargon/argot
+  "ז'רגון",
   'פוגעני',
-  'גנאי', // offensive/derogatory
+  'גנאי',
 ])
 
-// ── Parser ────────────────────────────────────────────────────────────────────
+// ── Raw DB row types ──────────────────────────────────────────────────────────
 
-export function parseWikitext(title: string, wikitext: string): WiktionarySense[] {
-  if (!wikitext || /^#הפניה|^#REDIRECT/i.test(wikitext.trim())) return []
-
-  const lines = wikitext.split('\n')
-  const senses: WiktionarySense[] = []
-  let cur: WiktionarySense | null = null
-  let curSection: string | null = null
-  let curDefIdx = -1
-
-  function flush() {
-    if (cur && (cur.definitions.length > 0 || Object.keys(cur.sections).length > 0)) {
-      senses.push(cur)
-    }
-    cur = null
-    curSection = null
-    curDefIdx = -1
-  }
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i] ?? ''
-
-    const senseMatch = line.match(/^==([^=][^=]*)==\s*$/)
-    if (senseMatch) {
-      flush()
-      const rawHeader = (senseMatch[1] ?? '').replace(/\{\{[^}]*\}\}/g, '').trim()
-      const nikud = /[\u05B0-\u05C7]/.test(rawHeader) ? rawHeader : null
-      const headword = stripNikud(rawHeader) || stripNikud(title)
-      cur = {
-        nikud,
-        headword,
-        pos: null,
-        binyan: null,
-        shoresh: null,
-        ktivMale: null,
-        definitions: [],
-        sections: {},
-        translations: [],
-      }
-      continue
-    }
-
-    if (!cur) continue
-
-    if (line.includes('{{ניתוח דקדוקי')) {
-      let block = line
-      let j = i + 1
-      let depth = (line.match(/\{\{/g) ?? []).length - (line.match(/\}\}/g) ?? []).length
-      while (j < lines.length && depth > 0) {
-        const nl = lines[j] ?? ''
-        block += '\n' + nl
-        depth += (nl.match(/\{\{/g) ?? []).length
-        depth -= (nl.match(/\}\}/g) ?? []).length
-        j++
-      }
-      i = j - 1
-      cur.shoresh = cur.shoresh || extractShoresh(block)
-      cur.binyan = cur.binyan || extractFromTemplate(block, 'בניין')
-      cur.pos = cur.pos || extractFromTemplate(block, 'חלק דיבר')
-      cur.ktivMale = cur.ktivMale || extractFromTemplate(block, 'כתיב מלא')
-      continue
-    }
-
-    const secMatch = line.match(/^===([^=]+)===\s*$/)
-    if (secMatch) {
-      curSection = (secMatch[1] ?? '').trim()
-      curDefIdx = -1
-      if (KNOWN_SECTIONS.has(curSection) && !cur.sections[curSection]) {
-        cur.sections[curSection] = []
-      }
-      continue
-    }
-
-    if (/^====/.test(line)) {
-      curSection = null
-      continue
-    }
-
-    if (!curSection && /^#{1,2}[^:#*]/.test(line)) {
-      const layerMatch = line.match(/\{\{(?:מקרא|רובד|משלב)\|([^|}]+)/)
-      const layer = layerMatch ? (layerMatch[1] ?? '').trim() : null
-      // Skip definitions with blocked layer tags
-      if (layer && BLOCKED_LAYERS.has(layer)) continue
-      const text = cleanWiki(line.replace(/^#+\s*/, ''))
-      if (text && text.length > 1) {
-        cur.definitions.push({ text, layer, examples: [] })
-        curDefIdx = cur.definitions.length - 1
-      }
-      continue
-    }
-
-    if (!curSection && /^#[:#*]/.test(line) && curDefIdx >= 0) {
-      const citMatch = line.match(/\{\{צט[^|]*\|([^|]+)\|([^|]+)\|([^|]+)\|([^|}]+)/)
-      if (citMatch) {
-        const src = `${citMatch[2] ?? ''} ${citMatch[3] ?? ''}, ${citMatch[4] ?? ''}`
-        const def = cur.definitions[curDefIdx]
-        if (def) def.examples.push({ text: cleanWiki(citMatch[1] ?? ''), source: src })
-      }
-      continue
-    }
-
-    if (curSection && KNOWN_SECTIONS.has(curSection)) {
-      if (curSection === 'תרגום') {
-        const langMatch = line.match(/^\*\s*([^:：]+)[：:]\s*(.+)/)
-        if (langMatch) {
-          const lang = (langMatch[1] ?? '').trim()
-          if (KEEP_LANGS.has(lang)) {
-            const words = [...(langMatch[2] ?? '').matchAll(/\{\{ת\|[^|]+\|([^|}]+)/g)].map((m) =>
-              (m[1] ?? '').trim(),
-            )
-            if (words.length) cur.translations.push({ lang, words })
-          }
-        }
-        continue
-      }
-
-      if (/^\*+/.test(line)) {
-        const text = cleanWiki(line.replace(/^\*+\s*/, ''))
-        if (text && containsHebrew(text) && text.length < 80) {
-          cur.sections[curSection]?.push(text)
-        }
-        continue
-      }
-
-      if (line.trim() && !/^[={<[]/.test(line)) {
-        const text = cleanWiki(line)
-        if (text && text.length > 4) cur.sections[curSection]?.push(text)
-      }
-    }
-  }
-
-  flush()
-  return senses
+interface RawSense {
+  id: number
+  headword: string
+  nikud: string | null
+  pos: string | null
+  binyan: string | null
+  shoresh: string | null
+  ktiv_male: string | null
+  etymology: string | null
+  source_label: string | null
+  sense_order: number
 }
 
-// ── API ───────────────────────────────────────────────────────────────────────
-
-// ── API ───────────────────────────────────────────────────────────────────────
-
-const API = 'https://he.wiktionary.org/w/api.php'
-
-async function fetchWikitext(word: string): Promise<{ title: string; wikitext: string } | null> {
-  const url = `${API}?action=query&titles=${encodeURIComponent(word)}&prop=revisions&rvprop=content&rvslots=main&format=json&origin=*`
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const data = await res.json()
-  const pages = data?.query?.pages ?? {}
-  const page = Object.values(pages)[0] as any
-  if (!page || page.missing) return null
-  const wikitext: string =
-    page.revisions?.[0]?.slots?.main?.['*'] ?? page.revisions?.[0]?.['*'] ?? ''
-  return { title: page.title as string, wikitext }
+interface RawDefinition {
+  id: number
+  sense_id: number
+  text: string
+  filter_tag: string | null
+  def_order: number
 }
 
-async function fetchSuggestions(term: string): Promise<string[]> {
-  const url = `${API}?action=opensearch&search=${encodeURIComponent(term)}&limit=100&namespace=0&format=json&origin=*`
-  const res = await fetch(url)
-  if (!res.ok) return []
-  const data = await res.json()
-  // opensearch returns [query, [titles], [descriptions], [urls]]
-  return (data[1] as string[]) ?? []
+interface RawExample {
+  definition_id: number
+  text: string
+  source: string | null
+}
+
+interface RawSectionRow {
+  sense_id: number
+  section_name: string
+  item_text: string
+  item_order: number
+}
+
+interface RawTranslation {
+  sense_id: number
+  lang: string
+  word: string
+}
+
+// ── Offline DB lookup — same 5-query pattern as useAramaicSearch ──────────────
+
+async function loadFullSenses(word: string): Promise<WiktionarySense[]> {
+  const rawSenses = await queryWikiDict<RawSense>(SQL.GET_WIKIDICT_SENSES_FOR_WORD, [word])
+  if (!rawSenses.length) return []
+
+  const senseIds = rawSenses.map((s) => s.id)
+
+  const [rawDefs, rawExamples, rawSections, rawTranslations] = await Promise.all([
+    queryWikiDict<RawDefinition>(SQL.GET_WIKIDICT_ALL_DEFINITIONS(senseIds), senseIds),
+    queryWikiDict<RawExample>(SQL.GET_WIKIDICT_ALL_EXAMPLES(senseIds), senseIds),
+    queryWikiDict<RawSectionRow>(SQL.GET_WIKIDICT_ALL_SECTIONS(senseIds), senseIds),
+    queryWikiDict<RawTranslation>(SQL.GET_WIKIDICT_ALL_TRANSLATIONS(senseIds), senseIds),
+  ])
+
+  const defsBySense = new Map<number, RawDefinition[]>()
+  for (const d of rawDefs) {
+    if (!defsBySense.has(d.sense_id)) defsBySense.set(d.sense_id, [])
+    defsBySense.get(d.sense_id)!.push(d)
+  }
+
+  const examplesByDef = new Map<number, RawExample[]>()
+  for (const e of rawExamples) {
+    if (!examplesByDef.has(e.definition_id)) examplesByDef.set(e.definition_id, [])
+    examplesByDef.get(e.definition_id)!.push(e)
+  }
+
+  const sectionsBySense = new Map<number, RawSectionRow[]>()
+  for (const s of rawSections) {
+    if (!sectionsBySense.has(s.sense_id)) sectionsBySense.set(s.sense_id, [])
+    sectionsBySense.get(s.sense_id)!.push(s)
+  }
+
+  const translationsBySense = new Map<number, RawTranslation[]>()
+  for (const t of rawTranslations) {
+    if (!translationsBySense.has(t.sense_id)) translationsBySense.set(t.sense_id, [])
+    translationsBySense.get(t.sense_id)!.push(t)
+  }
+
+  return rawSenses
+    .map((rs) => {
+      // Filter blocked layer tags
+      const definitions: WiktionaryDefinition[] = (defsBySense.get(rs.id) ?? [])
+        .filter((rd) => !rd.filter_tag || !BLOCKED_LAYERS.has(rd.filter_tag))
+        .map((rd) => ({
+          text: rd.text,
+          layer: rd.filter_tag,
+          examples: (examplesByDef.get(rd.id) ?? []).map((e) => ({
+            text: e.text,
+            source: e.source,
+          })),
+        }))
+
+      if (!definitions.length) return null
+
+      const sections: Record<string, string[]> = {}
+      for (const row of sectionsBySense.get(rs.id) ?? []) {
+        if (!sections[row.section_name]) sections[row.section_name] = []
+        sections[row.section_name]!.push(row.item_text)
+      }
+
+      const transMap = new Map<string, string[]>()
+      for (const t of translationsBySense.get(rs.id) ?? []) {
+        if (!transMap.has(t.lang)) transMap.set(t.lang, [])
+        transMap.get(t.lang)!.push(t.word)
+      }
+
+      return {
+        headword: rs.headword,
+        nikud: rs.nikud,
+        pos: rs.pos,
+        binyan: rs.binyan,
+        shoresh: rs.shoresh,
+        ktivMale: rs.ktiv_male,
+        etymology: rs.etymology ?? null,
+        definitions,
+        sections,
+        translations: [...transMap.entries()].map(([lang, words]) => ({ lang, words })),
+        sourceLabel: rs.source_label ?? 'ויקימילון',
+      } as WiktionarySense
+    })
+    .filter((s): s is WiktionarySense => s !== null)
 }
 
 // ── Composable ────────────────────────────────────────────────────────────────
 
 export function useWiktionary() {
-  const searchQuery = ref('')
-  const debouncedQuery = useDebounce(searchQuery, 350)
   const senses = ref<WiktionarySense[]>([])
-  const title = ref<string | null>(null)
-  const suggestions = ref<string[]>([])
   const searching = ref(false)
   const hasSearched = ref(false)
   const notFound = ref(false)
   const error = ref<string | null>(null)
 
-  async function loadSuggestions(term: string) {
-    if (!term.trim()) {
-      suggestions.value = []
-      return
-    }
-    try {
-      suggestions.value = await fetchSuggestions(term.trim())
-    } catch {
-      suggestions.value = []
-    }
-  }
-
-  function clearSuggestions() {
-    suggestions.value = []
-  }
-
   async function search(term: string) {
     const trimmed = term.trim()
     if (!trimmed) {
       senses.value = []
-      title.value = null
       hasSearched.value = false
       notFound.value = false
       error.value = null
@@ -296,20 +189,13 @@ export function useWiktionary() {
     notFound.value = false
     error.value = null
     senses.value = []
-    title.value = null
     try {
-      const fetched = await fetchWikitext(trimmed)
-      if (!fetched) {
+      const results = await loadFullSenses(trimmed)
+      if (!results.length) {
         notFound.value = true
         return
       }
-      const parsed = parseWikitext(fetched.title, fetched.wikitext)
-      if (parsed.length === 0) {
-        notFound.value = true
-        return
-      }
-      title.value = fetched.title
-      senses.value = parsed
+      senses.value = results
     } catch {
       error.value = 'שגיאה בטעינת הנתונים'
     } finally {
@@ -317,25 +203,27 @@ export function useWiktionary() {
     }
   }
 
-  function searchWord(word: string) {
-    searchQuery.value = word
-    clearSuggestions()
-    search(word)
+  async function getSuggestions(term: string): Promise<string[]> {
+    const trimmed = term.trim()
+    if (!trimmed) return []
+    try {
+      const rows = await queryWikiDict<{ headword: string }>(SQL.WIKIDICT_SUGGEST, [
+        `%${trimmed}%`,
+        `${trimmed}%`,
+      ])
+      return rows.map((r) => r.headword)
+    } catch {
+      return []
+    }
   }
 
   return {
-    searchQuery,
-    debouncedQuery,
     senses,
-    title,
-    suggestions,
     searching,
     hasSearched,
     notFound,
     error,
     search,
-    searchWord,
-    loadSuggestions,
-    clearSuggestions,
+    getSuggestions,
   }
 }

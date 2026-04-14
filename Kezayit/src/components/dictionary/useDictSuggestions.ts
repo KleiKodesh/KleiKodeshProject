@@ -3,45 +3,43 @@ import type { Ref } from 'vue'
 import type { DictSuggestion } from './useAramaicSearch'
 
 /**
- * Manages the merged autosuggest list from both Wiktionary (OpenSearch)
- * and the local Aramaic DB.
+ * Manages the merged autosuggest list from both offline sources:
+ * wikidictionary.db (Hebrew) and dictionary.db (Aramaic + abbreviations).
  *
- * Receives the wiki suggestions ref and the aramaic getter from the parent
- * so it shares the same composable instances — no duplicate fetches.
+ * Both sources return DictSuggestion[] so they merge cleanly.
  */
 export function useDictSuggestions(
-  wikiSuggestions: Ref<string[]>,
+  getWikiSuggestions: (term: string) => Promise<string[]>,
   getAramaicSuggestions: (term: string) => Promise<DictSuggestion[]>,
   debouncedQuery: Ref<string>,
 ) {
+  const wikiSuggestions = ref<string[]>([])
   const aramaicSuggestions = ref<DictSuggestion[]>([])
 
   watch(debouncedQuery, async (q) => {
-    aramaicSuggestions.value = await getAramaicSuggestions(q)
+    if (!q.trim()) {
+      wikiSuggestions.value = []
+      aramaicSuggestions.value = []
+      return
+    }
+    const [wiki, aramaic] = await Promise.all([getWikiSuggestions(q), getAramaicSuggestions(q)])
+    wikiSuggestions.value = wiki
+    aramaicSuggestions.value = aramaic
   })
 
   const hebrewOnly = /[\u05D0-\u05EA]/
 
   const suggestions = computed<DictSuggestion[]>(() => {
-    // Aramaic entries always have definitions — prefer them over bare Wiktionary headwords
+    const query = debouncedQuery.value.trim()
     const aramaicHeadwords = new Set(aramaicSuggestions.value.map((s) => s.headword))
 
-    // Wiki-only: headwords not in Aramaic DB, sorted prefix-first then alpha
-    const query = debouncedQuery.value.trim()
+    // Wiki headwords not already covered by Aramaic
     const wikiOnly = wikiSuggestions.value
       .filter((hw) => hebrewOnly.test(hw) && !aramaicHeadwords.has(hw))
-      .sort((a, b) => {
-        const aPrefix = a.startsWith(query) ? 0 : 1
-        const bPrefix = b.startsWith(query) ? 0 : 1
-        if (aPrefix !== bPrefix) return aPrefix - bPrefix
-        return a.localeCompare(b, 'he')
-      })
       .map((hw) => ({ headword: hw, definition: null }))
 
     const aramaicItems = aramaicSuggestions.value.filter((s) => hebrewOnly.test(s.headword))
 
-    // Order: prefix match → alpha → source (Aramaic last as tiebreaker)
-    // SQL already handles this for Aramaic; merge wiki-only into the same order
     const all = [...aramaicItems, ...wikiOnly]
     all.sort((a, b) => {
       const aPrefix = a.headword.startsWith(query) ? 0 : 1
@@ -49,15 +47,14 @@ export function useDictSuggestions(
       if (aPrefix !== bPrefix) return aPrefix - bPrefix
       const alpha = a.headword.localeCompare(b.headword, 'he')
       if (alpha !== 0) return alpha
-      // Same headword: Aramaic (has definition) after wiki-only (no definition)
-      const aDef = a.definition ? 1 : 0
-      const bDef = b.definition ? 1 : 0
-      return aDef - bDef
+      // Entries with definitions (Aramaic) after bare headwords (wiki)
+      return (a.definition ? 1 : 0) - (b.definition ? 1 : 0)
     })
     return all.slice(0, 60)
   })
 
   function clearSuggestions() {
+    wikiSuggestions.value = []
     aramaicSuggestions.value = []
   }
 

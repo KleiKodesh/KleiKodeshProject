@@ -1,39 +1,36 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
-import CalendarHeader from './CalendarHeader.vue'
-import WeeklyCalendarList from './WeeklyCalendarList.vue'
-import MonthlyCalendarGrid from './MonthlyCalendarGrid.vue'
-import { useZmanim } from './useZmanim'
-import { useHebrewCalendar } from './useHebrewCalendar'
-import { useWeeklyCalendar } from './useWeeklyCalendar'
 import { idbGet, idbSet, KEYS } from '@/utils/idbPersistence'
-
-const { activeCity, cities, setCity, init: initZmanim } = useZmanim()
+import { useZmanim } from './useZmanim'
+import { useWeeklyView } from './useWeeklyView'
+import { useMonthlyView } from './useMonthlyView'
+import CalendarHeader from './CalendarHeader.vue'
+import WeeklyView from './WeeklyView.vue'
+import MonthlyView from './MonthlyView.vue'
 
 type ViewMode = 'weekly' | 'monthly'
-const viewMode = ref<ViewMode>('weekly')
 
+const viewMode = ref<ViewMode>('weekly')
 watch(viewMode, (v) => idbSet(KEYS.SETTINGS_CALENDAR_VIEW, v))
 
-// Monthly composable — always alive so pickers work
-const monthly = useHebrewCalendar()
+const { activeCity, init: initZmanim } = useZmanim()
 
-// Weekly composable
 const cityRef = {
   get value() {
     return activeCity.value
   },
 }
-const weekly = useWeeklyCalendar(cityRef)
+const weekly = useWeeklyView(cityRef)
+const monthly = useMonthlyView()
 
 function onPrev() {
-  viewMode.value === 'weekly' ? weekly.prevWeek() : monthly.prevMonth()
+  viewMode.value === 'weekly' ? weekly.prev() : monthly.prevMonth()
 }
 function onNext() {
-  viewMode.value === 'weekly' ? weekly.nextWeek() : monthly.nextMonth()
+  viewMode.value === 'weekly' ? weekly.next() : monthly.nextMonth()
 }
 function onToday() {
-  viewMode.value === 'weekly' ? weekly.goToToday() : monthly.goToToday()
+  viewMode.value === 'weekly' ? weekly.goToday() : monthly.goToday()
 }
 
 onMounted(async () => {
@@ -46,42 +43,33 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="cal-page">
+  <div class="page">
     <CalendarHeader
       :view-mode="viewMode"
-      :heb-label="
-        viewMode === 'weekly' ? weekly.week.value.hebrewRangeLabel : monthly.hebrewMonthLabel.value
+      :hebrew-label="
+        viewMode === 'weekly' ? weekly.week.value.hebrewLabel : monthly.hebrewLabel.value
       "
-      :greg-label="
-        viewMode === 'weekly' ? weekly.week.value.gregRangeLabel : monthly.gregorianMonthLabel.value
-      "
-      :display-month="monthly.displayMonth.value"
-      :display-year="monthly.displayYear.value"
-      :current-heb-month="monthly.currentHebMonth.value"
-      :current-heb-year="monthly.currentHebYear.value"
+      :greg-label="viewMode === 'weekly' ? weekly.week.value.gregLabel : monthly.gregLabel.value"
+      :heb-month="monthly.hebMonth.value"
+      :heb-year="monthly.hebYear.value"
+      :greg-month="monthly.gregMonth.value"
+      :greg-year="monthly.gregYear.value"
       @prev="onPrev"
       @next="onNext"
       @today="onToday"
       @set-view="viewMode = $event"
-      @select-heb-month="monthly.jumpToHebrew(monthly.currentHebYear.value, $event)"
-      @select-heb-year="monthly.jumpToHebrew($event, monthly.currentHebMonth.value)"
-      @select-greg-month="monthly.displayMonth.value = $event"
-      @select-greg-year="monthly.displayYear.value = $event"
+      @select-heb-month="monthly.jumpToHebrew(monthly.hebYear.value, $event)"
+      @select-heb-year="monthly.jumpToHebrew($event, monthly.hebMonth.value)"
+      @select-greg-month="monthly.gregMonth.value = $event"
+      @select-greg-year="monthly.gregYear.value = $event"
     />
-
-    <WeeklyCalendarList
-      v-if="viewMode === 'weekly'"
-      :city="activeCity"
-      :cities="cities"
-      :weekly="weekly"
-      @city-change="setCity"
-    />
-    <MonthlyCalendarGrid v-else :monthly="monthly" />
+    <WeeklyView v-if="viewMode === 'weekly'" :weekly="weekly" />
+    <MonthlyView v-else :monthly="monthly" />
   </div>
 </template>
 
 <style scoped>
-.cal-page {
+.page {
   display: flex;
   flex-direction: column;
   height: 100%;

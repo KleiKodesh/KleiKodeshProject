@@ -22,7 +22,7 @@ const pages: Record<string, unknown> = {
     () => import('@/components/hebrew-calendar/HebrewCalendarPage.vue'),
   ),
   '/dictionary': defineAsyncComponent(() => import('@/components/dictionary/DictionaryPage.vue')),
-  '/midot': defineAsyncComponent(() => import('@/components/midot/MidotPage.vue')),
+  '/midot': defineAsyncComponent(() => import('@/components/conversions/MidotPage.vue')),
 }
 </script>
 
