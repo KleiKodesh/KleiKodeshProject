@@ -20,19 +20,25 @@ export const dbReady = ref(isHosted ? (window.__webviewDbReady ?? import.meta.en
 /** True once detected; false means the column doesn't exist or detection hasn't run yet. */
 export let categoryHasOrderIndex = false
 
-async function detectCategorySchema() {
-  const cols = await query<{ name: string }>('PRAGMA table_info(category)', [])
-  categoryHasOrderIndex = cols.some((c) => c.name === 'orderIndex')
+let _schemaDetected = false
+let _schemaDetecting: Promise<void> | null = null
+
+/** Lazy — only runs on first call. Safe to call multiple times. */
+export function ensureCategorySchema(): Promise<void> {
+  if (_schemaDetected) return Promise.resolve()
+  if (_schemaDetecting) return _schemaDetecting
+  _schemaDetecting = query<{ name: string }>('PRAGMA table_info(category)', []).then((cols) => {
+    categoryHasOrderIndex = cols.some((c) => c.name === 'orderIndex')
+    _schemaDetected = true
+    _schemaDetecting = null
+  })
+  return _schemaDetecting
 }
 
 export function onDbReady(path: string) {
   window.__webviewDbPath = path
   dbReady.value = true
-  detectCategorySchema()
 }
-
-// If DB is already ready at boot (C# host with DB pre-loaded), detect immediately
-if (dbReady.value) detectCategorySchema()
 
 // ── Push event bus ────────────────────────────────────────────────────────────
 type EventListener = (msg: Record<string, unknown>) => void

@@ -23,6 +23,19 @@ namespace KezayitLib
         private static readonly string AppDir =
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "kezayit");
 
+        // Shared across all AppViewer instances — same UDF means same browser process.
+        // Lazy so it's created on first use; subsequent instances reuse the running process.
+        private static Task<CoreWebView2Environment> _sharedEnvTask;
+
+        private static Task<CoreWebView2Environment> GetSharedEnv()
+        {
+            if (_sharedEnvTask == null)
+                _sharedEnvTask = CoreWebView2Environment.CreateAsync(
+                    browserExecutableFolder: null,
+                    userDataFolder: Path.Combine(AppDir, "webcache"));
+            return _sharedEnvTask;
+        }
+
         private readonly WebView2 _webView = new WebView2 { Dock = DockStyle.Fill };
         private WebBridge _bridge;
         private DbHandler _db;
@@ -69,23 +82,30 @@ namespace KezayitLib
 
         private async Task InitAsync()
         {
-            var env = await CoreWebView2Environment.CreateAsync(
-                browserExecutableFolder: null,
-                userDataFolder: Path.Combine(AppDir, "webcache"));
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            Console.WriteLine("[Timing] InitAsync start");
+
+            var env = await GetSharedEnv();
+            Console.WriteLine("[Timing] CreateAsync: " + sw.ElapsedMilliseconds + "ms");
 
             await _webView.EnsureCoreWebView2Async(env);
+            Console.WriteLine("[Timing] EnsureCoreWebView2Async: " + sw.ElapsedMilliseconds + "ms");
 
             _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                 "kezayit-vue-app", AppDir, CoreWebView2HostResourceAccessKind.Allow);
 
-            await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(JsBridge.Script);
-
             string savedPath = AppSettings.LoadDbPath();
             bool dbReady = File.Exists(savedPath);
             string escapedPath = savedPath.Replace("\\", "\\\\");
-            _dbInjectionScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+
+            // Merge both scripts into one AddScriptToExecuteOnDocumentCreatedAsync call —
+            // each call is a browser-process round-trip, so one call is faster than two.
+            string dbScript =
                 "window.__webviewDbPath=\"" + escapedPath + "\";" +
-                "window.__webviewDbReady=" + (dbReady ? "true" : "false") + ";");
+                "window.__webviewDbReady=" + (dbReady ? "true" : "false") + ";";
+            _dbInjectionScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                JsBridge.Script + "\n" + dbScript);
+            Console.WriteLine("[Timing] AddScripts: " + sw.ElapsedMilliseconds + "ms");
 
             _bridge = new WebBridge(_webView, this);
             _db = new DbHandler(_bridge, _webView, savedPath);
@@ -114,23 +134,18 @@ namespace KezayitLib
             _webView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
 
             _webView.Source = new Uri("http://kezayit-vue-app/index.html");
-
-            Console.WriteLine("[AppViewer] InitAsync: savedPath=" + savedPath + " dbReady=" + dbReady);
+            Console.WriteLine("[Timing] Navigate set: " + sw.ElapsedMilliseconds + "ms");
             if (dbReady)
             {
-                Console.WriteLine("[AppViewer] Calling _search.OnDbReady");
                 _search.OnDbReady(savedPath);
                 _hbCsvUpdater.RunIfDue();
-            }
-            else
-            {
-                Console.WriteLine("[AppViewer] Skipping OnDbReady — no DB file at path");
             }
         }
 
         private void OnNavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
         {
             _webView.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
+            Console.WriteLine("[Timing] NavigationCompleted (splash hide)");
             _HideSplash();
         }
 
@@ -198,8 +213,7 @@ namespace KezayitLib
                             bool confirm = root.TryGetProperty("confirm", out var cv) && cv.GetBoolean();
                             _search.HandleConfirmReindex(confirm, id);
                             break;
-                        case "TogglePopOut": HandleTogglePopOut(id); break;
-                        case "getFonts": HandleGetFonts(id); break;
+                        case "TogglePopOut": HandleTogglePopOut(id); break;                        case "getFonts": HandleGetFonts(id); break;
                         default: _bridge.Reply(id, new { error = "Unknown action: " + action }); break;
                     }
                 }
