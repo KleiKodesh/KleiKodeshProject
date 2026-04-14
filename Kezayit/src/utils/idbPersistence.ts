@@ -286,7 +286,7 @@ export function idbGetLastRead(bookId: number): Promise<LastReadState | null> {
 
 // ── Reset all ─────────────────────────────────────────────────────────────────
 
-const RESET_FLAG_KEY = '__pendingReset'
+const RESET_LS_KEY = '__pendingReset'
 
 export async function idbClearAll(): Promise<void> {
   await Promise.all([
@@ -301,26 +301,22 @@ export async function idbClearSettings(): Promise<void> {
   await dropDb('app-settings')
 }
 
-/** Write a reset flag and return immediately — actual deletion happens on next boot. */
+/** Schedule a full reset on next boot — synchronous localStorage write, zero IDB cost. */
 export function idbScheduleReset(): void {
-  // Use a raw IDB open so we don't go through the async openDb helper —
-  // we want this to fire-and-forget as fast as possible before navigation.
-  const req = indexedDB.open('app-settings', 1)
-  req.onupgradeneeded = () => {
-    if (!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE)
-  }
-  req.onsuccess = () => {
-    const db = req.result
-    db.transaction(STORE, 'readwrite').objectStore(STORE).put(true, RESET_FLAG_KEY)
-    db.close()
-  }
+  try { localStorage.setItem(RESET_LS_KEY, '1') } catch {}
 }
 
-/** Call once at boot before any store reads. If the reset flag exists, wipes all DBs. */
+/**
+ * Call once at boot. Synchronous localStorage check — zero cost on normal boots.
+ * If the flag is set, wipes all IDB databases and reloads.
+ */
 export async function idbCheckAndExecReset(): Promise<void> {
-  const flag = await idbGet<boolean>(RESET_FLAG_KEY)
-  if (!flag) return
+  let flagSet = false
+  try { flagSet = localStorage.getItem(RESET_LS_KEY) === '1' } catch {}
+  if (!flagSet) return
+  try { localStorage.removeItem(RESET_LS_KEY) } catch {}
   await idbClearAll()
+  window.location.reload()
 }
 
 // ── HebrewBooks history DB ────────────────────────────────────────────────────

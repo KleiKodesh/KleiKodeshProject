@@ -332,7 +332,24 @@ Junction tables: `bookId` + respective FK, composite PK.
 
 ## Persistence
 
-Persistence uses three separate IndexedDB databases — one per concern. No localStorage is used anywhere. No migration code exists.
+Persistence uses three separate IndexedDB databases plus one localStorage key — all access goes through `src/utils/idbPersistence.ts`.
+
+### Why localStorage exists here
+
+Opening an IndexedDB database has a measurable async cost (~65ms cold on WebView2) even for a single key read. For the app-reset flag — a boolean checked on every boot but set only when the user explicitly resets the app — this cost is unacceptable. The flag is stored in `localStorage` under key `__pendingReset` so the boot check is synchronous and zero-cost on normal launches. This is the only legitimate use of localStorage in the app; all other persistence goes through IDB.
+
+### IDB performance rule
+
+Every IDB open has a real async cost, especially cold on WebView2. Before adding any new boot-time IDB read, ask whether it can be deferred until after mount, batched into an existing transaction, or replaced with a synchronous localStorage read. Never add a new `await idbGet()` call to the startup sequence without justification.
+
+### localStorage rules
+
+- All localStorage access must go through `src/utils/idbPersistence.ts` — never call `localStorage` directly anywhere else in the codebase
+- The only current localStorage key is `__pendingReset` (the app-reset flag)
+- When adding a new localStorage key, add it as a named constant in `idbPersistence.ts` alongside the IDB keys
+- App reset (`idbClearAll`) must also call `localStorage.clear()` or explicitly remove every known localStorage key — reset must leave no state behind
+
+### IDB databases
 
 | Database       | Contents                                                    |
 | -------------- | ----------------------------------------------------------- |
@@ -371,7 +388,7 @@ Always use `tabStore.setLastReadPos()` — it calls `idbSetLastRead()` which enf
 
 ### App reset
 
-`tabStore.resetAll()` calls `idbClearAll()` which deletes all three databases, then the caller does `window.location.reload()`. The "איפוס האפליקציה" tab in `SettingsPage.vue` triggers this.
+`tabStore.resetAll()` calls `idbScheduleReset()` which writes the `__pendingReset` localStorage flag, then `window.location.reload()`. On next boot, `idbCheckAndExecReset()` sees the flag synchronously, clears all IDB databases and all localStorage keys, then reloads again into a clean state.
 
 ### Adding new persisted state
 
@@ -379,6 +396,7 @@ Always use `tabStore.setLastReadPos()` — it calls `idbSetLastRead()` which enf
 - Per-tab UI state → add field to `TabState` in `idbPersistence.ts`, expose via `tabStore.getTabViewState/setTabViewState`
 - Per-tab+book state → add field to `BookState` in `idbPersistence.ts`, expose via `tabStore.getBookViewState/setBookViewState`
 - Per-book global state → add field to `LastReadState` in `idbPersistence.ts`, expose via `tabStore.getLastReadPos/setLastReadPos`
+- Boot-time flag that must be synchronous → use localStorage via `idbPersistence.ts`, add a named constant, and ensure `idbClearAll` removes it
 
 ## HebrewBooks Downloads
 

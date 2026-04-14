@@ -2,7 +2,7 @@
  * Shared utilities for formatting Hebrew daily learning (daf yomi, mishna yomi, nach yomi).
  * Used by both the home page bottom bar and the calendar zmanim panel.
  */
-import { HDate, gematriya } from '@hebcal/core'
+import { HDate, gematriya } from '@hebcal/hdate'
 import {
   DafYomi,
   MishnaYomiIndex,
@@ -23,7 +23,6 @@ import {
   PsalmsEvent,
   dailyPsalms,
   SeferHaMitzvotEvent,
-  seferHaMitzvot,
   PerekYomiEvent,
   perekYomi,
   ArukhHaShulchanYomiEvent,

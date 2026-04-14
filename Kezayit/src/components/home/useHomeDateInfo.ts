@@ -1,25 +1,4 @@
-import { HDate } from '@hebcal/core'
-import { getDailyLearning } from '@/utils/hebrewLearning'
-
-const MONTH_NAMES: Record<number, string> = {
-  1: 'ניסן',
-  2: 'אייר',
-  3: 'סיון',
-  4: 'תמוז',
-  5: 'אב',
-  6: 'אלול',
-  7: 'תשרי',
-  8: 'חשון',
-  9: 'כסלו',
-  10: 'טבת',
-  11: 'שבט',
-  12: 'אדר',
-  13: 'אדר ב׳',
-}
-
-function stripGeresh(s: string): string {
-  return s.replace(/[\u05F3\u05F4]/g, '')
-}
+import { ref } from 'vue'
 
 export interface HomeDateInfo {
   hebrewDate: string
@@ -28,16 +7,31 @@ export interface HomeDateInfo {
   nachYomi: string | null
 }
 
-export function getHomeDateInfo(): HomeDateInfo {
+const MONTH_NAMES: Record<number, string> = {
+  1: 'ניסן', 2: 'אייר', 3: 'סיון', 4: 'תמוז', 5: 'אב', 6: 'אלול',
+  7: 'תשרי', 8: 'חשון', 9: 'כסלו', 10: 'טבת', 11: 'שבט', 12: 'אדר', 13: 'אדר ב׳',
+}
+
+function stripGeresh(s: string): string {
+  return s.replace(/[\u05F3\u05F4]/g, '')
+}
+
+export const dateInfo = ref<HomeDateInfo>({ hebrewDate: '', dafYomi: null, mishnaYomi: null, nachYomi: null })
+
+/** Call once from onMounted — defers hebcal/learning parse until after first render. */
+export async function loadDateInfo(): Promise<void> {
+  const [{ HDate }, { getDailyLearning }] = await Promise.all([
+    import('@hebcal/hdate'),
+    import('@/utils/hebrewLearning'),
+  ])
+
   const today = new Date()
   const hd = new HDate(today)
-
   const parts = hd.renderGematriya().split(' ')
   const day = stripGeresh(parts[0] ?? '')
   const year = parts[parts.length - 1] ?? ''
   const monthName = MONTH_NAMES[hd.getMonth()] ?? ''
-  const hebrewDate = `${day} ${monthName} ${year}`
 
   const { dafYomi, mishnaYomi, nachYomi } = getDailyLearning(hd)
-  return { hebrewDate, dafYomi, mishnaYomi, nachYomi }
+  dateInfo.value = { hebrewDate: `${day} ${monthName} ${year}`, dafYomi, mishnaYomi, nachYomi }
 }

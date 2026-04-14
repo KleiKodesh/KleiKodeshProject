@@ -16,14 +16,13 @@ import { IconSettings24, IconSearchSparkle24 } from '@iconify-prerendered/vue-fl
 import { isHosted, dbReady } from '@/host/db'
 import { useAppNavigation } from '@/composables/useAppNavigation'
 import { useTilesKeys } from '@/composables/useTileGridKeys'
-import { getHomeDateInfo } from './useHomeDateInfo'
+import { dateInfo, loadDateInfo } from './useHomeDateInfo'
 import { navigateToDafYomi } from './useDafYomiNavigation'
 import { useTabStore } from '@/stores/tabStore'
 import { useOnlineStatus } from '@/utils/useOnlineStatus'
 
 const { navigate } = useAppNavigation()
 const tabStore = useTabStore()
-const dateInfo = getHomeDateInfo()
 const isOnline = useOnlineStatus()
 
 const baseTiles = computed(() => [
@@ -57,7 +56,10 @@ const { focusedIndex, containerFocused } = useTilesKeys(
   (i) => navigate(tiles.value[i]!.label),
 )
 
-onMounted(() => pageRef.value?.focus())
+onMounted(() => {
+  pageRef.value?.focus()
+  loadDateInfo()
+})
 
 async function onTap(label: string) {
   await navigate(label)

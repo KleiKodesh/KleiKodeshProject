@@ -1,5 +1,6 @@
 import { ref, computed, watch } from 'vue'
-import { GeoLocation, Zmanim } from '@hebcal/core'
+import { GeoLocation } from '@hebcal/noaa'
+import { Zmanim } from '@hebcal/core/dist/esm/zmanim'
 import { idbGet, idbSet, KEYS } from '@/utils/idbPersistence'
 import type { City } from './calendarTypes'
 

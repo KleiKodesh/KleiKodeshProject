@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue'
-import { HDate } from '@hebcal/core'
+import { HDate } from '@hebcal/hdate'
 
 export const HEB_MONTHS = [
   { num: 1, name: 'ניסן' },
