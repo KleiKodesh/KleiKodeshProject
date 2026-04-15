@@ -43,7 +43,7 @@ const {
 
 // ── Suggestions ───────────────────────────────────────────────────────────────
 
-const { suggestions, clearSuggestions } = useDictSuggestions(
+const { suggestions } = useDictSuggestions(
   getWikiSuggestions,
   getAramaicSuggestions,
   debouncedQuery,
@@ -75,7 +75,6 @@ const inputEl = ref<HTMLInputElement | null>(null)
 
 function fillFromSuggestion(word: string) {
   searchQuery.value = word
-  clearSuggestions()
   activeTab.value = 'details'
   inputEl.value?.focus()
 }
@@ -88,10 +87,6 @@ function handleSearchWord(word: string) {
 }
 
 function onInputKeydown(e: KeyboardEvent) {
-  if (e.code === 'Escape') {
-    clearSuggestions()
-    return
-  }
   if (!suggestions.value.length) return
   if (e.code === 'ArrowDown' || e.code === 'ArrowUp' || e.code === 'Tab') {
     e.preventDefault()

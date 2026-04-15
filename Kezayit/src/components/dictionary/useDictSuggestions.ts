@@ -56,10 +56,5 @@ export function useDictSuggestions(
     return all.slice(0, 60)
   })
 
-  function clearSuggestions() {
-    wikiSuggestions.value = []
-    aramaicSuggestions.value = []
-  }
-
-  return { suggestions, clearSuggestions }
+  return { suggestions }
 }

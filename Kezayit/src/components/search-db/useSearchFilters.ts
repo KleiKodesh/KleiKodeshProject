@@ -1,4 +1,6 @@
-import { ref, computed } from 'vue'
+import { ref, watch } from 'vue'
+import { useDebounceFn } from '@vueuse/core'
+import { normalize } from '@/utils/normalizeText'
 import { query } from '@/host/db'
 import { SQL } from '@/host/queries.sql'
 import { useTabStore } from '@/stores/tabStore'
@@ -17,28 +19,84 @@ export function useSearch(
 
   const searchQuery = ref('')
   const isFilterOpen = ref(false)
+  const filterBookQuery = ref('')
   const checkedBookIds = ref<Set<number>>(new Set())
+
+  // Plain refs — never computeds. Updated only when filter/checkboxes change,
+  // not on every streaming batch.
+  const effectiveBookIds = ref<Set<number>>(new Set())
+  const filteredResults = ref<BloomSearchResult[]>([])
+  const resultCounts = ref<Map<number, number>>(new Map())
   const initialized = ref(false)
 
-  const allBookCount = computed(() => booksStore.allBooks.length)
+  // ── Core filter logic ────────────────────────────────────────────────────────
 
-  const filteredResults = computed(() => {
-    // All checked (or not yet initialized) → show everything
-    if (checkedBookIds.value.size === allBookCount.value) return results()
-    // None checked → show nothing
-    if (checkedBookIds.value.size === 0) return []
-    return results().filter((r) => checkedBookIds.value.has(r.bookId))
-  })
+  function matchBookIds(q: string, checked: Set<number>): Set<number> {
+    const trimmed = q.trim()
+    if (trimmed.length < 2) return checked
+    const words = normalize(trimmed).split(/\s+/).filter((w) => w.length > 0)
+    if (!words.length) return checked
+    const exactWords = words.slice(0, -1)
+    const prefixWord = words[words.length - 1]!
+    const matching = new Set(
+      booksStore.allBooks
+        .filter((b) => {
+          const pathWords = b.searchWords ?? (b.searchPath ?? '').split(/\s+/)
+          const exactOk = exactWords.every((qw) => pathWords.some((pw) => pw === qw))
+          const prefixOk = pathWords.some((pw) => pw.includes(prefixWord))
+          return exactOk && prefixOk
+        })
+        .map((b) => b.id),
+    )
+    const result = new Set<number>()
+    for (const id of checked) if (matching.has(id)) result.add(id)
+    return result
+  }
 
-  const resultCounts = computed(() => {
+  function applyFilter(ids: Set<number>) {
+    const raw = results()
+    const allChecked = filterBookQuery.value.trim().length < 2 && ids.size === booksStore.allBooks.length
+    filteredResults.value = allChecked ? raw : raw.filter((r) => ids.has(r.bookId))
     const m = new Map<number, number>()
-    for (const r of results()) m.set(r.bookId, (m.get(r.bookId) ?? 0) + 1)
-    return m
+    for (const r of raw) m.set(r.bookId, (m.get(r.bookId) ?? 0) + 1)
+    resultCounts.value = m
+  }
+
+  function updateFilter(q: string, checked: Set<number>) {
+    const ids = matchBookIds(q, checked)
+    effectiveBookIds.value = ids
+    applyFilter(ids)
+  }
+
+  const runFilterDebounce = useDebounceFn((q: string) => {
+    updateFilter(q, checkedBookIds.value)
+  }, 200)
+
+  // Query typing → debounce the scan; clear immediately if < 2 chars
+  watch(filterBookQuery, (q) => {
+    if (q.trim().length < 2) updateFilter(q, checkedBookIds.value)
+    else runFilterDebounce(q)
   })
+
+  // Checkbox change → immediate (no typing, no debounce needed)
+  watch(checkedBookIds, (checked) => updateFilter(filterBookQuery.value, checked))
+
+  // Results streaming → re-apply current filter to new results
+  // ids are already known — just a Set lookup, no book scan
+  watch(() => results(), () => applyFilter(effectiveBookIds.value))
+
+  // ── Public mutations ─────────────────────────────────────────────────────────
 
   function initCheckedBooks() {
     if (initialized.value || !booksStore.allBooks.length) return
-    checkedBookIds.value = new Set(booksStore.allBooks.map((b) => b.id))
+    const all = new Set(booksStore.allBooks.map((b) => b.id))
+    checkedBookIds.value = all
+    effectiveBookIds.value = all
+    initialized.value = true
+  }
+
+  function setCheckedBookIds(ids: Set<number>) {
+    checkedBookIds.value = ids
     initialized.value = true
   }
 
@@ -102,10 +160,12 @@ export function useSearch(
   return {
     searchQuery,
     isFilterOpen,
+    filterBookQuery,
     checkedBookIds,
     filteredResults,
     resultCounts,
     initCheckedBooks,
+    setCheckedBookIds,
     toggleBook,
     toggleCategory,
     checkAll,

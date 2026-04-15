@@ -24,10 +24,16 @@ Built from multiple sources:
 
 Schema: `source → sense → definition` (no examples, sections, or translations)
 
+The `sense` table stores only the columns that are actually populated: `id`, `headword`, `nikud`, `source_id`, `sense_order`. The columns `pos`, `binyan`, `shoresh`, `ktiv_male` were dropped — they are only meaningful for Wiktionary entries (wikidictionary.db) and are always NULL in this DB. Queries that need those columns return `NULL` literals so the result shape stays compatible with the wikidict queries.
+
 ### Rebuild scripts
 - `create-dictionary-db.cjs` — drops and recreates schema from scratch
 - `import-aramaic.cjs` — imports Aramaic entries from FinalDictionary.txt
 - `import-jewishbooks-abbrev.cjs` — imports Hebrew abbreviations
+
+### Optimization script
+- `optimize-kezayit-db.cjs` — rebuilds the DB with the lean schema (drops unused columns, drops redundant indexes, adds `idx_sense_suggest` covering index for DICT_SUGGEST, runs ANALYZE). Run this after any full rebuild.
+- `verify-kezayit-db.cjs` — verifies schema, row counts, and all runtime queries after optimization.
 
 ---
 

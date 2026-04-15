@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useEventListener } from '@vueuse/core'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBloomSearch } from './useBloomSearch'
 import { useSearch } from './useSearchFilters'
@@ -27,10 +28,12 @@ const {
 const {
   searchQuery,
   isFilterOpen,
+  filterBookQuery,
   checkedBookIds,
   filteredResults,
   resultCounts,
   initCheckedBooks,
+  setCheckedBookIds,
   toggleBook,
   toggleCategory,
   checkAll,
@@ -68,6 +71,17 @@ function onClearSearch() {
   handleClearSearch()
 }
 
+async function saveFilterState() {
+  const allCount = booksStore.allBooks.length
+  const isAllChecked = checkedBookIds.value.size === allCount
+  const existing = await tabStore.getTabViewState(tabStore.activeTabId) ?? {}
+  tabStore.setTabViewState(tabStore.activeTabId, {
+    ...existing,
+    searchFilterQuery: filterBookQuery.value || undefined,
+    searchCheckedBookIds: isAllChecked ? undefined : [...checkedBookIds.value],
+  })
+}
+
 async function restoreFromTab() {
   const savedQuery = tabStore.activeTab.searchQuery
   if (!savedQuery) return
@@ -78,16 +92,32 @@ async function restoreFromTab() {
 
 onMounted(async () => {
   await booksStore.ensureLoaded()
-  initCheckedBooks()
-  // load saved scroll state before results render
+
   const saved = await tabStore.getTabViewState(tabStore.activeTabId)
+
+  // Restore filter state before initCheckedBooks so we don't overwrite it
+  if (saved?.searchCheckedBookIds != null) {
+    setCheckedBookIds(new Set(saved.searchCheckedBookIds))
+  } else {
+    initCheckedBooks()
+  }
+  if (saved?.searchFilterQuery) {
+    filterBookQuery.value = saved.searchFilterQuery
+  }
+
   if (saved?.searchScrollIndex != null) {
     initialScrollIndex.value = saved.searchScrollIndex
     initialScrollOffset.value = saved.searchScrollOffset ?? 0
   }
+
   await restoreFromTab()
   searchBarRef.value?.focus()
 })
+
+useEventListener(document, 'visibilitychange', () => {
+  if (document.visibilityState === 'hidden') saveFilterState()
+})
+onBeforeUnmount(saveFilterState)
 </script>
 
 <template>
@@ -121,6 +151,7 @@ onMounted(async () => {
       :checked-book-ids="checkedBookIds"
       :result-counts="resultCounts"
       :has-searched="hasSearched"
+      v-model:filter-book-query="filterBookQuery"
       @toggle-book="toggleBook"
       @toggle-category="toggleCategory"
       @check-all="checkAll"

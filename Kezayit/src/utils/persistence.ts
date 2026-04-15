@@ -53,6 +53,8 @@ export function lsClearAll(): void {
 export interface TabState {
   searchScrollIndex?: number
   searchScrollOffset?: number
+  searchFilterQuery?: string
+  searchCheckedBookIds?: number[] // null/absent means "all checked" (default)
 }
 
 export interface BookState {
