@@ -16,7 +16,7 @@
   -->
 
   <PropertyGroup>
-    <VueProjectDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\'))</VueProjectDir>
+    <VueProjectDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\vue-frontend\'))</VueProjectDir>
     <VueDistDir>$(VueProjectDir)dist</VueDistDir>
     <VueFrontendOut>$(OutDir)kezayit</VueFrontendOut>
   </PropertyGroup>

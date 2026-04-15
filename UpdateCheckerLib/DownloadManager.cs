@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Win32;
+using System;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
@@ -11,7 +12,39 @@ namespace UpdateCheckerLib
 {
     internal static class DownloadManager
     {
-        public static string PendingInstallerPath { get; private set; }
+        private const string REGISTRY_KEY   = @"SOFTWARE\KleiKodesh";
+        private const string REGISTRY_VALUE = "PendingInstallerPath";
+
+        /// <summary>
+        /// Persisted to the registry so it survives AppDomain boundaries
+        /// (VSTO can load assemblies in a separate AppDomain from the shutdown callback).
+        /// </summary>
+        public static string PendingInstallerPath
+        {
+            get
+            {
+                try
+                {
+                    using (var key = Registry.CurrentUser.OpenSubKey(REGISTRY_KEY))
+                        return key?.GetValue(REGISTRY_VALUE)?.ToString();
+                }
+                catch { return null; }
+            }
+            private set
+            {
+                try
+                {
+                    using (var key = Registry.CurrentUser.CreateSubKey(REGISTRY_KEY))
+                    {
+                        if (value == null)
+                            key?.DeleteValue(REGISTRY_VALUE, throwOnMissingValue: false);
+                        else
+                            key?.SetValue(REGISTRY_VALUE, value);
+                    }
+                }
+                catch { }
+            }
+        }
 
         public static async Task DownloadAndScheduleInstallerAsync(string version)
         {
@@ -146,13 +179,13 @@ namespace UpdateCheckerLib
         }
 
         // Launch with ShellExecute so Windows handles UAC correctly per the
-        // manifest's RequestExecutionLevel (NSIS wrapper is user-level, no elevation needed)
+        // manifest's RequestExecutionLevel (NSIS wrapper is user-level, no elevation needed).
+        // No --silent: the installer shows its normal landing page so the user clicks through.
         private static void LaunchInstaller(string installerPath)
         {
             var psi = new ProcessStartInfo
             {
                 FileName         = installerPath,
-                Arguments        = "--silent",   // skip landing page, go straight to install, exit 0 on done
                 UseShellExecute  = true,
                 WorkingDirectory = Path.GetDirectoryName(installerPath)
             };

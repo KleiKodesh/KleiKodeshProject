@@ -67,6 +67,8 @@ Multi-instance routes (`/book-view`, `/search`, `/pdf-view`) can have multiple t
 | `/pdf-view`        | `PdfViewPage.vue`          | multi-instance                  |
 | `/workspaces`      | `WorkspaceManagerPage.vue` | singleton                       |
 | `/hebrew-calendar` | `HebrewCalendarPage.vue`   | singleton                       |
+| `/dictionary`      | `DictionaryPage.vue`       | singleton                       |
+| `/midot`           | `MidotPage.vue`            | singleton                       |
 
 ## Feature Folders (`src/components/`)
 
@@ -74,7 +76,7 @@ Multi-instance routes (`/book-view`, `/search`, `/pdf-view`) can have multiple t
 
 Home page navigation tiles. The tile list in `HomePage.vue` and the menu list in `AppTitleBarNavDropdown.vue` are the two entry points to the same set of destinations — they must always be kept in sync. When adding, removing, or renaming a navigation destination, update both files. The home page uses `navigate()` (navigates in the active tab); the nav dropdown uses `navigateInNewTab()` (always opens a new tab). Neither list is derived from the other — they are maintained in parallel.
 
-- `HomePage.vue`, `HomePageTile.vue`
+- `HomePage.vue`, `HomePageTile.vue`, `useHomeDateInfo.ts`, `useDafYomiNavigation.ts`
 
 ### books-fs/
 
@@ -147,7 +149,15 @@ App settings across three tabs: general, reading, and advanced. Also contains th
 HebrewBooks catalog browser with download history.
 
 - `HebrewBooksPage.vue`, `HebrewBooksListItem.vue`
-- `useHebrewBooks.ts`, `hebrewBooksCatalog.ts`, `hebrewBooksHistory.ts`
+- `useHebrewBooks.ts`, `hebrewBooksCatalog.ts`
+
+### conversions/
+
+Halachic unit converter. Singleton route `/midot`. Converts between biblical, Talmudic, and modern units across six systems (length, area, volume, weight, coins, time) with support for multiple halachic opinions.
+
+- `MidotPage.vue` — full converter UI with opinion selector and conversion explanation
+- `midot.ts` — all conversion logic (`convert`, `toMetric`, `explainConversion`)
+- `units/` — unit definitions per measurement system; `types.ts` for shared types
 
 ### pdf/
 
@@ -163,10 +173,15 @@ Workspace CRUD UI.
 
 ### hebrew-calendar/
 
-Hebrew calendar page. Displays a monthly grid with Hebrew dates (gematriya), holidays, and the weekly parasha. Singleton route.
+Hebrew calendar page. Monthly grid and weekly detail views with zmanim. Singleton route.
 
-- `HebrewCalendarPage.vue`
-- `useHebrewCalendar.ts` — Hebrew date calculations, holiday detection, parasha lookup via `@hebcal/core`
+- `HebrewCalendarPage.vue` — orchestrator, view-mode toggle, city picker
+- `MonthlyView.vue` — monthly grid with Hebrew dates, holidays, parasha
+- `WeeklyView.vue` — week view with events, candle lighting, zmanim, daily learning
+- `DayRow.vue`, `CalendarHeader.vue`, `calendarTypes.ts`
+- `useMonthlyView.ts` — month navigation, keeps Gregorian and Hebrew month in sync
+- `useWeeklyView.ts` — week data via `@hebcal/core`, daily learning via `hebrewLearning.ts`
+- `useZmanim.ts` — city selection, geolocation, zmanim calculation
 
 ### layout/
 
@@ -199,7 +214,9 @@ Shared reusable components used across features.
 
 **pdfStore** — PDF and Word file handling. Manages conversion state, HebrewBooks download state, and session restore for PDF tabs. Listens to C# push events (`conversionStarted`, `hbPdfReady`, `hbPdfCancelled`).
 
-**searchCacheStore** — LRU cache for search results (capped at 100 entries), stored in `app-settings` IDB under `search:` prefix.
+**searchCacheStore** — LRU cache for search results (capped at 100 entries), stored in `app-search-cache` IDB.
+
+**hebrewBooksHistoryStore** — HebrewBooks download history, stored in `app-hb-history` IDB, LRU-capped at 25 entries.
 
 ## Composables (`src/composables/`)
 
@@ -220,6 +237,8 @@ Shared reusable components used across features.
 **useLineCopy.ts** — intercepts the browser `copy` event on a scroller element; when the user has selected all, writes each line as a `<div>` in `text/html` and strips HTML tags for `text/plain`, so copied text has no inline line breaks.
 
 **useToolbarPosition.ts** — exports the `ToolbarPosition` type (`'top' | 'bottom' | 'left' | 'right'`). The actual position state lives in `bookViewStore`.
+
+**useDropdownClose.ts** — drop-in replacement for `onClickOutside` that also closes on window blur and handles the toggle-button race condition. Use on every dropdown instead of `onClickOutside` directly.
 
 ## Host & Database (`src/host/`)
 
@@ -267,6 +286,10 @@ The one exception is `ZayitDbManager.cs` in the C# backend, which owns the SQL u
 
 **resetState.ts** — exports a single `resetting` ref that is set to `true` just before an app reset/reload, blocking all interaction until the page reloads.
 
+**hebrewLearning.ts** — `getDailyLearning(hd)` returns today's schedule for all daily learning cycles (Daf Yomi, Mishna Yomi, Nach Yomi, Rambam, etc.). Used by the home page and the calendar weekly view.
+
+**useOnlineStatus.ts** — thin wrapper around VueUse `useOnline`. Returns a reactive boolean for network connectivity.
+
 ## Theme System (`src/theme/`)
 
 - `theme.css` — CSS custom properties (colors, fonts, spacing) for all themes
@@ -292,10 +315,10 @@ Default theme is `vscode-dark`. Custom themes are stored in `app-settings` IDB a
 
 ## C# Backend
 
-The C# project (`ZayitVueHost/Kezayit`) hosts the Vue app in a WebView2 control.
+The C# project (`CSharpBackend/`) hosts the Vue app in a WebView2 control.
 
 - Vue builds as a single-file bundle (`vite-plugin-singlefile`) — all JS/CSS inlined into one `index.html`
-- `ZayitVue.targets` runs `npm run build` after every C# build and copies `dist/` to `bin/{Config}/kezayit/`
+- `Kezayit.targets` runs `npm run build` after every C# build and copies `dist/` to `bin/{Config}/kezayit/`
 - C# injects `window.__webviewQuery`, `window.__webviewAction`, `window.__webviewDbReady` before the app boots
 - Push events from C# arrive via `window.__onWebviewEvent`
 - Target: .NET 4.8, C# 7.3
