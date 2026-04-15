@@ -1,5 +1,59 @@
-{
-  "fluent-light": {
+﻿{
+  "default-light": {
+    "name": "ברירת מחדל",
+    "family": "default",
+    "isDark": false,
+    "reading": {
+      "bgPrimary": "#ffffff",
+      "bgSecondary": "#f8f8f8",
+      "textPrimary": "#1f1f1f",
+      "textSecondary": "#5a5a5a",
+      "borderColor": "#e5e5e5",
+      "accentColor": "#7333ff",
+      "hoverBg": "rgba(0, 0, 0, 0.06)",
+      "activeBg": "rgba(0, 0, 0, 0.09)"
+    },
+    "ui": {
+      "bgPrimary": "#ffffff",
+      "bgSecondary": "#f8f8f8",
+      "bgTertiary": "#f0f0f0",
+      "textPrimary": "#1f1f1f",
+      "textSecondary": "#5a5a5a",
+      "borderColor": "#e5e5e5",
+      "accentColor": "#7333ff",
+      "hoverBg": "rgba(0, 0, 0, 0.06)",
+      "activeBg": "rgba(0, 0, 0, 0.09)"
+    },
+    "pdfFilter": "none"
+  },
+  "default-dark": {
+    "name": "ברירת מחדל",
+    "family": "default",
+    "isDark": true,
+    "reading": {
+      "bgPrimary": "#1e1e1e",
+      "bgSecondary": "#2d2d2d",
+      "textPrimary": "#ffffff",
+      "textSecondary": "#a6a6a6",
+      "borderColor": "#3b3b3b",
+      "accentColor": "#a57bff",
+      "hoverBg": "rgba(255, 255, 255, 0.08)",
+      "activeBg": "rgba(255, 255, 255, 0.12)"
+    },
+    "ui": {
+      "bgPrimary": "#1e1e1e",
+      "bgSecondary": "#2d2d2d",
+      "bgTertiary": "#252525",
+      "textPrimary": "#ffffff",
+      "textSecondary": "#a6a6a6",
+      "borderColor": "#3b3b3b",
+      "accentColor": "#a57bff",
+      "hoverBg": "rgba(255, 255, 255, 0.08)",
+      "activeBg": "rgba(255, 255, 255, 0.12)"
+    },
+    "pdfFilter": "invert(0.9) hue-rotate(180deg) brightness(0.9) contrast(0.9)"
+  },
+"fluent-light": {
     "name": "עיצוב זורם",
     "family": "fluent",
     "isDark": false,
@@ -16,7 +70,6 @@
     "ui": {
       "bgPrimary": "#ffffff",
       "bgSecondary": "#f8f8f8",
-      "bgTertiary": "#f1f1f1",
       "textPrimary": "#1f1f1f",
       "textSecondary": "#5a5a5a",
       "borderColor": "#e5e5e5",
@@ -43,7 +96,6 @@
     "ui": {
       "bgPrimary": "#1e1e1e",
       "bgSecondary": "#2d2d2d",
-      "bgTertiary": "#373737",
       "textPrimary": "#ffffff",
       "textSecondary": "#a6a6a6",
       "borderColor": "#3b3b3b",
@@ -69,8 +121,7 @@
     },
     "ui": {
       "bgPrimary": "#ffffff",
-      "bgSecondary": "#f3f3f3",
-      "bgTertiary": "#e9e9e9",
+      "bgSecondary": "#f8f8f8",
       "textPrimary": "#1f1f1f",
       "textSecondary": "#5a5a5a",
       "borderColor": "#e5e5e5",
@@ -95,9 +146,8 @@
       "activeBg": "rgba(255,255,255,0.12)"
     },
     "ui": {
-      "bgPrimary": "#1f1f1f",
-      "bgSecondary": "#292929",
-      "bgTertiary": "#333333",
+      "bgPrimary": "#1e1e1e",
+      "bgSecondary": "#2d2d2d",
       "textPrimary": "#ffffff",
       "textSecondary": "#a6a6a6",
       "borderColor": "#3b3b3b",
@@ -106,60 +156,6 @@
       "activeBg": "rgba(255,255,255,0.12)"
     },
     "pdfFilter": "invert(0.9) hue-rotate(180deg) brightness(0.8) contrast(0.9)"
-  },
-  "vscode-dark": {
-    "name": "VSCode",
-    "family": "vscode",
-    "isDark": true,
-    "reading": {
-      "bgPrimary": "#1e1e1e",
-      "bgSecondary": "#252526",
-      "textPrimary": "#d4d4d4",
-      "textSecondary": "#858585",
-      "borderColor": "#474747",
-      "accentColor": "#0078d4",
-      "hoverBg": "rgba(255, 255, 255, 0.07)",
-      "activeBg": "rgba(255, 255, 255, 0.11)"
-    },
-    "ui": {
-      "bgPrimary": "#1e1e1e",
-      "bgSecondary": "#252526",
-      "bgTertiary": "#2c2c2e",
-      "textPrimary": "#cccccc",
-      "textSecondary": "#858585",
-      "borderColor": "#474747",
-      "accentColor": "#0078d4",
-      "hoverBg": "rgba(255, 255, 255, 0.07)",
-      "activeBg": "rgba(255, 255, 255, 0.11)"
-    },
-    "pdfFilter": "invert(0.9) hue-rotate(180deg) brightness(0.9) contrast(0.9)"
-  },
-  "vscode-light": {
-    "name": "VSCode",
-    "family": "vscode",
-    "isDark": false,
-    "reading": {
-      "bgPrimary": "#ffffff",
-      "bgSecondary": "#f3f3f3",
-      "textPrimary": "#616161",
-      "textSecondary": "#a0a0a0",
-      "borderColor": "#e7e7e7",
-      "accentColor": "#007acc",
-      "hoverBg": "rgba(0, 0, 0, 0.06)",
-      "activeBg": "rgba(0, 0, 0, 0.09)"
-    },
-    "ui": {
-      "bgPrimary": "#ffffff",
-      "bgSecondary": "#f3f3f3",
-      "bgTertiary": "#e9e9e9",
-      "textPrimary": "#616161",
-      "textSecondary": "#a0a0a0",
-      "borderColor": "#e7e7e7",
-      "accentColor": "#007acc",
-      "hoverBg": "rgba(0, 0, 0, 0.06)",
-      "activeBg": "rgba(0, 0, 0, 0.09)"
-    },
-    "pdfFilter": "none"
   },
   "tallow-light": {
     "name": "חלב",
@@ -176,9 +172,8 @@
       "activeBg": "rgba(34, 24, 10, 0.08)"
     },
     "ui": {
-      "bgPrimary": "#fefaf4",
-      "bgSecondary": "#f4eedc",
-      "bgTertiary": "#efe6cc",
+      "bgPrimary": "#f4eedc",
+      "bgSecondary": "#ece4cc",
       "textPrimary": "#120c00",
       "textSecondary": "#4c4030",
       "borderColor": "#dcd4c0",
@@ -203,9 +198,8 @@
       "activeBg": "rgba(248, 244, 232, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#221810",
-      "bgSecondary": "#2e2218",
-      "bgTertiary": "#3b2c1f",
+      "bgPrimary": "#2e2218",
+      "bgSecondary": "#3c2e20",
       "textPrimary": "#ede8d8",
       "textSecondary": "#b0a080",
       "borderColor": "#4a3c28",
@@ -230,9 +224,8 @@
       "activeBg": "rgba(58, 48, 40, 0.08)"
     },
     "ui": {
-      "bgPrimary": "#fef9f3",
-      "bgSecondary": "#f0e8d8",
-      "bgTertiary": "#eadfc9",
+      "bgPrimary": "#f0e8d8",
+      "bgSecondary": "#e5ddc8",
       "textPrimary": "#2a2018",
       "textSecondary": "#5a4a38",
       "borderColor": "#d5c9b8",
@@ -257,9 +250,8 @@
       "activeBg": "rgba(232, 220, 200, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#2d2520",
-      "bgSecondary": "#3d3530",
-      "bgTertiary": "#483f39",
+      "bgPrimary": "#3d3530",
+      "bgSecondary": "#4d4540",
       "textPrimary": "#d8ccb8",
       "textSecondary": "#a89878",
       "borderColor": "#5d5550",
@@ -284,9 +276,8 @@
       "activeBg": "rgba(39, 40, 34, 0.08)"
     },
     "ui": {
-      "bgPrimary": "#fafaf6",
-      "bgSecondary": "#ededdc",
-      "bgTertiary": "#e6e6cf",
+      "bgPrimary": "#ededdc",
+      "bgSecondary": "#e4e4cc",
       "textPrimary": "#171812",
       "textSecondary": "#605c4a",
       "borderColor": "#d4d4c0",
@@ -311,9 +302,8 @@
       "activeBg": "rgba(248, 248, 242, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#272822",
-      "bgSecondary": "#3e3d32",
-      "bgTertiary": "#49483b",
+      "bgPrimary": "#3e3d32",
+      "bgSecondary": "#49483e",
       "textPrimary": "#e8e8dc",
       "textSecondary": "#908070",
       "borderColor": "#5a5950",
@@ -338,9 +328,8 @@
       "activeBg": "rgba(40, 32, 16, 0.08)"
     },
     "ui": {
-      "bgPrimary": "#fdfbee",
-      "bgSecondary": "#f4efd8",
-      "bgTertiary": "#f0e8c8",
+      "bgPrimary": "#f4efd8",
+      "bgSecondary": "#ece8c8",
       "textPrimary": "#181008",
       "textSecondary": "#504030",
       "borderColor": "#dcd4b8",
@@ -365,9 +354,8 @@
       "activeBg": "rgba(244, 240, 216, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#1e1a0a",
-      "bgSecondary": "#2c2818",
-      "bgTertiary": "#39341f",
+      "bgPrimary": "#2c2818",
+      "bgSecondary": "#38341e",
       "textPrimary": "#e8e4cc",
       "textSecondary": "#b0a060",
       "borderColor": "#443e28",
@@ -392,9 +380,8 @@
       "activeBg": "rgba(36, 24, 16, 0.08)"
     },
     "ui": {
-      "bgPrimary": "#fef8f0",
-      "bgSecondary": "#f4e8d8",
-      "bgTertiary": "#f0dfc8",
+      "bgPrimary": "#f4e8d8",
+      "bgSecondary": "#ecdcc8",
       "textPrimary": "#140a04",
       "textSecondary": "#4c3828",
       "borderColor": "#dccab8",
@@ -419,9 +406,8 @@
       "activeBg": "rgba(244, 232, 208, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#1a1208",
-      "bgSecondary": "#261c10",
-      "bgTertiary": "#342616",
+      "bgPrimary": "#261c10",
+      "bgSecondary": "#342818",
       "textPrimary": "#e8dcc0",
       "textSecondary": "#b08858",
       "borderColor": "#42341e",
@@ -446,9 +432,8 @@
       "activeBg": "rgba(34, 20, 8, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#fdf8f0",
-      "bgSecondary": "#eedccc",
-      "bgTertiary": "#e9d2bd",
+      "bgPrimary": "#eedccc",
+      "bgSecondary": "#e4d0c0",
       "textPrimary": "#120800",
       "textSecondary": "#442818",
       "borderColor": "#d4bcac",
@@ -473,9 +458,8 @@
       "activeBg": "rgba(240, 224, 204, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#221408",
-      "bgSecondary": "#302218",
-      "bgTertiary": "#3e2c1f",
+      "bgPrimary": "#302218",
+      "bgSecondary": "#3e2e20",
       "textPrimary": "#e4d0b8",
       "textSecondary": "#b08868",
       "borderColor": "#4c3c2a",
@@ -500,9 +484,8 @@
       "activeBg": "rgba(48, 24, 32, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#faf5f5",
-      "bgSecondary": "#f0e4e8",
-      "bgTertiary": "#e9d7dd",
+      "bgPrimary": "#f0e4e8",
+      "bgSecondary": "#e8d8dc",
       "textPrimary": "#200810",
       "textSecondary": "#583040",
       "borderColor": "#d8c8cc",
@@ -527,9 +510,8 @@
       "activeBg": "rgba(244, 228, 236, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#200a14",
-      "bgSecondary": "#2e1220",
-      "bgTertiary": "#3d182a",
+      "bgPrimary": "#2e1220",
+      "bgSecondary": "#3e1e2c",
       "textPrimary": "#e4d4dc",
       "textSecondary": "#b07888",
       "borderColor": "#4e2a3a",
@@ -554,9 +536,8 @@
       "activeBg": "rgba(40, 36, 32, 0.08)"
     },
     "ui": {
-      "bgPrimary": "#f8f7f4",
-      "bgSecondary": "#eeece8",
-      "bgTertiary": "#e5e2dc",
+      "bgPrimary": "#eeece8",
+      "bgSecondary": "#e4e2dc",
       "textPrimary": "#181410",
       "textSecondary": "#605850",
       "borderColor": "#d4d0ca",
@@ -581,9 +562,8 @@
       "activeBg": "rgba(240, 236, 228, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#181410",
-      "bgSecondary": "#242018",
-      "bgTertiary": "#302b20",
+      "bgPrimary": "#242018",
+      "bgSecondary": "#302c24",
       "textPrimary": "#e0dcd4",
       "textSecondary": "#a09888",
       "borderColor": "#3c3830",
@@ -608,9 +588,8 @@
       "activeBg": "rgba(42, 26, 20, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#fdf5ee",
-      "bgSecondary": "#edddd0",
-      "bgTertiary": "#e7d2c1",
+      "bgPrimary": "#edddd0",
+      "bgSecondary": "#e4d0c0",
       "textPrimary": "#1a0a08",
       "textSecondary": "#4c2c24",
       "borderColor": "#d4bcac",
@@ -635,9 +614,8 @@
       "activeBg": "rgba(244, 225, 212, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#1e1008",
-      "bgSecondary": "#2c1a10",
-      "bgTertiary": "#3b2315",
+      "bgPrimary": "#2c1a10",
+      "bgSecondary": "#3c2418",
       "textPrimary": "#e8d0bc",
       "textSecondary": "#b48060",
       "borderColor": "#4c3020",
@@ -662,9 +640,8 @@
       "activeBg": "rgba(40, 36, 30, 0.08)"
     },
     "ui": {
-      "bgPrimary": "#f8f6f2",
-      "bgSecondary": "#eeecea",
-      "bgTertiary": "#e6e3e0",
+      "bgPrimary": "#eeecea",
+      "bgSecondary": "#e6e4e0",
       "textPrimary": "#18140e",
       "textSecondary": "#5a5448",
       "borderColor": "#d4d0cc",
@@ -689,9 +666,8 @@
       "activeBg": "rgba(240, 236, 228, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#1e1c18",
-      "bgSecondary": "#2a2824",
-      "bgTertiary": "#35322d",
+      "bgPrimary": "#2a2824",
+      "bgSecondary": "#38342e",
       "textPrimary": "#e4e0d8",
       "textSecondary": "#a4a094",
       "borderColor": "#44403a",
@@ -716,9 +692,8 @@
       "activeBg": "rgba(46, 28, 10, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#fdf6ec",
-      "bgSecondary": "#f0e4cc",
-      "bgTertiary": "#ebdcbc",
+      "bgPrimary": "#f0e4cc",
+      "bgSecondary": "#e8d8bc",
       "textPrimary": "#1e0c00",
       "textSecondary": "#5a3010",
       "borderColor": "#d8c8a8",
@@ -743,9 +718,8 @@
       "activeBg": "rgba(240, 224, 200, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#1c1008",
-      "bgSecondary": "#2c1c10",
-      "bgTertiary": "#3b2615",
+      "bgPrimary": "#2c1c10",
+      "bgSecondary": "#3c2818",
       "textPrimary": "#e0d0b8",
       "textSecondary": "#b08050",
       "borderColor": "#4c3828",
@@ -770,9 +744,8 @@
       "activeBg": "rgba(40, 32, 16, 0.08)"
     },
     "ui": {
-      "bgPrimary": "#faf6ee",
-      "bgSecondary": "#f0e8d4",
-      "bgTertiary": "#ebe0c5",
+      "bgPrimary": "#f0e8d4",
+      "bgSecondary": "#e8e0c8",
       "textPrimary": "#181008",
       "textSecondary": "#504030",
       "borderColor": "#d4ccb4",
@@ -797,9 +770,8 @@
       "activeBg": "rgba(240, 232, 208, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#201a0e",
-      "bgSecondary": "#2c2418",
-      "bgTertiary": "#392f1f",
+      "bgPrimary": "#2c2418",
+      "bgSecondary": "#383020",
       "textPrimary": "#e4dcc0",
       "textSecondary": "#a89060",
       "borderColor": "#443c28",
@@ -824,9 +796,8 @@
       "activeBg": "rgba(58, 40, 32, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#faf4f0",
-      "bgSecondary": "#edddd4",
-      "bgTertiary": "#e7d2c6",
+      "bgPrimary": "#edddd4",
+      "bgSecondary": "#e4d4c8",
       "textPrimary": "#281810",
       "textSecondary": "#5a3830",
       "borderColor": "#d4c0b4",
@@ -851,9 +822,8 @@
       "activeBg": "rgba(244, 224, 208, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#221410",
-      "bgSecondary": "#301e18",
-      "bgTertiary": "#3e271f",
+      "bgPrimary": "#301e18",
+      "bgSecondary": "#402820",
       "textPrimary": "#e4d0c0",
       "textSecondary": "#b08070",
       "borderColor": "#503028",
@@ -878,9 +848,8 @@
       "activeBg": "rgba(42, 32, 16, 0.08)"
     },
     "ui": {
-      "bgPrimary": "#fdf8e8",
-      "bgSecondary": "#f4ecca",
-      "bgTertiary": "#f0e6b9",
+      "bgPrimary": "#f4ecca",
+      "bgSecondary": "#ece4bc",
       "textPrimary": "#1a1000",
       "textSecondary": "#504030",
       "borderColor": "#dcd4b0",
@@ -905,9 +874,8 @@
       "activeBg": "rgba(244, 236, 202, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#201808",
-      "bgSecondary": "#2e2410",
-      "bgTertiary": "#3d3015",
+      "bgPrimary": "#2e2410",
+      "bgSecondary": "#3c3018",
       "textPrimary": "#e8e0b8",
       "textSecondary": "#b09850",
       "borderColor": "#4a3c24",
@@ -932,9 +900,8 @@
       "activeBg": "rgba(44, 32, 24, 0.08)"
     },
     "ui": {
-      "bgPrimary": "#faf5ee",
-      "bgSecondary": "#ede4da",
-      "bgTertiary": "#e6dacc",
+      "bgPrimary": "#ede4da",
+      "bgSecondary": "#e4dbd0",
       "textPrimary": "#1c1008",
       "textSecondary": "#5a4c40",
       "borderColor": "#d4cac0",
@@ -959,9 +926,8 @@
       "activeBg": "rgba(240, 232, 220, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#201810",
-      "bgSecondary": "#2e2418",
-      "bgTertiary": "#3b2e1f",
+      "bgPrimary": "#2e2418",
+      "bgSecondary": "#3c3020",
       "textPrimary": "#e4dccc",
       "textSecondary": "#a89880",
       "borderColor": "#4a3c2a",
@@ -986,9 +952,8 @@
       "activeBg": "rgba(42, 26, 16, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#faf4ef",
-      "bgSecondary": "#f0e4d8",
-      "bgTertiary": "#eadac9",
+      "bgPrimary": "#f0e4d8",
+      "bgSecondary": "#e8d8cc",
       "textPrimary": "#1a0a00",
       "textSecondary": "#5a3a28",
       "borderColor": "#d8c8bc",
@@ -1013,9 +978,8 @@
       "activeBg": "rgba(240, 224, 208, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#1e1008",
-      "bgSecondary": "#2e1a10",
-      "bgTertiary": "#3d2315",
+      "bgPrimary": "#2e1a10",
+      "bgSecondary": "#3e2418",
       "textPrimary": "#e0d0c0",
       "textSecondary": "#b08060",
       "borderColor": "#4e2e20",
@@ -1040,9 +1004,8 @@
       "activeBg": "rgba(47, 30, 18, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#faf4ec",
-      "bgSecondary": "#edddd0",
-      "bgTertiary": "#e7d2c1",
+      "bgPrimary": "#edddd0",
+      "bgSecondary": "#e4d0c0",
       "textPrimary": "#1e0e06",
       "textSecondary": "#533424",
       "borderColor": "#d4bcac",
@@ -1067,9 +1030,8 @@
       "activeBg": "rgba(240, 221, 192, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#1e1208",
-      "bgSecondary": "#2c1c10",
-      "bgTertiary": "#3b2615",
+      "bgPrimary": "#2c1c10",
+      "bgSecondary": "#3a2818",
       "textPrimary": "#e4ccb0",
       "textSecondary": "#b08868",
       "borderColor": "#4a3420",
@@ -1094,9 +1056,8 @@
       "activeBg": "rgba(40, 35, 34, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#faf4ec",
-      "bgSecondary": "#ede4d4",
-      "bgTertiary": "#e7dbc6",
+      "bgPrimary": "#ede4d4",
+      "bgSecondary": "#e4d8c4",
       "textPrimary": "#181210",
       "textSecondary": "#443028",
       "borderColor": "#d4c4ac",
@@ -1121,9 +1082,8 @@
       "activeBg": "rgba(241, 211, 165, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#1c1510",
-      "bgSecondary": "#281e18",
-      "bgTertiary": "#342720",
+      "bgPrimary": "#281e18",
+      "bgSecondary": "#382a20",
       "textPrimary": "#e4c498",
       "textSecondary": "#b49060",
       "borderColor": "#483828",
@@ -1148,9 +1108,8 @@
       "activeBg": "rgba(42, 38, 24, 0.08)"
     },
     "ui": {
-      "bgPrimary": "#f8f6ec",
-      "bgSecondary": "#edead8",
-      "bgTertiary": "#e7e2ca",
+      "bgPrimary": "#edead8",
+      "bgSecondary": "#e4e0cc",
       "textPrimary": "#1a1608",
       "textSecondary": "#4e4838",
       "borderColor": "#d4d0bc",
@@ -1175,9 +1134,8 @@
       "activeBg": "rgba(238, 234, 216, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#1e1c10",
-      "bgSecondary": "#2c2a1c",
-      "bgTertiary": "#383624",
+      "bgPrimary": "#2c2a1c",
+      "bgSecondary": "#3a3824",
       "textPrimary": "#e2dece",
       "textSecondary": "#a8a080",
       "borderColor": "#484430",
@@ -1202,9 +1160,8 @@
       "activeBg": "rgba(42, 36, 24, 0.08)"
     },
     "ui": {
-      "bgPrimary": "#f8f4ee",
-      "bgSecondary": "#ede7dc",
-      "bgTertiary": "#e6decf",
+      "bgPrimary": "#ede7dc",
+      "bgSecondary": "#e4ded4",
       "textPrimary": "#1a1408",
       "textSecondary": "#5a5040",
       "borderColor": "#d4cec4",
@@ -1229,9 +1186,8 @@
       "activeBg": "rgba(237, 231, 220, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#1e1a14",
-      "bgSecondary": "#2c2820",
-      "bgTertiary": "#383329",
+      "bgPrimary": "#2c2820",
+      "bgSecondary": "#3a3428",
       "textPrimary": "#ddd7cc",
       "textSecondary": "#a09880",
       "borderColor": "#484030",
@@ -1256,9 +1212,8 @@
       "activeBg": "rgba(42, 30, 8, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#fdf8e4",
-      "bgSecondary": "#f4e8b8",
-      "bgTertiary": "#f1e2a6",
+      "bgPrimary": "#f4e8b8",
+      "bgSecondary": "#ece0a8",
       "textPrimary": "#1a0e00",
       "textSecondary": "#543e00",
       "borderColor": "#dcd0a0",
@@ -1283,9 +1238,8 @@
       "activeBg": "rgba(248, 240, 208, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#1e1606",
-      "bgSecondary": "#2c2210",
-      "bgTertiary": "#3b2e15",
+      "bgPrimary": "#2c2210",
+      "bgSecondary": "#3a2e18",
       "textPrimary": "#ece4c0",
       "textSecondary": "#b89830",
       "borderColor": "#483c20",
@@ -1310,9 +1264,8 @@
       "activeBg": "rgba(40, 46, 36, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#f4f5f0",
-      "bgSecondary": "#e4e8dc",
-      "bgTertiary": "#dbe0d0",
+      "bgPrimary": "#e4e8dc",
+      "bgSecondary": "#d8ddd0",
       "textPrimary": "#181e14",
       "textSecondary": "#485040",
       "borderColor": "#c4c9bc",
@@ -1337,9 +1290,8 @@
       "activeBg": "rgba(228, 234, 216, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#181e14",
-      "bgSecondary": "#222820",
-      "bgTertiary": "#2c3329",
+      "bgPrimary": "#222820",
+      "bgSecondary": "#2c3428",
       "textPrimary": "#d4dac8",
       "textSecondary": "#889880",
       "borderColor": "#384030",
@@ -1364,9 +1316,8 @@
       "activeBg": "rgba(44, 32, 16, 0.08)"
     },
     "ui": {
-      "bgPrimary": "#faf6e8",
-      "bgSecondary": "#eee4cc",
-      "bgTertiary": "#e9dcbd",
+      "bgPrimary": "#eee4cc",
+      "bgSecondary": "#e4d8bc",
       "textPrimary": "#1c1008",
       "textSecondary": "#5a4020",
       "borderColor": "#d8cbb4",
@@ -1391,9 +1342,8 @@
       "activeBg": "rgba(240, 232, 200, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#1c1608",
-      "bgSecondary": "#282010",
-      "bgTertiary": "#362b16",
+      "bgPrimary": "#282010",
+      "bgSecondary": "#342e18",
       "textPrimary": "#e4dcbc",
       "textSecondary": "#b09850",
       "borderColor": "#403820",
@@ -1418,9 +1368,8 @@
       "activeBg": "rgba(44, 36, 24, 0.08)"
     },
     "ui": {
-      "bgPrimary": "#f8f4ec",
-      "bgSecondary": "#eee8dc",
-      "bgTertiary": "#e7dfce",
+      "bgPrimary": "#eee8dc",
+      "bgSecondary": "#e4ddd0",
       "textPrimary": "#1c1408",
       "textSecondary": "#584838",
       "borderColor": "#d4cdc0",
@@ -1445,9 +1394,8 @@
       "activeBg": "rgba(240, 232, 212, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#1e1810",
-      "bgSecondary": "#2c2418",
-      "bgTertiary": "#392f1f",
+      "bgPrimary": "#2c2418",
+      "bgSecondary": "#3a3020",
       "textPrimary": "#e4dcc8",
       "textSecondary": "#a89870",
       "borderColor": "#483c28",
@@ -1472,9 +1420,8 @@
       "activeBg": "rgba(92, 106, 114, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#fdf6e3",
-      "bgSecondary": "#f0e8d0",
-      "bgTertiary": "#ebe0c1",
+      "bgPrimary": "#f0e8d0",
+      "bgSecondary": "#e6dfc8",
       "textPrimary": "#4c5a62",
       "textSecondary": "#728171",
       "borderColor": "#d6cfa8",
@@ -1499,9 +1446,8 @@
       "activeBg": "rgba(211, 198, 170, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#2d353b",
-      "bgSecondary": "#343f44",
-      "bgTertiary": "#3b474d",
+      "bgPrimary": "#343f44",
+      "bgSecondary": "#3d484d",
       "textPrimary": "#c3b69a",
       "textSecondary": "#758279",
       "borderColor": "#4d5860",
@@ -1526,9 +1472,8 @@
       "activeBg": "rgba(42, 20, 8, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#faf2ea",
-      "bgSecondary": "#ecddd0",
-      "bgTertiary": "#e6d2c1",
+      "bgPrimary": "#ecddd0",
+      "bgSecondary": "#e4d0c0",
       "textPrimary": "#1a0800",
       "textSecondary": "#4e2010",
       "borderColor": "#d4bcaa",
@@ -1553,9 +1498,8 @@
       "activeBg": "rgba(242, 224, 204, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#1a0a04",
-      "bgSecondary": "#281410",
-      "bgTertiary": "#371b16",
+      "bgPrimary": "#281410",
+      "bgSecondary": "#361e16",
       "textPrimary": "#e8d0b8",
       "textSecondary": "#b06848",
       "borderColor": "#44281e",
@@ -1580,9 +1524,8 @@
       "activeBg": "rgba(36, 32, 24, 0.08)"
     },
     "ui": {
-      "bgPrimary": "#f6f2ee",
-      "bgSecondary": "#e8e0d8",
-      "bgTertiary": "#e0d6cb",
+      "bgPrimary": "#e8e0d8",
+      "bgSecondary": "#dfd8d0",
       "textPrimary": "#141008",
       "textSecondary": "#504840",
       "borderColor": "#ccc8c0",
@@ -1607,9 +1550,8 @@
       "activeBg": "rgba(237, 232, 224, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#1c1814",
-      "bgSecondary": "#282420",
-      "bgTertiary": "#332e29",
+      "bgPrimary": "#282420",
+      "bgSecondary": "#34302c",
       "textPrimary": "#ddd8d0",
       "textSecondary": "#a09888",
       "borderColor": "#403c38",
@@ -1634,9 +1576,8 @@
       "activeBg": "rgba(36, 12, 4, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#fdf0e8",
-      "bgSecondary": "#edd8cc",
-      "bgTertiary": "#e8ccbd",
+      "bgPrimary": "#edd8cc",
+      "bgSecondary": "#e4ccbc",
       "textPrimary": "#140400",
       "textSecondary": "#48180a",
       "borderColor": "#d4b8a8",
@@ -1661,9 +1602,8 @@
       "activeBg": "rgba(244, 224, 208, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#160806",
-      "bgSecondary": "#241210",
-      "bgTertiary": "#321916",
+      "bgPrimary": "#241210",
+      "bgSecondary": "#321e1a",
       "textPrimary": "#e8d0c0",
       "textSecondary": "#b07060",
       "borderColor": "#402a24",
@@ -1688,9 +1628,8 @@
       "activeBg": "rgba(26, 16, 8, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#faf3e8",
-      "bgSecondary": "#ede0cc",
-      "bgTertiary": "#e8d7bd",
+      "bgPrimary": "#ede0cc",
+      "bgSecondary": "#e4d4b8",
       "textPrimary": "#0c0604",
       "textSecondary": "#3e2010",
       "borderColor": "#d4c0a4",
@@ -1715,9 +1654,8 @@
       "activeBg": "rgba(241, 211, 165, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#131008",
-      "bgSecondary": "#201810",
-      "bgTertiary": "#2e2217",
+      "bgPrimary": "#201810",
+      "bgSecondary": "#302418",
       "textPrimary": "#e4c890",
       "textSecondary": "#b08258",
       "borderColor": "#40301e",
@@ -1742,9 +1680,8 @@
       "activeBg": "rgba(30, 18, 8, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#f8f2e8",
-      "bgSecondary": "#ede3d0",
-      "bgTertiary": "#e7dac1",
+      "bgPrimary": "#ede3d0",
+      "bgSecondary": "#e4d8c4",
       "textPrimary": "#0e0400",
       "textSecondary": "#4a2c14",
       "borderColor": "#d4c8b0",
@@ -1769,9 +1706,8 @@
       "activeBg": "rgba(241, 233, 218, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#180e06",
-      "bgSecondary": "#241808",
-      "bgTertiary": "#2f200b",
+      "bgPrimary": "#241808",
+      "bgSecondary": "#342414",
       "textPrimary": "#e4dcc8",
       "textSecondary": "#b4906a",
       "borderColor": "#44301e",
@@ -1796,9 +1732,8 @@
       "activeBg": "rgba(42, 28, 20, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#f8f0ea",
-      "bgSecondary": "#ecdcd4",
-      "bgTertiary": "#e6d0c6",
+      "bgPrimary": "#ecdcd4",
+      "bgSecondary": "#e4d0c8",
       "textPrimary": "#1a0c04",
       "textSecondary": "#503830",
       "borderColor": "#d4c0b8",
@@ -1823,9 +1758,8 @@
       "activeBg": "rgba(240, 224, 208, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#1a1008",
-      "bgSecondary": "#281c14",
-      "bgTertiary": "#36261b",
+      "bgPrimary": "#281c14",
+      "bgSecondary": "#382818",
       "textPrimary": "#e4d0c0",
       "textSecondary": "#b08068",
       "borderColor": "#483020",
@@ -1850,9 +1784,8 @@
       "activeBg": "rgba(44, 30, 20, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#f9f0e8",
-      "bgSecondary": "#ecddd0",
-      "bgTertiary": "#e6d2c1",
+      "bgPrimary": "#ecddd0",
+      "bgSecondary": "#e4d0c4",
       "textPrimary": "#1c0e04",
       "textSecondary": "#4a3020",
       "borderColor": "#d4bcac",
@@ -1877,9 +1810,8 @@
       "activeBg": "rgba(240, 221, 200, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#1c1008",
-      "bgSecondary": "#2a1c10",
-      "bgTertiary": "#392616",
+      "bgPrimary": "#2a1c10",
+      "bgSecondary": "#382818",
       "textPrimary": "#e4ccb4",
       "textSecondary": "#a87c58",
       "borderColor": "#483020",
@@ -1904,9 +1836,8 @@
       "activeBg": "rgba(58, 48, 40, 0.08)"
     },
     "ui": {
-      "bgPrimary": "#FAF0E6",
-      "bgSecondary": "#F0E6DC",
-      "bgTertiary": "#eadcce",
+      "bgPrimary": "#F0E6DC",
+      "bgSecondary": "#E6DCD2",
       "textPrimary": "#2a2018",
       "textSecondary": "#5a4a38",
       "borderColor": "#d0c6bc",
@@ -1931,9 +1862,8 @@
       "activeBg": "rgba(234, 224, 214, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#2a2018",
-      "bgSecondary": "#3a3028",
-      "bgTertiary": "#463a30",
+      "bgPrimary": "#3a3028",
+      "bgSecondary": "#4a4038",
       "textPrimary": "#dad0c6",
       "textSecondary": "#aa9888",
       "borderColor": "#5a5048",
@@ -1958,9 +1888,8 @@
       "activeBg": "rgba(42, 20, 16, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#f8f0e8",
-      "bgSecondary": "#ecddd0",
-      "bgTertiary": "#e6d2c1",
+      "bgPrimary": "#ecddd0",
+      "bgSecondary": "#e4d0c0",
       "textPrimary": "#1a0808",
       "textSecondary": "#4a2018",
       "borderColor": "#d4bca8",
@@ -1985,9 +1914,8 @@
       "activeBg": "rgba(240, 220, 192, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#1a0e0a",
-      "bgSecondary": "#281810",
-      "bgTertiary": "#362116",
+      "bgPrimary": "#281810",
+      "bgSecondary": "#382418",
       "textPrimary": "#e0ccb0",
       "textSecondary": "#b07050",
       "borderColor": "#483020",
@@ -2012,9 +1940,8 @@
       "activeBg": "rgba(42, 42, 42, 0.08)"
     },
     "ui": {
-      "bgPrimary": "#f0f0f0",
-      "bgSecondary": "#e0e0e0",
-      "bgTertiary": "#d6d6d6",
+      "bgPrimary": "#e0e0e0",
+      "bgSecondary": "#d5d5d5",
       "textPrimary": "#1a1a1a",
       "textSecondary": "#5a5a5a",
       "borderColor": "#c0c0c0",
@@ -2039,9 +1966,8 @@
       "activeBg": "rgba(224, 224, 224, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#2a2a2a",
-      "bgSecondary": "#3a3a3a",
-      "bgTertiary": "#444444",
+      "bgPrimary": "#3a3a3a",
+      "bgSecondary": "#4a4a4a",
       "textPrimary": "#d0d0d0",
       "textSecondary": "#a0a0a0",
       "borderColor": "#5a5a5a",
@@ -2066,9 +1992,8 @@
       "activeBg": "rgba(42, 42, 30, 0.08)"
     },
     "ui": {
-      "bgPrimary": "#f5f2e8",
-      "bgSecondary": "#e8e5d8",
-      "bgTertiary": "#e0dccb",
+      "bgPrimary": "#e8e5d8",
+      "bgSecondary": "#dedad0",
       "textPrimary": "#1a1a10",
       "textSecondary": "#505040",
       "borderColor": "#ccc8bc",
@@ -2093,9 +2018,8 @@
       "activeBg": "rgba(220, 220, 204, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#3f3f3f",
-      "bgSecondary": "#4f4f4f",
-      "bgTertiary": "#595959",
+      "bgPrimary": "#4f4f4f",
+      "bgSecondary": "#5f5f5f",
       "textPrimary": "#c3bf9f",
       "textSecondary": "#8f8f8f",
       "borderColor": "#6f6f6f",
@@ -2120,9 +2044,8 @@
       "activeBg": "rgba(40, 12, 4, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#faf0e4",
-      "bgSecondary": "#edd8c4",
-      "bgTertiary": "#e8ceb4",
+      "bgPrimary": "#edd8c4",
+      "bgSecondary": "#e4ccb8",
       "textPrimary": "#180400",
       "textSecondary": "#502820",
       "borderColor": "#d4bcac",
@@ -2147,9 +2070,8 @@
       "activeBg": "rgba(240, 216, 192, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#180804",
-      "bgSecondary": "#261210",
-      "bgTertiary": "#341916",
+      "bgPrimary": "#261210",
+      "bgSecondary": "#341e18",
       "textPrimary": "#e4c8b0",
       "textSecondary": "#b06848",
       "borderColor": "#422a20",
@@ -2174,9 +2096,8 @@
       "activeBg": "rgba(48, 44, 40, 0.08)"
     },
     "ui": {
-      "bgPrimary": "#f4f0ea",
-      "bgSecondary": "#e6e0d8",
-      "bgTertiary": "#ded6cc",
+      "bgPrimary": "#e6e0d8",
+      "bgSecondary": "#dcd6ce",
       "textPrimary": "#201c18",
       "textSecondary": "#585048",
       "borderColor": "#ccc8c0",
@@ -2201,9 +2122,8 @@
       "activeBg": "rgba(236, 228, 216, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#201c18",
-      "bgSecondary": "#2c2824",
-      "bgTertiary": "#37322d",
+      "bgPrimary": "#2c2824",
+      "bgSecondary": "#38342e",
       "textPrimary": "#dcd4c8",
       "textSecondary": "#a09888",
       "borderColor": "#44403a",
@@ -2228,9 +2148,8 @@
       "activeBg": "rgba(40, 30, 24, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#fdfcd4",
-      "bgSecondary": "#f0ecb8",
-      "bgTertiary": "#ece7a7",
+      "bgPrimary": "#f0ecb8",
+      "bgSecondary": "#e8e4ac",
       "textPrimary": "#180e08",
       "textSecondary": "#4a3820",
       "borderColor": "#d8d098",
@@ -2255,9 +2174,8 @@
       "activeBg": "rgba(248, 240, 192, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#221808",
-      "bgSecondary": "#302410",
-      "bgTertiary": "#3f2f15",
+      "bgPrimary": "#302410",
+      "bgSecondary": "#3e3018",
       "textPrimary": "#ece4b0",
       "textSecondary": "#b09050",
       "borderColor": "#4c3c20",
@@ -2282,9 +2200,8 @@
       "activeBg": "rgba(42, 40, 8, 0.08)"
     },
     "ui": {
-      "bgPrimary": "#f8f5e0",
-      "bgSecondary": "#ece8c8",
-      "bgTertiary": "#e7e2b9",
+      "bgPrimary": "#ece8c8",
+      "bgSecondary": "#e4e0b8",
       "textPrimary": "#1a1800",
       "textSecondary": "#504820",
       "borderColor": "#d4d0a8",
@@ -2309,9 +2226,8 @@
       "activeBg": "rgba(240, 236, 200, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#1e1e08",
-      "bgSecondary": "#2c2c14",
-      "bgTertiary": "#3a3a1a",
+      "bgPrimary": "#2c2c14",
+      "bgSecondary": "#3a3820",
       "textPrimary": "#e4e0b8",
       "textSecondary": "#a8a058",
       "borderColor": "#48462c",
@@ -2336,9 +2252,8 @@
       "activeBg": "rgba(58, 52, 48, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#f5f0e8",
-      "bgSecondary": "#ece6d8",
-      "bgTertiary": "#e5ddca",
+      "bgPrimary": "#ece6d8",
+      "bgSecondary": "#e0d8c8",
       "textPrimary": "#2a2420",
       "textSecondary": "#5a5048",
       "borderColor": "#ccc4b4",
@@ -2363,9 +2278,8 @@
       "activeBg": "rgba(237, 230, 216, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#201c18",
-      "bgSecondary": "#2e2824",
-      "bgTertiary": "#39322d",
+      "bgPrimary": "#2e2824",
+      "bgSecondary": "#3c3630",
       "textPrimary": "#ddd6c8",
       "textSecondary": "#a09888",
       "borderColor": "#4a4440",
@@ -2390,9 +2304,8 @@
       "activeBg": "rgba(30, 26, 16, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#f5f0e8",
-      "bgSecondary": "#e8e0d0",
-      "bgTertiary": "#e1d7c2",
+      "bgPrimary": "#e8e0d0",
+      "bgSecondary": "#dfd8c4",
       "textPrimary": "#0e0a04",
       "textSecondary": "#4a4030",
       "borderColor": "#ccc4b0",
@@ -2417,9 +2330,8 @@
       "activeBg": "rgba(217, 200, 164, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#1a1810",
-      "bgSecondary": "#26241a",
-      "bgTertiary": "#322f22",
+      "bgPrimary": "#26241a",
+      "bgSecondary": "#343020",
       "textPrimary": "#ccbc98",
       "textSecondary": "#90785c",
       "borderColor": "#403c28",
@@ -2444,9 +2356,8 @@
       "activeBg": "rgba(46, 28, 16, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#faf0e0",
-      "bgSecondary": "#ecdccc",
-      "bgTertiary": "#e6d2bd",
+      "bgPrimary": "#ecdccc",
+      "bgSecondary": "#e4d0bc",
       "textPrimary": "#1e0c00",
       "textSecondary": "#5a3418",
       "borderColor": "#d4bcac",
@@ -2471,9 +2382,8 @@
       "activeBg": "rgba(242, 228, 204, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#1e1008",
-      "bgSecondary": "#2c1a10",
-      "bgTertiary": "#3b2315",
+      "bgPrimary": "#2c1a10",
+      "bgSecondary": "#3c2418",
       "textPrimary": "#e8d4b8",
       "textSecondary": "#b08458",
       "borderColor": "#4c3020",
@@ -2498,9 +2408,8 @@
       "activeBg": "rgba(42, 32, 24, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#f5efe4",
-      "bgSecondary": "#e8dece",
-      "bgTertiary": "#e1d5c0",
+      "bgPrimary": "#e8dece",
+      "bgSecondary": "#ded4c4",
       "textPrimary": "#1a1008",
       "textSecondary": "#4c4030",
       "borderColor": "#ccc4b0",
@@ -2525,9 +2434,8 @@
       "activeBg": "rgba(237, 228, 208, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#201810",
-      "bgSecondary": "#2e2418",
-      "bgTertiary": "#3b2e1f",
+      "bgPrimary": "#2e2418",
+      "bgSecondary": "#3c3020",
       "textPrimary": "#ddd4c0",
       "textSecondary": "#a09070",
       "borderColor": "#4a3e2c",
@@ -2552,9 +2460,8 @@
       "activeBg": "rgba(44, 40, 32, 0.08)"
     },
     "ui": {
-      "bgPrimary": "#f6eee3",
-      "bgSecondary": "#e8e0d0",
-      "bgTertiary": "#e1d7c2",
+      "bgPrimary": "#e8e0d0",
+      "bgSecondary": "#dfd6c4",
       "textPrimary": "#1c1810",
       "textSecondary": "#4a4038",
       "borderColor": "#ccc4b0",
@@ -2579,9 +2486,8 @@
       "activeBg": "rgba(240, 228, 204, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#1c1810",
-      "bgSecondary": "#282418",
-      "bgTertiary": "#342f20",
+      "bgPrimary": "#282418",
+      "bgSecondary": "#343020",
       "textPrimary": "#e0d4bc",
       "textSecondary": "#b09860",
       "borderColor": "#403c28",
@@ -2606,9 +2512,8 @@
       "activeBg": "rgba(40, 40, 39, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#fbeddb",
-      "bgSecondary": "#f0e0ca",
-      "bgTertiary": "#ecd7ba",
+      "bgPrimary": "#f0e0ca",
+      "bgSecondary": "#e8d4bc",
       "textPrimary": "#181818",
       "textSecondary": "#504840",
       "borderColor": "#d8c8b0",
@@ -2633,9 +2538,8 @@
       "activeBg": "rgba(240, 228, 204, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#1e1c14",
-      "bgSecondary": "#2c2818",
-      "bgTertiary": "#38331e",
+      "bgPrimary": "#2c2818",
+      "bgSecondary": "#383420",
       "textPrimary": "#e4d8b8",
       "textSecondary": "#a89870",
       "borderColor": "#44402c",
@@ -2660,9 +2564,8 @@
       "activeBg": "rgba(34, 40, 24, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#f4ede0",
-      "bgSecondary": "#e8dece",
-      "bgTertiary": "#e1d5c0",
+      "bgPrimary": "#e8dece",
+      "bgSecondary": "#ddd4c4",
       "textPrimary": "#121808",
       "textSecondary": "#3a4828",
       "borderColor": "#c8c4b0",
@@ -2687,9 +2590,8 @@
       "activeBg": "rgba(232, 220, 196, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#161c0e",
-      "bgSecondary": "#222818",
-      "bgTertiary": "#2d3520",
+      "bgPrimary": "#222818",
+      "bgSecondary": "#303820",
       "textPrimary": "#dcd0b8",
       "textSecondary": "#908860",
       "borderColor": "#3e4830",
@@ -2714,9 +2616,8 @@
       "activeBg": "rgba(95, 75, 50, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#f4ecd8",
-      "bgSecondary": "#e8e0cc",
-      "bgTertiary": "#e2d7be",
+      "bgPrimary": "#e8e0cc",
+      "bgSecondary": "#ddd5c0",
       "textPrimary": "#4a3828",
       "textSecondary": "#7a6345",
       "borderColor": "#c8b898",
@@ -2741,9 +2642,8 @@
       "activeBg": "rgba(232, 220, 196, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#3a2f1f",
-      "bgSecondary": "#4a3f2f",
-      "bgTertiary": "#564a37",
+      "bgPrimary": "#4a3f2f",
+      "bgSecondary": "#5a4f3f",
       "textPrimary": "#d8cca4",
       "textSecondary": "#a89878",
       "borderColor": "#6a5f4f",
@@ -2768,9 +2668,8 @@
       "activeBg": "rgba(40, 40, 40, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#fdf4c1",
-      "bgSecondary": "#f2e890",
-      "bgTertiary": "#f0e47e",
+      "bgPrimary": "#f2e890",
+      "bgSecondary": "#e8dc84",
       "textPrimary": "#1d2021",
       "textSecondary": "#504945",
       "borderColor": "#d0c878",
@@ -2795,9 +2694,8 @@
       "activeBg": "rgba(235, 219, 178, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#282828",
-      "bgSecondary": "#32302f",
-      "bgTertiary": "#3b3837",
+      "bgPrimary": "#32302f",
+      "bgSecondary": "#3c3836",
       "textPrimary": "#d5c4a1",
       "textSecondary": "#928374",
       "borderColor": "#504945",
@@ -2822,9 +2720,8 @@
       "activeBg": "rgba(44, 26, 14, 0.09)"
     },
     "ui": {
-      "bgPrimary": "#f7e7ce",
-      "bgSecondary": "#eedad8",
-      "bgTertiary": "#ead2cf",
+      "bgPrimary": "#eedad8",
+      "bgSecondary": "#e4cebc",
       "textPrimary": "#1c0a00",
       "textSecondary": "#49271b",
       "borderColor": "#d4b89c",
@@ -2849,9 +2746,8 @@
       "activeBg": "rgba(240, 219, 184, 0.12)"
     },
     "ui": {
-      "bgPrimary": "#1c1208",
-      "bgSecondary": "#2a1c10",
-      "bgTertiary": "#392616",
+      "bgPrimary": "#2a1c10",
+      "bgSecondary": "#382818",
       "textPrimary": "#e0ccaa",
       "textSecondary": "#b08458",
       "borderColor": "#483820",

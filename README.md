@@ -37,7 +37,36 @@ KleiKodeshVstoInstallerWpf  ──extracts & registers──▶  KleiKodeshVsto 
 
 ## Build
 
-- **Full solution (MSBuild):**
+### Release Build (installer)
+
+Use the interactive build menu:
+
+```
+Build\build-menu.bat
+```
+
+Or call the orchestration script directly:
+
+```powershell
+# Increment patch version and create GitHub release
+.\Build\build-installer.ps1 -VersionIncrement patch -ReleaseNotesSource commits
+
+# Set an exact version, skip GitHub release
+.\Build\build-installer.ps1 -ManualVersion v3.5.0 -NoRelease
+
+# Quick test build — no version change, no clean, no release
+.\Build\build-installer.ps1 -ManualVersion v3.2.0 -NoRelease -NoClean
+```
+
+The build pipeline:
+1. Updates version in `AddinInstaller.cs` and `KleiKodeshVstoInstallerWpf.csproj`
+2. `dotnet build` the WPF installer (its prebuild event builds the VSTO add-in via MSBuild)
+3. `makensis.exe` wraps everything into `Build/releases/KleiKodeshSetup-vX.Y.Z.exe`
+4. Optionally creates a GitHub release via `gh` CLI
+
+### Development Build (MSBuild)
+
+- **Full solution:**
   ```
   & "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe" KleiKodeshProject.slnx /m /nologo /verbosity:minimal
   ```
@@ -51,4 +80,5 @@ KleiKodeshVstoInstallerWpf  ──extracts & registers──▶  KleiKodeshVsto 
 ## Version
 
 App version is defined in `KleiKodeshVstoInstallerWpf/Helpers/AddinInstaller.cs` as `const string Version`.  
+All other version stamps (`.csproj`, NSIS) are derived from it by `KleiKodeshVstoInstallerWpf/UpdateVersion.ps1` during the build.  
 After install it is written to the registry at `HKEY_CURRENT_USER\SOFTWARE\KleiKodesh` → `Version`.

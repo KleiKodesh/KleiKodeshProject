@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Reflection;
 using System.Windows;
+using KleiKodeshVstoInstallerWpf.Helpers;
 
 namespace KleiKodeshVstoInstallerWpf
 {
@@ -57,6 +58,12 @@ namespace KleiKodeshVstoInstallerWpf
                 // Go straight to install progress page — no landing, no UI chrome.
                 // Exits with code 0 on success, 1 on failure.
                 // Used by: auto-updater (DownloadManager), NSIS --silent passthrough.
+                //
+                // Wait for Word to fully exit before we try to overwrite its locked VSTO files.
+                // The auto-updater launches this installer from ThisAddIn_Shutdown, so Word's
+                // process is still alive at this point. Without this wait the extraction fails
+                // immediately and Environment.Exit(1) is called silently.
+                WordHelper.WaitForWordToClose(timeoutMs: int.MaxValue);
                 mainWindow = new MainWindow(startInstallImmediately: true);
             }
             else

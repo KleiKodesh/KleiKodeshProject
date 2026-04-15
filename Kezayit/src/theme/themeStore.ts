@@ -10,7 +10,7 @@ interface ThemeState {
 }
 
 export const useThemeStore = defineStore('theme', () => {
-  const themePreset = ref<ThemePreset>('fluent-light')
+  const themePreset = ref<ThemePreset>('default-light')
   const readingBackground = ref('default')
 
   // Synchronous — theme is in localStorage
