@@ -52,13 +52,15 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         // ── Entry point ─────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Runs the full system cleanup.
+        /// Runs the system cleanup.
         /// <paramref name="progress"/> receives (percent 0-100, step description).
         /// <paramref name="detailLog"/> receives one line per deleted item.
+        /// <paramref name="deepClean"/> when true also cleans HKLM registry keys (requires admin).
         /// </summary>
         public static async Task<CleanupResult> RunAsync(
             IProgress<(int percent, string status)> progress,
-            IProgress<string> detailLog)
+            IProgress<string> detailLog,
+            bool deepClean = true)
         {
             var result = new CleanupResult();
 
@@ -78,7 +80,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             await CleanFileSystem(result, detailLog);
 
             progress.Report((25, "מנקה רגיסטרי — Addins..."));
-            await CleanAddinRegistry(result, detailLog);
+            await CleanAddinRegistry(result, detailLog, deepClean);
 
             progress.Report((40, "מנקה רגיסטרי — Uninstall + VSTO Security..."));
             await CleanVstoAndUninstallRegistry(result, detailLog);
@@ -286,7 +288,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
 
         // ── Addin registry (Addins + AddinsData) ─────────────────────────────────
 
-        private static async Task CleanAddinRegistry(CleanupResult result, IProgress<string> log)
+        private static async Task CleanAddinRegistry(CleanupResult result, IProgress<string> log, bool deepClean = true)
         {
             await Task.Run(() =>
             {
@@ -299,26 +301,26 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                     DeleteRegistrySubtree(Registry.CurrentUser, addinPath,     result, log);
                     DeleteRegistrySubtree(Registry.CurrentUser, addinDataPath, result, log);
 
-                    // HKLM 64-bit
-                    DeleteRegistrySubtreeHive(RegistryHive.LocalMachine, RegistryView.Registry64, addinPath,     result, log);
-                    DeleteRegistrySubtreeHive(RegistryHive.LocalMachine, RegistryView.Registry64, addinDataPath, result, log);
+                    if (deepClean)
+                    {
+                        // HKLM 64-bit
+                        DeleteRegistrySubtreeHive(RegistryHive.LocalMachine, RegistryView.Registry64, addinPath,     result, log);
+                        DeleteRegistrySubtreeHive(RegistryHive.LocalMachine, RegistryView.Registry64, addinDataPath, result, log);
 
-                    // HKLM 32-bit (Wow6432Node)
-                    DeleteRegistrySubtreeHive(RegistryHive.LocalMachine, RegistryView.Registry32, addinPath,     result, log);
-                    DeleteRegistrySubtreeHive(RegistryHive.LocalMachine, RegistryView.Registry32, addinDataPath, result, log);
+                        // HKLM 32-bit (Wow6432Node)
+                        DeleteRegistrySubtreeHive(RegistryHive.LocalMachine, RegistryView.Registry32, addinPath,     result, log);
+                        DeleteRegistrySubtreeHive(RegistryHive.LocalMachine, RegistryView.Registry32, addinDataPath, result, log);
+                    }
                 }
 
                 // Also clean the app version stamp
                 DeleteRegistrySubtree(Registry.CurrentUser, @"SOFTWARE\KleiKodesh", result, log);
 
-                // ── Corrupted Hebrew ghost key in HKLM 32-bit ──────────────────────────
-                // The very first public release registered under "כלי קודש" (Hebrew) in HKLM.
-                // On some machines the key name was written with a broken code page and the
-                // subkey name now reads as U+FFFD replacement characters: "\uFFFD\uFFFD\uFFFD \uFFFD\uFFFD\uFFFD\uFFFD"
-                // (3 replacement chars, space, 4 replacement chars — matching the shape of "כלי קודש").
-                // We scan all subkeys of the Addins parent and delete any whose Manifest value
-                // points to a KleiKodesh path, catching both the readable Hebrew and the corrupted form.
-                CleanCorruptedHklmAddinKeys(result, log);
+                if (deepClean)
+                {
+                    // ── Corrupted Hebrew ghost key in HKLM 32-bit ──────────────────────────
+                    CleanCorruptedHklmAddinKeys(result, log);
+                }
             });
         }
 

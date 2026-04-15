@@ -1,7 +1,7 @@
-# build-helpers.ps1 — dot-source this file to get shared paths and utilities
+# build-helpers.ps1 - dot-source this file to get shared paths and utilities
 # Usage: . "$PSScriptRoot\build-helpers.ps1"
 
-# ── Paths ─────────────────────────────────────────────────────────────────────
+# -- Paths --------------------------------------------------------------------
 $BuildDir            = $PSScriptRoot
 $ProjectRoot         = Split-Path -Parent $BuildDir
 $AddinInstallerPath  = Join-Path $ProjectRoot "KleiKodeshVstoInstallerWpf\Helpers\AddinInstaller.cs"
@@ -12,14 +12,14 @@ $NsisScriptPath      = Join-Path $BuildDir    "KleiKodeshWrapper.nsi"
 $ReleasesDir         = Join-Path $BuildDir    "releases"
 $ReleaseNotesFile    = Join-Path $ProjectRoot "RELEASE_NOTES.txt"
 
-# ── Read current version from source ─────────────────────────────────────────
+# -- Read current version from source -----------------------------------------
 function Get-CurrentVersion {
     $m = Select-String -Path $AddinInstallerPath -Pattern 'const string Version\s*=\s*"([^"]+)"'
     if (-not $m) { throw "Cannot read version from AddinInstaller.cs" }
     return $m.Matches[0].Groups[1].Value
 }
 
-# ── Locate MSBuild ────────────────────────────────────────────────────────────
+# -- Locate MSBuild -----------------------------------------------------------
 function Find-MSBuild {
     $inPath = Get-Command msbuild -ErrorAction SilentlyContinue
     if ($inPath) { return $inPath.Source }
@@ -34,7 +34,7 @@ function Find-MSBuild {
     return $null
 }
 
-# ── Clean solution ────────────────────────────────────────────────────────────
+# -- Clean solution -----------------------------------------------------------
 function Invoke-SolutionClean {
     Write-Host "Cleaning solution..." -ForegroundColor Yellow
     $msbuild = Find-MSBuild
@@ -42,13 +42,13 @@ function Invoke-SolutionClean {
         & $msbuild $SolutionPath /t:Clean /p:Configuration=Release /p:Platform="Any CPU" /verbosity:minimal
         if ($LASTEXITCODE -ne 0) { Write-Host "WARNING: MSBuild clean had issues, continuing." -ForegroundColor Yellow }
     } else {
-        Write-Host "MSBuild not found — cleaning WPF project only via dotnet." -ForegroundColor Yellow
+        Write-Host "MSBuild not found - cleaning WPF project only via dotnet." -ForegroundColor Yellow
         dotnet clean $WpfProjectPath -c Release --verbosity minimal
         if ($LASTEXITCODE -ne 0) { Write-Host "WARNING: dotnet clean had issues, continuing." -ForegroundColor Yellow }
     }
 }
 
-# ── Build release notes string ────────────────────────────────────────────────
+# -- Build release notes string -----------------------------------------------
 function New-ReleaseNotes {
     param([string]$Version, [string]$Source)   # Source: commits | file | both
 
@@ -67,8 +67,17 @@ function New-ReleaseNotes {
                    } else { "" }
 
     switch ($Source) {
-        "commits" { return "Release $Version`n`n$buildInfo`n`n$commitBlock" }
-        "file"    { return "Release $Version`n`n$(if ($fileContent) { $fileContent + "`n`n" })$buildInfo" }
-        "both"    { return "$(if ($fileContent) { $fileContent + "`n`n---`n`n" } else { "Release $Version`n`n" })$buildInfo`n`n$commitBlock" }
+        "commits" {
+            return "Release $Version`n`n$buildInfo`n`n$commitBlock"
+        }
+        "file" {
+            $prefix = if ($fileContent) { $fileContent + "`n`n" } else { "" }
+            return "Release $Version`n`n$prefix$buildInfo"
+        }
+        "both" {
+            $sep    = "`n`n---`n`n"
+            $prefix = if ($fileContent) { $fileContent + $sep } else { "Release $Version`n`n" }
+            return "$prefix$buildInfo`n`n$commitBlock"
+        }
     }
 }

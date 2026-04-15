@@ -1,4 +1,4 @@
-# build-menu.ps1 — interactive top-level menu. All logic lives in build-installer.ps1.
+# build-menu.ps1 - interactive top-level menu. All logic lives in build-installer.ps1.
 . "$PSScriptRoot\build-helpers.ps1"
 
 $installer = "$PSScriptRoot\build-installer.ps1"
@@ -62,12 +62,12 @@ function Confirm-Action([string]$summary) {
     return $c -match '^[Yy]'
 }
 
-function Invoke-Installer([hashtable]$args) {
+function Invoke-Installer([hashtable]$params) {
     # Splat the hashtable as named params to build-installer.ps1
-    & powershell -NoLogo -ExecutionPolicy Bypass -File $installer @args
+    & powershell -NoLogo -ExecutionPolicy Bypass -File $installer @params
 }
 
-# ── Menu loop ─────────────────────────────────────────────────────────────────
+# -- Menu loop ----------------------------------------------------------------
 while ($true) {
     Show-Header "KleiKodesh Build Menu"
     Write-Host "  1. Full Release Build + GitHub Release"
@@ -85,21 +85,19 @@ while ($true) {
 
         "1" {
             Show-Header "Full Release Build + GitHub Release"
-            $verArgs   = Read-VersionArgs
-            $notes     = Read-NotesSource
-            $summary   = if ($verArgs.ManualVersion) { "  Version : $($verArgs.ManualVersion) (manual)" }
-                         else { "  Version : increment $($verArgs.VersionIncrement)" }
-            $summary  += "`n  Notes   : $notes`n  Release : yes"
+            $verArgs  = Read-VersionArgs
+            $notes    = Read-NotesSource
+            $summary  = if ($verArgs.ManualVersion) { "  Version : $($verArgs.ManualVersion) (manual)" } else { "  Version : increment $($verArgs.VersionIncrement)" }
+            $summary += "`n  Notes   : $notes`n  Release : yes"
             if (Confirm-Action $summary) {
                 Invoke-Installer ($verArgs + @{ ReleaseNotesSource = $notes })
             }
         }
 
         "2" {
-            Show-Header "Release Build Only — No GitHub Release"
+            Show-Header "Release Build Only - No GitHub Release"
             $verArgs  = Read-VersionArgs
-            $summary  = if ($verArgs.ManualVersion) { "  Version : $($verArgs.ManualVersion) (manual)" }
-                        else { "  Version : increment $($verArgs.VersionIncrement)" }
+            $summary  = if ($verArgs.ManualVersion) { "  Version : $($verArgs.ManualVersion) (manual)" } else { "  Version : increment $($verArgs.VersionIncrement)" }
             $summary += "`n  Release : skipped"
             if (Confirm-Action $summary) {
                 Invoke-Installer ($verArgs + @{ NoRelease = $true })

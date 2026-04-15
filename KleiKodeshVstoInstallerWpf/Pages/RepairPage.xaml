@@ -46,8 +46,8 @@
         <Style x:Key="SecondaryButton" TargetType="Button">
             <Setter Property="Foreground"      Value="#5A5A5A"/>
             <Setter Property="Background"      Value="Transparent"/>
-            <Setter Property="BorderBrush"     Value="#E5E5E5"/>
-            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush"     Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding"         Value="12,0"/>
             <Setter Property="Height"          Value="28"/>
             <Setter Property="FontSize"        Value="12"/>
@@ -165,90 +165,6 @@
                       HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="28,0,28,12">
 
-            <!-- Admin elevation banner (hidden when already elevated) -->
-            <Border x:Name="AdminBanner"
-                    Background="#EFF6FF"
-                    BorderBrush="#BFDBFE"
-                    BorderThickness="1"
-                    CornerRadius="4"
-                    Padding="10,8"
-                    Margin="0,0,0,10"
-                    Visibility="Collapsed">
-                <StackPanel>
-                    <!-- Info row -->
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,7">
-                        <Viewbox Width="13" Height="13" Margin="0,1,6,0" VerticalAlignment="Top" FlowDirection="LeftToRight">
-                            <Path Data="M6,0 A6,6 0 1,1 5.99,0 Z M6,3 L6,6.5 M6,8 L6,8.5"
-                                  Stroke="#1D4ED8" StrokeThickness="1.2" Fill="Transparent"
-                                  StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                        </Viewbox>
-                        <TextBlock TextWrapping="Wrap" Foreground="#1E40AF" FontSize="12">
-                            <Run FontWeight="SemiBold">ניקוי חלקי בלבד.</Run>
-                            <Run>רשומות HKLM (גרסאות ישנות) דורשות הרשאות מנהל.</Run>
-                        </TextBlock>
-                    </StackPanel>
-                    <!-- Buttons row -->
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
-                        <Button x:Name="ElevateButton"
-                                Content="הפעל כמנהל 🛡"
-                                Margin="0,0,6,0"
-                                Padding="12,0"
-                                Height="26"
-                                FontSize="11"
-                                FontWeight="SemiBold"
-                                Foreground="White"
-                                Background="#1D4ED8"
-                                BorderThickness="0"
-                                Cursor="Hand"
-                                Click="ElevateButton_Click">
-                            <Button.Template>
-                                <ControlTemplate TargetType="Button">
-                                    <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="4"
-                                            Padding="{TemplateBinding Padding}" Height="{TemplateBinding Height}">
-                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="Bd" Property="Background" Value="#1E40AF"/>
-                                        </Trigger>
-                                        <Trigger Property="IsPressed" Value="True">
-                                            <Setter TargetName="Bd" Property="Background" Value="#1E3A8A"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Button.Template>
-                        </Button>
-                        <Button x:Name="ContinueWithoutAdminButton"
-                                Content="המשך בלי הרשאות"
-                                Padding="12,0"
-                                Height="26"
-                                FontSize="11"
-                                Foreground="#1E40AF"
-                                Background="Transparent"
-                                BorderBrush="#BFDBFE"
-                                BorderThickness="1"
-                                Cursor="Hand"
-                                Click="ContinueWithoutAdminButton_Click">
-                            <Button.Template>
-                                <ControlTemplate TargetType="Button">
-                                    <Border x:Name="Bd" Background="{TemplateBinding Background}"
-                                            BorderBrush="{TemplateBinding BorderBrush}"
-                                            BorderThickness="{TemplateBinding BorderThickness}"
-                                            CornerRadius="4" Padding="{TemplateBinding Padding}" Height="{TemplateBinding Height}">
-                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="Bd" Property="Background" Value="#DBEAFE"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Button.Template>
-                        </Button>
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-
             <!-- Warning -->
             <Border Background="#FFFBEB"
                     BorderBrush="#F6D860"
@@ -311,11 +227,17 @@
                         <TextBlock Grid.Column="1">מטמון WebView2, מטמון PDF, מטמון ספרים, ClickOnce cache</TextBlock>
                     </Grid>
                     <Grid Margin="0,2" Style="{StaticResource IconRow}">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/><ColumnDefinition Width="auto"/></Grid.ColumnDefinitions>
                         <Viewbox Width="11" Height="11" VerticalAlignment="Top" FlowDirection="LeftToRight">
                             <Path Data="M8,0 C5.8,0 4,1.8 4,4 C4,5.1 4.4,6.1 5.1,6.8 L0,12 L1,13 L2,12 L3,13 L4,12 L4,10 L6,10 L6,8 L6.8,8 C7.5,8.4 8.2,8.6 9,8.6 C11.2,8.6 13,6.8 13,4.6 C13,2.4 11.2,0.6 9,0.6 Z M9,2 C10.4,2 11.5,3.1 11.5,4.5 C11.5,5.9 10.4,7 9,7 C7.6,7 6.5,5.9 6.5,4.5 C6.5,3.1 7.6,2 9,2 Z" Stroke="#5A5A5A" StrokeThickness="0.5" Fill="#5A5A5A"/>
                         </Viewbox>
                         <TextBlock Grid.Column="1">רגיסטרי: Addins\KleiKodesh + Addins\כלי קודש — HKLM + HKCU</TextBlock>
+                        <TextBlock Grid.Column="2" Foreground="#1D4ED8" FontSize="10" Margin="4,0,0,0" VerticalAlignment="Top">
+                            <TextBlock.ToolTip>
+                                <ToolTip MaxWidth="220" FlowDirection="RightToLeft">
+                                    <TextBlock TextWrapping="Wrap" FontSize="11">רשומות HKLM דורשות ניקוי עמוק (הרשאות מנהל).</TextBlock>
+                                </ToolTip>
+                            </TextBlock.ToolTip>🛡</TextBlock>
                     </Grid>
                     <Grid Margin="0,2" Style="{StaticResource IconRow}">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
@@ -414,6 +336,8 @@
                     <ColumnDefinition Width="auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="auto"/>
+                    <ColumnDefinition Width="6"/>
+                    <ColumnDefinition Width="auto"/>
                 </Grid.ColumnDefinitions>
 
                 <Button x:Name="CancelButton"
@@ -422,11 +346,35 @@
                         Style="{StaticResource SecondaryButton}"
                         Click="CancelButton_Click"/>
 
-                <Button x:Name="RunButton"
+                <!-- Basic clean button -->
+                <Button x:Name="BasicCleanButton"
                         Grid.Column="2"
-                        Content="הפעל תיקון מלא"
+                        Content="ניקוי בסיסי"
+                        Style="{StaticResource SecondaryButton}"
+                        Click="BasicCleanButton_Click">
+                    <Button.ToolTip>
+                        <ToolTip MaxWidth="260" FlowDirection="RightToLeft">
+                            <TextBlock TextWrapping="Wrap" FontSize="11">
+                                מוחק קבצים, מטמון ורשומות HKCU — ללא צורך בהרשאות מנהל.
+                            </TextBlock>
+                        </ToolTip>
+                    </Button.ToolTip>
+                </Button>
+
+                <!-- Deep clean button -->
+                <Button x:Name="DeepCleanButton"
+                        Grid.Column="4"
+                        Content="ניקוי עמוק 🛡"
                         Style="{StaticResource PrimaryButton}"
-                        Click="RunButton_Click"/>
+                        Click="DeepCleanButton_Click">
+                    <Button.ToolTip>
+                        <ToolTip MaxWidth="260" FlowDirection="RightToLeft">
+                            <TextBlock TextWrapping="Wrap" FontSize="11">
+                                כולל גם רשומות HKLM (גרסאות ישנות) — דורש הפעלה מחדש כמנהל.
+                            </TextBlock>
+                        </ToolTip>
+                    </Button.ToolTip>
+                </Button>
             </Grid>
         </Border>
     </Grid>

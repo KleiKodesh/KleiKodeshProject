@@ -22,21 +22,12 @@ namespace KleiKodeshVstoInstallerWpf
 
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
-            // Show or hide the admin elevation banner
-            if (AdminHelper.IsElevated)
-            {
-                AdminBanner.Visibility = Visibility.Collapsed;
-            }
-            else
-            {
-                AdminBanner.Visibility = Visibility.Visible;
-            }
-
-            // If relaunched as admin with --repair, skip confirmation and run immediately
+            // If relaunched as admin with --repair, skip confirmation and run deep clean
             if (_autoRun)
             {
-                RunButton.IsEnabled = false;
-                _ = RunCleanupAsync(skipConfirm: true);
+                BasicCleanButton.IsEnabled = false;
+                DeepCleanButton.IsEnabled  = false;
+                _ = RunCleanupAsync(skipConfirm: true, deepClean: true);
             }
         }
 
@@ -56,28 +47,19 @@ namespace KleiKodeshVstoInstallerWpf
             _host.NavigateToLanding();
         }
 
-        private void RunButton_Click(object sender, RoutedEventArgs e)
+        private void BasicCleanButton_Click(object sender, RoutedEventArgs e)
         {
             if (_isRunning) return;
-            AdminBanner.Visibility = Visibility.Collapsed;
-            _ = RunCleanupAsync(skipConfirm: false);
+            _ = RunCleanupAsync(skipConfirm: false, deepClean: false);
         }
 
-        private void ElevateButton_Click(object sender, RoutedEventArgs e)
+        private void DeepCleanButton_Click(object sender, RoutedEventArgs e)
         {
-            // Relaunch self as admin, opening straight to repair + auto-run
-            AdminHelper.RelaunchAsAdmin("--repair");
-            // If user cancelled UAC, RelaunchAsAdmin returns false and we stay on the page
+            if (_isRunning) return;
+            _ = RunCleanupAsync(skipConfirm: false, deepClean: true);
         }
 
-        private void ContinueWithoutAdminButton_Click(object sender, RoutedEventArgs e)
-        {
-            // User explicitly chose to run without admin — hide the banner and proceed
-            AdminBanner.Visibility = Visibility.Collapsed;
-            _ = RunCleanupAsync(skipConfirm: false);
-        }
-
-        private async System.Threading.Tasks.Task RunCleanupAsync(bool skipConfirm)
+        private async System.Threading.Tasks.Task RunCleanupAsync(bool skipConfirm, bool deepClean = true)
         {
             if (!skipConfirm)
             {
@@ -95,11 +77,11 @@ namespace KleiKodeshVstoInstallerWpf
 
             if (!WordHelper.EnsureWordClosedForRepair()) return;
 
-            _isRunning             = true;
-            RunButton.IsEnabled    = false;
-            RunButton.Content      = "מנקה...";
-            CancelButton.IsEnabled = false;
-            AdminBanner.Visibility = Visibility.Collapsed;   // hide banner during run
+            _isRunning                 = true;
+            BasicCleanButton.IsEnabled = false;
+            DeepCleanButton.IsEnabled  = false;
+            BasicCleanButton.Content   = "מנקה...";
+            CancelButton.IsEnabled     = false;
             ProgressPanel.Visibility = Visibility.Visible;
             LogPanel.Visibility      = Visibility.Visible;
             SummaryText.Visibility   = Visibility.Collapsed;
@@ -116,15 +98,16 @@ namespace KleiKodeshVstoInstallerWpf
             FullSystemCleaner.CleanupResult result;
             try
             {
-                result = await FullSystemCleaner.RunAsync(progress, detailLog);
+                result = await FullSystemCleaner.RunAsync(progress, detailLog, deepClean);
             }
             catch (Exception ex)
             {
                 _isRunning = false;
                 AppendLog($"\n❌ שגיאה: {ex.Message}");
-                RunButton.IsEnabled    = true;
-                RunButton.Content      = "נסה שוב";
-                CancelButton.IsEnabled = true;
+                BasicCleanButton.IsEnabled = true;
+                BasicCleanButton.Content   = "ניקוי בסיסי";
+                DeepCleanButton.IsEnabled  = true;
+                CancelButton.IsEnabled     = true;
                 return;
             }
 
