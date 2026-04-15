@@ -73,6 +73,10 @@ namespace UpdateCheckerLib
                     throw new InvalidOperationException("הורדת הקובץ נכשלה");
 
                 PendingInstallerPath = tempPath;
+
+                // Confirm the write landed in the registry
+                var logPath = Path.Combine(Path.GetTempPath(), "KleiKodesh-update.log");
+                try { File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} Download complete, PendingInstallerPath set to '{PendingInstallerPath}'\r\n"); } catch { }
             }
             catch (OperationCanceledException)
             {
@@ -96,21 +100,44 @@ namespace UpdateCheckerLib
 
         public static void RunPendingInstaller()
         {
-            if (string.IsNullOrEmpty(PendingInstallerPath) ||
-                !File.Exists(PendingInstallerPath))
+            var logPath = Path.Combine(Path.GetTempPath(), "KleiKodesh-update.log");
+            void Log(string msg)
+            {
+                try { File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} {msg}\r\n"); } catch { }
+            }
+
+            Log("RunPendingInstaller called");
+            Log($"PendingInstallerPath = '{PendingInstallerPath}'");
+
+            if (string.IsNullOrEmpty(PendingInstallerPath))
+            {
+                Log("SKIP: path is null/empty");
                 return;
+            }
+
+            if (!File.Exists(PendingInstallerPath))
+            {
+                Log($"SKIP: file does not exist at '{PendingInstallerPath}'");
+                PendingInstallerPath = null;
+                return;
+            }
+
+            Log($"File exists, size = {new FileInfo(PendingInstallerPath).Length} bytes");
+
+            // Clear the registry entry BEFORE launching — if Word's process is killed
+            // mid-launch the finally block may never run, leaving a stale entry.
+            var pathToLaunch = PendingInstallerPath;
+            PendingInstallerPath = null;
+            Log("PendingInstallerPath cleared");
 
             try
             {
-                LaunchInstaller(PendingInstallerPath);
+                LaunchInstaller(pathToLaunch);
+                Log("LaunchInstaller succeeded");
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("Installer launch failed: " + ex);
-            }
-            finally
-            {
-                PendingInstallerPath = null;
+                Log($"LaunchInstaller FAILED: {ex}");
             }
         }
 
@@ -180,19 +207,43 @@ namespace UpdateCheckerLib
 
         // Launch with ShellExecute so Windows handles UAC correctly per the
         // manifest's RequestExecutionLevel (NSIS wrapper is user-level, no elevation needed).
-        // No --silent: the installer shows its normal landing page so the user clicks through.
+        // Uses a bat script launched via cmd.exe so the installer runs in a process
+        // completely detached from Word — Word's shutdown kills all its threads before
+        // Process.Start can return, so we must hand off to an external process.
         private static void LaunchInstaller(string installerPath)
         {
-            var psi = new ProcessStartInfo
-            {
-                FileName         = installerPath,
-                UseShellExecute  = true,
-                WorkingDirectory = Path.GetDirectoryName(installerPath)
-            };
+            var scriptPath = Path.Combine(Path.GetTempPath(), $"KleiKodesh_Updater_{DateTime.Now.Ticks}.bat");
 
-            var p = Process.Start(psi);
-            if (p == null)
-                throw new InvalidOperationException("Failed to start installer process");
+            var script = $@"@echo off
+REM Wait for Word to fully close
+:waitForWord
+tasklist /FI ""IMAGENAME eq WINWORD.EXE"" 2>NUL | find /I ""WINWORD.EXE"" >NUL
+if ""%ERRORLEVEL%""==""0"" (
+    timeout /t 2 /nobreak >NUL
+    goto waitForWord
+)
+
+REM Small extra delay to ensure file handles are released
+timeout /t 2 /nobreak >NUL
+
+REM Run the installer
+if exist ""{installerPath}"" (
+    start """" ""{installerPath}""
+)
+
+REM Self-delete
+(goto) 2>nul & del ""%~f0""";
+
+            File.WriteAllText(scriptPath, script);
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName        = "cmd.exe",
+                Arguments       = $"/c \"{scriptPath}\"",
+                UseShellExecute = false,
+                CreateNoWindow  = true,
+                WindowStyle     = ProcessWindowStyle.Hidden
+            });
         }
 
         private static void TryDeleteFile(string path)

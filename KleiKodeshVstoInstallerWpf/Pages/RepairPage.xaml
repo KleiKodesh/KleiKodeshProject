@@ -267,13 +267,6 @@
                         </Viewbox>
                         <TextBlock Grid.Column="1">רגיסטרי: Word Resiliency — רק אם מכיל כלי קודש</TextBlock>
                     </Grid>
-                    <Grid Margin="0,2" Style="{StaticResource IconRow}">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                        <Viewbox Width="11" Height="11" VerticalAlignment="Top" FlowDirection="LeftToRight">
-                            <Path Data="M2,0 L10,0 L10,8 L7,8 L7,11 L0,11 L0,3 Z M2,0 L2,3 L0,3" Stroke="#5A5A5A" StrokeThickness="1" Fill="Transparent" StrokeLineJoin="Round"/>
-                        </Viewbox>
-                        <TextBlock Grid.Column="1">קיצורי דרך בתפריט התחל ובשולחן העבודה</TextBlock>
-                    </Grid>
                 </StackPanel>
             </Border>
 
