@@ -11,6 +11,7 @@ import type { BloomSearchResult } from './searchTypes'
 
 const props = defineProps<{
   results: BloomSearchResult[]
+  totalResults: number
   searchQuery: string
   isSearching: boolean
   hasSearched: boolean
@@ -121,46 +122,59 @@ function onScroll() {}
       <IconSearchSparkle24Regular class="empty-icon" />
       <span v-if="hasSearched && !results.length" class="empty-msg">לא נמצאו תוצאות</span>
     </div>
-    <div v-else ref="scrollEl" class="scroller" tabindex="0" @scroll="onScroll">
-      <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
-        <div
-          v-for="vRow in virtualizer.getVirtualItems()"
-          :key="String(vRow.key)"
-          :ref="(el) => el && virtualizer.measureElement(el as Element)"
-          :data-index="vRow.index"
-          :style="{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            transform: `translateY(${vRow.start}px)`,
-          }"
-        >
-          <div class="result-item">
-            <div
-              class="result-header"
-              :title="
-                results[vRow.index]!.tocText
-                  ? results[vRow.index]!.bookTitle +
-                    ' › ' +
-                    results[vRow.index]!.tocText +
-                    '\n\nלחץ לניווט למיקום'
-                  : results[vRow.index]!.bookTitle + '\n\nלחץ לניווט למיקום'
-              "
-              @click="emit('resultClick', results[vRow.index]!)"
-            >
-              <span class="book-title">{{ results[vRow.index]!.bookTitle }}</span>
-              <span v-if="results[vRow.index]!.tocText" class="sep">›</span>
-              <span v-if="results[vRow.index]!.tocText" class="toc-text">{{
-                results[vRow.index]!.tocText
-              }}</span>
+    <template v-else>
+      <div class="results-count">
+        <span v-if="isSearching" class="count-searching">
+          {{ results.length.toLocaleString() }} תוצאות עד כה...
+        </span>
+        <span v-else-if="results.length < totalResults">
+          {{ results.length.toLocaleString() }} מתוך {{ totalResults.toLocaleString() }} תוצאות
+        </span>
+        <span v-else>
+          {{ results.length.toLocaleString() }} תוצאות
+        </span>
+      </div>
+      <div ref="scrollEl" class="scroller" tabindex="0" @scroll="onScroll">
+        <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
+          <div
+            v-for="vRow in virtualizer.getVirtualItems()"
+            :key="String(vRow.key)"
+            :ref="(el) => el && virtualizer.measureElement(el as Element)"
+            :data-index="vRow.index"
+            :style="{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              transform: `translateY(${vRow.start}px)`,
+            }"
+          >
+            <div class="result-item">
+              <div
+                class="result-header"
+                :title="
+                  results[vRow.index]!.tocText
+                    ? results[vRow.index]!.bookTitle +
+                      ' › ' +
+                      results[vRow.index]!.tocText +
+                      '\n\nלחץ לניווט למיקום'
+                    : results[vRow.index]!.bookTitle + '\n\nלחץ לניווט למיקום'
+                "
+                @click="emit('resultClick', results[vRow.index]!)"
+              >
+                <span class="book-title">{{ results[vRow.index]!.bookTitle }}</span>
+                <span v-if="results[vRow.index]!.tocText" class="sep">›</span>
+                <span v-if="results[vRow.index]!.tocText" class="toc-text">{{
+                  results[vRow.index]!.tocText
+                }}</span>
+              </div>
+              <!-- eslint-disable-next-line vue/no-v-html -->
+              <div class="snippet" v-html="highlight(results[vRow.index]!.snippet)" />
             </div>
-            <!-- eslint-disable-next-line vue/no-v-html -->
-            <div class="snippet" v-html="highlight(results[vRow.index]!.snippet)" />
           </div>
         </div>
       </div>
-    </div>
+    </template>
   </div>
 </template>
 
@@ -169,6 +183,8 @@ function onScroll() {}
   flex: 1;
   overflow: hidden;
   position: relative;
+  display: flex;
+  flex-direction: column;
 }
 .empty-state {
   height: 100%;
@@ -187,8 +203,19 @@ function onScroll() {}
   font-size: 14px;
   color: var(--text-secondary);
 }
+.results-count {
+  padding: 4px 14px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-color);
+  direction: rtl;
+  flex-shrink: 0;
+}
+.count-searching {
+  opacity: 0.7;
+}
 .scroller {
-  height: 100%;
+  flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
   outline: none;

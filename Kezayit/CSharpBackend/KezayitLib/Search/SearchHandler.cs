@@ -320,6 +320,7 @@ namespace KezayitLib.Search
         public void HandleSearchStart(JsonElement root, string id)
         {
             string query = root.TryGetProperty("0", out var q) ? q.GetString() : null;
+            int skipCount = root.TryGetProperty("1", out var s) ? s.GetInt32() : 0;
             if (!_isReady || string.IsNullOrWhiteSpace(query))
             {
                 _bridge.Reply(id, new { searchId = (string)null });
@@ -330,7 +331,7 @@ namespace KezayitLib.Search
             var cts = new CancellationTokenSource();
             _searches[searchId] = cts;
             _bridge.Reply(id, new { searchId = searchId });
-            Task.Run(() => RunSearch(searchId, query, cts.Token));
+            Task.Run(() => RunSearch(searchId, query, skipCount, cts.Token));
         }
 
         public void HandleSearchCancel(JsonElement root, string id)
@@ -344,11 +345,12 @@ namespace KezayitLib.Search
             _bridge.Reply(id, new { });
         }
 
-        private void RunSearch(string searchId, string query, CancellationToken ct)
+        private void RunSearch(string searchId, string query, int skipCount, CancellationToken ct)
         {
             try
             {
                 var batch = new System.Collections.Generic.List<object>(20);
+                int skipped = 0;
                 foreach (var item in new BloomFilterSearcher("lines").Search(query))
                 {
                     if (ct.IsCancellationRequested)
@@ -356,6 +358,8 @@ namespace KezayitLib.Search
                         PostSearch(new { type = "searchCancelled", searchId = searchId });
                         return;
                     }
+                    // Skip results the client already has from cache
+                    if (skipped < skipCount) { skipped++; continue; }
                     batch.Add(new
                     {
                         lineId = item.LineId,

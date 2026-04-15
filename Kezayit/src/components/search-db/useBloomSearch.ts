@@ -205,15 +205,65 @@ export function useBloomSearch() {
     }
   }
 
-  async function executeSearch(query: string) {
-    if (!query.trim()) return
+  // Start the C# search stream and wire up listeners.
+  // skipCount: number of results already in cache — C# will skip that many before streaming.
+  async function _startStream(normalizedQuery: string, skipCount: number) {
+    ensureWebviewListener()
+    const reply = await callAction<{ searchId: string }>('BloomSearchStart', normalizedQuery, skipCount)
+    const searchId = reply?.searchId
+    if (!searchId) {
+      // Index not ready
+      isSearching.value = false
+      return
+    }
+    currentSearchId = searchId
+
+    _searchListeners.set(searchId, {
+      onBatch: async (batch) => {
+        if (currentSearchId !== searchId) return
+        await enrichTocPaths(batch)
+        results.value = [...results.value, ...batch]
+        // Persist batch to IDB — strip proxies before writing
+        try {
+          await cache.appendBatch(normalizedQuery, JSON.parse(JSON.stringify(batch)))
+        } catch {
+          /* non-fatal — cache is best-effort */
+        }
+      },
+      onComplete: async () => {
+        if (currentSearchId !== searchId) return
+        isSearching.value = false
+        console.log(`[search] stream complete for "${normalizedQuery}" — total results: ${results.value.length}, marking cache complete`)
+        try {
+          await cache.markComplete(normalizedQuery)
+        } catch {
+          /* non-fatal */
+        }
+        _cleanup()
+      },
+      onCancelled: () => {
+        if (currentSearchId !== searchId) return
+        isSearching.value = false
+        _cleanup()
+      },
+      onError: (err) => {
+        console.error('[useBloomSearch] search error:', err)
+        if (currentSearchId !== searchId) return
+        isSearching.value = false
+        _cleanup()
+      },
+    })
+  }
+
+  async function executeSearch(q: string) {
+    if (!q.trim()) return
 
     if (currentSearchId) await cancelSearch()
 
     isSearching.value = true
     hasSearched.value = true
     results.value = []
-    executedQuery.value = query
+    executedQuery.value = q
 
     // Dev fallback — bridge not available in browser dev
     if (!isHosted || typeof window.__webviewAction !== 'function') {
@@ -223,61 +273,36 @@ export function useBloomSearch() {
       return
     }
 
-    // Cache check
-    const cached = await cache.get(query.trim().toLowerCase())
-    if (cached) {
-      results.value = cached
+    const normalizedQuery = q.trim().toLowerCase()
+    const cached = await cache.get(normalizedQuery)
+
+    if (cached?.complete) {
+      // Full result set available — show immediately, no stream needed
+      console.log(`[search] cache hit (complete) for "${normalizedQuery}" — ${cached.results.length} results`)
+      results.value = cached.results
       isSearching.value = false
       return
     }
 
-    try {
-      ensureWebviewListener()
-      const reply = await callAction<{ searchId: string }>('BloomSearchStart', query)
-      const searchId = reply?.searchId
-      if (!searchId) {
-        // Index not ready — caller should check indexing status
+    if (cached && cached.results.length > 0) {
+      // Partial result set from a previous interrupted search — show what we have,
+      // then resume streaming from where C# left off
+      console.log(`[search] cache hit (partial) for "${normalizedQuery}" — ${cached.results.length} cached, resuming from that offset`)
+      results.value = cached.results
+      try {
+        await _startStream(normalizedQuery, cached.results.length)
+      } catch (err) {
+        console.error('[useBloomSearch] failed to resume stream:', err)
         isSearching.value = false
-        return
       }
-      currentSearchId = searchId
+      return
+    }
 
-      _searchListeners.set(searchId, {
-        onBatch: async (batch) => {
-          if (currentSearchId === searchId) {
-            await enrichTocPaths(batch)
-            results.value = [...results.value, ...batch]
-          }
-        },
-        onComplete: async () => {
-          if (currentSearchId === searchId) {
-            isSearching.value = false
-            if (results.value.length > 0) {
-              const cacheKey = query.trim().toLowerCase()
-              try {
-                // Structured clone strips Vue reactive proxies before IDB write
-                await cache.set(cacheKey, JSON.parse(JSON.stringify(results.value)))
-              } catch (err) {
-                console.error('[useBloomSearch] cacheSet failed:', err)
-              }
-            }
-            _cleanup()
-          }
-        },
-        onCancelled: () => {
-          if (currentSearchId === searchId) {
-            isSearching.value = false
-            _cleanup()
-          }
-        },
-        onError: (err) => {
-          console.error('[useBloomSearch] search error:', err)
-          if (currentSearchId === searchId) {
-            isSearching.value = false
-            _cleanup()
-          }
-        },
-      })
+    // No cache — fresh search
+    console.log(`[search] cache miss for "${normalizedQuery}" — starting fresh`)
+    try {
+      await cache.init(normalizedQuery)
+      await _startStream(normalizedQuery, 0)
     } catch (err) {
       console.error('[useBloomSearch] failed to start search:', err)
       isSearching.value = false
@@ -290,12 +315,24 @@ export function useBloomSearch() {
     executedQuery.value = ''
   }
 
-  async function loadCachedResults(query: string): Promise<boolean> {
-    const cached = await cache.get(query.trim().toLowerCase())
-    if (!cached) return false
-    results.value = cached
-    executedQuery.value = query
+  async function loadCachedResults(q: string): Promise<boolean> {
+    const normalizedQuery = q.trim().toLowerCase()
+    const cached = await cache.get(normalizedQuery)
+    if (!cached || cached.results.length === 0) return false
+    results.value = cached.results
+    executedQuery.value = q
     hasSearched.value = true
+    // If incomplete, resume streaming in the background
+    if (!cached.complete) {
+      console.log(`[search] tab restore — partial cache for "${normalizedQuery}" (${cached.results.length} results), resuming stream`)
+      isSearching.value = true
+      _startStream(normalizedQuery, cached.results.length).catch((err) => {
+        console.error('[useBloomSearch] failed to resume stream after tab restore:', err)
+        isSearching.value = false
+      })
+    } else {
+      console.log(`[search] tab restore — complete cache for "${normalizedQuery}" (${cached.results.length} results)`)
+    }
     return true
   }
 

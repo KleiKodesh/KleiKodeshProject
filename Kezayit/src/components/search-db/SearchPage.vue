@@ -94,6 +94,7 @@ onMounted(async () => {
   <div class="search-page">
     <SearchResultsList
       :results="filteredResults"
+      :total-results="results.length"
       :search-query="executedQuery"
       :is-searching="isSearching"
       :has-searched="hasSearched"
