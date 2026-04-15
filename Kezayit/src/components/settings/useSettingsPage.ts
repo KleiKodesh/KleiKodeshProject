@@ -34,6 +34,8 @@ export function useSettingsPage() {
 
   function resetAll() {
     tabStore.resetAll()
+    // Clear all settings (including setupDone) so the setup wizard shows after reload
+    settings.reset()
     if (typeof window.__webviewAction === 'function') {
       window.__webviewAction('DeleteBloomIndex', {}).catch(() => {})
       window.__webviewAction('resetSettings', {}).catch(() => {})

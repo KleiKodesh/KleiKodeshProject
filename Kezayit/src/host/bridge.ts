@@ -100,6 +100,24 @@ export function togglePopOut(): void {
   action('TogglePopOut').catch(() => {})
 }
 
+/**
+ * Collect environment diagnostics from the C# host.
+ * Returns a flat key/value map with process bitness, OS bitness, Office bitness,
+ * SQLite.Interop.dll presence/bitness, and assembly paths.
+ * Used to diagnose the 0x8007000B SQLite bitness mismatch error.
+ */
+export async function getDiagnostics(): Promise<Record<string, string> | null> {
+  if (typeof window.__webviewAction !== 'function') return null
+  try {
+    const res = await action<{ diagnostics?: Record<string, string>; error?: string }>(
+      'getDiagnostics',
+    )
+    return res.diagnostics ?? null
+  } catch {
+    return null
+  }
+}
+
 // ── Dev fallback ──────────────────────────────────────────────────────────────
 
 async function devPickPdf(): Promise<PdfFileResult | null> {

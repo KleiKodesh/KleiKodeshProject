@@ -12,6 +12,7 @@ import BottomSearchBar from '@/components/common/BottomSearchBar.vue'
 import { useTabStore } from '@/stores/tabStore'
 import type { BookRow } from './booksCategoryTree'
 import type { TocFsItem } from './useBooksFsSearch'
+import { getDiagnostics } from '@/host/bridge'
 
 const tabStore = useTabStore()
 const {
@@ -32,6 +33,31 @@ const view = ref<'list' | 'tiles' | 'tree'>('list')
 onMounted(async () => {
   view.value = await tabStore.getBooksView()
 })
+
+// ── Diagnostics (auto-runs when a bitness-mismatch error is detected) ─────────
+
+const diagData = ref<Record<string, string> | null>(null)
+const diagLoading = ref(false)
+
+function isBitnessMismatch(msg: string | null) {
+  if (!msg) return false
+  return msg.includes('0x8007000B') || msg.toLowerCase().includes('incorrect format')
+}
+
+watch(error, async (msg) => {
+  if (!isBitnessMismatch(msg)) return
+  diagLoading.value = true
+  diagData.value = null
+  const result = await getDiagnostics()
+  diagLoading.value = false
+  diagData.value = result
+})
+
+function copyDiagnostics() {
+  if (!diagData.value) return
+  const lines = Object.entries(diagData.value).map(([k, v]) => k + ': ' + v)
+  navigator.clipboard.writeText(lines.join('\n')).catch(() => {})
+}
 const fullTreeRef = ref<InstanceType<typeof BooksFullTree> | null>(null)
 const booksTreeRef = ref<InstanceType<typeof BooksTreeView> | null>(null)
 const searchResultsRef = ref<InstanceType<typeof BooksSearchResults> | null>(null)
@@ -116,7 +142,38 @@ function onSearchEnter() {
     />
     <div class="books-content">
       <LoadingAnimation v-if="loading" />
-      <div v-else-if="error" class="state error">{{ error }}</div>
+      <div v-else-if="error" class="state error">
+        <span class="error-msg">{{ error }}</span>
+        <template v-if="isBitnessMismatch(error)">
+          <div v-if="diagLoading" class="diag-loading">אוסף נתוני אבחון...</div>
+          <div v-else-if="diagData" class="diag-panel">
+            <div class="diag-table">
+              <div v-for="(val, key) in diagData" :key="key" class="diag-row">
+                <span class="diag-key" dir="ltr">{{ key }}</span>
+                <span
+                  class="diag-val"
+                  dir="ltr"
+                  :class="{
+                    'val-error':
+                      (String(key).includes('sqlite.interop') &&
+                        String(key).includes('present') &&
+                        val === 'false') ||
+                      String(val).startsWith('error:') ||
+                      val === 'not found',
+                    'val-ok':
+                      (String(key).includes('sqlite.interop') &&
+                        String(key).includes('present') &&
+                        val === 'true') ||
+                      val === 'True',
+                  }"
+                  >{{ val }}</span
+                >
+              </div>
+            </div>
+            <button class="diag-copy-btn" @click="copyDiagnostics">העתק לדוח</button>
+          </div>
+        </template>
+      </div>
       <template v-else>
         <BooksFullTree
           ref="fullTreeRef"
@@ -195,5 +252,71 @@ function onSearchEnter() {
   text-align: center;
   color: #ff3b30;
   font-size: 15px;
+}
+.error-msg {
+  display: block;
+  margin-bottom: 16px;
+}
+.diag-loading {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+}
+.diag-panel {
+  margin-top: 12px;
+  text-align: start;
+  width: 100%;
+  max-width: 560px;
+  margin-inline: auto;
+}
+.diag-table {
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  overflow: hidden;
+  font-size: 11px;
+  font-family: 'Consolas', 'Cascadia Code', monospace;
+}
+.diag-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
+}
+.diag-row:last-child {
+  border-bottom: none;
+}
+.diag-row:nth-child(odd) {
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+}
+.diag-key {
+  flex-shrink: 0;
+  width: 260px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.diag-val {
+  flex: 1;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.val-error {
+  color: #ff3b30;
+  font-weight: 600;
+}
+.val-ok {
+  color: #34c759;
+}
+.diag-copy-btn {
+  margin-top: 8px;
+  height: 28px;
+  padding: 0 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
 }
 </style>

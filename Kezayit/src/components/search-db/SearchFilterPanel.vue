@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, nextTick, watch } from 'vue'
-import { useDebounceFn } from '@vueuse/core'
-import { IconMinimize20Regular } from '@iconify-prerendered/vue-fluent'
+import { useDebounceFn, useIntervalFn } from '@vueuse/core'
+import { IconMinimize20Regular, IconDismiss12Regular } from '@iconify-prerendered/vue-fluent'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { normalize } from '@/utils/normalizeText'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
@@ -13,7 +13,7 @@ const props = defineProps<{
   checkedBookIds: Set<number>
   resultCounts: Map<number, number>
   hasSearched?: boolean
-  filterBookQuery: string
+  atFilters: string[]
 }>()
 const emit = defineEmits<{
   toggleBook: [number]
@@ -21,16 +21,41 @@ const emit = defineEmits<{
   checkAll: []
   uncheckAll: []
   close: []
-  'update:filterBookQuery': [string]
+  'update:atFilters': [string[]]
 }>()
 
 const booksStore = useBooksDataStore()
 
 const bookListRef = ref<InstanceType<typeof SearchFilterBookList> | null>(null)
 const searchInputRef = ref<HTMLInputElement | null>(null)
+const inputText = ref('')
 const filteredBooks = ref<BookRow[]>([])
 
 onMounted(() => nextTick(() => searchInputRef.value?.focus()))
+
+// ── Animated placeholder ──────────────────────────────────────────────────────
+
+const PLACEHOLDERS = ['רש"י @ רמב"ם', 'בבלי ברכות', 'תוספתא @ תנ"ך תורה']
+const placeholder = ref(PLACEHOLDERS[0]!)
+let phraseIdx = 0, charIdx = 0, pauseTicks = 0
+
+const { pause: pauseTyping, resume: resumeTyping } = useIntervalFn(() => {
+  if (pauseTicks > 0) { pauseTicks--; return }
+  const target = PLACEHOLDERS[phraseIdx]!
+  if (charIdx < target.length) {
+    placeholder.value = target.slice(0, ++charIdx)
+  } else {
+    pauseTicks = 12
+    phraseIdx = (phraseIdx + 1) % PLACEHOLDERS.length
+    charIdx = 0
+  }
+}, 80)
+
+// Pause when user is typing or tokens are committed
+watch([inputText, () => props.atFilters.length], ([text, count]) => {
+  if (text || count) pauseTyping()
+  else resumeTyping()
+})
 
 const total = computed(() => booksStore.allBooks.length)
 const isAllChecked = computed(() => total.value > 0 && props.checkedBookIds.size === total.value)
@@ -38,14 +63,18 @@ const isIndet = computed(
   () => props.checkedBookIds.size > 0 && props.checkedBookIds.size < total.value,
 )
 
-// Show the book list only when the debounced results have been computed
-const isSearching = computed(() => props.filterBookQuery.trim().length >= 2)
+// Show book list when there are committed tokens OR the current input is long enough
+const activeQuery = computed(() => inputText.value.trim())
+const isSearching = computed(() => props.atFilters.length > 0 || activeQuery.value.length >= 2)
+
+// ── Book matching (same logic as useSearchFilters.matchBookIds but returns BookRow[]) ──
 
 function toWords(raw: string): string[] {
   return normalize(raw.trim()).split(/\s+/).filter((w) => w.length > 0)
 }
 
-function matchBooks(words: string[]): BookRow[] {
+function matchBooks(q: string): BookRow[] {
+  const words = toWords(q)
   if (!words.length) return []
   const exactWords = words.slice(0, -1)
   const prefixWord = words[words.length - 1]!
@@ -57,19 +86,77 @@ function matchBooks(words: string[]): BookRow[] {
   })
 }
 
-const runSearch = useDebounceFn((q: string) => {
-  if (q.trim().length < 2) {
-    filteredBooks.value = []
+// Union of all committed tokens + current input text (if long enough)
+function computeFilteredBooks(tokens: string[], currentInput: string): BookRow[] {
+  const allTokens = [
+    ...tokens,
+    ...(currentInput.trim().length >= 2 ? [currentInput.trim()] : []),
+  ]
+  if (!allTokens.length) return []
+  const seen = new Set<number>()
+  const result: BookRow[] = []
+  for (const token of allTokens) {
+    for (const book of matchBooks(token)) {
+      if (!seen.has(book.id)) {
+        seen.add(book.id)
+        result.push(book)
+      }
+    }
+  }
+  return result
+}
+
+const runSearch = useDebounceFn(() => {
+  filteredBooks.value = computeFilteredBooks(props.atFilters, inputText.value)
+}, 150)
+
+watch([() => props.atFilters, inputText], () => runSearch(), { immediate: true })
+
+// ── Token management ──────────────────────────────────────────────────────────
+
+function commitInput() {
+  const text = inputText.value.trim()
+  if (!text) return
+  emit('update:atFilters', [...props.atFilters, text])
+  inputText.value = ''
+}
+
+function removeToken(index: number) {
+  const next = props.atFilters.filter((_, i) => i !== index)
+  emit('update:atFilters', next)
+  nextTick(() => searchInputRef.value?.focus())
+}
+
+function onInputKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter' || e.key === '@') {
+    e.preventDefault()
+    commitInput()
     return
   }
-  filteredBooks.value = matchBooks(toWords(q))
-}, 200)
-
-watch(() => props.filterBookQuery, (q) => runSearch(q), { immediate: true })
+  if (e.key === 'Backspace' && inputText.value === '' && props.atFilters.length > 0) {
+    e.preventDefault()
+    removeToken(props.atFilters.length - 1)
+    return
+  }
+  if (e.key === 'ArrowDown' || e.key === 'Tab') {
+    e.preventDefault()
+    bookListRef.value?.focusList()
+    return
+  }
+  if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    bookListRef.value?.focusList()
+    return
+  }
+  if (e.key === 'Escape') {
+    e.preventDefault()
+    emit('close')
+  }
+}
 </script>
 
 <template>
-  <div class="panel" @keydown.esc="emit('close')">
+  <div class="panel" @keydown.esc.stop="emit('close')">
     <div class="panel-header">
       <div
         class="header-check"
@@ -99,37 +186,41 @@ watch(() => props.filterBookQuery, (q) => runSearch(q), { immediate: true })
           :has-searched="hasSearched"
           @toggle-book="emit('toggleBook', $event)"
         />
-        <template v-else>
-          <div class="tree-scroll">
-            <SearchFilterNode
-              v-for="cat in booksStore.ROOT.children"
-              :key="cat.id"
-              :category="cat"
-              :checked-book-ids="checkedBookIds"
-              :result-counts="resultCounts"
-              :has-searched="hasSearched"
-              @toggle-book="emit('toggleBook', $event)"
-              @toggle-category="(c, v) => emit('toggleCategory', c, v)"
-            />
-          </div>
-        </template>
+        <div v-else class="tree-scroll">
+          <SearchFilterNode
+            v-for="cat in booksStore.ROOT.children"
+            :key="cat.id"
+            :category="cat"
+            :checked-book-ids="checkedBookIds"
+            :result-counts="resultCounts"
+            :has-searched="hasSearched"
+            @toggle-book="emit('toggleBook', $event)"
+            @toggle-category="(c, v) => emit('toggleCategory', c, v)"
+          />
+        </div>
       </template>
     </div>
 
     <div class="panel-search">
       <div class="search-inner">
+        <span
+          v-for="(token, i) in atFilters"
+          :key="i"
+          class="token-pill"
+        >
+          {{ token }}
+          <button class="pill-remove" @click.stop="removeToken(i)">
+            <IconDismiss12Regular />
+          </button>
+        </span>
         <input
           ref="searchInputRef"
-          type="search"
+          v-model="inputText"
+          type="text"
           name="filter-book-search"
           class="search-input"
-          placeholder="חיפוש ספר..."
-          :value="filterBookQuery"
-          @input="emit('update:filterBookQuery', ($event.target as HTMLInputElement).value)"
-          @keydown.down.prevent="bookListRef?.focusList()"
-          @keydown.up.prevent="bookListRef?.focusList()"
-          @keydown.tab.prevent="bookListRef?.focusList()"
-          @keydown.esc.prevent="emit('close')"
+          :placeholder="atFilters.length ? '' : placeholder"
+          @keydown="onInputKeydown"
         />
       </div>
     </div>
@@ -180,21 +271,11 @@ watch(() => props.filterBookQuery, (q) => runSearch(q), { immediate: true })
   font-size: 11px;
   color: var(--accent-color);
 }
-.check-mark {
-  display: none;
-}
-.dash-mark {
-  display: none;
-}
-.header-check.checked .check-mark {
-  display: block;
-}
-.header-check.indet .dash-mark {
-  display: block;
-}
-.panel-title {
-  flex: 1;
-}
+.check-mark { display: none; }
+.dash-mark  { display: none; }
+.header-check.checked .check-mark { display: block; }
+.header-check.indet   .dash-mark  { display: block; }
+.panel-title { flex: 1; }
 .close-btn {
   display: flex;
   align-items: center;
@@ -226,26 +307,58 @@ watch(() => props.filterBookQuery, (q) => runSearch(q), { immediate: true })
 .search-inner {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
   padding: 4px 8px;
   border-radius: 999px;
   background: var(--input-bg);
   border: 1px solid var(--border-color);
+  min-height: 26px;
+  cursor: text;
+}
+.search-inner:focus-within {
+  border-color: var(--accent-color);
+}
+.token-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 5px 0 4px;
+  height: 18px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-color) 18%, transparent);
+  color: var(--accent-color);
+  font-size: 11px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.pill-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  color: var(--accent-color);
+  opacity: 0.7;
+  padding: 0;
+}
+.pill-remove:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--accent-color) 25%, transparent);
 }
 .search-input {
   flex: 1;
-  width: 0;
-  min-width: 0;
+  min-width: 60px;
   background: none;
   border: none;
   outline: none;
   font-size: 12px;
   color: var(--text-primary);
   direction: rtl;
+  padding: 0;
 }
 .search-input::placeholder {
   color: var(--text-secondary);
-}
-.search-input::-webkit-search-cancel-button {
-  filter: grayscale(1) opacity(0.4);
 }
 </style>

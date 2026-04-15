@@ -56,6 +56,7 @@ export function useAppNavigation() {
     }
     if (label === 'בחר מסד נתונים') {
       window.__webviewPickDbPath?.()
+      return
     }
   }
 

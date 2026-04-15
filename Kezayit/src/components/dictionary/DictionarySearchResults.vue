@@ -5,6 +5,14 @@ import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 import { IconOpen20Regular } from '@iconify-prerendered/vue-fluent'
 import type { DictEntry, DictEntryContent } from './useDictionarySearch'
 import DictionaryEntryView from './DictionaryEntryView.vue'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { censorDivineNames } from '@/utils/censorDivineNames'
+
+const settingsStore = useSettingsStore()
+
+function maybeFilter(text: string): string {
+  return settingsStore.censorDivineNames ? censorDivineNames(text) : text
+}
 
 const props = defineProps<{
   results: DictEntry[]
@@ -64,7 +72,8 @@ function bookPreview(entry: DictEntry): string {
     .replace(/<[^>]+>/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-  return plain.length > 120 ? plain.slice(0, 120) + '…' : plain
+  const preview = plain.length > 120 ? plain.slice(0, 120) + '…' : plain
+  return maybeFilter(preview)
 }
 
 /** Whether this entry has inline content to show (non-book types) */

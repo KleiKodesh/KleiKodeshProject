@@ -19,34 +19,28 @@ import { useTilesKeys } from '@/composables/useTileGridKeys'
 import { dateInfo, loadDateInfo } from './useHomeDateInfo'
 import { navigateToDafYomi } from './useDafYomiNavigation'
 import { useTabStore } from '@/stores/tabStore'
-import { useOnlineStatus } from '@/utils/useOnlineStatus'
 
 const { navigate } = useAppNavigation()
 const tabStore = useTabStore()
-const isOnline = useOnlineStatus()
 
-const baseTiles = computed(() => [
-  { label: 'ספרים', icon: IconLibrary24Filled, color: '#B5451B' },
-  { label: 'חיפוש', icon: IconSearchSparkle24 },
-  { label: 'פתח קובץ', icon: IconFolder24Filled, color: '#f0a500' },
-  { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#D94F1E' },
-  ...(isOnline.value ? [{ label: 'מילון', icon: IconBookLetter24Filled, color: '#7b5ea7' }] : []),
-  { label: 'לוח שנה', icon: IconCalendarRtl24Filled, color: '#2e7d32' },
-  { label: 'מידות ושיעורים', icon: IconRuler24Filled, color: '#8b6914' },
-  { label: 'סביבות עבודה', icon: IconApps24Filled, color: '#6b7fc4' },
-  { label: 'הגדרות', icon: IconSettings24 },
-])
-
-const noDbTiles = [
-  { label: 'התקן כזית', icon: IconArrowDownload24Filled, color: '#B5451B' },
-  { label: 'בחר מסד נתונים', icon: IconDatabase24Filled, color: '#3478f6' },
-  { label: 'פתח קובץ', icon: IconFolder24Filled, color: '#f0a500' },
-  { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#D94F1E' },
-  { label: 'סביבות עבודה', icon: IconApps24Filled, color: '#6b7fc4' },
-  { label: 'הגדרות', icon: IconSettings24 },
-]
-
-const tiles = computed(() => (isHosted && !dbReady.value ? noDbTiles : baseTiles.value))
+const tiles = computed(() => {
+  const dbMissing = isHosted && !dbReady.value
+  return [
+    dbMissing
+      ? { label: 'התקן כזית', icon: IconArrowDownload24Filled, color: '#B5451B' }
+      : { label: 'ספרים', icon: IconLibrary24Filled, color: '#B5451B' },
+    dbMissing
+      ? { label: 'בחר מסד נתונים', icon: IconDatabase24Filled, color: '#3478f6' }
+      : { label: 'חיפוש', icon: IconSearchSparkle24 },
+    { label: 'פתח קובץ', icon: IconFolder24Filled, color: '#f0a500' },
+    { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#D94F1E' },
+    { label: 'מילון', icon: IconBookLetter24Filled, color: '#7b5ea7' },
+    { label: 'לוח שנה', icon: IconCalendarRtl24Filled, color: '#2e7d32' },
+    { label: 'מידות ושיעורים', icon: IconRuler24Filled, color: '#8b6914' },
+    { label: 'סביבות עבודה', icon: IconApps24Filled, color: '#6b7fc4' },
+    { label: 'הגדרות', icon: IconSettings24 },
+  ]
+})
 
 const pageRef = ref<HTMLElement | null>(null)
 

@@ -1,12 +1,25 @@
 import { ref, watch } from 'vue'
-import { useDebounceFn } from '@vueuse/core'
-import { normalize } from '@/utils/normalizeText'
 import { query } from '@/host/db'
 import { SQL } from '@/host/queries.sql'
+import { normalize } from '@/utils/normalizeText'
 import { useTabStore } from '@/stores/tabStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import type { BloomSearchResult } from './searchTypes'
 import type { CategoryNode } from '@/components/books-fs/booksCategoryTree'
+
+// ── Query parsing ─────────────────────────────────────────────────────────────
+
+/**
+ * Splits a raw search input on `@` separators.
+ * "some words @ בראשית @ בבלי" → { term: "some words", atFilters: ["בראשית", "בבלי"] }
+ * Whitespace around `@` and around each token is trimmed.
+ */
+export function parseSearchQuery(raw: string): { term: string; atFilters: string[] } {
+  const parts = raw.split('@').map((p) => p.trim())
+  const term = parts[0] ?? ''
+  const atFilters = parts.slice(1).filter((p) => p.length > 0)
+  return { term, atFilters }
+}
 
 export function useSearch(
   results: () => BloomSearchResult[],
@@ -19,8 +32,11 @@ export function useSearch(
 
   const searchQuery = ref('')
   const isFilterOpen = ref(false)
-  const filterBookQuery = ref('')
   const checkedBookIds = ref<Set<number>>(new Set())
+  // @ tokens — shared between the main search bar and the filter panel search input.
+  // Each token is matched against the full book catalog; results are unioned,
+  // then intersected with checkedBookIds to produce effectiveBookIds.
+  const atFilters = ref<string[]>([])
 
   // Plain refs — never computeds. Updated only when filter/checkboxes change,
   // not on every streaming batch.
@@ -31,6 +47,10 @@ export function useSearch(
 
   // ── Core filter logic ────────────────────────────────────────────────────────
 
+  /**
+   * Returns the subset of `checked` whose books match the query `q`.
+   * If q is too short to be meaningful, returns `checked` unchanged.
+   */
   function matchBookIds(q: string, checked: Set<number>): Set<number> {
     const trimmed = q.trim()
     if (trimmed.length < 2) return checked
@@ -53,36 +73,55 @@ export function useSearch(
     return result
   }
 
+  /**
+   * Computes the union of books matching any of the @ tokens, searched against
+   * the full book catalog. Returns null when there are no tokens (no restriction).
+   */
+  function atFilterIds(tokens: string[]): Set<number> | null {
+    if (!tokens.length) return null
+    const allIds = new Set(booksStore.allBooks.map((b) => b.id))
+    const union = new Set<number>()
+    for (const token of tokens) {
+      for (const id of matchBookIds(token, allIds)) union.add(id)
+    }
+    return union
+  }
+
+  /**
+   * Computes the final effective book ID set:
+   * 1. Start with checkedBookIds (user's manual checkbox selection)
+   * 2. Intersect with the union of all @ token matches (if any tokens present)
+   */
+  function computeEffectiveIds(checked: Set<number>, tokens: string[]): Set<number> {
+    const atIds = atFilterIds(tokens)
+    if (!atIds) return checked
+    const result = new Set<number>()
+    for (const id of checked) if (atIds.has(id)) result.add(id)
+    return result
+  }
+
   function applyFilter(ids: Set<number>) {
     const raw = results()
-    const allChecked = filterBookQuery.value.trim().length < 2 && ids.size === booksStore.allBooks.length
-    filteredResults.value = allChecked ? raw : raw.filter((r) => ids.has(r.bookId))
+    const isEffectivelyAll = atFilters.value.length === 0 && ids.size === booksStore.allBooks.length
+    filteredResults.value = isEffectivelyAll ? raw : raw.filter((r) => ids.has(r.bookId))
     const m = new Map<number, number>()
     for (const r of raw) m.set(r.bookId, (m.get(r.bookId) ?? 0) + 1)
     resultCounts.value = m
   }
 
-  function updateFilter(q: string, checked: Set<number>) {
-    const ids = matchBookIds(q, checked)
+  function updateFilter(checked: Set<number>, tokens: string[]) {
+    const ids = computeEffectiveIds(checked, tokens)
     effectiveBookIds.value = ids
     applyFilter(ids)
   }
 
-  const runFilterDebounce = useDebounceFn((q: string) => {
-    updateFilter(q, checkedBookIds.value)
-  }, 200)
+  // Checkbox change → immediate
+  watch(checkedBookIds, (checked) => updateFilter(checked, atFilters.value))
 
-  // Query typing → debounce the scan; clear immediately if < 2 chars
-  watch(filterBookQuery, (q) => {
-    if (q.trim().length < 2) updateFilter(q, checkedBookIds.value)
-    else runFilterDebounce(q)
-  })
+  // @ tokens change → immediate
+  watch(atFilters, (tokens) => updateFilter(checkedBookIds.value, tokens))
 
-  // Checkbox change → immediate (no typing, no debounce needed)
-  watch(checkedBookIds, (checked) => updateFilter(filterBookQuery.value, checked))
-
-  // Results streaming → re-apply current filter to new results
-  // ids are already known — just a Set lookup, no book scan
+  // Results streaming → re-apply current filter (ids already known, just a Set lookup)
   watch(() => results(), () => applyFilter(effectiveBookIds.value))
 
   // ── Public mutations ─────────────────────────────────────────────────────────
@@ -97,7 +136,12 @@ export function useSearch(
 
   function setCheckedBookIds(ids: Set<number>) {
     checkedBookIds.value = ids
+    effectiveBookIds.value = computeEffectiveIds(ids, atFilters.value)
     initialized.value = true
+  }
+
+  function setAtFilters(tokens: string[]) {
+    atFilters.value = tokens
   }
 
   function toggleBook(bookId: number) {
@@ -131,6 +175,7 @@ export function useSearch(
   function handleClearSearch() {
     clearSearch()
     searchQuery.value = ''
+    atFilters.value = []
     tabStore.updateActiveTab({ title: 'חיפוש' })
   }
 
@@ -160,12 +205,13 @@ export function useSearch(
   return {
     searchQuery,
     isFilterOpen,
-    filterBookQuery,
     checkedBookIds,
+    atFilters,
     filteredResults,
     resultCounts,
     initCheckedBooks,
     setCheckedBookIds,
+    setAtFilters,
     toggleBook,
     toggleCategory,
     checkAll,

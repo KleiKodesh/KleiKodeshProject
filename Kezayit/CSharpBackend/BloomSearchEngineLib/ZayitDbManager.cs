@@ -38,11 +38,24 @@ public sealed class ZayitDbManager : IDisposable
         catch (Exception ex) { Console.WriteLine("[ZayitDbManager] GetLineCount: " + ex.Message); return 0; }
     }
 
-    public IEnumerable<(int id, string content)> GetAllLineContents()
+    public IEnumerable<(int id, string content)> GetAllLineContents(int afterLineId = 0)
     {
         SQLiteCommand cmd = null;
         SQLiteDataReader reader = null;
-        try { cmd = _connection.CreateCommand(); cmd.CommandText = "SELECT id, content FROM line ORDER BY id"; reader = cmd.ExecuteReader(); }
+        try
+        {
+            cmd = _connection.CreateCommand();
+            if (afterLineId > 0)
+            {
+                cmd.CommandText = "SELECT id, content FROM line WHERE id > @after ORDER BY id";
+                cmd.Parameters.AddWithValue("@after", afterLineId);
+            }
+            else
+            {
+                cmd.CommandText = "SELECT id, content FROM line ORDER BY id";
+            }
+            reader = cmd.ExecuteReader();
+        }
         catch (Exception ex) { Console.WriteLine("[ZayitDbManager] GetAllLineContents: " + ex.Message); cmd?.Dispose(); yield break; }
         using (reader) using (cmd) { while (reader.Read()) yield return (reader.GetInt32(0), reader.GetString(1)); }
     }

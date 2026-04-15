@@ -72,7 +72,7 @@ Multi-instance routes (`/book-view`, `/search`, `/pdf-view`) can have multiple t
 
 ### home/
 
-Home page with 6 navigation tiles: Books, Search, Open File, HebrewBooks, Workspaces, Settings.
+Home page navigation tiles. The tile list in `HomePage.vue` and the menu list in `AppTitleBarNavDropdown.vue` are the two entry points to the same set of destinations — they must always be kept in sync. When adding, removing, or renaming a navigation destination, update both files. The home page uses `navigate()` (navigates in the active tab); the nav dropdown uses `navigateInNewTab()` (always opens a new tab). Neither list is derived from the other — they are maintained in parallel.
 
 - `HomePage.vue`, `HomePageTile.vue`
 
@@ -174,6 +174,8 @@ App shell components.
 
 - `AppTitleBar.vue`, `AppPageView.vue`, `AppTitleBarTabDropdown.vue`, `AppTitleBarNavDropdown.vue`
 
+`AppTitleBarNavDropdown` is the hamburger nav menu. Its destination list mirrors the tiles in `HomePage.vue` — see the `home/` section for the sync rule.
+
 ### common/
 
 Shared reusable components used across features.
@@ -241,7 +243,9 @@ C# host actions for file operations. All functions have dev fallbacks.
 
 ### queries.sql.ts
 
-All raw SQL strings live here. No inline SQL anywhere else in the codebase.
+All raw SQL strings for the frontend live here. No inline SQL anywhere else in the Vue/TypeScript codebase — every query a composable or store needs must be added to this file and imported from it.
+
+The one exception is `ZayitDbManager.cs` in the C# backend, which owns the SQL used exclusively by the Bloom filter pipeline (indexing and search result hydration). That SQL never crosses into the frontend and is not duplicated in `queries.sql.ts`. No other C# file may contain inline SQL — `DbHandler.cs` is a passthrough that executes whatever SQL the frontend sends; it has no queries of its own.
 
 ## Utilities (`src/utils/`)
 

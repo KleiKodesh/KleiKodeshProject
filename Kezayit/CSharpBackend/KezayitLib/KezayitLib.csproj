@@ -98,6 +98,7 @@
     <Compile Include="AppViewer.cs">
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Include="Diagnostics\EnvironmentDiagnostics.cs" />
     <Compile Include="SplashOverlay.cs">
       <SubType>Component</SubType>
     </Compile>

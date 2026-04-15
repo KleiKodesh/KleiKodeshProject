@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useIntervalFn } from '@vueuse/core'
 import {
   IconSearch20Regular,
   IconDismiss20Regular,
@@ -11,6 +12,7 @@ const props = defineProps<{
   searchQuery: string
   isSearching: boolean
   filterCount: number
+  atFilterCount: number
   disabled?: boolean
 }>()
 const emit = defineEmits<{
@@ -27,11 +29,37 @@ const localQuery = ref(props.searchQuery)
 
 watch(
   () => props.searchQuery,
-  (v) => {
-    localQuery.value = v
-  },
+  (v) => { localQuery.value = v },
 )
 watch(localQuery, (v) => emit('update:searchQuery', v))
+
+// ── Animated placeholder ──────────────────────────────────────────────────────
+
+const PLACEHOLDERS = [
+  'הזן טקסט לחיפוש...',
+  'הוסף @ לסינון לפי ספר או קטגוריה',
+  'שויתי לנגדי תמיד',
+  'כי ביצחק @רשי @ רמבן',
+  'איסתרא בלגינא @ בבלי',
+]
+const placeholder = ref(PLACEHOLDERS[0]!)
+let phraseIdx = 0, charIdx = 0, pauseTicks = 0
+
+const { pause: pauseTyping, resume: resumeTyping } = useIntervalFn(() => {
+  if (pauseTicks > 0) { pauseTicks--; return }
+  const target = PLACEHOLDERS[phraseIdx]!
+  if (charIdx < target.length) {
+    placeholder.value = target.slice(0, ++charIdx)
+  } else {
+    pauseTicks = 12
+    phraseIdx = (phraseIdx + 1) % PLACEHOLDERS.length
+    charIdx = 0
+  }
+}, 80)
+
+watch(localQuery, (v) => (v ? pauseTyping() : resumeTyping()))
+
+// ── Actions ───────────────────────────────────────────────────────────────────
 
 function handleSearch() {
   if (localQuery.value.trim()) emit('search', localQuery.value)
@@ -51,7 +79,7 @@ defineExpose({ focus: () => inputRef.value?.focus(), filterBtnRef })
       <button
         ref="filterBtnRef"
         class="bar-btn"
-        :class="{ 'filter-active': filterCount > 0 }"
+        :class="{ 'filter-active': filterCount > 0 || atFilterCount > 0 }"
         :title="filterCount > 0 ? `סינון: ${filterCount} ספרים` : 'סינון תוצאות'"
         @click.stop="$emit('toggleFilter')"
       >
@@ -64,7 +92,7 @@ defineExpose({ focus: () => inputRef.value?.focus(), filterBtnRef })
       type="text"
       name="full-text-search"
       class="search-input"
-      placeholder="הזן טקסט לחיפוש..."
+      :placeholder="placeholder"
       :disabled="disabled"
       @keydown.enter="handleSearch"
       @keydown.esc="handleClear"

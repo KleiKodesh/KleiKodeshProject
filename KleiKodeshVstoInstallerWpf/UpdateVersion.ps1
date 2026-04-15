@@ -1,7 +1,9 @@
 param(
     [string]$FilePath,
     [ValidateSet("major", "minor", "patch")]
-    [string]$IncrementType = "patch"
+    [string]$IncrementType = "patch",
+    # When set, skip GitHub fetch and use this exact version (e.g. "v3.5.0")
+    [string]$ManualVersion
 )
 
 # Derive sibling paths from $FilePath (which points to AddinInstaller.cs)
@@ -40,6 +42,23 @@ function Update-AllVersionTargets($newVersion) {
 }
 
 try {
+    # ── Manual version path ──────────────────────────────────────────────────
+    if ($ManualVersion) {
+        # Normalise: ensure leading 'v'
+        if ($ManualVersion -notmatch '^v') { $ManualVersion = "v$ManualVersion" }
+
+        if ($ManualVersion -notmatch '^v\d+\.\d+\.\d+$') {
+            Write-Host "ERROR: ManualVersion '$ManualVersion' is not valid semver (expected vX.Y.Z)" -ForegroundColor Red
+            exit 1
+        }
+
+        Write-Host "Using manually specified version: $ManualVersion" -ForegroundColor Cyan
+        Update-AllVersionTargets $ManualVersion
+        Write-Host "Version updated successfully to $ManualVersion"
+        exit 0
+    }
+
+    # ── Auto-increment path ──────────────────────────────────────────────────
     Write-Host "Getting latest version from GitHub..."
 
     $latestVersion = (Invoke-RestMethod `

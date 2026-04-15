@@ -1,8 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { DictEntryContent } from './useDictionarySearch'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { censorDivineNames } from '@/utils/censorDivineNames'
 
 const props = defineProps<{ entry: DictEntryContent }>()
+
+const settings = useSettingsStore()
+
+function maybeFilter(text: string): string {
+  return settings.censorDivineNames ? censorDivineNames(text) : text
+}
 
 interface Sense {
   nikud: string | null
@@ -59,14 +67,14 @@ const isHtml = computed(() => props.entry.html.includes('<') && props.entry.html
     <!-- Abbreviation expansion -->
     <div v-else-if="entry.type === 'abbrev'" class="entry-abbrev">
       <div v-for="(sense, i) in senses" :key="i" class="abbrev-sense">
-        <span v-if="sense.expansion" class="abbrev-expansion">{{ sense.expansion }}</span>
-        <span v-if="sense.text" class="abbrev-rest">{{ sense.text }}</span>
+        <span v-if="sense.expansion" class="abbrev-expansion">{{ maybeFilter(sense.expansion) }}</span>
+        <span v-if="sense.text" class="abbrev-rest">{{ maybeFilter(sense.text) }}</span>
       </div>
     </div>
 
     <!-- HTML book entry -->
     <div v-else-if="isHtml" class="entry-html-body">
-      <div v-for="(sense, i) in senses" :key="i" class="sense-html" v-html="sense.text" />
+      <div v-for="(sense, i) in senses" :key="i" class="sense-html" v-html="maybeFilter(sense.text)" />
     </div>
 
     <!-- Regular senses (aramaic / wiktionary) -->
@@ -76,7 +84,7 @@ const isHtml = computed(() => props.entry.html.includes('<') && props.entry.html
         <span v-if="sense.nikud && sense.nikud !== entry.nikud" class="sense-nikud">
           {{ sense.nikud }}
         </span>
-        <span class="sense-text">{{ sense.text }}</span>
+        <span class="sense-text">{{ maybeFilter(sense.text) }}</span>
       </div>
     </div>
   </div>

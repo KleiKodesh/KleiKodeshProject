@@ -1,5 +1,6 @@
 using KezayitLib.Bridge;
 using KezayitLib.Db;
+using KezayitLib.Diagnostics;
 using KezayitLib.HebrewBooks;
 using KezayitLib.Pdf;
 using KezayitLib.Search;
@@ -151,9 +152,11 @@ namespace KezayitLib
             string savedPath = AppSettings.LoadDbPath();
             bool dbReady = File.Exists(savedPath);
             string escapedPath = savedPath.Replace("\\", "\\\\");
-            _dbInjectionScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+            string dbScript =
                 "window.__webviewDbPath=\"" + escapedPath + "\";" +
-                "window.__webviewDbReady=" + (dbReady ? "true" : "false") + ";");
+                "window.__webviewDbReady=" + (dbReady ? "true" : "false") + ";";
+            _dbInjectionScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                JsBridge.Script + "\n" + dbScript);
 
             // Re-init the DB handler; keep the existing search handler and its index state
             _db = new DbHandler(_bridge, _webView, savedPath);
@@ -206,6 +209,7 @@ namespace KezayitLib
                             _search.HandleConfirmReindex(confirm, id);
                             break;
                         case "TogglePopOut": HandleTogglePopOut(id); break;                        case "getFonts": HandleGetFonts(id); break;
+                        case "getDiagnostics": HandleGetDiagnostics(id); break;
                         default: _bridge.Reply(id, new { error = "Unknown action: " + action }); break;
                     }
                 }
@@ -242,6 +246,12 @@ namespace KezayitLib
                 GlyphTypeface glyph;
                 return typeface.TryGetGlyphTypeface(out glyph) && glyph.CharacterToGlyphMap.ContainsKey('א');
             });
+        }
+
+        private void HandleGetDiagnostics(string id)
+        {
+            var report = EnvironmentDiagnostics.Collect();
+            _bridge.Reply(id, new { diagnostics = report });
         }
 
         private async Task HandleDictSql(JsonElement root, string id, DbAccess db)

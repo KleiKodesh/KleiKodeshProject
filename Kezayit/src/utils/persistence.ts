@@ -53,8 +53,8 @@ export function lsClearAll(): void {
 export interface TabState {
   searchScrollIndex?: number
   searchScrollOffset?: number
-  searchFilterQuery?: string
-  searchCheckedBookIds?: number[] // null/absent means "all checked" (default)
+  searchCheckedBookIds?: number[] // absent/null means "all checked" (default)
+  searchAtFilters?: string[]      // @ tokens from the search input, e.g. ["בראשית", "בבלי"]
 }
 
 export interface BookState {

@@ -87,6 +87,12 @@ export function useIndexingStatus() {
         callAction('ConfirmReindex', { confirm: rebuild }).catch(() => {})
         return
       }
+      if (msg.event === 'bloomIndexInvalidated') {
+        // Old or corrupt index format detected — rebuild started automatically, nothing to confirm.
+        console.warn('[useIndexingStatus] Bloom index invalidated:', msg.reason)
+        state.value = { ...IDLE, isIndexing: true, totalChunks: 0, eta: '' }
+        return
+      }
       if (msg.event !== 'bloomIndexProgress') return
       state.value = {
         isReady: msg.isReady as boolean,

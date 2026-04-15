@@ -2,6 +2,14 @@
 import { computed } from 'vue'
 import { IconOpen20Regular } from '@iconify-prerendered/vue-fluent'
 import type { DictEntry, DictEntryContent } from './useDictionarySearch'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { censorDivineNames as censorNames } from '@/utils/censorDivineNames'
+
+const settingsStore = useSettingsStore()
+
+function maybeFilter(text: string): string {
+  return settingsStore.censorDivineNames ? censorNames(text) : text
+}
 
 const props = defineProps<{
   results: DictEntry[]
@@ -211,21 +219,21 @@ function getContent(entry: DictEntry): DictEntryContent | null | undefined {
           <template v-else-if="entry.type === 'abbrev'">
             <div v-for="(sense, si) in parseSenses(entry)" :key="si" class="dict-abbrev-sense">
               <span v-if="sense.expansion" class="dict-abbrev-expansion">{{
-                sense.expansion
+                maybeFilter(sense.expansion)
               }}</span>
-              <span v-if="sense.text" class="dict-abbrev-rest">{{ sense.text }}</span>
+              <span v-if="sense.text" class="dict-abbrev-rest">{{ maybeFilter(sense.text) }}</span>
             </div>
           </template>
 
           <div
             v-else-if="isHtml(entry) && getContent(entry)"
             class="dict-html-body"
-            v-html="getContent(entry)!.html.replace(/\n/g, '<br>')"
+            v-html="maybeFilter(getContent(entry)!.html.replace(/\n/g, '<br>'))"
           />
           <div
             v-else-if="isHtml(entry)"
             class="dict-html-body"
-            v-html="(entry.definition ?? '').replace(/\n/g, '<br>')"
+            v-html="maybeFilter((entry.definition ?? '').replace(/\n/g, '<br>'))"
           />
 
           <template v-else>
@@ -233,7 +241,7 @@ function getContent(entry: DictEntry): DictEntryContent | null | undefined {
               <template v-for="(sense, si) in parseSenses(entry)" :key="si">
                 <span v-if="si > 0" class="dict-sense-sep"> · </span>
                 <span v-if="sense.nikud" class="dict-sense-nikud-paren">({{ sense.nikud }})</span>
-                <span class="dict-sense-text">{{ sense.text }}</span>
+                <span class="dict-sense-text">{{ maybeFilter(sense.text) }}</span>
               </template>
             </div>
           </template>

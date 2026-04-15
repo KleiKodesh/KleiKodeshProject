@@ -3,7 +3,6 @@ import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { IconSearchSparkle24Regular } from '@iconify-prerendered/vue-fluent'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { useTabStore } from '@/stores/tabStore'
 import { useEventListener } from '@vueuse/core'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
@@ -19,11 +18,12 @@ const props = defineProps<{
   initialScrollOffset?: number
 }>()
 
-const emit = defineEmits<{ resultClick: [BloomSearchResult]; scrolled: [number] }>()
+const emit = defineEmits<{
+  resultClick: [BloomSearchResult]
+  saveScroll: [{ scrollIndex: number; scrollOffset: number }]
+}>()
 
 const settingsStore = useSettingsStore()
-const tabStore = useTabStore()
-const tabId = tabStore.activeTabId
 const scrollEl = ref<HTMLElement | null>(null)
 let programmaticScrolling = false
 
@@ -59,22 +59,29 @@ function captureScrollPos() {
 function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
   // Two-rAF pattern: scrollToIndex triggers TanStack's internal correction.
   // Wait one rAF for it to settle, then set scrollTop directly — TanStack is idle by then.
+  console.log('[search-scroll] restoreScrollPos called — index:', scrollIndex, 'offset:', scrollOffset)
   programmaticScrolling = true
   virtualizer.value.scrollToIndex(scrollIndex, { align: 'start' })
   requestAnimationFrame(() => {
     const item = virtualizer.value.measurementsCache.find((m) => m.index === scrollIndex)
+    console.log('[search-scroll] rAF1 — measurementsCache item:', item, '| scrollEl:', !!scrollEl.value)
     if (item && scrollEl.value) scrollEl.value.scrollTop = item.start + scrollOffset
     requestAnimationFrame(() => {
+      console.log('[search-scroll] rAF2 — programmaticScrolling cleared, final scrollTop:', scrollEl.value?.scrollTop)
       programmaticScrolling = false
     })
   })
 }
 
 {
+  // Restore scroll once results are populated — don't gate on isSearching because
+  // loadCachedResults can set isSearching=true while simultaneously populating results
+  // (partial cache + resume stream). We restore as soon as we have results to scroll into.
   const stopWatch = watch(
     () => props.results.length,
     (len) => {
-      if (!len || props.isSearching) return
+      console.log('[search-scroll] results.length watch fired — len:', len, '| initialScrollIndex prop:', props.initialScrollIndex, '| isSearching:', props.isSearching)
+      if (!len) return
       if (props.initialScrollIndex == null) {
         stopWatch()
         return
@@ -89,11 +96,9 @@ function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
 function savePos() {
   if (programmaticScrolling) return
   const pos = captureScrollPos()
-  if (pos)
-    tabStore.setTabViewState(tabId, {
-      searchScrollIndex: pos.scrollIndex,
-      searchScrollOffset: pos.scrollOffset,
-    })
+  if (!pos) return
+  console.log('[search-scroll] savePos emitting:', pos)
+  emit('saveScroll', pos)
 }
 
 useEventListener(document, 'visibilitychange', () => {
@@ -101,7 +106,6 @@ useEventListener(document, 'visibilitychange', () => {
 })
 useEventListener(window, 'beforeunload', savePos)
 onBeforeUnmount(() => {
-  // Force-clear the programmatic flag so savePos is never silently skipped at unmount.
   programmaticScrolling = false
   savePos()
 })
@@ -114,6 +118,8 @@ useVirtualScrollerKeys(
 )
 
 function onScroll() {}
+
+defineExpose({ captureScrollPos })
 </script>
 
 <template>

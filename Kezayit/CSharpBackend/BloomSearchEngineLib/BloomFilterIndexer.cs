@@ -16,12 +16,6 @@ namespace BloomSearchEngineLib
 
         public event EventHandler<IndexProgressChangedEventArgs> IndexProgressChanged;
 
-        /// <summary>
-        /// Called after each chunk is committed: (lastLineId, chunkCount).
-        /// Allows the caller to persist a resume sentinel without creating a circular dependency.
-        /// </summary>
-        public Action<int, int> OnChunkCommitted;
-
         public BloomFilterIndexer(string id = "lines", short chunkSize = 100, double falsePositiveRate = 0.01, string dbPath = null)
         {
             _id = id; _chunkSize = chunkSize; _fpRate = falsePositiveRate; _dbPath = dbPath;
@@ -34,8 +28,7 @@ namespace BloomSearchEngineLib
         /// </summary>
         public void CreateBloomFilters(int resumeAfterLineId = 0, int resumeChunkCount = 0)
         {
-            Console.WriteLine("[BloomFilterIndexer] CreateBloomFilters called, dbPath=" + _dbPath
-                + " resumeAfterLineId=" + resumeAfterLineId + " resumeChunkCount=" + resumeChunkCount);
+            Console.WriteLine("[BloomFilterIndexer] CreateBloomFilters called, resumeAfterLineId=" + resumeAfterLineId + " resumeChunkCount=" + resumeChunkCount);
             CancellationToken ct;
             if (!BloomIndexingCoordinator.TryAcquireIndexingLock(0, out ct))
             {
@@ -45,7 +38,7 @@ namespace BloomSearchEngineLib
             try
             {
                 using (var db = new ZayitDbManager(_dbPath))
-                using (var writer = new BloomFilterCollectionWriter(_id, _chunkSize, resumeChunkCount))
+                using (var writer = new BloomFilterCollectionWriter(_id, _chunkSize, resumeChunkCount, resumeAfterLineId))
                 {
                     Console.WriteLine("[BloomFilterIndexer] ZayitDbManager created, connection=" + (db._connection == null ? "NULL" : "OK"));
                     if (db._connection == null || db._connection.IsCanceled())
@@ -57,14 +50,12 @@ namespace BloomSearchEngineLib
                     int totalLines = db.GetLineCount();
                     int totalChunks = (totalLines + _chunkSize - 1) / _chunkSize;
                     Console.WriteLine("[BloomFilterIndexer] totalLines=" + totalLines + " totalChunks=" + totalChunks);
+
                     var sw = Stopwatch.StartNew();
                     var lastReport = sw.Elapsed;
                     var chunk = new List<string>(_chunkSize);
-                    // Start processed count from already-committed chunks so progress % is correct
                     int processed = resumeChunkCount;
-                    bool isResuming = resumeChunkCount > 0;
                     var extractor = new TermExtractor();
-                    // Use int.MinValue as "not set" sentinel — safe since no real line ID will be that low
                     const int NotSet = int.MinValue;
                     int chunkFirstId = NotSet, chunkLastId = NotSet;
 
@@ -74,8 +65,6 @@ namespace BloomSearchEngineLib
                         var filter = new BloomFilter(Math.Max(1, terms.Count), _fpRate);
                         foreach (var t in terms) filter.Add(t);
                         writer.Commit(filter, chunkFirstId, chunkLastId);
-                        // Sentinel updated AFTER the chunk is fully written — mid-chunk kill redoes this chunk
-                        OnChunkCommitted?.Invoke(chunkLastId, writer.Count);
                         chunk.Clear();
                         chunkFirstId = NotSet; chunkLastId = NotSet;
                         processed++;
@@ -93,11 +82,9 @@ namespace BloomSearchEngineLib
                         }
                     }
 
-                    foreach (var (lineId, line) in db.GetAllLineContents())
+                    foreach (var (lineId, line) in db.GetAllLineContents(resumeAfterLineId))
                     {
                         if (ct.IsCancellationRequested) { Console.WriteLine("[BloomFilterIndexer] Cancelled during indexing"); return; }
-                        // Skip lines already committed in a previous run (only when resuming)
-                        if (isResuming && lineId <= resumeAfterLineId) continue;
                         if (chunkFirstId == NotSet) chunkFirstId = lineId;
                         chunkLastId = lineId;
                         chunk.Add(line);

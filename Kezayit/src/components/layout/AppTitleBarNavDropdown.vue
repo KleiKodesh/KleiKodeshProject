@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import {
   IconLibrary24Filled,
@@ -14,30 +15,28 @@ import { IconSettings24, IconSearchSparkle24 } from '@iconify-prerendered/vue-fl
 import { useAppNavigation } from '@/composables/useAppNavigation'
 import { isHosted } from '@/host/db'
 import { togglePopOut } from '@/host/bridge'
-import { useOnlineStatus } from '@/utils/useOnlineStatus'
 
 const emit = defineEmits<{ close: [] }>()
 
 const props = defineProps<{ toggleButtonEl?: HTMLElement | null }>()
 
 const { navigateInNewTab } = useAppNavigation()
-const isOnline = useOnlineStatus()
 
 const menuRef = ref<HTMLElement | null>(null)
 useDropdownClose(menuRef, () => emit('close'), {
   toggleButton: computed(() => props.toggleButtonEl ?? null),
 })
 
-const tiles = computed(() => [
+const tiles = [
   { label: 'ספרים', icon: IconLibrary24Filled, color: '#B5451B' },
   { label: 'חיפוש', icon: IconSearchSparkle24, color: undefined },
   { label: 'פתח קובץ', icon: IconFolder24Filled, color: '#f0a500' },
   { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#D94F1E' },
-  ...(isOnline.value ? [{ label: 'מילון', icon: IconBookLetter24Filled, color: '#7b5ea7' }] : []),
+  { label: 'מילון', icon: IconBookLetter24Filled, color: '#7b5ea7' },
   { label: 'מידות ושיעורים', icon: IconRuler24Filled, color: '#8b6914' },
   { label: 'הגדרות', icon: IconSettings24, color: undefined },
   { label: 'סביבות עבודה', icon: IconApps24Filled, color: '#6b7fc4' },
-])
+]
 
 async function onTap(label: string) {
   await navigateInNewTab(label)

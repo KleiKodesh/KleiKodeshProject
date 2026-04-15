@@ -38,6 +38,14 @@ export function ensureCategorySchema(): Promise<void> {
 export function onDbReady(path: string) {
   window.__webviewDbPath = path
   dbReady.value = true
+  // Ask C# to reload via its HandleReload() method, which re-reads the saved path from
+  // the registry, updates the __webviewDbReady injection script, then navigates.
+  // window.location.reload() bypasses that and would re-inject the old "false" value.
+  if (typeof window.__webviewAction === 'function') {
+    window.__webviewAction('reload').catch(() => window.location.reload())
+  } else {
+    window.location.reload()
+  }
 }
 
 // ── Push event bus ────────────────────────────────────────────────────────────

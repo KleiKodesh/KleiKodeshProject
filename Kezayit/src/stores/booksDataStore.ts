@@ -68,9 +68,14 @@ export const useBooksDataStore = defineStore('booksData', () => {
       loaded.value = true
     } catch (e) {
       const msg = e instanceof Error ? e.message : ''
-      error.value = msg.toLowerCase().includes('failed to fetch')
-        ? 'שגיאה בטעינת הנתונים — לא ניתן להתחבר לשרת'
-        : msg || 'שגיאה בטעינת הנתונים'
+      if (msg.toLowerCase().includes('failed to fetch')) {
+        error.value = 'שגיאה בטעינת הנתונים — לא ניתן להתחבר לשרת'
+      } else if (msg.includes('0x8007000B') || msg.toLowerCase().includes('incorrect format')) {
+        error.value =
+          'שגיאה בטעינת הנתונים — קובץ ה־SQLite אינו תואם לגרסת המערכת (32/64 סיביות). יש להתקין מחדש את האפליקציה.'
+      } else {
+        error.value = msg || 'שגיאה בטעינת הנתונים'
+      }
     } finally {
       loading.value = false
     }
