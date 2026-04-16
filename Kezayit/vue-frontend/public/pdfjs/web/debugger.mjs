@@ -659,10 +659,6 @@ class Stepper {
     this.goTo(idx);
   }
 
-  shouldSkip(idx) {
-    return false;
-  }
-
   goTo(idx) {
     const allRows = this.panel.getElementsByClassName("line");
     for (const row of allRows) {
@@ -676,7 +672,7 @@ class Stepper {
   }
 }
 
-const Stats = (function () {
+const Stats = (function Stats() {
   let stats = [];
   function clear(node) {
     node.textContent = ""; // Remove any `node` contents from the DOM.
