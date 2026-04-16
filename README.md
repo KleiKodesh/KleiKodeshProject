@@ -4,41 +4,48 @@
 
 # KleiKodesh — כלי קודש
 
-תוסף Microsoft Word לכתיבת מסמכי תורה ומחקר ספרים.
+ארגז כלים לעורך התורני
 
 </div>
+
+## מה התוסף כולל
+
+- **זית** — גישה למאגר הספרים של זית ישירות בתוך וורד
+- **חיפוש רגקס** — חיפוש והחלפה עם ביטויים רגולריים מעבר ליכולות וורד
+- **עיצוב תורני** — כלים לעיצוב מסמכים כפי שמקובל בספרי קודש
+- **דרך האתרים** — גישה נוחה לאתרים תורניים (נקדנית, דיקטה, אוצר החכמה ועוד) ישירות מוורד
 
 ## פרויקטים
 
 | תיקייה                                                                                               | סוג                   | מטרה                                                  |
 | ---------------------------------------------------------------------------------------------------- | --------------------- | ----------------------------------------------------- |
-| [`KleiKodeshVstoInstallerWpf`](KleiKodeshVstoInstallerWpf/README.md)                                 | WPF (.NET)            | **האפליקציה הראשית** — מתקינה את תוסף VSTO ב-Word     |
-| [`KleiKodeshVsto`](KleiKodeshVsto/README.md)                                                         | VSTO (.NET Framework) | תוסף Word — סרגל כלים, חלוניות משימה, כל הכלים        |
-| [`DocSeferLib`](DocSeferLib/README.md)                                                               | ספריית מחלקות WPF     | כלי עיצוב מסמכי תורה (עיצוב תורני)                   |
-| [`Kezayit`](Kezayit/README.md)                                                                       | Vue 3 + TypeScript    | ממשק צפייה בספרים (רץ בתוך WebView2)                  |
-| [`Kezayit/CSharpBackend/KezayitLib`](Kezayit/CSharpBackend/KezayitLib/README.md)                     | ספריית .NET           | צד שרת C# המחבר את אפליקציית Vue ל-Windows APIs       |
-| [`Kezayit/CSharpBackend/BloomSearchEngineLib`](Kezayit/CSharpBackend/BloomSearchEngineLib/README.md) | ספריית .NET           | מנוע חיפוש טקסט מלא מבוסס Bloom filter לספרים         |
-| [`kleikodesh.github.io`](kleikodesh.github.io/README.md)                                             | HTML/CSS/JS סטטי      | אתר הפרויקט הציבורי ודף ההורדה                        |
+| [`KleiKodeshVstoInstallerWpf`](KleiKodeshVstoInstallerWpf/README.md)                                 | WPF (.NET)            | המתקין — מתקין את תוסף VSTO ב-Word                    |
+| [`KleiKodeshVsto`](KleiKodeshVsto/README.md)                                                         | VSTO (.NET Framework) | **פרויקט התוסף הראשי**                                                    |
+| [`DocSeferLib`](DocSeferLib/README.md)                                                               | WPF Class Library     | כלים לעיצוב מסמכים תורניים בוורד                      |
+| [`Kezayit`](Kezayit/README.md)                                                                       | Vue 3 + TypeScript    | ספרייה לצפייה במאגר הספרים של זית / אוצריא            |
+| [`Kezayit/CSharpBackend/KezayitLib`](Kezayit/CSharpBackend/KezayitLib/README.md)                     | .NET Library          | WebView2 host                                         |
+| [`Kezayit/CSharpBackend/BloomSearchEngineLib`](Kezayit/CSharpBackend/BloomSearchEngineLib/README.md) | .NET Library          | מנוע חיפוש Bloom filter                               |
+| [`kleikodesh.github.io`](kleikodesh.github.io/README.md)                                             | Static HTML/CSS/JS    | אתר הפרויקט הציבורי ודף ההורדה                        |
 
 ## ארכיטקטורה
 
 ```
-המשתמש מריץ את המתקין
-        ↓
-KleiKodeshVstoInstallerWpf  ──מחלץ ורושם──▶  KleiKodeshVsto (תוסף Word)
-                                                        │
-                              ┌─────────────────────────┤
-                              │                         │
-                        כפתורי סרגל              חלוניות משימה
-                              │
-              ┌───────────────┼───────────────┐
-              │               │               │
-          Kezayit         DocSeferLib      RegexFind / WebSites
-       (Vue ב-WebView2)  (עיצוב WPF)      (HTML / WPF)
-              │
-        KezayitLib (צד שרת C#)
-              │
-    BloomSearchEngineLib + מסד נתונים SQLite
+User runs the installer
+          ↓
+KleiKodeshVstoInstallerWpf  ──installs──▶  KleiKodeshVsto (Word add-in)
+                                                    │
+                                        ┌───────────┤
+                                        │           │
+                                 Ribbon buttons  Task panes
+                                        │
+                        ┌───────────────┼──────────────────┐
+                        │               │                  │
+                    Kezayit       DocSeferLib     RegexFind / WebSites
+               (Vue in WebView2) (WPF formatting)   (HTML / WPF)
+                    │
+              KezayitLib (C# backend)
+                    │
+        BloomSearchEngineLib + SQLite database
 ```
 
 ## בנייה
@@ -51,40 +58,8 @@ KleiKodeshVstoInstallerWpf  ──מחלץ ורושם──▶  KleiKodeshVsto (
 Build\build-menu.bat
 ```
 
-או קרא ישירות לסקריפט התזמור:
 
-```powershell
-# הגדל גרסת patch וצור GitHub release
-.\Build\build-installer.ps1 -VersionIncrement patch -ReleaseNotesSource commits
 
-# הגדר גרסה מדויקת, ללא GitHub release
-.\Build\build-installer.ps1 -ManualVersion v3.5.0 -NoRelease
 
-# בנייה מהירה לבדיקה — ללא שינוי גרסה, ללא ניקוי, ללא הפצה
-.\Build\build-installer.ps1 -ManualVersion v3.2.0 -NoRelease -NoClean
-```
 
-צינור הבנייה:
-1. מעדכן את הגרסה ב-`AddinInstaller.cs` וב-`KleiKodeshVstoInstallerWpf.csproj`
-2. `dotnet build` לבניית מתקין ה-WPF (אירוע הפרה-בילד שלו בונה את תוסף ה-VSTO דרך MSBuild)
-3. `makensis.exe` עוטף הכל לקובץ `Build/releases/KleiKodeshSetup-vX.Y.Z.exe`
-4. אופציונלית יוצר GitHub release דרך כלי ה-`gh` CLI
 
-### בנייה לפיתוח (MSBuild)
-
-- **פתרון מלא:**
-  ```
-  & "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe" KleiKodeshProject.slnx /m /nologo /verbosity:minimal
-  ```
-- **פרויקטים מסוג SDK בלבד (dotnet):**
-  ```
-  dotnet build
-  ```
-  עובד עבור `KleiKodeshVstoInstallerWpf`, `KezayitLib`, `BloomSearchEngineLib`.  
-  פרויקטים ישנים (`KleiKodeshVsto`, `DocSeferLib`) דורשים MSBuild מ-Visual Studio.
-
-## גרסה
-
-גרסת האפליקציה מוגדרת ב-`KleiKodeshVstoInstallerWpf/Helpers/AddinInstaller.cs` כ-`const string Version`.  
-כל שאר חותמות הגרסה (`.csproj`, NSIS) נגזרות ממנה על ידי `KleiKodeshVstoInstallerWpf/UpdateVersion.ps1` בזמן הבנייה.  
-לאחר ההתקנה היא נכתבת לרג'יסטרי ב-`HKEY_CURRENT_USER\SOFTWARE\KleiKodesh` → `Version`.
