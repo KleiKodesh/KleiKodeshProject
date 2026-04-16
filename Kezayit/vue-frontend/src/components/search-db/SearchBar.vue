@@ -40,7 +40,7 @@ const PLACEHOLDERS = [
   'הוסף @ לסינון לפי ספר או קטגוריה',
   'שויתי לנגדי תמיד',
   'כי ביצחק @רשי @ רמבן',
-  'איסתרא בלגינא @ בבלי',
+  'קיש קיש קריא @בבלי בבא מציעא',
 ]
 const placeholder = ref(PLACEHOLDERS[0]!)
 let phraseIdx = 0, charIdx = 0, pauseTicks = 0

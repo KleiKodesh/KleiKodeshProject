@@ -176,6 +176,7 @@
                            Text="0%"
                            FontSize="12"
                            Foreground="#5A5A5A"
+                           FlowDirection="LeftToRight"
                            HorizontalAlignment="Left"/>
             </Grid>
         </StackPanel>

@@ -36,8 +36,10 @@ namespace KleiKodeshVstoInstallerWpf
         {
             base.OnStartup(e);
 
-            bool silentMode = false;
-            bool repairMode = false;
+            bool silentMode  = false;
+            bool repairMode  = false;
+            int  waitForPid  = 0;
+
             foreach (string arg in e.Args)
             {
                 if (arg.Equals("--silent",  StringComparison.OrdinalIgnoreCase) ||
@@ -49,6 +51,35 @@ namespace KleiKodeshVstoInstallerWpf
                 if (arg.Equals("--repair", StringComparison.OrdinalIgnoreCase) ||
                     arg.Equals("/repair",  StringComparison.OrdinalIgnoreCase))
                     repairMode = true;
+            }
+
+            // --wait-for-pid <PID>: hide until the given process exits, then show normally.
+            // Used by the auto-updater: installer is launched from Word's shutdown event
+            // while Word is still alive, then waits for Word to fully exit before showing UI.
+            for (int i = 0; i < e.Args.Length - 1; i++)
+            {
+                if (e.Args[i].Equals("--wait-for-pid", StringComparison.OrdinalIgnoreCase))
+                {
+                    int.TryParse(e.Args[i + 1], out waitForPid);
+                    break;
+                }
+            }
+
+            if (waitForPid > 0)
+            {
+                // Wait on a background thread — don't block the UI thread
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    try
+                    {
+                        var proc = System.Diagnostics.Process.GetProcessById(waitForPid);
+                        proc.WaitForExit();
+                    }
+                    catch { /* process already gone */ }
+
+                    // Now show the window on the UI thread
+                    Dispatcher.Invoke(() => MainWindow?.Show());
+                });
             }
 
             MainWindow mainWindow;
@@ -65,7 +96,12 @@ namespace KleiKodeshVstoInstallerWpf
                 if (repairMode)
                     mainWindow.NavigateToRepairOnLoad();
             }
-            mainWindow.Show();
+
+            // If waiting for a pid, start hidden — the background task above will show it
+            if (waitForPid > 0)
+                mainWindow.Visibility = System.Windows.Visibility.Hidden;
+            else
+                mainWindow.Show();
         }
     }
 }

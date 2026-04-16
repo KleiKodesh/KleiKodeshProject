@@ -65,6 +65,8 @@ function Confirm-Action([string]$summary) {
 function Invoke-Installer([hashtable]$params) {
     # Splat the hashtable as named params to build-installer.ps1
     & powershell -NoLogo -ExecutionPolicy Bypass -File $installer @params
+    Write-Host ""
+    Read-Host "Press Enter to return to menu"
 }
 
 # -- Menu loop ----------------------------------------------------------------

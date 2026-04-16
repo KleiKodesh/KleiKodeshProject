@@ -111,23 +111,23 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # Delete existing release/tag if present
-gh release view $version 2>$null | Out-Null
+gh release view $version --repo KleiKodesh/KleiKodeshProject 2>$null | Out-Null
 if ($LASTEXITCODE -eq 0) {
     Write-Host "Existing release $version found — deleting..." -ForegroundColor Yellow
-    gh release delete $version --yes
+    gh release delete $version --repo KleiKodesh/KleiKodeshProject --yes
 }
 
 $notes  = New-ReleaseNotes -Version $version -Source $ReleaseNotesSource
 $branch = git rev-parse --abbrev-ref HEAD
 
 gh release create $version $installerPath `
+    --repo KleiKodesh/KleiKodeshProject `
     --title "KleiKodesh $version" `
     --notes $notes `
     --target $branch
 
 if ($LASTEXITCODE -eq 0) {
-    $repoUrl = gh repo view --json url --jq .url
-    Write-Host "SUCCESS: $repoUrl/releases/tag/$version" -ForegroundColor Green
+    Write-Host "SUCCESS: https://github.com/KleiKodesh/KleiKodeshProject/releases/tag/$version" -ForegroundColor Green
 } else {
     Write-Host "ERROR: GitHub release creation failed." -ForegroundColor Red
     exit 1

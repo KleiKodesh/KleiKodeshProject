@@ -221,26 +221,11 @@ Section "Main"
   File /nonfatal "..\KleiKodeshVstoInstallerWpf\bin\Release\net48\*.config"
   File "..\KleiKodeshVstoInstallerWpf\KleiKodesh.zip"
   
-  ; Check if silent mode was requested
+  ; Pass all command-line arguments through to the WPF installer unchanged
   ${GetParameters} $R0
-  StrCpy $R1 ""
   
-  ; Check for --silent
-  StrLen $R3 $R0
-  ${If} $R3 > 0
-    StrCpy $R2 $R0 8  ; Get first 8 chars
-    ${If} $R2 == "--silent"
-      StrCpy $R1 " --silent"
-    ${Else}
-      StrCpy $R2 $R0 7  ; Get first 7 chars  
-      ${If} $R2 == "/silent"
-        StrCpy $R1 " /silent"
-      ${EndIf}
-    ${EndIf}
-  ${EndIf}
-  
-  ; Run WPF installer with or without silent argument
-  ExecWait '"$TEMP\KleiKodeshInstaller\KleiKodeshVstoInstallerWpf.exe"$R1' $0
+  ; Run WPF installer with all original arguments
+  ExecWait '"$TEMP\KleiKodeshInstaller\KleiKodeshVstoInstallerWpf.exe" $R0' $0
   
   ; Clean up temp files
   RMDir /r "$TEMP\KleiKodeshInstaller"

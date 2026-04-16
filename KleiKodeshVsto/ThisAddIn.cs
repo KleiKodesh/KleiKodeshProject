@@ -22,8 +22,6 @@ namespace KleiKodesh
             WordToPdfConverter.CancelHostConversions();
             // Run any pending installer that was deferred during update process
             UpdateChecker.RunPendingInstaller();
-
-            // Add-in shutdown cleanup
         }
 
         #region VSTO generated code

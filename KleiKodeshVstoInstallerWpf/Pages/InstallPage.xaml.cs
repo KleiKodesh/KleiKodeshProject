@@ -50,8 +50,6 @@ namespace KleiKodeshVstoInstallerWpf
                 _status.Report("שומר גרסה...");
                 AddinInstaller.SaveVersion();
 
-                await AddinInstaller.EnsureDbExistsAsync();
-
                 _status.Report("ההתקנה הושלמה!");
                 await Task.Delay(300);
                 Environment.Exit(0);

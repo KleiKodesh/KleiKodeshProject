@@ -1,15 +1,12 @@
 using KleiKodesh.Helpers;
-using Microsoft.VisualBasic;
 using Microsoft.Win32;
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using System.Windows;
 
 namespace KleiKodeshVstoInstallerWpf.Helpers
 {
@@ -21,7 +18,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
     {
         public const string AppName         = "KleiKodesh";
         public const string AppDisplayName  = "כלי קודש";
-        public const string Version         = "v3.4.9";
+        public const string Version         = "v2.0.26";
         public const string InstallFolderName = "KleiKodesh";
         public const string ZipResourceName = "KleiKodesh.zip";
         public const string VstoFileName    = "KleiKodesh.vsto";
@@ -175,27 +172,5 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             catch { }
         }
 
-        public static async Task EnsureDbExistsAsync()
-        {
-            if (!SettingsManager.GetBool("Ribbon", "Kezayit_Visible", true)) return;
-
-            string appData      = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            string defaultDb    = Path.Combine(appData, "io.github.kdroidfilter.seforimapp", "databases", "seforim.db");
-            string currentDb    = Interaction.GetSetting("ZayitApp", "Database", "Path", defaultDb);
-
-            if (!File.Exists(currentDb))
-            {
-                var result = MessageBox.Show(
-                    "לא נמצאה ספריית זית במחשב.\n\nהאם ברצונך להוריד ולהתקין כעת?",
-                    "ספריית זית לא נמצאה",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Question,
-                    MessageBoxResult.Yes,
-                    MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
-
-                if (result == MessageBoxResult.Yes)
-                    Process.Start(new ProcessStartInfo { FileName = "https://zayitapp.com/#/download", UseShellExecute = true });
-            }
-        }
     }
 }

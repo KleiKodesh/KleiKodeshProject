@@ -86,7 +86,7 @@ Word taskpane opens
 - **`--repair` arg**: handled in `App.xaml.cs` → calls `MainWindow.NavigateToRepairOnLoad()` which opens `RepairPage(autoRun: true)` directly, bypassing the landing page entirely.
 - **WPF installer manifest**: `asInvoker` — correct, never forces UAC.
 - **NSIS wrapper**: `RequestExecutionLevel user` — correct, never forces UAC.
-- **`DownloadManager.LaunchInstaller`**: uses plain `ShellExecute` (no `Verb = "runas"`) — Windows respects the manifest's `asInvoker` level. Do NOT add `runas` here; it would force unnecessary UAC and break for standard (non-admin) users.
+- **`DownloadManager.LaunchInstaller`**: **MUST use `Verb = "runas"`** — this is not for elevation, but because `runas` hands off to the Windows Application Information Service (AIS) which runs as a separate system service outside Word's process. Without `runas`, `ShellExecuteEx` runs in-process and gets killed when Word shuts down before `Process.Start` returns. The NSIS wrapper has `RequestExecutionLevel user` so no UAC prompt appears, but the AIS handoff is what makes the launch survive Word's shutdown.
 
 If a user wants to clean HKLM leftovers from very old versions, they can run the WPF installer manually as administrator — the repair page will then have full access.
 

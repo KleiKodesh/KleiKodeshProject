@@ -14,14 +14,22 @@ function Update-AllVersionTargets($newVersion) {
     # Strip leading 'v' for numeric-only contexts (csproj <Version>)
     $numericVersion = $newVersion -replace '^v', ''
 
-    # 1. AddinInstaller.cs — const string Version = "vX.Y.Z";
+    # 1. AddinInstaller.cs — public const string Version = "vX.Y.Z";
     $content = Get-Content $FilePath -Raw
-    $updated = $content -replace '(const string Version\s*=\s*)"v[^"]*"', "`$1`"$newVersion`""
+    $updated = $content -replace '(public const string Version\s*=\s*)"v[^"]*"', "`$1`"$newVersion`""
     if ($updated -ne $content) {
         Set-Content $FilePath -Value $updated -NoNewline
         Write-Host "  [OK] AddinInstaller.cs -> $newVersion"
     } else {
-        Write-Host "  [WARN] AddinInstaller.cs: pattern not matched, no change"
+        # Fallback: try without 'public' prefix
+        $updated = $content -replace '(const string Version\s*=\s*)"v[^"]*"', "`$1`"$newVersion`""
+        if ($updated -ne $content) {
+            Set-Content $FilePath -Value $updated -NoNewline
+            Write-Host "  [OK] AddinInstaller.cs -> $newVersion"
+        } else {
+            Write-Host "  [WARN] AddinInstaller.cs: pattern not matched, no change"
+            Write-Host "  [DEBUG] First 200 chars: $($content.Substring(0, [Math]::Min(200, $content.Length)))"
+        }
     }
 
     # 2. KleiKodeshVstoInstallerWpf.csproj — <Version>X.Y.Z</Version>
