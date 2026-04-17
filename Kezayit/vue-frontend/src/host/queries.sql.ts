@@ -204,47 +204,32 @@ export const SQL = {
   // ── Kezayit Dictionary (public/dicts/kezayit_dictionary.db) ─────────────────
 
   /**
-   * Search Aramaic entries by headword prefix or exact match.
-   * Returns senses with their first definition text.
+   * Search entries by exact headword or prefix match.
    * Params: [term, prefixPattern, term]  e.g. ['אבא', 'אבא%', 'אבא']
    */
   SEARCH_DICT_SENSES: `
-    SELECT s.id, s.headword, s.nikud, NULL AS pos, src.label AS source_label,
-           d.text AS definition
-    FROM sense s
-    LEFT JOIN source src ON src.id = s.source_id
-    JOIN definition d ON d.sense_id = s.id AND d.def_order = 0
-    WHERE s.headword = ? OR s.headword LIKE ?
+    SELECT headword, nikud, source_label, definition
+    FROM entry
+    WHERE headword = ? OR headword LIKE ?
     ORDER BY
-      CASE WHEN s.headword = ? THEN 0 ELSE 1 END,
-      length(s.headword),
-      s.headword
+      CASE WHEN headword = ? THEN 0 ELSE 1 END,
+      length(headword),
+      headword
     LIMIT 100
   `,
 
   /**
-   * Autosuggest: one row per (headword, source) combination, with all definitions
-   * for that source concatenated. Uses contains match (%word%) — negligible perf
-   * difference vs prefix at this data size, and the index is still used.
-   * Ordered: prefix matches first, then alphabetical, then by source.
-   * Params: [containsPattern, term]  e.g. ['%דיל%', 'דיל']
+   * Fuzzy fallback: fetch candidate headwords that share at least one character
+   * with the search term, for client-side Levenshtein ranking.
+   * Uses a simple contains match — fast enough at 15k rows.
+   * Params: [containsPattern]  e.g. ['%אב%']
    */
-  DICT_SUGGEST: `
-    SELECT s.headword, src.label AS source_label,
-           d.text AS definition
-    FROM sense s
-    LEFT JOIN source src ON src.id = s.source_id
-    JOIN definition d ON d.sense_id = s.id AND d.def_order = 0
-    WHERE s.headword LIKE ?
-    GROUP BY s.headword, s.source_id
-    ORDER BY
-      CASE WHEN s.headword LIKE ? THEN 0 ELSE 1 END,
-      s.headword,
-      s.source_id
-    LIMIT 50
+  DICT_FUZZY_CANDIDATES: `
+    SELECT DISTINCT headword
+    FROM entry
+    WHERE headword LIKE ?
+    LIMIT 200
   `,
-
-  // ── Dictionary (old schema — main app DB) ────────────────────────────────────
 
   /**
    * All books under the reference/dictionary top-level categories:
