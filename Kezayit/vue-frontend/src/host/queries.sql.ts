@@ -244,57 +244,6 @@ export const SQL = {
     LIMIT 50
   `,
 
-  /**
-   * All senses for a headword, with source label joined.
-   * pos/binyan/shoresh/ktiv_male are not stored in kezayit_dictionary.db (always NULL) —
-   * returned as NULL literals so the result shape matches the wikidict version.
-   */
-  GET_DICT_SENSES_FOR_WORD: `
-    SELECT s.id, s.headword, s.nikud,
-           NULL AS pos, NULL AS binyan, NULL AS shoresh, NULL AS ktiv_male,
-           src.label AS source_label, s.sense_order
-    FROM sense s
-    LEFT JOIN source src ON src.id = s.source_id
-    WHERE s.headword = ?
-    ORDER BY s.sense_order
-  `,
-
-  /**
-   * Bulk fetch all definitions for a set of sense ids.
-   * Pass the ids array as the single param — the function expands the placeholders.
-   * Returns: id, sense_id, text, layer, def_order
-   */
-  GET_DICT_ALL_DEFINITIONS: (ids: number[]) => `
-    SELECT id, sense_id, text, def_order
-    FROM definition
-    WHERE sense_id IN (${ids.map(() => '?').join(',')})
-    ORDER BY sense_id, def_order
-  `,
-
-  /**
-   * Bulk fetch all examples for all definitions belonging to a set of sense ids.
-   * Returns: definition_id, text, source
-   */
-  GET_DICT_ALL_EXAMPLES: (ids: number[]) => `
-    SELECT e.definition_id, e.text, e.source
-    FROM example e
-    JOIN definition d ON d.id = e.definition_id
-    WHERE d.sense_id IN (${ids.map(() => '?').join(',')})
-    ORDER BY e.definition_id, e.id
-  `,
-
-  /**
-   * Bulk fetch all section items for a set of sense ids.
-   * Returns: sense_id, section_name, item_text, item_order
-   */
-  GET_DICT_ALL_SECTIONS: (ids: number[]) => `
-    SELECT s.sense_id, s.name AS section_name, si.text AS item_text, si.item_order
-    FROM section s
-    JOIN section_item si ON si.section_id = s.id
-    WHERE s.sense_id IN (${ids.map(() => '?').join(',')})
-    ORDER BY s.sense_id, s.id, si.item_order
-  `,
-
   // ── Dictionary (old schema — main app DB) ────────────────────────────────────
 
   /**
@@ -372,79 +321,6 @@ export const SQL = {
       AND ln.lineIndex >= ?
       AND ln.lineIndex < ?
     LIMIT 1
-  `,
-
-  // ── Wiktionary offline DB (public/wikidictionary.db) ─────────────────────────
-
-  /**
-   * Autosuggest for wikidictionary.db.
-   * Returns one row per headword (senses are merged at display time).
-   * Matches headword OR ktiv_male (alternative spelling).
-   * Ordered: prefix matches first, then alphabetical.
-   * Params: [containsPattern, containsPattern, prefixPattern, prefixPattern]
-   */
-  WIKIDICT_SUGGEST: `
-    SELECT s.headword,
-           d.text AS definition
-    FROM sense s
-    JOIN definition d ON d.sense_id = s.id AND d.def_order = 0
-    WHERE s.headword LIKE ? OR s.ktiv_male LIKE ?
-    GROUP BY s.headword
-    ORDER BY
-      CASE WHEN s.headword LIKE ? OR s.ktiv_male LIKE ? THEN 0 ELSE 1 END,
-      s.headword
-    LIMIT 50
-  `,
-
-  /**
-   * All senses for a headword in wikidictionary.db.
-   * Returns one row per sense with source label and pos name joined.
-   */
-  GET_WIKIDICT_SENSES_FOR_WORD: `
-    SELECT s.id, s.headword, s.nikud, p.name AS pos, s.binyan, s.shoresh, s.ktiv_male,
-           src.label AS source_label, s.sense_order
-    FROM sense s
-    JOIN source src ON src.id = s.source_id
-    LEFT JOIN pos p ON p.id = s.pos_id
-    WHERE s.headword = ? OR s.ktiv_male = ?
-    ORDER BY s.sense_order
-  `,
-
-  /**
-   * Bulk fetch all definitions for a set of sense ids from wikidictionary.db.
-   * Returns: id, sense_id, text, def_order
-   */
-  GET_WIKIDICT_ALL_DEFINITIONS: (ids: number[]) => `
-    SELECT id, sense_id, text, def_order
-    FROM definition
-    WHERE sense_id IN (${ids.map(() => '?').join(',')})
-    ORDER BY sense_id, def_order
-  `,
-
-  /**
-   * Bulk fetch all examples for a set of sense ids from wikidictionary.db.
-   * Returns: definition_id, text, source
-   */
-  GET_WIKIDICT_ALL_EXAMPLES: (ids: number[]) => `
-    SELECT e.definition_id, e.text, es.name AS source
-    FROM example e
-    JOIN definition d ON d.id = e.definition_id
-    LEFT JOIN example_source es ON es.id = e.source_id
-    WHERE d.sense_id IN (${ids.map(() => '?').join(',')})
-    ORDER BY e.definition_id, e.id
-  `,
-
-  /**
-   * Bulk fetch all section items for a set of sense ids from wikidictionary.db.
-   * Returns: sense_id, section_name, item_text, item_order
-   */
-  GET_WIKIDICT_ALL_SECTIONS: (ids: number[]) => `
-    SELECT s.sense_id, sn.name AS section_name, si.text AS item_text, si.item_order
-    FROM section s
-    JOIN section_name sn ON sn.id = s.name_id
-    JOIN section_item si ON si.section_id = s.id
-    WHERE s.sense_id IN (${ids.map(() => '?').join(',')})
-    ORDER BY s.sense_id, s.id, si.item_order
   `,
 
 } as const

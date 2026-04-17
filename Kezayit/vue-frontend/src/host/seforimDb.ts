@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { devQuery } from './devFallbacks'
 
 declare global {
   interface Window {
@@ -73,12 +74,5 @@ export async function query<T = unknown>(sql: string, params: unknown[] = []): P
   if (typeof window.__webviewQuery === 'function') {
     return (await window.__webviewQuery(sql, params)).rows as T[]
   }
-  // Dev fallback — hits the Vite middleware at /query (same origin, no separate server needed)
-  const res = await fetch('/query', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sql, params }),
-  })
-  if (!res.ok) throw new Error(`DB query failed: ${res.status} ${res.statusText}`)
-  return (await res.json()).rows as T[]
+  return devQuery<T>(sql, params)
 }

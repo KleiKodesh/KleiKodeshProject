@@ -1,7 +1,6 @@
 import { useTabStore } from '@/stores/tabStore'
 import { usePdfStore } from '@/stores/pdfStore'
-import { useZimStore } from '@/stores/zimStore'
-import { pickFile, pickZimFile } from '@/host/bridge'
+import { pickFile } from '@/host/bridge'
 import type { TabRoute } from '@/stores/tabStore'
 
 /**
@@ -13,7 +12,6 @@ import type { TabRoute } from '@/stores/tabStore'
 export function useAppNavigation() {
   const tabStore = useTabStore()
   const pdfStore = usePdfStore()
-  const zimStore = useZimStore()
 
   const SINGLETON_ROUTES: Partial<Record<string, TabRoute>> = {
     ספרים: '/books',
@@ -48,21 +46,6 @@ export function useAppNavigation() {
           pdfFilePath: result.filePath,
           pdfVirtualUrl: result.url,
           pdfConverting: false,
-        })
-      }
-      return
-    }
-    if (label === 'פתח קיוויקס') {
-      const result = await pickZimFile()
-      // In hosted mode, zimReady push event handles navigation — pickZimFile() returns null.
-      // In dev mode it returns a blob URL directly.
-      if (result) {
-        tabStore.updateActiveTab({
-          route: '/kiwix-view',
-          title: result.fileName,
-          zimFileName: result.fileName,
-          zimFilePath: result.filePath,
-          zimVirtualUrl: result.url,
         })
       }
       return
@@ -106,21 +89,6 @@ export function useAppNavigation() {
           pdfFilePath: result.filePath,
           pdfVirtualUrl: result.url,
           pdfConverting: false,
-        })
-      }
-      return
-    }
-    if (label === 'פתח קיוויקס') {
-      const result = await pickZimFile()
-      // In hosted mode zimReady push event handles navigation — pickZimFile() returns null.
-      // In dev mode open the result in a new tab.
-      if (result) {
-        tabStore.openTab({
-          route: '/kiwix-view',
-          title: result.fileName,
-          zimFileName: result.fileName,
-          zimFilePath: result.filePath,
-          zimVirtualUrl: result.url,
         })
       }
       return

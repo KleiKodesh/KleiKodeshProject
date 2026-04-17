@@ -9,3 +9,5 @@ Database access and C# host bridge. Everything that communicates outside the Vue
 **bridge.ts** — C# host actions for file operations: `pickFile()`, `restoreLocalPdf`, `restoreHbPdf`, `disposePdfHost`. All have dev-mode fallbacks. Import from here for any native file system interaction.
 
 **queries.sql.ts** — all raw SQL strings in the app. Every new SQL query must be added here as a named constant. No inline SQL anywhere else in the codebase.
+
+**devFallbacks.ts** — dev-mode fallbacks for all host operations. Contains the fetch-based DB transports (`devQuery`, `devQueryDict`, `devQueryWikiDict`) and browser file-input pickers (`devPickPdf`, `devPickZim`). Only called when running outside the C# WebView2 host. Never import this file from production logic paths directly — it is only consumed by the other files in this folder.

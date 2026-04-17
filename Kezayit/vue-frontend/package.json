@@ -11,17 +11,8 @@
     "build": "vue-tsc --build && vite build",
     "preview": "vite preview",
     "type-check": "vue-tsc --noEmit",
-    "format": "prettier --write \"src/**/*.{vue,ts}\"",
-    "dict:create": "node scripts/dictionary/create-dictionary-db.cjs",
-    "dict:import-aramaic": "node scripts/dictionary/import-aramaic.cjs",
-    "dict:import-jewishbooks": "node scripts/dictionary/import-jewishbooks-abbrev.cjs",
-    "wikidict:create": "node scripts/dictionary/create-wikidictionary-db.cjs",
-    "wikidict:fetch": "powershell -ExecutionPolicy Bypass -File scripts/dictionary/fetch-wiktionary-api.ps1",
-    "wikidict:import": "node scripts/dictionary/import-wiktionary.cjs",
-    "wikidict:rebuild": "node scripts/dictionary/rebuild-wiki.cjs",
-    "wikidict:filter": "node scripts/dictionary/create-filtered-wikidict.cjs",
-    "nikkud:build": "node scripts/dictionary/build-nikkud-db.cjs"
-  },
+    "format": "prettier --write \"src/**/*.{vue,ts}\""
+   },
   "serverDependencies": {
     "better-sqlite3": "^11.0.0"
   },

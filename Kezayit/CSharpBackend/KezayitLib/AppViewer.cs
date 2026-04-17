@@ -4,7 +4,6 @@ using KezayitLib.Diagnostics;
 using KezayitLib.Dictionary;
 using KezayitLib.Helpers;
 using KezayitLib.HebrewBooks;
-using KezayitLib.Kiwix;
 using KezayitLib.Pdf;
 using KezayitLib.Search;
 using KezayitLib.Settings;
@@ -43,7 +42,6 @@ namespace KezayitLib
         private WebBridge _bridge;
         private DbHandler _db;
         private PdfHandler _pdf;
-        private ZimHandler _zim;
         private HebrewBooksHandler _hb;
         private HebrewBooksCsvUpdater _hbCsvUpdater;
         private SearchHandler _search;
@@ -108,7 +106,6 @@ namespace KezayitLib
             _db = new DbHandler(_bridge, _webView, savedPath);
 
             _pdf = new PdfHandler(_bridge, _webView);
-            _zim = new ZimHandler(_bridge, _webView);
             _hb = new HebrewBooksHandler(_bridge, _webView, this);
             _hbCsvUpdater = new HebrewBooksCsvUpdater();
             _search = new SearchHandler(_bridge, _webView);
@@ -191,9 +188,6 @@ namespace KezayitLib
                         case "pickFile": _pdf.HandlePickFile(id, this); break;
                         case "restoreLocalPdf": await _pdf.HandleRestoreLocalPdf(root, id); break;
                         case "disposePdfHost": _pdf.HandleDisposePdfHost(root, id); break;
-                        case "pickZimFile": _zim.HandlePickZimFile(id, this); break;
-                        case "restoreLocalZim": _zim.HandleRestoreLocalZim(root, id); break;
-                        case "disposeZimHost": _zim.HandleDisposeZimHost(root, id); break;
                         case "restoreHbPdf": _hb.HandleRestoreHbPdf(root, id); break;
                         case "triggerHbDownload": _hb.HandleTriggerHbDownload(root, id); break;
                         case "triggerHbSaveAs": _hb.HandleTriggerHbSaveAs(root, id); break;

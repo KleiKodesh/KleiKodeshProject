@@ -102,3 +102,28 @@ This project uses Prettier with `printWidth: 100`. The Vue template compiler rej
 - No code samples in READMEs — prose only
 - No padding, no intros, no summaries — every sentence must carry information
 - Whenever functionality changes — files added, removed, renamed, or behavior meaningfully altered — update the README of the affected folder immediately
+
+## Scripts & Tooling
+
+- For any script that runs outside the app — database building, data processing, file generation, migrations, or any other standalone tooling — use Python, not Node.js
+- Never write a Node.js script for out-of-process tasks; if a task needs a script, it's Python
+
+## Misc Folder
+
+`Misc/` is the workspace-level folder for assets and scripts that live outside the app but belong to the project.
+
+- `Misc/scripts/` — reusable standalone scripts only. Every script here must be something that can and will be run again (build pipelines, data imports, DB rebuilds, verification tools). One-off scripts do not belong here.
+- `Misc/scripts/dictionary/` — scripts for building and maintaining the dictionary databases. Has its own `README.md` that documents the full rebuild pipeline.
+- `Misc/pdfjs-backup/` — backup of the PDF.js viewer used in the app.
+- Other files in `Misc/` (e.g. `.zim` files) are static assets used by the app or for testing.
+
+## Cleanup After One-Off Work
+
+When completing a task that involved temporary or investigative work, always clean up before finishing:
+
+- Delete any script written purely to gather data, audit content, or investigate a problem once the results have been acted on — these have no future value and clutter the repo.
+- Delete output files produced by one-off scripts (markdown reports, JSON dumps, analysis files) once their contents have been used.
+- Delete any temporary files created during the task (scratch files, test outputs, intermediate data files).
+- A script is reusable if it can be run again in the future to produce useful output — build scripts, import scripts, verification scripts, and optimization scripts qualify. Audit scans, one-off data mutations, and diagnostic dumps do not.
+- If a cleanup script mutates data and its changes are now permanently baked into the database or codebase, delete the script — it cannot safely be run again and keeping it implies it can.
+- Apply this rule to `Misc/scripts/`, the workspace root, and any other location where temporary work files accumulate.
