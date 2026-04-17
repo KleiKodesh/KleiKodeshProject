@@ -19,7 +19,8 @@
     "wikidict:fetch": "powershell -ExecutionPolicy Bypass -File scripts/dictionary/fetch-wiktionary-api.ps1",
     "wikidict:import": "node scripts/dictionary/import-wiktionary.cjs",
     "wikidict:rebuild": "node scripts/dictionary/rebuild-wiki.cjs",
-    "wikidict:filter": "node scripts/dictionary/create-filtered-wikidict.cjs"
+    "wikidict:filter": "node scripts/dictionary/create-filtered-wikidict.cjs",
+    "nikkud:build": "node scripts/dictionary/build-nikkud-db.cjs"
   },
   "serverDependencies": {
     "better-sqlite3": "^11.0.0"

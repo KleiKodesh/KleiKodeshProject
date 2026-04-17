@@ -11,7 +11,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import SettingRow from './SettingRow.vue'
 import { resetting } from '@/utils/resetState'
-import { isHosted, onDbReady } from '@/host/db'
+import { isHosted, onDbReady } from '@/host/seforimDb'
 import { useZmanim, CITIES } from '@/components/hebrew-calendar/useZmanim'
 
 const { resetSettings, resetAll } = useSettingsPage()

@@ -18,4 +18,4 @@ When `isHosted && !dbReady`: the first two tiles are **התקן כזית** and *
 
 When DB is available (or not hosted): the first two tiles are **ספרים** and **חיפוש**, which require a DB to function.
 
-Never hide or conditionally render any tile beyond these first two — the rest (פתח קובץ, היברו-בוקס, מילון, לוח שנה, מידות ושיעורים, סביבות עבודה, הגדרות) are always shown.
+Never hide or conditionally render any tile beyond these first two — the rest (פתח קובץ, היברו-בוקס, פתח קיוויקס, מילון, לוח שנה, מידות ושיעורים, סביבות עבודה, הגדרות) are always shown.

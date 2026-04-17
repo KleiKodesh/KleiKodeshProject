@@ -1,5 +1,5 @@
 import { ref, onMounted, onUnmounted } from 'vue'
-import { isHosted, onWebviewEvent } from '@/host/db'
+import { isHosted, onWebviewEvent } from '@/host/seforimDb'
 
 export interface IndexingState {
   isReady: boolean

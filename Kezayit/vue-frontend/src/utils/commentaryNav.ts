@@ -1,4 +1,4 @@
-import { query } from '@/host/db'
+import { query } from '@/host/seforimDb'
 import { SQL } from '@/host/queries.sql'
 import type { TocEntry } from '@/components/book-view/useToc'
 

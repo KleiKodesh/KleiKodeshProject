@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import type { WiktionarySense } from './useWiktionary'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { censorDivineNames } from '@/utils/censorDivineNames'
+import { IconOpen16Regular } from '@iconify-prerendered/vue-fluent'
 
 const props = defineProps<{ sense: WiktionarySense; index: number; total: number }>()
 defineEmits<{ searchWord: [word: string] }>()
@@ -11,6 +12,25 @@ const settings = useSettingsStore()
 
 function maybeFilter(text: string): string {
   return settings.censorDivineNames ? censorDivineNames(text) : text
+}
+
+const TORAT_EMET_LICENSE =
+  'זכויות היוצרים על חלק נכבד מהמילון שייכות להוצאת "שיח ישראל" לר\' יעקב כהן שליט"א.\nחלק מהמילים של המילון הארמי עברי נלקחו מאתר פשיטא מבית המרכז לטכנולוגיה חינוכית.'
+
+const WIKTIONARY_LICENSE = 'מקור: ויקימילון · רישיון CC BY-SA 4.0'
+
+function cleanSourceLabel(label: string | null | undefined): string | null {
+  if (!label) return null
+  const dashIndex = label.indexOf(' - ')
+  return dashIndex >= 0 ? label.slice(0, dashIndex) : label
+}
+
+function sourceTooltip(label: string | null | undefined): string | null {
+  if (!label) return null
+  if (label.startsWith('תורת אמת')) return TORAT_EMET_LICENSE
+  if (label === 'ויקימילון') return WIKTIONARY_LICENSE
+  if (label === 'המכלול') return 'מקור: המכלול · רישיון CC BY-SA 3.0'
+  return null
 }
 
 const SECTION_ORDER = [
@@ -39,6 +59,13 @@ function stripNikud(s: string): string {
       </span>
       <span v-if="sense.pos" class="entry-pos">{{ sense.pos }}</span>
       <span v-if="sense.binyan" class="entry-binyan">{{ sense.binyan }}</span>
+      <span
+        v-if="sense.sourceLabel"
+        class="entry-source"
+        :title="sourceTooltip(sense.sourceLabel) ?? undefined"
+      >
+        {{ cleanSourceLabel(sense.sourceLabel) }}
+      </span>
     </div>
 
     <!-- שורש -->
@@ -89,6 +116,12 @@ function stripNikud(s: string): string {
         </div>
       </div>
     </template>
+
+    <!-- Read more link -->
+    <a v-if="sense.readMoreUrl" class="read-more-link" :href="sense.readMoreUrl" target="_blank" rel="noopener noreferrer">
+      <span>קרא עוד</span>
+      <IconOpen16Regular class="read-more-icon" />
+    </a>
 
   </div>
 </template>
@@ -154,6 +187,9 @@ function stripNikud(s: string): string {
   padding: 0 6px;
   line-height: 16px;
   margin-inline-start: auto;
+}
+.entry-source[title] {
+  cursor: help;
 }
 
 /* ── שורש ── */
@@ -285,5 +321,30 @@ function stripNikud(s: string): string {
 .trans-lang {
   color: var(--text-secondary);
   margin-inline-end: 3px;
+}
+
+/* ── Read more ── */
+.read-more-link {
+  font-size: 12px;
+  color: var(--accent-color);
+  text-decoration: none;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.read-more-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.read-more-link span {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.read-more-icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  display: block;
 }
 </style>

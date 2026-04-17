@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue'
 import { useDebounce } from '@vueuse/core'
-import { query, queryDict } from '@/host/db'
+import { query } from '@/host/seforimDb'
+import { queryDict } from '@/host/dictionaryDb'
 import { SQL } from '@/host/queries.sql'
 
 const SOURCE_BOOK_TITLES: Record<number, string> = {

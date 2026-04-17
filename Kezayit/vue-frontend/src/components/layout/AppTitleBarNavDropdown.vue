@@ -10,10 +10,11 @@ import {
   IconOpen28Regular,
   IconBookLetter24Filled,
   IconRuler24Filled,
+  IconGlobe24Filled,
 } from '@iconify-prerendered/vue-fluent'
 import { IconSettings24, IconSearchSparkle24 } from '@iconify-prerendered/vue-fluent-color'
 import { useAppNavigation } from '@/composables/useAppNavigation'
-import { isHosted } from '@/host/db'
+import { isHosted } from '@/host/seforimDb'
 import { togglePopOut } from '@/host/bridge'
 
 const emit = defineEmits<{ close: [] }>()
@@ -32,6 +33,7 @@ const tiles = [
   { label: 'חיפוש', icon: IconSearchSparkle24, color: undefined },
   { label: 'פתח קובץ', icon: IconFolder24Filled, color: '#f0a500' },
   { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#D94F1E' },
+  { label: 'פתח קיוויקס', icon: IconGlobe24Filled, color: '#1a7f5a' },
   { label: 'מילון', icon: IconBookLetter24Filled, color: '#7b5ea7' },
   { label: 'מידות ושיעורים', icon: IconRuler24Filled, color: '#8b6914' },
   { label: 'הגדרות', icon: IconSettings24, color: undefined },

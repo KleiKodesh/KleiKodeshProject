@@ -1,5 +1,5 @@
 import { ref, watch } from 'vue'
-import { query } from '@/host/db'
+import { query } from '@/host/seforimDb'
 import { SQL } from '@/host/queries.sql'
 import { normalize } from '@/utils/normalizeText'
 import { useTabStore } from '@/stores/tabStore'

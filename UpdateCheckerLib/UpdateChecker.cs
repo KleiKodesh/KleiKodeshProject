@@ -52,10 +52,12 @@ namespace UpdateCheckerLib
             var normalizedGithub = githubVersion?.TrimStart('v') ?? "";
             var normalizedRegistry = registryVersion?.TrimStart('v') ?? "";
 
-            return Version.TryParse(normalizedGithub, out var githubVer) &&
+            var result =  Version.TryParse(normalizedGithub, out var githubVer) &&
                    Version.TryParse(normalizedRegistry, out var registryVer)
                 ? githubVer.CompareTo(registryVer)
                 : string.Compare(normalizedGithub, normalizedRegistry, StringComparison.OrdinalIgnoreCase);
+            
+            return result;
         }
 
         public static async Task CheckAndPromptForUpdateAsync(Action closeApplicationAction = null)
@@ -66,7 +68,8 @@ namespace UpdateCheckerLib
                 if (string.IsNullOrEmpty(currentVersion)) return;
 
                 var release = await GetLatestReleaseAsync();
-                if (release?.TagName == null || CompareVersions(release.TagName, currentVersion) <= 0) return;
+                if (release?.TagName == null || CompareVersions(release.TagName, currentVersion) <= 0) 
+                    return;
 
                 var result = ShowHebrewMessageBox(
                     $"גרסה חדשה זמינה: {release.TagName}\nהגרסה הנוכחית שלך: {currentVersion}\n\nהאם ברצונך להוריד ולהתקין את הגרסה החדשה?",

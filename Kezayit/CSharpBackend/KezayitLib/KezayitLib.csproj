@@ -112,6 +112,9 @@
     <Compile Include="Pdf\WordToPdfConverter.cs" />
     <Compile Include="Search\SearchHandler.cs" />
     <Compile Include="Settings\AppSettings.cs" />
+    <Compile Include="Dictionary\DictionaryHandler.cs" />
+    <Compile Include="Dictionary\WordThesaurusProvider.cs" />
+    <Compile Include="Helpers\FontsProvider.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

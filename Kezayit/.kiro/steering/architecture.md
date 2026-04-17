@@ -65,6 +65,7 @@ Multi-instance routes (`/book-view`, `/search`, `/pdf-view`) can have multiple t
 | `/settings`        | `SettingsPage.vue`         | singleton                       |
 | `/hebrewbooks`     | `HebrewBooksPage.vue`      | singleton                       |
 | `/pdf-view`        | `PdfViewPage.vue`          | multi-instance                  |
+| `/kiwix-view`      | `KiwixViewPage.vue`        | multi-instance                  |
 | `/workspaces`      | `WorkspaceManagerPage.vue` | singleton                       |
 | `/hebrew-calendar` | `HebrewCalendarPage.vue`   | singleton                       |
 | `/dictionary`      | `DictionaryPage.vue`       | singleton                       |
@@ -165,6 +166,12 @@ PDF and Word document viewer. Embeds a PDF.js iframe.
 
 - `PdfViewPage.vue`
 
+### kiwix/
+
+Kiwix ZIM file reader. Embeds Kiwix JS in an iframe to render offline ZIM archives (Wikipedia, reference works, etc.). FTS is disabled by default to avoid loading the Xapian WASM index; a future per-tab setting can enable it.
+
+- `KiwixViewPage.vue` — iframe wrapper loading `/kiwix/www/index.html` with the ZIM virtual host URL
+
 ### workspace/
 
 Workspace CRUD UI.
@@ -213,6 +220,8 @@ Shared reusable components used across features.
 **workspaceStore** — workspace management. All tab/book IDB keys are workspace-scoped; switching workspaces changes `activeId` and reloads tabs.
 
 **pdfStore** — PDF and Word file handling. Manages conversion state, HebrewBooks download state, and session restore for PDF tabs. Listens to C# push events (`conversionStarted`, `hbPdfReady`, `hbPdfCancelled`).
+
+**zimStore** — Kiwix ZIM file handling. Manages virtual host URL and session restore for `/kiwix-view` tabs. Listens to the `zimReady` C# push event. No conversion pipeline — ZIM files are always local and served directly.
 
 **searchCacheStore** — LRU cache for search results (capped at 100 entries), stored in `app-search-cache` IDB.
 
@@ -331,4 +340,5 @@ Key C# handlers:
 - `SearchHandler.cs` — Bloom filter search
 - `HebrewBooksHandler.cs` — HebrewBooks download via WebView2 browser engine
 - `PdfHandler.cs` — PDF virtual host management
+- `ZimHandler.cs` — ZIM virtual host management (Kiwix reader)
 - `WordToPdfConverter.cs` — Word-to-PDF conversion

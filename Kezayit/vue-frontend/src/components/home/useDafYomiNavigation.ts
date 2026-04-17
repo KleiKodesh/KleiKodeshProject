@@ -1,6 +1,6 @@
 import { normalize } from '@/utils/normalizeText'
 import { splitQuery, SearchableTree, stripTocTitleRoots } from '@/utils/tocSearchUtils'
-import { query } from '@/host/db'
+import { query } from '@/host/seforimDb'
 import { SQL } from '@/host/queries.sql'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useTabStore } from '@/stores/tabStore'

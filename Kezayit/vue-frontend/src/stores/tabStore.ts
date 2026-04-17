@@ -15,11 +15,12 @@ import {
 } from '@/utils/persistence'
 import type { TabState, BookState, LastReadState } from '@/utils/persistence'
 import { useWorkspaceStore } from './workspaceStore'
-import { disposePdfHost } from '@/host/bridge'
+import { disposePdfHost, disposeZimHost } from '@/host/bridge'
 
 export type TabRoute =
   | '/'
   | '/pdf-view'
+  | '/kiwix-view'
   | '/settings'
   | '/books'
   | '/book-view'
@@ -42,6 +43,10 @@ export interface Tab {
   pdfHbBookTitle?: string // persisted — HebrewBooks book title (used as cache filename)
   pdfConverting?: boolean // in-memory only — true while Word conversion is in progress
   pdfLoadingType?: 'converting' | 'downloading' // in-memory only — drives placeholder message
+  // Kiwix ZIM state
+  zimVirtualUrl?: string // in-memory only — not persisted, reconstructed on restore
+  zimFileName?: string // persisted
+  zimFilePath?: string // persisted — absolute path on disk
   // Book reader state
   bookId?: number
   openToc?: boolean
@@ -114,6 +119,7 @@ export const useTabStore = defineStore('tabs', () => {
           pdfVirtualUrl,
           pdfConverting,
           pdfLoadingType,
+          zimVirtualUrl,
           openToc,
           openTocEntryId,
           openTocLineIndex,
@@ -142,6 +148,8 @@ export const useTabStore = defineStore('tabs', () => {
         pdfFilePath: t.pdfFilePath,
         pdfHbBookId: t.pdfHbBookId,
         pdfHbBookTitle: t.pdfHbBookTitle,
+        zimFileName: t.zimFileName,
+        zimFilePath: t.zimFilePath,
         bookId: t.bookId,
         searchQuery: t.searchQuery,
         tocPath: t.tocPath,
@@ -258,6 +266,7 @@ export const useTabStore = defineStore('tabs', () => {
     const wsId = useWorkspaceStore().activeId
     for (const tab of tabs.value) {
       if (tab.pdfFilePath) disposePdfHost(tab.pdfFilePath)
+      if (tab.zimFilePath) disposeZimHost(tab.zimFilePath)
       idbTabsDelete(KEYS.tab(wsId, tab.id))
       idbTabsDeleteByPrefix(KEYS.tabPrefix(wsId, tab.id))
     }
@@ -272,6 +281,7 @@ export const useTabStore = defineStore('tabs', () => {
     if (idx === -1) return
     const tab = tabs.value[idx]!
     if (tab.pdfFilePath) disposePdfHost(tab.pdfFilePath)
+    if (tab.zimFilePath) disposeZimHost(tab.zimFilePath)
     const wsId = useWorkspaceStore().activeId
     idbTabsDelete(KEYS.tab(wsId, id))
     idbTabsDeleteByPrefix(KEYS.tabPrefix(wsId, id))

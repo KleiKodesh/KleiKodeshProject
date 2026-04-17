@@ -1,4 +1,5 @@
-﻿using KleiKodesh.Ribbon;
+﻿using KezayitLib.Dictionary;
+using KleiKodesh.Ribbon;
 using KezayitLib.Pdf;
 using UpdateCheckerLib;
 using Office = Microsoft.Office.Core;
@@ -15,6 +16,7 @@ namespace KleiKodesh
         private void ThisAddIn_Startup(object sender, System.EventArgs e)
         {
             WordToPdfConverter.HostApplication = this.Application;
+            WordThesaurusProvider.HostApplication = this.Application;
         }
 
         private void ThisAddIn_Shutdown(object sender, System.EventArgs e)

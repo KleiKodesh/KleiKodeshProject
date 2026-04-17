@@ -7,8 +7,7 @@
  * Falls back to sample data in dev when the C# host is not present.
  */
 import { ref } from 'vue'
-import { isHosted } from '@/host/db'
-import { query } from '@/host/db'
+import { isHosted, query } from '@/host/seforimDb'
 import { SQL } from '@/host/queries.sql'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
 import type { BloomSearchResult } from './searchTypes'

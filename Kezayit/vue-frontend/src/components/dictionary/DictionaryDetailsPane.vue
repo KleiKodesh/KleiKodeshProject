@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
-import WiktionaryEntry from './WiktionaryEntry.vue'
+import WiktionaryEntry from './DictionarySenseEntry.vue'
 import type { WiktionarySense } from './useWiktionary'
 import type { DictSuggestion } from './useKezayitDictionary'
 
@@ -10,11 +10,11 @@ const props = defineProps<{
   error: string | null
   notFound: boolean
   allSenses: WiktionarySense[]
-  wikiSensesCount: number
-  aramaicSensesCount: number
   suggestions: DictSuggestion[]
   queryLength: number
-  hasWikiAttribution: boolean
+  hamichlolSenses: WiktionarySense[]
+  hamichlolLoading: boolean
+  wordThesaurusGroups: string[][]
 }>()
 
 const emit = defineEmits<{
@@ -23,29 +23,29 @@ const emit = defineEmits<{
 }>()
 
 const detailChips = computed(() => {
+  // Exclude headwords that are already shown as full results
+  const shownHeadwords = new Set(props.allSenses.map((s) => s.headword))
   const seen = new Set<string>()
   const filtered = props.suggestions
+    .filter((s) => !shownHeadwords.has(s.headword))
     .filter((s) => s.headword.length <= props.queryLength + 2)
     .filter((s) => {
       if (seen.has(s.headword)) return false
       seen.add(s.headword)
       return true
     })
-  // If the length filter leaves nothing, show all suggestions (deduplicated)
+  // If the length filter leaves nothing, show all (deduplicated, still excluding shown results)
   if (filtered.length > 0) return filtered
   const seen2 = new Set<string>()
-  return props.suggestions.filter((s) => {
-    if (seen2.has(s.headword)) return false
-    seen2.add(s.headword)
-    return true
-  })
+  return props.suggestions
+    .filter((s) => !shownHeadwords.has(s.headword))
+    .filter((s) => {
+      if (seen2.has(s.headword)) return false
+      seen2.add(s.headword)
+      return true
+    })
 })
 
-function isFirstAramaic(index: number): boolean {
-  return (
-    index === props.wikiSensesCount && props.aramaicSensesCount > 0 && props.wikiSensesCount > 0
-  )
-}
 </script>
 
 <template>
@@ -65,29 +65,57 @@ function isFirstAramaic(index: number): boolean {
         >
       </div>
 
-      <div v-if="notFound" class="dict-state">לא נמצא</div>
-
-      <div v-else-if="allSenses.length > 0" class="dict-document">
-        <!-- Senses -->
-        <template v-for="(sense, i) in allSenses" :key="`${sense.headword}-${i}`">
-          <div v-if="isFirstAramaic(i)" class="dict-section-divider">
-            <span>מקורות נוספים</span>
-          </div>
+      <div v-if="notFound" class="dict-document">
+        <template v-for="(sense, i) in hamichlolSenses" :key="`hm-nf-${i}`">
           <WiktionaryEntry
             :sense="sense"
             :index="i"
-            :total="allSenses.length"
+            :total="hamichlolSenses.length"
+            @search-word="emit('searchWord', $event)"
+          />
+        </template>
+      </div>
+
+      <div v-else-if="allSenses.length > 0 || hamichlolSenses.length > 0 || hamichlolLoading" class="dict-document">
+        <!-- All senses — wiki + aramaic, flat, each carries its own sourceLabel badge -->
+        <template v-for="(sense, i) in allSenses" :key="`${sense.headword}-${i}`">
+          <WiktionaryEntry
+            :sense="sense"
+            :index="i"
+            :total="allSenses.length + hamichlolSenses.length"
             @search-word="emit('searchWord', $event)"
           />
         </template>
 
-        <div v-if="hasWikiAttribution" class="dict-attribution">
-          מקור: <a href="https://he.wiktionary.org" target="_blank" rel="noopener">ויקימילון</a>
-          · רישיון CC BY-SA 4.0
+        <!-- המכלול — one entry per sense (handles both regular articles and disambiguation) -->
+        <template v-for="(sense, i) in hamichlolSenses" :key="`hm-${i}`">
+          <WiktionaryEntry
+            :sense="sense"
+            :index="allSenses.length + i"
+            :total="allSenses.length + hamichlolSenses.length"
+            @search-word="emit('searchWord', $event)"
+          />
+        </template>
+      </div>
+
+      <!-- Word thesaurus — only shown in VSTO environment when results exist -->
+      <div v-if="wordThesaurusGroups.length > 0" class="word-thesaurus">
+        <div class="word-thesaurus-header">מילים נרדפות (Word)</div>
+        <div
+          v-for="(group, gi) in wordThesaurusGroups"
+          :key="gi"
+          class="word-thesaurus-group"
+        >
+          <button
+            v-for="(syn, si) in group"
+            :key="si"
+            class="word-thesaurus-word"
+            @click="emit('searchWord', syn)"
+          >{{ syn }}</button>
         </div>
       </div>
 
-      <div v-else class="dict-empty">
+      <div v-else-if="!notFound && allSenses.length === 0 && !hamichlolSenses.length && !hamichlolLoading" class="dict-empty">
         <IconSearch20Regular class="dict-empty-icon" />
       </div>
     </template>
@@ -181,6 +209,43 @@ function isFirstAramaic(index: number): boolean {
   flex: 1;
   height: 1px;
   background: var(--border-color);
+}
+
+/* ── Word thesaurus (VSTO only) ── */
+.word-thesaurus {
+  padding: 10px 16px 14px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  direction: rtl;
+}
+.word-thesaurus-header {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.03em;
+}
+.word-thesaurus-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.word-thesaurus-word {
+  display: inline;
+  color: var(--accent-color);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1.6;
+}
+.word-thesaurus-word:hover {
+  opacity: 0.8;
 }
 
 /* ── Attribution ── */

@@ -30,7 +30,7 @@ namespace UpdateCheckerLib
                     throw new InvalidOperationException("הורדת הקובץ נכשלה");
 
                 PendingInstallerPath = tempPath;
-                Log($"Download complete, PendingInstallerPath set to '{PendingInstallerPath}'");            }
+            }
             catch (OperationCanceledException) { TryDeleteFile(tempPath); }
             catch (Exception ex)
             {
@@ -46,36 +46,30 @@ namespace UpdateCheckerLib
 
         public static void RunPendingInstaller()
         {
-            Log("RunPendingInstaller called");
-            Log($"PendingInstallerPath = '{PendingInstallerPath}'");
-
             if (string.IsNullOrEmpty(PendingInstallerPath))
-            {
-                Log("SKIP: path is null/empty");
                 return;
-            }
 
             if (!File.Exists(PendingInstallerPath))
             {
-                Log($"SKIP: file does not exist at '{PendingInstallerPath}'");
                 PendingInstallerPath = null;
                 return;
             }
 
-            Log($"File exists, size = {new FileInfo(PendingInstallerPath).Length} bytes");
-
             var pathToLaunch = PendingInstallerPath;
             PendingInstallerPath = null;
-            Log("PendingInstallerPath cleared");
 
             try
             {
                 LaunchInstaller(pathToLaunch);
-                Log("LaunchInstaller succeeded");
             }
             catch (Exception ex)
             {
-                Log($"LaunchInstaller FAILED: {ex.Message}");
+                MessageBox.Show(
+                    $"שגיאה בהפעלת המתקין:\n{ex.Message}",
+                    "שגיאה - כלי קודש",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error,
+                    MessageBoxDefaultButton.Button1,
+                    MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
             }
         }
 
@@ -85,7 +79,6 @@ namespace UpdateCheckerLib
         // The NSIS wrapper has RequestExecutionLevel=user so no UAC prompt appears.
         private static void LaunchInstaller(string installerPath)
         {
-            Log($"LaunchInstaller entered, path='{installerPath}'");
 
             var psi = new ProcessStartInfo
             {
@@ -98,8 +91,6 @@ namespace UpdateCheckerLib
             var p = Process.Start(psi);
             if (p == null)
                 throw new InvalidOperationException("Failed to start installer process");
-
-            Log($"Installer launched pid={p.Id}");
         }
 
         private static async Task DownloadFileAsync(
@@ -138,11 +129,6 @@ namespace UpdateCheckerLib
                     }
                 }
             }
-        }
-
-        private static void Log(string msg)
-        {
-            try { File.AppendAllText(Path.Combine(Path.GetTempPath(), "KleiKodesh-update.log"), $"{DateTime.Now:HH:mm:ss.fff} {msg}\r\n"); } catch { }
         }
 
         private static void TryDeleteFile(string path)

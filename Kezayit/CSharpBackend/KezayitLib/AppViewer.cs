@@ -1,7 +1,10 @@
 using KezayitLib.Bridge;
 using KezayitLib.Db;
 using KezayitLib.Diagnostics;
+using KezayitLib.Dictionary;
+using KezayitLib.Helpers;
 using KezayitLib.HebrewBooks;
+using KezayitLib.Kiwix;
 using KezayitLib.Pdf;
 using KezayitLib.Search;
 using KezayitLib.Settings;
@@ -14,7 +17,6 @@ using System.Linq;
 using System.Reflection;
 using System.Text.Json;
 using System.Threading.Tasks;
-using System.Windows.Media;
 using System.Windows.Forms;
 
 namespace KezayitLib
@@ -41,11 +43,11 @@ namespace KezayitLib
         private WebBridge _bridge;
         private DbHandler _db;
         private PdfHandler _pdf;
+        private ZimHandler _zim;
         private HebrewBooksHandler _hb;
         private HebrewBooksCsvUpdater _hbCsvUpdater;
         private SearchHandler _search;
-        private DbAccess _dictDb;
-        private DbAccess _wikiDictDb;
+        private DictionaryHandler _dictionary;
         private string _dbInjectionScriptId;
 
         private SplashOverlay _splash;
@@ -106,19 +108,11 @@ namespace KezayitLib
             _db = new DbHandler(_bridge, _webView, savedPath);
 
             _pdf = new PdfHandler(_bridge, _webView);
+            _zim = new ZimHandler(_bridge, _webView);
             _hb = new HebrewBooksHandler(_bridge, _webView, this);
             _hbCsvUpdater = new HebrewBooksCsvUpdater();
             _search = new SearchHandler(_bridge, _webView);
-
-            // Wire up wiki dictionary DB (read-only, fixed path next to the app)
-            string wikiDictPath = Path.Combine(AppDir, "dicts", "wikidictionary.db");
-            if (File.Exists(wikiDictPath))
-                _wikiDictDb = new DbAccess(wikiDictPath);
-
-            // Wire up Aramaic dictionary DB (read-only, fixed path next to the app)
-            string dictPath = Path.Combine(AppDir, "dicts", "kezayit_dictionary.db");
-            if (File.Exists(dictPath))
-                _dictDb = new DbAccess(dictPath);
+            _dictionary = new DictionaryHandler(AppDir);
             _db.OnDbPathPicked = path =>
             {
                 _search.ResetAndReindex(path);
@@ -188,8 +182,8 @@ namespace KezayitLib
                     switch (action)
                     {
                         case "sql": await _db.HandleSql(root, id); break;
-                        case "dict-sql": await HandleDictSql(root, id, _dictDb); break;
-                        case "wikidict-sql": await HandleDictSql(root, id, _wikiDictDb); break;
+                        case "dict-sql":     await HandleDictSql(root, id, _dictionary, isAramaic: true);  break;
+                        case "wikidict-sql": await HandleDictSql(root, id, _dictionary, isAramaic: false); break;
                         case "setDbPath": _db.HandleSetDbPath(root, id); break;
                         case "pickDbPath": _db.HandlePickDbPath(id, this); break;
                         case "resetSettings": _db.HandleResetSettings(id); break;
@@ -197,6 +191,9 @@ namespace KezayitLib
                         case "pickFile": _pdf.HandlePickFile(id, this); break;
                         case "restoreLocalPdf": await _pdf.HandleRestoreLocalPdf(root, id); break;
                         case "disposePdfHost": _pdf.HandleDisposePdfHost(root, id); break;
+                        case "pickZimFile": _zim.HandlePickZimFile(id, this); break;
+                        case "restoreLocalZim": _zim.HandleRestoreLocalZim(root, id); break;
+                        case "disposeZimHost": _zim.HandleDisposeZimHost(root, id); break;
                         case "restoreHbPdf": _hb.HandleRestoreHbPdf(root, id); break;
                         case "triggerHbDownload": _hb.HandleTriggerHbDownload(root, id); break;
                         case "triggerHbSaveAs": _hb.HandleTriggerHbSaveAs(root, id); break;
@@ -208,7 +205,9 @@ namespace KezayitLib
                             bool confirm = root.TryGetProperty("confirm", out var cv) && cv.GetBoolean();
                             _search.HandleConfirmReindex(confirm, id);
                             break;
-                        case "TogglePopOut": HandleTogglePopOut(id); break;                        case "getFonts": HandleGetFonts(id); break;
+                        case "TogglePopOut": HandleTogglePopOut(id); break;
+                        case "getWordSynonyms": HandleGetWordSynonyms(root, id); break;
+                        case "getFonts": HandleGetFonts(id); break;
                         case "getDiagnostics": HandleGetDiagnostics(id); break;
                         default: _bridge.Reply(id, new { error = "Unknown action: " + action }); break;
                     }
@@ -218,6 +217,31 @@ namespace KezayitLib
             {
                 if (id != null) _bridge.Reply(id, new { error = ex.Message });
             }
+        }
+
+        private void HandleGetWordSynonyms(JsonElement root, string id)
+        {
+            string word = root.TryGetProperty("word", out var w) ? w.GetString() : null;
+            var groups = WordThesaurusProvider.GetSynonyms(word);
+            _bridge.Reply(id, new { groups });
+        }
+
+        private async Task HandleDictSql(JsonElement root, string id, DictionaryHandler dict, bool isAramaic)
+        {
+            bool ready = isAramaic ? dict.IsAramaicDbReady : dict.IsWikiDbReady;
+            string name = isAramaic ? "Aramaic dictionary" : "Wiktionary";
+            if (!ready) { _bridge.Reply(id, new { error = $"{name} database not available" }); return; }
+
+            string sql = root.GetProperty("sql").GetString();
+            try
+            {
+                var rows = await Task.Run(() =>
+                    isAramaic
+                        ? dict.QueryAramaic(sql, DbHandler.ParseParamsStatic(root))
+                        : dict.QueryWiki(sql, DbHandler.ParseParamsStatic(root)));
+                _bridge.Reply(id, new { rows });
+            }
+            catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
         }
 
         private void HandleTogglePopOut(string id)
@@ -231,39 +255,13 @@ namespace KezayitLib
 
         private void HandleGetFonts(string id)
         {
-            string[] fonts = Fonts.SystemFontFamilies
-                .Where(f => HasHebCharacters(f))
-                .Select(f => f.Source)
-                .OrderBy(n => n)
-                .ToArray();
-            _bridge.Reply(id, new { fonts = fonts });
-        }
-
-        private bool HasHebCharacters(System.Windows.Media.FontFamily family)
-        {
-            return family.GetTypefaces().Any(typeface =>
-            {
-                GlyphTypeface glyph;
-                return typeface.TryGetGlyphTypeface(out glyph) && glyph.CharacterToGlyphMap.ContainsKey('א');
-            });
+            _bridge.Reply(id, new { fonts = FontsProvider.GetHebrewFonts() });
         }
 
         private void HandleGetDiagnostics(string id)
         {
             var report = EnvironmentDiagnostics.Collect();
             _bridge.Reply(id, new { diagnostics = report });
-        }
-
-        private async Task HandleDictSql(JsonElement root, string id, DbAccess db)
-        {
-            if (db == null) { _bridge.Reply(id, new { error = "Dictionary database not available" }); return; }
-            string sql = root.GetProperty("sql").GetString();
-            try
-            {
-                var rows = await Task.Run(() => db.Query(sql, DbHandler.ParseParamsStatic(root)));
-                _bridge.Reply(id, new { rows });
-            }
-            catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
         }
 
         /// <summary>

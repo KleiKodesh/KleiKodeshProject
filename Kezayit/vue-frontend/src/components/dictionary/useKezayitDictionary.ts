@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { queryDict } from '@/host/db'
+import { queryDict } from '@/host/dictionaryDb'
 import { SQL } from '@/host/queries.sql'
 import type { WiktionarySense, WiktionaryDefinition } from './useWiktionary'
 

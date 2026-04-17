@@ -110,6 +110,8 @@ useEventListener('keydown', (e: KeyboardEvent) => {
   } else if (e.ctrlKey && e.key === 'f') {
     const active = document.activeElement as HTMLElement | null
     if (!active?.dataset.ctrlfEnabled) e.preventDefault()
+  } else if (e.ctrlKey && e.key === 'p') {
+    e.preventDefault()
   }
 })
 </script>

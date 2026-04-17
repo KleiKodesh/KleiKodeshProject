@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, watch } from 'vue'
 import { useTabStore } from './tabStore'
 import { restoreLocalPdf, restoreHbPdf } from '@/host/bridge'
-import { onWebviewEvent } from '@/host/db'
+import { onWebviewEvent } from '@/host/seforimDb'
 
 export const usePdfStore = defineStore('pdf', () => {
   const tabStore = useTabStore()

@@ -1,5 +1,5 @@
 import { ref, computed, onMounted } from 'vue'
-import { query } from '@/host/db'
+import { query } from '@/host/seforimDb'
 import { SQL } from '@/host/queries.sql'
 import { useTabStore } from '@/stores/tabStore'
 

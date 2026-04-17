@@ -16,7 +16,7 @@ Dictionary page. Singleton route `/dictionary`. Queries two sources simultaneous
 
 `useAramaicSearch.ts` — Aramaic DB lookup via `queryDict()`. `search(term)` loads full senses in 5 queries (bulk, no N+1). `getSuggestions(prefix)` returns one row per `(headword, source)` combination with all definitions for that source concatenated.
 
-`WiktionaryEntry.vue` — renders a single `WiktionarySense`: headword, nikud, pos badge, binyan, etymology, shoresh, definitions with examples, named sections, and translations.
+`DictionarySenseEntry.vue` — renders a single `WiktionarySense`: headword, nikud, pos badge, binyan, etymology, shoresh, definitions with examples, named sections, and translations.
 
 `DictionaryEntryView.vue` — renders entries from the old book-based dictionary (HTML content).
 

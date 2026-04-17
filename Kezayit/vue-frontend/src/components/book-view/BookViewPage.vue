@@ -16,7 +16,7 @@ import {
   findNextTocCommentarySection,
   findPrevTocCommentarySection,
 } from '@/utils/commentaryNav'
-import { query } from '@/host/db'
+import { query } from '@/host/seforimDb'
 import { SQL } from '@/host/queries.sql'
 import BookViewToolbar from './BookViewToolbar.vue'
 import BookViewSplitPane from './BookViewSplitPane.vue'

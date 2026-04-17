@@ -151,14 +151,16 @@ namespace KleiKodesh.Helpers
                         }
                         catch (Exception ex)
                         {
-                            MessageBox.Show($"[TaskPaneManager] Update check failed: {ex.Message}");
+                            // Log silently instead of showing MessageBox to avoid blocking UI
+                            System.Diagnostics.Debug.WriteLine($"[TaskPaneManager] Update check failed: {ex.Message}");
                         }
                     });
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"[TaskPaneManager] Update check failed: {ex.Message}");
+                // Log silently instead of showing MessageBox to avoid blocking UI
+                System.Diagnostics.Debug.WriteLine($"[TaskPaneManager] Update check failed: {ex.Message}");
             }
         }
 

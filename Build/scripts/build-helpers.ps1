@@ -2,13 +2,14 @@
 # Usage: . "$PSScriptRoot\build-helpers.ps1"
 
 # -- Paths --------------------------------------------------------------------
-$BuildDir            = $PSScriptRoot
+$ScriptsDir          = $PSScriptRoot
+$BuildDir            = Split-Path -Parent $ScriptsDir
 $ProjectRoot         = Split-Path -Parent $BuildDir
 $AddinInstallerPath  = Join-Path $ProjectRoot "KleiKodeshVstoInstallerWpf\Helpers\AddinInstaller.cs"
 $UpdateVersionScript = Join-Path $ProjectRoot "KleiKodeshVstoInstallerWpf\UpdateVersion.ps1"
 $WpfProjectPath      = Join-Path $ProjectRoot "KleiKodeshVstoInstallerWpf\KleiKodeshVstoInstallerWpf.csproj"
 $SolutionPath        = Join-Path $ProjectRoot "KleiKodeshProject.slnx"
-$NsisScriptPath      = Join-Path $BuildDir    "KleiKodeshWrapper.nsi"
+$NsisScriptPath      = Join-Path $BuildDir    "nsis\KleiKodeshWrapper.nsi"
 $ReleasesDir         = Join-Path $BuildDir    "releases"
 $ReleaseNotesFile    = Join-Path $ProjectRoot "RELEASE_NOTES.txt"
 

@@ -1,4 +1,4 @@
-# build-installer.ps1 — pure orchestration, no interactive prompts.
+﻿# build-installer.ps1 — pure orchestration, no interactive prompts.
 # Called by build-menu.ps1 or directly from the CLI.
 #
 # Examples:
@@ -103,6 +103,12 @@ if ($NoRelease) { Write-Host "GitHub release skipped." -ForegroundColor Yellow; 
 
 Write-Host ""
 Write-Host "Creating GitHub release..." -ForegroundColor Yellow
+
+$ghCmd = Get-Command gh -ErrorAction SilentlyContinue
+if (-not $ghCmd) {
+    Write-Host "GitHub CLI (gh) not found — skipping release. Install from: https://cli.github.com/" -ForegroundColor Yellow
+    exit 0
+}
 
 gh auth status 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) {

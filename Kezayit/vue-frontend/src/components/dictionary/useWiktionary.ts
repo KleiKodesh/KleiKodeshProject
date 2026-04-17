@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { queryWikiDict } from '@/host/db'
+import { queryWikiDict } from '@/host/dictionaryDb'
 import { SQL } from '@/host/queries.sql'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -21,6 +21,7 @@ export interface WiktionarySense {
   sections: Record<string, string[]>
   translations?: { lang: string; text: string }[]
   sourceLabel?: string | null
+  readMoreUrl?: string | null
 }
 
 // ── Raw DB row types ──────────────────────────────────────────────────────────

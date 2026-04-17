@@ -6,7 +6,7 @@
  * Push events from C# arrive via window.__onWebviewEvent (registered in db.ts).
  */
 
-import { isHosted } from './db'
+import { isHosted } from './seforimDb'
 
 function action<T>(name: string, args?: object): Promise<T> {
   if (typeof window.__webviewAction !== 'function')
@@ -17,7 +17,19 @@ function action<T>(name: string, args?: object): Promise<T> {
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface PdfFileResult {
-  /** Ready-to-use URL for PDF.js — constructed by C#, served via virtual host */
+  /** Ready-to-use URL served via virtual host */
+  url: string
+  fileName: string
+  /** Absolute path on disk — persisted for session restore */
+  filePath: string
+}
+
+export interface ZimRestoreResult {
+  url: string
+}
+
+export interface ZimFileResult {
+  /** Ready-to-use URL served via virtual host */
   url: string
   fileName: string
   /** Absolute path on disk — persisted for session restore */
@@ -118,8 +130,6 @@ export async function getDiagnostics(): Promise<Record<string, string> | null> {
   }
 }
 
-// ── Dev fallback ──────────────────────────────────────────────────────────────
-
 async function devPickPdf(): Promise<PdfFileResult | null> {
   return new Promise((resolve) => {
     const input = Object.assign(document.createElement('input'), {
@@ -132,6 +142,61 @@ async function devPickPdf(): Promise<PdfFileResult | null> {
         resolve(null)
         return
       }
+      resolve({ url: URL.createObjectURL(file), fileName: file.name, filePath: '' })
+    }
+    input.oncancel = () => resolve(null)
+    input.click()
+  })
+}
+
+// ── Kiwix ZIM bridge ──────────────────────────────────────────────────────────
+
+/**
+ * Open native file picker filtered to .zim files.
+ * In hosted mode C# pushes a `zimReady` event and returns cancelled=false.
+ * In dev mode returns a blob URL directly.
+ */
+export async function pickZimFile(): Promise<ZimFileResult | null> {
+  if (typeof window.__webviewAction !== 'function') return devPickZim()
+  const res = await action<{
+    cancelled?: boolean
+    url?: string
+    fileName?: string
+    filePath?: string
+    error?: string
+  }>('pickZimFile')
+  if (res.cancelled || res.error || !res.url) return null
+  return { url: res.url, fileName: res.fileName!, filePath: res.filePath! }
+}
+
+/**
+ * Restore a local ZIM tab from a persisted file path.
+ * C# re-registers the virtual host and returns the URL.
+ */
+export async function restoreLocalZim(filePath: string): Promise<ZimRestoreResult | null> {
+  if (!isHosted) return null
+  const res = await action<{ url?: string; error?: string }>('restoreLocalZim', { filePath })
+  if (res.error || !res.url) return null
+  return { url: res.url }
+}
+
+/**
+ * Notify C# that a Kiwix tab was closed so it can decrement the virtual host ref count.
+ */
+export function disposeZimHost(filePath: string): void {
+  if (!isHosted || !filePath) return
+  action('disposeZimHost', { filePath }).catch(() => {})
+}
+
+async function devPickZim(): Promise<ZimFileResult | null> {
+  return new Promise((resolve) => {
+    const input = Object.assign(document.createElement('input'), {
+      type: 'file',
+      accept: '.zim',
+    })
+    input.onchange = () => {
+      const file = input.files?.[0]
+      if (!file) { resolve(null); return }
       resolve({ url: URL.createObjectURL(file), fileName: file.name, filePath: '' })
     }
     input.oncancel = () => resolve(null)

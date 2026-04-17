@@ -10,6 +10,7 @@ import { useThemeStore } from './theme/themeStore'
 import { initPdfThemeObserver } from './theme/themes'
 import { useBooksDataStore } from './stores/booksDataStore'
 import { usePdfStore } from './stores/pdfStore'
+import { useZimStore } from './stores/zimStore'
 import { idbCheckAndExecReset } from './utils/persistence'
 
 // Synchronous localStorage check — zero cost on normal boots.
@@ -26,12 +27,14 @@ useBookViewStore().init()
 useThemeStore().init()
 useTabStore().init()
 
-// Restore any persisted PDF tabs — must run after tabStore.init()
+// Restore any persisted PDF and Kiwix tabs — must run after tabStore.init()
 const pdfStore = usePdfStore()
+const zimStore = useZimStore()
 const tabStore = useTabStore()
-await Promise.all(
-  tabStore.tabs.filter((t) => t.route === '/pdf-view').map((t) => pdfStore.restoreTab(t.id)),
-)
+await Promise.all([
+  ...tabStore.tabs.filter((t) => t.route === '/pdf-view').map((t) => pdfStore.restoreTab(t.id)),
+  ...tabStore.tabs.filter((t) => t.route === '/kiwix-view').map((t) => zimStore.restoreTab(t.id)),
+])
 
 app.mount('#app')
 

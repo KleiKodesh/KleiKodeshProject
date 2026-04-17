@@ -1,4 +1,4 @@
-# build-menu.ps1 - interactive top-level menu. All logic lives in build-installer.ps1.
+﻿# build-menu.ps1 - interactive top-level menu. All logic lives in build-installer.ps1.
 . "$PSScriptRoot\build-helpers.ps1"
 
 $installer = "$PSScriptRoot\build-installer.ps1"

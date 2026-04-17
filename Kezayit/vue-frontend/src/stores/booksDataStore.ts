@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { query, categoryHasOrderIndex, ensureCategorySchema } from '@/host/db'
+import { query, categoryHasOrderIndex, ensureCategorySchema } from '@/host/seforimDb'
 import { SQL } from '@/host/queries.sql'
 import {
   buildTree,

@@ -9,6 +9,9 @@ import DictionaryDetailsPane from './DictionaryDetailsPane.vue'
 import { useWiktionary } from './useWiktionary'
 import { useKezayitDictionary } from './useKezayitDictionary'
 import { useDictSuggestions } from './useDictSuggestions'
+import { useHamichlol } from './useHamichlol'
+import { useWordThesaurus } from './useWordThesaurus'
+import { useOnlineStatus } from '@/utils/useOnlineStatus'
 import { useTabStore } from '@/stores/tabStore'
 
 const tabStore = useTabStore()
@@ -56,6 +59,18 @@ const allSenses = computed(() => [...wikiSenses.value, ...aramaicSenses.value])
 const notFound = computed(
   () => hasSearched.value && !searching.value && allSenses.value.length === 0 && !error.value,
 )
+
+// ── המכלול online lookup ──────────────────────────────────────────────────────
+
+const isOnline = useOnlineStatus()
+const {
+  results: hamichlolSenses,
+  loading: hamichlolLoading,
+} = useHamichlol(debouncedQuery, isOnline)
+
+// ── Word thesaurus (VSTO only) ────────────────────────────────────────────────
+
+const { groups: wordThesaurusGroups } = useWordThesaurus(debouncedQuery)
 
 watch(debouncedQuery, (q) => {
   wikiSearch(q)
@@ -124,11 +139,11 @@ function onInputKeydown(e: KeyboardEvent) {
       :error="error"
       :not-found="notFound"
       :all-senses="allSenses"
-      :wiki-senses-count="wikiSenses.length"
-      :aramaic-senses-count="aramaicSenses.length"
       :suggestions="suggestions"
       :query-length="searchQuery.length"
-      :has-wiki-attribution="wikiSenses.length > 0"
+      :hamichlol-senses="hamichlolSenses"
+      :hamichlol-loading="hamichlolLoading"
+      :word-thesaurus-groups="wordThesaurusGroups"
       @pick="fillFromSuggestion"
       @search-word="handleSearchWord"
     />
