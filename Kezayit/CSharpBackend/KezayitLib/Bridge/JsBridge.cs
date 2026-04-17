@@ -5,7 +5,6 @@ namespace KezayitLib.Bridge
     /// Exposes Promise-based functions on window:
     ///   __webviewQuery(sql, params)        — run a SQL query against the main DB
     ///   __webviewDictQuery(sql, params)    — run a SQL query against dictionary.db
-    ///   __webviewWikiDictQuery(sql, params)— run a SQL query against wikidictionary.db
     ///   __webviewSetDbPath(path)           — set the DB path programmatically
     ///   __webviewPickDbPath()              — open the native DB file picker (push event)
     ///   __webviewAction(action, args)      — generic bridge for all other actions
@@ -45,7 +44,6 @@ namespace KezayitLib.Bridge
 
     window.__webviewQuery          = function (sql, params) { return post({ sql: sql, params: params || [] }).then(function (m) { return { rows: m.rows }; }); };
     window.__webviewDictQuery      = function (sql, params) { return post({ action: 'dict-sql', sql: sql, params: params || [] }).then(function (m) { return { rows: m.rows }; }); };
-    window.__webviewWikiDictQuery  = function (sql, params) { return post({ action: 'wikidict-sql', sql: sql, params: params || [] }).then(function (m) { return { rows: m.rows }; }); };
     window.__webviewSetDbPath      = function (path)         { return post({ action: 'setDbPath', path: path }); };
     window.__webviewPickDbPath     = function ()             { window.chrome.webview.postMessage({ id: '0', action: 'pickDbPath' }); };
     window.__webviewAction         = function (action, args) { return post(Object.assign({ action: action }, args || {})); };

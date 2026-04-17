@@ -63,8 +63,21 @@ function Confirm-Action([string]$summary) {
 }
 
 function Invoke-Installer([hashtable]$params) {
-    # Splat the hashtable as named params to build-installer.ps1
-    & powershell -NoLogo -ExecutionPolicy Bypass -File $installer @params
+    # Build an explicit argument list so that switch parameters (NoRelease,
+    # NoClean) are passed as flags rather than string values.  Splatting a
+    # hashtable with -File serialises booleans as "True"/"False" strings,
+    # which PowerShell cannot bind to [switch] parameters.
+    $argList = @()
+    foreach ($key in $params.Keys) {
+        $val = $params[$key]
+        if ($val -is [bool] -or $val -is [System.Management.Automation.SwitchParameter]) {
+            if ($val) { $argList += "-$key" }
+        } else {
+            $argList += "-$key"
+            $argList += $val
+        }
+    }
+    & powershell -NoLogo -ExecutionPolicy Bypass -File $installer @argList
     Write-Host ""
     Read-Host "Press Enter to return to menu"
 }

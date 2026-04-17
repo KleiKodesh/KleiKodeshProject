@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { watch } from 'vue'
+import { watch, ref } from 'vue'
 import { useDebounce } from '@vueuse/core'
-import { ref } from 'vue'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import BottomSearchBar from '@/components/common/BottomSearchBar.vue'
 import { useKezayitDictionary } from './useKezayitDictionary'
@@ -15,7 +14,7 @@ const settings = useSettingsStore()
 const searchQuery = ref('')
 const debouncedQuery = useDebounce(searchQuery, 300)
 
-const { senses, searching, thesaurusGroups, search } = useKezayitDictionary()
+const { senses, searching, search } = useKezayitDictionary()
 
 watch(debouncedQuery, (q) => search(q))
 
@@ -39,19 +38,14 @@ function maybeFilter(text: string): string {
         לא נמצאו תוצאות
       </div>
 
-      <template v-if="thesaurusGroups.length > 0">
-        <div class="dict-section-label">מילים נרדפות</div>
-        <div class="dict-thesaurus">
-          <div v-for="(group, gi) in thesaurusGroups" :key="gi" class="dict-thesaurus-group">
-            <span v-for="(word, wi) in group" :key="wi" class="dict-thesaurus-word">{{ word }}</span>
-          </div>
-        </div>
-      </template>      <div v-else-if="senses.length > 0" class="dict-list">
+      <div v-else-if="senses.length > 0" class="dict-list">
         <div v-if="senses[0]?.isFuzzy" class="dict-fuzzy-label">הצעות דומות</div>
         <div v-for="(sense, i) in senses" :key="i" class="dict-row">
           <span class="dict-headword">{{ sense.headword }}</span>
-          <span class="dict-sep">—</span>
-          <span class="dict-definition">{{ maybeFilter(sense.definition) }}</span>
+          <template v-if="sense.definition">
+            <span class="dict-sep">—</span>
+            <span class="dict-definition">{{ maybeFilter(sense.definition) }}</span>
+          </template>
           <span v-if="sense.sourceLabel" class="dict-source">{{ sense.sourceLabel }}</span>
         </div>
       </div>
@@ -172,37 +166,6 @@ function maybeFilter(text: string): string {
   line-height: 16px;
   flex-shrink: 0;
   align-self: center;
-}
-
-/* ── Section label ── */
-.dict-section-label {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  letter-spacing: 0.04em;
-  padding: 10px 14px 4px;
-  border-top: 1px solid var(--border-color);
-}
-
-/* ── Thesaurus ── */
-.dict-thesaurus {
-  padding: 0 14px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.dict-thesaurus-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 8px;
-}
-.dict-thesaurus-word {
-  font-size: 13px;
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
-  border-radius: 4px;
-  padding: 1px 7px;
-  line-height: 22px;
 }
 
 /* ── Search bar ── */

@@ -179,8 +179,7 @@ namespace KezayitLib
                     switch (action)
                     {
                         case "sql": await _db.HandleSql(root, id); break;
-                        case "dict-sql":     await HandleDictSql(root, id, _dictionary, isAramaic: true);  break;
-                        case "wikidict-sql": await HandleDictSql(root, id, _dictionary, isAramaic: false); break;
+                        case "dict-sql":     await HandleDictSql(root, id); break;
                         case "setDbPath": _db.HandleSetDbPath(root, id); break;
                         case "pickDbPath": _db.HandlePickDbPath(id, this); break;
                         case "resetSettings": _db.HandleResetSettings(id); break;
@@ -220,19 +219,14 @@ namespace KezayitLib
             _bridge.Reply(id, new { groups });
         }
 
-        private async Task HandleDictSql(JsonElement root, string id, DictionaryHandler dict, bool isAramaic)
+        private async Task HandleDictSql(JsonElement root, string id)
         {
-            bool ready = isAramaic ? dict.IsAramaicDbReady : dict.IsWikiDbReady;
-            string name = isAramaic ? "Aramaic dictionary" : "Wiktionary";
-            if (!ready) { _bridge.Reply(id, new { error = $"{name} database not available" }); return; }
+            if (!_dictionary.IsAramaicDbReady) { _bridge.Reply(id, new { error = "Aramaic dictionary database not available" }); return; }
 
             string sql = root.GetProperty("sql").GetString();
             try
             {
-                var rows = await Task.Run(() =>
-                    isAramaic
-                        ? dict.QueryAramaic(sql, DbHandler.ParseParamsStatic(root))
-                        : dict.QueryWiki(sql, DbHandler.ParseParamsStatic(root)));
+                var rows = await Task.Run(() => _dictionary.QueryAramaic(sql, DbHandler.ParseParamsStatic(root)));
                 _bridge.Reply(id, new { rows });
             }
             catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
