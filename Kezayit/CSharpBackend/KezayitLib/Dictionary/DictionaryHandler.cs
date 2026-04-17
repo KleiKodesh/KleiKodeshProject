@@ -6,7 +6,7 @@ namespace KezayitLib.Dictionary
 {
     /// <summary>
     /// Pure data layer for dictionary queries.
-    /// Owns the two read-only dictionary databases and exposes query methods.
+    /// Owns the Kezayit dictionary database and exposes query methods.
     /// Has no knowledge of the web bridge — AppViewer handles messaging.
     /// </summary>
     public class DictionaryHandler

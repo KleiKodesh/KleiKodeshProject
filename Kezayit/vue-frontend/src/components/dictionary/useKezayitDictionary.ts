@@ -86,6 +86,12 @@ export function useKezayitDictionary() {
         return
       }
 
+      // No DB results and no thesaurus — try fuzzy Levenshtein fallback
+      if (thesaurusSenses.length > 0) {
+        senses.value = thesaurusSenses
+        return
+      }
+
       // Fallback: fuzzy via Levenshtein on contains-match candidates
       const fragment = trimmed.length >= 2 ? trimmed.slice(0, 2) : trimmed
       const candidates = await queryDict<{ headword: string }>(

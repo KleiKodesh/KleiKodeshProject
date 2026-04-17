@@ -77,7 +77,7 @@ namespace KezayitLib.Db
 
         /// <summary>
         /// Parses the "params" array from a JSON message into a typed object array.
-        /// Public so AppViewer can reuse it for dict/wikidict SQL handlers.
+        /// Public so AppViewer can reuse it for dict SQL handlers.
         /// </summary>
         public static object[] ParseParamsStatic(JsonElement root)
         {

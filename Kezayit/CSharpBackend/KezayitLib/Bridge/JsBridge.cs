@@ -4,7 +4,7 @@ namespace KezayitLib.Bridge
     /// JavaScript injected before the Vue app loads.
     /// Exposes Promise-based functions on window:
     ///   __webviewQuery(sql, params)        — run a SQL query against the main DB
-    ///   __webviewDictQuery(sql, params)    — run a SQL query against dictionary.db
+    ///   __webviewDictQuery(sql, params)    — run a SQL query against kezayit_dictionary.db
     ///   __webviewSetDbPath(path)           — set the DB path programmatically
     ///   __webviewPickDbPath()              — open the native DB file picker (push event)
     ///   __webviewAction(action, args)      — generic bridge for all other actions

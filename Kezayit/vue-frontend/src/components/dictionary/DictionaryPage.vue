@@ -4,16 +4,12 @@ import { useDebounce } from '@vueuse/core'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import BottomSearchBar from '@/components/common/BottomSearchBar.vue'
 import { useKezayitDictionary } from './useKezayitDictionary'
-import { useSettingsStore } from '@/stores/settingsStore'
-import { censorDivineNames } from '@/utils/censorDivineNames'
+import DictionaryRow from './DictionaryRow.vue'
 import { useTabStore } from '@/stores/tabStore'
 
 const tabStore = useTabStore()
-const settings = useSettingsStore()
-
 const searchQuery = ref('')
 const debouncedQuery = useDebounce(searchQuery, 300)
-
 const { senses, searching, search } = useKezayitDictionary()
 
 watch(debouncedQuery, (q) => search(q))
@@ -23,10 +19,6 @@ watch(senses, (s) => {
   if (first) tabStore.updateActiveTab({ title: `מילון · ${first.headword}` })
   else tabStore.updateActiveTab({ title: 'מילון' })
 })
-
-function maybeFilter(text: string): string {
-  return settings.censorDivineNames ? censorDivineNames(text) : text
-}
 </script>
 
 <template>
@@ -40,14 +32,7 @@ function maybeFilter(text: string): string {
 
       <div v-else-if="senses.length > 0" class="dict-list">
         <div v-if="senses[0]?.isFuzzy" class="dict-fuzzy-label">הצעות דומות</div>
-        <div v-for="(sense, i) in senses" :key="i" class="dict-row">
-          <span class="dict-headword">{{ sense.headword }}</span>
-          <template v-if="sense.definition">
-            <span class="dict-sep">—</span>
-            <span class="dict-definition">{{ maybeFilter(sense.definition) }}</span>
-          </template>
-          <span v-if="sense.sourceLabel" class="dict-source">{{ sense.sourceLabel }}</span>
-        </div>
+        <DictionaryRow v-for="(sense, i) in senses" :key="i" :sense="sense" />
       </div>
 
       <div v-else class="dict-empty">
@@ -124,48 +109,6 @@ function maybeFilter(text: string): string {
 .dict-list {
   display: flex;
   flex-direction: column;
-}
-
-.dict-row {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  min-height: 44px;
-  padding: 8px 14px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
-  flex-wrap: wrap;
-}
-
-.dict-headword {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-primary);
-  flex-shrink: 0;
-}
-
-.dict-sep {
-  font-size: 13px;
-  color: var(--text-secondary);
-  flex-shrink: 0;
-}
-
-.dict-definition {
-  font-size: 13px;
-  color: var(--text-primary);
-  line-height: 1.5;
-  flex: 1;
-  min-width: 0;
-}
-
-.dict-source {
-  font-size: 10px;
-  color: var(--text-secondary);
-  background: color-mix(in srgb, var(--text-secondary) 10%, transparent);
-  border-radius: 999px;
-  padding: 0 6px;
-  line-height: 16px;
-  flex-shrink: 0;
-  align-self: center;
 }
 
 /* ── Search bar ── */
