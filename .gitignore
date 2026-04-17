@@ -366,3 +366,10 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+# Project-specific junk files
+*.db.bak
+*.db-shm
+*.db-wal
+*.zim
+Kezayit/scripts/
+
