@@ -208,13 +208,14 @@ export const SQL = {
    * Params: [term, prefixPattern, term]  e.g. ['אבא', 'אבא%', 'אבא']
    */
   SEARCH_DICT_SENSES: `
-    SELECT headword, nikud, source_label, definition
-    FROM entry
-    WHERE headword = ? OR headword LIKE ?
+    SELECT e.headword, e.nikud, s.name AS source_label, e.definition
+    FROM entry e
+    LEFT JOIN source s ON s.id = e.source_id
+    WHERE e.headword = ? OR e.headword LIKE ?
     ORDER BY
-      CASE WHEN headword = ? THEN 0 ELSE 1 END,
-      length(headword),
-      headword
+      CASE WHEN e.headword = ? THEN 0 ELSE 1 END,
+      length(e.headword),
+      e.headword
     LIMIT 100
   `,
 
