@@ -220,3 +220,12 @@ for r in db.execute("""
 
 db.close()
 print("\nDone.")
+
+# Run Hamichlol enrichment
+print("\nRunning Hamichlol enrichment...")
+import subprocess, sys
+subprocess.run([sys.executable, "Misc/scripts/dictionary/add_hamichlol_definitions.py"], check=True)
+
+# Run seforim token extraction
+print("\nRunning seforim token extraction...")
+subprocess.run([sys.executable, "Misc/scripts/dictionary/extract_seforim_tokens.py"], check=True)

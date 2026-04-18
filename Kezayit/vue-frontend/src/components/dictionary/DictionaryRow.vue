@@ -27,13 +27,13 @@ function maybeFilter(text: string): string {
 <style scoped>
 .dict-row {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 6px;
-  height: 38px;
-  padding: 0 14px;
+  min-height: 38px;
+  padding: 6px 14px;
   border-bottom: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
   direction: rtl;
-  overflow: hidden;
+  flex-wrap: wrap;
 }
 
 .dict-headword {
@@ -55,9 +55,8 @@ function maybeFilter(text: string): string {
   color: var(--text-primary);
   flex: 1;
   min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .dict-spacer {
