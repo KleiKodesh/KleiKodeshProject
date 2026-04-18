@@ -201,7 +201,7 @@ export const SQL = {
     ORDER BY position ASC
   `,
 
-  // ── Kezayit Dictionary (public/dicts/kezayit_dictionary.db) ─────────────────
+  // ── Kezayit Dictionary (public/dictionary/kezayit_dictionary.db) ─────────────────
 
   /**
    * Search entries by exact headword or prefix match.

@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const DB_PATH = process.env.DB_PATH ?? './data.db'
-const DICT_DB_PATH = process.env.DICT_DB_PATH ?? path.join(__dirname, '../public/dicts/kezayit_dictionary.db')
+const DICT_DB_PATH = process.env.DICT_DB_PATH ?? path.join(__dirname, '../public/dictionary/kezayit_dictionary.db')
 const PORT = process.env.PORT ?? 4000
 
 const db = new Database(path.resolve(DB_PATH))

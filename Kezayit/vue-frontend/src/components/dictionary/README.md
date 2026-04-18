@@ -1,6 +1,6 @@
 # dictionary/
 
-Dictionary page. Singleton route `/dictionary`. Queries the local Kezayit dictionary DB (`public/dicts/kezayit_dictionary.db`) only.
+Dictionary page. Singleton route `/dictionary`. Queries the local Kezayit dictionary DB (`public/dictionary/kezayit_dictionary.db`) only.
 
 ## Files
 
@@ -10,7 +10,7 @@ Dictionary page. Singleton route `/dictionary`. Queries the local Kezayit dictio
 
 ## Data source
 
-`public/dicts/kezayit_dictionary.db` — Aramaic/Hebrew dictionary. Queried via `queryDict()` from `src/host/dictionaryDb.ts`. SQL constants live in `src/host/queries.sql.ts` under the `SEARCH_DICT_SENSES` and `DICT_SUGGEST` keys.
+`public/dictionary/kezayit_dictionary.db` — Aramaic/Hebrew dictionary. Queried via `queryDict()` from `src/host/dictionaryDb.ts`. SQL constants live in `src/host/queries.sql.ts` under the `SEARCH_DICT_SENSES` and `DICT_SUGGEST` keys.
 
 ## SQL queries used
 

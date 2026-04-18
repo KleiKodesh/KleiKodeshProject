@@ -18,7 +18,7 @@ function devSqlitePlugin(): Plugin {
       // loadEnv with prefix '' loads all vars including non-VITE_ ones
       const env = loadEnv('development', process.cwd(), '')
       const dbPath = process.env.DB_PATH ?? env.DB_PATH ?? './data.db'
-      const dictDbPath = path.resolve('./public/dicts/kezayit_dictionary.db')
+      const dictDbPath = path.resolve('./public/dictionary/kezayit_dictionary.db')
       try {
         db = new Database(path.resolve(dbPath))
         console.log(`[dev-sqlite] opened ${dbPath}`)

@@ -15,7 +15,7 @@ namespace KezayitLib.Dictionary
 
         public DictionaryHandler(string appDir)
         {
-            string aramaicDictPath = Path.Combine(appDir, "dicts", "kezayit_dictionary.db");
+            string aramaicDictPath = Path.Combine(appDir, "dictionary", "kezayit_dictionary.db");
             if (File.Exists(aramaicDictPath))
                 _aramaicDictDb = new DbAccess(aramaicDictPath);
         }
