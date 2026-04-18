@@ -1,10 +1,10 @@
 import { ref } from 'vue'
-import { queryDict } from '@/host/dictionaryDb'
-import { SQL } from '@/host/queries.sql'
+import { dictLookup, dictFuzzyCandidates } from '@/host/dictionaryDb'
+import type { DictRow } from '@/host/dictionaryDb'
 import { isHosted } from '@/host/seforimDb'
 
-export interface DictSense {
-  headword: string
+export interface DictSenseDisplay {
+  headword:   string   // plain or vocalized (nikud ?? headword)
   definition: string
   sourceLabel: string | null
   isFuzzy?: boolean
@@ -41,7 +41,7 @@ async function fetchThesaurus(word: string): Promise<string[][]> {
   return []
 }
 
-function thesaurusToSenses(groups: string[][]): DictSense[] {
+function thesaurusToSenses(groups: string[][]): DictSenseDisplay[] {
   return groups.flatMap((group) =>
     group.map((word) => ({
       headword: word,
@@ -51,12 +51,19 @@ function thesaurusToSenses(groups: string[][]): DictSense[] {
   )
 }
 
+function rowToSense(r: DictRow, isFuzzy = false): DictSenseDisplay {
+  return {
+    headword:    r.nikud ?? r.headword,
+    definition:  r.definition,
+    sourceLabel: r.source ?? null,
+    isFuzzy,
+  }
+}
+
 // ── Composable ────────────────────────────────────────────────────────────────
 
-type RawRow = { headword: string; nikud: string | null; definition: string; source_label: string | null }
-
 export function useKezayitDictionary() {
-  const senses = ref<DictSense[]>([])
+  const senses = ref<DictSenseDisplay[]>([])
   const searching = ref(false)
 
   async function search(term: string) {
@@ -68,36 +75,25 @@ export function useKezayitDictionary() {
     searching.value = true
     try {
       const [rows, thesaurusGroups] = await Promise.all([
-        queryDict<RawRow>(SQL.SEARCH_DICT_SENSES, [trimmed, `${trimmed}%`, trimmed]),
+        dictLookup(trimmed),
         fetchThesaurus(trimmed),
       ])
 
       const thesaurusSenses = thesaurusToSenses(thesaurusGroups)
 
       if (rows.length > 0) {
-        senses.value = [
-          ...rows.map((r) => ({
-            headword: r.headword,
-            definition: r.definition,
-            sourceLabel: r.source_label ?? null,
-          })),
-          ...thesaurusSenses,
-        ]
+        senses.value = [...rows.map((r) => rowToSense(r)), ...thesaurusSenses]
         return
       }
 
-      // No DB results and no thesaurus — try fuzzy Levenshtein fallback
       if (thesaurusSenses.length > 0) {
         senses.value = thesaurusSenses
         return
       }
 
-      // Fallback: fuzzy via Levenshtein on contains-match candidates
+      // Fuzzy Levenshtein fallback
       const fragment = trimmed.length >= 2 ? trimmed.slice(0, 2) : trimmed
-      const candidates = await queryDict<{ headword: string }>(
-        SQL.DICT_FUZZY_CANDIDATES,
-        [`%${fragment}%`],
-      )
+      const candidates = await dictFuzzyCandidates(`%${fragment}%`)
 
       if (!candidates.length) {
         senses.value = thesaurusSenses
@@ -105,7 +101,7 @@ export function useKezayitDictionary() {
       }
 
       const scored = candidates
-        .map((c) => ({ headword: c.headword, dist: levenshtein(trimmed, c.headword) }))
+        .map((hw) => ({ hw, dist: levenshtein(trimmed, hw) }))
         .sort((a, b) => a.dist - b.dist)
         .slice(0, 10)
 
@@ -117,21 +113,11 @@ export function useKezayitDictionary() {
         return
       }
 
-      const allFuzzy: RawRow[] = []
-      for (const { headword: hw } of close) {
-        const r = await queryDict<RawRow>(SQL.SEARCH_DICT_SENSES, [hw, `${hw}%`, hw])
-        allFuzzy.push(...r)
-      }
+      const fuzzyRows = (
+        await Promise.all(close.map(({ hw }) => dictLookup(hw)))
+      ).flat().map((row) => rowToSense(row, true))
 
-      senses.value = [
-        ...allFuzzy.map((r) => ({
-          headword: r.headword,
-          definition: r.definition,
-          sourceLabel: r.source_label ?? null,
-          isFuzzy: true,
-        })),
-        ...thesaurusSenses,
-      ]
+      senses.value = [...fuzzyRows, ...thesaurusSenses]
     } catch {
       senses.value = []
     } finally {

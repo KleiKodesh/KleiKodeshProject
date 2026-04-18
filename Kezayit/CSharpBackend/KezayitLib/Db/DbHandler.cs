@@ -52,6 +52,7 @@ namespace KezayitLib.Db
             string path = root.GetProperty("path").GetString();
             if (!File.Exists(path)) { _bridge.Reply(id, new { error = "קובץ לא נמצא" }); return; }
             AppSettings.SaveDbPath(path);
+            if (_db != null) _db.Dispose();
             _db = new DbAccess(path);
             _bridge.Reply(id, new { path });
         }
@@ -67,6 +68,7 @@ namespace KezayitLib.Db
                     dlg.FileName = AppSettings.LoadDbPath();
                     if (dlg.ShowDialog() != DialogResult.OK) return;
                     AppSettings.SaveDbPath(dlg.FileName);
+                    if (_db != null) _db.Dispose();
                     _db = new DbAccess(dlg.FileName);
                     string escaped = dlg.FileName.Replace("\\", "\\\\");
                     _bridge.PushEvent(new { @event = "dbPathPicked", path = dlg.FileName });

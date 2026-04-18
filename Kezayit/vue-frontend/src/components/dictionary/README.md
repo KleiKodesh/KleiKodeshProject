@@ -1,18 +1,41 @@
 # dictionary/
 
-Dictionary page. Singleton route `/dictionary`. Queries the local Kezayit dictionary DB (`public/dictionary/kezayit_dictionary.db`) only.
+Dictionary page. Singleton route `/dictionary`. Queries `public/dictionary/kezayit_dictionary.db` — a normalized Aramaic/Hebrew dictionary with a graph schema.
 
 ## Files
 
-`DictionaryPage.vue` — the entire page. Search input at the bottom via `BottomSearchBar`, flat list of results above. No tabs, no sub-components.
+`DictionaryPage.vue` — the entire page. Search input at the bottom via `BottomSearchBar`, flat list of results above.
 
-`useKezayitDictionary.ts` — composable that owns search state. Calls `SEARCH_DICT_SENSES` and returns a flat `DictSense[]` array: `{ headword, definition, sourceLabel }`. One row per sense.
+`DictionaryRow.vue` — single result row. Displays headword (vocalized if one nikud variant exists), separator, definition (vocalized if nikud available), and source pill.
+
+`useKezayitDictionary.ts` — composable owning search state. Calls `dictLookup()` and `dictFuzzyCandidates()` from `src/host/dictionaryDb.ts`. Assembles the structured result into a flat `DictSenseDisplay[]` array for rendering.
 
 ## Data source
 
-`public/dictionary/kezayit_dictionary.db` — Aramaic/Hebrew dictionary. Queried via `queryDict()` from `src/host/dictionaryDb.ts`. SQL constants live in `src/host/queries.sql.ts` under the `SEARCH_DICT_SENSES` and `DICT_SUGGEST` keys.
+`public/dictionary/kezayit_dictionary.db` — normalized graph schema:
 
-## SQL queries used
+- `entry(id, term)` — plain unvocalized terms (headwords + single-word definitions)
+- `meaning(id, text)` — multi-word definition strings, kept as-is with any nikud
+- `synonym_link(from_id, to_id, source_id)` — bidirectional term→term links (headword ↔ single-word definition)
+- `entry_meaning(entry_id, meaning_id, source_id)` — headword → multi-word definition links
+- `nikud(id, entry_id, form)` — vocalized variants of entry terms, display metadata only
+- `source(id, name)` — source dictionary names
 
-- `SEARCH_DICT_SENSES` — exact + prefix match on headword, returns headword + first definition + source label, limit 100
-- `DICT_SUGGEST` — prefix match for autosuggest (not currently used in the UI but kept for future use)
+## Query architecture
+
+Dictionary queries go through `src/host/dictionaryDb.ts`, which owns all SQL strings and calls `__webviewDictQuery` (C# host) or `devQueryDict` (Vite dev middleware). No SQL lives in `queries.sql.ts` for the dictionary.
+
+The JS side exposes two functions:
+
+- `dictLookup(term)` — exact + prefix match on `headword`, returns `DictRow[]`
+- `dictFuzzyCandidates(pattern)` — contains match for Levenshtein fallback, returns `string[]`
+
+Both directions (forward: search by headword, reverse: search by definition) work via the same `headword` index because reverse rows are inserted at build time.
+
+## Dev fallback sync rule
+
+`devQueryDict` in `src/host/devFallbacks.ts` hits the Vite `/query-dict` middleware with the same SQL that `dictionaryDb.ts` sends to C#. Since the SQL lives in one place (`dictionaryDb.ts`) and both paths use it, there is nothing to keep in sync — the dev and C# paths are identical by construction.
+
+## Rebuild script
+
+`Misc/scripts/dictionary/rebuild_dict_final_schema.py` — rebuilds the DB from the original git data (commit `f88ed51`). Run after any schema change or source data update.

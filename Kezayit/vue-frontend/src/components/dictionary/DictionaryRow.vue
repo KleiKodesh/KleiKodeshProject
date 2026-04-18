@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { DictSense } from './useKezayitDictionary'
+import type { DictSenseDisplay } from './useKezayitDictionary'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 
-const props = defineProps<{ sense: DictSense }>()
+const props = defineProps<{ sense: DictSenseDisplay }>()
 
 const settings = useSettingsStore()
 
@@ -19,6 +19,7 @@ function maybeFilter(text: string): string {
       <span class="dict-sep">—</span>
       <span class="dict-definition">{{ maybeFilter(sense.definition) }}</span>
     </template>
+    <span v-else class="dict-spacer" />
     <span v-if="sense.sourceLabel" class="dict-source">{{ sense.sourceLabel }}</span>
   </div>
 </template>
@@ -57,6 +58,10 @@ function maybeFilter(text: string): string {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.dict-spacer {
+  flex: 1;
 }
 
 .dict-source {

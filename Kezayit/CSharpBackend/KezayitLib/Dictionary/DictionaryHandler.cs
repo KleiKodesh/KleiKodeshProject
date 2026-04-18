@@ -1,29 +1,34 @@
 using KezayitLib.Db;
+using System;
 using System.Collections.Generic;
 using System.IO;
 
 namespace KezayitLib.Dictionary
 {
     /// <summary>
-    /// Pure data layer for dictionary queries.
-    /// Owns the Kezayit dictionary database and exposes query methods.
-    /// Has no knowledge of the web bridge — AppViewer handles messaging.
+    /// Thin data layer for the Kezayit dictionary database.
+    /// SQL lives in the Vue frontend (dictionaryDb.ts) and is sent over the bridge.
+    /// This class only owns the connection — it does not define any queries.
     /// </summary>
-    public class DictionaryHandler
+    public class DictionaryHandler : IDisposable
     {
-        private readonly DbAccess _aramaicDictDb;
+        private readonly DbAccess _db;
 
         public DictionaryHandler(string appDir)
         {
-            string aramaicDictPath = Path.Combine(appDir, "dictionary", "kezayit_dictionary.db");
-            if (File.Exists(aramaicDictPath))
-                _aramaicDictDb = new DbAccess(aramaicDictPath);
+            string path = Path.Combine(appDir, "dictionary", "kezayit_dictionary.db");
+            if (File.Exists(path))
+                _db = new DbAccess(path);
         }
 
-        public bool IsAramaicDbReady => _aramaicDictDb != null;
+        public bool IsReady => _db != null;
 
-        /// <summary>Runs a SQL query against the Aramaic dictionary database.</summary>
-        public IEnumerable<IDictionary<string, object>> QueryAramaic(string sql, object[] parameters)
-            => _aramaicDictDb.Query(sql, parameters);
+        public IEnumerable<IDictionary<string, object>> Query(string sql, object[] parameters)
+            => _db.Query(sql, parameters);
+
+        public void Dispose()
+        {
+            if (_db != null) _db.Dispose();
+        }
     }
 }

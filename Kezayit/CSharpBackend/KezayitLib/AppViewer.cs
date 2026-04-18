@@ -179,7 +179,7 @@ namespace KezayitLib
                     switch (action)
                     {
                         case "sql": await _db.HandleSql(root, id); break;
-                        case "dict-sql":     await HandleDictSql(root, id); break;
+                        case "dict-sql": await HandleDictSql(root, id); break;
                         case "setDbPath": _db.HandleSetDbPath(root, id); break;
                         case "pickDbPath": _db.HandlePickDbPath(id, this); break;
                         case "resetSettings": _db.HandleResetSettings(id); break;
@@ -221,12 +221,11 @@ namespace KezayitLib
 
         private async Task HandleDictSql(JsonElement root, string id)
         {
-            if (!_dictionary.IsAramaicDbReady) { _bridge.Reply(id, new { error = "Aramaic dictionary database not available" }); return; }
-
+            if (!_dictionary.IsReady) { _bridge.Reply(id, new { error = "Dictionary database not available" }); return; }
             string sql = root.GetProperty("sql").GetString();
             try
             {
-                var rows = await Task.Run(() => _dictionary.QueryAramaic(sql, DbHandler.ParseParamsStatic(root)));
+                var rows = await Task.Run(() => _dictionary.Query(sql, DbHandler.ParseParamsStatic(root)));
                 _bridge.Reply(id, new { rows });
             }
             catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }

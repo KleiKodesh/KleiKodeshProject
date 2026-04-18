@@ -1,4 +1,5 @@
 using Dapper;
+using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
 using System.Linq;
@@ -9,14 +10,18 @@ namespace KezayitLib.Db
     /// <summary>
     /// Thin wrapper around SQLite. Converts positional ? params to named @p0, @p1, ...
     /// because Dapper requires named parameters.
+    /// Keeps a single open connection for the lifetime of the instance — the DB is
+    /// read-only so there is no reason to open and close a connection per query.
     /// </summary>
-    public class DbAccess
+    public class DbAccess : IDisposable
     {
-        private readonly string _connectionString;
+        private readonly SQLiteConnection _conn;
 
         public DbAccess(string path)
         {
-            _connectionString = "Data Source=" + path + ";Version=3;Read Only=True;";
+            string connectionString = "Data Source=" + path + ";Version=3;Read Only=True;";
+            _conn = new SQLiteConnection(connectionString);
+            _conn.Open();
         }
 
         public IEnumerable<IDictionary<string, object>> Query(string sql, object[] parameters)
@@ -28,12 +33,15 @@ namespace KezayitLib.Db
             for (int i = 0; i < parameters.Length; i++)
                 dp.Add("@p" + i, parameters[i]);
 
-            using (var conn = new SQLiteConnection(_connectionString))
-            {
-                return conn.Query(namedSql, dp)
-                           .Cast<IDictionary<string, object>>()
-                           .ToList();
-            }
+            return _conn.Query(namedSql, dp)
+                        .Cast<IDictionary<string, object>>()
+                        .ToList();
+        }
+
+        public void Dispose()
+        {
+            _conn.Close();
+            _conn.Dispose();
         }
     }
 }

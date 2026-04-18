@@ -178,6 +178,7 @@ Every component that uses `useVirtualizer` from `@tanstack/vue-virtual` must wir
 - All SQLite access goes through `src/host/db.ts` — never call fetch against the DB from a component or composable
 - All raw SQL strings live in `src/host/queries.sql.ts` — no inline SQL anywhere else
 - Feature composables call `query()` with a SQL constant from `queries.sql.ts` and a params array
+- **Exception — dictionary DB**: dictionary SQL lives in `src/host/dictionaryDb.ts`, not in `queries.sql.ts`. Both the C# host path (`__webviewDictQuery`) and the dev path (`devQueryDict`) execute the same SQL string sent from the frontend — there is nothing to keep in sync between C# and dev for dictionary queries.
 
 ### Transports (auto-selected at runtime)
 

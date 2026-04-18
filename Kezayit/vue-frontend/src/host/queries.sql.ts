@@ -201,37 +201,6 @@ export const SQL = {
     ORDER BY position ASC
   `,
 
-  // ── Kezayit Dictionary (public/dictionary/kezayit_dictionary.db) ─────────────────
-
-  /**
-   * Search entries by exact headword or prefix match.
-   * Params: [term, prefixPattern, term]  e.g. ['אבא', 'אבא%', 'אבא']
-   */
-  SEARCH_DICT_SENSES: `
-    SELECT e.headword, e.nikud, s.name AS source_label, e.definition
-    FROM entry e
-    LEFT JOIN source s ON s.id = e.source_id
-    WHERE e.headword = ? OR e.headword LIKE ?
-    ORDER BY
-      CASE WHEN e.headword = ? THEN 0 ELSE 1 END,
-      length(e.headword),
-      e.headword
-    LIMIT 100
-  `,
-
-  /**
-   * Fuzzy fallback: fetch candidate headwords that share at least one character
-   * with the search term, for client-side Levenshtein ranking.
-   * Uses a simple contains match — fast enough at 15k rows.
-   * Params: [containsPattern]  e.g. ['%אב%']
-   */
-  DICT_FUZZY_CANDIDATES: `
-    SELECT DISTINCT headword
-    FROM entry
-    WHERE headword LIKE ?
-    LIMIT 200
-  `,
-
   /** Next toc entry (by lineIndex) whose section contains a link to a given commentary book */
   HAS_COMMENTARY_IN_RANGE: `
     SELECT 1
