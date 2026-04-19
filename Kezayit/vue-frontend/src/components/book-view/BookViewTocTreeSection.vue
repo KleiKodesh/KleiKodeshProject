@@ -10,7 +10,6 @@ defineProps<{
   filter: string
   activeEntryId?: number
   visible?: boolean
-  suppressScroll?: boolean
   searchTree?: SearchableTree
 }>()
 defineEmits<{ select: [TocEntry] }>()
@@ -28,7 +27,6 @@ defineExpose({ containerRef: () => treeViewRef.value?.containerRef ?? null })
       :filter="filter"
       :active-node-id="activeEntryId"
       :visible="visible"
-      :suppress-scroll="suppressScroll"
       :search-tree="searchTree"
       @select="$emit('select', $event as TocEntry)"
     />

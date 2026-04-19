@@ -12,7 +12,6 @@ const props = defineProps<{
   indent?: number
   rowHeight?: number
   fontSize?: string
-  suppressScroll?: boolean
   stickyHeaders?: boolean
   searchTree?: SearchableTree
 }>()
@@ -52,18 +51,12 @@ function scrollIntoView(id: number) {
 }
 
 watch(
-  () => props.activeNodeId,
-  (id) => {
-    if (id == null || props.suppressScroll) return
-    expandAncestors(id)
-    nextTick(() => scrollIntoView(id))
-  },
-)
-
-watch(
   () => props.visible,
   (val) => {
-    if (val && props.activeNodeId != null) nextTick(() => scrollIntoView(props.activeNodeId!))
+    if (val && props.activeNodeId != null) {
+      expandAncestors(props.activeNodeId)
+      nextTick(() => scrollIntoView(props.activeNodeId!))
+    }
   },
 )
 

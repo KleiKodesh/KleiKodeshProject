@@ -82,7 +82,11 @@ const {
   () => bookId,
   () => bookTitle,
 )
-const { lines, prioritise, hasCommentaries } = useLines(() => bookId)
+// Delay lines loading until TOC is ready — ensures getActiveTocEntry works correctly
+// on the first scroll event and avoids the flash-to-entry-1 race on session restore.
+const { lines, prioritise, hasCommentaries } = useLines(() =>
+  tocEntries.value.length > 0 ? bookId : undefined,
+)
 
 // When selected line is a toc entry line, collect all line IDs in that section
 const selectedSectionLineIds = computed<number[] | null>(() => {
@@ -141,23 +145,10 @@ if (openTocEntryId != null) {
     }
     stop()
   })
-} else {
-  // On reload: tocEntries may arrive after the initial scroll event, so the
-  // first onLinesScrolled call finds no entry and tocPath is never set.
-  // Once entries load, derive the active entry from the current scroll position.
-  const stop = watch(tocEntries, (entries) => {
-    if (!entries.length) return
-    stop()
-    if (activeTocEntryId.value != null) return // already set by a scroll event
-    const entry = getActiveTocEntry(currentScrollLineIndex.value)
-    if (entry) {
-      activeTocEntryId.value = entry.id
-      tabStore.updateActiveTab({ tocPath: getTocPath(entry) })
-    }
-  })
 }
 
 let tocScrolling = false
+let tocScrollTargetLineIndex: number | null = null
 let tocScrollTimer: ReturnType<typeof setTimeout> | null = null
 
 const currentScrollLineIndex = ref(0)
@@ -168,7 +159,24 @@ let autoSelectCommentaryTimer: ReturnType<typeof setTimeout> | null = null
 function onLinesScrolled(lineIndex: number, fullLineIndex: number) {
   currentScrollLineIndex.value = lineIndex
   currentFullLineIndex.value = fullLineIndex
-  if (tocScrolling) return
+  if (tocScrolling) {
+    const reached =
+      tocScrollTargetLineIndex == null
+        ? false
+        : tocScrollTargetLineIndex === 0
+          ? lineIndex === 0
+          : lineIndex >= tocScrollTargetLineIndex
+    if (reached) {
+      tocScrolling = false
+      tocScrollTargetLineIndex = null
+      if (tocScrollTimer) {
+        clearTimeout(tocScrollTimer)
+        tocScrollTimer = null
+      }
+    }
+    // activeTocEntryId was already set in onTocSelect — don't overwrite during programmatic scroll
+    return
+  }
   const entry = getActiveTocEntry(lineIndex)
   if (entry && entry.id !== activeTocEntryId.value) {
     activeTocEntryId.value = entry.id
@@ -195,14 +203,17 @@ watch(autoSelectTopLine, (enabled) => {
 
 function onTocSelect(entry: TocEntry) {
   if (entry.lineId == null) return
-  tocScrolling = true
-  if (tocScrollTimer) clearTimeout(tocScrollTimer)
   activeTocEntryId.value = entry.id
   tabStore.updateActiveTab({ tocPath: getTocPath(entry) })
-  linesContentRef.value?.scrollToLineId(entry.lineId)
+  tocScrolling = true
+  tocScrollTargetLineIndex = entry.lineIndex ?? null
+  if (tocScrollTimer) clearTimeout(tocScrollTimer)
   tocScrollTimer = setTimeout(() => {
     tocScrolling = false
-  }, 500)
+    tocScrollTargetLineIndex = null
+    tocScrollTimer = null
+  }, 300)
+  linesContentRef.value?.scrollToLineId(entry.lineId, entry.lineIndex ?? undefined)
 }
 
 function onAltTocSelect(entry: TocEntry) {
@@ -552,7 +563,6 @@ watch(searchVisible, (v) => {
           @mode-change="onModeChange"
         />
         <BookViewTocTree
-          v-show="tocVisible"
           :book-id="bookId"
           :book-title="bookTitle"
           :active-toc-entry-id="activeTocEntryId"

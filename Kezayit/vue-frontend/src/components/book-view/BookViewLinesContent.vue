@@ -543,8 +543,8 @@ function setProgrammaticScroll() {
   }, 300)
 }
 
-function scrollToLineId(lineId: number) {
-  const lineIndex = props.lines.find((l) => l.id === lineId)?.lineIndex
+function scrollToLineId(lineId: number, fallbackLineIndex?: number) {
+  const lineIndex = props.lines.find((l) => l.id === lineId)?.lineIndex ?? fallbackLineIndex
   if (lineIndex == null) return
   props.prioritise(lineIndex)
   const scroller = scrollerEl.value

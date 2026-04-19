@@ -1,41 +1,41 @@
 # dictionary/
 
-Dictionary page. Singleton route `/dictionary`. Queries `public/dictionary/kezayit_dictionary.db` — a normalized Aramaic/Hebrew dictionary with a graph schema.
+Dictionary page. Singleton route `/dictionary`. Queries `public/dictionary/kezayit_dictionary.db`.
 
 ## Files
 
-`DictionaryPage.vue` — the entire page. Search input at the bottom via `BottomSearchBar`, flat list of results above.
+`DictionaryPage.vue` — page shell. Search input via `BottomSearchBar`, fetches data on query change, passes `WordPageData` to `DictionaryWordPage`.
 
-`DictionaryRow.vue` — single result row. Displays headword (vocalized if one nikud variant exists), separator, definition (vocalized if nikud available), and source pill.
+`DictionaryWordPage.vue` — renders a looked-up word: definitions (משמעויות) and related words (קשורים). No grammar/nikud section.
 
-`useKezayitDictionary.ts` — composable owning search state. Calls `dictLookup()` and `dictFuzzyCandidates()` from `src/host/dictionaryDb.ts`. Assembles the structured result into a flat `DictSenseDisplay[]` array for rendering.
+## DB Schema
 
-## Data source
+```
+source_kind(id, name)
+link_kind(id, name, explanation)                              ← נרדף | כתיב | ראו_גם | ניגוד | נגזרת
+word(id, headword UNIQUE)                                     ← one row per distinct headword
+sense(id, word_id → word, nikud, text, source_id → source_kind)
+link(word_id → word, target_id → word, kind_id → link_kind)  PK: (word_id, target_id, kind_id)
+```
 
-`public/dictionary/kezayit_dictionary.db` — normalized graph schema:
+`word` is the identity table — one row per distinct headword. `sense` holds all content (definitions, abbreviations, Aramaic entries) — multiple rows per word, one per source. `link` uses integer FKs into `word`.
 
-- `entry(id, term)` — plain unvocalized terms (headwords + single-word definitions)
-- `meaning(id, text)` — multi-word definition strings, kept as-is with any nikud
-- `synonym_link(from_id, to_id, source_id)` — bidirectional term→term links (headword ↔ single-word definition)
-- `entry_meaning(entry_id, meaning_id, source_id)` — headword → multi-word definition links
-- `nikud(id, entry_id, form)` — vocalized variants of entry terms, display metadata only
-- `source(id, name)` — source dictionary names
+## Query layer
 
-## Query architecture
+All SQL lives in `src/host/dictionaryDb.ts`.
 
-Dictionary queries go through `src/host/dictionaryDb.ts`, which owns all SQL strings and calls `__webviewDictQuery` (C# host) or `devQueryDict` (Vite dev middleware). No SQL lives in `queries.sql.ts` for the dictionary.
+Exported functions:
 
-The JS side exposes two functions:
+- `dictLookup(term)` — exact → prefix → contains on `sense.headword`; returns `SenseRow[]` + `isExact`
+- `dictLinks(term)` — related words from `link` (excludes כתיב variants)
+- `dictSynonyms(term)` — נרדף links only
+- `dictVariants(term)` — כתיב links only
+- `dictSpellCandidates(term)` — headword prefix scan for Levenshtein fallback
+- `abbrevLookup(term)` — delegates to `dictLookup` (abbreviations are in the same table)
 
-- `dictLookup(term)` — exact + prefix match on `headword`, returns `DictRow[]`
-- `dictFuzzyCandidates(pattern)` — contains match for Levenshtein fallback, returns `string[]`
+Routes through `__webviewDictQuery` (C# host) or `/query-dict` Vite middleware in dev.
 
-Both directions (forward: search by headword, reverse: search by definition) work via the same `headword` index because reverse rows are inserted at build time.
+## Rebuild
 
-## Dev fallback sync rule
-
-`devQueryDict` in `src/host/devFallbacks.ts` hits the Vite `/query-dict` middleware with the same SQL that `dictionaryDb.ts` sends to C#. Since the SQL lives in one place (`dictionaryDb.ts`) and both paths use it, there is nothing to keep in sync — the dev and C# paths are identical by construction.
-
-## Rebuild script
-
-`Misc/scripts/dictionary/rebuild_dict_final_schema.py` — rebuilds the DB from the original git data (commit `f88ed51`). Run after any schema change or source data update.
+`Misc/scripts/dictionary/import_radak_definitions.py` — imports clean definitions from ספר השרשים לרד"ק. Re-runnable.
+`Misc/scripts/dictionary/import_radak_roots.py` — imports 2,048 roots into a standalone `root_form` table (not used by the app directly).

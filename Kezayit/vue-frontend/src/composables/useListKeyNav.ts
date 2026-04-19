@@ -32,7 +32,6 @@ export function useListKeys(
 
   useEventListener(containerEl, 'focus', () => {
     containerFocused.value = true
-    if (focusedIndex.value < 0 && getCount() > 0) moveTo(0)
   })
 
   useEventListener(containerEl, 'blur', () => {

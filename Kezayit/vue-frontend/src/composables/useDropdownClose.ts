@@ -31,6 +31,7 @@ export function useDropdownClose(
   options?: {
     ignore?: MaybeElementRef<MaybeElement>[]
     toggleButton?: MaybeElementRef<MaybeElement>
+    closeOnBlur?: boolean
   },
 ) {
   const justClosed = ref(false)
@@ -51,8 +52,6 @@ export function useDropdownClose(
     (e) => {
       const btn = toValue(options?.toggleButton)
       if (btn && btn.contains(e.target as Node)) {
-        // The click is on the toggle button — suppress the handler here;
-        // the button's click event will handle closing via justClosed guard
         justClosed.value = true
         setTimeout(() => {
           justClosed.value = false
@@ -64,9 +63,14 @@ export function useDropdownClose(
     { ignore: options?.ignore },
   )
 
-  useEventListener(window, 'blur', (e: FocusEvent) => {
-    if (toValue(target)) close(e)
-  })
+  if (options?.closeOnBlur !== false) {
+    useEventListener(window, 'blur', (e: FocusEvent) => {
+      // Use setTimeout so document.activeElement settles before we check focus.
+      setTimeout(() => {
+        if (toValue(target) && !document.hasFocus()) close(e)
+      }, 0)
+    })
+  }
 
   return { justClosed }
 }

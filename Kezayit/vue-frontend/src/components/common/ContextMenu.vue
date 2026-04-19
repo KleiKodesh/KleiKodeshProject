@@ -77,6 +77,9 @@ defineExpose({ show, hide })
   border-bottom: none;
 }
 .context-menu-item:hover {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+.context-menu-item:active {
+  background: color-mix(in srgb, var(--text-primary) 13%, transparent);
 }
 </style>

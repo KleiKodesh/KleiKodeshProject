@@ -24,26 +24,23 @@ const panelRef = ref<HTMLElement | null>(null)
 const searchRef = ref<HTMLInputElement | null>(null)
 const tocSectionRef = ref<InstanceType<typeof BookViewTocTreeSection> | null>(null)
 const searchQuery = ref('')
-const justSelected = ref(false)
 
 watch(
   () => props.loading,
   (val) => {
-    if (!val) nextTick(() => searchRef.value?.focus())
+    if (!val) nextTick(() => searchRef.value?.focus({ preventScroll: true }))
   },
 )
 watch(
   () => props.visible,
   (val) => {
-    if (val && !props.loading) nextTick(() => searchRef.value?.focus())
+    if (val) nextTick(() => searchRef.value?.focus({ preventScroll: true }))
   },
 )
 useDropdownClose(
   panelRef,
-  () => {
-    if (!justSelected.value) emit('close')
-  },
-  { toggleButton: computed(() => props.toggleButtonEl ?? null) },
+  () => emit('close'),
+  { toggleButton: computed(() => props.toggleButtonEl ?? null), closeOnBlur: false },
 )
 
 function focusTocList() {
@@ -52,11 +49,7 @@ function focusTocList() {
 }
 
 function onSelect(entry: TocEntry) {
-  justSelected.value = true
   emit('select', entry)
-  nextTick(() => {
-    justSelected.value = false
-  })
 }
 
 const hasToc = computed(() => props.tocEntries.length > 0)
@@ -74,8 +67,7 @@ watch(searchQuery, (q) => {
 </script>
 
 <template>
-  <Transition name="toc-slide">
-    <div ref="panelRef" class="toc-panel">
+  <div ref="panelRef" class="toc-panel" :class="{ 'is-hidden': !visible }">
       <div v-if="loading" class="toc-state">טוען...</div>
       <div v-else-if="error" class="toc-state error">{{ error }}</div>
       <template v-else>
@@ -83,13 +75,12 @@ watch(searchQuery, (q) => {
           <template #top>
             <BookViewTocTreeSection
               ref="tocSectionRef"
-              v-if="hasToc"
+              v-show="hasToc"
               :title="null"
               :entries="tocEntries"
               :filter="searchQuery"
               :active-entry-id="activeTocEntryId"
               :visible="props.visible"
-              :suppress-scroll="justSelected"
               :search-tree="tocSearchTree"
               @select="onSelect"
             />
@@ -123,7 +114,6 @@ watch(searchQuery, (q) => {
         </div>
       </template>
     </div>
-  </Transition>
 </template>
 
 <style scoped>
@@ -141,6 +131,13 @@ watch(searchQuery, (q) => {
   border-left: 1px solid var(--border-color);
   overflow: hidden;
   --tree-bg: var(--bg-secondary);
+  transition: transform 180ms ease;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+.toc-panel.is-hidden {
+  transform: translateX(100%);
+  pointer-events: none;
 }
 .toc-body {
   flex: 1;
@@ -183,12 +180,5 @@ watch(searchQuery, (q) => {
 .toc-state.error {
   color: #ff3b30;
 }
-.toc-slide-enter-active,
-.toc-slide-leave-active {
-  transition: transform 180ms ease;
-}
-.toc-slide-enter-from,
-.toc-slide-leave-to {
-  transform: translateX(100%);
-}
+
 </style>

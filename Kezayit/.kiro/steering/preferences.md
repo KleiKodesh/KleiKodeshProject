@@ -46,6 +46,8 @@ These thresholds exist so that agentic AI can reliably read, edit, and reason ab
 
 - Names should be descriptive enough that a comment isn't needed — code reads like prose
 - Consistent and predictable naming means anyone can guess a filename without looking
+- Never use shorthand or abbreviations in any name — variables, functions, components, files, database tables, columns, or CSS classes. Write the full word every time. Examples: use `abbreviation` not `abbrev`, `definition` not `def`, `configuration` not `config`, `navigation` not `nav`, `parameter` not `param`, `index` not `idx`, `button` not `btn`, `message` not `msg`, `error` not `err`, `reference` not `ref` (unless it is a Vue template ref), `source` not `src` (unless it is an HTML attribute), `destination` not `dest`, `previous` not `prev`, `next` is fine as it is a full word.
+- The only exceptions are universally understood domain terms where the short form IS the name: `id`, `url`, `html`, `css`, `sql`, `api`, `db` when used as a suffix in a variable name referring to a database connection object.
 
 ## VueUse
 
