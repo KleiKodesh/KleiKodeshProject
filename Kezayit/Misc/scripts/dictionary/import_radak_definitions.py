@@ -179,12 +179,12 @@ print(f"  Entries without definition:    {no_definition}")
 db = sqlite3.connect(DICT_DB)
 db.execute("PRAGMA journal_mode=WAL")
 
-src = db.execute("SELECT id FROM source WHERE name=?", (SOURCE_NAME,)).fetchone()
+src = db.execute("SELECT id FROM source_kind WHERE name=?", (SOURCE_NAME,)).fetchone()
 if src:
     source_id = src[0]
 else:
-    db.execute("INSERT INTO source (name) VALUES (?)", (SOURCE_NAME,))
-    source_id = db.execute("SELECT id FROM source WHERE name=?", (SOURCE_NAME,)).fetchone()[0]
+    db.execute("INSERT INTO source_kind (name) VALUES (?)", (SOURCE_NAME,))
+    source_id = db.execute("SELECT id FROM source_kind WHERE name=?", (SOURCE_NAME,)).fetchone()[0]
 
 db.execute("DELETE FROM sense WHERE source_id=?", (source_id,))
 db.commit()

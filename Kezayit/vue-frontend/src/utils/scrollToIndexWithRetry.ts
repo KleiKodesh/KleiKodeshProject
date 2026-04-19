@@ -33,7 +33,14 @@ export function scrollToIndexWithRetry(
         // line is in view — scroll the actual mark into view in case the line is long
         requestAnimationFrame(() => {
           const mark = scrollerEl.querySelector('mark.search-match.current') as HTMLElement | null
-          mark?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+          if (!mark) return
+          const markRect = mark.getBoundingClientRect()
+          const scrollerRect = scrollerEl.getBoundingClientRect()
+          const scrollPaddingTop = parseInt(scrollerEl.style.scrollPaddingTop ?? '0', 10) || 0
+          const obscured = markRect.top < scrollerRect.top + scrollPaddingTop
+          if (obscured) {
+            scrollerEl.scrollTop -= scrollerRect.top + scrollPaddingTop - markRect.top + 8
+          }
         })
       }
     })

@@ -39,6 +39,7 @@ const props = defineProps<{
   searchHighlightQuery?: string
   searchHighlightSnippet?: string
   searchHighlightTerms?: string[]
+  searchBarVisible?: boolean
 }>()
 
 const tabStore = useTabStore()
@@ -585,7 +586,7 @@ function onLineClick(index: number) {
       class="scroller"
       tabindex="0"
       data-ctrlf-enabled
-      :style="{ fontSize: `${fontPx}px` }"
+      :style="{ fontSize: `${fontPx}px`, scrollPaddingTop: searchBarVisible ? '44px' : '0px' }"
       @scroll="onScroll"
       @contextmenu="contextMenuRef?.show($event)"
     >

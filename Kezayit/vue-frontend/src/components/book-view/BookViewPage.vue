@@ -505,6 +505,7 @@ watch(searchVisible, (v) => {
               :search-highlight-query="searchHighlightQuery"
               :search-highlight-snippet="searchHighlightSnippet"
               :search-highlight-terms="searchHighlightTerms"
+              :search-bar-visible="searchVisible"
               :commentary-scroll-index="commentaryScrollIndex"
               :commentary-scroll-offset="commentaryScrollOffset"
               :hidden-commentary-book-ids="hiddenCommentaryBookIds"
