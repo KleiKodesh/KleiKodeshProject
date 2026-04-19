@@ -10,9 +10,9 @@ namespace MinimalIndexer
         private const int CacheLineSize = 64;
         private const int MaxPartialPerThread = 100;
 
-        private readonly BloomFilterData[] _filters;
-        private readonly int _count;
-        public short ChunkSize { get; }
+        private BloomFilterData[] _filters;
+        private int _count;
+        public short ChunkSize { get; private set; }
 
         public BloomFilterCollectionReader(string id)
         {
@@ -20,9 +20,9 @@ namespace MinimalIndexer
             using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.SequentialScan))
             using (var r = new BinaryReader(fs))
             {
-                _count = r.ReadInt32();   // offset 0: chunk count
-                ChunkSize = r.ReadInt16(); // offset 4: chunk size
-                r.ReadInt32();             // offset 6: lastLineId (used by resume, not needed here)
+                _count = r.ReadInt32();
+                ChunkSize = r.ReadInt16();
+                r.ReadInt32();
                 _filters = new BloomFilterData[_count];
                 for (int i = 0; i < _count; i++)
                 {

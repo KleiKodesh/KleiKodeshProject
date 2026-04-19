@@ -60,6 +60,50 @@ function rowToSense(r: DictRow, isFuzzy = false): DictSenseDisplay {
   }
 }
 
+// ── Sort ──────────────────────────────────────────────────────────────────────
+
+const ABBREVIATION_RE = /["\u05F4\u05F3]/  // ASCII " or ״ or ׳
+
+// Source priority for plain search (case A)
+const SOURCE_PRIORITY_PLAIN: Record<string, number> = {
+  'המכלול':                          0,
+  'מילון ארמי עברי':                 1,
+  'ויקיפדיה':                        2,
+  'ויקי ספרי יהדות - ראשי תיבות':   3,
+  'קיצור ראשי תיבות':               4,
+  'מילים נרדפות':                    5,
+}
+
+// Source priority for abbreviation search (case B)
+const SOURCE_PRIORITY_ABBREV: Record<string, number> = {
+  'קיצור ראשי תיבות':               0,
+  'ויקיפדיה':                        1,
+  'ויקי ספרי יהדות - ראשי תיבות':   2,
+  'המכלול':                          3,
+  'מילון ארמי עברי':                 4,
+  'מילים נרדפות':                    5,
+}
+
+function sourcePriority(source: string | null, isAbbrev: boolean): number {
+  const map = isAbbrev ? SOURCE_PRIORITY_ABBREV : SOURCE_PRIORITY_PLAIN
+  return map[source ?? ''] ?? 4
+}
+
+function sortSenses(senses: DictSenseDisplay[], term: string): DictSenseDisplay[] {
+  const isAbbrev = ABBREVIATION_RE.test(term)
+  return [...senses].sort((a, b) => {
+    // 1. Exact headword match first
+    const aExact = a.headword === term ? 0 : 1
+    const bExact = b.headword === term ? 0 : 1
+    if (aExact !== bExact) return aExact - bExact
+    // 2. Alphabetical by headword
+    const hwCmp = a.headword.localeCompare(b.headword, 'he')
+    if (hwCmp !== 0) return hwCmp
+    // 3. Source priority within same headword
+    return sourcePriority(a.sourceLabel, isAbbrev) - sourcePriority(b.sourceLabel, isAbbrev)
+  })
+}
+
 // ── Composable ────────────────────────────────────────────────────────────────
 
 export function useKezayitDictionary() {
@@ -82,7 +126,10 @@ export function useKezayitDictionary() {
       const thesaurusSenses = thesaurusToSenses(thesaurusGroups)
 
       if (rows.length > 0) {
-        senses.value = [...rows.map((r) => rowToSense(r)), ...thesaurusSenses]
+        senses.value = sortSenses(
+          [...rows.map((r) => rowToSense(r)), ...thesaurusSenses],
+          trimmed
+        )
         return
       }
 
@@ -117,7 +164,7 @@ export function useKezayitDictionary() {
         await Promise.all(close.map(({ hw }) => dictLookup(hw)))
       ).flat().map((row) => rowToSense(row, true))
 
-      senses.value = [...fuzzyRows, ...thesaurusSenses]
+      senses.value = sortSenses([...fuzzyRows, ...thesaurusSenses], trimmed)
     } catch {
       senses.value = []
     } finally {
