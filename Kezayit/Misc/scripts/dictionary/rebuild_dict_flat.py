@@ -225,3 +225,11 @@ print("\nDone.")
 print("\nRunning Aramaic Hamichlol enrichment...")
 import subprocess, sys
 subprocess.run([sys.executable, "Misc/scripts/dictionary/add_aramaic_hamichlol.py"], check=True)
+
+# Add wikidict שורש and בניין data
+print("\nAdding wikidict שורש/בניין data...")
+subprocess.run([sys.executable, "Misc/scripts/dictionary/add_wikidict_shoresh.py"], check=True)
+
+# Add Wiktionary shoresh/binyan data
+print("\nAdding Wiktionary shoresh/binyan data...")
+subprocess.run([sys.executable, "Misc/scripts/dictionary/add_wikidict_shoresh.py"], check=True)

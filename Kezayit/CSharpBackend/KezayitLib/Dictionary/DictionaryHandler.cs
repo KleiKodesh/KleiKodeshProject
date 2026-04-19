@@ -9,6 +9,7 @@ namespace KezayitLib.Dictionary
     /// Thin data layer for the Kezayit dictionary database.
     /// SQL lives in the Vue frontend (dictionaryDb.ts) and is sent over the bridge.
     /// This class only owns the connection — it does not define any queries.
+    /// The single DB (kezayit_dictionary.db) contains entry, sense, related, and source tables.
     /// </summary>
     public class DictionaryHandler : IDisposable
     {

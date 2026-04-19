@@ -20,7 +20,7 @@ export async function devQuery<T = unknown>(sql: string, params: unknown[]): Pro
   return (await res.json()).rows as T[]
 }
 
-/** Hits the Vite dev middleware at /query-dict (Aramaic dictionary DB). */
+/** Hits the Vite dev middleware at /query-dict (dictionary DB — entries, senses, related). */
 export async function devQueryDict<T = unknown>(sql: string, params: unknown[]): Promise<T[]> {
   const res = await fetch('/query-dict', {
     method: 'POST',
@@ -31,8 +31,6 @@ export async function devQueryDict<T = unknown>(sql: string, params: unknown[]):
   if (!res.ok) throw new Error(`Dict query failed: ${json.error ?? res.statusText}`)
   return json.rows as T[]
 }
-
-// ── File picker fallbacks ─────────────────────────────────────────────────────
 
 /** Browser file input fallback for pickFile() — accepts PDF only. */
 export function devPickPdf(): Promise<PdfFileResult | null> {

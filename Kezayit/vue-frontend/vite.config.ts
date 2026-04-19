@@ -15,7 +15,6 @@ function devSqlitePlugin(): Plugin {
     apply: 'serve',
 
     configureServer(server) {
-      // loadEnv with prefix '' loads all vars including non-VITE_ ones
       const env = loadEnv('development', process.cwd(), '')
       const dbPath = process.env.DB_PATH ?? env.DB_PATH ?? './data.db'
       const dictDbPath = path.resolve('./public/dictionary/kezayit_dictionary.db')
@@ -33,12 +32,9 @@ function devSqlitePlugin(): Plugin {
       }
 
       server.middlewares.use((req, res, next) => {
-        const isQuery = req.url === '/query' && req.method === 'POST'
+        const isQuery     = req.url === '/query'      && req.method === 'POST'
         const isDictQuery = req.url === '/query-dict' && req.method === 'POST'
-        if (!isQuery && !isDictQuery) {
-          next()
-          return
-        }
+        if (!isQuery && !isDictQuery) { next(); return }
 
         const target = isDictQuery ? dictDb : db
         if (!target) {

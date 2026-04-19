@@ -7,6 +7,7 @@ import path from 'node:path';
 function devSqlitePlugin() {
     let db;
     let dictDb;
+    let wikiDb;
     return {
         name: 'dev-sqlite',
         apply: 'serve',
@@ -29,14 +30,23 @@ function devSqlitePlugin() {
             catch (err) {
                 console.error(`[dev-sqlite] failed to open kezayit_dictionary.db:`, err);
             }
+            const wikiDbPath = path.resolve('./public/dictionary/wikidict.db');
+            try {
+                wikiDb = new Database(wikiDbPath, { readonly: true });
+                console.log(`[dev-sqlite] opened wikidict.db`);
+            }
+            catch (err) {
+                console.error(`[dev-sqlite] failed to open wikidict.db:`, err);
+            }
             server.middlewares.use((req, res, next) => {
                 const isQuery = req.url === '/query' && req.method === 'POST';
                 const isDictQuery = req.url === '/query-dict' && req.method === 'POST';
-                if (!isQuery && !isDictQuery) {
+                const isWikiQuery = req.url === '/query-wikidict' && req.method === 'POST';
+                if (!isQuery && !isDictQuery && !isWikiQuery) {
                     next();
                     return;
                 }
-                const target = isDictQuery ? dictDb : db;
+                const target = isWikiQuery ? wikiDb : isDictQuery ? dictDb : db;
                 if (!target) {
                     res.writeHead(503, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ error: 'Database not available' }));

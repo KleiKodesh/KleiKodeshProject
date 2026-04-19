@@ -231,6 +231,18 @@ namespace KezayitLib
             catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
         }
 
+        private async Task HandleWikiDictSql(JsonElement root, string id)
+        {
+            if (!_dictionary.IsWikiReady) { _bridge.Reply(id, new { error = "Wikidict database not available" }); return; }
+            string sql = root.GetProperty("sql").GetString();
+            try
+            {
+                var rows = await Task.Run(() => _dictionary.QueryWiki(sql, DbHandler.ParseParamsStatic(root)));
+                _bridge.Reply(id, new { rows });
+            }
+            catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
+        }
+
         private void HandleTogglePopOut(string id)
         {
             _bridge.Reply(id, new { });
