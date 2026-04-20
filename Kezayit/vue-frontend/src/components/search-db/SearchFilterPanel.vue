@@ -107,10 +107,17 @@ function computeFilteredBooks(tokens: string[], currentInput: string): BookRow[]
 }
 
 const runSearch = useDebounceFn(() => {
-  filteredBooks.value = computeFilteredBooks(props.atFilters, inputText.value)
+  const books = computeFilteredBooks(props.atFilters, inputText.value)
+  filteredBooks.value = props.hasSearched
+    ? books.filter((b) => (props.resultCounts.get(b.id) ?? 0) > 0)
+    : books
 }, 150)
 
-watch([() => props.atFilters, inputText], () => runSearch(), { immediate: true })
+watch(
+  [() => props.atFilters, inputText, () => props.hasSearched, () => props.resultCounts],
+  () => runSearch(),
+  { immediate: true },
+)
 
 // ── Token management ──────────────────────────────────────────────────────────
 

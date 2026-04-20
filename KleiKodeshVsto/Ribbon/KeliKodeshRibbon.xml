@@ -67,12 +67,12 @@
 								getImage="getImage"
 								onAction="button_Click"/>
 
-							<button id="OpenChildDoc"
+							<!--<button id="OpenChildDoc"
 							label="פתח מסמך בחלונית משנה"
 							screentip="מסמך בחלונית משנה"
 							supertip="מוצג תמיד מעל המסמך הנוכחי וממוזער יחד איתו"
 							getImage="getImage"
-							onAction="button_Click"/>
+							onAction="button_Click"/>-->
 
 							<button id="Settings"
 									label="הגדרות"
