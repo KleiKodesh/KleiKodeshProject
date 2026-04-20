@@ -38,6 +38,13 @@ namespace MinimalIndexer
 
         public SearchResult[] Search(string[] terms)
         {
+            // Sort longest-first: longer Hebrew words are rarer, so they fail fast
+            // on most filters and short-circuit the AND check early.
+            var sorted = (string[])terms.Clone();
+            Array.Sort(sorted, (a, b) => b.Length.CompareTo(a.Length));
+
+            bool requireAll = sorted.Length > 1;
+
             int threads = Environment.ProcessorCount;
             int chunkSize = (_count + threads - 1) / threads;
             var threadResults = new ThreadSearchResults[threads];
@@ -47,13 +54,13 @@ namespace MinimalIndexer
                 int start = t * chunkSize;
                 int end = Math.Min(start + chunkSize, _count);
                 if (start < _count)
-                    threadResults[t] = SearchChunk(terms, start, end);
+                    threadResults[t] = SearchChunk(sorted, requireAll, start, end);
             });
 
             return MergeResults(threadResults, terms.Length);
         }
 
-        private ThreadSearchResults SearchChunk(string[] terms, int start, int end)
+        private ThreadSearchResults SearchChunk(string[] terms, bool requireAll, int start, int end)
         {
             int maxScore = terms.Length;
             var perfect = new List<SearchResult>((end - start) / 10);
@@ -62,7 +69,7 @@ namespace MinimalIndexer
 
             for (int i = start; i < end; i++)
             {
-                int score = ScoreFilter(_filters[i].Filter, terms);
+                int score = ScoreFilter(_filters[i].Filter, terms, requireAll);
 
                 if (score == maxScore)
                 {
@@ -77,11 +84,18 @@ namespace MinimalIndexer
             return new ThreadSearchResults { PerfectMatches = perfect, PartialMatches = partial };
         }
 
-        private static int ScoreFilter(BloomFilter filter, string[] terms)
+        // For AND queries (requireAll=true) returns immediately on the first missing term.
+        // Terms should be pre-sorted longest-first so the rarest term is checked first.
+        private static int ScoreFilter(BloomFilter filter, string[] terms, bool requireAll)
         {
             int score = 0;
             for (int j = 0; j < terms.Length; j++)
-                if (filter.Contains(terms[j])) score++;
+            {
+                if (filter.Contains(terms[j]))
+                    score++;
+                else if (requireAll)
+                    return 0;
+            }
             return score;
         }
 

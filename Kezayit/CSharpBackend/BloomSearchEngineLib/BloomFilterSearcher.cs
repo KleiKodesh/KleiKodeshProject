@@ -1,10 +1,7 @@
 ﻿using MinimalIndexer;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace BloomSearchEngineLib
 {
@@ -23,25 +20,28 @@ namespace BloomSearchEngineLib
 
             using (var reader = new BloomFilterCollectionReader(_id))
             {
-                var hits = RunBloomSearch(reader, terms);
+                var hits = reader.Search(terms);
                 if (hits.Length == 0) yield break;
 
-                var perfectMatches = new ConcurrentQueue<SearchResultItem>();
+                // Process hits one chunk at a time and stream results to the caller.
+                // Each chunk's perfect matches are sorted by proximity before yielding,
+                // so the frontend receives well-ordered results as they arrive rather
+                // than waiting for all chunks to finish.
+                var chunkBatch    = new List<SearchResultItem>();
                 var partialMatches = new TopNPartialMatches(100);
-                int perfectCount = 0;
-                var done = new ManualResetEventSlim(false);
+                int perfectCount  = 0;
 
-                Task.Run(() =>
+                using (var db = new ZayitDbManager())
                 {
-                    ProcessHits(hits, terms, terms.Length, perfectMatches, partialMatches);
-                    done.Set();
-                });
+                    foreach (var hit in hits)
+                    {
+                        chunkBatch.Clear();
+                        ProcessChunk(db, hit, terms, terms.Length, chunkBatch, partialMatches);
 
-                // Stream perfect matches to caller as they arrive
-                while (!done.IsSet || !perfectMatches.IsEmpty)
-                {
-                    if (perfectMatches.TryDequeue(out var r)) { perfectCount++; yield return r; }
-                    else if (!done.IsSet) Thread.Sleep(1);
+                        if (chunkBatch.Count == 0) continue;
+
+                        foreach (var item in chunkBatch) { perfectCount++; yield return item; }
+                    }
                 }
 
                 Console.WriteLine("[Search] {0} perfect + {1} partial", perfectCount, partialMatches.Count);
@@ -53,22 +53,25 @@ namespace BloomSearchEngineLib
             }
         }
 
-        private static SearchResult[] RunBloomSearch(BloomFilterCollectionReader reader, string[] terms)
-        {
-            return reader.Search(terms);
-        }
-
         private static IEnumerable<SearchResultItem> HydratePartialMatches(TopNPartialMatches partialMatches, int perfectCount)
         {
             if (perfectCount >= 100) yield break;
 
             int remaining = Math.Min(100 - perfectCount, partialMatches.Count);
+            var partials = partialMatches.GetTop(remaining);
+            if (partials.Length == 0) yield break;
+
             using (var db = new ZayitDbManager())
             {
-                foreach (var p in partialMatches.GetTop(remaining))
+                var lineIds = new List<int>(partials.Length);
+                foreach (var p in partials) lineIds.Add(p.LineId);
+
+                var metadata = db.GetLineMetadataBatch(lineIds);
+
+                foreach (var p in partials)
                 {
-                    var meta = db.GetLineMetadata(p.LineId);
                     var content = db.GetLineContent(p.LineId).NormalizeText();
+                    if (!metadata.TryGetValue(p.LineId, out var meta)) continue;
                     yield return new SearchResultItem
                     {
                         LineId = p.LineId,
@@ -83,59 +86,34 @@ namespace BloomSearchEngineLib
             }
         }
 
-        private void ProcessHits(
-            SearchResult[] hits,
-            string[] terms,
-            int maxScore,
-            ConcurrentQueue<SearchResultItem> perfectMatches,
-            TopNPartialMatches partialMatches)
-        {
-            var queue = new BlockingCollection<SearchResult>(boundedCapacity: 2);
-
-            var consumer = Task.Run(() => ConsumeChunks(queue, terms, maxScore, perfectMatches, partialMatches));
-
-            foreach (var hit in hits) queue.Add(hit);
-            queue.CompleteAdding();
-            consumer.Wait();
-        }
-
-        private static void ConsumeChunks(
-            BlockingCollection<SearchResult> queue,
-            string[] terms,
-            int maxScore,
-            ConcurrentQueue<SearchResultItem> perfectMatches,
-            TopNPartialMatches partialMatches)
-        {
-            using (var db = new ZayitDbManager())
-            {
-                int chunksProcessed = 0;
-                foreach (var hit in queue.GetConsumingEnumerable())
-                {
-                    ProcessChunk(db, hit, terms, maxScore, perfectMatches, partialMatches);
-
-                    if (++chunksProcessed % 50 == 0 && GC.GetTotalMemory(false) > 300_000_000)
-                        GC.Collect(1, GCCollectionMode.Optimized, false);
-                }
-            }
-        }
-
         private static void ProcessChunk(
             ZayitDbManager db,
             SearchResult hit,
             string[] terms,
             int maxScore,
-            ConcurrentQueue<SearchResultItem> perfectMatches,
+            List<SearchResultItem> perfectMatches,
             TopNPartialMatches partialMatches)
         {
+            var perfectLineIds   = new List<int>();
+            var perfectMatchInfo = new List<(int lineId, MatchInfo match, string norm)>();
+
             foreach (var (lineId, content) in db.GetLineContentsChunk(hit.FirstLineId, hit.LastLineId))
             {
+                // Cheap raw pre-filter: if any term's first character is absent from the
+                // raw content, normalization cannot produce a match — skip it entirely.
+                if (!TextNormalizer.RawContentMightMatch(content, terms)) continue;
+
                 string norm = content.NormalizeText();
                 var match = SearchEngineMatcher.Match(norm, terms, hit.Score);
                 if (match == null) continue;
 
                 if (match.Words.Length == maxScore)
-                    perfectMatches.Enqueue(BuildResult(db, lineId, match, norm));
+                {
+                    perfectLineIds.Add(lineId);
+                    perfectMatchInfo.Add((lineId, match, norm));
+                }
                 else
+                {
                     partialMatches.TryAdd(new PartialMatchData
                     {
                         LineId = lineId,
@@ -144,22 +122,27 @@ namespace BloomSearchEngineLib
                         ClusterStart = match.ClusterStart,
                         ClusterEnd = match.ClusterEnd
                     });
+                }
             }
-        }
 
-        private static SearchResultItem BuildResult(ZayitDbManager db, int lineId, MatchInfo match, string norm)
-        {
-            var meta = db.GetLineMetadata(lineId);
-            return new SearchResultItem
+            if (perfectLineIds.Count == 0) return;
+
+            var metadata = db.GetLineMetadataBatch(perfectLineIds);
+
+            foreach (var (lineId, match, norm) in perfectMatchInfo)
             {
-                LineId = lineId,
-                BookId = meta.bookId,
-                BookTitle = meta.bookTitle,
-                TocText = meta.tocText,
-                Score = match.Words.Length,
-                ProximityScore = match.ProximityScore,
-                Snippet = match.Snippet(norm)
-            };
+                if (!metadata.TryGetValue(lineId, out var meta)) continue;
+                perfectMatches.Add(new SearchResultItem
+                {
+                    LineId = lineId,
+                    BookId = meta.bookId,
+                    BookTitle = meta.bookTitle,
+                    TocText = meta.tocText,
+                    Score = match.Words.Length,
+                    ProximityScore = match.ProximityScore,
+                    Snippet = match.Snippet(norm)
+                });
+            }
         }
 
         private struct PartialMatchData

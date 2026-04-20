@@ -98,18 +98,11 @@ namespace RegexFindLib.UI
         }
 
         // ── Show/hide formatting panels ───────────────────────────────────────
-        bool _showFindFormatting = false;
-        public bool ShowFindFormatting
+        bool _showRegexPalette = false;
+        public bool ShowRegexPalette
         {
-            get => _showFindFormatting;
-            set => SetProperty(ref _showFindFormatting, value);
-        }
-
-        bool _showReplaceFormatting = false;
-        public bool ShowReplaceFormatting
-        {
-            get => _showReplaceFormatting;
-            set => SetProperty(ref _showReplaceFormatting, value);
+            get => _showRegexPalette;
+            set => SetProperty(ref _showRegexPalette, value);
         }
 
         // ── Commands ──────────────────────────────────────────────────────────
@@ -121,8 +114,7 @@ namespace RegexFindLib.UI
         public ICommand ClearFindFormattingCommand { get; }
         public ICommand ClearReplaceFormattingCommand { get; }
         public ICommand ToggleReplaceCommand { get; }
-        public ICommand ToggleFindFormattingCommand { get; }
-        public ICommand ToggleReplaceFormattingCommand { get; }
+        public ICommand ToggleRegexPaletteCommand { get; }
         public ICommand LoadFontsCommand { get; }
         public ICommand LoadStylesCommand { get; }
 
@@ -136,8 +128,7 @@ namespace RegexFindLib.UI
             ClearFindFormattingCommand = new RelayCommand(() => FindFormatting.Clear());
             ClearReplaceFormattingCommand = new RelayCommand(() => ReplaceFormatting.Clear());
             ToggleReplaceCommand = new RelayCommand(() => ShowReplace = !ShowReplace);
-            ToggleFindFormattingCommand = new RelayCommand(() => ShowFindFormatting = !ShowFindFormatting);
-            ToggleReplaceFormattingCommand = new RelayCommand(() => ShowReplaceFormatting = !ShowReplaceFormatting);
+            ToggleRegexPaletteCommand = new RelayCommand(() => ShowRegexPalette = !ShowRegexPalette);
             LoadFontsCommand = new RelayCommand(LoadFonts);
             LoadStylesCommand = new RelayCommand(LoadStyles);
         }

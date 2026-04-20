@@ -76,14 +76,13 @@
 
     <!-- UI -->
     <Compile Include="UI\Converters.cs" />
+    <Compile Include="UI\SnippetBlock.cs" />
+    <Compile Include="UI\RegexPalettePanel.cs" />
     <Compile Include="UI\ColorPickerButton.xaml.cs">
       <DependentUpon>ColorPickerButton.xaml</DependentUpon>
     </Compile>
     <Compile Include="UI\FormattingOptions.cs" />
     <Compile Include="UI\RegexFindViewModel.cs" />
-    <Compile Include="UI\FormattingPanel.xaml.cs">
-      <DependentUpon>FormattingPanel.xaml</DependentUpon>
-    </Compile>
     <Compile Include="UI\RegexFindView.xaml.cs">
       <DependentUpon>RegexFindView.xaml</DependentUpon>
     </Compile>
@@ -98,10 +97,6 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="UI\ColorPickerButton.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>
-    <Page Include="UI\FormattingPanel.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

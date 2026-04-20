@@ -87,6 +87,31 @@ public sealed class ZayitDbManager : IDisposable
         catch (Exception ex) { Console.WriteLine("[ZayitDbManager] GetLineContent " + lineId + ": " + ex.Message); return string.Empty; }
     }
 
+    public Dictionary<int, (int bookId, string bookTitle, string tocText)> GetLineMetadataBatch(List<int> lineIds)
+    {
+        var result = new Dictionary<int, (int, string, string)>(lineIds.Count);
+        if (lineIds.Count == 0) return result;
+        try
+        {
+            using (var cmd = _connection.CreateCommand())
+            {
+                cmd.CommandText = @"
+                    SELECT l.id, l.bookId, b.title, COALESCE(tt.text, '')
+                    FROM line l
+                    INNER JOIN book b ON l.bookId = b.id
+                    LEFT JOIN line_toc lt ON l.id = lt.lineId
+                    LEFT JOIN tocEntry te ON lt.tocEntryId = te.id
+                    LEFT JOIN tocText tt ON te.textId = tt.id
+                    WHERE l.id IN (" + string.Join(",", lineIds) + ")";
+                using (var r = cmd.ExecuteReader())
+                    while (r.Read())
+                        result[r.GetInt32(0)] = (r.GetInt32(1), r.GetString(2), r.IsDBNull(3) ? "" : r.GetString(3));
+            }
+        }
+        catch (Exception ex) { Console.WriteLine("[ZayitDbManager] GetLineMetadataBatch: " + ex.Message); }
+        return result;
+    }
+
     public (int bookId, string bookTitle, string tocText) GetLineMetadata(int lineId)
     {
         try

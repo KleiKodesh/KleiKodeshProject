@@ -16,8 +16,18 @@ namespace BloomSearchEngineLib
             return t;
         }
 
+        // Returns true if every term's first character appears somewhere in the raw
+        // (un-normalized) content. Used as a cheap pre-filter before the expensive
+        // NormalizeText call — if any term's first char is absent from the raw string,
+        // the line cannot possibly match regardless of normalization.
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static bool IsNsm(char c) => (s_nsm[c >> 3] & (1 << (c & 7))) != 0;
+        public static bool RawContentMightMatch(string content, string[] terms)
+        {
+            for (int i = 0; i < terms.Length; i++)
+                if (terms[i].Length > 0 && content.IndexOf(terms[i][0]) < 0)
+                    return false;
+            return true;
+        }
 
         public static string NormalizeText(this string text)
         {
