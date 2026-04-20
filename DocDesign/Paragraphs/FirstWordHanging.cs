@@ -1,8 +1,8 @@
-﻿using DocSeferLib.Helpers;
+using DocDesign.Helpers;
 using Microsoft.Office.Interop.Word;
 using System.Collections.Generic;
 
-namespace DocSeferLib.Paragraphs
+namespace DocDesign.Paragraphs
 {
     public class FirstWordHanging : PargaraphsBase
     {

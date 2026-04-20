@@ -1,4 +1,4 @@
-﻿using KleiKodesh.Helpers;
+using KleiKodesh.Helpers;
 using System.Windows;
 using System.Windows.Controls;
 

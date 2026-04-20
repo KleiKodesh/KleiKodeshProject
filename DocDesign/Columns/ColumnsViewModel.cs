@@ -1,8 +1,8 @@
-﻿using Microsoft.Office.Interop.Word;
+using Microsoft.Office.Interop.Word;
 using WpfLib;
 using WpfLib.ViewModels;
 
-namespace DocSeferLib.Columns
+namespace DocDesign.Columns
 {
     public class ColumnsViewModel : ViewModelBase
     {

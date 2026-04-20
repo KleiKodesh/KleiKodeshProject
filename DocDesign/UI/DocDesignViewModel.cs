@@ -1,15 +1,15 @@
-﻿using DocSeferLib.Columns;
-using DocSeferLib.Paragraphs;
-using DocSeferLib.Spacing;
+using DocDesign.Columns;
+using DocDesign.Paragraphs;
+using DocDesign.Spacing;
 
-namespace DocSeferLib.UI
+namespace DocDesign.UI
 {
-    public class DocseferViewModel
+    public class DocDesignViewModel
     {
         public ParagraphsViewModel ParagraphsViewModel { get; } = new ParagraphsViewModel();
         public ColumnsViewModel ColumnsViewModel { get; } = new ColumnsViewModel();
         public SpacingViewModel SpacingViewModel { get; } = new SpacingViewModel();
-        public DocseferViewModel() { }
+        public DocDesignViewModel() { }
 
     }
 }

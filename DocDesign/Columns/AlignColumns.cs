@@ -1,4 +1,4 @@
-﻿using DocSeferLib.Helpers;
+using DocDesign.Helpers;
 using Microsoft.Office.Interop.Word;
 using System;
 using System.Collections.Generic;
@@ -7,7 +7,7 @@ using WpfLib;
 using WpfLib.Helpers;
 
 //maybe first apply space after auto before detecting longer column
-namespace DocSeferLib.Columns
+namespace DocDesign.Columns
 {
     public class AlignColumns : ViewModelBase
     {

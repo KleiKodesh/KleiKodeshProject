@@ -22,7 +22,7 @@ namespace KleiKodeshVstoInstallerWpf
             _status = new Progress<string>(s => StatusText.Text = s);
             Loaded += (_, __) =>
             {
-                // Hide close button — user must not abort mid-install
+                // Hide close button ג€” user must not abort mid-install
                 (Window.GetWindow(this) as MainWindow)?.SetCloseButtonVisible(false);
                 Install();
             };
@@ -35,15 +35,15 @@ namespace KleiKodeshVstoInstallerWpf
                 if (!System.IO.Directory.Exists(AddinInstaller.InstallPath))
                     System.IO.Directory.CreateDirectory(AddinInstaller.InstallPath);
 
-                _status.Report("מחלץ קבצים...");
+                _status.Report("׳׳—׳׳¥ ׳§׳‘׳¦׳™׳...");
                 await AddinInstaller.ExtractAsync(_progress);
 
                 // Write the user-edited whitelist (if any) over the extracted default.
-                // Must run after ExtractAsync — the install folder must exist first.
+                // Must run after ExtractAsync ג€” the install folder must exist first.
                 // No-op when PendingWhitelist is null (user did not edit the list).
                 AddinInstaller.ApplyPendingWhitelist();
 
-                _status.Report("רושם תוסף...");
+                _status.Report("׳¨׳•׳©׳ ׳×׳•׳¡׳£...");
                 await AddinInstaller.RegisterAddInAsync(_progress);
 
                 while (ProgressBar.Value < ProgressBar.Maximum)
@@ -52,10 +52,10 @@ namespace KleiKodeshVstoInstallerWpf
                     await Task.Delay(10);
                 }
 
-                _status.Report("שומר גרסה...");
+                _status.Report("׳©׳•׳׳¨ ׳’׳¨׳¡׳”...");
                 AddinInstaller.SaveVersion();
 
-                _status.Report("ההתקנה הושלמה!");
+                _status.Report("׳”׳”׳×׳§׳ ׳” ׳”׳•׳©׳׳׳”!");
                 await Task.Delay(300);
                 Environment.Exit(0);
             }

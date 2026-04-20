@@ -1,4 +1,4 @@
-﻿using Microsoft.Office.Interop.Word;
+using Microsoft.Office.Interop.Word;
 using System.Collections.Generic;
 using System.Linq;
 

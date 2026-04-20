@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <defs>
+    <!-- Warm amber-orange gradient — flat, no 3D -->
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#C97B00"/>
+      <stop offset="100%" stop-color="#7A4200"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="100" height="100" rx="22" ry="22" fill="url(#bg)"/>
+
+  <!-- Document body -->
+  <rect x="22" y="14" width="46" height="58" rx="4" ry="4" fill="white" opacity="0.95"/>
+
+  <!-- Folded corner (top-right) -->
+  <polygon points="56,14 68,26 56,26" fill="#C97B00" opacity="0.55"/>
+  <polygon points="56,14 68,26 56,26" fill="white" opacity="0.40"/>
+  <!-- Fold crease line -->
+  <line x1="56" y1="14" x2="68" y2="26" stroke="#C97B00" stroke-width="1.2" opacity="0.5"/>
+
+  <!-- Text lines on document -->
+  <line x1="30" y1="36" x2="60" y2="36" stroke="#C97B00" stroke-width="3.2" stroke-linecap="round" opacity="0.75"/>
+  <line x1="30" y1="45" x2="60" y2="45" stroke="#C97B00" stroke-width="3.2" stroke-linecap="round" opacity="0.75"/>
+  <line x1="30" y1="54" x2="60" y2="54" stroke="#C97B00" stroke-width="3.2" stroke-linecap="round" opacity="0.75"/>
+  <line x1="30" y1="63" x2="48" y2="63" stroke="#C97B00" stroke-width="3.2" stroke-linecap="round" opacity="0.75"/>
+
+  <!-- Paintbrush / styling tool — bottom right, overlapping doc -->
+  <!-- Brush handle -->
+  <rect x="54" y="52" width="7" height="28" rx="3.5" ry="3.5"
+        fill="white" opacity="0.95" transform="rotate(-38,57.5,66)"/>
+  <!-- Brush head -->
+  <ellipse cx="70" cy="76" rx="7" ry="5"
+           fill="white" opacity="0.95" transform="rotate(-38,70,76)"/>
+  <!-- Brush tip accent -->
+  <ellipse cx="73" cy="80" rx="4" ry="3"
+           fill="#FFD580" opacity="0.90" transform="rotate(-38,73,80)"/>
+</svg>

@@ -1,4 +1,4 @@
-﻿namespace DocSeferLib.Helpers
+namespace DocDesign.Helpers
 {
     public class RangePageData
     {

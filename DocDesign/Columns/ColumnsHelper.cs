@@ -1,9 +1,9 @@
-﻿using DocSeferLib.Helpers;
+using DocDesign.Helpers;
 using Microsoft.Office.Interop.Word;
 using System;
 using System.Collections.Generic;
 
-namespace DocSeferLib.Columns
+namespace DocDesign.Columns
 {
     public static class ColumnsHelper
     {

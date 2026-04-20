@@ -1,6 +1,6 @@
-﻿using Microsoft.Office.Interop.Word;
+using Microsoft.Office.Interop.Word;
 
-namespace DocSeferLib.Spacing
+namespace DocDesign.Spacing
 {
     public static class SpacingHelper
     {

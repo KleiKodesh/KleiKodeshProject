@@ -1,4 +1,4 @@
-﻿using Microsoft.Office.Interop.Word;
+using Microsoft.Office.Interop.Word;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -8,7 +8,7 @@ using System.Windows.Threading;
 using WpfLib;
 using WpfLib.ViewModels;
 
-namespace DocSeferLib.Paragraphs
+namespace DocDesign.Paragraphs
 {
     public class ParagraphsViewModel : ViewModelBase
     {
@@ -26,7 +26,6 @@ namespace DocSeferLib.Paragraphs
 
         int _minLineCount = 2;
         ObservableCollection<ActiveStyle> _activeStyles = new ObservableCollection<ActiveStyle>();
-        bool _refreshStyles;
         bool? _checkAllStyles;
         public int MinLineCount { get => _minLineCount; set => SetProperty(ref _minLineCount, value); }
         public bool? CheckAllStyles { get => _checkAllStyles; set { if (SetProperty(ref _checkAllStyles, value)) CheckAllChanged(value); } }

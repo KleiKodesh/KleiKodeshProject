@@ -1,9 +1,9 @@
-﻿using DocSeferLib.Helpers;
+using DocDesign.Helpers;
 using Microsoft.Office.Interop.Word;
 using System;
 using System.Collections.Generic;
 
-namespace DocSeferLib.Paragraphs
+namespace DocDesign.Paragraphs
 {
     public class CenterLastLine : PargaraphsBase
     {

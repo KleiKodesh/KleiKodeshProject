@@ -1,4 +1,4 @@
-﻿//using KleiKodesh.Helpers;
+//using KleiKodesh.Helpers;
 //using System.Drawing;
 //using System.Windows.Forms;
 

@@ -1,4 +1,4 @@
-﻿using DocSeferLib.Helpers;
+using DocDesign.Helpers;
 using Microsoft.Office.Interop.Word;
 using Microsoft.VisualBasic;
 using System;
@@ -8,7 +8,7 @@ using System.Linq;
 using System.Windows.Controls;
 using System.Windows.Threading;
 
-namespace DocSeferLib.Paragraphs
+namespace DocDesign.Paragraphs
 {
     public class FirstWordStyle : PargaraphsBase
     {

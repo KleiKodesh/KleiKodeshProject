@@ -51,14 +51,14 @@ namespace KleiKodeshVstoInstallerWpf
         {
             if (_pendingDbPath != null)
             {
-                DbHintText.Text = "לחץ לשינוי הנתיב";
+                DbHintText.Text = "׳׳—׳¥ ׳׳©׳™׳ ׳•׳™ ׳”׳ ׳×׳™׳‘";
             }
             else
             {
                 string existing = Interaction.GetSetting("ZayitApp", "Database", "Path", "");
                 DbHintText.Text = string.IsNullOrEmpty(existing)
-                    ? "לא הוגדר נתיב — ישתמש בברירת המחדל של אפליקציית זית"
-                    : "לחץ לשינוי הנתיב";
+                    ? "׳׳ ׳”׳•׳’׳“׳¨ ׳ ׳×׳™׳‘ ג€” ׳™׳©׳×׳׳© ׳‘׳‘׳¨׳™׳¨׳× ׳”׳׳—׳“׳ ׳©׳ ׳׳₪׳׳™׳§׳¦׳™׳™׳× ׳–׳™׳×"
+                    : "׳׳—׳¥ ׳׳©׳™׳ ׳•׳™ ׳”׳ ׳×׳™׳‘";
             }
         }
 
@@ -68,7 +68,7 @@ namespace KleiKodeshVstoInstallerWpf
             {
                 var dialog = new OpenFileDialog
                 {
-                    Title = "בחר קובץ מסד נתונים לכזית",
+                    Title = "׳‘׳—׳¨ ׳§׳•׳‘׳¥ ׳׳¡׳“ ׳ ׳×׳•׳ ׳™׳ ׳׳›׳–׳™׳×",
                     Filter = "SQLite Database (*.db)|*.db|All Files (*.*)|*.*",
                     CheckFileExists = true
                 };
@@ -87,7 +87,7 @@ namespace KleiKodeshVstoInstallerWpf
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"שגיאה בהגדרת מסד הנתונים: {ex.Message}", "שגיאה",
+                MessageBox.Show($"׳©׳’׳™׳׳” ׳‘׳”׳’׳“׳¨׳× ׳׳¡׳“ ׳”׳ ׳×׳•׳ ׳™׳: {ex.Message}", "׳©׳’׳™׳׳”",
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -95,9 +95,9 @@ namespace KleiKodeshVstoInstallerWpf
         private void EditWhitelistButton_Click(object sender, RoutedEventArgs e)
         {
             // Load entries using priority order:
-            //   1. PendingWhitelist — user already edited this session
-            //   2. Installed file   — update scenario, preserve user's existing list
-            //   3. Embedded default — fresh install
+            //   1. PendingWhitelist ג€” user already edited this session
+            //   2. Installed file   ג€” update scenario, preserve user's existing list
+            //   3. Embedded default ג€” fresh install
             // If user clicks OK, serialize back into PendingWhitelist so ExtractAsync
             // skips the zip entry and ApplyPendingWhitelist() writes the edited version.
             // If user clicks Cancel, PendingWhitelist is unchanged (null or prior edit).
@@ -119,7 +119,7 @@ namespace KleiKodeshVstoInstallerWpf
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"שגיאה בהתקנה: {ex.Message}", "שגיאה",
+                MessageBox.Show($"׳©׳’׳™׳׳” ׳‘׳”׳×׳§׳ ׳”: {ex.Message}", "׳©׳’׳™׳׳”",
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -130,10 +130,10 @@ namespace KleiKodeshVstoInstallerWpf
                 Interaction.SaveSetting("ZayitApp", "Database", "Path", _pendingDbPath);
         }
 
-        // ── Whitelist helpers ─────────────────────────────────────────────────────
+        // ג”€ג”€ Whitelist helpers ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
         //
         // These live here rather than in a shared class because the installer cannot
-        // use System.Text.Json or System.Web.Extensions — those assemblies are not
+        // use System.Text.Json or System.Web.Extensions ג€” those assemblies are not
         // available via the embedded-DLL resolver at the point this page loads.
         // The hand-rolled regex parser/serializer below handles the flat JSON array
         // in WebSitesWhitelist.json without any external dependencies.
@@ -141,9 +141,9 @@ namespace KleiKodeshVstoInstallerWpf
         /// <summary>
         /// Returns the whitelist entries to show in the editor dialog.
         /// Priority:
-        ///   1. PendingWhitelist  — user already edited this session (in-memory)
-        ///   2. Installed file    — update: %LocalAppData%\KleiKodesh\WebSitesWhitelist.json
-        ///   3. Embedded default  — fresh install: resource compiled into the exe
+        ///   1. PendingWhitelist  ג€” user already edited this session (in-memory)
+        ///   2. Installed file    ג€” update: %LocalAppData%\KleiKodesh\WebSitesWhitelist.json
+        ///   3. Embedded default  ג€” fresh install: resource compiled into the exe
         /// </summary>
         private static ObservableCollection<WhitelistEntry> LoadEntries()
         {
@@ -151,7 +151,7 @@ namespace KleiKodeshVstoInstallerWpf
             if (AddinInstaller.PendingWhitelist != null)
                 return Deserialize(AddinInstaller.PendingWhitelist);
 
-            // 2. Existing install — preserve the user's customised list
+            // 2. Existing install ג€” preserve the user's customised list
             string installedPath = Path.Combine(AddinInstaller.InstallPath, "WebSitesWhitelist.json");
             if (File.Exists(installedPath))
             {
@@ -163,7 +163,7 @@ namespace KleiKodeshVstoInstallerWpf
                 catch { /* fall through to embedded default */ }
             }
 
-            // 3. Fresh install — use the default list embedded in the exe
+            // 3. Fresh install ג€” use the default list embedded in the exe
             string json2 = LoadDefaultJson();
             return json2 != null ? Deserialize(json2) : new ObservableCollection<WhitelistEntry>();
         }
@@ -172,7 +172,7 @@ namespace KleiKodeshVstoInstallerWpf
         /// Loads the default whitelist JSON.
         /// Tries the exe directory first (dev/debug), then the embedded resource.
         /// The embedded resource is linked directly from WebSitesLib2/WebSitesWhitelist.json
-        /// — do not add a second copy anywhere.
+        /// ג€” do not add a second copy anywhere.
         /// </summary>
         private static string LoadDefaultJson()
         {

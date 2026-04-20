@@ -7,8 +7,8 @@
     <ProjectGuid>{74E59BC0-41E5-475A-85CB-EACDC2EF6415}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>DocSeferLib</RootNamespace>
-    <AssemblyName>DocSeferLib</AssemblyName>
+    <RootNamespace>DocDesign</RootNamespace>
+    <AssemblyName>DocDesign</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
@@ -75,18 +75,18 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Spacing\SpacingHelper.cs" />
     <Compile Include="Spacing\SpacingViewModel.cs" />
-    <Compile Include="UI\DocSeferView.xaml.cs">
-      <DependentUpon>DocSeferView.xaml</DependentUpon>
+    <Compile Include="UI\DocDesignView.xaml.cs">
+      <DependentUpon>DocDesignView.xaml</DependentUpon>
     </Compile>
-    <Compile Include="UI\DocseferViewModel.cs" />
+    <Compile Include="UI\DocDesignViewModel.cs" />
   </ItemGroup>
 
   <ItemGroup>
-    <Page Include="UI\DocSeferDictionary.xaml">
+    <Page Include="UI\DocDesignDictionary.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
-    <Page Include="UI\DocSeferView.xaml">
+    <Page Include="UI\DocDesignView.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

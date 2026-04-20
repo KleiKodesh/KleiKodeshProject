@@ -1,4 +1,4 @@
-﻿using KleiKodesh.Helpers;
+using KleiKodesh.Helpers;
 using System;
 using System.IO;
 using System.Reflection;
@@ -59,8 +59,8 @@ namespace KleiKodesh.Ribbon
                     // case "HebrewBooks":
                     //     //WpfTaskPane.Show(new HebrewBooksLib.HebrewBooksView(), LocaleDictionary.Translate(id), 600);
                     //     break;
-                    case "KleiKodesh":
-                        var control = new DocSeferLib.DocSeferLibView(Globals.ThisAddIn.Application, Globals.Factory);
+                    case "DocDesign":
+                        var control = new DocDesign.DocDesignView(Globals.ThisAddIn.Application, Globals.Factory);
                         WpfTaskPane.Show(control, "עיצוב תורני", 520);
                         break;
                     case "RegexFind":

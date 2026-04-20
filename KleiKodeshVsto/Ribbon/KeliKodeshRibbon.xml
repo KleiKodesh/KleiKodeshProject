@@ -1,4 +1,4 @@
-﻿<customUI xmlns="http://schemas.microsoft.com/office/2009/07/customui" onLoad="Ribbon_Load">
+<customUI xmlns="http://schemas.microsoft.com/office/2009/07/customui" onLoad="Ribbon_Load">
 	<ribbon>
 		<tabs>
 			<tab idMso="TabHome">
@@ -44,7 +44,7 @@
 									onAction="button_Click"
 									getVisible="getVisible"/>
 
-							<button id="KleiKodesh"
+							<button id="DocDesign"
 									label="עיצוב תורני"
 									screentip="עיצוב תורני"
 									supertip="כלים לעיצוב ספרי קודש"

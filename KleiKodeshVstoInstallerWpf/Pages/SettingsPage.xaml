@@ -177,7 +177,7 @@
                     </StackPanel.Resources>
                     <CheckBox x:Name="Kezayit_Visible"    Content="ספריית כזית"/>
                     <CheckBox x:Name="WebSites_Visible"   Content="דרך האתרים"/>
-                    <CheckBox x:Name="KleiKodesh_Visible" Content="עיצוב תורני"/>
+                    <CheckBox x:Name="DocDesign_Visible" Content="עיצוב תורני"/>
                     <CheckBox x:Name="RegexFind_Visible"  Content="חיפוש רגקס בוורד"/>
                 </StackPanel>
 
@@ -202,7 +202,7 @@
                     </StackPanel.Resources>
                     <RadioButton x:Name="Kezayit_Option"    Content="ספריית כזית"/>
                     <RadioButton x:Name="WebSites_Option"   Content="דרך האתרים"/>
-                    <RadioButton x:Name="KleiKodesh_Option" Content="עיצוב תורני"/>
+                    <RadioButton x:Name="DocDesign_Option" Content="עיצוב תורני"/>
                     <RadioButton x:Name="RegexFind_Option"  Content="חיפוש רגקס בוורד"/>
                     <RadioButton x:Name="Settings_Option"   Content="הגדרות"/>
                 </StackPanel>

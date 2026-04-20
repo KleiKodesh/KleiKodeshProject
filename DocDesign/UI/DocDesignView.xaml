@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="DocSeferLib.DocSeferLibView"
+<UserControl x:Class="DocDesign.DocDesignView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
@@ -6,18 +6,18 @@
              xmlns:controls="clr-namespace:WpfLib.Controls;assembly=WpfLib"
              xmlns:helpers="clr-namespace:WpfLib.Helpers;assembly=WpfLib"
              xmlns:ap="clr-namespace:WpfLib.AttachedProperties;assembly=WpfLib"
-             xmlns:local="clr-namespace:DocSeferLib.UI"
+             xmlns:local="clr-namespace:DocDesign.UI"
              mc:Ignorable="d" 
              MinHeight="450" MinWidth="335"
              FlowDirection="RightToLeft"
              FontSize="13"
              FontFamily="Tahoma">
     <UserControl.Resources>
-        <ResourceDictionary Source="/DocSeferLib;component/UI/DocSeferDictionary.xaml"/>
+        <ResourceDictionary Source="/DocDesign;component/UI/DocDesignDictionary.xaml"/>
     </UserControl.Resources>
 
     <UserControl.DataContext>
-        <local:DocseferViewModel/>
+        <local:DocDesignViewModel/>
     </UserControl.DataContext>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto">
