@@ -20,7 +20,7 @@
 
 ; MUI Settings
 !define MUI_ABORTWARNING
-!define MUI_UNICON "..\..\KleiKodeshVstoInstallerWpf\KleiKodesh_Main.ico"
+!define MUI_UNICON "..\Installer\KleiKodesh_Main.ico"
 
 ; Uninstaller window customization for Hebrew
 !define MUI_UNINSTALLER
@@ -62,8 +62,8 @@ LangString MSG_WORD_CLOSE_FAILED ${LANG_ENGLISH} "Could not close Word automatic
 LangString MSG_UNINSTALL_CONFIRM ${LANG_ENGLISH} "Are you sure you want to completely remove ${PRODUCT_NAME} and all of its components?"
 
 ; Classic NSIS UI for minimal window
-Icon "..\..\KleiKodeshVstoInstallerWpf\KleiKodesh_Main.ico"
-UninstallIcon "..\..\KleiKodeshVstoInstallerWpf\KleiKodesh_Main.ico"
+Icon "..\Installer\KleiKodesh_Main.ico"
+UninstallIcon "..\Installer\KleiKodesh_Main.ico"
 
 ; Output directory - passed from build script, defaults to releases subfolder
 !ifndef OUTPUT_DIR
@@ -223,9 +223,9 @@ Section "Main"
   SetOutPath "$TEMP\KleiKodeshInstaller"
   
   ; Copy WPF installer files (built for .NET Framework 4.8)
-  File "..\..\KleiKodeshVstoInstallerWpf\bin\Release\net48\KleiKodeshVstoInstallerWpf.exe"
-  File /nonfatal "..\..\KleiKodeshVstoInstallerWpf\bin\Release\net48\*.config"
-  File "..\..\KleiKodeshVstoInstallerWpf\KleiKodesh.zip"
+  File "..\Installer\bin\Release\net48\KleiKodeshVstoInstallerWpf.exe"
+  File /nonfatal "..\Installer\bin\Release\net48\*.config"
+  File "..\Installer\KleiKodesh.zip"
   
   ; Pass all command-line arguments through to the WPF installer unchanged
   ${GetParameters} $R0

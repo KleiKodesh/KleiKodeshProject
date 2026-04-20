@@ -5,7 +5,7 @@
 The app version lives in **one place only**:
 
 ```
-KleiKodeshVstoInstallerWpf/Helpers/AddinInstaller.cs
+Build/Installer/Helpers/AddinInstaller.cs
 ```
 
 ```csharp
@@ -16,12 +16,12 @@ All other version stamps are derived from this value by `UpdateVersion.ps1` duri
 
 ## What Gets Updated on Every Release Build
 
-`KleiKodeshVstoInstallerWpf/UpdateVersion.ps1` (called by `Build/build-installer.ps1`) updates:
+`Build/Installer/UpdateVersion.ps1` (called by `Build/build-installer.ps1`) updates:
 
 | File                                                           | Field                  | Format                  |
 | -------------------------------------------------------------- | ---------------------- | ----------------------- |
-| `KleiKodeshVstoInstallerWpf/Helpers/AddinInstaller.cs`         | `const string Version` | `"vX.Y.Z"`              |
-| `KleiKodeshVstoInstallerWpf/KleiKodeshVstoInstallerWpf.csproj` | `<Version>`            | `X.Y.Z` (no `v` prefix) |
+| `Build/Installer/Helpers/AddinInstaller.cs`         | `const string Version` | `"vX.Y.Z"`              |
+| `Build/Installer/KleiKodeshVstoInstallerWpf.csproj` | `<Version>`            | `X.Y.Z` (no `v` prefix) |
 
 The NSIS script (`Build/KleiKodeshWrapper.nsi`) receives `${PRODUCT_VERSION}` as a command-line define from `build-installer.ps1` — it does **not** need to be edited manually.
 

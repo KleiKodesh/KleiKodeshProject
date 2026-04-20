@@ -62,7 +62,7 @@ else { Write-Host "All files valid UTF-8." }
 
 Note: this scan is slow on the full repo due to `node_modules` and WebView2 cache. Scope it to specific project directories when possible:
 ```powershell
-$dirs = @("DocDesign","KleiKodeshVsto/Ribbon","KleiKodeshVsto/Helpers","KleiKodeshVstoInstallerWpf/Pages")
+$dirs = @("DocDesign","KleiKodeshVsto/Ribbon","KleiKodeshVsto/Helpers","Build/Installer/Pages")
 ```
 
 ---
@@ -119,6 +119,6 @@ These files contain Hebrew strings and must stay UTF-8:
 | `DocDesign/UI/DocDesignDictionary.xaml` | Style definitions |
 | `DocDesign/Paragraphs/*.cs` | Hebrew comments |
 | `DocDesign/Helpers/*.cs` | Hebrew comments |
-| `KleiKodeshVstoInstallerWpf/Pages/*.xaml` | All installer UI |
-| `KleiKodeshVstoInstallerWpf/Dialogs/*.xaml` | Dialog UI |
+| `Build/Installer/Pages/*.xaml` | All installer UI |
+| `Build/Installer/Dialogs/*.xaml` | Dialog UI |
 | `KleiKodeshVsto/KleiKodeshVsto.csproj` | Hebrew comments |

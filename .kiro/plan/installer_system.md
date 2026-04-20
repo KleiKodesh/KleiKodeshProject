@@ -1,6 +1,6 @@
 ---
 inclusion: fileMatch
-fileMatchPattern: '**/KleiKodeshVstoInstallerWpf/**|**/Build/**'
+fileMatchPattern: '**/Build/Installer/**|**/Build/**'
 ---
 
 # Installer System
@@ -23,7 +23,7 @@ fileMatchPattern: '**/KleiKodeshVstoInstallerWpf/**|**/Build/**'
 5. **GitHub Release** - Optional auto-create release with installer asset
 
 ## Version Management
-- **Single Source**: `KleiKodeshVstoInstallerWpf/InstallProgressWindow.xaml.cs`
+- **Single Source**: `Build/Installer/Helpers/AddinInstaller.cs`
 - **Auto-Increment**: Fetches latest from `https://api.github.com/repos/KleiKodesh/KleiKodeshProject/releases/latest`
 - **Format**: GitHub tag format (e.g., "v1.0.31")
 - **Registry Storage**: `HKEY_CURRENT_USER\SOFTWARE\KleiKodesh\Version`

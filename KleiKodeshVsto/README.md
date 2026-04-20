@@ -1,6 +1,6 @@
 # KleiKodeshVsto — VSTO Word Add-in
 
-The core Word add-in. It is installed by `KleiKodeshVstoInstallerWpf` and loaded automatically by Word on startup.
+The core Word add-in. It is installed by `Build/Installer` and loaded automatically by Word on startup.
 
 ## What It Does
 

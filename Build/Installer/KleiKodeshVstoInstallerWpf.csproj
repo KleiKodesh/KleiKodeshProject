@@ -4,7 +4,7 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net48</TargetFramework>
     <UseWPF>true</UseWPF>
-    <Version>3.6.1</Version>
+    <Version>3.6.2</Version>
     <ApplicationIcon>KleiKodesh_Main.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>AnyCPU</Platforms>
@@ -25,14 +25,14 @@
   <!-- Prebuild: build KleiKodeshVsto and pack KleiKodesh.zip — runs in both Debug and Release -->
   <Target Name="BuildVstoAndPack" BeforeTargets="BeforeBuild">
     <PropertyGroup>
-      <KleiKodeshProject>$(MSBuildProjectDirectory)\..\KleiKodeshVsto\KleiKodeshVsto.csproj</KleiKodeshProject>
+      <KleiKodeshProject>$(MSBuildProjectDirectory)\..\..\KleiKodeshVsto\KleiKodeshVsto.csproj</KleiKodeshProject>
       <!-- In Release use Release|AnyCPU (or overrides from build script); in Debug use Debug|AnyCPU -->
       <VstoConfig Condition="'$(Configuration)' == 'Release' AND '$(VstoConfiguration)' != ''">$(VstoConfiguration)</VstoConfig>
       <VstoConfig Condition="'$(Configuration)' == 'Release' AND '$(VstoConfiguration)' == ''">Release</VstoConfig>
       <VstoConfig Condition="'$(Configuration)' != 'Release'">Debug</VstoConfig>
       <VstoPlatformParam Condition="'$(VstoPlatform)' != ''">$(VstoPlatform)</VstoPlatformParam>
       <VstoPlatformParam Condition="'$(VstoPlatform)' == ''">AnyCPU</VstoPlatformParam>
-      <VstoOutputPath>$(MSBuildProjectDirectory)\..\KleiKodeshVsto\bin\$(VstoConfig)</VstoOutputPath>
+      <VstoOutputPath>$(MSBuildProjectDirectory)\..\..\KleiKodeshVsto\bin\$(VstoConfig)</VstoOutputPath>
       <TempPackageDir>$(OutputPath)VstoPackage</TempPackageDir>
       <ZipOutputPath>$(MSBuildProjectDirectory)\KleiKodesh.zip</ZipOutputPath>
       <InstallProgressFile>$(MSBuildProjectDirectory)\Helpers\AddinInstaller.cs</InstallProgressFile>
@@ -68,7 +68,7 @@
     <EmbeddedResource Include="KleiKodesh.zip" Condition="Exists('KleiKodesh.zip')">
       <LogicalName>KleiKodesh.zip</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="..\WebSitesLib\WebSitesLib2\WebSitesWhitelist.json">
+    <EmbeddedResource Include="..\..\WebSitesLib\WebSitesLib2\WebSitesWhitelist.json">
       <LogicalName>KleiKodeshVstoInstallerWpf.WebSitesWhitelist.json</LogicalName>
     </EmbeddedResource>
   </ItemGroup>

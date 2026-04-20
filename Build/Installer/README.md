@@ -1,4 +1,4 @@
-# KleiKodeshVstoInstallerWpf — WPF Installer (Main App)
+# Build/Installer — WPF Installer (Main App)
 
 This is the **main application** that end users download and run. It packages the VSTO add-in as an embedded zip resource, extracts it to `%LocalAppData%\KleiKodesh`, and registers it with Word.
 
@@ -32,7 +32,7 @@ Silent/update mode (`--silent` / `--install`) skips straight to InstallPage.
 ## Folder Structure
 
 ```
-KleiKodeshVstoInstallerWpf/
+Build/Installer/
 ├── App.xaml / .cs                — Entry point; assembly resolver; CLI arg handling
 ├── MainWindow.xaml / .cs         — Shell window; page navigation methods
 ├── KleiKodesh.zip                — Embedded VSTO package (built by pre-build target)

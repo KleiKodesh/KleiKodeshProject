@@ -64,24 +64,24 @@
 								label="שכפל חלונית צד"
 								screentip="שכפל חלונית צד"
 								supertip="מאפשר פתיחה של חלונית צד נוספת המשכפלת את חלונית הצד הנוכחית"
-								imageMso="ReviewReviewingPaneVertical"
+								getImage="getImage"
 								onAction="button_Click"/>
 
 							<button id="OpenChildDoc"
 							label="פתח מסמך בחלונית משנה"
 							screentip="מסמך בחלונית משנה"
 							supertip="מוצג תמיד מעל המסמך הנוכחי וממוזער יחד איתו"
-							imageMso="DocumentTemplate"
+							getImage="getImage"
 							onAction="button_Click"/>
 
 							<button id="Settings"
 									label="הגדרות"
-									imageMso="ComAddInsDialog"
+									getImage="getImage"
 									onAction="button_Click"/>
 
 							<button id="About"
 									label="אודות"
-									imageMso="Info"
+									getImage="getImage"
 									onAction="button_Click"/>
 
 						</menu>

@@ -2,14 +2,14 @@
 
 ## Main App
 
-The **main application** is the **WPF installer** (`KleiKodeshVstoInstallerWpf`). It installs the VSTO add-in (`KleiKodeshVsto`) into the user's local app data and registers it with Word. When referring to "the app", "the installer", or "app version", this always means the WPF installer project.
+The **main application** is the **WPF installer** (`Build/Installer`). It installs the VSTO add-in (`KleiKodeshVsto`) into the user's local app data and registers it with Word. When referring to "the app", "the installer", or "app version", this always means the WPF installer project.
 
 - App version is stored in the Windows registry at `HKEY_CURRENT_USER\SOFTWARE\KleiKodesh` → `Version` (e.g. `v3.0.0`).
-- The version constant lives in `KleiKodeshVstoInstallerWpf/Helpers/AddinInstaller.cs` as `const string Version`.
+- The version constant lives in `Build/Installer/Helpers/AddinInstaller.cs` as `const string Version`.
 
 ## Projects
 
-- `KleiKodeshVstoInstallerWpf` — WPF installer (the main app, see above)
+- `Build/Installer` — WPF installer (the main app, see above)
 - `KleiKodeshVsto` — VSTO Word add-in (installed by the WPF installer)
 - `DocSeferLib` — shared library for the VSTO add-in
 - `Kezayit/CSharpBackend/KezayitLib` — C# backend for the Kezayit WebView2 app
@@ -29,7 +29,7 @@ The installer lets users customize the website list before installation via `Adv
 
 `AddinInstaller.PendingWhitelist` is `null` until the user opens the dialog and clicks OK.
 
-See `KleiKodeshVstoInstallerWpf/README.md` for full details.
+See `Build/Installer/README.md` for full details.
 
 ## Bloom Filter Index & Version Detection
 
@@ -41,7 +41,7 @@ On startup (`SearchHandler.OnDbReady`), if the installed app version (from regis
 
 - **MSBuild** (for VSTO and WPF projects requiring VS tools): `C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe`
 - **Full solution build**: `& "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe" KleiKodeshProject.slnx /m /nologo /verbosity:minimal`
-- **dotnet build** works for SDK-style projects only (`KleiKodeshVstoInstallerWpf`, `KezayitLib`, `BloomSearchEngineLib`). Old-style WPF/VSTO projects (`KleiKodeshVsto`, `WpfLib`) require MSBuild from VS.
+- **dotnet build** works for SDK-style projects only (`Build/Installer`, `KezayitLib`, `BloomSearchEngineLib`). Old-style WPF/VSTO projects (`KleiKodeshVsto`, `WpfLib`) require MSBuild from VS.
 
 ## NuGet Quirk — Native Interop DLLs Don't Propagate Transitively
 
@@ -71,7 +71,7 @@ Each project folder contains a `README.md` describing its purpose, folder struct
 | README                                                                                                               | Covers                                                             |
 | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | [`README.md`](../../README.md)                                                                                       | Root overview, architecture diagram, build instructions            |
-| [`KleiKodeshVstoInstallerWpf/README.md`](../../KleiKodeshVstoInstallerWpf/README.md)                                 | WPF installer: extraction, registry keys, version management       |
+| [`Build/Installer/README.md`](../../Build/Installer/README.md)                                                       | WPF installer: extraction, registry keys, version management       |
 | [`KleiKodeshVsto/README.md`](../../KleiKodeshVsto/README.md)                                                         | VSTO add-in: ribbon, task panes, helpers                           |
 | [`DocSeferLib/README.md`](../../DocSeferLib/README.md)                                                               | Torah formatting library: Columns, Paragraphs, Spacing             |
 | [`Kezayit/README.md`](../../Kezayit/README.md)                                                                       | Vue 3 frontend: components, stores, host bridge, build             |

@@ -7,7 +7,7 @@ param(
 )
 
 # Derive sibling paths from $FilePath (which points to AddinInstaller.cs)
-$projectDir   = Split-Path -Parent (Split-Path -Parent $FilePath)   # KleiKodeshVstoInstallerWpf/
+$projectDir   = Split-Path -Parent (Split-Path -Parent $FilePath)   # Build/Installer/
 $csprojPath   = Join-Path $projectDir "KleiKodeshVstoInstallerWpf.csproj"
 
 function Update-AllVersionTargets($newVersion) {

@@ -36,8 +36,8 @@ namespace KleiKodeshVstoInstallerWpf
             if (_isRunning)
             {
                 var confirm = MessageBox.Show(
-                    "׳”׳ ׳™׳§׳•׳™ ׳¢׳“׳™׳™׳ ׳₪׳•׳¢׳. ׳”׳׳ ׳׳—׳–׳•׳¨ ׳‘׳›׳ ׳–׳׳×?",
-                    "׳׳™׳©׳•׳¨",
+                    "הניקוי עדיין פועל. האם לחזור בכל זאת?",
+                    "אישור",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Question,
                     MessageBoxResult.No,
@@ -64,9 +64,9 @@ namespace KleiKodeshVstoInstallerWpf
             if (!skipConfirm)
             {
                 var confirm = MessageBox.Show(
-                    "׳₪׳¢׳•׳׳” ׳–׳• ׳×׳׳—׳§ ׳׳× ׳›׳ ׳§׳‘׳¦׳™ ׳•׳¨׳©׳•׳׳•׳× ׳”׳¨׳’׳™׳¡׳˜׳¨׳™ ׳©׳ ׳›׳׳™ ׳§׳•׳“׳© ׳׳”׳׳—׳©׳‘.\n\n" +
-                    "׳׳׳—׳¨ ׳”׳ ׳™׳§׳•׳™ ׳×׳×׳—׳™׳ ׳”׳×׳§׳ ׳” ׳׳—׳“׳© ׳׳•׳˜׳•׳׳˜׳™׳×.\n\n׳׳”׳׳©׳™׳?",
-                    "׳׳™׳©׳•׳¨ ׳×׳™׳§׳•׳ ׳׳׳",
+                    "פעולה זו תמחק את כל קבצי ורשומות הרגיסטרי של כלי קודש מהמחשב.\n\n" +
+                    "לאחר הניקוי תתחיל התקנה מחדש אוטומטית.\n\nלהמשיך?",
+                    "אישור תיקון מלא",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Warning,
                     MessageBoxResult.No,
@@ -80,7 +80,7 @@ namespace KleiKodeshVstoInstallerWpf
             _isRunning                 = true;
             BasicCleanButton.IsEnabled = false;
             DeepCleanButton.IsEnabled  = false;
-            BasicCleanButton.Content   = "׳׳ ׳§׳”...";
+            BasicCleanButton.Content   = "מנקה...";
             CancelButton.IsEnabled     = false;
             ProgressPanel.Visibility = Visibility.Visible;
             LogPanel.Visibility      = Visibility.Visible;
@@ -91,7 +91,7 @@ namespace KleiKodeshVstoInstallerWpf
             {
                 ProgressBar.Value = r.percent;
                 StepText.Text     = r.status;
-                AppendLog($"ג”€ג”€ {r.status}");
+                AppendLog($"── {r.status}");
             });
             var detailLog = new Progress<string>(line => AppendLog(line));
 
@@ -103,9 +103,9 @@ namespace KleiKodeshVstoInstallerWpf
             catch (Exception ex)
             {
                 _isRunning = false;
-                AppendLog($"\nג ׳©׳’׳™׳׳”: {ex.Message}");
+                AppendLog($"\n❌ שגיאה: {ex.Message}");
                 BasicCleanButton.IsEnabled = true;
-                BasicCleanButton.Content   = "׳ ׳™׳§׳•׳™ ׳‘׳¡׳™׳¡׳™";
+                BasicCleanButton.Content   = "ניקוי בסיסי";
                 DeepCleanButton.IsEnabled  = true;
                 CancelButton.IsEnabled     = true;
                 return;
@@ -117,19 +117,19 @@ namespace KleiKodeshVstoInstallerWpf
 
             if (result.TotalDeleted == 0 && result.Errors.Count == 0)
             {
-                SummaryText.Text = "ג… ׳׳ ׳ ׳׳¦׳׳• ׳©׳׳¨׳™׳•׳× ג€” ׳”׳׳—׳©׳‘ ׳”׳™׳” ׳ ׳§׳™.";
-                AppendLog("\nג… ׳׳ ׳ ׳׳¦׳׳• ׳©׳׳¨׳™׳•׳×.");
+                SummaryText.Text = "✅ לא נמצאו שאריות — המחשב היה נקי.";
+                AppendLog("\n✅ לא נמצאו שאריות.");
             }
             else
             {
-                SummaryText.Text = $"ג… ׳”׳ ׳™׳§׳•׳™ ׳”׳•׳©׳׳ ג€” {result.DeletedPaths.Count} ׳×׳™׳§׳™׳•׳×/׳§׳‘׳¦׳™׳, {result.DeletedRegistryKeys.Count} ׳¨׳©׳•׳׳•׳× ׳¨׳’׳™׳¡׳˜׳¨׳™ ׳ ׳׳—׳§׳•.";
+                SummaryText.Text = $"✅ הניקוי הושלם — {result.DeletedPaths.Count} תיקיות/קבצים, {result.DeletedRegistryKeys.Count} רשומות רגיסטרי נמחקו.";
                 if (result.Errors.Count > 0)
-                    AppendLog($"\nג  {result.Errors.Count} ׳©׳’׳™׳׳•׳×.");
+                    AppendLog($"\n⚠ {result.Errors.Count} שגיאות.");
             }
 
-            StepText.Text = "׳”׳ ׳™׳§׳•׳™ ׳”׳•׳©׳׳ ג€” ׳׳×׳—׳™׳ ׳”׳×׳§׳ ׳” ׳׳—׳“׳©...";
+            StepText.Text = "הניקוי הושלם — מתחיל התקנה מחדש...";
             ProgressBar.Value = 100;
-            AppendLog("\nג–¶ ׳׳×׳—׳™׳ ׳”׳×׳§׳ ׳” ׳׳—׳“׳©...");
+            AppendLog("\n▶ מתחיל התקנה מחדש...");
 
             await System.Threading.Tasks.Task.Delay(800);
             _host.NavigateToInstall();

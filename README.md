@@ -19,7 +19,7 @@
 
 | תיקייה                                                                                               | סוג                   | מטרה                                                  |
 | ---------------------------------------------------------------------------------------------------- | --------------------- | ----------------------------------------------------- |
-| [`KleiKodeshVstoInstallerWpf`](KleiKodeshVstoInstallerWpf/README.md)                                 | WPF (.NET)            | המתקין — מתקין את תוסף VSTO ב-Word                    |
+| [`Build/Installer`](Build/Installer/README.md)                                 | WPF (.NET)            | המתקין — מתקין את תוסף VSTO ב-Word                    |
 | [`KleiKodeshVsto`](KleiKodeshVsto/README.md)                                                         | VSTO (.NET Framework) | **פרויקט התוסף הראשי**                                                    |
 | [`DocSeferLib`](DocSeferLib/README.md)                                                               | WPF Class Library     | כלים לעיצוב מסמכים תורניים בוורד                      |
 | [`Kezayit`](Kezayit/README.md)                                                                       | Vue 3 + TypeScript    | ספרייה לצפייה במאגר הספרים של זית / אוצריא            |
@@ -32,7 +32,7 @@
 ```
 User runs the installer
           ↓
-KleiKodeshVstoInstallerWpf  ──installs──▶  KleiKodeshVsto (Word add-in)
+Build/Installer  ──installs──▶  KleiKodeshVsto (Word add-in)
                                                     │
                                         ┌───────────┤
                                         │           │

@@ -139,7 +139,7 @@ while ($true) {
             Remove-Item -Path (Join-Path $ReleasesDir "KleiKodeshSetup-*.exe") -ErrorAction SilentlyContinue
             Write-Host "Wiping build dirs..." -ForegroundColor Yellow
             @("KleiKodeshVsto\bin","KleiKodeshVsto\obj",
-              "KleiKodeshVstoInstallerWpf\bin","KleiKodeshVstoInstallerWpf\obj") |
+              "Build\Installer\bin","Build\Installer\obj") |
                 ForEach-Object {
                     $p = Join-Path $ProjectRoot $_
                     if (Test-Path $p) { Remove-Item $p -Recurse -Force }
