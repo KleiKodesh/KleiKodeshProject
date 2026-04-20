@@ -105,6 +105,16 @@ This project uses Prettier with `printWidth: 100`. The Vue template compiler rej
 - No padding, no intros, no summaries — every sentence must carry information
 - Whenever functionality changes — files added, removed, renamed, or behavior meaningfully altered — update the README of the affected folder immediately
 
+## Book Search Query Normalization
+
+Book catalog search applies Hebrew-specific text transformations so that variant spellings and abbreviations all match the same results. These transformations live exclusively in `src/utils/bookQueryNormalizer.ts` and must be applied symmetrically to both sides: indexed titles (in `booksCategoryTree.ts` `assignFullPaths`) and user queries (in `useBooksFsSearch.ts` `toWords`).
+
+Current rules:
+- שו"ע / שוע → שלחן ערוך (abbreviation expansion)
+- שולחן → שלחן (standalone word normalization — applies wherever the word appears, not only in שלחן ערוך)
+
+When adding a new normalization rule — a new abbreviation, a new spelling variant, a new title alias — add it only to `bookQueryNormalizer.ts`. Never add book-search-specific normalization to `normalizeText.ts` or inline it in a composable.
+
 ## Scripts & Tooling
 
 - For any script that runs outside the app — database building, data processing, file generation, migrations, or any other standalone tooling — use Python, not Node.js
@@ -129,3 +139,20 @@ When completing a task that involved temporary or investigative work, always cle
 - A script is reusable if it can be run again in the future to produce useful output — build scripts, import scripts, verification scripts, and optimization scripts qualify. Audit scans, one-off data mutations, and diagnostic dumps do not.
 - If a cleanup script mutates data and its changes are now permanently baked into the database or codebase, delete the script — it cannot safely be run again and keeping it implies it can.
 - Apply this rule to `Misc/scripts/`, the workspace root, and any other location where temporary work files accumulate.
+
+## IDB-Backed LRU Cache Pattern
+
+When the user asks to add an LRU cache for a feature, always ask for the cap limit before implementing — never hardcode a guess.
+
+The established pattern for an IDB-backed LRU cache depends on how many places consume it. If multiple stores or composables need to read and write the cache, use a Pinia store in `src/stores/` — see `searchCacheStore.ts` as the canonical reference. If only a single feature touches the cache, use a plain module (no Pinia) co-located in the feature folder — see `dictCache.ts` in `src/components/dictionary/` as the reference for that case.
+
+Either way the internal structure is the same:
+
+- A dedicated IDB database registered in the `handles` map in `persistence.ts`, with matching `idb{Name}Get/Set/Delete` exports added there.
+- The database is added to `idbClearAll` in `persistence.ts` so it is wiped on full app reset.
+- A `PREFIX` constant for all entry keys and a separate `LRU_KEY` entry that holds the ordered list of cached keys as a JSON array.
+- `get` reads the entry, returns null on miss, and calls `touchLru` on hit to move the key to the most-recently-used end.
+- `set` calls `evictIfNeeded` before writing — eviction removes the least-recently-used entry (the first element of the LRU array) when the array length without the current key is already at the cap.
+- `clear` deletes all entries listed in the LRU array plus the LRU key itself.
+- Results are never cached in memory — only the LRU key list may be kept in memory if needed. Large result sets belong in IDB only.
+- The full app reset (`idbClearAll`) drops the database entirely — no explicit `clear()` call or settings button is needed for the full reset path.

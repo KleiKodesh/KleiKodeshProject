@@ -357,7 +357,7 @@ function asLine(item: FlatItem | undefined) {
         @toggle="toggleBookVisibility"
         @close="treeVisible = false"
       />
-      <div class="content-col">
+      <div class="content-col" :style="{ fontSize: `${commentaryFontPx}px` }">
         <CommentaryHeaderNav
           ref="headerNavRef"
           class="sticky-nav"
@@ -383,7 +383,6 @@ function asLine(item: FlatItem | undefined) {
           class="scroller"
           tabindex="0"
           data-ctrlf-enabled
-          :style="{ fontSize: `${commentaryFontPx}px` }"
           @scroll="onScroll"
           @contextmenu="contextMenuRef?.show($event)"
         >
@@ -446,6 +445,7 @@ function asLine(item: FlatItem | undefined) {
 .sticky-nav {
   flex-shrink: 0;
   height: 32px;
+  font-size: 13px;
 }
 .state-overlay {
   flex: 1;

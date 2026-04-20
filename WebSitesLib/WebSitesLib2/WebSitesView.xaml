@@ -591,13 +591,13 @@
                     </ComboBox.InputBindings>
                 </ComboBox>
 
-                <Button x:Name="EditWhiteListButton"
+                <!-- <Button x:Name="EditWhiteListButton"
                         Grid.Column="2"
                         ToolTip="ערוך רשימה מותרת"
                         Margin="2,0,0,0"
                         Command="{Binding ElementName=BrowserTabs, Path=EditWhiteListCommand}">
                     <Path Data="{StaticResource EditWhitelistIcon}"/>
-                </Button>
+                </Button> -->
             </Grid>
         </Border>
 

@@ -16,6 +16,7 @@ const props = defineProps<{
   hasSearched: boolean
   initialScrollIndex?: number
   initialScrollOffset?: number
+  zoom?: number
 }>()
 
 const emit = defineEmits<{
@@ -59,15 +60,12 @@ function captureScrollPos() {
 function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
   // Two-rAF pattern: scrollToIndex triggers TanStack's internal correction.
   // Wait one rAF for it to settle, then set scrollTop directly — TanStack is idle by then.
-  console.log('[search-scroll] restoreScrollPos called — index:', scrollIndex, 'offset:', scrollOffset)
   programmaticScrolling = true
   virtualizer.value.scrollToIndex(scrollIndex, { align: 'start' })
   requestAnimationFrame(() => {
     const item = virtualizer.value.measurementsCache.find((m) => m.index === scrollIndex)
-    console.log('[search-scroll] rAF1 — measurementsCache item:', item, '| scrollEl:', !!scrollEl.value)
     if (item && scrollEl.value) scrollEl.value.scrollTop = item.start + scrollOffset
     requestAnimationFrame(() => {
-      console.log('[search-scroll] rAF2 — programmaticScrolling cleared, final scrollTop:', scrollEl.value?.scrollTop)
       programmaticScrolling = false
     })
   })
@@ -80,7 +78,6 @@ function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
   const stopWatch = watch(
     () => props.results.length,
     (len) => {
-      console.log('[search-scroll] results.length watch fired — len:', len, '| initialScrollIndex prop:', props.initialScrollIndex, '| isSearching:', props.isSearching)
       if (!len) return
       if (props.initialScrollIndex == null) {
         stopWatch()
@@ -97,7 +94,6 @@ function savePos() {
   if (programmaticScrolling) return
   const pos = captureScrollPos()
   if (!pos) return
-  console.log('[search-scroll] savePos emitting:', pos)
   emit('saveScroll', pos)
 }
 
@@ -140,7 +136,7 @@ defineExpose({ captureScrollPos })
           {{ results.length.toLocaleString() }} תוצאות
         </span>
       </div>
-      <div ref="scrollEl" class="scroller" tabindex="0" @scroll="onScroll">
+      <div ref="scrollEl" class="scroller" tabindex="0" :style="zoom != null ? { fontSize: `${(zoom / 100) * 13}px` } : undefined" @scroll="onScroll">
         <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
           <div
             v-for="vRow in virtualizer.getVirtualItems()"

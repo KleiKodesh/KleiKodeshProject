@@ -68,6 +68,9 @@
     <EmbeddedResource Include="KleiKodesh.zip" Condition="Exists('KleiKodesh.zip')">
       <LogicalName>KleiKodesh.zip</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="..\WebSitesLib\WebSitesLib2\WebSitesWhitelist.json">
+      <LogicalName>KleiKodeshVstoInstallerWpf.WebSitesWhitelist.json</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup>

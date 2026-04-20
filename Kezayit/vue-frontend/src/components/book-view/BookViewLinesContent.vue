@@ -566,7 +566,7 @@ function scrollToLineIndex(lineIndex: number) {
     virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
     scrollerEl.value,
     lineIndex,
-    -52,
+    props.searchBarVisible ? 44 : 0,
   )
 }
 
@@ -586,7 +586,7 @@ function onLineClick(index: number) {
       class="scroller"
       tabindex="0"
       data-ctrlf-enabled
-      :style="{ fontSize: `${fontPx}px`, scrollPaddingTop: searchBarVisible ? '44px' : '0px' }"
+      :style="{ fontSize: `${fontPx}px` }"
       @scroll="onScroll"
       @contextmenu="contextMenuRef?.show($event)"
     >

@@ -1,20 +1,28 @@
 <script setup lang="ts">
-import { watch, ref } from 'vue'
+import { watch, ref, computed, onMounted, nextTick } from 'vue'
 import { useDebounce } from '@vueuse/core'
+import { storeToRefs } from 'pinia'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import BottomSearchBar from '@/components/common/BottomSearchBar.vue'
 import DictionaryWordPage from './DictionaryWordPage.vue'
 import { useTabStore } from '@/stores/tabStore'
-import { dictLookup, dictLinks, dictSynonyms, dictVariants, dictSpellCandidates } from '@/host/dictionaryDb'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { useZoomHandler } from '@/composables/useZoom'
+import { dictCacheGet, dictCacheSet } from './dictCache'
+import { dictLinks, dictSynonyms, dictVariants, dictSpellCandidates, combinedLookup } from '@/host/dictionaryDb'
 import { isHosted } from '@/host/seforimDb'
-import type { SenseRow, DictLink } from '@/host/dictionaryDb'
+import type { SenseRow, DictLink, MetzudatRow, MenchemRow } from '@/host/dictionaryDb'
 
 export interface WordPageData {
-  headword:  string
-  senses:    SenseRow[]
-  links:     DictLink[]
-  synonyms:  string[]
-  variants:  string[]
+  headword:    string
+  senses:      SenseRow[]     // dictionary sources (not Radak)
+  radak:       SenseRow[]     // ספר השרשים לרד"ק — groups with commentary
+  metzudat:    MetzudatRow[]
+  malbim:      MetzudatRow[]
+  menchemRows: MenchemRow[]
+  links:       DictLink[]
+  synonyms:    string[]
+  variants:    string[]
 }
 
 function levenshtein(a: string, b: string): number {
@@ -40,8 +48,32 @@ async function fetchThesaurus(word: string): Promise<string[]> {
   return []
 }
 
-const tabStore    = useTabStore()
+const tabStore  = useTabStore()
+const settingsStore = useSettingsStore()
+const { dictionaryZoom: zoom } = storeToRefs(settingsStore)
+
+const isDictionaryActive = computed(() => tabStore.activeTab?.route === '/dictionary')
+useZoomHandler({ zoom, enabled: isDictionaryActive })
+
+const fontPx = computed(() => (zoom.value / 100) * 13)
+
 const searchQuery = ref('')
+const searchInputRef = ref<HTMLInputElement | null>(null)
+
+function focusSearchInput() {
+  nextTick(() => searchInputRef.value?.focus())
+}
+
+onMounted(() => {
+  const saved = tabStore.activeTab?.searchQuery
+  if (saved) searchQuery.value = saved
+  focusSearchInput()
+})
+
+watch(() => tabStore.activeTab?.route, (route) => {
+  if (route === '/dictionary') focusSearchInput()
+})
+
 const debouncedQuery = useDebounce(searchQuery, 300)
 
 const pageData    = ref<WordPageData | null>(null)
@@ -51,6 +83,7 @@ const suggestions = ref<string[]>([])
 
 watch(debouncedQuery, async (q) => {
   const trimmed = q.trim()
+  tabStore.updateActiveTab({ searchQuery: trimmed || undefined })
   if (!trimmed) {
     pageData.value = null
     noResults.value = false
@@ -61,7 +94,21 @@ watch(debouncedQuery, async (q) => {
   noResults.value = false
   suggestions.value = []
   try {
-    const { rows, isExact } = await dictLookup(trimmed)
+    const cached = await dictCacheGet(trimmed)
+    if (cached) {
+      pageData.value = cached
+      tabStore.updateActiveTab({ title: `מילון · ${trimmed}` })
+      return
+    }
+
+    const [{ dictRows, metzudatRows, malbimRows, menchemRows, isExact }] = await Promise.all([
+      combinedLookup(trimmed),
+    ])
+
+    // Split dictionary senses: Radak (source_id=7) groups with commentary sources
+    const RADAK_SOURCE_ID = 7
+    const dictSenses  = dictRows.filter(r => r.source_id !== RADAK_SOURCE_ID)
+    const radakSenses = dictRows.filter(r => r.source_id === RADAK_SOURCE_ID)
 
     const [links, dbSynonyms, thesaurus, variants] = isExact
       ? await Promise.all([
@@ -89,12 +136,22 @@ watch(debouncedQuery, async (q) => {
         .map(x => x.hw)
     }
 
-    if (!rows.length && !synonyms.length) {
+    if (!dictRows.length && !metzudatRows.length && !malbimRows.length && !menchemRows.length && !synonyms.length) {
       pageData.value = null
       noResults.value = true
       tabStore.updateActiveTab({ title: 'מילון' })
     } else {
-      pageData.value = { headword: trimmed, senses: rows, links, synonyms, variants }
+      const result: WordPageData = {
+        headword:    trimmed,
+        senses:      dictSenses,
+        radak:       radakSenses,
+        metzudat:    metzudatRows,
+        malbim:      malbimRows,
+        menchemRows,
+        links, synonyms, variants,
+      }
+      pageData.value = result
+      dictCacheSet(trimmed, result)
       tabStore.updateActiveTab({ title: `מילון · ${trimmed}` })
     }
   } finally {
@@ -115,6 +172,7 @@ function onSelect(headword: string) {
       <DictionaryWordPage
         v-else-if="pageData"
         :data="pageData"
+        :font-px="fontPx"
         @select="onSelect"
       />
 
@@ -138,12 +196,12 @@ function onSelect(headword: string) {
         <IconSearch20Regular class="search-icon" />
       </template>
       <input
+        ref="searchInputRef"
         v-model="searchQuery"
         class="dict-search-input"
         type="search"
         placeholder="חפש מילה"
         dir="rtl"
-        autofocus
       />
     </BottomSearchBar>
   </div>

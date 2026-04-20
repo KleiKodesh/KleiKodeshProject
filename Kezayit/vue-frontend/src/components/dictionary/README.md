@@ -1,39 +1,57 @@
 # dictionary/
 
-Dictionary page. Singleton route `/dictionary`. Queries `public/dictionary/kezayit_dictionary.db`.
+Dictionary page. Singleton route `/dictionary`. Queries two databases: `public/dictionary/kezayit_dictionary.db` for the dictionary, and the main seforim DB for מצודת ציון, מלבי"ם באור המילות, and מחברת מנחם.
 
 ## Files
 
-`DictionaryPage.vue` — page shell. Search input via `BottomSearchBar`, fetches data on query change, passes `WordPageData` to `DictionaryWordPage`.
+`DictionaryPage.vue` — page shell. Search input via `BottomSearchBar`, debounces the query, calls `combinedLookup`, passes `WordPageData` to `DictionaryWordPage`. Handles spelling suggestions via Levenshtein on `dictSpellCandidates` when no exact match is found. Manages zoom state via `useZoomHandler` — zoom is stored globally in `settingsStore.dictionaryZoom` (persisted to localStorage) and passed as `fontPx` to `DictionaryWordPage`.
 
-`DictionaryWordPage.vue` — renders a looked-up word: definitions (משמעויות) and related words (קשורים). No grammar/nikud section.
+`DictionaryWordPage.vue` — renders a looked-up word. Three sections stacked vertically:
+- מחברת מנחם results (scrollable, capped height) — shown directly under the title
+- Definitions — all sources merged into one grouped list, grouped by word form (nikud if present, else plain headword)
+- קשורים — synonyms, related links, spelling variants
 
-## DB Schema
+Source labels for מצודת ציון and מלבי"ם are Ctrl+clickable — opens the source book in a new tab at the matched line. מחברת מנחם entries are also Ctrl+clickable for the same reason.
 
-```
-source_kind(id, name)
-link_kind(id, name, explanation)                              ← נרדף | כתיב | ראו_גם | ניגוד | נגזרת
-word(id, headword UNIQUE)                                     ← one row per distinct headword
-sense(id, word_id → word, nikud, text, source_id → source_kind)
-link(word_id → word, target_id → word, kind_id → link_kind)  PK: (word_id, target_id, kind_id)
-```
+## Data flow
 
-`word` is the identity table — one row per distinct headword. `sense` holds all content (definitions, abbreviations, Aramaic entries) — multiple rows per word, one per source. `link` uses integer FKs into `word`.
+`DictionaryPage.vue` calls `combinedLookup(term)` which runs all three tiered sources in parallel through a shared progression: exact → prefix → contains. All three exact queries fire together; if any source returns results at a tier, the lower tiers are skipped entirely. The result carries `dictRows`, `metzudatRows`, `malbimRows`, and `isExact`.
+
+מחברת מנחם runs independently in parallel via `menchemLookup` — it is contains-only (no tier progression) and does not participate in the tier gating.
+
+Dictionary senses with `source_id = 7` (רד"ק) are split out into `radak` and grouped with the seforim sources in the display, not with the dictionary senses.
+
+Related words (synonyms, links, variants) are only fetched when `isExact` is true.
+
+## DB Schema (dictionary DB)
+
+`source_kind(id, name)` — 7 sources including רד"ק (id=7).
+
+`link_kind(id, name, explanation)` — נרדף | כתיב | ראו_גם | ניגוד | נגזרת.
+
+`word(id, headword UNIQUE)` — one row per distinct headword.
+
+`sense(id, word_id → word, nikud, text, source_id → source_kind)` — all definitions and abbreviations; multiple rows per word, one per source.
+
+`link(word_id → word, target_id → word, kind_id → link_kind)` — composite PK on all three columns.
+
+## Seforim DB queries (מצודת ציון / מלבי"ם / מחברת מנחם)
+
+All three sources are queried from the main seforim DB. Book IDs are looked up at runtime by title pattern and cached — never hardcoded.
+
+**מצודת ציון / מלבי"ם**: Lines are matched against the bold header tag only. The SQL pattern `<b>TERM...</b>%` ensures the term ends inside `<b>...</b>` and is never matched against the definition body. Each `MetzudatRow` carries `bookId`, `lineId`, and `lineIndex` for Ctrl+click navigation.
+
+**מחברת מנחם**: The book has two sections. The dictionary section uses `<strong><big>HEADWORD</big></strong>` lines — the term is matched inside the `<big>` tag (with and without trailing space), and the next line is returned as the definition. The synonym section uses lines where multiple `<b>WORD</b>` entries appear — the term is matched as the end of a bold word (`%<b>%TERM</b>%`) to prevent false positives from plain text between tags. The nearest preceding pure-bold line is returned as the section title. Both sections use contains matching inside the tag patterns.
 
 ## Query layer
 
-All SQL lives in `src/host/dictionaryDb.ts`.
+Three files handle all query logic:
 
-Exported functions:
+`src/host/dictionaryDb.sql.ts` — all SQL strings for the dictionary DB. No inline SQL anywhere else in the dictionary layer.
 
-- `dictLookup(term)` — exact → prefix → contains on `sense.headword`; returns `SenseRow[]` + `isExact`
-- `dictLinks(term)` — related words from `link` (excludes כתיב variants)
-- `dictSynonyms(term)` — נרדף links only
-- `dictVariants(term)` — כתיב links only
-- `dictSpellCandidates(term)` — headword prefix scan for Levenshtein fallback
-- `abbrevLookup(term)` — delegates to `dictLookup` (abbreviations are in the same table)
+`src/host/dictionaryDb.ts` — dictionary DB query functions (`dictLinks`, `dictSynonyms`, `dictVariants`, `dictSpellCandidates`, `abbrevLookup`) and the main entry point `combinedLookup`. Routes through `__webviewDictQuery` (C# host) or the `/query-dict` Vite dev middleware.
 
-Routes through `__webviewDictQuery` (C# host) or `/query-dict` Vite middleware in dev.
+`src/host/dictionarySeforimDb.ts` — seforim DB queries for מצודת ציון, מלבי"ם, and מחברת מנחם. Exports `boldExact`, `boldPrefix`, `boldContains`, `getMetzudatBookIds`, `getMalbimBookIds`, and `menchemLookup`. Uses the same seforim DB transport as the rest of the app.
 
 ## Rebuild
 

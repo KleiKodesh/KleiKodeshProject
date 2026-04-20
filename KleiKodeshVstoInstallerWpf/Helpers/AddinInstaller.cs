@@ -29,6 +29,23 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         public static string AddinRegistryPath     => $@"Software\Microsoft\Office\Word\Addins\{AppName}";
         public static string AddinDataRegistryPath => $@"Software\Microsoft\Office\Word\AddinsData\{AppName}";
 
+        /// <summary>
+        /// Holds the user-edited whitelist JSON for the current installer session.
+        ///
+        /// null     = user has not opened the whitelist dialog this session.
+        ///            ExtractAsync will either extract the default from the zip (fresh install)
+        ///            or leave the existing file untouched (update).
+        ///
+        /// non-null = user opened WhitelistEditorDialog and clicked OK.
+        ///            ExtractAsync skips the zip entry entirely, and ApplyPendingWhitelist()
+        ///            writes this value to disk after extraction completes.
+        ///
+        /// Set by:   AdvancedPage.EditWhitelistButton_Click (via dialog OK)
+        /// Read by:  AddinInstaller.ExtractAsync, AddinInstaller.ApplyPendingWhitelist
+        /// See also: whitelist-management.md steering file
+        /// </summary>
+        public static string PendingWhitelist { get; set; }
+
         // ── Extract ──────────────────────────────────────────────────────────────
 
         public static async Task ExtractAsync(IProgress<double> progress)
@@ -51,6 +68,20 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                         if (string.IsNullOrEmpty(entry.Name))
                         {
                             Directory.CreateDirectory(fullPath);
+                            continue;
+                        }
+
+                        // If the user customised the whitelist, skip the copy from
+                        // the zip — ApplyPendingWhitelist() will write their version
+                        // immediately after extraction completes.
+                        // Also skip if the file already exists on disk (update scenario) —
+                        // we never overwrite the user's whitelist unless they explicitly edited it.
+                        if (string.Equals(entry.Name, "WebSitesWhitelist.json",
+                                StringComparison.OrdinalIgnoreCase) &&
+                            (PendingWhitelist != null || File.Exists(fullPath)))
+                        {
+                            current++;
+                            progress?.Report((double)current / total * 100);
                             continue;
                         }
 
@@ -158,6 +189,29 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             }
             catch { }
             return null;
+        }
+
+        // ── Whitelist ────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Writes the user-edited whitelist to disk after extraction.
+        ///
+        /// Called unconditionally from InstallPage after ExtractAsync — it is a no-op
+        /// when PendingWhitelist is null (user did not edit the list this session).
+        ///
+        /// Do NOT call this before ExtractAsync — the install folder may not exist yet.
+        /// Do NOT call this from anywhere other than InstallPage.
+        /// </summary>
+        public static void ApplyPendingWhitelist()
+        {
+            // null = user never opened the dialog → nothing to do, existing or default file is correct
+            if (string.IsNullOrEmpty(PendingWhitelist)) return;
+            try
+            {
+                string dest = Path.Combine(InstallPath, "WebSitesWhitelist.json");
+                File.WriteAllText(dest, PendingWhitelist, System.Text.Encoding.UTF8);
+            }
+            catch { }
         }
 
         // ── Version + DB ─────────────────────────────────────────────────────────

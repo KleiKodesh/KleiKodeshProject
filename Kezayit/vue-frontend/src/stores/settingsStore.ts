@@ -17,6 +17,7 @@ const DEFAULTS = {
   commentaryLinePadding: 1.6,
   useSeparateCommentarySettings: false,
   appZoom: 1.0,
+  dictionaryZoom: 100,
   newTabPage: 'homepage' as NewTabPage,
   pdfPageFilters: false,
   resumeLastRead: true,
@@ -36,6 +37,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const commentaryLinePadding = ref(DEFAULTS.commentaryLinePadding)
   const useSeparateCommentarySettings = ref(DEFAULTS.useSeparateCommentarySettings)
   const appZoom = ref(DEFAULTS.appZoom)
+  const dictionaryZoom = ref(DEFAULTS.dictionaryZoom)
   const newTabPage = ref<NewTabPage>(DEFAULTS.newTabPage)
   const pdfPageFilters = ref(DEFAULTS.pdfPageFilters)
   const resumeLastRead = ref(DEFAULTS.resumeLastRead)
@@ -58,6 +60,7 @@ export const useSettingsStore = defineStore('settings', () => {
     const clp = v<number>(KEYS.SETTINGS_COMMENTARY_LINE_PADDING); if (clp != null) commentaryLinePadding.value = clp
     const sc = v<boolean>(KEYS.SETTINGS_SEPARATE_COMMENTARY); if (sc != null) useSeparateCommentarySettings.value = sc
     const az = v<number>(KEYS.SETTINGS_APP_ZOOM); if (az != null) appZoom.value = az
+    const dz = v<number>(KEYS.SETTINGS_DICTIONARY_ZOOM); if (dz != null) dictionaryZoom.value = dz
     const nt = v<NewTabPage>(KEYS.SETTINGS_NEW_TAB_PAGE); if (nt != null) newTabPage.value = nt
     const pf = v<boolean>(KEYS.SETTINGS_PDF_FILTERS); if (pf != null) pdfPageFilters.value = pf
     const rl = v<boolean>(KEYS.SETTINGS_RESUME_LAST_READ); if (rl != null) resumeLastRead.value = rl
@@ -119,6 +122,7 @@ export const useSettingsStore = defineStore('settings', () => {
     commentaryLinePadding.value = DEFAULTS.commentaryLinePadding
     useSeparateCommentarySettings.value = DEFAULTS.useSeparateCommentarySettings
     appZoom.value = DEFAULTS.appZoom
+    dictionaryZoom.value = DEFAULTS.dictionaryZoom
     newTabPage.value = DEFAULTS.newTabPage
     pdfPageFilters.value = DEFAULTS.pdfPageFilters
     resumeLastRead.value = DEFAULTS.resumeLastRead
@@ -139,6 +143,7 @@ export const useSettingsStore = defineStore('settings', () => {
   watch(commentaryLinePadding, (v) => { lsSet(KEYS.SETTINGS_COMMENTARY_LINE_PADDING, v); applyCSSVariables() })
   watch(useSeparateCommentarySettings, (v) => lsSet(KEYS.SETTINGS_SEPARATE_COMMENTARY, v))
   watch(appZoom, (v) => { lsSet(KEYS.SETTINGS_APP_ZOOM, v); applyCSSVariables() })
+  watch(dictionaryZoom, (v) => lsSet(KEYS.SETTINGS_DICTIONARY_ZOOM, v))
   watch(newTabPage, (v) => lsSet(KEYS.SETTINGS_NEW_TAB_PAGE, v))
   watch(pdfPageFilters, (v) => lsSet(KEYS.SETTINGS_PDF_FILTERS, v))
   watch(resumeLastRead, (v) => lsSet(KEYS.SETTINGS_RESUME_LAST_READ, v))
@@ -147,7 +152,7 @@ export const useSettingsStore = defineStore('settings', () => {
   return {
     censorDivineNames, diacriticsState, headerFont, textFont, fontSize, linePadding,
     commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryLinePadding,
-    useSeparateCommentarySettings, appZoom, newTabPage, pdfPageFilters, resumeLastRead,
+    useSeparateCommentarySettings, appZoom, dictionaryZoom, newTabPage, pdfPageFilters, resumeLastRead,
     defaultAutoSyncCommentary, setupDone, midotDisclaimerAccepted,
     init, cycleDiacritics, togglePdfPageFilters, reset, completeSetup, acceptMidotDisclaimer,
   }

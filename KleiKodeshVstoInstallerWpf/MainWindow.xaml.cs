@@ -63,6 +63,8 @@ namespace KleiKodeshVstoInstallerWpf
         public void NavigateToLanding()  => MainFrame.Navigate(new LandingPage(this));
         public void NavigateToSettings() => MainFrame.Navigate(new SettingsPage(this));
         public void NavigateToRepair()   => MainFrame.Navigate(new RepairPage(this));
+        public void NavigateToAdvanced(bool showKezayit, bool showWebsites)
+            => MainFrame.Navigate(new AdvancedPage(this, showKezayit, showWebsites));
 
         public void NavigateToInstall()
         {

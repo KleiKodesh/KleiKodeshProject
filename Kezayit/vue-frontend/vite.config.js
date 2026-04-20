@@ -7,12 +7,10 @@ import path from 'node:path';
 function devSqlitePlugin() {
     let db;
     let dictDb;
-    let wikiDb;
     return {
         name: 'dev-sqlite',
         apply: 'serve',
         configureServer(server) {
-            // loadEnv with prefix '' loads all vars including non-VITE_ ones
             const env = loadEnv('development', process.cwd(), '');
             const dbPath = process.env.DB_PATH ?? env.DB_PATH ?? './data.db';
             const dictDbPath = path.resolve('./public/dictionary/kezayit_dictionary.db');
@@ -30,23 +28,14 @@ function devSqlitePlugin() {
             catch (err) {
                 console.error(`[dev-sqlite] failed to open kezayit_dictionary.db:`, err);
             }
-            const wikiDbPath = path.resolve('./public/dictionary/wikidict.db');
-            try {
-                wikiDb = new Database(wikiDbPath, { readonly: true });
-                console.log(`[dev-sqlite] opened wikidict.db`);
-            }
-            catch (err) {
-                console.error(`[dev-sqlite] failed to open wikidict.db:`, err);
-            }
             server.middlewares.use((req, res, next) => {
                 const isQuery = req.url === '/query' && req.method === 'POST';
                 const isDictQuery = req.url === '/query-dict' && req.method === 'POST';
-                const isWikiQuery = req.url === '/query-wikidict' && req.method === 'POST';
-                if (!isQuery && !isDictQuery && !isWikiQuery) {
+                if (!isQuery && !isDictQuery) {
                     next();
                     return;
                 }
-                const target = isWikiQuery ? wikiDb : isDictQuery ? dictDb : db;
+                const target = isDictQuery ? dictDb : db;
                 if (!target) {
                     res.writeHead(503, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ error: 'Database not available' }));

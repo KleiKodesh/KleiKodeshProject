@@ -38,6 +38,11 @@ namespace KleiKodeshVstoInstallerWpf
                 _status.Report("מחלץ קבצים...");
                 await AddinInstaller.ExtractAsync(_progress);
 
+                // Write the user-edited whitelist (if any) over the extracted default.
+                // Must run after ExtractAsync — the install folder must exist first.
+                // No-op when PendingWhitelist is null (user did not edit the list).
+                AddinInstaller.ApplyPendingWhitelist();
+
                 _status.Report("רושם תוסף...");
                 await AddinInstaller.RegisterAddInAsync(_progress);
 

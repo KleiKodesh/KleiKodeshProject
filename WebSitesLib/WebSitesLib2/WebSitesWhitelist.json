@@ -45,7 +45,7 @@
     "Name": "פורום לתורה",
     "Description": "פורום דיונים תורניים.",
     "Url": "https://tora-forum.co.il/",
-    "IsVisible": true
+    "IsVisible": false
   },
   {
     "Name": "ספריית הלכה ברורה",
@@ -178,6 +178,12 @@
     "Name": "ויקי מילון",
     "Description": "ויקימילון - המילון החופשי בעברית.",
     "Url": "https://he.wiktionary.org",
+    "IsVisible": false
+  },
+  {
+    "Name": "ויקיסוגיה",
+    "Description": "ויקיסוגיה - אתר שיתופי עבור סוגיות השס.",
+    "Url": "https://www.betmidrash.org.il",
     "IsVisible": true
   }
 ]

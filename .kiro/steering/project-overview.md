@@ -16,6 +16,21 @@ The **main application** is the **WPF installer** (`KleiKodeshVstoInstallerWpf`)
 - `Kezayit/CSharpBackend/BloomSearchEngineLib` — Bloom filter search engine
 - `Kezayit` (Vue/TypeScript) — frontend for the Kezayit seforim viewer
 
+## Website Whitelist (Installer)
+
+The installer lets users customize the website list before installation via `AdvancedPage` → `WhitelistEditorDialog`.
+
+**Single source of truth:** `WebSitesLib/WebSitesLib2/WebSitesWhitelist.json`
+
+**Extraction rules:**
+- Fresh install, user did not edit → extract from zip (default list)
+- Update (file exists), user did not edit → **skip** — never overwrite user's list
+- User edited via dialog → skip zip entry, `ApplyPendingWhitelist()` writes edited version
+
+`AddinInstaller.PendingWhitelist` is `null` until the user opens the dialog and clicks OK.
+
+See `KleiKodeshVstoInstallerWpf/README.md` for full details.
+
 ## Bloom Filter Index & Version Detection
 
 The Bloom filter index (`BloomFilters/lines.dat`) is built from the Zayit seforim database.

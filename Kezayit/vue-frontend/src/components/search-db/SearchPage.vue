@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { useDropdownClose } from '@/composables/useDropdownClose'
+import { useZoomHandler, ZOOM_CONFIG } from '@/composables/useZoom'
 import { useBloomSearch } from './useBloomSearch'
 import { useSearch, parseSearchQuery } from './useSearchFilters'
 import { useIndexingStatus } from './useIndexingStatus'
@@ -17,6 +18,10 @@ const booksStore = useBooksDataStore()
 
 // Capture tabId at mount time — stable for this component's lifetime (/search is keyed by tabId)
 const tabId = tabStore.activeTabId
+
+const zoom = ref<number>(ZOOM_CONFIG.DEFAULT)
+const isSearchActive = computed(() => tabStore.activeTab?.route === '/search')
+useZoomHandler({ zoom, enabled: isSearchActive })
 
 const {
   results,
@@ -83,7 +88,6 @@ function onClearSearch() {
 }
 
 function onSaveScroll(pos: { scrollIndex: number; scrollOffset: number }) {
-  console.log('[search-scroll] onSaveScroll received from list:', pos)
   lastScrollIndex = pos.scrollIndex
   lastScrollOffset = pos.scrollOffset
 }
@@ -94,7 +98,6 @@ async function saveFilterState() {
   // emit-based lastScrollIndex would still be undefined when the parent unmounts.
   const captured = resultsListRef.value?.captureScrollPos()
   if (captured) {
-    console.log('[search-scroll] saveFilterState — captured pos from list:', captured)
     lastScrollIndex = captured.scrollIndex
     lastScrollOffset = captured.scrollOffset
   }
@@ -105,30 +108,26 @@ async function saveFilterState() {
     searchAtFilters: atFilters.value.length ? atFilters.value : undefined,
     searchScrollIndex: lastScrollIndex,
     searchScrollOffset: lastScrollOffset,
+    searchZoom: zoom.value !== ZOOM_CONFIG.DEFAULT ? zoom.value : undefined,
   }
-  console.log('[search-scroll] saveFilterState → writing to IDB:', state)
   tabStore.setTabViewState(tabId, state)
 }
 
 async function restoreFromTab() {
   const savedQuery = tabStore.activeTab.searchQuery
-  console.log('[search-scroll] restoreFromTab — savedQuery:', savedQuery)
   if (!savedQuery) return
   searchQuery.value = savedQuery
   const { term, atFilters: tokens } = parseSearchQuery(savedQuery)
   setAtFilters(tokens)
   tabStore.updateActiveTab({ title: `חיפוש: ${term || savedQuery}` })
   const fromCache = await loadCachedResults(term || savedQuery)
-  console.log('[search-scroll] restoreFromTab — loadCachedResults returned:', fromCache, '| results.length after:', results.value.length)
   if (!fromCache) handleSearch(term || savedQuery)
 }
 
 onMounted(async () => {
-  console.log('[search-scroll] onMounted — tabId:', tabId)
   await booksStore.ensureLoaded()
 
   const saved = await tabStore.getTabViewState(tabId)
-  console.log('[search-scroll] IDB TabState read:', saved)
 
   if (saved?.searchCheckedBookIds != null) {
     const validIds = new Set(booksStore.allBooks.map((b) => b.id))
@@ -143,13 +142,14 @@ onMounted(async () => {
   }
 
   if (saved?.searchScrollIndex != null) {
-    console.log('[search-scroll] setting initialScrollIndex prop:', saved.searchScrollIndex, 'offset:', saved.searchScrollOffset ?? 0)
     initialScrollIndex.value = saved.searchScrollIndex
     initialScrollOffset.value = saved.searchScrollOffset ?? 0
     lastScrollIndex = saved.searchScrollIndex
     lastScrollOffset = saved.searchScrollOffset ?? 0
-  } else {
-    console.log('[search-scroll] no saved scroll index in IDB — will not restore')
+  }
+
+  if (saved?.searchZoom != null) {
+    zoom.value = saved.searchZoom
   }
 
   await restoreFromTab()
@@ -176,6 +176,7 @@ onBeforeUnmount(saveFilterState)
       :has-searched="hasSearched"
       :initial-scroll-index="initialScrollIndex"
       :initial-scroll-offset="initialScrollOffset"
+      :zoom="zoom"
       @result-click="handleResultClick"
       @save-scroll="onSaveScroll"
     />

@@ -3,7 +3,7 @@ import type { Ref } from 'vue'
 
 export const ZOOM_CONFIG = {
   MIN: 50,
-  MAX: 200,
+  MAX: 400,
   DEFAULT: 100,
   STEP: 10,
   WHEEL_SENSITIVITY: 1,

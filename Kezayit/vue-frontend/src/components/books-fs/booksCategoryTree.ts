@@ -1,4 +1,5 @@
 import { normalize } from '@/utils/normalizeText'
+import { normalizeBookQuery } from '@/utils/bookQueryNormalizer'
 
 export interface BookRow {
   id: number
@@ -55,7 +56,7 @@ export function assignFullPaths(nodes: CategoryNode[], parentPath = '', counter 
       book.fullPath = `${nodePath} / ${book.title}`
       book.parentPath = nodePath
       const authorPart = book.authors ? ` ${normalize(book.authors)}` : ''
-      book.searchPath = normalize(book.fullPath) + authorPart
+      book.searchPath = normalizeBookQuery(normalize(book.fullPath)) + authorPart
       book.searchWords = book.searchPath.split(/\s+/).filter((w) => w.length > 0)
     }
     assignFullPaths(node.children, nodePath, counter)

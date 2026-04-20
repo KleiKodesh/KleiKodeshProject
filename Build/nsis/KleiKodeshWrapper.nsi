@@ -42,7 +42,7 @@
 !insertmacro MUI_LANGUAGE "English"
 
 ; Language strings for Hebrew
-LangString MSG_DOTNET_FRAMEWORK_REQUIRED ${LANG_HEBREW} "נדרש .NET Framework ${DOTNET_FRAMEWORK_VERSION} או גרסה חדשה יותר.$\r$\n$\r$\nאנא התקן את .NET Framework ${DOTNET_FRAMEWORK_VERSION} ונסה שוב.$\r$\n$\r$\nהורדה: https://dotnet.microsoft.com/download/dotnet-framework/${DOTNET_FRAMEWORK_VERSION}"
+LangString MSG_DOTNET_FRAMEWORK_REQUIRED ${LANG_HEBREW} "נדרש .NET Framework ${DOTNET_FRAMEWORK_VERSION} או גרסה חדשה יותר.$\r$\n$\r$\nרכיב זה נדרש להפעלת כלי קודש.$\r$\n$\r$\nהאם ברצונך לפתוח את דף ההורדה כעת?"
 LangString MSG_VSTO_RUNTIME_REQUIRED ${LANG_HEBREW} "נדרש Microsoft Visual Studio ${VSTO_RUNTIME_VERSION} Tools for Office Runtime.$\r$\n$\r$\nרכיב זה נדרש להפעלת תוספי Office.$\r$\n$\r$\nהאם ברצונך להוריד ולהתקין אותו כעת?$\r$\n$\r$\nהורדה: https://www.microsoft.com/download/details.aspx?id=48217"
 LangString MSG_PREREQUISITES_FAILED ${LANG_HEBREW} "התקנת הדרישות המוקדמות נכשלה.$\r$\n$\r$\nאנא התקן ידנית:$\r$\n• .NET Framework ${DOTNET_FRAMEWORK_VERSION}$\r$\n• VSTO Runtime ${VSTO_RUNTIME_VERSION}$\r$\n$\r$\nלאחר מכן נסה שוב."
 LangString MSG_DOWNLOAD_VSTO ${LANG_HEBREW} "מוריד VSTO Runtime..."
@@ -52,7 +52,7 @@ LangString MSG_WORD_CLOSE_FAILED ${LANG_HEBREW} "לא ניתן לסגור את W
 LangString MSG_UNINSTALL_CONFIRM ${LANG_HEBREW} "האם אתה בטוח שברצונך להסיר לחלוטין את ${PRODUCT_NAME} ואת כל הרכיבים שלו?"
 
 ; Language strings for English (fallback)
-LangString MSG_DOTNET_FRAMEWORK_REQUIRED ${LANG_ENGLISH} ".NET Framework ${DOTNET_FRAMEWORK_VERSION} or higher is required.$\r$\n$\r$\nPlease install .NET Framework ${DOTNET_FRAMEWORK_VERSION} and try again.$\r$\n$\r$\nDownload: https://dotnet.microsoft.com/download/dotnet-framework/${DOTNET_FRAMEWORK_VERSION}"
+LangString MSG_DOTNET_FRAMEWORK_REQUIRED ${LANG_ENGLISH} ".NET Framework ${DOTNET_FRAMEWORK_VERSION} or higher is required.$\r$\n$\r$\nThis component is needed to run KleiKodesh.$\r$\n$\r$\nWould you like to open the download page now?"
 LangString MSG_VSTO_RUNTIME_REQUIRED ${LANG_ENGLISH} "Microsoft Visual Studio ${VSTO_RUNTIME_VERSION} Tools for Office Runtime is required.$\r$\n$\r$\nThis component is needed to run Office add-ins.$\r$\n$\r$\nWould you like to download and install it now?$\r$\n$\r$\nDownload: https://www.microsoft.com/download/details.aspx?id=48217"
 LangString MSG_PREREQUISITES_FAILED ${LANG_ENGLISH} "Prerequisites installation failed.$\r$\n$\r$\nPlease install manually:$\r$\n• .NET Framework ${DOTNET_FRAMEWORK_VERSION}$\r$\n• VSTO Runtime ${VSTO_RUNTIME_VERSION}$\r$\n$\r$\nThen try again."
 LangString MSG_DOWNLOAD_VSTO ${LANG_ENGLISH} "Downloading VSTO Runtime..."
@@ -118,16 +118,22 @@ Function CheckDotNetFramework48
     Goto framework_check_done
   ${EndIf}
   
-  ; If no .NET Framework 4.8+ found, show error
+  ; If no .NET Framework 4.8+ found, offer to open download page
   ${If} $R0 == "0"
     ${If} $LANGUAGE == ${LANG_HEBREW}
-      MessageBox MB_OK|MB_ICONSTOP|MB_RTLREADING "$(MSG_DOTNET_FRAMEWORK_REQUIRED)"
+      MessageBox MB_YESNO|MB_ICONEXCLAMATION|MB_RTLREADING "$(MSG_DOTNET_FRAMEWORK_REQUIRED)" IDYES OpenDotNetDownload IDNO AbortDotNet
     ${Else}
-      MessageBox MB_OK|MB_ICONSTOP "$(MSG_DOTNET_FRAMEWORK_REQUIRED)"
+      MessageBox MB_YESNO|MB_ICONEXCLAMATION "$(MSG_DOTNET_FRAMEWORK_REQUIRED)" IDYES OpenDotNetDownload IDNO AbortDotNet
     ${EndIf}
-    Abort
+
+    OpenDotNetDownload:
+      ExecShell "open" "https://dotnet.microsoft.com/download/dotnet-framework/net48"
+      Quit
+
+    AbortDotNet:
+      Abort
   ${EndIf}
-  
+
   framework_check_done:
 FunctionEnd
 

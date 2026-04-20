@@ -1,11 +1,32 @@
+/**
+ * Books-fs search composable.
+ *
+ * Two-phase search:
+ *
+ *   Phase 1 — Instant book match (runs on every keystroke, synchronous)
+ *             Filters the in-memory book catalog by the query words.
+ *             Results appear immediately with no loading state.
+ *             Also cancels any in-flight Phase 2 search so the spinner
+ *             never gets stuck when the user keeps typing.
+ *
+ *   Phase 2 — TOC heuristics fallback (runs debounced, async)
+ *             When Phase 1 finds nothing, delegates to booksFsTocHeuristics
+ *             which splits the query into "<book words> <toc words>" and
+ *             searches the TOC entries of the matching books.
+ *             Shows a loading spinner while the DB fetch is in progress.
+ *             Capped at MAX_TOC_CANDIDATE_BOOKS so a broad prefix like "ראש"
+ *             doesn't trigger a fetch for hundreds of books.
+ */
+
 import { ref, watch } from 'vue'
 import { refDebounced } from '@vueuse/core'
 import { normalize } from '@/utils/normalizeText'
-import { splitQuery, SearchableTree, stripTocTitleRoots } from '@/utils/tocSearchUtils'
-import { query } from '@/host/seforimDb'
-import { SQL } from '@/host/queries.sql'
+import { normalizeBookQuery } from '@/utils/bookQueryNormalizer'
 import { useBooksDataStore } from '@/stores/booksDataStore'
+import { runTocHeuristics } from './booksFsTocHeuristics'
 import type { BookRow } from './booksCategoryTree'
+
+// ─── Public types ─────────────────────────────────────────────────────────────
 
 export type BookFsItem = { uid: string; kind: 'book'; book: BookRow }
 export type TocFsItem = {
@@ -19,43 +40,48 @@ export type TocFsItem = {
 }
 export type SearchFsItem = BookFsItem | TocFsItem
 
-type TocRow = {
-  id: number
-  parentId: number | null
-  bookId: number
-  text: string
-  lineIndex: number | null
-  hasChildren: number | boolean
-}
+// ─── Query normalization ──────────────────────────────────────────────────────
 
-function chunkIds(ids: number[]): number[][] {
-  const size = Math.max(1, Math.ceil(Math.sqrt(ids.length)))
-  const out: number[][] = []
-  for (let i = 0; i < ids.length; i += size) out.push(ids.slice(i, i + size))
-  return out
-}
-
-function stripRoots(rows: TocRow[], bookTitles: Map<number, string>): TocRow[] {
-  // Group by bookId, strip per book, then flatten
-  const byBook = new Map<number, TocRow[]>()
-  for (const r of rows) {
-    const group = byBook.get(r.bookId) ?? []
-    group.push(r)
-    byBook.set(r.bookId, group)
-  }
-  const out: TocRow[] = []
-  for (const [bookId, group] of byBook) {
-    const title = bookTitles.get(bookId) ?? ''
-    out.push(...stripTocTitleRoots(group, title, { bookId }))
-  }
-  return out
-}
-
-function toWords(raw: string) {
-  return normalize(raw.trim())
+/**
+ * Normalize and split a raw query string into search words.
+ * Applies base normalization (lowercase, strip quotes) then book-specific
+ * normalization (abbreviation expansion, spelling variants).
+ */
+function toQueryWords(rawQuery: string): string[] {
+  return normalizeBookQuery(normalize(rawQuery.trim()))
     .split(/\s+/)
-    .filter((w) => w.length > 0)
+    .filter((word) => word.length > 0)
 }
+
+// ─── Phase 1: Instant book filter ─────────────────────────────────────────────
+
+/**
+ * Filter the full book catalog to books whose searchPath contains all query
+ * words. The last word is matched as a prefix (supports partial typing);
+ * all earlier words must match exactly.
+ *
+ * Results are sorted by tree order (catalog order) so the most prominent
+ * books appear first.
+ */
+export function filterBooksByWords(allBooks: BookRow[], words: string[]): BookRow[] {
+  if (!words.length) return []
+
+  const exactWords = words.slice(0, -1)
+  const prefixWord = words[words.length - 1]!
+
+  return allBooks
+    .filter((book) => {
+      const pathWords = book.searchWords ?? (book.searchPath ?? '').split(/\s+/)
+      const exactWordsMatch = exactWords.every((queryWord) =>
+        pathWords.some((pathWord) => pathWord === queryWord),
+      )
+      const prefixWordMatch = pathWords.some((pathWord) => pathWord.includes(prefixWord))
+      return exactWordsMatch && prefixWordMatch
+    })
+    .sort((a, b) => (a.treeOrder ?? 0) - (b.treeOrder ?? 0))
+}
+
+// ─── Composable ───────────────────────────────────────────────────────────────
 
 export function useBooksFsSearch(searchQuery: ReturnType<typeof ref<string>>) {
   const store = useBooksDataStore()
@@ -63,108 +89,79 @@ export function useBooksFsSearch(searchQuery: ReturnType<typeof ref<string>>) {
   const results = ref<SearchFsItem[]>([])
   const searching = ref(false)
 
-  function filterBooks(words: string[]) {
-    const exactWords = words.slice(0, -1)
-    const prefixWord = words[words.length - 1]!
-    return store.allBooks
-      .filter((b) => {
-        const pathWords = b.searchWords ?? (b.searchPath ?? '').split(/\s+/)
-        const exactOk = exactWords.every((qw) => pathWords.some((pw) => pw === qw))
-        const prefixOk = pathWords.some((pw) => pw.includes(prefixWord))
-        return exactOk && prefixOk
-      })
-      .sort((a, b) => (a.treeOrder ?? 0) - (b.treeOrder ?? 0))
-  }
+  // Monotonically increasing counter — incremented whenever a new search starts
+  // OR when the user types new text (Phase 1). Any in-flight Phase 2 async work
+  // checks this after every await and aborts if the value has changed.
+  let searchGeneration = 0
 
-  // Phase 1: instant book match
+  // ── Phase 1: instant book match ─────────────────────────────────────────────
+  // Runs on every keystroke. Also cancels any in-flight Phase 2 by bumping the
+  // generation counter and clearing the spinner — so the user never gets stuck
+  // on the loading animation while typing.
+
   watch(
     searchQuery,
-    (raw) => {
-      const words = toWords(raw ?? '')
-      if (words.length === 0) {
+    (rawQuery) => {
+      // Cancel any in-flight Phase 2 search immediately
+      searchGeneration++
+      searching.value = false
+
+      const words = toQueryWords(rawQuery ?? '')
+      if (!words.length) {
         results.value = []
         return
       }
-      const matches = filterBooks(words)
-      if (matches.length)
-        results.value = matches.map((b) => ({ uid: `b-${b.id}`, kind: 'book' as const, book: b }))
+
+      const matchedBooks = filterBooksByWords(store.allBooks, words)
+      if (matchedBooks.length) {
+        results.value = matchedBooks.map((book) => ({
+          uid: `b-${book.id}`,
+          kind: 'book' as const,
+          book,
+        }))
+      } else {
+        // No book match yet — clear stale results while Phase 2 is pending
+        results.value = []
+      }
     },
     { immediate: true },
   )
 
-  // Phase 2: TOC fallback when book search yields nothing
-  let searchGen = 0
+  // ── Phase 2: TOC heuristics fallback ────────────────────────────────────────
+  // Runs after the debounce delay. Only fires when Phase 1 found no books.
+  // The generation captured at the start of each run is checked after every
+  // await — if Phase 1 has already bumped it, the run exits without touching
+  // results or the searching flag.
+
   watch(
     debouncedQuery,
-    async (raw) => {
-      const gen = ++searchGen
-      const words = toWords(raw ?? '')
-      if (words.length === 0) {
-        results.value = []
-        return
-      }
-      if (filterBooks(words).length > 0) return
+    async (rawQuery) => {
+      const generation = ++searchGeneration
+      const words = toQueryWords(rawQuery ?? '')
 
-      const split = splitQuery(words, (bw) => filterBooks(bw).length > 0)
-      if (!split) {
+      if (!words.length) {
         results.value = []
         return
       }
 
-      const { bookWords, tocWords } = split
-      if (!tocWords.length) return
-      const candidateBooks = filterBooks(bookWords)
-      if (!candidateBooks.length) {
-        results.value = []
-        return
-      }
-
-      const bookMap = new Map(candidateBooks.map((b) => [b.id, b]))
-      const ids = candidateBooks
-        .slice()
-        .sort((a, b) => (a.treeOrder ?? 0) - (b.treeOrder ?? 0))
-        .map((b) => b.id)
-      const tocQuery = tocWords.join(' ')
+      // Skip TOC search when Phase 1 already found book results
+      if (filterBooksByWords(store.allBooks, words).length > 0) return
 
       searching.value = true
       results.value = []
-      const allRows: TocRow[] = []
-      const bookTitles = new Map(candidateBooks.map((b) => [b.id, b.title]))
+
       try {
-        for (const batch of chunkIds(ids)) {
-          const rows = await query<TocRow>(SQL.GET_TOC_TITLES_FOR_BOOKS(batch.length), batch)
-          if (gen !== searchGen) return
-          const stripped = stripRoots(rows, bookTitles)
-          stripped.sort(
-            (a, b) =>
-              (bookMap.get(a.bookId)?.treeOrder ?? 0) - (bookMap.get(b.bookId)?.treeOrder ?? 0),
-          )
-          allRows.push(...stripped)
-          // yield to keep UI responsive
-          await Promise.resolve()
-          if (gen !== searchGen) return
-        }
-        const tree = new SearchableTree(allRows)
-        const matched = tree.search(allRows, tocQuery)
-        if (gen !== searchGen) return
-        const items = matched.flatMap((node) => {
-          const book = bookMap.get((node as TocRow).bookId)
-          if (!book) return []
-          return [
-            {
-              uid: `toc-${(node as TocRow).bookId}-${node.id}`,
-              kind: 'toc' as const,
-              book,
-              tocEntryId: node.id,
-              tocLineIndex: (node as TocRow).lineIndex,
-              tocTitle: node.text,
-              tocPath: tree.displayPaths.get(node.id) ?? node.text,
-            },
-          ]
-        })
-        if (items.length) results.value = items
+        const { items } = await runTocHeuristics(
+          words,
+          (bookWords) => filterBooksByWords(store.allBooks, bookWords),
+          () => generation !== searchGeneration,
+        )
+
+        if (generation !== searchGeneration) return
+
+        results.value = items
       } finally {
-        if (gen === searchGen) searching.value = false
+        if (generation === searchGeneration) searching.value = false
       }
     },
     { immediate: true },

@@ -4,11 +4,11 @@ Full-text search using Bloom filters. Category and book filters, virtual-scrolle
 
 ## Components
 
-**SearchPage.vue** — orchestrates search bar, filter panel, results list, and indexing overlay.
+**SearchPage.vue** — orchestrates search bar, filter panel, results list, and indexing overlay. Manages per-tab zoom via `useZoomHandler` — zoom is stored in `TabState.searchZoom` (IDB, per-tab) and passed as a prop to `SearchResultsList`.
 
 **SearchBar.vue** — search input with filter toggle button.
 
-**SearchResultsList.vue** — virtual-scrolled results list. Accepts `results` (filtered) and `totalResults` (unfiltered count) to show a count bar above the list. Shows live count during streaming.
+**SearchResultsList.vue** — virtual-scrolled results list. Accepts `results` (filtered), `totalResults` (unfiltered count), and `zoom` (optional number, 50–200). Applies zoom as a font-size scaling on the scroller element. Shows live count during streaming.
 
 **SearchFilterPanel.vue** — slide-in filter panel. Contains the category/book tree and a book-name search input at the bottom. The book-name query is owned by `useSearchFilters` (via `v-model:filter-book-query`) so it persists when the panel closes. When a query is typed the tree is replaced by a flat matching-book list (`SearchFilterBookList`).
 

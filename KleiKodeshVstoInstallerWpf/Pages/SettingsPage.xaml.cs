@@ -1,10 +1,7 @@
 using KleiKodesh.Helpers;
 using KleiKodeshVstoInstallerWpf.Helpers;
-using Microsoft.VisualBasic;
-using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -16,7 +13,6 @@ namespace KleiKodeshVstoInstallerWpf
 
         private readonly Dictionary<string, bool> _visibleFlags = new Dictionary<string, bool>();
         private string _defaultButton;
-        private string _pendingDbPath;
 
         public SettingsPage(MainWindow host)
         {
@@ -44,12 +40,6 @@ namespace KleiKodeshVstoInstallerWpf
                 rb.Checked += (s, e) =>
                     _defaultButton = rb.Name.Replace("_Option", "");
             }
-
-            string currentPath = Interaction.GetSetting("ZayitApp", "Database", "Path", "");
-            if (!string.IsNullOrEmpty(currentPath))
-                DbPathText.Text = currentPath;
-
-            UpdateDbHint();
         }
 
         private void CommitSettings()
@@ -58,73 +48,20 @@ namespace KleiKodeshVstoInstallerWpf
                 SettingsManager.Save("Ribbon", kv.Key, kv.Value);
 
             SettingsManager.Save("Ribbon", "DefaultButton", _defaultButton);
-
-            if (_pendingDbPath != null)
-                Interaction.SaveSetting("ZayitApp", "Database", "Path", _pendingDbPath);
         }
 
-        private void UpdateDbHint()
+        private void BackButton_Click(object sender, RoutedEventArgs e) => _host.NavigateToLanding();
+        private void NextButton_Click(object sender, RoutedEventArgs e)
         {
-            if (_pendingDbPath != null)
-            {
-                DbHintText.Text = "לחץ לשינוי הנתיב";
-            }
+            CommitSettings();
+            bool kezayit  = _visibleFlags.TryGetValue("Kezayit_Visible",  out bool k) && k;
+            bool webSites = _visibleFlags.TryGetValue("WebSites_Visible", out bool w) && w;
+
+            if (kezayit || webSites)
+                _host.NavigateToAdvanced(kezayit, webSites);
             else
-            {
-                string existing = Interaction.GetSetting("ZayitApp", "Database", "Path", "");
-                DbHintText.Text = string.IsNullOrEmpty(existing)
-                    ? "לא הוגדר נתיב — ישתמש בברירת המחדל של אפליקציית זית"
-                    : "לחץ לשינוי הנתיב";
-            }
-        }
-
-        private void BackButton_Click(object sender, RoutedEventArgs e)    => _host.NavigateToLanding();
-        private void InstallButton_Click(object sender, RoutedEventArgs e) => Install();
-
-        private void ZayitDbButton_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                var dialog = new Microsoft.Win32.OpenFileDialog
-                {
-                    Title = "בחר קובץ מסד נתונים לכזית",
-                    Filter = "SQLite Database (*.db)|*.db|All Files (*.*)|*.*",
-                    CheckFileExists = true
-                };
-
-                string seedPath = _pendingDbPath ?? Interaction.GetSetting("ZayitApp", "Database", "Path", "");
-                if (!string.IsNullOrEmpty(seedPath) && File.Exists(seedPath))
-                {
-                    dialog.InitialDirectory = Path.GetDirectoryName(seedPath);
-                    dialog.FileName = Path.GetFileName(seedPath);
-                }
-
-                if (dialog.ShowDialog() != true) return;
-
-                _pendingDbPath = dialog.FileName;
-                DbPathText.Text = dialog.FileName;
-                UpdateDbHint();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"שגיאה בהגדרת מסד הנתונים: {ex.Message}", "שגיאה",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void Install()
-        {
-            try
-            {
-                if (!WordHelper.EnsureWordClosed()) return;
-                CommitSettings();
                 _host.NavigateToInstall();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"שגיאה בהתקנה: {ex.Message}", "שגיאה",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-            }
         }
+
     }
 }

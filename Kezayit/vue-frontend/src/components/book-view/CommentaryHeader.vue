@@ -96,7 +96,7 @@ function onHeaderClick(e: MouseEvent) {
 }
 .book-title {
   margin: 0;
-  font-size: 13px;
+  font-size: 1em;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;

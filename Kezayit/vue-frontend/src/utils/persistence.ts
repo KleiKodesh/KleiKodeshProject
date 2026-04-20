@@ -55,6 +55,7 @@ export interface TabState {
   searchScrollOffset?: number
   searchCheckedBookIds?: number[] // absent/null means "all checked" (default)
   searchAtFilters?: string[]      // @ tokens from the search input, e.g. ["בראשית", "בבלי"]
+  searchZoom?: number             // per-tab zoom level for the search results page (50–200)
 }
 
 export interface BookState {
@@ -96,6 +97,7 @@ const handles: Record<string, IDBDatabase | null> = {
   'app-lastread': null,
   'app-hb-history': null,
   'app-search-cache': null,
+  'app-dict-cache': null,
 }
 
 function openDb(name: string): Promise<IDBDatabase> {
@@ -199,6 +201,7 @@ export const KEYS = {
   SETTINGS_ZMANIM_CITY: 'zmanim.city',
   SETTINGS_CALENDAR_VIEW: 'calendar.viewMode',
   SETTINGS_MIDOT_DISCLAIMER: 'midot.disclaimerAccepted',
+  SETTINGS_DICTIONARY_ZOOM: 'dictionaryZoom',
   // tab list is also localStorage (small JSON, needed synchronously at boot)
   tabsList: (wsId: string) => `tabs:${wsId}`,
 
@@ -218,6 +221,18 @@ export function idbSet<T>(key: string, value: T): Promise<void> {
 }
 export function idbDelete(key: string): Promise<void> {
   return dbDelete('app-search-cache', key)
+}
+
+// ── Dict cache DB ─────────────────────────────────────────────────────────────
+
+export function idbDictCacheGet<T>(key: string): Promise<T | null> {
+  return dbGet<T>('app-dict-cache', key)
+}
+export function idbDictCacheSet<T>(key: string, value: T): Promise<void> {
+  return dbSet('app-dict-cache', key, value)
+}
+export function idbDictCacheDelete(key: string): Promise<void> {
+  return dbDelete('app-dict-cache', key)
 }
 
 // ── Tabs DB ───────────────────────────────────────────────────────────────────
@@ -314,6 +329,7 @@ export async function idbClearAll(): Promise<void> {
     dropDb('app-lastread'),
     dropDb('app-hb-history'),
     dropDb('app-search-cache'),
+    dropDb('app-dict-cache'),
   ])
 }
 

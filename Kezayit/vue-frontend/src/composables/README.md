@@ -8,7 +8,7 @@ Only create a file here if the composable is used by two or more features. Singl
 
 **useVirtualScrollerKeys.ts** — `Ctrl+Home` / `Ctrl+End` keyboard navigation for `@tanstack/vue-virtual` scrollers. Must be wired up on every component that uses a virtualizer. The scroll container element must have `tabindex="0"`.
 
-**useZoom.ts** — zoom via keyboard (`Ctrl+±/0`), wheel (`Ctrl+scroll`), and pinch. Range 50–200, step 10, default 100.
+**useZoom.ts** — zoom via keyboard (`Ctrl+±/0`), wheel (`Ctrl+scroll`), and pinch. Range 50–200, step 10, default 100. `useZoomHandler` accepts a `zoom` ref, an optional `target` element, and an optional `enabled` flag — pass `enabled` to guard the handler so it only fires when the relevant page is active. Used in `BookViewPage`, `DictionaryPage`, and `SearchPage`.
 
 **useListKeyNav.ts** — arrow-key, Home, and End navigation for plain DOM lists. Use this instead of hand-rolling keyboard handlers on any list.
 
