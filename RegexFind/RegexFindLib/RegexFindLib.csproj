@@ -101,7 +101,10 @@
       <DependentUpon>SpinnerTextBox.xaml</DependentUpon>
     </Compile>
     <Compile Include="UI\FormattingOptions.cs" />
+    <Compile Include="UI\ColorPickerPopupBuilder.cs" />
     <Compile Include="UI\RegexFindViewModel.cs" />
+    <Compile Include="UI\RegexFindViewModel.Commands.cs" />
+    <Compile Include="UI\RegexFindViewModel.Loading.cs" />
     <Compile Include="UI\RegexFindView.xaml.cs">
       <DependentUpon>RegexFindView.xaml</DependentUpon>
     </Compile>
@@ -144,6 +147,10 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="UI\Themes\ComboBoxStyles.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Themes\SearchComboStyle.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

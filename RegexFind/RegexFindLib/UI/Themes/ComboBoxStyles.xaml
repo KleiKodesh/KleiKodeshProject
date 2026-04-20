@@ -33,77 +33,6 @@
         </Setter>
     </Style>
 
-    <!-- ── SearchCombo — borderless, sits inside InputWrapper ────── -->
-    <Style x:Key="SearchCombo" TargetType="ComboBox">
-        <Setter Property="IsEditable"      Value="True"/>
-        <Setter Property="Background"      Value="Transparent"/>
-        <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="Padding"         Value="8,0"/>
-        <Setter Property="FontSize"        Value="13"/>
-        <Setter Property="FontFamily"      Value="Segoe UI"/>
-        <Setter Property="Foreground"      Value="#323130"/>
-        <Setter Property="VerticalContentAlignment" Value="Center"/>
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-        <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True"/>
-        <Setter Property="ItemContainerStyle" Value="{StaticResource OfficeComboItem}"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="ComboBox">
-                    <Grid>
-                        <!-- Placeholder — visible when empty and unfocused -->
-                        <TextBlock x:Name="Placeholder"
-                                   Text="{TemplateBinding Tag}"
-                                   Foreground="#969492"
-                                   FontSize="{TemplateBinding FontSize}"
-                                   FontFamily="{TemplateBinding FontFamily}"
-                                   Padding="{TemplateBinding Padding}"
-                                   VerticalAlignment="Center"
-                                   TextAlignment="left"
-                                   IsHitTestVisible="False"
-                                   Visibility="Collapsed"/>
-                        <TextBox x:Name="PART_EditableTextBox"
-                                 Background="Transparent" BorderThickness="0"
-                                 Padding="{TemplateBinding Padding}"
-                                 FontSize="{TemplateBinding FontSize}"
-                                 FontFamily="{TemplateBinding FontFamily}"
-                                 Foreground="{TemplateBinding Foreground}"
-                                 VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
-                                 FlowDirection="RightToLeft"
-                                 IsReadOnly="{TemplateBinding IsReadOnly}"
-                                 Focusable="True"/>
-                        <Popup x:Name="PART_Popup"
-                               IsOpen="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}}"
-                               Placement="Bottom" StaysOpen="False" AllowsTransparency="True">
-                            <Border Background="#FFFFFF" BorderBrush="#EDEBE9"
-                                    BorderThickness="1" CornerRadius="4"
-                                    MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
-                                    MaxHeight="220">
-                                <Border.Effect>
-                                    <DropShadowEffect BlurRadius="8" ShadowDepth="2"
-                                                      Opacity="0.12" Direction="270"/>
-                                </Border.Effect>
-                                <ScrollViewer CanContentScroll="True">
-                                    <ItemsPresenter VirtualizingPanel.IsVirtualizing="True"
-                                                    VirtualizingPanel.VirtualizationMode="Recycling"/>
-                                </ScrollViewer>
-                            </Border>
-                        </Popup>
-                    </Grid>
-                    <ControlTemplate.Triggers>
-                        <!-- Show placeholder when text is empty -->
-                        <Trigger Property="Text" Value="">
-                            <Setter TargetName="Placeholder" Property="Visibility" Value="Visible"/>
-                        </Trigger>
-                        <!-- Hide placeholder when focused -->
-                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                            <Setter TargetName="Placeholder" Property="Visibility" Value="Collapsed"/>
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
-
     <!-- ── Implicit Office ComboBox (all other ComboBoxes) ───────── -->
     <Style TargetType="ComboBox">
         <Setter Property="Background"      Value="#FFFFFF"/>
@@ -150,8 +79,7 @@
                                            FontFamily="{TemplateBinding FontFamily}"
                                            Padding="{TemplateBinding Padding}"
                                            VerticalAlignment="Center"
-                                           HorizontalAlignment="Stretch"
-                                           TextAlignment="Right"
+                                           TextAlignment="Left"
                                            IsHitTestVisible="False"
                                            Visibility="Collapsed"/>
                                 <TextBox x:Name="PART_EditableTextBox" Grid.Column="0"

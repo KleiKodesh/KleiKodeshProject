@@ -202,7 +202,7 @@ public static class OfficeThemeWatcher
             case OfficeThemeCode.Black:
                 return new OfficeTheme(
                     Color.FromArgb(38, 38, 38),
-                    Color.White,
+                    Color.FromArgb(212, 212, 212),
                     Color.FromArgb(70, 70, 70),
                     Color.FromArgb(90, 90, 90),
                     Color.FromArgb(120, 120, 120));

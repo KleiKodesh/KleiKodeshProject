@@ -11,6 +11,7 @@
         <ResourceDictionary Source="/RegexFindLib;component/ui/themes/buttonstyles.xaml"/>
         <ResourceDictionary Source="/RegexFindLib;component/ui/themes/formattoggle.xaml"/>
         <ResourceDictionary Source="/RegexFindLib;component/ui/themes/comboboxstyles.xaml"/>
+        <ResourceDictionary Source="/RegexFindLib;component/ui/themes/searchcombostyle.xaml"/>
         <ResourceDictionary Source="/RegexFindLib;component/ui/themes/miscstyles.xaml"/>
     </ResourceDictionary.MergedDictionaries>
 </ResourceDictionary>

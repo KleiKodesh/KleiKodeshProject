@@ -33,7 +33,7 @@
     "reading": {
       "bgPrimary": "#1e1e1e",
       "bgSecondary": "#2d2d2d",
-      "textPrimary": "#ffffff",
+      "textPrimary": "#d4d4d4",
       "textSecondary": "#a6a6a6",
       "borderColor": "#3b3b3b",
       "accentColor": "#a57bff",
@@ -44,7 +44,7 @@
       "bgPrimary": "#1e1e1e",
       "bgSecondary": "#2d2d2d",
       "bgTertiary": "#252525",
-      "textPrimary": "#ffffff",
+      "textPrimary": "#d4d4d4",
       "textSecondary": "#a6a6a6",
       "borderColor": "#3b3b3b",
       "accentColor": "#a57bff",
@@ -86,7 +86,7 @@
     "reading": {
       "bgPrimary": "#1e1e1e",
       "bgSecondary": "#2d2d2d",
-      "textPrimary": "#ffffff",
+      "textPrimary": "#d4d4d4",
       "textSecondary": "#a6a6a6",
       "borderColor": "#3b3b3b",
       "accentColor": "#60cdff",
@@ -96,7 +96,7 @@
     "ui": {
       "bgPrimary": "#1e1e1e",
       "bgSecondary": "#2d2d2d",
-      "textPrimary": "#ffffff",
+      "textPrimary": "#d4d4d4",
       "textSecondary": "#a6a6a6",
       "borderColor": "#3b3b3b",
       "accentColor": "#60cdff",
@@ -138,7 +138,7 @@
     "reading": {
       "bgPrimary": "#1f1f1f",
       "bgSecondary": "#292929",
-      "textPrimary": "#ffffff",
+      "textPrimary": "#d4d4d4",
       "textSecondary": "#c8c6c4",
       "borderColor": "#3d3d3d",
       "accentColor": "#5B9BD5",
@@ -148,7 +148,7 @@
     "ui": {
       "bgPrimary": "#1e1e1e",
       "bgSecondary": "#2d2d2d",
-      "textPrimary": "#ffffff",
+      "textPrimary": "#d4d4d4",
       "textSecondary": "#a6a6a6",
       "borderColor": "#3b3b3b",
       "accentColor": "#5B9BD5",

@@ -1,5 +1,4 @@
 using RegexFindLib.Search;
-using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Windows.Input;
@@ -9,34 +8,49 @@ using WpfLib.ViewModels;
 namespace RegexFindLib.UI
 {
     /// <summary>
-    /// ViewModel for the RegexFind task pane.
-    /// Knows about the model (RegexSearch, IWordService) and exposes bindable
-    /// state to the view. Does NOT reference any WPF controls or Vsto/Globals.
+    /// ViewModel for the RegexFind task pane — split across partial files:
+    ///   RegexFindViewModel.cs          — state, properties, shared statics
+    ///   RegexFindViewModel.Commands.cs — command execution (search/replace/copy)
+    ///   RegexFindViewModel.Loading.cs  — font/style/history loading
     /// </summary>
-    public class RegexFindViewModel : ViewModelBase
+    public partial class RegexFindViewModel : ViewModelBase
     {
         readonly RegexSearch _search;
         readonly IWordService _word;
 
+        // ── Shared across all instances ───────────────────────────────────────
+
+        public static readonly ObservableCollection<string> FontList =
+            new ObservableCollection<string>();
+
+        static bool _fontsLoaded = false;
+        static readonly object _fontLock = new object();
+
+        public static readonly ObservableCollection<string> RecentSearches =
+            new ObservableCollection<string>();
+
+        public static readonly ObservableCollection<string> RecentReplacements =
+            new ObservableCollection<string>();
+
+        public static readonly IReadOnlyList<string> SearchModes =
+            new[] { "הכל", "כלפי מטה", "כלפי מעלה", "לפי בחירה" };
+
+        // ── Constructor ───────────────────────────────────────────────────────
+
         public RegexFindViewModel(IWordService word)
         {
-            _word = word;
+            _word   = word;
             _search = new RegexSearch(word);
-
-            SearchCommand              = new RelayCommand(ExecuteSearch);
-            ReplaceCommand             = new RelayCommand(ExecuteReplace);
-            ReplaceAllCommand          = new RelayCommand(ExecuteReplaceAll);
-            CopyFindFormattingCommand  = new RelayCommand(() => CopyFormatting(FindFormatting));
-            CopyReplaceFormattingCommand = new RelayCommand(() => CopyFormatting(ReplaceFormatting));
-            ClearFindFormattingCommand = new RelayCommand(() => FindFormatting.Clear());
-            ClearReplaceFormattingCommand = new RelayCommand(() => ReplaceFormatting.Clear());
-            ToggleReplaceCommand       = new RelayCommand(() => ShowReplace = !ShowReplace);
-            ToggleRegexPaletteCommand  = new RelayCommand(() => ShowRegexPalette = !ShowRegexPalette);
-            LoadFontsCommand           = new RelayCommand(LoadFonts);
-            LoadStylesCommand          = new RelayCommand(LoadStyles);
+            InitCommands();
         }
 
-        // ── Search text ───────────────────────────────────────────────────────
+        // ── Instance proxies for static collections (WPF binding) ────────────
+        public ObservableCollection<string> FontListBinding            => FontList;
+        public ObservableCollection<string> RecentSearchesBinding      => RecentSearches;
+        public ObservableCollection<string> RecentReplacementsBinding  => RecentReplacements;
+        public IReadOnlyList<string>        SearchModesBinding         => SearchModes;
+
+        // ── Search / Replace text ─────────────────────────────────────────────
         string _searchText = "";
         public string SearchText
         {
@@ -44,7 +58,6 @@ namespace RegexFindLib.UI
             set => SetProperty(ref _searchText, value);
         }
 
-        // ── Replace text ──────────────────────────────────────────────────────
         string _replaceText = "";
         public string ReplaceText
         {
@@ -52,37 +65,7 @@ namespace RegexFindLib.UI
             set => SetProperty(ref _replaceText, value);
         }
 
-        // ── Recent search history ─────────────────────────────────────────────
-        public ObservableCollection<string> RecentSearches  { get; } = new ObservableCollection<string>();
-        public ObservableCollection<string> RecentReplacements { get; } = new ObservableCollection<string>();
-
-        public void LoadRecentSearches()
-        {
-            RecentSearches.Clear();
-            foreach (var s in SearchHistory.Find.Load())    RecentSearches.Add(s);
-            RecentReplacements.Clear();
-            foreach (var s in SearchHistory.Replace.Load()) RecentReplacements.Add(s);
-        }
-
-        public void AddSearchToHistory()
-        {
-            if (!string.IsNullOrWhiteSpace(SearchText))
-            {
-                SearchHistory.Find.Add(SearchText);
-                LoadRecentSearches();
-            }
-        }
-
-        public void AddReplaceToHistory()
-        {
-            if (!string.IsNullOrWhiteSpace(ReplaceText))
-            {
-                SearchHistory.Replace.Add(ReplaceText);
-                LoadRecentSearches();
-            }
-        }
-
-        // ── Which input last had focus (for regex tip insertion) ──────────────
+        // ── Focus tracking ────────────────────────────────────────────────────
         bool _findFocused = true;
         public bool FindFocused
         {
@@ -91,10 +74,6 @@ namespace RegexFindLib.UI
         }
 
         // ── Search mode ───────────────────────────────────────────────────────
-        // Labels match the HTML exactly
-        public IReadOnlyList<string> SearchModes { get; } =
-            new[] { "הכל", "כלפי מטה", "כלפי מעלה", "לפי בחירה" };
-
         int _searchModeIndex = 0;
         public int SearchModeIndex
         {
@@ -152,8 +131,7 @@ namespace RegexFindLib.UI
             set => SetProperty(ref _noResults, value);
         }
 
-        // ── Font / Style lists ────────────────────────────────────────────────
-        public ObservableCollection<string> FontList  { get; } = new ObservableCollection<string>();
+        // ── Style list — per-instance (document-specific) ─────────────────────
         public ObservableCollection<string> StyleList { get; } = new ObservableCollection<string>();
 
         // ── UI state ──────────────────────────────────────────────────────────
@@ -171,161 +149,17 @@ namespace RegexFindLib.UI
             set => SetProperty(ref _showRegexPalette, value);
         }
 
-        // ── Commands ──────────────────────────────────────────────────────────
-        public ICommand SearchCommand              { get; }
-        public ICommand ReplaceCommand             { get; }
-        public ICommand ReplaceAllCommand          { get; }
-        public ICommand CopyFindFormattingCommand  { get; }
-        public ICommand CopyReplaceFormattingCommand { get; }
-        public ICommand ClearFindFormattingCommand { get; }
-        public ICommand ClearReplaceFormattingCommand { get; }
-        public ICommand ToggleReplaceCommand       { get; }
-        public ICommand ToggleRegexPaletteCommand  { get; }
-        public ICommand LoadFontsCommand           { get; }
-        public ICommand LoadStylesCommand          { get; }
-
-        // ── Execution ─────────────────────────────────────────────────────────
-
-        void ExecuteSearch()
-        {
-            try
-            {
-                AddSearchToHistory();
-                _search.Execute(BuildFind());
-                RefreshResults();
-            }
-            catch (Exception ex) { StatusText = ex.Message; }
-        }
-
-        void ExecuteReplace()
-        {
-            try
-            {
-                AddSearchToHistory();
-                AddReplaceToHistory();
-                _search.Execute(BuildFind(), BuildReplace(), replace: true);
-                RefreshResults();
-            }
-            catch (Exception ex) { StatusText = ex.Message; }
-        }
-
-        void ExecuteReplaceAll()
-        {
-            try
-            {
-                AddSearchToHistory();
-                AddReplaceToHistory();
-                _search.Execute(BuildFind(), BuildReplace(), replaceAll: true);
-                int count = _search.Results?.Length ?? 0;
-                StatusText = $"הוחלפו {count} תוצאות";
-                Results.Clear();
-                NoResults = false;
-            }
-            catch (Exception ex) { StatusText = ex.Message; }
-        }
-
-        void RefreshResults()
-        {
-            Results.Clear();
-            ShowRegexPalette = false; // hide palette when search runs
-
-            if (_search.Results == null || _search.Results.Length == 0)
-            {
-                NoResults = true;
-                StatusText = "לא נמצאו תוצאות התואמות לחיפוש";
-                return;
-            }
-
-            NoResults = false;
-            foreach (var r in _search.Results)
-                Results.Add(new SnippetModel(r.ContextBefore, r.MatchText, r.ContextAfter));
-
-            StatusText = $"נמצאו {_search.Results.Length} תוצאות";
-        }
-
-        void CopyFormatting(FormattingOptions target)
-        {
-            try
-            {
-                var fmt = _search.GetSelectionFormatting();
-                target.Bold        = fmt.Bold;
-                target.Italic      = fmt.Italic;
-                target.Underline   = fmt.Underline;
-                target.Superscript = fmt.Superscript;
-                target.Subscript   = fmt.Subscript;
-                target.FontName    = fmt.Font ?? "";
-                target.FontSize    = fmt.FontSize ?? 0f;
-                target.StyleName   = fmt.Style ?? "";
-                target.TextColor   = fmt.TextColor.HasValue
-                    ? (System.Windows.Media.Color?)WordColors.WordDecimalToColor(fmt.TextColor.Value)
-                    : null;
-            }
-            catch (Exception ex) { StatusText = ex.Message; }
-        }
-
-        void LoadFonts()
-        {
-            if (FontList.Count > 0) return;
-            try
-            {
-                foreach (var name in _word.GetFontNames())
-                    FontList.Add(name);
-            }
-            catch { }
-        }
-
-        void LoadStyles()
-        {
-            StyleList.Clear();
-            try
-            {
-                foreach (var name in _word.GetStyleNames())
-                    StyleList.Add(name);
-            }
-            catch { }
-        }
-
-        /// <summary>Loads styles on demand (called when style combobox is focused).</summary>
-        public void EnsureStylesLoaded()
-        {
-            if (StyleList.Count == 0)
-                LoadStylesCommand.Execute(null);
-        }
-
-        // ── Model builders ────────────────────────────────────────────────────
-
-        RegexFind BuildFind() => new RegexFind
-        {
-            Text         = SearchText,
-            Mode         = SelectedMode,
-            Slop         = (short)Slop,
-            UseWildcards = UseRegex,
-            Bold         = FindFormatting.Bold,
-            Italic       = FindFormatting.Italic,
-            Underline    = FindFormatting.Underline,
-            Superscript  = FindFormatting.Superscript,
-            Subscript    = FindFormatting.Subscript,
-            Font         = FindFormatting.FontName,
-            FontSize     = FindFormatting.FontSize > 0 ? FindFormatting.FontSize : (float?)null,
-            Style        = FindFormatting.StyleName,
-            TextColor    = FindFormatting.TextColor.HasValue
-                ? WordColors.ColorToWordDecimal(FindFormatting.TextColor.Value) : (int?)null
-        };
-
-        RegexFindReplace BuildReplace() => new RegexFindReplace
-        {
-            Text         = ReplaceText,
-            Bold         = ReplaceFormatting.Bold,
-            Italic       = ReplaceFormatting.Italic,
-            Underline    = ReplaceFormatting.Underline,
-            Superscript  = ReplaceFormatting.Superscript,
-            Subscript    = ReplaceFormatting.Subscript,
-            Font         = ReplaceFormatting.FontName,
-            FontSize     = ReplaceFormatting.FontSize > 0 ? ReplaceFormatting.FontSize : (float?)null,
-            Style        = ReplaceFormatting.StyleName,
-            TextColor    = ReplaceFormatting.TextColor.HasValue
-                ? WordColors.ColorToWordDecimal(ReplaceFormatting.TextColor.Value) : (int?)null
-        };
-
+        // ── Commands (declared here, initialized in Commands partial) ─────────
+        public ICommand SearchCommand                { get; private set; }
+        public ICommand ReplaceCommand               { get; private set; }
+        public ICommand ReplaceAllCommand            { get; private set; }
+        public ICommand CopyFindFormattingCommand    { get; private set; }
+        public ICommand CopyReplaceFormattingCommand { get; private set; }
+        public ICommand ClearFindFormattingCommand   { get; private set; }
+        public ICommand ClearReplaceFormattingCommand { get; private set; }
+        public ICommand ToggleReplaceCommand         { get; private set; }
+        public ICommand ToggleRegexPaletteCommand    { get; private set; }
+        public ICommand LoadFontsCommand             { get; private set; }
+        public ICommand LoadStylesCommand            { get; private set; }
     }
 }

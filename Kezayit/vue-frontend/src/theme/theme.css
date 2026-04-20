@@ -27,7 +27,7 @@
   --bg-toolbar: var(--bg-toolbar-custom, #252525);
   --bg-toolbar-rgb: var(--bg-toolbar-rgb-custom, 37, 37, 37);
   --border-color: var(--border-color-custom, #3b3b3b);
-  --text-primary: var(--text-primary-custom, #ffffff);
+  --text-primary: var(--text-primary-custom, #d4d4d4);
   --text-secondary: var(--text-secondary-custom, #a6a6a6);
   --hover-bg: var(--hover-bg-custom, rgba(255, 255, 255, 0.08));
   --active-bg: var(--active-bg-custom, rgba(255, 255, 255, 0.12));

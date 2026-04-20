@@ -38,7 +38,7 @@ namespace RegexFindLib.UI
                 if (DataContext is RegexFindViewModel vm)
                 {
                     vm.LoadFontsCommand.Execute(null);
-                    vm.LoadRecentSearches();
+                    RegexFindViewModel.LoadRecentSearches(); // static — shared across instances
                 }
                 RegexPalette.InsertAction = InsertSymbolAtCursor;
             };
@@ -133,12 +133,12 @@ namespace RegexFindLib.UI
             if (combo == null) return;
 
             // Find/replace by checking which collection is bound
-            if (combo.ItemsSource == Vm.RecentSearches)
+            if (combo.ItemsSource == RegexFindViewModel.RecentSearches)
                 SearchHistory.Find.Remove(text);
             else
                 SearchHistory.Replace.Remove(text);
 
-            Vm.LoadRecentSearches();
+            RegexFindViewModel.LoadRecentSearches();
 
             // Keep dropdown open
             combo.IsDropDownOpen = true;
