@@ -59,9 +59,9 @@ namespace KezayitLib.Search
 
         /// <summary>
         /// Validates the .dat file format. Returns null if valid, or a reason string if not.
-        /// Checks: file exists, minimum header size (10 bytes = new format), header count
-        /// is non-negative, and chunkSize is a sane value (> 0).
-        /// An old 6-byte header (pre-lastLineId format) will fail the length check.
+        /// Checks: file exists, minimum header size, sane header values, and that the first
+        /// filter entry uses the SBBF format (hashFunctions == 8, bitCount % 256 == 0).
+        /// An old FNV-based index will fail the filter format check and trigger a rebuild.
         /// </summary>
         private static string ValidateDatFile()
         {
@@ -71,12 +71,25 @@ namespace KezayitLib.Search
                 using (var fs = new FileStream(BloomFilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
                 using (var r = new BinaryReader(fs))
                 {
-                    if (fs.Length < 10) return "header too short (" + fs.Length + " bytes, expected ≥10) — old format";
+                    if (fs.Length < 10) return "header too short (" + fs.Length + " bytes) — old format";
                     int count = r.ReadInt32();       // offset 0
                     short chunkSize = r.ReadInt16(); // offset 4
                     r.ReadInt32();                   // offset 6: lastLineId
                     if (count < 0) return "negative chunk count (" + count + ")";
                     if (chunkSize <= 0) return "invalid chunkSize (" + chunkSize + ")";
+
+                    // Probe the first filter entry to detect old FNV-based format.
+                    // SBBF requires hashFunctions == 8 and bitCount % 256 == 0.
+                    if (count > 0 && fs.Length > 10)
+                    {
+                        int bits   = r.ReadInt32(); // filter bitCount
+                        int hashes = r.ReadInt32(); // filter hashFunctions
+                        if (hashes != 8)
+                            return "old filter format (hashFunctions=" + hashes + ", expected 8) — SBBF rebuild required";
+                        if (bits <= 0 || bits % 256 != 0)
+                            return "old filter format (bitCount=" + bits + ", not a multiple of 256) — SBBF rebuild required";
+                    }
+
                     return null; // valid
                 }
             }
@@ -389,6 +402,18 @@ namespace KezayitLib.Search
                 if (batch.Count > 0)
                     PostSearch(new { type = "searchBatch", searchId = searchId, results = batch.ToArray() });
                 PostSearch(new { type = "searchComplete", searchId = searchId });
+            }
+            catch (InvalidOperationException ex)
+            {
+                // The index file is corrupt or was built with an incompatible format.
+                // Delete it and trigger a full rebuild — same path as OnDbReady validation.
+                Console.WriteLine("[SearchHandler] Index format error during search: " + ex.Message + " — invalidating and rebuilding");
+                PostSearch(new { type = "searchComplete", searchId = searchId });
+                _isReady = false;
+                try { if (File.Exists(BloomFilePath)) File.Delete(BloomFilePath); } catch { }
+                try { if (File.Exists(BloomVersionStampPath)) File.Delete(BloomVersionStampPath); } catch { }
+                _bridge.PushEvent(new { @event = "bloomIndexInvalidated", reason = ex.Message });
+                StartIndexing(0, 0);
             }
             catch (Exception ex) { PostSearch(new { type = "searchError", searchId = searchId, error = ex.Message }); }
             finally

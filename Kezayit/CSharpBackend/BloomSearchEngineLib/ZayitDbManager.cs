@@ -21,15 +21,21 @@ public sealed class ZayitDbManager : IDisposable
         Console.WriteLine("[ZayitDbManager] Opening DB at: " + dbPath + " exists=" + File.Exists(dbPath));
         if (!File.Exists(dbPath)) return;
 
-        _connection = new SQLiteConnection($"Data Source={dbPath};Version=3;Cache Size=10000;Page Size=4096;");
+        _connection = new SQLiteConnection($"Data Source={dbPath};Version=3;Page Size=4096;");
         _connection.Open();
 
         try
         {
             using (var cmd = _connection.CreateCommand())
-            { cmd.CommandText = "PRAGMA journal_mode=WAL;"; cmd.ExecuteNonQuery(); }
+            {
+                cmd.CommandText =
+                    "PRAGMA journal_mode=WAL; " +
+                    "PRAGMA cache_size=-65536; " +   // up to 64 MB page cache (ceiling, not reservation)
+                    "PRAGMA temp_store=MEMORY;";     // temp indices/tables in RAM, not disk
+                cmd.ExecuteNonQuery();
+            }
         }
-        catch (Exception ex) { Console.WriteLine("[ZayitDbManager] WAL mode failed: " + ex.Message); }
+        catch (Exception ex) { Console.WriteLine("[ZayitDbManager] PRAGMA setup failed: " + ex.Message); }
     }
 
     public int GetLineCount()

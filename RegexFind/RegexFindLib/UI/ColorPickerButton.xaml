@@ -1,0 +1,64 @@
+<UserControl x:Class="RegexFindLib.UI.ColorPickerButton"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d"
+             Width="26" Height="26">
+
+    <UserControl.Resources>
+        <ResourceDictionary Source="/RegexFindLib;component/ui/regexfinddictionary.xaml"/>
+    </UserControl.Resources>
+
+    <!--
+        Matches HTML .color-btn:
+        - Shows color-palette-icon.svg
+        - When a color is selected: border-bottom: 3px solid <color>
+        - Clicking opens the color picker popup
+    -->
+    <Button x:Name="SwatchButton"
+            Width="26" Height="26"
+            Padding="0"
+            BorderThickness="0"
+            Background="Transparent"
+            Cursor="Hand"
+            Click="SwatchButton_Click"
+            ToolTip="{Binding RelativeSource={RelativeSource AncestorType=UserControl}, Path=ToolTip}">
+        <Button.Template>
+            <ControlTemplate TargetType="Button">
+                <Border x:Name="Bd"
+                        Background="{TemplateBinding Background}"
+                        CornerRadius="4"
+                        Padding="3">
+                    <Grid>
+                        <!-- color-palette icon from Fluent UI -->
+                        <Viewbox Width="16" Height="16" FlowDirection="LeftToRight"
+                                 Margin="0,0,0,3">
+                            <Canvas Width="24" Height="24">
+                                <Path Fill="#666666"
+                                      Data="{StaticResource Icon.ColorPalette}"/>
+                            </Canvas>
+                        </Viewbox>
+                        <!-- Color underline bar — 3px, matches HTML border-bottom -->
+                        <Border x:Name="ColorBar"
+                                Height="3"
+                                VerticalAlignment="Bottom"
+                                HorizontalAlignment="Stretch"
+                                Margin="2,0,2,0"
+                                Background="{Binding RelativeSource={RelativeSource AncestorType=UserControl},
+                                                     Path=SwatchBrush}"/>
+                    </Grid>
+                </Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter TargetName="Bd" Property="Background" Value="#0A000000"/>
+                    </Trigger>
+                    <Trigger Property="IsPressed" Value="True">
+                        <Setter TargetName="Bd" Property="Background" Value="#0F000000"/>
+                    </Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate>
+        </Button.Template>
+    </Button>
+
+</UserControl>

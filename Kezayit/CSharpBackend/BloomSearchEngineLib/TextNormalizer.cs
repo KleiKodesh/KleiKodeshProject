@@ -171,5 +171,8 @@ namespace BloomSearchEngineLib
                 if (!IsNsm(buf[si])) buf[di++] = buf[si];
             return di;
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool IsNsm(char c) => (s_nsm[c >> 3] & (1 << (c & 7))) != 0;
     }
 }
