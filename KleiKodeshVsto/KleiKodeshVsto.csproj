@@ -297,13 +297,7 @@
       <AutoGen>True</AutoGen>
       <DependentUpon>Settings.settings</DependentUpon>
     </Compile>
-    <Compile Include="RegexFind\RegexSearchMain.cs" />
-    <Compile Include="RegexFind\RegexSearchReplace.cs" />
-    <Compile Include="RegexFind\RegexSearchFind.cs" />
-    <Compile Include="RegexFind\RegexFindHost.cs">
-      <SubType>UserControl</SubType>
-    </Compile>
-    <Compile Include="RegexFind\RegexSearchModels.cs" />
+    <!-- RegexFind logic moved to RegexFindLib project reference -->
     <Compile Include="Ribbon\RibbonSettingsControl.cs" />
     <Compile Include="Ribbon\KeliKodeshRibbon.cs" />
     <Compile Include="Ribbon\RibbonSettingsView.xaml.cs">
@@ -315,14 +309,8 @@
     <Content Include="KleiKodesh_Main.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="RegexFind\index.html">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <None Include="Resources\first-word-style.png" />
+    <!-- RegexFind HTML removed — replaced by XAML UI in RegexFindLib -->
     <Content Include="Resources\RegexFind.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Resources\UpdateKleiKodesh.ps1">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <None Include="ThisAddIn.Designer.xml">
@@ -337,19 +325,13 @@
     <EmbeddedResource Include="Ribbon\KeliKodeshRibbon.xml" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Resources\HebrewBooks.png">
+    <Content Include="Resources\DocDesign.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="Resources\KeZayit.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="Resources\DocDesign.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
     <Content Include="Resources\DuplicatePane.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Resources\OpenChildDoc.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="Resources\Settings.png">
@@ -367,18 +349,7 @@
     <Content Include="Resources\About.dotx">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="RegexFind\**\*.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="RegexFind\**\*.jpg">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="RegexFind\**\*.gif">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="RegexFind\**\*.ico">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    <!-- RegexFind HTML assets removed — XAML UI has no external assets -->
     <!-- SQLite.Interop.dll — must be explicitly copied here because SQLite is only
          referenced transitively via KezayitLib. The native interop DLL is not
          propagated through project references and throws DllNotFoundException at runtime. -->
@@ -401,6 +372,10 @@
     </Page>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\RegexFindLib\RegexFindLib.csproj">
+      <Project>{c3d4e5f6-a7b8-9012-cdef-123456789abc}</Project>
+      <Name>RegexFindLib</Name>
+    </ProjectReference>
     <ProjectReference Include="..\DocDesign\DocDesign.csproj">
       <Project>{74e59bc0-41e5-475a-85cb-eacdc2ef6415}</Project>
       <Name>DocDesign</Name>
@@ -461,20 +436,6 @@
   <Import Project="..\packages\Stub.System.Data.SQLite.Core.NetFramework.1.0.119.0\build\net46\Stub.System.Data.SQLite.Core.NetFramework.targets" Condition="Exists('..\packages\Stub.System.Data.SQLite.Core.NetFramework.1.0.119.0\build\net46\Stub.System.Data.SQLite.Core.NetFramework.targets')" />
   <!-- Import Kezayit.targets for automatic Vue build and deployment -->
   <Import Project="..\Kezayit\CSharpBackend\Kezayit.targets" Condition="Exists('..\Kezayit\CSharpBackend\Kezayit.targets')" />
-  <!-- Prebuild event to build HTML app and copy to RegexFind folder -->
-  <Target Name="BuildHtmlApp" BeforeTargets="Build">
-    <PropertyGroup>
-      <HtmlProjectPath>$(MSBuildProjectDirectory)\..\regx-find-html</HtmlProjectPath>
-      <RegexFindOutputPath>$(MSBuildProjectDirectory)\RegexFind</RegexFindOutputPath>
-      <HtmlDistFile>$(HtmlProjectPath)\dist\index.html</HtmlDistFile>
-      <OutputHtmlFile>$(RegexFindOutputPath)\index.html</OutputHtmlFile>
-    </PropertyGroup>
-    <!-- Create RegexFind directory if it doesn't exist -->
-    <MakeDir Directories="$(RegexFindOutputPath)" Condition="!Exists('$(RegexFindOutputPath)')" />
-    <!-- Build HTML app using Vite -->
-    <Exec Command="npm run build" WorkingDirectory="$(HtmlProjectPath)" Condition="Exists('$(HtmlProjectPath)\package.json')" />
-    <!-- Copy the single HTML file -->
-    <Copy SourceFiles="$(HtmlDistFile)" DestinationFiles="$(OutputHtmlFile)" Condition="Exists('$(HtmlDistFile)')" />
-  </Target>
+  <!-- BuildHtmlApp target removed — RegexFind now uses XAML UI (RegexFindLib) -->
   <Import Project="..\packages\Microsoft.Web.WebView2.1.0.3856.49\build\Microsoft.Web.WebView2.targets" Condition="Exists('..\packages\Microsoft.Web.WebView2.1.0.3856.49\build\Microsoft.Web.WebView2.targets')" />
 </Project>

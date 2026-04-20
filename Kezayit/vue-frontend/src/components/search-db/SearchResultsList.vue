@@ -26,6 +26,11 @@ const emit = defineEmits<{
 
 const settingsStore = useSettingsStore()
 const scrollEl = ref<HTMLElement | null>(null)
+
+const fontPx = computed(() => {
+  const zoomFactor = (props.zoom ?? 100) / 100
+  return zoomFactor * (settingsStore.fontSize / 100) * 15
+})
 let programmaticScrolling = false
 
 const virtualizer = useVirtualizer(
@@ -136,7 +141,7 @@ defineExpose({ captureScrollPos })
           {{ results.length.toLocaleString() }} תוצאות
         </span>
       </div>
-      <div ref="scrollEl" class="scroller" tabindex="0" :style="zoom != null ? { fontSize: `${(zoom / 100) * 13}px` } : undefined" @scroll="onScroll">
+      <div ref="scrollEl" class="scroller" tabindex="0" :style="{ fontSize: `${fontPx}px` }" @scroll="onScroll">
         <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
           <div
             v-for="vRow in virtualizer.getVirtualItems()"
@@ -233,7 +238,7 @@ defineExpose({ captureScrollPos })
   margin-bottom: 4px;
   font-family: var(--header-font);
   font-weight: 500;
-  font-size: 13px;
+  font-size: 1em;
   min-width: 0;
   overflow: hidden;
   user-select: text;
@@ -255,13 +260,13 @@ defineExpose({ captureScrollPos })
 }
 .sep {
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 0.85em;
   flex-shrink: 0;
   user-select: text;
 }
 .toc-text {
   color: inherit;
-  font-size: 12px;
+  font-size: 0.9em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -271,7 +276,7 @@ defineExpose({ captureScrollPos })
 }
 .snippet {
   font-family: var(--text-font);
-  font-size: var(--font-size, 100%);
+  font-size: 1em;
   line-height: var(--line-height, 1.5);
   color: var(--text-secondary);
   direction: rtl;

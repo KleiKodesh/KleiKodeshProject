@@ -64,7 +64,8 @@ namespace KleiKodesh.Ribbon
                         WpfTaskPane.Show(control, "עיצוב תורני", 520);
                         break;
                     case "RegexFind":
-                        TaskPaneManager.Show(new KleiKodesh.RegexSearch.RegexFindHost(), "חיפוש רגקס", 600);
+                        var regexView = new RegexFindLib.UI.RegexFindView(Globals.ThisAddIn.Application, Globals.Factory);
+                        WpfTaskPane.Show(regexView, "חיפוש רגקס", 600);
                         break;
                     case "DuplicatePane":
                         try { TaskPaneManager.DuplicateCurrent(); } catch { }

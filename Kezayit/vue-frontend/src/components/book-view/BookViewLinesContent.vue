@@ -431,6 +431,7 @@ function restoreScrollPos(lineIndex: number, scrollOffset = 0) {
       const targetIndex = props.initialLineIndex ?? props.initialScrollIndex
       if (targetIndex == null) {
         stop?.()
+        nextTick(() => scrollerEl.value?.focus({ preventScroll: true }))
         return
       }
       props.prioritise(targetIndex)
@@ -462,6 +463,7 @@ function restoreScrollPos(lineIndex: number, scrollOffset = 0) {
                 mark?.scrollIntoView({ block: 'center' })
               })
             }
+            scrollerEl.value?.focus({ preventScroll: true })
           })
         },
         { immediate: true, flush: 'post' },
@@ -570,11 +572,15 @@ function scrollToLineIndex(lineIndex: number) {
   )
 }
 
-defineExpose({ scrollToLineId, scrollToLineIndex })
+defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller })
 
 function onLineClick(index: number) {
   const line = props.lines[index]
   if (props.bottomVisible && line && line.id > 0) emit('lineSelected', line.id)
+}
+
+function focusScroller() {
+  scrollerEl.value?.focus({ preventScroll: true })
 }
 </script>
 

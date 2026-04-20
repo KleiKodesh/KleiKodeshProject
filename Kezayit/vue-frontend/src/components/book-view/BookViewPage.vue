@@ -244,6 +244,11 @@ function openSearch(mode: SearchMode) {
 }
 
 function openContentSearch() {
+  if (searchVisible.value && searchMode.value === 'content') {
+    searchVisible.value = false
+    nextTick(() => linesContentRef.value?.focusScroller())
+    return
+  }
   openSearch('content')
   nextTick(() => searchBarRef.value?.focus())
 }

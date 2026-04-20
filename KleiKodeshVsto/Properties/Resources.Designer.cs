@@ -59,15 +59,5 @@ namespace KleiKodesh.Properties {
                 resourceCulture = value;
             }
         }
-        
-        /// <summary>
-        ///   Looks up a localized resource of type System.Drawing.Bitmap.
-        /// </summary>
-        internal static System.Drawing.Bitmap first_word_style {
-            get {
-                object obj = ResourceManager.GetObject("first-word-style", resourceCulture);
-                return ((System.Drawing.Bitmap)(obj));
-            }
-        }
     }
 }

@@ -1,0 +1,266 @@
+<UserControl x:Class="RegexFindLib.UI.RegexFindView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:RegexFindLib.UI"
+             mc:Ignorable="d"
+             MinWidth="320"
+             FlowDirection="RightToLeft"
+             FontFamily="Segoe UI"
+             FontSize="13"
+             Background="White">
+
+    <UserControl.Resources>
+        <ResourceDictionary Source="/RegexFindLib;component/UI/RegexFindDictionary.xaml"/>
+    </UserControl.Resources>
+
+    <UserControl.DataContext>
+        <local:RegexFindViewModel/>
+    </UserControl.DataContext>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <!-- accent bar -->
+            <RowDefinition Height="3"/>
+            <!-- scrollable body -->
+            <RowDefinition Height="*"/>
+            <!-- status bar -->
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- ── Accent top bar ──────────────────────────────────────── -->
+        <Border Grid.Row="0" Style="{StaticResource AccentBar}"/>
+
+        <!-- ── Main scrollable content ────────────────────────────── -->
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="14,12,14,8">
+
+                <!-- ── Search row ──────────────────────────────────── -->
+                <TextBlock Text="חיפוש" Style="{StaticResource SectionLabel}"/>
+                <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="6"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox Grid.Column="0"
+                             Style="{StaticResource SearchInput}"
+                             Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                             Height="32">
+                        <TextBox.InputBindings>
+                            <KeyBinding Key="Return" Command="{Binding SearchCommand}"/>
+                        </TextBox.InputBindings>
+                    </TextBox>
+                    <!-- Regex toggle -->
+                    <ToggleButton Grid.Column="2"
+                                  Style="{StaticResource FormatToggle}"
+                                  Width="32" Height="32"
+                                  IsChecked="{Binding UseRegex}"
+                                  ToolTip="הפעל ביטויים רגולריים">
+                        <TextBlock Text=".*" FontFamily="Consolas" FontSize="11"
+                                   VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                    </ToggleButton>
+                </Grid>
+
+                <!-- ── Search mode + slop ──────────────────────────── -->
+                <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="4"/>
+                        <ColumnDefinition Width="52"/>
+                    </Grid.ColumnDefinitions>
+                    <ComboBox Grid.Column="0"
+                              Style="{StaticResource FilterCombo}"
+                              IsEditable="False"
+                              ItemsSource="{Binding SearchModes}"
+                              SelectedIndex="{Binding SearchModeIndex}"/>
+                    <TextBlock Grid.Column="2" Text="מרחק:"
+                               VerticalAlignment="Center"
+                               Foreground="#5A5A5A" FontSize="12"/>
+                    <TextBox Grid.Column="4"
+                             Style="{StaticResource SearchInput}"
+                             Height="28" FontSize="12"
+                             Text="{Binding Slop, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="מספר מילים מרביות בין מונחי החיפוש (Slop)"/>
+                </Grid>
+
+                <!-- ── Search action buttons ───────────────────────── -->
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <Button Style="{StaticResource PrimaryButton}"
+                            Content="חפש"
+                            Command="{Binding SearchCommand}"
+                            Margin="0,0,6,0"/>
+                    <Button Style="{StaticResource GhostButton}"
+                            Command="{Binding ToggleFindFormattingCommand}"
+                            ToolTip="סינון לפי עיצוב">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Data="M3 4H21V6L14 13V20L10 18V13L3 6V4Z"
+                                  Fill="#5A5A5A" Stretch="Uniform"
+                                  Width="12" Height="12" Margin="0,0,4,0"/>
+                            <TextBlock Text="עיצוב"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource GhostButton}"
+                            Command="{Binding ToggleReplaceCommand}"
+                            Margin="4,0,0,0">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Data="M19 7V4H5V7H2L7 12L2 17H5V20H19V17H22L17 12L22 7H19ZM17 15V18H7V15H4.83L7 12.83V9H17V12.83L19.17 15H17Z"
+                                  Fill="#5A5A5A" Stretch="Uniform"
+                                  Width="12" Height="12" Margin="0,0,4,0"/>
+                            <TextBlock Text="החלפה"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+
+                <!-- ── Find formatting panel ───────────────────────── -->
+                <Border Visibility="{Binding ShowFindFormatting,
+                            Converter={x:Static local:BoolToVisibilityConverter.Instance}}"
+                        Background="#F8F8F8" CornerRadius="6"
+                        BorderBrush="#E5E5E5" BorderThickness="1"
+                        Padding="10,8" Margin="0,0,0,10">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,6">
+                            <TextBlock Text="עיצוב לחיפוש"
+                                       FontWeight="SemiBold" FontSize="12"
+                                       Foreground="#1F1F1F"/>
+                            <StackPanel Orientation="Horizontal"
+                                        HorizontalAlignment="Left">
+                                <Button Style="{StaticResource GhostButton}"
+                                        Content="העתק מבחירה"
+                                        Command="{Binding CopyFindFormattingCommand}"
+                                        FontSize="11" Height="22" Padding="6,0"
+                                        Margin="0,0,4,0"/>
+                                <Button Style="{StaticResource GhostButton}"
+                                        Content="נקה"
+                                        Command="{Binding ClearFindFormattingCommand}"
+                                        FontSize="11" Height="22" Padding="6,0"/>
+                            </StackPanel>
+                        </Grid>
+                        <local:FormattingPanel DataContext="{Binding FindFormatting}"
+                                               FontList="{Binding DataContext.FontList,
+                                                   RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                               StyleList="{Binding DataContext.StyleList,
+                                                   RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- ── Replace panel ───────────────────────────────── -->
+                <Border Visibility="{Binding ShowReplace,
+                            Converter={x:Static local:BoolToVisibilityConverter.Instance}}"
+                        Background="#F8F8F8" CornerRadius="6"
+                        BorderBrush="#E5E5E5" BorderThickness="1"
+                        Padding="10,8" Margin="0,0,0,10">
+                    <StackPanel>
+                        <TextBlock Text="החלפה" Style="{StaticResource SectionLabel}"
+                                   FontWeight="SemiBold" FontSize="12"
+                                   Foreground="#1F1F1F" Margin="0,0,0,6"/>
+
+                        <TextBlock Text="טקסט להחלפה" Style="{StaticResource SectionLabel}"/>
+                        <TextBox Style="{StaticResource SearchInput}"
+                                 Text="{Binding ReplaceText, UpdateSourceTrigger=PropertyChanged}"
+                                 Height="32" Margin="0,0,0,8"/>
+
+                        <!-- Replace action buttons -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <Button Style="{StaticResource SecondaryButton}"
+                                    Content="החלף"
+                                    Command="{Binding ReplaceCommand}"
+                                    Margin="0,0,6,0"/>
+                            <Button Style="{StaticResource SecondaryButton}"
+                                    Content="החלף הכל"
+                                    Command="{Binding ReplaceAllCommand}"
+                                    Margin="0,0,6,0"/>
+                            <Button Style="{StaticResource GhostButton}"
+                                    Command="{Binding ToggleReplaceFormattingCommand}"
+                                    FontSize="11">
+                                <StackPanel Orientation="Horizontal">
+                                    <Path Data="M3 4H21V6L14 13V20L10 18V13L3 6V4Z"
+                                          Fill="#5A5A5A" Stretch="Uniform"
+                                          Width="11" Height="11" Margin="0,0,4,0"/>
+                                    <TextBlock Text="עיצוב"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+
+                        <!-- Replace formatting panel -->
+                        <Border Visibility="{Binding ShowReplaceFormatting,
+                                    Converter={x:Static local:BoolToVisibilityConverter.Instance}}"
+                                Background="#FFFFFF" CornerRadius="4"
+                                BorderBrush="#E5E5E5" BorderThickness="1"
+                                Padding="8,6">
+                            <StackPanel>
+                                <Grid Margin="0,0,0,6">
+                                    <TextBlock Text="עיצוב להחלפה"
+                                               FontWeight="SemiBold" FontSize="12"
+                                               Foreground="#1F1F1F"/>
+                                    <StackPanel Orientation="Horizontal"
+                                                HorizontalAlignment="Left">
+                                        <Button Style="{StaticResource GhostButton}"
+                                                Content="העתק מבחירה"
+                                                Command="{Binding CopyReplaceFormattingCommand}"
+                                                FontSize="11" Height="22" Padding="6,0"
+                                                Margin="0,0,4,0"/>
+                                        <Button Style="{StaticResource GhostButton}"
+                                                Content="נקה"
+                                                Command="{Binding ClearReplaceFormattingCommand}"
+                                                FontSize="11" Height="22" Padding="6,0"/>
+                                    </StackPanel>
+                                </Grid>
+                                <local:FormattingPanel DataContext="{Binding ReplaceFormatting}"
+                                                       FontList="{Binding DataContext.FontList,
+                                                           RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                       StyleList="{Binding DataContext.StyleList,
+                                                           RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <!-- ── Results list ────────────────────────────────── -->
+                <Border BorderBrush="#E5E5E5" BorderThickness="1" CornerRadius="6"
+                        Visibility="{Binding Results.Count,
+                            Converter={x:Static local:CountToVisibilityConverter.Instance}}">
+                    <ListBox ItemsSource="{Binding Results}"
+                             SelectedIndex="{Binding SelectedResultIndex}"
+                             ItemContainerStyle="{StaticResource ResultItem}"
+                             MaxHeight="280"
+                             BorderThickness="0"
+                             Background="White"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             VirtualizingPanel.IsVirtualizing="True"
+                             VirtualizingPanel.VirtualizationMode="Recycling">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <!-- Snippets contain <b>…</b> tags from C# — render as plain text.
+                                     For rich rendering a FlowDocument would be needed; plain text
+                                     is sufficient and avoids XSS concerns. -->
+                                <TextBlock Text="{Binding}"
+                                           TextWrapping="Wrap"
+                                           FontSize="12"
+                                           Foreground="#1F1F1F"/>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- ── Status bar ──────────────────────────────────────────── -->
+        <Border Grid.Row="2"
+                Background="#F0F0F0"
+                BorderBrush="#E5E5E5"
+                BorderThickness="0,1,0,0"
+                Padding="14,5">
+            <TextBlock Text="{Binding StatusText}"
+                       FontSize="11"
+                       Foreground="#5A5A5A"/>
+        </Border>
+
+    </Grid>
+</UserControl>

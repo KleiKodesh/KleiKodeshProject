@@ -1,6 +1,6 @@
-﻿using Microsoft.Office.Interop.Word;
+using Microsoft.Office.Interop.Word;
 
-namespace KleiKodesh.RegexSearch
+namespace RegexFindLib.Search
 {
     public enum RegexSearchMode
     {
@@ -15,7 +15,7 @@ namespace KleiKodesh.RegexSearch
         public Range Range { get; set; }
         public int Start => Range.Start;
         public int End => Range.End;
-        public string Snippet { get; set;  }
+        public string Snippet { get; set; }
     }
 
     public class RegexFindBase
@@ -41,7 +41,5 @@ namespace KleiKodesh.RegexSearch
 
     public class RegexFindReplace : RegexFindBase
     {
-
     }
-
 }
