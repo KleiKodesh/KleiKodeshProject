@@ -1,6 +1,5 @@
 using System.Windows.Media;
 using WpfLib;
-
 namespace RegexFindLib.UI
 {
     /// <summary>
@@ -64,9 +63,40 @@ namespace RegexFindLib.UI
         public string StyleName { get => _styleName; set => SetProperty(ref _styleName, value); }
 
         Color? _textColor;
-        /// <summary>WPF display color. Converted to/from Word decimal at the Word boundary.</summary>
-        public Color? TextColor { get => _textColor; set => SetProperty(ref _textColor, value); }
+        /// <summary>WPF display color for UI binding. Set via SetTextColor() to keep WordDecimal in sync.</summary>
+        public Color? TextColor
+        {
+            get => _textColor;
+            set
+            {
+                if (SetProperty(ref _textColor, value))
+                    TextColorWordDecimal = value.HasValue
+                        ? (int?)WordColors.ColorToWordDecimal(value.Value)
+                        : null;
+            }
+        }
 
+        int? _textColorWordDecimal;
+        /// <summary>
+        /// The raw Word Font.Color decimal — preserved exactly as Word returns it.
+        /// Used directly in BuildFind/BuildReplace so theme colors and AutoColor match correctly.
+        /// </summary>
+        public int? TextColorWordDecimal
+        {
+            get => _textColorWordDecimal;
+            set => SetProperty(ref _textColorWordDecimal, value);
+        }
+
+        /// <summary>
+        /// Set color from a raw Word decimal (eyedropper / CopyFormatting).
+        /// Preserves the exact Word decimal for matching while updating the WPF display color.
+        /// </summary>
+        public void SetTextColorFromWord(int wordDecimal)
+        {
+            TextColorWordDecimal = wordDecimal;
+            _textColor = WordColors.WordDecimalToColor(wordDecimal);
+            OnPropertyChanged(nameof(TextColor));
+        }
         /// <summary>Returns true if any formatting option has a non-default value.</summary>
         public bool HasAny =>
             Bold.HasValue || Italic.HasValue || Underline.HasValue ||
@@ -86,6 +116,7 @@ namespace RegexFindLib.UI
             FontSize = 0f;
             StyleName = "";
             TextColor = null;
+            TextColorWordDecimal = null;
         }
     }
 }

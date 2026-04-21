@@ -89,18 +89,18 @@
     <Reference Include="WindowsFormsIntegration" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="BrowserTabControl.cs" />
-    <Compile Include="MyWebView.cs">
-      <SubType>Component</SubType>
-    </Compile>
-    <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="WebAddressModel.cs" />
-    <Compile Include="WebSitesView.xaml.cs">
+    <!-- UI -->
+    <Compile Include="UI\WebAddressModel.cs" />
+    <Compile Include="UI\MyWebView.cs" />
+    <Compile Include="UI\BrowserTabControl.cs" />
+    <Compile Include="UI\WebSitesView.xaml.cs">
       <DependentUpon>WebSitesView.xaml</DependentUpon>
     </Compile>
-    <Compile Include="WhiteListDialog.xaml.cs">
+    <Compile Include="UI\WhiteListDialog.xaml.cs">
       <DependentUpon>WhiteListDialog.xaml</DependentUpon>
     </Compile>
+    <!-- Properties -->
+    <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
@@ -109,15 +109,38 @@
     </Content>
   </ItemGroup>
   <ItemGroup>
-    <Page Include="Dictionary1.xaml">
+    <!-- Root dictionary -->
+    <Page Include="UI\WebSitesDictionary.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
-    <Page Include="WebSitesView.xaml">
-      <SubType>Designer</SubType>
+    <!-- Themes -->
+    <Page Include="UI\Themes\Icons.xaml">
       <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
     </Page>
-    <Page Include="WhiteListDialog.xaml">
+    <Page Include="UI\Themes\Brushes.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Themes\ButtonStyles.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Themes\MiscStyles.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Themes\AddressBarStyles.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <!-- Views -->
+    <Page Include="UI\WebSitesView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\WhiteListDialog.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

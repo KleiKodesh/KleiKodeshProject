@@ -86,19 +86,19 @@
                     <Border x:Name="Bd"
                             CornerRadius="2"
                             BorderThickness="1"
-                            BorderBrush="{StaticResource BorderBrush}"
-                            Background="{StaticResource BgSecBrush}"
+                            BorderBrush="#50808080"
+                            Background="#0F808080"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="Center"
                                           VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="#0A808080"/>
-                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource BorderStrong}"/>
+                            <Setter TargetName="Bd" Property="Background"   Value="#0A808080"/>
+                            <Setter TargetName="Bd" Property="BorderBrush"  Value="#80808080"/>
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="#14808080"/>
+                            <Setter TargetName="Bd" Property="Background"   Value="#14808080"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.35"/>

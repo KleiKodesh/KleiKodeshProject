@@ -24,8 +24,10 @@ namespace RegexFindLib.UI
 
         public ColorPickerButton()
         {
-            UpdateSwatch();  // Initialize swatch on construction
-            SelectColorCommand = new RelayCommand<Color?>(ExecuteSelectColor);
+            UpdateSwatch();
+            SelectColorCommand      = new RelayCommand<object>(ExecuteSelectColorObj);
+            SelectAutoColorCommand  = new RelayCommand(ExecuteSelectAutoColor);
+            SelectNoColorCommand    = new RelayCommand(ExecuteSelectNoColor);
             OpenNativePickerCommand = new RelayCommand(ExecuteOpenNativePicker);
         }
 
@@ -47,7 +49,18 @@ namespace RegexFindLib.UI
             set => SetValue(SelectedColorProperty, value);
         }
 
-        // ── SwatchBrush — read-only, derived from SelectedColor ───────────────
+        // ── SelectedWordDecimal DP — raw Word decimal, preserved for theme colors ──
+        public static readonly DependencyProperty SelectedWordDecimalProperty =
+            DependencyProperty.Register(nameof(SelectedWordDecimal), typeof(int?),
+                typeof(ColorPickerButton),
+                new FrameworkPropertyMetadata(null,
+                    FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
+
+        public int? SelectedWordDecimal
+        {
+            get => (int?)GetValue(SelectedWordDecimalProperty);
+            set => SetValue(SelectedWordDecimalProperty, value);
+        }
         static readonly DependencyPropertyKey SwatchBrushKey =
             DependencyProperty.RegisterReadOnly(nameof(SwatchBrush), typeof(Brush),
                 typeof(ColorPickerButton), new PropertyMetadata(Brushes.Transparent));
@@ -89,11 +102,43 @@ namespace RegexFindLib.UI
 
         // ── Commands for template binding ─────────────────────────────────────
         public ICommand SelectColorCommand { get; }
+        public ICommand SelectAutoColorCommand { get; }
+        public ICommand SelectNoColorCommand { get; }
         public ICommand OpenNativePickerCommand { get; }
 
-        void ExecuteSelectColor(Color? color)
+        void ExecuteSelectAutoColor()
         {
-            SelectedColor = color;
+            // אוטומטי — Word's automatic color constant
+            SelectedColor       = Colors.Black;  // display as black
+            SelectedWordDecimal = WordColors.AutoColor;
+            if (_popup != null) _popup.IsOpen = false;
+        }
+
+        void ExecuteSelectNoColor()
+        {
+            SelectedColor       = null;
+            SelectedWordDecimal = null;
+            if (_popup != null) _popup.IsOpen = false;
+        }
+
+        void ExecuteSelectColorObj(object parameter)
+        {
+            if (parameter is WordColor wc)
+            {
+                SelectedColor       = wc.WpfColor;
+                SelectedWordDecimal = wc.WordDecimal;
+            }
+            else if (parameter is Color c)
+            {
+                SelectedColor       = c;
+                SelectedWordDecimal = WordColors.ColorToWordDecimal(c);
+            }
+            else
+            {
+                // null = "no color"
+                SelectedColor       = null;
+                SelectedWordDecimal = null;
+            }
             if (_popup != null) _popup.IsOpen = false;
         }
 

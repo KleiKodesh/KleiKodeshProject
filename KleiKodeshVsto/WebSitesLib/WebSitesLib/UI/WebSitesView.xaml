@@ -20,6 +20,30 @@
                 <ResourceDictionary Source="/WebSitesLib;component/ui/WebSitesDictionary.xaml"/>
             </ResourceDictionary.MergedDictionaries>
             <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+            <!-- Hide native TabPanel — we draw our own tab strip -->
+            <Style TargetType="local:BrowserTabControl">
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="Margin"  Value="0"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Style.Resources>
+                    <Style TargetType="TabPanel">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                    </Style>
+                    <Style TargetType="TabItem">
+                        <Setter Property="Padding"         Value="0"/>
+                        <Setter Property="Margin"          Value="0"/>
+                        <Setter Property="BorderThickness" Value="0"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="TabItem">
+                                    <ContentPresenter Margin="0" ContentSource="Content"/>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Style.Resources>
+            </Style>
         </ResourceDictionary>
     </UserControl.Resources>
 
@@ -32,108 +56,46 @@
 
         <!-- ══════════════════════════════════════════════════════════
              ROW 0 — TAB STRIP
+             Chrome/Edge pattern: strip bg = slightly darker than toolbar.
+             Active tab = same as toolbar (white/content bg) → "lifts up" effect.
+             Inactive tabs = transparent (inherit strip bg).
+             No borders between tabs — just the accent bar on active.
         ══════════════════════════════════════════════════════════ -->
         <Border Grid.Row="0"
-                Background="{StaticResource BgSecBrush}"
-                BorderBrush="{StaticResource BorderStrong}"
-                BorderThickness="0,0,0,1"
-                Padding="0">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
+                Background="{StaticResource BgSecBrush}">
+            <DockPanel LastChildFill="True">
 
-                <!-- Tab list -->
-                <ListBox x:Name="TabStrip"
-                         Grid.Column="0"
-                         ItemsSource="{Binding ElementName=BrowserTabs, Path=TabsCollection}"
-                         SelectedIndex="{Binding ElementName=BrowserTabs, Path=SelectedIndex}">
-                    <ListBox.Resources>
-                        <Style TargetType="ListBoxItem" BasedOn="{StaticResource TabItemStyle}"/>
-                    </ListBox.Resources>
-                    <ListBox.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <StackPanel Orientation="Horizontal"/>
-                        </ItemsPanelTemplate>
-                    </ListBox.ItemsPanel>
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <Border x:Name="TabBorder"
-                                    MaxWidth="150"
-                                    Background="Transparent"
-                                    BorderThickness="0,0,1,1"
-                                    BorderBrush="{StaticResource BorderBrush}"
-                                    ToolTip="{Binding Title}">
-                                <Grid Height="34">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-
-                                    <TextBlock x:Name="TabTitle"
-                                               Grid.Column="0"
-                                               Style="{StaticResource TabTitle}"
-                                               Text="{Binding Title}"
-                                               Padding="8,0,4,0"/>
-
-                                    <Button x:Name="CloseTabBtn"
-                                            Grid.Column="1"
-                                            ToolTip="סגור כרטיסייה"
-                                            Command="{Binding CloseTabCommand}"
-                                            Padding="5"
-                                            Margin="0,0,4,0"
-                                            VerticalAlignment="Center"
-                                            Visibility="Hidden">
-                                        <Path Style="{StaticResource TabClosePath}"/>
-                                    </Button>
-                                </Grid>
-                            </Border>
-
-                            <DataTemplate.Triggers>
-                                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                                    <Setter TargetName="CloseTabBtn" Property="Visibility" Value="Visible"/>
-                                    <Setter TargetName="TabBorder"   Property="Background" Value="{StaticResource HoverBrush}"/>
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                    <Setter TargetName="TabBorder"   Property="Background"
-                                            Value="{Binding Background, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-                                    <Setter TargetName="TabBorder"   Property="BorderThickness" Value="0,0,1,0"/>
-                                    <Setter TargetName="CloseTabBtn" Property="Visibility" Value="Visible"/>
-                                    <Setter TargetName="TabTitle"    Property="Opacity" Value="1"/>
-                                </DataTrigger>
-                            </DataTemplate.Triggers>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-
-                <!-- New-tab + dropdown -->
-                <StackPanel Grid.Column="1"
+                <!-- New-tab + dropdown — docked right (RTL: renders on left) -->
+                <StackPanel DockPanel.Dock="Right"
                             Orientation="Horizontal"
-                            VerticalAlignment="Center"
-                            Margin="2,0">
-
-                    <Button ToolTip="כרטיסייה חדשה"
-                            Command="{Binding ElementName=BrowserTabs, Path=NewTabCommand}"
-                            Padding="7">
-                        <Viewbox Width="14" Height="14" FlowDirection="LeftToRight">
-                            <Canvas Width="24" Height="24">
-                                <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                      Data="{StaticResource Icon.Add}"/>
-                            </Canvas>
-                        </Viewbox>
-                    </Button>
+                            FlowDirection="LeftToRight"
+                            VerticalAlignment="Stretch">
 
                     <ToggleButton x:Name="TabDropDownToggle"
                                   ToolTip="הצג את כל הכרטיסיות"
-                                  Padding="7">
-                        <Viewbox Width="10" Height="10" FlowDirection="LeftToRight">
+                                  Width="26" Height="26"
+                                  Padding="5"
+                                  VerticalAlignment="Center">
+                        <Viewbox FlowDirection="LeftToRight">
                             <Canvas Width="24" Height="24">
                                 <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                       Data="{StaticResource Icon.ChevronDown}"/>
                             </Canvas>
                         </Viewbox>
                     </ToggleButton>
+
+                    <Button ToolTip="כרטיסייה חדשה"
+                            Command="{Binding ElementName=BrowserTabs, Path=NewTabCommand}"
+                            Width="26" Height="26"
+                            Padding="5"
+                            VerticalAlignment="Center">
+                        <Viewbox FlowDirection="LeftToRight">
+                            <Canvas Width="24" Height="24">
+                                <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                      Data="{StaticResource Icon.Add}"/>
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
 
                     <Popup IsOpen="{Binding IsChecked, ElementName=TabDropDownToggle}"
                            PlacementTarget="{Binding ElementName=TabDropDownToggle}"
@@ -150,7 +112,7 @@
                                     <DataTemplate>
                                         <Border x:Name="DropItem"
                                                 CornerRadius="2"
-                                                Padding="8,4"
+                                                Padding="8,3"
                                                 Background="Transparent"
                                                 Cursor="Hand">
                                             <Grid>
@@ -172,7 +134,8 @@
                                                 <Button Grid.Column="1"
                                                         ToolTip="סגור כרטיסייה"
                                                         Command="{Binding CloseTabCommand}"
-                                                        Padding="4"
+                                                        Width="20" Height="20"
+                                                        Padding="3"
                                                         Margin="4,0,0,0"
                                                         VerticalAlignment="Center">
                                                     <Path Style="{StaticResource TabClosePath}"
@@ -194,25 +157,128 @@
                         </Border>
                     </Popup>
                 </StackPanel>
-            </Grid>
+
+                <!-- Tab list — fills remaining space -->
+                <ListBox x:Name="TabStrip"
+                         ItemsSource="{Binding ElementName=BrowserTabs, Path=TabsCollection}"
+                         SelectedIndex="{Binding ElementName=BrowserTabs, Path=SelectedIndex}"
+                         VerticalAlignment="Stretch">
+                    <ListBox.Resources>
+                        <Style TargetType="ListBoxItem" BasedOn="{StaticResource TabItemStyle}"/>
+                    </ListBox.Resources>
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Stretch"/>
+                        </ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <!--
+                                Fluent-style tab chip:
+                                - Transparent bg, text at 60% opacity
+                                - Hover: subtle mid-gray tint
+                                - Active: full opacity text + 2px accent bar at bottom
+                                - Close ×: thin, appears on hover/active only
+                            -->
+                            <Grid x:Name="TabRoot"
+                                  Height="28"
+                                  MinWidth="60"
+                                  MaxWidth="160"
+                                  Background="Transparent"
+                                  ToolTip="{Binding Title}">
+                                <!-- 2px accent indicator at bottom — active only -->
+                                <Border x:Name="ActiveBar"
+                                        Height="2"
+                                        Background="#0078D4"
+                                        VerticalAlignment="Bottom"
+                                        Visibility="Collapsed"/>
+
+                                <DockPanel Margin="0">
+                                    <!-- × docked Right — in RTL renders on visual LEFT -->
+                                    <Button x:Name="CloseTabBtn"
+                                            DockPanel.Dock="Right"
+                                            Command="{Binding CloseTabCommand}"
+                                            ToolTip="סגור כרטיסייה"
+                                            Width="18" Height="18"
+                                            Padding="3"
+                                            Margin="0,0,3,0"
+                                            VerticalAlignment="Center"
+                                            Visibility="Hidden"
+                                            Opacity="0.55">
+                                        <Path Data="M1,1 L7,7 M7,1 L1,7"
+                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                              StrokeThickness="1"
+                                              StrokeStartLineCap="Round"
+                                              StrokeEndLineCap="Round"
+                                              Width="8" Height="8"
+                                              Stretch="Fill"
+                                              FlowDirection="LeftToRight"/>
+                                    </Button>
+
+                                    <TextBlock x:Name="TabTitle"
+                                               Text="{Binding Title}"
+                                               FontSize="11"
+                                               FontFamily="Segoe UI"
+                                               Padding="8,0"
+                                               VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"
+                                               Opacity="0.75"
+                                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                                </DockPanel>
+                            </Grid>
+
+                            <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                    <Setter TargetName="CloseTabBtn" Property="Visibility" Value="Visible"/>
+                                    <Setter TargetName="TabRoot"     Property="Background" Value="#0A808080"/>
+                                    <Setter TargetName="TabTitle"    Property="Opacity"    Value="0.9"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                    <Setter TargetName="ActiveBar"   Property="Visibility" Value="Visible"/>
+                                    <Setter TargetName="TabRoot"     Property="Background"
+                                            Value="{Binding Background, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                                    <Setter TargetName="CloseTabBtn" Property="Visibility" Value="Visible"/>
+                                    <Setter TargetName="TabTitle"    Property="Opacity"    Value="1"/>
+                                    <Setter TargetName="TabTitle"    Property="FontWeight"  Value="SemiBold"/>
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+            </DockPanel>
         </Border>
 
         <!-- ══════════════════════════════════════════════════════════
-             ROW 1 — ADDRESS / TOOLBAR BAR
+             ROW 1 — ADDRESS BAR
+             Same bg as content (UserControl.Background) — toolbar is "white".
+             Single border at bottom separates chrome from browser content.
         ══════════════════════════════════════════════════════════ -->
         <Border Grid.Row="1"
-                Background="{Binding Background, RelativeSource={RelativeSource Self}}"
+                Background="{Binding Background, RelativeSource={RelativeSource AncestorType=UserControl}}"
                 BorderBrush="{StaticResource BorderBrush}"
                 BorderThickness="0,0,0,1"
-                Padding="6,5"
-                FlowDirection="LeftToRight">
+                Padding="4,3">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>  <!-- nav buttons  -->
-                    <ColumnDefinition Width="*"/>     <!-- address bar  -->
+                    <ColumnDefinition Width="*"/>     <!-- address bar — left in RTL  -->
+                    <ColumnDefinition Width="Auto"/>  <!-- nav buttons — right in RTL -->
                 </Grid.ColumnDefinitions>
 
-                <StackPanel Orientation="Horizontal" Grid.Column="0" Margin="0,0,4,0">
+                <ComboBox x:Name="AddressBarCombo"
+                          Grid.Column="0"
+                          Style="{StaticResource AddressBarCombo}"
+                          ItemsSource="{Binding ElementName=BrowserTabs, Path=VisibleAddressModels}"
+                          SelectedValue="{Binding ElementName=BrowserTabs, Path=CurrentAddressModel}">
+                    <ComboBox.InputBindings>
+                        <KeyBinding Key="Return"
+                                    Command="{Binding ElementName=BrowserTabs, Path=NavigateCommand}"/>
+                    </ComboBox.InputBindings>
+                </ComboBox>
+
+                <StackPanel Orientation="Horizontal" Grid.Column="1"
+                            FlowDirection="LeftToRight"
+                            Margin="4,0,0,0">
                     <Button ToolTip="חזור אחורה"
                             Command="{Binding ElementName=BrowserTabs, Path=GoBackCommand}">
                         <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
@@ -241,17 +307,6 @@
                         </Viewbox>
                     </Button>
                 </StackPanel>
-
-                <ComboBox x:Name="AddressBarCombo"
-                          Grid.Column="1"
-                          Style="{StaticResource AddressBarCombo}"
-                          ItemsSource="{Binding ElementName=BrowserTabs, Path=VisibleAddressModels}"
-                          SelectedValue="{Binding ElementName=BrowserTabs, Path=CurrentAddressModel}">
-                    <ComboBox.InputBindings>
-                        <KeyBinding Key="Return"
-                                    Command="{Binding ElementName=BrowserTabs, Path=NavigateCommand}"/>
-                    </ComboBox.InputBindings>
-                </ComboBox>
             </Grid>
         </Border>
 

@@ -53,8 +53,11 @@ namespace KleiKodesh.Ribbon
                     case "Kezayit":
                         TaskPaneManager.Show(new KezayitLib.AppViewer(), "כזית", 610, popOutBehavior: true);
                         break;
+                    case "Kiwix":
+                        TaskPaneManager.Show(new KiwixLib.KiwixWebview(), "קיוויקס", 610, popOutBehavior: true);
+                        break;
                     case "WebSites":
-                        WpfTaskPane.Show(new WebSitesLib.WebSitesView(), "דרך האתרים", 510);
+                        WpfTaskPane.Show(new WebSitesLib.UI.WebSitesView(), "דרך האתרים", 510);
                         break;
                     // case "HebrewBooks":
                     //     //WpfTaskPane.Show(new HebrewBooksLib.HebrewBooksView(), LocaleDictionary.Translate(id), 600);

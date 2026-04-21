@@ -25,7 +25,7 @@
                         <!-- font-size spinner -->
                         <local:SpinnerTextBox
                                  IsFloat="True"
-                                 FloatValue="{TemplateBinding FontSizeValue}"
+                                 FloatValue="{Binding FontSizeValue, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
                                  FloatStep="0.5"
                                  Width="52" Height="26"
                                  ToolTip="גודל גופן (נקודות)"/>
@@ -33,7 +33,7 @@
                         <!-- B — Bold -->
                         <CheckBox Style="{StaticResource FormatToggle}"
                                   ToolTip="מודגש"
-                                  IsChecked="{TemplateBinding Bold}">
+                                  IsChecked="{Binding Bold, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
                             <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
                                 <Canvas Width="24" Height="24">
                                     <Path Data="{StaticResource Icon.Bold}"
@@ -45,7 +45,7 @@
                         <!-- I — Italic -->
                         <CheckBox Style="{StaticResource FormatToggle}"
                                   ToolTip="נטוי"
-                                  IsChecked="{TemplateBinding Italic}">
+                                  IsChecked="{Binding Italic, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
                             <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
                                 <Canvas Width="24" Height="24">
                                     <Path Data="{StaticResource Icon.Italic}"
@@ -57,7 +57,7 @@
                         <!-- U — Underline -->
                         <CheckBox Style="{StaticResource FormatToggle}"
                                   ToolTip="קו תחתון"
-                                  IsChecked="{TemplateBinding Underline}">
+                                  IsChecked="{Binding Underline, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
                             <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
                                 <Canvas Width="24" Height="24">
                                     <Path Data="{StaticResource Icon.Underline}"
@@ -69,7 +69,7 @@
                         <!-- x² — Superscript -->
                         <CheckBox Style="{StaticResource FormatToggle}"
                                   ToolTip="כתב עילי"
-                                  IsChecked="{TemplateBinding Superscript}">
+                                  IsChecked="{Binding Superscript, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
                             <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
                                 <Canvas Width="24" Height="24">
                                     <Path Data="{StaticResource Icon.Superscript}"
@@ -81,7 +81,7 @@
                         <!-- x₂ — Subscript -->
                         <CheckBox Style="{StaticResource FormatToggle}"
                                   ToolTip="כתב תחתי"
-                                  IsChecked="{TemplateBinding Subscript}">
+                                  IsChecked="{Binding Subscript, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
                             <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
                                 <Canvas Width="24" Height="24">
                                     <Path Data="{StaticResource Icon.Subscript}"
@@ -92,7 +92,8 @@
 
                         <!-- A — Color picker -->
                         <local:ColorPickerButton
-                            SelectedColor="{TemplateBinding TextColor}"
+                            SelectedColor="{Binding TextColor, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                            SelectedWordDecimal="{Binding TextColorWordDecimal, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
                             ToolTip="צבע גופן"/>
 
                         <!-- Eraser — Clear formatting -->

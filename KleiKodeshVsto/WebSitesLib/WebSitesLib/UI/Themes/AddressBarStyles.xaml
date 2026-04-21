@@ -2,8 +2,10 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!--
-        Address-bar ComboBox — custom template matching the RegexFindLib input-wrapper style.
-        Borderless text input, chevron toggle, popup with shadow.
+        Address-bar ComboBox — custom template.
+        All icon data and color values are inlined — no StaticResource inside ControlTemplates,
+        because this template is instantiated inside a Window (WebSitesDemo) which is a
+        separate HwndSource and cannot resolve resources from merged dictionaries at template-load time.
     -->
     <Style x:Key="AddressBarCombo" TargetType="ComboBox">
         <Setter Property="VerticalContentAlignment" Value="Center"/>
@@ -13,25 +15,25 @@
                 Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
         <Setter Property="Background"
                 Value="{Binding Background, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-        <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="FontSize"        Value="12"/>
-        <Setter Property="FontFamily"      Value="Segoe UI"/>
-        <Setter Property="Padding"         Value="10,0"/>
+        <Setter Property="BorderThickness"  Value="0"/>
+        <Setter Property="FontSize"         Value="12"/>
+        <Setter Property="FontFamily"       Value="Segoe UI"/>
+        <Setter Property="Padding"          Value="10,0"/>
         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ComboBox">
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>     <!-- text — right in RTL  -->
+                            <ColumnDefinition Width="Auto"/>  <!-- chevron — left in RTL -->
                         </Grid.ColumnDefinitions>
 
                         <Border x:Name="Bd"
                                 Grid.ColumnSpan="2"
                                 CornerRadius="2"
                                 BorderThickness="1"
-                                BorderBrush="{StaticResource BorderBrush}"
+                                BorderBrush="#50808080"
                                 Background="Transparent"/>
 
                         <TextBox x:Name="PART_EditableTextBox"
@@ -42,6 +44,7 @@
                                  Padding="10,5,4,5"
                                  FontFamily="Segoe UI"
                                  FontSize="12"
+                                 FlowDirection="RightToLeft"
                                  CaretBrush="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                  VerticalAlignment="Center"/>
 
@@ -51,10 +54,10 @@
                                       Background="Transparent"
                                       BorderThickness="0"
                                       Cursor="Hand"
-                                      Padding="6,0,8,0"
+                                      Padding="8,0,6,0"
                                       VerticalAlignment="Stretch"
                                       Focusable="False">
-                            <Path Data="{StaticResource Icon.ChevronDown}"
+                            <Path Data="M4.21967 6.96967C4.51256 6.67678 4.98744 6.67678 5.28033 6.96967L10 11.6893L14.7197 6.96967C15.0126 6.67678 15.4874 6.67678 15.7803 6.96967C16.0732 7.26256 16.0732 7.73744 15.7803 8.03033L10.5303 13.2803C10.2374 13.5732 9.76256 13.5732 9.46967 13.2803L4.21967 8.03033Z"
                                   Width="10" Height="10"
                                   Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                   Stretch="Uniform"
@@ -71,11 +74,11 @@
                                StaysOpen="False">
                             <Border CornerRadius="2"
                                     BorderThickness="1"
-                                    BorderBrush="{StaticResource BorderBrush}"
+                                    BorderBrush="#50808080"
                                     Background="{Binding Background, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                     Padding="2"
-                                    MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}">
-                                <ScrollViewer MaxHeight="240">
+                                    FlowDirection="RightToLeft"
+                                    MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}">                                <ScrollViewer MaxHeight="240">
                                     <ItemsPresenter/>
                                 </ScrollViewer>
                             </Border>
@@ -84,13 +87,13 @@
 
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource BorderStrong}"/>
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="#80808080"/>
                         </Trigger>
                         <Trigger Property="IsDropDownOpen" Value="True">
-                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="#0078D4"/>
                         </Trigger>
                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="#0078D4"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -102,7 +105,7 @@
     <Style x:Key="DropdownBorder" TargetType="Border">
         <Setter Property="CornerRadius"    Value="2"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="BorderBrush"     Value="{StaticResource BorderBrush}"/>
+        <Setter Property="BorderBrush"     Value="#50808080"/>
         <Setter Property="Background"
                 Value="{Binding Background, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
         <Setter Property="Padding"         Value="3"/>
@@ -111,14 +114,14 @@
 
     <!-- ── Tab title text ────────────────────────────────────────── -->
     <Style x:Key="TabTitle" TargetType="TextBlock">
-        <Setter Property="FontSize"         Value="12"/>
-        <Setter Property="FontFamily"       Value="Segoe UI"/>
-        <Setter Property="Margin"           Value="6,0,4,0"/>
+        <Setter Property="FontSize"          Value="12"/>
+        <Setter Property="FontFamily"        Value="Segoe UI"/>
+        <Setter Property="Margin"            Value="6,0,4,0"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
-        <Setter Property="TextTrimming"     Value="CharacterEllipsis"/>
+        <Setter Property="TextTrimming"      Value="CharacterEllipsis"/>
         <Setter Property="Foreground"
                 Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-        <Setter Property="Opacity"          Value="0.80"/>
+        <Setter Property="Opacity"           Value="0.80"/>
     </Style>
 
     <Style x:Key="TabTitleActive" TargetType="TextBlock"
@@ -126,9 +129,13 @@
         <Setter Property="Opacity" Value="1"/>
     </Style>
 
-    <!-- ── Tab close path ────────────────────────────────────────── -->
+    <!--
+        Tab close path — Data inlined (Icon.Close geometry).
+        Stroke bound to UserControl.Foreground — only used inside WebSitesView (UserControl scope).
+    -->
     <Style x:Key="TabClosePath" TargetType="Path">
-        <Setter Property="Data"            Value="{StaticResource Icon.Close}"/>
+        <Setter Property="Data"
+                Value="M4.397 4.554l.073-.084a.75.75 0 0 1 .976-.073l.084.073L12 10.939l6.47-6.47a.75.75 0 1 1 1.06 1.061L13.061 12l6.47 6.47a.75.75 0 0 1 .072.976l-.073.084a.75.75 0 0 1-.976.073l-.084-.073L12 13.061l-6.47 6.47a.75.75 0 0 1-1.06-1.061L10.939 12l-6.47-6.47a.75.75 0 0 1-.072-.976z"/>
         <Setter Property="Width"           Value="8"/>
         <Setter Property="Height"          Value="8"/>
         <Setter Property="Stretch"         Value="Fill"/>
@@ -138,16 +145,6 @@
                 Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
         <Setter Property="Opacity"         Value="0.65"/>
         <Setter Property="FlowDirection"   Value="LeftToRight"/>
-    </Style>
-
-    <!-- ── BrowserTabControl — hide native TabPanel ──────────────── -->
-    <Style TargetType="local:BrowserTabControl"
-           xmlns:local="clr-namespace:WebSitesLib.UI">
-        <Style.Resources>
-            <Style TargetType="TabPanel">
-                <Setter Property="Visibility" Value="Collapsed"/>
-            </Style>
-        </Style.Resources>
     </Style>
 
 </ResourceDictionary>

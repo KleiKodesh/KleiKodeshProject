@@ -28,7 +28,7 @@ namespace RegexFindLib.UI
         public static readonly IReadOnlyList<WordColor> StandardColors = new[]
         {
             new WordColor("#C00000", "Dark Red",   0xC00000.BgrToWord()),
-            new WordColor("#FF0000", "Red",        0xFF0000.BgrToWord()),
+            new WordColor("#EE0000", "Red",        0xFF0000.BgrToWord()),
             new WordColor("#FFC000", "Orange",     0xFFC000.BgrToWord()),
             new WordColor("#FFFF00", "Yellow",     0xFFFF00.BgrToWord()),
             new WordColor("#92D050", "Light Green",0x92D050.BgrToWord()),
@@ -121,22 +121,22 @@ namespace RegexFindLib.UI
                 return Colors.Black;
             }
 
-            byte b = (byte)(wordDecimal & 0xFF);
+            byte r = (byte)(wordDecimal & 0xFF);
             byte g = (byte)((wordDecimal >> 8) & 0xFF);
-            byte r = (byte)((wordDecimal >> 16) & 0xFF);
+            byte b = (byte)((wordDecimal >> 16) & 0xFF);
             return Color.FromRgb(r, g, b);
         }
 
         /// <summary>
         /// Convert WPF Color to Word BGR int (for custom/standard colors only).
         /// Word uses BGR byte order: Blue in LSB, Green in middle, Red in MSB.
-        /// Example: RGB(255,0,0) red → 0 | (0 << 8) | (255 << 16) = 16711680
+        /// Example: RGB(255,0,0) red → 255 in MSB → (255 << 16) = 16711680
         /// Source: https://powerspreadsheets.com/vba-font-color-hex/
         /// Historical reason: IBM VGA RAMDAC chips required BGR order
         /// Source: https://retrocomputing.stackexchange.com/questions/3023
         /// </summary>
         public static int ColorToWordDecimal(Color c) =>
-            c.B | (c.G << 8) | (c.R << 16);
+            c.R | (c.G << 8) | (c.B << 16);
 
         // ── Theme color tint/shade helpers (ported from color-calculations.js) ─
 
@@ -267,7 +267,8 @@ namespace RegexFindLib.UI
             byte r = (byte)((rgb >> 16) & 0xFF);
             byte g = (byte)((rgb >> 8) & 0xFF);
             byte b = (byte)(rgb & 0xFF);
-            return b | (g << 8) | (r << 16);
+            // Word stores R in LSB, G in middle, B in MSB — same as ColorToWordDecimal
+            return r | (g << 8) | (b << 16);
         }
     }
 }

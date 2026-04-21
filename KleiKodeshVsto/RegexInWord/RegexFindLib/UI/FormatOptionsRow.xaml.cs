@@ -84,6 +84,16 @@ namespace RegexFindLib.UI
             set => SetValue(TextColorProperty, value);
         }
 
+        public static readonly DependencyProperty TextColorWordDecimalProperty =
+            DependencyProperty.Register(nameof(TextColorWordDecimal), typeof(int?),
+                typeof(FormatOptionsRow), new FrameworkPropertyMetadata(null,
+                    FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
+        public int? TextColorWordDecimal
+        {
+            get => (int?)GetValue(TextColorWordDecimalProperty);
+            set => SetValue(TextColorWordDecimalProperty, value);
+        }
+
         public static readonly DependencyProperty ClearCommandProperty =
             DependencyProperty.Register(nameof(ClearCommand), typeof(ICommand),
                 typeof(FormatOptionsRow));

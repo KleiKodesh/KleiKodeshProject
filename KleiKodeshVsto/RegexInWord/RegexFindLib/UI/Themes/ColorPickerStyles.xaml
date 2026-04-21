@@ -6,15 +6,15 @@
         <ResourceDictionary Source="/RegexFindLib;component/ui/themes/icons.xaml"/>
     </ResourceDictionary.MergedDictionaries>
 
+    <local:ColorToBrushConverter x:Key="ColorToBrush"/>
+
     <!-- ── Swatch DataTemplate (ThemeColors + StandardColors) ──────────── -->
     <DataTemplate x:Key="SwatchTemplate" DataType="{x:Type local:WordColor}">
         <Border Width="18" Height="18" Margin="1"
                 Cursor="Hand"
                 ToolTip="{Binding Name}"
+                Background="{Binding WpfColor, Converter={StaticResource ColorToBrush}}"
                 BorderThickness="0.5">
-            <Border.Background>
-                <SolidColorBrush Color="{Binding WpfColor}"/>
-            </Border.Background>
             <Border.Style>
                 <Style TargetType="Border">
                     <Setter Property="BorderBrush" Value="#50808080"/>
@@ -30,7 +30,7 @@
                 <MouseBinding MouseAction="LeftClick"
                               Command="{Binding SelectColorCommand,
                                   RelativeSource={RelativeSource AncestorType=local:ColorPickerButton}}"
-                              CommandParameter="{Binding WpfColor}"/>
+                              CommandParameter="{Binding}"/>
             </Border.InputBindings>
         </Border>
     </DataTemplate>
@@ -115,15 +115,20 @@
                                             </Border.Style>
                                             <Border.InputBindings>
                                                 <MouseBinding MouseAction="LeftClick"
-                                                              Command="{Binding SelectColorCommand,
-                                                                  RelativeSource={RelativeSource AncestorType=local:ColorPickerButton}}"
-                                                              CommandParameter="{x:Static Colors.Black}"/>
+                                                              Command="{Binding SelectAutoColorCommand,
+                                                                  RelativeSource={RelativeSource AncestorType=local:ColorPickerButton}}"/>
                                             </Border.InputBindings>
-                                            <TextBlock Text="אוטומטי"
-                                                       HorizontalAlignment="Center"
-                                                       VerticalAlignment="Center"
-                                                       FontSize="12"
-                                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
+                                            <StackPanel Orientation="Horizontal"
+                                                        HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center">
+                                                <Border Width="14" Height="14" Margin="0,0,5,0"
+                                                        BorderBrush="#50808080" BorderThickness="1"
+                                                        Background="Black"/>
+                                                <TextBlock Text="אוטומטי"
+                                                           VerticalAlignment="Center"
+                                                           FontSize="12"
+                                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
+                                            </StackPanel>
                                         </Border>
                                         <Border Height="28" Cursor="Hand" Margin="1">
                                             <Border.Style>
@@ -138,15 +143,20 @@
                                             </Border.Style>
                                             <Border.InputBindings>
                                                 <MouseBinding MouseAction="LeftClick"
-                                                              Command="{Binding SelectColorCommand,
-                                                                  RelativeSource={RelativeSource AncestorType=local:ColorPickerButton}}"
-                                                              CommandParameter="{x:Null}"/>
+                                                              Command="{Binding SelectNoColorCommand,
+                                                                  RelativeSource={RelativeSource AncestorType=local:ColorPickerButton}}"/>
                                             </Border.InputBindings>
-                                            <TextBlock Text="ללא צבע"
-                                                       HorizontalAlignment="Center"
-                                                       VerticalAlignment="Center"
-                                                       FontSize="12"
-                                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
+                                            <StackPanel Orientation="Horizontal"
+                                                        HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center">
+                                                <Border Width="14" Height="14" Margin="0,0,5,0"
+                                                        BorderBrush="#50808080" BorderThickness="1"
+                                                        Background="White"/>
+                                                <TextBlock Text="ללא צבע"
+                                                           VerticalAlignment="Center"
+                                                           FontSize="12"
+                                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
+                                            </StackPanel>
                                         </Border>
                                     </UniformGrid>
 

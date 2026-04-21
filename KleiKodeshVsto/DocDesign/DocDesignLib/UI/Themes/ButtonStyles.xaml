@@ -1,0 +1,169 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        Icon button — flat, square, same as RegexFindLib InputIconButton.
+        Path inside inherits Foreground from UserControl via implicit Path style.
+    -->
+    <Style TargetType="Button">
+        <Setter Property="Background"       Value="Transparent"/>
+        <Setter Property="BorderThickness"  Value="0"/>
+        <Setter Property="Width"            Value="28"/>
+        <Setter Property="Height"           Value="28"/>
+        <Setter Property="Padding"          Value="5"/>
+        <Setter Property="Margin"           Value="1,0"/>
+        <Setter Property="Cursor"           Value="Hand"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="2"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#0A808080"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#14808080"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.35"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Resources>
+            <Style TargetType="Path">
+                <Setter Property="Fill"          Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                <Setter Property="Stretch"       Value="Uniform"/>
+                <Setter Property="FlowDirection" Value="LeftToRight"/>
+            </Style>
+        </Style.Resources>
+    </Style>
+
+    <!-- ── Reset button (= icon) ─────────────────────────────────── -->
+    <Style x:Key="ResetButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="ToolTip"  Value="איפוס"/>
+        <Setter Property="Width"    Value="26"/>
+        <Setter Property="Height"   Value="26"/>
+        <Setter Property="Padding"  Value="5"/>
+        <Style.Resources>
+            <Style TargetType="Path">
+                <Setter Property="Fill"          Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                <Setter Property="Stretch"       Value="Uniform"/>
+                <Setter Property="FlowDirection" Value="LeftToRight"/>
+                <Setter Property="Data"          Value="M5.854 2.646a.5.5 0 0 1 0 .708L4.207 5H11a6 6 0 1 1-6 6a.5.5 0 0 1 1 0a5 5 0 1 0 5-5H4.207l1.647 1.646a.5.5 0 1 1-.708.708l-2.5-2.5a.5.5 0 0 1 0-.708l2.5-2.5a.5.5 0 0 1 .708 0"/>
+            </Style>
+        </Style.Resources>
+    </Style>
+
+    <!-- ── Increase / Decrease repeat buttons ────────────────────── -->
+    <Style x:Key="IncreaseButton" TargetType="RepeatButton">
+        <Setter Property="ToolTip"          Value="הגדל"/>
+        <Setter Property="Margin"           Value="0"/>
+        <Setter Property="Background"       Value="Transparent"/>
+        <Setter Property="BorderThickness"  Value="0"/>
+        <Setter Property="Cursor"           Value="Hand"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="MinWidth"         Value="{Binding ActualHeight, RelativeSource={RelativeSource Self}}"/>
+        <Style.Resources>
+            <Style TargetType="Path">
+                <Setter Property="Fill"          Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                <Setter Property="Stretch"       Value="Fill"/>
+                <Setter Property="FlowDirection" Value="LeftToRight"/>
+                <Setter Property="Margin"        Value="3"/>
+                <Setter Property="Data"          Value="M10 2.5a.5.5 0 0 1 .5.5v6.5H17a.5.5 0 0 1 0 1h-6.5V17a.5.5 0 0 1-1 0v-6.5H3a.5.5 0 0 1 0-1h6.5V3a.5.5 0 0 1 .5-.5"/>
+            </Style>
+        </Style.Resources>
+    </Style>
+
+    <Style x:Key="DecreaseButton" TargetType="RepeatButton">
+        <Setter Property="ToolTip"          Value="הקטן"/>
+        <Setter Property="Margin"           Value="0"/>
+        <Setter Property="Background"       Value="Transparent"/>
+        <Setter Property="BorderThickness"  Value="0"/>
+        <Setter Property="Cursor"           Value="Hand"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="MinWidth"         Value="{Binding ActualHeight, RelativeSource={RelativeSource Self}}"/>
+        <Style.Resources>
+            <Style TargetType="Path">
+                <Setter Property="Fill"          Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                <Setter Property="Stretch"       Value="Fill"/>
+                <Setter Property="FlowDirection" Value="LeftToRight"/>
+                <Setter Property="Margin"        Value="3"/>
+                <Setter Property="Data"          Value="M3 10a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 0 1h-13A.5.5 0 0 1 3 10"/>
+            </Style>
+        </Style.Resources>
+    </Style>
+
+    <!-- ── ToggleButton — flat icon toggle, no checked color ────────
+         Use x:Key="CheckedToggle" for toggles that need a blue checked state.
+    -->
+    <Style TargetType="ToggleButton">
+        <Setter Property="Background"       Value="Transparent"/>
+        <Setter Property="BorderThickness"  Value="0"/>
+        <Setter Property="Padding"          Value="8,4"/>
+        <Setter Property="FontSize"         Value="12"/>
+        <Setter Property="FontFamily"       Value="Segoe UI"/>
+        <Setter Property="Cursor"           Value="Hand"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Foreground"
+                Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Bd"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="4"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#0A808080"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#14808080"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ── ToggleButton with blue checked state (for toolbar toggles) -->
+    <Style x:Key="CheckedToggle" TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Bd"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="4"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#3300B4FF"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#0A808080"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#14808080"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

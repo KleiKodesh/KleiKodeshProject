@@ -25,6 +25,14 @@
 									onAction="button_Click"
 									getVisible="getVisible"/>
 
+							<button id="Kiwix"
+									label="ספריית קיוויקס"
+									screentip="ספריית קיוויקס"
+									supertip="גישה לספרים ואנציקלופדיות במצב לא מקוון דרך קיוויקס"
+									getImage="getImage"
+									onAction="button_Click"
+									getVisible="getVisible"/>
+
 							<!--
 <button id="HebrewBooks"
         label="היברו-בוקס"

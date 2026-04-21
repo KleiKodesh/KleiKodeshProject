@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="KiwixDemoApp/KiwixDemoApp.csproj" Id="3fe46d77-1bce-4356-a171-071a2328c03d" />
+  <Project Path="KiwixLib/KiwixLib.csproj" Id="235001e0-16c9-4aea-9260-99cf489a79c2" />
+</Solution>

@@ -131,7 +131,7 @@
                                 Width="14" Height="14"
                                 CornerRadius="2"
                                 BorderThickness="1"
-                                BorderBrush="{StaticResource BorderBrush}"
+                                BorderBrush="#50808080"
                                 Background="Transparent"
                                 Margin="0,0,6,0">
                             <Path x:Name="Tick"
@@ -148,12 +148,12 @@
                     </StackPanel>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="Tick" Property="Opacity" Value="1"/>
-                            <Setter TargetName="Box"  Property="Background" Value="#14808080"/>
-                            <Setter TargetName="Box"  Property="BorderBrush" Value="{StaticResource BorderStrong}"/>
+                            <Setter TargetName="Tick" Property="Opacity"     Value="1"/>
+                            <Setter TargetName="Box"  Property="Background"  Value="#14808080"/>
+                            <Setter TargetName="Box"  Property="BorderBrush" Value="#80808080"/>
                         </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource BorderStrong}"/>
+                            <Setter TargetName="Box" Property="BorderBrush"  Value="#80808080"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -163,9 +163,9 @@
 
     <!-- ── Separator line ────────────────────────────────────────── -->
     <Style x:Key="SeparatorLine" TargetType="Rectangle">
-        <Setter Property="Height"            Value="1"/>
-        <Setter Property="IsHitTestVisible"  Value="False"/>
-        <Setter Property="Fill"              Value="{StaticResource BorderBrush}"/>
+        <Setter Property="Height"           Value="1"/>
+        <Setter Property="IsHitTestVisible" Value="False"/>
+        <Setter Property="Fill"             Value="#50808080"/>
     </Style>
 
 </ResourceDictionary>

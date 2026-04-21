@@ -1,0 +1,14 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        Root theme dictionary — merges all sub-dictionaries.
+        NOTE: Pack URI paths must be all-lowercase (WPF BAML compiler lowercases them).
+    -->
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/DocDesign;component/ui/themes/brushes.xaml"/>
+        <ResourceDictionary Source="/DocDesign;component/ui/themes/buttonstyles.xaml"/>
+        <ResourceDictionary Source="/DocDesign;component/ui/themes/miscstyles.xaml"/>
+        <ResourceDictionary Source="/DocDesign;component/ui/themes/comboboxstyles.xaml"/>
+        <ResourceDictionary Source="/DocDesign;component/ui/themes/expanderstyles.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+</ResourceDictionary>

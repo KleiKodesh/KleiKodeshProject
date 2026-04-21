@@ -1,3 +1,0 @@
-﻿improve if diff < 0 loop by calicalting valid pargraphs
-add search uneven coumns
-refractor get column info

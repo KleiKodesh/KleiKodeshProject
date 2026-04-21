@@ -57,6 +57,7 @@ WPF in ElementHost and VSTO environments.
 
 **Key Topics:**
 - Theme-aware colors: mid-gray opacity overlays
+- **StaticResource inside ControlTemplates: NEVER — inline all values (crashes in Window/HwndSource scope)**
 - Popup background in separate HwndSource
 - Dispatcher in VSTO (Application.Current is null)
 - Generic.xaml not loaded
@@ -139,3 +140,4 @@ Debugging WPF applications.
 - `Generic.xaml` not loaded — merge ResourceDictionaries explicitly
 - Use mid-gray opacity overlays for theme-aware colors
 - Bind Popup backgrounds to `TemplatedParent`
+- **Never use `{StaticResource ...}` inside a `ControlTemplate` body** — inline literal values instead (`#50808080` not `{StaticResource BorderBrush}`). ControlTemplates defined in merged dictionaries are instantiated in the element's own resource scope; if that element lives in a `Window` or separate `HwndSource`, named resources from the merged dictionary are not visible and cause `XamlParseException` at runtime.

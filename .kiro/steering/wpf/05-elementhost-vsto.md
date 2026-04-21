@@ -148,6 +148,79 @@ Popup backgrounds must bind to a **local value** (not inherited) on a control th
 
 ---
 
+## StaticResource Inside ControlTemplates — Never Use Named Resources
+
+This is the most common runtime crash in this project. The error looks like:
+
+```
+XamlParseException: Cannot find resource named 'BorderBrush'. Resource names are case sensitive.
+```
+
+or
+
+```
+XamlParseException: Cannot find resource named 'Icon.ChevronDown'. Resource names are case sensitive.
+```
+
+**Root cause:** `StaticResource` inside a `ControlTemplate` body is resolved when the template is *instantiated* (applied to a control), not when the XAML is parsed. If the control is instantiated inside a `Window` (or any separate `HwndSource` — including `Popup`, `ContextMenu`, `WhiteListDialog`, `WebSitesDemo`), WPF cannot walk up to find resources defined in a merged `ResourceDictionary` that was loaded by a different `UserControl`.
+
+This affects:
+- Any `ControlTemplate` defined in a theme file (e.g. `Themes/ButtonStyles.xaml`) that is merged into a `UserControl`, but whose controls are also used in a `Window`
+- Icon geometry references (`{StaticResource Icon.Close}`) inside ControlTemplates
+- Named brush references (`{StaticResource BorderBrush}`) inside ControlTemplates
+
+**The rule: never use `StaticResource` inside a `ControlTemplate` body. Inline all values.**
+
+```xml
+<!-- ✗ WRONG — crashes when instantiated in a Window -->
+<ControlTemplate TargetType="Button">
+    <Border x:Name="Bd" BorderBrush="{StaticResource BorderBrush}">
+        <Path Data="{StaticResource Icon.Close}"/>
+    </Border>
+    <ControlTemplate.Triggers>
+        <Trigger Property="IsMouseOver" Value="True">
+            <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverBrush}"/>
+        </Trigger>
+    </ControlTemplate.Triggers>
+</ControlTemplate>
+
+<!-- ✓ CORRECT — inline literal values -->
+<ControlTemplate TargetType="Button">
+    <Border x:Name="Bd" BorderBrush="#50808080">
+        <Path Data="M4.397 4.554l.073-.084a.75.75 0 0 1 .976-.073..."/>
+    </Border>
+    <ControlTemplate.Triggers>
+        <Trigger Property="IsMouseOver" Value="True">
+            <Setter TargetName="Bd" Property="Background" Value="#0A808080"/>
+        </Trigger>
+    </ControlTemplate.Triggers>
+</ControlTemplate>
+```
+
+**What IS safe with `StaticResource`:**
+- `Setter` values on a `Style` (resolved at style application time, in the element's own resource scope)
+- Direct element attributes in a `UserControl`'s visual tree (resolved at parse time against the UserControl's resources)
+- `BasedOn="{StaticResource ...}"` on a `Style` (resolved at parse time)
+
+**What is NOT safe:**
+- Any property set *inside* a `<ControlTemplate>` or `<DataTemplate>` body via `{StaticResource}`
+- `Setter` values inside `ControlTemplate.Triggers` that reference named resources
+- Icon geometry data (`Path.Data`) inside a ControlTemplate
+
+**The standard color values to inline** (from `Brushes.xaml` — memorize these):
+
+| Token | Value |
+|-------|-------|
+| `BgSecBrush` | `#0F808080` |
+| `HoverBrush` | `#0A808080` |
+| `PressedBrush` | `#14808080` |
+| `BorderBrush` | `#50808080` |
+| `BorderStrong` | `#80808080` |
+| `SelectedBrush` | `#3300B4FF` |
+| `AccentBrush` | `#0078D4` |
+
+---
+
 ## Dispatcher in VSTO
 
 `Application.Current` is `null` in VSTO. Always capture dispatcher before async:

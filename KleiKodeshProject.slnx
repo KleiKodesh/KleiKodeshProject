@@ -1,5 +1,6 @@
 <Solution>
-  <Project Path="KleiKodeshVsto/DocDesign/DocDesign.csproj" Id="74e59bc0-41e5-475a-85cb-eacdc2ef6415" />
+  <Project Path="KleiKodeshVsto/DocDesign/DocDesignLib/DocDesignLib.csproj" Id="74e59bc0-41e5-475a-85cb-eacdc2ef6415" />
+  <Project Path="KleiKodeshVsto/DocDesign/DocDesignDemo/DocDesignDemo.csproj" Id="e5f6a7b8-c9d0-1234-efab-567890123cde" />
   <Project Path="KleiKodeshVsto/RegexInWord/RegexFindLib/RegexFindLib.csproj" Id="c3d4e5f6-a7b8-9012-cdef-123456789abc" />
   <Project Path="KleiKodeshVsto/RegexInWord/RegexFindDemo/RegexFindDemo.csproj" Id="d1e2f3a4-b5c6-7890-defa-123456789bcd" />
   <Project Path="Kezayit/CSharpBackend/BloomSearchEngineLib/BloomSearchEngineLib.csproj" Id="0f7c9226-2c18-4cb8-8f39-a3a539b7122a" />

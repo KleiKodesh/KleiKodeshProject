@@ -1,0 +1,107 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        STEP 1 — ToggleButton template for expander header.
+        - Collapsed: left-pointing chevron < (in RTL = pointing toward content)
+        - Expanded:  down-pointing chevron v
+        - NO color changes ever — outer Border owns all backgrounds.
+        - ContentPresenter HorizontalAlignment="Right" = text flush right in RTL.
+    -->
+    <ControlTemplate x:Key="ExpanderToggleTemplate" TargetType="ToggleButton">
+        <Border Background="Transparent" Padding="{TemplateBinding Padding}">
+            <!-- LTR grid so column 0=left, column 1=right — predictable regardless of RTL context -->
+            <Grid FlowDirection="LeftToRight">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>  <!-- chevron — visual LEFT -->
+                    <ColumnDefinition Width="*"/>     <!-- text    — visual RIGHT -->
+                </Grid.ColumnDefinitions>
+                <Viewbox Grid.Column="0"
+                         Width="12" Height="12"
+                         Margin="0,0,6,0"
+                         FlowDirection="LeftToRight"
+                         VerticalAlignment="Center">
+                    <Canvas Width="24" Height="24">
+                        <Path x:Name="Chevron"
+                              Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              Data="M15.41,16.58L10.83,12L15.41,7.41L14,6L8,12L14,18L15.41,16.58Z"/>
+                    </Canvas>
+                </Viewbox>
+                <TextBlock Grid.Column="1"
+                           Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}"
+                           FontSize="{TemplateBinding FontSize}"
+                           FontFamily="{TemplateBinding FontFamily}"
+                           FontWeight="{TemplateBinding FontWeight}"
+                           Foreground="{TemplateBinding Foreground}"
+                           TextAlignment="Right"
+                           VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+        <ControlTemplate.Triggers>
+            <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Chevron" Property="Data"
+                        Value="M7.41,8.58L12,13.17L16.59,8.58L18,10L12,16L6,10L7.41,8.58Z"/>
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+
+    <!--
+        STEP 2 — Expander style plugging in ExpanderToggleTemplate.
+    -->
+    <Style TargetType="Expander">
+        <Setter Property="Background"       Value="Transparent"/>
+        <Setter Property="Foreground"
+                Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+        <Setter Property="Margin"           Value="0"/>
+        <Setter Property="Padding"          Value="0"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Expander">
+                    <DockPanel>
+
+                        <Border x:Name="HeaderBd"
+                                DockPanel.Dock="Top"
+                                Background="#0F808080"
+                                HorizontalAlignment="Stretch"
+                                Cursor="Hand">
+                            <ToggleButton
+                                x:Name="HeaderSite"
+                                Template="{StaticResource ExpanderToggleTemplate}"
+                                IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                                Content="{TemplateBinding Header}"
+                                ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                Padding="10,7"
+                                FontSize="11"
+                                FontFamily="Segoe UI"
+                                FontWeight="SemiBold"
+                                Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                HorizontalContentAlignment="Stretch"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Stretch"
+                                FocusVisualStyle="{x:Null}"
+                                Background="Transparent"
+                                BorderThickness="0"/>
+                        </Border>
+
+                        <ContentPresenter x:Name="ExpandSite"
+                                          DockPanel.Dock="Top"
+                                          Focusable="False"
+                                          Visibility="Collapsed"
+                                          Margin="0,0,0,4"/>
+                    </DockPanel>
+
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsExpanded" Value="True">
+                            <Setter TargetName="ExpandSite" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="HeaderBd" Property="Background" Value="#1A808080"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

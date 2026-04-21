@@ -240,6 +240,7 @@
                 Superscript="{Binding FindFormatting.Superscript, Mode=TwoWay}"
                 Subscript="{Binding FindFormatting.Subscript, Mode=TwoWay}"
                 TextColor="{Binding FindFormatting.TextColor, Mode=TwoWay}"
+                TextColorWordDecimal="{Binding FindFormatting.TextColorWordDecimal, Mode=TwoWay}"
                 ClearCommand="{Binding ClearFindFormattingCommand}"
                 CopyCommand="{Binding CopyFindFormattingCommand}"
                 Margin="0,0,0,5"/>
@@ -378,6 +379,7 @@
                     Superscript="{Binding ReplaceFormatting.Superscript, Mode=TwoWay}"
                     Subscript="{Binding ReplaceFormatting.Subscript, Mode=TwoWay}"
                     TextColor="{Binding ReplaceFormatting.TextColor, Mode=TwoWay}"
+                    TextColorWordDecimal="{Binding ReplaceFormatting.TextColorWordDecimal, Mode=TwoWay}"
                     ClearCommand="{Binding ClearReplaceFormattingCommand}"
                     CopyCommand="{Binding CopyReplaceFormattingCommand}"
                     Margin="0,0,0,5"/>
