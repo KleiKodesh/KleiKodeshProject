@@ -11,10 +11,14 @@ The **main application** is the **WPF installer** (`Build/Installer`). It instal
 
 - `Build/Installer` — WPF installer (the main app, see above)
 - `KleiKodeshVsto` — VSTO Word add-in (installed by the WPF installer)
-- `DocSeferLib` — shared library for the VSTO add-in
+- `KleiKodeshVsto/DocDesign` — WPF library for Torah document formatting (columns, paragraphs, spacing)
+- `KleiKodeshVsto/RegexInWord/RegexFindLib` — WPF library for regex find & replace in Word
+- `WebSitesLib` — WPF library for curated website browser task pane
+- `UpdateCheckerLib` — Library for checking and downloading updates from GitHub
+- `WpfLib` — Shared WPF utilities and helpers
+- `Kezayit` (Vue/TypeScript) — frontend for the Kezayit seforim viewer
 - `Kezayit/CSharpBackend/KezayitLib` — C# backend for the Kezayit WebView2 app
 - `Kezayit/CSharpBackend/BloomSearchEngineLib` — Bloom filter search engine
-- `Kezayit` (Vue/TypeScript) — frontend for the Kezayit seforim viewer
 
 ## Website Whitelist (Installer)
 
@@ -73,7 +77,9 @@ Each project folder contains a `README.md` describing its purpose, folder struct
 | [`README.md`](../../README.md)                                                                                       | Root overview, architecture diagram, build instructions            |
 | [`Build/Installer/README.md`](../../Build/Installer/README.md)                                                       | WPF installer: extraction, registry keys, version management       |
 | [`KleiKodeshVsto/README.md`](../../KleiKodeshVsto/README.md)                                                         | VSTO add-in: ribbon, task panes, helpers                           |
-| [`DocSeferLib/README.md`](../../DocSeferLib/README.md)                                                               | Torah formatting library: Columns, Paragraphs, Spacing             |
+| [`KleiKodeshVsto/DocDesign/README.md`](../../KleiKodeshVsto/DocDesign/README.md)                                                                   | Torah formatting library: Columns, Paragraphs, Spacing             |
+| [`KleiKodeshVsto/RegexInWord/RegexFindLib/README.md`](../../KleiKodeshVsto/RegexInWord/RegexFindLib/README.md)                                         | Regex find & replace library for Word                              |
+| [`WebSitesLib/README.md`](../../WebSitesLib/README.md)                                                               | Curated website browser task pane                                  |
 | [`Kezayit/README.md`](../../Kezayit/README.md)                                                                       | Vue 3 frontend: components, stores, host bridge, build             |
 | [`Kezayit/CSharpBackend/README.md`](../../Kezayit/CSharpBackend/README.md)                                           | C# backend projects overview                                       |
 | [`Kezayit/CSharpBackend/KezayitLib/README.md`](../../Kezayit/CSharpBackend/KezayitLib/README.md)                     | WebView2 host, message bridge, all handlers                        |

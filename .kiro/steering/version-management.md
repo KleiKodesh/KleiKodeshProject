@@ -16,14 +16,14 @@ All other version stamps are derived from this value by `UpdateVersion.ps1` duri
 
 ## What Gets Updated on Every Release Build
 
-`Build/Installer/UpdateVersion.ps1` (called by `Build/build-installer.ps1`) updates:
+`Build/Installer/UpdateVersion.ps1` (called by `Build/scripts/build-installer.ps1`) updates:
 
 | File                                                           | Field                  | Format                  |
 | -------------------------------------------------------------- | ---------------------- | ----------------------- |
 | `Build/Installer/Helpers/AddinInstaller.cs`         | `const string Version` | `"vX.Y.Z"`              |
 | `Build/Installer/KleiKodeshVstoInstallerWpf.csproj` | `<Version>`            | `X.Y.Z` (no `v` prefix) |
 
-The NSIS script (`Build/KleiKodeshWrapper.nsi`) receives `${PRODUCT_VERSION}` as a command-line define from `build-installer.ps1` — it does **not** need to be edited manually.
+The NSIS script (`Build/nsis/KleiKodeshWrapper.nsi`) receives `${PRODUCT_VERSION}` as a command-line define from `build-installer.ps1` — it does **not** need to be edited manually.
 
 ## Version Flow at Runtime
 
@@ -111,10 +111,10 @@ Add it to the `Update-AllVersionTargets` function in `UpdateVersion.ps1`. Do NOT
 
 ## Build Script Regex
 
-`build-installer.ps1` reads the version back after `UpdateVersion.ps1` runs using:
+`Build/scripts/build-installer.ps1` reads the version back after `UpdateVersion.ps1` runs using the `Get-CurrentVersion` function from `build-helpers.ps1`:
 
 ```powershell
-Select-String -Path $progressWindowPath -Pattern 'const string Version\s*=\s*"([^"]+)"'
+Select-String -Path $AddinInstallerPath -Pattern 'const string Version\s*=\s*"([^"]+)"'
 ```
 
 The `\s*=\s*` handles the aligned spacing in `AddinInstaller.cs`.

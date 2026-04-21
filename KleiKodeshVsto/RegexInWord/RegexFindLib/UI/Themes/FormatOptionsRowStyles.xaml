@@ -1,0 +1,128 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:local="clr-namespace:RegexFindLib.UI">
+
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/RegexFindLib;component/ui/themes/icons.xaml"/>
+        <ResourceDictionary Source="/RegexFindLib;component/ui/themes/formattoggle.xaml"/>
+        <ResourceDictionary Source="/RegexFindLib;component/ui/themes/buttonstyles.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+
+    <!-- ── FormatOptionsRow ──────────────────────────────────────────────── -->
+    <Style TargetType="local:FormatOptionsRow">
+        <Setter Property="FlowDirection" Value="RightToLeft"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="local:FormatOptionsRow">
+                    <!--
+                        Mirrors HTML .flex-row inside find/replace containers.
+                        Visual order (RTL — right side is "start"):
+                          [font-size] [B] [I] [U] [x²] [x₂] [A] [eraser] [pencil]
+                          SpaceBetweenPanel distributes them evenly across the full width automatically.
+                    -->
+                    <local:SpaceBetweenPanel>
+
+                        <!-- font-size spinner -->
+                        <local:SpinnerTextBox
+                                 IsFloat="True"
+                                 FloatValue="{TemplateBinding FontSizeValue}"
+                                 FloatStep="0.5"
+                                 Width="52" Height="26"
+                                 ToolTip="גודל גופן (נקודות)"/>
+
+                        <!-- B — Bold -->
+                        <CheckBox Style="{StaticResource FormatToggle}"
+                                  ToolTip="מודגש"
+                                  IsChecked="{TemplateBinding Bold}">
+                            <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
+                                <Canvas Width="24" Height="24">
+                                    <Path Data="{StaticResource Icon.Bold}"
+                                          Fill="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
+                                </Canvas>
+                            </Viewbox>
+                        </CheckBox>
+
+                        <!-- I — Italic -->
+                        <CheckBox Style="{StaticResource FormatToggle}"
+                                  ToolTip="נטוי"
+                                  IsChecked="{TemplateBinding Italic}">
+                            <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
+                                <Canvas Width="24" Height="24">
+                                    <Path Data="{StaticResource Icon.Italic}"
+                                          Fill="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
+                                </Canvas>
+                            </Viewbox>
+                        </CheckBox>
+
+                        <!-- U — Underline -->
+                        <CheckBox Style="{StaticResource FormatToggle}"
+                                  ToolTip="קו תחתון"
+                                  IsChecked="{TemplateBinding Underline}">
+                            <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
+                                <Canvas Width="24" Height="24">
+                                    <Path Data="{StaticResource Icon.Underline}"
+                                          Fill="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
+                                </Canvas>
+                            </Viewbox>
+                        </CheckBox>
+
+                        <!-- x² — Superscript -->
+                        <CheckBox Style="{StaticResource FormatToggle}"
+                                  ToolTip="כתב עילי"
+                                  IsChecked="{TemplateBinding Superscript}">
+                            <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
+                                <Canvas Width="24" Height="24">
+                                    <Path Data="{StaticResource Icon.Superscript}"
+                                          Fill="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
+                                </Canvas>
+                            </Viewbox>
+                        </CheckBox>
+
+                        <!-- x₂ — Subscript -->
+                        <CheckBox Style="{StaticResource FormatToggle}"
+                                  ToolTip="כתב תחתי"
+                                  IsChecked="{TemplateBinding Subscript}">
+                            <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
+                                <Canvas Width="24" Height="24">
+                                    <Path Data="{StaticResource Icon.Subscript}"
+                                          Fill="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
+                                </Canvas>
+                            </Viewbox>
+                        </CheckBox>
+
+                        <!-- A — Color picker -->
+                        <local:ColorPickerButton
+                            SelectedColor="{TemplateBinding TextColor}"
+                            ToolTip="צבע גופן"/>
+
+                        <!-- Eraser — Clear formatting -->
+                        <Button Style="{StaticResource FormatButton}"
+                                Command="{TemplateBinding ClearCommand}"
+                                ToolTip="נקה הגדרות עיצוב">
+                            <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
+                                <Canvas Width="24" Height="24">
+                                    <Path Data="{StaticResource Icon.Eraser}"
+                                          Fill="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
+                                </Canvas>
+                            </Viewbox>
+                        </Button>
+
+                        <!-- Pencil — Copy formatting from selection -->
+                        <Button Style="{StaticResource FormatButton}"
+                                Command="{TemplateBinding CopyCommand}"
+                                ToolTip="שאב הגדרות עיצוב">
+                            <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
+                                <Canvas Width="24" Height="24">
+                                    <Path Data="{StaticResource Icon.Eyedropper}"
+                                          Fill="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
+                                </Canvas>
+                            </Viewbox>
+                        </Button>
+
+                    </local:SpaceBetweenPanel>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

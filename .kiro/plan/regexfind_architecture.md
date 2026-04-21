@@ -1,6 +1,6 @@
 ---
 inclusion: fileMatch
-fileMatchPattern: '**/regx-find-html/**|**/RegexFind/**'
+fileMatchPattern: '**/regx-find-html/**|**/KleiKodeshVsto/RegexInWord/**'
 ---
 
 # RegexFind Module Architecture
@@ -12,7 +12,7 @@ regx-find-html/          # Vue source project
 ├── js/webview-bridge.js # Communication layer
 └── css/styles.css       # Styling
 
-KleiKodeshVsto/RegexFind/ # C# backend
+KleiKodeshVsto/KleiKodeshVsto/RegexInWord/ # C# backend
 ├── RegexFindHost.cs     # WebView host
 ├── RegexSearch.cs       # Search logic
 └── index.html           # Built output (copied from Vue)
@@ -79,7 +79,7 @@ if (replace.Bold == true) {
 ## Build Process
 1. **Source**: `regx-find-html/` → Vue project
 2. **Build**: `npm run build` → Creates `dist/index.html`
-3. **Copy**: Built file → `KleiKodeshVsto/RegexFind/index.html`
+3. **Copy**: Built file → `KleiKodeshVsto/KleiKodeshVsto/RegexInWord/index.html`
 4. **VSTO Build**: Includes copied HTML automatically
 
 **CRITICAL**: Always work with source files in `regx-find-html/`!

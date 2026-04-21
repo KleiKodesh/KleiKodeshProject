@@ -115,10 +115,10 @@ These files contain Hebrew strings and must stay UTF-8:
 |------|---------------|
 | `KleiKodeshVsto/Ribbon/KeliKodeshRibbon.xml` | Button labels, tooltips |
 | `KleiKodeshVsto/Ribbon/KeliKodeshRibbon.cs` | Task pane titles, error messages |
-| `DocDesign/UI/DocDesignView.xaml` | All UI labels |
-| `DocDesign/UI/DocDesignDictionary.xaml` | Style definitions |
-| `DocDesign/Paragraphs/*.cs` | Hebrew comments |
-| `DocDesign/Helpers/*.cs` | Hebrew comments |
+| `KleiKodeshVsto/DocDesign/UI/DocDesignView.xaml` | All UI labels |
+| `KleiKodeshVsto/DocDesign/UI/DocDesignDictionary.xaml` | Style definitions |
+| `KleiKodeshVsto/DocDesign/Paragraphs/*.cs` | Hebrew comments |
+| `KleiKodeshVsto/DocDesign/Helpers/*.cs` | Hebrew comments |
 | `Build/Installer/Pages/*.xaml` | All installer UI |
 | `Build/Installer/Dialogs/*.xaml` | Dialog UI |
 | `KleiKodeshVsto/KleiKodeshVsto.csproj` | Hebrew comments |

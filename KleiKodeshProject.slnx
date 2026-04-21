@@ -2,9 +2,9 @@
   <Configurations>
     <Platform Name="Any CPU" />
   </Configurations>
-  <Project Path="DocDesign/DocDesign.csproj" Id="74e59bc0-41e5-475a-85cb-eacdc2ef6415" />
-  <Project Path="RegexFind/RegexFindLib/RegexFindLib.csproj" Id="c3d4e5f6-a7b8-9012-cdef-123456789abc" />
-  <Project Path="RegexFind/RegexFindDemo/RegexFindDemo.csproj" Id="d1e2f3a4-b5c6-7890-defa-123456789bcd" />
+  <Project Path="KleiKodeshVsto/DocDesign/DocDesign.csproj" Id="74e59bc0-41e5-475a-85cb-eacdc2ef6415" />
+  <Project Path="KleiKodeshVsto/RegexInWord/RegexFindLib/RegexFindLib.csproj" Id="c3d4e5f6-a7b8-9012-cdef-123456789abc" />
+  <Project Path="KleiKodeshVsto/RegexInWord/RegexFindDemo/RegexFindDemo.csproj" Id="d1e2f3a4-b5c6-7890-defa-123456789bcd" />
   <Project Path="Kezayit/CSharpBackend/BloomSearchEngineLib/BloomSearchEngineLib.csproj" Id="0f7c9226-2c18-4cb8-8f39-a3a539b7122a" />
   <Project Path="Kezayit/CSharpBackend/KezayitDemoApp/KezayitDemoApp.csproj" Id="2b6e5acb-2062-4281-aacb-c46681fcfe42" />
   <Project Path="Kezayit/CSharpBackend/KezayitLib/KezayitLib.csproj" Id="a1b2c3d4-e5f6-7890-abcd-ef1234567890" />

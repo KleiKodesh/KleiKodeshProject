@@ -35,7 +35,7 @@ KleiKodeshVsto/
 │   ├── SettingsManager.cs    — Registry-backed settings (INI-style sections/keys)
 │   ├── MsgBox.cs             — Themed message box wrapper
 │   └── JsonExtensions.cs     — JSON serialization helpers
-├── RegexFind/                — Self-contained regex search/replace tool (HTML)
+├── KleiKodeshVsto/RegexInWord/                — Self-contained regex search/replace tool (HTML)
 └── Resources/                — Embedded resource files
 ```
 

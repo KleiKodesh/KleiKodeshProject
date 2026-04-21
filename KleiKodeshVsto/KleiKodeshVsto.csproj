@@ -372,11 +372,11 @@
     </Page>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\RegexFind\RegexFindLib\RegexFindLib.csproj">
+    <ProjectReference Include="RegexInWord\RegexFindLib\RegexFindLib.csproj">
       <Project>{c3d4e5f6-a7b8-9012-cdef-123456789abc}</Project>
       <Name>RegexFindLib</Name>
     </ProjectReference>
-    <ProjectReference Include="..\DocDesign\DocDesign.csproj">
+    <ProjectReference Include="DocDesign\DocDesign.csproj">
       <Project>{74e59bc0-41e5-475a-85cb-eacdc2ef6415}</Project>
       <Name>DocDesign</Name>
     </ProjectReference>
