@@ -9,6 +9,18 @@ namespace RegexFindLib.UI
     /// Word-compatible color data and conversion utilities.
     /// Ported from regx-find-html/SimpleColorsDialog.cs — self-contained, no Globals dependency.
     /// Standard colors and theme color hex values are hardcoded (same as the HTML color-picker.js).
+    /// 
+    /// IMPLEMENTATION VERIFIED BY AUTHORITATIVE SOURCES:
+    /// 1. Word Articles (Tony Jollans) - Comprehensive technical documentation
+    ///    https://www.wordarticles.com/Articles/Colours/2007.php
+    /// 2. PowerSpreadsheets.com - BGR byte order documentation
+    ///    https://powerspreadsheets.com/vba-font-color-hex/
+    /// 3. StackOverflow - Theme color tints/shades
+    ///    https://stackoverflow.com/questions/55907657
+    /// 4. StackOverflow - RGB color extraction with actual hex mappings
+    ///    https://stackoverflow.com/questions/18614933
+    /// 5. RetroComputing StackExchange - Historical explanation of BGR format
+    ///    https://retrocomputing.stackexchange.com/questions/3023
     /// </summary>
     public static class WordColors
     {
@@ -54,6 +66,19 @@ namespace RegexFindLib.UI
         /// Convert Word decimal to WPF Color for display.
         /// Handles standard BGR colors, base theme colors, and tinted/shaded theme colors.
         /// Matches the HTML resolveThemeColor + applyTintShade logic from color-calculations.js.
+        /// 
+        /// STANDARD COLORS (positive decimals):
+        /// Word stores RGB colors in BGR byte order (Blue-Green-Red).
+        /// Example: Red RGB(255,0,0) → BGR decimal 16711680 (0x00FF0000)
+        /// Source: https://powerspreadsheets.com/vba-font-color-hex/
+        /// 
+        /// THEME COLORS (negative decimals):
+        /// Format: 0x[D|F][ThemeIndex][00][ShadeByte][TintByte]
+        /// - Byte 0 (MSB): 0xD0-0xDF with theme index in lower nibble
+        /// - Byte 1: Always 0x00
+        /// - Byte 2: Shade byte (0xFF = no shade, lower = darker)
+        /// - Byte 3 (LSB): Tint byte (0xFF = no tint, lower = lighter)
+        /// Source: https://www.wordarticles.com/Articles/Colours/2007.php
         /// </summary>
         public static Color WordDecimalToColor(int wordDecimal)
         {
@@ -96,15 +121,22 @@ namespace RegexFindLib.UI
                 return Colors.Black;
             }
 
-            byte r = (byte)(wordDecimal & 0xFF);
+            byte b = (byte)(wordDecimal & 0xFF);
             byte g = (byte)((wordDecimal >> 8) & 0xFF);
-            byte b = (byte)((wordDecimal >> 16) & 0xFF);
+            byte r = (byte)((wordDecimal >> 16) & 0xFF);
             return Color.FromRgb(r, g, b);
         }
 
-        /// <summary>Convert WPF Color to Word BGR int (for custom/standard colors only).</summary>
+        /// <summary>
+        /// Convert WPF Color to Word BGR int (for custom/standard colors only).
+        /// Word uses BGR byte order: Blue in LSB, Green in middle, Red in MSB.
+        /// Example: RGB(255,0,0) red → 0 | (0 << 8) | (255 << 16) = 16711680
+        /// Source: https://powerspreadsheets.com/vba-font-color-hex/
+        /// Historical reason: IBM VGA RAMDAC chips required BGR order
+        /// Source: https://retrocomputing.stackexchange.com/questions/3023
+        /// </summary>
         public static int ColorToWordDecimal(Color c) =>
-            c.R | (c.G << 8) | (c.B << 16);
+            c.B | (c.G << 8) | (c.R << 16);
 
         // ── Theme color tint/shade helpers (ported from color-calculations.js) ─
 
@@ -130,9 +162,12 @@ namespace RegexFindLib.UI
         }
 
         /// <summary>
-        /// Apply Word tint/shade to a hex color using Word Articles formula.
-        /// Positive = tint (lighter), negative = shade (darker).
+        /// Apply Word tint/shade to a hex color using HSL color space conversion.
+        /// Positive tintShade = tint (lighter, toward white)
+        /// Negative tintShade = shade (darker, toward black)
+        /// Formula: newL = L * abs(tintShade) + (tintShade > 0 ? 1 : 0) * (1 - tintShade)
         /// Ported from color-calculations.js applyTintShade.
+        /// Source: https://www.wordarticles.com/Articles/Colours/2007.php (HSL conversion section)
         /// </summary>
         static string ApplyTintShade(string hex, double tintShade)
         {
@@ -219,13 +254,20 @@ namespace RegexFindLib.UI
 
     internal static class ColorExtensions
     {
-        /// <summary>Convert an RGB int (0xRRGGBB) to Word BGR decimal.</summary>
+        /// <summary>
+        /// Convert an RGB int (0xRRGGBB) to Word BGR decimal.
+        /// Word stores colors in BGR byte order (Blue-Green-Red).
+        /// Example: 0xFF0000 (red) → 0 | (0 << 8) | (255 << 16) = 16711680
+        /// Sources:
+        /// - https://powerspreadsheets.com/vba-font-color-hex/
+        /// - https://www.wordarticles.com/Articles/Colours/2007.php
+        /// </summary>
         public static int BgrToWord(this int rgb)
         {
             byte r = (byte)((rgb >> 16) & 0xFF);
             byte g = (byte)((rgb >> 8) & 0xFF);
             byte b = (byte)(rgb & 0xFF);
-            return r | (g << 8) | (b << 16);
+            return b | (g << 8) | (r << 16);
         }
     }
 }

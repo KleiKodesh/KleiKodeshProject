@@ -62,7 +62,7 @@ else { Write-Host "All files valid UTF-8." }
 
 Note: this scan is slow on the full repo due to `node_modules` and WebView2 cache. Scope it to specific project directories when possible:
 ```powershell
-$dirs = @("DocDesign","KleiKodeshVsto/Ribbon","KleiKodeshVsto/Helpers","Build/Installer/Pages")
+$dirs = @("KleiKodeshVsto/DocDesign","KleiKodeshVsto/Ribbon","KleiKodeshVsto/Helpers","Build/Installer/Pages")
 ```
 
 ---

@@ -72,8 +72,8 @@
     -->
     <OfficeApplication>Word</OfficeApplication>
   </PropertyGroup>
-
-  <!-- SQLite.Interop.dll is explicitly included as Content items above -->  <!--
+  <!-- SQLite.Interop.dll is explicitly included as Content items above -->
+  <!--
     This section defines properties that are set when the "Debug" configuration is selected.
 
     DebugSymbols
@@ -349,7 +349,6 @@
     <Content Include="Resources\About.dotx">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <!-- RegexFind HTML assets removed — XAML UI has no external assets -->
     <!-- SQLite.Interop.dll — must be explicitly copied here because SQLite is only
          referenced transitively via KezayitLib. The native interop DLL is not
          propagated through project references and throws DllNotFoundException at runtime. -->
@@ -363,7 +362,6 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </Content>
-    <!-- SQLite.Interop.dll removed — SQLite not used in this project -->
   </ItemGroup>
   <ItemGroup>
     <Page Include="Ribbon\RibbonSettingsView.xaml">
@@ -388,9 +386,13 @@
       <Project>{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}</Project>
       <Name>KezayitLib</Name>
     </ProjectReference>
-    <ProjectReference Include="..\WebSitesLib\WebSitesLib2\WebSitesLib2.csproj">
-      <Project>{8100c454-b34e-45a2-98b5-7f766487c9ff}</Project>
-      <Name>WebSitesLib2</Name>
+    <ProjectReference Include="WebSitesLib\WebSitesLib\WebSitesLib.csproj">
+      <Project>{8100C454-B34E-45A2-98B5-7F766487C9FF}</Project>
+      <Name>WebSitesLib</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\WpfLib\WpfLib.csproj">
+      <Project>{494b02c1-54f2-4244-9a90-23c9984970e7}</Project>
+      <Name>WpfLib</Name>
     </ProjectReference>
   </ItemGroup>
   <PropertyGroup>
@@ -407,7 +409,6 @@
   <PropertyGroup>
     <ManifestCertificateThumbprint>248FB7586402B5FEA4B6FEFF20723CFBB6437082</ManifestCertificateThumbprint>
   </PropertyGroup>
-
   <PropertyGroup>
     <ApplicationIcon>KleiKodesh_Main.ico</ApplicationIcon>
   </PropertyGroup>
@@ -436,6 +437,5 @@
   <Import Project="..\packages\Stub.System.Data.SQLite.Core.NetFramework.1.0.119.0\build\net46\Stub.System.Data.SQLite.Core.NetFramework.targets" Condition="Exists('..\packages\Stub.System.Data.SQLite.Core.NetFramework.1.0.119.0\build\net46\Stub.System.Data.SQLite.Core.NetFramework.targets')" />
   <!-- Import Kezayit.targets for automatic Vue build and deployment -->
   <Import Project="..\Kezayit\CSharpBackend\Kezayit.targets" Condition="Exists('..\Kezayit\CSharpBackend\Kezayit.targets')" />
-  <!-- BuildHtmlApp target removed — RegexFind now uses XAML UI (RegexFindLib) -->
   <Import Project="..\packages\Microsoft.Web.WebView2.1.0.3856.49\build\Microsoft.Web.WebView2.targets" Condition="Exists('..\packages\Microsoft.Web.WebView2.1.0.3856.49\build\Microsoft.Web.WebView2.targets')" />
 </Project>

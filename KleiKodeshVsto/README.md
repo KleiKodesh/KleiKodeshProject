@@ -9,7 +9,7 @@ Adds a custom ribbon tab to Word and opens task panes for each tool:
 | Ribbon Button            | Tool                      | Implementation                                 |
 | ------------------------ | ------------------------- | ---------------------------------------------- |
 | כזית (Kezayit)           | Seforim viewer & search   | `KezayitLib.AppViewer` in WebView2 task pane   |
-| עיצוב תורני (KleiKodesh) | Torah document formatting | `DocSeferLib.DocSeferLibView` in WPF task pane |
+| עיצוב תורני (KleiKodesh) | Torah document formatting | `DocDesign.DocDesignView` in WPF task pane |
 | דרך האתרים (WebSites)    | Curated website browser   | `WebSitesLib2.WebSitesView` in WPF task pane   |
 | חיפוש רגקס (RegexFind)   | Regex find & replace      | HTML-based task pane                           |
 | הגדרות (Settings)        | Add-in settings           | WPF task pane                                  |

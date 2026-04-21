@@ -30,7 +30,6 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
-
   <ItemGroup>
     <Reference Include="Microsoft.Office.Interop.Word, Version=15.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
       <EmbedInteropTypes>True</EmbedInteropTypes>
@@ -58,7 +57,6 @@
     <Reference Include="System.Xml" />
     <Reference Include="WindowsBase" />
   </ItemGroup>
-
   <ItemGroup>
     <Compile Include="Columns\AlignColumns.cs" />
     <Compile Include="Columns\ColumnsHelper.cs" />
@@ -80,7 +78,6 @@
     </Compile>
     <Compile Include="UI\DocDesignViewModel.cs" />
   </ItemGroup>
-
   <ItemGroup>
     <Page Include="UI\DocDesignDictionary.xaml">
       <Generator>MSBuild:Compile</Generator>
@@ -91,22 +88,18 @@
       <SubType>Designer</SubType>
     </Page>
   </ItemGroup>
-
   <ItemGroup>
     <None Include="app.config" />
     <None Include="packages.config" />
   </ItemGroup>
-
   <ItemGroup>
     <Content Include="Notes.txt" />
   </ItemGroup>
-
   <ItemGroup>
-    <ProjectReference Include="..\WpfLib\WpfLib\WpfLib.csproj">
+    <ProjectReference Include="..\..\WpfLib\WpfLib.csproj">
       <Project>{494b02c1-54f2-4244-9a90-23c9984970e7}</Project>
       <Name>WpfLib</Name>
     </ProjectReference>
   </ItemGroup>
-
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

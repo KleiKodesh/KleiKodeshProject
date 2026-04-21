@@ -4,8 +4,8 @@
     <!--
         Three-state format toggle (CheckBox IsThreeState)
         null  → transparent
-        true  → #3300B4FF (Office selected blue)
-        false → #33FF0000 (Office error red) + diagonal line
+        true  → #3300B4FF (Office selected blue tint)
+        false → #18DC3545 red tint + red diagonal line (1.5px, rounded caps)
     -->
     <Style x:Key="FormatToggle" TargetType="CheckBox">
         <Setter Property="IsThreeState"    Value="True"/>
@@ -24,23 +24,16 @@
                                 Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
-                        <Border x:Name="ErrorLine" CornerRadius="2"
+                        <!-- false state: soft red tint + red diagonal line -->
+                        <Border x:Name="ExcludedTint" CornerRadius="2"
+                                Background="#18DC3545"
+                                IsHitTestVisible="False" Visibility="Collapsed"/>
+                        <Canvas x:Name="ExcludedLine"
                                 IsHitTestVisible="False" Visibility="Collapsed">
-                            <Border.Background>
-                                <DrawingBrush TileMode="None" Stretch="Fill">
-                                    <DrawingBrush.Drawing>
-                                        <GeometryDrawing>
-                                            <GeometryDrawing.Geometry>
-                                                <LineGeometry StartPoint="0,0" EndPoint="1,1"/>
-                                            </GeometryDrawing.Geometry>
-                                            <GeometryDrawing.Pen>
-                                                <Pen Brush="#DC3545" Thickness="0.1"/>
-                                            </GeometryDrawing.Pen>
-                                        </GeometryDrawing>
-                                    </DrawingBrush.Drawing>
-                                </DrawingBrush>
-                            </Border.Background>
-                        </Border>
+                            <Line X1="4" Y1="4" X2="24" Y2="24"
+                                  Stroke="#DC3545" StrokeThickness="1.5"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                        </Canvas>
                         <Border x:Name="Hover" CornerRadius="2"
                                 Background="Transparent" IsHitTestVisible="False"/>
                     </Grid>
@@ -49,8 +42,8 @@
                             <Setter TargetName="Bg" Property="Background" Value="#3300B4FF"/>
                         </Trigger>
                         <Trigger Property="IsChecked" Value="False">
-                            <!-- no background tint — just the red diagonal line -->
-                            <Setter TargetName="ErrorLine" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="ExcludedTint" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="ExcludedLine" Property="Visibility" Value="Visible"/>
                         </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Hover" Property="Background" Value="#0A808080"/>

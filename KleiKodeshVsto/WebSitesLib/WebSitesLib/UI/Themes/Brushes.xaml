@@ -1,0 +1,29 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        Adaptive color tokens — identical to RegexFindLib so both panes look like one app.
+
+        Mid-gray (#808080) overlays are equidistant from black and white,
+        so they work on both light and dark Office themes.
+    -->
+
+    <!-- Background overlays -->
+    <SolidColorBrush x:Key="BgSecBrush"   Color="#0F808080"/>  <!-- ~6%  -->
+    <SolidColorBrush x:Key="BgTerBrush"   Color="#1A808080"/>  <!-- ~10% -->
+    <SolidColorBrush x:Key="HoverBrush"   Color="#0A808080"/>  <!-- ~4%  -->
+    <SolidColorBrush x:Key="PressedBrush" Color="#14808080"/>  <!-- ~8%  -->
+    <SolidColorBrush x:Key="BorderBrush"  Color="#50808080"/>  <!-- ~31% -->
+    <SolidColorBrush x:Key="BorderStrong" Color="#80808080"/>  <!-- ~50% -->
+
+    <!-- Accent -->
+    <SolidColorBrush x:Key="AccentBrush"   Color="#0078D4"/>
+    <SolidColorBrush x:Key="AccentHover"   Color="#106EBE"/>
+    <SolidColorBrush x:Key="AccentPressed" Color="#005A9E"/>
+
+    <!-- Selected state -->
+    <SolidColorBrush x:Key="SelectedBrush" Color="#3300B4FF"/>
+
+    <!-- Secondary text -->
+    <SolidColorBrush x:Key="TextSecBrush"  Color="#99808080"/>
+
+</ResourceDictionary>

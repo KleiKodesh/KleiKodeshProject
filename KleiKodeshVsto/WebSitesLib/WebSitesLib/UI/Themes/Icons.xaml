@@ -1,0 +1,58 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        Fluent UI icon geometries (24×24 viewBox).
+        Usage: <Path Data="{StaticResource Icon.Back}"/> inside
+               <Canvas Width="24" Height="24"/> inside <Viewbox Width="16" Height="16"/>.
+    -->
+
+    <StreamGeometry x:Key="Icon.Back">
+        M20,11V13H8L13.5,18.5L12.08,19.92L4.16,12L12.08,4.08L13.5,5.5L8,11H20Z
+    </StreamGeometry>
+
+    <StreamGeometry x:Key="Icon.Forward">
+        M4,11V13H16L10.5,18.5L11.92,19.92L19.84,12L11.92,4.08L10.5,5.5L16,11H4Z
+    </StreamGeometry>
+
+    <StreamGeometry x:Key="Icon.Reload">
+        M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20
+        C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18
+        A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z
+    </StreamGeometry>
+
+    <StreamGeometry x:Key="Icon.Add">
+        M12 3.25a.75.75 0 0 1 .75.75v7.25H20a.75.75 0 0 1 0 1.5h-7.25V20
+        a.75.75 0 0 1-1.5 0v-7.25H4a.75.75 0 0 1 0-1.5h7.25V4a.75.75 0 0 1 .75-.75
+    </StreamGeometry>
+
+    <StreamGeometry x:Key="Icon.ChevronDown">
+        M4.21967 6.96967C4.51256 6.67678 4.98744 6.67678 5.28033 6.96967
+        L10 11.6893L14.7197 6.96967C15.0126 6.67678 15.4874 6.67678 15.7803 6.96967
+        C16.0732 7.26256 16.0732 7.73744 15.7803 8.03033L10.5303 13.2803
+        C10.2374 13.5732 9.76256 13.5732 9.46967 13.2803L4.21967 8.03033Z
+    </StreamGeometry>
+
+    <StreamGeometry x:Key="Icon.Close">
+        M4.397 4.554l.073-.084a.75.75 0 0 1 .976-.073l.084.073L12 10.939
+        l6.47-6.47a.75.75 0 1 1 1.06 1.061L13.061 12l6.47 6.47
+        a.75.75 0 0 1 .072.976l-.073.084a.75.75 0 0 1-.976.073l-.084-.073
+        L12 13.061l-6.47 6.47a.75.75 0 0 1-1.06-1.061L10.939 12l-6.47-6.47
+        a.75.75 0 0 1-.072-.976z
+    </StreamGeometry>
+
+    <StreamGeometry x:Key="Icon.MoveUp">
+        M13,20H11V8L5.5,13.5L4.08,12.08L12,4.16L19.92,12.08L18.5,13.5L13,8V20Z
+    </StreamGeometry>
+
+    <StreamGeometry x:Key="Icon.MoveDown">
+        M11,4H13V16L18.5,10.5L19.92,11.92L12,19.84L4.08,11.92L5.5,10.5L11,16V4Z
+    </StreamGeometry>
+
+    <StreamGeometry x:Key="Icon.EditList">
+        M2,6V8H14V6H2M2,10V12H14V10H2M20.04,10.13C19.9,10.13 19.76,10.19 19.65,10.3
+        L18.65,11.3L20.7,13.35L21.7,12.35C21.92,12.14 21.92,11.79 21.7,11.58
+        L20.42,10.3C20.31,10.19 20.18,10.13 20.04,10.13M18.07,11.88L12,17.94V20H14.06
+        L20.12,13.93L18.07,11.88M2,14V16H10V14H2Z
+    </StreamGeometry>
+
+</ResourceDictionary>
