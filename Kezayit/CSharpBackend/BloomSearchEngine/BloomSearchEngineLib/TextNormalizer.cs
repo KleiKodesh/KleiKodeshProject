@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Text;
 
 namespace BloomSearchEngineLib
 {
@@ -14,6 +15,39 @@ namespace BloomSearchEngineLib
                 if (CharUnicodeInfo.GetUnicodeCategory((char)i) == UnicodeCategory.NonSpacingMark)
                     t[i >> 3] |= (byte)(1 << (i & 7));
             return t;
+        }
+
+        /// <summary>
+        /// Normalizes a single query term to match the form stored in the Bloom index.
+        /// Mirrors what TermExtractor.ProcessLine does during indexing:
+        ///   - strips nikud (NSM) first via NormalizeText
+        ///   - then keeps only Hebrew letters (א–ת) and ASCII letters (a–z, lowercased)
+        ///   - everything else (punctuation, geresh, gershayim, maqaf, digits, etc.) is dropped
+        /// Returns null if the term collapses to empty (caller should skip it).
+        /// </summary>
+        public static string NormalizeQueryTerm(string term)
+        {
+            if (string.IsNullOrEmpty(term)) return null;
+
+            // Strip nikud first (same as NormalizeText, but we only need RemoveNsm here
+            // since query terms have no HTML).
+            char[] buf = new char[term.Length];
+            int len = 0;
+            for (int i = 0; i < term.Length; i++)
+                if (!IsNsm(term[i])) buf[len++] = term[i];
+
+            // Now keep only Hebrew letters and ASCII letters (lowercased), same as TermExtractor.
+            var sb = new StringBuilder(len);
+            for (int i = 0; i < len; i++)
+            {
+                char c = buf[i];
+                if (c >= '\u05D0' && c <= '\u05EA') sb.Append(c);
+                else if (c >= 'A' && c <= 'Z') sb.Append((char)(c | 32));
+                else if (c >= 'a' && c <= 'z') sb.Append(c);
+                // everything else is silently dropped — matches TermExtractor behaviour
+            }
+
+            return sb.Length > 0 ? sb.ToString() : null;
         }
 
         // Returns true if every term's first character appears somewhere in the raw

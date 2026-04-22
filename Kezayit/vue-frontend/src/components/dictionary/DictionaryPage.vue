@@ -8,21 +8,24 @@ import DictionaryWordPage from './DictionaryWordPage.vue'
 import { useTabStore } from '@/stores/tabStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useZoomHandler } from '@/composables/useZoom'
-import { dictCacheGet, dictCacheSet } from './dictCache'
-import { dictLinks, dictSynonyms, dictVariants, dictSpellCandidates, combinedLookup } from '@/host/dictionaryDb'
+import { dictCacheGet, dictCacheSet, dictCacheClear } from './dictCache'
+import { dictLinks, dictSynonyms, dictVariants, dictSpellCandidates, dictKetivVariants, combinedLookup } from '@/host/dictionaryDb'
+import { expandKetivHaser } from '@/utils/hebrewKetivExpander'
 import { isHosted } from '@/host/seforimDb'
 import type { SenseRow, DictLink, MetzudatRow, MenchemRow } from '@/host/dictionaryDb'
 
 export interface WordPageData {
-  headword:    string
-  senses:      SenseRow[]     // dictionary sources (not Radak)
-  radak:       SenseRow[]     // ספר השרשים לרד"ק — groups with commentary
-  metzudat:    MetzudatRow[]
-  malbim:      MetzudatRow[]
-  menchemRows: MenchemRow[]
-  links:       DictLink[]
-  synonyms:    string[]
-  variants:    string[]
+  headword:             string
+  senses:               SenseRow[]     // dictionary sources (not Radak)
+  radak:                SenseRow[]     // ספר השרשים לרד"ק — groups with commentary
+  metzudat:             MetzudatRow[]
+  malbim:               MetzudatRow[]
+  menchemRows:          MenchemRow[]
+  links:                DictLink[]
+  synonyms:             string[]
+  variants:             string[]
+  ketivSuggestions:     string[]       // כתיב מלא expansions of the query
+  levenshteinSuggestions: string[]     // edit-distance spelling suggestions (shown last)
 }
 
 function levenshtein(a: string, b: string): number {
@@ -65,6 +68,7 @@ function focusSearchInput() {
 }
 
 onMounted(() => {
+  dictCacheClear()
   const saved = tabStore.activeTab?.searchQuery
   if (saved) searchQuery.value = saved
   focusSearchInput()
@@ -125,15 +129,28 @@ watch(debouncedQuery, async (q) => {
       if (!seen.has(w)) { seen.add(w); synonyms.push(w) }
     }
 
+    // כתיב חסר and Levenshtein — always computed, shown in קשורים (or in the
+    // no-results bar when there are no results at all)
+    const ketivExpansions = expandKetivHaser(trimmed)
+    const [ketivSuggestions, spellCandidates] = await Promise.all([
+      dictKetivVariants(ketivExpansions),
+      dictSpellCandidates(trimmed),
+    ])
+    const maxDist = Math.max(2, Math.floor(trimmed.length / 2))
+    const levenshteinSuggestions = spellCandidates
+      .map(hw => ({ hw, d: levenshtein(trimmed, hw) }))
+      .filter(x => x.d <= maxDist && x.hw !== trimmed)
+      .sort((a, b) => a.d - b.d)
+      .slice(0, 8)
+      .map(x => x.hw)
+
     if (!isExact) {
-      const candidates = await dictSpellCandidates(trimmed)
-      const maxDist = Math.max(2, Math.floor(trimmed.length / 2))
-      suggestions.value = candidates
-        .map(hw => ({ hw, d: levenshtein(trimmed, hw) }))
-        .filter(x => x.d <= maxDist && x.hw !== trimmed)
-        .sort((a, b) => a.d - b.d)
-        .slice(0, 8)
-        .map(x => x.hw)
+      // No-results bar: כתיב חסר first, Levenshtein only as fallback
+      if (ketivSuggestions.length > 0) {
+        suggestions.value = ketivSuggestions.slice(0, 8)
+      } else {
+        suggestions.value = levenshteinSuggestions.slice(0, 8)
+      }
     }
 
     if (!dictRows.length && !metzudatRows.length && !malbimRows.length && !menchemRows.length && !synonyms.length) {
@@ -149,6 +166,8 @@ watch(debouncedQuery, async (q) => {
         malbim:      malbimRows,
         menchemRows,
         links, synonyms, variants,
+        ketivSuggestions,
+        levenshteinSuggestions,
       }
       pageData.value = result
       dictCacheSet(trimmed, result)

@@ -59,3 +59,13 @@ export const SQL_DICT_SPELL_CANDIDATES_FRAG2 = `
 
 export const SQL_DICT_SPELL_CANDIDATES_FRAG3 = `
   SELECT headword FROM word WHERE headword LIKE ? LIMIT 200`
+
+/**
+ * Check which of a given set of headword candidates actually exist in the word table.
+ * The caller must build the IN clause dynamically — use buildKetivExistsQuery().
+ * Returns only the headword strings, no sense data.
+ */
+export function buildKetivExistsQuery(count: number): string {
+  const placeholders = Array.from({ length: count }, () => '?').join(', ')
+  return `SELECT headword FROM word WHERE headword IN (${placeholders})`
+}

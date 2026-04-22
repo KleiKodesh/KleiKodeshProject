@@ -141,15 +141,17 @@ onMounted(async () => {
     setAtFilters(saved.searchAtFilters)
   }
 
+  // Restore zoom BEFORE restoring scroll — zoom affects item height estimates in the
+  // virtualizer, so if zoom is applied after results populate the scroll lands in the wrong place.
+  if (saved?.searchZoom != null) {
+    zoom.value = saved.searchZoom
+  }
+
   if (saved?.searchScrollIndex != null) {
     initialScrollIndex.value = saved.searchScrollIndex
     initialScrollOffset.value = saved.searchScrollOffset ?? 0
     lastScrollIndex = saved.searchScrollIndex
     lastScrollOffset = saved.searchScrollOffset ?? 0
-  }
-
-  if (saved?.searchZoom != null) {
-    zoom.value = saved.searchZoom
   }
 
   await restoreFromTab()

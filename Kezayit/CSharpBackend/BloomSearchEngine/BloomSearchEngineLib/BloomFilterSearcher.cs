@@ -15,7 +15,19 @@ namespace BloomSearchEngineLib
         {
             if (string.IsNullOrWhiteSpace(query)) yield break;
 
-            var terms = query.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            // Normalize each query term the same way TermExtractor normalizes during indexing:
+            // strip nikud, keep only Hebrew letters (א–ת) and ASCII letters.
+            // This ensures the Bloom filter lookup and IndexOf match use the same form
+            // as the indexed terms, regardless of what punctuation or diacritics the
+            // user typed.
+            var rawTerms = query.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            var termList = new List<string>(rawTerms.Length);
+            foreach (var raw in rawTerms)
+            {
+                var normalized = TextNormalizer.NormalizeQueryTerm(raw);
+                if (normalized != null) termList.Add(normalized);
+            }
+            var terms = termList.ToArray();
             if (terms.Length == 0) yield break;
 
             using (var reader = new BloomFilterCollectionReader(_id))

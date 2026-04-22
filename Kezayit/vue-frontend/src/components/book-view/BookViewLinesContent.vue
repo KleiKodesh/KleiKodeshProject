@@ -45,9 +45,18 @@ const props = defineProps<{
 const tabStore = useTabStore()
 const settingsStore = useSettingsStore()
 const bookViewStore = useBookViewStore()
-const { zoom, autoSelectTopLine } = storeToRefs(bookViewStore)
+const { autoSelectTopLine } = storeToRefs(bookViewStore)
 const tabId = tabStore.activeTabId
 const bookId = tabStore.activeTab.bookId!
+
+// Read zoom directly by tabId+bookId — NOT via bookViewStore.zoom computed which is
+// gated on activeTab. If this tab is not active when savePos fires (e.g. user switched
+// tabs before closing), the activeTab-based computed returns DEFAULT and overwrites the
+// real zoom in IDB.
+const zoom = computed({
+  get: () => bookViewStore.getZoom(tabId, bookId),
+  set: (v: number) => bookViewStore.setZoom(tabId, bookId, v),
+})
 
 const diacriticsState = computed(() => settingsStore.diacriticsState)
 const fontPx = computed(() => (zoom.value / 100) * (settingsStore.fontSize / 100) * 15)
@@ -450,10 +459,21 @@ function restoreScrollPos(lineIndex: number, scrollOffset = 0) {
           nextTick(() => {
             const offset = props.initialScrollIndex != null ? (props.initialScrollOffset ?? 0) : 0
             restoreScrollPos(targetIndex, offset)
-            // Emit scrolled after the programmatic restore so TOC tracking picks up
-            // the correct position even if tocEntries weren't loaded yet during onScroll.
+            // Emit scrolled after the programmatic restore so TOC tracking picks up the
+            // correct position. Use the actual first *visible* line index (same logic as
+            // onScroll) rather than targetIndex — targetIndex is the first *rendered* item
+            // which includes overscan items above the viewport and would point the TOC to
+            // a line the user cannot see.
             requestAnimationFrame(() =>
-              requestAnimationFrame(() => emit('scrolled', targetIndex, targetIndex)),
+              requestAnimationFrame(() => {
+                const scrollTop = scrollerEl.value?.scrollTop ?? 0
+                const items = virtualizer.value.getVirtualItems()
+                const firstVisible = items.find((v) => v.start + v.size > scrollTop) ?? items[0]
+                const firstFull = items.find((v) => v.start >= scrollTop) ?? firstVisible
+                const visibleIndex = firstVisible?.index ?? targetIndex
+                const fullIndex = firstFull?.index ?? visibleIndex
+                emit('scrolled', visibleIndex, fullIndex)
+              }),
             )
             if (props.searchHighlightLineIndex != null && scrollerEl.value) {
               nextTick(() => {

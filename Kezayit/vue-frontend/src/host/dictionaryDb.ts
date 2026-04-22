@@ -12,6 +12,7 @@ import {
   SQL_DICT_EXACT, SQL_DICT_PREFIX, SQL_DICT_CONTAINS, SQL_DICT_EXACT_IN_WORD,
   SQL_DICT_LINKS, SQL_DICT_SYNONYMS, SQL_DICT_VARIANTS,
   SQL_DICT_SPELL_CANDIDATES_FRAG2, SQL_DICT_SPELL_CANDIDATES_FRAG3,
+  buildKetivExistsQuery,
 } from './dictionaryDb.sql'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -104,6 +105,19 @@ export async function dictSpellCandidates(term: string): Promise<string[]> {
 export async function abbrevLookup(term: string): Promise<SenseRow[]> {
   const { dictRows } = await combinedLookup(term)
   return dictRows
+}
+
+/**
+ * Given a list of candidate headwords (כתיב מלא expansions), returns only those
+ * that actually exist in the word table. Single IN query — no sense data fetched.
+ */
+export async function dictKetivVariants(candidates: string[]): Promise<string[]> {
+  if (candidates.length === 0) return []
+  const rows = await queryDict<{ headword: string }>(
+    buildKetivExistsQuery(candidates.length),
+    candidates,
+  )
+  return rows.map(r => r.headword)
 }
 
 // ── Combined lookup ───────────────────────────────────────────────────────────

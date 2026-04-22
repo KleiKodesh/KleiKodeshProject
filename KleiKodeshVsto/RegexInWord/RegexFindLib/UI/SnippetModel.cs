@@ -22,9 +22,10 @@ namespace RegexFindLib.UI
 
         // Collapse any run of whitespace that contains at least one newline
         // (paragraph marks, line breaks, tabs, etc.) into a single space.
+        // Do NOT Trim() — that would eat the space adjacent to the highlighted match.
         static string Normalize(string text) =>
             string.IsNullOrEmpty(text)
                 ? ""
-                : Regex.Replace(text, @"[ \t]*[\r\n\v\f]+[ \t]*", " ").Trim();
+                : Regex.Replace(text, @"[ \t]*[\r\n\v\f]+[ \t]*", " ");
     }
 }

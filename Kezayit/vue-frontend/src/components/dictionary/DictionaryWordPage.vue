@@ -150,6 +150,8 @@ const allRelated = computed(() => [
   ...props.data.synonyms,
   ...allLinks.value,
   ...props.data.variants,
+  ...(props.data.ketivSuggestions ?? []),
+  ...(props.data.levenshteinSuggestions ?? []),
 ])
 </script>
 
