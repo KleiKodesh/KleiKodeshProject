@@ -127,7 +127,7 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\BloomSearchEngineLib\BloomSearchEngineLib.csproj">
+    <ProjectReference Include="..\BloomSearchEngine\BloomSearchEngineLib\BloomSearchEngineLib.csproj">
       <Project>{0f7c9226-2c18-4cb8-8f39-a3a539b7122a}</Project>
       <Name>BloomSearchEngineLib</Name>
     </ProjectReference>

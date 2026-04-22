@@ -91,7 +91,9 @@
   <ItemGroup>
     <!-- UI -->
     <Compile Include="UI\WebAddressModel.cs" />
-    <Compile Include="UI\MyWebView.cs" />
+    <Compile Include="UI\MyWebView.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Include="UI\BrowserTabControl.cs" />
     <Compile Include="UI\WebSitesView.xaml.cs">
       <DependentUpon>WebSitesView.xaml</DependentUpon>

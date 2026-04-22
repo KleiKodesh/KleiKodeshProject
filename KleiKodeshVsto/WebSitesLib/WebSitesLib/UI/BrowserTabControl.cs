@@ -17,7 +17,7 @@ namespace WebSitesLib.UI
         public event PropertyChangedEventHandler PropertyChanged;
 
         WebAddressModel _currentAddressModel;
-        bool _isTabDropDownOpen;
+        bool _isAddressDropDownOpen;
         bool _isRestoringSession;
 
         static readonly string SessionPath = Path.Combine(
@@ -29,13 +29,13 @@ namespace WebSitesLib.UI
             set => UpdateAddressModel(value);
         }
 
-        public bool IsTabDropDownOpen
+        public bool IsAddressDropDownOpen
         {
-            get => _isTabDropDownOpen;
+            get => _isAddressDropDownOpen;
             set
             {
-                _isTabDropDownOpen = value;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsTabDropDownOpen)));
+                _isAddressDropDownOpen = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsAddressDropDownOpen)));
             }
         }
 
@@ -100,6 +100,12 @@ namespace WebSitesLib.UI
             SelectedItem = tab;
         });
 
+        public RelayCommand NavigateToTabCommand(BrowserTab tab) => new RelayCommand(() =>
+        {
+            if (tab == null) return;
+            SelectedItem = tab;
+        });
+
         #endregion
 
         public BrowserTabControl()
@@ -149,8 +155,10 @@ namespace WebSitesLib.UI
             var models = session.Urls
                 .Select(url =>
                 {
-                    var match = VisibleAddressModels.FirstOrDefault(m => m.Url == url);
-                    return match ?? new WebAddressModel { Url = url, Name = url, IsVisible = true };
+                    var match = VisibleAddressModels
+                        .FirstOrDefault(m => url.StartsWith(m.Url, StringComparison.OrdinalIgnoreCase));
+                    return (model: match ?? new WebAddressModel { Url = url, Name = url, IsVisible = true },
+                            actualUrl: url);
                 })
                 .ToList();
 
@@ -164,11 +172,11 @@ namespace WebSitesLib.UI
             catch { return null; }
         }
 
-        void RestoreTabs(List<WebAddressModel> models, int selectedIndex)
+        void RestoreTabs(List<(WebAddressModel model, string actualUrl)> entries, int selectedIndex)
         {
             _isRestoringSession = true;
-            foreach (var model in models)
-                TabsCollection.Add(new BrowserTab(model, this));
+            foreach (var (model, actualUrl) in entries)
+                TabsCollection.Add(new BrowserTab(model, actualUrl, this));
             _isRestoringSession = false;
 
             int idx = (selectedIndex >= 0 && selectedIndex < TabsCollection.Count) ? selectedIndex : 0;
@@ -220,10 +228,19 @@ namespace WebSitesLib.UI
             UpdateAddressModel(first, true);
         }
 
-        void RemoveTab(BrowserTab tab)
+        internal void RemoveTab(BrowserTab tab)
         {
+            int index = TabsCollection.IndexOf(tab);
             TabsCollection.Remove(tab);
-            if (TabsCollection.Count == 0) AddTab();
+            if (TabsCollection.Count == 0)
+            {
+                AddTab();
+            }
+            else
+            {
+                int selectIndex = Math.Min(index, TabsCollection.Count - 1);
+                SelectedItem = TabsCollection[selectIndex];
+            }
         }
 
         #endregion
@@ -233,8 +250,29 @@ namespace WebSitesLib.UI
             if (!force && (newModel == _currentAddressModel || newModel == null)) return;
             _currentAddressModel = newModel;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CurrentAddressModel)));
-            if (CurrentTab != null && (force || IsTabDropDownOpen))
+            if (CurrentTab != null && (force || IsAddressDropDownOpen))
                 CurrentTab.AddressModel = newModel;
+        }
+
+        internal void OnTabNavigationCompleted(BrowserTab tab)
+        {
+            SaveSession();
+
+            // Only update the combobox if this is the currently visible tab
+            if (tab != CurrentTab) return;
+
+            // Find the whitelist entry whose Url is a prefix of the actual navigated URL
+            var actualUrl = tab.CurrentUrl;
+            if (string.IsNullOrEmpty(actualUrl)) return;
+
+            var match = VisibleAddressModels
+                .FirstOrDefault(m => actualUrl.StartsWith(m.Url, StringComparison.OrdinalIgnoreCase));
+
+            if (match != null && match != _currentAddressModel)
+            {
+                _currentAddressModel = match;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CurrentAddressModel)));
+            }
         }
     }
 
@@ -243,6 +281,7 @@ namespace WebSitesLib.UI
         public event PropertyChangedEventHandler PropertyChanged;
 
         WebAddressModel _addressModel;
+        string _navigateUrl;
         bool _isLoaded;
 
         public WebAddressModel AddressModel
@@ -252,7 +291,8 @@ namespace WebSitesLib.UI
             {
                 if (value == null) return;
                 _addressModel = value;
-                if (_isLoaded) NavigateTo(value.Url);
+                _navigateUrl = value.Url;
+                if (_isLoaded) NavigateTo(_navigateUrl);
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(AddressModel)));
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Title)));
             }
@@ -263,17 +303,28 @@ namespace WebSitesLib.UI
 
         public RelayCommand CloseTabCommand { get; }
         public RelayCommand MoveToFrontCommand { get; }
+        public RelayCommand NavigateToTabCommand { get; }
         public MyWebView WebView { get; }
 
         readonly WindowsFormsHost _host;
 
         public BrowserTab(WebAddressModel model, BrowserTabControl owner)
+            : this(model, null, owner) { }
+
+        public BrowserTab(WebAddressModel model, string actualUrl, BrowserTabControl owner)
         {
-            CloseTabCommand    = new RelayCommand(() => owner.TabsCollection.Remove(this));
-            MoveToFrontCommand = owner.MoveToFrontCommand(this);
+            CloseTabCommand      = new RelayCommand(() => owner.RemoveTab(this));
+            MoveToFrontCommand   = owner.MoveToFrontCommand(this);
+            NavigateToTabCommand = owner.NavigateToTabCommand(this);
+
+            _navigateUrl = actualUrl ?? model.Url;
 
             WebView = new MyWebView();
-            WebView.NavigationCompleted += (s, e) => CurrentUrl = WebView.Source?.ToString();
+            WebView.NavigationCompleted += (s, e) =>
+            {
+                CurrentUrl = WebView.Source?.ToString();
+                owner.OnTabNavigationCompleted(this);
+            };
 
             _host = new WindowsFormsHost { Child = WebView };
             Content = _host;
@@ -291,7 +342,7 @@ namespace WebSitesLib.UI
             if (!(bool)e.NewValue) return;
             _host.IsVisibleChanged -= OnHostVisibleChanged;
             _isLoaded = true;
-            NavigateTo(_addressModel.Url);
+            NavigateTo(_navigateUrl);
         }
 
         void NavigateTo(string url)

@@ -34,60 +34,50 @@
                         <CheckBox Style="{StaticResource FormatToggle}"
                                   ToolTip="מודגש"
                                   IsChecked="{Binding Bold, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
-                            <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
-                                <Canvas Width="24" Height="24">
-                                    <Path Data="{StaticResource Icon.Bold}"
-                                          Fill="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
-                                </Canvas>
-                            </Viewbox>
+                            <Path Data="{StaticResource Icon.Bold}"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"
+                                  Stretch="Uniform" FlowDirection="LeftToRight"
+                                  Width="16" Height="16"/>
                         </CheckBox>
 
                         <!-- I — Italic -->
                         <CheckBox Style="{StaticResource FormatToggle}"
                                   ToolTip="נטוי"
                                   IsChecked="{Binding Italic, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
-                            <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
-                                <Canvas Width="24" Height="24">
-                                    <Path Data="{StaticResource Icon.Italic}"
-                                          Fill="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
-                                </Canvas>
-                            </Viewbox>
+                            <Path Data="{StaticResource Icon.Italic}"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"
+                                  Stretch="Uniform" FlowDirection="LeftToRight"
+                                  Width="16" Height="16"/>
                         </CheckBox>
 
                         <!-- U — Underline -->
                         <CheckBox Style="{StaticResource FormatToggle}"
                                   ToolTip="קו תחתון"
                                   IsChecked="{Binding Underline, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
-                            <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
-                                <Canvas Width="24" Height="24">
-                                    <Path Data="{StaticResource Icon.Underline}"
-                                          Fill="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
-                                </Canvas>
-                            </Viewbox>
+                            <Path Data="{StaticResource Icon.Underline}"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"
+                                  Stretch="Uniform" FlowDirection="LeftToRight"
+                                  Width="16" Height="16"/>
                         </CheckBox>
 
                         <!-- x² — Superscript -->
                         <CheckBox Style="{StaticResource FormatToggle}"
                                   ToolTip="כתב עילי"
                                   IsChecked="{Binding Superscript, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
-                            <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
-                                <Canvas Width="24" Height="24">
-                                    <Path Data="{StaticResource Icon.Superscript}"
-                                          Fill="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
-                                </Canvas>
-                            </Viewbox>
+                            <Path Data="{StaticResource Icon.Superscript}"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"
+                                  Stretch="Uniform" FlowDirection="LeftToRight"
+                                  Width="16" Height="16"/>
                         </CheckBox>
 
                         <!-- x₂ — Subscript -->
                         <CheckBox Style="{StaticResource FormatToggle}"
                                   ToolTip="כתב תחתי"
                                   IsChecked="{Binding Subscript, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
-                            <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
-                                <Canvas Width="24" Height="24">
-                                    <Path Data="{StaticResource Icon.Subscript}"
-                                          Fill="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
-                                </Canvas>
-                            </Viewbox>
+                            <Path Data="{StaticResource Icon.Subscript}"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"
+                                  Stretch="Uniform" FlowDirection="LeftToRight"
+                                  Width="16" Height="16"/>
                         </CheckBox>
 
                         <!-- A — Color picker -->
@@ -100,24 +90,20 @@
                         <Button Style="{StaticResource FormatButton}"
                                 Command="{TemplateBinding ClearCommand}"
                                 ToolTip="נקה הגדרות עיצוב">
-                            <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
-                                <Canvas Width="24" Height="24">
-                                    <Path Data="{StaticResource Icon.Eraser}"
-                                          Fill="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
-                                </Canvas>
-                            </Viewbox>
+                            <Path Data="{StaticResource Icon.Eraser}"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"
+                                  Stretch="Uniform" FlowDirection="LeftToRight"
+                                  Width="16" Height="16"/>
                         </Button>
 
                         <!-- Pencil — Copy formatting from selection -->
                         <Button Style="{StaticResource FormatButton}"
                                 Command="{TemplateBinding CopyCommand}"
                                 ToolTip="שאב הגדרות עיצוב">
-                            <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
-                                <Canvas Width="24" Height="24">
-                                    <Path Data="{StaticResource Icon.Eyedropper}"
-                                          Fill="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
-                                </Canvas>
-                            </Viewbox>
+                            <Path Data="{StaticResource Icon.Eyedropper}"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"
+                                  Stretch="Uniform" FlowDirection="LeftToRight"
+                                  Width="16" Height="16"/>
                         </Button>
 
                     </local:SpaceBetweenPanel>

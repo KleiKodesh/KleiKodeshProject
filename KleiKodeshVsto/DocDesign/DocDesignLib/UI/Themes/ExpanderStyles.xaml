@@ -16,17 +16,13 @@
                     <ColumnDefinition Width="Auto"/>  <!-- chevron — visual LEFT -->
                     <ColumnDefinition Width="*"/>     <!-- text    — visual RIGHT -->
                 </Grid.ColumnDefinitions>
-                <Viewbox Grid.Column="0"
-                         Width="12" Height="12"
-                         Margin="0,0,6,0"
-                         FlowDirection="LeftToRight"
-                         VerticalAlignment="Center">
-                    <Canvas Width="24" Height="24">
-                        <Path x:Name="Chevron"
-                              Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                              Data="M15.41,16.58L10.83,12L15.41,7.41L14,6L8,12L14,18L15.41,16.58Z"/>
-                    </Canvas>
-                </Viewbox>
+                <Path x:Name="Chevron"
+                      Grid.Column="0"
+                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                      Data="M15.41,16.58L10.83,12L15.41,7.41L14,6L8,12L14,18L15.41,16.58Z"
+                      Stretch="Uniform" FlowDirection="LeftToRight"
+                      Width="12" Height="12" Margin="0,0,6,0"
+                      VerticalAlignment="Center"/>
                 <TextBlock Grid.Column="1"
                            Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}"
                            FontSize="{TemplateBinding FontSize}"
@@ -41,6 +37,9 @@
             <Trigger Property="IsChecked" Value="True">
                 <Setter TargetName="Chevron" Property="Data"
                         Value="M7.41,8.58L12,13.17L16.59,8.58L18,10L12,16L6,10L7.41,8.58Z"/>
+            </Trigger>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Chevron" Property="Fill" Value="#0078D4"/>
             </Trigger>
         </ControlTemplate.Triggers>
     </ControlTemplate>
@@ -94,9 +93,6 @@
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsExpanded" Value="True">
                             <Setter TargetName="ExpandSite" Property="Visibility" Value="Visible"/>
-                        </Trigger>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="HeaderBd" Property="Background" Value="#1A808080"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

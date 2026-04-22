@@ -1,0 +1,70 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        All geometries on a 20×20 viewBox.
+        Usage in view:
+            <Viewbox FlowDirection="LeftToRight">
+                <Canvas Width="20" Height="20">
+                    <Path Fill="..." Data="{StaticResource Icon.Xxx}"/>
+                </Canvas>
+            </Viewbox>
+        The Viewbox has no explicit size — it fills the button's padded content area.
+        Button size + Padding controls the rendered icon size uniformly.
+    -->
+
+    <!-- Paragraphs — first word style (indent increase, 20×20) -->
+    <StreamGeometry x:Key="Icon.FirstWordStyle">
+        M15 5a.5.5 0 000 1h1.5a.5.5 0 000-1z
+        M3.5 5a.5.5 0 000 1h9.5a.5.5 0 000-1z
+        m0 3a.5.5 0 000 1h13a.5.5 0 000-1z
+        M3 11.5a.5.5 0 01.5-.5h13a.5.5 0 010 1h-13a.5.5 0 01-.5-.5
+        m.5 2.5a.5.5 0 000 1h13a.5.5 0 000-1z
+    </StreamGeometry>
+
+    <!-- Paragraphs — hanging indent (justify low, 20×20) -->
+    <StreamGeometry x:Key="Icon.Hanging">
+        M3 5a.5.5 0 000 1h13a.5.5 0 000-1z
+        m0 3a.5.5 0 000 1h10a.5.5 0 000-1z
+        M3 11a.5.5 0 000 1h13a.5.5 0 000-1z
+        m0 3a.5.5 0 000 1h13a.5.5 0 000-1z
+    </StreamGeometry>
+
+    <!-- Paragraphs — double hanging indent (20×20) -->
+    <StreamGeometry x:Key="Icon.DoubleHanging">
+        M3 5a.5.5 0 000 1h13a.5.5 0 000-1z
+        m0 3a.5.5 0 000 1h10a.5.5 0 000-1z
+        M3 11a.5.5 0 000 1h10a.5.5 0 000-1z
+        m0 3a.5.5 0 000 1h13a.5.5 0 000-1z
+    </StreamGeometry>
+
+    <!-- Paragraphs — center last line (20×20) -->
+    <StreamGeometry x:Key="Icon.CenterLastLine">
+        M3 5a.5.5 0 000 1h13a.5.5 0 000-1z
+        m0 3a.5.5 0 000 1h13a.5.5 0 000-1z
+        M3 11a.5.5 0 000 1h13a.5.5 0 000-1z
+        m3 3a.5.5 0 000 1h7a.5.5 0 000-1z
+    </StreamGeometry>
+
+    <!-- Columns — two-column align (20×20) -->
+    <StreamGeometry x:Key="Icon.AlignColumns">
+        M17 5.5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h5a.5.5 0 0 0 .5-.5
+        m-8 0a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h5a.5.5 0 0 0 .5-.5
+        m8 3a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h5a.5.5 0 0 0 .5-.5
+        m-8 0a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h5a.5.5 0 0 0 .5-.5
+        m8 3a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h5a.5.5 0 0 0 .5-.5
+        m-8 0a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h5a.5.5 0 0 0 .5-.5
+        m8 3a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h5a.5.5 0 0 0 .5-.5
+        m-8 0a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h5a.5.5 0 0 0 .5-.5
+    </StreamGeometry>
+
+    <!-- Columns — settings/dialog (20×20, scaled from 24×24 Fluent) -->
+    <StreamGeometry x:Key="Icon.ColumnsSettings">
+        M6.5 6a.5.5 0 0 0 0 1h7a.5.5 0 0 0 0-1zM6 9.5a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1h-4a.5.5 0 0 1-.5-.5m.5 2.5a.5.5 0 0 0 0 1h2.707q.149-.524.393-1zm-1 4h3.707q.149.524.393 1H5.5A2.5 2.5 0 0 1 3 14.5v-9A2.5 2.5 0 0 1 5.5 3h9A2.5 2.5 0 0 1 17 5.5v4.1a5.5 5.5 0 0 0-1-.393V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16m6.565-4.558a2 2 0 0 1-1.43 2.478l-.461.118a4.7 4.7 0 0 0 .01 1.016l.35.083a2 2 0 0 1 1.455 2.519l-.126.423q.387.306.835.517l.325-.344a2 2 0 0 1 2.909.002l.337.358q.44-.203.822-.498l-.156-.556a2 2 0 0 1 1.43-2.478l.461-.118a4.7 4.7 0 0 0-.01-1.017l-.349-.082a2 2 0 0 1-1.456-2.52l.126-.421a4.3 4.3 0 0 0-.835-.519l-.324.344a2 2 0 0 1-2.91-.001l-.337-.358a4.3 4.3 0 0 0-.822.497zM14.5 15.5a1 1 0 1 1 0-2a1 1 0 0 1 0 2
+    </StreamGeometry>
+
+    <!-- Columns — search/find (20×20) -->
+    <StreamGeometry x:Key="Icon.ColumnsSearch">
+        M5.75 3h8.5A2.75 2.75 0 0 1 17 5.75v8.5A2.75 2.75 0 0 1 14.25 17h-4.129l-1-1h5.129A1.75 1.75 0 0 0 16 14.25v-8.5A1.75 1.75 0 0 0 14.25 4h-8.5A1.75 1.75 0 0 0 4 5.75v3.277a4.5 4.5 0 0 0-1 .23V5.75A2.75 2.75 0 0 1 5.75 3M9.5 14a.5.5 0 0 1 0-1h4a.5.5 0 0 1 0 1zm-2-6.75a.75.75 0 1 1-1.5 0a.75.75 0 0 1 1.5 0m2-.25a.5.5 0 0 0 0 1h4a.5.5 0 0 0 0-1zm0 3a.5.5 0 0 0 0 1h4a.5.5 0 0 0 0-1zm-5 7c.786 0 1.512-.26 2.096-.697l2.55 2.55a.5.5 0 1 0 .708-.707l-2.55-2.55A3.5 3.5 0 1 0 4.5 17m0-1a2.5 2.5 0 1 1 0-5a2.5 2.5 0 0 1 0 5
+    </StreamGeometry>
+
+</ResourceDictionary>

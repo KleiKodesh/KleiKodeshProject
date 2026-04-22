@@ -3,8 +3,10 @@
     <!--
         Fluent UI icon geometries from @iconify-prerendered/vue-fluent (24×24 viewBox).
         Usage:
-            <Path Fill="#666666" Data="{StaticResource Icon.Search}"/>
-        inside a <Canvas Width="24" Height="24"/> inside a <Viewbox Width="16" Height="16"/>.
+            <Path Data="{StaticResource Icon.Search}"
+                  Fill="..." Stretch="Uniform" FlowDirection="LeftToRight"
+                  Width="16" Height="16"/>
+        No Viewbox or Canvas wrapper needed — Stretch="Uniform" handles scaling.
     -->
 
     <!-- Search -->

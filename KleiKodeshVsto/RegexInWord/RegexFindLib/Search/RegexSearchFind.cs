@@ -22,12 +22,16 @@ namespace RegexFindLib.Search
             var list = new List<SearchResult>();
             foreach (var match in matches)
             {
-                Range matchRange = Document.Range(
+                // Build match range within the same story as searchRange.
+                // Document.Range() always uses the main story — use Duplicate + SetRange instead
+                // so footnote/endnote story ranges are preserved correctly.
+                Range matchRange = searchRange.Duplicate;
+                matchRange.SetRange(
                     startPos + match.Index,
                     startPos + match.Index + match.Length);
 
                 if (MatchedConditions(match, find, matchRange))
-                    list.Add(BuildResult(matchRange));
+                    list.Add(BuildResult(matchRange, searchRange));
             }
 
             return list.ToArray();
@@ -93,23 +97,24 @@ namespace RegexFindLib.Search
 
         /// <summary>
         /// Builds a SearchResult with plain context text (no HTML).
-        /// The ViewModel's SnippetBuilder wraps the match in markup for display.
+        /// storyRange is used to clamp context expansion to the same story (footnote, endnote, etc.)
         /// </summary>
-        SearchResult BuildResult(Range matchRange)
+        SearchResult BuildResult(Range matchRange, Range storyRange)
         {
             var dup = matchRange.Duplicate;
             int start = dup.Start;
             int end = dup.End;
             string matchText = dup.Text ?? "";
 
-            // Context before
-            dup.End = start;
-            dup.MoveStart(WdUnits.wdCharacter, -SnippetLength);
+            int storyStart = storyRange.Start;
+            int storyEnd   = storyRange.End;
+
+            // Context before — clamp to story start
+            dup.SetRange(Math.Max(start - SnippetLength, storyStart), start);
             string before = dup.Text ?? "";
 
-            // Context after
-            dup.SetRange(end, end);
-            dup.MoveEnd(WdUnits.wdCharacter, SnippetLength);
+            // Context after — clamp to story end
+            dup.SetRange(end, Math.Min(end + SnippetLength, storyEnd));
             string after = dup.Text ?? "";
 
             return new SearchResult

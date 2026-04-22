@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace RegexFindLib.UI
 {
     /// <summary>
@@ -13,9 +15,16 @@ namespace RegexFindLib.UI
 
         public SnippetModel(string before, string match, string after)
         {
-            Before = before ?? "";
-            Match = match ?? "";
-            After = after ?? "";
+            Before = Normalize(before);
+            Match  = Normalize(match);
+            After  = Normalize(after);
         }
+
+        // Collapse any run of whitespace that contains at least one newline
+        // (paragraph marks, line breaks, tabs, etc.) into a single space.
+        static string Normalize(string text) =>
+            string.IsNullOrEmpty(text)
+                ? ""
+                : Regex.Replace(text, @"[ \t]*[\r\n\v\f]+[ \t]*", " ").Trim();
     }
 }

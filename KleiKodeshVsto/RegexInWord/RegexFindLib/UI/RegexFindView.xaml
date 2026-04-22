@@ -113,12 +113,10 @@
                               Height="Auto" Width="Auto" Padding="8,4"
                               ToolTip="החלפה">
                     <StackPanel Orientation="Horizontal">
-                        <Viewbox Width="14" Height="14" FlowDirection="LeftToRight" Margin="0,0,4,0">
-                            <Canvas Width="24" Height="24">
-                                <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                                      Data="{StaticResource Icon.ReplaceAll}"/>
-                            </Canvas>
-                        </Viewbox>
+                        <Path Data="{StaticResource Icon.ReplaceAll}"
+                              Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                              Stretch="Uniform" FlowDirection="LeftToRight"
+                              Width="14" Height="14" Margin="0,0,4,0"/>
                         <TextBlock Text="החלפה" VerticalAlignment="Center"/>
                     </StackPanel>
                 </ToggleButton>
@@ -127,12 +125,10 @@
                               Style="{StaticResource IconToggle}"
                               IsChecked="{Binding ShowRegexPalette}"
                               ToolTip="לוח תווי רג'קס">
-                    <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
-                        <Canvas Width="24" Height="24">
-                            <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                                  Data="{StaticResource Icon.Sparkle}"/>
-                        </Canvas>
-                    </Viewbox>
+                    <Path Data="{StaticResource Icon.Sparkle}"
+                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                          Stretch="Uniform" FlowDirection="LeftToRight"
+                          Width="16" Height="16"/>
                 </ToggleButton>
 
                 <!-- RIGHT side (RTL: Dock=Left) — mode select + מרחק -->
@@ -147,14 +143,14 @@
                               ToolTip="כיוון החיפוש"/>
                     <StackPanel Orientation="Horizontal"
                                 Visibility="{Binding ShowReplace, Converter={StaticResource InvBoolToVis}}">
-                        <TextBlock Text="מרחק:" VerticalAlignment="Center"
+                        <!--<TextBlock Text="מרחק:" VerticalAlignment="Center"
                                    FontSize="12" Margin="5,0,3,0"
                                    Foreground="{StaticResource TextSecBrush}"/>
                         <controls:UpDownTextBox
                                  xmlns:controls="clr-namespace:WpfLib.Controls;assembly=WpfLib"
                                  Value="{Binding Slop, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  Step="1" Width="38" Height="24" FontSize="12"
-                                 ToolTip="מרחק בין מילים (מקשי ↑↓)"/>
+                                 ToolTip="מרחק בין מילים (מקשי ↑↓)"/>-->
                     </StackPanel>
                 </StackPanel>
 
@@ -174,24 +170,20 @@
                             Style="{StaticResource InputIconButton}"
                             Command="{Binding SearchCommand}"
                             ToolTip="חיפוש">
-                        <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
-                            <Canvas Width="24" Height="24">
-                                <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                      Data="{StaticResource Icon.Search}"/>
-                            </Canvas>
-                        </Viewbox>
+                        <Path Data="{StaticResource Icon.Search}"
+                              Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              Stretch="Uniform" FlowDirection="LeftToRight"
+                              Width="16" Height="16"/>
                     </Button>
                     <!-- .* regex toggle — LEFT side of the input (HTML: left of text) -->
                     <ToggleButton DockPanel.Dock="Left"
                                   Style="{StaticResource InputIconToggle}"
                                   IsChecked="{Binding UseRegex}"
                                   ToolTip="השתמש בביטויים רגולריים">
-                        <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
-                            <Canvas Width="24" Height="24">
-                                <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                      Data="{StaticResource Icon.Regex}"/>
-                            </Canvas>
-                        </Viewbox>
+                        <Path Data="{StaticResource Icon.Regex}"
+                              Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              Stretch="Uniform" FlowDirection="LeftToRight"
+                              Width="16" Height="16"/>
                     </ToggleButton>
                     <!-- history dropdown button — must be docked BEFORE the fill TextBox -->
                     <Button DockPanel.Dock="Right"
@@ -313,24 +305,20 @@
                                 Style="{StaticResource InputIconButton}"
                                 Command="{Binding ReplaceCommand}"
                                 ToolTip="החלף">
-                            <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
-                                <Canvas Width="24" Height="24">
-                                    <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                          Data="{StaticResource Icon.Replace}"/>
-                                </Canvas>
-                            </Viewbox>
+                            <Path Data="{StaticResource Icon.Replace}"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                  Stretch="Uniform" FlowDirection="LeftToRight"
+                                  Width="16" Height="16"/>
                         </Button>
                         <!-- replace-all icon -->
                         <Button DockPanel.Dock="Left"
                                 Style="{StaticResource InputIconButton}"
                                 Command="{Binding ReplaceAllCommand}"
                                 ToolTip="החלף הכל">
-                            <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
-                                <Canvas Width="24" Height="24">
-                                    <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                          Data="{StaticResource Icon.ReplaceAll}"/>
-                                </Canvas>
-                            </Viewbox>
+                            <Path Data="{StaticResource Icon.ReplaceAll}"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                  Stretch="Uniform" FlowDirection="LeftToRight"
+                                  Width="16" Height="16"/>
                         </Button>
                         <!-- history dropdown button — must be docked BEFORE the fill TextBox -->
                         <Button DockPanel.Dock="Right"

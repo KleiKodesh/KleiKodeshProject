@@ -25,12 +25,6 @@
         <local:DocDesignViewModel/>
     </UserControl.DataContext>
 
-    <!--
-        Icon source: @iconify-prerendered/vue-fluent (Fluent UI 20px Regular)
-        All icons use Canvas Width="24" Height="24" to match the 20×20 viewBox.
-        Fill bound to UserControl.Foreground for theme awareness.
-    -->
-
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel>
 
@@ -41,167 +35,170 @@
                 <StackPanel Margin="10,4,10,4">
 
                     <!-- Apply buttons -->
-                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0" VerticalAlignment="Center">
-
-                        <!-- TextIndentIncrease20Regular — first word style (indent increase) -->
+                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
                         <Button ToolTip="סגנון מילה ראשונה"
                                 Command="{Binding ParagraphsViewModel.ApplyFirstWordStyleCommand}">
-                            <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
-                                <Canvas
-                                    Width="20" Height="20">
-                                    <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                          Data="M15 5a.5.5 0 000 1h1.5a.5.5 0 000-1zM3.5 5a.5.5 0 000 1h9.5a.5.5 0 000-1zm0 3a.5.5 0 000 1h13a.5.5 0 000-1zM3 11.5a.5.5 0 01.5-.5h13a.5.5 0 010 1h-13a.5.5 0 01-.5-.5m.5 2.5a.5.5 0 000 1h13a.5.5 0 000-1z"/>
-                                </Canvas>
-                            </Viewbox>
+                            <Path Data="{StaticResource Icon.FirstWordStyle}"/>
                         </Button>
-
-                        <!-- TextAlignJustifyLow20Regular — hanging indent (justify with low last line) -->
                         <Button ToolTip="עיצוב חלון"
                                 Command="{Binding ParagraphsViewModel.ApplyFirstWordHangingCommand}">
-                            <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
-                                 $args[0] -replace 'Width="24" Height="24"', 'Width="20" Height="20"' a.5.5 0 000 1h13a.5.5 0 000-1zm0 3a.5.5 0 000 1h10a.5.5 0 000-1zM3 11a.5.5 0 000 1h13a.5.5 0 000-1zm0 3a.5.5 0 000 1h13a.5.5 0 000-1z"/>
-                                </Canvas>
-                            </Viewbox>
+                            <Path Data="{StaticResource Icon.Hanging}"/>
                         </Button>
-
-                        <!-- TextAlignDistributed20Regular — double hanging (distributed) -->
                         <Button ToolTip="עיצוב חלון כפול"
                                 Command="{Binding ParagraphsViewModel.ApplyDoubleFirstWordHangingCommand}">
-                            <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
-                                 $args[0] -replace 'Width="24" Height="24"', 'Width="20" Height="20"' a.5.5 0 000 1h13a.5.5 0 000-1zm0 3a.5.5 0 000 1h10a.5.5 0 000-1zM3 11a.5.5 0 000 1h10a.5.5 0 000-1zm0 3a.5.5 0 000 1h13a.5.5 0 000-1z"/>
-                                </Canvas>
-                            </Viewbox>
+                            <Path Data="{StaticResource Icon.DoubleHanging}"/>
                         </Button>
-
-                        <!-- TextAlignCenter20Regular — center last line -->
                         <Button ToolTip="מירכוז שורה אחרונה"
                                 Command="{Binding ParagraphsViewModel.ApplyCenterLastLineCommand}">
-                            <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
-                                 $args[0] -replace 'Width="24" Height="24"', 'Width="20" Height="20"' a.5.5 0 000 1h13a.5.5 0 000-1zm0 3a.5.5 0 000 1h13a.5.5 0 000-1zM3 11a.5.5 0 000 1h13a.5.5 0 000-1zm3 3a.5.5 0 000 1h7a.5.5 0 000-1z"/>
-                                </Canvas>
-                            </Viewbox>
+                            <Path Data="{StaticResource Icon.CenterLastLine}"/>
                         </Button>
                     </StackPanel>
 
-                    <!-- Remove buttons -->
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4" VerticalAlignment="Center">
-
-                        <!-- Remove first word style -->
+                    <!-- Remove buttons — same icon at 45% opacity + red diagonal overlay -->
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                         <Button ToolTip="הסר סגנון מילה ראשונה"
                                 Command="{Binding ParagraphsViewModel.RemoveFirstWordStyleCommand}">
-                            <Grid Width="16" Height="16">
-                                <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
-                                     $args[0] -replace 'Width="24" Height="24"', 'Width="20" Height="20"' a.5.5 0 000 1h1.5a.5.5 0 000-1zM3.5 5a.5.5 0 000 1h9.5a.5.5 0 000-1zm0 3a.5.5 0 000 1h13a.5.5 0 000-1zM3 11.5a.5.5 0 01.5-.5h13a.5.5 0 010 1h-13a.5.5 0 01-.5-.5m.5 2.5a.5.5 0 000 1h13a.5.5 0 000-1z"/>
-                                    </Canvas>
-                                </Viewbox>
-                                <!-- Red tint + diagonal line overlay -->
+                            <Grid>
+                                <Path Data="{StaticResource Icon.FirstWordStyle}" Opacity="0.45"/>
                                 <Border CornerRadius="2" Background="#18DC3545" IsHitTestVisible="False"/>
-                                <Canvas IsHitTestVisible="False">
-                                    <Line X1="2" Y1="2" X2="14" Y2="14"
-                                          Stroke="#DC3545" StrokeThickness="1.5"
-                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                </Canvas>
+                                <Line X1="0" Y1="0" X2="1" Y2="1"
+                                      Stretch="Fill"
+                                      Stroke="#DC3545" StrokeThickness="1.5"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                      IsHitTestVisible="False"/>
                             </Grid>
                         </Button>
-
-                        <!-- Remove hanging -->
                         <Button ToolTip="הסר עיצוב חלון"
                                 Command="{Binding ParagraphsViewModel.RemoveFirstWordHangingCommand}">
-                            <Grid Width="16" Height="16">
-                                <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
-                                     $args[0] -replace 'Width="24" Height="24"', 'Width="20" Height="20"' a.5.5 0 000 1h13a.5.5 0 000-1zm0 3a.5.5 0 000 1h10a.5.5 0 000-1zM3 11a.5.5 0 000 1h13a.5.5 0 000-1zm0 3a.5.5 0 000 1h13a.5.5 0 000-1z"/>
-                                    </Canvas>
-                                </Viewbox>
+                            <Grid>
+                                <Path Data="{StaticResource Icon.Hanging}" Opacity="0.45"/>
                                 <Border CornerRadius="2" Background="#18DC3545" IsHitTestVisible="False"/>
-                                <Canvas IsHitTestVisible="False">
-                                    <Line X1="2" Y1="2" X2="14" Y2="14"
-                                          Stroke="#DC3545" StrokeThickness="1.5"
-                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                </Canvas>
+                                <Line X1="0" Y1="0" X2="1" Y2="1"
+                                      Stretch="Fill"
+                                      Stroke="#DC3545" StrokeThickness="1.5"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                      IsHitTestVisible="False"/>
                             </Grid>
                         </Button>
-
-                        <!-- Remove center last line -->
                         <Button ToolTip="הסר מירכוז שורה אחרונה"
                                 Command="{Binding ParagraphsViewModel.RemoveCenterLastLineCommand}">
-                            <Grid Width="16" Height="16">
-                                <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
-                                     $args[0] -replace 'Width="24" Height="24"', 'Width="20" Height="20"' a.5.5 0 000 1h13a.5.5 0 000-1zm0 3a.5.5 0 000 1h13a.5.5 0 000-1zM3 11a.5.5 0 000 1h13a.5.5 0 000-1zm3 3a.5.5 0 000 1h7a.5.5 0 000-1z"/>
-                                    </Canvas>
-                                </Viewbox>
+                            <Grid>
+                                <Path Data="{StaticResource Icon.CenterLastLine}" Opacity="0.45"/>
                                 <Border CornerRadius="2" Background="#18DC3545" IsHitTestVisible="False"/>
-                                <Canvas IsHitTestVisible="False">
-                                    <Line X1="2" Y1="2" X2="14" Y2="14"
-                                          Stroke="#DC3545" StrokeThickness="1.5"
-                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                </Canvas>
+                                <Line X1="0" Y1="0" X2="1" Y2="1"
+                                      Stretch="Fill"
+                                      Stroke="#DC3545" StrokeThickness="1.5"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                      IsHitTestVisible="False"/>
                             </Grid>
                         </Button>
                     </StackPanel>
 
                     <!-- Style picker row -->
-                    <DockPanel Margin="0,0,0,4">
-                        <ToggleButton x:Name="ChooseStylesToggle"
-                                      Style="{StaticResource CheckedToggle}"
-                                      DockPanel.Dock="Left"
-                                      Content="החל על ▾"
-                                      Padding="8,4"
-                                      FontSize="11"
-                                      IsHitTestVisible="{Binding IsOpen, ElementName=ChooseStylesPopup,
-                                          Converter={StaticResource ReverseBoolConverter}}"
-                                      IsChecked="{Binding RefreshStyles}"/>
-                        <Popup x:Name="ChooseStylesPopup"
-                               StaysOpen="False"
-                               PlacementTarget="{Binding ElementName=ChooseStylesToggle}"
-                               IsOpen="{Binding IsChecked, ElementName=ChooseStylesToggle}"
-                               AllowsTransparency="False"
-                               MaxHeight="220">
-                            <Border BorderBrush="#50808080"
-                                    BorderThickness="1"
-                                    Background="{Binding Background, RelativeSource={RelativeSource AncestorType=UserControl}}">
-                                <Grid>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="*"/>
-                                    </Grid.RowDefinitions>
-                                    <CheckBox Content="סמן הכל"
-                                              IsChecked="{Binding ParagraphsViewModel.CheckAllStyles}"
-                                              Margin="8,5"/>
-                                    <ScrollViewer Grid.Row="1"
-                                                  HorizontalScrollBarVisibility="Disabled"
-                                                  VerticalScrollBarVisibility="Auto">
-                                        <ItemsControl ItemsSource="{Binding ParagraphsViewModel.ActiveStyles}">
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate>
-                                                    <CheckBox Content="{Binding Name}"
-                                                              IsChecked="{Binding Apply}"
-                                                              Margin="8,2"/>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </ScrollViewer>
-                                </Grid>
-                            </Border>
-                        </Popup>
+                    <StackPanel Margin="0,0,0,4">
+                        <TextBlock Text="הגדרות"
+                                   Opacity="0.55"
+                                   FontSize="11"
+                                   Margin="0,6,0,2"/>
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
 
-                        <StackPanel Orientation="Horizontal"
-                                    VerticalAlignment="Center"
-                                    HorizontalAlignment="Right">
-                            <TextBlock Text="מינ׳ שורות" Margin="0,0,4,0" Opacity="0.65"/>
-                            <controls:UpDownTextBox Value="{Binding ParagraphsViewModel.MinLineCount}"
-                                                    Width="38"/>
-                        </StackPanel>
-                    </DockPanel>
+                            <ToggleButton x:Name="ChooseStylesToggle"
+                                          Grid.Column="0"
+                                          Style="{StaticResource CheckedToggle}"
+                                          Content="החל על ▾"
+                                          Height="26"
+                                          Padding="8,0"
+                                          FontSize="11"
+                                          HorizontalAlignment="Stretch"
+                                          IsHitTestVisible="{Binding IsOpen, ElementName=ChooseStylesPopup,
+                                              Converter={StaticResource ReverseBoolConverter}}"
+                                          IsChecked="{Binding RefreshStyles}"/>
+                            <Popup x:Name="ChooseStylesPopup"
+                                   StaysOpen="False"
+                                   PlacementTarget="{Binding ElementName=ChooseStylesToggle}"
+                                   IsOpen="{Binding IsChecked, ElementName=ChooseStylesToggle}"
+                                   AllowsTransparency="False"
+                                   MaxHeight="220">
+                                <Border BorderBrush="#50808080"
+                                        BorderThickness="1"
+                                        MinWidth="{Binding ActualWidth, ElementName=ChooseStylesToggle}"
+                                        Background="{Binding Background, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                    <StackPanel>
+                                        <!-- "סמן הכל" row -->
+                                        <Border x:Name="SelectAllBd" Background="Transparent" Cursor="Hand">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="Transparent"/>
+                                                    <Style.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="#0A808080"/>
+                                                        </Trigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <CheckBox Content="סמן הכל"
+                                                      IsChecked="{Binding ParagraphsViewModel.CheckAllStyles}"
+                                                      Padding="4,0"
+                                                      Margin="8,5"/>
+                                        </Border>
+                                        <Separator Background="#50808080" Margin="0,2"/>
+                                        <!-- Style items -->
+                                        <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                                      VerticalScrollBarVisibility="Auto"
+                                                      MaxHeight="180">
+                                            <ItemsControl ItemsSource="{Binding ParagraphsViewModel.ActiveStyles}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Background="Transparent" Cursor="Hand">
+                                                            <Border.Style>
+                                                                <Style TargetType="Border">
+                                                                    <Setter Property="Background" Value="Transparent"/>
+                                                                    <Style.Triggers>
+                                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                                            <Setter Property="Background" Value="#0A808080"/>
+                                                                        </Trigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Border.Style>
+                                                            <CheckBox Content="{Binding Name}"
+                                                                      IsChecked="{Binding Apply}"
+                                                                      Padding="4,0"
+                                                                      Margin="8,4"/>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </ScrollViewer>
+                                    </StackPanel>
+                                </Border>
+                            </Popup>
 
-                    <DockPanel Margin="0,0,0,2"
-                               ToolTip="בחר סגנון עבור מילה ראשונה (סגנון תו בלבד)">
-                        <TextBlock DockPanel.Dock="Right" Text="סגנון מילה ראשונה"
-                                   Opacity="0.65"/>
-                        <ComboBox VirtualizingPanel.IsVirtualizing="True"
-                                  ItemsSource="{Binding ParagraphsViewModel.FirstWordStyle.Styles}"
-                                  Text="{Binding ParagraphsViewModel.FirstWordStyle.SelectedStyle}"
-                                  IsEditable="True"/>
-                    </DockPanel>
+                            <StackPanel Grid.Column="2"
+                                        Orientation="Horizontal"
+                                        VerticalAlignment="Center"
+                                        Margin="8,0,0,0">
+                                <TextBlock Text="מינ׳ שורות" Margin="0,0,4,0" Opacity="0.65"/>
+                                <controls:UpDownTextBox Value="{Binding ParagraphsViewModel.MinLineCount}"
+                                                        Width="38" Height="26"/>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+
+                    <TextBlock Text="סגנון מילה ראשונה"
+                               Opacity="0.55"
+                               FontSize="11"
+                               Margin="0,6,0,2"
+                               ToolTip="בחר סגנון עבור מילה ראשונה (סגנון תו בלבד)"/>
+                    <ComboBox VirtualizingPanel.IsVirtualizing="True"
+                              ItemsSource="{Binding ParagraphsViewModel.FirstWordStyle.Styles}"
+                              Text="{Binding ParagraphsViewModel.FirstWordStyle.SelectedStyle}"
+                              IsEditable="True"
+                              Margin="0,0,0,2"
+                              ToolTip="בחר סגנון עבור מילה ראשונה (סגנון תו בלבד)"/>
 
                 </StackPanel>
             </Expander>
@@ -212,47 +209,32 @@
             <Expander Header="איזון טורים">
                 <StackPanel Margin="10,4,10,4">
 
-                    <StackPanel Orientation="Horizontal" Margin="0,2,0,4" VerticalAlignment="Center">
-
-                        <!-- ColumnDoubleCompare20Regular — align columns -->
+                    <StackPanel Orientation="Horizontal" Margin="0,2,0,4">
                         <Button ToolTip="יישור טורים"
                                 Command="{Binding ColumnsViewModel.AlignColumnsCommand}">
-                            <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
-                                <Canvas Width="24" Height="24">
-                                    <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                          Data="M7 3H3a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2M3 4h4a1 1 0 0 1 1 1v1H2V5a1 1 0 0 1 1-1m4 12H3a1 1 0 0 1-1-1V7h6v8a1 1 0 0 1-1 1M17 3h-4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2m-4 1h4a1 1 0 0 1 1 1v5h-6V5a1 1 0 0 1 1-1m4 12h-4a1 1 0 0 1-1-1v-2h6v2a1 1 0 0 1-1 1"/>
-                                </Canvas>
-                            </Viewbox>
+                            <Path Data="{StaticResource Icon.AlignColumns}"/>
                         </Button>
-
-                        <!-- Settings20Regular — columns dialog -->
                         <Button ToolTip="הגדרות טורים"
                                 Command="{Binding ColumnsViewModel.OpenColumnsDialogCommand}">
-                            <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
-                                <Canvas Width="24" Height="24">
-                                    <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                          Data="M1.911 7.383a8.5 8.5 0 0 1 1.78-3.08a.5.5 0 0 1 .54-.135l1.918.686a1 1 0 0 0 1.32-.762l.366-2.006a.5.5 0 0 1 .388-.4a8.5 8.5 0 0 1 3.554 0a.5.5 0 0 1 .388.4l.366 2.006a1 1 0 0 0 1.32.762l1.919-.686a.5.5 0 0 1 .54.136a8.5 8.5 0 0 1 1.78 3.079a.5.5 0 0 1-.153.535l-1.555 1.32a1 1 0 0 0 0 1.524l1.555 1.32a.5.5 0 0 1 .152.535a8.5 8.5 0 0 1-1.78 3.08a.5.5 0 0 1-.54.135l-1.918-.686a1 1 0 0 0-1.32.762l-.366 2.007a.5.5 0 0 1-.388.399a8.5 8.5 0 0 1-3.554 0a.5.5 0 0 1-.388-.4l-.366-2.006a1 1 0 0 0-1.32-.762l-1.918.686a.5.5 0 0 1-.54-.136a8.5 8.5 0 0 1-1.78-3.079a.5.5 0 0 1 .152-.535l1.555-1.32a1 1 0 0 0 0-1.524l-1.555-1.32a.5.5 0 0 1-.152-.535m1.06-.006l1.294 1.098a2 2 0 0 1 0 3.05l-1.293 1.098c.292.782.713 1.51 1.244 2.152l1.596-.57q.155-.055.315-.085a2 2 0 0 1 2.326 1.609l.304 1.669a7.6 7.6 0 0 0 2.486 0l.304-1.67a1.998 1.998 0 0 1 2.641-1.524l1.596.571a7.5 7.5 0 0 0 1.245-2.152l-1.294-1.098a1.998 1.998 0 0 1 0-3.05l1.294-1.098a7.5 7.5 0 0 0-1.245-2.152l-1.596.57a2 2 0 0 1-2.64-1.524l-.305-1.669a7.6 7.6 0 0 0-2.486 0l-.304 1.669a2 2 0 0 1-2.64 1.525l-1.597-.571a7.5 7.5 0 0 0-1.244 2.152M7.502 10a2.5 2.5 0 1 1 5 0a2.5 2.5 0 0 1-5 0m1 0a1.5 1.5 0 1 0 3 0a1.5 1.5 0 0 0-3 0"/>
-                                </Canvas>
-                            </Viewbox>
+                            <Path Data="{StaticResource Icon.ColumnsSettings}"/>
                         </Button>
-
-                        <!-- Search20Regular — find uneven columns -->
                         <Button ToolTip="חפש טורים שאינם מאוזנים"
                                 Command="{Binding ColumnsViewModel.FindNextUnevenColumnsCommand}">
-                            <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
-                                <Canvas Width="24" Height="24">
-                                    <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                          Data="M12.73 13.436a6.5 6.5 0 1 1 .707-.707l3.416 3.418a.5.5 0 0 1-.637.764l-.07-.057zm-.71-.71q.385-.32.707-.706a5.5 5.5 0 1 0-.707.707"/>
-                                </Canvas>
-                            </Viewbox>
+                            <Path Data="{StaticResource Icon.ColumnsSearch}"/>
                         </Button>
                     </StackPanel>
 
-                    <DockPanel Margin="0,0,0,2">
-                        <TextBlock DockPanel.Dock="Right" Text="מרווח מקסימלי" Opacity="0.65"/>
-                        <controls:UpDownTextBox Value="{Binding ColumnsViewModel.AlignColumns.MaxSpaceAfter}"
-                                                Width="38"/>
-                    </DockPanel>
+                    <Grid Margin="0,0,0,2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="5"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock DockPanel.Dock="Right" Text="מרווח מקסימלי בין קטעים" Opacity="0.65"/>
+                        <controls:UpDownTextBox Grid.Column="2"
+                            Value="{Binding ColumnsViewModel.AlignColumns.MaxSpaceAfter}"
+                                                Width="38" Height="26"/>
+                    </Grid>
 
                 </StackPanel>
             </Expander>
@@ -269,68 +251,99 @@
                             <Style TargetType="Button" BasedOn="{StaticResource ResetButton}"/>
                         </Grid.Resources>
 
-                        <!-- מרווח אחרי פסקה -->
-                        <Button Grid.Row="0" Grid.Column="0"
-                                Command="{Binding SpacingViewModel.SetSpaceAfterCommand}" CommandParameter="="><Path/></Button>
+                        <Button Grid.Row="0" Grid.Column="0" VerticalAlignment="Center"
+                                Command="{Binding SpacingViewModel.SetSpaceAfterCommand}" CommandParameter="=">
+                            <Path/>
+                        </Button>
                         <TextBlock Grid.Row="0" Grid.Column="1" Text="מרווח אחרי" Opacity="0.75" Margin="6,0"/>
-                        <controls:UpDownFloatTextBox Grid.Row="0" Grid.Column="2" Width="44"
+                        <controls:UpDownFloatTextBox Grid.Row="0" Grid.Column="2" Width="44" Height="26" Margin="0,2"
                                 Step="{Binding SpacingViewModel.StepSize}" Value="{Binding SpacingViewModel.SpaceAfter}"/>
-                        <RepeatButton Grid.Row="0" Grid.Column="3" Style="{StaticResource DecreaseButton}"
-                                      Command="{Binding SpacingViewModel.SetSpaceAfterCommand}" CommandParameter="-"><Path/></RepeatButton>
-                        <RepeatButton Grid.Row="0" Grid.Column="4" Style="{StaticResource IncreaseButton}"
-                                      Command="{Binding SpacingViewModel.SetSpaceAfterCommand}" CommandParameter="+"><Path/></RepeatButton>
+                        <RepeatButton Grid.Row="0" Grid.Column="3" Style="{StaticResource DecreaseButton}" Height="26"
+                                      Command="{Binding SpacingViewModel.SetSpaceAfterCommand}" CommandParameter="-">
+                            <Path/>
+                        </RepeatButton>
+                        <RepeatButton Grid.Row="0" Grid.Column="4" Style="{StaticResource IncreaseButton}" Height="26"
+                                      Command="{Binding SpacingViewModel.SetSpaceAfterCommand}" CommandParameter="+">
+                            <Path/>
+                        </RepeatButton>
 
-                        <!-- מרווח לפני פסקה -->
-                        <Button Grid.Row="1" Grid.Column="0"
-                                Command="{Binding SpacingViewModel.SetSpaceBeforeCommand}" CommandParameter="="><Path/></Button>
+                        <Button Grid.Row="1" Grid.Column="0" VerticalAlignment="Center"
+                                Command="{Binding SpacingViewModel.SetSpaceBeforeCommand}" CommandParameter="=">
+                            <Path/>
+                        </Button>
                         <TextBlock Grid.Row="1" Grid.Column="1" Text="מרווח לפני" Opacity="0.75" Margin="6,0"/>
-                        <controls:UpDownFloatTextBox Grid.Row="1" Grid.Column="2" Width="44"
+                        <controls:UpDownFloatTextBox Grid.Row="1" Grid.Column="2" Width="44" Height="26" Margin="0,2"
                                 Step="{Binding SpacingViewModel.StepSize}" Value="{Binding SpacingViewModel.SpaceBefore}"/>
-                        <RepeatButton Grid.Row="1" Grid.Column="3" Style="{StaticResource DecreaseButton}"
-                                      Command="{Binding SpacingViewModel.SetSpaceBeforeCommand}" CommandParameter="-"><Path/></RepeatButton>
-                        <RepeatButton Grid.Row="1" Grid.Column="4" Style="{StaticResource IncreaseButton}"
-                                      Command="{Binding SpacingViewModel.SetSpaceBeforeCommand}" CommandParameter="+"><Path/></RepeatButton>
+                        <RepeatButton Grid.Row="1" Grid.Column="3" Style="{StaticResource DecreaseButton}" Height="26"
+                                      Command="{Binding SpacingViewModel.SetSpaceBeforeCommand}" CommandParameter="-">
+                            <Path/>
+                        </RepeatButton>
+                        <RepeatButton Grid.Row="1" Grid.Column="4" Style="{StaticResource IncreaseButton}" Height="26"
+                                      Command="{Binding SpacingViewModel.SetSpaceBeforeCommand}" CommandParameter="+">
+                            <Path/>
+                        </RepeatButton>
 
-                        <!-- מרווח בין שורות -->
-                        <Button Grid.Row="2" Grid.Column="0"
-                                Command="{Binding SpacingViewModel.SetLineSpacingCommand}" CommandParameter="="><Path/></Button>
+                        <Button Grid.Row="2" Grid.Column="0" VerticalAlignment="Center"
+                                Command="{Binding SpacingViewModel.SetLineSpacingCommand}" CommandParameter="=">
+                            <Path/>
+                        </Button>
                         <TextBlock Grid.Row="2" Grid.Column="1" Text="בין שורות" Opacity="0.75" Margin="6,0"/>
-                        <controls:UpDownFloatTextBox Grid.Row="2" Grid.Column="2" Width="44"
+                        <controls:UpDownFloatTextBox Grid.Row="2" Grid.Column="2" Width="44" Height="26" Margin="0,2"
                                 Step="{Binding SpacingViewModel.StepSize}" Value="{Binding SpacingViewModel.LineSpacing}"/>
-                        <RepeatButton Grid.Row="2" Grid.Column="3" Style="{StaticResource DecreaseButton}"
-                                      Command="{Binding SpacingViewModel.SetLineSpacingCommand}" CommandParameter="-"><Path/></RepeatButton>
-                        <RepeatButton Grid.Row="2" Grid.Column="4" Style="{StaticResource IncreaseButton}"
-                                      Command="{Binding SpacingViewModel.SetLineSpacingCommand}" CommandParameter="+"><Path/></RepeatButton>
+                        <RepeatButton Grid.Row="2" Grid.Column="3" Style="{StaticResource DecreaseButton}" Height="26"
+                                      Command="{Binding SpacingViewModel.SetLineSpacingCommand}" CommandParameter="-">
+                            <Path/>
+                        </RepeatButton>
+                        <RepeatButton Grid.Row="2" Grid.Column="4" Style="{StaticResource IncreaseButton}" Height="26"
+                                      Command="{Binding SpacingViewModel.SetLineSpacingCommand}" CommandParameter="+">
+                            <Path/>
+                        </RepeatButton>
 
-                        <!-- מרווח בין מילים -->
-                        <Button Grid.Row="3" Grid.Column="0"
-                                Command="{Binding SpacingViewModel.SetWordSpacingCommand}" CommandParameter="="><Path/></Button>
+                        <Button Grid.Row="3" Grid.Column="0" VerticalAlignment="Center"
+                                Command="{Binding SpacingViewModel.SetWordSpacingCommand}" CommandParameter="=">
+                            <Path/>
+                        </Button>
                         <TextBlock Grid.Row="3" Grid.Column="1" Text="בין מילים" Opacity="0.75" Margin="6,0"/>
-                        <controls:UpDownFloatTextBox Grid.Row="3" Grid.Column="2" Width="44"
+                        <controls:UpDownFloatTextBox Grid.Row="3" Grid.Column="2" Width="44" Height="26" Margin="0,2"
                                 Step="{Binding SpacingViewModel.StepSize}" Value="{Binding SpacingViewModel.WordSpacing}"/>
-                        <RepeatButton Grid.Row="3" Grid.Column="3" Style="{StaticResource DecreaseButton}"
-                                      Command="{Binding SpacingViewModel.SetWordSpacingCommand}" CommandParameter="-"><Path/></RepeatButton>
-                        <RepeatButton Grid.Row="3" Grid.Column="4" Style="{StaticResource IncreaseButton}"
-                                      Command="{Binding SpacingViewModel.SetWordSpacingCommand}" CommandParameter="+"><Path/></RepeatButton>
+                        <RepeatButton Grid.Row="3" Grid.Column="3" Style="{StaticResource DecreaseButton}" Height="26"
+                                      Command="{Binding SpacingViewModel.SetWordSpacingCommand}" CommandParameter="-">
+                            <Path/>
+                        </RepeatButton>
+                        <RepeatButton Grid.Row="3" Grid.Column="4" Style="{StaticResource IncreaseButton}" Height="26"
+                                      Command="{Binding SpacingViewModel.SetWordSpacingCommand}" CommandParameter="+">
+                            <Path/>
+                        </RepeatButton>
 
-                        <!-- מתיחת אותיות -->
-                        <Button Grid.Row="4" Grid.Column="0"
-                                Command="{Binding SpacingViewModel.SetCharacterStretchCommand}" CommandParameter="="><Path/></Button>
+                        <Button Grid.Row="4" Grid.Column="0" VerticalAlignment="Center"
+                                Command="{Binding SpacingViewModel.SetCharacterStretchCommand}" CommandParameter="=">
+                            <Path/>
+                        </Button>
                         <TextBlock Grid.Row="4" Grid.Column="1" Text="מתיחת אותיות" Opacity="0.75" Margin="6,0"/>
-                        <controls:UpDownFloatTextBox Grid.Row="4" Grid.Column="2" Width="44"
+                        <controls:UpDownFloatTextBox Grid.Row="4" Grid.Column="2" Width="44" Height="26" Margin="0,2"
                                 Step="{Binding SpacingViewModel.StepSize}" Value="{Binding SpacingViewModel.CharacterStretch}"/>
-                        <RepeatButton Grid.Row="4" Grid.Column="3" Style="{StaticResource DecreaseButton}"
-                                      Command="{Binding SpacingViewModel.SetCharacterStretchCommand}" CommandParameter="-"><Path/></RepeatButton>
-                        <RepeatButton Grid.Row="4" Grid.Column="4" Style="{StaticResource IncreaseButton}"
-                                      Command="{Binding SpacingViewModel.SetCharacterStretchCommand}" CommandParameter="+"><Path/></RepeatButton>
+                        <RepeatButton Grid.Row="4" Grid.Column="3" Style="{StaticResource DecreaseButton}" Height="26"
+                                      Command="{Binding SpacingViewModel.SetCharacterStretchCommand}" CommandParameter="-">
+                            <Path/>
+                        </RepeatButton>
+                        <RepeatButton Grid.Row="4" Grid.Column="4" Style="{StaticResource IncreaseButton}" Height="26"
+                                      Command="{Binding SpacingViewModel.SetCharacterStretchCommand}" CommandParameter="+">
+                            <Path/>
+                        </RepeatButton>
                     </Grid>
 
-                    <DockPanel Margin="0,6,0,0">
-                        <TextBlock DockPanel.Dock="Right" Text="גודל צעד" Opacity="0.65"/>
+                    <Grid Margin="0,6,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="5"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock DockPanel.Dock="Left" Text="גודל צעד" Opacity="0.65"/>
                         <controls:UpDownFloatTextBox Step="0.5"
+                                                     Grid.Column="2"
                                                      Value="{Binding SpacingViewModel.StepSize}"
-                                                     Width="44"/>
-                    </DockPanel>
+                                                     Width="44" Height="26"/>
+                    </Grid>
 
                 </StackPanel>
             </Expander>

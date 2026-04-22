@@ -6,6 +6,7 @@
     -->
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="/DocDesign;component/ui/themes/brushes.xaml"/>
+        <ResourceDictionary Source="/DocDesign;component/ui/themes/icons.xaml"/>
         <ResourceDictionary Source="/DocDesign;component/ui/themes/buttonstyles.xaml"/>
         <ResourceDictionary Source="/DocDesign;component/ui/themes/miscstyles.xaml"/>
         <ResourceDictionary Source="/DocDesign;component/ui/themes/comboboxstyles.xaml"/>

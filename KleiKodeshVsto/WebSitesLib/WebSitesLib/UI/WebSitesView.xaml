@@ -112,43 +112,45 @@
                                     <DataTemplate>
                                         <Border x:Name="DropItem"
                                                 CornerRadius="2"
-                                                Padding="8,3"
+                                                Padding="4,3"
                                                 Background="Transparent"
                                                 Cursor="Hand">
+                                            <Border.InputBindings>
+                                                <MouseBinding MouseAction="LeftClick"
+                                                              Command="{Binding NavigateToTabCommand}"/>
+                                            </Border.InputBindings>
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
                                                 </Grid.ColumnDefinitions>
-                                                <TextBlock Text="{Binding Title}"
-                                                           Style="{StaticResource TabTitle}"
-                                                           MaxWidth="200"
-                                                           Margin="0"
-                                                           TextTrimming="CharacterEllipsis"
-                                                           ToolTip="{Binding Title}">
-                                                    <TextBlock.InputBindings>
-                                                        <MouseBinding MouseAction="LeftClick"
-                                                                      Command="{Binding MoveToFrontCommand}"/>
-                                                    </TextBlock.InputBindings>
-                                                </TextBlock>
-                                                <Button Grid.Column="1"
+                                                <!-- × button — col 0, visual left -->
+                                                <Button Grid.Column="0"
                                                         ToolTip="סגור כרטיסייה"
                                                         Command="{Binding CloseTabCommand}"
                                                         Width="20" Height="20"
                                                         Padding="3"
-                                                        Margin="4,0,0,0"
+                                                        Margin="0,0,4,0"
                                                         VerticalAlignment="Center">
                                                     <Path Style="{StaticResource TabClosePath}"
                                                           Width="7" Height="7"/>
                                                 </Button>
+                                                <!-- Title — col 1, visual right -->
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding Title}"
+                                                           Style="{StaticResource TabTitle}"
+                                                           MaxWidth="200"
+                                                           Margin="0"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           ToolTip="{Binding Title}"/>
                                             </Grid>
                                         </Border>
                                         <DataTemplate.Triggers>
                                             <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                                                <Setter TargetName="DropItem" Property="Background" Value="{StaticResource HoverBrush}"/>
+                                                <Setter TargetName="DropItem" Property="Background" Value="#0A808080"/>
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                                <Setter TargetName="DropItem" Property="Background" Value="{StaticResource PressedBrush}"/>
+                                                <Setter TargetName="DropItem" Property="Background" Value="#14808080"/>
                                             </DataTrigger>
                                         </DataTemplate.Triggers>
                                     </DataTemplate>
@@ -268,6 +270,7 @@
                 <ComboBox x:Name="AddressBarCombo"
                           Grid.Column="0"
                           Style="{StaticResource AddressBarCombo}"
+                          IsDropDownOpen="{Binding ElementName=BrowserTabs, Path=IsAddressDropDownOpen, Mode=TwoWay}"
                           ItemsSource="{Binding ElementName=BrowserTabs, Path=VisibleAddressModels}"
                           SelectedValue="{Binding ElementName=BrowserTabs, Path=CurrentAddressModel}">
                     <ComboBox.InputBindings>

@@ -59,15 +59,11 @@
                                             Background="{TemplateBinding Background}"
                                             CornerRadius="4" Padding="3">
                                         <Grid>
-                                            <Viewbox Width="16" Height="16"
-                                                     FlowDirection="LeftToRight"
-                                                     Margin="0,0,0,3">
-                                                <Canvas Width="24" Height="24">
-                                                    <Path Fill="{Binding Foreground,
-                                                              RelativeSource={RelativeSource AncestorType=local:ColorPickerButton}}"
-                                                          Data="{StaticResource Icon.ColorPalette}"/>
-                                                </Canvas>
-                                            </Viewbox>
+                                            <Path Data="{StaticResource Icon.ColorPalette}"
+                                                  Fill="{Binding Foreground,
+                                                      RelativeSource={RelativeSource AncestorType=local:ColorPickerButton}}"
+                                                  Stretch="Uniform" FlowDirection="LeftToRight"
+                                                  Width="16" Height="16" Margin="0,0,0,3"/>
                                             <!-- Color underline bar -->
                                             <Border Height="3"
                                                     VerticalAlignment="Bottom"

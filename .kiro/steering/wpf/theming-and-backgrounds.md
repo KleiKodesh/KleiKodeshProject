@@ -135,6 +135,39 @@ Foreground works differently — it inherits automatically through the visual tr
 </Button>
 ```
 
+---
+
+## Icon Usage Pattern
+
+Icons are `StreamGeometry` resources on a 24×24 viewBox (defined in `Icons.xaml`). Render them with a plain `Path` — no `Viewbox` or `Canvas` wrapper needed.
+
+```xml
+<!-- ✓ CORRECT — Path with Stretch="Uniform" scales itself -->
+<Path Data="{StaticResource Icon.Search}"
+      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
+      Stretch="Uniform"
+      FlowDirection="LeftToRight"
+      Width="16" Height="16"/>
+
+<!-- ✗ WRONG — unnecessary wrapper elements -->
+<Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
+    <Canvas Width="24" Height="24">
+        <Path Fill="..." Data="{StaticResource Icon.Search}"/>
+    </Canvas>
+</Viewbox>
+```
+
+`FlowDirection="LeftToRight"` is required on the `Path` itself when the parent is RTL — otherwise the geometry mirrors horizontally.
+
+For icons inside button content areas where the button style already sets `Path.Fill` via `Style.Resources`, you can omit the `Fill` binding:
+
+```xml
+<!-- DocDesign buttons — implicit Path style in ButtonStyles.xaml sets Fill + Stretch -->
+<Button>
+    <Path Data="{StaticResource Icon.AlignColumns}"/>
+</Button>
+```
+
 ### Bind Foreground Explicitly (When Needed)
 
 ```xml
