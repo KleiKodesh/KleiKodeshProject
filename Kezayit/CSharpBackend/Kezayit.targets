@@ -28,7 +28,7 @@
 
     <Message Text="[Vue] VueProjectDir = $(VueProjectDir)" Importance="high" />
     <Message Text="[1/3] Running npm run build..." Importance="high" />
-    <Exec Command="npm run build" WorkingDirectory="$(VueProjectDir)" ContinueOnError="false" />
+    <Exec Command="set &quot;PATH=C:\Program Files\nodejs;%PATH%&quot; &amp;&amp; &quot;C:\Program Files\nodejs\npm.cmd&quot; run build" WorkingDirectory="$(VueProjectDir)" ContinueOnError="false" />
 
     <Message Text="[2/3] Copying dist to $(VueFrontendOut)..." Importance="high" />
     <MakeDir Directories="$(VueFrontendOut)" />

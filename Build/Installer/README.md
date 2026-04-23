@@ -15,19 +15,23 @@ This is the **main application** that end users download and run. It packages th
 ```
 LandingPage  ●○○   Welcome screen
     ↓ הבא
-SettingsPage  ○●○  Ribbon components + default button
+InstallPage   ○●○  Extraction + registration + version stamp
+    ↓
+SettingsPage  ○○●  Ribbon components + default button
     ↓ הבא
-    ├─ Kezayit OR WebSites checked → AdvancedPage  ○○●
+    ├─ Kezayit OR WebSites checked → AdvancedPage  ○○○
     │     Kezayit DB picker  (hidden if Kezayit unchecked)
     │     Websites list      (hidden if WebSites unchecked)
     │       └─ "ערוך רשימת אתרים" → WhitelistEditorDialog (modal)
-    │     ↓ התקן
+    │     ↓ סיום
     └─ both unchecked → skip AdvancedPage
     ↓
-InstallPage   Extraction + registration + version stamp
+Exit
 ```
 
-Silent/update mode (`--silent` / `--install`) skips straight to InstallPage.
+Silent/update mode (`--silent` / `--install`) skips straight to InstallPage and exits.
+
+Repair mode (`--repair`) cleans up old files/registry, then installs and proceeds to settings.
 
 ## Folder Structure
 

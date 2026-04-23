@@ -184,7 +184,7 @@ function onLinesScrolled(lineIndex: number, fullLineIndex: number) {
   }
   if (!autoSelectTopLine.value) return
   const line = lines.value.find((l) => l.lineIndex === currentFullLineIndex.value)
-  if (line && line.id > 0) {
+  if (line) {
     selectedLineId.value = line.id
     bottomVisible.value = true
     if (autoSelectCommentaryTimer) clearTimeout(autoSelectCommentaryTimer)

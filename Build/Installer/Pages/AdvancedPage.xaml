@@ -272,24 +272,29 @@
         </ScrollViewer>
 
         <!-- Footer -->
-        <Grid Grid.Row="3" Margin="28,12,28,16">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="auto"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="auto"/>
-            </Grid.ColumnDefinitions>
+        <Border Grid.Row="3"
+                Background="#F0F0F0"
+                BorderBrush="#E5E5E5"
+                BorderThickness="0,1,0,0">
+            <Grid Margin="10,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="auto"/>
+                </Grid.ColumnDefinitions>
 
-            <Button x:Name="BackButton"
-                    Grid.Column="0"
-                    Content="חזור"
-                    Style="{StaticResource SecondaryButton}"
-                    Click="BackButton_Click"/>
+                <Button x:Name="BackButton"
+                        Grid.Column="0"
+                        Content="חזור"
+                        Style="{StaticResource SecondaryButton}"
+                        Click="BackButton_Click"/>
 
-            <Button x:Name="InstallButton"
-                    Grid.Column="2"
-                    Content="התקן"
-                    Style="{StaticResource PrimaryButton}"
-                    Click="InstallButton_Click"/>
-        </Grid>
+                <Button x:Name="InstallButton"
+                        Grid.Column="2"
+                        Content="סגור"
+                        Style="{StaticResource PrimaryButton}"
+                        Click="InstallButton_Click"/>
+            </Grid>
+        </Border>
     </Grid>
 </Page>

@@ -6,12 +6,16 @@ namespace KleiKodeshVstoInstallerWpf
 {
     public partial class MainWindow : Window
     {
+        private bool _showSettingsAfterInstall;
+
         public MainWindow(bool startInstallImmediately = false)
         {
             InitializeComponent();
 
+            _showSettingsAfterInstall = !startInstallImmediately;
+
             if (startInstallImmediately)
-                MainFrame.Navigate(new InstallPage());
+                NavigateToInstall(false);
             else
                 MainFrame.Navigate(new LandingPage(this));
         }
@@ -66,9 +70,9 @@ namespace KleiKodeshVstoInstallerWpf
         public void NavigateToAdvanced(bool showKezayit, bool showWebsites)
             => MainFrame.Navigate(new AdvancedPage(this, showKezayit, showWebsites));
 
-        public void NavigateToInstall()
+        public void NavigateToInstall(bool showSettingsAfter = false)
         {
-            MainFrame.Navigate(new InstallPage());
+            MainFrame.Navigate(new InstallPage(showSettingsAfter));
             MainFrame.NavigationService.RemoveBackEntry();
         }
 

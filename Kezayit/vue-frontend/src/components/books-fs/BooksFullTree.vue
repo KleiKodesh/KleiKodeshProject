@@ -13,9 +13,19 @@ interface FlatNode extends TreeNodeItem {
   _book?: BookRow
 }
 
+function encodeCategoryId(categoryId: number): number {
+  // Use a separate number namespace for category nodes so custom category IDs
+  // do not collide with custom book IDs in the flat tree.
+  return categoryId * 2 - 1
+}
+
+function encodeBookId(bookId: number): number {
+  return bookId * 2
+}
+
 function flatten(nodes: CategoryNode[], parentId: number | null, level: number, out: FlatNode[]) {
   for (const node of nodes) {
-    const id = -(node.id + 1)
+    const id = encodeCategoryId(node.id)
     out.push({
       id,
       parentId,
@@ -26,7 +36,7 @@ function flatten(nodes: CategoryNode[], parentId: number | null, level: number, 
     flatten(node.children, id, level + 1, out)
     for (const book of node.books)
       out.push({
-        id: book.id,
+        id: encodeBookId(book.id),
         parentId: id,
         level: level + 1,
         hasChildren: false,

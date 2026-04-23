@@ -142,7 +142,7 @@
 
         <!-- Sticky header -->
         <StackPanel Grid.Row="1" Margin="28,22,28,10">
-            <TextBlock Text="הגדרות התקנה"
+            <TextBlock Text="הגדרות התוסף"
                        FontSize="20"
                        FontWeight="Bold"
                        Foreground="#1F1F1F"/>
@@ -222,17 +222,18 @@
                     <ColumnDefinition Width="auto"/>
                 </Grid.ColumnDefinitions>
 
-                <Button x:Name="BackButton"
+                <Button x:Name="CloseButton"
                         Grid.Column="0"
-                        Content="חזור"
-                        Style="{StaticResource SecondaryButton}"
-                        Click="BackButton_Click"/>
+                        Content="סגור"
+                        Style="{StaticResource GhostButton}"
+                        Click="CloseButton_Click"/>
 
                 <Button x:Name="NextButton"
-                        Grid.Column="2"
-                        Content="הבא"
-                        Style="{StaticResource PrimaryButton}"
-                        Click="NextButton_Click"/>
+          Grid.Column="2"
+          Content="הבא"
+          Style="{StaticResource PrimaryButton}"
+          Margin="0,0,4,0"
+          Click="NextButton_Click"/>
             </Grid>
         </Border>
     </Grid>

@@ -56,6 +56,14 @@ namespace KleiKodeshVstoInstallerWpf
         private void DeepCleanButton_Click(object sender, RoutedEventArgs e)
         {
             if (_isRunning) return;
+
+            if (!AdminHelper.IsElevated)
+            {
+                // Relaunch as admin for deep clean
+                AdminHelper.RelaunchAsAdmin("--repair");
+                return;
+            }
+
             _ = RunCleanupAsync(skipConfirm: false, deepClean: true);
         }
 
@@ -132,7 +140,7 @@ namespace KleiKodeshVstoInstallerWpf
             AppendLog("\n▶ מתחיל התקנה מחדש...");
 
             await System.Threading.Tasks.Task.Delay(800);
-            _host.NavigateToInstall();
+            _host.NavigateToInstall(true);
         }
 
         private void AppendLog(string line)

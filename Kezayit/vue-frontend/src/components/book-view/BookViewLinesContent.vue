@@ -596,7 +596,7 @@ defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller })
 
 function onLineClick(index: number) {
   const line = props.lines[index]
-  if (props.bottomVisible && line && line.id > 0) emit('lineSelected', line.id)
+  if (props.bottomVisible && line) emit('lineSelected', line.id)
 }
 
 function focusScroller() {

@@ -5,6 +5,7 @@ using Microsoft.Win32;
 using System;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Windows;
@@ -115,7 +116,7 @@ namespace KleiKodeshVstoInstallerWpf
             {
                 if (!WordHelper.EnsureWordClosed()) return;
                 Commit();
-                _host.NavigateToInstall();
+                Environment.Exit(0);
             }
             catch (Exception ex)
             {
@@ -142,8 +143,8 @@ namespace KleiKodeshVstoInstallerWpf
         /// Returns the whitelist entries to show in the editor dialog.
         /// Priority:
         ///   1. PendingWhitelist  — user already edited this session (in-memory)
-        ///   2. Installed file    — update: %LocalAppData%\KleiKodesh\WebSitesWhitelist.json
-        ///   3. Embedded default  — fresh install: resource compiled into the exe
+        ///   2. Embedded default + user's visibility from installed file — update scenario
+        ///   3. Embedded default  — fresh install
         /// </summary>
         private static ObservableCollection<WhitelistEntry> LoadEntries()
         {
@@ -151,21 +152,30 @@ namespace KleiKodeshVstoInstallerWpf
             if (AddinInstaller.PendingWhitelist != null)
                 return Deserialize(AddinInstaller.PendingWhitelist);
 
-            // 2. Existing install — preserve the user's customised list
+            // Load the default list
+            string defaultJson = LoadDefaultJson();
+            var entries = defaultJson != null ? Deserialize(defaultJson) : new ObservableCollection<WhitelistEntry>();
+
+            // 2. Existing install — merge user's visibility choices
             string installedPath = Path.Combine(AddinInstaller.InstallPath, "WebSitesWhitelist.json");
             if (File.Exists(installedPath))
             {
                 try
                 {
-                    string json = File.ReadAllText(installedPath);
-                    return Deserialize(json);
+                    string installedJson = File.ReadAllText(installedPath);
+                    var installedEntries = ParseWhitelistJson(installedJson);
+                    // For each installed entry, find matching default entry by Url and update IsVisible
+                    foreach (var installed in installedEntries)
+                    {
+                        var defaultEntry = entries.FirstOrDefault(e => e.Url == installed.Url);
+                        if (defaultEntry != null)
+                            defaultEntry.IsVisible = installed.IsVisible;
+                    }
                 }
-                catch { /* fall through to embedded default */ }
+                catch { /* ignore errors, keep defaults */ }
             }
 
-            // 3. Fresh install — use the default list embedded in the exe
-            string json2 = LoadDefaultJson();
-            return json2 != null ? Deserialize(json2) : new ObservableCollection<WhitelistEntry>();
+            return entries;
         }
 
         /// <summary>

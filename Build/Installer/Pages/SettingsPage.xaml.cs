@@ -50,7 +50,6 @@ namespace KleiKodeshVstoInstallerWpf
             SettingsManager.Save("Ribbon", "DefaultButton", _defaultButton);
         }
 
-        private void BackButton_Click(object sender, RoutedEventArgs e) => _host.NavigateToLanding();
         private void NextButton_Click(object sender, RoutedEventArgs e)
         {
             CommitSettings();
@@ -60,8 +59,10 @@ namespace KleiKodeshVstoInstallerWpf
             if (kezayit || webSites)
                 _host.NavigateToAdvanced(kezayit, webSites);
             else
-                _host.NavigateToInstall();
+                Environment.Exit(0);
         }
+
+        private void CloseButton_Click(object sender, RoutedEventArgs e) => Environment.Exit(0);
 
     }
 }

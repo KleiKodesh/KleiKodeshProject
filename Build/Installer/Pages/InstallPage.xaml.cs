@@ -10,9 +10,11 @@ namespace KleiKodeshVstoInstallerWpf
     {
         readonly IProgress<double> _progress;
         readonly IProgress<string> _status;
+        private readonly bool _showSettingsAfter;
 
-        public InstallPage()
+        public InstallPage(bool showSettingsAfter = false)
         {
+            _showSettingsAfter = showSettingsAfter;
             InitializeComponent();
             _progress = new Progress<double>(v =>
             {
@@ -57,7 +59,10 @@ namespace KleiKodeshVstoInstallerWpf
 
                 _status.Report("ההתקנה הושלמה!");
                 await Task.Delay(300);
-                Environment.Exit(0);
+                if (_showSettingsAfter)
+                    (Window.GetWindow(this) as MainWindow)?.NavigateToSettings();
+                else
+                    Environment.Exit(0);
             }
             catch (Exception ex)
             {
