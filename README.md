@@ -2,7 +2,7 @@
 
 <img width="100" alt="כלי קודש לוגו" src="https://github.com/user-attachments/assets/0d528a83-c124-47de-bfcc-ceb87342a2e0" />
 
-# כלי קודש לוורד 
+# תוסף כלי קודש לוורד 
 
 ארגז כלים לעורך התורני
 
