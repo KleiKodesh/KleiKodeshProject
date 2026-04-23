@@ -77,10 +77,6 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\WpfLib\WpfLib.csproj">
-      <Project>{494b02c1-54f2-4244-9a90-23c9984970e7}</Project>
-      <Name>WpfLib</Name>
-    </ProjectReference>
     <ProjectReference Include="..\WebSitesLib\WebSitesLib.csproj">
       <Project>{8100C454-B34E-45A2-98B5-7F766487C9FF}</Project>
       <Name>WebSitesLib</Name>

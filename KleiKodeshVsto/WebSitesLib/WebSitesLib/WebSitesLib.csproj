@@ -148,7 +148,7 @@
     </Page>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\WpfLib\WpfLib.csproj">
+    <ProjectReference Include="..\..\..\..\..\..\Admin\source\repos\WpfLib\WpfLib\WpfLib.csproj">
       <Project>{494b02c1-54f2-4244-9a90-23c9984970e7}</Project>
       <Name>WpfLib</Name>
     </ProjectReference>

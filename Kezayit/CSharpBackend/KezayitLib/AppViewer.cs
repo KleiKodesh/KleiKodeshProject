@@ -194,10 +194,13 @@ namespace KezayitLib
                         case "BloomSearchStart": _search.HandleSearchStart(root, id); break;
                         case "BloomSearchCancel": _search.HandleSearchCancel(root, id); break;
                         case "DeleteBloomIndex":
-                            // Reply immediately, then cancel+delete on a background thread
-                            // so the message handler thread is not blocked by task.Wait.
-                            _bridge.Reply(id, new { });
-                            Task.Run(() => _search.HandleDeleteIndex(null));
+                            // Run cancel+delete on a background thread, reply when done
+                            // so the JS caller can await completion before reloading.
+                            Task.Run(() =>
+                            {
+                                _search.HandleDeleteIndex(null);
+                                _bridge.Reply(id, new { });
+                            });
                             break;
                         case "ResetSearchIndex": _search.HandleResetSearchIndex(id); break;
                         case "ConfirmReindex":

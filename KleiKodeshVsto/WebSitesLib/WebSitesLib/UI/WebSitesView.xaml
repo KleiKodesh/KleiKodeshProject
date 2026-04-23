@@ -44,14 +44,22 @@
                     </Style>
                 </Style.Resources>
             </Style>
+            <Style TargetType="Path">
+                <Setter Property="Height" Value="12"/>
+                <Setter Property="Width" Value="12"/>
+                <Setter Property="Stretch" Value="Uniform"/>
+            </Style>
         </ResourceDictionary>
     </UserControl.Resources>
 
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>  <!-- Tab strip   -->
-            <RowDefinition Height="Auto"/>  <!-- Address bar -->
-            <RowDefinition Height="*"/>     <!-- Browser     -->
+            <RowDefinition Height="Auto"/>
+            <!-- Tab strip   -->
+            <RowDefinition Height="Auto"/>
+            <!-- Address bar -->
+            <RowDefinition Height="*"/>
+            <!-- Browser     -->
         </Grid.RowDefinitions>
 
         <!-- ══════════════════════════════════════════════════════════
@@ -76,12 +84,9 @@
                                   Width="26" Height="26"
                                   Padding="5"
                                   VerticalAlignment="Center">
-                        <Viewbox FlowDirection="LeftToRight">
-                            <Canvas Width="24" Height="24">
-                                <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        <Path Stretch="Uniform"
+                            Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                       Data="{StaticResource Icon.ChevronDown}"/>
-                            </Canvas>
-                        </Viewbox>
                     </ToggleButton>
 
                     <Button ToolTip="כרטיסייה חדשה"
@@ -89,12 +94,8 @@
                             Width="26" Height="26"
                             Padding="5"
                             VerticalAlignment="Center">
-                        <Viewbox FlowDirection="LeftToRight">
-                            <Canvas Width="24" Height="24">
-                                <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                       Data="{StaticResource Icon.Add}"/>
-                            </Canvas>
-                        </Viewbox>
                     </Button>
 
                     <!-- Tab list popup -->
@@ -263,9 +264,12 @@
                 Padding="4,3">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>     <!-- address bar — right in RTL  -->
-                    <ColumnDefinition Width="Auto"/>  <!-- options menu — left in RTL  -->
-                    <ColumnDefinition Width="Auto"/>  <!-- nav buttons — leftmost in RTL -->
+                    <ColumnDefinition Width="*"/>
+                    <!-- address bar — right in RTL  -->
+                    <ColumnDefinition Width="Auto"/>
+                    <!-- options menu — left in RTL  -->
+                    <ColumnDefinition Width="Auto"/>
+                    <!-- nav buttons — leftmost in RTL -->
                 </Grid.ColumnDefinitions>
 
                 <!-- Address bar ComboBox -->
@@ -281,151 +285,31 @@
                     </ComboBox.InputBindings>
                 </ComboBox>
 
-                <!-- Options dropdown — to the left of the address bar in RTL -->
-                <StackPanel Grid.Column="1"
-                            Orientation="Horizontal"
-                            FlowDirection="LeftToRight"
-                            Margin="2,0,0,0">
-
-                    <ToggleButton x:Name="AddressOptionsToggle"
-                                  ToolTip="אפשרויות"
-                                  Width="26" Height="26"
-                                  Padding="5"
-                                  VerticalAlignment="Center">
-                        <Viewbox FlowDirection="LeftToRight">
-                            <Canvas Width="24" Height="24">
-                                <!-- Hamburger / more-options icon (three horizontal lines) -->
-                                <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                      Data="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/>
-                            </Canvas>
-                        </Viewbox>
-                    </ToggleButton>
-
-                    <Popup IsOpen="{Binding IsChecked, ElementName=AddressOptionsToggle}"
-                           PlacementTarget="{Binding ElementName=AddressOptionsToggle}"
-                           Placement="Bottom"
-                           AllowsTransparency="False"
-                           StaysOpen="False">
-                        <Border CornerRadius="2"
-                                BorderThickness="1"
-                                BorderBrush="#50808080"
-                                Background="{Binding Background, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                Padding="3"
-                                MinWidth="180"
-                                FlowDirection="RightToLeft">
-                            <StackPanel>
-
-                                <!-- Item 1: Open Kiwix reader -->
-                                <Border x:Name="KiwixItem"
-                                        CornerRadius="2"
-                                        Padding="8,7"
-                                        Cursor="Hand">
-                                    <Border.Style>
-                                        <Style TargetType="Border">
-                                            <Setter Property="Background" Value="Transparent"/>
-                                            <Style.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter Property="Background" Value="#0A808080"/>
-                                                </Trigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Border.Style>
-                                    <Border.InputBindings>
-                                        <MouseBinding MouseAction="LeftClick"
-                                                      Command="{Binding ElementName=BrowserTabs, Path=OpenKiwixCommand}"/>
-                                    </Border.InputBindings>
-                                    <StackPanel Orientation="Horizontal">
-                                        <Viewbox Width="14" Height="14"
-                                                 Margin="0,0,8,0"
-                                                 FlowDirection="LeftToRight">
-                                            <Canvas Width="24" Height="24">
-                                                <!-- Book / reader icon -->
-                                                <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                      Data="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z"/>
-                                            </Canvas>
-                                        </Viewbox>
-                                        <TextBlock Text="פתח קורא קיוויקס"
-                                                   FontSize="12"
-                                                   FontFamily="Segoe UI"
-                                                   VerticalAlignment="Center"
-                                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- Item 2: Pop out taskpane -->
-                                <Border x:Name="PopOutItem"
-                                        CornerRadius="2"
-                                        Padding="8,7"
-                                        Cursor="Hand">
-                                    <Border.Style>
-                                        <Style TargetType="Border">
-                                            <Setter Property="Background" Value="Transparent"/>
-                                            <Style.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter Property="Background" Value="#0A808080"/>
-                                                </Trigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Border.Style>
-                                    <Border.InputBindings>
-                                        <MouseBinding MouseAction="LeftClick"
-                                                      Command="{Binding ElementName=BrowserTabs, Path=PopOutCommand}"/>
-                                    </Border.InputBindings>
-                                    <StackPanel Orientation="Horizontal">
-                                        <Viewbox Width="14" Height="14"
-                                                 Margin="0,0,8,0"
-                                                 FlowDirection="LeftToRight">
-                                            <Canvas Width="24" Height="24">
-                                                <!-- Pop-out / open-in-window icon -->
-                                                <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                      Data="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/>
-                                            </Canvas>
-                                        </Viewbox>
-                                        <TextBlock Text="פתח בחלון נפרד"
-                                                   FontSize="12"
-                                                   FontFamily="Segoe UI"
-                                                   VerticalAlignment="Center"
-                                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-                                    </StackPanel>
-                                </Border>
-
-                            </StackPanel>
-                        </Border>
-                    </Popup>
-
-                </StackPanel>
-
                 <!-- Nav buttons: Back, Forward, Refresh -->
                 <StackPanel Orientation="Horizontal"
                             Grid.Column="2"
                             FlowDirection="LeftToRight"
                             Margin="2,0,0,0">
+                    <Button x:Name="PopOutButton"
+                            ToolTip="הצג בחלונית \ חלון צד"
+                            Click="PopOutButton_Click">
+                        <Path  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
+Data="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/>
+                    </Button>
+                    <Button ToolTip="רענן"
+        Command="{Binding ElementName=BrowserTabs, Path=RefreshCommand}">
+                        <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                  Data="{StaticResource Icon.Reload}"/>
+                    </Button>
                     <Button ToolTip="חזור אחורה"
                             Command="{Binding ElementName=BrowserTabs, Path=GoBackCommand}">
-                        <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
-                            <Canvas Width="24" Height="24">
-                                <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                       Data="{StaticResource Icon.Back}"/>
-                            </Canvas>
-                        </Viewbox>
                     </Button>
                     <Button ToolTip="קדימה"
                             Command="{Binding ElementName=BrowserTabs, Path=GoForwardCommand}">
-                        <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
-                            <Canvas Width="24" Height="24">
-                                <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                       Data="{StaticResource Icon.Forward}"/>
-                            </Canvas>
-                        </Viewbox>
-                    </Button>
-                    <Button ToolTip="רענן"
-                            Command="{Binding ElementName=BrowserTabs, Path=RefreshCommand}">
-                        <Viewbox Width="16" Height="16" FlowDirection="LeftToRight">
-                            <Canvas Width="24" Height="24">
-                                <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                      Data="{StaticResource Icon.Reload}"/>
-                            </Canvas>
-                        </Viewbox>
                     </Button>
                 </StackPanel>
 

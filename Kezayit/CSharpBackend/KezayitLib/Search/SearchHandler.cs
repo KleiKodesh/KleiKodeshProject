@@ -264,7 +264,7 @@ namespace KezayitLib.Search
                 Console.WriteLine("[SearchHandler] Task.Run started, resumeAfterLineId=" + resumeAfterLineId);
                 try
                 {
-                    var indexer = new BloomFilterIndexer("lines", (short)50, 0.001, _dbPath);
+                    var indexer = new BloomFilterIndexer("lines", (short)500, 0.001, _dbPath);
                     indexer.IndexProgressChanged += (s, e) => PushIndexProgress(e);
                     indexer.CreateBloomFilters(resumeAfterLineId, resumeChunkCount);
                     Console.WriteLine("[SearchHandler] CreateBloomFilters completed");
