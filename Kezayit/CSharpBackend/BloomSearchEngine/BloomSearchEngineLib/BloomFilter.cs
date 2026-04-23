@@ -4,115 +4,115 @@ using System.Runtime.CompilerServices;
 namespace MinimalIndexer
 {
     /// <summary>
-    /// Split Block Bloom Filter (SBBF) — same structure used by DuckDB / Apache Parquet.
+    /// Standard Bloom filter with double-hashing (Kirsch-Mitzenmacher).
     ///
     /// Layout
     /// ------
-    /// The bit array is divided into 256-bit blocks (8 × uint32 words).
-    /// Each Add/Contains touches exactly ONE block, selected by the upper 32 bits of an
-    /// xxHash64 digest.  Within that block, 8 independent bit positions are derived from
-    /// the lower 32 bits using the 8 Parquet salt multipliers.  Every probe therefore
-    /// touches exactly one 32-byte region — one cache line — regardless of filter size.
+    /// A flat bit array of m bits, addressed directly. No block structure —
+    /// this avoids the 256-bit minimum block size of the SBBF which wastes
+    /// space for small item counts (the dominant case at 50 lines/chunk).
     ///
     /// Hash function
     /// -------------
-    /// xxHash64 (64-bit).  Upper 32 bits → block index.  Lower 32 bits → intra-block
-    /// probes via the 8 salt multipliers.  The two halves are statistically independent,
-    /// giving a true ~1 % FP rate at ~10.5 bits/item.
+    /// xxHash64 split into two 32-bit halves h1, h2.
+    /// The k-th probe position is (h1 + k*h2) % m — Kirsch-Mitzenmacher
+    /// double hashing, proven to achieve the same FP rate as k independent
+    /// hash functions while requiring only two hash evaluations total.
+    ///
+    /// Space
+    /// -----
+    /// m = ceil(-n * ln(ε) / ln(2)²) bits, k = ceil(-log2(ε)) hash functions.
+    /// At ε=0.001: ~14.4 bits/item, k=10. No block-rounding waste.
     ///
     /// Serialization
     /// -------------
-    /// GetBytes() / GetByteSize() return the raw uint[] block array as bytes.
-    /// The .dat header stores (bitCount = blockCount * 256, hashFunctions = 8).
-    /// The load constructor asserts both invariants so a corrupt or mismatched file
-    /// fails loudly rather than silently producing wrong results.
+    /// GetBytes() returns the raw bit array as bytes (ceil(m/8) bytes).
+    /// The .dat header stores (size=m, hashFunctions=k).
+    /// Magic: hashFunctions is always in range [1..20] for a valid standard
+    /// Bloom filter. The old SBBF always wrote hashFunctions=8 with
+    /// bitCount % 256 == 0. The validator in SearchHandler detects the old
+    /// format and forces a rebuild.
     /// </summary>
     public sealed class BloomFilter
     {
-        // Parquet SBBF salt multipliers — one per word in a 256-bit block.
-        private static readonly uint[] Salts =
-        {
-            0x47b6137bU, 0x44974d91U, 0x8824ad5bU, 0xa2b7289dU,
-            0x705495c7U, 0x2df1424bU, 0x9efc4947U, 0x5c6bfb31U
-        };
+        private readonly byte[] _bits;
+        private readonly int    _m;       // total bit count
+        private readonly int    _k;       // number of hash probes
+        private readonly uint   _h2Mask;  // mask for h2 to keep it odd (better distribution)
 
-        private const int WordsPerBlock    = 8;    // 8 × uint32 = 256 bits = one cache line
-        private const int BitsPerBlock     = 256;
-        private const int HashFunctionCount = 8;   // always 8 for SBBF
-
-        private readonly uint[] _blocks;           // flat: blockCount × 8 words
-        private readonly int    _blockCount;
-        private readonly int    _bitCount;         // blockCount * 256  (stored in .dat header)
-
-        // Public surface — writer/reader depend on these two properties.
-        public int Size          => _bitCount;
-        public int HashFunctions => HashFunctionCount;
+        public int Size          => _m;
+        public int HashFunctions => _k;
 
         // ── Constructor: new filter (used during indexing) ────────────────────────────
         public BloomFilter(int expectedItems, double fpRate)
         {
-            // Guard against degenerate inputs.
             if (expectedItems < 1) expectedItems = 1;
-            // Clamp fpRate to a range where Math.Log is finite and negative.
             if (fpRate <= 0.0 || fpRate >= 1.0) fpRate = 0.01;
 
-            double rawBits = -(expectedItems * Math.Log(fpRate)) / (Math.Log(2) * Math.Log(2));
+            // Optimal m and k for standard Bloom filter.
+            double ln2 = Math.Log(2);
+            double rawBits = -(expectedItems * Math.Log(fpRate)) / (ln2 * ln2);
+            _m = Math.Max(8, (int)Math.Ceiling(rawBits));
+            _k = Math.Max(1, (int)Math.Round(-Math.Log(fpRate) / ln2));
 
-            // Round up to the next whole number of 256-bit blocks; minimum 1 block.
-            int blockCount = Math.Max(1, (int)Math.Ceiling(rawBits / BitsPerBlock));
-
-            _blockCount = blockCount;
-            _bitCount   = blockCount * BitsPerBlock;
-            _blocks     = new uint[blockCount * WordsPerBlock];
+            int byteCount = (_m + 7) / 8;
+            _bits = new byte[byteCount];
         }
 
         // ── Constructor: load from file ───────────────────────────────────────────────
         public BloomFilter(byte[] bytes, int bitCount, int hashFunctions)
         {
-            if (hashFunctions != HashFunctionCount)
+            if (bitCount <= 0)
                 throw new InvalidOperationException(
-                    "Bloom filter file was built with a different hash function count (" + hashFunctions +
+                    "Bloom filter file has invalid bit count (" + bitCount + "). Rebuild the index.");
+            if (hashFunctions <= 0 || hashFunctions > 20)
+                throw new InvalidOperationException(
+                    "Bloom filter file has unexpected hash function count (" + hashFunctions +
                     "). Delete the .dat file and rebuild the index.");
 
-            if (bitCount <= 0 || bitCount % BitsPerBlock != 0)
-                throw new InvalidOperationException(
-                    "Bloom filter file has an unexpected bit count (" + bitCount +
-                    "). Delete the .dat file and rebuild the index.");
+            _m = bitCount;
+            _k = hashFunctions;
 
-            _bitCount   = bitCount;
-            _blockCount = bitCount / BitsPerBlock;
-            _blocks     = new uint[_blockCount * WordsPerBlock];
-
-            int expectedBytes = _blocks.Length * 4;
+            int expectedBytes = (_m + 7) / 8;
             if (bytes == null || bytes.Length < expectedBytes)
                 throw new InvalidOperationException(
                     "Bloom filter data is truncated (expected " + expectedBytes +
                     " bytes, got " + (bytes?.Length ?? 0) + "). Rebuild the index.");
 
-            Buffer.BlockCopy(bytes, 0, _blocks, 0, expectedBytes);
+            _bits = new byte[expectedBytes];
+            Buffer.BlockCopy(bytes, 0, _bits, 0, expectedBytes);
         }
 
         // ── Add ───────────────────────────────────────────────────────────────────────
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Add(string item)
         {
-            ulong h     = XxHash64(item);
-            int   block = BlockIndex(h) * WordsPerBlock;
-            uint  lower = (uint)h;
-            for (int w = 0; w < WordsPerBlock; w++)
-                _blocks[block + w] |= 1u << (int)((lower * Salts[w]) >> 27);
+            ulong hash = XxHash64(item);
+            uint h1 = (uint)(hash >> 32);
+            uint h2 = (uint)hash | 1u;   // force odd for full-period stepping
+            uint m  = (uint)_m;
+            for (int i = 0; i < _k; i++)
+            {
+                uint pos = h1 % m;
+                _bits[pos >> 3] |= (byte)(1 << (int)(pos & 7));
+                h1 += h2;
+            }
         }
 
         // ── Contains ─────────────────────────────────────────────────────────────────
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool Contains(string item)
         {
-            ulong h     = XxHash64(item);
-            int   block = BlockIndex(h) * WordsPerBlock;
-            uint  lower = (uint)h;
-            for (int w = 0; w < WordsPerBlock; w++)
-                if ((_blocks[block + w] & (1u << (int)((lower * Salts[w]) >> 27))) == 0)
-                    return false;
+            ulong hash = XxHash64(item);
+            uint h1 = (uint)(hash >> 32);
+            uint h2 = (uint)hash | 1u;
+            uint m  = (uint)_m;
+            for (int i = 0; i < _k; i++)
+            {
+                uint pos = h1 % m;
+                if ((_bits[pos >> 3] & (1 << (int)(pos & 7))) == 0) return false;
+                h1 += h2;
+            }
             return true;
         }
 
@@ -126,32 +126,20 @@ namespace MinimalIndexer
         // ── Serialization ─────────────────────────────────────────────────────────────
         public byte[] GetBytes()
         {
-            var b = new byte[_blocks.Length * 4];
-            Buffer.BlockCopy(_blocks, 0, b, 0, b.Length);
+            var b = new byte[_bits.Length];
+            Buffer.BlockCopy(_bits, 0, b, 0, b.Length);
             return b;
         }
 
-        public int GetByteSize() => _blocks.Length * 4;
-
-        // ── Helpers ───────────────────────────────────────────────────────────────────
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private int BlockIndex(ulong h)
-            => (int)((uint)(h >> 32) % (uint)_blockCount);
+        public int GetByteSize() => _bits.Length;
 
         // ── xxHash64 ──────────────────────────────────────────────────────────────────
-        // Hashes the string's UTF-16 code units treated as raw bytes (2 bytes per char).
-        // Follows the standard xxHash64 streaming spec:
-        //   - Large path (len >= 16 chars): 4 independent accumulators, 16 chars per turn.
-        //   - Short path (len < 16 chars):  single accumulator with 4-char and 1-char steps.
-        //   - Empty string: returns a valid constant (Prime5 after avalanche).
-        // Hebrew words are typically 2–8 chars, so the short path dominates in practice.
         private const ulong Prime1 = 11400714785074694791UL;
         private const ulong Prime2 = 14029467366897019727UL;
         private const ulong Prime3 =  1609587929392839161UL;
         private const ulong Prime4 =  9650029242287828579UL;
         private const ulong Prime5 =  2870177450012600261UL;
 
-        // Pack 4 consecutive UTF-16 chars into one uint64 lane.
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static ulong Lane(string s, int i)
             => (ulong)s[i]
@@ -167,7 +155,6 @@ namespace MinimalIndexer
 
             if (len >= 16)
             {
-                // 4 independent accumulators; consume 16 chars (32 bytes) per iteration.
                 ulong v1 = unchecked(Prime1 + Prime2);
                 ulong v2 = Prime2;
                 ulong v3 = 0UL;
@@ -189,13 +176,11 @@ namespace MinimalIndexer
                 h = MergeRound(h, v4);
                 h += (ulong)(len * 2);
 
-                // Remaining full 4-char groups.
                 for (; i <= len - 4; i += 4)
                 {
                     h ^= Round(0, Lane(s, i));
                     h  = unchecked(Rotl(h, 27) * Prime1 + Prime4);
                 }
-                // Remaining individual chars.
                 for (; i < len; i++)
                 {
                     h ^= unchecked((ulong)s[i] * Prime5);
@@ -204,7 +189,6 @@ namespace MinimalIndexer
             }
             else
             {
-                // Short path — covers empty string, 1-char, 2-char … 15-char inputs.
                 h = Prime5 + (ulong)(len * 2);
 
                 int j = 0;
@@ -220,7 +204,6 @@ namespace MinimalIndexer
                 }
             }
 
-            // Final avalanche mix.
             h ^= h >> 33;
             h  = unchecked(h * Prime2);
             h ^= h >> 29;

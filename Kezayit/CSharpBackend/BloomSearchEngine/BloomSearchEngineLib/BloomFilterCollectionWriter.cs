@@ -6,7 +6,6 @@ namespace MinimalIndexer
     public sealed class BloomFilterCollectionWriter : IDisposable
     {
         private const int FlushThreshold = 10 * 1024 * 1024;
-        private const int CacheLineSize = 64;
         // Header layout: int32 count (4) + int16 chunkSize (2) + int32 lastLineId (4) = 10 bytes
         private const int HeaderSize = 10;
 
@@ -61,10 +60,6 @@ namespace MinimalIndexer
             _w.Write(firstLineId);
             _w.Write(lastLineId);
             _w.Write(bytes, 0, byteSize);
-
-            long entrySize = 16 + byteSize;
-            int pad = (int)((CacheLineSize - entrySize % CacheLineSize) % CacheLineSize);
-            for (int i = 0; i < pad; i++) _w.Write((byte)0);
 
             Count++;
             LastLineId = lastLineId;

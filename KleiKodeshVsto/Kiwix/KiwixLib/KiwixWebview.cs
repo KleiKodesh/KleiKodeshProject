@@ -34,7 +34,8 @@ namespace KiwixLib
             AutoScaleMode = AutoScaleMode.None;
             Controls.Add(_webView);
             _InitSplash();
-            _ = InitAsync();
+            // Load fires after the form is shown and all handles are created.
+            Load += (_, __) => _ = InitAsync();
         }
 
         private void _InitSplash()
@@ -62,16 +63,29 @@ namespace KiwixLib
 
         private async Task InitAsync()
         {
-            var env = await GetSharedEnv();
+            try
+            {
+                var env = await GetSharedEnv();
 
-            await _webView.EnsureCoreWebView2Async(env);
+                await _webView.EnsureCoreWebView2Async(env);
 
-            _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
-                "kiwix-app", AppDir, CoreWebView2HostResourceAccessKind.Allow);
+                _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                    "kiwix-app", AppDir, CoreWebView2HostResourceAccessKind.Allow);
 
-            _webView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
+                _webView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
 
-            _webView.Source = new Uri("https://kiwix-app/index.html");
+                _webView.Source = new Uri("https://kiwix-app/index.html");
+            }
+            catch (Exception ex)
+            {
+                // Surface the error and dismiss the splash so the app is not stuck.
+                _HideSplash();
+                MessageBox.Show(
+                    "Kiwix failed to initialise:\n\n" + ex.Message,
+                    "Kiwix",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
         }
 
         private void OnNavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)

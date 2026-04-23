@@ -91,6 +91,16 @@ namespace KleiKodesh.Helpers
                 var pane = TaskPaneManager.CreateNew(hostControl, title, width);
                 pane.Visible = true;
 
+                // Forward pop-out toggle action to the WPF control if it supports it
+                var setPopOut = userControl.GetType().GetMethod("SetPopOutToggleAction");
+                if (setPopOut != null)
+                {
+                    // TaskPaneManager wired the action to hostControl; we need to re-wire to the WPF view.
+                    // Create a fresh TaskPanePopOut for the hostControl and pass its Toggle to the WPF view.
+                    var popOut = new TaskPanePopOut(hostControl, pane);
+                    setPopOut.Invoke(userControl, new object[] { new Action(popOut.Toggle) });
+                }
+
                 setColor();
                 hostControl.ForeColorChanged += (_, __) => setColor();
 

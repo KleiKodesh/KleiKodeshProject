@@ -45,6 +45,7 @@ namespace WebSitesLib.UI
                     {
                         _defaultUserAgent = CoreWebView2.Settings.UserAgent;
                         CoreWebView2.NavigationStarting += OnNavigationStarting;
+                        SetupKiwixVirtualHost();
                         _coreInitializedTcs.TrySetResult(true);
                     }
                     else
@@ -81,6 +82,14 @@ namespace WebSitesLib.UI
         {
             string cacheDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "webCache");
             _environment = await CoreWebView2Environment.CreateAsync(userDataFolder: cacheDir);
+        }
+
+        internal void SetupKiwixVirtualHost()
+        {
+            string kiwixDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Kiwix.js");
+            if (Directory.Exists(kiwixDir))
+                CoreWebView2.SetVirtualHostNameToFolderMapping(
+                    "kiwix-app", kiwixDir, CoreWebView2HostResourceAccessKind.Allow);
         }
     }
 }

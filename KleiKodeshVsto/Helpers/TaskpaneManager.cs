@@ -83,7 +83,7 @@ namespace KleiKodesh.Helpers
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.ToString(), "Duplicate TaskPane Error");
+                MessageBox.Show("אין אפשרות לשכפל חלונית צד זו)", "Duplicate TaskPane Error");
                 return null;
             }
         }

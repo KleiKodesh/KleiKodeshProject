@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html dir="rtl" lang="he">
     <head>
         <meta charset="utf-8">
 
@@ -470,13 +470,14 @@
                             <button type="button" class="close" data-hide="alert">&times;</button>
                             <span id="persistentMessage"></span>
                         </div>
-                        <div class="dropdown" style="float:right">
+                        <div class="mb-2">
                             <select class="form-control" tabindex="4" id="languageSelector" name="languageSelector" aria-labelledby="languageSelector">
-                                <option data-i18n="configure-language-selector-default" selected class="dropdown-item" href="#" value="default">Language</a>
-                                <option class="dropdown-item" href="#" value="en">English</a>
-                                <option class="dropdown-item" href="#" value="fr">Français</a>
-                                <option class="dropdown-item" href="#" value="es">Español</a>
-                                <option data-i18n="configure-language-selector-other" class="dropdown-item" href="#" value="other">More coming soon...!</a>
+                                <option data-i18n="configure-language-selector-default" selected class="dropdown-item" value="default">Language</option>
+                                <option class="dropdown-item" value="he">עברית</option>
+                                <option class="dropdown-item" value="en">English</option>
+                                <option class="dropdown-item" value="fr">Français</option>
+                                <option class="dropdown-item" value="es">Español</option>
+                                <option data-i18n="configure-language-selector-other" class="dropdown-item" value="other">More coming soon...!</option>
                             </select>
                         </div>
                         <p id="downloadInstruction"><span data-i18n="configure-download-instructions">This application needs a ZIM archive to work.<br />
@@ -844,6 +845,6 @@
     <script type="text/javascript" src="js/bootstrap.bundle.min.js"></script>
     <script type="text/javascript" src="js/init.js"></script>
     <!-- <script type="module" defer src="js/app.js"></script> -->
-    <script type="text/javascript" defer src="js/bundle.min.js"></script>
+    <script type="text/javascript" defer src="js/bundle.js"></script>
 </body>
 </html>

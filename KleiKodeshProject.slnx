@@ -6,6 +6,8 @@
   <Project Path="Kezayit/CSharpBackend/BloomSearchEngine/BloomSearchEngineLib/BloomSearchEngineLib.csproj" Id="0f7c9226-2c18-4cb8-8f39-a3a539b7122a" />
   <Project Path="Kezayit/CSharpBackend/KezayitDemoApp/KezayitDemoApp.csproj" Id="2b6e5acb-2062-4281-aacb-c46681fcfe42" />
   <Project Path="Kezayit/CSharpBackend/KezayitLib/KezayitLib.csproj" Id="a1b2c3d4-e5f6-7890-abcd-ef1234567890" />
+  <Project Path="KleiKodeshVsto/Kiwix/KiwixDemoApp/KiwixDemoApp.csproj" Id="3fe46d77-1bce-4356-a171-071a2328c03d" />
+  <Project Path="KleiKodeshVsto/Kiwix/KiwixLib/KiwixLib.csproj" Id="235001e0-16c9-4aea-9260-99cf489a79c2" />
   <Project Path="KleiKodeshVsto/KleiKodeshVsto.csproj" Id="47dbe4db-2a18-46ed-838a-2114fd44d016" />
   <Project Path="Build/Installer/KleiKodeshVstoInstallerWpf.csproj" Id="2444948f-973d-4cdd-a5be-3596a400b7ba" />
   <Project Path="KleiKodeshVsto/WebSitesLib/WebSitesDemo/WebSitesDemo.csproj" Id="a5b8c9d1-e2f3-4a5b-8c9d-1e2f3a5b8c9d" />

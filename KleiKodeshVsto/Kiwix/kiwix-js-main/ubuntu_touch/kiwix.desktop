@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=kiwix
+Comment=kiwix for Ubuntu Touch
+Exec=webapp-container $@ ./www/index.html
+Terminal=false
+Type=Application
+X-Ubuntu-Touch=true
+Icon=./www/img/icons/kiwix_scalable.svg
+X-Ubuntu-Splash-Image=./www/img/icons/kiwix-splash-scalable.svg
+X-Ubuntu-Splash-Color=#888888

@@ -457,6 +457,12 @@ watch(
     bottomVisible.value = !bottomVisible.value
   },
 )
+// If the bottom panel was restored open but the book has no commentaries, close it.
+// hasCommentaries resolves asynchronously after the book data loads, so we can't
+// check it at restore time — instead we watch for it to settle to false.
+watch(hasCommentaries, (has) => {
+  if (!has) bottomVisible.value = false
+})
 watch(searchVisible, (v) => {
   if (!v) {
     contentSearch.clear()

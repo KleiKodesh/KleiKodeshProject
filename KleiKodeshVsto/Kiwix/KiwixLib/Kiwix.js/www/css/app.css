@@ -607,3 +607,89 @@ button {
     
 }
 
+
+
+/* =====================================================================
+   RTL OVERRIDES — KleiKodesh embedding
+   Flip all LTR-specific left/right properties for dir="rtl" layout.
+   ===================================================================== */
+
+/* Snippet indentation: flip border and padding sides */
+[dir="rtl"] .snippet-header {
+    padding-left: 0;
+    padding-right: 2em;
+    border-left: none;
+    border-right: 3px solid #dee2e6;
+}
+
+[dir="rtl"] .snippet-indicator {
+    margin-right: 0;
+    margin-left: 8px;
+}
+
+[dir="rtl"] .snippet-content {
+    padding: 0.25em 2em 1em 1em;
+    border-left: none;
+    border-right: 3px solid #dee2e6;
+}
+
+/* TOC indentation: flip margin sides */
+[dir="rtl"] .toc-item-h2 {
+    margin-left: 0;
+    margin-right: 6px;
+}
+
+[dir="rtl"] .toc-item-h3 {
+    margin-left: 0;
+    margin-right: 12px;
+}
+
+[dir="rtl"] .toc-item-h4 {
+    margin-left: 0;
+    margin-right: 16px;
+}
+
+/* Button group block: flip padding */
+[dir="rtl"] .btn-group.btn-block {
+    padding-left: 0;
+    padding-right: 5%;
+}
+
+/* Form control margin */
+[dir="rtl"] .form-control {
+    margin-right: 0;
+    margin-left: 4px;
+}
+
+/* Navbar brand: Bootstrap RTL sets margin-left, ensure no margin-right conflict */
+[dir="rtl"] .navbar-brand {
+    margin-right: 0;
+}
+
+/* Navbar toggler: align to left side in RTL */
+[dir="rtl"] .navbar-toggler {
+    margin-right: auto;
+    margin-left: 0;
+}
+
+/* Collapse nav: align items to the right */
+[dir="rtl"] .navbar-collapse {
+    text-align: right;
+}
+
+/* Search form row: ensure RTL flex direction */
+[dir="rtl"] #formArticleSearch .row {
+    flex-direction: row;
+}
+
+/* col-3 small screen fix */
+@media (max-width: 768px) {
+    [dir="rtl"] .col-3 {
+        padding-left: 0;
+        padding-right: 0;
+    }
+    [dir="rtl"] #formArticleSearch .form-control {
+        margin-right: 0;
+        margin-left: 4px;
+    }
+}

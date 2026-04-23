@@ -6,6 +6,12 @@
     "IsVisible": true
   },
   {
+    "Name": "קיוויקס",
+    "Description": "קורא ספרים אופליין - Kiwix",
+    "Url": "https://kiwix-app/index.html",
+    "IsVisible": false
+  },
+  {
     "Name": "דיקטה",
     "Description": "כלים לעיבוד העברית ואוסף טקסטים.",
     "Url": "https://dicta.org.il/tools",

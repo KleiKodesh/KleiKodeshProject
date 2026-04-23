@@ -14,7 +14,7 @@ import { resetting } from '@/utils/resetState'
 import { isHosted, onDbReady } from '@/host/seforimDb'
 import { useZmanim, CITIES } from '@/components/hebrew-calendar/useZmanim'
 
-const { resetSettings, resetAll } = useSettingsPage()
+const { resetSettings, resetSearchIndex, resetAll } = useSettingsPage()
 const settings = useSettingsStore()
 
 const dbPath = ref(window.__webviewDbPath ?? '')
@@ -59,9 +59,9 @@ function cancelConfirm() {
   pendingConfirm.value = null
 }
 
-function resetSettingsAndReload() {
+async function resetSettingsAndReload() {
   resetting.value = true
-  resetSettings()
+  await resetSettings()
   settings.completeSetup()
   window.location.reload()
 }
@@ -70,9 +70,9 @@ function confirmResetAll() {
   confirmAction({
     label: 'איפוס האפליקציה',
     desc: 'פעולה זו תמחק את כל נתוני האפליקציה ואינדקס החיפוש ותטען אותה מחדש. לא ניתן לבטל פעולה זו.',
-    action: () => {
+    action: async () => {
       resetting.value = true
-      resetAll()
+      await resetAll()
     },
   })
 }
@@ -84,7 +84,13 @@ function confirmResetSettings() {
     action: resetSettingsAndReload,
   })
 }
-
+function confirmResetSearchIndex() {
+  confirmAction({
+    label: 'איפוס אינדקס החיפוש',
+    desc: 'פעולה זו תמחק את אינדקס החיפוש ומטמון תוצאות החיפוש ותבנה את האינדקס מחדש. שאר נתוני האפליקציה לא יושפעו.',
+    action: resetSearchIndex,
+  })
+}
 const { activeCity, setCity, init: initZmanim } = useZmanim()
 onMounted(() => initZmanim())
 
@@ -200,6 +206,10 @@ function pickCity(name: string) {
       נשמרים.
     </p>
     <button class="reset-all-btn" @click="confirmResetSettings">איפוס ההגדרות</button>
+    <p class="reset-desc">
+      מוחק את אינדקס החיפוש ובונה אותו מחדש. שאר נתוני האפליקציה לא יושפעו.
+    </p>
+    <button class="reset-all-btn" @click="confirmResetSearchIndex">איפוס אינדקס החיפוש</button>
     <p class="reset-desc">
       מוחק את כל נתוני האפליקציה — הגדרות, היסטוריית קריאה, מיקומי גלילה, טאבים פתוחים, ואינדקס
       החיפוש. לא ניתן לבטל פעולה זו.

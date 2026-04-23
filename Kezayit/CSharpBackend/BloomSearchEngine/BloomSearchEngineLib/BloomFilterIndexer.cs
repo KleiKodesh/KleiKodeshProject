@@ -1,8 +1,10 @@
 using MinimalIndexer;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace BloomSearchEngineLib
 {
@@ -21,10 +23,33 @@ namespace BloomSearchEngineLib
             _id = id; _chunkSize = chunkSize; _fpRate = falsePositiveRate; _dbPath = dbPath;
         }
 
+        // Holds one chunk ready for processing.
+        private struct ChunkWork
+        {
+            public int SequenceNumber;
+            public List<string> Lines;
+            public int FirstLineId;
+            public int LastLineId;
+        }
+
+        // Holds one processed chunk ready for writing.
+        private struct ChunkResult
+        {
+            public int SequenceNumber;
+            public BloomFilter Filter;
+            public int FirstLineId;
+            public int LastLineId;
+        }
+
         /// <summary>
         /// Start or resume indexing.
-        /// resumeAfterLineId: skip all lines with id &lt;= this value. Only meaningful when resuming.
-        /// resumeChunkCount: number of chunks already committed to the .dat file (0 = fresh start).
+        /// Uses a parallel pipeline:
+        ///   - Reader thread: streams rows from SQLite in bulk batches, splits into chunks,
+        ///     enqueues ChunkWork items.
+        ///   - Worker threads (ProcessorCount-1): each dequeues a ChunkWork, normalizes lines,
+        ///     extracts terms, builds a BloomFilter, enqueues a ChunkResult.
+        ///   - Writer (main thread): drains ChunkResults in sequence order, writes to .dat file.
+        /// Order is preserved via sequence numbers and a reorder buffer on the writer side.
         /// </summary>
         public void CreateBloomFilters(int resumeAfterLineId = 0, int resumeChunkCount = 0)
         {
@@ -49,48 +74,141 @@ namespace BloomSearchEngineLib
 
                     int totalLines = db.GetLineCount();
                     int totalChunks = (totalLines + _chunkSize - 1) / _chunkSize;
-                    Console.WriteLine("[BloomFilterIndexer] totalLines=" + totalLines + " totalChunks=" + totalChunks);
+                    int workerCount = Math.Max(1, Environment.ProcessorCount - 1);
+                    Console.WriteLine("[BloomFilterIndexer] totalLines=" + totalLines + " totalChunks=" + totalChunks + " workers=" + workerCount);
 
                     var sw = Stopwatch.StartNew();
                     var lastReport = sw.Elapsed;
-                    var chunk = new List<string>(_chunkSize);
                     int processed = resumeChunkCount;
-                    var extractor = new TermExtractor();
-                    const int NotSet = int.MinValue;
-                    int chunkFirstId = NotSet, chunkLastId = NotSet;
+                    double fpRate = _fpRate;
+                    short chunkSize = _chunkSize;
 
-                    void Commit()
+                    // Queue from reader → workers. Bounded to limit memory: at most 4× workers pending.
+                    var workQueue = new BlockingCollection<ChunkWork>(workerCount * 4);
+                    // Queue from workers → writer. Same bound.
+                    var resultQueue = new BlockingCollection<ChunkResult>(workerCount * 4);
+
+                    // ── Reader task ───────────────────────────────────────────
+                    var readerTask = Task.Run(() =>
                     {
-                        var terms = extractor.ExtractTermsFromLines(chunk);
-                        var filter = new BloomFilter(Math.Max(1, terms.Count), _fpRate);
-                        foreach (var t in terms) filter.Add(t);
-                        writer.Commit(filter, chunkFirstId, chunkLastId);
-                        chunk.Clear();
-                        chunkFirstId = NotSet; chunkLastId = NotSet;
-                        processed++;
-
-                        var now = sw.Elapsed;
-                        if ((now - lastReport).TotalMilliseconds >= ReportIntervalMs)
+                        try
                         {
-                            var eta = processed > 0 && processed < totalChunks
-                                ? TimeSpan.FromMilliseconds(sw.Elapsed.TotalMilliseconds / processed * (totalChunks - processed))
-                                : TimeSpan.Zero;
-                            var args = new IndexProgressChangedEventArgs(processed, totalChunks, sw.Elapsed, eta);
-                            IndexProgressChanged?.Invoke(this, args);
-                            BloomIndexingCoordinator.NotifyProgress(args);
-                            lastReport = now;
+                            int seq = resumeChunkCount;
+                            const int NotSet = int.MinValue;
+                            int chunkFirstId = NotSet, chunkLastId = NotSet;
+                            var chunk = new List<string>(chunkSize);
+
+                            foreach (var batch in db.GetAllLineContentsBulk(resumeAfterLineId))
+                            {
+                                foreach (var (lineId, line) in batch)
+                                {
+                                    if (ct.IsCancellationRequested) return;
+                                    if (chunkFirstId == NotSet) chunkFirstId = lineId;
+                                    chunkLastId = lineId;
+                                    chunk.Add(line);
+                                    if (chunk.Count == chunkSize)
+                                    {
+                                        workQueue.Add(new ChunkWork
+                                        {
+                                            SequenceNumber = seq++,
+                                            Lines = chunk,
+                                            FirstLineId = chunkFirstId,
+                                            LastLineId = chunkLastId,
+                                        });
+                                        chunk = new List<string>(chunkSize);
+                                        chunkFirstId = NotSet; chunkLastId = NotSet;
+                                    }
+                                }
+                                if (ct.IsCancellationRequested) return;
+                            }
+                            // Final partial chunk
+                            if (chunk.Count > 0 && !ct.IsCancellationRequested)
+                                workQueue.Add(new ChunkWork
+                                {
+                                    SequenceNumber = seq,
+                                    Lines = chunk,
+                                    FirstLineId = chunkFirstId,
+                                    LastLineId = chunkLastId,
+                                });
+                        }
+                        finally { workQueue.CompleteAdding(); }
+                    });
+
+                    // ── Worker tasks ──────────────────────────────────────────
+                    var workerTasks = new Task[workerCount];
+                    for (int w = 0; w < workerCount; w++)
+                    {
+                        workerTasks[w] = Task.Run(() =>
+                        {
+                            var extractor = new TermExtractor();
+                            foreach (var work in workQueue.GetConsumingEnumerable())
+                            {
+                                if (ct.IsCancellationRequested) break;
+                                var terms = extractor.ExtractTermsFromLines(work.Lines);
+                                var filter = new BloomFilter(Math.Max(1, terms.Count), fpRate);
+                                foreach (var t in terms) filter.Add(t);
+                                resultQueue.Add(new ChunkResult
+                                {
+                                    SequenceNumber = work.SequenceNumber,
+                                    Filter = filter,
+                                    FirstLineId = work.FirstLineId,
+                                    LastLineId = work.LastLineId,
+                                });
+                            }
+                        });
+                    }
+
+                    // Close resultQueue when all workers finish
+                    Task.Run(() =>
+                    {
+                        Task.WaitAll(workerTasks);
+                        resultQueue.CompleteAdding();
+                    });
+
+                    // ── Writer (this thread) ──────────────────────────────────
+                    // Reorder buffer: holds out-of-order results until the next expected
+                    // sequence number is available.
+                    var reorderBuffer = new SortedDictionary<int, ChunkResult>();
+                    int nextExpected = resumeChunkCount;
+                    long msWrite = 0;
+
+                    foreach (var result in resultQueue.GetConsumingEnumerable())
+                    {
+                        if (ct.IsCancellationRequested) break;
+                        reorderBuffer[result.SequenceNumber] = result;
+
+                        // Drain all consecutive results from the buffer
+                        while (reorderBuffer.ContainsKey(nextExpected))
+                        {
+                            var r = reorderBuffer[nextExpected];
+                            reorderBuffer.Remove(nextExpected);
+
+                            var swWrite = Stopwatch.StartNew();
+                            writer.Commit(r.Filter, r.FirstLineId, r.LastLineId);
+                            swWrite.Stop(); msWrite += swWrite.ElapsedMilliseconds;
+
+                            processed++;
+                            nextExpected++;
+
+                            var now = sw.Elapsed;
+                            if ((now - lastReport).TotalMilliseconds >= ReportIntervalMs)
+                            {
+                                var eta = processed > 0 && processed < totalChunks
+                                    ? TimeSpan.FromMilliseconds(sw.Elapsed.TotalMilliseconds / processed * (totalChunks - processed))
+                                    : TimeSpan.Zero;
+                                var args = new IndexProgressChangedEventArgs(processed, totalChunks, sw.Elapsed, eta);
+                                IndexProgressChanged?.Invoke(this, args);
+                                BloomIndexingCoordinator.NotifyProgress(args);
+                                lastReport = now;
+                            }
                         }
                     }
 
-                    foreach (var (lineId, line) in db.GetAllLineContents(resumeAfterLineId))
-                    {
-                        if (ct.IsCancellationRequested) { Console.WriteLine("[BloomFilterIndexer] Cancelled during indexing"); return; }
-                        if (chunkFirstId == NotSet) chunkFirstId = lineId;
-                        chunkLastId = lineId;
-                        chunk.Add(line);
-                        if (chunk.Count == _chunkSize) Commit();
-                    }
-                    if (chunk.Count > 0 && !ct.IsCancellationRequested) Commit();
+                    readerTask.Wait();
+
+                    sw.Stop();
+                    Console.WriteLine("[BloomFilterIndexer] Done — total={0}s  chunks={1}  write={2}ms",
+                        sw.Elapsed.TotalSeconds.ToString("F1"), processed, msWrite);
 
                     if (!ct.IsCancellationRequested)
                     {

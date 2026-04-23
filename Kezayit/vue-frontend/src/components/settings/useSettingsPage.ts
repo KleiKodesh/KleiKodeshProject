@@ -2,10 +2,12 @@ import { watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useTabStore } from '@/stores/tabStore'
+import { useSearchCacheStore } from '@/stores/searchCacheStore'
 
 export function useSettingsPage() {
   const settings = useSettingsStore()
   const tabStore = useTabStore()
+  const searchCache = useSearchCacheStore()
 
   const {
     censorDivineNames,
@@ -32,10 +34,10 @@ export function useSettingsPage() {
     }
   })
 
-  function resetAll() {
+  async function resetAll() {
     tabStore.resetAll()
-    // Clear all settings (including setupDone) so the setup wizard shows after reload
     settings.reset()
+    await searchCache.clear()
     if (typeof window.__webviewAction === 'function') {
       window.__webviewAction('DeleteBloomIndex', {}).catch(() => {})
       window.__webviewAction('resetSettings', {}).catch(() => {})
@@ -45,8 +47,14 @@ export function useSettingsPage() {
     }
   }
 
-  function resetSettings() {
+  async function resetSearchIndex() {
+    await searchCache.clear()
+    await window.__webviewAction?.('ResetSearchIndex')
+  }
+
+  async function resetSettings() {
     settings.reset()
+    await searchCache.clear()
   }
 
   return {
@@ -64,6 +72,7 @@ export function useSettingsPage() {
     newTabPage,
     resumeLastRead,
     resetSettings,
+    resetSearchIndex,
     resetAll,
   }
 }

@@ -83,14 +83,22 @@ namespace WebSitesLib.UI
             () => { CurrentTab.AddressModel = CurrentAddressModel; },
             () => CurrentTab != null && CurrentAddressModel != null);
 
-        public RelayCommand EditWhiteListCommand => new RelayCommand(() =>
+        public RelayCommand OpenKiwixCommand => new RelayCommand(() =>
         {
-            var dialog = new WhiteListDialog(_webAddressModels);
-            dialog.ShowDialog();
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(WebAddressModels)));
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(VisibleAddressModels)));
-            SaveWhiteList();
+            const string kiwixUrl = "https://kiwix-app/index.html";
+            var existing = TabsCollection.FirstOrDefault(t =>
+                t.CurrentUrl != null && t.CurrentUrl.StartsWith("https://kiwix-app", StringComparison.OrdinalIgnoreCase));
+            if (existing != null) { SelectedItem = existing; return; }
+
+            var model = new WebAddressModel { Name = "קיוויקס", Url = kiwixUrl, IsVisible = false };
+            var tab = new BrowserTab(model, this);
+            TabsCollection.Add(tab);
+            SelectedItem = tab;
         });
+
+        Action _popOutToggle;
+        public void SetPopOutToggleAction(Action toggle) => _popOutToggle = toggle;
+        public RelayCommand PopOutCommand => new RelayCommand(() => _popOutToggle?.Invoke());
 
         public RelayCommand MoveToFrontCommand(BrowserTab tab) => new RelayCommand(() =>
         {

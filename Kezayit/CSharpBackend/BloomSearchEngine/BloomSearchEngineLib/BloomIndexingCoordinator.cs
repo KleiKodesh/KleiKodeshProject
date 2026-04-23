@@ -23,13 +23,16 @@ namespace BloomSearchEngineLib
         public static bool IsIndexing { get { lock (_lock) return _isIndexing; } }
         public static IndexProgressChangedEventArgs LastProgress { get { lock (_lock) return _lastProgress; } }
 
-        /// <summary>Cancel any in-progress indexing run and wait briefly for it to stop.</summary>
+        /// <summary>
+        /// Signal cancellation to any in-progress indexing run.
+        /// The caller is responsible for waiting on the indexing task to fully stop
+        /// before accessing the index file — use SearchHandler._indexingTask.Wait().
+        /// </summary>
         public static void CancelIndexing()
         {
             CancellationTokenSource old;
             lock (_lock) { old = _cts; }
             if (old != null) { try { old.Cancel(); } catch { } }
-            for (int i = 0; i < 30 && IsIndexing; i++) Thread.Sleep(100);
         }
 
         public static bool TryAcquireIndexingLock(int timeoutMs, out CancellationToken ct)

@@ -1,6 +1,7 @@
 using MinimalIndexer;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 
 namespace BloomSearchEngineLib
@@ -8,18 +9,22 @@ namespace BloomSearchEngineLib
     public sealed class BloomFilterSearcher
     {
         private readonly string _id;
+        private readonly ZayitDbConnectionPool _pool;
 
-        public BloomFilterSearcher(string id = "lines") { _id = id; }
+        /// <param name="pool">
+        /// Shared connection pool. If null a temporary single-use connection is opened
+        /// per search (original behaviour — useful for one-off calls and tests).
+        /// </param>
+        public BloomFilterSearcher(string id = "lines", ZayitDbConnectionPool pool = null)
+        {
+            _id = id;
+            _pool = pool;
+        }
 
         public IEnumerable<SearchResultItem> Search(string query)
         {
             if (string.IsNullOrWhiteSpace(query)) yield break;
 
-            // Normalize each query term the same way TermExtractor normalizes during indexing:
-            // strip nikud, keep only Hebrew letters (א–ת) and ASCII letters.
-            // This ensures the Bloom filter lookup and IndexOf match use the same form
-            // as the indexed terms, regardless of what punctuation or diacritics the
-            // user typed.
             var rawTerms = query.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             var termList = new List<string>(rawTerms.Length);
             foreach (var raw in rawTerms)
@@ -30,42 +35,136 @@ namespace BloomSearchEngineLib
             var terms = termList.ToArray();
             if (terms.Length == 0) yield break;
 
+            var swTotal = Stopwatch.StartNew();
+
             using (var reader = new BloomFilterCollectionReader(_id))
             {
-                var hits = reader.Search(terms);
-                if (hits.Length == 0) yield break;
+                // ── Bloom scan ────────────────────────────────────────────────
+                // Enumerate eagerly so we can time the scan separately from DB work.
+                var swScan = Stopwatch.StartNew();
+                var hits = new List<SearchResult>(reader.Search(terms));
+                swScan.Stop();
 
-                // Process hits one chunk at a time and stream results to the caller.
-                // Each chunk's perfect matches are sorted by proximity before yielding,
-                // so the frontend receives well-ordered results as they arrive rather
-                // than waiting for all chunks to finish.
-                var chunkBatch    = new List<SearchResultItem>();
+                int perfectHits  = hits.Count(h => h.Score == terms.Length);
+                int partialHits  = hits.Count - perfectHits;
+                Console.WriteLine("[Search] query=\"{0}\"  bloom_scan={1}ms  hits={2} (perfect={3} partial={4})",
+                    query, swScan.ElapsedMilliseconds, hits.Count, perfectHits, partialHits);
+
+                if (hits.Count == 0) yield break;
+
+                // ── Merge consecutive hit chunks ──────────────────────────────
+                // Hits whose line-ID ranges are within GAP lines of each other are
+                // merged into one wider range. This turns N small range queries into
+                // one larger one, dramatically reducing SQLite round-trips for common
+                // words where hits are dense.
+                //
+                // GAP = 0  → only merge chunks that are literally adjacent (LastLineId+1 == next FirstLineId)
+                // GAP = 50 → merge chunks with up to 50 lines of gap between them
+                // We use a small gap so we don't pull in huge swaths of unrelated lines.
+                const int MergeGap = 50;
+                var mergedHits = MergeHits(hits, MergeGap);
+
+                int mergedCount = mergedHits.Count;
+                Console.WriteLine("[Search] merged {0} hits → {1} ranges (gap={2})", hits.Count, mergedCount, MergeGap);
+
+                // ── DB verification ───────────────────────────────────────────
+                // Phase 1 (per chunk): read lines, run match, collect perfect hits.
+                // Phase 2 (flush): one GetLineMetadataBatch call for accumulated hits, yield results.
+                //
+                // Flush triggers (whichever comes first):
+                //   - FLUSH_HIT_THRESHOLD hits accumulated → flush immediately for low first-result latency
+                //   - META_BATCH_SIZE chunks processed → flush periodically to bound memory
+                // The hit threshold drives first-result latency; the chunk threshold bounds memory
+                // for dense queries where almost every chunk has hits.
+                const int FirstFlushThreshold = 1;   // flush immediately on first hit — minimises first-result latency
+                const int MetaBatchSize       = 200; // subsequent flushes every N chunks
+
                 var partialMatches = new TopNPartialMatches(100);
-                int perfectCount  = 0;
+                int perfectCount   = 0;
+                int chunksProcessed = 0;
 
-                using (var db = new ZayitDbManager())
+                long msDbRead    = 0;
+                long msMatchWork = 0;
+                long msMeta      = 0;
+                bool firstResult  = true;
+                bool firstFlushed = false; // tracks whether the first flush has happened
+
+                var pendingLineIds   = new List<int>(MetaBatchSize * 2);
+                var pendingMatchInfo = new List<(int lineId, MatchInfo match, string norm)>(MetaBatchSize * 2);
+
+                bool ownsConnection = _pool == null;
+                ZayitDbConnectionPool.Lease lease = _pool != null ? _pool.Acquire() : null;
+                ZayitDbManager tempDb = ownsConnection ? new ZayitDbManager() : null;
+                ZayitDbManager db = lease != null ? lease.Db : tempDb;
+                try
                 {
-                    foreach (var hit in hits)
+                    foreach (var hit in mergedHits)
                     {
-                        chunkBatch.Clear();
-                        ProcessChunk(db, hit, terms, terms.Length, chunkBatch, partialMatches);
+                        CollectChunkMatches(db, hit, terms, terms.Length, pendingLineIds, pendingMatchInfo,
+                            partialMatches, ref msDbRead, ref msMatchWork);
+                        chunksProcessed++;
 
-                        if (chunkBatch.Count == 0) continue;
+                        bool shouldFlush = (!firstFlushed && pendingLineIds.Count >= FirstFlushThreshold)
+                            || chunksProcessed % MetaBatchSize == 0;
 
-                        foreach (var item in chunkBatch) { perfectCount++; yield return item; }
+                        if (shouldFlush && pendingLineIds.Count > 0)
+                        {
+                            firstFlushed = true;
+                            foreach (var item in FlushMetaBatch(db, pendingLineIds, pendingMatchInfo, ref msMeta))
+                            {
+                                if (firstResult)
+                                {
+                                    Console.WriteLine("[Search] first_result_latency={0}ms  chunks_before_first={1}",
+                                        swTotal.ElapsedMilliseconds, chunksProcessed);
+                                    firstResult = false;
+                                }
+                                perfectCount++;
+                                yield return item;
+                            }
+                        }
+                    }
+
+                    // Flush any remaining pending hits.
+                    if (pendingLineIds.Count > 0)
+                    {
+                        foreach (var item in FlushMetaBatch(db, pendingLineIds, pendingMatchInfo, ref msMeta))
+                        {
+                            if (firstResult)
+                            {
+                                Console.WriteLine("[Search] first_result_latency={0}ms  chunks_before_first={1}",
+                                    swTotal.ElapsedMilliseconds, chunksProcessed);
+                                firstResult = false;
+                            }
+                            perfectCount++;
+                            yield return item;
+                        }
                     }
                 }
+                finally
+                {
+                    if (lease != null) lease.Dispose();
+                    if (tempDb != null) tempDb.Dispose();
+                }                Console.WriteLine("[Search] db_phase={0}ms  chunks={1}  perfect={2}  partial_candidates={3}",
+                    swTotal.ElapsedMilliseconds - swScan.ElapsedMilliseconds,
+                    chunksProcessed, perfectCount, partialMatches.Count);
+                Console.WriteLine("[Search] db_breakdown  read={0}ms  match={1}ms  meta={2}ms",
+                    msDbRead, msMatchWork, msMeta);
 
-                Console.WriteLine("[Search] {0} perfect + {1} partial", perfectCount, partialMatches.Count);
-
-                foreach (var item in HydratePartialMatches(partialMatches, perfectCount))
+                // ── Partial hydration ─────────────────────────────────────────
+                var swPartial = Stopwatch.StartNew();
+                foreach (var item in HydratePartialMatches(partialMatches, perfectCount, _pool))
                     yield return item;
+                swPartial.Stop();
 
-                Console.WriteLine("[Search completed] RAM: {0:F2} MB", GC.GetTotalMemory(false) / (1024.0 * 1024.0));
+                swTotal.Stop();
+                Console.WriteLine("[Search] partial_hydration={0}ms  total={1}ms  RAM={2:F1}MB",
+                    swPartial.ElapsedMilliseconds, swTotal.ElapsedMilliseconds,
+                    GC.GetTotalMemory(false) / (1024.0 * 1024.0));
             }
         }
 
-        private static IEnumerable<SearchResultItem> HydratePartialMatches(TopNPartialMatches partialMatches, int perfectCount)
+        private static IEnumerable<SearchResultItem> HydratePartialMatches(
+            TopNPartialMatches partialMatches, int perfectCount, ZayitDbConnectionPool pool)
         {
             if (perfectCount >= 100) yield break;
 
@@ -73,7 +172,10 @@ namespace BloomSearchEngineLib
             var partials = partialMatches.GetTop(remaining);
             if (partials.Length == 0) yield break;
 
-            using (var db = new ZayitDbManager())
+            ZayitDbConnectionPool.Lease lease = pool != null ? pool.Acquire() : null;
+            ZayitDbManager tempDb = pool == null ? new ZayitDbManager() : null;
+            ZayitDbManager db = lease != null ? lease.Db : tempDb;
+            try
             {
                 var lineIds = new List<int>(partials.Length);
                 foreach (var p in partials) lineIds.Add(p.LineId);
@@ -96,23 +198,83 @@ namespace BloomSearchEngineLib
                     };
                 }
             }
+            finally
+            {
+                if (lease != null) lease.Dispose();
+                if (tempDb != null) tempDb.Dispose();
+            }
         }
 
-        private static void ProcessChunk(
+        /// <summary>
+        /// Merges Bloom hit ranges that are within <paramref name="gap"/> lines of each other
+        /// into a single wider range, reducing the number of SQLite round-trips.
+        ///
+        /// Hits are sorted by FirstLineId before merging so the output is in DB order.
+        /// The merged hit's Score is the minimum of the constituent scores — conservative,
+        /// ensures we don't skip lines that only partially matched in the Bloom scan.
+        /// </summary>
+        private static List<SearchResult> MergeHits(List<SearchResult> hits, int gap)
+        {
+            if (hits.Count <= 1) return hits;
+
+            // Sort by FirstLineId so we can do a single linear pass.
+            hits.Sort((a, b) => a.FirstLineId.CompareTo(b.FirstLineId));
+
+            var merged = new List<SearchResult>(hits.Count);
+            var current = hits[0];
+
+            for (int i = 1; i < hits.Count; i++)
+            {
+                var next = hits[i];
+                // Merge if the next range starts within gap lines of where the current ends.
+                if (next.FirstLineId <= current.LastLineId + gap)
+                {
+                    // Extend the current range and take the minimum score.
+                    current = new SearchResult
+                    {
+                        Id           = current.Id,
+                        FirstLineId  = current.FirstLineId,
+                        LastLineId   = Math.Max(current.LastLineId, next.LastLineId),
+                        Score        = Math.Min(current.Score, next.Score)
+                    };
+                }
+                else
+                {
+                    merged.Add(current);
+                    current = next;
+                }
+            }
+            merged.Add(current);
+            return merged;
+        }
+
+        /// <summary>
+        /// Phase 1: read lines for one chunk, run match, accumulate perfect hits into
+        /// pending lists. Does NOT touch metadata — that is deferred to FlushMetaBatch.
+        /// </summary>
+        private static void CollectChunkMatches(
             ZayitDbManager db,
             SearchResult hit,
             string[] terms,
             int maxScore,
-            List<SearchResultItem> perfectMatches,
-            TopNPartialMatches partialMatches)
+            List<int> pendingLineIds,
+            List<(int lineId, MatchInfo match, string norm)> pendingMatchInfo,
+            TopNPartialMatches partialMatches,
+            ref long msDbRead,
+            ref long msMatchWork)
         {
-            var perfectLineIds   = new List<int>();
-            var perfectMatchInfo = new List<(int lineId, MatchInfo match, string norm)>();
+            var sw = Stopwatch.StartNew();
 
-            foreach (var (lineId, content) in db.GetLineContentsChunk(hit.FirstLineId, hit.LastLineId))
+            var lines = new List<(int lineId, string content)>();
+            foreach (var row in db.GetLineContentsChunk(hit.FirstLineId, hit.LastLineId))
+                lines.Add(row);
+
+            sw.Stop();
+            msDbRead += sw.ElapsedMilliseconds;
+            sw.Restart();
+
+            foreach (var (lineId, content) in lines)
             {
-                // Cheap raw pre-filter: if any term's first character is absent from the
-                // raw content, normalization cannot produce a match — skip it entirely.
                 if (!TextNormalizer.RawContentMightMatch(content, terms)) continue;
 
                 string norm = content.NormalizeText();
@@ -121,8 +283,8 @@ namespace BloomSearchEngineLib
 
                 if (match.Words.Length == maxScore)
                 {
-                    perfectLineIds.Add(lineId);
-                    perfectMatchInfo.Add((lineId, match, norm));
+                    pendingLineIds.Add(lineId);
+                    pendingMatchInfo.Add((lineId, match, norm));
                 }
                 else
                 {
@@ -137,14 +299,30 @@ namespace BloomSearchEngineLib
                 }
             }
 
-            if (perfectLineIds.Count == 0) return;
+            sw.Stop();
+            msMatchWork += sw.ElapsedMilliseconds;
+        }
 
-            var metadata = db.GetLineMetadataBatch(perfectLineIds);
+        /// <summary>
+        /// Phase 2: fetch metadata for all accumulated perfect line IDs in one batch query,
+        /// build result items, clear the pending lists, and return the items.
+        /// </summary>
+        private static IEnumerable<SearchResultItem> FlushMetaBatch(
+            ZayitDbManager db,
+            List<int> pendingLineIds,
+            List<(int lineId, MatchInfo match, string norm)> pendingMatchInfo,
+            ref long msMeta)
+        {
+            var sw = Stopwatch.StartNew();
+            var metadata = db.GetLineMetadataBatch(pendingLineIds);
+            sw.Stop();
+            msMeta += sw.ElapsedMilliseconds;
 
-            foreach (var (lineId, match, norm) in perfectMatchInfo)
+            var results = new List<SearchResultItem>(pendingMatchInfo.Count);
+            foreach (var (lineId, match, norm) in pendingMatchInfo)
             {
                 if (!metadata.TryGetValue(lineId, out var meta)) continue;
-                perfectMatches.Add(new SearchResultItem
+                results.Add(new SearchResultItem
                 {
                     LineId = lineId,
                     BookId = meta.bookId,
@@ -155,6 +333,10 @@ namespace BloomSearchEngineLib
                     Snippet = match.Snippet(norm)
                 });
             }
+
+            pendingLineIds.Clear();
+            pendingMatchInfo.Clear();
+            return results;
         }
 
         private struct PartialMatchData

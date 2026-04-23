@@ -1,14 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Threading.Tasks;
 
 namespace MinimalIndexer
 {
     public sealed class BloomFilterCollectionReader : IDisposable
     {
-        private const int CacheLineSize = 64;
-        private const int MaxPartialPerThread = 100;
+        private const int MaxPartials = 100;
 
         private BloomFilterData[] _filters;
         private int _count;
@@ -30,13 +28,17 @@ namespace MinimalIndexer
                     int firstLineId = r.ReadInt32(), lastLineId = r.ReadInt32();
                     int byteLen = (bits + 7) / 8;
                     _filters[i] = new BloomFilterData { Filter = new BloomFilter(r.ReadBytes(byteLen), bits, hashes), Id = i, FirstLineId = firstLineId, LastLineId = lastLineId };
-                    int pad = (int)((CacheLineSize - (16 + byteLen) % CacheLineSize) % CacheLineSize);
-                    if (pad > 0) r.ReadBytes(pad);
                 }
             }
         }
 
-        public SearchResult[] Search(string[] terms)
+        /// <summary>
+        /// Scans all Bloom filters in a single sequential pass and yields hits lazily.
+        /// Perfect hits (all terms present) are yielded immediately in DB order so the
+        /// caller can start DB verification before the scan finishes.
+        /// Partial hits accumulate and are yielded after all perfect hits.
+        /// </summary>
+        public IEnumerable<SearchResult> Search(string[] terms)
         {
             // Sort longest-first: longer Hebrew words are rarer, so they fail fast
             // on most filters and short-circuit the AND check early.
@@ -44,47 +46,44 @@ namespace MinimalIndexer
             Array.Sort(sorted, (a, b) => b.Length.CompareTo(a.Length));
 
             bool requireAll = sorted.Length > 1;
+            int maxScore = sorted.Length;
 
-            int threads = Environment.ProcessorCount;
-            int chunkSize = (_count + threads - 1) / threads;
-            var threadResults = new ThreadSearchResults[threads];
-
-            Parallel.For(0, threads, t =>
-            {
-                int start = t * chunkSize;
-                int end = Math.Min(start + chunkSize, _count);
-                if (start < _count)
-                    threadResults[t] = SearchChunk(sorted, requireAll, start, end);
-            });
-
-            return MergeResults(threadResults, terms.Length);
-        }
-
-        private ThreadSearchResults SearchChunk(string[] terms, bool requireAll, int start, int end)
-        {
-            int maxScore = terms.Length;
-            var perfect = new List<SearchResult>((end - start) / 10);
-            var partial = new List<SearchResult>(MaxPartialPerThread);
+            var partials = new List<SearchResult>(MaxPartials);
             int lowestPartial = 0;
 
-            for (int i = start; i < end; i++)
+            for (int i = 0; i < _count; i++)
             {
-                int score = ScoreFilter(_filters[i].Filter, terms, requireAll);
+                int score = ScoreFilter(_filters[i].Filter, sorted, requireAll);
 
                 if (score == maxScore)
                 {
-                    perfect.Add(new SearchResult { Id = _filters[i].Id, Score = score, FirstLineId = _filters[i].FirstLineId, LastLineId = _filters[i].LastLineId });
+                    yield return new SearchResult
+                    {
+                        Id = _filters[i].Id,
+                        Score = score,
+                        FirstLineId = _filters[i].FirstLineId,
+                        LastLineId = _filters[i].LastLineId
+                    };
                 }
                 else if (score > 0)
                 {
-                    TryAddPartial(partial, ref lowestPartial, new SearchResult { Id = _filters[i].Id, Score = score, FirstLineId = _filters[i].FirstLineId, LastLineId = _filters[i].LastLineId });
+                    TryAddPartial(partials, ref lowestPartial, new SearchResult
+                    {
+                        Id = _filters[i].Id,
+                        Score = score,
+                        FirstLineId = _filters[i].FirstLineId,
+                        LastLineId = _filters[i].LastLineId
+                    });
                 }
             }
 
-            return new ThreadSearchResults { PerfectMatches = perfect, PartialMatches = partial };
+            // Yield partials sorted by score descending after all perfect hits
+            partials.Sort((a, b) => b.Score.CompareTo(a.Score));
+            foreach (var p in partials)
+                yield return p;
         }
 
-        // For AND queries (requireAll=true) returns immediately on the first missing term.
+        // For AND queries (requireAll=true) returns 0 immediately on the first missing term.
         // Terms should be pre-sorted longest-first so the rarest term is checked first.
         private static int ScoreFilter(BloomFilter filter, string[] terms, bool requireAll)
         {
@@ -99,15 +98,15 @@ namespace MinimalIndexer
             return score;
         }
 
-        private static void TryAddPartial(List<SearchResult> partial, ref int lowestPartial, SearchResult candidate)
+        private static void TryAddPartial(List<SearchResult> partials, ref int lowestPartial, SearchResult candidate)
         {
-            if (partial.Count < MaxPartialPerThread)
+            if (partials.Count < MaxPartials)
             {
-                partial.Add(candidate);
-                if (partial.Count == MaxPartialPerThread)
+                partials.Add(candidate);
+                if (partials.Count == MaxPartials)
                 {
                     lowestPartial = int.MaxValue;
-                    foreach (var p in partial)
+                    foreach (var p in partials)
                         if (p.Score < lowestPartial) lowestPartial = p.Score;
                 }
                 return;
@@ -115,45 +114,20 @@ namespace MinimalIndexer
 
             if (candidate.Score <= lowestPartial) return;
 
-            int worstIdx = 0, worstScore = partial[0].Score;
-            for (int j = 1; j < partial.Count; j++)
-                if (partial[j].Score < worstScore) { worstScore = partial[j].Score; worstIdx = j; }
+            int worstIdx = 0, worstScore = partials[0].Score;
+            for (int j = 1; j < partials.Count; j++)
+                if (partials[j].Score < worstScore) { worstScore = partials[j].Score; worstIdx = j; }
 
-            partial[worstIdx] = candidate;
+            partials[worstIdx] = candidate;
 
-            // Rescan for the new lowest after replacement
             lowestPartial = int.MaxValue;
-            foreach (var p in partial)
+            foreach (var p in partials)
                 if (p.Score < lowestPartial) lowestPartial = p.Score;
-        }
-
-        private static SearchResult[] MergeResults(ThreadSearchResults[] threadResults, int maxScore)
-        {
-            var allPerfect = new List<SearchResult>();
-            var allPartial = new List<SearchResult>();
-
-            foreach (var r in threadResults)
-            {
-                if (r == null) continue;
-                if (r.PerfectMatches != null) allPerfect.AddRange(r.PerfectMatches);
-                if (r.PartialMatches != null) allPartial.AddRange(r.PartialMatches);
-            }
-
-            allPartial.Sort((a, b) => b.Score.CompareTo(a.Score));
-
-            int neededPartials = allPerfect.Count < 100 ? Math.Min(100 - allPerfect.Count, allPartial.Count) : 0;
-            var result = new SearchResult[allPerfect.Count + neededPartials];
-
-            for (int i = 0; i < allPerfect.Count; i++) result[i] = allPerfect[i];
-            for (int i = 0; i < neededPartials; i++) result[allPerfect.Count + i] = allPartial[i];
-
-            return result;
         }
 
         public void Dispose() { }
     }
 
     public struct BloomFilterData { public BloomFilter Filter; public int Id; public int FirstLineId; public int LastLineId; }
-    public class ThreadSearchResults { public List<SearchResult> PerfectMatches; public List<SearchResult> PartialMatches; }
     public struct SearchResult { public int Id; public int Score; public int FirstLineId; public int LastLineId; }
 }

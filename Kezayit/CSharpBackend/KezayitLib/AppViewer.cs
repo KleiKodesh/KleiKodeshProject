@@ -112,7 +112,7 @@ namespace KezayitLib
             _dictionary = new DictionaryHandler(AppDir);
             _db.OnDbPathPicked = path =>
             {
-                _search.ResetAndReindex(path);
+                Task.Run(() => _search.ResetAndReindex(path));
             };
 
             _webView.CoreWebView2.WebMessageReceived += OnMessageReceived;
@@ -153,7 +153,7 @@ namespace KezayitLib
             _db = new DbHandler(_bridge, _webView, savedPath);
             _db.OnDbPathPicked = path =>
             {
-                _search.ResetAndReindex(path);
+                Task.Run(() => _search.ResetAndReindex(path));
             };
 
             // Only kick off indexing if the DB changed or bloom is missing/stale
@@ -193,7 +193,13 @@ namespace KezayitLib
                         case "GetBloomIndexingProgress": _search.HandleGetProgress(id); break;
                         case "BloomSearchStart": _search.HandleSearchStart(root, id); break;
                         case "BloomSearchCancel": _search.HandleSearchCancel(root, id); break;
-                        case "DeleteBloomIndex": _search.HandleDeleteIndex(id); break;
+                        case "DeleteBloomIndex":
+                            // Reply immediately, then cancel+delete on a background thread
+                            // so the message handler thread is not blocked by task.Wait.
+                            _bridge.Reply(id, new { });
+                            Task.Run(() => _search.HandleDeleteIndex(null));
+                            break;
+                        case "ResetSearchIndex": _search.HandleResetSearchIndex(id); break;
                         case "ConfirmReindex":
                             bool confirm = root.TryGetProperty("confirm", out var cv) && cv.GetBoolean();
                             _search.HandleConfirmReindex(confirm, id);

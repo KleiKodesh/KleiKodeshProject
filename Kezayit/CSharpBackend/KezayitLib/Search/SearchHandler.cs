@@ -1,6 +1,5 @@
 using BloomSearchEngineLib;
-using KezayitLib.Bridge;
-using Microsoft.Web.WebView2.WinForms;
+using KezayitLib.Bridge;using Microsoft.Web.WebView2.WinForms;
 using Microsoft.Win32;
 using System;
 using System.Collections.Concurrent;
@@ -17,6 +16,8 @@ namespace KezayitLib.Search
         private volatile bool _isReady = false;
         private volatile bool _isIndexing = false;
         private string _dbPath;
+        private ZayitDbConnectionPool _dbPool;
+        private Task _indexingTask;
         private readonly ConcurrentDictionary<string, CancellationTokenSource> _searches
             = new ConcurrentDictionary<string, CancellationTokenSource>();
         private int _nextSearchId = 1;
@@ -59,9 +60,6 @@ namespace KezayitLib.Search
 
         /// <summary>
         /// Validates the .dat file format. Returns null if valid, or a reason string if not.
-        /// Checks: file exists, minimum header size, sane header values, and that the first
-        /// filter entry uses the SBBF format (hashFunctions == 8, bitCount % 256 == 0).
-        /// An old FNV-based index will fail the filter format check and trigger a rebuild.
         /// </summary>
         private static string ValidateDatFile()
         {
@@ -71,26 +69,13 @@ namespace KezayitLib.Search
                 using (var fs = new FileStream(BloomFilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
                 using (var r = new BinaryReader(fs))
                 {
-                    if (fs.Length < 10) return "header too short (" + fs.Length + " bytes) — old format";
-                    int count = r.ReadInt32();       // offset 0
-                    short chunkSize = r.ReadInt16(); // offset 4
-                    r.ReadInt32();                   // offset 6: lastLineId
+                    if (fs.Length < 10) return "header too short (" + fs.Length + " bytes)";
+                    int count = r.ReadInt32();
+                    short chunkSize = r.ReadInt16();
+                    r.ReadInt32();
                     if (count < 0) return "negative chunk count (" + count + ")";
                     if (chunkSize <= 0) return "invalid chunkSize (" + chunkSize + ")";
-
-                    // Probe the first filter entry to detect old FNV-based format.
-                    // SBBF requires hashFunctions == 8 and bitCount % 256 == 0.
-                    if (count > 0 && fs.Length > 10)
-                    {
-                        int bits   = r.ReadInt32(); // filter bitCount
-                        int hashes = r.ReadInt32(); // filter hashFunctions
-                        if (hashes != 8)
-                            return "old filter format (hashFunctions=" + hashes + ", expected 8) — SBBF rebuild required";
-                        if (bits <= 0 || bits % 256 != 0)
-                            return "old filter format (bitCount=" + bits + ", not a multiple of 256) — SBBF rebuild required";
-                    }
-
-                    return null; // valid
+                    return null;
                 }
             }
             catch (Exception ex) { return "read error: " + ex.Message; }
@@ -166,6 +151,7 @@ namespace KezayitLib.Search
 
                 Console.WriteLine("[SearchHandler] Bloom index complete and up-to-date, marking ready");
                 _isReady = true;
+                OpenPool();
                 PushProgress(true, false, 100, 0, 0, "");
                 return;
             }
@@ -201,9 +187,24 @@ namespace KezayitLib.Search
         public void ResetAndReindex(string newDbPath)
         {
             Console.WriteLine("[SearchHandler] ResetAndReindex called, newDbPath=" + newDbPath);
-            StopIndexing();
-            try { if (File.Exists(BloomFilePath)) { File.Delete(BloomFilePath); Console.WriteLine("[SearchHandler] Deleted bloom file"); } } catch (Exception ex) { Console.WriteLine("[SearchHandler] Delete bloom file failed: " + ex.Message); }
+
+            // Cancel any running indexer and wait for it to fully stop so it releases
+            // the file handle before we try to delete the .dat file.
+            BloomIndexingCoordinator.CancelIndexing();
+            var task = _indexingTask;
+            if (task != null)
+            {
+                try { task.Wait(10000); } // wait up to 10s for clean shutdown
+                catch { }
+                _indexingTask = null;
+            }
+            _isIndexing = false;
+            ClosePool();
+
+            try { if (File.Exists(BloomFilePath)) { File.Delete(BloomFilePath); Console.WriteLine("[SearchHandler] Deleted bloom file"); } }
+            catch (Exception ex) { Console.WriteLine("[SearchHandler] Delete bloom file failed: " + ex.Message); }
             try { if (File.Exists(BloomVersionStampPath)) File.Delete(BloomVersionStampPath); } catch { }
+
             _isReady = false;
             if (!string.IsNullOrEmpty(newDbPath) && File.Exists(newDbPath))
                 OnDbReady(newDbPath);
@@ -214,6 +215,33 @@ namespace KezayitLib.Search
             Console.WriteLine("[SearchHandler] StopIndexing called, _isIndexing=" + _isIndexing);
             _isIndexing = false;
             BloomIndexingCoordinator.CancelIndexing();
+            var task = _indexingTask;
+            if (task != null)
+            {
+                try { task.Wait(10000); } catch { }
+                _indexingTask = null;
+            }
+        }
+
+        private void OpenPool()
+        {
+            ClosePool();
+            if (!string.IsNullOrEmpty(_dbPath) && File.Exists(_dbPath))
+            {
+                _dbPool = new ZayitDbConnectionPool(1, _dbPath);
+                Console.WriteLine("[SearchHandler] Connection pool opened (size=1)");
+            }
+        }
+
+        private void ClosePool()
+        {
+            var pool = _dbPool;
+            _dbPool = null;
+            if (pool != null)
+            {
+                pool.Dispose();
+                Console.WriteLine("[SearchHandler] Connection pool closed");
+            }
         }
 
         private void StartIndexing(int resumeAfterLineId, int resumeChunkCount)
@@ -231,12 +259,12 @@ namespace KezayitLib.Search
                 try { if (File.Exists(BloomVersionStampPath)) { File.Delete(BloomVersionStampPath); Console.WriteLine("[SearchHandler] Deleted version stamp"); } } catch (Exception ex) { Console.WriteLine("[SearchHandler] Failed to delete version stamp: " + ex.Message); }
             }
 
-            Task.Run(() =>
+            _indexingTask = Task.Run(() =>
             {
                 Console.WriteLine("[SearchHandler] Task.Run started, resumeAfterLineId=" + resumeAfterLineId);
                 try
                 {
-                    var indexer = new BloomFilterIndexer("lines", (short)100, 0.01, _dbPath);
+                    var indexer = new BloomFilterIndexer("lines", (short)50, 0.001, _dbPath);
                     indexer.IndexProgressChanged += (s, e) => PushIndexProgress(e);
                     indexer.CreateBloomFilters(resumeAfterLineId, resumeChunkCount);
                     Console.WriteLine("[SearchHandler] CreateBloomFilters completed");
@@ -250,6 +278,14 @@ namespace KezayitLib.Search
                     {
                         string ver = GetInstalledAppVersion();
                         if (!string.IsNullOrEmpty(ver)) WriteVersionStamp(ver);
+                        OpenPool();
+                        try
+                        {
+                            long bytes = new FileInfo(BloomFilePath).Length;
+                            Console.WriteLine("[SearchHandler] Index file size: {0:F1} MB ({1:N0} bytes)",
+                                bytes / (1024.0 * 1024.0), bytes);
+                        }
+                        catch { }
                     }
                     Console.WriteLine("[SearchHandler] Indexing done, _isReady=" + _isReady + " bloom exists=" + File.Exists(BloomFilePath));
                     PushProgress(_isReady, false, 100, 0, 0, "");
@@ -289,15 +325,32 @@ namespace KezayitLib.Search
 
         public void HandleDeleteIndex(string id)
         {
+            // Cancel any running indexer first, wait for it to release the file handle,
+            // then delete. Used by full app reset — does NOT start a new index build.
+            BloomIndexingCoordinator.CancelIndexing();
+            var task = _indexingTask;
+            if (task != null)
+            {
+                try { task.Wait(10000); } catch { }
+                _indexingTask = null;
+            }
+            _isIndexing = false;
+            ClosePool();
             try
             {
                 if (File.Exists(BloomFilePath)) File.Delete(BloomFilePath);
                 if (File.Exists(BloomVersionStampPath)) File.Delete(BloomVersionStampPath);
                 _isReady = false;
-                _isIndexing = false;
             }
             catch (Exception ex) { Console.WriteLine("[SearchHandler] Delete index error: " + ex.Message); }
+            if (id != null) _bridge.Reply(id, new { });
+        }
+
+        public void HandleResetSearchIndex(string id)
+        {
             _bridge.Reply(id, new { });
+            if (!string.IsNullOrEmpty(_dbPath) && File.Exists(_dbPath))
+                Task.Run(() => ResetAndReindex(_dbPath));
         }
 
         /// <summary>
@@ -309,7 +362,7 @@ namespace KezayitLib.Search
             _bridge.Reply(id, new { });
             if (!confirm) return;
             Console.WriteLine("[SearchHandler] User confirmed reindex after app update");
-            ResetAndReindex(_dbPath);
+            Task.Run(() => ResetAndReindex(_dbPath));
         }
 
         public void HandleGetProgress(string id)
@@ -374,7 +427,7 @@ namespace KezayitLib.Search
             {
                 var batch = new System.Collections.Generic.List<object>(20);
                 int skipped = 0;
-                foreach (var item in new BloomFilterSearcher("lines").Search(query))
+                foreach (var item in new BloomFilterSearcher("lines", _dbPool).Search(query))
                 {
                     if (ct.IsCancellationRequested)
                     {

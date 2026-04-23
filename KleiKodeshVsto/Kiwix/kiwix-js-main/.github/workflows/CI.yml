@@ -1,0 +1,255 @@
+name: CI
+
+on:
+  - push
+  - pull_request
+  # Allow running manually
+  - workflow_dispatch
+
+jobs:
+
+  # Tests the list of offline files in the Service Worker and compares it to the contents of the www directory
+  # Also runs end-to-end tests on Windows (taking advantage of the build)
+  tests-files-windows:
+    # We want to run on external PRs, but not on our own internal PRs as they'll be run by the push to the branch
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test the list of offline files in Service Worker
+        run: ./scripts/Check-OfflineFilesList.ps1
+
+  # This job runs always, including for remote pull requests, and
+  # has external dependencies or special permission needs, besides a
+  # local install of Node.js, Firefox, and Chromium or Chrome.
+  #
+  # You can run these same tests locally in your own developer
+  # environment via `npm ci && npm test`.
+
+  tests-linux:
+    # We want to run on external PRs, but not on our own internal PRs as they'll be run by the push to the branch
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # Clone the repo and checkout the commit for which the workflow was triggered
+      - uses: actions/checkout@v4
+
+      - name: Test integrity of app parameters
+        run: |
+          # Check that values of assetsCache and appVersion are correctly duplicated
+          chmod +x ./scripts/test_duplicate_values.sh
+          ./scripts/test_duplicate_values.sh
+          # Check that PWAServer is correctly set in init.js
+          chmod +x ./scripts/test_pwa_server.sh
+          ./scripts/test_pwa_server.sh
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests (Linux)
+        run: npm run test-unit
+
+      - name: Test a full build of the app
+        run: npm run build
+
+      - name: Test integrity of patch_gitignore.sh
+        run: |
+          # Check that the /scripts/patch_gitignore script valid (it will be needed for the gh-pages implementation used for unbundled testing)
+          echo "DEV: If this patch_gitignore script fails, follow instructions in ADDING_DEPENDENCIES_NODE_MODULES.md to correct it."
+          chmod +x ./scripts/patch_gitignore.sh
+          ./scripts/patch_gitignore.sh
+          # Check that .gitignore does NOT contain /dist/
+          failed=0
+          if grep -q "^/dist/" .gitignore; then
+            echo "/dist/ found in .gitignore, so patch failed."
+            failed=1
+          fi
+          # Check that .gitignore DOES contain !/node_modules/
+          if ! grep -q "^\!/node_modules/" .gitignore; then
+            echo "!/node_modules/ not found in .gitignore, so patch failed."
+            failed=1
+          fi
+          exit $failed
+
+      - name: Run ESLint
+        run: |
+          npx eslint
+      
+      - name: End-to-end tests on Chrome (Linux)
+        env:
+          GITHUB_ACTION: ${{ github.event_name }}
+        run: npm run test-e2e-chrome
+
+      # Disabling Edge tests for now, as they are very flaky on Linux, but pass fine on Windows
+      # - name: End-to-end tests on Edge (Linux)
+      #   env:
+      #     GITHUB_ACTION: ${{ github.event_name }}
+      #   run: npm run test-e2e-edge
+
+      - name: End-to-end tests on Firefox (Linux)
+        env:
+          GITHUB_ACTION: ${{ github.event_name }}
+        run: npm run test-e2e-firefox
+
+        
+      - name: BrowserStack environment setup
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: browserstack/github-actions/setup-env@master
+        with:
+          username:  ${{ secrets.BROWSERSTACK_USERNAME }}
+          access-key: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+      
+      - name: BrowserStack local tunnel setup
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: browserstack/github-actions/setup-local@master
+        with:
+          local-testing: start
+          local-identifier: random
+
+      - name: Start server locally in background
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
+          BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+        run: npx http-server --silent -p 8099 &
+
+      - name: Run BrowserStack tests on Firefox Legacy 56 / Win10
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
+          BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+        run: npx mocha --no-config tests/e2e/runners/firefox/firefox56.bs.runner.js
+
+      - name: Run BrowserStack tests on  Firefox 70 / Win10
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
+          BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+        run: npx mocha --no-config tests/e2e/runners/firefox/firefox70.bs.runner.js
+
+      - name: Run BrowserStack tests on Chrome 58 / Mojave
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
+          BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+        run: npx mocha --no-config tests/e2e/runners/chrome/chrome58.bs.runner.js
+
+      - name: Run BrowserStack tests on Chrome 60 / Mojave
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
+          BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+        run: npx mocha --no-config tests/e2e/runners/chrome/chrome60.bs.runner.js
+
+      - name: Run BrowserStack tests on Safari 14 / Big Sur
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
+          BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+        run: npx mocha --no-config tests/e2e/runners/safari/safari14.bs.runner.js
+
+      # [DEV] Test on Edge18 are bit flaky, so we are retrying 2 times
+      - name: Run BrowserStack tests on Edge Legacy 18 / Win10
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
+          BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+        run: npx mocha --no-config tests/e2e/runners/edge/edge18.bs.runner.js --retries 2
+
+          
+      - name: Stop BrowserStackLocal
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: browserstack/github-actions/setup-local@master
+        with:
+          local-testing: stop
+
+  tests-windows:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      SE_AVOID_SELENIUM_MANAGER: '1'
+      SE_MANAGER_ENABLED: 'false'
+    steps:
+      # Clone the repo and checkout the commit for which the workflow was triggered
+      - uses: actions/checkout@v4
+
+      - name: Install IEDriver (for IE / Edge IE mode)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          # Download IEDriver 4.14.0 from Selenium GitHub releases (last version available)
+          $downloadUrl = "https://github.com/SeleniumHQ/selenium/releases/download/selenium-4.14.0/IEDriverServer_x64_4.14.0.zip"
+          $downloadPath = "$env:TEMP\IEDriverServer.zip"
+          $extractPath = "C:\tools\iedriver"
+          
+          Write-Host "Downloading IEDriver 4.14.0..."
+          Invoke-WebRequest -Uri $downloadUrl -OutFile $downloadPath -UseBasicParsing
+          
+          Write-Host "Extracting IEDriver..."
+          New-Item -ItemType Directory -Force -Path $extractPath | Out-Null
+          Expand-Archive -Path $downloadPath -DestinationPath $extractPath -Force
+          
+          Write-Host "IEDriver installed at: $extractPath"
+          
+          # Add IEDriver to PATH
+          if (Test-Path "$extractPath\IEDriverServer.exe") {
+            echo "$extractPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            Write-Host "Added to PATH: $extractPath"
+            Write-Host "IEDriver version:"
+            & "$extractPath\IEDriverServer.exe" --version
+          } else {
+            Write-Error "IEDriverServer.exe not found after extraction!"
+            exit 1
+          }
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build App
+        run: npm run build-min
+
+      - name: Unit tests (Windows)
+        run: npm run test-unit
+
+      - name: Run ESLint
+        run: |
+          npx eslint
+      
+      - name: End-to-end tests on Edge Chromium (Windows)
+        env:
+          GITHUB_ACTION: ${{ github.event_name }}
+        run: node tests/e2e/start-server-and-run-tests.js "npx mocha --no-config ./tests/e2e/runners/edge/microsoftEdge.e2e.runner.js --retries 2"
+
+      - name: End-to-end tests on Firefox (Windows)
+        env:
+          GITHUB_ACTION: ${{ github.event_name }}
+        run: node tests/e2e/start-server-and-run-tests.js "npx mocha --no-config ./tests/e2e/runners/firefox/firefox.e2e.runner.js --retries 2"
+
+      - name: End-to-end tests in IE11 Mode (Windows)
+        env:
+          GITHUB_ACTION: ${{ github.event_name }}
+        run: node tests/e2e/start-server-and-run-tests.js "npx mocha --no-config ./tests/e2e/runners/edge/ieMode.e2e.runner.js --retries 2"
+
+  # tests-unit-mac:
+  #   if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+  #   runs-on: macos-latest
+  #   steps:
+  #     # Clone the repo and checkout the commit for which the workflow was triggered
+  #     - uses: actions/checkout@v4
+
+  #     - name: Install dependencies
+  #       run: npm ci
+
+  #     - name: Unit tests (Mackintosh)
+  #       run: |
+  #         npx testcafe remote ./tests/initTestCafe.js --hostname localhost --ports 1337,1338 &
+  #         pid=$!
+  #         open -a Safari http://localhost:1337
+  #         wait $pid
+  

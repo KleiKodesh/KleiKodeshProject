@@ -66,6 +66,63 @@ public sealed class ZayitDbManager : IDisposable
         using (reader) using (cmd) { while (reader.Read()) yield return (reader.GetInt32(0), reader.GetString(1)); }
     }
 
+    /// <summary>
+    /// Bulk variant of GetAllLineContents — reads up to <paramref name="batchSize"/> rows
+    /// per SQLite query using LIMIT/OFFSET, returning each batch as a List.
+    /// Dramatically reduces per-row SQLite overhead compared to the streaming reader
+    /// at the cost of slightly higher memory use per batch.
+    /// </summary>
+    public IEnumerable<List<(int id, string content)>> GetAllLineContentsBulk(int afterLineId = 0, int batchSize = 5000)
+    {
+        int lastId = afterLineId;
+        int batchNumber = 0;
+        long totalDbMs = 0;
+        var swTotal = System.Diagnostics.Stopwatch.StartNew();
+
+        while (true)
+        {
+            var batch = new List<(int id, string content)>(batchSize);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                using (var cmd = _connection.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT id, content FROM line WHERE id > @after ORDER BY id LIMIT @limit";
+                    cmd.Parameters.AddWithValue("@after", lastId);
+                    cmd.Parameters.AddWithValue("@limit", batchSize);
+                    using (var reader = cmd.ExecuteReader())
+                        while (reader.Read())
+                            batch.Add((reader.GetInt32(0), reader.GetString(1)));
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[ZayitDbManager] GetAllLineContentsBulk: " + ex.Message);
+                yield break;
+            }
+            sw.Stop();
+            totalDbMs += sw.ElapsedMilliseconds;
+            batchNumber++;
+
+            if (batch.Count == 0)
+            {
+                Console.WriteLine("[ZayitDbManager] Bulk read done — {0} batches  total_db_read={1}ms  total_elapsed={2}ms",
+                    batchNumber - 1, totalDbMs, swTotal.ElapsedMilliseconds);
+                yield break;
+            }
+
+            lastId = batch[batch.Count - 1].id;
+            yield return batch;
+
+            if (batch.Count < batchSize)
+            {
+                Console.WriteLine("[ZayitDbManager] Bulk read done — {0} batches  total_db_read={1}ms  total_elapsed={2}ms",
+                    batchNumber, totalDbMs, swTotal.ElapsedMilliseconds);
+                yield break;
+            }
+        }
+    }
+
     public IEnumerable<(int id, string content)> GetLineContentsChunk(int firstLineId, int lastLineId)
     {
         var cmd = _connection.CreateCommand();
@@ -97,21 +154,56 @@ public sealed class ZayitDbManager : IDisposable
     {
         var result = new Dictionary<int, (int, string, string)>(lineIds.Count);
         if (lineIds.Count == 0) return result;
+
+        string inClause = string.Join(",", lineIds);
         try
         {
+            // Query 1: lineId → bookId (single table, PK lookup)
+            var lineBookMap = new Dictionary<int, int>(lineIds.Count);
             using (var cmd = _connection.CreateCommand())
             {
-                cmd.CommandText = @"
-                    SELECT l.id, l.bookId, b.title, COALESCE(tt.text, '')
-                    FROM line l
-                    INNER JOIN book b ON l.bookId = b.id
-                    LEFT JOIN line_toc lt ON l.id = lt.lineId
-                    LEFT JOIN tocEntry te ON lt.tocEntryId = te.id
-                    LEFT JOIN tocText tt ON te.textId = tt.id
-                    WHERE l.id IN (" + string.Join(",", lineIds) + ")";
+                cmd.CommandText = "SELECT id, bookId FROM line WHERE id IN (" + inClause + ")";
                 using (var r = cmd.ExecuteReader())
                     while (r.Read())
-                        result[r.GetInt32(0)] = (r.GetInt32(1), r.GetString(2), r.IsDBNull(3) ? "" : r.GetString(3));
+                        lineBookMap[r.GetInt32(0)] = r.GetInt32(1);
+            }
+
+            // Query 2: bookId → title (small table, only distinct book IDs)
+            var bookTitleMap = new Dictionary<int, string>();
+            var distinctBookIds = new HashSet<int>(lineBookMap.Values);
+            if (distinctBookIds.Count > 0)
+            {
+                using (var cmd = _connection.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT id, title FROM book WHERE id IN (" + string.Join(",", distinctBookIds) + ")";
+                    using (var r = cmd.ExecuteReader())
+                        while (r.Read())
+                            bookTitleMap[r.GetInt32(0)] = r.GetString(1);
+                }
+            }
+
+            // Query 3: lineId → tocText (3-table join, but no line/book drag)
+            var tocTextMap = new Dictionary<int, string>(lineIds.Count);
+            using (var cmd = _connection.CreateCommand())
+            {
+                cmd.CommandText =
+                    "SELECT lt.lineId, tt.text " +
+                    "FROM line_toc lt " +
+                    "JOIN tocEntry te ON te.id = lt.tocEntryId " +
+                    "JOIN tocText tt ON tt.id = te.textId " +
+                    "WHERE lt.lineId IN (" + inClause + ")";
+                using (var r = cmd.ExecuteReader())
+                    while (r.Read())
+                        tocTextMap[r.GetInt32(0)] = r.GetString(1);
+            }
+
+            // Assemble results
+            foreach (var lineId in lineIds)
+            {
+                if (!lineBookMap.TryGetValue(lineId, out int bookId)) continue;
+                bookTitleMap.TryGetValue(bookId, out string bookTitle);
+                tocTextMap.TryGetValue(lineId, out string tocText);
+                result[lineId] = (bookId, bookTitle ?? "", tocText ?? "");
             }
         }
         catch (Exception ex) { Console.WriteLine("[ZayitDbManager] GetLineMetadataBatch: " + ex.Message); }

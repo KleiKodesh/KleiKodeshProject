@@ -116,8 +116,9 @@ if (/^dark$|^auto(?!_wikimediaNative)/.test(params['appTheme'])) {
 params['useHomeKeyToFocusSearchBar'] = getSetting('useHomeKeyToFocusSearchBar') === true;
 // A global parameter to turn on/off opening external links in new tab (for ServiceWorker mode)
 params['openExternalLinksInNewTabs'] = getSetting('openExternalLinksInNewTabs') !== false;
-// A global language override
-params['overrideBrowserLanguage'] = getSetting('languageOverride');
+// A global language override — always Hebrew for KleiKodesh embedding
+// Do not read from localStorage: Hebrew is the only supported language here.
+params['overrideBrowserLanguage'] = 'he';
 // A parameter to disable drag-and-drop
 params['disableDragAndDrop'] = getSetting('disableDragAndDrop') === true;
 // A parameter to access the URL of any extension that this app was launched from
