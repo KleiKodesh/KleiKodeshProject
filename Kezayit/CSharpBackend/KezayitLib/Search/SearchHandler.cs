@@ -425,12 +425,18 @@ namespace KezayitLib.Search
         {
             try
             {
-                const int FirstBatchSize = 10;
-                const int SubsequentBatchSize = 20;
+                const int InitialBatchSize = 1;
+                const int SwitchToTimerThreshold = 16;  // switch to timer-only after reaching 16
+                const int FlushTimeoutMs = 150;  // flush every 150ms before user perceives a pause
+                const int MemorySafetyCap = 200;  // flush immediately if batch exceeds this to prevent memory bloat
 
-                var batch = new System.Collections.Generic.List<object>(20);
-                bool firstBatchSent = false;
+                var batch = new System.Collections.Generic.List<object>(50);
+                int currentThreshold = InitialBatchSize;
                 int skipped = 0;
+                var batchTimer = new System.Diagnostics.Stopwatch();
+                batchTimer.Start();
+                bool useTimerOnly = false;
+
                 foreach (var item in new BloomFilterSearcher("lines", _dbPool).Search(query))
                 {
                     if (ct.IsCancellationRequested)
@@ -451,12 +457,38 @@ namespace KezayitLib.Search
                         snippet = item.Snippet
                     });
 
-                    var flushThreshold = firstBatchSent ? SubsequentBatchSize : FirstBatchSize;
-                    if (batch.Count >= flushThreshold)
+                    bool shouldFlush = false;
+                    if (useTimerOnly)
+                    {
+                        // Timer-only mode: flush if timeout OR memory cap reached
+                        shouldFlush = batch.Count > 0 && (batchTimer.ElapsedMilliseconds >= FlushTimeoutMs || batch.Count >= MemorySafetyCap);
+                    }
+                    else
+                    {
+                        // Exponential mode: check threshold, timeout, or memory cap
+                        bool reachedThreshold = batch.Count >= currentThreshold;
+                        bool timedOut = batch.Count > 0 && batchTimer.ElapsedMilliseconds >= FlushTimeoutMs;
+                        bool memoryCapReached = batch.Count >= MemorySafetyCap;
+                        shouldFlush = reachedThreshold || timedOut || memoryCapReached;
+                        
+                        if (shouldFlush && reachedThreshold && currentThreshold >= SwitchToTimerThreshold)
+                        {
+                            // Switch to timer-only mode after this flush
+                            useTimerOnly = true;
+                        }
+                    }
+
+                    if (shouldFlush)
                     {
                         PostSearch(new { type = "searchBatch", searchId = searchId, results = batch.ToArray() });
                         batch.Clear();
-                        firstBatchSent = true;
+                        batchTimer.Restart();
+                        
+                        // Only increment threshold if not in timer-only mode
+                        if (!useTimerOnly && currentThreshold < SwitchToTimerThreshold)
+                        {
+                            currentThreshold = Math.Min(currentThreshold * 2, SwitchToTimerThreshold);
+                        }
                     }
                 }
                 if (batch.Count > 0)

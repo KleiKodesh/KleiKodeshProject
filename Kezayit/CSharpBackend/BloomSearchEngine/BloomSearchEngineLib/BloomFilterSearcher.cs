@@ -60,7 +60,7 @@ namespace BloomSearchEngineLib
                 //
                 // GAP = 0  → only merge chunks that are literally adjacent (LastLineId+1 == next FirstLineId)
                 // GAP = 50 → merge chunks with up to 50 lines of gap between them
-                // We use a small gap so we don't pull in huge swaths of unrelated lines.
+                // Balanced gap for optimal chunk size and processing speed.
                 const int MergeGap = 50;
                 var mergedHits = MergeHits(hits, MergeGap);
 
@@ -76,9 +76,9 @@ namespace BloomSearchEngineLib
                 //   - META_BATCH_SIZE chunks processed → flush periodically to bound memory
                 // The hit threshold drives first-result latency; the chunk threshold bounds memory
                 // for dense queries where almost every chunk has hits.
-                const int FirstFlushThreshold = 5;   // flush the first batch after ~5 perfect matches for faster initial results
-                const int MetaBatchSize       = 50;  // subsequent flushes every N chunks to reduce overhead
-                const int MaxPendingHits      = 30;  // flush sooner when enough hits have accumulated
+                const int FirstFlushThreshold = 2;   // flush the first batch after ~2 perfect matches for faster initial results
+                const int MetaBatchSize       = 25;  // more frequent flushes for smoother streaming
+                const int MaxPendingHits      = 20;  // flush sooner for better responsiveness
 
                 var partialMatches = new TopNPartialMatches(100);
                 int perfectCount   = 0;
