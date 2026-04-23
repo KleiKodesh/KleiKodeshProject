@@ -76,8 +76,9 @@ namespace BloomSearchEngineLib
                 //   - META_BATCH_SIZE chunks processed → flush periodically to bound memory
                 // The hit threshold drives first-result latency; the chunk threshold bounds memory
                 // for dense queries where almost every chunk has hits.
-                const int FirstFlushThreshold = 1;   // flush immediately on first hit — minimises first-result latency
-                const int MetaBatchSize       = 200; // subsequent flushes every N chunks
+                const int FirstFlushThreshold = 5;   // flush the first batch after ~5 perfect matches for faster initial results
+                const int MetaBatchSize       = 50;  // subsequent flushes every N chunks to reduce overhead
+                const int MaxPendingHits      = 30;  // flush sooner when enough hits have accumulated
 
                 var partialMatches = new TopNPartialMatches(100);
                 int perfectCount   = 0;
@@ -105,7 +106,8 @@ namespace BloomSearchEngineLib
                         chunksProcessed++;
 
                         bool shouldFlush = (!firstFlushed && pendingLineIds.Count >= FirstFlushThreshold)
-                            || chunksProcessed % MetaBatchSize == 0;
+                            || chunksProcessed % MetaBatchSize == 0
+                            || pendingLineIds.Count >= MaxPendingHits;
 
                         if (shouldFlush && pendingLineIds.Count > 0)
                         {

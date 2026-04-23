@@ -425,7 +425,11 @@ namespace KezayitLib.Search
         {
             try
             {
+                const int FirstBatchSize = 10;
+                const int SubsequentBatchSize = 20;
+
                 var batch = new System.Collections.Generic.List<object>(20);
+                bool firstBatchSent = false;
                 int skipped = 0;
                 foreach (var item in new BloomFilterSearcher("lines", _dbPool).Search(query))
                 {
@@ -446,10 +450,13 @@ namespace KezayitLib.Search
                         proximityScore = item.ProximityScore,
                         snippet = item.Snippet
                     });
-                    if (batch.Count >= 20)
+
+                    var flushThreshold = firstBatchSent ? SubsequentBatchSize : FirstBatchSize;
+                    if (batch.Count >= flushThreshold)
                     {
                         PostSearch(new { type = "searchBatch", searchId = searchId, results = batch.ToArray() });
                         batch.Clear();
+                        firstBatchSent = true;
                     }
                 }
                 if (batch.Count > 0)
