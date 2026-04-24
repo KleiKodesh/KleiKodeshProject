@@ -289,11 +289,11 @@
                         Style="{StaticResource SecondaryButton}"
                         Click="BackButton_Click"/>
 
-                <Button x:Name="InstallButton"
+                <Button x:Name="CloseButton"
                         Grid.Column="2"
                         Content="סגור"
                         Style="{StaticResource PrimaryButton}"
-                        Click="InstallButton_Click"/>
+                        Click="CloseButton_Click"/>
             </Grid>
         </Border>
     </Grid>

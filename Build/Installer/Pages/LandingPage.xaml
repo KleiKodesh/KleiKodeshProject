@@ -151,12 +151,12 @@
                             Click="RepairButton_Click"/>
                 </StackPanel>
 
-                <Button x:Name="NextButton"
+                <Button x:Name="InstallButton"
                         Grid.Column="2"
                         Content="התקן"
                         Style="{StaticResource PrimaryButton}"
                         MinWidth="72"
-                        Click="NextButton_Click"/>
+                        Click="InstallButton_Click"/>
             </Grid>
         </Border>
     </Grid>

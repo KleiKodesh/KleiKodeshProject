@@ -62,7 +62,10 @@ namespace KleiKodeshVstoInstallerWpf
                 Environment.Exit(0);
         }
 
-        private void CloseButton_Click(object sender, RoutedEventArgs e) => Environment.Exit(0);
-
+        private void CloseButton_Click(object sender, RoutedEventArgs e)
+        {
+            CommitSettings();
+            Environment.Exit(0);
+        }
     }
 }

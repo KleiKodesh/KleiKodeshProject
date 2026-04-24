@@ -16,7 +16,11 @@ namespace KleiKodeshVstoInstallerWpf
             WordHelper.WaitForWordToClose();
         }
 
-        private void NextButton_Click(object sender, RoutedEventArgs e)   => _host.NavigateToInstall(true);
+        private void InstallButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (!WordHelper.EnsureWordClosed()) return;
+            _host.NavigateToInstall(true);
+        }
         private void CancelButton_Click(object sender, RoutedEventArgs e) => Environment.Exit(1);
         private void RepairButton_Click(object sender, RoutedEventArgs e) => _host.NavigateToRepair();
     }

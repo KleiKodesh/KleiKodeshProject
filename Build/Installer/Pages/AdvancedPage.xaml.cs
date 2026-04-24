@@ -108,13 +108,16 @@ namespace KleiKodeshVstoInstallerWpf
                 AddinInstaller.PendingWhitelist = SerializeWhitelistJson(dialog.Entries);
         }
 
-        private void BackButton_Click(object sender, RoutedEventArgs e) => _host.NavigateToSettings();
+        private void BackButton_Click(object sender, RoutedEventArgs e)
+        {
+            Commit();
+            _host.NavigateToSettings();
+        }
 
-        private void InstallButton_Click(object sender, RoutedEventArgs e)
+        private void CloseButton_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                if (!WordHelper.EnsureWordClosed()) return;
                 Commit();
                 Environment.Exit(0);
             }
