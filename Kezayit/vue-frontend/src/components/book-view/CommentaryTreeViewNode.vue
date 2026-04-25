@@ -8,7 +8,9 @@ const props = defineProps<{
   hiddenBookIds?: Set<number>
   depth?: number
 }>()
-const emit = defineEmits<{ toggle: [bookId: number] }>()
+const emit = defineEmits<{
+  'update:hiddenBookIds': [value: Set<number>]
+}>()
 
 const expanded = ref(false)
 
@@ -34,21 +36,24 @@ const sectionState = computed<'checked' | 'unchecked' | 'indeterminate'>(() => {
 
 function toggleCheck(e: MouseEvent) {
   e.stopPropagation()
+  const next = new Set(props.hiddenBookIds ?? [])
   if (props.node.type === 'section') {
-    if (sectionState.value === 'indeterminate') {
-      leafIds.value.filter((id) => props.hiddenBookIds?.has(id)).forEach((id) => emit('toggle', id))
+    if (sectionState.value === 'checked') {
+      leafIds.value.forEach((id) => next.add(id))
     } else {
-      leafIds.value.forEach((id) => emit('toggle', id))
+      leafIds.value.forEach((id) => next.delete(id))
     }
   } else if (props.node.bookId != null) {
-    emit('toggle', props.node.bookId)
+    if (next.has(props.node.bookId)) next.delete(props.node.bookId)
+    else next.add(props.node.bookId)
   }
+  emit('update:hiddenBookIds', next)
 }
 </script>
 
 <template>
   <div style="display: contents">
-    <div v-if="node.type === 'section'" class="row section-row" :class="sectionState">
+    <div v-if="node.type === 'section'" class="row section-row" :class="[sectionState, { expanded }]">
       <button class="expander" :class="{ open: expanded }" @click.stop="expanded = !expanded">
         <span class="expander-icon"><IconChevronDown20Regular /></span>
       </button>
@@ -68,7 +73,7 @@ function toggleCheck(e: MouseEvent) {
         :node="child"
         :depth="(depth ?? 0) + 1"
         :hidden-book-ids="hiddenBookIds"
-        @toggle="emit('toggle', $event)"
+        @update:hidden-book-ids="emit('update:hiddenBookIds', $event)"
       />
     </template>
 
@@ -87,8 +92,10 @@ function toggleCheck(e: MouseEvent) {
 <style scoped>
 .row {
   display: flex;
+  flex-direction: row-reverse;
   align-items: stretch;
   height: 26px;
+  flex-shrink: 0;
   white-space: nowrap;
   color: var(--text-primary);
 }
@@ -105,6 +112,14 @@ function toggleCheck(e: MouseEvent) {
 .section-row {
   font-size: 12px;
   font-weight: 600;
+}
+.section-row.expanded .row-body,
+.section-row.expanded .expander {
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+.section-row.expanded .row-body:hover,
+.section-row.expanded .expander:hover {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 .book-row {
   font-size: 11px;

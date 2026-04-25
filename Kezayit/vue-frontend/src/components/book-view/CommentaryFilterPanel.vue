@@ -23,13 +23,6 @@ const allState = computed<'checked' | 'unchecked' | 'indeterminate'>(() => {
   return 'indeterminate'
 })
 
-function toggleBookVisibility(bookId: number) {
-  const next = new Set(props.hiddenBookIds ?? [])
-  if (next.has(bookId)) next.delete(bookId)
-  else next.add(bookId)
-  emit('update:hiddenBookIds', next)
-}
-
 function toggleAll() {
   const next = new Set(props.hiddenBookIds ?? [])
   const shouldHideAll = allState.value === 'checked'
@@ -59,7 +52,7 @@ function toggleAll() {
       :key="node.label"
       :node="node"
       :hidden-book-ids="hiddenBookIds"
-      @toggle="toggleBookVisibility"
+      @update:hidden-book-ids="emit('update:hiddenBookIds', $event)"
     />
   </div>
 </template>
@@ -86,6 +79,7 @@ function toggleAll() {
   align-items: center;
   gap: 4px;
   height: 28px;
+  flex-shrink: 0;
   padding-inline: 6px 10px;
   cursor: pointer;
   font-size: 12px;
