@@ -98,6 +98,8 @@ function toggleCheck(e: MouseEvent) {
   flex-shrink: 0;
   white-space: nowrap;
   color: var(--text-primary);
+  --expanded-row-bg: color-mix(in srgb, var(--active-bg) 55%, transparent);
+  --expanded-row-hover-bg: color-mix(in srgb, var(--active-bg) 65%, var(--hover-bg));
 }
 .row-body {
   flex: 1;
@@ -115,11 +117,11 @@ function toggleCheck(e: MouseEvent) {
 }
 .section-row.expanded .row-body,
 .section-row.expanded .expander {
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background: var(--expanded-row-bg);
 }
 .section-row.expanded .row-body:hover,
 .section-row.expanded .expander:hover {
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  background: var(--expanded-row-hover-bg);
 }
 .book-row {
   font-size: 11px;
@@ -191,5 +193,10 @@ function toggleCheck(e: MouseEvent) {
 .expander-placeholder {
   width: 26px;
   flex-shrink: 0;
+}
+
+:global(:root.dark) .row {
+  --expanded-row-bg: var(--active-bg);
+  --expanded-row-hover-bg: color-mix(in srgb, var(--active-bg) 70%, var(--hover-bg));
 }
 </style>
