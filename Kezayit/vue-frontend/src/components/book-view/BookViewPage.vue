@@ -22,6 +22,7 @@ import BookViewToolbar from './BookViewToolbar.vue'
 import BookViewSplitPane from './BookViewSplitPane.vue'
 import BookViewLinesContent from './BookViewLinesContent.vue'
 import BookViewSearchBar from './BookViewSearchBar.vue'
+import BookViewSidePanel from './BookViewSidePanel.vue'
 import BookViewTocTree from './BookViewTocTree.vue'
 import CommentaryView from './CommentaryView.vue'
 import type { TocEntry } from './useToc'
@@ -574,21 +575,23 @@ watch(searchVisible, (v) => {
           @prev="onSearchPrev"
           @mode-change="onModeChange"
         />
-        <BookViewTocTree
-          :book-id="bookId"
-          :book-title="bookTitle"
-          :active-toc-entry-id="activeTocEntryId"
+        <BookViewSidePanel
           :visible="tocVisible"
-          :toc-entries="tocEntries"
-          :toc-search-tree="tocSearchTree"
-          :alt-toc-sections="altTocSections"
-          :loading="tocLoading"
-          :error="tocError"
           :toggle-button-el="toolbarRef?.tocBtnRef ?? null"
           @close="tocVisible = false"
-          @select="onTocSelect"
-          @alt-select="onAltTocSelect"
-        />
+        >
+          <BookViewTocTree
+            :active-toc-entry-id="activeTocEntryId"
+            :visible="tocVisible"
+            :toc-entries="tocEntries"
+            :toc-search-tree="tocSearchTree"
+            :alt-toc-sections="altTocSections"
+            :loading="tocLoading"
+            :error="tocError"
+            @select="onTocSelect"
+            @alt-select="onAltTocSelect"
+          />
+        </BookViewSidePanel>
       </div>
       <BookViewToolbar
         v-if="bookViewStore.toolbarVisible && toolbarPosition === 'left'"
