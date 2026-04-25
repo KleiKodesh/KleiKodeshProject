@@ -1,36 +1,39 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useDropdownClose } from '@/composables/useDropdownClose'
-
-const props = defineProps<{
+defineProps<{
   visible?: boolean
   toggleButtonEl?: HTMLElement | null
 }>()
 
 const emit = defineEmits<{ close: [] }>()
-
-const panelRef = ref<HTMLElement | null>(null)
-
-useDropdownClose(
-  panelRef,
-  () => emit('close'),
-  { toggleButton: computed(() => props.toggleButtonEl ?? null), closeOnBlur: false },
-)
 </script>
 
 <template>
-  <div ref="panelRef" class="side-panel" :class="{ 'is-hidden': !visible }">
-    <slot />
+  <div class="side-panel-shell" :class="{ 'is-hidden': !visible }" @click="emit('close')">
+    <div class="side-panel" @click.stop>
+      <slot />
+    </div>
   </div>
 </template>
 
 <style scoped>
+.side-panel-shell {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.28);
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 180ms ease;
+}
+
 .side-panel {
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
-  z-index: 100;
   display: flex;
   flex-direction: column;
   width: fit-content;
@@ -40,11 +43,14 @@ useDropdownClose(
   --tree-bg: var(--bg-secondary);
   transition: transform 180ms ease;
   transform: translateX(0);
-  pointer-events: auto;
 }
 
-.side-panel.is-hidden {
-  transform: translateX(100%);
+.side-panel-shell.is-hidden {
+  opacity: 0;
   pointer-events: none;
+}
+
+.side-panel-shell.is-hidden .side-panel {
+  transform: translateX(100%);
 }
 </style>
