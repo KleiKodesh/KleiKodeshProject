@@ -24,9 +24,12 @@ import BookViewLinesContent from './BookViewLinesContent.vue'
 import BookViewSearchBar from './BookViewSearchBar.vue'
 import BookViewSidePanel from './BookViewSidePanel.vue'
 import BookViewTocTree from './BookViewTocTree.vue'
+import CommentaryFilterPanel from './CommentaryFilterPanel.vue'
 import CommentaryView from './CommentaryView.vue'
 import type { TocEntry } from './useToc'
 import type { SearchMode } from './BookViewSearchBar.vue'
+
+type SidePanelMode = 'toc' | 'commentary-filter'
 
 const bookViewStore = useBookViewStore()
 const tabStore = useTabStore()
@@ -55,7 +58,7 @@ if (openTocEntryId != null)
 
 const bottomVisible = ref(false)
 const searchVisible = ref(false)
-const tocVisible = ref(false)
+const sidePanelMode = ref<SidePanelMode | null>(null)
 const toolbarRef = ref<InstanceType<typeof BookViewToolbar> | null>(null)
 const selectedLineId = ref<number | null>(null)
 const commentaryLineId = ref<number | null>(null)
@@ -70,6 +73,14 @@ const scrollStateReady = ref(openTocLineIndex != null) // if TOC nav, no need to
 const linesContentRef = ref<InstanceType<typeof BookViewLinesContent> | null>(null)
 const commentaryViewRef = ref<InstanceType<typeof CommentaryView> | null>(null)
 const searchBarRef = ref<InstanceType<typeof BookViewSearchBar> | null>(null)
+const tocVisible = computed(() => sidePanelMode.value === 'toc')
+const commentaryFilterVisible = computed(() => sidePanelMode.value === 'commentary-filter')
+const sidePanelVisible = computed(() => sidePanelMode.value !== null)
+const sidePanelToggleButtonEl = computed(() =>
+  sidePanelMode.value === 'commentary-filter'
+    ? commentaryViewRef.value?.getFilterButtonEl?.() ?? null
+    : toolbarRef.value?.tocBtnRef ?? null,
+)
 
 const {
   getActiveTocEntry,
@@ -257,6 +268,29 @@ function openContentSearch() {
 function openCommentarySearch() {
   openSearch('commentary')
   nextTick(() => searchBarRef.value?.focus())
+}
+
+function toggleTocPanel() {
+  sidePanelMode.value = sidePanelMode.value === 'toc' ? null : 'toc'
+}
+
+function toggleCommentaryFilterPanel() {
+  if (!bottomVisible.value) return
+  sidePanelMode.value =
+    sidePanelMode.value === 'commentary-filter' ? null : 'commentary-filter'
+}
+
+function closeSidePanel() {
+  sidePanelMode.value = null
+}
+
+async function setHiddenCommentaryBookIds(value: Set<number>) {
+  const savedPos = commentaryViewRef.value?.captureScrollPos?.()
+  hiddenCommentaryBookIds.value = value
+  await nextTick()
+  if (savedPos) {
+    commentaryViewRef.value?.restoreCommentaryScrollPos(savedPos.scrollIndex, savedPos.scrollOffset)
+  }
 }
 
 function openBookInTab(bookId: number, lineIndex: number | undefined) {
@@ -458,11 +492,17 @@ watch(
     bottomVisible.value = !bottomVisible.value
   },
 )
+watch(bottomVisible, (visible) => {
+  if (!visible && sidePanelMode.value === 'commentary-filter') closeSidePanel()
+})
 // If the bottom panel was restored open but the book has no commentaries, close it.
 // hasCommentaries resolves asynchronously after the book data loads, so we can't
 // check it at restore time — instead we watch for it to settle to false.
 watch(hasCommentaries, (has) => {
-  if (!has) bottomVisible.value = false
+  if (!has) {
+    bottomVisible.value = false
+    if (sidePanelMode.value === 'commentary-filter') closeSidePanel()
+  }
 })
 watch(searchVisible, (v) => {
   if (!v) {
@@ -484,7 +524,7 @@ watch(searchVisible, (v) => {
       :has-commentaries="hasCommentaries"
       @toggle-bottom="bottomVisible = !bottomVisible"
       @toggle-search="searchVisible = !searchVisible"
-      @toggle-toc="tocVisible = !tocVisible"
+      @toggle-toc="toggleTocPanel"
     />
     <!-- Middle row: right toolbar + content + left toolbar (RTL: first child = physical right) -->
     <div class="body-row">
@@ -497,7 +537,7 @@ watch(searchVisible, (v) => {
         :has-commentaries="hasCommentaries"
         @toggle-bottom="bottomVisible = !bottomVisible"
         @toggle-search="searchVisible = !searchVisible"
-        @toggle-toc="tocVisible = !tocVisible"
+        @toggle-toc="toggleTocPanel"
       />
       <div class="content-area">
         <BookViewSplitPane :bottom-visible="bottomVisible">
@@ -541,6 +581,7 @@ watch(searchVisible, (v) => {
               :loading="commentaryLoading"
               :hidden-book-ids="hiddenCommentaryBookIds"
               :pinned-book-id="pinnedCommentaryBookId"
+              :filter-visible="commentaryFilterVisible"
               :search-query="searchMode === 'commentary' ? commentarySearch.query.value : ''"
               :current-match-flat-index="
                 searchMode === 'commentary'
@@ -555,9 +596,9 @@ watch(searchVisible, (v) => {
               @close="bottomVisible = false"
               @navigate-section="onNavigateSection"
               @scroll="onCommentaryScroll"
+              @toggle-filter-panel="toggleCommentaryFilterPanel"
               @toggle-search="openCommentarySearch"
               @open-book="openBookInTab"
-              @update:hidden-book-ids="hiddenCommentaryBookIds = $event"
             />
           </template>
         </BookViewSplitPane>
@@ -576,11 +617,12 @@ watch(searchVisible, (v) => {
           @mode-change="onModeChange"
         />
         <BookViewSidePanel
-          :visible="tocVisible"
-          :toggle-button-el="toolbarRef?.tocBtnRef ?? null"
-          @close="tocVisible = false"
+          :visible="sidePanelVisible"
+          :toggle-button-el="sidePanelToggleButtonEl"
+          @close="closeSidePanel"
         >
           <BookViewTocTree
+            v-if="sidePanelMode === 'toc'"
             :active-toc-entry-id="activeTocEntryId"
             :visible="tocVisible"
             :toc-entries="tocEntries"
@@ -590,6 +632,12 @@ watch(searchVisible, (v) => {
             :error="tocError"
             @select="onTocSelect"
             @alt-select="onAltTocSelect"
+          />
+          <CommentaryFilterPanel
+            v-else-if="sidePanelMode === 'commentary-filter'"
+            :groups="groups"
+            :hidden-book-ids="hiddenCommentaryBookIds"
+            @update:hidden-book-ids="setHiddenCommentaryBookIds"
           />
         </BookViewSidePanel>
       </div>
@@ -602,7 +650,7 @@ watch(searchVisible, (v) => {
         :has-commentaries="hasCommentaries"
         @toggle-bottom="bottomVisible = !bottomVisible"
         @toggle-search="searchVisible = !searchVisible"
-        @toggle-toc="tocVisible = !tocVisible"
+        @toggle-toc="toggleTocPanel"
       />
     </div>
     <!-- Bottom toolbar -->
@@ -615,7 +663,7 @@ watch(searchVisible, (v) => {
       :has-commentaries="hasCommentaries"
       @toggle-bottom="bottomVisible = !bottomVisible"
       @toggle-search="searchVisible = !searchVisible"
-      @toggle-toc="tocVisible = !tocVisible"
+      @toggle-toc="toggleTocPanel"
     />
   </div>
 </template>

@@ -34,7 +34,6 @@ useDropdownClose(
   display: flex;
   flex-direction: column;
   width: fit-content;
-  max-width: 30%;
   background: var(--bg-secondary);
   border-left: 1px solid var(--border-color);
   overflow: hidden;

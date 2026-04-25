@@ -15,11 +15,12 @@ const props = defineProps<{
   groups: CommentaryGroup[]
   scrollToGroup: (bookId: number) => void
   activeBookId: number
+  filterVisible?: boolean
 }>()
 
 const emit = defineEmits<{
   'navigate-section': [direction: 'next' | 'prev', bookId: number]
-  'toggle-tree': []
+  'toggle-filter': []
   'toggle-search': []
   'open-book': [bookId: number, lineIndex: number]
   close: []
@@ -75,8 +76,9 @@ function handleKeydown(e: KeyboardEvent) {
     <button
       ref="filterBtnRef"
       class="btn c-pointer hover-bg"
+      :class="{ active: filterVisible }"
       title="סנן מפרשים"
-      @click.stop="emit('toggle-tree')"
+      @click.stop="emit('toggle-filter')"
     >
       <IconFilter20Regular />
     </button>
@@ -170,6 +172,9 @@ function handleKeydown(e: KeyboardEvent) {
 .btn svg {
   width: 14px;
   height: 14px;
+}
+.btn.active {
+  color: var(--accent-color);
 }
 .btn:disabled {
   opacity: 0.3;

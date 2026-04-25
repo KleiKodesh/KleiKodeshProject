@@ -5,7 +5,6 @@ import { useScopedCopy } from '@/composables/useLineCopy'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import CommentaryHeader from './CommentaryHeader.vue'
 import CommentaryHeaderNav from './CommentaryHeaderNav.vue'
-import CommentaryTreePanel from './CommentaryFilterPanel.vue'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
 import type { ContextMenuItem } from '@/components/common/ContextMenu.vue'
@@ -27,14 +26,15 @@ const props = defineProps<{
   currentMatchFlatIndex?: number
   currentMatchOccurrence?: number
   pinnedBookId?: number | null
+  filterVisible?: boolean
 }>()
 const emit = defineEmits<{
   close: []
   'navigate-section': [direction: 'next' | 'prev', bookId: number]
   'open-book': [bookId: number, lineIndex: number]
+  'toggle-filter-panel': []
   'toggle-search': []
   scroll: [scrollIndex: number, scrollOffset: number]
-  'update:hiddenBookIds': [value: Set<number>]
 }>()
 
 const settingsStore = useSettingsStore()
@@ -175,20 +175,7 @@ watch(
 
 const scrollerEl = ref<HTMLElement | null>(null)
 const scrollTop = ref(0)
-const treeVisible = ref(false)
 const headerNavRef = ref<InstanceType<typeof CommentaryHeaderNav> | null>(null)
-
-function toggleBookVisibility(bookId: number) {
-  // capture current scroll before visibleGroups changes
-  const savedScrollTop = scrollerEl.value?.scrollTop ?? 0
-  const next = new Set(props.hiddenBookIds)
-  if (next.has(bookId)) next.delete(bookId)
-  else next.add(bookId)
-  emit('update:hiddenBookIds', next)
-  nextTick(() => {
-    if (scrollerEl.value) scrollerEl.value.scrollTop = savedScrollTop
-  })
-}
 
 const visibleGroups = computed(() => props.groups.filter((g) => !props.hiddenBookIds.has(g.bookId)))
 
@@ -251,8 +238,6 @@ const activeHeader = computed(
 const activeBookId = computed(
   () => visibleGroups.value.find((g) => g.bookTitle === activeHeader.value?.bookTitle)?.bookId ?? 0,
 )
-
-const suppressTreeScroll = ref(false)
 
 function scrollToGroup(bookId: number) {
   const idx = flatItems.value.findIndex(
@@ -335,6 +320,7 @@ defineExpose({
   activeBookId,
   captureScrollPos,
   restoreCommentaryScrollPos,
+  getFilterButtonEl: () => headerNavRef.value?.filterBtnRef ?? null,
 })
 
 function asHeader(item: FlatItem | undefined) {
@@ -349,14 +335,6 @@ function asLine(item: FlatItem | undefined) {
   <div class="commentary-view">
     <ContextMenu ref="contextMenuRef" :items="contextMenuItems" />
     <div class="body">
-      <CommentaryTreePanel
-        v-if="treeVisible && props.groups.length"
-        :groups="props.groups"
-        :hidden-book-ids="props.hiddenBookIds"
-        :toggle-button-el="headerNavRef?.filterBtnRef ?? null"
-        @toggle="toggleBookVisibility"
-        @close="treeVisible = false"
-      />
       <div class="content-col" :style="{ fontSize: `${commentaryFontPx}px` }">
         <CommentaryHeaderNav
           ref="headerNavRef"
@@ -364,12 +342,13 @@ function asLine(item: FlatItem | undefined) {
           :groups="visibleGroups"
           :scroll-to-group="scrollToGroup"
           :active-book-id="activeBookId"
+          :filter-visible="props.filterVisible"
           @update:active-book-id="() => {}"
           @navigate-section="(d, id) => emit('navigate-section', d, id)"
+          @toggle-filter="emit('toggle-filter-panel')"
           @toggle-search="emit('toggle-search')"
           @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)"
           @close="emit('close')"
-          @toggle-tree="treeVisible = !treeVisible"
         />
         <div v-if="props.loading" class="state-overlay"><LoadingAnimation /></div>
         <div v-else-if="!flatItems.length" class="state-overlay">

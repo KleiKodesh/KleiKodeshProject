@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useDropdownClose } from '@/composables/useDropdownClose'
+import { computed } from 'vue'
 import CommentaryTreeViewNode from './CommentaryTreeViewNode.vue'
 import { buildCommentaryTree } from './useCommentary'
 import type { CommentaryGroup } from './useCommentary'
@@ -8,18 +7,11 @@ import type { CommentaryGroup } from './useCommentary'
 const props = defineProps<{
   groups: CommentaryGroup[]
   hiddenBookIds?: Set<number>
-  toggleButtonEl?: HTMLElement | null
 }>()
 
 const emit = defineEmits<{
-  toggle: [bookId: number]
-  close: []
+  'update:hiddenBookIds': [value: Set<number>]
 }>()
-
-const panelEl = ref<HTMLElement | null>(null)
-useDropdownClose(panelEl, () => emit('close'), {
-  toggleButton: computed(() => props.toggleButtonEl ?? null),
-})
 
 const tree = computed(() => buildCommentaryTree(props.groups))
 const allBookIds = computed(() => props.groups.map((g) => g.bookId))
@@ -31,61 +23,64 @@ const allState = computed<'checked' | 'unchecked' | 'indeterminate'>(() => {
   return 'indeterminate'
 })
 
+function toggleBookVisibility(bookId: number) {
+  const next = new Set(props.hiddenBookIds ?? [])
+  if (next.has(bookId)) next.delete(bookId)
+  else next.add(bookId)
+  emit('update:hiddenBookIds', next)
+}
+
 function toggleAll() {
-  if (allState.value === 'indeterminate') {
-    allBookIds.value
-      .filter((id) => props.hiddenBookIds?.has(id))
-      .forEach((id) => emit('toggle', id))
-  } else {
-    allBookIds.value.forEach((id) => emit('toggle', id))
-  }
+  const next = new Set(props.hiddenBookIds ?? [])
+  const shouldHideAll = allState.value === 'checked'
+  allBookIds.value.forEach((id) => {
+    if (shouldHideAll) next.add(id)
+    else next.delete(id)
+  })
+  emit('update:hiddenBookIds', next)
 }
 </script>
 
 <template>
-  <div ref="panelEl" class="filter-panel">
+  <div class="filter-panel">
     <div
       class="all-row"
       :class="{ checked: allState === 'checked', indeterminate: allState === 'indeterminate' }"
       @click="toggleAll"
     >
       <span class="check-col">
-        <span class="check-mark">✓</span>
-        <span class="dash-mark">–</span>
+        <span class="check-mark">&#10003;</span>
+        <span class="dash-mark">&#8211;</span>
       </span>
-      <span class="row-label">הצג הכל</span>
+      <span class="row-label">&#x5D4;&#x5E6;&#x5D2; &#x5D4;&#x5DB;&#x5DC;</span>
     </div>
     <CommentaryTreeViewNode
       v-for="node in tree"
       :key="node.label"
       :node="node"
       :hidden-book-ids="hiddenBookIds"
-      @toggle="emit('toggle', $event)"
+      @toggle="toggleBookVisibility"
     />
   </div>
 </template>
 
 <style scoped>
 .filter-panel {
-  position: absolute;
-  top: 32px;
-  right: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   width: fit-content;
   min-width: 140px;
-  max-width: 50%;
-  max-height: calc(100% - 40px);
-  z-index: 10;
+  max-width: 100%;
   overflow-y: auto;
   overflow-x: hidden;
   background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
   direction: rtl;
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
   padding-block: 0;
 }
+
 .all-row {
   display: flex;
   align-items: center;
@@ -98,9 +93,11 @@ function toggleAll() {
   color: var(--text-primary);
   border-bottom: 1px solid var(--border-color);
 }
+
 .all-row:hover {
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
+
 .check-col {
   width: 16px;
   height: 16px;
@@ -111,18 +108,23 @@ function toggleAll() {
   font-size: 11px;
   color: var(--accent-color);
 }
+
 .check-mark {
   display: none;
 }
+
 .dash-mark {
   display: none;
 }
+
 .all-row.checked .check-mark {
   display: block;
 }
+
 .all-row.indeterminate .dash-mark {
   display: block;
 }
+
 .row-label {
   flex: 1;
   white-space: nowrap;
