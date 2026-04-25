@@ -4,9 +4,8 @@ import { useIntervalFn } from '@vueuse/core'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import { useBooksFs } from './useBooksFs'
 import BooksFsTitleBar from './BooksFsTitleBar.vue'
-import BooksTreeView from './BooksTreeView.vue'
-import BooksFullTree from './BooksFullTree.vue'
-import BooksSearchResults from './BooksSearchResults.vue'
+import BooksFsView from './BooksFsView.vue'
+import BooksFsSearch from './BooksFsSearch.vue'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
 import BottomSearchBar from '@/components/common/BottomSearchBar.vue'
 import { useTabStore } from '@/stores/tabStore'
@@ -58,9 +57,8 @@ function copyDiagnostics() {
   const lines = Object.entries(diagData.value).map(([k, v]) => k + ': ' + v)
   navigator.clipboard.writeText(lines.join('\n')).catch(() => {})
 }
-const fullTreeRef = ref<InstanceType<typeof BooksFullTree> | null>(null)
-const booksTreeRef = ref<InstanceType<typeof BooksTreeView> | null>(null)
-const searchResultsRef = ref<InstanceType<typeof BooksSearchResults> | null>(null)
+const booksViewRef = ref<InstanceType<typeof BooksFsView> | null>(null)
+const searchResultsRef = ref<InstanceType<typeof BooksFsSearch> | null>(null)
 const searchInputRef = ref<HTMLInputElement | null>(null)
 
 function focusList() {
@@ -68,11 +66,7 @@ function focusList() {
     searchResultsRef.value?.focusContainer()
     return
   }
-  if (view.value === 'tree') {
-    fullTreeRef.value?.containerRef?.focus()
-    return
-  }
-  booksTreeRef.value?.focusContainer()
+  booksViewRef.value?.focusContainer()
 }
 
 const PLACEHOLDERS = ['בראשית פרק ד', 'בבלי ברכות דף יד', 'רמב"ם משנה תורה']
@@ -138,7 +132,7 @@ function onSearchEnter() {
       :is-searching="isSearching"
       @set-view="setView"
       @navigate="navigateTo"
-      @reset="fullTreeRef?.reset()"
+      @reset="booksViewRef?.reset()"
     />
     <div class="books-content">
       <LoadingAnimation v-if="loading" />
@@ -175,22 +169,17 @@ function onSearchEnter() {
         </template>
       </div>
       <template v-else>
-        <BooksFullTree
-          ref="fullTreeRef"
-          v-show="view === 'tree' && !isSearching"
-          @select-book="onSelectBook"
-        />
-        <BooksTreeView
-          ref="booksTreeRef"
-          v-show="view !== 'tree' && !isSearching"
+        <BooksFsView
+          ref="booksViewRef"
+          v-show="!isSearching"
           :items="treeItems"
-          :view="view === 'tree' ? 'list' : view"
+          :view="view"
           @select-book="onSelectBook"
           @enter-folder="enter"
         />
         <template v-if="isSearching">
           <LoadingAnimation v-if="tocSearching" />
-          <BooksSearchResults
+          <BooksFsSearch
             ref="searchResultsRef"
             v-else
             :items="searchItems"

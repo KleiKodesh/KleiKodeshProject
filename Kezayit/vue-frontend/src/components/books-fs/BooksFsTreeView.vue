@@ -14,8 +14,6 @@ interface FlatNode extends TreeNodeItem {
 }
 
 function encodeCategoryId(categoryId: number): number {
-  // Use a separate number namespace for category nodes so custom category IDs
-  // do not collide with custom book IDs in the flat tree.
   return categoryId * 2 - 1
 }
 
@@ -57,8 +55,15 @@ function onSelect(node: TreeNodeItem) {
   flat._book ? emit('selectBook', flat._book) : treeViewRef.value?.toggleNode(node)
 }
 
-const reset = () => treeViewRef.value?.reset()
-defineExpose({ reset, containerRef: computed(() => treeViewRef.value?.containerRef ?? null) })
+function focusContainer() {
+  treeViewRef.value?.containerRef?.focus()
+}
+
+function reset() {
+  treeViewRef.value?.reset()
+}
+
+defineExpose({ focusContainer, reset })
 </script>
 
 <template>

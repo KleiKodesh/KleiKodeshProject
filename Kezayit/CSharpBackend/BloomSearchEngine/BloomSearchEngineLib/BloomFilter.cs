@@ -38,7 +38,6 @@ namespace MinimalIndexer
         private readonly byte[] _bits;
         private readonly int    _m;       // total bit count
         private readonly int    _k;       // number of hash probes
-        private readonly uint   _h2Mask;  // mask for h2 to keep it odd (better distribution)
 
         public int Size          => _m;
         public int HashFunctions => _k;

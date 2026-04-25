@@ -196,7 +196,7 @@ namespace KezayitLib
                         case "DeleteBloomIndex":
                             // Run cancel+delete on a background thread, reply when done
                             // so the JS caller can await completion before reloading.
-                            Task.Run(() =>
+                            _ = Task.Run(() =>
                             {
                                 _search.HandleDeleteIndex(null);
                                 _bridge.Reply(id, new { });
