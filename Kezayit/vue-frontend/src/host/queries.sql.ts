@@ -34,20 +34,6 @@ export const SQL = {
     WHERE id = ?
   `,
 
-  /** Multiple books by id list — used by commentary loader */
-  GET_BOOKS_BY_IDS: (count: number) => `
-    SELECT id, title
-    FROM book
-    WHERE id IN (${Array(count).fill('?').join(',')})
-  `,
-
-  /** Multiple lines by id list — used by commentary loader */
-  GET_LINES_BY_IDS: (count: number) => `
-    SELECT id, lineIndex, content
-    FROM line
-    WHERE id IN (${Array(count).fill('?').join(',')})
-  `,
-
   // ── TOC ──────────────────────────────────────────────────────────────────────
 
   /** All TOC entries for a book, flat — build tree in memory */
@@ -153,20 +139,38 @@ export const SQL = {
 
   // ── Links ────────────────────────────────────────────────────────────────────
 
-  /** All links where a line is the source */
-  GET_LINKS_FOR_SOURCE_LINE: `
-    SELECT l.targetBookId, l.targetLineId, ct.name AS connectionType
+  /** Combined links and lines data for commentary loader (single query) */
+  GET_COMMENTARY_DATA_FOR_SOURCE_LINE: `
+    SELECT l.targetBookId, l.targetLineId, l.connectionTypeId,
+           ln.lineIndex, ln.content
     FROM link l
-    JOIN connection_type ct ON ct.id = l.connectionTypeId
+    JOIN line ln ON ln.id = l.targetLineId
     WHERE l.sourceLineId = ?
   `,
 
-  /** All links where source line is within a range (for toc-section commentary) */
-  GET_LINKS_FOR_SOURCE_LINE_RANGE: (count: number) => `
-    SELECT l.targetBookId, l.targetLineId, ct.name AS connectionType
+  /** Combined links and lines data for commentary loader (range) */
+  GET_COMMENTARY_DATA_FOR_SOURCE_LINE_RANGE: (count: number) => `
+    SELECT l.targetBookId, l.targetLineId, l.connectionTypeId,
+           ln.lineIndex, ln.content
     FROM link l
-    JOIN connection_type ct ON ct.id = l.connectionTypeId
+    JOIN line ln ON ln.id = l.targetLineId
     WHERE l.sourceLineId IN (${Array(count).fill('?').join(',')})
+  `,
+
+  /** All available connection type IDs and names */
+  GET_ALL_CONNECTION_TYPES: `
+    SELECT id, name
+    FROM connection_type
+  `,
+
+  /** All books that have static commentary connections (SOURCE, TARGUM, COMMENTARY) */
+  GET_STATIC_COMMENTARY_BOOKS: `
+    SELECT DISTINCT b.id, b.title
+    FROM book b
+    JOIN line ln ON ln.bookId = b.id
+    JOIN link l ON l.targetLineId = ln.id
+    JOIN connection_type ct ON ct.id = l.connectionTypeId
+    WHERE ct.name IN ('SOURCE', 'TARGUM', 'COMMENTARY')
   `,
 
   /** Next line in main book (by lineIndex) that has a link to a given commentary book */

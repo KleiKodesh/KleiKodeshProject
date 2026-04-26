@@ -104,27 +104,47 @@ function sortCategoryEntries(
   return entries.sort(([catA], [catB]) => categoryRank(catA) - categoryRank(catB))
 }
 
+let connectionTypeNamesById: Map<number, string> | null = null
+
+async function ensureConnectionTypeNamesLoaded() {
+  if (connectionTypeNamesById) return
+  const rows = await query<{ id: number; name: string }>(SQL.GET_ALL_CONNECTION_TYPES)
+  connectionTypeNamesById = new Map(rows.map((row) => [row.id, row.name]))
+}
+
+function getConnectionTypeName(connectionTypeId: number): string {
+  return connectionTypeNamesById?.get(connectionTypeId) ?? String(connectionTypeId)
+}
+
 // ─── Shared core ────────────────────────────────────────────────────────────
 
 type ByBookMap = Map<number, { lineIds: Set<number>; connectionTypes: Set<string> }>
 
-async function buildCommentaryGroups(
-  byBook: ByBookMap,
+async function buildCommentaryGroupsFromCombined(
+  rows: Array<{
+    targetBookId: number
+    targetLineId: number
+    connectionTypeId: number
+    lineIndex: number
+    content: string
+  }>,
   allBooksMap: Map<number, BookRow>,
 ): Promise<CommentaryGroup[]> {
+  await ensureConnectionTypeNamesLoaded()
+  const byBook: ByBookMap = new Map()
+  const lineData = new Map<number, { lineIndex: number; content: string }>()
+
+  for (const row of rows) {
+    if (!byBook.has(row.targetBookId))
+      byBook.set(row.targetBookId, { lineIds: new Set(), connectionTypes: new Set() })
+    const g = byBook.get(row.targetBookId)!
+    g.lineIds.add(row.targetLineId)
+    g.connectionTypes.add(getConnectionTypeName(row.connectionTypeId))
+
+    lineData.set(row.targetLineId, { lineIndex: row.lineIndex, content: row.content })
+  }
+
   const bookIds = [...byBook.keys()]
-  const lineIds = [...new Set([...byBook.values()].flatMap((g) => [...g.lineIds]))]
-
-  const [bookRows, lineRows] = await Promise.all([
-    query<{ id: number; title: string }>(SQL.GET_BOOKS_BY_IDS(bookIds.length), bookIds),
-    query<{ id: number; lineIndex: number; content: string }>(
-      SQL.GET_LINES_BY_IDS(lineIds.length),
-      lineIds,
-    ),
-  ])
-
-  const bookTitleMap = new Map(bookRows.map((b) => [b.id, b.title]))
-  const lineMap = new Map(lineRows.map((l) => [l.id, l]))
 
   const raw = bookIds.map((bookId) => {
     const g = byBook.get(bookId)!
@@ -132,13 +152,13 @@ async function buildCommentaryGroups(
     const ct = [...g.connectionTypes][0] ?? 'OTHER'
     return {
       bookId,
-      bookTitle: bookTitleMap.get(bookId) ?? String(bookId),
+      bookTitle: book?.title ?? String(bookId),
       connectionTypes: [...g.connectionTypes],
       lines: [...g.lineIds]
         .map((id) => ({
           lineId: id,
-          lineIndex: lineMap.get(id)?.lineIndex ?? 0,
-          content: lineMap.get(id)?.content ?? '',
+          lineIndex: lineData.get(id)?.lineIndex ?? 0,
+          content: lineData.get(id)?.content ?? '',
         }))
         .sort((a, b) => a.lineIndex - b.lineIndex),
       category: resolveCategory(book),
@@ -225,27 +245,20 @@ export function useCommentary(
       const multiIds = selectedLineIds()
       const isMulti = multiIds && multiIds.length > 0
       const sql = isMulti
-        ? SQL.GET_LINKS_FOR_SOURCE_LINE_RANGE(multiIds.length)
-        : SQL.GET_LINKS_FOR_SOURCE_LINE
+        ? SQL.GET_COMMENTARY_DATA_FOR_SOURCE_LINE_RANGE(multiIds.length)
+        : SQL.GET_COMMENTARY_DATA_FOR_SOURCE_LINE
       const params = isMulti ? multiIds : [lineId]
 
-      const links = await query<{
+      const rows = await query<{
         targetBookId: number
         targetLineId: number
-        connectionType: string
+        connectionTypeId: number
+        lineIndex: number
+        content: string
       }>(sql, params)
-      if (!links.length) return
+      if (!rows.length) return
 
-      const byBook: ByBookMap = new Map()
-      for (const l of links) {
-        if (!byBook.has(l.targetBookId))
-          byBook.set(l.targetBookId, { lineIds: new Set(), connectionTypes: new Set() })
-        const g = byBook.get(l.targetBookId)!
-        g.lineIds.add(l.targetLineId)
-        g.connectionTypes.add(l.connectionType)
-      }
-
-      groups.value = await buildCommentaryGroups(byBook, booksDataStore.allBooksMap)
+      groups.value = await buildCommentaryGroupsFromCombined(rows, booksDataStore.allBooksMap)
     } finally {
       loading.value = false
     }

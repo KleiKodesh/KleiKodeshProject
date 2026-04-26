@@ -26,6 +26,8 @@ export const useBooksDataStore = defineStore('booksData', () => {
   let loadPromise: Promise<void> | null = null
   let commentaryMetaPromise: Promise<void> | null = null
   let commentaryMetaLoaded = false
+  const staticCommentaryBooks = ref<BookRow[]>([])
+  let staticCommentaryPromise: Promise<void> | null = null
 
   async function ensureLoaded() {
     if (loaded.value) return
@@ -99,14 +101,33 @@ export const useBooksDataStore = defineStore('booksData', () => {
     return commentaryMetaPromise
   }
 
+  async function ensureStaticCommentaryBooksLoaded() {
+    await ensureLoaded()
+    if (staticCommentaryBooks.value.length > 0) return
+    if (staticCommentaryPromise) return staticCommentaryPromise
+
+    staticCommentaryPromise = Promise.resolve().then(async () => {
+      const books = await query<{ id: number; title: string }>(SQL.GET_STATIC_COMMENTARY_BOOKS)
+      // Convert to BookRow format by finding the full book data
+      staticCommentaryBooks.value = books
+        .map((b) => allBooksMap.value.get(b.id))
+        .filter((b): b is BookRow => b !== undefined)
+      staticCommentaryPromise = null
+    })
+
+    return staticCommentaryPromise
+  }
+
   return {
     loaded,
     loading,
     error,
     allBooks,
     allBooksMap,
+    staticCommentaryBooks,
     ensureLoaded,
     ensureCommentaryMetadataLoaded,
+    ensureStaticCommentaryBooksLoaded,
     ROOT,
   }
 })
