@@ -1,6 +1,7 @@
 using KezayitLib;
 using KezayitLib.Settings;
 using System;
+using System.Drawing;
 using System.Windows.Forms;
 
 namespace KezayitDemoApp
@@ -16,10 +17,17 @@ namespace KezayitDemoApp
             ClientSize = new System.Drawing.Size(600, 750);
             StartPosition = FormStartPosition.CenterScreen;
             AutoScaleMode = AutoScaleMode.Font;
+            Icon = CreateWindowIcon();
 
             _viewer = new AppViewer { Dock = DockStyle.Fill };
             _viewer.TogglePopOut = Toggle;
             Controls.Add(_viewer);
+        }
+
+        private static Icon CreateWindowIcon()
+        {
+            using (var executableIcon = Icon.ExtractAssociatedIcon(Application.ExecutablePath))
+                return executableIcon == null ? null : (Icon)executableIcon.Clone();
         }
 
         private void Toggle()
@@ -42,6 +50,7 @@ namespace KezayitDemoApp
                 Text = "זית",
                 Size = new System.Drawing.Size(saved.Width, saved.Height),
                 StartPosition = hasSaved ? FormStartPosition.Manual : FormStartPosition.CenterScreen,
+                Icon = CreateWindowIcon(),
             };
             if (hasSaved)
                 _popoutWindow.Location = new System.Drawing.Point(saved.X, saved.Y);

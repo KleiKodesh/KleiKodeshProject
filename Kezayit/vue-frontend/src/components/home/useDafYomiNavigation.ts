@@ -4,6 +4,7 @@ import { query } from '@/host/seforimDb'
 import { SQL } from '@/host/queries.sql'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useTabStore } from '@/stores/tabStore'
+import { ensureBookSearchMetadata } from '@/components/books-fs/booksCategoryTree'
 import type { BookRow } from '@/components/books-fs/booksCategoryTree'
 
 type TocRow = {
@@ -26,7 +27,8 @@ function filterBooks(allBooks: BookRow[], words: string[]) {
   const prefixWord = words[words.length - 1]!
   return allBooks
     .filter((b) => {
-      const pathWords = b.searchWords ?? (b.searchPath ?? '').split(/\s+/)
+      ensureBookSearchMetadata(b)
+      const pathWords = b.searchWords ?? []
       const exactOk = exactWords.every((qw) => pathWords.some((pw) => pw === qw))
       const prefixOk = pathWords.some((pw) => pw.includes(prefixWord))
       return exactOk && prefixOk

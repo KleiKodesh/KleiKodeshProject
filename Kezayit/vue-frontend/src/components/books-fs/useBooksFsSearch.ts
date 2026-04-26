@@ -24,6 +24,7 @@ import { normalize } from '@/utils/normalizeText'
 import { normalizeBookQuery } from '@/utils/bookQueryNormalizer'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { runTocHeuristics } from './booksFsTocHeuristics'
+import { ensureBookSearchMetadata } from './booksCategoryTree'
 import type { BookRow } from './booksCategoryTree'
 
 // ─── Public types ─────────────────────────────────────────────────────────────
@@ -71,7 +72,8 @@ export function filterBooksByWords(allBooks: BookRow[], words: string[]): BookRo
 
   return allBooks
     .filter((book) => {
-      const pathWords = book.searchWords ?? (book.searchPath ?? '').split(/\s+/)
+      ensureBookSearchMetadata(book)
+      const pathWords = book.searchWords ?? []
       const exactWordsMatch = exactWords.every((queryWord) =>
         pathWords.some((pathWord) => pathWord === queryWord),
       )

@@ -48,19 +48,31 @@ export function buildTree(categories: CategoryRow[], books: BookRow[]): Category
   return roots
 }
 
-export function assignFullPaths(nodes: CategoryNode[], parentPath = '', counter = { n: 0 }): void {
+export function assignFullPaths(
+  nodes: CategoryNode[],
+  parentPath = '',
+  counter = { n: 0 },
+  orderedBooks: BookRow[] = [],
+): BookRow[] {
   for (const node of nodes) {
     const nodePath = parentPath ? `${parentPath} / ${node.title}` : node.title
     for (const book of node.books) {
       book.treeOrder = counter.n++
       book.fullPath = `${nodePath} / ${book.title}`
       book.parentPath = nodePath
-      const authorPart = book.authors ? ` ${normalize(book.authors)}` : ''
-      book.searchPath = normalizeBookQuery(normalize(book.fullPath)) + authorPart
-      book.searchWords = book.searchPath.split(/\s+/).filter((w) => w.length > 0)
+      orderedBooks.push(book)
     }
-    assignFullPaths(node.children, nodePath, counter)
+    assignFullPaths(node.children, nodePath, counter, orderedBooks)
   }
+  return orderedBooks
+}
+
+export function ensureBookSearchMetadata(book: BookRow): void {
+  if (book.searchPath && book.searchWords) return
+  const searchBase = book.fullPath ?? book.title
+  const authorPart = book.authors ? ` ${normalize(book.authors)}` : ''
+  book.searchPath = normalizeBookQuery(normalize(searchBase)) + authorPart
+  book.searchWords = book.searchPath.split(/\s+/).filter((w) => w.length > 0)
 }
 
 const PERIOD_KEYWORDS: [string, string][] = [

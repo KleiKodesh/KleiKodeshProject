@@ -14,8 +14,6 @@ export const useBooksDataStore = defineStore('booksData', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
   const allBooks = ref<BookRow[]>([])
-  const categoryMap = ref(new Map<number, CategoryNode>())
-  // Cached map for O(1) book lookups — built once alongside allBooks, never rebuilt
   const allBooksMap = ref(new Map<number, BookRow>())
   const ROOT = ref<CategoryNode>({
     id: -1,
@@ -25,21 +23,54 @@ export const useBooksDataStore = defineStore('booksData', () => {
     children: [],
     books: [],
   })
+  let loadPromise: Promise<void> | null = null
+  let commentaryMetaPromise: Promise<void> | null = null
+  let commentaryMetaLoaded = false
 
   async function ensureLoaded() {
-    if (loaded.value || loading.value) return
+    if (loaded.value) return
+    if (loadPromise) return loadPromise
+
     loading.value = true
     error.value = null
-    try {
-      await ensureCategorySchema()
-      const [categories, books] = await Promise.all([
-        query<CategoryRow>(SQL.GET_ALL_CATEGORIES(categoryHasOrderIndex)),
-        query<BookRow>(SQL.GET_ALL_BOOKS),
-      ])
-      const children = buildTree(categories, books)
-      assignFullPaths(children)
+    loadPromise = (async () => {
+      try {
+        await ensureCategorySchema()
+        const [categories, books] = await Promise.all([
+          query<CategoryRow>(SQL.GET_ALL_CATEGORIES(categoryHasOrderIndex)),
+          query<BookRow>(SQL.GET_ALL_BOOKS),
+        ])
+        const children = buildTree(categories, books)
+        const orderedBooks = assignFullPaths(children)
 
-      // Build flat category map for hierarchy lookups
+        ROOT.value = { ...ROOT.value, children }
+        allBooks.value = orderedBooks
+        loaded.value = true
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : ''
+        if (msg.toLowerCase().includes('failed to fetch')) {
+          error.value = 'שגיאה בטעינת הנתונים — לא ניתן להתחבר לשרת'
+        } else if (msg.includes('0x8007000B') || msg.toLowerCase().includes('incorrect format')) {
+          error.value =
+            'שגיאה בטעינת הנתונים — קובץ ה־SQLite אינו תואם לגרסת המערכת (32/64 סיביות). יש להתקין מחדש את האפליקציה.'
+        } else {
+          error.value = msg || 'שגיאה בטעינת הנתונים'
+        }
+      } finally {
+        loading.value = false
+        loadPromise = null
+      }
+    })()
+
+    return loadPromise
+  }
+
+  async function ensureCommentaryMetadataLoaded() {
+    await ensureLoaded()
+    if (commentaryMetaLoaded) return
+    if (commentaryMetaPromise) return commentaryMetaPromise
+
+    commentaryMetaPromise = Promise.resolve().then(() => {
       const map = new Map<number, CategoryNode>()
       const flattenNodes = (nodes: CategoryNode[]) => {
         for (const node of nodes) {
@@ -47,12 +78,10 @@ export const useBooksDataStore = defineStore('booksData', () => {
           flattenNodes(node.children)
         }
       }
-      flattenNodes(children)
-      categoryMap.value = map
+      flattenNodes(ROOT.value.children)
 
-      // Assign period and category hierarchy to all books (cached per categoryId)
       const metaCache = new Map<number, ReturnType<typeof findCategoryMeta>>()
-      for (const book of books) {
+      for (const book of allBooks.value) {
         let meta = metaCache.get(book.categoryId)
         if (!meta) {
           meta = findCategoryMeta(book.categoryId, map)
@@ -62,24 +91,22 @@ export const useBooksDataStore = defineStore('booksData', () => {
         book.rootCategory = meta.root ?? undefined
       }
 
-      ROOT.value = { ...ROOT.value, children }
-      allBooks.value = books.slice().sort((a, b) => (a.treeOrder ?? 0) - (b.treeOrder ?? 0))
-      allBooksMap.value = new Map(allBooks.value.map((b) => [b.id, b]))
-      loaded.value = true
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : ''
-      if (msg.toLowerCase().includes('failed to fetch')) {
-        error.value = 'שגיאה בטעינת הנתונים — לא ניתן להתחבר לשרת'
-      } else if (msg.includes('0x8007000B') || msg.toLowerCase().includes('incorrect format')) {
-        error.value =
-          'שגיאה בטעינת הנתונים — קובץ ה־SQLite אינו תואם לגרסת המערכת (32/64 סיביות). יש להתקין מחדש את האפליקציה.'
-      } else {
-        error.value = msg || 'שגיאה בטעינת הנתונים'
-      }
-    } finally {
-      loading.value = false
-    }
+      allBooksMap.value = new Map(allBooks.value.map((book) => [book.id, book]))
+      commentaryMetaLoaded = true
+      commentaryMetaPromise = null
+    })
+
+    return commentaryMetaPromise
   }
 
-  return { loaded, loading, error, allBooks, allBooksMap, categoryMap, ensureLoaded, ROOT }
+  return {
+    loaded,
+    loading,
+    error,
+    allBooks,
+    allBooksMap,
+    ensureLoaded,
+    ensureCommentaryMetadataLoaded,
+    ROOT,
+  }
 })

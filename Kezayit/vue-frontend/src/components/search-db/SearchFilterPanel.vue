@@ -7,6 +7,7 @@ import { normalize } from '@/utils/normalizeText'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
 import SearchFilterNode from './SearchFilterNode.vue'
 import SearchFilterBookList from './SearchFilterBookList.vue'
+import { ensureBookSearchMetadata } from '@/components/books-fs/booksCategoryTree'
 import type { CategoryNode, BookRow } from '@/components/books-fs/booksCategoryTree'
 
 const props = defineProps<{
@@ -79,7 +80,8 @@ function matchBooks(q: string): BookRow[] {
   const exactWords = words.slice(0, -1)
   const prefixWord = words[words.length - 1]!
   return booksStore.allBooks.filter((b) => {
-    const pathWords = b.searchWords ?? (b.searchPath ?? '').split(/\s+/)
+    ensureBookSearchMetadata(b)
+    const pathWords = b.searchWords ?? []
     const exactOk = exactWords.every((qw) => pathWords.some((pw) => pw === qw))
     const prefixOk = pathWords.some((pw) => pw.includes(prefixWord))
     return exactOk && prefixOk

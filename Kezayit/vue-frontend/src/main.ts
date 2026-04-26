@@ -8,6 +8,7 @@ import { useBookViewStore } from './stores/bookViewStore'
 import { useSettingsStore } from './stores/settingsStore'
 import { useThemeStore } from './theme/themeStore'
 import { initPdfThemeObserver } from './theme/themes'
+import { dbReady } from './host/seforimDb'
 import { useBooksDataStore } from './stores/booksDataStore'
 import { usePdfStore } from './stores/pdfStore'
 import { idbCheckAndExecReset } from './utils/persistence'
@@ -33,7 +34,21 @@ await Promise.all([
   ...tabStore.tabs.filter((t) => t.route === '/pdf-view').map((t) => pdfStore.restoreTab(t.id)),
 ])
 
+function warmBooksDataInBackground() {
+  if (!dbReady.value) return
+
+  const run = () => void useBooksDataStore().ensureLoaded()
+
+  window.setTimeout(() => {
+    if (typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(() => run(), { timeout: 1500 })
+      return
+    }
+    window.setTimeout(run, 250)
+  }, 0)
+}
+
 app.mount('#app')
 
 initPdfThemeObserver()
-useBooksDataStore().ensureLoaded()
+warmBooksDataInBackground()

@@ -220,6 +220,7 @@ export function useCommentary(
     groups.value = []
     try {
       await booksDataStore.ensureLoaded()
+      await booksDataStore.ensureCommentaryMetadataLoaded()
 
       const multiIds = selectedLineIds()
       const isMulti = multiIds && multiIds.length > 0

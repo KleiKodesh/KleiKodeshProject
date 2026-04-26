@@ -26,26 +26,27 @@ defineExpose({
   focusContainer: () => scrollEl.value?.focus(),
 })
 
-function selectItem(i: number) {
-  focusedIndex.value = i
-  activateIndex(i)
+function selectItem(index: number) {
+  focusedIndex.value = index
+  activateIndex(index)
 }
 </script>
 
 <template>
-  <p v-if="!items.length" class="empty">׳׳™׳ ׳₪׳¨׳™׳˜׳™׳</p>
+  <p v-if="!items.length" class="empty">אין פריטים</p>
   <div v-else ref="scrollEl" class="scroller" tabindex="0">
     <div class="list-items">
       <div
-        v-for="(item, i) in items"
+        v-for="(item, index) in items"
         :key="item.uid"
         class="fs-item"
         data-nav-item
-        :class="{ 'is-focused': containerFocused && focusedIndex === i }"
-        @click="selectItem(i)"
+        :class="{ 'is-focused': containerFocused && focusedIndex === index }"
+        @click="selectItem(index)"
       >
         <span class="icon" :class="item.kind === 'folder' ? 'folder-icon' : 'book-icon'">
-          <IconFolder20Filled v-if="item.kind === 'folder'" /><IconBook20Filled v-else />
+          <IconFolder20Filled v-if="item.kind === 'folder'" />
+          <IconBook20Filled v-else />
         </span>
         <span class="title">{{ getTitle(item) }}</span>
       </div>
