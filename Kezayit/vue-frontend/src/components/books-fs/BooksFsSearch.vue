@@ -63,7 +63,7 @@ function selectTileItem(i: number) {
 </script>
 
 <template>
-  <p v-if="!items.length" class="empty">׳׳™׳ ׳×׳•׳¦׳׳•׳×</p>
+  <p v-if="!items.length" class="empty">לא נמצאו תוצאות</p>
   <div v-else-if="view !== 'tiles'" ref="scrollEl" class="scroller" tabindex="0">
     <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
       <div
