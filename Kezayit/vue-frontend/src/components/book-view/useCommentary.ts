@@ -52,11 +52,15 @@ const CONNECTION_TYPE_PRIORITY: CommentaryConnectionType[] = [
   'REFERENCE',
 ]
 
-const STATIC_FILTER_CONNECTION_TYPES = new Set<StaticFilterConnectionType>([
+const STATIC_FILTER_CONNECTION_TYPE_LIST: StaticFilterConnectionType[] = [
   'SOURCE',
   'TARGUM',
   'COMMENTARY',
-])
+]
+
+const STATIC_FILTER_CONNECTION_TYPES = new Set<StaticFilterConnectionType>(
+  STATIC_FILTER_CONNECTION_TYPE_LIST,
+)
 
 const CONNECTION_TYPE_SECTION_LABELS: Record<CommentaryConnectionType, string> = {
   SOURCE: '\u05DE\u05E7\u05D5\u05E8',
@@ -148,15 +152,21 @@ function sortCategoryEntries(
 }
 
 let connectionTypeNamesById: Map<number, string> | null = null
+let connectionTypeIdsByName: Map<string, number> | null = null
 
 async function ensureConnectionTypeNamesLoaded() {
-  if (connectionTypeNamesById) return
+  if (connectionTypeNamesById && connectionTypeIdsByName) return
   const rows = await query<{ id: number; name: string }>(SQL.GET_ALL_CONNECTION_TYPES)
   connectionTypeNamesById = new Map(rows.map((row) => [row.id, row.name]))
+  connectionTypeIdsByName = new Map(rows.map((row) => [row.name, row.id]))
 }
 
 function getConnectionTypeName(connectionTypeId: number): string {
   return connectionTypeNamesById?.get(connectionTypeId) ?? String(connectionTypeId)
+}
+
+function getConnectionTypeId(connectionTypeName: string): number | null {
+  return connectionTypeIdsByName?.get(connectionTypeName) ?? null
 }
 
 function getPrimaryConnectionType(connectionTypes: string[]): string {
@@ -313,16 +323,22 @@ async function buildStaticCommentaryFilterGroups(
   sourceBookId: number,
   allBooksMap: Map<number, BookRow>,
 ): Promise<CommentaryGroup[]> {
-  const rows = await query<{ targetBookId: number; connectionType: string }>(
+  await ensureConnectionTypeNamesLoaded()
+  const connectionTypeIds = STATIC_FILTER_CONNECTION_TYPE_LIST.map((name) =>
+    getConnectionTypeId(name),
+  )
+  if (connectionTypeIds.some((id) => id == null)) return []
+
+  const rows = await query<{ targetBookId: number; connectionTypeId: number }>(
     SQL.GET_STATIC_COMMENTARY_FILTER_BOOKS_FOR_SOURCE_BOOK,
-    [sourceBookId],
+    [sourceBookId, ...connectionTypeIds],
   )
   if (!rows.length) return []
 
   const byBook = new Map<number, Set<string>>()
   for (const row of rows) {
     if (!byBook.has(row.targetBookId)) byBook.set(row.targetBookId, new Set())
-    byBook.get(row.targetBookId)!.add(row.connectionType)
+    byBook.get(row.targetBookId)!.add(getConnectionTypeName(row.connectionTypeId))
   }
 
   const entries: CommentaryBookEntry[] = [...byBook.entries()].map(([bookId, typesSet]) => {
@@ -346,6 +362,7 @@ export function useCommentary(
   selectedLineId: () => number | null,
   selectedLineIds: () => number[] | null = () => null,
   sourceBookId: () => number | undefined = () => undefined,
+  filterPanelVisible: () => boolean = () => false,
 ) {
   const groups = ref<CommentaryGroup[]>([])
   const staticFilterGroups = ref<CommentaryGroup[]>([])
@@ -415,12 +432,12 @@ export function useCommentary(
   )
 
   watch(
-    sourceBookId,
-    (id) => {
+    [sourceBookId, filterPanelVisible],
+    ([id, visible]) => {
       staticFilterLoadToken += 1
       staticFilterGroups.value = []
       staticFilterGroupsLoaded.value = false
-      if (id == null) return
+      if (id == null || !visible) return
       void loadStaticFilterGroups(id, staticFilterLoadToken)
     },
     { immediate: true },

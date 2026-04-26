@@ -121,6 +121,7 @@ const { groups, filterGroups, loading: commentaryLoading } = useCommentary(
   () => commentaryLineId.value,
   () => selectedSectionLineIds.value,
   () => bookId ?? undefined,
+  () => commentaryFilterVisible.value,
 )
 const contentSearch = useBookViewSearch(
   () => lines.value,
