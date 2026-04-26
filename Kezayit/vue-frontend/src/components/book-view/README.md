@@ -34,7 +34,7 @@ Main book reader. Split pane with text above and commentary below, shared side p
 
 **useLinesTable.ts** - paginated line fetching in chunks of 200. Pre-allocates placeholder slots for correct virtualizer height. Use `prioritise(lineIndex)` to move a chunk to the front of the queue when the user jumps to a specific position.
 
-**useCommentary.ts** - fetches linked commentary for a selected line or range, groups by connection type and category. Returns `CommentaryGroup[]`. All commentary data fetching goes through here.
+**useCommentary.ts** - fetches linked commentary for a selected line or range, groups by connection type and category, and also prepares the commentary-filter data. Returns live `groups` for the commentary panel plus `filterGroups` for the filter tree. All commentary data fetching goes through here.
 
 **useBookViewSearch.ts** - in-book content search, line-based.
 

@@ -1,34 +1,39 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import CommentaryTreeViewNode from './CommentaryTreeViewNode.vue'
-import { buildCommentaryTree } from './useCommentary'
+import {
+  buildCommentaryTree,
+  getLegacyCommentaryBookKey,
+  isCommentaryGroupHidden,
+} from './useCommentary'
 import type { CommentaryGroup } from './useCommentary'
 
 const props = defineProps<{
   groups: CommentaryGroup[]
-  hiddenBookIds?: Set<number>
+  hiddenBookIds?: Set<string>
 }>()
 
 const emit = defineEmits<{
-  'update:hiddenBookIds': [value: Set<number>]
+  'update:hiddenBookIds': [value: Set<string>]
 }>()
 
 const tree = computed(() => buildCommentaryTree(props.groups))
-const allBookIds = computed(() => props.groups.map((g) => g.bookId))
+const hiddenKeys = computed(() => props.hiddenBookIds ?? new Set<string>())
 
 const allState = computed<'checked' | 'unchecked' | 'indeterminate'>(() => {
-  const hidden = allBookIds.value.filter((id) => props.hiddenBookIds?.has(id)).length
+  const hidden = props.groups.filter((group) => isCommentaryGroupHidden(hiddenKeys.value, group)).length
   if (hidden === 0) return 'checked'
-  if (hidden === allBookIds.value.length) return 'unchecked'
+  if (hidden === props.groups.length) return 'unchecked'
   return 'indeterminate'
 })
 
 function toggleAll() {
   const next = new Set(props.hiddenBookIds ?? [])
   const shouldHideAll = allState.value === 'checked'
-  allBookIds.value.forEach((id) => {
-    if (shouldHideAll) next.add(id)
-    else next.delete(id)
+  props.groups.forEach((group) => {
+    if (shouldHideAll) next.add(group.filterKey)
+    else next.delete(group.filterKey)
+    next.delete(getLegacyCommentaryBookKey(group.bookId))
   })
   emit('update:hiddenBookIds', next)
 }
@@ -49,7 +54,7 @@ function toggleAll() {
     </div>
     <CommentaryTreeViewNode
       v-for="node in tree"
-      :key="node.label"
+      :key="node.filterKey ?? node.label"
       :node="node"
       :hidden-book-ids="hiddenBookIds"
       @update:hidden-book-ids="emit('update:hiddenBookIds', $event)"

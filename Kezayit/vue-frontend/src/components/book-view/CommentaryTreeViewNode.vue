@@ -1,36 +1,50 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { IconChevronDown20Regular } from '@iconify-prerendered/vue-fluent'
-import type { CommentaryTreeNode } from './useCommentary'
+import {
+  getLegacyCommentaryBookKey,
+  isCommentaryGroupHidden,
+} from './useCommentary'
+import type { CommentaryGroup, CommentaryTreeNode } from './useCommentary'
 
 const props = defineProps<{
   node: CommentaryTreeNode
-  hiddenBookIds?: Set<number>
+  hiddenBookIds?: Set<string>
   depth?: number
 }>()
 const emit = defineEmits<{
-  'update:hiddenBookIds': [value: Set<number>]
+  'update:hiddenBookIds': [value: Set<string>]
 }>()
 
 const expanded = ref(false)
 
-function collectBookIds(node: CommentaryTreeNode): number[] {
-  if (node.type === 'book' && node.bookId != null) return [node.bookId]
-  return node.children.flatMap(collectBookIds)
+type LeafNode = Pick<CommentaryGroup, 'filterKey' | 'bookId'>
+
+function collectLeafNodes(node: CommentaryTreeNode): LeafNode[] {
+  if (node.type === 'book' && node.bookId != null && node.filterKey)
+    return [{ filterKey: node.filterKey, bookId: node.bookId }]
+  return node.children.flatMap(collectLeafNodes)
 }
 
-const leafIds = computed(() => collectBookIds(props.node))
+const hiddenKeys = computed(() => props.hiddenBookIds ?? new Set<string>())
+const leafNodes = computed(() => collectLeafNodes(props.node))
 
 const isChecked = computed(
-  () => props.node.bookId == null || !(props.hiddenBookIds?.has(props.node.bookId) ?? false),
+  () =>
+    props.node.type !== 'book' ||
+    props.node.bookId == null ||
+    !isCommentaryGroupHidden(hiddenKeys.value, {
+      filterKey: props.node.filterKey ?? '',
+      bookId: props.node.bookId,
+    }),
 )
 
 const sectionState = computed<'checked' | 'unchecked' | 'indeterminate'>(() => {
   if (props.node.type !== 'section') return 'checked'
-  if (!leafIds.value.length) return 'checked'
-  const hidden = leafIds.value.filter((id) => props.hiddenBookIds?.has(id)).length
+  if (!leafNodes.value.length) return 'checked'
+  const hidden = leafNodes.value.filter((node) => isCommentaryGroupHidden(hiddenKeys.value, node)).length
   if (hidden === 0) return 'checked'
-  if (hidden === leafIds.value.length) return 'unchecked'
+  if (hidden === leafNodes.value.length) return 'unchecked'
   return 'indeterminate'
 })
 
@@ -39,13 +53,25 @@ function toggleCheck(e: MouseEvent) {
   const next = new Set(props.hiddenBookIds ?? [])
   if (props.node.type === 'section') {
     if (sectionState.value === 'checked') {
-      leafIds.value.forEach((id) => next.add(id))
+      leafNodes.value.forEach((node) => {
+        next.add(node.filterKey)
+        next.delete(getLegacyCommentaryBookKey(node.bookId))
+      })
     } else {
-      leafIds.value.forEach((id) => next.delete(id))
+      leafNodes.value.forEach((node) => {
+        next.delete(node.filterKey)
+        next.delete(getLegacyCommentaryBookKey(node.bookId))
+      })
     }
-  } else if (props.node.bookId != null) {
-    if (next.has(props.node.bookId)) next.delete(props.node.bookId)
-    else next.add(props.node.bookId)
+  } else if (props.node.bookId != null && props.node.filterKey) {
+    const legacyKey = getLegacyCommentaryBookKey(props.node.bookId)
+    const hidden = isCommentaryGroupHidden(hiddenKeys.value, {
+      filterKey: props.node.filterKey,
+      bookId: props.node.bookId,
+    })
+    next.delete(legacyKey)
+    if (hidden) next.delete(props.node.filterKey)
+    else next.add(props.node.filterKey)
   }
   emit('update:hiddenBookIds', next)
 }
@@ -69,7 +95,7 @@ function toggleCheck(e: MouseEvent) {
     <template v-if="node.type === 'section' && expanded">
       <CommentaryTreeViewNode
         v-for="child in node.children"
-        :key="child.bookId ?? child.label"
+        :key="child.filterKey ?? child.bookId ?? child.label"
         :node="child"
         :depth="(depth ?? 0) + 1"
         :hidden-book-ids="hiddenBookIds"

@@ -62,7 +62,7 @@ const sidePanelMode = ref<SidePanelMode | null>(null)
 const toolbarRef = ref<InstanceType<typeof BookViewToolbar> | null>(null)
 const selectedLineId = ref<number | null>(null)
 const commentaryLineId = ref<number | null>(null)
-const hiddenCommentaryBookIds = ref(new Set<number>())
+const hiddenCommentaryBookIds = ref(new Set<string>())
 const searchMode = ref<SearchMode>('content')
 const activeTocEntryId = ref<number | undefined>(undefined)
 const initialLineIndex = ref<number | undefined>(openTocLineIndex)
@@ -117,9 +117,10 @@ const selectedSectionLineIds = computed<number[] | null>(() => {
     .map((l) => l.id)
 })
 
-const { groups, loading: commentaryLoading } = useCommentary(
+const { groups, filterGroups, loading: commentaryLoading } = useCommentary(
   () => commentaryLineId.value,
   () => selectedSectionLineIds.value,
+  () => bookId ?? undefined,
 )
 const contentSearch = useBookViewSearch(
   () => lines.value,
@@ -284,7 +285,7 @@ function closeSidePanel() {
   sidePanelMode.value = null
 }
 
-async function setHiddenCommentaryBookIds(value: Set<number>) {
+async function setHiddenCommentaryBookIds(value: Set<string>) {
   const savedPos = commentaryViewRef.value?.captureScrollPos?.()
   hiddenCommentaryBookIds.value = value
   await nextTick()
@@ -411,7 +412,7 @@ onMounted(async () => {
     const savedFilter =
       bookSaved?.hiddenCommentaryBookIds ??
       (settingsStore.resumeLastRead ? lastRead?.hiddenCommentaryBookIds : undefined)
-    if (savedFilter?.length) hiddenCommentaryBookIds.value = new Set(savedFilter)
+    if (savedFilter?.length) hiddenCommentaryBookIds.value = new Set(savedFilter.map(String))
     // restore scroll position — only if not navigating to a specific TOC entry
     if (openTocLineIndex == null) {
       const scrollIndex = bookSaved?.scrollIndex ?? lastRead?.scrollIndex
@@ -635,7 +636,7 @@ watch(searchVisible, (v) => {
           />
           <CommentaryFilterPanel
             v-else-if="sidePanelMode === 'commentary-filter'"
-            :groups="groups"
+            :groups="filterGroups"
             :hidden-book-ids="hiddenCommentaryBookIds"
             @update:hidden-book-ids="setHiddenCommentaryBookIds"
           />

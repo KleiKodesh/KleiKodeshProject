@@ -64,7 +64,7 @@ export interface BookState {
   selectedLineId?: number | null
   commentaryScrollIndex?: number | null
   commentaryScrollOffset?: number | null
-  hiddenCommentaryBookIds?: number[]
+  hiddenCommentaryBookIds?: Array<number | string>
   zoom?: number
   bottomVisible?: boolean
   autoSelectTopLine?: boolean
@@ -76,7 +76,7 @@ export interface LastReadState {
   selectedLineId?: number | null
   commentaryScrollIndex?: number | null
   commentaryScrollOffset?: number | null
-  hiddenCommentaryBookIds?: number[]
+  hiddenCommentaryBookIds?: Array<number | string>
 }
 
 export interface Workspace {

@@ -8,6 +8,7 @@ import CommentaryHeaderNav from './CommentaryHeaderNav.vue'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
 import type { ContextMenuItem } from '@/components/common/ContextMenu.vue'
+import { isCommentaryGroupHidden } from './useCommentary'
 import type { CommentaryGroup } from './useCommentary'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
@@ -21,7 +22,7 @@ const props = defineProps<{
   selectedLineId: number | null
   groups: CommentaryGroup[]
   loading: boolean
-  hiddenBookIds: Set<number>
+  hiddenBookIds: Set<string>
   searchQuery?: string
   currentMatchFlatIndex?: number
   currentMatchOccurrence?: number
@@ -177,7 +178,9 @@ const scrollerEl = ref<HTMLElement | null>(null)
 const scrollTop = ref(0)
 const headerNavRef = ref<InstanceType<typeof CommentaryHeaderNav> | null>(null)
 
-const visibleGroups = computed(() => props.groups.filter((g) => !props.hiddenBookIds.has(g.bookId)))
+const visibleGroups = computed(() =>
+  props.groups.filter((group) => !isCommentaryGroupHidden(props.hiddenBookIds, group)),
+)
 
 const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, {
   onCtrlF: () => emit('toggle-search'),

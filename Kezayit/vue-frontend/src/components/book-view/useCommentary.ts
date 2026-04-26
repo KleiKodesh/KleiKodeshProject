@@ -1,4 +1,4 @@
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { query } from '@/host/seforimDb'
 import { SQL } from '@/host/queries.sql'
 import { useBooksDataStore } from '@/stores/booksDataStore'
@@ -9,7 +9,9 @@ export interface CommentaryLine {
   lineIndex: number
   content: string
 }
+
 export interface CommentaryGroup {
+  filterKey: string
   bookId: number
   bookTitle: string
   path: string
@@ -23,19 +25,70 @@ export interface CommentaryGroup {
 export interface CommentaryTreeNode {
   type: 'section' | 'book'
   label: string
+  filterKey?: string
   bookId?: number
   firstLineIndex?: number
   children: CommentaryTreeNode[]
 }
+
+type CommentaryConnectionType = 'SOURCE' | 'TARGUM' | 'COMMENTARY' | 'OTHER' | 'REFERENCE'
+type StaticFilterConnectionType = 'SOURCE' | 'TARGUM' | 'COMMENTARY'
+
+interface CommentaryBookEntry {
+  bookId: number
+  bookTitle: string
+  connectionTypes: string[]
+  lines: CommentaryLine[]
+  category: string
+  treeOrder: number
+  primaryConnectionType: string
+}
+
+const CONNECTION_TYPE_PRIORITY: CommentaryConnectionType[] = [
+  'SOURCE',
+  'TARGUM',
+  'COMMENTARY',
+  'OTHER',
+  'REFERENCE',
+]
+
+const STATIC_FILTER_CONNECTION_TYPES = new Set<StaticFilterConnectionType>([
+  'SOURCE',
+  'TARGUM',
+  'COMMENTARY',
+])
+
+const CONNECTION_TYPE_SECTION_LABELS: Record<CommentaryConnectionType, string> = {
+  SOURCE: '\u05DE\u05E7\u05D5\u05E8',
+  TARGUM: '\u05EA\u05E8\u05D2\u05D5\u05DE\u05D9\u05DD',
+  COMMENTARY: '\u05DE\u05E4\u05E8\u05E9\u05D9\u05DD',
+  OTHER: '\u05E7\u05E9\u05E8\u05D9\u05DD',
+  REFERENCE: '\u05E6\u05D9\u05D5\u05E0\u05D9\u05DD',
+}
+
+const OTHER_CATEGORY = '\u05D0\u05D7\u05E8'
+const AL_SUFFIX = ' \u05E2\u05DC'
+
+const CATEGORY_ORDER = [
+  '\u05EA\u05E0"\u05DA',
+  '\u05DE\u05E9\u05E0\u05D4',
+  '\u05EA\u05D5\u05E1\u05E4\u05EA\u05D0',
+  '\u05EA\u05DC\u05DE\u05D5\u05D3',
+  '\u05DE\u05D3\u05E8\u05E9',
+  '\u05D2\u05D0\u05D5\u05E0\u05D9\u05DD',
+  '\u05E8\u05D0\u05E9\u05D5\u05E0\u05D9\u05DD',
+  '\u05D0\u05D7\u05E8\u05D5\u05E0\u05D9\u05DD',
+  OTHER_CATEGORY,
+]
 
 export function buildCommentaryTree(groups: CommentaryGroup[]): CommentaryTreeNode[] {
   const root: CommentaryTreeNode[] = []
   let currentSection: CommentaryTreeNode | null = null
   let currentSubSection: CommentaryTreeNode | null = null
 
-  for (const g of groups) {
-    const sectionLabel = g.sectionLabel ?? g.bookTitle
-    const subLabel = g.subSectionLabel ?? null
+  for (const group of groups) {
+    const sectionLabel = group.sectionLabel ?? group.bookTitle
+    const subLabel = group.subSectionLabel ?? null
 
     if (!currentSection || currentSection.label !== sectionLabel) {
       currentSection = { type: 'section', label: sectionLabel, children: [] }
@@ -50,18 +103,20 @@ export function buildCommentaryTree(groups: CommentaryGroup[]): CommentaryTreeNo
       }
       currentSubSection.children.push({
         type: 'book',
-        label: g.bookTitle,
-        bookId: g.bookId,
-        firstLineIndex: g.lines[0]?.lineIndex,
+        label: group.bookTitle,
+        filterKey: group.filterKey,
+        bookId: group.bookId,
+        firstLineIndex: group.lines[0]?.lineIndex,
         children: [],
       })
     } else {
       currentSubSection = null
       currentSection.children.push({
         type: 'book',
-        label: g.bookTitle,
-        bookId: g.bookId,
-        firstLineIndex: g.lines[0]?.lineIndex,
+        label: group.bookTitle,
+        filterKey: group.filterKey,
+        bookId: group.bookId,
+        firstLineIndex: group.lines[0]?.lineIndex,
         children: [],
       })
     }
@@ -71,27 +126,15 @@ export function buildCommentaryTree(groups: CommentaryGroup[]): CommentaryTreeNo
 }
 
 function truncateAtAl(label: string): string {
-  const idx = label.indexOf(' על')
+  const idx = label.indexOf(AL_SUFFIX)
   return idx !== -1 ? label.slice(0, idx) : label
 }
 
 function resolveCategory(book: BookRow | undefined): string {
-  if (!book) return 'אחר'
-  if (book.period && book.period !== 'אחר') return truncateAtAl(book.period)
-  return truncateAtAl(book.rootCategory ?? 'אחר')
+  if (!book) return OTHER_CATEGORY
+  if (book.period && book.period !== OTHER_CATEGORY) return truncateAtAl(book.period)
+  return truncateAtAl(book.rootCategory ?? OTHER_CATEGORY)
 }
-
-const CATEGORY_ORDER = [
-  'תנ"ך',
-  'משנה',
-  'תוספתא',
-  'תלמוד',
-  'מדרש',
-  'גאונים',
-  'ראשונים',
-  'אחרונים',
-  'אחר',
-]
 
 function categoryRank(cat: string): number {
   const idx = CATEGORY_ORDER.indexOf(cat)
@@ -116,9 +159,107 @@ function getConnectionTypeName(connectionTypeId: number): string {
   return connectionTypeNamesById?.get(connectionTypeId) ?? String(connectionTypeId)
 }
 
-// ─── Shared core ────────────────────────────────────────────────────────────
+function getPrimaryConnectionType(connectionTypes: string[]): string {
+  for (const type of CONNECTION_TYPE_PRIORITY) {
+    if (connectionTypes.includes(type)) return type
+  }
+  return connectionTypes[0] ?? 'OTHER'
+}
+
+export function getCommentaryGroupFilterKey(
+  bookId: number,
+  sectionLabel?: string,
+  subSectionLabel?: string,
+): string {
+  return [bookId, sectionLabel ?? '', subSectionLabel ?? ''].join('::')
+}
+
+export function getLegacyCommentaryBookKey(bookId: number): string {
+  return String(bookId)
+}
+
+export function isCommentaryGroupHidden(
+  hiddenKeys: Set<string>,
+  group: Pick<CommentaryGroup, 'filterKey' | 'bookId'>,
+): boolean {
+  return hiddenKeys.has(group.filterKey) || hiddenKeys.has(getLegacyCommentaryBookKey(group.bookId))
+}
+
+function isStaticFilterConnectionType(type: string): type is StaticFilterConnectionType {
+  return STATIC_FILTER_CONNECTION_TYPES.has(type as StaticFilterConnectionType)
+}
 
 type ByBookMap = Map<number, { lineIds: Set<number>; connectionTypes: Set<string> }>
+
+function buildCommentaryGroupsFromEntries(entries: CommentaryBookEntry[]): CommentaryGroup[] {
+  const byType = new Map<string, CommentaryBookEntry[]>()
+  for (const entry of entries) {
+    if (!byType.has(entry.primaryConnectionType)) byType.set(entry.primaryConnectionType, [])
+    byType.get(entry.primaryConnectionType)!.push(entry)
+  }
+
+  const result: CommentaryGroup[] = []
+  const byTreeOrder = (a: { treeOrder: number }, b: { treeOrder: number }) =>
+    a.treeOrder - b.treeOrder
+
+  const addFlat = (ct: CommentaryConnectionType) => {
+    const sectionLabel = CONNECTION_TYPE_SECTION_LABELS[ct]
+    for (const entry of (byType.get(ct) ?? []).sort(byTreeOrder)) {
+      const filterKey = getCommentaryGroupFilterKey(entry.bookId, sectionLabel)
+      result.push({
+        filterKey,
+        bookId: entry.bookId,
+        bookTitle: entry.bookTitle,
+        path: `${entry.bookTitle} \u00B7 ${sectionLabel}`,
+        connectionTypes: entry.connectionTypes,
+        lines: entry.lines,
+        category: entry.category,
+        sectionLabel,
+      })
+    }
+  }
+
+  const addMergedByCategory = (ct: CommentaryConnectionType) => {
+    const sectionLabel = CONNECTION_TYPE_SECTION_LABELS[ct]
+    const items = byType.get(ct) ?? []
+    if (!items.length) return
+
+    const byCat = new Map<string, CommentaryBookEntry[]>()
+    for (const entry of items) {
+      if (!byCat.has(entry.category)) byCat.set(entry.category, [])
+      byCat.get(entry.category)!.push(entry)
+    }
+
+    const sorted = sortCategoryEntries(
+      [...byCat.entries()].map(([cat, groups]) => [cat, groups.map((g) => ({ bookId: g.bookId }))]),
+    )
+
+    for (const [cat] of sorted) {
+      for (const entry of byCat.get(cat)!.sort(byTreeOrder)) {
+        const filterKey = getCommentaryGroupFilterKey(entry.bookId, sectionLabel, cat)
+        result.push({
+          filterKey,
+          bookId: entry.bookId,
+          bookTitle: entry.bookTitle,
+          path: `${entry.bookTitle} \u00B7 ${sectionLabel} \u00B7 ${cat}`,
+          connectionTypes: entry.connectionTypes,
+          lines: entry.lines,
+          category: cat,
+          sectionLabel,
+          subSectionLabel: cat,
+        })
+      }
+    }
+  }
+
+  addFlat('SOURCE')
+  addFlat('TARGUM')
+  addMergedByCategory('COMMENTARY')
+  addMergedByCategory('OTHER')
+  addFlat('REFERENCE')
+
+  return result
+}
 
 async function buildCommentaryGroupsFromCombined(
   rows: Array<{
@@ -137,24 +278,22 @@ async function buildCommentaryGroupsFromCombined(
   for (const row of rows) {
     if (!byBook.has(row.targetBookId))
       byBook.set(row.targetBookId, { lineIds: new Set(), connectionTypes: new Set() })
-    const g = byBook.get(row.targetBookId)!
-    g.lineIds.add(row.targetLineId)
-    g.connectionTypes.add(getConnectionTypeName(row.connectionTypeId))
+    const group = byBook.get(row.targetBookId)!
+    group.lineIds.add(row.targetLineId)
+    group.connectionTypes.add(getConnectionTypeName(row.connectionTypeId))
 
     lineData.set(row.targetLineId, { lineIndex: row.lineIndex, content: row.content })
   }
 
-  const bookIds = [...byBook.keys()]
-
-  const raw = bookIds.map((bookId) => {
-    const g = byBook.get(bookId)!
+  const entries: CommentaryBookEntry[] = [...byBook.entries()].map(([bookId, group]) => {
     const book = allBooksMap.get(bookId)
-    const ct = [...g.connectionTypes][0] ?? 'OTHER'
+    const connectionTypes = [...group.connectionTypes]
+
     return {
       bookId,
       bookTitle: book?.title ?? String(bookId),
-      connectionTypes: [...g.connectionTypes],
-      lines: [...g.lineIds]
+      connectionTypes,
+      lines: [...group.lineIds]
         .map((id) => ({
           lineId: id,
           lineIndex: lineData.get(id)?.lineIndex ?? 0,
@@ -162,78 +301,69 @@ async function buildCommentaryGroupsFromCombined(
         }))
         .sort((a, b) => a.lineIndex - b.lineIndex),
       category: resolveCategory(book),
-      ct,
       treeOrder: book?.treeOrder ?? 999999,
+      primaryConnectionType: getPrimaryConnectionType(connectionTypes),
     }
   })
 
-  const byType = new Map<string, typeof raw>()
-  for (const g of raw) {
-    if (!byType.has(g.ct)) byType.set(g.ct, [])
-    byType.get(g.ct)!.push(g)
-  }
-
-  const result: CommentaryGroup[] = []
-  const byTreeOrder = (a: { treeOrder: number }, b: { treeOrder: number }) =>
-    a.treeOrder - b.treeOrder
-
-  const addFlat = (ct: string, sectionLabel: string) => {
-    for (const g of (byType.get(ct) ?? []).sort(byTreeOrder))
-      result.push({
-        bookId: g.bookId,
-        bookTitle: g.bookTitle,
-        path: `${g.bookTitle} · ${sectionLabel}`,
-        connectionTypes: g.connectionTypes,
-        lines: g.lines,
-        category: g.category,
-        sectionLabel,
-      })
-  }
-
-  const addMergedByCategory = (ct: string, sectionLabel: string) => {
-    const items = byType.get(ct) ?? []
-    if (!items.length) return
-    const byCat = new Map<string, typeof items>()
-    for (const g of items) {
-      if (!byCat.has(g.category)) byCat.set(g.category, [])
-      byCat.get(g.category)!.push(g)
-    }
-    const sorted = sortCategoryEntries(
-      [...byCat.entries()].map(([cat, gs]) => [cat, gs.map((g) => ({ bookId: g.bookId }))]),
-    )
-    for (const [cat] of sorted) {
-      for (const g of byCat.get(cat)!.sort(byTreeOrder))
-        result.push({
-          bookId: g.bookId,
-          bookTitle: g.bookTitle,
-          path: `${g.bookTitle} · ${sectionLabel} · ${cat}`,
-          connectionTypes: g.connectionTypes,
-          lines: g.lines,
-          category: cat,
-          sectionLabel,
-          subSectionLabel: cat,
-        })
-    }
-  }
-
-  addFlat('SOURCE', 'מקור')
-  addFlat('TARGUM', 'תרגומים')
-  addMergedByCategory('COMMENTARY', 'מפרשים')
-  addMergedByCategory('OTHER', 'קשרים')
-  addFlat('REFERENCE', 'ציונים')
-
-  return result
+  return buildCommentaryGroupsFromEntries(entries)
 }
 
-// ─── Composable ─────────────────────────────────────────────────────────────
+async function buildStaticCommentaryFilterGroups(
+  sourceBookId: number,
+  allBooksMap: Map<number, BookRow>,
+): Promise<CommentaryGroup[]> {
+  const rows = await query<{ targetBookId: number; connectionType: string }>(
+    SQL.GET_STATIC_COMMENTARY_FILTER_BOOKS_FOR_SOURCE_BOOK,
+    [sourceBookId],
+  )
+  if (!rows.length) return []
+
+  const byBook = new Map<number, Set<string>>()
+  for (const row of rows) {
+    if (!byBook.has(row.targetBookId)) byBook.set(row.targetBookId, new Set())
+    byBook.get(row.targetBookId)!.add(row.connectionType)
+  }
+
+  const entries: CommentaryBookEntry[] = [...byBook.entries()].map(([bookId, typesSet]) => {
+    const book = allBooksMap.get(bookId)
+    const connectionTypes = [...typesSet]
+    return {
+      bookId,
+      bookTitle: book?.title ?? String(bookId),
+      connectionTypes,
+      lines: [],
+      category: resolveCategory(book),
+      treeOrder: book?.treeOrder ?? 999999,
+      primaryConnectionType: getPrimaryConnectionType(connectionTypes),
+    }
+  })
+
+  return buildCommentaryGroupsFromEntries(entries)
+}
 
 export function useCommentary(
   selectedLineId: () => number | null,
   selectedLineIds: () => number[] | null = () => null,
+  sourceBookId: () => number | undefined = () => undefined,
 ) {
   const groups = ref<CommentaryGroup[]>([])
+  const staticFilterGroups = ref<CommentaryGroup[]>([])
+  const staticFilterGroupsLoaded = ref(false)
   const loading = ref(false)
   const booksDataStore = useBooksDataStore()
+  let staticFilterLoadToken = 0
+
+  const filterGroups = computed(() => {
+    if (!staticFilterGroupsLoaded.value) return groups.value
+    return [
+      ...staticFilterGroups.value,
+      ...groups.value.filter((group) => {
+        const primaryType = getPrimaryConnectionType(group.connectionTypes)
+        return !isStaticFilterConnectionType(primaryType)
+      }),
+    ]
+  })
 
   async function load(lineId: number) {
     loading.value = true
@@ -264,14 +394,37 @@ export function useCommentary(
     }
   }
 
+  async function loadStaticFilterGroups(bookId: number, token: number) {
+    await booksDataStore.ensureLoaded()
+    await booksDataStore.ensureCommentaryMetadataLoaded()
+
+    const nextGroups = await buildStaticCommentaryFilterGroups(bookId, booksDataStore.allBooksMap)
+    if (token !== staticFilterLoadToken) return
+
+    staticFilterGroups.value = nextGroups
+    staticFilterGroupsLoaded.value = true
+  }
+
   watch(
     selectedLineId,
     (id) => {
-      if (id != null) load(id)
+      if (id != null) void load(id)
       else groups.value = []
     },
     { immediate: true },
   )
 
-  return { groups, loading }
+  watch(
+    sourceBookId,
+    (id) => {
+      staticFilterLoadToken += 1
+      staticFilterGroups.value = []
+      staticFilterGroupsLoaded.value = false
+      if (id == null) return
+      void loadStaticFilterGroups(id, staticFilterLoadToken)
+    },
+    { immediate: true },
+  )
+
+  return { groups, filterGroups, loading }
 }

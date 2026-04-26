@@ -163,6 +163,16 @@ export const SQL = {
     FROM connection_type
   `,
 
+  /** Distinct static filter books for one source book (SOURCE, TARGUM, COMMENTARY only) */
+  GET_STATIC_COMMENTARY_FILTER_BOOKS_FOR_SOURCE_BOOK: `
+    SELECT DISTINCT l.targetBookId, ct.name AS connectionType
+    FROM line src
+    JOIN link l ON l.sourceLineId = src.id
+    JOIN connection_type ct ON ct.id = l.connectionTypeId
+    WHERE src.bookId = ?
+      AND ct.name IN ('SOURCE', 'TARGUM', 'COMMENTARY')
+  `,
+
   /** All books that have static commentary connections (SOURCE, TARGUM, COMMENTARY) */
   GET_STATIC_COMMENTARY_BOOKS: `
     SELECT DISTINCT b.id, b.title

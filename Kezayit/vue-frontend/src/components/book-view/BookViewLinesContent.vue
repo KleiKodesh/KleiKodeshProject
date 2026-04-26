@@ -26,7 +26,7 @@ const props = defineProps<{
   bottomVisible?: boolean
   commentaryScrollIndex?: number | null
   commentaryScrollOffset?: number | null
-  hiddenCommentaryBookIds?: Set<number>
+  hiddenCommentaryBookIds?: Set<string>
   searchQuery?: string
   currentMatchLineIndex?: number
   currentMatchOccurrence?: number
