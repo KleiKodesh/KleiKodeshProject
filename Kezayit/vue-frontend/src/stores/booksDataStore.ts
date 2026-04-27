@@ -107,10 +107,24 @@ export const useBooksDataStore = defineStore('booksData', () => {
     if (staticCommentaryPromise) return staticCommentaryPromise
 
     staticCommentaryPromise = Promise.resolve().then(async () => {
-      const books = await query<{ id: number; title: string }>(SQL.GET_STATIC_COMMENTARY_BOOKS)
-      // Convert to BookRow format by finding the full book data
-      staticCommentaryBooks.value = books
-        .map((b) => allBooksMap.value.get(b.id))
+      const connectionTypes = await query<{ id: number; name: string }>(SQL.GET_ALL_CONNECTION_TYPES)
+      const typeIds = connectionTypes
+        .filter((row) => row.name === 'SOURCE' || row.name === 'TARGUM' || row.name === 'COMMENTARY')
+        .map((row) => row.id)
+
+      if (typeIds.length !== 3) {
+        staticCommentaryBooks.value = []
+        staticCommentaryPromise = null
+        return
+      }
+
+      const bookIds = await query<{ id: number }>(SQL.GET_STATIC_COMMENTARY_BOOK_IDS, typeIds)
+      const allBooksById = allBooksMap.value.size
+        ? allBooksMap.value
+        : new Map(allBooks.value.map((book) => [book.id, book]))
+
+      staticCommentaryBooks.value = bookIds
+        .map((b) => allBooksById.get(b.id))
         .filter((b): b is BookRow => b !== undefined)
       staticCommentaryPromise = null
     })

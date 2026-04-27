@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import type { TocEntry, AltTocSection } from './useToc'
 import { SearchableTree } from '@/utils/tocSearchUtils'
 import BookViewTocTreeSection from './BookViewTocTreeSection.vue'
@@ -7,7 +7,6 @@ import SplitPane from '@/components/common/SplitPane.vue'
 
 const props = defineProps<{
   activeTocEntryId?: number
-  visible?: boolean
   tocEntries: TocEntry[]
   altTocSections: AltTocSection[]
   loading: boolean
@@ -21,17 +20,16 @@ const searchRef = ref<HTMLInputElement | null>(null)
 const tocSectionRef = ref<InstanceType<typeof BookViewTocTreeSection> | null>(null)
 const searchQuery = ref('')
 
+// Component mounts fresh each time the panel opens (v-if), so onMounted handles the
+// initial focus. The loading watcher covers the case where TOC data arrives after mount.
+onMounted(() => {
+  if (!props.loading) nextTick(() => searchRef.value?.focus({ preventScroll: true }))
+})
+
 watch(
   () => props.loading,
   (val) => {
     if (!val) nextTick(() => searchRef.value?.focus({ preventScroll: true }))
-  },
-)
-
-watch(
-  () => props.visible,
-  (val) => {
-    if (val) nextTick(() => searchRef.value?.focus({ preventScroll: true }))
   },
 )
 

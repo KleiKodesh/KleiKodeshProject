@@ -177,6 +177,7 @@ const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
   align-items: stretch;
   min-height: 0;
   flex: 1;
+  padding-inline: 8px;
 }
 
 /* ── Date columns ── */

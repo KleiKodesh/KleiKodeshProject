@@ -171,14 +171,11 @@ export const SQL = {
       AND l.connectionTypeId IN (?, ?, ?)
   `,
 
-  /** All books that have static commentary connections (SOURCE, TARGUM, COMMENTARY) */
-  GET_STATIC_COMMENTARY_BOOKS: `
-    SELECT DISTINCT b.id, b.title
-    FROM book b
-    JOIN line ln ON ln.bookId = b.id
-    JOIN link l ON l.targetLineId = ln.id
-    JOIN connection_type ct ON ct.id = l.connectionTypeId
-    WHERE ct.name IN ('SOURCE', 'TARGUM', 'COMMENTARY')
+  /** Distinct target book ids that appear in SOURCE/TARGUM/COMMENTARY links */
+  GET_STATIC_COMMENTARY_BOOK_IDS: `
+    SELECT DISTINCT l.targetBookId AS id
+    FROM link l
+    WHERE l.connectionTypeId IN (?, ?, ?)
   `,
 
   /** Next line in main book (by lineIndex) that has a link to a given commentary book */

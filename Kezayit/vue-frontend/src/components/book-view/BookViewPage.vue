@@ -626,7 +626,6 @@ watch(searchVisible, (v) => {
           <BookViewTocTree
             v-if="sidePanelMode === 'toc'"
             :active-toc-entry-id="activeTocEntryId"
-            :visible="tocVisible"
             :toc-entries="tocEntries"
             :toc-search-tree="tocSearchTree"
             :alt-toc-sections="altTocSections"
