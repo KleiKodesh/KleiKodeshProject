@@ -319,10 +319,16 @@ async function buildCommentaryGroupsFromCombined(
   return buildCommentaryGroupsFromEntries(entries)
 }
 
+/** Module-level cache: sourceBookId → resolved CommentaryGroup[]. Never evicted — one entry
+ *  per book opened, bounded by the number of books the user actually views in a session. */
+const _staticFilterGroupsCache = new Map<number, CommentaryGroup[]>()
+
 async function buildStaticCommentaryFilterGroups(
   sourceBookId: number,
   allBooksMap: Map<number, BookRow>,
 ): Promise<CommentaryGroup[]> {
+  const cached = _staticFilterGroupsCache.get(sourceBookId)
+  if (cached) return cached
   await ensureConnectionTypeNamesLoaded()
   const connectionTypeIds = STATIC_FILTER_CONNECTION_TYPE_LIST.map((name) =>
     getConnectionTypeId(name),
@@ -355,7 +361,9 @@ async function buildStaticCommentaryFilterGroups(
     }
   })
 
-  return buildCommentaryGroupsFromEntries(entries)
+  const result = buildCommentaryGroupsFromEntries(entries)
+  _staticFilterGroupsCache.set(sourceBookId, result)
+  return result
 }
 
 export function useCommentary(

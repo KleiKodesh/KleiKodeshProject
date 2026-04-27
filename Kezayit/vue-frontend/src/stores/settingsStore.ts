@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
-import { lsGet, lsSet, lsClearAll, KEYS } from '@/utils/persistence'
+import { lsGet, lsSet, lsClearSettingsOnly, KEYS } from '@/utils/persistence'
 
 export type NewTabPage = 'homepage' | 'openfile' | 'hebrewbooks' | 'kezayit-search'
 
@@ -127,7 +127,7 @@ export const useSettingsStore = defineStore('settings', () => {
     pdfPageFilters.value = DEFAULTS.pdfPageFilters
     resumeLastRead.value = DEFAULTS.resumeLastRead
     defaultAutoSyncCommentary.value = DEFAULTS.defaultAutoSyncCommentary
-    lsClearAll()
+    lsClearSettingsOnly()
     applyCSSVariables()
   }
 

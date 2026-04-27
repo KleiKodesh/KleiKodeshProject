@@ -1,23 +1,31 @@
 import { useEventListener } from '@vueuse/core'
 import type { Ref } from 'vue'
 
-function toClipboard(event: ClipboardEvent, lines: string[]) {
-  const htmlContent = `<!DOCTYPE html><html><head><meta charset="utf-8">
+function wrapRtlHtml(innerHtml: string): string {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>body { direction: rtl; }</style></head><body>
-${lines.map((l) => `<div>${l}</div>`).join('\n')}
+${innerHtml}
 </body></html>`
+}
 
+function htmlToPlainText(html: string): string {
   const tempDiv = document.createElement('div')
-  const textContent = lines
-    .map((l) => {
-      tempDiv.innerHTML = l
-      return tempDiv.textContent ?? ''
-    })
-    .join('\n')
+  tempDiv.innerHTML = html
+  return tempDiv.textContent ?? ''
+}
 
-  event.clipboardData?.setData('text/html', htmlContent)
-  event.clipboardData?.setData('text/plain', textContent)
-  event.preventDefault()
+function linesToHtml(lines: string[]): string {
+  return lines.map((l) => `<div>${l}</div>`).join('\n')
+}
+
+function selectedHtml(): string {
+  const selection = window.getSelection()
+  if (!selection || selection.rangeCount === 0) return ''
+  const range = selection.getRangeAt(0)
+  const fragment = range.cloneContents()
+  const container = document.createElement('div')
+  container.appendChild(fragment)
+  return container.innerHTML
 }
 
 export function useScopedCopy(
@@ -26,7 +34,14 @@ export function useScopedCopy(
   isSelectAll: Ref<boolean>,
 ) {
   useEventListener(scrollerEl, 'copy', (event: ClipboardEvent) => {
-    if (!isSelectAll.value) return
-    toClipboard(event, getLines())
+    const innerHtml = isSelectAll.value ? linesToHtml(getLines()) : selectedHtml()
+    if (!innerHtml.trim()) return
+
+    const htmlContent = wrapRtlHtml(innerHtml)
+    const plainText = htmlToPlainText(innerHtml)
+
+    event.clipboardData?.setData('text/html', htmlContent)
+    event.clipboardData?.setData('text/plain', plainText)
+    event.preventDefault()
   })
 }

@@ -26,8 +26,6 @@ export const useBooksDataStore = defineStore('booksData', () => {
   let loadPromise: Promise<void> | null = null
   let commentaryMetaPromise: Promise<void> | null = null
   let commentaryMetaLoaded = false
-  const staticCommentaryBooks = ref<BookRow[]>([])
-  let staticCommentaryPromise: Promise<void> | null = null
 
   async function ensureLoaded() {
     if (loaded.value) return
@@ -101,47 +99,14 @@ export const useBooksDataStore = defineStore('booksData', () => {
     return commentaryMetaPromise
   }
 
-  async function ensureStaticCommentaryBooksLoaded() {
-    await ensureLoaded()
-    if (staticCommentaryBooks.value.length > 0) return
-    if (staticCommentaryPromise) return staticCommentaryPromise
-
-    staticCommentaryPromise = Promise.resolve().then(async () => {
-      const connectionTypes = await query<{ id: number; name: string }>(SQL.GET_ALL_CONNECTION_TYPES)
-      const typeIds = connectionTypes
-        .filter((row) => row.name === 'SOURCE' || row.name === 'TARGUM' || row.name === 'COMMENTARY')
-        .map((row) => row.id)
-
-      if (typeIds.length !== 3) {
-        staticCommentaryBooks.value = []
-        staticCommentaryPromise = null
-        return
-      }
-
-      const bookIds = await query<{ id: number }>(SQL.GET_STATIC_COMMENTARY_BOOK_IDS, typeIds)
-      const allBooksById = allBooksMap.value.size
-        ? allBooksMap.value
-        : new Map(allBooks.value.map((book) => [book.id, book]))
-
-      staticCommentaryBooks.value = bookIds
-        .map((b) => allBooksById.get(b.id))
-        .filter((b): b is BookRow => b !== undefined)
-      staticCommentaryPromise = null
-    })
-
-    return staticCommentaryPromise
-  }
-
   return {
     loaded,
     loading,
     error,
     allBooks,
     allBooksMap,
-    staticCommentaryBooks,
     ensureLoaded,
     ensureCommentaryMetadataLoaded,
-    ensureStaticCommentaryBooksLoaded,
     ROOT,
   }
 })

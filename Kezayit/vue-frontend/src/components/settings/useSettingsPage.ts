@@ -35,12 +35,11 @@ export function useSettingsPage() {
   })
 
   async function resetAll() {
+    // Schedule IDB wipe on next boot, then clear C# state and reload.
     tabStore.resetAll()
-    settings.reset()
-    await searchCache.clear()
     if (typeof window.__webviewAction === 'function') {
-      window.__webviewAction('DeleteBloomIndex', {}).catch(() => {})
-      window.__webviewAction('resetSettings', {}).catch(() => {})
+      await window.__webviewAction('DeleteBloomIndex', {}).catch(() => {})
+      await window.__webviewAction('resetSettings', {}).catch(() => {})
       window.__webviewAction('reload', {}).catch(() => window.location.reload())
     } else {
       window.location.reload()
@@ -53,8 +52,8 @@ export function useSettingsPage() {
   }
 
   async function resetSettings() {
+    // Frontend display/reading settings only — no tabs, no cache, no C# side.
     settings.reset()
-    await searchCache.clear()
   }
 
   return {

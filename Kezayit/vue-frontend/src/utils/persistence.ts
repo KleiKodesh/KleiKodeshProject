@@ -36,13 +36,34 @@ export function lsDelete(key: string): void {
   try { localStorage.removeItem(LS_PREFIX + key) } catch {}
 }
 
-/** Remove all zayit.* keys from localStorage (used during reset). */
+/** Remove all zayit.* keys from localStorage (used during full app reset). */
 export function lsClearAll(): void {
   try {
     const toRemove: string[] = []
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i)
       if (k?.startsWith(LS_PREFIX) || k === RESET_LS_KEY) toRemove.push(k)
+    }
+    toRemove.forEach((k) => localStorage.removeItem(k))
+  } catch {}
+}
+
+/**
+ * Remove only display/reading settings from localStorage.
+ * Preserves structural and non-settings keys: tabs lists (tabs:*), workspaces,
+ * and the one-time onboarding flag (setupDone) so the wizard never re-appears.
+ * Used by settings reset so open tabs and app structure survive.
+ */
+export function lsClearSettingsOnly(): void {
+  const PRESERVE = new Set(['workspaces', 'setupDone'])
+  try {
+    const toRemove: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (!k?.startsWith(LS_PREFIX)) continue
+      const unprefixed = k.slice(LS_PREFIX.length)
+      if (unprefixed.startsWith('tabs:') || PRESERVE.has(unprefixed)) continue
+      toRemove.push(k)
     }
     toRemove.forEach((k) => localStorage.removeItem(k))
   } catch {}

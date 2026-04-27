@@ -7,7 +7,6 @@ import {
 } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useSettingsPage } from './useSettingsPage'
-import { useSettingsStore } from '@/stores/settingsStore'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import SettingRow from './SettingRow.vue'
 import { resetting } from '@/utils/resetState'
@@ -15,7 +14,6 @@ import { isHosted, onDbReady } from '@/host/seforimDb'
 import { useZmanim, CITIES } from '@/components/hebrew-calendar/useZmanim'
 
 const { resetSettings, resetSearchIndex, resetAll } = useSettingsPage()
-const settings = useSettingsStore()
 
 const dbPath = ref(window.__webviewDbPath ?? '')
 const editingPath = ref(false)
@@ -62,7 +60,6 @@ function cancelConfirm() {
 async function resetSettingsAndReload() {
   resetting.value = true
   await resetSettings()
-  settings.completeSetup()
   window.location.reload()
 }
 
