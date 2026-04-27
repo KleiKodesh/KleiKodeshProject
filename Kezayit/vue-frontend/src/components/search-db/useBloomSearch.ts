@@ -9,6 +9,7 @@
 import { ref } from 'vue'
 import { isHosted, query } from '@/host/seforimDb'
 import { SQL } from '@/host/queries.sql'
+import { callBridgeAction } from '@/host/bridge'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
 import type { BloomSearchResult } from './searchTypes'
 
@@ -86,13 +87,6 @@ const DEV_SAMPLES: BloomSearchResult[] = [
     snippet: 'מאימתי קורין את שמע בערבין משעה שהכהנים נכנסים לאכול בתרומתן',
   },
 ]
-
-function callAction<T>(name: string, ...params: unknown[]): Promise<T> {
-  if (typeof window.__webviewAction !== 'function')
-    return Promise.reject(new Error('bridge not available'))
-  // The new project's bridge uses positional params array, not named args object
-  return window.__webviewAction(name, params as unknown as object) as Promise<T>
-}
 
 // ── chrome.webview message listener (search stream events from C#) ────────────
 // C# sends search events via PostWebMessageAsString → chrome.webview message events.
@@ -198,7 +192,7 @@ export function useBloomSearch() {
     _cleanup()
     isSearching.value = false
     try {
-      await callAction('BloomSearchCancel', id)
+      await callBridgeAction('BloomSearchCancel', id)
     } catch {
       /* ignore */
     }
@@ -208,7 +202,7 @@ export function useBloomSearch() {
   // skipCount: number of results already in cache — C# will skip that many before streaming.
   async function _startStream(normalizedQuery: string, skipCount: number) {
     ensureWebviewListener()
-    const reply = await callAction<{ searchId: string }>('BloomSearchStart', normalizedQuery, skipCount)
+    const reply = await callBridgeAction<{ searchId: string }>('BloomSearchStart', normalizedQuery, skipCount)
     const searchId = reply?.searchId
     if (!searchId) {
       // Index not ready

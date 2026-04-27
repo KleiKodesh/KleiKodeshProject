@@ -9,7 +9,7 @@
  * links, synonyms). Only the LRU key list is kept in memory.
  */
 import { idbDictCacheGet, idbDictCacheSet, idbDictCacheDelete } from '@/utils/persistence'
-import type { WordPageData } from './DictionaryPage.vue'
+import type { WordPageData } from './dictionaryTypes'
 
 const PREFIX = 'dict:'
 const LRU_KEY = `${PREFIX}lru`

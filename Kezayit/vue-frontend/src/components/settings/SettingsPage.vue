@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import TabStrip from '@/components/common/TabStrip.vue'
 import SettingsGeneralPane from './SettingsGeneralPane.vue'
 import SettingsReadingPane from './SettingsReadingPane.vue'
@@ -11,21 +11,21 @@ const TABS = [
   { key: 'advanced', label: 'מתקדם' },
 ]
 
+const PANE_MAP = {
+  general: SettingsGeneralPane,
+  reading: SettingsReadingPane,
+  advanced: SettingsAdvancedPane,
+}
+
 const activeTab = ref('general')
+const activePane = computed(() => PANE_MAP[activeTab.value as keyof typeof PANE_MAP])
 </script>
 
 <template>
   <div class="settings-page">
     <TabStrip v-model="activeTab" :tabs="TABS" />
-
-    <div v-show="activeTab === 'general'" class="pane">
-      <SettingsGeneralPane />
-    </div>
-    <div v-show="activeTab === 'reading'" class="pane">
-      <SettingsReadingPane />
-    </div>
-    <div v-show="activeTab === 'advanced'" class="pane">
-      <SettingsAdvancedPane />
+    <div class="pane">
+      <component :is="activePane" />
     </div>
   </div>
 </template>

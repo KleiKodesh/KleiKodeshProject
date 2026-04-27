@@ -10,7 +10,7 @@ import {
   IconLayoutRowTwoFocusBottom20Filled,
 } from '@iconify-prerendered/vue-fluent'
 
-export type SearchMode = 'content' | 'commentary'
+import type { SearchMode } from './bookViewTypes'
 
 const props = defineProps<{
   visible: boolean

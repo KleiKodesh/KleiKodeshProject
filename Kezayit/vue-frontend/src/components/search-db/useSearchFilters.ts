@@ -4,9 +4,9 @@ import { SQL } from '@/host/queries.sql'
 import { normalize } from '@/utils/normalizeText'
 import { useTabStore } from '@/stores/tabStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
-import { ensureBookSearchMetadata } from '@/components/books-fs/booksCategoryTree'
+import { ensureBookSearchMetadata } from '@/utils/booksCategoryTree'
 import type { BloomSearchResult } from './searchTypes'
-import type { CategoryNode } from '@/components/books-fs/booksCategoryTree'
+import type { CategoryNode } from '@/utils/booksCategoryTree'
 
 // ── Query parsing ─────────────────────────────────────────────────────────────
 

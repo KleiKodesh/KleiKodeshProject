@@ -116,7 +116,6 @@ export interface WorkspaceList {
 const handles: Record<string, IDBDatabase | null> = {
   'app-tabs': null,
   'app-lastread': null,
-  'app-hb-history': null,
   'app-search-cache': null,
   'app-dict-cache': null,
 }
@@ -339,16 +338,16 @@ export function idbGetLastRead(bookId: number): Promise<LastReadState | null> {
   return dbGet<LastReadState>('app-lastread', `lastread:${bookId}`)
 }
 
-// ── Reset all ─────────────────────────────────────────────────────────────────
-
 const RESET_LS_KEY = '__pendingReset'
 
 export async function idbClearAll(): Promise<void> {
+  // Import lazily to avoid circular dependency — dropHbHistoryDb is a plain function
+  const { dropHbHistoryDb } = await import('@/stores/hebrewBooksHistoryStore')
   lsClearAll()
   await Promise.all([
     dropDb('app-tabs'),
     dropDb('app-lastread'),
-    dropDb('app-hb-history'),
+    dropHbHistoryDb(),
     dropDb('app-search-cache'),
     dropDb('app-dict-cache'),
   ])
@@ -370,70 +369,4 @@ export async function idbCheckAndExecReset(): Promise<void> {
   try { localStorage.removeItem(RESET_LS_KEY) } catch {}
   await idbClearAll()
   window.location.reload()
-}
-
-// ── HebrewBooks history DB ────────────────────────────────────────────────────
-// Separate database — keyed by book id, stores HebrewBook + lastAccessed timestamp.
-// LRU-capped at 25 entries (oldest evicted on insert).
-
-const HB_HISTORY_DB = 'app-hb-history'
-const HB_HISTORY_MAX = 25
-
-export interface HbHistoryEntry {
-  id: string
-  title: string
-  author: string
-  printingPlace: string
-  printingYear: string
-  pages: string
-  _csvTags: string
-  lastAccessed: number
-}
-
-function openHbHistoryDb(): Promise<IDBDatabase> {
-  if (handles[HB_HISTORY_DB]) return Promise.resolve(handles[HB_HISTORY_DB]!)
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(HB_HISTORY_DB, 1)
-    req.onupgradeneeded = () => {
-      const db = req.result
-      if (!db.objectStoreNames.contains('history')) {
-        const s = db.createObjectStore('history', { keyPath: 'id' })
-        s.createIndex('lastAccessed', 'lastAccessed')
-      }
-    }
-    req.onsuccess = () => {
-      handles[HB_HISTORY_DB] = req.result
-      resolve(req.result)
-    }
-    req.onerror = () => reject(req.error)
-  })
-}
-
-export async function idbHbGetHistory(): Promise<HbHistoryEntry[]> {
-  const db = await openHbHistoryDb()
-  return new Promise((resolve, reject) => {
-    const req = db.transaction('history', 'readonly').objectStore('history').getAll()
-    req.onsuccess = () =>
-      resolve((req.result as HbHistoryEntry[]).sort((a, b) => b.lastAccessed - a.lastAccessed))
-    req.onerror = () => reject(req.error)
-  })
-}
-
-export async function idbHbTrackAccess(entry: HbHistoryEntry): Promise<void> {
-  const db = await openHbHistoryDb()
-  const tx = db.transaction('history', 'readwrite')
-  const store = tx.objectStore('history')
-  store.put(entry)
-  const countReq = store.count()
-  countReq.onsuccess = () => {
-    if (countReq.result > HB_HISTORY_MAX) {
-      const all = store.getAll()
-      all.onsuccess = () => {
-        const sorted = (all.result as HbHistoryEntry[]).sort(
-          (a, b) => a.lastAccessed - b.lastAccessed,
-        )
-        sorted.slice(0, countReq.result - HB_HISTORY_MAX).forEach((e) => store.delete(e.id))
-      }
-    }
-  }
 }

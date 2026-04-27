@@ -2,19 +2,23 @@
 import { ref } from 'vue'
 import { IconBook20Filled, IconFolder20Filled } from '@iconify-prerendered/vue-fluent'
 import type { FsItem } from './useBooksFs'
-import type { CategoryNode, BookRow } from './booksCategoryTree'
+import type { CategoryNode, BookRow } from '@/utils/booksCategoryTree'
 import { useTilesKeys } from '@/composables/useTileGridKeys'
-import { useBooksFsViewItems } from './useBooksFsViewItems'
 
 const props = defineProps<{ items: FsItem[] }>()
 const emit = defineEmits<{ selectBook: [BookRow]; enterFolder: [CategoryNode] }>()
 
 const tilesEl = ref<HTMLElement | null>(null)
 
-const { activateIndex, getTitle } = useBooksFsViewItems(() => props.items, {
-  selectBook: (book) => emit('selectBook', book),
-  enterFolder: (node) => emit('enterFolder', node),
-})
+function activateIndex(index: number) {
+  const item = props.items[index]
+  if (!item) return
+  item.kind === 'folder' ? emit('enterFolder', item.node) : emit('selectBook', item.book)
+}
+
+function getTitle(item: FsItem) {
+  return item.kind === 'folder' ? item.node.title : item.book.title
+}
 
 const { focusedIndex, containerFocused } = useTilesKeys(
   tilesEl,

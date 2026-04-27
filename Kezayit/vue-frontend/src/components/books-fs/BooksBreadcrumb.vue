@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { IconChevronLeft16Regular, IconHome16Regular } from '@iconify-prerendered/vue-fluent'
-import type { CategoryNode } from './booksCategoryTree'
+import type { CategoryNode } from '@/utils/booksCategoryTree'
 defineProps<{ path: CategoryNode[] }>()
 defineEmits<{ navigate: [number] }>()
 </script>

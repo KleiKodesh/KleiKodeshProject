@@ -4,8 +4,8 @@ import { query } from '@/host/seforimDb'
 import { SQL } from '@/host/queries.sql'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useTabStore } from '@/stores/tabStore'
-import { ensureBookSearchMetadata } from '@/components/books-fs/booksCategoryTree'
-import type { BookRow } from '@/components/books-fs/booksCategoryTree'
+import { filterBooksByWords } from '@/utils/booksCategoryTree'
+import type { BookRow } from '@/utils/booksCategoryTree'
 
 type TocRow = {
   id: number
@@ -14,26 +14,6 @@ type TocRow = {
   text: string
   lineIndex: number | null
   hasChildren: number | boolean
-}
-
-function toWords(raw: string) {
-  return normalize(raw.trim())
-    .split(/\s+/)
-    .filter((w) => w.length > 0)
-}
-
-function filterBooks(allBooks: BookRow[], words: string[]) {
-  const exactWords = words.slice(0, -1)
-  const prefixWord = words[words.length - 1]!
-  return allBooks
-    .filter((b) => {
-      ensureBookSearchMetadata(b)
-      const pathWords = b.searchWords ?? []
-      const exactOk = exactWords.every((qw) => pathWords.some((pw) => pw === qw))
-      const prefixOk = pathWords.some((pw) => pw.includes(prefixWord))
-      return exactOk && prefixOk
-    })
-    .sort((a, b) => (a.treeOrder ?? 0) - (b.treeOrder ?? 0))
 }
 
 /**
@@ -49,16 +29,16 @@ export async function navigateToDafYomi(dafYomi: string): Promise<void> {
 
   // Prepend בבלי so we match Talmud Bavli, not Mishna
   const fullQuery = `בבלי ${dafYomi}`
-  const words = toWords(fullQuery)
+  const words = normalize(fullQuery.trim()).split(/\s+/).filter((w) => w.length > 0)
   if (!words.length) return
 
-  const split = splitQuery(words, (bw) => filterBooks(store.allBooks, bw).length > 0)
+  const split = splitQuery(words, (bw) => filterBooksByWords(store.allBooks, bw).length > 0)
   if (!split) return
 
   const { bookWords, tocWords } = split
   if (!tocWords.length) return
 
-  const candidateBooks = filterBooks(store.allBooks, bookWords)
+  const candidateBooks = filterBooksByWords(store.allBooks, bookWords)
   if (!candidateBooks.length) return
 
   const bookMap = new Map(candidateBooks.map((b) => [b.id, b]))

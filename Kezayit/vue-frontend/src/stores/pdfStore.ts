@@ -106,9 +106,8 @@ export const usePdfStore = defineStore('pdf', () => {
     if (!_converting.has(tabId)) return
 
     _converting.delete(tabId)
-
     if (result) {
-      Object.assign(tab, {
+      tabStore.updateTab(tabId, {
         route: '/pdf-view',
         title: result.fileName,
         pdfVirtualUrl: result.url,
@@ -117,7 +116,7 @@ export const usePdfStore = defineStore('pdf', () => {
         pdfConverting: false,
       })
     } else {
-      Object.assign(tab, {
+      tabStore.updateTab(tabId, {
         route: '/',
         title: 'בית',
         pdfVirtualUrl: undefined,
@@ -131,9 +130,7 @@ export const usePdfStore = defineStore('pdf', () => {
   /** Cancel an in-progress conversion — resets the tab to home. */
   function cancelConversion(tabId: string) {
     _converting.delete(tabId)
-    const tab = tabStore.tabs.find((t) => t.id === tabId)
-    if (!tab) return
-    Object.assign(tab, {
+    tabStore.updateTab(tabId, {
       route: '/',
       title: 'בית',
       pdfVirtualUrl: undefined,
@@ -146,25 +143,21 @@ export const usePdfStore = defineStore('pdf', () => {
   /** Navigate a tab to /pdf-view placeholder while a HebrewBooks download is in progress. */
   function startHbDownload(bookTitle: string, tabId: string) {
     _converting.add(tabId)
-    const tab = tabStore.tabs.find((t) => t.id === tabId)
-    if (tab)
-      Object.assign(tab, {
-        route: '/pdf-view',
-        title: bookTitle,
-        pdfFileName: bookTitle,
-        pdfConverting: true,
-        pdfLoadingType: 'downloading',
-        pdfVirtualUrl: undefined,
-      })
+    tabStore.updateTab(tabId, {
+      route: '/pdf-view',
+      title: bookTitle,
+      pdfFileName: bookTitle,
+      pdfConverting: true,
+      pdfLoadingType: 'downloading',
+      pdfVirtualUrl: undefined,
+    })
   }
 
   /** Called when hbPdfReady fires — ignored if tab was closed/navigated away. */
   function finishHbDownload(tabId: string, url: string, bookTitle: string, bookId: string) {
     if (!_converting.has(tabId)) return
     _converting.delete(tabId)
-    const tab = tabStore.tabs.find((t) => t.id === tabId)
-    if (!tab) return
-    Object.assign(tab, {
+    tabStore.updateTab(tabId, {
       route: '/pdf-view',
       title: bookTitle,
       pdfVirtualUrl: url,
@@ -178,10 +171,6 @@ export const usePdfStore = defineStore('pdf', () => {
   /** Called on hbPdfError — closes the tab. */
   function cancelHbDownload(tabId: string) {
     _converting.delete(tabId)
-    _closeTab(tabId)
-  }
-
-  function _closeTab(tabId: string) {
     tabStore.closeTab(tabId)
   }
 
@@ -203,7 +192,7 @@ export const usePdfStore = defineStore('pdf', () => {
     if (!tab || tab.route !== '/pdf-view') return
 
     if (tab.pdfHbBookId) {
-      Object.assign(tab, { pdfConverting: true, pdfLoadingType: 'downloading' })
+      tabStore.updateTab(tabId, { pdfConverting: true, pdfLoadingType: 'downloading' })
       _converting.add(tabId)
       const res = await restoreHbPdf(tab.pdfHbBookId, tab.pdfHbBookTitle ?? '', tabId)
       if (!res) {
@@ -211,7 +200,7 @@ export const usePdfStore = defineStore('pdf', () => {
         tabStore.closeTab(tabId)
       } else if ('url' in res) {
         _converting.delete(tabId)
-        Object.assign(tab, {
+        tabStore.updateTab(tabId, {
           pdfVirtualUrl: res.url,
           pdfConverting: false,
           pdfLoadingType: undefined,
@@ -220,7 +209,7 @@ export const usePdfStore = defineStore('pdf', () => {
       // redownload: true — stays in _converting, hbPdfReady push event will finish it
     } else if (tab.pdfFilePath) {
       const res = await restoreLocalPdf(tab.pdfFilePath)
-      if (res) Object.assign(tab, { pdfVirtualUrl: res.url })
+      if (res) tabStore.updateTab(tabId, { pdfVirtualUrl: res.url })
     }
   }
 

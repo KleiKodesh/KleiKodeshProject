@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
+import type { Ref } from 'vue'
 import { lsGet, lsSet, lsClearSettingsOnly, KEYS } from '@/utils/persistence'
 
 export type NewTabPage = 'homepage' | 'openfile' | 'hebrewbooks' | 'kezayit-search'
@@ -45,45 +46,86 @@ export const useSettingsStore = defineStore('settings', () => {
   const setupDone = ref(false)
   const midotDisclaimerAccepted = ref(false)
 
-  // Synchronous — all settings are in localStorage
-  function init() {
-    const v = <T>(key: string) => lsGet<T>(key)
-    const b = v<boolean>(KEYS.SETTINGS_CENSOR_DIVINE); if (b != null) censorDivineNames.value = b
-    const d = v<number>(KEYS.SETTINGS_DIACRITICS); if (d != null) diacriticsState.value = d
-    const hf = v<string>(KEYS.SETTINGS_HEADER_FONT); if (hf != null) headerFont.value = hf
-    const tf = v<string>(KEYS.SETTINGS_TEXT_FONT); if (tf != null) textFont.value = tf
-    const fs = v<number>(KEYS.SETTINGS_FONT_SIZE); if (fs != null) fontSize.value = fs
-    const lp = v<number>(KEYS.SETTINGS_LINE_PADDING); if (lp != null) linePadding.value = lp
-    const chf = v<string>(KEYS.SETTINGS_COMMENTARY_HEADER_FONT); if (chf != null) commentaryHeaderFont.value = chf
-    const ctf = v<string>(KEYS.SETTINGS_COMMENTARY_TEXT_FONT); if (ctf != null) commentaryTextFont.value = ctf
-    const cfs = v<number>(KEYS.SETTINGS_COMMENTARY_FONT_SIZE); if (cfs != null) commentaryFontSize.value = cfs
-    const clp = v<number>(KEYS.SETTINGS_COMMENTARY_LINE_PADDING); if (clp != null) commentaryLinePadding.value = clp
-    const sc = v<boolean>(KEYS.SETTINGS_SEPARATE_COMMENTARY); if (sc != null) useSeparateCommentarySettings.value = sc
-    const az = v<number>(KEYS.SETTINGS_APP_ZOOM); if (az != null) appZoom.value = az
-    const dz = v<number>(KEYS.SETTINGS_DICTIONARY_ZOOM); if (dz != null) dictionaryZoom.value = dz
-    const nt = v<NewTabPage>(KEYS.SETTINGS_NEW_TAB_PAGE); if (nt != null) newTabPage.value = nt
-    const pf = v<boolean>(KEYS.SETTINGS_PDF_FILTERS); if (pf != null) pdfPageFilters.value = pf
-    const rl = v<boolean>(KEYS.SETTINGS_RESUME_LAST_READ); if (rl != null) resumeLastRead.value = rl
-    const sd = v<boolean>(KEYS.SETTINGS_SETUP_DONE); if (sd != null) setupDone.value = sd
-    const da = v<boolean>(KEYS.SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY); if (da != null) defaultAutoSyncCommentary.value = da
-    const md = v<boolean>(KEYS.SETTINGS_MIDOT_DISCLAIMER); if (md != null) midotDisclaimerAccepted.value = md
-    applyCSSVariables()
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  /** Read a value from localStorage and assign it to the ref if present. */
+  function loadSetting<T>(key: string, target: Ref<T>): void {
+    const value = lsGet<T>(key)
+    if (value != null) target.value = value
   }
 
+  /** Watch a ref and persist it to localStorage on every change. */
+  function persistSetting<T>(target: Ref<T>, key: string, afterSave?: () => void): void {
+    watch(target, (value) => {
+      lsSet(key, value)
+      afterSave?.()
+    })
+  }
+
+  // ── CSS sync ──────────────────────────────────────────────────────────────
+
   function applyCSSVariables() {
-    const s = document.documentElement.style
-    s.setProperty('--header-font', headerFont.value)
-    s.setProperty('--text-font', textFont.value)
-    s.setProperty('--font-size', `${fontSize.value}%`)
-    s.setProperty('--line-height', linePadding.value.toString())
-    s.setProperty('--commentary-header-font', commentaryHeaderFont.value)
-    s.setProperty('--commentary-text-font', commentaryTextFont.value)
-    s.setProperty('--commentary-font-size', `${commentaryFontSize.value}%`)
-    s.setProperty('--commentary-line-height', commentaryLinePadding.value.toString())
+    const style = document.documentElement.style
+    style.setProperty('--header-font', headerFont.value)
+    style.setProperty('--text-font', textFont.value)
+    style.setProperty('--font-size', `${fontSize.value}%`)
+    style.setProperty('--line-height', linePadding.value.toString())
+    style.setProperty('--commentary-header-font', commentaryHeaderFont.value)
+    style.setProperty('--commentary-text-font', commentaryTextFont.value)
+    style.setProperty('--commentary-font-size', `${commentaryFontSize.value}%`)
+    style.setProperty('--commentary-line-height', commentaryLinePadding.value.toString())
     document.documentElement.setAttribute('data-pdf-filters', pdfPageFilters.value ? 'true' : 'false')
     const app = document.getElementById('app')
     if (app) app.style.zoom = appZoom.value.toString()
   }
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+
+  // Synchronous — all settings are in localStorage
+  function init() {
+    loadSetting(KEYS.SETTINGS_CENSOR_DIVINE, censorDivineNames)
+    loadSetting(KEYS.SETTINGS_DIACRITICS, diacriticsState)
+    loadSetting(KEYS.SETTINGS_HEADER_FONT, headerFont)
+    loadSetting(KEYS.SETTINGS_TEXT_FONT, textFont)
+    loadSetting(KEYS.SETTINGS_FONT_SIZE, fontSize)
+    loadSetting(KEYS.SETTINGS_LINE_PADDING, linePadding)
+    loadSetting(KEYS.SETTINGS_COMMENTARY_HEADER_FONT, commentaryHeaderFont)
+    loadSetting(KEYS.SETTINGS_COMMENTARY_TEXT_FONT, commentaryTextFont)
+    loadSetting(KEYS.SETTINGS_COMMENTARY_FONT_SIZE, commentaryFontSize)
+    loadSetting(KEYS.SETTINGS_COMMENTARY_LINE_PADDING, commentaryLinePadding)
+    loadSetting(KEYS.SETTINGS_SEPARATE_COMMENTARY, useSeparateCommentarySettings)
+    loadSetting(KEYS.SETTINGS_APP_ZOOM, appZoom)
+    loadSetting(KEYS.SETTINGS_DICTIONARY_ZOOM, dictionaryZoom)
+    loadSetting(KEYS.SETTINGS_NEW_TAB_PAGE, newTabPage)
+    loadSetting(KEYS.SETTINGS_PDF_FILTERS, pdfPageFilters)
+    loadSetting(KEYS.SETTINGS_RESUME_LAST_READ, resumeLastRead)
+    loadSetting(KEYS.SETTINGS_SETUP_DONE, setupDone)
+    loadSetting(KEYS.SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY, defaultAutoSyncCommentary)
+    loadSetting(KEYS.SETTINGS_MIDOT_DISCLAIMER, midotDisclaimerAccepted)
+    applyCSSVariables()
+  }
+
+  // ── Persistence watchers ──────────────────────────────────────────────────
+
+  persistSetting(censorDivineNames, KEYS.SETTINGS_CENSOR_DIVINE, applyCSSVariables)
+  persistSetting(diacriticsState, KEYS.SETTINGS_DIACRITICS)
+  persistSetting(headerFont, KEYS.SETTINGS_HEADER_FONT, applyCSSVariables)
+  persistSetting(textFont, KEYS.SETTINGS_TEXT_FONT, applyCSSVariables)
+  persistSetting(fontSize, KEYS.SETTINGS_FONT_SIZE, applyCSSVariables)
+  persistSetting(linePadding, KEYS.SETTINGS_LINE_PADDING, applyCSSVariables)
+  persistSetting(commentaryHeaderFont, KEYS.SETTINGS_COMMENTARY_HEADER_FONT, applyCSSVariables)
+  persistSetting(commentaryTextFont, KEYS.SETTINGS_COMMENTARY_TEXT_FONT, applyCSSVariables)
+  persistSetting(commentaryFontSize, KEYS.SETTINGS_COMMENTARY_FONT_SIZE, applyCSSVariables)
+  persistSetting(commentaryLinePadding, KEYS.SETTINGS_COMMENTARY_LINE_PADDING, applyCSSVariables)
+  persistSetting(useSeparateCommentarySettings, KEYS.SETTINGS_SEPARATE_COMMENTARY)
+  persistSetting(appZoom, KEYS.SETTINGS_APP_ZOOM, applyCSSVariables)
+  persistSetting(dictionaryZoom, KEYS.SETTINGS_DICTIONARY_ZOOM)
+  persistSetting(newTabPage, KEYS.SETTINGS_NEW_TAB_PAGE)
+  persistSetting(pdfPageFilters, KEYS.SETTINGS_PDF_FILTERS)
+  persistSetting(resumeLastRead, KEYS.SETTINGS_RESUME_LAST_READ)
+  persistSetting(defaultAutoSyncCommentary, KEYS.SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY)
+
+  // ── Actions ───────────────────────────────────────────────────────────────
 
   function cycleDiacritics() {
     diacriticsState.value = (diacriticsState.value + 1) % 3
@@ -130,24 +172,6 @@ export const useSettingsStore = defineStore('settings', () => {
     lsClearSettingsOnly()
     applyCSSVariables()
   }
-
-  watch(censorDivineNames, (v) => { lsSet(KEYS.SETTINGS_CENSOR_DIVINE, v); applyCSSVariables() })
-  watch(diacriticsState, (v) => lsSet(KEYS.SETTINGS_DIACRITICS, v))
-  watch(headerFont, (v) => { lsSet(KEYS.SETTINGS_HEADER_FONT, v); applyCSSVariables() })
-  watch(textFont, (v) => { lsSet(KEYS.SETTINGS_TEXT_FONT, v); applyCSSVariables() })
-  watch(fontSize, (v) => { lsSet(KEYS.SETTINGS_FONT_SIZE, v); applyCSSVariables() })
-  watch(linePadding, (v) => { lsSet(KEYS.SETTINGS_LINE_PADDING, v); applyCSSVariables() })
-  watch(commentaryHeaderFont, (v) => { lsSet(KEYS.SETTINGS_COMMENTARY_HEADER_FONT, v); applyCSSVariables() })
-  watch(commentaryTextFont, (v) => { lsSet(KEYS.SETTINGS_COMMENTARY_TEXT_FONT, v); applyCSSVariables() })
-  watch(commentaryFontSize, (v) => { lsSet(KEYS.SETTINGS_COMMENTARY_FONT_SIZE, v); applyCSSVariables() })
-  watch(commentaryLinePadding, (v) => { lsSet(KEYS.SETTINGS_COMMENTARY_LINE_PADDING, v); applyCSSVariables() })
-  watch(useSeparateCommentarySettings, (v) => lsSet(KEYS.SETTINGS_SEPARATE_COMMENTARY, v))
-  watch(appZoom, (v) => { lsSet(KEYS.SETTINGS_APP_ZOOM, v); applyCSSVariables() })
-  watch(dictionaryZoom, (v) => lsSet(KEYS.SETTINGS_DICTIONARY_ZOOM, v))
-  watch(newTabPage, (v) => lsSet(KEYS.SETTINGS_NEW_TAB_PAGE, v))
-  watch(pdfPageFilters, (v) => lsSet(KEYS.SETTINGS_PDF_FILTERS, v))
-  watch(resumeLastRead, (v) => lsSet(KEYS.SETTINGS_RESUME_LAST_READ, v))
-  watch(defaultAutoSyncCommentary, (v) => lsSet(KEYS.SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY, v))
 
   return {
     censorDivineNames, diacriticsState, headerFont, textFont, fontSize, linePadding,

@@ -9,7 +9,7 @@ import BooksFsSearch from './BooksFsSearch.vue'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
 import BottomSearchBar from '@/components/common/BottomSearchBar.vue'
 import { useTabStore } from '@/stores/tabStore'
-import type { BookRow } from './booksCategoryTree'
+import type { BookRow } from '@/utils/booksCategoryTree'
 import type { TocFsItem } from './useBooksFsSearch'
 import { getDiagnostics } from '@/host/bridge'
 

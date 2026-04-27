@@ -5,7 +5,7 @@ import BooksFsTreeView from './BooksFsTreeView.vue'
 import BooksFsTileView from './BooksFsTileView.vue'
 import BooksFsListView from './BooksFsListView.vue'
 import type { FsItem } from './useBooksFs'
-import type { CategoryNode, BookRow } from './booksCategoryTree'
+import type { CategoryNode, BookRow } from '@/utils/booksCategoryTree'
 
 const props = defineProps<{ items: FsItem[]; view: 'list' | 'tiles' | 'tree' }>()
 const emit = defineEmits<{ selectBook: [BookRow]; enterFolder: [CategoryNode] }>()

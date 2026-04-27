@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick } from 'vue'
+import { normalize } from '@/utils/normalizeText'
 import {
   IconChevronDown20Regular,
   IconChevronUp20Regular,
@@ -55,17 +56,19 @@ function openActiveBook() {
 }
 
 function handleSelect() {
-  const val = inputRef.value?.value ?? ''
-  const match = props.groups.find((g) => groupLabel(g) === val || g.bookTitle === val)
+  const val = normalize(inputRef.value?.value ?? '')
+  const match = props.groups.find(
+    (g) => normalize(groupLabel(g)) === val || normalize(g.bookTitle) === val,
+  )
   if (match) navigateToGroup(match.bookId)
 }
 
 function handleKeydown(e: KeyboardEvent) {
   if (e.key !== 'Enter') return
-  const val = (inputRef.value?.value ?? '').trim()
+  const val = normalize((inputRef.value?.value ?? '').trim())
   if (!val) return
   const matches = props.groups.filter(
-    (g) => groupLabel(g).includes(val) || g.bookTitle.includes(val),
+    (g) => normalize(groupLabel(g)).includes(val) || normalize(g.bookTitle).includes(val),
   )
   if (matches.length === 1) navigateToGroup(matches[0]!.bookId)
 }

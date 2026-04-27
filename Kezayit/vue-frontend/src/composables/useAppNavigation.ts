@@ -23,7 +23,36 @@ export function useAppNavigation() {
     'מידות ושיעורים': '/midot',
   }
 
-  async function navigate(label: string) {
+  // ── Shared side-effect actions ────────────────────────────────────────────
+
+  async function handleFilePicker(newTab: boolean): Promise<void> {
+    const result = await pickFile()
+    // In hosted mode, push events handle navigation — pickFile() returns null.
+    // In dev mode, navigate directly with the blob URL.
+    if (!result) return
+    const tabData = {
+      route: '/pdf-view' as TabRoute,
+      title: result.fileName,
+      pdfFileName: result.fileName,
+      pdfFilePath: result.filePath,
+      pdfVirtualUrl: result.url,
+      pdfConverting: false,
+    }
+    if (newTab) tabStore.openTab(tabData)
+    else tabStore.updateActiveTab(tabData)
+  }
+
+  function handleExternalLink(): void {
+    window.open('https://zayitapp.com/#/download', '_blank')
+  }
+
+  function handleDbPicker(): void {
+    window.__webviewPickDbPath?.()
+  }
+
+  // ── Public navigation functions ───────────────────────────────────────────
+
+  async function navigate(label: string): Promise<void> {
     const singleton = SINGLETON_ROUTES[label]
     if (singleton) {
       tabStore.navigateToSingleton(singleton)
@@ -33,73 +62,28 @@ export function useAppNavigation() {
       tabStore.updateActiveTab({ route: '/search', title: 'חיפוש' })
       return
     }
-    if (label === 'פתח קובץ') {
-      const result = await pickFile()
-      // In hosted mode, both PDFs (localPdfReady) and Word files (conversionReady) are
-      // handled via push events — pickFile() returns null. In dev mode it returns the
-      // blob URL directly, so we navigate here.
-      if (result) {
-        tabStore.updateActiveTab({
-          route: '/pdf-view',
-          title: result.fileName,
-          pdfFileName: result.fileName,
-          pdfFilePath: result.filePath,
-          pdfVirtualUrl: result.url,
-          pdfConverting: false,
-        })
-      }
-      return
-    }
-    if (label === 'התקן כזית') {
-      window.open('https://zayitapp.com/#/download', '_blank')
-      return
-    }
-    if (label === 'בחר מסד נתונים') {
-      window.__webviewPickDbPath?.()
-      return
-    }
+    if (label === 'פתח קובץ') { await handleFilePicker(false); return }
+    if (label === 'התקן כזית') { handleExternalLink(); return }
+    if (label === 'בחר מסד נתונים') { handleDbPicker(); return }
   }
 
-  async function navigateInNewTab(label: string) {
+  async function navigateInNewTab(label: string): Promise<void> {
     const singleton = SINGLETON_ROUTES[label]
     if (singleton) {
       // If a singleton tab already exists, just switch to it (don't close current).
       // Otherwise open a brand new tab for it.
       const existing = tabStore.tabs.find((t) => t.route === singleton)
-      if (existing) {
-        tabStore.switchTab(existing.id)
-      } else {
-        tabStore.openTab({ route: singleton, title: label })
-      }
+      if (existing) tabStore.switchTab(existing.id)
+      else tabStore.openTab({ route: singleton, title: label })
       return
     }
     if (label === 'חיפוש') {
       tabStore.openTab({ route: '/search', title: 'חיפוש' })
       return
     }
-    if (label === 'פתח קובץ') {
-      const result = await pickFile()
-      // In hosted mode push events handle navigation — pickFile() returns null.
-      // In dev mode open the result in a new tab.
-      if (result) {
-        tabStore.openTab({
-          route: '/pdf-view',
-          title: result.fileName,
-          pdfFileName: result.fileName,
-          pdfFilePath: result.filePath,
-          pdfVirtualUrl: result.url,
-          pdfConverting: false,
-        })
-      }
-      return
-    }
-    if (label === 'התקן כזית') {
-      window.open('https://zayitapp.com/#/download', '_blank')
-      return
-    }
-    if (label === 'בחר מסד נתונים') {
-      window.__webviewPickDbPath?.()
-    }
+    if (label === 'פתח קובץ') { await handleFilePicker(true); return }
+    if (label === 'התקן כזית') { handleExternalLink(); return }
+    if (label === 'בחר מסד נתונים') { handleDbPicker(); return }
   }
 
   return { navigate, navigateInNewTab }

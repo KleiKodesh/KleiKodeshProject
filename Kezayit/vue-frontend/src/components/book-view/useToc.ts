@@ -2,7 +2,7 @@ import { ref, shallowRef, watch } from 'vue'
 import { query } from '@/host/seforimDb'
 import { SQL } from '@/host/queries.sql'
 import { SearchableTree, stripTocTitleRoots } from '@/utils/tocSearchUtils'
-import type { TreeNodeItem } from '@/components/common/TreeNode.vue'
+import type { TreeNodeItem } from '@/components/common/treeTypes'
 
 export interface TocEntry extends TreeNodeItem {
   lineId: number | null

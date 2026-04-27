@@ -1,5 +1,6 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { isHosted, onWebviewEvent } from '@/host/seforimDb'
+import { callBridgeAction } from '@/host/bridge'
 
 export interface IndexingState {
   isReady: boolean
@@ -8,12 +9,6 @@ export interface IndexingState {
   processedChunks: number
   totalChunks: number
   eta: string
-}
-
-function callAction<T>(name: string, ...params: unknown[]): Promise<T> {
-  if (typeof window.__webviewAction !== 'function')
-    return Promise.reject(new Error('bridge not available'))
-  return window.__webviewAction(name, params as unknown as object) as Promise<T>
 }
 
 const IDLE: IndexingState = {
@@ -63,7 +58,7 @@ export function useIndexingStatus() {
     }
 
     try {
-      const p = await callAction<IndexingState>('GetBloomIndexingProgress')
+      const p = await callBridgeAction<IndexingState>('GetBloomIndexingProgress')
       if (p)
         state.value = {
           isReady: p.isReady,
@@ -84,7 +79,7 @@ export function useIndexingStatus() {
         const rebuild = window.confirm(
           `הגרסה של האפליקציה עודכנה (${oldVer} ← ${newVer}).\nהאם לבנות מחדש את אינדקס החיפוש?`,
         )
-        callAction('ConfirmReindex', { confirm: rebuild }).catch(() => {})
+        callBridgeAction('ConfirmReindex', { confirm: rebuild }).catch(() => {})
         return
       }
       if (msg.event === 'bloomIndexInvalidated') {

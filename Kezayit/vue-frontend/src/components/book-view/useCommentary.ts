@@ -2,7 +2,7 @@ import { computed, ref, watch } from 'vue'
 import { query } from '@/host/seforimDb'
 import { SQL } from '@/host/queries.sql'
 import { useBooksDataStore } from '@/stores/booksDataStore'
-import type { BookRow } from '@/components/books-fs/booksCategoryTree'
+import type { BookRow } from '@/utils/booksCategoryTree'
 
 export interface CommentaryLine {
   lineId: number
@@ -319,15 +319,12 @@ async function buildCommentaryGroupsFromCombined(
   return buildCommentaryGroupsFromEntries(entries)
 }
 
-/** Module-level cache: sourceBookId → resolved CommentaryGroup[]. Never evicted — one entry
- *  per book opened, bounded by the number of books the user actually views in a session. */
-const _staticFilterGroupsCache = new Map<number, CommentaryGroup[]>()
-
 async function buildStaticCommentaryFilterGroups(
   sourceBookId: number,
   allBooksMap: Map<number, BookRow>,
+  instanceCache: Map<number, CommentaryGroup[]>,
 ): Promise<CommentaryGroup[]> {
-  const cached = _staticFilterGroupsCache.get(sourceBookId)
+  const cached = instanceCache.get(sourceBookId)
   if (cached) return cached
   await ensureConnectionTypeNamesLoaded()
   const connectionTypeIds = STATIC_FILTER_CONNECTION_TYPE_LIST.map((name) =>
@@ -362,7 +359,7 @@ async function buildStaticCommentaryFilterGroups(
   })
 
   const result = buildCommentaryGroupsFromEntries(entries)
-  _staticFilterGroupsCache.set(sourceBookId, result)
+  instanceCache.set(sourceBookId, result)
   return result
 }
 
@@ -378,6 +375,8 @@ export function useCommentary(
   const loading = ref(false)
   const booksDataStore = useBooksDataStore()
   let staticFilterLoadToken = 0
+  // Per-instance cache — scoped to this tab's book, cleared when the composable is destroyed
+  const staticFilterCache = new Map<number, CommentaryGroup[]>()
 
   const filterGroups = computed(() => {
     if (!staticFilterGroupsLoaded.value) return groups.value
@@ -390,15 +389,22 @@ export function useCommentary(
     ]
   })
 
+  let loadedForLineId: number | null = null
+  let lastLoadUsedSingleLine = false
+
   async function load(lineId: number) {
+    loadedForLineId = lineId
+    // Capture selectedLineIds synchronously before any await — by the time the
+    // async steps below complete, tocEntries/lines may have loaded and changed it.
+    const multiIds = selectedLineIds()
+    const isMulti = multiIds != null && multiIds.length > 0
+    lastLoadUsedSingleLine = !isMulti
     loading.value = true
     groups.value = []
     try {
       await booksDataStore.ensureLoaded()
       await booksDataStore.ensureCommentaryMetadataLoaded()
 
-      const multiIds = selectedLineIds()
-      const isMulti = multiIds && multiIds.length > 0
       const sql = isMulti
         ? SQL.GET_COMMENTARY_DATA_FOR_SOURCE_LINE_RANGE(multiIds.length)
         : SQL.GET_COMMENTARY_DATA_FOR_SOURCE_LINE
@@ -423,7 +429,7 @@ export function useCommentary(
     await booksDataStore.ensureLoaded()
     await booksDataStore.ensureCommentaryMetadataLoaded()
 
-    const nextGroups = await buildStaticCommentaryFilterGroups(bookId, booksDataStore.allBooksMap)
+    const nextGroups = await buildStaticCommentaryFilterGroups(bookId, booksDataStore.allBooksMap, staticFilterCache)
     if (token !== staticFilterLoadToken) return
 
     staticFilterGroups.value = nextGroups
@@ -434,10 +440,24 @@ export function useCommentary(
     selectedLineId,
     (id) => {
       if (id != null) void load(id)
-      else groups.value = []
+      else { loadedForLineId = null; lastLoadUsedSingleLine = false; groups.value = [] }
     },
     { immediate: true },
   )
+
+  // Re-fetch when selectedLineIds becomes available after the initial load.
+  // On session restore, commentaryLineId is set before tocEntries/lines are ready,
+  // so the first load() call has selectedLineIds() = null and falls back to the
+  // single-line query (which returns nothing for TOC entry lines). Once tocEntries
+  // and lines load, selectedLineIds becomes non-null — re-fetch with the section range.
+  // Only re-fetch if the last load used the single-line fallback (lastLoadUsedSingleLine),
+  // meaning the section range wasn't available yet. If load() already used the section
+  // range (interactive click with tocEntries loaded), skip to avoid a double-fetch.
+  watch(selectedLineIds, (ids) => {
+    const lineId = selectedLineId()
+    if (lineId != null && lineId === loadedForLineId && lastLoadUsedSingleLine && ids != null && ids.length > 0)
+      void load(lineId)
+  })
 
   watch(
     [sourceBookId, filterPanelVisible],

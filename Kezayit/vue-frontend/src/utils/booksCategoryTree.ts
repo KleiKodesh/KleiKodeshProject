@@ -75,8 +75,24 @@ export function ensureBookSearchMetadata(book: BookRow): void {
   book.searchWords = book.searchPath.split(/\s+/).filter((w) => w.length > 0)
 }
 
+export function filterBooksByWords(allBooks: BookRow[], words: string[]): BookRow[] {
+  if (!words.length) return []
+  const exactWords = words.slice(0, -1)
+  const prefixWord = words[words.length - 1]!
+  return allBooks
+    .filter((book) => {
+      ensureBookSearchMetadata(book)
+      const pathWords = book.searchWords ?? []
+      const exactWordsMatch = exactWords.every((queryWord) =>
+        pathWords.some((pathWord) => pathWord === queryWord),
+      )
+      const prefixWordMatch = pathWords.some((pathWord) => pathWord.includes(prefixWord))
+      return exactWordsMatch && prefixWordMatch
+    })
+    .sort((a, b) => (a.treeOrder ?? 0) - (b.treeOrder ?? 0))
+}
+
 const PERIOD_KEYWORDS: [string, string][] = [
-  ['גאונים', 'גאונים'],
   ['ראשונים', 'ראשונים'],
   ['אחרונים', 'אחרונים'],
   ['מדרש', 'מדרש'],

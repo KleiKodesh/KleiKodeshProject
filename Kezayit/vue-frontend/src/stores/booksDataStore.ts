@@ -6,8 +6,8 @@ import {
   buildTree,
   assignFullPaths,
   findCategoryMeta,
-} from '@/components/books-fs/booksCategoryTree'
-import type { CategoryNode, CategoryRow, BookRow } from '@/components/books-fs/booksCategoryTree'
+} from '@/utils/booksCategoryTree'
+import type { CategoryNode, CategoryRow, BookRow } from '@/utils/booksCategoryTree'
 
 export const useBooksDataStore = defineStore('booksData', () => {
   const loaded = ref(false)

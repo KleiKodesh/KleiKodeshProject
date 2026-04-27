@@ -116,6 +116,13 @@ The main book reader. Orchestrates a split pane (text above, commentary below), 
 - `useCommentary.ts` — fetches linked commentary for a selected line (or range), groups results by connection type and category, returns `CommentaryGroup[]`
 - `useBookViewSearch.ts` — content search (line-based)
 - `useCommentarySearch.ts` — commentary search (flat index-based)
+- `useBookView.ts` — central composable; owns all data loading, state, event handlers, and watchers. `BookViewPage.vue` is a shell that calls this.
+- `useBookViewScrollSync.ts` — syncs active TOC entry and auto-selects commentary on scroll
+- `useBookViewSessionRestore.ts` — restores per-book view state from IDB on mount
+- `useCommentaryNavigation.ts` — next/prev section navigation for the commentary panel
+- `usePinnedCommentary.ts` — tracks the pinned commentary book with default-commentator fallback
+- `useTocScrollTracking.ts` — tracks programmatic TOC scrolls to suppress active-entry updates during animation
+- `bookViewTypes.ts` — shared types: `SearchMode`, `SidePanelMode`
 
 ### search-db/
 
@@ -203,6 +210,7 @@ App shell components.
 Shared reusable components used across features.
 
 - `TreeView.vue`, `TreeNode.vue` — generic tree
+- `treeTypes.ts` — `TreeNodeItem` interface; import from here, never from `TreeNode.vue`
 - `SplitPane.vue` — resizable split pane
 - `BottomSearchBar.vue`, `ContextMenu.vue`, `ConfirmDialog.vue`, `LoadingAnimation.vue`
 - `IconTreeRtl.vue` — `IconTextBulletListTree` pre-flipped for RTL layout
@@ -245,11 +253,7 @@ Shared reusable components used across features.
 
 **useLineCopy.ts** — intercepts the browser `copy` event on a scroller element; when the user has selected all, writes each line as a `<div>` in `text/html` and strips HTML tags for `text/plain`, so copied text has no inline line breaks.
 
-**useToolbarPosition.ts** — exports the `ToolbarPosition` type (`'top' | 'bottom' | 'left' | 'right'`). The actual position state lives in `bookViewStore`.
-
 **useDropdownClose.ts** — drop-in replacement for `onClickOutside` that also closes on window blur and handles the toggle-button race condition. Use on every dropdown instead of `onClickOutside` directly.
-
-## Host & Database (`src/host/`)
 
 ### db.ts
 
@@ -268,6 +272,9 @@ C# host actions for file operations. All functions have dev fallbacks.
 - `restoreLocalPdf(filePath)` — re-register virtual host for a local file
 - `restoreHbPdf(bookId, bookTitle, tabId)` — restore HebrewBooks PDF from cache
 - `disposePdfHost(filePath)` — decrement virtual host ref count on tab close
+- `callBridgeAction(name, ...params)` — call any C# action with positional params (used by search/indexing)
+- `resetHostApp()` — full app reset: deletes Bloom index, resets C# settings, reloads
+- `resetSearchIndex()` — resets the Bloom search index on the C# side
 
 ### queries.sql.ts
 
@@ -297,7 +304,7 @@ The one exception is `ZayitDbManager.cs` in the C# backend, which owns the SQL u
 
 **hebrewLearning.ts** — `getDailyLearning(hd)` returns today's schedule for all daily learning cycles (Daf Yomi, Mishna Yomi, Nach Yomi, Rambam, etc.). Used by the home page and the calendar weekly view.
 
-**useOnlineStatus.ts** — thin wrapper around VueUse `useOnline`. Returns a reactive boolean for network connectivity.
+**booksCategoryTree.ts** — pure data logic for the book catalog tree. Exports `buildTree`, `assignFullPaths`, `findCategoryMeta`, `ensureBookSearchMetadata`, and the `BookRow`, `CategoryRow`, `CategoryNode` types. No Vue or Pinia dependencies.
 
 ## Theme System (`src/theme/`)
 

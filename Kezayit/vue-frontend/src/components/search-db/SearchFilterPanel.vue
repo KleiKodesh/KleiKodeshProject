@@ -7,8 +7,8 @@ import { normalize } from '@/utils/normalizeText'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
 import SearchFilterNode from './SearchFilterNode.vue'
 import SearchFilterBookList from './SearchFilterBookList.vue'
-import { ensureBookSearchMetadata } from '@/components/books-fs/booksCategoryTree'
-import type { CategoryNode, BookRow } from '@/components/books-fs/booksCategoryTree'
+import { ensureBookSearchMetadata } from '@/utils/booksCategoryTree'
+import type { CategoryNode, BookRow } from '@/utils/booksCategoryTree'
 
 const props = defineProps<{
   checkedBookIds: Set<number>

@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useTabStore } from '@/stores/tabStore'
 import { censorDivineNames } from '@/utils/censorDivineNames'
-import type { WordPageData } from './DictionaryPage.vue'
+import type { WordPageData } from './dictionaryTypes'
 
 const props = defineProps<{ data: WordPageData; fontPx?: number }>()
 const emit  = defineEmits<{ (e: 'select', headword: string): void }>()

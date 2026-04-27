@@ -3,6 +3,7 @@ import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useTabStore } from '@/stores/tabStore'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
+import { resetHostApp, resetSearchIndex as bridgeResetSearchIndex } from '@/host/bridge'
 
 export function useSettingsPage() {
   const settings = useSettingsStore()
@@ -35,24 +36,16 @@ export function useSettingsPage() {
   })
 
   async function resetAll() {
-    // Schedule IDB wipe on next boot, then clear C# state and reload.
     tabStore.resetAll()
-    if (typeof window.__webviewAction === 'function') {
-      await window.__webviewAction('DeleteBloomIndex', {}).catch(() => {})
-      await window.__webviewAction('resetSettings', {}).catch(() => {})
-      window.__webviewAction('reload', {}).catch(() => window.location.reload())
-    } else {
-      window.location.reload()
-    }
+    await resetHostApp()
   }
 
-  async function resetSearchIndex() {
+  async function resetSearchIndexAction() {
     await searchCache.clear()
-    await window.__webviewAction?.('ResetSearchIndex')
+    await bridgeResetSearchIndex()
   }
 
-  async function resetSettings() {
-    // Frontend display/reading settings only — no tabs, no cache, no C# side.
+  function resetSettings() {
     settings.reset()
   }
 
@@ -71,7 +64,7 @@ export function useSettingsPage() {
     newTabPage,
     resumeLastRead,
     resetSettings,
-    resetSearchIndex,
+    resetSearchIndex: resetSearchIndexAction,
     resetAll,
   }
 }

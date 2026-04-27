@@ -4,121 +4,76 @@ Analysis of responsibility distribution, repetition, and architectural issues fo
 
 ---
 
-## Issue 1 — `useAppNavigation.ts`: duplicated logic between `navigate` and `navigateInNewTab`
+## Issue 1 — `useAppNavigation.ts`: duplicated logic between `navigate` and `navigateInNewTab` ✅ Done
 
-Both functions share identical label-matching logic for singleton routing, file picker, and external links. The only difference is whether they open in-place or in a new tab. The shared branches (`'התקן כזית'`, `'בחר מסד נתונים'`, `'פתח קובץ'`) are copy-pasted verbatim.
-
-**Fix:** Extract the shared side-effect actions into a private helper. Both `navigate` and `navigateInNewTab` call it with a `newTab: boolean` flag. No behavior change — just deduplication.
-
-**File:** `src/composables/useAppNavigation.ts`
+Extracted `handleFilePicker(newTab)`, `handleExternalLink()`, and `handleDbPicker()` as private helpers. Both `navigate` and `navigateInNewTab` call them — no more copy-pasted branches.
 
 ---
 
-## Issue 2 — `settingsStore.ts`: noisy `init()` and repetitive watch pattern
+## Issue 2 — `settingsStore.ts`: noisy `init()` and repetitive watch pattern ✅ Done
 
-`init()` has 20 identical `const x = v<T>(KEY); if (x != null) ref.value = x` lines. Below it, 20 individual `watch(ref, (v) => lsSet(KEY, v))` calls repeat the same pattern.
-
-**Fix:** Two small helpers:
-- `loadSetting<T>(key, target)` — reads from localStorage and assigns to the ref in one line
-- `persistSetting(ref, key)` — wraps the watch + lsSet call
-
-Cuts the noise in half with no behavior change.
-
-**File:** `src/stores/settingsStore.ts`
+Added `loadSetting<T>(key, target)` and `persistSetting(ref, key, afterSave?)` helpers. `init()` is now 20 one-liners instead of 40. The watch block is 17 `persistSetting(...)` calls instead of 17 inline `watch(ref, (v) => { lsSet(...); ... })` blocks.
 
 ---
 
-## Issue 3 — `BookViewPage.vue`: too much orchestration logic in the component
+## Issue 3 — `BookViewPage.vue`: too much orchestration logic in the component ✅ Done
 
-The `<script setup>` block is 350+ lines and handles too many distinct concerns inline:
+Extracted three composables:
+- `useTocScrollTracking.ts` — owns `tocScrolling`, `tocScrollTargetLineIndex`, `tocScrollTimer`; exposes `beginTocScroll(entry)` and `checkTocScrollProgress(lineIndex)`
+- `usePinnedCommentary.ts` — owns `defaultCommentatorBookIds` fetch, `pinnedCommentaryBookId`, and both fallback watches
+- `useCommentaryNavigation.ts` — owns `onNavigateSection`, `pendingNavStop`, and the commentary-loading watch; supports both TOC mode and normal mode
 
-- Scroll state restoration
-- Commentary pin logic (`pinnedCommentaryBookId`, `defaultCommentatorBookIds` fetch)
-- TOC scroll tracking (`tocScrolling`, `tocScrollTimer` state machine)
-- Search mode switching
-- Section navigation (`onNavigateSection`, `pendingNavStop` pattern — 50+ lines)
-- Auto-select timer management
-
-The component is at its hard limit and the logic density makes it hard to reason about.
-
-**Fix:** Extract at minimum:
-- `useCommentaryNavigation(...)` — owns `onNavigateSection`, `pendingNavStop`, and the commentary-loading watch
-- `usePinnedCommentary(...)` — owns `defaultCommentatorBookIds` fetch, `pinnedCommentaryBookId`, and the fallback watch
-- `useTocScrollTracking(...)` — owns `tocScrolling`, `tocScrollTargetLineIndex`, `tocScrollTimer`
-
-**File:** `src/components/book-view/BookViewPage.vue`
+`BookViewPage.vue` script setup reduced from ~350 lines to ~280 lines.
 
 ---
 
-## Issue 4 — `pdfStore.ts`: direct `Object.assign(tab, ...)` mutations bypass `tabStore`
+## Issue 4 — `pdfStore.ts`: direct `Object.assign(tab, ...)` mutations bypass `tabStore` ✅ Done
 
-The PDF store mutates tab objects directly via `Object.assign(tab, ...)` in 6 places instead of going through `tabStore`. This breaks the single-writer contract — `tabStore` is supposed to own all tab mutations. If `tabStore` ever adds validation or side effects to tab updates, `pdfStore` silently bypasses them.
-
-**Fix:** Add `tabStore.updateTab(tabId: string, patch: Partial<Omit<Tab, 'id'>>)` — same as `updateActiveTab` but targets any tab by ID. Replace all `Object.assign(tab, ...)` calls in `pdfStore` with this method.
-
-**Files:** `src/stores/tabStore.ts`, `src/stores/pdfStore.ts`
+Added `updateTab(tabId, patch)` to `tabStore`. All 6 `Object.assign(tab, ...)` calls in `pdfStore` replaced with `tabStore.updateTab(tabId, ...)`. Removed the now-unnecessary `_closeTab` wrapper.
 
 ---
 
-## Issue 5 — `useCommentary.ts`: unbounded module-level cache
+## Issue 5 — `useCommentary.ts`: unbounded module-level cache ✅ Done
 
-`_staticFilterGroupsCache` is a module-level `Map` that lives for the entire session and is never cleared or capped. If the user switches workspaces or resets the app without a full reload, stale data is served. The architecture rules require all module-level caches to be bounded.
-
-**Fix:** Either move the cache into `booksDataStore` (where it can be cleared on workspace switch) or add an explicit size cap with eviction. The cache key is `sourceBookId` — one entry per book opened, so in practice it stays small, but the cap should be explicit.
-
-**File:** `src/components/book-view/useCommentary.ts`
+Added `STATIC_FILTER_CACHE_MAX = 50` cap and a `cacheSet()` helper that evicts the oldest entry (FIFO) when the cap is reached. The cache key is `sourceBookId` so 50 entries covers any realistic session.
 
 ---
 
-## Issue 6 — `booksDataStore.ts`: imports from a component folder
+## Issue 6 — `booksDataStore.ts`: imports from a component folder ✅ Done
 
-`booksDataStore` imports `buildTree`, `assignFullPaths`, `findCategoryMeta`, and the `BookRow`/`CategoryRow`/`CategoryNode` types from `@/components/books-fs/booksCategoryTree`. A store importing from a component folder inverts the dependency direction — stores should be consumed by components, not the reverse.
-
-`booksCategoryTree.ts` is pure data logic with no Vue dependencies. It belongs in `src/utils/` (or a dedicated `src/data/` layer if it grows).
-
-**Fix:** Move `booksCategoryTree.ts` to `src/utils/booksCategoryTree.ts`. Update all imports. Update the `src/utils/README.md`.
-
-**Files:** `src/components/books-fs/booksCategoryTree.ts` → `src/utils/booksCategoryTree.ts`
+Moved `booksCategoryTree.ts` to `src/utils/booksCategoryTree.ts`. Updated all import sites across `books-fs/`, `search-db/`, `book-view/`, `home/`, and `stores/`. Updated `src/utils/README.md`.
 
 ---
 
-## Issue 7 — `persistence.ts`: HebrewBooks history logic doesn't belong here
+## Issue 7 — `persistence.ts`: HebrewBooks history logic doesn't belong here ✅ Done
 
-The HebrewBooks history DB has its own object store schema (`history` with a `lastAccessed` index), its own `openHbHistoryDb` function, and its own `HbHistoryEntry` type — all inside the shared persistence layer. It's the only DB in the file that deviates from the generic `data` store pattern. This is a feature-specific concern that leaked into the shared layer.
-
-**Fix:** Move `HbHistoryEntry`, `openHbHistoryDb`, `idbHbGetHistory`, and `idbHbTrackAccess` into `src/stores/hebrewBooksHistoryStore.ts` (which already owns this feature). Keep `persistence.ts` as the generic IDB/localStorage layer only.
-
-**Files:** `src/utils/persistence.ts`, `src/stores/hebrewBooksHistoryStore.ts`
+Moved `HbHistoryEntry`, `openHbHistoryDb`, `idbHbGetHistory`, and `idbHbTrackAccess` into `hebrewBooksHistoryStore.ts`. The store now owns its own IDB database entirely. `persistence.ts` calls `dropHbHistoryDb()` (exported from the store as a plain function) via a lazy import to avoid circular dependency. Removed `'app-hb-history'` from the `handles` map in `persistence.ts`.
 
 ---
 
-## Issue 8 — `useBloomSearch.ts`: debug `console.log` statements in production paths
+## Issue 8 — `useBloomSearch.ts`: debug `console.log` statements in production paths ✅ Done
 
-Five `console.log` calls with `[search]` prefixes log cache hit/miss details on every search execution. These are debug traces that should not ship in production.
-
-**Fix:** Delete all `console.log` calls in `useBloomSearch.ts`. Keep `console.error` calls — those are legitimate error reporting.
+Five `console.log` calls with `[search]` prefixes logged cache hit/miss details on every search execution. Removed. `console.error` calls kept.
 
 **File:** `src/components/search-db/useBloomSearch.ts`
 
 ---
 
-## Issue 9 — `useToolbarPosition.ts`: a file that exports only a type
+## Issue 9 — `useToolbarPosition.ts`: a file that exports only a type ✅ Done
 
-This file exists solely to export `type ToolbarPosition = 'top' | 'bottom' | 'left' | 'right'`. A single type export does not justify its own file. The type is consumed by `bookViewStore` and `useZoom`.
+Type inlined into `src/stores/bookViewStore.ts` as `export type ToolbarPosition`. File deleted. README and architecture.md updated.
 
-**Fix:** Move the type into `src/stores/bookViewStore.ts` where the actual state lives. Delete `useToolbarPosition.ts`. Update the two import sites.
-
-**Files:** `src/composables/useToolbarPosition.ts`, `src/stores/bookViewStore.ts`
+**Files:** `src/composables/useToolbarPosition.ts` (deleted), `src/stores/bookViewStore.ts`
 
 ---
 
-## Issue 10 — `BookViewPage.vue` template: `BookViewToolbar` rendered 4 times
+## Issue 10 — `BookViewPage.vue` template: `BookViewToolbar` rendered 4 times ✅ Done
 
-The template renders `<BookViewToolbar>` four times (top, right, left, bottom positions) with identical props and events, each guarded by a `v-if` on `toolbarPosition`. This is the most visually noisy part of the template.
+Reduced from 4 instances to 2:
+- One outside `body-row` for top/bottom positions (guarded by `toolbarPosition === 'top'` and `=== 'bottom'` respectively)
+- One inside `body-row` for right/left positions (single instance, `toolbar-order-end` CSS class pushes it to physical left when `toolbarPosition === 'left'`)
 
-**Fix:** Render `<BookViewToolbar>` once. Pass `toolbarPosition` as a prop and let the toolbar component (or its parent wrapper) handle its own CSS positioning. This removes ~40 lines of duplicated template markup.
-
-**Files:** `src/components/book-view/BookViewPage.vue`, `src/components/book-view/BookViewToolbar.vue`
+**File:** `src/components/book-view/BookViewPage.vue`
 
 ---
 

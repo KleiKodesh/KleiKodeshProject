@@ -341,35 +341,29 @@ function rectangleSelect() {
       </div>
     </div>
 
-    <!-- Find bar row -->
-    <div v-if="findOpen" class="find-bar">
-      <div class="find-input-pill">
-        <IconSearch20Regular class="find-icon" />
-        <input
-          ref="findInputRef"
-          v-model="findQuery"
-          class="find-input"
-          type="search"
-          placeholder="חיפוש..."
-          dir="rtl"
-          @keydown="onFindKeydown"
-        />
-        <span v-if="findNotFound" class="find-status not-found">לא נמצא</span>
-        <span v-else-if="findMatchCount !== null" class="find-status">
-          {{ findMatchIndex }}/{{ findMatchCount }}
-        </span>
+    <!-- Find bar — floating pill, same style as BookViewSearchBar -->
+    <Transition name="search-bar">
+      <div v-if="findOpen" class="search-bar">
+        <div class="search-inner">
+          <input
+            ref="findInputRef"
+            v-model="findQuery"
+            type="search"
+            class="search-input"
+            placeholder="חיפוש..."
+            @keydown="onFindKeydown"
+          />
+          <span class="match-count" :class="{ 'no-match': findNotFound }">
+            {{ findNotFound ? 'לא נמצא' : findMatchCount !== null ? `${findMatchIndex} / ${findMatchCount}` : '' }}
+          </span>
+        </div>
+        <span class="sep" />
+        <button class="nav-btn" @click="findPrev"><IconChevronUp20Regular /></button>
+        <button class="nav-btn" @click="findNext"><IconChevronDown20Regular /></button>
+        <span class="sep" />
+        <button class="close-btn" @click="closeFind"><IconDismiss20Regular /></button>
       </div>
-
-      <button class="tool-btn find-nav-btn" title="תוצאה קודמת" @click="findPrev">
-        <IconChevronUp20Regular />
-      </button>
-      <button class="tool-btn find-nav-btn" title="תוצאה הבאה" @click="findNext">
-        <IconChevronDown20Regular />
-      </button>
-      <button class="tool-btn find-close-btn" title="סגור חיפוש" @click="closeFind">
-        <IconDismiss20Regular />
-      </button>
-    </div>
+    </Transition>
   </div>
 </template>
 

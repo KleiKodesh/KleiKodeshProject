@@ -15,6 +15,16 @@ function action<T>(name: string, args?: object): Promise<T> {
   return window.__webviewAction(name, args) as Promise<T>
 }
 
+/**
+ * Call a C# bridge action with positional params (used by search/indexing).
+ * The bridge receives params as an array, not a named object.
+ */
+export function callBridgeAction<T>(name: string, ...params: unknown[]): Promise<T> {
+  if (typeof window.__webviewAction !== 'function')
+    return Promise.reject(new Error('bridge not available'))
+  return window.__webviewAction(name, params as unknown as object) as Promise<T>
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface PdfFileResult {
@@ -99,6 +109,27 @@ export function disposePdfHost(filePath: string): void {
 export function togglePopOut(): void {
   if (!isHosted) return
   action('TogglePopOut').catch(() => {})
+}
+
+/**
+ * Full app reset — deletes the Bloom index, resets C# settings, then reloads.
+ * Call tabStore.resetAll() before this to schedule the IDB wipe.
+ */
+export async function resetHostApp(): Promise<void> {
+  if (typeof window.__webviewAction !== 'function') {
+    window.location.reload()
+    return
+  }
+  await action('DeleteBloomIndex').catch(() => {})
+  await action('resetSettings').catch(() => {})
+  action('reload').catch(() => window.location.reload())
+}
+
+/**
+ * Reset the Bloom search index on the C# side.
+ */
+export async function resetSearchIndex(): Promise<void> {
+  await action('ResetSearchIndex').catch(() => {})
 }
 
 /**

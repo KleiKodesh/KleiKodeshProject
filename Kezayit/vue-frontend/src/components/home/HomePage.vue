@@ -16,8 +16,8 @@ import { IconSettings24, IconSearchSparkle24 } from '@iconify-prerendered/vue-fl
 import { isHosted, dbReady } from '@/host/seforimDb'
 import { useAppNavigation } from '@/composables/useAppNavigation'
 import { useTilesKeys } from '@/composables/useTileGridKeys'
-import { dateInfo, loadDateInfo } from './useHomeDateInfo'
-import { navigateToDafYomi } from './useDafYomiNavigation'
+import { dateInfo, loadDateInfo } from './homeDateInfo'
+import { navigateToDafYomi } from './dafYomiNavigation'
 import { useTabStore } from '@/stores/tabStore'
 
 const { navigate } = useAppNavigation()

@@ -13,20 +13,7 @@ import { dictLinks, dictSynonyms, dictVariants, dictSpellCandidates, dictKetivVa
 import { expandKetivHaser } from '@/utils/hebrewKetivExpander'
 import { isHosted } from '@/host/seforimDb'
 import type { SenseRow, DictLink, MetzudatRow, MenchemRow } from '@/host/dictionaryDb'
-
-export interface WordPageData {
-  headword:             string
-  senses:               SenseRow[]     // dictionary sources (not Radak)
-  radak:                SenseRow[]     // ספר השרשים לרד"ק — groups with commentary
-  metzudat:             MetzudatRow[]
-  malbim:               MetzudatRow[]
-  menchemRows:          MenchemRow[]
-  links:                DictLink[]
-  synonyms:             string[]
-  variants:             string[]
-  ketivSuggestions:     string[]       // כתיב מלא expansions of the query
-  levenshteinSuggestions: string[]     // edit-distance spelling suggestions (shown last)
-}
+import type { WordPageData } from './dictionaryTypes'
 
 function levenshtein(a: string, b: string): number {
   const m = a.length, n = b.length

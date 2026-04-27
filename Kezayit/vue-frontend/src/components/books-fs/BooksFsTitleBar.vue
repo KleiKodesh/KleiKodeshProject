@@ -6,7 +6,7 @@ import {
   IconHome16Regular,
 } from '@iconify-prerendered/vue-fluent'
 import BooksBreadcrumb from './BooksBreadcrumb.vue'
-import type { CategoryNode } from './booksCategoryTree'
+import type { CategoryNode } from '@/utils/booksCategoryTree'
 defineProps<{ view: 'list' | 'tiles' | 'tree'; path: CategoryNode[]; isSearching: boolean }>()
 defineEmits<{ setView: ['list' | 'tiles' | 'tree']; navigate: [number]; reset: [] }>()
 </script>

@@ -24,8 +24,8 @@ import { normalize } from '@/utils/normalizeText'
 import { normalizeBookQuery } from '@/utils/bookQueryNormalizer'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { runTocHeuristics } from './booksFsTocHeuristics'
-import { ensureBookSearchMetadata } from './booksCategoryTree'
-import type { BookRow } from './booksCategoryTree'
+import { ensureBookSearchMetadata, filterBooksByWords } from '@/utils/booksCategoryTree'
+import type { BookRow } from '@/utils/booksCategoryTree'
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -52,35 +52,6 @@ function toQueryWords(rawQuery: string): string[] {
   return normalizeBookQuery(normalize(rawQuery.trim()))
     .split(/\s+/)
     .filter((word) => word.length > 0)
-}
-
-// ─── Phase 1: Instant book filter ─────────────────────────────────────────────
-
-/**
- * Filter the full book catalog to books whose searchPath contains all query
- * words. The last word is matched as a prefix (supports partial typing);
- * all earlier words must match exactly.
- *
- * Results are sorted by tree order (catalog order) so the most prominent
- * books appear first.
- */
-export function filterBooksByWords(allBooks: BookRow[], words: string[]): BookRow[] {
-  if (!words.length) return []
-
-  const exactWords = words.slice(0, -1)
-  const prefixWord = words[words.length - 1]!
-
-  return allBooks
-    .filter((book) => {
-      ensureBookSearchMetadata(book)
-      const pathWords = book.searchWords ?? []
-      const exactWordsMatch = exactWords.every((queryWord) =>
-        pathWords.some((pathWord) => pathWord === queryWord),
-      )
-      const prefixWordMatch = pathWords.some((pathWord) => pathWord.includes(prefixWord))
-      return exactWordsMatch && prefixWordMatch
-    })
-    .sort((a, b) => (a.treeOrder ?? 0) - (b.treeOrder ?? 0))
 }
 
 // ─── Composable ───────────────────────────────────────────────────────────────

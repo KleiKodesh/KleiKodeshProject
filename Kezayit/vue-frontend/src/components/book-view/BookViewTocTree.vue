@@ -64,12 +64,11 @@ watch(searchQuery, (q) => {
         <template #top>
           <BookViewTocTreeSection
             ref="tocSectionRef"
-            v-show="hasToc"
+            v-if="hasToc"
             :title="null"
             :entries="tocEntries"
             :filter="searchQuery"
             :active-entry-id="activeTocEntryId"
-            :visible="props.visible"
             :search-tree="tocSearchTree"
             @select="onSelect"
           />

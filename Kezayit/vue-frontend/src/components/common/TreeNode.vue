@@ -1,13 +1,6 @@
 <script setup lang="ts">
 import { IconChevronLeft16Regular, IconChevronDown16Regular } from '@iconify-prerendered/vue-fluent'
-
-export interface TreeNodeItem {
-  id: number
-  parentId: number | null
-  level: number
-  hasChildren: boolean | number
-  text: string
-}
+import type { TreeNodeItem } from './treeTypes'
 
 const props = defineProps<{
   node: TreeNodeItem

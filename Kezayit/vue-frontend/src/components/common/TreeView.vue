@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
-import TreeNode, { type TreeNodeItem } from './TreeNode.vue'
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import TreeNode from './TreeNode.vue'
+import type { TreeNodeItem } from './treeTypes'
 import { useListKeys } from '@/composables/useListKeyNav'
 import { SearchableTree } from '@/utils/tocSearchUtils'
 
@@ -8,7 +9,6 @@ const props = defineProps<{
   nodes: TreeNodeItem[]
   filter?: string
   activeNodeId?: number
-  visible?: boolean
   indent?: number
   rowHeight?: number
   fontSize?: string
@@ -51,14 +51,21 @@ function scrollIntoView(id: number) {
 }
 
 watch(
-  () => props.visible,
-  (val) => {
-    if (val && props.activeNodeId != null) {
-      expandAncestors(props.activeNodeId)
-      nextTick(() => scrollIntoView(props.activeNodeId!))
+  () => props.activeNodeId,
+  (id) => {
+    if (id != null) {
+      expandAncestors(id)
+      nextTick(() => scrollIntoView(id))
     }
   },
 )
+
+onMounted(() => {
+  if (props.activeNodeId != null) {
+    expandAncestors(props.activeNodeId)
+    nextTick(() => scrollIntoView(props.activeNodeId!))
+  }
+})
 
 function toggle(node: TreeNodeItem) {
   if (expanded.value.has(node.id)) expanded.value.delete(node.id)

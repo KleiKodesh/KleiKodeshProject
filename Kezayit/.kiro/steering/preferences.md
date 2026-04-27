@@ -7,6 +7,9 @@
 - Start simple. Extract only when complexity justifies it — never upfront
 - Avoid indirection — every extra layer is a file someone has to find and open. Only abstract when it genuinely helps navigation and understanding
 - Architecture evolves: simple component → logic grows → extract composable
+- A file's contents must match what its name promises. A file named `BookViewPage.vue` is a page shell — it wires pieces together, it does not contain scroll sync logic, session restore logic, or search handlers. A composable named `useToc.ts` owns TOC loading — it does not contain commentary logic. If you cannot describe a file's entire contents using only its name, the mismatched code belongs in a different file.
+- A composable or utility file must never import from a component (`.vue`) file. Components are consumers — they sit at the top of the dependency graph. Types shared between a composable and its child components belong in a dedicated `*Types.ts` file in the same feature folder, not in either the composable or the component. Importing a type from a `.vue` file in a `.ts` file inverts the dependency direction and is forbidden. The same rule applies to interfaces defined inside `.vue` files that are needed by `.ts` files — move them to a `*Types.ts` or `*types.ts` file and import from there in both the component and the composable.
+- `.vue` files must never re-export types for the benefit of `.ts` files. If a type is needed by a `.ts` file, it does not belong in a `.vue` file at all — move it to a plain `.ts` types file. A `.vue` file that re-exports a type is a sign the type is in the wrong place.
 
 ## File Length & Refactoring Thresholds
 
@@ -22,6 +25,7 @@ These thresholds exist so that agentic AI can reliably read, edit, and reason ab
 
 ## Components
 
+- When switching between a fixed set of components based on a single state value, use `<component :is="...">` with a map object rather than a chain of `v-if`/`v-else-if`. The map lives in `<script setup>` and the template stays clean.
 - Components are dumb — no business logic, no data fetching, just props in, template out
 - Small UI logic (a toggle, a local flag) can stay inline in the component — don't extract it just to follow a pattern
 - Extract a sub-component when it has its own logic or when the markup is complex enough that inlining hurts readability — repetition alone is not enough reason
@@ -48,6 +52,14 @@ These thresholds exist so that agentic AI can reliably read, edit, and reason ab
 - Consistent and predictable naming means anyone can guess a filename without looking
 - Never use shorthand or abbreviations in any name — variables, functions, components, files, database tables, columns, or CSS classes. Write the full word every time. Examples: use `abbreviation` not `abbrev`, `definition` not `def`, `configuration` not `config`, `navigation` not `nav`, `parameter` not `param`, `index` not `idx`, `button` not `btn`, `message` not `msg`, `error` not `err`, `reference` not `ref` (unless it is a Vue template ref), `source` not `src` (unless it is an HTML attribute), `destination` not `dest`, `previous` not `prev`, `next` is fine as it is a full word.
 - The only exceptions are universally understood domain terms where the short form IS the name: `id`, `url`, `html`, `css`, `sql`, `api`, `db` when used as a suffix in a variable name referring to a database connection object.
+
+## Dropdowns & Panels — Close Behavior
+
+Every dropdown, popover, or overlay panel must use `useDropdownClose` from `src/composables/useDropdownClose.ts` — never `onClickOutside` directly. `useDropdownClose` also closes on window blur (iframe clicks, app switching), which `onClickOutside` alone does not handle.
+
+When the panel has a dedicated toggle button, pass it as the `toggleButton` option so the composable can suppress the close handler on that element and prevent the toggle-button race condition (pointerdown closes → click reopens).
+
+Every dropdown or panel must be rendered with `v-if`, not `v-show`. `v-if` ensures the component is fully unmounted when closed — child composables, watchers, and focus state are all torn down. `v-show` keeps the subtree alive and is only appropriate for tab-pane switching where preserving scroll position or expensive state across tab changes is intentional (e.g. the settings tab panes).
 
 ## VueUse
 

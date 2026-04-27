@@ -295,6 +295,11 @@ export const useTabStore = defineStore('tabs', () => {
     if (tab) Object.assign(tab, patch)
   }
 
+  function updateTab(tabId: string, patch: Partial<Omit<Tab, 'id'>>) {
+    const tab = tabs.value.find((t) => t.id === tabId)
+    if (tab) Object.assign(tab, patch)
+  }
+
   function openNewHomeTab() {
     const existing = tabs.value.find((t) => t.route === '/')
     if (existing) switchTab(existing.id)
@@ -327,6 +332,7 @@ export const useTabStore = defineStore('tabs', () => {
     closeTab,
     closeAllTabs,
     updateActiveTab,
+    updateTab,
     openNewHomeTab,
     navigateToSingleton,
     getBooksView,

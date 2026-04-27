@@ -24,7 +24,7 @@
 import { query } from '@/host/seforimDb'
 import { SQL } from '@/host/queries.sql'
 import { SearchableTree, stripTocTitleRoots } from '@/utils/tocSearchUtils'
-import type { BookRow } from './booksCategoryTree'
+import type { BookRow } from '../../utils/booksCategoryTree'
 import type { TocFsItem } from './useBooksFsSearch'
 
 // ─── Cap ──────────────────────────────────────────────────────────────────────
