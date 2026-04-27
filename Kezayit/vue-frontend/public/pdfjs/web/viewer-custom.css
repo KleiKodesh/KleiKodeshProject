@@ -136,3 +136,26 @@ body,
 #outerContainer {
   overflow-x: hidden !important;
 }
+
+/* ── Mobile toolbar: hide the native PDF.js toolbar and findbar entirely ── */
+.toolbar,
+#toolbarContainer,
+#findbar {
+  display: none !important;
+}
+
+/* Expand the viewer to fill the full height since toolbar is gone */
+#mainContainer {
+  top: 0 !important;
+}
+
+#viewerContainer {
+  top: 0 !important;
+}
+
+/* Sidebar: start from top since toolbar is gone */
+#viewsManager {
+  top: 0 !important;
+  height: 100vh !important;
+  /* override the earlier rule that used --toolbar-height */
+}

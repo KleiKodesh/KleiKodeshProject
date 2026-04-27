@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { usePdfStore } from '@/stores/pdfStore'
 import { useTabStore } from '@/stores/tabStore'
 import { syncPdfViewerTheme } from '@/theme/themes'
 import { IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
 import LoadingAnimation from '@/components/common/LoadingAnimation.vue'
+import PdfToolbar from './PdfToolbar.vue'
 
 const pdfStore = usePdfStore()
 const tabStore = useTabStore()
+
+const iframeRef = ref<HTMLIFrameElement | null>(null)
 
 function onIframeLoad() {
   setTimeout(syncPdfViewerTheme, 100)
@@ -46,13 +49,16 @@ function cancelConversion() {
       </div>
     </div>
 
-    <iframe
-      v-else-if="iframeSrc"
-      :src="iframeSrc"
-      class="pdf-iframe"
-      allowfullscreen
-      @load="onIframeLoad"
-    />
+    <template v-else-if="iframeSrc">
+      <PdfToolbar :iframe-el="iframeRef" />
+      <iframe
+        ref="iframeRef"
+        :src="iframeSrc"
+        class="pdf-iframe"
+        allowfullscreen
+        @load="onIframeLoad"
+      />
+    </template>
 
     <div v-else class="pdf-empty">לא נבחר קובץ</div>
   </div>

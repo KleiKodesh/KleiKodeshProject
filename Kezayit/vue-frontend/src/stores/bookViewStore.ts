@@ -9,7 +9,7 @@ import {
   zoomOut as zoomOutUtil,
   resetZoom as resetZoomUtil,
 } from '@/composables/useZoom'
-import type { ToolbarPosition } from '@/composables/useToolbarPosition'
+export type ToolbarPosition = 'top' | 'bottom' | 'left' | 'right'
 
 export interface SearchBarPos {
   x: number

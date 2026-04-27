@@ -232,7 +232,6 @@ export function useBloomSearch() {
       onComplete: async () => {
         if (currentSearchId !== searchId) return
         isSearching.value = false
-        console.log(`[search] stream complete for "${normalizedQuery}" — total results: ${results.value.length}, marking cache complete`)
         try {
           await cache.markComplete(normalizedQuery)
         } catch {
@@ -277,7 +276,6 @@ export function useBloomSearch() {
 
     if (cached?.complete) {
       // Full result set available — show immediately, no stream needed
-      console.log(`[search] cache hit (complete) for "${normalizedQuery}" — ${cached.results.length} results`)
       results.value = cached.results
       isSearching.value = false
       return
@@ -286,7 +284,6 @@ export function useBloomSearch() {
     if (cached && cached.results.length > 0) {
       // Partial result set from a previous interrupted search — show what we have,
       // then resume streaming from where C# left off
-      console.log(`[search] cache hit (partial) for "${normalizedQuery}" — ${cached.results.length} cached, resuming from that offset`)
       results.value = cached.results
       try {
         await _startStream(normalizedQuery, cached.results.length)
@@ -298,7 +295,6 @@ export function useBloomSearch() {
     }
 
     // No cache — fresh search
-    console.log(`[search] cache miss for "${normalizedQuery}" — starting fresh`)
     try {
       await cache.init(normalizedQuery)
       await _startStream(normalizedQuery, 0)
@@ -323,14 +319,14 @@ export function useBloomSearch() {
     hasSearched.value = true
     // If incomplete, resume streaming in the background
     if (!cached.complete) {
-      console.log(`[search] tab restore — partial cache for "${normalizedQuery}" (${cached.results.length} results), resuming stream`)
+      // If incomplete, resume streaming in the background
       isSearching.value = true
       _startStream(normalizedQuery, cached.results.length).catch((err) => {
         console.error('[useBloomSearch] failed to resume stream after tab restore:', err)
         isSearching.value = false
       })
     } else {
-      console.log(`[search] tab restore — complete cache for "${normalizedQuery}" (${cached.results.length} results)`)
+      // complete cache — nothing more to do
     }
     return true
   }

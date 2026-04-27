@@ -1125,3 +1125,30 @@ WebView2's `SetVirtualHostNameToFolderMapping` maps arbitrary hostnames to local
 ### Applicability
 
 This patch is intentionally generic — it works for any app using WebView2 virtual host mappings, regardless of the hostname convention used.
+
+## Mobile Toolbar Replacement
+
+### Problem
+
+The native PDF.js toolbar does not contract on small viewports — it overflows and gets cut off. It is not suitable for Android-sized screens.
+
+### Solution
+
+The native toolbar is hidden entirely via CSS. A Vue component (`PdfToolbar.vue`) renders a compact 44px toolbar above the iframe with all the same functionality. The findbar is moved out of the toolbar DOM so it survives the toolbar being hidden.
+
+### Implementation
+
+**viewer-custom.css** — hides `.toolbar` and `#toolbarContainer`, expands `#mainContainer` and `#viewerContainer` to `top: 0`, positions `#findbar` as a `position: fixed` overlay at the top when visible, suppresses the doorHanger triangle decorations on the findbar.
+
+**viewer.html** — `#findbar` is moved out of `#toolbarViewerLeft` and placed as a direct child of `#mainContainer` immediately before `#viewerContainer`. The `#viewFindButton` remains in the toolbar (hidden with it) because PDF.js's `PDFFindBar` wires its toggle logic to that button — our Vue toolbar clicks it programmatically.
+
+**PdfToolbar.vue** (`src/components/pdf/`) — Vue component rendered above the iframe. Controls: sidebar toggle (clicks `#viewsManagerToggleButton`), find toggle (clicks `#viewFindButton`), prev/next page, page number input, zoom out/select/in, and a "more" dropdown with download and rectangle selection. Communicates via `contentWindow.PDFViewerApplication`. Polls every 400ms to sync page number and zoom state.
+
+### What still works
+
+- Sidebar (TOC outline, thumbnails, attachments, layers) — fully intact, toggled by our toolbar
+- Findbar — moved to `#mainContainer`, floats as a fixed overlay at the top when open
+- All editor panels (highlight, freetext, ink, stamp) — untouched, PDF.js enables them per-document
+- Theme sync — `syncPdfViewerTheme` in `themes.ts` is unaffected
+- Rectangle selection tool — triggered from the "more" menu via `window.toggleRectangleSelection()`
+- Download with save dialog — triggered via `PDFViewerApplication.downloadOrSave()`

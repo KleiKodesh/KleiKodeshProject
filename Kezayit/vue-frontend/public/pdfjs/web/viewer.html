@@ -233,6 +233,7 @@ See https://github.com/adobe-type-tools/cmap-resources
                 <!-- sidebarContainer -->
 
                 <div class="toolbarButtonSpacer"></div>
+                <!-- viewFindButton stays in toolbar for PDF.js wiring; findbar moved to mainContainer -->
                 <div class="toolbarButtonWithContainer">
                   <button
                     id="viewFindButton"
@@ -245,49 +246,6 @@ See https://github.com/adobe-type-tools/cmap-resources
                   >
                     <span data-l10n-id="pdfjs-findbar-button-label"></span>
                   </button>
-                  <div class="hidden doorHanger toolbarHorizontalGroup" id="findbar">
-                    <div id="findInputContainer" class="toolbarHorizontalGroup">
-                      <span class="loadingInput end toolbarHorizontalGroup">
-                        <input id="findInput" class="toolbarField" tabindex="0" data-l10n-id="pdfjs-find-input" aria-invalid="false" />
-                      </span>
-                      <div class="toolbarHorizontalGroup">
-                        <button id="findPreviousButton" class="toolbarButton" type="button" tabindex="0" data-l10n-id="pdfjs-find-previous-button">
-                          <span data-l10n-id="pdfjs-find-previous-button-label"></span>
-                        </button>
-                        <div class="splitToolbarButtonSeparator"></div>
-                        <button id="findNextButton" class="toolbarButton" type="button" tabindex="0" data-l10n-id="pdfjs-find-next-button">
-                          <span data-l10n-id="pdfjs-find-next-button-label"></span>
-                        </button>
-                      </div>
-                    </div>
-
-                    <div id="findbarOptionsOneContainer" class="toolbarHorizontalGroup">
-                      <div class="toggleButton toolbarLabel">
-                        <input type="checkbox" id="findHighlightAll" tabindex="0" />
-                        <label for="findHighlightAll" data-l10n-id="pdfjs-find-highlight-checkbox"></label>
-                      </div>
-                      <div class="toggleButton toolbarLabel">
-                        <input type="checkbox" id="findMatchCase" tabindex="0" />
-                        <label for="findMatchCase" data-l10n-id="pdfjs-find-match-case-checkbox-label"></label>
-                      </div>
-                    </div>
-                    <div id="findbarOptionsTwoContainer" class="toolbarHorizontalGroup">
-                      <div class="toggleButton toolbarLabel">
-                        <input type="checkbox" id="findMatchDiacritics" tabindex="0" />
-                        <label for="findMatchDiacritics" data-l10n-id="pdfjs-find-match-diacritics-checkbox-label"></label>
-                      </div>
-                      <div class="toggleButton toolbarLabel">
-                        <input type="checkbox" id="findEntireWord" tabindex="0" />
-                        <label for="findEntireWord" data-l10n-id="pdfjs-find-entire-word-checkbox-label"></label>
-                      </div>
-                    </div>
-
-                    <div id="findbarMessageContainer" class="toolbarHorizontalGroup" aria-live="polite">
-                      <span id="findResultsCount" class="toolbarLabel"></span>
-                      <span id="findMsg" class="toolbarLabel"></span>
-                    </div>
-                  </div>
-                  <!-- findbar -->
                 </div>
                 <div class="toolbarHorizontalGroup hiddenSmallView">
                   <button class="toolbarButton" type="button" id="previous" tabindex="0" data-l10n-id="pdfjs-previous-button">
@@ -778,6 +736,49 @@ See https://github.com/adobe-type-tools/cmap-resources
             </div>
           </div>
         </div>
+
+        <!-- findbar: moved out of toolbar so it survives toolbar being hidden -->
+        <div class="hidden doorHanger toolbarHorizontalGroup" id="findbar">
+          <div id="findInputContainer" class="toolbarHorizontalGroup">
+            <span class="loadingInput end toolbarHorizontalGroup">
+              <input id="findInput" class="toolbarField" tabindex="0" data-l10n-id="pdfjs-find-input" aria-invalid="false" />
+            </span>
+            <div class="toolbarHorizontalGroup">
+              <button id="findPreviousButton" class="toolbarButton" type="button" tabindex="0" data-l10n-id="pdfjs-find-previous-button">
+                <span data-l10n-id="pdfjs-find-previous-button-label"></span>
+              </button>
+              <div class="splitToolbarButtonSeparator"></div>
+              <button id="findNextButton" class="toolbarButton" type="button" tabindex="0" data-l10n-id="pdfjs-find-next-button">
+                <span data-l10n-id="pdfjs-find-next-button-label"></span>
+              </button>
+            </div>
+          </div>
+          <div id="findbarOptionsOneContainer" class="toolbarHorizontalGroup">
+            <div class="toggleButton toolbarLabel">
+              <input type="checkbox" id="findHighlightAll" tabindex="0" />
+              <label for="findHighlightAll" data-l10n-id="pdfjs-find-highlight-checkbox"></label>
+            </div>
+            <div class="toggleButton toolbarLabel">
+              <input type="checkbox" id="findMatchCase" tabindex="0" />
+              <label for="findMatchCase" data-l10n-id="pdfjs-find-match-case-checkbox-label"></label>
+            </div>
+          </div>
+          <div id="findbarOptionsTwoContainer" class="toolbarHorizontalGroup">
+            <div class="toggleButton toolbarLabel">
+              <input type="checkbox" id="findMatchDiacritics" tabindex="0" />
+              <label for="findMatchDiacritics" data-l10n-id="pdfjs-find-match-diacritics-checkbox-label"></label>
+            </div>
+            <div class="toggleButton toolbarLabel">
+              <input type="checkbox" id="findEntireWord" tabindex="0" />
+              <label for="findEntireWord" data-l10n-id="pdfjs-find-entire-word-checkbox-label"></label>
+            </div>
+          </div>
+          <div id="findbarMessageContainer" class="toolbarHorizontalGroup" aria-live="polite">
+            <span id="findResultsCount" class="toolbarLabel"></span>
+            <span id="findMsg" class="toolbarLabel"></span>
+          </div>
+        </div>
+        <!-- findbar -->
 
         <div id="viewerContainer" tabindex="0">
           <div id="viewer" class="pdfViewer"></div>

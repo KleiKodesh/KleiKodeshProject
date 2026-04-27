@@ -531,7 +531,7 @@ watch(searchVisible, (v) => {
     <!-- Middle row: right toolbar + content + left toolbar (RTL: first child = physical right) -->
     <div class="body-row">
       <BookViewToolbar
-        v-if="bookViewStore.toolbarVisible && toolbarPosition === 'right'"
+        v-if="bookViewStore.toolbarVisible && (toolbarPosition === 'right' || toolbarPosition === 'left')"
         ref="toolbarRef"
         :bottom-visible="bottomVisible"
         :search-visible="searchVisible"
