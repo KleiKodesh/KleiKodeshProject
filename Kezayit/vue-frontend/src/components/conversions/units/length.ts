@@ -1,4 +1,4 @@
-import type { Unit, UnitSource } from './types'
+import type { Unit, UnitSource } from './conversionUnitTypes'
 
 // Reference sources
 const M: UnitSource = {

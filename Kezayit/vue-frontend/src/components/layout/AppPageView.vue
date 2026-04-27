@@ -7,7 +7,7 @@ const route = computed(() => tabStore.activeTab.route)
 
 const pages: Record<string, unknown> = {
   '/': defineAsyncComponent(() => import('@/components/home/HomePage.vue')),
-  '/books': defineAsyncComponent(() => import('@/components/books-fs/BooksFsPage.vue')),
+  '/books': defineAsyncComponent(() => import('@/components/book-catalog/BookCatalogPage.vue')),
   '/book-view': defineAsyncComponent(() => import('@/components/book-view/BookViewPage.vue')),
   '/pdf-view': defineAsyncComponent(() => import('@/components/pdf/PdfViewPage.vue')),
   '/settings': defineAsyncComponent(() => import('@/components/settings/SettingsPage.vue')),

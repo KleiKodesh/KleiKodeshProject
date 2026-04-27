@@ -59,7 +59,7 @@ Multi-instance routes (`/book-view`, `/search`, `/pdf-view`) can have multiple t
 | Route              | Component                  | Kind                            |
 | ------------------ | -------------------------- | ------------------------------- |
 | `/`                | `HomePage.vue`             | shared instance                 |
-| `/books`           | `BooksFsPage.vue`          | singleton                       |
+| `/books`           | `FileSystemPage.vue`       | singleton                       |
 | `/book-view`       | `BookViewPage.vue`         | multi-instance (keyed by tabId) |
 | `/search`          | `SearchPage.vue`           | multi-instance (keyed by tabId) |
 | `/settings`        | `SettingsPage.vue`         | singleton                       |
@@ -79,18 +79,17 @@ Home page navigation tiles. The tile list in `HomePage.vue` and the menu list in
 
 - `HomePage.vue`, `HomePageTile.vue`, `useHomeDateInfo.ts`, `useDafYomiNavigation.ts`
 
-### books-fs/
+### book-filesystem/
 
 File system browser for the book catalog. Supports list, tiles, and full tree views with search.
 
-- `BooksFsPage.vue` — main page
-- `BooksFsTitleBar.vue` — breadcrumb + view toggle
-- `BooksTreeView.vue` — list/tiles view
-- `BooksFullTree.vue` — collapsible category tree
-- `BooksSearchResults.vue` — search results
-- `BooksBreadcrumb.vue` — navigation breadcrumb
-- `useBooksFs.ts` — navigation and folder traversal
-- `useBooksFsSearch.ts` — title + TOC entry search
+- `FileSystemPage.vue` — main page; owns view switching (list/tiles/tree) via `<component :is>` map
+- `FileSystemView.vue` — list/tiles view
+- `FileSystemTreeView.vue` — collapsible category tree
+- `FileSystemSearch.vue` — search results
+- `FileSystemBreadcrumb.vue` — navigation breadcrumb
+- `useFileSystem.ts` — navigation and folder traversal
+- `useFileSystemSearch.ts` — title + TOC entry search
 - `booksCategoryTree.ts` — tree building and category metadata
 
 ### book-view/

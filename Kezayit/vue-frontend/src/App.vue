@@ -2,7 +2,7 @@
 import AppTitleBar from '@/components/layout/AppTitleBar.vue'
 import AppPageView from '@/components/layout/AppPageView.vue'
 import SetupWizard from '@/components/settings/SetupWizard.vue'
-import { resetting } from '@/utils/resetState'
+import { resetting } from '@/utils/appResetState'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { storeToRefs } from 'pinia'
 

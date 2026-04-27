@@ -243,15 +243,15 @@ export function idbDelete(key: string): Promise<void> {
   return dbDelete('app-search-cache', key)
 }
 
-// ── Dict cache DB ─────────────────────────────────────────────────────────────
+// ── Dictionary cache DB ──────────────────────────────────────────────────────
 
-export function idbDictCacheGet<T>(key: string): Promise<T | null> {
+export function idbDictionaryCacheGet<T>(key: string): Promise<T | null> {
   return dbGet<T>('app-dict-cache', key)
 }
-export function idbDictCacheSet<T>(key: string, value: T): Promise<void> {
+export function idbDictionaryCacheSet<T>(key: string, value: T): Promise<void> {
   return dbSet('app-dict-cache', key, value)
 }
-export function idbDictCacheDelete(key: string): Promise<void> {
+export function idbDictionaryCacheDelete(key: string): Promise<void> {
   return dbDelete('app-dict-cache', key)
 }
 

@@ -327,7 +327,7 @@ export class SearchableTree {
    */
   /**
    * @param limit - max results to return. Use 100 for the TOC tree panel (in-book view).
-   *   Pass Infinity (or omit) for the books-fs search where all results should be shown.
+   *   Pass Infinity (or omit) for the book-catalog search where all results should be shown.
    */
   search(nodes: SearchableNode[], query: string, limit = Infinity): SearchableNode[] {
     const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean)

@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { watch, ref, computed, onMounted, nextTick } from 'vue'
 import { useDebounce } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
@@ -8,7 +8,7 @@ import DictionaryWordPage from './DictionaryWordPage.vue'
 import { useTabStore } from '@/stores/tabStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useZoomHandler } from '@/composables/useZoom'
-import { dictCacheGet, dictCacheSet, dictCacheClear } from './dictCache'
+import { dictionaryCacheGet, dictionaryCacheSet, dictionaryCacheClear } from './dictionaryCache'
 import { dictLinks, dictSynonyms, dictVariants, dictSpellCandidates, dictKetivVariants, combinedLookup } from '@/host/dictionaryDb'
 import { expandKetivHaser } from '@/utils/hebrewKetivExpander'
 import { isHosted } from '@/host/seforimDb'
@@ -55,7 +55,7 @@ function focusSearchInput() {
 }
 
 onMounted(() => {
-  dictCacheClear()
+  dictionaryCacheClear()
   const saved = tabStore.activeTab?.searchQuery
   if (saved) searchQuery.value = saved
   focusSearchInput()
@@ -78,17 +78,17 @@ watch(debouncedQuery, async (q) => {
   if (!trimmed) {
     pageData.value = null
     noResults.value = false
-    tabStore.updateActiveTab({ title: 'מילון' })
+    tabStore.updateActiveTab({ title: '׳׳™׳׳•׳' })
     return
   }
   searching.value = true
   noResults.value = false
   suggestions.value = []
   try {
-    const cached = await dictCacheGet(trimmed)
+    const cached = await dictionaryCacheGet(trimmed)
     if (cached) {
       pageData.value = cached
-      tabStore.updateActiveTab({ title: `מילון · ${trimmed}` })
+      tabStore.updateActiveTab({ title: `׳׳™׳׳•׳ ֲ· ${trimmed}` })
       return
     }
 
@@ -116,7 +116,7 @@ watch(debouncedQuery, async (q) => {
       if (!seen.has(w)) { seen.add(w); synonyms.push(w) }
     }
 
-    // כתיב חסר and Levenshtein — always computed, shown in קשורים (or in the
+    // ׳›׳×׳™׳‘ ׳—׳¡׳¨ and Levenshtein ג€” always computed, shown in ׳§׳©׳•׳¨׳™׳ (or in the
     // no-results bar when there are no results at all)
     const ketivExpansions = expandKetivHaser(trimmed)
     const [ketivSuggestions, spellCandidates] = await Promise.all([
@@ -132,7 +132,7 @@ watch(debouncedQuery, async (q) => {
       .map(x => x.hw)
 
     if (!isExact) {
-      // No-results bar: כתיב חסר first, Levenshtein only as fallback
+      // No-results bar: ׳›׳×׳™׳‘ ׳—׳¡׳¨ first, Levenshtein only as fallback
       if (ketivSuggestions.length > 0) {
         suggestions.value = ketivSuggestions.slice(0, 8)
       } else {
@@ -143,7 +143,7 @@ watch(debouncedQuery, async (q) => {
     if (!dictRows.length && !metzudatRows.length && !malbimRows.length && !menchemRows.length && !synonyms.length) {
       pageData.value = null
       noResults.value = true
-      tabStore.updateActiveTab({ title: 'מילון' })
+      tabStore.updateActiveTab({ title: '׳׳™׳׳•׳' })
     } else {
       const result: WordPageData = {
         headword:    trimmed,
@@ -157,8 +157,8 @@ watch(debouncedQuery, async (q) => {
         levenshteinSuggestions,
       }
       pageData.value = result
-      dictCacheSet(trimmed, result)
-      tabStore.updateActiveTab({ title: `מילון · ${trimmed}` })
+      dictionaryCacheSet(trimmed, result)
+      tabStore.updateActiveTab({ title: `׳׳™׳׳•׳ ֲ· ${trimmed}` })
     }
   } finally {
     searching.value = false
@@ -173,7 +173,7 @@ function onSelect(headword: string) {
 <template>
   <div class="dict-page">
     <div class="dict-body">
-      <div v-if="searching" class="dict-state">מחפש...</div>
+      <div v-if="searching" class="dict-state">׳׳—׳₪׳©...</div>
 
       <DictionaryWordPage
         v-else-if="pageData"
@@ -189,12 +189,12 @@ function onSelect(headword: string) {
 
     <div v-if="noResults" class="dict-no-results">
       <template v-if="suggestions.length">
-        <span class="dict-suggestions-label">אולי התכוונת ל: </span>
+        <span class="dict-suggestions-label">׳׳•׳׳™ ׳”׳×׳›׳•׳•׳ ׳× ׳: </span>
         <span v-for="(w, i) in suggestions" :key="w">
           <button class="dict-suggestion-link" @click="onSelect(w)">{{ w }}</button><span v-if="i < suggestions.length - 1">, </span>
         </span>
       </template>
-      <span v-else>לא נמצאו תוצאות</span>
+      <span v-else>׳׳ ׳ ׳׳¦׳׳• ׳×׳•׳¦׳׳•׳×</span>
     </div>
 
     <BottomSearchBar>
@@ -206,7 +206,7 @@ function onSelect(headword: string) {
         v-model="searchQuery"
         class="dict-search-input"
         type="search"
-        placeholder="חפש מילה"
+        placeholder="׳—׳₪׳© ׳׳™׳׳”"
         dir="rtl"
       />
     </BottomSearchBar>

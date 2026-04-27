@@ -6,14 +6,14 @@ import {
   IconChevronUp20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
-import { useSettingsPage } from './useSettingsPage'
+import { useSettings } from './useSettings'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import SettingRow from './SettingRow.vue'
-import { resetting } from '@/utils/resetState'
+import { resetting } from '@/utils/appResetState'
 import { isHosted, onDbReady } from '@/host/seforimDb'
 import { useZmanim, CITIES } from '@/components/hebrew-calendar/useZmanim'
 
-const { resetSettings, resetSearchIndex, resetAll } = useSettingsPage()
+const { resetSettings, resetSearchIndex, resetAll } = useSettings()
 
 const dbPath = ref(window.__webviewDbPath ?? '')
 const editingPath = ref(false)

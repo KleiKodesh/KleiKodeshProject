@@ -1,4 +1,4 @@
-export * from './types'
+export * from './conversionUnitTypes'
 export * from './length'
 export * from './area'
 export * from './volume'

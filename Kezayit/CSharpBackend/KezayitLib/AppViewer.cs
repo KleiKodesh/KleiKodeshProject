@@ -83,6 +83,28 @@ namespace KezayitLib
 
         private async Task InitAsync()
         {
+            try
+            {
+                await InitAsyncCore();
+            }
+            catch (Exception ex)
+            {
+                // InitAsync is fire-and-forget — swallowed exceptions leave the splash up forever.
+                // Hide the splash and surface the error so the user isn't stuck on a blank screen.
+                _HideSplash();
+                if (InvokeRequired)
+                    Invoke(new Action(() => MessageBox.Show(
+                        "שגיאה באתחול האפליקציה:\n" + ex.Message,
+                        "כזית", MessageBoxButtons.OK, MessageBoxIcon.Error)));
+                else
+                    MessageBox.Show(
+                        "שגיאה באתחול האפליקציה:\n" + ex.Message,
+                        "כזית", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private async Task InitAsyncCore()
+        {
             var env = await GetSharedEnv();
 
             await _webView.EnsureCoreWebView2Async(env);
@@ -120,6 +142,10 @@ namespace KezayitLib
             _webView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
 
             _webView.Source = new Uri("http://kezayit-vue-app/index.html");
+
+            // Safety net: if NavigationCompleted never fires (e.g. WebView2 runtime issue),
+            // hide the splash after 8 seconds so the user isn't stuck on a blank screen.
+            _ = Task.Delay(8000).ContinueWith(_ => _HideSplash());
             if (dbReady)
             {
                 _search.OnDbReady(savedPath);
@@ -130,6 +156,8 @@ namespace KezayitLib
         private void OnNavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
         {
             _webView.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
+            // Hide the splash regardless of success — a failed navigation still shows the
+            // WebView error page, which is more useful than an infinite splash screen.
             _HideSplash();
         }
 

@@ -64,6 +64,11 @@ function handleSelect() {
 }
 
 function handleKeydown(e: KeyboardEvent) {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+    e.preventDefault()
+    e.stopPropagation()
+    return
+  }
   if (e.key !== 'Enter') return
   const val = normalize((inputRef.value?.value ?? '').trim())
   if (!val) return

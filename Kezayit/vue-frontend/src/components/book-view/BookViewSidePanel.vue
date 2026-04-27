@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 
 const props = defineProps<{
@@ -13,7 +13,7 @@ const panelRef = ref<HTMLElement | null>(null)
 useDropdownClose(
   panelRef,
   () => emit('close'),
-  { toggleButton: () => props.toggleButtonEl ?? null },
+  { toggleButton: computed(() => props.toggleButtonEl ?? null) },
 )
 </script>
 

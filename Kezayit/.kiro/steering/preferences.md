@@ -119,7 +119,7 @@ This project uses Prettier with `printWidth: 100`. The Vue template compiler rej
 
 ## Book Search Query Normalization
 
-Book catalog search applies Hebrew-specific text transformations so that variant spellings and abbreviations all match the same results. These transformations live exclusively in `src/utils/bookQueryNormalizer.ts` and must be applied symmetrically to both sides: indexed titles (in `booksCategoryTree.ts` `assignFullPaths`) and user queries (in `useBooksFsSearch.ts` `toWords`).
+Book catalog search applies Hebrew-specific text transformations so that variant spellings and abbreviations all match the same results. These transformations live exclusively in `src/utils/bookQueryNormalizer.ts` and must be applied symmetrically to both sides: indexed titles (in `booksCategoryTree.ts` `assignFullPaths`) and user queries (in `useFileSystemSearch.ts` `toWords`).
 
 Current rules:
 - שו"ע / שוע → שלחן ערוך (abbreviation expansion)
@@ -168,3 +168,21 @@ Either way the internal structure is the same:
 - `clear` deletes all entries listed in the LRU array plus the LRU key itself.
 - Results are never cached in memory — only the LRU key list may be kept in memory if needed. Large result sets belong in IDB only.
 - The full app reset (`idbClearAll`) drops the database entirely — no explicit `clear()` call or settings button is needed for the full reset path.
+
+## Screaming Architecture
+
+Folder and file names must scream the domain they belong to — not the technology or pattern used. A developer (or AI agent) glancing at the folder structure should immediately understand what the system does, not how it is built.
+
+The core principle, from Robert C. Martin: if you walked up to a building and could identify it as a library, school, or hospital purely from its architecture — without a sign — that is the goal. Code structure should do the same.
+
+Practical rules for this codebase:
+
+- Feature folders are named after the domain concept they represent, not the technical role. `book-catalog/` not `file-system/` or `fs/`. `search-db/` not `bloom/`. `book-view/` not `reader/`.
+- Framework and infrastructure concerns (HTTP, IDB, WebView bridge) live at the edges — in `src/host/` and `src/utils/persistence.ts` — never mixed into feature folders.
+- Business logic (what the app does) is always more prominent than technical plumbing (how it does it). A new developer should be able to name every feature of the app by reading only the folder names under `src/components/`.
+- When a folder name could apply to any app (e.g. `utils`, `services`, `helpers`, `file-system`), it is wrong. Every folder name must be specific enough to belong only to this app.
+- Technical layer names (`controllers`, `repositories`, `models`) are forbidden as top-level organizers. Organize by feature first; layer distinctions live inside the feature folder if needed at all.
+- Abbreviations in folder and file names fail the screaming test twice — they obscure both the domain and the intent. `books-fs` says neither "book catalog" nor "browser". Write the full domain name every time.
+- When a name feels generic or could belong to any project, stop and ask: what is the actual domain concept here? `file-system` describes a technology. `book-catalog` describes the feature. Always prefer the domain word.
+- A rename is not complete until every reference is updated: imports, exported function names, CSS class names, comments, READMEs, steering files, and the old folder deleted. A partial rename leaves the codebase in a worse state than before — half the names scream the old concept, half scream the new one.
+- Thin wrapper components that only forward props and delegate method calls do not earn their own file. Inline them into the parent. Every file must justify its existence with logic that cannot live elsewhere.

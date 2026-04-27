@@ -9,7 +9,7 @@
 
 ## Folder Structure
 
-- `src/components/` organized by feature folder (e.g. `books-fs/`, `book-view/`, `search/`)
+- `src/components/` organized by feature folder (e.g. `book-filesystem/`, `book-view/`, `search/`)
 - Each feature folder contains its page component, composables, and sub-components — keep flat, no nested subfolders
 - Sub-components named after parent: `BookCard.vue` → `BookCardCover.vue`, `BookCardMeta.vue`
 - Shared reusable components (used across features): `src/components/common/`

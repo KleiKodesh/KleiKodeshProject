@@ -15,7 +15,7 @@ import {
   findPrevCommentarySection,
   findNextTocCommentarySection,
   findPrevTocCommentarySection,
-} from '@/utils/commentaryNav'
+} from '@/utils/commentaryNavigation'
 import type { Ref } from 'vue'
 import type { LineItem } from './useLinesTable'
 import type { TocEntry } from './useToc'

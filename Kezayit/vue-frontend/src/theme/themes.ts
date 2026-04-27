@@ -3,7 +3,6 @@ import type { ThemePreset, Theme } from './themeTypes'
 import { lighten, darken, hexToRgb, hexToRgbObj } from './themeColorUtils'
 
 export type { ThemePreset, Theme, ThemeColors } from './themeTypes'
-export { lighten, darken, hexToRgb, hexToRgbObj } from './themeColorUtils'
 
 export const THEME_PRESETS: Record<ThemePreset, Theme> = themesData as Record<ThemePreset, Theme>
 
