@@ -3,7 +3,7 @@
  * onLinesScrolled does not overwrite activeTocEntryId while the virtualizer
  * is still animating to the target line.
  */
-import type { TocEntry } from './useToc'
+import type { TocEntry } from './useBookViewToc'
 
 export function useTocScrollTracking() {
   let tocScrolling = false
