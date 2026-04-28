@@ -4,7 +4,7 @@
 
 The PDF.js viewer is maintained in two locations and must be kept in sync:
 
-- Source code: `Misc/pdfjs-master/` — the authoritative source for all viewer modifications
+- Source code: `Misc/pdf.js-master/` — the authoritative source for all viewer modifications
 - Published build: `vue-frontend/public/pdfjs/` — the built viewer served by the Vue frontend
 
 ## Making Changes to the Viewer
