@@ -201,6 +201,15 @@ pdfjs-thumb-page-title =
 #   $page (Number) - the page number
 pdfjs-thumb-page-canvas =
     .aria-label = Miniaturo de paĝo { $page }
+# Variables:
+#   $page (Number) - the page number
+pdfjs-thumb-page-checkbox1 =
+    .title = Elekti paĝon { $page }
+# Variables:
+#   $page (Number) - the page number
+#   $total (Number) - the number of pages
+pdfjs-thumb-page-title1 =
+    .title = Paĝo { $page } el { $total }
 
 ## Find panel button title and messages
 
@@ -214,7 +223,7 @@ pdfjs-find-next-button =
     .title = Serĉi la venontan aperon de la frazo
 pdfjs-find-next-button-label = Antaŭen
 pdfjs-find-highlight-checkbox = Elstarigi ĉiujn
-pdfjs-find-match-case-checkbox-label = Distingi inter majuskloj kaj minuskloj
+pdfjs-find-match-case-checkbox-label = Distingi usklecon
 pdfjs-find-match-diacritics-checkbox-label = Respekti supersignojn
 pdfjs-find-entire-word-checkbox-label = Tutaj vortoj
 pdfjs-find-reached-top = Komenco de la dokumento atingita, daŭrigado ekde la fino
@@ -641,20 +650,22 @@ pdfjs-editor-add-comment-button =
 ##  - layers.
 ## The thumbnails view is used to edit the pdf: remove/insert pages, ...
 
-pdfjs-toggle-views-manager-button =
-    .title = Montri/kaŝi flankan strion
 pdfjs-toggle-views-manager-notification-button =
     .title = Montri/kaŝi flankan strion (la dokumento enhavas miniaturojn/konturon/kunsendaĵojn/tavolojn)
-pdfjs-toggle-views-manager-button-label = Montri/kaŝi flankan strion
+pdfjs-toggle-views-manager-button1-label = Administri paĝojn
 pdfjs-views-manager-sidebar =
     .aria-label = Flanka strio
+pdfjs-views-manager-sidebar-resizer =
+    .aria-label = Dimensiigilo por la flanka strio
 pdfjs-views-manager-view-selector-button =
     .title = Vidoj
 pdfjs-views-manager-view-selector-button-label = Vidoj
 pdfjs-views-manager-pages-title = Paĝoj
-pdfjs-views-manager-outlines-title = Konturo de dokumento
+pdfjs-views-manager-outlines-title1 = Konturo de dokumento
+    .title = Konturo de dokumento (alklaku duoble por faldi/malfaldi ĉiujn elementojn)
 pdfjs-views-manager-attachments-title = Kunsendaĵoj
-pdfjs-views-manager-layers-title = Tavoloj
+pdfjs-views-manager-layers-title1 = Tavoloj
+    .title = Tavoloj (alklaku duoble por ke ĉiuj tavoloj reiru al la norma stato)
 pdfjs-views-manager-pages-option-label = Paĝoj
 pdfjs-views-manager-outlines-option-label = Konturo de dokumento
 pdfjs-views-manager-attachments-option-label = Kunsendaĵoj
@@ -674,7 +685,7 @@ pdfjs-views-manager-pages-status-action-button-label = Administri
 pdfjs-views-manager-pages-status-copy-button-label = Kopii
 pdfjs-views-manager-pages-status-cut-button-label = Eltondi
 pdfjs-views-manager-pages-status-delete-button-label = Forigi
-pdfjs-views-manager-pages-status-save-as-button-label = Konservi kiel…
+pdfjs-views-manager-pages-status-export-selected-button-label = Eksporti elektitajn…
 # Variables:
 #   $count (Number) - the number of selected pages to be cut.
 pdfjs-views-manager-status-undo-cut-label =
@@ -703,9 +714,22 @@ pdfjs-views-manager-status-warning-copy-label = Ne eblis kopii. Refreŝigu la pa
 pdfjs-views-manager-status-warning-delete-label = Ne eblis forigi. Refreŝigu la paĝon kaj provu denove.
 pdfjs-views-manager-status-warning-save-label = Ne eblis konservi. Refreŝigu la paĝon kaj provu denove.
 pdfjs-views-manager-status-undo-button-label = Malfari
+pdfjs-views-manager-status-done-button-label = Farita
 pdfjs-views-manager-status-close-button =
     .title = Fermi
 pdfjs-views-manager-status-close-button-label = Fermi
+pdfjs-views-manager-paste-button-label = Alglui
+pdfjs-views-manager-paste-button-before =
+    .title = Alglui antaŭ la unua paĝo
+# Variables:
+#   $page (Number) - the page number after which the paste button is.
+pdfjs-views-manager-paste-button-after =
+    .title = Alglui post la paĝo { $page }
+# Badge used to promote a new feature in the UI, keep it as short as possible.
+# It's spelled uppercase for English, but it can be translated as usual.
+pdfjs-new-badge-content = NOVA
+pdfjs-toggle-views-manager-button1 =
+    .title = Administri paĝojn
 
 ## Main menu for adding/removing signatures
 

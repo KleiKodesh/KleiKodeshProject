@@ -1,50 +1,45 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useEventListener } from '@vueuse/core'
+import { ref, computed, watch } from 'vue'
 import { usePdfStore } from '@/stores/pdfStore'
 import { useTabStore } from '@/stores/tabStore'
 import { syncPdfViewerTheme } from '@/theme/themes'
 import { IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
-import PdfToolbar from './PdfToolbar.vue'
+import PdfOcrResultPopup from './PdfOcrResultPopup.vue'
+import { usePdfOcrSelection } from './usePdfOcrSelection'
+
+import { usePdfOcrStore } from '@/stores/pdfOcrStore'
 
 const pdfStore = usePdfStore()
 const tabStore = useTabStore()
+const pdfOcrStore = usePdfOcrStore()
 
 const iframeRef = ref<HTMLIFrameElement | null>(null)
-const toolbarRef = ref<InstanceType<typeof PdfToolbar> | null>(null)
+const ocr = usePdfOcrSelection(() => iframeRef.value)
 
-function openFindBar() {
-  toolbarRef.value?.openFind()
-}
-
-// Ctrl+F when focus is in the Vue app (outside the iframe)
-useEventListener('keydown', (event: KeyboardEvent) => {
-  if (event.ctrlKey && event.key === 'f' && iframeRef.value) {
-    event.preventDefault()
-    openFindBar()
+// Sync composable active state with store
+watch(pdfOcrStore, () => {
+  if (pdfOcrStore.isActive !== ocr.isActive.value) {
+    pdfOcrStore.isActive ? ocr.activate() : ocr.deactivate()
   }
+  if (pdfOcrStore.script !== ocr.script.value) {
+    ocr.setScript(pdfOcrStore.script)
+  }
+})
+
+// Deactivate store when composable deactivates (e.g. after selection)
+watch(ocr.isActive, (active) => {
+  if (!active && pdfOcrStore.isActive) pdfOcrStore.deactivate()
 })
 
 function onIframeLoad() {
   setTimeout(syncPdfViewerTheme, 100)
-  // Inject Ctrl+F listener into the iframe so it works when focus is inside the PDF
-  try {
-    iframeRef.value?.contentWindow?.addEventListener('keydown', (event: KeyboardEvent) => {
-      if (event.ctrlKey && event.key === 'f') {
-        event.preventDefault()
-        openFindBar()
-      }
-    })
-  } catch {
-    // cross-origin guard — won't happen since pdfjs is same-origin
-  }
 }
 
 const iframeSrc = computed(() => {
   const url = pdfStore.virtualUrl
   if (!url) return null
-  const p = new URLSearchParams({ file: url, locale: 'he', enableHWA: 'true', cMapPacked: 'true' })
+  const p = new URLSearchParams({ file: url, locale: 'he', cMapPacked: 'true' })
   if (pdfStore.fileName) p.set('filename', encodeURIComponent(pdfStore.fileName))
   return `/pdfjs/web/viewer.html?${p}`
 })
@@ -52,6 +47,7 @@ const iframeSrc = computed(() => {
 function cancelConversion() {
   pdfStore.cancelConversion(tabStore.activeTabId)
 }
+
 </script>
 
 <template>
@@ -75,17 +71,26 @@ function cancelConversion() {
     </div>
 
     <template v-else-if="iframeSrc">
-      <PdfToolbar ref="toolbarRef" :iframe-el="iframeRef" />
-      <iframe
-        ref="iframeRef"
-        :src="iframeSrc"
-        class="pdf-iframe"
-        allowfullscreen
-        @load="onIframeLoad"
-      />
+      <div class="iframe-wrap">
+        <iframe
+          ref="iframeRef"
+          :src="iframeSrc"
+          class="pdf-iframe"
+          allowfullscreen
+          @load="onIframeLoad"
+        />
+      </div>
     </template>
 
     <div v-else class="pdf-empty">לא נבחר קובץ</div>
+
+    <PdfOcrResultPopup
+      v-if="ocr.result.value"
+      :result="ocr.result.value"
+      :script="pdfOcrStore.script"
+      @dismiss="ocr.dismissResult"
+      @update:script="pdfOcrStore.setScript"
+    />
   </div>
 </template>
 
@@ -94,14 +99,16 @@ function cancelConversion() {
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow: visible;
+}
+.iframe-wrap {
+  flex: 1;
+  position: relative;
+  min-height: 0;
 }
 .pdf-iframe {
-  flex: 1;
   width: 100%;
+  height: 100%;
   border: none;
-  min-height: 0;
-  overflow: hidden;
 }
 .pdf-empty {
   flex: 1;
@@ -111,7 +118,6 @@ function cancelConversion() {
   color: var(--text-secondary);
   font-size: 14px;
 }
-
 .converting {
   flex: 1;
   display: flex;
@@ -119,7 +125,6 @@ function cancelConversion() {
   justify-content: center;
   background: var(--bg-primary);
 }
-
 .converting-card {
   display: flex;
   flex-direction: column;
@@ -132,7 +137,6 @@ function cancelConversion() {
   min-width: 260px;
   text-align: center;
 }
-
 .converting-name {
   font-size: 14px;
   font-weight: 600;
@@ -142,12 +146,10 @@ function cancelConversion() {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 .converting-sub {
   font-size: 12px;
   color: var(--text-secondary);
 }
-
 .cancel-btn {
   display: flex;
   align-items: center;

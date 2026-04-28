@@ -32,6 +32,11 @@ function devSqlitePlugin(): Plugin {
       }
 
       server.middlewares.use((req, res, next) => {
+        // Prevent browser caching of PDF.js files during dev
+        if (req.url?.startsWith('/pdfjs/')) {
+          res.setHeader('Cache-Control', 'no-store')
+        }
+
         const isQuery     = req.url === '/query'      && req.method === 'POST'
         const isDictQuery = req.url === '/query-dict' && req.method === 'POST'
         if (!isQuery && !isDictQuery) { next(); return }

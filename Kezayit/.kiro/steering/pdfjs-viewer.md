@@ -2,26 +2,40 @@
 
 ## Overview
 
-The PDF.js viewer is maintained in two locations and must be kept in sync:
+The PDF.js viewer (v5.7.284) lives in `vue-frontend/public/pdfjs/` and is served via an iframe in `PdfViewPage.vue`. All customizations are applied directly to the files in that folder.
 
-- Source code: `Misc/pdf.js-master/` — the authoritative source for all viewer modifications
-- Published build: `vue-frontend/public/pdfjs/` — the built viewer served by the Vue frontend
+A copy of the original unmodified 5.5.207 dist is kept in `Misc/pdfjs-dist-5.5.207/` as a baseline for generating patch diffs. The full PDF.js source is in `Misc/pdf.js-master/` for reference.
 
-## Making Changes to the Viewer
+The git branch `pdf-vue-toolbar` preserves a previous experiment adding a Vue toolbar wrapper. The current approach uses the native PDF.js toolbar inside the iframe.
 
-All modifications must be made in `Misc/pdfjs-master/`, never directly in `vue-frontend/public/pdfjs/`. The `prebuild` npm script runs `Misc/scripts/publish_pdfjs.py` automatically before every `npm run build`, which copies the entire source folder to `vue-frontend/public/pdfjs/`. For dev work, run the script manually to sync changes without a full build.
+## Customized Files
 
-## Directory Structure
+- `web/viewer.mjs` — 4 patches:
+  1. Hebrew locale default: reads `?locale=` URL param, falls back to `he`
+  2. Cross-origin allow: permits `http://` origins for WebView2 virtual hosts
+  3. Filename param: reads `?filename=` and sets `_contentDispositionFilename`
+  4. Save dialog: `_triggerDownload` uses `showSaveFilePicker()` with anchor fallback
+- `web/viewer.html` — adds `viewer-custom.css` stylesheet and `pixel-ratio-override.js` script
+- `web/viewer-custom.css` — CSS variable hooks for theme sync; PDF page filter via `data-pdf-filters` attribute
+- `web/pixel-ratio-override.js` — forces minimum 2x `devicePixelRatio` for sharp rendering (added file)
 
-- `Misc/pdfjs-master/web/viewer.html` — main viewer HTML; findbar lives here as a direct child of `#mainContainer`
-- `Misc/pdfjs-master/web/viewer-custom.css` — all Zayit-specific CSS overrides
-- `Misc/pdfjs-master/web/viewer.mjs` — PDF.js application bundle; patched for Hebrew locale, save dialog, and origin validation
-- `Misc/pdfjs-master/Pdf.js_Cotumizations.md` — documents every customization made to the viewer
-- `vue-frontend/public/pdfjs/` — published build; mirrors the above files after each update
-- `vue-frontend/src/features/pdf-viewer/` — Vue integration layer that embeds the viewer in an iframe
+## Vue Integration
+
+- `PdfViewPage.vue` — embeds the viewer iframe; passes `?file=`, `?locale=he`, `?filename=`, `?cMapPacked=true`
+- `themes.ts syncPdfViewerTheme()` — injects theme CSS variables and `--pdf-filter-custom` into the iframe
+- `settingsStore.togglePdfPageFilters()` — sets `data-pdf-filters` attribute on iframe document element; `viewer-custom.css` applies the filter only when this attribute is `"true"`
+
+## Upgrading PDF.js
+
+1. Save the current dist: `Copy-Item -Recurse vue-frontend/public/pdfjs Misc/pdfjs-dist-X.X.XXX`
+2. Download the new prebuilt release zip from GitHub releases
+3. Replace `vue-frontend/public/pdfjs/` with the new build
+4. Re-apply the 4 patches to `viewer.mjs` (search for the same surrounding code — it rarely moves far)
+5. Re-add `viewer-custom.css` and `pixel-ratio-override.js`
+6. Update `viewer.html` with the two extra tags
+7. Update this file with the new version number
 
 ## Key Rules
 
-- Every customization must be documented in `Misc/pdfjs-master/Pdf.js_Cotumizations.md`
-- Source and published files must always be in sync — a difference between them means an incomplete update
-- The published build is what the app actually uses — always verify changes work in the Vue frontend before considering the task complete
+- Never modify files in `Misc/pdfjs-dist-5.5.207/` — it is a read-only baseline
+- Document any new customization here and in `vue-frontend/public/pdfjs/Pdf.js_Cotumizations.md`

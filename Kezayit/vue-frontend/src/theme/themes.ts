@@ -159,8 +159,8 @@ export function syncPdfViewerTheme(): void {
           const family = isCustomTheme(preset as ThemePreset) ? 'custom' : preset.split('-')[0]
           if (family) doc.documentElement.setAttribute('data-theme-family', family)
           const filter = theme?.pdfFilter ?? (theme ? calcPdfFilter(theme) : null)
-          if (filter) doc.documentElement.style.setProperty('--pdf-page-filter', filter)
-          else doc.documentElement.style.removeProperty('--pdf-page-filter')
+          if (filter) doc.documentElement.style.setProperty('--pdf-filter-custom', filter)
+          else doc.documentElement.style.removeProperty('--pdf-filter-custom')
         }
 
         const pdfFilters = document.documentElement.getAttribute('data-pdf-filters')

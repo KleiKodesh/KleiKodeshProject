@@ -11,6 +11,7 @@ import {
   IconOptions24Filled,
   IconColor24Regular,
   IconColor24Filled,
+  IconCrop20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import ThemeToggle from '@/theme/ThemeToggle.vue'
 import AppTitleBarTabDropdown from './AppTitleBarTabDropdown.vue'
@@ -19,10 +20,12 @@ import { useTabStore } from '@/stores/tabStore'
 import type { TabRoute } from '@/stores/tabStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { usePdfOcrStore } from '@/stores/pdfOcrStore'
 
 const bookViewStore = useBookViewStore()
 const settingsStore = useSettingsStore()
 const tabStore = useTabStore()
+const pdfOcrStore = usePdfOcrStore()
 
 const activeTab = computed(() => tabStore.activeTab)
 const dropdownOpen = ref(false)
@@ -149,6 +152,15 @@ useEventListener('keydown', (e: KeyboardEvent) => {
       >
         <IconColor24Filled v-if="settingsStore.pdfPageFilters" />
         <IconColor24Regular v-else />
+      </button>
+      <button
+        v-if="isPdfTab"
+        class="bar-btn"
+        :class="{ active: pdfOcrStore.isActive }"
+        title="בחירת טקסט באזור (OCR)"
+        @click.stop="pdfOcrStore.toggle()"
+      >
+        <IconCrop20Regular />
       </button>
     </div>
 
