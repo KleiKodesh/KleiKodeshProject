@@ -250,5 +250,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
 }
 .bar-btn.active {
   color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 15%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-color) 30%, transparent);
 }
 </style>

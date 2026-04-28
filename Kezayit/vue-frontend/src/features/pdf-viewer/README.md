@@ -1,7 +1,11 @@
-# document-viewer
+# pdf-viewer
 
-PDF and Word document viewer.
+PDF viewer with OCR text extraction.
 
-**DocumentViewPage.vue** — renders the PDF.js viewer in an iframe served via a C# virtual host. Handles local files, HebrewBooks downloads, and Word-to-PDF conversions. Session restore is handled by `pdfStore` at app boot — do not add restore logic here.
+**PdfViewPage.vue** — renders the PDF.js viewer in an iframe served via a C# virtual host. Handles local files, HebrewBooks downloads, and Word-to-PDF conversions. Session restore is handled by `pdfStore` at app boot — do not add restore logic here. Displays a conversion progress overlay while files are being processed.
 
-**DocumentToolbar.vue** — compact 44px Android-friendly toolbar that overlays the iframe. Hides the native PDF.js toolbar (via `viewer-custom.css`) and replaces it with: sidebar toggle, find toggle, prev/next page, page number input, zoom out/in/select, and a "more" dropdown (download, rectangle selection). Communicates with the iframe via `contentWindow.PDFViewerApplication`. Syncs page number and zoom state by polling every 400ms.
+**usePdfOcrSelection.ts** — composable that manages OCR text extraction. Injects a selection tool into the PDF.js iframe, captures user-drawn rectangles, attempts text extraction from the text layer first, and falls back to Tesseract.js OCR on canvas data if needed. Supports Hebrew and Rashi scripts. Returns extracted text via `result` ref.
+
+**PdfOcrResultPopup.vue** — modal popup displaying OCR results. Shows extracted text in an editable textarea, allows script switching (Hebrew/Rashi), and provides copy-to-clipboard functionality. Dismisses on overlay click or Escape key.
+
+**pdfOcrInjectedScript.ts** — injected script that runs inside the PDF.js iframe. Implements the selection rectangle UI (crosshair cursor, dashed selection box), text layer hit testing, and canvas capture. Communicates back to the parent window via postMessage.

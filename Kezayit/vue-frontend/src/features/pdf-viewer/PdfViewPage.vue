@@ -79,6 +79,48 @@ function cancelConversion() {
           allowfullscreen
           @load="onIframeLoad"
         />
+        <div v-if="ocr.isActive.value" class="ocr-overlay" />
+        <div v-if="ocr.isActive.value" class="ocr-toolbar">
+          <div class="toolbar-content">
+            <div class="script-buttons">
+              <button
+                class="script-btn"
+                :class="{ active: pdfOcrStore.script === 'hebrew' }"
+                @click="pdfOcrStore.setScript('hebrew')"
+                title="עברי רגיל"
+              >
+                עברי
+              </button>
+              <button
+                class="script-btn"
+                :class="{ active: pdfOcrStore.script === 'rashi' }"
+                @click="pdfOcrStore.setScript('rashi')"
+                title="כתב רש״י"
+              >
+                רש"י
+              </button>
+              <button
+                class="script-btn"
+                :class="{ active: pdfOcrStore.script === 'mixed' }"
+                @click="pdfOcrStore.setScript('mixed')"
+                title="עברי + רש״י"
+              >
+                מעורב
+              </button>
+            </div>
+            <button
+              class="toggle-btn"
+              :class="{ active: pdfOcrStore.skipExistingText }"
+              @click="pdfOcrStore.toggleSkipExistingText()"
+              title="כפה OCR גם אם קיים טקסט"
+            >
+              כפה OCR
+            </button>
+            <button class="close-btn" @click="ocr.deactivate()" title="סגור (Esc)">
+              <IconDismiss20Regular />
+            </button>
+          </div>
+        </div>
       </div>
     </template>
 
@@ -88,6 +130,8 @@ function cancelConversion() {
       v-if="ocr.result.value"
       :result="ocr.result.value"
       :script="pdfOcrStore.script"
+      :is-processing="ocr.isProcessing.value"
+      :processing-progress="ocr.processingProgress.value"
       @dismiss="ocr.dismissResult"
       @update:script="pdfOcrStore.setScript"
     />
@@ -110,6 +154,123 @@ function cancelConversion() {
   height: 100%;
   border: none;
 }
+.ocr-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+  z-index: 8000;
+}
+
+.ocr-toolbar {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10000;
+  animation: slideDown 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.toolbar-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.script-buttons {
+  display: flex;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.script-btn {
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: all 100ms ease;
+}
+
+.script-btn:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+}
+
+.script-btn.active {
+  background: var(--accent-color);
+  color: #fff;
+}
+
+.toggle-btn {
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 100ms ease;
+  white-space: nowrap;
+}
+
+.toggle-btn:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+}
+
+.toggle-btn.active {
+  background: #f0a500;
+  color: #fff;
+  border-color: #f0a500;
+}
+
+.close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 4px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 100ms ease;
+}
+
+.close-btn:hover {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  color: var(--text-primary);
+}
+
+.close-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
 .pdf-empty {
   flex: 1;
   display: flex;

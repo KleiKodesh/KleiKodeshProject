@@ -10,8 +10,8 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
   const tool = {
     isActive: false,
     isDrawing: false,
-    startX: 0,
-    startY: 0,
+    centerX: 0,
+    centerY: 0,
     selectionDiv: null,
     crosshairDiv: null,
     langFile: 'heb',
@@ -25,12 +25,21 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
   style.textContent = \`
     #viewerContainer.zayit-ocr-mode { cursor: crosshair !important; }
     #viewerContainer.zayit-ocr-mode * { cursor: crosshair !important; }
+    #viewerContainer.zayit-ocr-drawing { cursor: default !important; }
+    #viewerContainer.zayit-ocr-drawing * { cursor: default !important; }
     .zayit-ocr-rect {
       position: absolute;
       border: 2px dashed #0078d4;
-      background: rgba(0,120,212,0.08);
+      background: rgba(0,120,212,0.12);
       pointer-events: none;
       z-index: 9000;
+      box-shadow: 0 0 0 1px rgba(0,120,212,0.3), inset 0 0 0 1px rgba(0,120,212,0.2);
+      border-radius: 2px;
+      transition: box-shadow 100ms ease;
+      box-sizing: content-box;
+    }
+    .zayit-ocr-rect.active {
+      box-shadow: 0 0 8px rgba(0,120,212,0.4), inset 0 0 0 1px rgba(0,120,212,0.3);
     }
   \`;
   document.head.appendChild(style);
@@ -58,7 +67,10 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
         words.push(text);
       }
     }
-    return words.length > 0 ? words.join(' ') : null;
+    if (words.length === 0) return null;
+    // Join words and clean up whitespace
+    const text = words.join(' ').replace(/\s+/g, ' ').trim();
+    return text.length > 0 ? text : null;
   }
 
   // ── Canvas capture ───────────────────────────────────────────────────────
@@ -112,37 +124,54 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
     tool.isDrawing = true;
     const container = document.getElementById('viewerContainer');
     const cr = container.getBoundingClientRect();
-    tool.startX = e.clientX - cr.left + container.scrollLeft;
-    tool.startY = e.clientY - cr.top  + container.scrollTop;
+    // Use centerX/centerY like the old version
+    tool.centerX = e.clientX - cr.left + container.scrollLeft;
+    tool.centerY = e.clientY - cr.top  + container.scrollTop;
 
     tool.selectionDiv = document.createElement('div');
     tool.selectionDiv.className = 'zayit-ocr-rect';
-    tool.selectionDiv.style.left   = tool.startX + 'px';
-    tool.selectionDiv.style.top    = tool.startY + 'px';
+    tool.selectionDiv.style.left   = tool.centerX + 'px';
+    tool.selectionDiv.style.top    = tool.centerY + 'px';
     tool.selectionDiv.style.width  = '0px';
     tool.selectionDiv.style.height = '0px';
     container.appendChild(tool.selectionDiv);
+
+    // Switch to default cursor — cursor now tracks the bottom-right corner
+    container.classList.add('zayit-ocr-drawing');
   }
 
   function onMouseMove(e) {
     if (!tool.isDrawing || !tool.selectionDiv) return;
     const container = document.getElementById('viewerContainer');
     const cr = container.getBoundingClientRect();
-    const cx = e.clientX - cr.left + container.scrollLeft;
-    const cy = e.clientY - cr.top  + container.scrollTop;
-    const left   = Math.min(cx, tool.startX);
-    const top    = Math.min(cy, tool.startY);
-    const width  = Math.abs(cx - tool.startX);
-    const height = Math.abs(cy - tool.startY);
+    const currentX = e.clientX - cr.left + container.scrollLeft;
+    const currentY = e.clientY - cr.top  + container.scrollTop;
+
+    // Calculate rectangle from start point to current point (traditional drag)
+    const width = Math.abs(currentX - tool.centerX);
+    const height = Math.abs(currentY - tool.centerY);
+    const left = Math.min(currentX, tool.centerX);
+    const top = Math.min(currentY, tool.centerY);
+
     tool.selectionDiv.style.left   = left   + 'px';
     tool.selectionDiv.style.top    = top    + 'px';
     tool.selectionDiv.style.width  = width  + 'px';
     tool.selectionDiv.style.height = height + 'px';
+
+    if (width > 5 && height > 5) {
+      tool.selectionDiv.classList.add('active');
+    } else {
+      tool.selectionDiv.classList.remove('active');
+    }
   }
 
   function onMouseUp(e) {
     if (!tool.isDrawing) return;
     tool.isDrawing = false;
+
+    // Restore crosshair cursor
+    const container = document.getElementById('viewerContainer');
+    if (container) container.classList.remove('zayit-ocr-drawing');
 
     const div = tool.selectionDiv;
     if (div) {
@@ -173,7 +202,7 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
     // Need OCR — send canvas data to parent
     const dataUrl = captureCanvas(rect);
     if (dataUrl) {
-      window.parent.postMessage({ type: 'zayit-ocr-canvas', dataUrl, langFile: tool.langFile }, '*');
+      window.parent.postMessage({ type: 'zayit-ocr-canvas', dataUrl, langFile: tool.langFile, hasExistingText: false }, '*');
     } else {
       window.parent.postMessage({ type: 'zayit-ocr-result', text: '', isOcr: true }, '*');
     }
@@ -198,6 +227,7 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
     const container = document.getElementById('viewerContainer');
     if (!container) return;
     container.classList.remove('zayit-ocr-mode');
+    container.classList.remove('zayit-ocr-drawing');
     container.removeEventListener('mousedown', onMouseDown);
     container.removeEventListener('mousemove', onMouseMove);
     container.removeEventListener('mouseup',   onMouseUp);
