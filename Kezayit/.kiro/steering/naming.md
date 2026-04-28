@@ -58,8 +58,8 @@ Every name in this codebase — file, folder, variable, function, component, sto
 
 ## Folder Naming
 
-- All lowercase, kebab-case: `book-view/`, `book-filesystem/`, `hebrew-calendar/`, `search-db/`
-- Folder name describes the feature, not the technology: `book-view/` not `reader/`, `search-db/` not `bloom/`
+- All lowercase, kebab-case: `book-view/`, `book-catalog/`, `hebrew-calendar/`, `full-text-search/`
+- Folder name describes the feature, not the technology: `book-view/` not `reader/`, `full-text-search/` not `bloom/`
 - No generic folder names: no `utils/` inside a feature folder (put utilities in `src/utils/`), no `components/` inside a feature folder (all components live flat in the feature folder)
 
 ## Vue Official Style Guide Alignment

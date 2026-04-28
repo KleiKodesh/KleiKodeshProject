@@ -1,0 +1,161 @@
+/* Custom styles for Zayit PDF.js viewer */
+
+/* Override PDF.js toolbar and scrollbar to match the app theme */
+:root {
+  --toolbar-bg-color: var(--bg-toolbar-custom, rgb(240, 240, 240)) !important;
+  --toolbar-border-color: var(--border-color-custom, rgb(229, 229, 229)) !important;
+  --sidebar-toolbar-bg-color: var(--bg-secondary-custom, rgb(243, 243, 243)) !important;
+  --scrollbar-color: color-mix(in srgb, var(--text-secondary-custom, #5a5a5a) 30%, transparent) !important;
+  --scrollbar-bg-color: transparent !important;
+}
+
+:root.dark {
+  --toolbar-bg-color: var(--bg-toolbar-custom, rgb(37, 37, 37)) !important;
+  --toolbar-border-color: var(--border-color-custom, rgb(59, 59, 59)) !important;
+  --sidebar-toolbar-bg-color: var(--bg-secondary-custom, rgb(45, 45, 45)) !important;
+  --scrollbar-color: color-mix(in srgb, var(--text-secondary-custom, #a6a6a6) 30%, transparent) !important;
+  --scrollbar-bg-color: transparent !important;
+}
+
+/* Override sidebar colors to use theme variables */
+.sidebar {
+  --sidebar-bg-color: var(--bg-primary-custom) !important;
+  --sidebar-border-color: var(--border-color-custom) !important;
+}
+
+#viewsManager {
+  --sidebar-bg-color: var(--bg-primary-custom) !important;
+  background-color: var(--bg-primary-custom) !important;
+}
+
+/* Override popup menu colors to use theme variables */
+.popupMenu {
+  --menu-bg: var(--bg-primary-custom) !important;
+  --menu-text-color: var(--text-primary-custom) !important;
+  --menu-border-color: var(--border-color-custom) !important;
+}
+
+/* PDF Page Filters - Apply theme-based filters to PDF content */
+/* Only apply when pdfPageFilters setting is enabled */
+.pdfViewer .canvasWrapper canvas {
+  transition: filter 0.3s ease;
+}
+
+/* All themes use CSS variable for filters */
+:root[data-pdf-filters="true"] .pdfViewer .canvasWrapper canvas {
+  filter: var(--pdf-page-filter, none);
+}
+
+/* Make sidebar fill full height from toolbar to bottom, no rounded corners */
+#viewsManager {
+  /* Full height from toolbar to bottom */
+  height: calc(100vh - var(--toolbar-height)) !important;
+  top: var(--toolbar-height) !important;
+  bottom: 0 !important;
+  padding-bottom: 0 !important;
+  
+  /* Remove rounded corners */
+  border-radius: 0 !important;
+  
+  /* Remove any box shadows that might create floating effect */
+  box-shadow: none !important;
+}
+
+/* Hide only the default status action section (showing view name) */
+/* Keep visible when there are actual actions, warnings, or loading states */
+#viewsManagerStatusAction {
+  display: none !important;
+}
+
+/* Show status section when undo, warning, or waiting states are active */
+#viewsManagerStatusUndo:not(.hidden) ~ #viewsManagerStatusAction,
+#viewsManagerStatusWarning:not(.hidden) ~ #viewsManagerStatusAction,
+#viewsManagerStatusWaiting:not(.hidden) ~ #viewsManagerStatusAction {
+  display: flex !important;
+}
+
+/* Remove rounded corners from sidebar buttons */
+#viewsManager .viewsManagerButton {
+  border-radius: 0 !important;
+}
+
+/* Remove rounded corners from sidebar content areas */
+#viewsManager #viewsManagerContent {
+  border-radius: 0 !important;
+}
+
+/* Remove rounded corners from thumbnails */
+#viewsManager .thumbnail {
+  border-radius: 0 !important;
+}
+
+/* Remove rounded corners from tree items */
+#viewsManager .treeItem {
+  border-radius: 0 !important;
+}
+
+/* Remove rounded corners from all buttons in sidebar */
+#viewsManager button {
+  border-radius: 0 !important;
+}
+
+/* Remove rounded corners from sidebar header */
+#viewsManager #viewsManagerHeader {
+  border-radius: 0 !important;
+}
+
+/* Compact views manager title row */
+#viewsManagerTitle {
+  padding: 4px 8px !important;
+}
+
+#viewsManagerSelector {
+  height: 24px !important;
+}
+
+#viewsManagerHeader .viewsManagerLabel {
+  font-size: 13px !important;
+}
+
+/* Remove rounded corners from view selector */
+#viewsManager #viewsManagerSelector button {
+  border-radius: 0 !important;
+}
+
+/* Remove rounded corners from popup menus */
+#viewsManager .popupMenu {
+  border-radius: 0 !important;
+}
+
+#viewsManager .popupMenu button {
+  border-radius: 0 !important;
+}
+
+/* Prevent horizontal overflow/scrollbar when viewer is narrow */
+body,
+#outerContainer {
+  overflow-x: hidden !important;
+}
+
+/* ── Mobile toolbar: hide the native PDF.js toolbar and findbar entirely ── */
+.toolbar,
+#toolbarContainer,
+#findbar {
+  display: none !important;
+}
+
+/* Expand the viewer to fill the full height since toolbar is gone */
+#mainContainer {
+  top: 0 !important;
+}
+
+#viewerContainer {
+  top: 0 !important;
+}
+
+/* Sidebar: start from top since toolbar is gone */
+#viewsManager {
+  top: 0 !important;
+  height: 100vh !important;
+  /* override the earlier rule that used --toolbar-height */
+}

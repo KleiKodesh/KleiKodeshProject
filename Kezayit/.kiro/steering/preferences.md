@@ -109,7 +109,7 @@ This project uses Prettier with `printWidth: 100`. The Vue template compiler rej
 
 ## Documentation
 
-- Every folder in the app (`src/components/*`, `src/composables/`, `src/utils/`, `src/stores/`, `src/host/`, `src/theme/`) must have its own `README.md`
+- Every folder in the app (`src/features/*`, `src/components/`, `src/layout/`, `src/composables/`, `src/utils/`, `src/stores/`, `src/host/`, `src/theme/`) must have its own `README.md`
 - When the user says "add documentation" or "document this", they mean: create or update the local `README.md` in the relevant folder
 - READMEs must be purely functional and concise — describe what each file does, where to add new code, what to import from where, and what patterns or constraints to follow
 - READMEs are written to help an AI agent make correct decisions without reading every file — they should answer "where does this go?" and "what should I use for this?"
@@ -119,7 +119,7 @@ This project uses Prettier with `printWidth: 100`. The Vue template compiler rej
 
 ## Book Search Query Normalization
 
-Book catalog search applies Hebrew-specific text transformations so that variant spellings and abbreviations all match the same results. These transformations live exclusively in `src/utils/bookQueryNormalizer.ts` and must be applied symmetrically to both sides: indexed titles (in `booksCategoryTree.ts` `assignFullPaths`) and user queries (in `useFileSystemSearch.ts` `toWords`).
+Book catalog search applies Hebrew-specific text transformations so that variant spellings and abbreviations all match the same results. These transformations live exclusively in `src/utils/bookQueryNormalizer.ts` and must be applied symmetrically to both sides: indexed titles (in `booksCategoryTree.ts` `assignFullPaths`) and user queries (in `useBookCatalogSearch.ts` `toWords`).
 
 Current rules:
 - שו"ע / שוע → שלחן ערוך (abbreviation expansion)
@@ -177,7 +177,7 @@ The core principle, from Robert C. Martin: if you walked up to a building and co
 
 Practical rules for this codebase:
 
-- Feature folders are named after the domain concept they represent, not the technical role. `book-catalog/` not `file-system/` or `fs/`. `search-db/` not `bloom/`. `book-view/` not `reader/`.
+- Feature folders are named after the domain concept they represent, not the technical role. `book-catalog/` not `file-system/` or `fs/`. `full-text-search/` not `bloom/`. `book-view/` not `reader/`.
 - Framework and infrastructure concerns (HTTP, IDB, WebView bridge) live at the edges — in `src/host/` and `src/utils/persistence.ts` — never mixed into feature folders.
 - Business logic (what the app does) is always more prominent than technical plumbing (how it does it). A new developer should be able to name every feature of the app by reading only the folder names under `src/components/`.
 - When a folder name could apply to any app (e.g. `utils`, `services`, `helpers`, `file-system`), it is wrong. Every folder name must be specific enough to belong only to this app.

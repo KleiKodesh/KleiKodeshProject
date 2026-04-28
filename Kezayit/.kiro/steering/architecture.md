@@ -59,9 +59,9 @@ Multi-instance routes (`/book-view`, `/search`, `/pdf-view`) can have multiple t
 | Route              | Component                  | Kind                            |
 | ------------------ | -------------------------- | ------------------------------- |
 | `/`                | `HomePage.vue`             | shared instance                 |
-| `/books`           | `FileSystemPage.vue`       | singleton                       |
+| `/books`           | `BookCatalogPage.vue`      | singleton                       |
 | `/book-view`       | `BookViewPage.vue`         | multi-instance (keyed by tabId) |
-| `/search`          | `SearchPage.vue`           | multi-instance (keyed by tabId) |
+| `/search`          | `FullTextSearchPage.vue`   | multi-instance (keyed by tabId) |
 | `/settings`        | `SettingsPage.vue`         | singleton                       |
 | `/hebrewbooks`     | `HebrewBooksPage.vue`      | singleton                       |
 | `/pdf-view`        | `PdfViewPage.vue`          | multi-instance                  |
@@ -69,9 +69,9 @@ Multi-instance routes (`/book-view`, `/search`, `/pdf-view`) can have multiple t
 | `/workspaces`      | `WorkspaceManagerPage.vue` | singleton                       |
 | `/hebrew-calendar` | `HebrewCalendarPage.vue`   | singleton                       |
 | `/dictionary`      | `DictionaryPage.vue`       | singleton                       |
-| `/midot`           | `MidotPage.vue`            | singleton                       |
+| `/midot`           | `HalachicUnitsPage.vue`    | singleton                       |
 
-## Feature Folders (`src/components/`)
+## Feature Folders (`src/features/`)
 
 ### home/
 
@@ -79,17 +79,16 @@ Home page navigation tiles. The tile list in `HomePage.vue` and the menu list in
 
 - `HomePage.vue`, `HomePageTile.vue`, `useHomeDateInfo.ts`, `useDafYomiNavigation.ts`
 
-### book-filesystem/
+### book-catalog/
 
-File system browser for the book catalog. Supports list, tiles, and full tree views with search.
+Book catalog browser. Supports list, tiles, and full tree views with search.
 
-- `FileSystemPage.vue` — main page; owns view switching (list/tiles/tree) via `<component :is>` map
-- `FileSystemView.vue` — list/tiles view
-- `FileSystemTreeView.vue` — collapsible category tree
-- `FileSystemSearch.vue` — search results
-- `FileSystemBreadcrumb.vue` — navigation breadcrumb
-- `useFileSystem.ts` — navigation and folder traversal
-- `useFileSystemSearch.ts` — title + TOC entry search
+- `BookCatalogPage.vue` — main page; owns view switching (list/tiles/tree) via `<component :is>` map
+- `BookCatalogTreeView.vue` — collapsible category tree
+- `BookCatalogSearch.vue` — search results
+- `BookCatalogBreadcrumb.vue` — navigation breadcrumb
+- `useBookCatalog.ts` — navigation and folder traversal
+- `useBookCatalogSearch.ts` — title + TOC entry search
 - `booksCategoryTree.ts` — tree building and category metadata
 
 ### book-view/
@@ -123,20 +122,20 @@ The main book reader. Orchestrates a split pane (text above, commentary below), 
 - `useTocScrollTracking.ts` — tracks programmatic TOC scrolls to suppress active-entry updates during animation
 - `bookViewTypes.ts` — shared types: `SearchMode`, `SidePanelMode`
 
-### search-db/
+### full-text-search/
 
 Full-text search using Bloom filters. Supports category/book filters and caches results.
 
-- `SearchPage.vue` — main page
-- `SearchBar.vue` — search input + filter toggle
-- `SearchResultsList.vue` — results (virtual scroller)
-- `SearchFilterPanel.vue` — category/book filter tree
-- `SearchFilterNode.vue` — filter tree node
-- `SearchIndexingOverlay.vue` — indexing progress overlay
-- `useBloomSearch.ts` — Bloom filter search execution and caching
-- `useIndexingStatus.ts` — indexing status polling
-- `useSearchFilters.ts` — filter state (checked books/categories), result filtering, and result click handler
-- `searchTypes.ts` — TypeScript types
+- `FullTextSearchPage.vue` — main page
+- `FullTextSearchBar.vue` — search input + filter toggle
+- `FullTextSearchResultsList.vue` — results (virtual scroller)
+- `FullTextSearchFilterPanel.vue` — category/book filter tree
+- `FullTextSearchFilterNode.vue` — filter tree node
+- `FullTextSearchIndexingOverlay.vue` — indexing progress overlay
+- `useFullTextSearch.ts` — Bloom filter search execution and caching
+- `useFullTextSearchIndexingStatus.ts` — indexing status polling
+- `useFullTextSearchFilters.ts` — filter state (checked books/categories), result filtering, and result click handler
+- `fullTextSearchTypes.ts` — TypeScript types
 
 ### settings/
 
@@ -158,17 +157,17 @@ HebrewBooks catalog browser with download history.
 - `HebrewBooksPage.vue`, `HebrewBooksListItem.vue`
 - `useHebrewBooks.ts`, `hebrewBooksCatalog.ts`
 
-### conversions/
+### halachic-units/
 
 Halachic unit converter. Singleton route `/midot`. Converts between biblical, Talmudic, and modern units across six systems (length, area, volume, weight, coins, time) with support for multiple halachic opinions.
 
-- `MidotPage.vue` — full converter UI with opinion selector and conversion explanation
-- `midot.ts` — all conversion logic (`convert`, `toMetric`, `explainConversion`)
+- `HalachicUnitsPage.vue` — full converter UI with opinion selector and conversion explanation
+- `halachicUnits.ts` — all conversion logic (`convert`, `toMetric`, `explainConversion`)
 - `units/` — unit definitions per measurement system; `types.ts` for shared types
 
-### pdf/
+### pdf-viewer/
 
-PDF and Word document viewer. Embeds a PDF.js iframe.
+PDF viewer. Embeds a PDF.js iframe.
 
 - `PdfViewPage.vue`
 
@@ -196,23 +195,24 @@ Hebrew calendar page. Monthly grid and weekly detail views with zmanim. Singleto
 - `useWeeklyView.ts` — week data via `@hebcal/core`, daily learning via `hebrewLearning.ts`
 - `useZmanim.ts` — city selection, geolocation, zmanim calculation
 
-### layout/
-
-App shell components.
+## App Shell (`src/layout/`)
 
 - `AppTitleBar.vue`, `AppPageView.vue`, `AppTitleBarTabDropdown.vue`, `AppTitleBarNavDropdown.vue`
 
 `AppTitleBarNavDropdown` is the hamburger nav menu. Its destination list mirrors the tiles in `HomePage.vue` — see the `home/` section for the sync rule.
 
-### common/
+## Shared Components (`src/components/`)
 
-Shared reusable components used across features.
+Reusable UI primitives used across multiple features. No feature-specific logic lives here.
 
 - `TreeView.vue`, `TreeNode.vue` — generic tree
 - `treeTypes.ts` — `TreeNodeItem` interface; import from here, never from `TreeNode.vue`
 - `SplitPane.vue` — resizable split pane
 - `BottomSearchBar.vue`, `ContextMenu.vue`, `ConfirmDialog.vue`, `LoadingAnimation.vue`
+- `HintIcon.vue` — tooltip hint icon
 - `IconTreeRtl.vue` — `IconTextBulletListTree` pre-flipped for RTL layout
+
+## App Shell (`src/layout/`)
 
 ## Pinia Stores (`src/stores/`)
 

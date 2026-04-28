@@ -4,7 +4,7 @@
  * No other file may access this database.
  */
 import { defineStore } from 'pinia'
-import type { HebrewBook } from '@/components/hebrew-books/hebrewBooksCatalog'
+import type { HebrewBook } from '@/features/hebrewbooks/hebrewBooksCatalog'
 
 // ── IDB setup ─────────────────────────────────────────────────────────────────
 

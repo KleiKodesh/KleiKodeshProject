@@ -10,7 +10,7 @@
  */
 import { defineStore } from 'pinia'
 import { idbGet, idbSet, idbDelete } from '@/utils/persistence'
-import type { BloomSearchResult } from '@/components/search-db/searchTypes'
+import type { BloomSearchResult } from '@/features/full-text-search/fullTextSearchTypes'
 
 export interface SearchCacheEntry {
   results: BloomSearchResult[]

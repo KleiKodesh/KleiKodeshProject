@@ -1,6 +1,6 @@
 import { query } from '@/host/seforimDb'
 import { SQL } from '@/host/queries.sql'
-import type { TocEntry } from '@/components/book-view/useToc'
+import type { TocEntry } from '@/features/book-view/useBookViewToc'
 
 export interface SectionNavResult {
   id: number

@@ -9,10 +9,11 @@
 
 ## Folder Structure
 
-- `src/components/` organized by feature folder (e.g. `book-filesystem/`, `book-view/`, `search/`)
+- `src/features/` — one folder per app feature (e.g. `book-catalog/`, `book-view/`, `full-text-search/`)
 - Each feature folder contains its page component, composables, and sub-components — keep flat, no nested subfolders
 - Sub-components named after parent: `BookCard.vue` → `BookCardCover.vue`, `BookCardMeta.vue`
-- Shared reusable components (used across features): `src/components/common/`
+- Shared reusable components (used across features): `src/components/`
+- App shell components (title bar, page router): `src/layout/`
 - Shared composables across features: `src/composables/`
 - Shared pure utils: `src/utils/`
 - Pinia stores: `src/stores/` — never under `src/data/` or elsewhere
