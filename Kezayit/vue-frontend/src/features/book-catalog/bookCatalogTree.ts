@@ -1,16 +1,10 @@
-import { normalize } from '@/utils/normalizeText'
-import { normalizeBookQuery } from '@/utils/bookQueryNormalizer'
-
 export interface BookRow {
   id: number
   categoryId: number
   title: string
   authors?: string | null
   treeOrder?: number
-  fullPath?: string
-  parentPath?: string // fullPath with the book title stripped — pre-computed for display
-  searchPath?: string
-  searchWords?: string[] // pre-split searchPath tokens — avoids re-splitting on every keystroke
+  parentPath?: string // category path without the book title — used for display in search results
   period?: string // Chronological period: תנ"ך, ספרות חז"ל, גאונים, ראשונים, אחרונים, etc.
   rootCategory?: string // First-tier category title
 }
@@ -58,38 +52,12 @@ export function assignFullPaths(
     const nodePath = parentPath ? `${parentPath} / ${node.title}` : node.title
     for (const book of node.books) {
       book.treeOrder = counter.n++
-      book.fullPath = `${nodePath} / ${book.title}`
       book.parentPath = nodePath
       orderedBooks.push(book)
     }
     assignFullPaths(node.children, nodePath, counter, orderedBooks)
   }
   return orderedBooks
-}
-
-export function ensureBookSearchMetadata(book: BookRow): void {
-  if (book.searchPath && book.searchWords) return
-  const searchBase = book.fullPath ?? book.title
-  const authorPart = book.authors ? ` ${normalize(book.authors)}` : ''
-  book.searchPath = normalizeBookQuery(normalize(searchBase)) + authorPart
-  book.searchWords = book.searchPath.split(/\s+/).filter((w) => w.length > 0)
-}
-
-export function filterBooksByWords(allBooks: BookRow[], words: string[]): BookRow[] {
-  if (!words.length) return []
-  const exactWords = words.slice(0, -1)
-  const prefixWord = words[words.length - 1]!
-  return allBooks
-    .filter((book) => {
-      ensureBookSearchMetadata(book)
-      const pathWords = book.searchWords ?? []
-      const exactWordsMatch = exactWords.every((queryWord) =>
-        pathWords.some((pathWord) => pathWord === queryWord),
-      )
-      const prefixWordMatch = pathWords.some((pathWord) => pathWord.includes(prefixWord))
-      return exactWordsMatch && prefixWordMatch
-    })
-    .sort((a, b) => (a.treeOrder ?? 0) - (b.treeOrder ?? 0))
 }
 
 const PERIOD_KEYWORDS: [string, string][] = [
