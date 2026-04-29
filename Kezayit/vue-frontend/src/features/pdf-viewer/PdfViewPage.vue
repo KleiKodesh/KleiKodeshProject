@@ -108,14 +108,16 @@ function cancelConversion() {
                 מעורב
               </button>
             </div>
-            <button
-              class="toggle-btn"
-              :class="{ active: pdfOcrStore.skipExistingText }"
-              @click="pdfOcrStore.toggleSkipExistingText()"
-              title="כפה OCR גם אם קיים טקסט"
-            >
-              כפה OCR
-            </button>
+<!--
+<button
+  class="toggle-btn"
+  :class="{ active: pdfOcrStore.skipExistingText }"
+  @click="pdfOcrStore.toggleSkipExistingText()"
+  title="כפה OCR גם אם קיים טקסט"
+>
+  כפה OCR
+</button>
+-->
             <button class="close-btn" @click="ocr.deactivate()" title="סגור (Esc)">
               <IconDismiss20Regular />
             </button>
