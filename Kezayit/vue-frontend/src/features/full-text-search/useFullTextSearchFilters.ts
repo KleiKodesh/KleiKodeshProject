@@ -1,12 +1,13 @@
 import { ref, watch } from 'vue'
-import { query } from '@/host/seforimDb'
-import { SQL } from '@/host/queries.sql'
+import { query } from '@/webview-host/seforimDb'
+import { SQL } from '@/webview-host/queries.sql'
 import { normalize } from '@/utils/normalizeText'
+import { normalizeBookPath } from '../book-catalog/bookCatalogSearchNormalizer'
 import { useTabStore } from '@/stores/tabStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
-import { ensureBookSearchMetadata } from '@/utils/booksCategoryTree'
+import { filterBooksByWords } from '../book-catalog/bookCatalogSearch'
 import type { BloomSearchResult } from './fullTextSearchTypes'
-import type { CategoryNode } from '@/utils/booksCategoryTree'
+import type { CategoryNode } from '../book-catalog/bookCatalogTree'
 
 // ── Query parsing ─────────────────────────────────────────────────────────────
 
@@ -55,21 +56,9 @@ export function useFullTextSearchFilters(
   function matchBookIds(q: string, checked: Set<number>): Set<number> {
     const trimmed = q.trim()
     if (trimmed.length < 2) return checked
-    const words = normalize(trimmed).split(/\s+/).filter((w) => w.length > 0)
+    const words = normalizeBookPath(normalize(trimmed)).split(/\s+/).filter((w) => w.length > 0)
     if (!words.length) return checked
-    const exactWords = words.slice(0, -1)
-    const prefixWord = words[words.length - 1]!
-    const matching = new Set(
-      booksStore.allBooks
-        .filter((b) => {
-          ensureBookSearchMetadata(b)
-          const pathWords = b.searchWords ?? []
-          const exactOk = exactWords.every((qw) => pathWords.some((pw) => pw === qw))
-          const prefixOk = pathWords.some((pw) => pw.includes(prefixWord))
-          return exactOk && prefixOk
-        })
-        .map((b) => b.id),
-    )
+    const matching = new Set(filterBooksByWords(booksStore.allBooks, words).map((b) => b.id))
     const result = new Set<number>()
     for (const id of checked) if (matching.has(id)) result.add(id)
     return result

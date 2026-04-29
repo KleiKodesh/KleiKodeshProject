@@ -1,6 +1,6 @@
 import { ref, onMounted, onUnmounted } from 'vue'
-import { isHosted, onWebviewEvent } from '@/host/seforimDb'
-import { callBridgeAction } from '@/host/bridge'
+import { isHosted, onWebviewEvent } from '@/webview-host/seforimDb'
+import { callBridgeAction } from '@/webview-host/bridge'
 
 export interface IndexingState {
   isReady: boolean

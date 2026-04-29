@@ -43,11 +43,21 @@ namespace RegexFindLib.UI
             });
         }
 
-        // ── Style loading — per-instance, async, reloads on every focus ─────────
-        // Styles are document-specific and filtered by InUse — they change mid-session.
+        // ── Style loading — per-instance, async, refreshed on visibility/focus ──
+        // Styles are document-specific and filtered by InUse — they can change mid-session.
+        // Load asynchronously to avoid blocking UI, but refresh when control becomes visible or focused.
+
+        readonly object _styleLock = new object();
+        bool _styleRefreshInProgress = false;
 
         void LoadStyles()
         {
+            lock (_styleLock)
+            {
+                if (_styleRefreshInProgress) return;
+                _styleRefreshInProgress = true;
+            }
+
             var dispatcher = System.Windows.Application.Current?.Dispatcher
                           ?? System.Windows.Threading.Dispatcher.CurrentDispatcher;
             System.Threading.Tasks.Task.Run(() =>
@@ -57,19 +67,29 @@ namespace RegexFindLib.UI
                     var names = _word.GetStyleNames().ToList();
                     dispatcher.BeginInvoke(new System.Action(() =>
                     {
-                        StyleList.Clear();
-                        foreach (var name in names)
-                            StyleList.Add(name);
+                        lock (_styleLock)
+                        {
+                            StyleList.Clear();
+                            foreach (var name in names)
+                                StyleList.Add(name);
+                            _styleRefreshInProgress = false;
+                        }
                     }));
                 }
-                catch { }
+                catch 
+                { 
+                    lock (_styleLock)
+                    {
+                        _styleRefreshInProgress = false;
+                    }
+                }
             });
         }
 
         public void EnsureStylesLoaded()
         {
-            // Always reload — styles are document-specific and filtered by InUse,
-            // so they can change as the user applies/removes styles mid-session.
+            // Refresh styles asynchronously when control becomes visible or focused.
+            // This ensures styles stay up-to-date as user applies/removes styles mid-session.
             LoadStylesCommand.Execute(null);
         }
 

@@ -30,8 +30,26 @@ namespace RegexFindLib.UI
             Loaded += (_, __) =>
             {
                 if (DataContext is RegexFindViewModel vm)
+                {
                     RegexFindViewModel.LoadRecentSearches();
+                    // Load styles once at initialization
+                    vm.EnsureStylesLoaded();
+                }
                 RegexPalette.InsertAction = InsertSymbolAtCursor;
+            };
+
+            // Refresh styles when control becomes visible
+            IsVisibleChanged += (_, e) =>
+            {
+                if ((bool)e.NewValue && DataContext is RegexFindViewModel vm)
+                    vm.EnsureStylesLoaded();
+            };
+
+            // Refresh styles when control gets focus
+            GotFocus += (_, __) =>
+            {
+                if (DataContext is RegexFindViewModel vm)
+                    vm.EnsureStylesLoaded();
             };
         }
 
@@ -155,13 +173,6 @@ namespace RegexFindLib.UI
                 parent = System.Windows.Media.VisualTreeHelper.GetParent(parent);
             }
             return false;
-        }
-
-        // ── Style combobox — lazy load ────────────────────────────────────────
-
-        void StyleCombo_GotFocus(object sender, RoutedEventArgs e)
-        {
-            Vm?.EnsureStylesLoaded();
         }
 
         // ── Results keyboard navigation ───────────────────────────────────────

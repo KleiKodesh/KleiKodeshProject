@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { IconBook20Filled, IconFolder20Filled } from '@iconify-prerendered/vue-fluent'
 import type { FsItem } from './useBookCatalog'
-import type { CategoryNode, BookRow } from '@/utils/booksCategoryTree'
+import type { CategoryNode, BookRow } from '@/features/book-catalog/bookCatalogTree'
 import { useTilesKeys } from '@/composables/useTileGridKeys'
 
 const props = defineProps<{ items: FsItem[] }>()

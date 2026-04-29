@@ -3,7 +3,7 @@ import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import TreeNode from './TreeNode.vue'
 import type { TreeNodeItem } from './treeTypes'
 import { useListKeys } from '@/composables/useListKeyNav'
-import { SearchableTree } from '@/utils/tocSearchUtils'
+import { SearchableTree } from '@/features/book-view/tocSearchUtils'
 
 const props = defineProps<{
   nodes: TreeNodeItem[]

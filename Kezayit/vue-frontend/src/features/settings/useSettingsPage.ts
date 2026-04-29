@@ -3,7 +3,7 @@ import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useTabStore } from '@/stores/tabStore'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
-import { resetHostApp, resetSearchIndex as bridgeResetSearchIndex } from '@/host/bridge'
+import { resetHostApp, resetSearchIndex as bridgeResetSearchIndex } from '@/webview-host/bridge'
 
 export function useSettings() {
   const settings = useSettingsStore()

@@ -14,8 +14,8 @@ import {
 } from '@iconify-prerendered/vue-fluent'
 import { IconSettings24, IconSearchSparkle24 } from '@iconify-prerendered/vue-fluent-color'
 import { useAppNavigation } from '@/composables/useAppNavigation'
-import { isHosted } from '@/host/seforimDb'
-import { togglePopOut } from '@/host/bridge'
+import { isHosted } from '@/webview-host/seforimDb'
+import { togglePopOut } from '@/webview-host/bridge'
 
 const emit = defineEmits<{ close: [] }>()
 

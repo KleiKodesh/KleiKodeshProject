@@ -1,4 +1,4 @@
-# src/host
+# src/webview-host
 
 Database access and C# host bridge. Everything that communicates outside the Vue app lives here. Nothing outside this folder should call `fetch` against the DB or invoke C# actions directly.
 

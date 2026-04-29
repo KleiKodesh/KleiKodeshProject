@@ -1,4 +1,6 @@
 using System.Windows.Controls;
+using DocDesign.Helpers;
+using DocDesign.UI;
 
 namespace DocDesign
 {
@@ -14,6 +16,7 @@ namespace DocDesign
             Vsto.Application = app;
             Vsto.ApplicationFactory = factory;
             InitializeComponent();
+            SetupStyleRefresh();
         }
 
         /// <summary>
@@ -23,6 +26,24 @@ namespace DocDesign
         public DocDesignView()
         {
             InitializeComponent();
+            SetupStyleRefresh();
+        }
+
+        void SetupStyleRefresh()
+        {
+            // Refresh styles when control becomes visible
+            IsVisibleChanged += (_, e) =>
+            {
+                if ((bool)e.NewValue && DataContext is DocDesignViewModel vm)
+                    vm.ParagraphsViewModel.RefreshActiveStylesAction();
+            };
+
+            // Refresh styles when control gets focus
+            GotFocus += (_, __) =>
+            {
+                if (DataContext is DocDesignViewModel vm)
+                    vm.ParagraphsViewModel.RefreshActiveStylesAction();
+            };
         }
     }
 }

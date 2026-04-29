@@ -3,7 +3,7 @@ import { HDate } from '@hebcal/hdate'
 import { HebrewCalendar } from '@hebcal/core/dist/esm/hebcal'
 import { flags } from '@hebcal/core/dist/esm/event'
 import { Location } from '@hebcal/core/dist/esm/location'
-import { getDailyLearning } from '@/utils/hebrewLearning'
+import { getDailyLearning } from './hebrewCalendarLearning'
 import { calcDayZmanim } from './useZmanim'
 import type { City, CalendarDay, CalendarWeek } from './calendarTypes'
 

@@ -4,12 +4,12 @@ import { useDebounceFn, useIntervalFn } from '@vueuse/core'
 import { IconMinimize20Regular, IconDismiss12Regular } from '@iconify-prerendered/vue-fluent'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { normalize } from '@/utils/normalizeText'
+import { normalizeBookPath } from '@/features/book-catalog/bookCatalogSearchNormalizer'
+import { filterBooksByWords } from '@/features/book-catalog/bookCatalogSearch'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import FullTextSearchFilterNode from './FullTextSearchFilterNode.vue'
 import FullTextSearchFilterBookList from './FullTextSearchFilterBookList.vue'
-import { ensureBookSearchMetadata } from '@/utils/booksCategoryTree'
-import type { CategoryNode, BookRow } from '@/utils/booksCategoryTree'
-
+import type { CategoryNode, BookRow } from '@/features/book-catalog/bookCatalogTree'
 const props = defineProps<{
   checkedBookIds: Set<number>
   resultCounts: Map<number, number>
@@ -68,26 +68,6 @@ const isIndet = computed(
 const activeQuery = computed(() => inputText.value.trim())
 const isSearching = computed(() => props.atFilters.length > 0 || activeQuery.value.length >= 2)
 
-// ── Book matching (same logic as useSearchFilters.matchBookIds but returns BookRow[]) ──
-
-function toWords(raw: string): string[] {
-  return normalize(raw.trim()).split(/\s+/).filter((w) => w.length > 0)
-}
-
-function matchBooks(q: string): BookRow[] {
-  const words = toWords(q)
-  if (!words.length) return []
-  const exactWords = words.slice(0, -1)
-  const prefixWord = words[words.length - 1]!
-  return booksStore.allBooks.filter((b) => {
-    ensureBookSearchMetadata(b)
-    const pathWords = b.searchWords ?? []
-    const exactOk = exactWords.every((qw) => pathWords.some((pw) => pw === qw))
-    const prefixOk = pathWords.some((pw) => pw.includes(prefixWord))
-    return exactOk && prefixOk
-  })
-}
-
 // Union of all committed tokens + current input text (if long enough)
 function computeFilteredBooks(tokens: string[], currentInput: string): BookRow[] {
   const allTokens = [
@@ -98,7 +78,8 @@ function computeFilteredBooks(tokens: string[], currentInput: string): BookRow[]
   const seen = new Set<number>()
   const result: BookRow[] = []
   for (const token of allTokens) {
-    for (const book of matchBooks(token)) {
+    const words = normalizeBookPath(normalize(token.trim())).split(/\s+/).filter((w) => w.length > 0)
+    for (const book of filterBooksByWords(booksStore.allBooks, words)) {
       if (!seen.has(book.id)) {
         seen.add(book.id)
         result.push(book)

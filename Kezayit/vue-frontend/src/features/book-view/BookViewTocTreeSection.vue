@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import TreeView from '@/components/TreeView.vue'
 import type { TocEntry } from './useBookViewToc'
-import type { SearchableTree } from '@/utils/tocSearchUtils'
+import type { SearchableTree } from '@/features/book-view/tocSearchUtils'
 
 defineProps<{
   title: string | null

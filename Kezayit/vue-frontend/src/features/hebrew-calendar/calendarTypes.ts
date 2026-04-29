@@ -1,4 +1,4 @@
-import type { DailyLearning } from '@/utils/hebrewLearning'
+import type { DailyLearning } from './hebrewCalendarLearning'
 
 export interface CalendarZmanim {
   alot: string | null

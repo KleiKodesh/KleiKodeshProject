@@ -15,7 +15,7 @@ import {
 } from '@/utils/persistence'
 import type { TabState, BookState, LastReadState } from '@/utils/persistence'
 import { useWorkspaceStore } from './workspaceStore'
-import { disposePdfHost } from '@/host/bridge'
+import { disposePdfHost } from '@/webview-host/bridge'
 
 export type TabRoute =
   | '/'

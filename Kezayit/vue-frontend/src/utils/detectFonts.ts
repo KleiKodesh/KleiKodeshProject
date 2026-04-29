@@ -1,4 +1,4 @@
-import { isHosted } from '@/host/seforimDb'
+import { isHosted } from '@/webview-host/seforimDb'
 
 const CANDIDATES = [
   // Culmus

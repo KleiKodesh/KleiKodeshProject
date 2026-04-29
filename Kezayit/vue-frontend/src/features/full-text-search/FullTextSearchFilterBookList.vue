@@ -3,7 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { IconBook20Filled } from '@iconify-prerendered/vue-fluent'
 import { useVirtualListKeys } from '@/composables/useVirtualListKeyNav'
-import type { BookRow } from '@/utils/booksCategoryTree'
+import type { BookRow } from '@/features/book-catalog/bookCatalogTree'
 
 const props = defineProps<{
   books: BookRow[]

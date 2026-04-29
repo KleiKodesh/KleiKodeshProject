@@ -5,6 +5,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Security.Cryptography.X509Certificates;
 using System.Windows.Threading;
+using DocDesign.Helpers;
 using WpfLib;
 using WpfLib.ViewModels;
 
@@ -55,7 +56,7 @@ namespace DocDesign.Paragraphs
                 RefreshActiveStylesAction();
         }
 
-        void RefreshActiveStylesAction()
+        public void RefreshActiveStylesAction()
         {
             Dispatcher.CurrentDispatcher.InvokeAsync(() =>
             {

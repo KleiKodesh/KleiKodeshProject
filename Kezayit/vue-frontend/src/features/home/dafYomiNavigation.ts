@@ -1,11 +1,11 @@
 import { normalize } from '@/utils/normalizeText'
-import { splitQuery, SearchableTree, stripTocTitleRoots } from '@/utils/tocSearchUtils'
-import { query } from '@/host/seforimDb'
-import { SQL } from '@/host/queries.sql'
+import { splitQuery, SearchableTree, stripTocTitleRoots } from '../book-view/tocSearchUtils'
+import { query } from '@/webview-host/seforimDb'
+import { SQL } from '@/webview-host/queries.sql'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useTabStore } from '@/stores/tabStore'
-import { filterBooksByWords } from '@/utils/booksCategoryTree'
-import type { BookRow } from '@/utils/booksCategoryTree'
+import { filterBooksByWords } from '../book-catalog/bookCatalogSearch'
+import type { BookRow } from '../book-catalog/bookCatalogTree'
 
 type TocRow = {
   id: number

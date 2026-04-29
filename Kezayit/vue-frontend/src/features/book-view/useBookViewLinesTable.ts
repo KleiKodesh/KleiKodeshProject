@@ -1,6 +1,6 @@
 import { ref, watch } from 'vue'
-import { query } from '@/host/seforimDb'
-import { SQL } from '@/host/queries.sql'
+import { query } from '@/webview-host/seforimDb'
+import { SQL } from '@/webview-host/queries.sql'
 
 export interface LineItem {
   id: number

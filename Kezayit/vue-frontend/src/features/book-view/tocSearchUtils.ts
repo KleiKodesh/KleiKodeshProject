@@ -1,4 +1,4 @@
-﻿import { normalize } from './normalizeText'
+﻿import { normalize } from '../../utils/normalizeText'
 
 export interface TocNode {
   id: number

@@ -7,9 +7,9 @@
  * Falls back to sample data in dev when the C# host is not present.
  */
 import { ref } from 'vue'
-import { isHosted, query } from '@/host/seforimDb'
-import { SQL } from '@/host/queries.sql'
-import { callBridgeAction } from '@/host/bridge'
+import { isHosted, query } from '@/webview-host/seforimDb'
+import { SQL } from '@/webview-host/queries.sql'
+import { callBridgeAction } from '@/webview-host/bridge'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
 import type { BloomSearchResult } from './fullTextSearchTypes'
 

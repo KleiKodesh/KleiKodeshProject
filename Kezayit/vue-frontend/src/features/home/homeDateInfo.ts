@@ -22,7 +22,7 @@ export const dateInfo = ref<HomeDateInfo>({ hebrewDate: '', dafYomi: null, mishn
 export async function loadDateInfo(): Promise<void> {
   const [{ HDate }, { getDailyLearning }] = await Promise.all([
     import('@hebcal/hdate'),
-    import('@/utils/hebrewLearning'),
+    import('../hebrew-calendar/hebrewCalendarLearning'),
   ])
 
   const today = new Date()

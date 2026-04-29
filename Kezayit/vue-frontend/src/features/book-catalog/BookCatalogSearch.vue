@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { IconBook20Filled } from '@iconify-prerendered/vue-fluent'
 import type { SearchFsItem, TocFsItem } from './useBookCatalogSearch'
-import type { BookRow } from '@/utils/booksCategoryTree'
+import type { BookRow } from '@/features/book-catalog/bookCatalogTree'
 import { useVirtualListKeys } from '@/composables/useVirtualListKeyNav'
 import { useTilesKeys } from '@/composables/useTileGridKeys'
 

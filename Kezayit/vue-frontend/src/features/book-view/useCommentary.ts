@@ -1,8 +1,8 @@
 import { computed, ref, watch } from 'vue'
-import { query } from '@/host/seforimDb'
-import { SQL } from '@/host/queries.sql'
+import { query } from '@/webview-host/seforimDb'
+import { SQL } from '@/webview-host/queries.sql'
 import { useBooksDataStore } from '@/stores/booksDataStore'
-import type { BookRow } from '@/utils/booksCategoryTree'
+import type { BookRow } from '../book-catalog/bookCatalogTree'
 
 export interface CommentaryLine {
   lineId: number

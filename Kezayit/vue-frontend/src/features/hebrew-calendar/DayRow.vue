@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { CalendarDay } from './calendarTypes'
-import type { DailyLearning } from '@/utils/hebrewLearning'
+import type { DailyLearning } from '@/features/hebrew-calendar/hebrewCalendarLearning'
 
 const props = defineProps<{
   day: CalendarDay

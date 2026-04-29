@@ -50,7 +50,7 @@ Every name in this codebase — file, folder, variable, function, component, sto
 - Named after the database they serve: `queries.sql.ts` for the main seforim DB, `dictionaryDb.sql.ts` for the dictionary DB
 - SQL constant names are SCREAMING_SNAKE_CASE: `SQL.GET_ALL_TOC_ENTRIES`, `SQL.GET_BOOK_BY_ID`
 
-### Host Layer Files (`src/host/`)
+### Host Layer Files (`src/webview-host/`)
 - Named after what they connect to: `seforimDb.ts`, `dictionaryDb.ts`, `bridge.ts`, `devFallbacks.ts`
 - No `use` prefix — these are not composables
 

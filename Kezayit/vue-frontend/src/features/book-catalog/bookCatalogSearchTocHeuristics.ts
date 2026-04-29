@@ -21,10 +21,10 @@
  *             Converts matched TOC nodes into SearchFsItem objects for the UI.
  */
 
-import { query } from '@/host/seforimDb'
-import { SQL } from '@/host/queries.sql'
-import { SearchableTree, stripTocTitleRoots } from '@/utils/tocSearchUtils'
-import type { BookRow } from '../../utils/booksCategoryTree'
+import { query } from '@/webview-host/seforimDb'
+import { SQL } from '@/webview-host/queries.sql'
+import { SearchableTree, stripTocTitleRoots } from '../book-view/tocSearchUtils'
+import type { BookRow } from './bookCatalogTree'
 import type { TocFsItem } from './useBookCatalogSearch'
 
 // ─── Cap ──────────────────────────────────────────────────────────────────────

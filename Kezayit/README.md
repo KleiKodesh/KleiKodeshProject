@@ -70,7 +70,7 @@ Every folder under `src/` has its own `README.md` — read it before editing fil
 
 ### Add a new SQL query
 
-All SQL lives in `vue-frontend/src/host/queries.sql.ts` as named string constants. Add your query there and import it in the composable that needs it. Never write inline SQL anywhere else.
+All SQL lives in `vue-frontend/src/webview-host/queries.sql.ts` as named string constants. Add your query there and import it in the composable that needs it. Never write inline SQL anywhere else.
 
 ### Add a new icon
 
@@ -78,7 +78,7 @@ Use Iconify via `@iconify-prerendered/vue-fluent`. Import the icon component by 
 
 ### Change how data is fetched
 
-All database access goes through `vue-frontend/src/host/db.ts`. Call `query<T>(sql, params)` — it routes to the C# host in production and the Vite dev middleware in development. Never call `fetch` against the database directly from a component or composable.
+All database access goes through `vue-frontend/src/webview-host/db.ts`. Call `query<T>(sql, params)` — it routes to the C# host in production and the Vite dev middleware in development. Never call `fetch` against the database directly from a component or composable.
 
 ## Key Rules
 
@@ -100,7 +100,7 @@ These are the constraints most likely to cause bugs if ignored.
 
 ## How the Frontend and Backend Communicate
 
-Before the page loads, the C# host injects a JavaScript bridge that exposes async functions on `window`. The Vue app calls these through `src/host/db.ts` and `src/host/bridge.ts` — the transport detail is hidden from the rest of the app.
+Before the page loads, the C# host injects a JavaScript bridge that exposes async functions on `window`. The Vue app calls these through `src/webview-host/db.ts` and `src/webview-host/bridge.ts` — the transport detail is hidden from the rest of the app.
 
 - SQL queries → `window.__webviewQuery` → C# `DbHandler` → SQLite → rows returned as JSON
 - File operations, PDF management, search → `window.__webviewAction` → appropriate C# handler

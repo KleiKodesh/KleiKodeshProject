@@ -9,8 +9,8 @@ import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useSettings } from './useSettingsPage'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import SettingRow from './SettingRow.vue'
-import { resetting } from '@/utils/appResetState'
-import { isHosted, onDbReady } from '@/host/seforimDb'
+import { resetting } from '@/features/settings/appResetState'
+import { isHosted, onDbReady } from '@/webview-host/seforimDb'
 import { useZmanim, CITIES } from '@/features/hebrew-calendar/useZmanim'
 
 const { resetSettings, resetSearchIndex, resetAll } = useSettings()

@@ -7,8 +7,8 @@
  * the commentary view, the pin follows their selection.
  */
 import { ref, watch } from 'vue'
-import { query } from '@/host/seforimDb'
-import { SQL } from '@/host/queries.sql'
+import { query } from '@/webview-host/seforimDb'
+import { SQL } from '@/webview-host/queries.sql'
 import type { CommentaryGroup } from './useCommentary'
 
 interface CommentaryViewRef {

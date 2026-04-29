@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { IconChevronDown20Regular } from '@iconify-prerendered/vue-fluent'
-import type { CategoryNode } from '@/utils/booksCategoryTree'
+import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 
 const props = withDefaults(
   defineProps<{

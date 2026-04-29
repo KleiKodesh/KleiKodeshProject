@@ -9,10 +9,10 @@ import { useTabStore } from '@/stores/tabStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useZoomHandler } from '@/composables/useZoom'
 import { dictionaryCacheGet, dictionaryCacheSet, dictionaryCacheClear } from './dictionaryCache'
-import { dictLinks, dictSynonyms, dictVariants, dictSpellCandidates, dictKetivVariants, combinedLookup } from '@/host/dictionaryDb'
+import { dictLinks, dictSynonyms, dictVariants, dictSpellCandidates, dictKetivVariants, combinedLookup } from '@/webview-host/dictionaryDb'
 import { expandKetivHaser } from '@/utils/hebrewKetivExpander'
-import { isHosted } from '@/host/seforimDb'
-import type { SenseRow, DictLink, MetzudatRow, MenchemRow } from '@/host/dictionaryDb'
+import { isHosted } from '@/webview-host/seforimDb'
+import type { SenseRow, DictLink, MetzudatRow, MenchemRow } from '@/webview-host/dictionaryDb'
 import type { WordPageData } from './dictionaryTypes'
 
 function levenshtein(a: string, b: string): number {

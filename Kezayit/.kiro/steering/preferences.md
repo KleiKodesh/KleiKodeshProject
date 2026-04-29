@@ -11,6 +11,8 @@
 - A composable or utility file must never import from a component (`.vue`) file. Components are consumers — they sit at the top of the dependency graph. Types shared between a composable and its child components belong in a dedicated `*Types.ts` file in the same feature folder, not in either the composable or the component. Importing a type from a `.vue` file in a `.ts` file inverts the dependency direction and is forbidden. The same rule applies to interfaces defined inside `.vue` files that are needed by `.ts` files — move them to a `*Types.ts` or `*types.ts` file and import from there in both the component and the composable.
 - `.vue` files must never re-export types for the benefit of `.ts` files. If a type is needed by a `.ts` file, it does not belong in a `.vue` file at all — move it to a plain `.ts` types file. A `.vue` file that re-exports a type is a sign the type is in the wrong place.
 
+- `src/utils/` is for code that is genuinely reusable across multiple features — text normalization, persistence helpers, generic data structures. A utility that is only ever used by one feature does not belong in `src/utils/`; it belongs in that feature's folder alongside its composables and components. The test: if removing a feature from the app would leave a dead file in `src/utils/`, that file was in the wrong place. Conversely, never put shared infrastructure in a feature folder — anything imported by more than one feature must live in `src/utils/`, `src/composables/`, `src/stores/`, or `src/webview-host/` depending on its role.
+
 ## File Length & Refactoring Thresholds
 
 These thresholds exist so that agentic AI can reliably read, edit, and reason about any file without losing context or making partial edits.
@@ -109,7 +111,7 @@ This project uses Prettier with `printWidth: 100`. The Vue template compiler rej
 
 ## Documentation
 
-- Every folder in the app (`src/features/*`, `src/components/`, `src/layout/`, `src/composables/`, `src/utils/`, `src/stores/`, `src/host/`, `src/theme/`) must have its own `README.md`
+- Every folder in the app (`src/features/*`, `src/components/`, `src/layout/`, `src/composables/`, `src/utils/`, `src/stores/`, `src/webview-host/`, `src/theme/`) must have its own `README.md`
 - When the user says "add documentation" or "document this", they mean: create or update the local `README.md` in the relevant folder
 - READMEs must be purely functional and concise — describe what each file does, where to add new code, what to import from where, and what patterns or constraints to follow
 - READMEs are written to help an AI agent make correct decisions without reading every file — they should answer "where does this go?" and "what should I use for this?"
@@ -119,13 +121,18 @@ This project uses Prettier with `printWidth: 100`. The Vue template compiler rej
 
 ## Book Search Query Normalization
 
-Book catalog search applies Hebrew-specific text transformations so that variant spellings and abbreviations all match the same results. These transformations live exclusively in `src/utils/bookQueryNormalizer.ts` and must be applied symmetrically to both sides: indexed titles (in `booksCategoryTree.ts` `assignFullPaths`) and user queries (in `useBookCatalogSearch.ts` `toWords`).
+Book catalog search applies Hebrew-specific text transformations so that variant spellings and abbreviations all match the same results. The normalization and matching logic is split across two files:
 
-Current rules:
+`src/utils/bookPathNormalizer.ts` — owns all normalization rules. Must be applied symmetrically to both sides: indexed titles (in `booksCategoryTree.ts` `ensureBookSearchMetadata`) and user queries (in `useBookCatalogSearch.ts` `toQueryWords`).
+
+`src/utils/bookPathMatcher.ts` — owns the scoring logic (exact / prefix / contains tiers). Used by `filterBooksByWords` in `booksCategoryTree.ts`.
+
+Current normalization rules in `bookPathNormalizer.ts`:
 - שו"ע / שוע → שלחן ערוך (abbreviation expansion)
-- שולחן → שלחן (standalone word normalization — applies wherever the word appears, not only in שלחן ערוך)
+- שולחן → שלחן (standalone word normalization)
+- חסר/מלא spelling variants: נידה matches נדה, ליקוטי matches לקוטי, but שבועות does NOT match שביעית (different vowel letter types at the same skeleton positions)
 
-When adding a new normalization rule — a new abbreviation, a new spelling variant, a new title alias — add it only to `bookQueryNormalizer.ts`. Never add book-search-specific normalization to `normalizeText.ts` or inline it in a composable.
+When adding a new normalization rule — a new abbreviation, a new spelling variant, a new title alias — add it only to `bookPathNormalizer.ts`. Never add book-search-specific normalization to `normalizeText.ts` or inline it in a composable.
 
 ## Scripts & Tooling
 
@@ -178,7 +185,7 @@ The core principle, from Robert C. Martin: if you walked up to a building and co
 Practical rules for this codebase:
 
 - Feature folders are named after the domain concept they represent, not the technical role. `book-catalog/` not `file-system/` or `fs/`. `full-text-search/` not `bloom/`. `book-view/` not `reader/`.
-- Framework and infrastructure concerns (HTTP, IDB, WebView bridge) live at the edges — in `src/host/` and `src/utils/persistence.ts` — never mixed into feature folders.
+- Framework and infrastructure concerns (HTTP, IDB, WebView bridge) live at the edges — in `src/webview-host/` and `src/utils/persistence.ts` — never mixed into feature folders.
 - Business logic (what the app does) is always more prominent than technical plumbing (how it does it). A new developer should be able to name every feature of the app by reading only the folder names under `src/components/`.
 - When a folder name could apply to any app (e.g. `utils`, `services`, `helpers`, `file-system`), it is wrong. Every folder name must be specific enough to belong only to this app.
 - Technical layer names (`controllers`, `repositories`, `models`) are forbidden as top-level organizers. Organize by feature first; layer distinctions live inside the feature folder if needed at all.

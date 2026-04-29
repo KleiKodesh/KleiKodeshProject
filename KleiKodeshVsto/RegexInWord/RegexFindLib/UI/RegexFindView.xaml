@@ -250,8 +250,7 @@
                           IsEditable="True" Height="26" FontSize="12"
                           VirtualizingPanel.IsVirtualizing="True"
                           local:PlaceholderBehavior.Placeholder="בחר סגנון"
-                          ToolTip="בחר סגנון"
-                          GotFocus="StyleCombo_GotFocus"/>
+                          ToolTip="בחר סגנון"/>
                 <ComboBox Grid.Column="2"
                           ItemsSource="{Binding FontListBinding}"
                           Text="{Binding FindFormatting.FontName, UpdateSourceTrigger=PropertyChanged}"
@@ -385,8 +384,7 @@
                               IsEditable="True" Height="26" FontSize="12"
                               VirtualizingPanel.IsVirtualizing="True"
                               local:PlaceholderBehavior.Placeholder="בחר סגנון"
-                              ToolTip="בחר סגנון"
-                              GotFocus="StyleCombo_GotFocus"/>
+                              ToolTip="בחר סגנון"/>
                     <ComboBox Grid.Column="2"
                               ItemsSource="{Binding FontListBinding}"
                               Text="{Binding ReplaceFormatting.FontName, UpdateSourceTrigger=PropertyChanged}"

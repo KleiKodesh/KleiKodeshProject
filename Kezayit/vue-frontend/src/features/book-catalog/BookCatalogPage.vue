@@ -11,9 +11,9 @@ import BookCatalogSearch from './BookCatalogSearch.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import BottomSearchBar from '@/components/BottomSearchBar.vue'
 import { useTabStore } from '@/stores/tabStore'
-import type { BookRow, CategoryNode } from '@/utils/booksCategoryTree'
+import type { BookRow, CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 import type { TocFsItem } from './useBookCatalogSearch'
-import { getDiagnostics } from '@/host/bridge'
+import { getDiagnostics } from '@/webview-host/bridge'
 import type { ComponentPublicInstance } from 'vue'
 
 const tabStore = useTabStore()

@@ -1,6 +1,6 @@
 import { useTabStore } from '@/stores/tabStore'
 import { usePdfStore } from '@/stores/pdfStore'
-import { pickFile } from '@/host/bridge'
+import { pickFile } from '@/webview-host/bridge'
 import type { TabRoute } from '@/stores/tabStore'
 
 /**

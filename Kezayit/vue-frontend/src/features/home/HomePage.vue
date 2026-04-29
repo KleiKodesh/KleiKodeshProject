@@ -13,7 +13,7 @@ import {
   IconRuler24Filled,
 } from '@iconify-prerendered/vue-fluent'
 import { IconSettings24, IconSearchSparkle24 } from '@iconify-prerendered/vue-fluent-color'
-import { isHosted, dbReady } from '@/host/seforimDb'
+import { isHosted, dbReady } from '@/webview-host/seforimDb'
 import { useAppNavigation } from '@/composables/useAppNavigation'
 import { useTilesKeys } from '@/composables/useTileGridKeys'
 import { dateInfo, loadDateInfo } from './homeDateInfo'

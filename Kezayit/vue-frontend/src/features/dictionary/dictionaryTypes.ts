@@ -1,4 +1,4 @@
-import type { SenseRow, DictLink, MetzudatRow, MenchemRow } from '@/host/dictionaryDb'
+import type { SenseRow, DictLink, MetzudatRow, MenchemRow } from '@/webview-host/dictionaryDb'
 
 export interface WordPageData {
   headword:               string

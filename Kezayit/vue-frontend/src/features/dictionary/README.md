@@ -61,11 +61,11 @@ The two stages are sequential — כתיב חסר is tried first, Levenshtein on
 
 Three files handle all query logic:
 
-`src/host/dictionaryDb.sql.ts` — all SQL strings for the dictionary DB. No inline SQL anywhere else in the dictionary layer.
+`src/webview-host/dictionaryDb.sql.ts` — all SQL strings for the dictionary DB. No inline SQL anywhere else in the dictionary layer.
 
-`src/host/dictionaryDb.ts` — dictionary DB query functions (`dictLinks`, `dictSynonyms`, `dictVariants`, `dictSpellCandidates`, `abbrevLookup`) and the main entry point `combinedLookup`. Routes through `__webviewDictQuery` (C# host) or the `/query-dict` Vite dev middleware.
+`src/webview-host/dictionaryDb.ts` — dictionary DB query functions (`dictLinks`, `dictSynonyms`, `dictVariants`, `dictSpellCandidates`, `abbrevLookup`) and the main entry point `combinedLookup`. Routes through `__webviewDictQuery` (C# host) or the `/query-dict` Vite dev middleware.
 
-`src/host/dictionarySeforimDb.ts` — seforim DB queries for מצודת ציון, מלבי"ם, and מחברת מנחם. Exports `boldExact`, `boldPrefix`, `boldContains`, `getMetzudatBookIds`, `getMalbimBookIds`, and `menchemLookup`. Uses the same seforim DB transport as the rest of the app.
+`src/webview-host/dictionarySeforimDb.ts` — seforim DB queries for מצודת ציון, מלבי"ם, and מחברת מנחם. Exports `boldExact`, `boldPrefix`, `boldContains`, `getMetzudatBookIds`, `getMalbimBookIds`, and `menchemLookup`. Uses the same seforim DB transport as the rest of the app.
 
 ## Rebuild
 

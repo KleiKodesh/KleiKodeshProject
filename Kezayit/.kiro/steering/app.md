@@ -176,10 +176,10 @@ Every component that uses `useVirtualizer` from `@tanstack/vue-virtual` must wir
 
 ## Database
 
-- All SQLite access goes through `src/host/db.ts` — never call fetch against the DB from a component or composable
-- All raw SQL strings live in `src/host/queries.sql.ts` — no inline SQL anywhere else
+- All SQLite access goes through `src/webview-host/db.ts` — never call fetch against the DB from a component or composable
+- All raw SQL strings live in `src/webview-host/queries.sql.ts` — no inline SQL anywhere else
 - Feature composables call `query()` with a SQL constant from `queries.sql.ts` and a params array
-- **Exception — dictionary DB**: dictionary SQL lives in `src/host/dictionaryDb.ts`, not in `queries.sql.ts`. Both the C# host path (`__webviewDictQuery`) and the dev path (`devQueryDict`) execute the same SQL string sent from the frontend — there is nothing to keep in sync between C# and dev for dictionary queries.
+- **Exception — dictionary DB**: dictionary SQL lives in `src/webview-host/dictionaryDb.ts`, not in `queries.sql.ts`. Both the C# host path (`__webviewDictQuery`) and the dev path (`devQueryDict`) execute the same SQL string sent from the frontend — there is nothing to keep in sync between C# and dev for dictionary queries.
 
 ### Transports (auto-selected at runtime)
 
@@ -454,7 +454,7 @@ Always use `tabStore.setLastReadPos()` — it calls `idbSetLastRead()` which enf
 ## C# Host UI in Dev Mode
 
 - All UI that is conditional on running inside the C# WebView host (`isHosted`) must also be visible in browser dev mode
-- `isHosted` and `dbReady` are exported from `src/host/db.ts` as module-level constants/refs — import them from there, never recompute locally in components
+- `isHosted` and `dbReady` are exported from `src/webview-host/db.ts` as module-level constants/refs — import them from there, never recompute locally in components
 - `isHosted = window.__webviewDbReady !== undefined || import.meta.env.DEV`
 - `dbReady` is a `ref<boolean>` — set to `true` when the user picks a valid DB file; the `__onDbPathPicked` callback in `db.ts` handles this automatically
 - Never use `typeof window.__webviewPickDbPath === 'function'` for host detection — the bridge registers those functions at Vue boot time, which is too late for module-level const evaluation

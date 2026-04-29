@@ -1,13 +1,14 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { query, categoryHasOrderIndex, ensureCategorySchema } from '@/host/seforimDb'
-import { SQL } from '@/host/queries.sql'
+import { query, categoryHasOrderIndex, ensureCategorySchema } from '@/webview-host/seforimDb'
+import { SQL } from '@/webview-host/queries.sql'
 import {
   buildTree,
   assignFullPaths,
   findCategoryMeta,
-} from '@/utils/booksCategoryTree'
-import type { CategoryNode, CategoryRow, BookRow } from '@/utils/booksCategoryTree'
+} from '../features/book-catalog/bookCatalogTree'
+import { buildSearchIndex } from '../features/book-catalog/bookCatalogSearch'
+import type { CategoryNode, CategoryRow, BookRow } from '../features/book-catalog/bookCatalogTree'
 
 export const useBooksDataStore = defineStore('booksData', () => {
   const loaded = ref(false)
@@ -46,6 +47,10 @@ export const useBooksDataStore = defineStore('booksData', () => {
         ROOT.value = { ...ROOT.value, children }
         allBooks.value = orderedBooks
         loaded.value = true
+
+        // Build the search index asynchronously in the background — yields between
+        // chunks so it doesn't block the first render after catalog load
+        buildSearchIndex(orderedBooks)
       } catch (e) {
         const msg = e instanceof Error ? e.message : ''
         if (msg.toLowerCase().includes('failed to fetch')) {

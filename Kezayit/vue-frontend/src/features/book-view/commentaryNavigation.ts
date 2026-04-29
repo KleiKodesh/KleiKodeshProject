@@ -1,5 +1,5 @@
-import { query } from '@/host/seforimDb'
-import { SQL } from '@/host/queries.sql'
+import { query } from '@/webview-host/seforimDb'
+import { SQL } from '@/webview-host/queries.sql'
 import type { TocEntry } from '@/features/book-view/useBookViewToc'
 
 export interface SectionNavResult {
