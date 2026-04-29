@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { IconDismiss20Regular, IconCopy20Regular, IconCheckmark20Regular, IconHourglassOneQuarter20Regular } from '@iconify-prerendered/vue-fluent'
 import type { OcrSelectionResult, OcrScript } from './usePdfOcrSelection'
 
@@ -13,6 +13,12 @@ const emit = defineEmits<{ dismiss: []; 'update:script': [OcrScript] }>()
 
 const textRef = ref<HTMLTextAreaElement | null>(null)
 const copied = ref(false)
+const editableText = ref(props.result.text ?? '')
+
+// Keep editableText in sync if the result changes (e.g. OCR finishes)
+watch(() => props.result.text, (val) => {
+  editableText.value = val ?? ''
+})
 
 const resultLabel = computed(() => {
   return props.result.isOcr ? 'טקסט מזוהה (OCR)' : 'טקסט נבחר'
@@ -23,8 +29,7 @@ const copyButtonLabel = computed(() => {
 })
 
 async function copyText() {
-  const text = textRef.value?.value ?? props.result.text
-  await navigator.clipboard.writeText(text)
+  await navigator.clipboard.writeText(editableText.value)
   copied.value = true
   setTimeout(() => { copied.value = false }, 1200)
 }
@@ -60,16 +65,17 @@ function onKeydown(event: KeyboardEvent) {
         <textarea
           ref="textRef"
           class="popup-textarea"
-          :value="props.result.text || ''"
-          :placeholder="props.result.text ? '' : 'לא נמצא טקסט באזור הנבחר'"
+          v-model="editableText"
+          :placeholder="editableText ? '' : 'לא נמצא טקסט באזור הנבחר'"
+          spellcheck="true"
           dir="rtl"
           :disabled="props.isProcessing"
         />
         <div v-if="props.isProcessing" class="progress-container">
           <div class="progress-bar">
-            <div class="progress-fill" :style="{ width: (props.processingProgress * 100) + '%' }" />
+            <div class="progress-fill" :style="{ width: ((props.processingProgress ?? 0) * 100) + '%' }" />
           </div>
-          <span class="progress-text">{{ Math.round(props.processingProgress * 100) }}%</span>
+          <span class="progress-text">{{ Math.round((props.processingProgress ?? 0) * 100) }}%</span>
         </div>
       </div>
 
@@ -77,7 +83,7 @@ function onKeydown(event: KeyboardEvent) {
         <button class="action-btn cancel-btn" @click="emit('dismiss')" :disabled="props.isProcessing">ביטול</button>
         <button 
           class="action-btn copy-btn" 
-          :disabled="!props.result.text || props.isProcessing" 
+          :disabled="!editableText || props.isProcessing" 
           :class="{ copied: copied }"
           @click="copyText"
           title="העתק לחיתוך (Ctrl+C)"
@@ -262,6 +268,7 @@ function onKeydown(event: KeyboardEvent) {
 .copy-btn {
   background: var(--accent-color);
   color: #fff;
+  color: var(--text-primary);
   border: 1px solid var(--accent-color);
 }
 
@@ -290,6 +297,7 @@ function onKeydown(event: KeyboardEvent) {
 .copy-btn .icon {
   width: 14px;
   height: 14px;
+  color: inherit;
 }
 
 .processing-indicator {

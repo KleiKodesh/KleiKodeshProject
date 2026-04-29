@@ -26,3 +26,124 @@
   --scrollbar-color: var(--border-color-custom, auto);
   --scrollbar-bg-color: transparent;
 }
+
+/* --- Zoom select: contain dynamic width --- */
+#scaleSelectContainer {
+  min-width: 0;
+  overflow: hidden;
+  flex-shrink: 1;
+}
+#scaleSelect {
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* Allow all toolbar flex containers to shrink to zero */
+#toolbarContainer,
+#toolbarViewer,
+#toolbarViewerLeft,
+#toolbarViewerMiddle,
+#toolbarViewerRight,
+.toolbarHorizontalGroup,
+.toolbarButtonWithContainer,
+#scaleSelectContainer {
+  min-width: 0;
+}
+
+/* Override PDF.js's #toolbarContainer #toolbarViewer { width: 100% } — must match exact specificity */
+#toolbarContainer #toolbarViewer {
+  width: auto;
+  flex-shrink: 1;
+}
+
+/* --- Responsive toolbar: progressive hiding --- */
+
+/* Step 1 — Shrink gaps and padding */
+@media (max-width: 650px) {
+  #toolbarViewer,
+  #toolbarViewerLeft,
+  #toolbarViewerMiddle,
+  #toolbarViewerRight {
+    gap: 2px;
+  }
+  .toolbarButton {
+    padding-inline: 4px;
+  }
+}
+
+/* Step 2 — Shrink page number input */
+@media (max-width: 600px) {
+  #pageNumber {
+    width: 2em;
+    min-width: 0;
+    padding-inline: 2px;
+    text-align: center;
+  }
+}
+
+/* Step 3 — Hide "of N pages" first */
+@media (max-width: 580px) {
+  #numPages {
+    display: none;
+  }
+}
+
+/* Keep middle section from being squeezed away by flex before our breakpoints fire */
+#toolbarViewerMiddle {
+  flex-shrink: 0;
+}
+
+/* Step 4 — Shrink zoom dropdown gradually before hiding */
+#scaleSelectContainer {
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+/* Override PDF.js dropdown min-width via the CSS custom property it uses internally.
+   Since !important on .dropdownToolbarButton doesn't win, we intercept at :root level
+   and use max-width + overflow on the container instead to force the shrink. */
+#scaleSelectContainer {
+  overflow: hidden;
+  flex-shrink: 0;
+  transition: max-width 0.2s ease;
+  max-width: 200px;
+}
+
+@media (max-width: 570px) {
+  #scaleSelectContainer {
+    max-width: 44px;
+  }
+}
+
+@media (max-width: 420px) {
+  #scaleSelectContainer {
+    display: none;
+  }
+}
+
+/* Step 6 — Hide zoom +/- buttons */
+@media (max-width: 380px) {
+  #zoomOutButton,
+  #zoomInButton,
+  #zoomOutButton + .splitToolbarButtonSeparator {
+    display: none;
+  }
+}
+
+
+@media (min-width: 350px) {
+ #toolbarViewer {
+  display: flex;
+}
+}
+
+
+
+/* Step 7 — Hide page number input entirely */
+@media (max-width: 300px) {
+  .loadingInput.start,
+  #numPages {
+    display: none;
+  }
+}
