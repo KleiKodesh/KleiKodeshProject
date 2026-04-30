@@ -24,6 +24,11 @@ namespace DocDesign.Paragraphs
 
         public FirstWordStyle()
         {
+            // Style enumeration is deferred to ApplicationIdle by the View
+        }
+
+        public void DeferredInit()
+        {
             if (Vsto.Application == null) return;
             Dispatcher.CurrentDispatcher.InvokeAsync(() =>
             {

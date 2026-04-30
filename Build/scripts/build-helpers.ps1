@@ -53,7 +53,7 @@ function Invoke-SolutionClean {
 function New-ReleaseNotes {
     param([string]$Version, [string]$Source)   # Source: commits | file | both
 
-    $buildInfo   = "**Build:** Release|AnyCPU"
+    $buildInfo   = "**Build:** Release - three variants: KleiKodeshSetup-${Version}-x64.exe (64-bit Word), KleiKodeshSetup-${Version}-x86.exe (32-bit Word), KleiKodeshSetup-${Version}.exe (universal)"
     $fileContent = if (Test-Path $ReleaseNotesFile) { Get-Content $ReleaseNotesFile -Raw } else { "" }
 
     $previousTag = gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>$null

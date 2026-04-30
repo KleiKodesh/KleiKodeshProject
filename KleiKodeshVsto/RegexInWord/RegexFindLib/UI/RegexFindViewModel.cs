@@ -42,7 +42,7 @@ namespace RegexFindLib.UI
             _word   = word;
             _search = new RegexSearch(word);
             InitCommands();
-            LoadFonts();
+            // Font loading is scheduled by the View after first render — not here
         }
 
         // ── Instance proxies for static collections (WPF binding) ────────────

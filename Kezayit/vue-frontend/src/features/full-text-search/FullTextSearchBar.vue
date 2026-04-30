@@ -94,6 +94,8 @@ defineExpose({ focus: () => inputRef.value?.focus(), filterBtnRef })
       class="search-input"
       :placeholder="placeholder"
       :disabled="disabled"
+      spellcheck="true"
+      autocomplete="on"
       @keydown.enter="handleSearch"
       @keydown.esc="handleClear"
     />

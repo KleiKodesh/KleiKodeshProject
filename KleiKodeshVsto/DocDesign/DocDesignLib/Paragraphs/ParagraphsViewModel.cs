@@ -52,8 +52,7 @@ namespace DocDesign.Paragraphs
 
         public ParagraphsViewModel()
         {
-            if (Vsto.Application != null)
-                RefreshActiveStylesAction();
+            // Initial style load is deferred to ApplicationIdle by the View
         }
 
         public void RefreshActiveStylesAction()

@@ -39,6 +39,7 @@ const virtualizer = useVirtualizer(
     getScrollElement: () => scrollEl.value,
     estimateSize: () => 80,
     overscan: 8,
+    getItemKey: (index) => props.results[index]?.lineId ?? index,
     measureElement: (el) => el.getBoundingClientRect().height,
   })),
 )

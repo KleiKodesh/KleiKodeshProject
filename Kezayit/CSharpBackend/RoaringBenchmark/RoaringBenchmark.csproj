@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>RoaringBenchmark</RootNamespace>
+    <AssemblyName>RoaringBenchmark</AssemblyName>
+    <Nullable>disable</Nullable>
+    <LangVersion>12</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Roaring.Net" Version="1.4.0" />
+    <PackageReference Include="System.Data.SQLite" Version="1.0.119.0" />
+  </ItemGroup>
+
+</Project>

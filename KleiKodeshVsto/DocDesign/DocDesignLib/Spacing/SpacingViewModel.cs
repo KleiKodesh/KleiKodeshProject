@@ -36,9 +36,20 @@ namespace DocDesign.Spacing
             {
                 Vsto.ApplicationFactory.GetVstoObject(Vsto.Application.ActiveDocument).SelectionChange += (_, x) =>
                     UpdateProperties();
-                UpdateProperties();
+                // Initial property read is deferred to ApplicationIdle by the View
             }
             catch { }
+        }
+
+        /// <summary>
+        /// Called by the View after first render to populate initial values without
+        /// blocking the constructor or the Loaded event.
+        /// </summary>
+        public void DeferredInit()
+        {
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.InvokeAsync(
+                UpdateProperties,
+                System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         }
 
         void UpdateProperties()

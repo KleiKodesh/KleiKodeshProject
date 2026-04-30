@@ -33,7 +33,12 @@ namespace RegexFindLib.Search
 
         public void Execute(FindRequest request, bool replace = false, bool replaceAll = false)
         {
-            if (string.IsNullOrEmpty(request?.Text))
+            // Allow empty text when searching by formatting only (non-wildcard mode).
+            // Word's Find API handles this natively — empty text + Format=true matches
+            // any run that satisfies the formatting criteria, exactly like the built-in dialog.
+            // Wildcard mode is excluded because an empty wildcard pattern is invalid in Word.
+            bool hasText = !string.IsNullOrEmpty(request?.Text);
+            if (!hasText && (request.MatchWildcards || !HasFormatting(request.Formatting)))
                 return;
 
             if (replace)

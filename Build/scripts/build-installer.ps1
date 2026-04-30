@@ -41,11 +41,13 @@ Write-Host "Notes source : $ReleaseNotesSource" -ForegroundColor Gray
 Write-Host "GitHub rel.  : $(if ($NoRelease) { 'skip' } else { 'yes' })" -ForegroundColor Gray
 Write-Host ""
 
-# ── 1. Wipe VSTO Release folder (ensures clean VSTO output) ──────────────────
-$vstoRelease = Join-Path $ProjectRoot "KleiKodeshVsto\bin\Release"
-if (Test-Path $vstoRelease) {
-    Remove-Item $vstoRelease -Recurse -Force
-    Write-Host "Deleted VSTO Release folder." -ForegroundColor Gray
+# ── 1. Wipe VSTO Release folders (ensures clean VSTO output for all variants) ─
+foreach ($folder in @("bin\Release", "bin\Release-x64", "bin\Release-x86")) {
+    $path = Join-Path $ProjectRoot "KleiKodeshVsto\$folder"
+    if (Test-Path $path) {
+        Remove-Item $path -Recurse -Force
+        Write-Host "Deleted $folder" -ForegroundColor Gray
+    }
 }
 
 # ── 2. Update version ─────────────────────────────────────────────────────────
@@ -65,15 +67,15 @@ Write-Host "Version: $version" -ForegroundColor Cyan
 # ── 3. Clean ──────────────────────────────────────────────────────────────────
 if (-not $NoClean) { Invoke-SolutionClean }
 
-# ── 4. Build WPF installer (prebuild event builds VSTO via MSBuild) ───────────
-Write-Host ""
-Write-Host "Building WPF installer (Release|AnyCPU)..." -ForegroundColor Yellow
-dotnet build $WpfProjectPath -c Release `
-    -p:VstoConfiguration=Release -p:VstoPlatform=AnyCPU `
-    --verbosity normal
-if ($LASTEXITCODE -ne 0) { Write-Host "ERROR: WPF build failed." -ForegroundColor Red; exit 1 }
+# ── 4. Build three VSTO+installer variants ───────────────────────────────────
+#
+# Each variant builds the VSTO at the given platform, packs it into KleiKodesh.zip
+# (via the pre-build target), then wraps it with NSIS.
+# The three output files are:
+#   KleiKodeshSetup-{version}-x64.exe   — for 64-bit Word (most users)
+#   KleiKodeshSetup-{version}-x86.exe   — for 32-bit Word
+#   KleiKodeshSetup-{version}.exe       — AnyCPU fallback (both native folders)
 
-# ── 5. NSIS wrapper ───────────────────────────────────────────────────────────
 $nsisExe = @(
     "C:\Program Files (x86)\NSIS\makensis.exe",
     "C:\Program Files\NSIS\makensis.exe"
@@ -86,19 +88,54 @@ if (-not $nsisExe) {
 
 if (-not (Test-Path $ReleasesDir)) { New-Item -ItemType Directory -Path $ReleasesDir -Force | Out-Null }
 
-Write-Host "Building NSIS wrapper ($version)..." -ForegroundColor Yellow
-& $nsisExe "/DPRODUCT_VERSION=$version" "/DOUTPUT_DIR=$ReleasesDir" $NsisScriptPath
-if ($LASTEXITCODE -ne 0) { Write-Host "ERROR: NSIS build failed." -ForegroundColor Red; exit 1 }
+# Helper: build one variant and produce its NSIS installer
+function Build-Variant {
+    param(
+        [string]$Platform,      # AnyCPU | x64 | x86
+        [string]$Suffix         # "" | "-x64" | "-x86"
+    )
 
-$installerPath = Join-Path $ReleasesDir "KleiKodeshSetup-$version.exe"
-if (-not (Test-Path $installerPath)) {
-    Write-Host "ERROR: Installer not found at $installerPath" -ForegroundColor Red; exit 1
+    Write-Host ""
+    Write-Host "Building WPF installer (Release|$Platform)..." -ForegroundColor Yellow
+
+    dotnet build $WpfProjectPath -c Release `
+        -p:VstoConfiguration=Release -p:VstoPlatform=$Platform `
+        --verbosity normal
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "ERROR: WPF build failed for $Platform." -ForegroundColor Red
+        exit 1
+    }
+
+    $outFile = Join-Path $ReleasesDir "KleiKodeshSetup-${version}${Suffix}.exe"
+
+    Write-Host "Building NSIS wrapper ($version$Suffix)..." -ForegroundColor Yellow
+    & $nsisExe `
+        "/DPRODUCT_VERSION=$version" `
+        "/DOUTPUT_DIR=$ReleasesDir" `
+        "/DOUTPUT_SUFFIX=$Suffix" `
+        $NsisScriptPath
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "ERROR: NSIS build failed for $Platform." -ForegroundColor Red
+        exit 1
+    }
+
+    if (-not (Test-Path $outFile)) {
+        Write-Host "ERROR: Expected installer not found: $outFile" -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host "OK: $(Split-Path -Leaf $outFile)" -ForegroundColor Green
+    return $outFile
 }
 
-Write-Host ""
-Write-Host "SUCCESS: KleiKodeshSetup-$version.exe" -ForegroundColor Green
+$installerX64 = Build-Variant -Platform "x64"    -Suffix "-x64"
+$installerX86 = Build-Variant -Platform "x86"    -Suffix "-x86"
+$installerAny = Build-Variant -Platform "AnyCPU" -Suffix ""
 
-# ── 6. GitHub release ─────────────────────────────────────────────────────────
+Write-Host ""
+Write-Host "All three variants built successfully." -ForegroundColor Green
+
+# ── 5. GitHub release ─────────────────────────────────────────────────────────
 if ($NoRelease) { Write-Host "GitHub release skipped." -ForegroundColor Yellow; exit 0 }
 
 Write-Host ""
@@ -126,7 +163,9 @@ if ($LASTEXITCODE -eq 0) {
 $notes  = New-ReleaseNotes -Version $version -Source $ReleaseNotesSource
 $branch = git rev-parse --abbrev-ref HEAD
 
-gh release create $version $installerPath `
+# Upload all three installers to the same release.
+# The AnyCPU build (no suffix) is the default download link shown on the release page.
+gh release create $version $installerX64 $installerX86 $installerAny `
     --repo KleiKodesh/KleiKodeshProject `
     --title "KleiKodesh $version" `
     --notes $notes `

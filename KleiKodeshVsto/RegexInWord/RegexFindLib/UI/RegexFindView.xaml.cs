@@ -26,16 +26,7 @@ namespace RegexFindLib.UI
             DataContext = new RegexFindViewModel(wordService);
             InitializeComponent();
 
-            Loaded += (_, __) =>
-            {
-                if (DataContext is RegexFindViewModel vm)
-                {
-                    RegexFindViewModel.LoadRecentSearches();
-                    // Load styles once at initialization
-                    vm.EnsureStylesLoaded();
-                }
-                RegexPalette.InsertAction = InsertSymbolAtCursor;
-            };
+            Loaded += OnLoaded;
 
             // Refresh styles when control becomes visible
             IsVisibleChanged += (_, e) =>
@@ -50,6 +41,25 @@ namespace RegexFindLib.UI
                 if (DataContext is RegexFindViewModel vm)
                     vm.EnsureStylesLoaded();
             };
+        }
+
+        void OnLoaded(object sender, RoutedEventArgs e)
+        {
+            Loaded -= OnLoaded;
+
+            // Defer all data loading until after the first frame is rendered.
+            // DispatcherPriority.ApplicationIdle fires only when the UI is idle —
+            // the control is fully painted and visible before any loading begins.
+            Dispatcher.BeginInvoke(new System.Action(() =>
+            {
+                RegexFindViewModel.LoadRecentSearches();
+                RegexFindViewModel.ScheduleFontLoad();
+
+                if (DataContext is RegexFindViewModel vm)
+                    vm.EnsureStylesLoaded();
+
+                RegexPalette.InsertAction = InsertSymbolAtCursor;
+            }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         }
 
         RegexFindViewModel Vm => DataContext as RegexFindViewModel;
@@ -97,6 +107,16 @@ namespace RegexFindLib.UI
             FindHistoryPopup.IsOpen = true;
         }
 
+        void FindHistoryList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (e.AddedItems.Count > 0)
+            {
+                FindHistoryPopup.IsOpen = false;
+                FindBox.Focus();
+                FindBox.CaretIndex = FindBox.Text?.Length ?? 0;
+            }
+        }
+
         // ── Replace TextBox ───────────────────────────────────────────────────
 
         void ReplaceBox_GotFocus(object sender, RoutedEventArgs e)
@@ -121,6 +141,16 @@ namespace RegexFindLib.UI
         void ReplaceHistoryBtn_Click(object sender, RoutedEventArgs e)
         {
             ReplaceHistoryPopup.IsOpen = true;
+        }
+
+        void ReplaceHistoryList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (e.AddedItems.Count > 0)
+            {
+                ReplaceHistoryPopup.IsOpen = false;
+                ReplaceBox.Focus();
+                ReplaceBox.CaretIndex = ReplaceBox.Text?.Length ?? 0;
+            }
         }
 
         // ── Results keyboard navigation ───────────────────────────────────────

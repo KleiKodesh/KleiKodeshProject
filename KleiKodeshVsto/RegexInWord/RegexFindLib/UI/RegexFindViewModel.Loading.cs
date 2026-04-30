@@ -8,7 +8,7 @@ namespace RegexFindLib.UI
     {
         // ── Font loading — async, shared across instances ─────────────────────
 
-        void LoadFonts()
+        internal static void ScheduleFontLoad()
         {
             lock (_fontLock)
             {
@@ -37,7 +37,7 @@ namespace RegexFindLib.UI
                                 FontList.Add(item);
                             _fontsLoaded = true;
                         }
-                    }));
+                    }), System.Windows.Threading.DispatcherPriority.Background);
                 }
                 catch { }
             });
@@ -69,15 +69,33 @@ namespace RegexFindLib.UI
                     {
                         lock (_styleLock)
                         {
-                            StyleList.Clear();
-                            foreach (var name in names)
-                                StyleList.Add(name);
+                            // Only rebuild the list if it actually changed — avoids
+                            // clearing the ComboBox selection on every focus/visibility event.
+                            bool changed = names.Count != StyleList.Count
+                                        || !names.SequenceEqual(StyleList);
+
+                            if (changed)
+                            {
+                                var findStyle    = FindFormatting.StyleName;
+                                var replaceStyle = ReplaceFormatting.StyleName;
+
+                                StyleList.Clear();
+                                foreach (var name in names)
+                                    StyleList.Add(name);
+
+                                // Restore selections by value so the ComboBox doesn't go blank
+                                if (!string.IsNullOrEmpty(findStyle))
+                                    FindFormatting.StyleName = findStyle;
+                                if (!string.IsNullOrEmpty(replaceStyle))
+                                    ReplaceFormatting.StyleName = replaceStyle;
+                            }
+
                             _styleRefreshInProgress = false;
                         }
-                    }));
+                    }), System.Windows.Threading.DispatcherPriority.Background);
                 }
-                catch 
-                { 
+                catch
+                {
                     lock (_styleLock)
                     {
                         _styleRefreshInProgress = false;
@@ -97,10 +115,24 @@ namespace RegexFindLib.UI
 
         public static void LoadRecentSearches()
         {
-            RecentSearches.Clear();
-            foreach (var s in SearchHistory.Find.Load())    RecentSearches.Add(s);
-            RecentReplacements.Clear();
-            foreach (var s in SearchHistory.Replace.Load()) RecentReplacements.Add(s);
+            var dispatcher = System.Windows.Application.Current?.Dispatcher
+                          ?? System.Windows.Threading.Dispatcher.CurrentDispatcher;
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try
+                {
+                    var finds    = SearchHistory.Find.Load().ToList();
+                    var replaces = SearchHistory.Replace.Load().ToList();
+                    dispatcher.BeginInvoke(new System.Action(() =>
+                    {
+                        RecentSearches.Clear();
+                        foreach (var s in finds)    RecentSearches.Add(s);
+                        RecentReplacements.Clear();
+                        foreach (var s in replaces) RecentReplacements.Add(s);
+                    }), System.Windows.Threading.DispatcherPriority.Background);
+                }
+                catch { }
+            });
         }
 
         public void AddSearchToHistory()

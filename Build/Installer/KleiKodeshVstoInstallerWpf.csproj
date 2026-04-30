@@ -4,7 +4,7 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net48</TargetFramework>
     <UseWPF>true</UseWPF>
-    <Version>4.2.0</Version>
+    <Version>4.3.0</Version>
     <ApplicationIcon>KleiKodesh_Main.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>AnyCPU</Platforms>
@@ -32,7 +32,10 @@
       <VstoConfig Condition="'$(Configuration)' != 'Release'">Debug</VstoConfig>
       <VstoPlatformParam Condition="'$(VstoPlatform)' != ''">$(VstoPlatform)</VstoPlatformParam>
       <VstoPlatformParam Condition="'$(VstoPlatform)' == ''">AnyCPU</VstoPlatformParam>
-      <VstoOutputPath>$(MSBuildProjectDirectory)\..\..\KleiKodeshVsto\bin\$(VstoConfig)</VstoOutputPath>
+      <!-- Output path matches the platform-specific PropertyGroups in KleiKodeshVsto.csproj -->
+      <VstoOutputPath Condition="'$(VstoPlatformParam)' == 'x64'">$(MSBuildProjectDirectory)\..\..\KleiKodeshVsto\bin\$(VstoConfig)-x64</VstoOutputPath>
+      <VstoOutputPath Condition="'$(VstoPlatformParam)' == 'x86'">$(MSBuildProjectDirectory)\..\..\KleiKodeshVsto\bin\$(VstoConfig)-x86</VstoOutputPath>
+      <VstoOutputPath Condition="'$(VstoOutputPath)' == ''">$(MSBuildProjectDirectory)\..\..\KleiKodeshVsto\bin\$(VstoConfig)</VstoOutputPath>
       <TempPackageDir>$(OutputPath)VstoPackage</TempPackageDir>
       <ZipOutputPath>$(MSBuildProjectDirectory)\KleiKodesh.zip</ZipOutputPath>
       <InstallProgressFile>$(MSBuildProjectDirectory)\Helpers\AddinInstaller.cs</InstallProgressFile>

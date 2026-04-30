@@ -203,11 +203,13 @@ function onSelect(headword: string) {
       </template>
       <input
         ref="searchInputRef"
-        v-model="searchQuery"
+        :value="searchQuery"
         class="dict-search-input"
-        type="search"
+        type="text"
         placeholder="חפש מילה"
-        dir="rtl"
+        spellcheck="true"
+        autocomplete="on"
+        @input="searchQuery = ($event.target as HTMLInputElement).value"
       />
     </BottomSearchBar>
   </div>
@@ -220,7 +222,6 @@ function onSelect(headword: string) {
   height: 100%;
   overflow: hidden;
   background: var(--bg-primary);
-  direction: rtl;
 }
 .dict-body { flex: 1; overflow: hidden; }
 .dict-state {
@@ -235,7 +236,6 @@ function onSelect(headword: string) {
   padding: 8px 16px;
   font-size: 12px;
   color: var(--text-secondary);
-  direction: rtl;
   flex-shrink: 0;
 }
 .dict-suggestions-label { font-weight: 600; }
@@ -270,7 +270,6 @@ function onSelect(headword: string) {
   font-size: 13px;
   color: var(--text-primary);
   font-family: inherit;
-  direction: rtl;
 }
 .dict-search-input::placeholder { color: var(--text-secondary); }
 .dict-search-input::-webkit-search-cancel-button { filter: grayscale(1) opacity(0.4); }

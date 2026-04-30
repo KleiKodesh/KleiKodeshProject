@@ -70,8 +70,13 @@ UninstallIcon "..\Installer\KleiKodesh_Main.ico"
   !define OUTPUT_DIR "releases"
 !endif
 
+; Filename suffix - passed from build script: "" | "-x64" | "-x86"
+!ifndef OUTPUT_SUFFIX
+  !define OUTPUT_SUFFIX ""
+!endif
+
 Name "מתקין ${PRODUCT_NAME}"
-OutFile "${OUTPUT_DIR}\KleiKodeshSetup-${PRODUCT_VERSION}.exe"
+OutFile "${OUTPUT_DIR}\KleiKodeshSetup-${PRODUCT_VERSION}${OUTPUT_SUFFIX}.exe"
 InstallDir "$LOCALAPPDATA\KleiKodesh"
 RequestExecutionLevel user
 SilentInstall silent

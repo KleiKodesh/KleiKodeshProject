@@ -1,4 +1,6 @@
+using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using DocDesign.Helpers;
 using DocDesign.UI;
 
@@ -31,19 +33,46 @@ namespace DocDesign
 
         void SetupStyleRefresh()
         {
-            // Refresh styles when control becomes visible
+            Loaded += OnLoaded;
+
+            // Refresh styles when control becomes visible — deferred so it doesn't
+            // block the visibility transition itself
             IsVisibleChanged += (_, e) =>
             {
                 if ((bool)e.NewValue && DataContext is DocDesignViewModel vm)
-                    vm.ParagraphsViewModel.RefreshActiveStylesAction();
+                    Dispatcher.BeginInvoke(new System.Action(() =>
+                    {
+                        vm.ParagraphsViewModel.RefreshActiveStylesAction();
+                    }), DispatcherPriority.ApplicationIdle);
             };
 
-            // Refresh styles when control gets focus
+            // Refresh styles when control gets focus — deferred
             GotFocus += (_, __) =>
             {
                 if (DataContext is DocDesignViewModel vm)
-                    vm.ParagraphsViewModel.RefreshActiveStylesAction();
+                    Dispatcher.BeginInvoke(new System.Action(() =>
+                    {
+                        vm.ParagraphsViewModel.RefreshActiveStylesAction();
+                    }), DispatcherPriority.ApplicationIdle);
             };
+        }
+
+        void OnLoaded(object sender, RoutedEventArgs e)
+        {
+            Loaded -= OnLoaded;
+
+            // Defer all Word COM initialization until after the first frame is rendered.
+            // ApplicationIdle fires only when the dispatcher queue is empty — the control
+            // is fully painted before any COM calls begin.
+            Dispatcher.BeginInvoke(new System.Action(() =>
+            {
+                if (DataContext is DocDesignViewModel vm)
+                {
+                    vm.ParagraphsViewModel.RefreshActiveStylesAction();
+                    vm.ParagraphsViewModel.FirstWordStyle.DeferredInit();
+                    vm.SpacingViewModel.DeferredInit();
+                }
+            }), DispatcherPriority.ApplicationIdle);
         }
     }
 }

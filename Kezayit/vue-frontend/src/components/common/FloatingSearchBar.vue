@@ -62,6 +62,8 @@ defineExpose({ focus: () => inputRef.value?.focus() })
           type="search"
           class="search-input"
           :placeholder="placeholder ?? 'חיפוש...'"
+          spellcheck="true"
+          autocomplete="on"
           @input="emit('update:query', ($event.target as HTMLInputElement).value)"
           @keydown="onKeydown"
         />

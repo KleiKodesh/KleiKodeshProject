@@ -186,7 +186,7 @@
         <StackPanel Grid.Row="1" Margin="10,8,10,0">
 
             <!-- input-wrapper: [regex .*] [text fills] [🔍] — LTR DockPanel, absolute dock positions -->
-            <Border CornerRadius="4" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Background="Transparent" Height="28" Margin="0,0,0,5">
+            <Border x:Name="FindInputBorder" CornerRadius="4" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Background="Transparent" Height="28" Margin="0,0,0,5">
                 <DockPanel FlowDirection="LeftToRight">
                     <!-- 🔍 search icon — LEFT side -->
                     <Button DockPanel.Dock="Left"
@@ -235,12 +235,12 @@
 
             <!-- find history popup -->
             <Popup x:Name="FindHistoryPopup"
-                   PlacementTarget="{Binding ElementName=FindBox}"
+                   PlacementTarget="{Binding ElementName=FindInputBorder}"
                    Placement="Bottom" StaysOpen="False" AllowsTransparency="False"
                    DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}">
                 <Border Background="{Binding Background, RelativeSource={RelativeSource AncestorType=UserControl}}"
                         BorderBrush="#50808080" BorderThickness="1"
-                        MinWidth="{Binding ActualWidth, ElementName=FindBox}"
+                        MinWidth="{Binding ActualWidth, ElementName=FindInputBorder}"
                         MaxHeight="220">
                     <ListBox ItemsSource="{Binding RecentSearchesBinding}"
                              SelectedItem="{Binding SelectedSearchHistory, Mode=TwoWay}"
@@ -248,6 +248,7 @@
                              ItemContainerStyle="{StaticResource HistoryItemContainerStyle}"
                              BorderThickness="0" Background="Transparent"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             SelectionChanged="FindHistoryList_SelectionChanged"
                              Margin="0,2"/>
                 </Border>
             </Popup>
@@ -326,7 +327,7 @@
             <StackPanel>
 
                 <!-- input-wrapper: [replace icon] [replace-all icon] [text] -->
-                <Border CornerRadius="4" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Background="Transparent" Height="28" Margin="0,0,0,5">
+                <Border x:Name="ReplaceInputBorder" CornerRadius="4" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Background="Transparent" Height="28" Margin="0,0,0,5">
                     <DockPanel FlowDirection="LeftToRight">
                         <!-- replace icon — docks Left → appears on LEFT (LTR) = RIGHT in RTL UI -->
                         <Button DockPanel.Dock="Left"
@@ -375,12 +376,12 @@
 
                 <!-- replace history popup -->
                 <Popup x:Name="ReplaceHistoryPopup"
-                       PlacementTarget="{Binding ElementName=ReplaceBox}"
+                       PlacementTarget="{Binding ElementName=ReplaceInputBorder}"
                        Placement="Bottom" StaysOpen="False" AllowsTransparency="False"
                        DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}">
                     <Border Background="{Binding Background, RelativeSource={RelativeSource AncestorType=UserControl}}"
                             BorderBrush="#50808080" BorderThickness="1"
-                            MinWidth="{Binding ActualWidth, ElementName=ReplaceBox}"
+                            MinWidth="{Binding ActualWidth, ElementName=ReplaceInputBorder}"
                             MaxHeight="220">
                         <ListBox ItemsSource="{Binding RecentReplacementsBinding}"
                                  SelectedItem="{Binding SelectedReplaceHistory, Mode=TwoWay}"
@@ -388,6 +389,7 @@
                                  ItemContainerStyle="{StaticResource HistoryItemContainerStyle}"
                                  BorderThickness="0" Background="Transparent"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 SelectionChanged="ReplaceHistoryList_SelectionChanged"
                                  Margin="0,2"/>
                     </Border>
                 </Popup>
