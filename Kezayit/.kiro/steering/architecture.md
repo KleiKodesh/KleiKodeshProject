@@ -293,7 +293,9 @@ The one exception is `ZayitDbManager.cs` in the C# backend, which owns the SQL u
 
 **normalizeText.ts** — `normalize(s)`: lowercases and strips Hebrew/ASCII quote characters. Import this as the base normalization step before any search comparison.
 
-**tocSearchUtils.ts** — TOC search path building (`buildTocSearchPaths`), query splitting (`splitQuery`), and ordered subsequence word matching (`matchWords`).
+**tocSearchUtils.ts** — TOC search path building (`buildTocSearchPaths`), query splitting (`splitQuery`), and ordered subsequence word matching (`matchWords`). Re-exports `SegmentSearchTree` as `SearchableTree` for backward compatibility — new code should import `SegmentSearchTree` from `segmentSearchTree.ts` directly.
+
+**segmentSearchTree.ts** — generic segment-aware search tree for any hierarchical node list. `SegmentSearchTree` matches query words as an ordered subsequence across ancestor path segments. Used by `TreeView.vue`, `CommentaryFilterPanel.vue`, `bookCatalogSearchTocHeuristics.ts`, and `dafYomiNavigation.ts`.
 
 **detectFonts.ts** — `detectAvailableFonts()` uses canvas measurement to detect which Hebrew and general fonts are installed. Used by `FontSelector.vue`.
 

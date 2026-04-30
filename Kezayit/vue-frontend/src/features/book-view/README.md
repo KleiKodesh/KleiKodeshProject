@@ -24,7 +24,7 @@ Main book reader. Split pane with text above and commentary below, shared side p
 
 **CommentaryHeaderNav.vue** - previous/next section navigation within a commentary book.
 
-**CommentaryFilterPanel.vue** - side-panel content for toggling individual commentary books on/off. Uses `buildCommentaryTree` from `useCommentary.ts` to render the tree.
+**CommentaryFilterPanel.vue** - side-panel content for toggling individual commentary books on/off. Uses `buildCommentaryTree` from `useCommentary.ts` to render the tree in normal mode. In search mode, renders a flat result list using `SegmentSearchTree` from `segmentSearchTree.ts` — matches query words across the full path (sectionLabel / subSectionLabel / bookTitle). When a search is active, emits an effective hidden set that merges the user's explicit hidden set with all groups outside the search results, so the commentary view automatically shows only what is both checked and in the search results.
 
 **CommentaryTreeViewNode.vue** - single node in the commentary filter tree.
 

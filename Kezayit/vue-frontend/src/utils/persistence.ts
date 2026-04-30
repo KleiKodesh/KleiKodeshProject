@@ -5,10 +5,11 @@
  *   All scalar app settings, theme, workspaces, UI state flags
  *
  * IndexedDB databases:
- *   app-tabs          — tabs list, tab states, book states (workspace-scoped)
- *   app-lastread      — per-book last-read positions (LRU-capped at 1000)
- *   app-hb-history    — HebrewBooks download history
- *   app-search-cache  — Bloom search result cache (LRU-capped at 100 queries)
+ *   app-tabs               — tabs list, tab states, book states (workspace-scoped)
+ *   app-lastread           — per-book last-read positions (LRU-capped at 1000)
+ *   app-hb-history         — HebrewBooks download history
+ *   app-search-cache       — Bloom search result cache (LRU-capped at 100 queries)
+ *   app-catalog-toc-cache  — Book catalog TOC search result cache (LRU-capped at 25 queries)
  *
  * Reset: clear all localStorage keys + delete all IDB databases.
  */
@@ -85,7 +86,7 @@ export interface BookState {
   selectedLineId?: number | null
   commentaryScrollIndex?: number | null
   commentaryScrollOffset?: number | null
-  hiddenCommentaryBookIds?: Array<number | string>
+  commentaryFilterState?: import('@/features/book-view/bookViewTypes').CommentaryTreeState
   zoom?: number
   bottomVisible?: boolean
   autoSelectTopLine?: boolean
@@ -97,7 +98,7 @@ export interface LastReadState {
   selectedLineId?: number | null
   commentaryScrollIndex?: number | null
   commentaryScrollOffset?: number | null
-  hiddenCommentaryBookIds?: Array<number | string>
+  commentaryFilterState?: import('@/features/book-view/bookViewTypes').CommentaryTreeState
 }
 
 export interface Workspace {
@@ -118,6 +119,7 @@ const handles: Record<string, IDBDatabase | null> = {
   'app-lastread': null,
   'app-search-cache': null,
   'app-dict-cache': null,
+  'app-catalog-toc-cache': null,
 }
 
 function openDb(name: string): Promise<IDBDatabase> {
@@ -255,6 +257,18 @@ export function idbDictionaryCacheDelete(key: string): Promise<void> {
   return dbDelete('app-dict-cache', key)
 }
 
+// ── Catalog TOC search cache DB ───────────────────────────────────────────────
+
+export function idbCatalogTocCacheGet<T>(key: string): Promise<T | null> {
+  return dbGet<T>('app-catalog-toc-cache', key)
+}
+export function idbCatalogTocCacheSet<T>(key: string, value: T): Promise<void> {
+  return dbSet('app-catalog-toc-cache', key, value)
+}
+export function idbCatalogTocCacheDelete(key: string): Promise<void> {
+  return dbDelete('app-catalog-toc-cache', key)
+}
+
 // ── Tabs DB ───────────────────────────────────────────────────────────────────
 
 export function idbTabsGet<T>(key: string): Promise<T | null> {
@@ -350,6 +364,7 @@ export async function idbClearAll(): Promise<void> {
     dropHbHistoryDb(),
     dropDb('app-search-cache'),
     dropDb('app-dict-cache'),
+    dropDb('app-catalog-toc-cache'),
   ])
 }
 

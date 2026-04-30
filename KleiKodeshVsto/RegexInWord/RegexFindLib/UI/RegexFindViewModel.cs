@@ -15,7 +15,7 @@ namespace RegexFindLib.UI
     /// </summary>
     public partial class RegexFindViewModel : ViewModelBase
     {
-        readonly RegexSearch _search;
+        ISearchEngine _search;
         readonly IWordService _word;
 
         // ── Shared across all instances ───────────────────────────────────────
@@ -47,9 +47,9 @@ namespace RegexFindLib.UI
 
         // ── Instance proxies for static collections (WPF binding) ────────────
         public ObservableCollection<FontItem> FontListBinding            => FontList;
-        public ObservableCollection<string> RecentSearchesBinding      => RecentSearches;
-        public ObservableCollection<string> RecentReplacementsBinding  => RecentReplacements;
-        public IReadOnlyList<string>        SearchModesBinding         => SearchModes;
+        public ObservableCollection<string>   RecentSearchesBinding     => RecentSearches;
+        public ObservableCollection<string>   RecentReplacementsBinding => RecentReplacements;
+        public IReadOnlyList<string>          SearchModesBinding        => SearchModes;
 
         // ── Search / Replace text ─────────────────────────────────────────────
         string _searchText = "";
@@ -66,15 +66,45 @@ namespace RegexFindLib.UI
             set => SetProperty(ref _replaceText, value);
         }
 
+        // ── History selection — picking from the popup fills the text box ─────
+        string _selectedSearchHistory;
+        public string SelectedSearchHistory
+        {
+            get => _selectedSearchHistory;
+            set
+            {
+                if (string.IsNullOrEmpty(value)) return;
+                SearchText = value;
+                SetProperty(ref _selectedSearchHistory, (string)null); // reset so same item is re-selectable
+            }
+        }
+
+        string _selectedReplaceHistory;
+        public string SelectedReplaceHistory
+        {
+            get => _selectedReplaceHistory;
+            set
+            {
+                if (string.IsNullOrEmpty(value)) return;
+                ReplaceText = value;
+                SetProperty(ref _selectedReplaceHistory, (string)null);
+            }
+        }
+
         // ── Focus tracking ────────────────────────────────────────────────────
         bool _findFocused = true;
         public bool FindFocused
         {
             get => _findFocused;
-            set => SetProperty(ref _findFocused, value);
+            set
+            {
+                if (SetProperty(ref _findFocused, value))
+                    OnPropertyChanged(nameof(PaletteTips));
+            }
         }
 
-        // ── Search mode ───────────────────────────────────────────────────────
+        // ── Search mode (direction + scope) ───────────────────────────────────
+        // SearchModeIndex maps: 0=All, 1=Forward, 2=Back, 3=Selection
         int _searchModeIndex = 0;
         public int SearchModeIndex
         {
@@ -82,15 +112,51 @@ namespace RegexFindLib.UI
             set => SetProperty(ref _searchModeIndex, value);
         }
 
-        RegexSearchMode SelectedMode => (RegexSearchMode)_searchModeIndex;
+        bool        SelectedForward     => _searchModeIndex != 2;  // false only for "כלפי מעלה"
+        bool        SelectedIsDirectional => _searchModeIndex == 1 || _searchModeIndex == 2;
+        SearchScope SelectedScope       => _searchModeIndex == 3   // "לפי בחירה"
+                                         ? SearchScope.Selection
+                                         : SearchScope.All;
 
         // ── Options ───────────────────────────────────────────────────────────
         bool _useRegex = false;
         public bool UseRegex
         {
             get => _useRegex;
-            set => SetProperty(ref _useRegex, value);
+            set
+            {
+                if (SetProperty(ref _useRegex, value))
+                    OnPropertyChanged(nameof(PaletteTips));
+            }
         }
+
+        bool _useWordSearch = false;
+        public bool UseWordSearch
+        {
+            get => _useWordSearch;
+            set
+            {
+                if (SetProperty(ref _useWordSearch, value))
+                {
+                    _search = value
+                        ? (ISearchEngine)new WordSearchEngine(_word)
+                        : (ISearchEngine)new RegexSearch(_word);
+                    // Clear stale results from the previous engine
+                    Results.Clear();
+                    NoResults = false;
+                    StatusText = "";
+                    OnPropertyChanged(nameof(WildcardTooltip));
+                    OnPropertyChanged(nameof(PaletteTips));
+                }
+            }
+        }
+
+        /// <summary>
+        /// Tooltip for the .* toggle — changes meaning depending on active engine.
+        /// </summary>
+        public string WildcardTooltip => UseWordSearch
+            ? "השתמש בתווים כלליים של Word"
+            : "השתמש בביטויים רגולריים";
 
         int _slop = 0;
         public int Slop
@@ -151,15 +217,16 @@ namespace RegexFindLib.UI
         }
 
         // ── Commands (declared here, initialized in Commands partial) ─────────
-        public ICommand SearchCommand                { get; private set; }
-        public ICommand ReplaceCommand               { get; private set; }
-        public ICommand ReplaceAllCommand            { get; private set; }
-        public ICommand CopyFindFormattingCommand    { get; private set; }
-        public ICommand CopyReplaceFormattingCommand { get; private set; }
-        public ICommand ClearFindFormattingCommand   { get; private set; }
+        public ICommand SearchCommand                 { get; private set; }
+        public ICommand ReplaceCommand                { get; private set; }
+        public ICommand ReplaceAllCommand             { get; private set; }
+        public ICommand CopyFindFormattingCommand     { get; private set; }
+        public ICommand CopyReplaceFormattingCommand  { get; private set; }
+        public ICommand ClearFindFormattingCommand    { get; private set; }
         public ICommand ClearReplaceFormattingCommand { get; private set; }
-        public ICommand ToggleReplaceCommand         { get; private set; }
-        public ICommand ToggleRegexPaletteCommand    { get; private set; }
-        public ICommand LoadStylesCommand            { get; private set; }
+        public ICommand ToggleReplaceCommand          { get; private set; }
+        public ICommand ToggleRegexPaletteCommand     { get; private set; }
+        public ICommand ToggleEngineCommand           { get; private set; }
+        public ICommand LoadStylesCommand             { get; private set; }
     }
 }

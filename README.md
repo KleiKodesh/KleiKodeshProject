@@ -20,11 +20,16 @@
 
 | תיקייה                                                                                               | סוג                   | מטרה                                                  |
 | ---------------------------------------------------------------------------------------------------- | --------------------- | ----------------------------------------------------- |
-| [`Build/Installer`](Build/Installer/README.md)                                 | WPF (.NET)            | המתקין — מתקין את תוסף VSTO ב-Word                    |
-| [`KleiKodeshVsto`](KleiKodeshVsto/README.md)                                                         | VSTO (.NET Framework) | **פרויקט התוסף הראשי**                                                    |
-| [`DocSeferLib`](DocSeferLib/README.md)                                                               | WPF Class Library     | כלים לעיצוב מסמכים תורניים בוורד                      |
+| [`Build/Installer`](Build/Installer/README.md)                                                       | WPF (.NET)            | המתקין — מתקין את תוסף VSTO ב-Word                    |
+| [`KleiKodeshVsto`](KleiKodeshVsto/README.md)                                                         | VSTO (.NET Framework) | **פרויקט התוסף הראשי**                                |
+| [`KleiKodeshVsto/DocDesign`](KleiKodeshVsto/DocDesign/README.md)                                     | WPF Class Library     | כלים לעיצוב מסמכים תורניים בוורד                      |
+| [`KleiKodeshVsto/RegexInWord/RegexFindLib`](KleiKodeshVsto/RegexInWord/RegexFindLib/README.md)       | WPF Class Library     | חיפוש והחלפה עם ביטויים רגולריים — ממשק WPF מקורי    |
+| [`KleiKodeshVsto/WebSitesLib`](KleiKodeshVsto/WebSitesLib/README.md)                                 | WPF Class Library     | דפדפן אתרים תורניים עם WebView2                       |
+| [`KleiKodeshVsto/Kiwix`](KleiKodeshVsto/Kiwix/KIWIX_CHANGES.md)                                     | WinForms + JS         | קורא קבצי ZIM (Kiwix) — WebView2 עם kiwix-js מותאם   |
+| [`WpfLib`](WpfLib/README.md)                                                                         | WPF Class Library     | כלי WPF משותפים — ViewModelBase, converters, controls |
+| [`UpdateCheckerLib`](UpdateCheckerLib/UpdateChecker.cs)                                              | .NET Library          | בדיקת עדכונים מ-GitHub והורדתם                        |
 | [`Kezayit`](Kezayit/README.md)                                                                       | Vue 3 + TypeScript    | ספרייה לצפייה במאגר הספרים של זית / אוצריא            |
-| [`Kezayit/CSharpBackend/KezayitLib`](Kezayit/CSharpBackend/KezayitLib/README.md)                     | .NET Library          | WebView2 host                                         |
+| [`Kezayit/CSharpBackend/KezayitLib`](Kezayit/CSharpBackend/KezayitLib/README.md)                     | .NET Library          | WebView2 host לממשק Kezayit                           |
 | [`Kezayit/CSharpBackend/BloomSearchEngineLib`](Kezayit/CSharpBackend/BloomSearchEngineLib/README.md) | .NET Library          | מנוע חיפוש Bloom filter                               |
 | [`kleikodesh.github.io`](kleikodesh.github.io/README.md)                                             | Static HTML/CSS/JS    | אתר הפרויקט הציבורי ודף ההורדה                        |
 
@@ -34,19 +39,23 @@
 User runs the installer
           ↓
 Build/Installer  ──installs──▶  KleiKodeshVsto (Word add-in)
-                                                    │
-                                        ┌───────────┤
-                                        │           │
-                                 Ribbon buttons  Task panes
                                         │
-                        ┌───────────────┼──────────────────┐
-                        │               │                  │
-                    Kezayit       DocSeferLib     RegexFind / WebSites
-               (Vue in WebView2) (WPF formatting)   (HTML / WPF)
-                    │
-              KezayitLib (C# backend)
-                    │
-        BloomSearchEngineLib + SQLite database
+                            ┌───────────┤
+                            │           │
+                     Ribbon buttons  Task panes
+                            │
+          ┌─────────────────┼──────────────────┬──────────────┐
+          │                 │                  │              │
+      Kezayit           DocDesign         RegexFindLib   WebSitesLib
+  (Vue in WebView2)  (WPF formatting)    (WPF regex UI)  (WPF + WebView2)
+          │
+    KezayitLib (C# backend)
+          │
+  BloomSearchEngineLib + SQLite database
+
+  WpfLib ──────────────────────────────▶  shared by all WPF libraries
+  UpdateCheckerLib ────────────────────▶  auto-update on Word startup
+  Kiwix (WinForms + kiwix-js) ─────────▶  ZIM file reader task pane
 ```
 
 ## בנייה

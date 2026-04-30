@@ -11,6 +11,7 @@ import { useTabStore } from '@/stores/tabStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { Ref } from 'vue'
+import type { CommentaryTreeState } from './bookViewTypes'
 
 interface CommentaryViewRef {
   restoreCommentaryScrollPos: (index: number, offset: number) => void
@@ -23,7 +24,7 @@ export function useBookViewSessionRestore(
   bottomVisible: Ref<boolean>,
   selectedLineId: Ref<number | null>,
   commentaryLineId: Ref<number | null>,
-  hiddenCommentaryBookIds: Ref<Set<string>>,
+  commentaryTreeState: CommentaryTreeState,
   commentaryLoading: Ref<boolean>,
   commentaryViewRef: () => CommentaryViewRef | null,
 ) {
@@ -59,9 +60,13 @@ export function useBookViewSessionRestore(
     }
 
     const savedFilter =
-      bookSaved?.hiddenCommentaryBookIds ??
-      (settingsStore.resumeLastRead ? lastRead?.hiddenCommentaryBookIds : undefined)
-    if (savedFilter?.length) hiddenCommentaryBookIds.value = new Set(savedFilter.map(String))
+      bookSaved?.commentaryFilterState ??
+      (settingsStore.resumeLastRead ? lastRead?.commentaryFilterState : undefined)
+    if (savedFilter) {
+      commentaryTreeState.searchQuery = savedFilter.searchQuery
+      commentaryTreeState.tokens = savedFilter.tokens ?? []
+      commentaryTreeState.visibilityList = savedFilter.visibilityList
+    }
 
     if (openTocLineIndex == null) {
       const scrollIndex = bookSaved?.scrollIndex ?? lastRead?.scrollIndex

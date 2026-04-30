@@ -19,6 +19,7 @@ namespace RegexFindLib.UI
             ClearReplaceFormattingCommand = new RelayCommand(() => ReplaceFormatting.Clear());
             ToggleReplaceCommand         = new RelayCommand(ToggleReplace);
             ToggleRegexPaletteCommand    = new RelayCommand(() => ShowRegexPalette = !ShowRegexPalette);
+            ToggleEngineCommand          = new RelayCommand(() => UseWordSearch = !UseWordSearch);
             LoadStylesCommand            = new RelayCommand(LoadStyles);
         }
 
@@ -35,7 +36,7 @@ namespace RegexFindLib.UI
             try
             {
                 AddSearchToHistory();
-                _search.Execute(BuildFind());
+                _search.Execute(BuildRequest());
                 RefreshResults();
             }
             catch (Exception ex) { StatusText = ex.Message; }
@@ -47,7 +48,7 @@ namespace RegexFindLib.UI
             {
                 AddSearchToHistory();
                 AddReplaceToHistory();
-                _search.Execute(BuildFind(), BuildReplace(), replace: true);
+                _search.Execute(BuildRequest(), replace: true);
                 RefreshResults();
             }
             catch (Exception ex) { StatusText = ex.Message; }
@@ -59,7 +60,7 @@ namespace RegexFindLib.UI
             {
                 AddSearchToHistory();
                 AddReplaceToHistory();
-                _search.Execute(BuildFind(), BuildReplace(), replaceAll: true);
+                _search.Execute(BuildRequest(), replaceAll: true);
                 int count = _search.Results?.Length ?? 0;
                 StatusText = $"הוחלפו {count} תוצאות";
                 Results.Clear();
@@ -97,7 +98,7 @@ namespace RegexFindLib.UI
                 target.Underline   = fmt.Underline;
                 target.Superscript = fmt.Superscript;
                 target.Subscript   = fmt.Subscript;
-                target.FontName    = fmt.Font ?? "";
+                target.FontName    = fmt.FontName ?? "";
                 target.FontSize    = fmt.FontSize ?? 0f;
                 target.StyleName   = fmt.Style ?? "";
                 if (fmt.TextColor.HasValue)
@@ -115,43 +116,50 @@ namespace RegexFindLib.UI
             catch (Exception ex) { StatusText = ex.Message; }
         }
 
-        RegexFind BuildFind()
+        FindRequest BuildRequest()
         {
             var textColor = FindFormatting.TextColorWordDecimal;
 
             // DEBUG — color picker selection
-            Debug.WriteLine($"[BuildFind] FindFormatting.TextColor: {FindFormatting.TextColor?.ToString() ?? "null"} → WordDecimal: {textColor?.ToString() ?? "null"}");
+            Debug.WriteLine($"[BuildRequest] FindFormatting.TextColor: {FindFormatting.TextColor?.ToString() ?? "null"} → WordDecimal: {textColor?.ToString() ?? "null"}");
 
-            return new RegexFind
+            return new FindRequest
             {
-                Text         = SearchText,
-                Mode         = SelectedMode,
-                Slop         = (short)Slop,
-                UseWildcards = UseRegex,
-                Bold         = FindFormatting.Bold,
-                Italic       = FindFormatting.Italic,
-                Underline    = FindFormatting.Underline,
-                Superscript  = FindFormatting.Superscript,
-                Subscript    = FindFormatting.Subscript,
-                Font         = FindFormatting.FontName,
-                FontSize     = FindFormatting.FontSize > 0 ? FindFormatting.FontSize : (float?)null,
-                Style        = FindFormatting.StyleName,
-                TextColor    = textColor
+                Text           = SearchText,
+                Forward        = SelectedForward,
+                IsDirectional  = SelectedIsDirectional,
+                Scope          = SelectedScope,
+                Slop           = (short)Slop,
+                MatchWildcards = UseRegex,
+                Formatting     = new FindFormatting
+                {
+                    Bold        = FindFormatting.Bold,
+                    Italic      = FindFormatting.Italic,
+                    Underline   = FindFormatting.Underline,
+                    Superscript = FindFormatting.Superscript,
+                    Subscript   = FindFormatting.Subscript,
+                    FontName    = FindFormatting.FontName,
+                    FontSize    = FindFormatting.FontSize > 0 ? FindFormatting.FontSize : (float?)null,
+                    Style       = FindFormatting.StyleName,
+                    TextColor   = textColor
+                },
+                Replacement = new FindReplacement
+                {
+                    Text       = ReplaceText,
+                    Formatting = new FindFormatting
+                    {
+                        Bold        = ReplaceFormatting.Bold,
+                        Italic      = ReplaceFormatting.Italic,
+                        Underline   = ReplaceFormatting.Underline,
+                        Superscript = ReplaceFormatting.Superscript,
+                        Subscript   = ReplaceFormatting.Subscript,
+                        FontName    = ReplaceFormatting.FontName,
+                        FontSize    = ReplaceFormatting.FontSize > 0 ? ReplaceFormatting.FontSize : (float?)null,
+                        Style       = ReplaceFormatting.StyleName,
+                        TextColor   = ReplaceFormatting.TextColorWordDecimal
+                    }
+                }
             };
         }
-
-        RegexFindReplace BuildReplace() => new RegexFindReplace
-        {
-            Text         = ReplaceText,
-            Bold         = ReplaceFormatting.Bold,
-            Italic       = ReplaceFormatting.Italic,
-            Underline    = ReplaceFormatting.Underline,
-            Superscript  = ReplaceFormatting.Superscript,
-            Subscript    = ReplaceFormatting.Subscript,
-            Font         = ReplaceFormatting.FontName,
-            FontSize     = ReplaceFormatting.FontSize > 0 ? ReplaceFormatting.FontSize : (float?)null,
-            Style        = ReplaceFormatting.StyleName,
-            TextColor    = ReplaceFormatting.TextColorWordDecimal
-        };
     }
 }

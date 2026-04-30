@@ -7,7 +7,7 @@ import BookViewLinesContent from './BookViewLinesContent.vue'
 import BookViewSearchBar from './BookViewSearchBar.vue'
 import BookViewSidePanel from './BookViewSidePanel.vue'
 import BookViewTocTree from './BookViewTocTree.vue'
-import CommentaryFilterPanel from './CommentaryFilterPanel.vue'
+import CommentaryTreePanel from './CommentaryTreePanel.vue'
 import CommentaryView from './CommentaryView.vue'
 
 const toolbarRef = ref<InstanceType<typeof BookViewToolbar> | null>(null)
@@ -19,9 +19,9 @@ const {
   toolbarPosition, toolbarVisible,
   searchHighlightLineIndex, searchHighlightQuery, searchHighlightSnippet, searchHighlightTerms,
   bottomVisible, searchVisible, sidePanelMode,
-  selectedLineId, hiddenCommentaryBookIds, searchMode,
+  selectedLineId, commentaryTreeState, searchMode,
   activeTocEntryId, commentaryScrollIndex, commentaryScrollOffset,
-  tocVisible, commentaryFilterVisible, sidePanelVisible, sidePanelToggleButtonEl,
+  tocVisible, commentaryTreeVisible, sidePanelVisible, sidePanelToggleButtonEl,
   lines, prioritise, hasCommentaries,
   groups, filterGroups, commentaryLoading,
   tocEntries, tocSearchTree, altTocSections, tocLoading, tocError,
@@ -30,10 +30,10 @@ const {
   activeMatchCount, activeMatchIdx, contentSearch, commentarySearch,
   onLinesScrolled, onTocSelect, onAltTocSelect,
   onLineSelected, onNavigateSection, onCommentaryScroll,
-  setHiddenCommentaryBookIds, openBookInTab,
+  onCommentaryTreeChanged, openBookInTab,
   openContentSearch, openCommentarySearch,
   onQueryChange, onSearchNext, onSearchPrev, onModeChange,
-  toggleTocPanel, toggleCommentaryFilterPanel, closeSidePanel,
+  toggleTocPanel, toggleCommentaryTreePanel, closeSidePanel,
 } = useBookView(
   () => toolbarRef.value,
   () => linesContentRef.value,
@@ -92,7 +92,7 @@ const {
               :search-bar-visible="searchVisible"
               :commentary-scroll-index="commentaryScrollIndex"
               :commentary-scroll-offset="commentaryScrollOffset"
-              :hidden-commentary-book-ids="hiddenCommentaryBookIds"
+              :commentary-filter-state="commentaryTreeState"
               :search-query="searchMode === 'content' ? contentSearch.query.value : ''"
               :current-match-line-index="
                 searchMode === 'content' ? contentSearch.currentMatchLineIndex.value : undefined
@@ -111,9 +111,9 @@ const {
               :selected-line-id="selectedLineId"
               :groups="groups"
               :loading="commentaryLoading"
-              :hidden-book-ids="hiddenCommentaryBookIds"
+              :visibility-list="commentaryTreeState.visibilityList"
               :pinned-book-id="pinnedCommentaryBookId"
-              :filter-visible="commentaryFilterVisible"
+              :filter-visible="commentaryTreeVisible"
               :search-query="searchMode === 'commentary' ? commentarySearch.query.value : ''"
               :current-match-flat-index="
                 searchMode === 'commentary'
@@ -128,7 +128,7 @@ const {
               @close="bottomVisible = false"
               @navigate-section="onNavigateSection"
               @scroll="onCommentaryScroll"
-              @toggle-filter-panel="toggleCommentaryFilterPanel"
+              @toggle-filter-panel="toggleCommentaryTreePanel"
               @toggle-search="openCommentarySearch"
               @open-book="openBookInTab"
             />
@@ -164,11 +164,11 @@ const {
             @select="onTocSelect"
             @alt-select="onAltTocSelect"
           />
-          <CommentaryFilterPanel
-            v-else-if="sidePanelMode === 'commentary-filter'"
+          <CommentaryTreePanel
+            v-else-if="sidePanelMode === 'commentary-tree'"
             :groups="filterGroups"
-            :hidden-book-ids="hiddenCommentaryBookIds"
-            @update:hidden-book-ids="setHiddenCommentaryBookIds"
+            :tree-state="commentaryTreeState"
+            :scroll-to-book="(bookId: number) => commentaryViewRef?.scrollToGroup(bookId)"
           />
         </BookViewSidePanel>
       </div>

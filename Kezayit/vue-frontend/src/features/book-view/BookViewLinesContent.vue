@@ -6,6 +6,7 @@ import { useTabStore } from '@/stores/tabStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import type { LineItem } from './useBookViewLinesTable'
+import type { CommentaryTreeState, CommentaryVisibilityItem } from './bookViewTypes'
 import { applyDiacriticsFilter, removeDiacriticsForSearch } from '@/utils/hebrewTextProcessing'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import ContextMenu from '@/components/ContextMenu.vue'
@@ -27,6 +28,7 @@ const props = defineProps<{
   commentaryScrollIndex?: number | null
   commentaryScrollOffset?: number | null
   hiddenCommentaryBookIds?: Set<string>
+  commentaryFilterState?: CommentaryTreeState
   searchQuery?: string
   currentMatchLineIndex?: number
   currentMatchOccurrence?: number
@@ -503,14 +505,21 @@ function savePos() {
   if (programmaticScrolling) return
   const pos = lastKnownPos ?? captureScrollPos()
   if (pos) {
+    // Serialize the reactive proxy to a plain object before writing to IDB.
+    // IDB's structured clone algorithm cannot serialize Vue reactive proxies.
+    const filterState = props.commentaryFilterState
+      ? {
+          searchQuery: props.commentaryFilterState.searchQuery,
+          tokens: [...props.commentaryFilterState.tokens],
+          visibilityList: props.commentaryFilterState.visibilityList.map((item: CommentaryVisibilityItem) => ({ ...item })),
+        }
+      : undefined
     tabStore.setBookViewState(tabId, bookId, {
       ...pos,
       selectedLineId: props.selectedLineId,
       commentaryScrollIndex: props.commentaryScrollIndex,
       commentaryScrollOffset: props.commentaryScrollOffset,
-      hiddenCommentaryBookIds: props.hiddenCommentaryBookIds
-        ? Array.from(props.hiddenCommentaryBookIds)
-        : undefined,
+      commentaryFilterState: filterState,
       zoom: zoom.value,
       bottomVisible: props.bottomVisible,
       autoSelectTopLine: autoSelectTopLine.value,
@@ -520,9 +529,7 @@ function savePos() {
       selectedLineId: props.selectedLineId,
       commentaryScrollIndex: props.commentaryScrollIndex,
       commentaryScrollOffset: props.commentaryScrollOffset,
-      hiddenCommentaryBookIds: props.hiddenCommentaryBookIds
-        ? Array.from(props.hiddenCommentaryBookIds)
-        : undefined,
+      commentaryFilterState: filterState,
     })
   }
 }

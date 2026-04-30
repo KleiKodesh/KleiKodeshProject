@@ -8,8 +8,9 @@ import CommentaryHeaderNav from './CommentaryHeaderNav.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import ContextMenu from '@/components/ContextMenu.vue'
 import type { ContextMenuItem } from '@/components/ContextMenu.vue'
-import { isCommentaryGroupHidden } from './useCommentary'
 import type { CommentaryGroup } from './useCommentary'
+import type { CommentaryVisibilityItem } from './bookViewTypes'
+import { isCommentaryItemVisible } from './bookViewTypes'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { storeToRefs } from 'pinia'
@@ -22,7 +23,7 @@ const props = defineProps<{
   selectedLineId: number | null
   groups: CommentaryGroup[]
   loading: boolean
-  hiddenBookIds: Set<string>
+  visibilityList: CommentaryVisibilityItem[]
   searchQuery?: string
   currentMatchFlatIndex?: number
   currentMatchOccurrence?: number
@@ -178,9 +179,20 @@ const scrollerEl = ref<HTMLElement | null>(null)
 const scrollTop = ref(0)
 const headerNavRef = ref<InstanceType<typeof CommentaryHeaderNav> | null>(null)
 
-const visibleGroups = computed(() =>
-  props.groups.filter((group) => !isCommentaryGroupHidden(props.hiddenBookIds, group)),
-)
+const visibleGroups = computed(() => {
+  if (!props.visibilityList.length) return props.groups
+  const visibleKeys = new Set(
+    props.visibilityList
+      .filter(isCommentaryItemVisible)
+      .map((item) => `${item.bookId}::${item.sectionLabel}::${item.subSectionLabel}`),
+  )
+  return props.groups.filter(
+    (group) =>
+      visibleKeys.has(
+        `${group.bookId}::${group.sectionLabel ?? ''}::${group.subSectionLabel ?? ''}`,
+      ),
+  )
+})
 
 const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, {
   onCtrlF: () => emit('toggle-search'),

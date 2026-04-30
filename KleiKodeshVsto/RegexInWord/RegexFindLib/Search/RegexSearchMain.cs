@@ -4,7 +4,14 @@ using System.Text.RegularExpressions;
 
 namespace RegexFindLib.Search
 {
-    public partial class RegexSearch
+    /// <summary>
+    /// Custom .NET-regex search engine. Implements ISearchEngine.
+    /// Split across partial files:
+    ///   RegexSearchMain.cs    — Execute, pattern building, GetSelectionFormatting
+    ///   RegexSearchFind.cs    — result collection, range helpers, navigation
+    ///   RegexSearchReplace.cs — replace / replace-all
+    /// </summary>
+    public partial class RegexSearch : ISearchEngine
     {
         readonly IWordService _word;
 
@@ -13,41 +20,46 @@ namespace RegexFindLib.Search
             _word = word;
         }
 
-        Application App => _word.Application;
-        Document Document => _word.ActiveDocument;
-        Selection Selection => _word.Selection;
-        int SelectionStart => Selection.Start;
+        Application App       => _word.Application;
+        Document    Document  => _word.ActiveDocument;
+        Selection   Selection => _word.Selection;
+        int SelectionStart    => Selection.Start;
 
-        public void Execute(RegexFind regexFind, RegexFindReplace regexReplace = null,
-                            bool replace = false, bool replaceAll = false)
+        // ── ISearchEngine.Execute ─────────────────────────────────────────────
+
+        public void Execute(FindRequest request, bool replace = false, bool replaceAll = false)
         {
-            if (string.IsNullOrEmpty(regexFind?.Text))
+            if (string.IsNullOrEmpty(request?.Text))
                 return;
 
-            ComputeEffectivePattern(regexFind);
+            // Work on a copy so we don't mutate the caller's object
+            var find = CloneRequest(request);
+            ComputeEffectivePattern(find);
 
-            if (replace && regexReplace != null)
-                Replace(regexFind, regexReplace);
+            if (replace)
+                Replace(find);
 
-            Results = GetSearchResults(regexFind);
+            Results = GetSearchResults(find);
             if (Results == null || Results.Length == 0)
                 return;
 
-            if (replaceAll && regexReplace != null)
+            if (replaceAll)
             {
-                ReplaceAll(regexFind, regexReplace);
+                ReplaceAll(find);
                 return;
             }
 
-            if (regexFind.Mode == RegexSearchMode.Back)
+            if (!find.Forward)
                 SelectPreviousResult();
             else
                 SelectNextResult();
         }
 
-        void ComputeEffectivePattern(RegexFind find)
+        // ── Pattern building ──────────────────────────────────────────────────
+
+        void ComputeEffectivePattern(FindRequest find)
         {
-            if (!find.UseWildcards)
+            if (!find.MatchWildcards)
                 find.Text = Regex.Escape(find.Text);
 
             if (find.Slop > 0)
@@ -61,55 +73,65 @@ namespace RegexFindLib.Search
             }
         }
 
-        /// <summary>
-        /// Returns the formatting of the current Word selection as a model object.
-        /// The ViewModel maps this to FormattingOptions.
-        /// </summary>
-        public RegexFindBase GetSelectionFormatting()
+        static FindRequest CloneRequest(FindRequest src) => new FindRequest
+        {
+            Text           = src.Text,
+            MatchWildcards = src.MatchWildcards,
+            Forward        = src.Forward,
+            IsDirectional  = src.IsDirectional,
+            Scope          = src.Scope,
+            Slop           = src.Slop,
+            Formatting     = src.Formatting,
+            Replacement    = src.Replacement
+        };
+
+        // ── ISearchEngine.GetSelectionFormatting ──────────────────────────────
+
+        public FindFormatting GetSelectionFormatting()
         {
             try
             {
                 var selection = Selection;
                 if (selection?.Range == null)
-                    return new RegexFindBase();
+                    return new FindFormatting();
 
                 dynamic rng = selection.Range;
 
                 bool? bold = (rng.Font.Bold == -1 || rng.Font.BoldBi == -1) ? true
-                           : (rng.Font.Bold == 0 && rng.Font.BoldBi == 0) ? false
+                           : (rng.Font.Bold == 0  && rng.Font.BoldBi == 0)  ? false
                            : (bool?)null;
 
                 bool? italic = (rng.Font.Italic == -1 || rng.Font.ItalicBi == -1) ? true
-                             : (rng.Font.Italic == 0 && rng.Font.ItalicBi == 0) ? false
+                             : (rng.Font.Italic == 0  && rng.Font.ItalicBi == 0)  ? false
                              : (bool?)null;
 
                 float? fontSize = rng.Font.SizeBi > 0 ? (float)rng.Font.SizeBi
-                                : rng.Font.Size > 0 ? (float)rng.Font.Size
+                                : rng.Font.Size   > 0 ? (float)rng.Font.Size
                                 : (float?)null;
 
                 string fontName = !string.IsNullOrEmpty((string)rng.Font.NameBi)
                                 ? (string)rng.Font.NameBi
                                 : (string)rng.Font.Name ?? "";
 
-                return new RegexFindBase
+                return new FindFormatting
                 {
-                    Bold = bold,
-                    Italic = italic,
-                    Underline = rng.Font.Underline != (int)WdUnderline.wdUnderlineNone ? true : (bool?)false,
+                    Bold        = bold,
+                    Italic      = italic,
+                    Underline   = rng.Font.Underline != (int)WdUnderline.wdUnderlineNone ? true : (bool?)false,
                     Superscript = rng.Font.Superscript == -1 ? true
-                                : rng.Font.Superscript == 0 ? false : (bool?)null,
-                    Subscript = rng.Font.Subscript == -1 ? true
-                              : rng.Font.Subscript == 0 ? false : (bool?)null,
-                    Style = (rng.Style as Style)?.NameLocal ?? "",
-                    Font = fontName,
-                    FontSize = fontSize,
-                    TextColor = (int)rng.Font.Color
+                                : rng.Font.Superscript == 0  ? false : (bool?)null,
+                    Subscript   = rng.Font.Subscript == -1 ? true
+                                : rng.Font.Subscript == 0   ? false : (bool?)null,
+                    Style       = (rng.Style as Style)?.NameLocal ?? "",
+                    FontName    = fontName,
+                    FontSize    = fontSize,
+                    TextColor   = (int)rng.Font.Color
                 };
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"GetSelectionFormatting error: {ex.Message}");
-                return new RegexFindBase();
+                return new FindFormatting();
             }
         }
     }

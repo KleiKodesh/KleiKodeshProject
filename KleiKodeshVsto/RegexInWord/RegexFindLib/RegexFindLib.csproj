@@ -70,10 +70,12 @@
     <Compile Include="Helpers\WdActionManager.cs" />
     <!-- Search -->
     <Compile Include="Search\IWordService.cs" />
-    <Compile Include="Search\RegexSearchModels.cs" />
+    <Compile Include="Search\ISearchEngine.cs" />
+    <Compile Include="Search\SearchModels.cs" />
     <Compile Include="Search\RegexSearchFind.cs" />
     <Compile Include="Search\RegexSearchMain.cs" />
     <Compile Include="Search\RegexSearchReplace.cs" />
+    <Compile Include="Search\WordSearchEngine.cs" />
     <!-- UI -->
     <Compile Include="UI\Converters.cs" />
     <Compile Include="UI\FontItem.cs" />
@@ -92,6 +94,7 @@
     <Compile Include="UI\RegexFindViewModel.cs" />
     <Compile Include="UI\RegexFindViewModel.Commands.cs" />
     <Compile Include="UI\RegexFindViewModel.Loading.cs" />
+    <Compile Include="UI\RegexFindViewModel.Palette.cs" />
     <Compile Include="UI\RegexFindView.xaml.cs">
       <DependentUpon>RegexFindView.xaml</DependentUpon>
     </Compile>

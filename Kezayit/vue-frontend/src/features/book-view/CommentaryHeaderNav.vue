@@ -85,7 +85,7 @@ function handleKeydown(e: KeyboardEvent) {
       ref="filterBtnRef"
       class="btn c-pointer hover-bg"
       :class="{ active: filterVisible }"
-      title="סנן מפרשים"
+      title="עץ מפרשים"
       @click.stop="emit('toggle-filter')"
     >
       <IconFilter20Regular />

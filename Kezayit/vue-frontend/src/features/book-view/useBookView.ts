@@ -3,7 +3,7 @@
  * Owns all data loading, state, event handlers, and watchers.
  * BookViewPage.vue is a shell that calls this and passes results to the template.
  */
-import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useTabStore } from '@/stores/tabStore'
@@ -19,7 +19,7 @@ import { useCommentaryNavigation } from './useCommentaryNavigation'
 import { useBookViewScrollSync } from './useBookViewScrollSync'
 import { useBookViewSessionRestore } from './useBookViewSessionRestore'
 import type { TocEntry } from './useBookViewToc'
-import type { SearchMode, SidePanelMode } from './bookViewTypes'
+import type { SearchMode, SidePanelMode, CommentaryTreeState } from './bookViewTypes'
 export type { SearchMode } from './bookViewTypes'
 
 // Component instance types — used only for ref typing
@@ -81,17 +81,17 @@ export function useBookView(
   const sidePanelMode = ref<SidePanelMode | null>(null)
   const selectedLineId = ref<number | null>(null)
   const commentaryLineId = ref<number | null>(null)
-  const hiddenCommentaryBookIds = ref(new Set<string>())
+  const commentaryTreeState = reactive<CommentaryTreeState>({ searchQuery: '', tokens: [], visibilityList: [] })
   const searchMode = ref<SearchMode>('content')
   const activeTocEntryId = ref<number | undefined>(undefined)
   const commentaryScrollIndex = ref<number | null>(null)
   const commentaryScrollOffset = ref<number | null>(null)
 
   const tocVisible = computed(() => sidePanelMode.value === 'toc')
-  const commentaryFilterVisible = computed(() => sidePanelMode.value === 'commentary-filter')
+  const commentaryTreeVisible = computed(() => sidePanelMode.value === 'commentary-tree')
   const sidePanelVisible = computed(() => sidePanelMode.value !== null)
   const sidePanelToggleButtonEl = computed(() =>
-    sidePanelMode.value === 'commentary-filter'
+    sidePanelMode.value === 'commentary-tree'
       ? commentaryViewRef()?.getFilterButtonEl?.() ?? null
       : toolbarRef()?.tocBtnRef ?? null,
   )
@@ -129,7 +129,7 @@ export function useBookView(
     () => commentaryLineId.value,
     () => selectedSectionLineIds.value,
     () => bookId ?? undefined,
-    () => commentaryFilterVisible.value,
+    () => commentaryTreeVisible.value,
   )
 
   // ── TOC ───────────────────────────────────────────────────────────────────
@@ -250,18 +250,18 @@ export function useBookView(
     sidePanelMode.value = sidePanelMode.value === 'toc' ? null : 'toc'
   }
 
-  function toggleCommentaryFilterPanel() {
+  function toggleCommentaryTreePanel() {
     if (!bottomVisible.value) return
-    sidePanelMode.value = sidePanelMode.value === 'commentary-filter' ? null : 'commentary-filter'
+    sidePanelMode.value = sidePanelMode.value === 'commentary-tree' ? null : 'commentary-tree'
   }
 
   function closeSidePanel() { sidePanelMode.value = null }
 
   // ── Commentary ────────────────────────────────────────────────────────────
 
-  async function setHiddenCommentaryBookIds(value: Set<string>) {
+  // Preserve commentary scroll position when visibility changes (items toggled or search changes)
+  async function onCommentaryTreeChanged() {
     const savedPos = commentaryViewRef()?.captureScrollPos?.()
-    hiddenCommentaryBookIds.value = value
     await nextTick()
     if (savedPos)
       commentaryViewRef()?.restoreCommentaryScrollPos(savedPos.scrollIndex, savedPos.scrollOffset)
@@ -303,7 +303,7 @@ export function useBookView(
   } = useBookViewSessionRestore(
     tabId, bookId, openTocLineIndex,
     bottomVisible, selectedLineId, commentaryLineId,
-    hiddenCommentaryBookIds, commentaryLoading, commentaryViewRef,
+    commentaryTreeState, commentaryLoading, commentaryViewRef,
   )
 
   onMounted(restoreSession)
@@ -312,9 +312,9 @@ export function useBookView(
   // ── Watchers ──────────────────────────────────────────────────────────────
 
   watch(() => bookViewStore.toggleBottomPanelSignal, () => { bottomVisible.value = !bottomVisible.value })
-  watch(bottomVisible, (visible) => { if (!visible && sidePanelMode.value === 'commentary-filter') closeSidePanel() })
+  watch(bottomVisible, (visible) => { if (!visible && sidePanelMode.value === 'commentary-tree') closeSidePanel() })
   watch(hasCommentaries, (has) => {
-    if (!has) { bottomVisible.value = false; if (sidePanelMode.value === 'commentary-filter') closeSidePanel() }
+    if (!has) { bottomVisible.value = false; if (sidePanelMode.value === 'commentary-tree') closeSidePanel() }
   })
   watch(searchVisible, (v) => { if (!v) { contentSearch.clear(); commentarySearch.clear() } })
 
@@ -328,9 +328,9 @@ export function useBookView(
     searchHighlightLineIndex, searchHighlightQuery, searchHighlightSnippet, searchHighlightTerms,
     // UI state
     bottomVisible, searchVisible, sidePanelMode,
-    selectedLineId, hiddenCommentaryBookIds, searchMode,
+    selectedLineId, commentaryTreeState, searchMode,
     activeTocEntryId, commentaryScrollIndex, commentaryScrollOffset,
-    tocVisible, commentaryFilterVisible, sidePanelVisible, sidePanelToggleButtonEl,
+    tocVisible, commentaryTreeVisible, sidePanelVisible, sidePanelToggleButtonEl,
     // data
     lines, prioritise, hasCommentaries,
     groups, filterGroups, commentaryLoading,
@@ -342,9 +342,9 @@ export function useBookView(
     // handlers
     onLinesScrolled, onTocSelect, onAltTocSelect,
     onLineSelected, onNavigateSection, onCommentaryScroll,
-    setHiddenCommentaryBookIds, openBookInTab,
+    onCommentaryTreeChanged, openBookInTab,
     openContentSearch, openCommentarySearch,
     onQueryChange, onSearchNext, onSearchPrev, onModeChange,
-    toggleTocPanel, toggleCommentaryFilterPanel, closeSidePanel,
+    toggleTocPanel, toggleCommentaryTreePanel, closeSidePanel,
   }
 }

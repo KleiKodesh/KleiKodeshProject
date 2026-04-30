@@ -7,7 +7,11 @@ import type { BookRow } from '@/features/book-catalog/bookCatalogTree'
 import { useVirtualListKeys } from '@/composables/useVirtualListKeyNav'
 import { useTilesKeys } from '@/composables/useTileGridKeys'
 
-const props = defineProps<{ items: SearchFsItem[]; view: 'list' | 'tiles' | 'tree' }>()
+const props = defineProps<{
+  items: SearchFsItem[]
+  view: 'list' | 'tiles' | 'tree'
+  searching: boolean
+}>()
 const emit = defineEmits<{ selectBook: [BookRow]; selectToc: [TocFsItem] }>()
 
 const scrollEl = ref<HTMLElement | null>(null)
@@ -40,6 +44,14 @@ const { focusedIndex: tilesFocused, containerFocused: tilesContainerFocused } = 
 const itemTitle = (item: SearchFsItem) =>
   item.kind === 'toc' ? `${item.book.title} ${item.tocPath}` : item.book.title
 
+function itemTooltip(item: SearchFsItem): string {
+  const title = item.kind === 'toc' ? `${item.book.title} — ${item.tocPath}` : item.book.title
+  const parts = [title]
+  if (item.book.authors) parts.push(item.book.authors)
+  if (item.book.parentPath) parts.push(item.book.parentPath)
+  return parts.join('\n')
+}
+
 function onSelect(item: SearchFsItem) {
   item.kind === 'toc' ? emit('selectToc', item) : emit('selectBook', item.book)
 }
@@ -63,7 +75,7 @@ function selectTileItem(i: number) {
 </script>
 
 <template>
-  <p v-if="!items.length" class="empty">לא נמצאו תוצאות</p>
+  <p v-if="!items.length && !searching" class="empty">לא נמצאו תוצאות</p>
   <div v-else-if="view !== 'tiles'" ref="scrollEl" class="scroller" tabindex="0">
     <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
       <div
@@ -86,6 +98,7 @@ function selectTileItem(i: number) {
             'no-icon': view === 'tree',
             'is-focused': listContainerFocused && listFocused === vRow.index,
           }"
+          :title="itemTooltip(items[vRow.index]!)"
           @click="selectListItem(vRow.index)"
         >
           <span v-if="view !== 'tree'" class="icon"><IconBook20Filled /></span>
@@ -111,7 +124,7 @@ function selectTileItem(i: number) {
       class="tile"
       data-nav-item
       :class="{ 'is-focused': tilesContainerFocused && tilesFocused === i }"
-      :title="itemTitle(item)"
+      :title="itemTooltip(item)"
       @click="selectTileItem(i)"
     >
       <div class="tile-icon"><IconBook20Filled /></div>

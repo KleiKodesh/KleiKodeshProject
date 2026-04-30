@@ -11,7 +11,6 @@ export interface CommentaryLine {
 }
 
 export interface CommentaryGroup {
-  filterKey: string
   bookId: number
   bookTitle: string
   path: string
@@ -25,7 +24,6 @@ export interface CommentaryGroup {
 export interface CommentaryTreeNode {
   type: 'section' | 'book'
   label: string
-  filterKey?: string
   bookId?: number
   firstLineIndex?: number
   children: CommentaryTreeNode[]
@@ -108,7 +106,6 @@ export function buildCommentaryTree(groups: CommentaryGroup[]): CommentaryTreeNo
       currentSubSection.children.push({
         type: 'book',
         label: group.bookTitle,
-        filterKey: group.filterKey,
         bookId: group.bookId,
         firstLineIndex: group.lines[0]?.lineIndex,
         children: [],
@@ -118,7 +115,6 @@ export function buildCommentaryTree(groups: CommentaryGroup[]): CommentaryTreeNo
       currentSection.children.push({
         type: 'book',
         label: group.bookTitle,
-        filterKey: group.filterKey,
         bookId: group.bookId,
         firstLineIndex: group.lines[0]?.lineIndex,
         children: [],
@@ -176,25 +172,6 @@ function getPrimaryConnectionType(connectionTypes: string[]): string {
   return connectionTypes[0] ?? 'OTHER'
 }
 
-export function getCommentaryGroupFilterKey(
-  bookId: number,
-  sectionLabel?: string,
-  subSectionLabel?: string,
-): string {
-  return [bookId, sectionLabel ?? '', subSectionLabel ?? ''].join('::')
-}
-
-export function getLegacyCommentaryBookKey(bookId: number): string {
-  return String(bookId)
-}
-
-export function isCommentaryGroupHidden(
-  hiddenKeys: Set<string>,
-  group: Pick<CommentaryGroup, 'filterKey' | 'bookId'>,
-): boolean {
-  return hiddenKeys.has(group.filterKey) || hiddenKeys.has(getLegacyCommentaryBookKey(group.bookId))
-}
-
 function isStaticFilterConnectionType(type: string): type is StaticFilterConnectionType {
   return STATIC_FILTER_CONNECTION_TYPES.has(type as StaticFilterConnectionType)
 }
@@ -215,9 +192,7 @@ function buildCommentaryGroupsFromEntries(entries: CommentaryBookEntry[]): Comme
   const addFlat = (ct: CommentaryConnectionType) => {
     const sectionLabel = CONNECTION_TYPE_SECTION_LABELS[ct]
     for (const entry of (byType.get(ct) ?? []).sort(byTreeOrder)) {
-      const filterKey = getCommentaryGroupFilterKey(entry.bookId, sectionLabel)
       result.push({
-        filterKey,
         bookId: entry.bookId,
         bookTitle: entry.bookTitle,
         path: `${entry.bookTitle} \u00B7 ${sectionLabel}`,
@@ -246,9 +221,7 @@ function buildCommentaryGroupsFromEntries(entries: CommentaryBookEntry[]): Comme
 
     for (const [cat] of sorted) {
       for (const entry of byCat.get(cat)!.sort(byTreeOrder)) {
-        const filterKey = getCommentaryGroupFilterKey(entry.bookId, sectionLabel, cat)
         result.push({
-          filterKey,
           bookId: entry.bookId,
           bookTitle: entry.bookTitle,
           path: `${entry.bookTitle} \u00B7 ${sectionLabel} \u00B7 ${cat}`,

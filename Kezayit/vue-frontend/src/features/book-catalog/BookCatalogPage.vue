@@ -194,12 +194,13 @@ function onSearchEnter() {
           @enter-folder="enter"
         />
         <template v-if="isSearching">
-          <LoadingAnimation v-if="tocSearching" />
+          <LoadingAnimation v-if="tocSearching && !searchItems.length" />
           <BookCatalogSearch
             ref="searchResultsRef"
             v-else
             :items="searchItems"
             :view="view"
+            :searching="tocSearching"
             @select-book="onSelectBook"
             @select-toc="onSelectToc"
           />

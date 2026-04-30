@@ -252,7 +252,16 @@ export const useTabStore = defineStore('tabs', () => {
   }
 
   function switchTab(id: string) {
-    if (tabs.value.some((t) => t.id === id)) activeTabId.value = id
+    if (tabs.value.some((t) => t.id === id)) {
+      activeTabId.value = id
+      // Move switched tab to the front for MRU ordering
+      const idx = tabs.value.findIndex((t) => t.id === id)
+      if (idx > 0) {
+        const tab = tabs.value[idx]!
+        tabs.value.splice(idx, 1)
+        tabs.value.unshift(tab)
+      }
+    }
   }
 
   function closeAllTabs() {
@@ -292,7 +301,15 @@ export const useTabStore = defineStore('tabs', () => {
 
   function updateActiveTab(patch: Partial<Omit<Tab, 'id'>>) {
     const tab = tabs.value.find((t) => t.id === activeTabId.value)
-    if (tab) Object.assign(tab, patch)
+    if (tab) {
+      Object.assign(tab, patch)
+      // Move to front for MRU ordering
+      const idx = tabs.value.findIndex((t) => t.id === activeTabId.value)
+      if (idx > 0) {
+        tabs.value.splice(idx, 1)
+        tabs.value.unshift(tab)
+      }
+    }
   }
 
   function updateTab(tabId: string, patch: Partial<Omit<Tab, 'id'>>) {

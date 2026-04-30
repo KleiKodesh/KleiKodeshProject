@@ -1,7 +1,6 @@
 using RegexFindLib.Helpers;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 
 namespace RegexFindLib.UI
@@ -122,57 +121,6 @@ namespace RegexFindLib.UI
         void ReplaceHistoryBtn_Click(object sender, RoutedEventArgs e)
         {
             ReplaceHistoryPopup.IsOpen = true;
-        }
-
-        // ── History item click — fill the text box ────────────────────────────
-
-        void HistoryItem_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            if (!(sender is TextBlock tb) || Vm == null) return;
-            var text = tb.Text;
-            bool isFindPopup = IsDescendantOf(tb, FindHistoryPopup);
-            if (isFindPopup)
-            {
-                Vm.SearchText = text;
-                FindHistoryPopup.IsOpen = false;
-                FindBox.Focus();
-                FindBox.CaretIndex = text.Length;
-            }
-            else
-            {
-                Vm.ReplaceText = text;
-                ReplaceHistoryPopup.IsOpen = false;
-                ReplaceBox.Focus();
-                ReplaceBox.CaretIndex = text.Length;
-            }
-        }
-
-        void HistoryRemove_Click(object sender, RoutedEventArgs e)
-        {
-            if (!(sender is Button btn)) return;
-            var text = btn.Tag as string;
-            if (string.IsNullOrEmpty(text)) return;
-
-            // Determine which popup this × belongs to
-            bool isFindPopup = IsDescendantOf(btn, FindHistoryPopup);
-            if (isFindPopup)
-                SearchHistory.Find.Remove(text);
-            else
-                SearchHistory.Replace.Remove(text);
-
-            RegexFindViewModel.LoadRecentSearches();
-            e.Handled = true;
-        }
-
-        static bool IsDescendantOf(DependencyObject child, DependencyObject ancestor)
-        {
-            var parent = System.Windows.Media.VisualTreeHelper.GetParent(child);
-            while (parent != null)
-            {
-                if (parent == ancestor) return true;
-                parent = System.Windows.Media.VisualTreeHelper.GetParent(parent);
-            }
-            return false;
         }
 
         // ── Results keyboard navigation ───────────────────────────────────────

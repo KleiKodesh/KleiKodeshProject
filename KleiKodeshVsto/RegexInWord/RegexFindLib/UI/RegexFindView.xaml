@@ -28,55 +28,38 @@
             <local:BoolToFlowDirectionConverter     x:Key="BoolToFlowDir"/>
             <local:IntToVisibilityConverter         x:Key="IntToVis"/>
 
-            <!-- History item template — kept here so Click handler can reference code-behind -->
+            <!-- History item template — plain row matching OfficeComboItem style -->
             <DataTemplate x:Key="HistoryItemTemplate">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0"
-                               Text="{Binding}"
-                               Padding="8,6"
-                               VerticalAlignment="Center"
-                               TextTrimming="CharacterEllipsis"
-                               Cursor="Hand"
-                               MouseLeftButtonUp="HistoryItem_Click"/>
-                    <Button Grid.Column="1"
-                            Content="×"
-                            FontSize="13"
-                            Width="26" Height="26"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            Cursor="Hand"
-                            Opacity="0.5"
-                            ToolTip="הסר מההיסטוריה"
-                            Tag="{Binding}"
-                            Click="HistoryRemove_Click">
-                        <Button.Style>
-                            <Style TargetType="Button">
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border x:Name="Bd" Background="Transparent"
-                                                    CornerRadius="2" Padding="2">
-                                                <ContentPresenter HorizontalAlignment="Center"
-                                                                  VerticalAlignment="Center"/>
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="Bd" Property="Background" Value="#FDE7E9"/>
-                                                    <Setter Property="Opacity" Value="1"/>
-                                                </Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                            </Style>
-                        </Button.Style>
-                    </Button>
-                </Grid>
+                <TextBlock Text="{Binding}"
+                           FontSize="12"
+                           TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center"/>
             </DataTemplate>
+
+            <!-- History list item container — hover + click matching OfficeComboItem -->
+            <Style x:Key="HistoryItemContainerStyle" TargetType="ListBoxItem">
+                <Setter Property="Padding"         Value="8,5"/>
+                <Setter Property="FontFamily"      Value="Segoe UI"/>
+                <Setter Property="FontSize"        Value="12"/>
+                <Setter Property="Cursor"          Value="Hand"/>
+                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ListBoxItem">
+                            <Border x:Name="Bd" Background="Transparent"
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="#0A808080"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
         </ResourceDictionary>
     </UserControl.Resources>
 
@@ -106,7 +89,7 @@
                 Padding="6,3">
             <DockPanel LastChildFill="False">
 
-                <!-- LEFT side (RTL: Dock=Right) — החלפה + regex tips -->
+                <!-- LEFT side (RTL: Dock=Right) — החלפה + regex tips + engine toggle -->
                 <ToggleButton DockPanel.Dock="Right"
                               Style="{StaticResource IconToggle}"
                               IsChecked="{Binding ShowReplace}"
@@ -129,6 +112,46 @@
                           Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
                           Stretch="Uniform" FlowDirection="LeftToRight"
                           Width="16" Height="16"/>
+                </ToggleButton>
+
+                <!-- Engine toggle — switches between custom regex engine and Word native search -->
+                <ToggleButton DockPanel.Dock="Right"
+                              Style="{StaticResource IconToggle}"
+                              IsChecked="{Binding UseWordSearch}"
+                              Height="Auto" Width="Auto" Padding="8,4"
+                              ToolTip="חיפוש מובנה של Word">
+                    <Grid Width="16" Height="16">
+                        <!-- Unchecked state: dim normal W -->
+                        <TextBlock Text="W" FontSize="13" FontWeight="Normal"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Opacity" Value="0.55"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding UseWordSearch}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <!-- Checked state: bold accent W -->
+                        <TextBlock Text="W" FontSize="13" FontWeight="Bold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Foreground="{StaticResource AccentBrush}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding UseWordSearch}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Grid>
                 </ToggleButton>
 
                 <!-- RIGHT side (RTL: Dock=Left) — mode select + מרחק -->
@@ -179,7 +202,7 @@
                     <ToggleButton DockPanel.Dock="Left"
                                   Style="{StaticResource InputIconToggle}"
                                   IsChecked="{Binding UseRegex}"
-                                  ToolTip="השתמש בביטויים רגולריים">
+                                  ToolTip="{Binding WildcardTooltip}">
                         <Path Data="{StaticResource Icon.Regex}"
                               Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
                               Stretch="Uniform" FlowDirection="LeftToRight"
@@ -216,10 +239,16 @@
                    Placement="Bottom" StaysOpen="False" AllowsTransparency="False"
                    DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}">
                 <Border Background="{Binding Background, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
-                        MinWidth="{Binding ActualWidth, ElementName=FindBox}">
-                    <ItemsControl ItemsSource="{Binding RecentSearchesBinding}"
-                                  ItemTemplate="{StaticResource HistoryItemTemplate}"/>
+                        BorderBrush="#50808080" BorderThickness="1"
+                        MinWidth="{Binding ActualWidth, ElementName=FindBox}"
+                        MaxHeight="220">
+                    <ListBox ItemsSource="{Binding RecentSearchesBinding}"
+                             SelectedItem="{Binding SelectedSearchHistory, Mode=TwoWay}"
+                             ItemTemplate="{StaticResource HistoryItemTemplate}"
+                             ItemContainerStyle="{StaticResource HistoryItemContainerStyle}"
+                             BorderThickness="0" Background="Transparent"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             Margin="0,2"/>
                 </Border>
             </Popup>
 
@@ -350,10 +379,16 @@
                        Placement="Bottom" StaysOpen="False" AllowsTransparency="False"
                        DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}">
                     <Border Background="{Binding Background, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                            BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
-                            MinWidth="{Binding ActualWidth, ElementName=ReplaceBox}">
-                        <ItemsControl ItemsSource="{Binding RecentReplacementsBinding}"
-                                      ItemTemplate="{StaticResource HistoryItemTemplate}"/>
+                            BorderBrush="#50808080" BorderThickness="1"
+                            MinWidth="{Binding ActualWidth, ElementName=ReplaceBox}"
+                            MaxHeight="220">
+                        <ListBox ItemsSource="{Binding RecentReplacementsBinding}"
+                                 SelectedItem="{Binding SelectedReplaceHistory, Mode=TwoWay}"
+                                 ItemTemplate="{StaticResource HistoryItemTemplate}"
+                                 ItemContainerStyle="{StaticResource HistoryItemContainerStyle}"
+                                 BorderThickness="0" Background="Transparent"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 Margin="0,2"/>
                     </Border>
                 </Popup>
 
@@ -427,6 +462,7 @@
             <!-- Regex palette (help toggle on) -->
             <local:RegexPalettePanel
                 x:Name="RegexPalette"
+                Tips="{Binding PaletteTips}"
                 Background="{StaticResource BgSecBrush}"
                 Visibility="{Binding ShowRegexPalette,
                     Converter={StaticResource BoolToVis}}"/>

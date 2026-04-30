@@ -12,9 +12,11 @@
  *             When Phase 1 finds nothing, delegates to bookCatalogTocHeuristics
  *             which splits the query into "<book words> <toc words>" and
  *             searches the TOC entries of the matching books.
- *             Shows a loading spinner while the DB fetch is in progress.
- *             Capped at MAX_TOC_CANDIDATE_BOOKS so a broad prefix like "ראש"
- *             doesn't trigger a fetch for hundreds of books.
+ *             Results are cached in app-catalog-toc-cache IDB (LRU, 25 entries)
+ *             so repeated queries skip the DB round-trips entirely.
+ *             Shows a loading spinner only on a cache miss while the DB fetch
+ *             is in progress. Capped at MAX_TOC_CANDIDATE_BOOKS so a broad
+ *             prefix like "ראש" doesn't trigger a fetch for hundreds of books.
  */
 
 import { ref, watch } from 'vue'
@@ -24,6 +26,7 @@ import { normalizeBookPath } from './bookCatalogSearchNormalizer'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { runTocHeuristics } from './bookCatalogSearchTocHeuristics'
 import { filterBooksByWords } from './bookCatalogSearch'
+import { getCatalogTocCache, setCatalogTocCache } from './bookCatalogTocSearchCache'
 import type { BookRow } from './bookCatalogTree'
 
 // ─── Public types ─────────────────────────────────────────────────────────────
@@ -101,6 +104,15 @@ export function useBookCatalogSearch(searchQuery: ReturnType<typeof ref<string>>
 
       if (filterBooksByWords(store.allBooks, words).length > 0) return
 
+      // Check the disk cache before hitting the DB
+      const normalizedQuery = words.join(' ')
+      const cached = await getCatalogTocCache(normalizedQuery)
+      if (generation !== searchGeneration) return
+      if (cached) {
+        results.value = cached.items
+        return
+      }
+
       searching.value = true
       results.value = []
 
@@ -114,6 +126,9 @@ export function useBookCatalogSearch(searchQuery: ReturnType<typeof ref<string>>
         if (generation !== searchGeneration) return
 
         results.value = items
+
+        // Persist to disk cache (fire-and-forget — UI is already updated)
+        if (items.length > 0) setCatalogTocCache(normalizedQuery, items)
       } finally {
         if (generation === searchGeneration) searching.value = false
       }
