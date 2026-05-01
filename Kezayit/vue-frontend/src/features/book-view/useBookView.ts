@@ -117,10 +117,10 @@ export function useBookView(
     const nextEntry = tocEntries.value.slice(idx + 1).find((e) => e.lineIndex != null && e.level <= tocEntry.level)
     const fromIndex = tocEntry.lineIndex
     const toIndex = nextEntry?.lineIndex ?? lines.value.length
-    // Exclude placeholder lines (negative IDs) — they haven't loaded from DB yet.
+    // Exclude placeholder lines (content === null) — they haven't loaded from DB yet.
     // Return null instead of a partial list so useCommentary waits for real IDs.
     const ids = lines.value
-      .filter((l) => l.lineIndex >= fromIndex && l.lineIndex < toIndex && l.id > 0)
+      .filter((l) => l.lineIndex >= fromIndex && l.lineIndex < toIndex && l.content !== null)
       .map((l) => l.id)
     return ids.length > 0 ? ids : null
   })

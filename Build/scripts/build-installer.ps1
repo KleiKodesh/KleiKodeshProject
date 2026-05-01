@@ -100,6 +100,7 @@ function Build-Variant {
 
     dotnet build $WpfProjectPath -c Release `
         -p:VstoConfiguration=Release -p:VstoPlatform=$Platform `
+        -p:InstallerVariant=$Platform `
         --verbosity normal
     if ($LASTEXITCODE -ne 0) {
         Write-Host "ERROR: WPF build failed for $Platform." -ForegroundColor Red
@@ -125,12 +126,18 @@ function Build-Variant {
     }
 
     Write-Host "OK: $(Split-Path -Leaf $outFile)" -ForegroundColor Green
-    return $outFile
+    # Use script scope to return the path — avoids PowerShell function return value pollution
+    $script:LastBuiltInstaller = $outFile
 }
 
-$installerX64 = Build-Variant -Platform "x64"    -Suffix "-x64"
-$installerX86 = Build-Variant -Platform "x86"    -Suffix "-x86"
-$installerAny = Build-Variant -Platform "AnyCPU" -Suffix ""
+Build-Variant -Platform "x64"    -Suffix "-x64"
+$installerX64 = $script:LastBuiltInstaller
+
+Build-Variant -Platform "x86"    -Suffix "-x86"
+$installerX86 = $script:LastBuiltInstaller
+
+Build-Variant -Platform "AnyCPU" -Suffix ""
+$installerAny = $script:LastBuiltInstaller
 
 Write-Host ""
 Write-Host "All three variants built successfully." -ForegroundColor Green
@@ -164,12 +171,25 @@ $notes  = New-ReleaseNotes -Version $version -Source $ReleaseNotesSource
 $branch = git rev-parse --abbrev-ref HEAD
 
 # Upload all three installers to the same release.
-# The AnyCPU build (no suffix) is the default download link shown on the release page.
-gh release create $version $installerX64 $installerX86 $installerAny `
+# Files are uploaded one at a time to avoid Windows command-line length limits.
+gh release create $version `
     --repo KleiKodesh/KleiKodeshProject `
     --title "KleiKodesh $version" `
     --notes $notes `
     --target $branch
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: GitHub release creation failed." -ForegroundColor Red
+    exit 1
+}
+
+foreach ($asset in @($installerX64, $installerX86, $installerAny)) {
+    Write-Host "Uploading $(Split-Path -Leaf $asset)..." -ForegroundColor Yellow
+    gh release upload $version $asset --repo KleiKodesh/KleiKodeshProject --clobber
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "ERROR: Upload failed for $(Split-Path -Leaf $asset)" -ForegroundColor Red
+        exit 1
+    }
+}
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "SUCCESS: https://github.com/KleiKodesh/KleiKodeshProject/releases/tag/$version" -ForegroundColor Green

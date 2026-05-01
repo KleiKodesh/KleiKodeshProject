@@ -81,7 +81,7 @@ namespace KleiKodesh.Helpers
                 newPane.Visible = true;
                 return newPane;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 MessageBox.Show("אין אפשרות לשכפל חלונית צד זו)", "Duplicate TaskPane Error");
                 return null;

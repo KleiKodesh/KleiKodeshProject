@@ -17,51 +17,51 @@ namespace KleiKodesh.Ribbon
 
         private void InitializeControls()
         {
-            var defaultButtonId = SettingsManager.Get("Ribbon", "DefaultButton", "Settings");
-            var rbSettings = (RadioButton)FindName("RbSettings");
-
-            foreach (var name in new[] { "Kezayit", "WebSites", "KleiKodesh", "RegexFind" })
+            // cb.Name IS the registry key (e.g. "Kezayit_Visible") — do not rename the controls.
+            foreach (CheckBox cb in VisibleSettingsPanel.Children)
             {
-                var cb = (CheckBox)FindName($"Chk{name}");
-                var rb = (RadioButton)FindName($"Rb{name}");
-
-                cb.IsChecked = SettingsManager.GetBool("Ribbon", $"{name}_Visible", true);
-                rb.IsChecked = (name == defaultButtonId);
-                rb.Checked += (_, __) => SettingsManager.Save("Ribbon", "DefaultButton", name);
-
-                cb.Checked += (_, __) =>
+                cb.IsChecked = SettingsManager.GetBool("Ribbon", cb.Name, true);
+                cb.Checked   += (_, __) =>
                 {
-                    SettingsManager.Save("Ribbon", $"{name}_Visible", true);
-                    _ribbon.InvalidateControl(name);
+                    SettingsManager.Save("Ribbon", cb.Name, true);
+                    _ribbon.InvalidateControl(cb.Name.Replace("_Visible", ""));
                 };
                 cb.Unchecked += (_, __) =>
                 {
-                    SettingsManager.Save("Ribbon", $"{name}_Visible", false);
-                    _ribbon.InvalidateControl(name);
-                    if (rb.IsChecked == true)
+                    SettingsManager.Save("Ribbon", cb.Name, false);
+                    string componentId = cb.Name.Replace("_Visible", "");
+                    _ribbon.InvalidateControl(componentId);
+                    // If the corresponding option radio was selected, fall back to Settings
+                    var rb = (RadioButton)FindName($"{componentId}_Option");
+                    if (rb?.IsChecked == true)
                     {
                         rb.IsChecked = false;
-                        rbSettings.IsChecked = true;
+                        Settings_Option.IsChecked = true;
                         SettingsManager.Save("Ribbon", "DefaultButton", "Settings");
                     }
                 };
             }
 
-            rbSettings.IsChecked = ("Settings" == defaultButtonId);
-            rbSettings.Checked += (_, __) => SettingsManager.Save("Ribbon", "DefaultButton", "Settings");
+            // rb.Name stripped of "_Option" IS the saved DefaultButton value — do not rename the controls.
+            string defaultButtonId = SettingsManager.Get("Ribbon", "DefaultButton", "Settings");
+            foreach (RadioButton rb in OptionsSettingsPanel.Children)
+            {
+                rb.IsChecked = rb.Name.Replace("_Option", "") == defaultButtonId;
+                rb.Checked += (_, __) =>
+                    SettingsManager.Save("Ribbon", "DefaultButton", rb.Name.Replace("_Option", ""));
+            }
 
             ChkTurnOffUpdates.IsChecked = SettingsManager.GetBool("UpdateChecker", "TurnOffUpdates", false);
-            ChkTurnOffUpdates.Checked += (_, __) => SettingsManager.Save("UpdateChecker", "TurnOffUpdates", true);
+            ChkTurnOffUpdates.Checked   += (_, __) => SettingsManager.Save("UpdateChecker", "TurnOffUpdates", true);
             ChkTurnOffUpdates.Unchecked += (_, __) => SettingsManager.Save("UpdateChecker", "TurnOffUpdates", false);
 
             BtnReset.Click += (_, __) =>
             {
-                foreach (var name in new[] { "Kezayit", "WebSites", "KleiKodesh", "RegexFind" })
-                {
-                    ((CheckBox)FindName($"Chk{name}")).IsChecked = true;
-                    ((RadioButton)FindName($"Rb{name}")).IsChecked = false;
-                }
-                rbSettings.IsChecked = true;
+                foreach (CheckBox cb in VisibleSettingsPanel.Children)
+                    if (cb is CheckBox) cb.IsChecked = true;
+                foreach (RadioButton rb in OptionsSettingsPanel.Children)
+                    if (rb is RadioButton) rb.IsChecked = false;
+                Settings_Option.IsChecked = true;
                 ChkTurnOffUpdates.IsChecked = false;
                 SettingsManager.ClearAll();
                 MessageBox.Show("התוכנה אופסה בהצלחה - אנא התחל את וורד מחדש");

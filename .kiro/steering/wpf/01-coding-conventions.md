@@ -37,6 +37,8 @@ public MyViewModel(IService service)
 - `PascalCase`: `x:Name="SearchButton"`
 - Template parts: `x:Name="PART_TextBox"`
 - Avoid Hungarian notation (`btnSearch`)
+- **No abbreviations** — use full descriptive words: `x:Name="KezayitCheckBox"` not `x:Name="ChkKezayit"`, `x:Name="KezayitRadioButton"` not `x:Name="RbKezayit"`, `x:Name="ResetButton"` not `x:Name="BtnReset"`
+- **Exception:** when a control's `x:Name` is intentionally used as a data key (e.g. iterated via `panel.Children` and `cb.Name` is passed directly to a settings/registry API), keep the name aligned with the key format rather than the UI naming convention. Document this with a comment.
 
 **Resources:**
 - Prefix with category: `Brush_Primary`, `Style_HeaderText`

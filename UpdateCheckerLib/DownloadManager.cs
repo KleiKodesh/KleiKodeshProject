@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Win32;
+using System;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
@@ -12,9 +13,41 @@ namespace UpdateCheckerLib
     internal static class DownloadManager
     {
         public static string PendingInstallerPath { get; private set; }
+
+        /// <summary>
+        /// Returns the installer variant stored in the registry ("x64", "x86", or "AnyCPU").
+        /// Falls back to "AnyCPU" if the value is missing (pre-variant installs).
+        /// </summary>
+        private static string GetInstallerVariantFromRegistry()
+        {
+            try
+            {
+                using (var key = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\KleiKodesh"))
+                {
+                    var value = key?.GetValue("InstallerVariant")?.ToString();
+                    if (value == "x64" || value == "x86") return value;
+                }
+            }
+            catch { }
+            return "AnyCPU";
+        }
+
+        /// <summary>
+        /// Returns the URL suffix for the installer file name based on the stored variant.
+        /// x64 → "-x64", x86 → "-x86", AnyCPU → "" (no suffix).
+        /// </summary>
+        private static string GetInstallerSuffix()
+        {
+            var variant = GetInstallerVariantFromRegistry();
+            if (variant == "x64") return "-x64";
+            if (variant == "x86") return "-x86";
+            return "";
+        }
+
         public static async Task DownloadAndScheduleInstallerAsync(string version)
         {
-            string installerUrl = $"https://github.com/KleiKodesh/KleiKodeshProject/releases/download/{version}/KleiKodeshSetup-{version}.exe";
+            string suffix       = GetInstallerSuffix();
+            string installerUrl = $"https://github.com/KleiKodesh/KleiKodeshProject/releases/download/{version}/KleiKodeshSetup-{version}{suffix}.exe";
             string tempPath     = Path.Combine(Path.GetTempPath(), "KleiKodeshSetup.exe");
 
             DownloadProgressForm form = null;

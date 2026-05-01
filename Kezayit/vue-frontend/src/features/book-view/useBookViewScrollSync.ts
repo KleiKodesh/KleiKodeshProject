@@ -46,7 +46,7 @@ export function useBookViewScrollSync(
 
     if (!autoSelectTopLine.value) return
     const line = lines().find((l) => l.lineIndex === currentFullLineIndex.value)
-    if (line && line.id > 0) {
+    if (line && line.content !== null) {
       selectedLineId.value = line.id
       bottomVisible.value = true
       if (autoSelectCommentaryTimer) clearTimeout(autoSelectCommentaryTimer)

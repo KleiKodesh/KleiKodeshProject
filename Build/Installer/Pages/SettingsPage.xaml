@@ -165,6 +165,13 @@
                            Foreground="#5A5A5A"
                            Margin="0,0,0,6"/>
 
+                <!--
+                    IMPORTANT — control names are registry settings keys.
+                    LoadSettings() iterates VisibleSettingsPanel.Children and passes cb.Name
+                    directly to SettingsManager as the key (e.g. "Kezayit_Visible").
+                    Do NOT rename these to follow UI naming conventions — the name IS the key.
+                    Format: {ComponentId}_Visible
+                -->
                 <StackPanel x:Name="VisibleSettingsPanel">
                     <StackPanel.Resources>
                         <Style TargetType="CheckBox">
@@ -176,8 +183,9 @@
                         </Style>
                     </StackPanel.Resources>
                     <CheckBox x:Name="Kezayit_Visible"    Content="ספריית כזית"/>
+                    <CheckBox x:Name="Kiwix_Visible"      Content="ספריית קיוויקס"/>
                     <CheckBox x:Name="WebSites_Visible"   Content="דרך האתרים"/>
-                    <CheckBox x:Name="DocDesign_Visible" Content="עיצוב תורני"/>
+                    <CheckBox x:Name="DocDesign_Visible"  Content="עיצוב תורני"/>
                     <CheckBox x:Name="RegexFind_Visible"  Content="חיפוש רגקס בוורד"/>
                 </StackPanel>
 
@@ -190,6 +198,13 @@
                            Foreground="#5A5A5A"
                            Margin="0,0,0,6"/>
 
+                <!--
+                    IMPORTANT — control names encode the settings value.
+                    LoadSettings() iterates OptionsSettingsPanel.Children and derives the
+                    DefaultButton value by stripping "_Option" from rb.Name (e.g. "Kezayit_Option"
+                    → saves "Kezayit"). Do NOT rename these to follow UI naming conventions.
+                    Format: {ComponentId}_Option  (must match the ComponentId used in Kezayit_Visible etc.)
+                -->
                 <StackPanel x:Name="OptionsSettingsPanel">
                     <StackPanel.Resources>
                         <Style TargetType="RadioButton">
@@ -201,8 +216,9 @@
                         </Style>
                     </StackPanel.Resources>
                     <RadioButton x:Name="Kezayit_Option"    Content="ספריית כזית"/>
+                    <RadioButton x:Name="Kiwix_Option"      Content="ספריית קיוויקס"/>
                     <RadioButton x:Name="WebSites_Option"   Content="דרך האתרים"/>
-                    <RadioButton x:Name="DocDesign_Option" Content="עיצוב תורני"/>
+                    <RadioButton x:Name="DocDesign_Option"  Content="עיצוב תורני"/>
                     <RadioButton x:Name="RegexFind_Option"  Content="חיפוש רגקס בוורד"/>
                     <RadioButton x:Name="Settings_Option"   Content="הגדרות"/>
                 </StackPanel>
@@ -229,11 +245,11 @@
                         Click="CloseButton_Click"/>
 
                 <Button x:Name="NextButton"
-          Grid.Column="2"
-          Content="הבא"
-          Style="{StaticResource PrimaryButton}"
-          Margin="0,0,4,0"
-          Click="NextButton_Click"/>
+                        Grid.Column="2"
+                        Content="הבא"
+                        Style="{StaticResource PrimaryButton}"
+                        Margin="0,0,4,0"
+                        Click="NextButton_Click"/>
             </Grid>
         </Border>
     </Grid>

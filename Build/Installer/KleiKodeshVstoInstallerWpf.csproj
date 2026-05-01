@@ -4,13 +4,23 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net48</TargetFramework>
     <UseWPF>true</UseWPF>
-    <Version>4.3.0</Version>
+    <Version>4.4.0</Version>
     <ApplicationIcon>KleiKodesh_Main.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>AnyCPU</Platforms>
     <!-- Prevent dependency DLLs from being copied to output — they are embedded as resources -->
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
   </PropertyGroup>
+
+  <!-- Installer variant — set by build script via -p:InstallerVariant=x64|x86|AnyCPU.
+       Baked into the binary so SaveVersion() can record which variant was installed. -->
+  <PropertyGroup Condition="'$(InstallerVariant)' == 'x64'">
+    <DefineConstants>$(DefineConstants);INSTALLER_VARIANT_X64</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(InstallerVariant)' == 'x86'">
+    <DefineConstants>$(DefineConstants);INSTALLER_VARIANT_X86</DefineConstants>
+  </PropertyGroup>
+  <!-- AnyCPU (default) — no extra define needed; AddinInstaller falls through to "AnyCPU" -->
 
   <ItemGroup>
     <Reference Include="System.IO.Compression" />

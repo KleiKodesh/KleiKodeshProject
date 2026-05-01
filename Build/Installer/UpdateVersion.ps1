@@ -13,18 +13,17 @@ $csprojPath   = Join-Path $projectDir "KleiKodeshVstoInstallerWpf.csproj"
 function Update-AllVersionTargets($newVersion) {
     # Strip leading 'v' for numeric-only contexts (csproj <Version>)
     $numericVersion = $newVersion -replace '^v', ''
+    $encUtf8 = New-Object System.Text.UTF8Encoding($false)   # UTF-8, no BOM
 
     # 1. AddinInstaller.cs — public const string Version = "vX.Y.Z";
-    $content = Get-Content $FilePath -Raw
-    $updated = $content -replace '(public const string Version\s*=\s*)"v[^"]*"', "`$1`"$newVersion`""
-    if ($updated -ne $content) {
-        Set-Content $FilePath -Value $updated -NoNewline
-        Write-Host "  [OK] AddinInstaller.cs -> $newVersion"
+    $content = [System.IO.File]::ReadAllText($FilePath, $encUtf8)
+    # Check if already at the target version (no-op case)
+    if ($content -match [regex]::Escape("`"$newVersion`"")) {
+        Write-Host "  [OK] AddinInstaller.cs -> $newVersion (already current)"
     } else {
-        # Fallback: try without 'public' prefix
-        $updated = $content -replace '(const string Version\s*=\s*)"v[^"]*"', "`$1`"$newVersion`""
+        $updated = $content -replace '((?:public\s+)?const\s+string\s+Version\s*=\s*)"v[^"]*"', "`$1`"$newVersion`""
         if ($updated -ne $content) {
-            Set-Content $FilePath -Value $updated -NoNewline
+            [System.IO.File]::WriteAllText($FilePath, $updated, $encUtf8)
             Write-Host "  [OK] AddinInstaller.cs -> $newVersion"
         } else {
             Write-Host "  [WARN] AddinInstaller.cs: pattern not matched, no change"
@@ -33,16 +32,14 @@ function Update-AllVersionTargets($newVersion) {
     }
 
     # 2. KleiKodeshVstoInstallerWpf.csproj — <Version>X.Y.Z</Version>
-    #    Insert or update inside the first <PropertyGroup>
     if (Test-Path $csprojPath) {
-        $csproj = Get-Content $csprojPath -Raw
+        $csproj = [System.IO.File]::ReadAllText($csprojPath, $encUtf8)
         if ($csproj -match '<Version>[^<]*</Version>') {
             $csproj = $csproj -replace '<Version>[^<]*</Version>', "<Version>$numericVersion</Version>"
         } else {
-            # Insert after <UseWPF>true</UseWPF> or after first <OutputType> line
             $csproj = $csproj -replace '(<UseWPF>true</UseWPF>)', "`$1`n    <Version>$numericVersion</Version>"
         }
-        Set-Content $csprojPath -Value $csproj -NoNewline
+        [System.IO.File]::WriteAllText($csprojPath, $csproj, $encUtf8)
         Write-Host "  [OK] KleiKodeshVstoInstallerWpf.csproj -> $numericVersion"
     } else {
         Write-Host "  [SKIP] csproj not found at $csprojPath"

@@ -18,10 +18,24 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
     {
         public const string AppName         = "KleiKodesh";
         public const string AppDisplayName  = "כלי קודש";
-        public const string Version         = "v4.3.0";
+        public const string Version         = "v4.4.0";
         public const string InstallFolderName = "KleiKodesh";
         public const string ZipResourceName = "KleiKodesh.zip";
         public const string VstoFileName    = "KleiKodesh.vsto";
+
+        /// <summary>
+        /// Which installer variant this binary is — baked in at build time via
+        /// -p:InstallerVariant=x64|x86|AnyCPU (DefineConstants in the csproj).
+        /// Saved to registry by SaveVersion() so the update checker can download
+        /// the same variant on the next update.
+        /// </summary>
+#if INSTALLER_VARIANT_X64
+        public const string InstallerVariant = "x64";
+#elif INSTALLER_VARIANT_X86
+        public const string InstallerVariant = "x86";
+#else
+        public const string InstallerVariant = "AnyCPU";
+#endif
 
         public static string InstallPath =>
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), InstallFolderName);
@@ -221,7 +235,10 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             try
             {
                 using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"SOFTWARE\KleiKodesh"))
-                    key?.SetValue("Version", Version);
+                {
+                    key?.SetValue("Version",          Version);
+                    key?.SetValue("InstallerVariant", InstallerVariant);
+                }
             }
             catch { }
         }

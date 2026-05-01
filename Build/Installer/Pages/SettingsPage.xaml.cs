@@ -23,6 +23,7 @@ namespace KleiKodeshVstoInstallerWpf
 
         private void LoadSettings()
         {
+            // cb.Name IS the registry key (e.g. "Kezayit_Visible") — do not rename the controls.
             foreach (System.Windows.Controls.CheckBox cb in VisibleSettingsPanel.Children)
             {
                 bool val = SettingsManager.GetBool("Ribbon", cb.Name, true);
@@ -33,6 +34,8 @@ namespace KleiKodeshVstoInstallerWpf
             }
 
             _defaultButton = SettingsManager.Get("Ribbon", "DefaultButton", "Settings");
+            // rb.Name stripped of "_Option" IS the saved DefaultButton value (e.g. "Kezayit_Option" → "Kezayit").
+            // Do not rename the controls.
             foreach (System.Windows.Controls.RadioButton rb in OptionsSettingsPanel.Children)
             {
                 if (rb.Name.Contains(_defaultButton))
