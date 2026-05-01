@@ -63,6 +63,7 @@ export function useLines(bookId: () => number | undefined) {
       hasCommentaryConnection: number
       hasOtherConnection: number
     }>(SQL.GET_BOOK_BY_ID, [id])
+
     const totalLines = book?.totalLines ?? 0
     hasCommentaries.value = !!(
       book?.hasTargumConnection ||

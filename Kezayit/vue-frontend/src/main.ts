@@ -37,15 +37,35 @@ await Promise.all([
 function warmBooksDataInBackground() {
   if (!dbReady.value) return
 
-  const run = () => void useBooksDataStore().ensureLoaded()
+  const run = () => {
+    void useBooksDataStore().ensureLoaded()
+  }
 
-  window.setTimeout(() => {
-    if (typeof window.requestIdleCallback === 'function') {
-      window.requestIdleCallback(() => run(), { timeout: 1500 })
-      return
+  // Wait for the browser to be genuinely idle before loading the catalog.
+  // A minimum wall-clock delay of 8s ensures the book view's line chunks have
+  // all finished before the catalog queries compete for the DB connection.
+  const MIN_DELAY = 8000
+  const startTime = Date.now()
+
+  if (typeof window.requestIdleCallback === 'function') {
+    const tryIdle = () => {
+      window.requestIdleCallback(
+        (deadline) => {
+          const elapsed = Date.now() - startTime
+          if (elapsed >= MIN_DELAY && deadline.timeRemaining() > 50) {
+            run()
+          } else {
+            // Not ready yet — reschedule
+            window.setTimeout(tryIdle, Math.max(0, MIN_DELAY - elapsed))
+          }
+        },
+        { timeout: MIN_DELAY + 5000 },
+      )
     }
-    window.setTimeout(run, 250)
-  }, 0)
+    window.setTimeout(tryIdle, MIN_DELAY)
+  } else {
+    window.setTimeout(run, MIN_DELAY)
+  }
 }
 
 app.mount('#app')

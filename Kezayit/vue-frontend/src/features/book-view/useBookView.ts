@@ -102,14 +102,12 @@ export function useBookView(
     getActiveTocEntry, getTocPath,
     altTocSections, tocEntries, tocSearchTree,
     loading: tocLoading, error: tocError, tocLoaded,
+    loadAltTocSections,
   } = useToc(() => bookId, () => bookTitle)
 
-  // Delay lines loading until TOC has finished loading — avoids flash-to-entry-1 race on
-  // session restore. We gate on tocLoaded (not tocEntries.length) so that books with no
-  // TOC entries (or whose single root entry was stripped as a title duplicate) still load.
-  const { lines, prioritise, hasCommentaries, hasRelatedBooks } = useLines(() =>
-    tocLoaded.value ? bookId : undefined,
-  )
+  // Lines load immediately in parallel with TOC — scrollStateReady is always true,
+  // BookViewLinesContent mounts immediately and its scroll watcher handles late IDB restore.
+  const { lines, prioritise, hasCommentaries, hasRelatedBooks } = useLines(() => bookId)
 
   const hasToc = computed(() => tocLoaded.value && tocEntries.value.length > 0)
 
@@ -129,7 +127,7 @@ export function useBookView(
     return ids.length > 0 ? ids : null
   })
 
-  const { groups, filterGroups, staticFilterGroups, loading: commentaryLoading } = useCommentary(
+  const { groups, filterGroups, staticFilterGroups, loading: commentaryLoading, ensureStaticFilterGroupsLoaded } = useCommentary(
     () => commentaryLineId.value,
     () => selectedSectionLineIds.value,
     () => bookId ?? undefined,
@@ -252,11 +250,13 @@ export function useBookView(
 
   function toggleTocPanel() {
     sidePanelMode.value = sidePanelMode.value === 'toc' ? null : 'toc'
+    if (sidePanelMode.value === 'toc') loadAltTocSections()
   }
 
   function toggleCommentaryTreePanel() {
     if (!bottomVisible.value) return
     sidePanelMode.value = sidePanelMode.value === 'commentary-tree' ? null : 'commentary-tree'
+    if (sidePanelMode.value === 'commentary-tree') ensureStaticFilterGroupsLoaded()
   }
 
   function closeSidePanel() { sidePanelMode.value = null }
@@ -316,7 +316,25 @@ export function useBookView(
   // ── Watchers ──────────────────────────────────────────────────────────────
 
   watch(() => bookViewStore.toggleBottomPanelSignal, () => { bottomVisible.value = !bottomVisible.value })
-  watch(bottomVisible, (visible) => { if (!visible && sidePanelMode.value === 'commentary-tree') closeSidePanel() })
+  watch(bottomVisible, (visible) => {
+    if (!visible && sidePanelMode.value === 'commentary-tree') closeSidePanel()
+    // Sync commentaryLineId from selectedLineId when the bottom panel first opens
+    // after session restore (bottomVisible=true but commentaryLineId still null).
+    // Wait until the first chunk has real content so the commentary query doesn't
+    // compete with line chunk fetches.
+    if (visible && selectedLineId.value != null && commentaryLineId.value == null) {
+      const stop = watch(
+        () => lines.value.some((l) => l.content !== null),
+        (hasContent) => {
+          if (!hasContent) return
+          stop()
+          if (bottomVisible.value && selectedLineId.value != null && commentaryLineId.value == null)
+            commentaryLineId.value = selectedLineId.value
+        },
+        { immediate: true },
+      )
+    }
+  })
   watch(hasCommentaries, (has) => {
     if (!has) { bottomVisible.value = false; if (sidePanelMode.value === 'commentary-tree') closeSidePanel() }
   })
@@ -352,5 +370,6 @@ export function useBookView(
     openContentSearch, openCommentarySearch,
     onQueryChange, onSearchNext, onSearchPrev, onModeChange,
     toggleTocPanel, toggleCommentaryTreePanel, closeSidePanel,
+    ensureStaticFilterGroupsLoaded,
   }
 }

@@ -429,24 +429,30 @@ function restoreScrollPos(lineIndex: number, scrollOffset = 0) {
 // ── Initial scroll on load ────────────────────────────────────────────────────
 
 // ── Initial scroll on load ────────────────────────────────────────────────────
-// Waits for lines to be non-empty, then waits for the target line's content to load,
-// then restores scroll. The outer watch stops itself after the first successful restore
-// so it doesn't re-trigger on subsequent lines updates.
+// Watches lines and initialScrollIndex together. Waits for:
+//   1. lines to be non-empty (placeholders allocated)
+//   2. a target index to be known (either initialLineIndex from TOC nav, or
+//      initialScrollIndex from IDB session restore — which may arrive after mount)
+//   3. the target line's content to be loaded (not a placeholder)
+// Stops itself after the first successful restore.
 {
   let restored = false
+  let stopContentWatch: (() => void) | null = null
   let stop: (() => void) | null = null
+
   stop = watch(
-    () => props.lines,
-    (val) => {
+    () => [props.lines, props.initialScrollIndex] as const,
+    ([val]) => {
       if (!val.length) return
       const targetIndex = props.initialLineIndex ?? props.initialScrollIndex
       if (targetIndex == null) {
-        stop?.()
-        nextTick(() => scrollerEl.value?.focus({ preventScroll: true }))
+        // No target yet — keep watching in case initialScrollIndex arrives from IDB
         return
       }
+      // Target is known — stop the outer watch and wait for content
+      stop?.()
+      stop = null
       props.prioritise(targetIndex)
-      let stopContentWatch: (() => void) | null = null
       stopContentWatch = watch(
         () => props.lines[targetIndex]?.content,
         (content) => {
@@ -457,15 +463,9 @@ function restoreScrollPos(lineIndex: number, scrollOffset = 0) {
           }
           restored = true
           stopContentWatch?.()
-          stop?.()
           nextTick(() => {
             const offset = props.initialScrollIndex != null ? (props.initialScrollOffset ?? 0) : 0
             restoreScrollPos(targetIndex, offset)
-            // Emit scrolled after the programmatic restore so TOC tracking picks up the
-            // correct position. Use the actual first *visible* line index (same logic as
-            // onScroll) rather than targetIndex — targetIndex is the first *rendered* item
-            // which includes overscan items above the viewport and would point the TOC to
-            // a line the user cannot see.
             requestAnimationFrame(() =>
               requestAnimationFrame(() => {
                 const scrollTop = scrollerEl.value?.scrollTop ?? 0
@@ -492,6 +492,21 @@ function restoreScrollPos(lineIndex: number, scrollOffset = 0) {
       )
     },
     { flush: 'post', immediate: true },
+  )
+
+  // If no target ever arrives (no saved position, no TOC nav), focus the scroller
+  // once lines are loaded so keyboard navigation works immediately.
+  watch(
+    () => props.lines,
+    (val) => {
+      if (!val.length || restored) return
+      if (props.initialLineIndex == null && props.initialScrollIndex == null) {
+        stop?.()
+        stop = null
+        nextTick(() => scrollerEl.value?.focus({ preventScroll: true }))
+      }
+    },
+    { flush: 'post' },
   )
 }
 

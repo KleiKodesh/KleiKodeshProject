@@ -35,6 +35,7 @@ const {
   openContentSearch, openCommentarySearch,
   onQueryChange, onSearchNext, onSearchPrev, onModeChange,
   toggleTocPanel, toggleCommentaryTreePanel, closeSidePanel,
+  ensureStaticFilterGroupsLoaded,
 } = useBookView(
   () => toolbarRef.value,
   () => linesContentRef.value,
@@ -59,6 +60,7 @@ const {
       :filter-groups="staticFilterGroups"
       :current-scroll-line-index="currentScrollLineIndex"
       :lines="lines"
+      :on-related-books-open="ensureStaticFilterGroupsLoaded"
       @toggle-bottom="bottomVisible = !bottomVisible"
       @toggle-search="searchVisible = !searchVisible"
       @toggle-toc="toggleTocPanel"
@@ -80,10 +82,11 @@ const {
         :current-scroll-line-index="currentScrollLineIndex"
         :lines="lines"
         :class="toolbarPosition === 'left' ? 'toolbar-order-end' : ''"
+        :on-related-books-open="ensureStaticFilterGroupsLoaded"
         @toggle-bottom="bottomVisible = !bottomVisible"
         @toggle-search="searchVisible = !searchVisible"
         @toggle-toc="toggleTocPanel"
-      />
+    />
       <div class="content-area">
         <BookViewSplitPane :bottom-visible="bottomVisible">
           <template #top>
@@ -200,6 +203,7 @@ const {
       :filter-groups="staticFilterGroups"
       :current-scroll-line-index="currentScrollLineIndex"
       :lines="lines"
+      :on-related-books-open="ensureStaticFilterGroupsLoaded"
       @toggle-bottom="bottomVisible = !bottomVisible"
       @toggle-search="searchVisible = !searchVisible"
       @toggle-toc="toggleTocPanel"

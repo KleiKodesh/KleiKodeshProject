@@ -41,19 +41,10 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
     loading.value = true
     error.value = null
     try {
-      const [entries, structures] = await Promise.all([
-        query<TocEntry>(SQL.GET_ALL_TOC_ENTRIES, [id]),
-        query<AltTocStructure>(SQL.GET_ALT_TOC_STRUCTURES, [id]),
-      ])
+      const entries = await query<TocEntry>(SQL.GET_ALL_TOC_ENTRIES, [id])
       const stripped = stripBookTitleRoot(entries, bookTitle?.(), id)
       tocEntries.value = stripped
       tocSearchTree.value = new SearchableTree(stripped)
-      altTocSections.value = await Promise.all(
-        structures.map(async (s) => {
-          const entries = await query<TocEntry>(SQL.GET_ALL_ALT_TOC_ENTRIES, [s.id])
-          return { structure: s, entries, searchTree: null }
-        }),
-      )
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'שגיאה בטעינת תוכן עניינים'
     } finally {
@@ -62,11 +53,39 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
     }
   }
 
+  let _altTocBookId: number | undefined
+  let _altTocLoading = false
+
+  // Lazy — called by useBookView the first time the TOC panel opens.
+  // Safe to call multiple times; re-fetches only if the book changed.
+  async function loadAltTocSections() {
+    const id = bookId()
+    if (id == null || (id === _altTocBookId && altTocSections.value.length > 0) || _altTocLoading) return
+    _altTocBookId = id
+    _altTocLoading = true
+    try {
+      const structures = await query<AltTocStructure>(SQL.GET_ALT_TOC_STRUCTURES, [id])
+      const sections = await Promise.all(
+        structures.map(async (s) => {
+          const entries = await query<TocEntry>(SQL.GET_ALL_ALT_TOC_ENTRIES, [s.id])
+          return { structure: s, entries, searchTree: null }
+        }),
+      )
+      altTocSections.value = sections
+    } catch {
+      // alt TOC is non-critical — silently ignore errors
+    } finally {
+      _altTocLoading = false
+    }
+  }
+
   watch(
     bookId,
     (id) => {
       if (id != null) {
         tocLoaded.value = false
+        altTocSections.value = []
+        _altTocBookId = undefined
         load(id)
       }
     },
@@ -120,5 +139,6 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
     tocSearchTree,
     getActiveTocEntry,
     getTocPath,
+    loadAltTocSections,
   }
 }

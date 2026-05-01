@@ -22,6 +22,12 @@ namespace KezayitLib.Db
             string connectionString = "Data Source=" + path + ";Version=3;Read Only=True;";
             _conn = new SQLiteConnection(connectionString);
             _conn.Open();
+            // Increase page cache to 64MB (default is ~2MB) — reduces cold-read latency
+            // significantly for large text content in the line table.
+            _conn.Execute("PRAGMA cache_size = -65536");  // negative = kibibytes → 64MB
+            // Enable memory-mapped I/O up to 256MB — lets the OS serve reads directly
+            // from mapped memory instead of going through read() syscalls.
+            _conn.Execute("PRAGMA mmap_size = 268435456"); // 256MB
         }
 
         public IEnumerable<IDictionary<string, object>> Query(string sql, object[] parameters)

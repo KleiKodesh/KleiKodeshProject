@@ -29,6 +29,7 @@ defineProps<{
   filterGroups: CommentaryGroup[]
   currentScrollLineIndex: number
   lines: LineItem[]
+  onRelatedBooksOpen?: () => void
 }>()
 defineEmits<{ toggleBottom: []; toggleSearch: []; toggleToc: [] }>()
 
@@ -62,6 +63,7 @@ defineExpose({ tocBtnRef })
       :current-scroll-line-index="currentScrollLineIndex"
       :lines="lines"
       :disabled="!hasRelatedBooks"
+      :on-open="onRelatedBooksOpen"
     />
     <button
       :class="{ active: bottomVisible }"

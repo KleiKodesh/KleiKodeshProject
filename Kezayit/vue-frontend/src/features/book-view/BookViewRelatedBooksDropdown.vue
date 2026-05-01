@@ -3,8 +3,10 @@
  * "ספרים קרובים" dropdown in the BookView toolbar.
  *
  * Shows all books linked to the current book (SOURCE / TARGUM / COMMENTARY
- * connection types) as a flat sorted list. Clicking a book opens it in a new
- * tab, scrolled to the line that corresponds to the current top visible line.
+ * connection types) grouped by meaningful category (ראשונים, אחרונים, etc.
+ * for commentary; מקורות / תרגומים for flat types). Clicking a book opens it
+ * in a new tab, scrolled to the line that corresponds to the current top
+ * visible line.
  *
  * Resolution order for the target line:
  *   1. Direct hit  — the current top line already has a link to that book.
@@ -27,6 +29,7 @@ const props = defineProps<{
   currentScrollLineIndex: number
   lines: LineItem[]
   disabled?: boolean
+  onOpen?: () => void
 }>()
 
 const emit = defineEmits<{ 'open-change': [isOpen: boolean] }>()
@@ -51,10 +54,17 @@ const { justClosed } = useDropdownClose(dropdownRef, () => setOpen(false), {
 function toggleOpen() {
   if (props.disabled) return
   if (justClosed.value) return
-  setOpen(!isOpen.value)
+  const opening = !isOpen.value
+  setOpen(opening)
+  if (opening) props.onOpen?.()
 }
 
-// ── Book list — grouped by section (SOURCE / TARGUM / COMMENTARY) ─────────────
+// ── Book list — grouped by category (ראשונים / אחרונים / etc.) ───────────────
+//
+// For connection types that carry a subSectionLabel (COMMENTARY, OTHER), we use
+// the subSectionLabel (the period/category) as the section header instead of the
+// generic sectionLabel ("מפרשים"). For flat types (SOURCE, TARGUM, REFERENCE)
+// there is no subSectionLabel, so we fall back to sectionLabel as before.
 
 interface RelatedBook {
   bookId: number
@@ -72,7 +82,9 @@ const sections = computed<RelatedBooksSection[]>(() => {
   const seen = new Set<number>()
 
   for (const group of props.filterGroups) {
-    const label = group.sectionLabel ?? ''
+    // Use the specific category label (ראשונים, אחרונים…) when available,
+    // otherwise fall back to the connection-type section label (מקורות, תרגומים…).
+    const label = group.subSectionLabel || group.sectionLabel || ''
     if (!sectionMap.has(label)) {
       sectionMap.set(label, [])
       sectionOrder.push(label)

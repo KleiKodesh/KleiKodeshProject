@@ -1,4 +1,5 @@
 using KleiKodesh.Helpers;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -18,7 +19,7 @@ namespace KleiKodesh.Ribbon
         private void InitializeControls()
         {
             // cb.Name IS the registry key (e.g. "Kezayit_Visible") — do not rename the controls.
-            foreach (CheckBox cb in VisibleSettingsPanel.Children)
+            foreach (CheckBox cb in VisibleSettingsPanel.Children.OfType<CheckBox>())
             {
                 cb.IsChecked = SettingsManager.GetBool("Ribbon", cb.Name, true);
                 cb.Checked   += (_, __) =>
@@ -44,7 +45,7 @@ namespace KleiKodesh.Ribbon
 
             // rb.Name stripped of "_Option" IS the saved DefaultButton value — do not rename the controls.
             string defaultButtonId = SettingsManager.Get("Ribbon", "DefaultButton", "Settings");
-            foreach (RadioButton rb in OptionsSettingsPanel.Children)
+            foreach (RadioButton rb in OptionsSettingsPanel.Children.OfType<RadioButton>())
             {
                 rb.IsChecked = rb.Name.Replace("_Option", "") == defaultButtonId;
                 rb.Checked += (_, __) =>
@@ -57,9 +58,9 @@ namespace KleiKodesh.Ribbon
 
             BtnReset.Click += (_, __) =>
             {
-                foreach (CheckBox cb in VisibleSettingsPanel.Children)
+                foreach (CheckBox cb in VisibleSettingsPanel.Children.OfType<CheckBox>())
                     if (cb is CheckBox) cb.IsChecked = true;
-                foreach (RadioButton rb in OptionsSettingsPanel.Children)
+                foreach (RadioButton rb in OptionsSettingsPanel.Children.OfType<RadioButton>())
                     if (rb is RadioButton) rb.IsChecked = false;
                 Settings_Option.IsChecked = true;
                 ChkTurnOffUpdates.IsChecked = false;

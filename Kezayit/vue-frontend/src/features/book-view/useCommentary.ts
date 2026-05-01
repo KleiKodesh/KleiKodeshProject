@@ -432,20 +432,26 @@ export function useCommentary(
       void load(lineId)
   })
 
-  // Eager load when a book is open — needed to know whether related books exist
-  // before the filter panel or related-books dropdown is ever opened.
-  // The result is cached per instance so the filter panel pays no extra cost.
+  // Lazy — called by useBookView when the related-books dropdown or commentary filter
+  // panel first opens. Safe to call multiple times; the staticFilterCache prevents
+  // redundant DB queries for the same book.
+  async function ensureStaticFilterGroupsLoaded() {
+    const id = sourceBookId()
+    if (id == null || staticFilterGroupsLoaded.value) return
+    staticFilterLoadToken += 1
+    await loadStaticFilterGroups(id, staticFilterLoadToken)
+  }
+
+  // Reset state when the book changes so stale groups are never shown.
   watch(
     sourceBookId,
-    (id) => {
+    () => {
       staticFilterLoadToken += 1
       staticFilterGroups.value = []
       staticFilterGroupsLoaded.value = false
-      if (id == null) return
-      void loadStaticFilterGroups(id, staticFilterLoadToken)
     },
     { immediate: true },
   )
 
-  return { groups, filterGroups, staticFilterGroups, loading }
+  return { groups, filterGroups, staticFilterGroups, loading, ensureStaticFilterGroupsLoaded }
 }
