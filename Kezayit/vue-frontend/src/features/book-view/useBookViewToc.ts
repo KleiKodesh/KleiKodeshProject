@@ -33,6 +33,7 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
   const tocEntries = ref<TocEntry[]>([])
   const altTocSections = shallowRef<AltTocSection[]>([])
   const loading = ref(false)
+  const tocLoaded = ref(false) // true once the first load completes, even if entries is empty
   const error = ref<string | null>(null)
   const tocSearchTree = shallowRef<SearchableTree>(new SearchableTree([]))
 
@@ -57,13 +58,17 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
       error.value = e instanceof Error ? e.message : 'שגיאה בטעינת תוכן עניינים'
     } finally {
       loading.value = false
+      tocLoaded.value = true
     }
   }
 
   watch(
     bookId,
     (id) => {
-      if (id != null) load(id)
+      if (id != null) {
+        tocLoaded.value = false
+        load(id)
+      }
     },
     { immediate: true },
   )
@@ -110,6 +115,7 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
     tocEntries,
     altTocSections,
     loading,
+    tocLoaded,
     error,
     tocSearchTree,
     getActiveTocEntry,

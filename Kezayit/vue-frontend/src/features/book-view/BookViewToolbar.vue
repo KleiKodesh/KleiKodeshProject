@@ -11,15 +11,24 @@ import {
   IconTimeline20Filled,
 } from '@iconify-prerendered/vue-fluent'
 import IconTreeRtl from '@/components/IconTreeRtl.vue'
+import BookViewRelatedBooksDropdown from './BookViewRelatedBooksDropdown.vue'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { ZOOM_CONFIG } from '@/composables/useZoom'
+import type { CommentaryGroup } from './useCommentary'
+import type { LineItem } from './useBookViewLinesTable'
 
 defineProps<{
   bottomVisible: boolean
   searchVisible: boolean
   tocVisible: boolean
+  hasToc: boolean
   hasCommentaries: boolean
+  hasRelatedBooks: boolean
+  bookId: number | undefined
+  filterGroups: CommentaryGroup[]
+  currentScrollLineIndex: number
+  lines: LineItem[]
 }>()
 defineEmits<{ toggleBottom: []; toggleSearch: []; toggleToc: [] }>()
 
@@ -41,14 +50,22 @@ defineExpose({ tocBtnRef })
     <button
       ref="tocBtnRef"
       :class="{ active: tocVisible }"
+      :disabled="!hasToc"
       title="תוכן עניינים"
       @click="$emit('toggleToc')"
     >
       <IconTreeRtl />
     </button>
+    <BookViewRelatedBooksDropdown
+      :book-id="bookId"
+      :filter-groups="filterGroups"
+      :current-scroll-line-index="currentScrollLineIndex"
+      :lines="lines"
+      :disabled="!hasRelatedBooks"
+    />
     <button
-      v-if="hasCommentaries"
       :class="{ active: bottomVisible }"
+      :disabled="!hasCommentaries"
       title="פאנל תחתון (Ctrl+J)"
       @click="$emit('toggleBottom')"
     >
@@ -56,8 +73,8 @@ defineExpose({ tocBtnRef })
       <IconLayoutRowTwo20Regular v-else />
     </button>
     <button
-      v-if="hasCommentaries && bottomVisible"
       :class="{ active: autoSelectTopLine }"
+      :disabled="!hasCommentaries"
       :title="
         autoSelectTopLine
           ? 'סנכרן מפרשים\nלחץ לכיבוי הסנכרון האוטומטי'

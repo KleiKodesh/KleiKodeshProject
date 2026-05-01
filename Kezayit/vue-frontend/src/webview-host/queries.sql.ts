@@ -215,4 +215,19 @@ export const SQL = {
     LIMIT 1
   `,
 
+  /**
+   * Given a source line id and a target book id, return the target line id and
+   * its lineIndex — used to resolve the opening position when a direct link
+   * already exists on the current top line.
+   * Returns at most one row (first link found for that book).
+   */
+  GET_LINK_TARGET_FOR_SOURCE_LINE_AND_BOOK: `
+    SELECT lk.targetLineId, ln.lineIndex
+    FROM link lk
+    JOIN line ln ON ln.id = lk.targetLineId
+    WHERE lk.sourceLineId = ?
+      AND lk.targetBookId = ?
+    LIMIT 1
+  `,
+
 } as const

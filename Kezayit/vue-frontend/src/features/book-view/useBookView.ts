@@ -101,13 +101,17 @@ export function useBookView(
   const {
     getActiveTocEntry, getTocPath,
     altTocSections, tocEntries, tocSearchTree,
-    loading: tocLoading, error: tocError,
+    loading: tocLoading, error: tocError, tocLoaded,
   } = useToc(() => bookId, () => bookTitle)
 
-  // Delay lines loading until TOC is ready — avoids flash-to-entry-1 race on session restore
-  const { lines, prioritise, hasCommentaries } = useLines(() =>
-    tocEntries.value.length > 0 ? bookId : undefined,
+  // Delay lines loading until TOC has finished loading — avoids flash-to-entry-1 race on
+  // session restore. We gate on tocLoaded (not tocEntries.length) so that books with no
+  // TOC entries (or whose single root entry was stripped as a title duplicate) still load.
+  const { lines, prioritise, hasCommentaries, hasRelatedBooks } = useLines(() =>
+    tocLoaded.value ? bookId : undefined,
   )
+
+  const hasToc = computed(() => tocLoaded.value && tocEntries.value.length > 0)
 
   const selectedSectionLineIds = computed<number[] | null>(() => {
     if (commentaryLineId.value == null || !tocEntries.value.length || !lines.value.length) return null
@@ -125,7 +129,7 @@ export function useBookView(
     return ids.length > 0 ? ids : null
   })
 
-  const { groups, filterGroups, loading: commentaryLoading } = useCommentary(
+  const { groups, filterGroups, staticFilterGroups, loading: commentaryLoading } = useCommentary(
     () => commentaryLineId.value,
     () => selectedSectionLineIds.value,
     () => bookId ?? undefined,
@@ -332,11 +336,13 @@ export function useBookView(
     activeTocEntryId, commentaryScrollIndex, commentaryScrollOffset,
     tocVisible, commentaryTreeVisible, sidePanelVisible, sidePanelToggleButtonEl,
     // data
-    lines, prioritise, hasCommentaries,
-    groups, filterGroups, commentaryLoading,
+    bookId,
+    lines, prioritise, hasCommentaries, hasRelatedBooks, hasToc,
+    groups, filterGroups, staticFilterGroups, commentaryLoading,
     tocEntries, tocSearchTree, altTocSections, tocLoading, tocError,
     altTocLabelMap, pinnedCommentaryBookId,
     // scroll / search state
+    currentScrollLineIndex,
     scrollStateReady, initialLineIndex, initialScrollTop, initialScrollOffset,
     activeMatchCount, activeMatchIdx, contentSearch, commentarySearch,
     // handlers

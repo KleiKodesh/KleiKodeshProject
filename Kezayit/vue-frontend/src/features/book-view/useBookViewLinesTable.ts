@@ -13,6 +13,7 @@ const CHUNK_SIZE = 200
 export function useLines(bookId: () => number | undefined) {
   const lines = ref<LineItem[]>([])
   const hasCommentaries = ref(false)
+  const hasRelatedBooks = ref(false)
 
   let fetchQueue: number[] = []
   let fetching = false
@@ -70,6 +71,11 @@ export function useLines(bookId: () => number | undefined) {
       book?.hasCommentaryConnection ||
       book?.hasOtherConnection
     )
+    hasRelatedBooks.value = !!(
+      book?.hasSourceConnection ||
+      book?.hasTargumConnection ||
+      book?.hasCommentaryConnection
+    )
 
     // Pre-allocate all slots with placeholders so the virtualizer has the correct count
     // and scroll height from the start. Content fills in as chunks arrive.
@@ -91,5 +97,5 @@ export function useLines(bookId: () => number | undefined) {
     { immediate: true },
   )
 
-  return { lines, prioritise, hasCommentaries }
+  return { lines, prioritise, hasCommentaries, hasRelatedBooks }
 }

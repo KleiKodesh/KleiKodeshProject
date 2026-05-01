@@ -432,17 +432,20 @@ export function useCommentary(
       void load(lineId)
   })
 
+  // Eager load when a book is open — needed to know whether related books exist
+  // before the filter panel or related-books dropdown is ever opened.
+  // The result is cached per instance so the filter panel pays no extra cost.
   watch(
-    [sourceBookId, filterPanelVisible],
-    ([id, visible]) => {
+    sourceBookId,
+    (id) => {
       staticFilterLoadToken += 1
       staticFilterGroups.value = []
       staticFilterGroupsLoaded.value = false
-      if (id == null || !visible) return
+      if (id == null) return
       void loadStaticFilterGroups(id, staticFilterLoadToken)
     },
     { immediate: true },
   )
 
-  return { groups, filterGroups, loading }
+  return { groups, filterGroups, staticFilterGroups, loading }
 }

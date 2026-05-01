@@ -22,10 +22,11 @@ const {
   selectedLineId, commentaryTreeState, searchMode,
   activeTocEntryId, commentaryScrollIndex, commentaryScrollOffset,
   tocVisible, commentaryTreeVisible, sidePanelVisible, sidePanelToggleButtonEl,
-  lines, prioritise, hasCommentaries,
-  groups, filterGroups, commentaryLoading,
+  bookId, lines, prioritise, hasCommentaries, hasRelatedBooks, hasToc,
+  groups, filterGroups, staticFilterGroups, commentaryLoading,
   tocEntries, tocSearchTree, altTocSections, tocLoading, tocError,
   altTocLabelMap, pinnedCommentaryBookId,
+  currentScrollLineIndex,
   scrollStateReady, initialLineIndex, initialScrollTop, initialScrollOffset,
   activeMatchCount, activeMatchIdx, contentSearch, commentarySearch,
   onLinesScrolled, onTocSelect, onAltTocSelect,
@@ -51,7 +52,13 @@ const {
       :bottom-visible="bottomVisible"
       :search-visible="searchVisible"
       :toc-visible="tocVisible"
+      :has-toc="hasToc"
       :has-commentaries="hasCommentaries"
+      :has-related-books="hasRelatedBooks"
+      :book-id="bookId"
+      :filter-groups="staticFilterGroups"
+      :current-scroll-line-index="currentScrollLineIndex"
+      :lines="lines"
       @toggle-bottom="bottomVisible = !bottomVisible"
       @toggle-search="searchVisible = !searchVisible"
       @toggle-toc="toggleTocPanel"
@@ -65,7 +72,13 @@ const {
         :bottom-visible="bottomVisible"
         :search-visible="searchVisible"
         :toc-visible="tocVisible"
+        :has-toc="hasToc"
         :has-commentaries="hasCommentaries"
+        :has-related-books="hasRelatedBooks"
+        :book-id="bookId"
+        :filter-groups="staticFilterGroups"
+        :current-scroll-line-index="currentScrollLineIndex"
+        :lines="lines"
         :class="toolbarPosition === 'left' ? 'toolbar-order-end' : ''"
         @toggle-bottom="bottomVisible = !bottomVisible"
         @toggle-search="searchVisible = !searchVisible"
@@ -180,7 +193,13 @@ const {
       :bottom-visible="bottomVisible"
       :search-visible="searchVisible"
       :toc-visible="tocVisible"
+      :has-toc="hasToc"
       :has-commentaries="hasCommentaries"
+      :has-related-books="hasRelatedBooks"
+      :book-id="bookId"
+      :filter-groups="staticFilterGroups"
+      :current-scroll-line-index="currentScrollLineIndex"
+      :lines="lines"
       @toggle-bottom="bottomVisible = !bottomVisible"
       @toggle-search="searchVisible = !searchVisible"
       @toggle-toc="toggleTocPanel"
