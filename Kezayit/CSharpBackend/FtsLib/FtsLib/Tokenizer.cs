@@ -7,10 +7,12 @@ namespace FtsLib
     public sealed class Tokenizer
     {
         private readonly HashSet<string> _terms = new HashSet<string>();
-        private readonly StringBuilder _buffer = new StringBuilder(64);
-        private readonly StringBuilder _tagBuf = new StringBuilder(32);
+        private readonly StringBuilder   _buffer = new StringBuilder(64);
 
-        private bool _inTag;
+        // Tag name buffer — reused, no allocation per tag
+        private readonly char[] _tagName = new char[16];
+        private int              _tagLen;
+        private bool             _inTag;
 
         public HashSet<string> Extract(string text)
         {
@@ -26,10 +28,12 @@ namespace FtsLib
         private void Process(string text)
         {
             _buffer.Clear();
-            _tagBuf.Clear();
-            _inTag = false;
+            _tagLen = 0;
+            _inTag  = false;
 
-            for (int i = 0; i < text.Length; i++)
+            int len = text.Length;
+
+            for (int i = 0; i < len; i++)
             {
                 char c = text[i];
 
@@ -38,51 +42,46 @@ namespace FtsLib
                 {
                     if (c == '>')
                     {
-                        // Decide based on tag name whether to flush
-                        if (IsBlockTag(_tagBuf.ToString()))
+                        if (IsBlockTag(_tagName, _tagLen))
                             Flush();
-
-                        _inTag = false;
-                        _tagBuf.Clear();
+                        _inTag  = false;
+                        _tagLen = 0;
                     }
-                    else
+                    else if (_tagLen < 16 && c != ' ' && c != '\t' && c != '/')
                     {
-                        // Collect tag name chars only (stop at space or /)
-                        if (_tagBuf.Length < 16 && c != ' ' && c != '\t' && c != '/')
-                            _tagBuf.Append(c);
+                        _tagName[_tagLen++] = c;
                     }
-
                     continue;
                 }
 
                 if (c == '<')
                 {
-                    _inTag = true;
-                    _tagBuf.Clear();
+                    _inTag  = true;
+                    _tagLen = 0;
                     continue;
                 }
 
                 // ---------------- HTML ENTITIES ----------------
-                // Whitespace entities (nbsp etc.) break words; others are invisible
                 if (c == '&')
                 {
-                    HandleEntity(text, ref i);
+                    HandleEntity(text, len, ref i);
                     continue;
                 }
 
                 // ---------------- NIKUD REMOVAL ----------------
-                if (CharUnicodeInfo.GetUnicodeCategory(c) ==
-                    UnicodeCategory.NonSpacingMark)
-                {
+                // Hebrew nikud (U+05B0–U+05C7) and other non-spacing marks
+                if (c >= '\u05B0' && c <= '\u05C7')
                     continue;
-                }
+
+                if (c > 127 && CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark)
+                    continue;
 
                 // ---------------- WORD BUILDING ----------------
                 if (IsLetter(c))
                 {
+                    // ASCII uppercase → lowercase (branchless bit trick)
                     if (c >= 'A' && c <= 'Z')
                         c = (char)(c | 32);
-
                     _buffer.Append(c);
                 }
                 else
@@ -94,94 +93,158 @@ namespace FtsLib
             Flush();
         }
 
-        /// <summary>
-        /// Returns true for block-level tags that imply a visual break between
-        /// content and should therefore act as word separators.
-        /// Closing tags (starting with '!') and unknown tags are treated as invisible.
-        /// </summary>
-        private static bool IsBlockTag(string raw)
+        // No allocation — works directly on the char[] tag name buffer
+        private static bool IsBlockTag(char[] name, int len)
         {
-            if (raw.Length == 0) return false;
+            if (len == 0) return false;
 
-            // Strip leading '/' for closing tags — closing a block tag also breaks
-            int start = raw[0] == '!' ? 1 : 0; // skip '!' for comments/doctype
-            if (raw[0] == '/') start = 1;
+            // Skip leading '/' (closing tag) or '!' (comment/doctype)
+            int start = (name[0] == '/' || name[0] == '!') ? 1 : 0;
+            int tlen  = len - start;
+            if (tlen == 0) return false;
 
-            // Lowercase the tag name for comparison
-            var tag = raw.Substring(start).ToLowerInvariant();
+            // Lowercase first char for comparison
+            char c0 = name[start];
+            if (c0 >= 'A' && c0 <= 'Z') c0 = (char)(c0 | 32);
 
+            switch (tlen)
+            {
+                case 1:
+                    return c0 == 'p';
+
+                case 2:
+                {
+                    char c1 = name[start + 1];
+                    if (c1 >= 'A' && c1 <= 'Z') c1 = (char)(c1 | 32);
+                    if (c0 == 'b' && c1 == 'r') return true; // br
+                    if (c0 == 'h' && c1 == 'r') return true; // hr
+                    if (c0 == 'l' && c1 == 'i') return true; // li
+                    if (c0 == 'u' && c1 == 'l') return true; // ul
+                    if (c0 == 'o' && c1 == 'l') return true; // ol
+                    if (c0 == 't' && c1 == 'r') return true; // tr
+                    if (c0 == 't' && c1 == 'd') return true; // td
+                    if (c0 == 't' && c1 == 'h') return true; // th
+                    if (c0 == 'd' && c1 == 'd') return true; // dd
+                    if (c0 == 'd' && c1 == 't') return true; // dt
+                    if (c0 == 'h')                            // h1-h6
+                    {
+                        char d = c1 >= 'A' && c1 <= 'Z' ? (char)(c1 | 32) : c1;
+                        return d >= '1' && d <= '6';
+                    }
+                    return false;
+                }
+
+                case 3:
+                {
+                    char c1 = name[start + 1]; if (c1 >= 'A' && c1 <= 'Z') c1 = (char)(c1 | 32);
+                    char c2 = name[start + 2]; if (c2 >= 'A' && c2 <= 'Z') c2 = (char)(c2 | 32);
+                    if (c0 == 'd' && c1 == 'i' && c2 == 'v') return true; // div
+                    if (c0 == 'p' && c1 == 'r' && c2 == 'e') return true; // pre
+                    if (c0 == 'n' && c1 == 'a' && c2 == 'v') return true; // nav
+                    return false;
+                }
+
+                case 4:
+                {
+                    char c1 = name[start + 1]; if (c1 >= 'A' && c1 <= 'Z') c1 = (char)(c1 | 32);
+                    char c2 = name[start + 2]; if (c2 >= 'A' && c2 <= 'Z') c2 = (char)(c2 | 32);
+                    char c3 = name[start + 3]; if (c3 >= 'A' && c3 <= 'Z') c3 = (char)(c3 | 32);
+                    if (c0 == 'm' && c1 == 'a' && c2 == 'i' && c3 == 'n') return true; // main
+                    return false;
+                }
+
+                case 5:
+                {
+                    // table, aside
+                    char c1 = name[start + 1]; if (c1 >= 'A' && c1 <= 'Z') c1 = (char)(c1 | 32);
+                    char c2 = name[start + 2]; if (c2 >= 'A' && c2 <= 'Z') c2 = (char)(c2 | 32);
+                    char c3 = name[start + 3]; if (c3 >= 'A' && c3 <= 'Z') c3 = (char)(c3 | 32);
+                    char c4 = name[start + 4]; if (c4 >= 'A' && c4 <= 'Z') c4 = (char)(c4 | 32);
+                    if (c0 == 't' && c1 == 'a' && c2 == 'b' && c3 == 'l' && c4 == 'e') return true;
+                    if (c0 == 'a' && c1 == 's' && c2 == 'i' && c3 == 'd' && c4 == 'e') return true;
+                    return false;
+                }
+
+                default:
+                    // Longer tags: header, footer, figure, section, article, blockquote,
+                    // figcaption, caption
+                    return MatchesLongBlockTag(name, start, tlen);
+            }
+        }
+
+        private static bool MatchesLongBlockTag(char[] name, int start, int tlen)
+        {
+            // Build a lowercase string only for the longer/rarer tags
+            var sb = new System.Text.StringBuilder(tlen);
+            for (int i = start; i < start + tlen; i++)
+            {
+                char c = name[i];
+                if (c >= 'A' && c <= 'Z') c = (char)(c | 32);
+                sb.Append(c);
+            }
+            string tag = sb.ToString();
             switch (tag)
             {
-                case "p":
-                case "div":
-                case "br":
-                case "hr":
-                case "li":
-                case "ul":
-                case "ol":
-                case "tr":
-                case "td":
-                case "th":
-                case "h1": case "h2": case "h3":
-                case "h4": case "h5": case "h6":
-                case "blockquote":
-                case "pre":
-                case "section":
-                case "article":
-                case "header":
-                case "footer":
-                case "nav":
-                case "aside":
-                case "dd":
-                case "dt":
-                case "figure":
-                case "figcaption":
-                case "main":
-                case "table":
-                case "caption":
+                case "header": case "footer": case "figure": case "section":
+                case "article": case "caption": case "figcaption": case "blockquote":
                     return true;
-
                 default:
                     return false;
             }
         }
 
-        /// <summary>
-        /// Handles a '&amp;' at position <paramref name="i"/>.
-        /// Whitespace entities (nbsp, #160, etc.) flush the current buffer.
-        /// All other entities are skipped invisibly.
-        /// </summary>
-        private void HandleEntity(string text, ref int i)
+        // No Substring allocation — scans entity in-place
+        private void HandleEntity(string text, int len, ref int i)
         {
             int start = i + 1;
-            int end = start;
+            int end   = start;
 
-            while (end < text.Length && end - start < 10 && text[end] != ';')
+            while (end < len && end - start < 10 && text[end] != ';')
                 end++;
 
-            if (end >= text.Length || text[end] != ';')
-                return; // malformed — leave i unchanged, '&' silently ignored
+            if (end >= len || text[end] != ';')
+                return; // malformed
 
-            var entity = text.Substring(start, end - start);
             i = end; // advance past ';'
 
-            // Whitespace entities act as word separators
-            if (entity == "nbsp" || entity == "ensp" || entity == "emsp" ||
-                entity == "thinsp" || entity == "hairsp" ||
-                (entity.Length > 1 && entity[0] == '#' &&
-                 int.TryParse(entity.Substring(1), out int cp) &&
-                 (cp == 160 || cp == 8194 || cp == 8195 || cp == 8201)))
+            int elen = end - start;
+            if (elen == 0) return;
+
+            char e0 = text[start];
+
+            // Fast path for common whitespace entities
+            if (e0 == 'n' && elen == 4
+                && text[start+1]=='b' && text[start+2]=='s' && text[start+3]=='p')
+            { Flush(); return; } // nbsp
+
+            if (e0 == 'e' && elen == 4
+                && text[start+1]=='n' && text[start+2]=='s' && text[start+3]=='p')
+            { Flush(); return; } // ensp
+
+            if (e0 == 'e' && elen == 4
+                && text[start+1]=='m' && text[start+2]=='s' && text[start+3]=='p')
+            { Flush(); return; } // emsp
+
+            // Numeric entities: &#160; &#8194; &#8195; &#8201;
+            if (e0 == '#' && elen > 1)
             {
-                Flush();
+                int val = 0;
+                bool ok = true;
+                for (int k = start + 1; k < end; k++)
+                {
+                    char d = text[k];
+                    if (d < '0' || d > '9') { ok = false; break; }
+                    val = val * 10 + (d - '0');
+                }
+                if (ok && (val == 160 || val == 8194 || val == 8195 || val == 8201))
+                    Flush();
             }
-            // All other entities (shy, amp, lt, gt, zwj, zwnj, …) are invisible
+            // All other entities are invisible — no action
         }
 
         private void Flush()
         {
-            if (_buffer.Length == 0)
-                return;
-
+            if (_buffer.Length == 0) return;
             _terms.Add(_buffer.ToString());
             _buffer.Clear();
         }

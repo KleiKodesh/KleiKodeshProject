@@ -5,38 +5,32 @@ namespace FtsLib.Index
 {
     /// <summary>
     /// Public API for the full-text index.
-    /// Supports adding term→entryId pairs and AND-searching across multiple terms.
+    /// Finds which lines contain all search terms (AND semantics).
     /// </summary>
     public class IndexManager
     {
         private readonly RamIndex _index = new RamIndex();
 
-        /// <summary>Number of unique terms currently in the index.</summary>
         public int TermCount => _index.Count;
 
-        /// <summary>Adds a single term for the given entry.</summary>
-        public void Add(string term, int entryId)
+        public void Add(string term, int lineId)
         {
-            _index.Add(term, entryId);
+            _index.Add(term, lineId);
         }
 
         /// <summary>
-        /// Returns doc IDs that contain ALL of the supplied terms (AND semantics).
-        /// Returns an empty sequence if any term is not in the index.
+        /// Returns line IDs that contain ALL of the supplied terms.
+        /// Returns empty if any term is missing from the index.
         /// </summary>
         public IEnumerable<int> Search(IEnumerable<string> terms)
         {
-            var termList = terms.ToList();
+            HashSet<int> result = null;
 
-            // Fast-exit: any missing term means no possible match
-            foreach (var term in termList)
+            foreach (var term in terms)
+            {
                 if (!_index.ContainsKey(term))
                     return Enumerable.Empty<int>();
 
-            HashSet<int> result = null;
-
-            foreach (var term in termList)
-            {
                 var docs = _index.GetDocs(term);
 
                 if (result == null)
@@ -45,7 +39,7 @@ namespace FtsLib.Index
                     result.IntersectWith(docs);
 
                 if (result.Count == 0)
-                    break;
+                    return Enumerable.Empty<int>();
             }
 
             return result ?? Enumerable.Empty<int>();

@@ -15,8 +15,8 @@ namespace FtsLib.Codec
     internal static class PostingCodec
     {
         // Shift the signed int range onto [0, uint.MaxValue] to keep deltas non-negative.
-        private static uint  Encode(int value) => (uint)(value - (long)int.MinValue);
-        private static int   Decode(uint value) => (int)(value + (long)int.MinValue);
+        private static uint Encode(int value) => (uint)(value - (long)int.MinValue);
+        private static int  Decode(uint value) => (int)(value + (long)int.MinValue);
 
         public static void Write(Stream stream, int value, ref int last, ref bool hasLast)
         {

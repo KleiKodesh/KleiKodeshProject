@@ -6,7 +6,7 @@ namespace FtsLib.Codec
 {
     /// <summary>
     /// Holds the compressed posting list for a single term.
-    /// Entry IDs must be non-negative and added in ascending order.
+    /// Entry IDs must be added in ascending order.
     /// </summary>
     internal class PostingStream
     {

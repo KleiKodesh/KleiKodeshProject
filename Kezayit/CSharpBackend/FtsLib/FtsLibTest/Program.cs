@@ -4,7 +4,7 @@
     {
         static void Main()
         {
-            // TokenizerTests.RunAll();  // uncomment to run unit tests
+            TokenizerTests.RunAll();
             FullDbTest.Run();
         }
     }

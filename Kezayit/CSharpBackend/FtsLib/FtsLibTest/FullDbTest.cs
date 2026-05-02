@@ -59,16 +59,16 @@ namespace FtsLibTest
         [StructLayout(LayoutKind.Sequential)]
         private struct PROCESS_MEMORY_COUNTERS
         {
-            public uint  cb;
-            public uint  PageFaultCount;
-            public ulong PeakWorkingSetSize;
-            public ulong WorkingSetSize;
-            public ulong QuotaPeakPagedPoolUsage;
-            public ulong QuotaPagedPoolUsage;
-            public ulong QuotaPeakNonPagedPoolUsage;
-            public ulong QuotaNonPagedPoolUsage;
-            public ulong PagefileUsage;
-            public ulong PeakPagefileUsage;
+            public uint    cb;
+            public uint    PageFaultCount;
+            public UIntPtr PeakWorkingSetSize;
+            public UIntPtr WorkingSetSize;
+            public UIntPtr QuotaPeakPagedPoolUsage;
+            public UIntPtr QuotaPagedPoolUsage;
+            public UIntPtr QuotaPeakNonPagedPoolUsage;
+            public UIntPtr QuotaNonPagedPoolUsage;
+            public UIntPtr PagefileUsage;
+            public UIntPtr PeakPagefileUsage;
         }
 
         [DllImport("psapi.dll", SetLastError = true)]
@@ -81,7 +81,7 @@ namespace FtsLibTest
         {
             if (GetProcessMemoryInfo(Process.GetCurrentProcess().Handle,
                     out var mc, (uint)Marshal.SizeOf<PROCESS_MEMORY_COUNTERS>()))
-                return (long)(mc.WorkingSetSize / (1024 * 1024));
+                return (long)mc.WorkingSetSize.ToUInt64() / (1024 * 1024);
             return GC.GetTotalMemory(false) / (1024 * 1024);
         }
 
@@ -141,14 +141,14 @@ namespace FtsLibTest
                 Log($"Streaming all rows — content kept in index only, not in RAM");
 
                 var swTotal = Stopwatch.StartNew();
-                var (index, linesIndexed, termCount, dbReadMs, tokenizeMs) =
+                var (index, linesIndexed, termCount, totalBuildMs, _) =
                     BuildIndex(conn, report.TotalLinesInDb);
                 swTotal.Stop();
 
                 long memAfter = WorkingSetMB();
                 report.LinesLoaded   = linesIndexed;
-                report.DbReadMs      = dbReadMs;
-                report.TokenizeMs    = tokenizeMs;
+                report.DbReadMs      = totalBuildMs;
+                report.TokenizeMs    = 0;
                 report.IndexBuildMs  = swTotal.ElapsedMilliseconds;
                 report.UniqueTerms   = termCount;
                 report.MemBeforeMB   = memBefore;
@@ -157,11 +157,7 @@ namespace FtsLibTest
                 Log($"Lines indexed  : {linesIndexed:N0}", LogLevel.Ok);
                 Log($"Unique terms   : {termCount:N0}", LogLevel.Ok);
                 Log($"Total time     : {swTotal.ElapsedMilliseconds:N0} ms", LogLevel.Ok);
-                Log($"  DB read      : {dbReadMs:N0} ms  ({100.0 * dbReadMs / swTotal.ElapsedMilliseconds:F1}%)", LogLevel.Debug);
-                Log($"  Tokenize     : {tokenizeMs:N0} ms  ({100.0 * tokenizeMs / swTotal.ElapsedMilliseconds:F1}%)", LogLevel.Debug);
-                long insertMs = swTotal.ElapsedMilliseconds - dbReadMs - tokenizeMs;
-                Log($"  Index insert : {insertMs:N0} ms  ({100.0 * insertMs / swTotal.ElapsedMilliseconds:F1}%)", LogLevel.Debug);
-                Log($"Throughput     : {linesIndexed * 1000.0 / swTotal.ElapsedMilliseconds:N0} lines/sec", LogLevel.Debug);
+                Log($"Throughput     : {linesIndexed * 1000.0 / Math.Max(swTotal.ElapsedMilliseconds,1):N0} lines/sec", LogLevel.Debug);
                 Log($"RAM after      : {memAfter} MB  (Δ +{memAfter - memBefore} MB)", LogLevel.Ok);
 
                 // ---- search ----
@@ -216,22 +212,24 @@ namespace FtsLibTest
         }
 
         // ----------------------------------------------------------------
-        // Index builder — streams DB rows, never stores content in RAM
+        // Index builder — parallel partitioned pipeline
+        //
+        // ----------------------------------------------------------------
+        // Index builder — single threaded, streams rows from DB
         // ----------------------------------------------------------------
         private static (IndexManager index,
                         long linesIndexed,
                         int  termCount,
-                        long dbReadMs,
-                        long tokenizeMs)
+                        long totalMs,
+                        long unused)
             BuildIndex(SQLiteConnection conn, long totalLines)
         {
             var index     = new IndexManager();
             var tokenizer = new Tokenizer();
             long linesIndexed = 0;
-            long dbReadMs     = 0;
-            long tokenizeMs   = 0;
             const long milestone = 100_000;
-            var swMilestone = Stopwatch.StartNew();
+            var swWindow = Stopwatch.StartNew();
+            var swTotal  = Stopwatch.StartNew();
 
             using (var cmd = conn.CreateCommand())
             {
@@ -241,25 +239,17 @@ namespace FtsLibTest
                 {
                     while (r.Read())
                     {
-                        var swDb = Stopwatch.StartNew();
                         int    lineId  = r.GetInt32(0);
                         string content = r.IsDBNull(1) ? string.Empty : r.GetString(1);
-                        swDb.Stop();
-                        dbReadMs += swDb.ElapsedMilliseconds;
 
-                        var swTok = Stopwatch.StartNew();
-                        var terms = tokenizer.Extract(content);
-                        swTok.Stop();
-                        tokenizeMs += swTok.ElapsedMilliseconds;
-
-                        foreach (var term in terms)
+                        foreach (var term in tokenizer.Extract(content))
                             index.Add(term, lineId);
 
                         linesIndexed++;
 
                         if (linesIndexed % milestone == 0)
                         {
-                            long segMs   = swMilestone.ElapsedMilliseconds;
+                            long   segMs = swWindow.ElapsedMilliseconds;
                             double rate  = milestone * 1000.0 / Math.Max(segMs, 1);
                             double pct   = totalLines > 0 ? 100.0 * linesIndexed / totalLines : 0;
                             long   remMs = totalLines > 0
@@ -271,14 +261,13 @@ namespace FtsLibTest
                                 $"{rate:N0} lines/s  RAM {WorkingSetMB()} MB  ETA {eta}",
                                 LogLevel.Debug);
 
-                            swMilestone.Restart();
-                            GC.Collect(0, GCCollectionMode.Optimized);
+                            swWindow.Restart();
                         }
                     }
                 }
             }
 
-            return (index, linesIndexed, index.TermCount, dbReadMs, tokenizeMs);
+            return (index, linesIndexed, index.TermCount, swTotal.ElapsedMilliseconds, 0);
         }
 
         // ----------------------------------------------------------------
@@ -546,8 +535,27 @@ mark  { background:#ffe066; border-radius:2px; padding:0 2px; }
 
         private static SQLiteConnection OpenConnection(string dbPath)
         {
-            var conn = new SQLiteConnection($"Data Source={dbPath};Version=3;Page Size=4096;Read Only=True;");
+            // Tuned for fast sequential read-only scan:
+            // - cache_size=100000 pages (~400 MB) keeps hot pages in memory
+            // - mmap_size=2GB lets SQLite memory-map the file (avoids read() syscalls)
+            // - temp_store=memory avoids temp disk writes
+            var conn = new SQLiteConnection(
+                $"Data Source={dbPath};Version=3;Read Only=True;" +
+                $"Page Size=4096;Cache Size=100000;" +
+                $"Temp Store=Memory;");
             conn.Open();
+
+            // PRAGMA tuning applied after open
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = "PRAGMA mmap_size=2147483648;";  // 2 GB mmap
+                cmd.ExecuteNonQuery();
+                cmd.CommandText = "PRAGMA cache_size=100000;";
+                cmd.ExecuteNonQuery();
+                cmd.CommandText = "PRAGMA temp_store=MEMORY;";
+                cmd.ExecuteNonQuery();
+            }
+
             return conn;
         }
 
