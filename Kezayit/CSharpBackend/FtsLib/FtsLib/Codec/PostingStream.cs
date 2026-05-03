@@ -43,6 +43,15 @@ namespace FtsLib.Codec
         // Called by RamIndex skip list — byte offset before the next Add
         public int NextByteOffset => _len;
 
+        /// <summary>Resets the stream for reuse (avoids allocation per term during merge).</summary>
+        public void Reset()
+        {
+            _len         = 0;
+            _count       = 0;
+            _hasLast     = false;
+            _lastEncoded = 0;
+        }
+
         internal void WriteByte(byte b)
         {
             if (_len == _buf.Length)
