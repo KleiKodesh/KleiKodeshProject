@@ -66,6 +66,7 @@
     <Compile Include="Index\RamIndex.cs" />
     <Compile Include="Index\IndexManager.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="StopWords.cs" />
     <Compile Include="Tokenizer.cs" />
   </ItemGroup>
   <ItemGroup>

@@ -1,19 +1,26 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 
 namespace FtsLib.Codec
 {
     /// <summary>
     /// Holds the compressed posting list for a single term.
+    /// Uses a raw byte[] to avoid MemoryStream overhead.
     /// Entry IDs must be added in ascending order.
     /// </summary>
-    internal class PostingStream
+    internal sealed class PostingStream
     {
-        public MemoryStream Stream { get; } = new MemoryStream();
+        private byte[] _buf = new byte[8];
+        private int    _len;
+        private int    _count;
+        private int    _last;
+        private uint   _lastEncoded;
+        private bool   _hasLast;
 
-        private int  _last;
-        private bool _hasLast;
+        public int  ByteLength   => _len;
+        public int  Count        => _count;
+        public uint LastEncoded  => _lastEncoded;
+        public byte[] Buffer     => _buf;
 
         public void Add(int entryId)
         {
@@ -22,12 +29,37 @@ namespace FtsLib.Codec
                     $"Entry IDs must be added in strictly ascending order. Got {entryId} after {_last}.",
                     nameof(entryId));
 
-            PostingCodec.Write(Stream, entryId, ref _last, ref _hasLast);
+            uint encoded = Encode(entryId);
+            uint toWrite = _hasLast ? encoded - _lastEncoded : encoded;
+
+            _last        = entryId;
+            _lastEncoded = encoded;
+            _hasLast     = true;
+            _count++;
+
+            WriteVarInt(toWrite);
         }
 
-        public IEnumerable<int> Read()
+        // Called by RamIndex skip list — byte offset before the next Add
+        public int NextByteOffset => _len;
+
+        internal void WriteByte(byte b)
         {
-            return PostingCodec.Read(Stream);
+            if (_len == _buf.Length)
+                Array.Resize(ref _buf, _buf.Length * 2);
+            _buf[_len++] = b;
         }
+
+        private void WriteVarInt(uint v)
+        {
+            while (v >= 0x80)
+            {
+                WriteByte((byte)(v | 0x80));
+                v >>= 7;
+            }
+            WriteByte((byte)v);
+        }
+
+        private static uint Encode(int v) => (uint)((long)v - int.MinValue);
     }
 }
