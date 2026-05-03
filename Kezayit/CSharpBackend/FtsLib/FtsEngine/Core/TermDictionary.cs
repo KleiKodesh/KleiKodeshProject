@@ -1,19 +1,20 @@
-﻿using System.Data.SQLite;
+﻿using System.Collections.Generic;
+using System.Data.SQLite;
 
 namespace FtsEngine.Core
 {
     /// <summary>
     /// Writes term metadata (term → offset, length, count) into index.db during the merge phase.
-    /// Uses the same optimised SQLite settings as DiskIndexWriter:
-    ///   - WAL + synchronous=NORMAL
-    ///   - Plain rowid table during bulk insert
-    ///   - Unique index built after all rows are inserted
+    /// Uses batched inserts (1000 rows per transaction commit) for maximum throughput.
     /// </summary>
     internal sealed class TermDictionary : System.IDisposable
     {
+        private const int BatchSize = 1000;
+
         private readonly SQLiteConnection _conn;
-        private readonly SQLiteTransaction _tx;
+        private SQLiteTransaction _tx;
         private readonly SQLiteCommand _ins;
+        private int _batchCount;
 
         public TermDictionary(string indexDbPath)
         {
@@ -24,8 +25,8 @@ namespace FtsEngine.Core
             _conn = new SQLiteConnection(connStr);
             _conn.Open();
 
-            Exec("PRAGMA journal_mode=WAL;" +
-                 "PRAGMA synchronous=NORMAL;" +
+            Exec("PRAGMA journal_mode=OFF;" +        // fastest for bulk load — no WAL overhead
+                 "PRAGMA synchronous=OFF;" +          // no fsync during bulk insert
                  "PRAGMA temp_store=MEMORY;" +
                  "PRAGMA mmap_size=1073741824;");
 
@@ -54,12 +55,31 @@ namespace FtsEngine.Core
             _ins.Parameters["@l"].Value = length;
             _ins.Parameters["@c"].Value = count;
             _ins.ExecuteNonQuery();
+
+            if (++_batchCount >= BatchSize)
+            {
+                _tx.Commit();
+                _tx.Dispose();
+                _tx = _conn.BeginTransaction();
+                _batchCount = 0;
+            }
         }
 
         public void Commit()
         {
-            _tx.Commit();
+            // Flush any remaining rows
+            if (_batchCount > 0)
+            {
+                _tx.Commit();
+                _tx.Dispose();
+                _tx = null;
+            }
+
+            // Build index after all data is loaded — much faster than maintaining it during inserts
             Exec("CREATE UNIQUE INDEX idx_term ON term_index (term); ANALYZE;");
+
+            // Switch back to safe mode now that bulk load is done
+            Exec("PRAGMA synchronous=NORMAL; PRAGMA journal_mode=WAL;");
         }
 
         private void Exec(string sql)

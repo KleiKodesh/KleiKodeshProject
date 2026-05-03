@@ -39,6 +39,7 @@ namespace FtsEngineTest
             Console.Write(prefix);
             Console.ResetColor();
             Console.WriteLine(msg);
+            Console.Out.Flush();
 
             // Also log to results file
             _resultsLog.AppendLine($"[{_wallClock.Elapsed:mm\\:ss\\.ff}] {prefix} {msg}");
@@ -88,8 +89,14 @@ namespace FtsEngineTest
         // ----------------------------------------------------------------
         // Entry point
         // ----------------------------------------------------------------
-        public static void Run(int lineLimit = 0) // 0 = no limit (full DB)
+        public static void Run(int lineLimit = 0, string indexDir = null) // 0 = no limit (full DB)
         {
+            if (string.IsNullOrEmpty(indexDir))
+            {
+                Log("Error: indexDir parameter is required", LogLevel.Error);
+                return;
+            }
+
             _wallClock.Restart();
             _resultsLog.Clear();
 
@@ -98,6 +105,7 @@ namespace FtsEngineTest
             Log($"Started  : {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
             Log($"PID      : {Process.GetCurrentProcess().Id}");
             Log($"RAM      : {RamMB()} MB");
+            Log($"Index Dir: {indexDir}");
 
             // ---- DB ----
             Section("Database");
@@ -128,7 +136,7 @@ namespace FtsEngineTest
 
                 var swBuild = Stopwatch.StartNew();
                 var (index, linesIndexed, termCount) = BuildIndex(conn,
-                    lineLimit > 0 ? lineLimit : totalLines, lineLimit);
+                    lineLimit > 0 ? lineLimit : totalLines, lineLimit, indexDir);
                 swBuild.Stop();
 
                 long memAfter = RamMB();
@@ -140,6 +148,7 @@ namespace FtsEngineTest
 
                 // ---- search ----
                 Section("Search");
+                var swSearch = Stopwatch.StartNew();
                 var queryTerms = new List<string> { "כי", "ביצחק" };
 
                 Log($"Query : \"{SearchQuery}\"");
@@ -156,9 +165,11 @@ namespace FtsEngineTest
                     searchTimes.Add(sw.ElapsedMilliseconds);
                     Log($"  Run {i + 1}: {sw.ElapsedMilliseconds} ms  →  {matchIds.Count} results", LogLevel.Debug);
                 }
+                swSearch.Stop();
                 Log($"Results : {matchIds.Count}  |  " +
                     $"min={Min(searchTimes)} ms  avg={Avg(searchTimes):F1} ms  max={Max(searchTimes)} ms",
                     LogLevel.Ok);
+                Log($"Total search time (5 runs): {swSearch.ElapsedMilliseconds} ms", LogLevel.Ok);
 
                 // ---- fetch & print results ----
                 Section("Results");
@@ -217,7 +228,10 @@ namespace FtsEngineTest
 
                 // ---- write results to file ----
                 WriteResultsToFile(testName, linesIndexed, termCount, swBuild.ElapsedMilliseconds,
-                    memAfter - memBefore, Avg(searchTimes), matchIds.Count);
+                    memAfter - memBefore, Avg(searchTimes), matchIds.Count, indexDir);
+
+                // Close the index
+                index.Dispose();
             }
         }
 
@@ -225,18 +239,17 @@ namespace FtsEngineTest
         // Index builder
         // ----------------------------------------------------------------
         private static (DiskIndexReader index, long linesIndexed, int termCount)
-            BuildIndex(SQLiteConnection conn, long totalLines, int lineLimit = 0)
+            BuildIndex(SQLiteConnection conn, long totalLines, int lineLimit = 0, string indexDir = null)
         {
-            string runDir = Path.Combine(Path.GetTempPath(), "ftsengine_runs");
-            string postingsPath = Path.Combine(runDir, "postings.bin");
-            string indexDbPath = Path.Combine(runDir, "index.db");
+            if (string.IsNullOrEmpty(indexDir))
+                indexDir = Path.Combine(Path.GetTempPath(), $"ftsengine_index_{Guid.NewGuid()}");
 
-            // Clean up any previous run
-            if (Directory.Exists(runDir))
-                Directory.Delete(runDir, recursive: true);
-            Directory.CreateDirectory(runDir);
+            Directory.CreateDirectory(indexDir);
 
-            var builder = new IndexBuilder(runDir);
+            string postingsPath = Path.Combine(indexDir, "postings.bin");
+            string indexDbPath = Path.Combine(indexDir, "index.db");
+
+            var builder = new IndexBuilder(indexDir);
             builder.TotalLines = totalLines;
             builder.ProgressInterval = 100_000;
 
@@ -249,6 +262,22 @@ namespace FtsEngineTest
                         ? $"ETA {TimeSpan.FromSeconds(progress.EtaSeconds):mm\\:ss}"
                         : "ETA unknown";
                     Log($"{progress.LinesProcessed:N0} / {progress.TotalLines:N0}  {rate:N0} lines/s  {eta}  RAM {RamMB()} MB", LogLevel.Debug);
+                }
+                else if (progress.Phase == IndexPhase.FlushingRun)
+                {
+                    Log($"Flushing run {progress.RunsFlushed}...", LogLevel.Debug);
+                }
+                else if (progress.Phase == IndexPhase.Merging)
+                {
+                    Log($"Merging {progress.RunsFlushed} run files...", LogLevel.Debug);
+                }
+                else if (progress.Phase == IndexPhase.WritingDictionary)
+                {
+                    Log($"Writing term dictionary...", LogLevel.Debug);
+                }
+                else if (progress.Phase == IndexPhase.Complete)
+                {
+                    Log($"Index build complete!", LogLevel.Ok);
                 }
             };
 
@@ -277,6 +306,8 @@ namespace FtsEngineTest
 
             // Load the index for searching
             var index = new DiskIndexReader(postingsPath, indexDbPath);
+
+            Log($"Index stored at: {indexDir}", LogLevel.Ok);
 
             return (index, linesIndexed, 0); // termCount will be queried from index
         }
@@ -316,11 +347,11 @@ namespace FtsEngineTest
         // Write results to file
         // ----------------------------------------------------------------
         private static void WriteResultsToFile(string testName, long linesIndexed, int termCount,
-            long buildTimeMs, long ramUsedMb, double avgSearchMs, int resultCount)
+            long buildTimeMs, long ramUsedMb, double avgSearchMs, int resultCount, string indexDir)
         {
             try
             {
-                string outputDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test_results");
+                string outputDir = Path.Combine(indexDir, "results");
                 Directory.CreateDirectory(outputDir);
 
                 string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
