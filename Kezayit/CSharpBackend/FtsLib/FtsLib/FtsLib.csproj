@@ -65,6 +65,8 @@
     <Compile Include="Codec\PostingStream.cs" />
     <Compile Include="Index\RamIndex.cs" />
     <Compile Include="Index\IndexManager.cs" />
+    <Compile Include="Persistence\DiskIndexWriter.cs" />
+    <Compile Include="Persistence\DiskIndexReader.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="StopWords.cs" />
     <Compile Include="Tokenizer.cs" />

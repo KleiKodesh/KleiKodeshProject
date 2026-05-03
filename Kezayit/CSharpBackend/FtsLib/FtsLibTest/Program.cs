@@ -9,7 +9,7 @@ namespace FtsLibTest
             Console.OutputEncoding = System.Text.Encoding.UTF8;
             TokenizerTests.RunAll();
             SkipListTest.Run();
-            QuickTest.Run();
+            DiskIndexTest.Run(500_000); // quick verify
         }
     }
 }

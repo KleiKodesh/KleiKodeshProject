@@ -1,30 +1,34 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using FtsLib.Codec;
 
 namespace FtsLib.Index
 {
     /// <summary>
-    /// In-memory inverted index: maps each term to its PostingStream + skip list.
+    /// In-memory inverted index: maps each term to its PostingStream.
+    /// Implements IEnumerable so DiskIndexWriter can iterate all entries.
     /// </summary>
-    internal sealed class RamIndex
+    internal sealed class RamIndex : IEnumerable<KeyValuePair<string, RamIndex.Entry>>
     {
         private const int SKIP_INTERVAL = 128;
 
         private readonly Dictionary<string, Entry> _map;
+        private readonly bool _useSkipList;
 
         public int Count => _map.Count;
 
-        public RamIndex(int capacity = 1_500_000)
+        public RamIndex(int capacity = 1_500_000, bool useSkipList = true)
         {
-            _map = new Dictionary<string, Entry>(capacity, StringComparer.Ordinal);
+            _map         = new Dictionary<string, Entry>(capacity, StringComparer.Ordinal);
+            _useSkipList = useSkipList;
         }
 
         public void Add(string term, int lineId)
         {
             if (!_map.TryGetValue(term, out var e))
             {
-                e = new Entry();
+                e = new Entry(_useSkipList);
                 _map[term] = e;
             }
             e.Add(lineId);
@@ -46,21 +50,26 @@ namespace FtsLib.Index
                                        e.Skip, e.SkipLen);
         }
 
+        public IEnumerator<KeyValuePair<string, Entry>> GetEnumerator() => _map.GetEnumerator();
+        IEnumerator IEnumerable.GetEnumerator() => _map.GetEnumerator();
+
         // ----------------------------------------------------------------
         // Per-term entry
         // ----------------------------------------------------------------
-        private sealed class Entry
+        internal sealed class Entry
         {
             public readonly PostingStream Stream = new PostingStream();
             public int[]  Skip;
             public int    SkipLen;
+            private readonly bool _useSkipList;
+
+            public Entry(bool useSkipList = true) { _useSkipList = useSkipList; }
 
             public void Add(int lineId)
             {
                 int newCount = Stream.Count + 1;
 
-                // Record skip entry at the start of every SKIP_INTERVAL-th entry (after first)
-                if (newCount > 1 && (newCount - 1) % SKIP_INTERVAL == 0)
+                if (_useSkipList && newCount > 1 && (newCount - 1) % SKIP_INTERVAL == 0)
                 {
                     if (Skip == null) Skip = new int[12];
                     else if (SkipLen + 3 > Skip.Length)

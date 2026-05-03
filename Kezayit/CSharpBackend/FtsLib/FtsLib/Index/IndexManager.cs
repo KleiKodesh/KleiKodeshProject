@@ -9,7 +9,12 @@ namespace FtsLib.Index
     /// </summary>
     public class IndexManager
     {
-        private readonly RamIndex _index = new RamIndex();
+        private readonly RamIndex _index;
+
+        public IndexManager(bool useSkipList = true)
+        {
+            _index = new RamIndex(useSkipList: useSkipList);
+        }
 
         public int TermCount => _index.Count;
 
@@ -20,6 +25,12 @@ namespace FtsLib.Index
         public void Add(string term, int lineId)
         {
             _index.Add(term, lineId);
+        }
+
+        /// <summary>Persists the index to disk. Overwrites any existing files.</summary>
+        public void SaveToDisk(string postingsPath, string indexDbPath)
+        {
+            Persistence.DiskIndexWriter.Write(_index, postingsPath, indexDbPath);
         }
 
         /// <summary>

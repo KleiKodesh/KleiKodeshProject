@@ -50,8 +50,10 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="DiskIndexTest.cs" />
     <Compile Include="FullDbTest.cs" />
     <Compile Include="LiveDbTest.cs" />
+    <Compile Include="NoSkipTest.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="QuickTest.cs" />
