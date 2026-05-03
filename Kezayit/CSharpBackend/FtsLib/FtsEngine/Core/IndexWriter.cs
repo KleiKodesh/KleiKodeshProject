@@ -10,10 +10,11 @@ namespace FtsEngine.Core
     ///
     /// Deletes run files after a successful merge.
     /// </summary>
-    internal static class IndexWriter
+    public static class IndexWriter
     {
         public static void Merge(string[] runPaths, string postingsPath, string indexDbPath,
-                                  Action onDictionaryWrite = null)
+                                  Action onDictionaryWrite = null,
+                                  Action<int> onMergeProgress = null) // fires every 100k terms
         {
             if (File.Exists(postingsPath)) File.Delete(postingsPath);
             if (File.Exists(indexDbPath))  File.Delete(indexDbPath);
@@ -24,38 +25,22 @@ namespace FtsEngine.Core
             using (var dict    = new TermDictionary(indexDbPath))
             using (var merger  = new RunMerger(runPaths))
             {
-                var plBuf = new PostingListBuffer();
-                string lastTerm = null;
+                int termCount = 0;
+                const int progressInterval = 100_000;
 
                 while (merger.HasMore)
                 {
-                    var (term, docId) = merger.Next();
+                    var (term, bytes, count, _) = merger.Next();
+                    long offset = postings.Position;
+                    postings.Write(bytes, 0, bytes.Length);
+                    dict.Add(term, offset, bytes.Length, count);
 
-                    if (term != lastTerm)
-                    {
-                        // Flush previous term
-                        if (lastTerm != null)
-                        {
-                            var (off, len, cnt) = plBuf.Flush(postings);
-                            dict.Add(lastTerm, off, len, cnt);
-                        }
-
-                        plBuf.Begin(term);
-                        lastTerm = term;
-                    }
-
-                    plBuf.Add(docId);
+                    if (onMergeProgress != null && ++termCount % progressInterval == 0)
+                        onMergeProgress(termCount);
                 }
 
-                // Flush final term
-                if (lastTerm != null)
-                {
-                    var (off, len, cnt) = plBuf.Flush(postings);
-                    dict.Add(lastTerm, off, len, cnt);
-                }
-
-                dict.Commit();
                 onDictionaryWrite?.Invoke();
+                dict.Commit();
             }
 
             // Clean up run files

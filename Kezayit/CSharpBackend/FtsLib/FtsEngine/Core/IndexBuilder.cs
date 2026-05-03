@@ -104,7 +104,7 @@ namespace FtsEngine.Core
         /// </summary>
         public void Build(string postingsPath, string indexDbPath)
         {
-            if (_buffer.Count > 0)
+            if (!_buffer.IsEmpty)
             {
                 Report(IndexPhase.FlushingRun,
                     $"Flushing final run ({_linesProcessed:N0} lines total)...");
@@ -122,7 +122,9 @@ namespace FtsEngine.Core
                 postingsPath,
                 indexDbPath,
                 onDictionaryWrite: () => Report(IndexPhase.WritingDictionary,
-                    "Building term dictionary..."));
+                    "Building term dictionary..."),
+                onMergeProgress: (n) => Report(IndexPhase.Merging,
+                    $"Merging: {n:N0} terms written..."));
 
             Report(IndexPhase.Complete,
                 $"Done. {_linesProcessed:N0} lines indexed.");
@@ -132,7 +134,8 @@ namespace FtsEngine.Core
 
         private void FlushRun()
         {
-            string path = _buffer.Flush(_runDir, _runIndex++);
+            string path = _buffer.Flush(_runDir, _runIndex++, msg =>
+                Report(IndexPhase.FlushingRun, msg));
             _runPaths.Add(path);
         }
 

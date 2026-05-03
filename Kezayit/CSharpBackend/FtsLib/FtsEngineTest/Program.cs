@@ -24,6 +24,13 @@ namespace FtsEngineTest
             }
             else if (args.Length == 1)
             {
+                test = args[0].ToLower();
+                // correctness test manages its own temp dirs
+                if (test == "correct" || test == "0")
+                {
+                    CorrectnessTest.Run();
+                    return;
+                }
                 Console.WriteLine("Error: indexDir parameter is required");
                 Console.WriteLine("Usage: FtsEngineTest.exe [test] [indexDir]");
                 Console.WriteLine("\nExample:");
@@ -39,6 +46,9 @@ namespace FtsEngineTest
 
             switch (test)
             {
+                case "correct":
+                    CorrectnessTest.Run();
+                    break;
                 case "1":
                 case "quick":
                     FullDbTest.Run(lineLimit: 500_000, indexDir: indexDir);
@@ -74,6 +84,7 @@ namespace FtsEngineTest
         {
             Console.WriteLine("Select test to run:\n");
 
+            Console.WriteLine("0) correct - correctness & stitch tests (run first!)");
             Console.WriteLine("1) quick  - 500k lines (~1 min)");
             Console.WriteLine("2) medium - 1M lines (~2 min)");
             Console.WriteLine("3) large  - 3M lines (~6 min)");

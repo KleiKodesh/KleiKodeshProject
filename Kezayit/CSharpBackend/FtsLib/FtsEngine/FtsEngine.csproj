@@ -48,10 +48,9 @@
     <Compile Include="Core\IndexProgress.cs" />
     <Compile Include="Core\IndexWriter.cs" />
     <Compile Include="Core\OccurenceBuffer.cs" />
-    <Compile Include="Core\PostingListBuffer.cs" />
+    <Compile Include="Core\PostingStream.cs" />
     <Compile Include="Core\RunMerger.cs" />
     <Compile Include="Core\TermDictionary.cs" />
-    <Compile Include="Core\TermOccurences.cs" />
     <Compile Include="Core\Tokenizer.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

@@ -8,73 +8,77 @@ namespace FtsEngine.Core
     /// <summary>
     /// Fixed-size RAM buffer for (term, docId) occurrences.
     ///
-    /// Internally uses Dictionary&lt;term, List&lt;docId&gt;&gt; so each term string is stored
-    /// once regardless of how many documents contain it. This keeps memory low and makes
-    /// the flush sort O(U log U) over unique terms U rather than O(N log N) over all pairs N.
+    /// Internally uses Dictionary&lt;string, PostingStream&gt; — identical to FtsLib's RamIndex.
+    /// Each term's posting bytes are already delta+varint encoded in memory.
+    /// Flush is O(U log U) over unique terms only — no per-pair sort.
     ///
-    /// When full, Sort() + Flush() writes a sorted binary run file to disk and clears the buffer.
+    /// Flushes when either:
+    ///   - Estimated RAM exceeds MaxBytes (512 MB), or
+    ///   - Unique term count exceeds MaxUniqueTerms (500k) — dictionary efficiency cap
     ///
-    /// Run file format (binary, little-endian):
-    ///   Per record: [int16 termByteLen][UTF-8 term bytes][int32 docId]
-    ///   Records are written in ascending (term, docId) order.
+    /// Run file format (binary, little-endian), sorted by term:
+    ///   Per entry: [int16 termByteLen][UTF-8 term bytes][int32 docCount][int32 byteLen][encoded bytes]
     /// </summary>
     internal sealed class OccurenceBuffer
     {
-        private const int MaxBytes = 512 * 1024 * 1024; // 512 MB — fewer runs = faster merge
+        private const int MaxBytes       = 512 * 1024 * 1024; // 512 MB RAM cap
+        private const int MaxUniqueTerms = 500_000;           // dictionary efficiency cap
 
-        private readonly Dictionary<string, List<int>> _map;
+        private readonly Dictionary<string, PostingStream> _map;
         private int _estimatedBytes;
 
-        public int  Count          => _estimatedBytes; // proxy — used only for IsFull
-        public bool IsFull         => _estimatedBytes >= MaxBytes;
+        public bool IsFull  => _estimatedBytes >= MaxBytes || _map.Count >= MaxUniqueTerms;
+        public bool IsEmpty => _map.Count == 0;
 
         public OccurenceBuffer()
         {
-            _map = new Dictionary<string, List<int>>(1_000_000, StringComparer.Ordinal);
+            _map = new Dictionary<string, PostingStream>(1_500_000, StringComparer.Ordinal);
         }
 
         public void Add(string term, int docId)
         {
-            if (!_map.TryGetValue(term, out var list))
+            if (!_map.TryGetValue(term, out var stream))
             {
-                list = new List<int>(4);
-                _map[term] = list;
-                // New term: charge string overhead + ~2 bytes/char UTF-16 + list overhead
-                _estimatedBytes += 48 + term.Length * 2;
+                stream = new PostingStream();
+                _map[term] = stream;
+                _estimatedBytes += 48 + term.Length * 2; // string overhead
             }
-            list.Add(docId);
-            // Per docId: 4 bytes
-            _estimatedBytes += 4;
+            stream.Add(docId);
+            _estimatedBytes += 2; // avg varint size
         }
 
         /// <summary>
-        /// Sorts unique terms, then writes all (term, docId) pairs in order to a run file.
-        /// Returns the path of the written run file.
+        /// Sorts unique terms, writes each term's already-encoded posting bytes to a run file.
+        /// Stores LastEncoded so the merger can stitch segments without re-decoding.
+        ///
+        /// Run file format per entry:
+        ///   [int16 termByteLen][UTF-8 term bytes][int32 docCount][int32 byteLen][uint32 lastEncoded][encoded bytes]
         /// </summary>
-        public string Flush(string runDir, int runIndex)
+        public string Flush(string runDir, int runIndex, Action<string> onProgress = null)
         {
-            // Sort only unique terms — O(U log U) where U << N
             var terms = new string[_map.Count];
             _map.Keys.CopyTo(terms, 0);
+
+            onProgress?.Invoke($"Sorting {terms.Length:N0} terms...");
             Array.Sort(terms, StringComparer.Ordinal);
 
             string path = Path.Combine(runDir, $"run_{runIndex:D4}.bin");
+            onProgress?.Invoke($"Writing run {runIndex} ({terms.Length:N0} terms) to disk...");
 
             using (var fs = new FileStream(path, FileMode.Create, FileAccess.Write,
-                                           FileShare.None, 4 * 1024 * 1024)) // 4 MB write buffer
+                                           FileShare.None, 4 * 1024 * 1024))
             using (var bw = new BinaryWriter(fs, Encoding.UTF8, leaveOpen: false))
             {
                 foreach (var term in terms)
                 {
-                    byte[] termBytes = Encoding.UTF8.GetBytes(term);
-                    var docIds = _map[term];
-                    docIds.Sort(); // sort docIds within term — small list, fast
-                    foreach (var docId in docIds)
-                    {
-                        bw.Write((short)termBytes.Length);
-                        bw.Write(termBytes);
-                        bw.Write(docId);
-                    }
+                    var stream    = _map[term];
+                    byte[] tbytes = Encoding.UTF8.GetBytes(term);
+                    bw.Write((short)tbytes.Length);
+                    bw.Write(tbytes);
+                    bw.Write(stream.Count);
+                    bw.Write(stream.ByteLength);
+                    bw.Write(stream.LastEncoded);   // needed for cross-run delta stitching
+                    bw.Write(stream.Buffer, 0, stream.ByteLength);
                 }
             }
 

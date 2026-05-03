@@ -51,6 +51,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
+    <Compile Include="CorrectnessTest.cs" />
     <Compile Include="FullDbTest.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
@@ -62,10 +63,6 @@
     <ProjectReference Include="..\FtsEngine\FtsEngine.csproj">
       <Project>{5171b91b-61b4-4aa7-a810-469196b8fc5b}</Project>
       <Name>FtsEngine</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\FtsLib\FtsLib.csproj">
-      <Project>{76F9DAA9-374F-40F9-8511-3239FB6E846E}</Project>
-      <Name>FtsLib</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

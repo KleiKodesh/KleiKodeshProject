@@ -1,32 +1,29 @@
-﻿using System.Collections.Generic;
-using System.Data.SQLite;
+﻿using System.Data.SQLite;
 
 namespace FtsEngine.Core
 {
     /// <summary>
     /// Writes term metadata (term → offset, length, count) into index.db during the merge phase.
-    /// Uses batched inserts (1000 rows per transaction commit) for maximum throughput.
+    ///
+    /// Uses a single transaction for the entire bulk load:
+    ///   - journal_mode=OFF + synchronous=OFF → no fsync, no WAL overhead during insert
+    ///   - One BEGIN / one COMMIT for all 1.4M rows
+    ///   - UNIQUE INDEX built after all rows are inserted (not maintained during insert)
     /// </summary>
     internal sealed class TermDictionary : System.IDisposable
     {
-        private const int BatchSize = 1000;
-
-        private readonly SQLiteConnection _conn;
-        private SQLiteTransaction _tx;
-        private readonly SQLiteCommand _ins;
-        private int _batchCount;
+        private readonly SQLiteConnection  _conn;
+        private readonly SQLiteTransaction _tx;
+        private readonly SQLiteCommand     _ins;
 
         public TermDictionary(string indexDbPath)
         {
-            var connStr =
-                $"Data Source={indexDbPath};Version=3;" +
-                $"Page Size=65536;Cache Size=8000;";
-
+            var connStr = $"Data Source={indexDbPath};Version=3;Page Size=65536;Cache Size=8000;";
             _conn = new SQLiteConnection(connStr);
             _conn.Open();
 
-            Exec("PRAGMA journal_mode=OFF;" +        // fastest for bulk load — no WAL overhead
-                 "PRAGMA synchronous=OFF;" +          // no fsync during bulk insert
+            Exec("PRAGMA journal_mode=OFF;" +
+                 "PRAGMA synchronous=OFF;" +
                  "PRAGMA temp_store=MEMORY;" +
                  "PRAGMA mmap_size=1073741824;");
 
@@ -37,11 +34,11 @@ namespace FtsEngine.Core
                  "  count   INTEGER NOT NULL" +
                  ");");
 
+            // Single transaction for the entire bulk load
             _tx  = _conn.BeginTransaction();
             _ins = _conn.CreateCommand();
             _ins.CommandText =
-                "INSERT INTO term_index (term, offset, length, count) " +
-                "VALUES (@t, @o, @l, @c)";
+                "INSERT INTO term_index (term, offset, length, count) VALUES (@t, @o, @l, @c)";
             _ins.Parameters.Add("@t", System.Data.DbType.String);
             _ins.Parameters.Add("@o", System.Data.DbType.Int64);
             _ins.Parameters.Add("@l", System.Data.DbType.Int32);
@@ -55,30 +52,16 @@ namespace FtsEngine.Core
             _ins.Parameters["@l"].Value = length;
             _ins.Parameters["@c"].Value = count;
             _ins.ExecuteNonQuery();
-
-            if (++_batchCount >= BatchSize)
-            {
-                _tx.Commit();
-                _tx.Dispose();
-                _tx = _conn.BeginTransaction();
-                _batchCount = 0;
-            }
         }
 
         public void Commit()
         {
-            // Flush any remaining rows
-            if (_batchCount > 0)
-            {
-                _tx.Commit();
-                _tx.Dispose();
-                _tx = null;
-            }
+            _tx.Commit();
 
-            // Build index after all data is loaded — much faster than maintaining it during inserts
+            // Build index after all rows are loaded — far faster than maintaining during insert
             Exec("CREATE UNIQUE INDEX idx_term ON term_index (term); ANALYZE;");
 
-            // Switch back to safe mode now that bulk load is done
+            // Restore safe settings for readers
             Exec("PRAGMA synchronous=NORMAL; PRAGMA journal_mode=WAL;");
         }
 

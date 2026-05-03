@@ -9,7 +9,7 @@ namespace FtsEngine.Core
     /// Identical behaviour to FtsLib.Tokenizer — reused here to keep FtsEngine self-contained.
     /// Returns a reused HashSet (cleared on each call) — not thread-safe.
     /// </summary>
-    internal sealed class Tokenizer
+    public sealed class Tokenizer
     {
         private readonly HashSet<string> _terms  = new HashSet<string>();
         private readonly StringBuilder   _buffer = new StringBuilder(64);

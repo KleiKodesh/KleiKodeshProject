@@ -37,7 +37,6 @@ namespace FtsEngine.Core
         {
             var termList = new List<string>(terms);
 
-            // Look up all terms; bail if any missing
             var entries = new List<(string term, long offset, int length, int count)>(termList.Count);
             foreach (var term in termList)
             {
@@ -52,7 +51,6 @@ namespace FtsEngine.Core
             // Rarest term first — minimises work in the merge loop
             entries.Sort((a, b) => a.count.CompareTo(b.count));
 
-            // Load posting bytes for each term
             var iters = new PostingIterator[entries.Count];
             for (int i = 0; i < entries.Count; i++)
             {
@@ -73,7 +71,15 @@ namespace FtsEngine.Core
                 return r.Read() ? r.GetInt32(2) : 0;
         }
 
-        // ---- streaming AND-merge (no heap allocation) ----
+        public int GetTotalTermCount()
+        {
+            using (var cmd = _conn.CreateCommand())
+            {
+                cmd.CommandText = "SELECT COUNT(*) FROM term_index";
+                return (int)(long)cmd.ExecuteScalar();
+            }
+        }
+
         private static IEnumerable<int> MergeIntersect(PostingIterator[] iters)
         {
             for (int i = 0; i < iters.Length; i++)
@@ -110,7 +116,7 @@ namespace FtsEngine.Core
             _postings?.Dispose();
         }
 
-        // ---- self-contained posting list iterator (delta+varint) ----
+        // ---- posting list iterator — delta+varint, no skip list ----
         internal sealed class PostingIterator
         {
             private readonly byte[] _buf;
@@ -173,8 +179,7 @@ namespace FtsEngine.Core
                 return result;
             }
 
-            private static uint Encode(int v) => (uint)((long)v - int.MinValue);
-            private static int  Decode(uint v) => (int)((long)v + int.MinValue);
+            private static int Decode(uint v) => (int)((long)v + int.MinValue);
         }
     }
 }

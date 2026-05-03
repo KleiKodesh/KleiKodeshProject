@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Data.SQLite;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.VisualBasic;
@@ -141,7 +142,7 @@ namespace FtsEngineTest
 
                 long memAfter = RamMB();
                 Log($"Lines      : {linesIndexed:N0}", LogLevel.Ok);
-                Log($"Terms      : {termCount:N0}", LogLevel.Ok);
+                Log($"Terms      : {index.GetTotalTermCount():N0}", LogLevel.Ok);
                 Log($"Time       : {swBuild.ElapsedMilliseconds:N0} ms", LogLevel.Ok);
                 Log($"Throughput : {linesIndexed * 1000.0 / Math.Max(swBuild.ElapsedMilliseconds, 1):N0} lines/sec", LogLevel.Debug);
                 Log($"RAM after  : {memAfter} MB  (Δ +{memAfter - memBefore} MB)", LogLevel.Ok);
@@ -149,10 +150,20 @@ namespace FtsEngineTest
                 // ---- search ----
                 Section("Search");
                 var swSearch = Stopwatch.StartNew();
-                var queryTerms = new List<string> { "כי", "ביצחק" };
+
+                // Use FtsEngine's own tokenizer to extract query terms
+                var tokenizer  = new FtsEngine.Core.Tokenizer();
+                var queryTerms = new List<string>(tokenizer.Extract(SearchQuery));
 
                 Log($"Query : \"{SearchQuery}\"");
                 Log($"Terms : [{string.Join(", ", queryTerms)}]");
+
+                // Log per-term counts so we can verify terms exist in the index
+                foreach (var term in queryTerms)
+                {
+                    int cnt = index.GetTermCount(term);
+                    Log($"  '{term}' → {cnt:N0} docs", LogLevel.Debug);
+                }
 
                 var searchTimes = new List<long>(5);
                 List<int> matchIds = null;
@@ -219,7 +230,7 @@ namespace FtsEngineTest
                 Section("Summary");
                 Log($"DB size        : {fi.Length / (1024.0 * 1024.0):F1} MB");
                 Log($"Lines indexed  : {linesIndexed:N0}");
-                Log($"Unique terms   : {termCount:N0}");
+                Log($"Unique terms   : {index.GetTotalTermCount():N0}");
                 Log($"Index time     : {swBuild.ElapsedMilliseconds:N0} ms");
                 Log($"Search (avg)   : {Avg(searchTimes):F1} ms");
                 Log($"Results found  : {matchIds.Count}");
@@ -255,8 +266,9 @@ namespace FtsEngineTest
 
             builder.Progress += (progress) =>
             {
-                if (progress.Phase == IndexPhase.Indexing && progress.LinesProcessed % 100_000 == 0)
+                if (progress.Phase == IndexPhase.Indexing)
                 {
+                    // Log every 100k lines — fires when _windowLines hits ProgressInterval
                     double rate = progress.LinesPerSecond;
                     string eta = progress.TotalLines > 0
                         ? $"ETA {TimeSpan.FromSeconds(progress.EtaSeconds):mm\\:ss}"
@@ -265,15 +277,15 @@ namespace FtsEngineTest
                 }
                 else if (progress.Phase == IndexPhase.FlushingRun)
                 {
-                    Log($"Flushing run {progress.RunsFlushed}...", LogLevel.Debug);
+                    Log($"{progress.Message}  RAM {RamMB()} MB", LogLevel.Debug);
                 }
                 else if (progress.Phase == IndexPhase.Merging)
                 {
-                    Log($"Merging {progress.RunsFlushed} run files...", LogLevel.Debug);
+                    Log($"{progress.Message}  RAM {RamMB()} MB", LogLevel.Debug);
                 }
                 else if (progress.Phase == IndexPhase.WritingDictionary)
                 {
-                    Log($"Writing term dictionary...", LogLevel.Debug);
+                    Log($"Writing term dictionary...  RAM {RamMB()} MB", LogLevel.Debug);
                 }
                 else if (progress.Phase == IndexPhase.Complete)
                 {
@@ -283,6 +295,11 @@ namespace FtsEngineTest
 
             long linesIndexed = 0;
 
+            // Timing breakdown — separate SQLite read, tokenize, dictionary insert
+            long msRead = 0, msTokenize = 0, msInsert = 0;
+            var swPhase = new Stopwatch();
+            var tokenizer = new FtsEngine.Core.Tokenizer();
+
             using (var cmd = conn.CreateCommand())
             {
                 cmd.CommandText = lineLimit > 0
@@ -290,16 +307,31 @@ namespace FtsEngineTest
                     : "SELECT id, content FROM line ORDER BY id";
                 using (var r = cmd.ExecuteReader())
                 {
-                    while (r.Read())
+                    while (true)
                     {
+                        swPhase.Restart();
+                        bool hasRow = r.Read();
+                        msRead += swPhase.ElapsedMilliseconds;
+                        if (!hasRow) break;
+
                         int    lineId  = r.GetInt32(0);
                         string content = r.IsDBNull(1) ? string.Empty : r.GetString(1);
 
-                        builder.Add(lineId, content);
+                        swPhase.Restart();
+                        var terms = tokenizer.Extract(content);
+                        msTokenize += swPhase.ElapsedMilliseconds;
+
+                        swPhase.Restart();
+                        foreach (var term in terms)
+                            builder.AddTerm(lineId, term);
+                        msInsert += swPhase.ElapsedMilliseconds;
+
                         linesIndexed++;
                     }
                 }
             }
+
+            Log($"Timing — Read: {msRead / 1000.0:F1}s  Tokenize: {msTokenize / 1000.0:F1}s  Insert: {msInsert / 1000.0:F1}s", LogLevel.Debug);
 
             Log($"Building final index...", LogLevel.Debug);
             builder.Build(postingsPath, indexDbPath);
