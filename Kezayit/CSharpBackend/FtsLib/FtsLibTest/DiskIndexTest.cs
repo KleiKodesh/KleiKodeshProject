@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Data.SQLite;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using Microsoft.VisualBasic;
 
 namespace FtsLibTest
@@ -39,7 +40,12 @@ namespace FtsLibTest
                 return;
             }
 
-            // ---- Phase 1: build RAM index and save to disk ----
+            long ramStart = RamMB();
+            Console.ForegroundColor = ConsoleColor.DarkGray;
+            Console.WriteLine($"  · RAM at start: {ramStart} MB");
+            Console.ResetColor();
+
+            // ---- Phase 1: build RAM index ----
             Console.WriteLine($"  » Building index{(lineLimit > 0 ? $" from first {lineLimit:N0} lines" : " from full DB")}...");
             var index     = new IndexManager(useSkipList: false);
             var tokenizer = new Tokenizer();
@@ -65,9 +71,11 @@ namespace FtsLibTest
                 }
             }
             swBuild.Stop();
+            long ramAfterIndex = RamMB();
             Console.ForegroundColor = ConsoleColor.DarkGray;
             Console.WriteLine($"  · RAM index built: {linesIndexed:N0} lines, " +
-                              $"{index.TermCount:N0} terms, {swBuild.ElapsedMilliseconds:N0} ms");
+                              $"{index.TermCount:N0} terms, {swBuild.ElapsedMilliseconds:N0} ms  " +
+                              $"RAM: {ramAfterIndex} MB (Δ +{ramAfterIndex - ramStart} MB)");
             Console.ResetColor();
 
             // ---- Phase 2: save to disk ----
@@ -75,16 +83,28 @@ namespace FtsLibTest
             var swSave = Stopwatch.StartNew();
             index.SaveToDisk(PostingsPath, IndexDbPath);
             swSave.Stop();
+            long ramAfterSave = RamMB();
 
             long postingsBytes = new FileInfo(PostingsPath).Length;
             long indexBytes    = new FileInfo(IndexDbPath).Length;
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine($"  ✓ Saved in {swSave.ElapsedMilliseconds:N0} ms  " +
                               $"postings.bin={postingsBytes / 1024:N0} KB  " +
-                              $"index.db={indexBytes / 1024:N0} KB");
+                              $"index.db={indexBytes / 1024:N0} KB  " +
+                              $"RAM: {ramAfterSave} MB");
             Console.ResetColor();
 
-            // ---- Phase 3: search from disk (no RAM index) ----
+            // ---- free RAM index before searching from disk ----
+            // (index goes out of scope here — GC will collect it)
+            index = null;
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            long ramAfterFree = RamMB();
+            Console.ForegroundColor = ConsoleColor.DarkGray;
+            Console.WriteLine($"  · RAM after freeing index: {ramAfterFree} MB (Δ -{ramAfterSave - ramAfterFree} MB freed)");
+            Console.ResetColor();
+
+            // ---- Phase 3: search from disk ----
             Console.WriteLine($"  » Searching from disk index...");
             var qt         = new Tokenizer();
             var queryTerms = new List<string>(qt.Extract(SearchQuery));
@@ -120,8 +140,28 @@ namespace FtsLibTest
             }
         }
 
-        private static string ResolveDbPath()
+        // ---- RAM measurement ----
+        [StructLayout(LayoutKind.Sequential)]
+        private struct PROCESS_MEMORY_COUNTERS
         {
+            public uint cb, PageFaultCount;
+            public UIntPtr PeakWorkingSetSize, WorkingSetSize,
+                           QuotaPeakPagedPoolUsage, QuotaPagedPoolUsage,
+                           QuotaPeakNonPagedPoolUsage, QuotaNonPagedPoolUsage,
+                           PagefileUsage, PeakPagefileUsage;
+        }
+        [DllImport("psapi.dll")] static extern bool GetProcessMemoryInfo(
+            IntPtr h, out PROCESS_MEMORY_COUNTERS c, uint s);
+
+        private static long RamMB()
+        {
+            if (GetProcessMemoryInfo(Process.GetCurrentProcess().Handle,
+                    out var mc, (uint)Marshal.SizeOf<PROCESS_MEMORY_COUNTERS>()))
+                return (long)mc.WorkingSetSize.ToUInt64() / (1024 * 1024);
+            return GC.GetTotalMemory(false) / (1024 * 1024);
+        }
+
+        private static string ResolveDbPath()        {
             var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
             string def  = Path.Combine(appData, "io.github.kdroidfilter.seforimapp", "databases", "seforim.db");
             return Interaction.GetSetting("ZayitApp", "Database", "Path", def);
