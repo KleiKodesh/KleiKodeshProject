@@ -9,7 +9,7 @@ namespace FtsLib.Core
     /// All methods are static and allocation-free during iteration (beyond the
     /// iterator array itself, which callers supply).
     /// </summary>
-    public static class PostingMatcher
+    internal static class PostingMatcher
     {
         // ── AND merge ────────────────────────────────────────────────
 
@@ -31,11 +31,10 @@ namespace FtsLib.Core
                 for (int i = 1; i < iters.Length; i++)
                 {
                     if (!iters[i].SkipTo(candidate))
-                        yield break; // list exhausted
+                        yield break;
 
                     if (iters[i].Current != candidate)
                     {
-                        // iters[i] jumped ahead — advance driver to catch up
                         int newTarget = iters[i].Current;
                         if (!iters[0].SkipTo(newTarget))
                             yield break;
@@ -50,7 +49,6 @@ namespace FtsLib.Core
                     if (!iters[0].MoveNext())
                         yield break;
                 }
-                // if !match: iters[0] was already advanced by SkipTo above, loop continues
             }
         }
 

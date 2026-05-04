@@ -1,14 +1,13 @@
 using System;
-using System.Collections.Generic;
 
 namespace FtsLib.Core
 {
     /// <summary>
-    /// Holds the compressed posting list for a single term.
-    /// Uses a raw byte[] to avoid MemoryStream overhead.
-    /// Entry IDs must be added in ascending order.
+    /// Compressed posting list for a single term.
+    /// Stores delta+varint encoded doc IDs in a raw byte[].
+    /// IDs must be added in strictly ascending order.
     /// </summary>
-    public sealed class PostingStream
+    internal sealed class PostingStream
     {
         private byte[] _buf = new byte[8];
         private int    _len;
@@ -17,16 +16,19 @@ namespace FtsLib.Core
         private uint   _lastEncoded;
         private bool   _hasLast;
 
-        public int  ByteLength   => _len;
-        public int  Count        => _count;
-        public uint LastEncoded  => _lastEncoded;
-        public byte[] Buffer     => _buf;
+        public int    ByteLength  => _len;
+        public int    Count       => _count;
+        public uint   LastEncoded => _lastEncoded;
+        public byte[] Buffer      => _buf;
+
+        /// <summary>Byte offset at which the next Add will write — used by skip list.</summary>
+        public int NextByteOffset => _len;
 
         public void Add(int entryId)
         {
             if (_hasLast && entryId <= _last)
                 throw new ArgumentException(
-                    $"Entry IDs must be added in strictly ascending order. Got {entryId} after {_last}.",
+                    $"IDs must be strictly ascending. Got {entryId} after {_last}.",
                     nameof(entryId));
 
             uint encoded = Encode(entryId);
@@ -37,13 +39,9 @@ namespace FtsLib.Core
             _hasLast     = true;
             _count++;
 
-            WriteVarInt(toWrite);
+            VarInt.Write(toWrite, WriteByte);
         }
 
-        // Called by RamIndex skip list — byte offset before the next Add
-        public int NextByteOffset => _len;
-
-        /// <summary>Resets the stream for reuse (avoids allocation per term during merge).</summary>
         public void Reset()
         {
             _len         = 0;
@@ -57,16 +55,6 @@ namespace FtsLib.Core
             if (_len == _buf.Length)
                 Array.Resize(ref _buf, _buf.Length * 2);
             _buf[_len++] = b;
-        }
-
-        private void WriteVarInt(uint v)
-        {
-            while (v >= 0x80)
-            {
-                WriteByte((byte)(v | 0x80));
-                v >>= 7;
-            }
-            WriteByte((byte)v);
         }
 
         private static uint Encode(int v) => (uint)((long)v - int.MinValue);

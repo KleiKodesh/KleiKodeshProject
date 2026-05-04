@@ -1,5 +1,4 @@
-﻿using Microsoft.SqlServer.Server;
-using Microsoft.VisualBasic;
+﻿using Microsoft.VisualBasic;
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
@@ -7,60 +6,42 @@ using System.IO;
 
 namespace FtsLib.Misc
 {
-    public class ZayitDb : IDisposable
+    public sealed class ZayitDb : IDisposable
     {
-        SQLiteConnection _connection;
-        public ZayitDb(string dbPath)
-        {
-            OpenConnection(ResolveDbPath(dbPath));
-        }
+        private readonly SQLiteConnection _connection;
+        private readonly string _dbPath;
+        private bool _disposed;
 
-        private void OpenConnection(string dbPath)
+        public bool IsOpen => _connection != null;
+        public string DbPath => _dbPath;
+
+        public ZayitDb(string dbPath = null)
         {
-            if (dbPath == null)
+            string resolved = ResolveDbPath(dbPath);
+            _dbPath = resolved;
+            if (!File.Exists(resolved))
             {
-                var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-                string defaultPath = Path.Combine(appData, "io.github.kdroidfilter.seforimapp", "databases", "seforim.db");
-                dbPath = Interaction.GetSetting("ZayitApp", "Database", "Path", defaultPath);
+                Console.WriteLine($"[ZayitDb] Database not found: {resolved}");
+                return;
             }
-            Console.WriteLine("[ZayitDbManager] Opening DB at: " + dbPath + " exists=" + File.Exists(dbPath));
-            if (!File.Exists(dbPath)) return;
 
-            _connection = new SQLiteConnection($"Data Source={dbPath};Version=3;Page Size=4096;");
+            Console.WriteLine($"[ZayitDb] Opening: {resolved}");
+            _connection = new SQLiteConnection($"Data Source={resolved};Version=3;Page Size=4096;");
             _connection.Open();
 
-            try
+            using (var cmd = _connection.CreateCommand())
             {
-                using (var cmd = _connection.CreateCommand())
-                {
-                    cmd.CommandText =
-                        "PRAGMA journal_mode=WAL; " +
-                        "PRAGMA cache_size=-65536; " +   // up to 64 MB page cache (ceiling, not reservation)
-                        "PRAGMA temp_store=MEMORY;";     // temp indices/tables in RAM, not disk
-                    cmd.ExecuteNonQuery();
-                }
+                cmd.CommandText =
+                    "PRAGMA journal_mode=WAL;" +
+                    "PRAGMA cache_size=-65536;" +  // up to 64 MB page cache
+                    "PRAGMA temp_store=MEMORY;";
+                cmd.ExecuteNonQuery();
             }
-            catch (Exception ex) { Console.WriteLine("[ZayitDbManager] PRAGMA setup failed: " + ex.Message); }
-            //var conn = new SQLiteConnection(
-            //    $"Data Source={dbPath};Version=3;Read Only=True;Page Size=4096;Cache Size=100000;Temp Store=Memory;");
-            //conn.Open();
-            //using (var cmd = conn.CreateCommand())
-            //{
-            //    cmd.CommandText = "PRAGMA mmap_size=2147483648; PRAGMA cache_size=100000; PRAGMA temp_store=MEMORY;";
-            //    cmd.ExecuteNonQuery();
-            //}
-            //return conn;
-        }
-
-        string ResolveDbPath(string dbPath)
-        {
-            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            string def = Path.Combine(appData, "io.github.kdroidfilter.seforimapp", "databases", "seforim.db");
-            return Interaction.GetSetting("ZayitApp", "Database", "Path", string.IsNullOrEmpty(dbPath) ? def : dbPath);
         }
 
         public long CountLines()
         {
+            EnsureOpen();
             using (var cmd = _connection.CreateCommand())
             {
                 cmd.CommandText = "SELECT COUNT(*) FROM line";
@@ -70,6 +51,7 @@ namespace FtsLib.Misc
 
         public string GetLineContent(int id)
         {
+            EnsureOpen();
             using (var cmd = _connection.CreateCommand())
             {
                 cmd.CommandText = "SELECT content FROM line WHERE id = @id";
@@ -81,11 +63,13 @@ namespace FtsLib.Misc
 
         public IEnumerable<(int Id, string Content)> ReadLines(int limit)
         {
+            EnsureOpen();
             using (var cmd = _connection.CreateCommand())
             {
                 cmd.CommandText = limit > 0
-                    ? $"SELECT id, content FROM line ORDER BY id LIMIT {limit}"
+                    ? "SELECT id, content FROM line ORDER BY id LIMIT @lim"
                     : "SELECT id, content FROM line ORDER BY id";
+                if (limit > 0) cmd.Parameters.AddWithValue("@lim", limit);
 
                 using (var r = cmd.ExecuteReader())
                     while (r.Read())
@@ -93,9 +77,60 @@ namespace FtsLib.Misc
             }
         }
 
+        public List<(int Id, int LineIndex, string HeRef, string Content, string BookTitle)> 
+            FetchSearchResults(List<int> ids)
+        {
+            EnsureOpen();
+            var rows = new List<(int, int, string, string, string)>(ids.Count);
+
+            using (var cmd = _connection.CreateCommand())
+            {
+                cmd.CommandText =
+                    $@"SELECT l.id, l.lineIndex, l.heRef, l.content, b.title
+                         FROM line l JOIN book b ON b.id = l.bookId
+                        WHERE l.id IN ({string.Join(",", ids)})
+                        ORDER BY l.bookId, l.lineIndex";
+
+                using (var r = cmd.ExecuteReader())
+                {
+                    while (r.Read())
+                    {
+                        int    lineId    = r.GetInt32(0);
+                        int    lineIndex = r.GetInt32(1);
+                        string heRef     = r.IsDBNull(2) ? null : r.GetString(2);
+                        string content   = r.IsDBNull(3) ? string.Empty : r.GetString(3);
+                        string bookTitle = r.IsDBNull(4) ? string.Empty : r.GetString(4);
+
+                        rows.Add((lineId, lineIndex, heRef, content, bookTitle));
+                    }
+                }
+            }
+
+            return rows;
+        }
+
         public void Dispose()
         {
+            if (_disposed) return;
+            _disposed = true;
             _connection?.Dispose();
+        }
+
+        // ── Helpers ──────────────────────────────────────────────────
+
+        private static string ResolveDbPath(string dbPath)
+        {
+            if (!string.IsNullOrEmpty(dbPath)) return dbPath;
+            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            string def     = Path.Combine(appData, "io.github.kdroidfilter.seforimapp",
+                                          "databases", "seforim.db");
+            return Interaction.GetSetting("ZayitApp", "Database", "Path", def);
+        }
+
+        private void EnsureOpen()
+        {
+            if (_connection == null)
+                throw new InvalidOperationException("ZayitDb: database file was not found at open time.");
         }
     }
 }

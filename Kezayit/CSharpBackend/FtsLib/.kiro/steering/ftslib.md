@@ -8,23 +8,28 @@ A full-text search library for a Hebrew/Aramaic seforim database (SQLite, ~5.4M 
 ## Project structure
 
 ```
-FtsLib/                         ← the library
-  Codec/
-    PostingCodec.cs             ← delta+varint codec (read path only — see note below)
-    PostingStream.cs            ← per-term compressed byte buffer
-  Index/
-    RamIndex.cs                 ← Dictionary<term, Entry> + PostingIterator with skip list
-    IndexManager.cs             ← public API: Add(), Search()
-  DbManger.cs                   ← opens SQLite DB, streams rows
-  StopWords.cs                  ← Hebrew/Aramaic stop word filter
-  Tokenizer.cs                  ← HTML-aware, nikud-stripping tokenizer
+FtsLib/
+  Core/
+    IndexPaths.cs               ← base class: IndexPath + SegmentsDir
+    IndexWriter.cs              ← public write API: Add(), Dispose()
+    IndexReader.cs              ← public read API: Search(), SearchOr(); queries all live segments
+    RamIndex.cs                 ← in-memory term→PostingStream map; searchable directly
+    RamIndexEntry.cs            ← per-term PostingStream + skip list
+    PostingStream.cs            ← delta+varint compressed byte buffer
+    PostingIterator.cs          ← forward iterator with SkipTo; skip-list accelerated
+    PostingMatcher.cs           ← Intersect / Union merge algorithms
+    UnionIterator.cs            ← PostingIterator wrapper for OR groups
+    SegmentStore.cs             ← orchestrates flush, merge cascade, live-state tracking
+    SegmentMerger.cs            ← LSM merge logic: MergeLevel, ForceMergeAll
+    SegmentReader.cs            ← forward-only .dat file reader
+    SegmentWal.cs               ← write-ahead log for crash recovery
+    Tokenizer.cs                ← HTML-aware, nikud-stripping tokenizer
+  Misc/
+    ZayitDb.cs                  ← opens source SQLite DB, streams rows, fetches line content
 
 FtsLibTest/                     ← test + benchmark console app
-  TokenizerTests.cs             ← tokenizer unit tests
-  SkipListTest.cs               ← skip list correctness tests (run before full DB)
-  LiveDbTest.cs                 ← original 100k-line test (DO NOT MODIFY)
-  QuickTest.cs                  ← 500k-line dev test (~1 min)
-  FullDbTest.cs                 ← full 5.4M-line benchmark (~17 min)
+  IndexTest.cs                  ← multi-tier build+search+validate test
+  CostumeTest.cs                ← ad-hoc manual test
   Program.cs                    ← entry point
 ```
 
@@ -79,6 +84,13 @@ If you change the skip write logic, you must update `SkipTo` to match, and vice 
 
 ---
 
+## File length rule
+
+- **No source file should exceed 200 lines.** If a file grows beyond that, split it by responsibility before adding more code.
+- Each file should have one clear job: orchestration, I/O, merge logic, codec, etc. Mixed concerns are a sign the file needs splitting.
+
+---
+
 ## Core design rules
 
 - **Keep the codec**. `PostingCodec` + `PostingStream` are intentional — delta+varint compression keeps the index small. Never replace with `HashSet<int>` or `List<int>`.
@@ -88,6 +100,18 @@ If you change the skip write logic, you must update `SkipTo` to match, and vice 
 - **`LiveDbTest.cs` is read-only**. Never modify it.
 - **Tests live in `TokenizerTests.cs` and `SkipListTest.cs`**. Do not add tests to `Program.cs`.
 - **Run `SkipListTest` before any full DB run** — it catches skip list bugs in seconds rather than 17 minutes.
+
+## Search results must never be truncated — CRITICAL
+
+Every layer of the search pipeline must return **all** matching results. Never introduce a `LIMIT`, `.Take(N)`, `MaxResults`, or any other cap at any layer:
+
+- `IndexReader.Search` — lazy `IEnumerable<int>`, yields every matching doc ID
+- `SearchService.RunSearch` — materializes the full ID list: `new List<int>(reader.Search(terms))`
+- `ZayitDb.FetchSearchResults` — fetches every ID passed in, no `LIMIT` clause
+- `ResultsHtmlService.Render` — renders every item in the list
+- The ViewModel — passes the full result list to the HTML service, no slicing
+
+If a query matches 50,000 lines, the user sees 50,000 results. Do not add pagination, virtual scrolling limits, or result caps without explicit agreement. The WebView2 renderer handles large HTML documents without issue.
 
 ---
 
@@ -102,3 +126,20 @@ QuickTest.Run()        // 500k lines, ~1 min — use for development
 FullDbTest.Run()       // all 5.4M lines, ~17 min
 FullDbTest.Run(N)      // first N lines
 ```
+
+---
+
+## UI / MVVM coding style (FtsLibDemo)
+
+Follow **Brian Lagunas** MVVM conventions for all WPF/XAML code:
+
+- **ViewModelBase** — implement `INotifyPropertyChanged` with `[CallerMemberName]` and a `SetField<T>` equality-check helper.
+- **Commands** — expose `ICommand` properties (never the concrete type). Use `AsyncRelayCommand` for async handlers and `RelayCommand` for sync ones. Hook `CanExecuteChanged` into `CommandManager.RequerySuggested`.
+- **No `async void`** — command handlers must be `async Task`. The only acceptable `async void` is the `Execute` method inside `AsyncRelayCommand` itself.
+- **No `ContinueWith`** — always use `async/await` instead of `Task.ContinueWith` + manual `TaskScheduler`.
+- **Constructor injection** — ViewModels receive services through the constructor. Never `new` a service inside a ViewModel.
+- **Composition root** — wire up all services and ViewModels in `App.xaml.cs OnStartup`. Nothing else should know the concrete types.
+- **Clean code-behind** — `MainWindow.xaml.cs` must only call `InitializeComponent()`. All logic belongs in the ViewModel.
+- **Thin ViewModel** — the ViewModel orchestrates; it does not do I/O, DB access, or file operations. Extract those to services with interfaces.
+- **Services have interfaces** — every service the ViewModel depends on must have a matching `IXxxService` interface in the `Services/` folder.
+- **`SearchResultItem` and similar display models** — immutable, constructor-set, get-only properties.

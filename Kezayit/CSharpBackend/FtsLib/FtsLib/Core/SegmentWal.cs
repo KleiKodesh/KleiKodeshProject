@@ -6,23 +6,19 @@ using System.Text;
 namespace FtsLib.Core
 {
     /// <summary>
-    /// Write-ahead log for crash recovery during segment merges and commits.
-    /// 
+    /// Write-ahead log for crash recovery during segment merges.
+    ///
     /// Log format (one operation per line):
     ///   BEGIN_MERGE level=N sources=id1,id2,... target=id
-    ///   END_MERGE level=N target=id
-    ///   BEGIN_COMMIT segment=filename
-    ///   END_COMMIT
-    /// 
-    /// Recovery logic:
-    /// - BEGIN_MERGE without END_MERGE → delete partial target, redo merge
-    /// - END_MERGE without source cleanup → delete source segments
-    /// - BEGIN_COMMIT without END_COMMIT → delete partial postings.dat/Meta.db, redo commit
+    ///   END_MERGE   level=N target=id
+    ///
+    /// Recovery: BEGIN_MERGE without END_MERGE → delete partial target, redo merge.
+    /// Source segments are never deleted until END_MERGE is logged.
     /// </summary>
     internal sealed class SegmentWal
     {
         private readonly string _walPath;
-        private StreamWriter _writer;
+        private StreamWriter    _writer;
 
         public SegmentWal(string segmentsDir)
         {
@@ -31,7 +27,7 @@ namespace FtsLib.Core
 
         public void Open()
         {
-            if (_writer != null) return; // already open
+            if (_writer != null) return;
             _writer = new StreamWriter(_walPath, append: true, Encoding.UTF8);
             _writer.AutoFlush = true;
         }
@@ -45,42 +41,23 @@ namespace FtsLib.Core
         public void Clear()
         {
             Close();
-            if (File.Exists(_walPath))
-                File.Delete(_walPath);
+            if (File.Exists(_walPath)) File.Delete(_walPath);
         }
 
-        // ── Write operations ─────────────────────────────────────────
+        // ── Write ─────────────────────────────────────────────────────
 
-        public void BeginMerge(int level, int[] sources, int target)
-        {
+        public void BeginMerge(int level, int[] sources, int target) =>
             _writer.WriteLine($"BEGIN_MERGE level={level} sources={string.Join(",", sources)} target={target}");
-        }
 
-        public void EndMerge(int level, int target)
-        {
+        public void EndMerge(int level, int target) =>
             _writer.WriteLine($"END_MERGE level={level} target={target}");
-        }
 
-        public void BeginCommit(string segmentFile)
-        {
-            _writer.WriteLine($"BEGIN_COMMIT segment={Path.GetFileName(segmentFile)}");
-        }
+        // ── Analyze ───────────────────────────────────────────────────
 
-        public void EndCommit()
-        {
-            _writer.WriteLine("END_COMMIT");
-        }
-
-        // ── Recovery ─────────────────────────────────────────────────
-
-        /// <summary>
-        /// Analyzes WAL and returns pending operations that need recovery.
-        /// </summary>
         public RecoveryState Analyze()
         {
             var state = new RecoveryState();
-            if (!File.Exists(_walPath))
-                return state;
+            if (!File.Exists(_walPath)) return state;
 
             foreach (var line in File.ReadAllLines(_walPath, Encoding.UTF8))
             {
@@ -88,25 +65,17 @@ namespace FtsLib.Core
 
                 if (line.StartsWith("BEGIN_MERGE "))
                 {
-                    var parts = ParseKV(line.Substring("BEGIN_MERGE ".Length));
-                    int level = int.Parse(parts["level"]);
-                    int target = int.Parse(parts["target"]);
+                    var parts   = ParseKV(line.Substring("BEGIN_MERGE ".Length));
+                    int level   = int.Parse(parts["level"]);
+                    int target  = int.Parse(parts["target"]);
                     var sources = Array.ConvertAll(parts["sources"].Split(','), int.Parse);
                     state.PendingMerge = new MergeOp(level, sources, target);
                 }
                 else if (line.StartsWith("END_MERGE "))
                 {
-                    state.PendingMerge = null; // merge completed
+                    state.PendingMerge = null;
                 }
-                else if (line.StartsWith("BEGIN_COMMIT "))
-                {
-                    var parts = ParseKV(line.Substring("BEGIN_COMMIT ".Length));
-                    state.PendingCommit = parts["segment"];
-                }
-                else if (line == "END_COMMIT")
-                {
-                    state.PendingCommit = null; // commit completed
-                }
+                // Legacy entries from old format — ignore safely
             }
 
             return state;
@@ -118,19 +87,17 @@ namespace FtsLib.Core
             foreach (var pair in s.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries))
             {
                 int eq = pair.IndexOf('=');
-                if (eq > 0)
-                    result[pair.Substring(0, eq)] = pair.Substring(eq + 1);
+                if (eq > 0) result[pair.Substring(0, eq)] = pair.Substring(eq + 1);
             }
             return result;
         }
     }
 
-    // ── Recovery state ───────────────────────────────────────────────
+    // ── Recovery state ────────────────────────────────────────────────
 
     internal sealed class RecoveryState
     {
         public MergeOp PendingMerge;
-        public string  PendingCommit; // segment filename
     }
 
     internal sealed class MergeOp
@@ -140,10 +107,6 @@ namespace FtsLib.Core
         public readonly int   Target;
 
         public MergeOp(int level, int[] sources, int target)
-        {
-            Level = level;
-            Sources = sources;
-            Target = target;
-        }
+        { Level = level; Sources = sources; Target = target; }
     }
 }

@@ -3,7 +3,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         xmlns:vm="clr-namespace:FtsLibDemo.ViewModels"
+        xmlns:local="clr-namespace:FtsLibDemo"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance vm:MainViewModel}"
         Title="חיפוש בספרים"
@@ -14,10 +16,10 @@
         FontSize="14">
 
     <Window.Resources>
-        <!-- Busy overlay visibility -->
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <local:InvertBooleanConverter x:Key="InvertBool"/>
+        <local:BoolToVisibilityInvertedConverter x:Key="BoolToVisInverted"/>
 
-        <!-- Invert bool for controls that should be disabled while indexing/searching -->
         <Style x:Key="SearchBoxStyle" TargetType="TextBox">
             <Setter Property="Padding" Value="6,4"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
@@ -62,27 +64,12 @@
                 </Trigger>
             </Style.Triggers>
         </Style>
-
-        <Style x:Key="ResultItemStyle" TargetType="ListViewItem">
-            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-            <Setter Property="Padding" Value="0"/>
-            <Setter Property="BorderThickness" Value="0,0,0,1"/>
-            <Setter Property="BorderBrush" Value="#E0E0E0"/>
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#F0F6FF"/>
-                </Trigger>
-                <Trigger Property="IsSelected" Value="True">
-                    <Setter Property="Background" Value="#D6E8FF"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
     </Window.Resources>
 
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>  <!-- toolbar -->
-            <RowDefinition Height="Auto"/>  <!-- index status bar -->
+            <RowDefinition Height="Auto"/>  <!-- index progress bar -->
             <RowDefinition Height="*"/>     <!-- results -->
             <RowDefinition Height="Auto"/>  <!-- status bar -->
         </Grid.RowDefinitions>
@@ -97,16 +84,13 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Search box -->
+                <!-- Search box — always enabled -->
                 <TextBox Grid.Column="0"
                          Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
                          Style="{StaticResource SearchBoxStyle}"
-                         Margin="0,0,8,0"
-                         IsEnabled="{Binding IsIndexing, Converter={StaticResource BoolToVis},
-                                     ConverterParameter=Invert}">
+                         Margin="0,0,8,0">
                     <TextBox.InputBindings>
                         <KeyBinding Key="Return" Command="{Binding SearchCommand}"/>
                     </TextBox.InputBindings>
@@ -119,18 +103,20 @@
                         Style="{StaticResource PrimaryButton}"
                         Margin="0,0,6,0"/>
 
-                <!-- Build index button -->
+                <!-- Build index button — hidden while indexing -->
                 <Button Grid.Column="2"
                         Content="צור אינדקס"
                         Command="{Binding BuildIndexCommand}"
                         Style="{StaticResource PrimaryButton}"
-                        Margin="0,0,6,0"/>
+                        Margin="0,0,6,0"
+                        Visibility="{Binding IsIndexing, Converter={StaticResource BoolToVisInverted}}"/>
 
                 <!-- Cancel button — only visible while indexing -->
-                <Button Grid.Column="3"
+                <Button Grid.Column="2"
                         Content="בטל"
                         Command="{Binding CancelIndexCommand}"
                         Style="{StaticResource DangerButton}"
+                        Margin="0,0,6,0"
                         Visibility="{Binding IsIndexing, Converter={StaticResource BoolToVis}}"/>
             </Grid>
         </Border>
@@ -170,74 +156,12 @@
         </Border>
 
         <!-- ═══════════════════════════════════════════════════════════
-             Row 2 — Results list
+             Row 2 — Results WebView
         ═══════════════════════════════════════════════════════════ -->
         <Grid Grid.Row="2">
 
-            <!-- Results list -->
-            <ListView ItemsSource="{Binding Results}"
-                      ItemContainerStyle="{StaticResource ResultItemStyle}"
-                      BorderThickness="0"
-                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                      VirtualizingPanel.IsVirtualizing="True"
-                      VirtualizingPanel.VirtualizationMode="Recycling">
-                <ListView.View>
-                    <GridView>
-                        <GridViewColumn Header="ספר" Width="180">
-                            <GridViewColumn.CellTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding BookTitle}"
-                                               FontWeight="SemiBold"
-                                               Foreground="#2C3E50"
-                                               TextTrimming="CharacterEllipsis"
-                                               Padding="6,8"/>
-                                </DataTemplate>
-                            </GridViewColumn.CellTemplate>
-                        </GridViewColumn>
-
-                        <GridViewColumn Header="מיקום" Width="160">
-                            <GridViewColumn.CellTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding Reference}"
-                                               Foreground="#666666"
-                                               FontSize="12"
-                                               TextTrimming="CharacterEllipsis"
-                                               Padding="6,8"/>
-                                </DataTemplate>
-                            </GridViewColumn.CellTemplate>
-                        </GridViewColumn>
-
-                        <GridViewColumn Header="תוכן">
-                            <GridViewColumn.CellTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding Snippet}"
-                                               TextWrapping="Wrap"
-                                               Foreground="#222222"
-                                               Padding="6,8"
-                                               MaxWidth="580"/>
-                                </DataTemplate>
-                            </GridViewColumn.CellTemplate>
-                        </GridViewColumn>
-                    </GridView>
-                </ListView.View>
-            </ListView>
-
-            <!-- Empty state — no index loaded -->
-            <StackPanel HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Visibility="{Binding IndexReady,
-                                     Converter={StaticResource BoolToVis},
-                                     ConverterParameter=Invert}">
-                <TextBlock Text="אין אינדקס טעון"
-                           FontSize="18"
-                           Foreground="#AAAAAA"
-                           HorizontalAlignment="Center"/>
-                <TextBlock Text="לחץ על &#x22;צור אינדקס&#x22; כדי לבחור קובץ מסד נתונים ולבנות אינדקס"
-                           FontSize="13"
-                           Foreground="#BBBBBB"
-                           HorizontalAlignment="Center"
-                           Margin="0,8,0,0"/>
-            </StackPanel>
+            <wv2:WebView2 x:Name="ResultsWebView"
+                          DefaultBackgroundColor="White"/>
 
             <!-- Searching spinner overlay -->
             <Border Background="#80FFFFFF"

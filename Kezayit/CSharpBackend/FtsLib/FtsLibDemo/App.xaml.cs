@@ -10,8 +10,11 @@ namespace FtsLibDemo
         {
             base.OnStartup(e);
 
-            var settings  = new SettingsService();
-            var viewModel = new MainViewModel(settings);
+            var settings      = new SettingsService();
+            var indexService  = new IndexService();
+            var searchService = new SearchService(indexService);
+            var htmlService   = new ResultsHtmlService();
+            var viewModel     = new MainViewModel(settings, indexService, searchService, htmlService);
 
             var window = new MainWindow { DataContext = viewModel };
             window.Show();

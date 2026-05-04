@@ -7,7 +7,7 @@ namespace FtsLib.Core
     /// using a min-heap. Implements the PostingIterator interface so it can be fed
     /// directly into PostingMatcher.Intersect for mixed AND/OR queries.
     /// </summary>
-    public sealed class UnionIterator : PostingIterator
+    internal sealed class UnionIterator : PostingIterator
     {
         private readonly PostingIterator[] _iters;
         private readonly int[]             _heap;

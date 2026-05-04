@@ -18,7 +18,9 @@ namespace FtsLibTest
         public static readonly string[] Searches = new[]
         {
             "כי ביצחק",
-            "שויתי לנגדי תמיד"
+            "שויתי לנגדי תמיד",
+            "אבל בן אין לה",
+            "וידבר משה כן אל בני"
         };
 
         public static readonly (string label, int limit)[] Tiers = new[]
@@ -151,12 +153,13 @@ namespace FtsLibTest
 
         // ── Helpers ──────────────────────────────────────────────────
 
+        public static string StripDiacriticsPublic(string s) => StripDiacritics(s);
+
         private static string StripDiacritics(string s)
         {
             var sb = new StringBuilder(s.Length);
             foreach (char c in s)
             {
-                // Hebrew cantillation (U+0591–U+05AF) + nikud (U+05B0–U+05C7)
                 if (c >= '\u0591' && c <= '\u05C7') continue;
                 if (c > 127 && CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark) continue;
                 sb.Append(c);
