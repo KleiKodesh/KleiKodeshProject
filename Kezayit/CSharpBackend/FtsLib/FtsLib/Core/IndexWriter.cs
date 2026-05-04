@@ -22,12 +22,18 @@ namespace FtsLib.Core
             _useSkipList = useSkipList;
             _ramIndex    = new RamIndex(useSkipList: useSkipList);
 
-            // Clean up any leftover segment files from a previous crashed run
             string segDir = Path.Combine(IndexPath, "segments");
-            if (Directory.Exists(segDir))
+
+            // If segments directory exists and has content, recover before doing anything else.
+            // This handles crashes during a previous merge or commit.
+            if (Directory.Exists(segDir) &&
+                (Directory.GetFiles(segDir, "seg_*.dat").Length > 0 ||
+                 File.Exists(Path.Combine(segDir, "wal.log"))))
             {
-                foreach (var f in Directory.GetFiles(segDir, "seg_*"))
-                    try { File.Delete(f); } catch { /* best effort */ }
+                Console.WriteLine("[IndexWriter] Segments found — running crash recovery...");
+                _store = new SegmentStore(segDir);
+                _store.Recover(PostingsPath, MetaDbPath);
+                Console.WriteLine("[IndexWriter] Recovery complete.");
             }
         }
 

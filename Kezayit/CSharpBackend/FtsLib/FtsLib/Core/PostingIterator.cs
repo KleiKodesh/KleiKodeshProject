@@ -9,7 +9,7 @@ namespace FtsLib.Core
     // ----------------------------------------------------------------
     // PostingIterator
     // ----------------------------------------------------------------
-    public sealed class PostingIterator
+    public class PostingIterator
     {
         public static readonly PostingIterator Empty = new PostingIterator();
 
@@ -23,10 +23,10 @@ namespace FtsLib.Core
         private bool _started;
         private bool _done;
 
-        public int Current { get; private set; }
-        public bool IsDone => _done;
+        public virtual int  Current { get; private set; }
+        public virtual bool IsDone  => _done;
 
-        private PostingIterator() { _done = true; }
+        protected PostingIterator() { _done = true; }
 
         public PostingIterator(byte[] buf, int len, int[] skip, int skipLen)
         {
@@ -36,12 +36,12 @@ namespace FtsLib.Core
             _skipLen = skipLen;
         }
 
-        public IEnumerable<int> AsEnumerable()
+        public virtual IEnumerable<int> AsEnumerable()
         {
             while (MoveNext()) yield return Current;
         }
 
-        public bool MoveNext()
+        public virtual bool MoveNext()
         {
             if (_done) return false;
             if (!_started)
@@ -58,7 +58,7 @@ namespace FtsLib.Core
             return true;
         }
 
-        public bool SkipTo(int target)
+        public virtual bool SkipTo(int target)
         {
             if (_done) return false;
             if (!_started && !MoveNext()) return false;

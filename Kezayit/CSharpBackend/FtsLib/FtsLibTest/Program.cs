@@ -1,16 +1,21 @@
-﻿using System;
+﻿using FtsLib.Core;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
+using System.Linq;
 
 namespace FtsLibTest
 {
     /// <summary>
     /// Usage:
-    ///   FtsLibTest.exe                   — run all tiers, write results to test_results.txt
-    ///   FtsLibTest.exe 500k              — run 500k tier only
-    ///   FtsLibTest.exe 1m                — run 1M tier only
-    ///   FtsLibTest.exe 3m                — run 3M tier only
-    ///   FtsLibTest.exe full              — run full DB tier only
-    ///   FtsLibTest.exe validate [dir]    — validate existing index
+    ///   FtsLibTest.exe                        — run all tiers, write results to test_results.txt
+    ///   FtsLibTest.exe 500k                   — run 500k tier only
+    ///   FtsLibTest.exe 1m                     — run 1M tier only
+    ///   FtsLibTest.exe 3m                     — run 3M tier only
+    ///   FtsLibTest.exe full                   — run full DB tier only
+    ///   FtsLibTest.exe validate [dir]         — validate existing index
+    ///   FtsLibTest.exe search &lt;dir&gt; &lt;terms...&gt; — search an existing index
     /// </summary>
     internal class Program
     {
@@ -34,6 +39,60 @@ namespace FtsLibTest
                     return;
                 }
 
+                if (cmd == "build")
+                {
+                    // build <dir> [lineLimit]
+                    if (args.Length < 2)
+                    {
+                        Console.WriteLine("Usage: build <indexDir> [lineLimit]");
+                        return;
+                    }
+                    string buildDir   = args[1];
+                    int    buildLimit = args.Length > 2 ? int.Parse(args[2]) : 0;
+                    Console.WriteLine($"Building index → {buildDir}  limit={(buildLimit == 0 ? "all" : buildLimit.ToString("N0"))}");
+                    var swBuild = Stopwatch.StartNew();
+                    long linesBuilt = 0;
+                    using (var db     = new FtsLib.Misc.ZayitDb(""))
+                    using (var writer = new FtsLib.Core.IndexWriter(buildDir))
+                    {
+                        var tok = new FtsLib.Tokenizer();
+                        foreach (var row in db.ReadLines(buildLimit))
+                        {
+                            foreach (var token in tok.Extract(row.Content))
+                                writer.Add(row.Id, token);
+                            linesBuilt++;
+                            if (linesBuilt % 100_000 == 0)
+                                Console.WriteLine($"  {linesBuilt:N0} lines  {swBuild.Elapsed:mm\\:ss}");
+                        }
+                    }
+                    swBuild.Stop();
+                    Console.WriteLine($"Done: {linesBuilt:N0} lines in {swBuild.Elapsed:mm\\:ss\\.ff}");
+                    return;
+                }
+
+                if (cmd == "search")
+                {
+                    if (args.Length < 3)
+                    {
+                        Console.WriteLine("Usage: search <indexDir> <term1> [term2] ...");
+                        return;
+                    }
+                    string dir   = args[1];
+                    var    terms = args.Skip(2).ToArray();
+                    Console.WriteLine($"Index : {dir}");
+                    Console.WriteLine($"Terms : [{string.Join(", ", terms)}]");
+                    using (var reader = new IndexReader(dir))
+                    {
+                        foreach (var t in terms)
+                            Console.WriteLine($"  '{t}' → {reader.GetTermCount(t):N0} postings");
+                        var sw      = Stopwatch.StartNew();
+                        int count   = reader.Search(terms).Count();
+                        sw.Stop();
+                        Console.WriteLine($"Results: {count:N0}  ({sw.ElapsedMilliseconds} ms)");
+                    }
+                    return;
+                }
+
                 foreach (var tier in IndexTest.Tiers)
                 {
                     if (tier.label.ToLowerInvariant() == cmd)
@@ -51,7 +110,7 @@ namespace FtsLibTest
                 }
 
                 Console.WriteLine($"Unknown command '{args[0]}'.");
-                Console.WriteLine("Valid: 500k | 1m | 3m | full | validate [dir]");
+                Console.WriteLine("Valid: 500k | 1m | 3m | full | validate [dir] | search <dir> <terms...>");
                 return;
             }
 

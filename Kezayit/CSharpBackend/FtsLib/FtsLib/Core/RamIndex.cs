@@ -6,6 +6,9 @@ namespace FtsLib.Core
     /// <summary>
     /// In-memory inverted index: maps each term to its PostingStream.
     /// Implements IEnumerable so DiskIndexWriter can iterate all entries.
+    ///
+    /// Search algorithms are provided by PostingMatcher — the same algorithms
+    /// used by IndexReader, so both index types behave identically.
     /// </summary>
     public sealed class RamIndex : Dictionary<string, RamIndexEntry>
     {
@@ -37,15 +40,11 @@ namespace FtsLib.Core
                                        e.Skip, e.SkipLen);
         }
 
+        // ── AND search ───────────────────────────────────────────────
+
         /// <summary>
         /// Returns line IDs that contain ALL of the supplied terms (AND semantics).
-        ///
-        /// Uses a skip-list-accelerated merge-intersect:
-        /// - Terms sorted by frequency ascending (rarest drives the loop)
-        /// - For each candidate ID from the rarest list, SkipTo() jumps each
-        ///   other list forward using skip pointers — O(log n) per jump
-        ///   instead of O(n) linear scan.
-        /// - Zero heap allocation during search.
+        /// Rarest term drives the outer loop; PostingMatcher.Intersect handles the merge.
         /// </summary>
         public IEnumerable<int> Search(IEnumerable<string> terms)
         {
@@ -58,10 +57,58 @@ namespace FtsLib.Core
             // Rarest term first
             termList.Sort((a, b) => GetCount(a).CompareTo(GetCount(b)));
 
-            return MergeIntersect(termList);
+            return AndMerge(termList);
         }
 
-        private IEnumerable<int> MergeIntersect(List<string> terms)
+        // ── OR search ────────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns line IDs that contain ANY of the supplied terms (OR semantics).
+        /// Results are in ascending order with no duplicates.
+        /// </summary>
+        public IEnumerable<int> SearchOr(IEnumerable<string> terms)
+        {
+            var started = StartedIterators(terms, skipMissing: true);
+            if (started.Count == 0) return Enumerable.Empty<int>();
+            if (started.Count == 1) return started[0].AsEnumerable();
+            return PostingMatcher.Union(started.ToArray());
+        }
+
+        // ── Mixed AND/OR search ──────────────────────────────────────
+
+        /// <summary>
+        /// Mixed AND/OR search.
+        /// Each group is a set of terms joined by OR; all groups are joined by AND.
+        ///
+        /// Example:
+        ///   Search(new[]{ new[]{"כי","אשר"}, new[]{"ביצחק"} })
+        ///   → lines containing ("כי" OR "אשר") AND "ביצחק"
+        /// </summary>
+        public IEnumerable<int> Search(IEnumerable<IEnumerable<string>> groups)
+        {
+            var groupIters = new List<PostingIterator>();
+
+            foreach (var group in groups)
+            {
+                var started = StartedIterators(group, skipMissing: true);
+                if (started.Count == 0)
+                    return Enumerable.Empty<int>(); // AND: one group empty → no results
+
+                if (started.Count == 1)
+                    groupIters.Add(started[0]);
+                else
+                    groupIters.Add(new UnionIterator(started.ToArray()));
+            }
+
+            if (groupIters.Count == 0) return Enumerable.Empty<int>();
+            if (groupIters.Count == 1) return groupIters[0].AsEnumerable();
+
+            return PostingMatcher.Intersect(groupIters.ToArray());
+        }
+
+        // ── Helpers ──────────────────────────────────────────────────
+
+        private IEnumerable<int> AndMerge(List<string> terms)
         {
             var iters = new PostingIterator[terms.Count];
             for (int i = 0; i < terms.Count; i++)
@@ -72,37 +119,28 @@ namespace FtsLib.Core
                 if (!iters[i].MoveNext())
                     yield break;
 
-            // iters[0] is the rarest (smallest) list — it drives the outer loop.
-            // For each candidate from iters[0], SkipTo on all other lists.
-            while (!iters[0].IsDone)
+            foreach (var id in PostingMatcher.Intersect(iters))
+                yield return id;
+        }
+
+        /// <summary>
+        /// Loads iterators for the given terms and advances each one once.
+        /// Missing terms are skipped when skipMissing is true.
+        /// </summary>
+        private List<PostingIterator> StartedIterators(IEnumerable<string> terms, bool skipMissing)
+        {
+            var result = new List<PostingIterator>();
+            foreach (var term in terms)
             {
-                int candidate = iters[0].Current;
-                bool match = true;
-
-                for (int i = 1; i < iters.Length; i++)
+                if (!ContainsKey(term))
                 {
-                    if (!iters[i].SkipTo(candidate))
-                        yield break; // exhausted
-
-                    if (iters[i].Current != candidate)
-                    {
-                        // iters[i] is ahead — advance driver to catch up, restart inner loop
-                        int newTarget = iters[i].Current;
-                        if (!iters[0].SkipTo(newTarget))
-                            yield break;
-                        match = false;
-                        break;
-                    }
+                    if (!skipMissing) return null;
+                    continue;
                 }
-
-                if (match)
-                {
-                    yield return candidate;
-                    if (!iters[0].MoveNext())
-                        yield break;
-                }
-                // if !match: iters[0] was already advanced by SkipTo above, loop continues
+                var it = GetIterator(term);
+                if (it.MoveNext()) result.Add(it);
             }
+            return result;
         }
     }
 }

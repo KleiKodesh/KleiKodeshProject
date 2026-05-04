@@ -7,7 +7,7 @@ using System.Text;
 namespace FtsLib.Core
 {
     /// <summary>
-    /// Manages sorted segment files and LSM-style merging.
+    /// Manages sorted segment files and LSM-style merging with crash recovery.
     ///
     /// Segment file format (self-describing sorted run):
     ///   Per term, in ascending term-string order:
@@ -18,17 +18,22 @@ namespace FtsLib.Core
     ///     4 bytes  uint   lastEncoded   (encoded value of last doc ID)
     ///     M bytes         varint posting data
     ///
-    /// Because every segment is a sorted run, merging N segments is a
-    /// straightforward N-way merge: advance the segment with the smallest
-    /// current term, write it, repeat. Pure sequential I/O, zero seeks.
+    /// Crash recovery:
+    ///   A WAL (wal.log) records BEGIN/END for every merge and commit.
+    ///   On open, Recover() replays the WAL:
+    ///     - Interrupted merge  → delete partial target, redo merge
+    ///     - Interrupted commit → delete partial postings.dat/Meta.db, redo commit
+    ///   Source segments are never deleted until END_MERGE is logged.
+    ///   The final segment is never deleted until END_COMMIT is logged.
     ///
     /// LSM tiering: fanout = 4, levels grow as needed.
     /// </summary>
-    internal sealed class SegmentStore
+    public sealed class SegmentStore
     {
         private const int FANOUT = 4;
 
-        private readonly string _dir;
+        private readonly string     _dir;
+        private readonly SegmentWal _wal;
         private int[]  _levelCount = new int[4];
         private int    _nextSegId;
 
@@ -45,6 +50,116 @@ namespace FtsLib.Core
             _dir = dir;
             if (!Directory.Exists(_dir))
                 Directory.CreateDirectory(_dir);
+            _wal = new SegmentWal(_dir);
+            // WAL is opened for writing lazily in EnsureWalOpen(),
+            // so Recover() can read it first without a lock conflict.
+        }
+
+        private void EnsureWalOpen()
+        {
+            _wal.Open(); // no-op if already open
+        }
+
+        // ── Recovery ─────────────────────────────────────────────────
+
+        /// <summary>
+        /// Call once after construction (before Flush/Commit) to recover from
+        /// any interrupted merge or commit from a previous run.
+        ///
+        /// Scans the segments directory to rebuild live state, then replays
+        /// the WAL to detect and repair any incomplete operations.
+        /// </summary>
+        public void Recover(string postingsPath, string metaDbPath)
+        {
+            // Step 1: rebuild live state from files on disk
+            RebuildLiveState();
+
+            // Step 2: replay WAL
+            var recovery = _wal.Analyze();
+
+            // If segments exist but the WAL shows no pending operation, this is either
+            // a clean state (nothing to do) or a pre-WAL interrupted build where the
+            // segment was never committed. Distinguish by checking postings.dat health:
+            // if postings.dat is missing or smaller than the largest segment, commit.
+            bool postingsHealthy = IsPostingsHealthy(postingsPath);
+
+            if (recovery.PendingMerge != null)
+            {
+                var op = recovery.PendingMerge;
+                Console.WriteLine($"[Recovery] Interrupted merge detected: L{op.Level} sources=[{string.Join(",", op.Sources)}] target={op.Target}");
+
+                // Delete the partial target segment if it exists
+                string partialTarget = SegPath(op.Level + 1, op.Target);
+                if (File.Exists(partialTarget))
+                {
+                    Console.WriteLine($"[Recovery] Deleting partial target: {Path.GetFileName(partialTarget)}");
+                    File.Delete(partialTarget);
+                    RemoveFromLive(op.Level + 1, op.Target);
+                }
+
+                // Ensure all source segments are still registered as live
+                // (they should be — we never delete sources before END_MERGE)
+                foreach (int srcId in op.Sources)
+                {
+                    string srcPath = SegPath(op.Level, srcId);
+                    if (File.Exists(srcPath))
+                        AddToLive(op.Level, srcId);
+                }
+
+                // Redo the merge — EnsureWalOpen() is called inside MergeLevel
+                Console.WriteLine($"[Recovery] Redoing merge L{op.Level}→L{op.Level + 1}...");
+                EnsureWalOpen();
+                MergeLevel(op.Level);
+            }
+            else if (recovery.PendingCommit != null)
+            {
+                Console.WriteLine($"[Recovery] Interrupted commit detected: {recovery.PendingCommit}");
+
+                // Delete partial output files — they may be incomplete
+                if (File.Exists(postingsPath)) { Console.WriteLine("[Recovery] Deleting partial postings.dat"); File.Delete(postingsPath); }
+                if (File.Exists(metaDbPath))   { Console.WriteLine("[Recovery] Deleting partial Meta.db");     File.Delete(metaDbPath); }
+                // Also delete WAL-journal files SQLite may have left
+                if (File.Exists(metaDbPath + "-wal"))  File.Delete(metaDbPath + "-wal");
+                if (File.Exists(metaDbPath + "-shm"))  File.Delete(metaDbPath + "-shm");
+
+                // The segment file named in the WAL should still be on disk
+                string segFile = Path.Combine(_dir, recovery.PendingCommit);
+                if (File.Exists(segFile))
+                {
+                    Console.WriteLine($"[Recovery] Redoing commit from {recovery.PendingCommit}...");
+                    EnsureWalOpen();
+                    DoCommitFromSegment(segFile, postingsPath, metaDbPath);
+                }
+                else
+                {
+                    // Segment gone — find the highest-level surviving segment and commit from it
+                    string best = FindHighestSegment();
+                    if (best != null)
+                    {
+                        Console.WriteLine($"[Recovery] Original segment missing, committing from {Path.GetFileName(best)}...");
+                        EnsureWalOpen();
+                        DoCommitFromSegment(best, postingsPath, metaDbPath);
+                    }
+                    else
+                    {
+                        Console.WriteLine("[Recovery] No segments found — index is empty.");
+                    }
+                }
+            }
+            else if (!postingsHealthy && CountLiveSegs() > 0)
+            {
+                // No pending WAL operation, but postings.dat is missing/incomplete and
+                // segments exist — this is a pre-WAL interrupted build. Commit from the
+                // highest segment.
+                string best = FindHighestSegment();
+                if (best != null)
+                {
+                    Console.WriteLine($"[Recovery] Orphaned segment detected (no WAL): {Path.GetFileName(best)}");
+                    Console.WriteLine("[Recovery] Committing from highest segment...");
+                    EnsureWalOpen();
+                    DoCommitFromSegment(best, postingsPath, metaDbPath);
+                }
+            }
         }
 
         // ── Flush ────────────────────────────────────────────────────
@@ -59,25 +174,25 @@ namespace FtsLib.Core
             foreach (var kvp in ramIndex) terms.Add(kvp.Key);
             terms.Sort(StringComparer.Ordinal);
 
-            using (var fs  = new FileStream(path, FileMode.Create,
-                                            FileAccess.Write, FileShare.None,
-                                            bufferSize: 4 * 1024 * 1024))
-            using (var bw  = new BinaryWriter(fs, Encoding.UTF8, leaveOpen: false))
+            using (var fs = new FileStream(path, FileMode.Create,
+                                           FileAccess.Write, FileShare.None,
+                                           bufferSize: 4 * 1024 * 1024))
+            using (var bw = new BinaryWriter(fs, Encoding.UTF8, leaveOpen: false))
             {
                 foreach (var term in terms)
                 {
-                    var    entry    = ramIndex[term];
+                    var    entry     = ramIndex[term];
                     byte[] termBytes = Encoding.UTF8.GetBytes(term);
                     byte[] postBuf   = entry.Stream.Buffer;
                     int    postLen   = entry.Stream.ByteLength;
                     long   off       = fs.Position;
 
-                    bw.Write(termBytes.Length);   // 4 bytes
-                    bw.Write(termBytes);           // N bytes
-                    bw.Write(postLen);             // 4 bytes
-                    bw.Write(entry.Stream.Count);  // 4 bytes
-                    bw.Write(entry.Stream.LastEncoded); // 4 bytes
-                    bw.Write(postBuf, 0, postLen); // M bytes
+                    bw.Write(termBytes.Length);
+                    bw.Write(termBytes);
+                    bw.Write(postLen);
+                    bw.Write(entry.Stream.Count);
+                    bw.Write(entry.Stream.LastEncoded);
+                    bw.Write(postBuf, 0, postLen);
 
                     if (!_catalog.TryGetValue(term, out var list))
                     {
@@ -90,9 +205,7 @@ namespace FtsLib.Core
                 }
             }
 
-            _levelCount[0]++;
-            if (!_liveSegs.TryGetValue(0, out var ls0)) { ls0 = new HashSet<int>(); _liveSegs[0] = ls0; }
-            ls0.Add(segId);
+            AddToLive(0, segId);
             MergeIfNeeded(0);
         }
 
@@ -112,7 +225,6 @@ namespace FtsLib.Core
             int nextLevel = level + 1;
             int newSegId  = _nextSegId++;
 
-            // Collect segment ids at this level from _liveSegs (authoritative)
             if (!_liveSegs.TryGetValue(level, out var liveAtLevel) || liveAtLevel.Count < 2)
                 return;
             var segIds = new List<int>(liveAtLevel);
@@ -122,24 +234,21 @@ namespace FtsLib.Core
                 foreach (var c in list)
                     if (c.Level == level) { termsAtLevel++; break; }
 
-            Console.WriteLine(
-                $"[Merger] L{level}→L{nextLevel} seg {newSegId}: " +
-                $"{segIds.Count} segs, {termsAtLevel:N0} terms");
+            Console.WriteLine($"[Merger] L{level}→L{nextLevel} seg {newSegId}: {segIds.Count} segs, {termsAtLevel:N0} terms");
 
             string outPath = SegPath(nextLevel, newSegId);
 
-            // Open all source segment readers
+            // ── WAL: record merge start BEFORE writing anything ──────
+            EnsureWalOpen();
+            _wal.BeginMerge(level, segIds.ToArray(), newSegId);
+
             var readers = new SegmentReader[segIds.Count];
             for (int i = 0; i < segIds.Count; i++)
-                readers[i] = new SegmentReader(_segPath(level, segIds[i]));
-
-            // Advance all readers to first entry
+                readers[i] = new SegmentReader(SegPath(level, segIds[i]));
             for (int i = 0; i < readers.Length; i++)
                 readers[i].MoveNext();
 
-            var newEntries = new List<(string term, long outOff, int outLen, int count, uint lastEncoded)>(
-                termsAtLevel);
-
+            var newEntries = new List<(string term, long outOff, int outLen, int count, uint lastEncoded)>(termsAtLevel);
             const int REPORT_EVERY = 10_000;
             int  termsWritten = 0;
             long writePos     = 0;
@@ -151,31 +260,24 @@ namespace FtsLib.Core
             {
                 while (true)
                 {
-                    // Find the smallest current term across all readers
                     string minTerm = null;
                     for (int i = 0; i < readers.Length; i++)
                     {
                         if (readers[i].Done) continue;
-                        if (minTerm == null ||
-                            string.CompareOrdinal(readers[i].CurrentTerm, minTerm) < 0)
+                        if (minTerm == null || string.CompareOrdinal(readers[i].CurrentTerm, minTerm) < 0)
                             minTerm = readers[i].CurrentTerm;
                     }
-                    if (minTerm == null) break; // all exhausted
+                    if (minTerm == null) break;
 
-                    // Collect all chunks for minTerm into a temp buffer,
-                    // then write header + data in one shot — no seek-back needed.
                     long outOff      = writePos;
                     int  totalCount  = 0;
                     uint prevEncoded = 0;
                     bool firstChunk  = true;
-
-                    // Use a MemoryStream to accumulate the merged posting bytes
-                    var termBuf = new System.IO.MemoryStream(256);
+                    var  termBuf     = new MemoryStream(256);
 
                     for (int i = 0; i < readers.Length; i++)
                     {
-                        if (readers[i].Done) continue;
-                        if (readers[i].CurrentTerm != minTerm) continue;
+                        if (readers[i].Done || readers[i].CurrentTerm != minTerm) continue;
 
                         byte[] chunk    = readers[i].CurrentChunk;
                         int    chunkLen = readers[i].CurrentChunkLen;
@@ -187,18 +289,14 @@ namespace FtsLib.Core
                         }
                         else
                         {
-                            // Re-encode first varint as delta from prevEncoded
                             int  pos          = 0;
                             uint firstEncoded = ReadVarInt(chunk, ref pos, chunkLen);
                             uint newDelta     = firstEncoded - prevEncoded;
-
-                            byte[] hdr    = new byte[5];
-                            int    hdrLen = EncodeVarInt(newDelta, hdr);
+                            byte[] hdr        = new byte[5];
+                            int    hdrLen     = EncodeVarInt(newDelta, hdr);
                             termBuf.Write(hdr, 0, hdrLen);
-
                             int restLen = chunkLen - pos;
-                            if (restLen > 0)
-                                termBuf.Write(chunk, pos, restLen);
+                            if (restLen > 0) termBuf.Write(chunk, pos, restLen);
                         }
 
                         prevEncoded = readers[i].CurrentLastEncoded;
@@ -206,7 +304,6 @@ namespace FtsLib.Core
                         readers[i].MoveNext();
                     }
 
-                    // Write header + posting bytes — no seek, no placeholder
                     byte[] termBytes  = Encoding.UTF8.GetBytes(minTerm);
                     int    termOutLen = (int)termBuf.Length;
                     bw.Write(termBytes.Length);
@@ -215,37 +312,34 @@ namespace FtsLib.Core
                     bw.Write(totalCount);
                     bw.Write(prevEncoded);
                     bw.Flush();
-                    byte[] postBytes = termBuf.GetBuffer();
-                    outFs.Write(postBytes, 0, termOutLen);
+                    outFs.Write(termBuf.GetBuffer(), 0, termOutLen);
 
                     writePos += 4 + termBytes.Length + 4 + 4 + 4 + termOutLen;
                     newEntries.Add((minTerm, outOff, termOutLen, totalCount, prevEncoded));
 
                     termsWritten++;
                     if (termsWritten % REPORT_EVERY == 0)
-                        Console.WriteLine(
-                            $"[Merger]   L{level}→L{nextLevel}: " +
-                            $"{termsWritten:N0}/{termsAtLevel:N0} " +
-                            $"({termsWritten * 100 / termsAtLevel}%)  " +
-                            $"{writePos / 1024 / 1024:N0} MB");
+                        Console.WriteLine($"[Merger]   L{level}→L{nextLevel}: {termsWritten:N0}/{termsAtLevel:N0} ({termsWritten * 100 / termsAtLevel}%)  {writePos / 1024 / 1024:N0} MB");
                 }
             }
 
-            // Close and delete source files
             for (int i = 0; i < readers.Length; i++) readers[i].Dispose();
+
+            // ── WAL: record merge complete BEFORE deleting sources ───
+            _wal.EndMerge(level, newSegId);
+
+            // Now safe to delete source segments
             foreach (int sid in segIds)
             {
-                string sp = _segPath(level, sid);
+                string sp = SegPath(level, sid);
                 if (File.Exists(sp)) File.Delete(sp);
             }
 
-            // Update _liveSegs: remove source segs, add new seg
+            // Update live state
             liveAtLevel.ExceptWith(segIds);
-            if (!_liveSegs.TryGetValue(nextLevel, out var liveNext))
-            { liveNext = new HashSet<int>(); _liveSegs[nextLevel] = liveNext; }
-            liveNext.Add(newSegId);
+            AddToLive(nextLevel, newSegId);
 
-            // Update catalog — replace all level-N entries with the new merged entry
+            // Update catalog
             foreach (var (term, outOff, outLen, count, lastEncoded) in newEntries)
             {
                 var list = _catalog[term];
@@ -254,8 +348,6 @@ namespace FtsLib.Core
                 list.Insert(0, new ChunkRef(nextLevel, newSegId, outOff, outLen, count, lastEncoded));
             }
 
-            // Safety sweep: remove any remaining stale entries at this level
-            // (should not happen, but guards against catalog/merge inconsistency)
             foreach (var list in _catalog.Values)
                 for (int i = list.Count - 1; i >= 0; i--)
                     if (list[i].Level == level && segIds.Contains(list[i].SegId))
@@ -273,18 +365,14 @@ namespace FtsLib.Core
         {
             ForceMergeAll();
 
-            if (File.Exists(postingsPath)) File.Delete(postingsPath);
-            if (File.Exists(metaDbPath))   File.Delete(metaDbPath);
-
-            // Find the single surviving segment from _liveSegs
+            // Find the highest-level surviving segment
             int aliveLevel = -1, aliveSegId = -1;
             foreach (var kv in _liveSegs)
             {
-                if (kv.Value.Count == 1)
+                if (kv.Value.Count == 1 && kv.Key > aliveLevel)
                 {
                     aliveLevel = kv.Key;
                     foreach (int sid in kv.Value) aliveSegId = sid;
-                    break;
                 }
             }
 
@@ -292,20 +380,35 @@ namespace FtsLib.Core
             {
                 File.WriteAllBytes(postingsPath, new byte[0]);
                 WriteMetaDb(metaDbPath, new List<(string, long, int, int)>());
+                _wal.Clear();
                 return;
             }
 
-            string segFile = _segPath(aliveLevel, aliveSegId);
-            long   sizeMb  = new FileInfo(segFile).Length / 1024 / 1024;
-            Console.WriteLine($"[SegmentStore] Reading final segment ({sizeMb:N0} MB) → postings.dat + Meta.db...");
+            string segFile = SegPath(aliveLevel, aliveSegId);
+            DoCommitFromSegment(segFile, postingsPath, metaDbPath);
+        }
 
-            // Read the sorted segment and write postings.dat + Meta.db in one pass
+        private void DoCommitFromSegment(string segFile, string postingsPath, string metaDbPath)
+        {
+            long sizeMb = new FileInfo(segFile).Length / 1024 / 1024;
+            Console.WriteLine($"[SegmentStore] Committing from {Path.GetFileName(segFile)} ({sizeMb:N0} MB)...");
+
+            // Delete any previous incomplete output
+            if (File.Exists(postingsPath)) File.Delete(postingsPath);
+            if (File.Exists(metaDbPath))   File.Delete(metaDbPath);
+            if (File.Exists(metaDbPath + "-wal")) File.Delete(metaDbPath + "-wal");
+            if (File.Exists(metaDbPath + "-shm")) File.Delete(metaDbPath + "-shm");
+
+            // ── WAL: record commit start BEFORE writing output ───────
+            EnsureWalOpen();
+            _wal.BeginCommit(segFile);
+
             var meta = new List<(string term, long offset, int length, int count)>(_catalog.Count);
 
-            using (var reader  = new SegmentReader(segFile))
-            using (var postFs  = new FileStream(postingsPath, FileMode.Create,
-                                                FileAccess.Write, FileShare.None,
-                                                bufferSize: 4 * 1024 * 1024))
+            using (var reader = new SegmentReader(segFile))
+            using (var postFs = new FileStream(postingsPath, FileMode.Create,
+                                               FileAccess.Write, FileShare.None,
+                                               bufferSize: 4 * 1024 * 1024))
             {
                 const int REPORT_EVERY = 50_000;
                 int written = 0;
@@ -325,12 +428,20 @@ namespace FtsLib.Core
                 }
             }
 
-            File.Delete(segFile);
-
             Console.WriteLine($"[SegmentStore] Writing Meta.db ({meta.Count:N0} terms)...");
             WriteMetaDb(metaDbPath, meta);
-            Console.WriteLine($"[SegmentStore] Done.");
+
+            // ── WAL: record commit complete BEFORE deleting segment ──
+            _wal.EndCommit();
+
+            // Now safe to delete the segment
+            if (File.Exists(segFile)) File.Delete(segFile);
+
+            // Clear WAL — index is fully consistent
+            _wal.Clear();
             _catalog.Clear();
+
+            Console.WriteLine("[SegmentStore] Done.");
         }
 
         private void ForceMergeAll()
@@ -360,6 +471,97 @@ namespace FtsLib.Core
             Console.WriteLine("[SegmentStore] Force-merge complete.");
         }
 
+        // ── Rebuild live state from disk ─────────────────────────────
+
+        /// <summary>
+        /// Scans the segments directory and rebuilds _liveSegs and _nextSegId
+        /// from the actual files on disk. Called during recovery before WAL replay.
+        /// </summary>
+        private void RebuildLiveState()
+        {
+            _liveSegs.Clear();
+            _nextSegId = 0;
+
+            foreach (var file in Directory.GetFiles(_dir, "seg_*.dat"))
+            {
+                string name = Path.GetFileNameWithoutExtension(file); // seg_L_ID
+                var parts = name.Split('_');
+                if (parts.Length != 3) continue;
+                if (!int.TryParse(parts[1], out int level)) continue;
+                if (!int.TryParse(parts[2], out int segId)) continue;
+
+                AddToLive(level, segId);
+                if (segId >= _nextSegId) _nextSegId = segId + 1;
+            }
+
+            if (_liveSegs.Count > 0)
+                Console.WriteLine($"[Recovery] Found {CountLiveSegs()} segment(s) on disk, nextSegId={_nextSegId}");
+        }
+
+        // ── Live state helpers ───────────────────────────────────────
+
+        private void AddToLive(int level, int segId)
+        {
+            if (!_liveSegs.TryGetValue(level, out var set))
+            {
+                set = new HashSet<int>();
+                _liveSegs[level] = set;
+            }
+            set.Add(segId);
+
+            if (level >= _levelCount.Length)
+                Array.Resize(ref _levelCount, level + 2);
+            _levelCount[level] = set.Count;
+        }
+
+        private void RemoveFromLive(int level, int segId)
+        {
+            if (_liveSegs.TryGetValue(level, out var set))
+            {
+                set.Remove(segId);
+                _levelCount[level] = set.Count;
+            }
+        }
+
+        private int CountLiveSegs()
+        {
+            int n = 0;
+            foreach (var kv in _liveSegs) n += kv.Value.Count;
+            return n;
+        }
+
+        /// <summary>
+        /// Returns true if postings.dat exists and is at least as large as the
+        /// largest segment on disk (a rough but reliable health check).
+        /// </summary>
+        private bool IsPostingsHealthy(string postingsPath)
+        {
+            if (!File.Exists(postingsPath)) return false;
+            long postingsSize = new FileInfo(postingsPath).Length;
+
+            long maxSegSize = 0;
+            foreach (var file in Directory.GetFiles(_dir, "seg_*.dat"))
+            {
+                long sz = new FileInfo(file).Length;
+                if (sz > maxSegSize) maxSegSize = sz;
+            }
+
+            // postings.dat is a flattened version of the segment (no headers),
+            // so it will be somewhat smaller — but never smaller than 10% of the segment.
+            return maxSegSize == 0 || postingsSize >= maxSegSize / 10;
+        }
+
+        private string FindHighestSegment()
+        {
+            int bestLevel = -1, bestId = -1;
+            foreach (var kv in _liveSegs)
+                foreach (int sid in kv.Value)
+                    if (kv.Key > bestLevel || (kv.Key == bestLevel && sid > bestId))
+                    { bestLevel = kv.Key; bestId = sid; }
+
+            return bestLevel >= 0 ? SegPath(bestLevel, bestId) : null;
+        }
+
         // ── Meta.db ──────────────────────────────────────────────────
 
         private static void WriteMetaDb(string path,
@@ -386,7 +588,7 @@ namespace FtsLib.Core
                     var pL = ins.Parameters.Add("@l", System.Data.DbType.Int32);
                     var pC = ins.Parameters.Add("@c", System.Data.DbType.Int32);
                     foreach (var (term, off, len, cnt) in rows)
-                    { pT.Value=term; pO.Value=off; pL.Value=len; pC.Value=cnt; ins.ExecuteNonQuery(); }
+                    { pT.Value = term; pO.Value = off; pL.Value = len; pC.Value = cnt; ins.ExecuteNonQuery(); }
                     tx.Commit();
                 }
                 Exec(conn, "CREATE UNIQUE INDEX idx_term ON term_index(term);ANALYZE;");
@@ -398,7 +600,6 @@ namespace FtsLib.Core
 
         // ── Path helpers ─────────────────────────────────────────────
 
-        private string _segPath(int level, int segId) => SegPath(level, segId);
         private string SegPath(int level, int segId) =>
             Path.Combine(_dir, $"seg_{level}_{segId}.dat");
 
@@ -438,7 +639,7 @@ namespace FtsLib.Core
         public readonly uint  LastEncoded;
 
         public ChunkRef(int level, int segId, long offset, int length, int count, uint lastEncoded)
-        { Level=level; SegId=segId; Offset=offset; Length=length; Count=count; LastEncoded=lastEncoded; }
+        { Level = level; SegId = segId; Offset = offset; Length = length; Count = count; LastEncoded = lastEncoded; }
     }
 
     // ── SegmentReader ─────────────────────────────────────────────────

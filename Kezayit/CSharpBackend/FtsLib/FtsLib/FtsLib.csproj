@@ -63,6 +63,9 @@
   <ItemGroup>
     <Compile Include="Core\IndexPaths.cs" />
     <Compile Include="Core\PostingIterator.cs" />
+    <Compile Include="Core\PostingMatcher.cs" />
+    <Compile Include="Core\UnionIterator.cs" />
+    <Compile Include="Core\SegmentWal.cs" />
     <Compile Include="Core\PostingStream.cs" />
     <Compile Include="Core\RamIndex.cs" />
     <Compile Include="Core\IndexWriter.cs" />

@@ -1,0 +1,294 @@
+﻿<Window x:Class="FtsLibDemo.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:FtsLibDemo.ViewModels"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance vm:MainViewModel}"
+        Title="חיפוש בספרים"
+        Height="680" Width="1000"
+        MinHeight="480" MinWidth="700"
+        FlowDirection="RightToLeft"
+        FontFamily="Segoe UI"
+        FontSize="14">
+
+    <Window.Resources>
+        <!-- Busy overlay visibility -->
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <!-- Invert bool for controls that should be disabled while indexing/searching -->
+        <Style x:Key="SearchBoxStyle" TargetType="TextBox">
+            <Setter Property="Padding" Value="6,4"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="BorderBrush" Value="#AAAAAA"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+
+        <Style x:Key="PrimaryButton" TargetType="Button">
+            <Setter Property="Padding" Value="14,6"/>
+            <Setter Property="MinWidth" Value="90"/>
+            <Setter Property="Background" Value="#2E6DA4"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#1A5490"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Background" Value="#AAAAAA"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
+            <Setter Property="Background" Value="#C0392B"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#96281B"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="ResultItemStyle" TargetType="ListViewItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="BorderBrush" Value="#E0E0E0"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#F0F6FF"/>
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#D6E8FF"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>  <!-- toolbar -->
+            <RowDefinition Height="Auto"/>  <!-- index status bar -->
+            <RowDefinition Height="*"/>     <!-- results -->
+            <RowDefinition Height="Auto"/>  <!-- status bar -->
+        </Grid.RowDefinitions>
+
+        <!-- ═══════════════════════════════════════════════════════════
+             Row 0 — Toolbar: search box + buttons
+        ═══════════════════════════════════════════════════════════ -->
+        <Border Grid.Row="0" Background="#F5F5F5" BorderBrush="#DDDDDD"
+                BorderThickness="0,0,0,1" Padding="10,8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Search box -->
+                <TextBox Grid.Column="0"
+                         Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
+                         Style="{StaticResource SearchBoxStyle}"
+                         Margin="0,0,8,0"
+                         IsEnabled="{Binding IsIndexing, Converter={StaticResource BoolToVis},
+                                     ConverterParameter=Invert}">
+                    <TextBox.InputBindings>
+                        <KeyBinding Key="Return" Command="{Binding SearchCommand}"/>
+                    </TextBox.InputBindings>
+                </TextBox>
+
+                <!-- Search button -->
+                <Button Grid.Column="1"
+                        Content="חפש"
+                        Command="{Binding SearchCommand}"
+                        Style="{StaticResource PrimaryButton}"
+                        Margin="0,0,6,0"/>
+
+                <!-- Build index button -->
+                <Button Grid.Column="2"
+                        Content="צור אינדקס"
+                        Command="{Binding BuildIndexCommand}"
+                        Style="{StaticResource PrimaryButton}"
+                        Margin="0,0,6,0"/>
+
+                <!-- Cancel button — only visible while indexing -->
+                <Button Grid.Column="3"
+                        Content="בטל"
+                        Command="{Binding CancelIndexCommand}"
+                        Style="{StaticResource DangerButton}"
+                        Visibility="{Binding IsIndexing, Converter={StaticResource BoolToVis}}"/>
+            </Grid>
+        </Border>
+
+        <!-- ═══════════════════════════════════════════════════════════
+             Row 1 — Index progress bar (visible only while indexing)
+        ═══════════════════════════════════════════════════════════ -->
+        <Border Grid.Row="1"
+                Background="#FFFBF0"
+                BorderBrush="#F0C040"
+                BorderThickness="0,0,0,1"
+                Padding="10,6"
+                Visibility="{Binding IsIndexing, Converter={StaticResource BoolToVis}}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0"
+                           Foreground="#7A5800"
+                           FontSize="12"
+                           Margin="0,0,0,4">
+                    <Run Text="{Binding ProgressDetail, Mode=OneWay}"/>
+                    <Run Text="  "/>
+                    <Run Text="{Binding ElapsedTime, Mode=OneWay}" FontWeight="SemiBold"/>
+                </TextBlock>
+
+                <ProgressBar Grid.Row="1"
+                             Value="{Binding IndexProgress, Mode=OneWay}"
+                             Minimum="0" Maximum="100"
+                             Height="8"
+                             Foreground="#2E6DA4"
+                             Background="#E0E0E0"
+                             BorderThickness="0"/>
+            </Grid>
+        </Border>
+
+        <!-- ═══════════════════════════════════════════════════════════
+             Row 2 — Results list
+        ═══════════════════════════════════════════════════════════ -->
+        <Grid Grid.Row="2">
+
+            <!-- Results list -->
+            <ListView ItemsSource="{Binding Results}"
+                      ItemContainerStyle="{StaticResource ResultItemStyle}"
+                      BorderThickness="0"
+                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                      VirtualizingPanel.IsVirtualizing="True"
+                      VirtualizingPanel.VirtualizationMode="Recycling">
+                <ListView.View>
+                    <GridView>
+                        <GridViewColumn Header="ספר" Width="180">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding BookTitle}"
+                                               FontWeight="SemiBold"
+                                               Foreground="#2C3E50"
+                                               TextTrimming="CharacterEllipsis"
+                                               Padding="6,8"/>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+
+                        <GridViewColumn Header="מיקום" Width="160">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Reference}"
+                                               Foreground="#666666"
+                                               FontSize="12"
+                                               TextTrimming="CharacterEllipsis"
+                                               Padding="6,8"/>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+
+                        <GridViewColumn Header="תוכן">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Snippet}"
+                                               TextWrapping="Wrap"
+                                               Foreground="#222222"
+                                               Padding="6,8"
+                                               MaxWidth="580"/>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                    </GridView>
+                </ListView.View>
+            </ListView>
+
+            <!-- Empty state — no index loaded -->
+            <StackPanel HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Visibility="{Binding IndexReady,
+                                     Converter={StaticResource BoolToVis},
+                                     ConverterParameter=Invert}">
+                <TextBlock Text="אין אינדקס טעון"
+                           FontSize="18"
+                           Foreground="#AAAAAA"
+                           HorizontalAlignment="Center"/>
+                <TextBlock Text="לחץ על &#x22;צור אינדקס&#x22; כדי לבחור קובץ מסד נתונים ולבנות אינדקס"
+                           FontSize="13"
+                           Foreground="#BBBBBB"
+                           HorizontalAlignment="Center"
+                           Margin="0,8,0,0"/>
+            </StackPanel>
+
+            <!-- Searching spinner overlay -->
+            <Border Background="#80FFFFFF"
+                    Visibility="{Binding IsSearching, Converter={StaticResource BoolToVis}}">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <TextBlock Text="מחפש…"
+                               FontSize="16"
+                               Foreground="#2E6DA4"
+                               HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- ═══════════════════════════════════════════════════════════
+             Row 3 — Status bar
+        ═══════════════════════════════════════════════════════════ -->
+        <Border Grid.Row="3"
+                Background="#EEEEEE"
+                BorderBrush="#DDDDDD"
+                BorderThickness="0,1,0,0"
+                Padding="10,4">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0"
+                           Text="{Binding StatusText}"
+                           Foreground="#444444"
+                           VerticalAlignment="Center"
+                           FontSize="12"/>
+
+                <TextBlock Grid.Column="1"
+                           Foreground="#888888"
+                           FontSize="11"
+                           VerticalAlignment="Center">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IndexedDbPath}" Value="">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                    <Run Text="DB: "/>
+                    <Run Text="{Binding IndexedDbPath, Mode=OneWay}"/>
+                </TextBlock>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
