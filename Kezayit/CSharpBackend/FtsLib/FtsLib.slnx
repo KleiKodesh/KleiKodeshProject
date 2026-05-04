@@ -1,7 +1,5 @@
 <Solution>
   <Project Path="../BloomSearchEngineLib/BloomSearchEngineLib.csproj" Id="0f7c9226-2c18-4cb8-8f39-a3a539b7122a" />
-  <Project Path="FtsEngine/FtsEngine.csproj" Id="5171b91b-61b4-4aa7-a810-469196b8fc5b" />
-  <Project Path="FtsEngineTest/FtsEngineTest.csproj" Id="352875ff-3c19-4563-a66a-bb7a8abf187c" />
   <Project Path="FtsLib/FtsLib.csproj" Id="76f9daa9-374f-40f9-8511-3239fb6e846e" />
   <Project Path="FtsLibTest/FtsLibTest.csproj" Id="2574247f-b6d9-4d4d-b409-45a1fcc05eda" />
 </Solution>

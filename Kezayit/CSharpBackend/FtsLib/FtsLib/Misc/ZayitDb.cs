@@ -68,6 +68,17 @@ namespace FtsLib.Misc
             }
         }
 
+        public string GetLineContent(int id)
+        {
+            using (var cmd = _connection.CreateCommand())
+            {
+                cmd.CommandText = "SELECT content FROM line WHERE id = @id";
+                cmd.Parameters.AddWithValue("@id", id);
+                var result = cmd.ExecuteScalar();
+                return result == null || result == DBNull.Value ? null : (string)result;
+            }
+        }
+
         public IEnumerable<(int Id, string Content)> ReadLines(int limit)
         {
             using (var cmd = _connection.CreateCommand())

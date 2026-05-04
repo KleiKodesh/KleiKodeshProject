@@ -69,9 +69,11 @@ namespace FtsLib
                     continue;
                 }
 
-                // ---------------- NIKUD REMOVAL ----------------
-                // Hebrew nikud (U+05B0–U+05C7) and other non-spacing marks
-                if (c >= '\u05B0' && c <= '\u05C7')
+                // ---------------- NIKUD + CANTILLATION REMOVAL ----------------
+                // Hebrew cantillation marks (טעמים)  U+0591–U+05AF
+                // Hebrew nikud (ניקוד)                U+05B0–U+05C7
+                // Both are non-spacing marks — strip the entire range in one check.
+                if (c >= '\u0591' && c <= '\u05C7')
                     continue;
 
                 if (c > 127 && CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark)

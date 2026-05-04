@@ -31,7 +31,7 @@ namespace FtsLib.Core
 
         public PostingIterator GetIterator(string term)
         {
-            if (TryGetValue(term, out var e))
+            if (!TryGetValue(term, out var e))
                 return PostingIterator.Empty;
             return new PostingIterator(e.Stream.Buffer, e.Stream.ByteLength,
                                        e.Skip, e.SkipLen);

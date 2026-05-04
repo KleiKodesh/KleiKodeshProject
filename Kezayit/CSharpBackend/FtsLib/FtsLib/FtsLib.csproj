@@ -67,6 +67,7 @@
     <Compile Include="Core\RamIndex.cs" />
     <Compile Include="Core\IndexWriter.cs" />
     <Compile Include="Core\IndexReader.cs" />
+    <Compile Include="Core\SegmentStore.cs" />
     <Compile Include="Core\RamIndexEntry.cs" />
     <Compile Include="Misc\ZayitDb.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

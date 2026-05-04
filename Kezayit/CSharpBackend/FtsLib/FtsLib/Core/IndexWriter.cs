@@ -1,72 +1,108 @@
 using System;
-using System.Collections.Generic;
 using System.Data.SQLite;
 using System.IO;
-using System.Reflection;
 
 namespace FtsLib.Core
 {
-    /// <summary>
-    /// Persists a built RamIndex to two files:
-    ///   postings.bin  — flat binary file, all posting byte-arrays concatenated
-    ///   index.db      — SQLite DB: term → (offset, length, count) into postings.bin
-    ///
-    /// On each call to Write(), both files are deleted and recreated from scratch.
-    ///
-    /// Speed optimisations:
-    ///   - WAL journal + synchronous=OFF + large page/cache
-    ///   - Plain rowid table during bulk insert (no B-tree rebalancing per row)
-    ///   - Single transaction for all inserts
-    ///   - Index built AFTER all rows are inserted
-    ///   - postings.bin written with a 4 MB OS buffer
-    /// </summary>
     public sealed class IndexWriter : IndexPaths, IDisposable
     {
-        private readonly RamIndex _ramIndex;
+        /// <summary>
+        /// Flush the RamIndex when it reaches this many distinct terms.
+        /// 100k is a safe default; tune upward for machines with more RAM.
+        /// </summary>
+        public int FlushThreshold { get; set; } = 250_000;
+
+        private RamIndex      _ramIndex;
+        private SegmentStore  _store;
+        private readonly bool _useSkipList;
+        private bool          _committed;
 
         public IndexWriter(string indexPath, bool useSkipList = true) : base(indexPath)
         {
-            _ramIndex = new RamIndex(useSkipList: useSkipList);
+            _useSkipList = useSkipList;
+            _ramIndex    = new RamIndex(useSkipList: useSkipList);
+
+            // Clean up any leftover segment files from a previous crashed run
+            string segDir = Path.Combine(IndexPath, "segments");
+            if (Directory.Exists(segDir))
+            {
+                foreach (var f in Directory.GetFiles(segDir, "seg_*"))
+                    try { File.Delete(f); } catch { /* best effort */ }
+            }
         }
 
         public void Add(int lineId, string term)
         {
-            _ramIndex.Add(term, lineId);
-        }
+            if (_committed)
+                throw new InvalidOperationException("IndexWriter has already been committed.");
 
+            _ramIndex.Add(term, lineId);
+
+            if (_ramIndex.Count >= FlushThreshold)
+                FlushRam();
+        }
 
         public void Dispose()
         {
-            Commit();
+            if (!_committed)
+                Commit();
         }
 
-        void Commit()
-        {
-            // ---- delete existing files ----
-            if (File.Exists(PostingsPath)) File.Delete(PostingsPath);
-            if (File.Exists(MetaDbPath))  File.Delete(MetaDbPath);
+        // ── Private ──────────────────────────────────────────────────
 
-            // ---- write postings.bin + collect metadata ----
+        private void FlushRam()
+        {
+            if (_ramIndex.Count == 0) return;
+
+            if (_store == null)
+                _store = new SegmentStore(Path.Combine(IndexPath, "segments"));
+
+            Console.WriteLine($"[IndexWriter] Flushing {_ramIndex.Count:N0} terms to segment...");
+            _store.Flush(_ramIndex);
+            Console.WriteLine("[IndexWriter] Flush complete.");
+            _ramIndex = new RamIndex(useSkipList: _useSkipList);
+        }
+
+        private void Commit()
+        {
+            _committed = true;
+
+            if (_store == null)
+            {
+                Console.WriteLine("[IndexWriter] Committing (single-pass)...");
+                CommitDirect();
+                Console.WriteLine("[IndexWriter] Done.");
+                return;
+            }
+
+            FlushRam(); // flush tail
+            Console.WriteLine("[IndexWriter] Committing — merging all segments...");
+            _store.Commit(PostingsPath, MetaDbPath);
+            Console.WriteLine("[IndexWriter] Done.");
+        }
+
+        private void CommitDirect()
+        {
+            if (File.Exists(PostingsPath)) File.Delete(PostingsPath);
+            if (File.Exists(MetaDbPath))   File.Delete(MetaDbPath);
+
             using (var postings = new FileStream(PostingsPath, FileMode.Create,
                                                  FileAccess.Write, FileShare.None,
                                                  bufferSize: 4 * 1024 * 1024))
             {
-                var connStr =
+                string connStr =
                     $"Data Source={MetaDbPath};Version=3;" +
-                    $"Page Size=65536;Cache Size=8000;";   // 64 KB pages, ~500 MB cache
+                    $"Page Size=65536;Cache Size=8000;";
 
                 using (var conn = new SQLiteConnection(connStr))
                 {
                     conn.Open();
-
-                    // Fastest possible SQLite write settings
                     Exec(conn,
                         "PRAGMA journal_mode=WAL;" +
                         "PRAGMA synchronous=NORMAL;" +
                         "PRAGMA temp_store=MEMORY;" +
-                        "PRAGMA mmap_size=1073741824;");  // 1 GB mmap
+                        "PRAGMA mmap_size=1073741824;");
 
-                    // Plain rowid table — no index yet, no B-tree rebalancing per insert
                     Exec(conn,
                         "CREATE TABLE term_index (" +
                         "  term    TEXT    NOT NULL," +
@@ -75,7 +111,6 @@ namespace FtsLib.Core
                         "  count   INTEGER NOT NULL" +
                         ");");
 
-                    // Single transaction — all inserts in one batch
                     using (var tx  = conn.BeginTransaction())
                     using (var ins = conn.CreateCommand())
                     {
@@ -89,9 +124,9 @@ namespace FtsLib.Core
 
                         foreach (var kvp in _ramIndex)
                         {
-                            byte[] buf   = kvp.Value.Stream.Buffer;
-                            int    len   = kvp.Value.Stream.ByteLength;
-                            long   off   = postings.Position;
+                            byte[] buf = kvp.Value.Stream.Buffer;
+                            int    len = kvp.Value.Stream.ByteLength;
+                            long   off = postings.Position;
 
                             postings.Write(buf, 0, len);
 
@@ -101,11 +136,9 @@ namespace FtsLib.Core
                             pCount.Value  = kvp.Value.Stream.Count;
                             ins.ExecuteNonQuery();
                         }
-
                         tx.Commit();
                     }
 
-                    // Build the unique index AFTER all rows are inserted — much faster
                     Exec(conn,
                         "CREATE UNIQUE INDEX idx_term ON term_index (term);" +
                         "ANALYZE;");
@@ -116,10 +149,7 @@ namespace FtsLib.Core
         private static void Exec(SQLiteConnection conn, string sql)
         {
             using (var cmd = conn.CreateCommand())
-            {
-                cmd.CommandText = sql;
-                cmd.ExecuteNonQuery();
-            }
+            { cmd.CommandText = sql; cmd.ExecuteNonQuery(); }
         }
     }
 }
