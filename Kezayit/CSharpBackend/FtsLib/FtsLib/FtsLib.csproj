@@ -81,8 +81,16 @@
     <Compile Include="Core\SegmentMerger.cs" />
     <Compile Include="Core\SegmentReader.cs" />
     <Compile Include="Core\RamIndexEntry.cs" />
+    <Compile Include="Core\FuzzyExpander.cs" />
+    <Compile Include="Core\Levenshtein.cs" />
     <Compile Include="Core\WildcardExpander.cs" />
     <Compile Include="Misc\ZayitDb.cs" />
+    <Compile Include="Seforim\SearchResult.cs" />
+    <Compile Include="Seforim\SnippetResult.cs" />
+    <Compile Include="Seforim\SeforimIndex.cs" />
+    <Compile Include="Seforim\Internal\IndexingPipeline.cs" />
+    <Compile Include="Seforim\Internal\SearchPipeline.cs" />
+    <Compile Include="Seforim\Internal\SnippetPipeline.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Core\HtmlScannerHelpers.cs" />
     <Compile Include="Core\HtmlTextScanner.cs" />

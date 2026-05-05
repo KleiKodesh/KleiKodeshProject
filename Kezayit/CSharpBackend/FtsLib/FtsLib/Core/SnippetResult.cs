@@ -3,7 +3,7 @@ namespace FtsLib.Core
     /// <summary>
     /// The output of <see cref="SnippetBuilder.Build"/>.
     /// </summary>
-    public readonly struct SnippetResult
+    internal readonly struct SnippetResult
     {
         /// <summary>
         /// Ready-to-render HTML snippet with query terms wrapped in highlight tags.

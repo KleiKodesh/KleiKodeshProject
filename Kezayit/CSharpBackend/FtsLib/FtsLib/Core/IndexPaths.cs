@@ -3,7 +3,7 @@ using System.IO;
 
 namespace FtsLib.Core
 {
-    public class IndexPaths
+    internal class IndexPaths
     {
         protected readonly string IndexPath;
 

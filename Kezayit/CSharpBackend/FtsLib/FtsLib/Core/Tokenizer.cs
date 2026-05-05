@@ -7,7 +7,7 @@ namespace FtsLib.Core
     /// Strips nikud, lowercases ASCII, ignores HTML tags and non-letter characters.
     /// Not thread-safe — do not share across threads.
     /// </summary>
-    public sealed class Tokenizer : HtmlTextScanner
+    internal sealed class Tokenizer : HtmlTextScanner
     {
         private readonly HashSet<string> _terms = new HashSet<string>();
 

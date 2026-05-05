@@ -6,7 +6,7 @@ using System.IO;
 
 namespace FtsLib.Misc
 {
-    public sealed class ZayitDb : IDisposable
+    internal sealed class ZayitDb : IDisposable
     {
         private readonly SQLiteConnection _connection;
         private readonly string _dbPath;

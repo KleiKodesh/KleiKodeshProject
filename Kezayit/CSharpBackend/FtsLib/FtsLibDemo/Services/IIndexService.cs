@@ -5,7 +5,8 @@ using System.Threading.Tasks;
 namespace FtsLibDemo.Services
 {
     /// <summary>
-    /// Manages the FTS index lifecycle: building, opening, and closing.
+    /// Manages the FTS index lifecycle: building and opening.
+    /// Consumers never touch FtsLib internals — all access goes through this interface.
     /// </summary>
     public interface IIndexService : IDisposable
     {
@@ -18,9 +19,7 @@ namespace FtsLibDemo.Services
         /// </summary>
         string GetIndexPath(string dbPath);
 
-        /// <summary>
-        /// Returns true if a valid index already exists for the given DB file.
-        /// </summary>
+        /// <summary>Returns true if a valid index already exists for the given DB file.</summary>
         bool IndexExists(string dbPath);
 
         /// <summary>
@@ -32,25 +31,22 @@ namespace FtsLibDemo.Services
             IProgress<(double pct, string detail)> progress,
             CancellationToken ct);
 
-        /// <summary>
-        /// Opens an existing index so searches can be performed.
-        /// Throws if the index does not exist.
-        /// </summary>
+        /// <summary>Opens an existing index so searches can be performed.</summary>
         void Open(string dbPath);
 
-        /// <summary>Closes the open index reader, if any.</summary>
+        /// <summary>Closes the open index, if any.</summary>
         void Close();
 
         /// <summary>
-        /// Returns the open IndexReader for use by ISearchService.
-        /// Null if not open.
+        /// The active <see cref="FtsLib.Seforim.SeforimIndex"/> instance.
+        /// Null when no index is open. Used by ISearchService.
         /// </summary>
-        FtsLib.Core.IndexReader Reader { get; }
+        FtsLib.Seforim.SeforimIndex Index { get; }
 
         /// <summary>
-        /// Returns a reader for the live index being built, or null if no segments exist yet.
-        /// Used to enable search during indexing.
+        /// Opens a temporary index for the partially-built index path during a live build.
+        /// Returns null if no segments exist yet.
         /// </summary>
-        FtsLib.Core.IndexReader GetLiveReader(string indexPath);
+        FtsLib.Seforim.SeforimIndex GetLiveIndex(string indexPath, string dbPath);
     }
 }

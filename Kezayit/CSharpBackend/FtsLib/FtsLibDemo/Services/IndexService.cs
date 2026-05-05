@@ -1,5 +1,4 @@
-using FtsLib.Core;
-using FtsLib.Misc;
+using FtsLib.Seforim;
 using System;
 using System.IO;
 using System.Threading;
@@ -9,33 +8,17 @@ namespace FtsLibDemo.Services
 {
     /// <summary>
     /// Builds and manages the FTS index for a SQLite seforim database.
-    /// Owns the IndexReader lifetime — call Dispose when the app exits.
+    /// Owns the SeforimIndex lifetime — call Dispose when the app exits.
     /// </summary>
     public sealed class IndexService : IIndexService
     {
-        private IndexReader _reader;
-        private bool _disposed;
+        private SeforimIndex _index;
+        private string       _openDbPath;
+        private bool         _disposed;
 
-        public bool IsReady => _reader != null;
+        public bool IsReady => _index != null;
 
-        public IndexReader Reader => _reader;
-
-        /// <summary>
-        /// Returns a reader for the live index being built, or null if no build is in progress.
-        /// </summary>
-        public IndexReader GetLiveReader(string indexPath)
-        {
-            if (string.IsNullOrEmpty(indexPath) || !Directory.Exists(indexPath))
-                return null;
-            try
-            {
-                return new IndexReader(indexPath);
-            }
-            catch
-            {
-                return null;
-            }
-        }
+        public SeforimIndex Index => _index;
 
         // ── Path helpers ─────────────────────────────────────────────
 
@@ -57,13 +40,22 @@ namespace FtsLibDemo.Services
         public void Open(string dbPath)
         {
             Close();
-            _reader = new IndexReader(GetIndexPath(dbPath));
+            _openDbPath = dbPath;
+            _index      = new SeforimIndex(GetIndexPath(dbPath), dbPath);
         }
 
         public void Close()
         {
-            _reader?.Dispose();
-            _reader = null;
+            _index      = null;
+            _openDbPath = null;
+        }
+
+        public SeforimIndex GetLiveIndex(string indexPath, string dbPath)
+        {
+            if (string.IsNullOrEmpty(indexPath) || !Directory.Exists(indexPath)) return null;
+            if (Directory.GetFiles(indexPath, "seg_*.dat").Length == 0)          return null;
+            try   { return new SeforimIndex(indexPath, dbPath); }
+            catch { return null; }
         }
 
         // ── Build ────────────────────────────────────────────────────
@@ -82,21 +74,18 @@ namespace FtsLibDemo.Services
             IProgress<(double pct, string detail)> progress,
             CancellationToken ct)
         {
-            long totalLines = CountLines(dbPath);
+            // Count lines first so we can report percentage
+            long totalLines = CountLines(dbPath, indexPath);
             long indexed    = 0;
 
-            var tokenizer = new Tokenizer();
+            var seforimIndex = new SeforimIndex(indexPath, dbPath);
 
-            using (var writer = new IndexWriter(indexPath))
-            using (var db = new ZayitDb(dbPath))
-            {
-                foreach (var (lineId, content) in db.ReadLines(0))
+            seforimIndex.BuildIndex(
+                limit: 0,
+                onProgress: n =>
                 {
-                    foreach (var term in tokenizer.Extract(content))
-                        writer.Add(lineId, term);
-
-                    indexed++;
-
+                    ct.ThrowIfCancellationRequested();
+                    indexed = n;
                     if (indexed % 10_000 == 0)
                     {
                         double pct    = totalLines > 0 ? 100.0 * indexed / totalLines : 0;
@@ -105,19 +94,19 @@ namespace FtsLibDemo.Services
                             : $"{indexed:N0} שורות";
                         progress.Report((pct, detail));
                     }
-                }
+                });
 
-                // IndexWriter.Dispose() triggers the final merge — report indeterminate progress
-                progress.Report((99, "מסיים ומשמר אינדקס…"));
-            }
+            progress.Report((99, "מסיים ומשמר אינדקס…"));
         }
 
-        private static long CountLines(string dbPath)
+        private static long CountLines(string dbPath, string indexPath)
         {
-            using (var db = new ZayitDb(dbPath))
+            try
             {
-                return db.CountLines();
+                var tmp = new SeforimIndex(indexPath, dbPath);
+                return tmp.CountLines();
             }
+            catch { return 0; }
         }
 
         // ── Dispose ──────────────────────────────────────────────────

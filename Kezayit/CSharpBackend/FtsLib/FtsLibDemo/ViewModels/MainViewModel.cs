@@ -245,11 +245,11 @@ namespace FtsLibDemo.ViewModels
             var ct = _searchCts.Token;
 
             bool isLiveSearch = _isIndexing;
-            var reader = isLiveSearch
-                ? _indexService.GetLiveReader(_liveIndexPath)
-                : _indexService.Reader;
+            var index = isLiveSearch
+                ? _indexService.GetLiveIndex(_liveIndexPath, _indexedDbPath)
+                : _indexService.Index;
 
-            if (reader == null || string.IsNullOrWhiteSpace(_searchQuery)) return;
+            if (index == null || string.IsNullOrWhiteSpace(_searchQuery)) return;
 
             Results.Clear();
             ResultCountText = string.Empty;
@@ -257,8 +257,7 @@ namespace FtsLibDemo.ViewModels
             CurrentQuery    = _searchQuery.Trim();
             StatusText      = isLiveSearch ? "מחפש (בזמן בניית אינדקס)…" : "מחפש…";
 
-            string query  = CurrentQuery;
-            string dbPath = _indexedDbPath;
+            string query = CurrentQuery;
 
             // Dispatcher used to marshal batches onto the UI thread
             var dispatcher = System.Windows.Application.Current.Dispatcher;
@@ -277,7 +276,7 @@ namespace FtsLibDemo.ViewModels
 
             try
             {
-                var status = await _searchService.SearchStreamingAsync(query, dbPath, OnBatch, ct, reader);
+                var status = await _searchService.SearchStreamingAsync(query, OnBatch, ct, index);
                 if (!ct.IsCancellationRequested)
                 {
                     StatusText = status;
@@ -296,8 +295,6 @@ namespace FtsLibDemo.ViewModels
             }
             finally
             {
-                if (isLiveSearch)
-                    reader?.Dispose();
                 IsSearching = false;
             }
         }

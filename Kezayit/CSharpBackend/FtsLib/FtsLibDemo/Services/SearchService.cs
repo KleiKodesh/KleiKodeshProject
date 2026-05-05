@@ -1,115 +1,70 @@
-using FtsLib.Core;
-using FtsLib.Misc;
+using FtsLib.Seforim;
 using FtsLibDemo.ViewModels;
 using System;
 using System.Collections.Generic;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace FtsLibDemo.Services
 {
     /// <summary>
-    /// Searches the open index and streams result rows from the source SQLite DB in batches.
+    /// Searches the open index and streams result rows in batches.
+    /// All query parsing, wildcard/fuzzy expansion, and DB access are handled
+    /// internally by <see cref="SeforimIndex"/> — this service only drives batching.
     /// </summary>
     public sealed class SearchService : ISearchService
     {
         private const int BatchSize = 200;
 
-        private readonly IIndexService _indexService;
-
-        public SearchService(IIndexService indexService)
-        {
-            _indexService = indexService ?? throw new ArgumentNullException(nameof(indexService));
-        }
-
         public Task<string> SearchStreamingAsync(
-            string query,
-            string dbPath,
+            string                                  query,
             Action<IReadOnlyList<SearchResultItem>> onBatch,
-            CancellationToken ct,
-            IndexReader reader = null)
+            CancellationToken                       ct,
+            SeforimIndex                            index)
         {
-            var indexReader = reader ?? _indexService.Reader;
-            if (indexReader == null)
+            if (index == null)
                 return Task.FromResult("אין אינדקס פתוח");
 
-            return Task.Run(() => RunSearch(query, dbPath, indexReader, onBatch, ct), ct);
+            return Task.Run(() => RunSearch(query, index, onBatch, ct), ct);
         }
 
         // ── Core search ───────────────────────────────────────────────
 
         private static string RunSearch(
-            string query,
-            string dbPath,
-            IndexReader reader,
+            string                                  query,
+            SeforimIndex                            index,
             Action<IReadOnlyList<SearchResultItem>> onBatch,
-            CancellationToken ct)
+            CancellationToken                       ct)
         {
-            var tokenizer = new Tokenizer();
-            var terms     = new List<string>(tokenizer.Extract(query));
-
-            if (terms.Count == 0)
+            if (string.IsNullOrWhiteSpace(query))
                 return "אין מילות חיפוש תקינות";
 
-            var ids = new List<int>(reader.Search(terms));
+            var batch = new List<SearchResultItem>(BatchSize);
+            int total = 0;
 
-            if (ids.Count == 0)
+            foreach (var result in index.Search(query))
+            {
+                if (ct.IsCancellationRequested) break;
+
+                batch.Add(new SearchResultItem(result.LineId, result.BookTitle, result.Content));
+                total++;
+
+                if (batch.Count >= BatchSize)
+                {
+                    onBatch(batch);
+                    batch = new List<SearchResultItem>(BatchSize);
+                }
+            }
+
+            if (batch.Count > 0 && !ct.IsCancellationRequested)
+                onBatch(batch);
+
+            if (total == 0)
                 return "לא נמצאו תוצאות";
-
-            int total = ids.Count;
-            StreamRows(dbPath, ids, onBatch, ct);
 
             return ct.IsCancellationRequested
                 ? "החיפוש בוטל"
                 : $"נמצאו {total:N0} תוצאות";
-        }
-
-        // ── Streaming DB fetch ────────────────────────────────────────
-
-        private static void StreamRows(
-            string dbPath,
-            List<int> ids,
-            Action<IReadOnlyList<SearchResultItem>> onBatch,
-            CancellationToken ct)
-        {
-            using (var db = new ZayitDb(dbPath))
-            {
-                var batch = new List<SearchResultItem>(BatchSize);
-
-                foreach (var (lineId, content, bookTitle) in db.FetchSearchResults(ids))
-                {
-                    if (ct.IsCancellationRequested) break;
-
-                    string snippet = StripHtml(content);
-                    batch.Add(new SearchResultItem(lineId, bookTitle, snippet));
-
-                    if (batch.Count >= BatchSize)
-                    {
-                        onBatch(batch);
-                        batch = new List<SearchResultItem>(BatchSize);
-                    }
-                }
-
-                if (batch.Count > 0)
-                    onBatch(batch);
-            }
-        }
-
-        // ── Helpers ───────────────────────────────────────────────────
-
-        private static string StripHtml(string s)
-        {
-            if (string.IsNullOrEmpty(s)) return s;
-            var  sb    = new StringBuilder(s.Length);
-            bool inTag = false;
-            foreach (char c in s)
-            {
-                if (c == '<') { inTag = true;  continue; }
-                if (c == '>') { inTag = false; continue; }
-                if (!inTag) sb.Append(c);
-            }
-            return sb.ToString().Trim();
         }
     }
 }

@@ -12,7 +12,7 @@ namespace FtsLibDemo
 
             var settings      = new SettingsService();
             var indexService  = new IndexService();
-            var searchService = new SearchService(indexService);
+            var searchService = new SearchService();
             var viewModel     = new MainViewModel(settings, indexService, searchService);
 
             var window = new MainWindow { DataContext = viewModel };

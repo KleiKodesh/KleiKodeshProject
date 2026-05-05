@@ -14,7 +14,7 @@ namespace FtsLib.Core
     ///   SearchOr(terms) — OR:  any term must appear
     ///   Search(groups)  — Mixed: each group is OR'd, all groups are AND'd
     /// </summary>
-    public sealed class IndexReader : IndexPaths, IDisposable
+    internal sealed class IndexReader : IndexPaths, IDisposable
     {
         private readonly List<SegmentHandle> _segments = new List<SegmentHandle>();
         private readonly DeleteSet           _deletes;
@@ -54,6 +54,19 @@ namespace FtsLib.Core
         /// </summary>
         public List<string> ExpandWildcard(string pattern)
             => WildcardExpander.Expand(pattern, _segments);
+
+        // ── Fuzzy expansion ───────────────────────────────────────────
+
+        /// <summary>
+        /// Expands a fuzzy query term to all index terms within
+        /// <paramref name="maxDistance"/> Levenshtein edits (clamped to 3).
+        ///
+        /// Uses trigram pre-filtering against each segment's term_index to
+        /// narrow candidates before running the full edit-distance check.
+        /// Returns an empty list when nothing matches.
+        /// </summary>
+        public List<string> ExpandFuzzy(string term, int maxDistance = 1)
+            => FuzzyExpander.Expand(term, maxDistance, _segments);
 
         // ── AND search ───────────────────────────────────────────────
 

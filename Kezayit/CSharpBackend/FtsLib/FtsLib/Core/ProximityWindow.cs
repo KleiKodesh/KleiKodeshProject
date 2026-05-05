@@ -3,33 +3,47 @@ using System.Collections.Generic;
 namespace FtsLib.Core
 {
     /// <summary>
-    /// Finds the minimum-span window in a token list that covers all query terms.
+    /// Finds the minimum-span window in a token list that covers all query groups.
     /// Uses the classic two-pointer sliding-window algorithm — O(n) in token count.
+    ///
+    /// Each group is a set of alternative terms (OR semantics): the window must
+    /// contain at least one term from every group. This correctly handles fuzzy and
+    /// wildcard queries where multiple expanded forms are alternatives for one slot.
     /// </summary>
     internal static class ProximityWindow
     {
         /// <summary>
         /// Scans <paramref name="tokens"/> and returns the tightest contiguous window
-        /// (by raw character span) that contains at least one occurrence of every term
-        /// in <paramref name="queryTerms"/>.
+        /// (by raw character span) that contains at least one occurrence of every group
+        /// in <paramref name="queryGroups"/>.
+        ///
+        /// Each group is a collection of alternative terms (OR within the group).
+        /// Across groups the semantics are AND — every group must be satisfied.
         /// </summary>
         /// <returns>
-        /// <c>(winStart, winEnd, score)</c> where <c>winStart</c>/<c>winEnd</c> are raw
-        /// character offsets into the original string and <c>score</c> is
-        /// <c>winEnd - winStart</c>.  Returns <c>(-1, -1, int.MaxValue)</c> when at least
-        /// one query term is absent from the token list entirely.
+        /// <c>(winStart, winEnd, score)</c> where <c>score = winEnd - winStart</c>.
+        /// Returns <c>(-1, -1, int.MaxValue)</c> when at least one group has no
+        /// representative in the token list.
         /// </returns>
         internal static (int winStart, int winEnd, int score) Find(
-            List<TextToken>             tokens,
-            IReadOnlyCollection<string> queryTerms)
+            List<TextToken>                          tokens,
+            IReadOnlyList<IReadOnlyCollection<string>> queryGroups)
         {
-            // Build a frequency map of required terms.
-            var need = new Dictionary<string, int>(queryTerms.Count);
-            foreach (var t in queryTerms)
-                need[t] = need.ContainsKey(t) ? need[t] + 1 : 1;
+            if (queryGroups == null || queryGroups.Count == 0)
+                return (-1, -1, int.MaxValue);
 
-            int required = need.Count; // distinct terms we must cover
-            int covered  = 0;
+            // Map every term to its group index so we can track coverage.
+            // A term that appears in multiple groups is assigned to the first one.
+            var termToGroup = new Dictionary<string, int>(System.StringComparer.Ordinal);
+            for (int g = 0; g < queryGroups.Count; g++)
+                foreach (var t in queryGroups[g])
+                    if (!termToGroup.ContainsKey(t))
+                        termToGroup[t] = g;
+
+            // Per-group: how many tokens in the current window satisfy this group.
+            var groupCount = new int[queryGroups.Count];
+            int covered    = 0;   // number of groups with at least one token in window
+            int required   = queryGroups.Count;
 
             int bestStart = -1, bestEnd = -1, bestScore = int.MaxValue;
             int L = 0;
@@ -38,13 +52,12 @@ namespace FtsLib.Core
             {
                 // Expand window to the right.
                 string rt = tokens[R].Normalized;
-                if (need.ContainsKey(rt))
+                if (termToGroup.TryGetValue(rt, out int rg))
                 {
-                    need[rt]--;
-                    if (need[rt] == 0) covered++;
+                    if (groupCount[rg]++ == 0) covered++;
                 }
 
-                // Shrink from the left while all terms are still covered.
+                // Shrink from the left while all groups are still covered.
                 while (covered == required)
                 {
                     int span = tokens[R].RawEnd - tokens[L].RawStart;
@@ -56,16 +69,30 @@ namespace FtsLib.Core
                     }
 
                     string lt = tokens[L].Normalized;
-                    if (need.ContainsKey(lt))
+                    if (termToGroup.TryGetValue(lt, out int lg))
                     {
-                        need[lt]++;
-                        if (need[lt] == 1) covered--;
+                        if (--groupCount[lg] == 0) covered--;
                     }
                     L++;
                 }
             }
 
             return (bestStart, bestEnd, bestScore);
+        }
+
+        /// <summary>
+        /// Convenience overload for single-term-per-group queries (literal searches).
+        /// Each term is treated as its own group of one.
+        /// </summary>
+        internal static (int winStart, int winEnd, int score) Find(
+            List<TextToken>             tokens,
+            IReadOnlyCollection<string> queryTerms)
+        {
+            // Wrap each term as a single-element group.
+            var groups = new List<IReadOnlyCollection<string>>(queryTerms.Count);
+            foreach (var t in queryTerms)
+                groups.Add(new[] { t });
+            return Find(tokens, groups);
         }
     }
 }

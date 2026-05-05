@@ -144,3 +144,17 @@ Follow **Brian Lagunas** MVVM conventions for all WPF/XAML code:
 - **Thin ViewModel** — the ViewModel orchestrates; it does not do I/O, DB access, or file operations. Extract those to services with interfaces.
 - **Services have interfaces** — every service the ViewModel depends on must have a matching `IXxxService` interface in the `Services/` folder.
 - **`SearchResultItem` and similar display models** — immutable, constructor-set, get-only properties.
+
+---
+
+## SeforimIndex public API — README rule
+
+`FtsLib/Seforim/README.md` is the canonical reference for the public API.
+
+**Whenever any of the following change, update `README.md` in the same commit:**
+- Method signatures on `SeforimIndex` (`BuildIndex`, `Search`, `GenerateSnippet`, `CountLines`)
+- Properties on `SearchResult` or `SnippetResult`
+- Query syntax (new operators, changed defaults, removed features)
+- The folder layout of `FtsLib/Seforim/`
+
+Keep the README concise — code examples and a property table per type. No prose beyond what a caller needs to use the API.

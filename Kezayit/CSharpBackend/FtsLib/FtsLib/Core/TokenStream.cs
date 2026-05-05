@@ -5,7 +5,7 @@ namespace FtsLib.Core
     /// <summary>
     /// A single word token produced by <see cref="TokenStream"/>.
     /// </summary>
-    public readonly struct TextToken
+    internal readonly struct TextToken
     {
         /// <summary>
         /// Index of the first letter of the word in the original raw string
@@ -42,7 +42,7 @@ namespace FtsLib.Core
     /// in the original source without a second pass.
     /// Not thread-safe — do not share across threads.
     /// </summary>
-    public sealed class TokenStream : HtmlTextScanner
+    internal sealed class TokenStream : HtmlTextScanner
     {
         private readonly List<TextToken> _tokens = new List<TextToken>();
 

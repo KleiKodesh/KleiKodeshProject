@@ -12,7 +12,7 @@ namespace FtsLib.Core
     /// Tag/entity logic lives in <see cref="HtmlScannerHelpers"/>.
     /// Not thread-safe — one instance per thread.
     /// </summary>
-    public abstract class HtmlTextScanner
+    internal abstract class HtmlTextScanner
     {
         // Normalized word buffer — reused across words, no per-word allocation.
         protected readonly StringBuilder _buffer = new StringBuilder(64);

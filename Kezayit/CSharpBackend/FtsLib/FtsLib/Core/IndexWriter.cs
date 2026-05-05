@@ -14,7 +14,7 @@ namespace FtsLib.Core
     /// on Dispose. Recommended for a one-shot build that will be searched many times.
     /// Leave false (default) for incremental append scenarios.
     /// </summary>
-    public sealed class IndexWriter : IndexPaths, IDisposable
+    internal sealed class IndexWriter : IndexPaths, IDisposable
     {
         /// <summary>Flush the RamIndex when it reaches this many distinct terms.</summary>
         public int FlushThreshold { get; set; } = 250_000;

@@ -33,8 +33,11 @@ namespace FtsLib.Core
             if (!_started)
             {
                 _started = true;
+                // Sub-iterators are already pre-advanced (MoveNext was called by
+                // StartedIterators before they were handed to us). Build the heap
+                // using Current directly — do NOT call MoveNext again.
                 for (int i = 0; i < _iters.Length; i++)
-                    if (_iters[i].MoveNext())
+                    if (!_iters[i].IsDone)
                         _heap[_heapSize++] = i;
                 for (int i = _heapSize / 2 - 1; i >= 0; i--)
                     SiftDown(i);

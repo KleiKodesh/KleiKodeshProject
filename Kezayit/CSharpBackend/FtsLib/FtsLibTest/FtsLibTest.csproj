@@ -50,11 +50,17 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="CostumeTest.cs" />
-    <Compile Include="IndexTest.cs" />
     <Compile Include="Program.cs" />
-    <Compile Include="SnippetTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <!-- Shared -->
+    <Compile Include="Shared\HtmlReport.cs" />
+    <Compile Include="Shared\TestHelpers.cs" />
+    <!-- BuildIndex -->
+    <Compile Include="BuildIndex\BuildTest.cs" />
+    <!-- SearchIndex -->
+    <Compile Include="SearchIndex\SearchTest.cs" />
+    <Compile Include="SearchIndex\QueryTest.cs" />
+    <Compile Include="SearchIndex\VerifyTest.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
