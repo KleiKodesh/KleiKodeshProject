@@ -51,7 +51,7 @@ Build/Installer  ──installs──▶  KleiKodeshVsto (Word add-in)
           │
     KezayitLib (C# backend)
           │
-  BloomSearchEngineLib + SQLite database
+  FtsLib + SQLite database
 
   WpfLib ──────────────────────────────▶  shared by all WPF libraries
   UpdateCheckerLib ────────────────────▶  auto-update on Word startup
