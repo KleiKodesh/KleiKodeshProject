@@ -30,7 +30,7 @@
 | [`UpdateCheckerLib`](UpdateCheckerLib/UpdateChecker.cs)                                              | .NET Library          | בדיקת עדכונים מ-GitHub והורדתם                        |
 | [`Kezayit`](Kezayit/README.md)                                                                       | Vue 3 + TypeScript    | ספרייה לצפייה במאגר הספרים של זית / אוצריא            |
 | [`Kezayit/CSharpBackend/KezayitLib`](Kezayit/CSharpBackend/KezayitLib/README.md)                     | .NET Library          | WebView2 host לממשק Kezayit                           |
-| [`Kezayit/CSharpBackend/BloomSearchEngineLib`](Kezayit/CSharpBackend/BloomSearchEngineLib/README.md) | .NET Library          | מנוע חיפוש Bloom filter                               |
+| [`Kezayit/CSharpBackend/ftslib`](Kezayit/CSharpBackend/ftslib/README.md) | .NET Library          | מנוע חיפוש Bloom filter                               |
 | [`kleikodesh.github.io`](kleikodesh.github.io/README.md)                                             | Static HTML/CSS/JS    | אתר הפרויקט הציבורי ודף ההורדה                        |
 
 ## ארכיטקטורה
