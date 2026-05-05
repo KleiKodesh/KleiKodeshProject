@@ -5,15 +5,16 @@ namespace FtsLib.Core
 {
     /// <summary>
     /// Builds a highlighted HTML snippet from raw HTML content and a set of query terms.
-    /// In one logical pipeline:
-    ///   1. Tokenizes the raw HTML via <see cref="TokenStream"/>.
-    ///   2. Finds the tightest window covering all terms via <see cref="ProximityWindow"/>.
-    ///   3. Expands that window to a readable snippet length.
-    ///   4. Renders the snippet as HTML with matched terms wrapped in highlight tags.
     ///
-    /// The <see cref="SnippetResult.Score"/> (character span of the best window) can be
-    /// used by the caller to rank or filter results — smaller score = terms closer together.
-    /// Not thread-safe — one instance per thread.
+    /// Single-pass design — the raw HTML is scanned exactly once:
+    ///   1. <see cref="TokenStream"/> tokenizes the raw HTML, producing tokens with
+    ///      raw character positions pointing into the original string.
+    ///   2. <see cref="ProximityWindow"/> (inlined) finds the tightest window.
+    ///   3. The renderer walks the raw HTML in the window range, stripping tags
+    ///      and wrapping matched tokens in highlight tags — no separate strip pass.
+    ///
+    /// All internal data structures are reused across calls — zero per-call heap
+    /// allocation on the hot path. Not thread-safe — one instance per thread.
     /// </summary>
     internal sealed class SnippetBuilder
     {
@@ -24,10 +25,19 @@ namespace FtsLib.Core
 
         private readonly TokenStream _tokenStream = new TokenStream();
 
-        /// <param name="preTag">Inserted before each matched term. Default: &lt;mark&gt;</param>
-        /// <param name="postTag">Inserted after each matched term. Default: &lt;/mark&gt;</param>
-        /// <param name="snippetLength">Target total character length of the rendered snippet.</param>
-        /// <param name="contextMargin">Minimum extra chars added on each side of the best window.</param>
+        // ── Reused per-call state ─────────────────────────────────────
+
+        private readonly Dictionary<string, int> _termToGroup =
+            new Dictionary<string, int>(System.StringComparer.Ordinal);
+        private int[] _groupCount = new int[8];
+
+        private readonly HashSet<string>        _termSet  =
+            new HashSet<string>(System.StringComparer.Ordinal);
+        private readonly StringBuilder          _renderBuf = new StringBuilder(512);
+
+        private readonly HashSet<string> _allTerms =
+            new HashSet<string>(System.StringComparer.Ordinal);
+
         public SnippetBuilder(
             string preTag        = "<mark>",
             string postTag       = "</mark>",
@@ -42,229 +52,239 @@ namespace FtsLib.Core
 
         // ── Public API ───────────────────────────────────────────────
 
-        /// <summary>
-        /// Strips HTML tags from <paramref name="rawHtml"/>, tokenizes the clean text,
-        /// finds the best window covering all <paramref name="queryTerms"/>, and returns
-        /// a scored snippet with matched terms wrapped in highlight tags.
-        /// The output contains only plain text and highlight tags — no original HTML.
-        ///
-        /// Each term is treated as its own group (AND semantics across all terms).
-        /// Use <see cref="Build(string, IReadOnlyList{IReadOnlyCollection{string}})"/>
-        /// for fuzzy/wildcard queries where each group has multiple alternatives.
-        /// </summary>
         public SnippetResult Build(string rawHtml, IReadOnlyCollection<string> queryTerms)
         {
             if (string.IsNullOrEmpty(rawHtml) || queryTerms == null || queryTerms.Count == 0)
                 return new SnippetResult(Encode(rawHtml ?? string.Empty), int.MaxValue, false);
 
-            // Wrap each term as a single-element group.
-            var groups = new List<IReadOnlyCollection<string>>(queryTerms.Count);
-            foreach (var t in queryTerms)
-                groups.Add(new[] { t });
-
-            return BuildCore(rawHtml, groups, queryTerms);
+            return BuildCoreLiteral(rawHtml, queryTerms);
         }
 
-        /// <summary>
-        /// Overload for fuzzy/wildcard queries: each group is a set of alternative
-        /// terms (OR within the group, AND across groups). The window finder requires
-        /// one term from every group to be present; the highlighter marks any term
-        /// from any group that appears in the snippet.
-        /// </summary>
         public SnippetResult Build(
-            string                                       rawHtml,
-            IReadOnlyList<IReadOnlyCollection<string>>   queryGroups)
+            string                                     rawHtml,
+            IReadOnlyList<IReadOnlyCollection<string>> queryGroups)
         {
             if (string.IsNullOrEmpty(rawHtml) || queryGroups == null || queryGroups.Count == 0)
                 return new SnippetResult(Encode(rawHtml ?? string.Empty), int.MaxValue, false);
 
-            // Flatten all terms for the highlighter.
-            var allTerms = new HashSet<string>(System.StringComparer.Ordinal);
+            _allTerms.Clear();
             foreach (var g in queryGroups)
                 foreach (var t in g)
-                    allTerms.Add(t);
+                    _allTerms.Add(t);
 
-            return BuildCore(rawHtml, queryGroups, allTerms);
+            return BuildCoreGroups(rawHtml, queryGroups, _allTerms);
         }
 
-        private SnippetResult BuildCore(
+        // ── Core pipelines ────────────────────────────────────────────
+
+        private SnippetResult BuildCoreLiteral(
+            string                      rawHtml,
+            IReadOnlyCollection<string> queryTerms)
+        {
+            // 1. Tokenize raw HTML — tokens carry positions into rawHtml.
+            var tokens = _tokenStream.Tokenize(rawHtml);
+            if (tokens.Count == 0)
+                return new SnippetResult(Encode(rawHtml), int.MaxValue, false);
+
+            // 2. Find window (literal: each term is its own group).
+            var (winStart, winEnd, score) = FindWindowLiteral(tokens, queryTerms);
+            if (score == int.MaxValue)
+                return new SnippetResult(Encode(rawHtml), int.MaxValue, false);
+
+            // 3. Expand window.
+            var (snapStart, snapEnd) = ExpandWindow(rawHtml.Length, winStart, winEnd);
+
+            // 4. Render directly from raw HTML — single pass, no strip step.
+            string html = RenderFromRaw(rawHtml, tokens, queryTerms, snapStart, snapEnd);
+            return new SnippetResult(html, score, true);
+        }
+
+        private SnippetResult BuildCoreGroups(
             string                                     rawHtml,
             IReadOnlyList<IReadOnlyCollection<string>> queryGroups,
             IReadOnlyCollection<string>                highlightTerms)
         {
-            // 1. Strip all HTML tags — work on clean text throughout.
-            string text = StripHtml(rawHtml);
-            if (text.Length == 0)
-                return new SnippetResult(string.Empty, int.MaxValue, false);
+            var tokens = _tokenStream.Tokenize(rawHtml);
+            if (tokens.Count == 0)
+                return new SnippetResult(Encode(rawHtml), int.MaxValue, false);
 
-            // 2. Tokenize the clean text.
-            var tokens = _tokenStream.Tokenize(text);
-
-            // 3. Find the tightest window covering one term from every group.
-            var (winStart, winEnd, score) = ProximityWindow.Find(tokens, queryGroups);
-
+            var (winStart, winEnd, score) = FindWindowGroups(tokens, queryGroups);
             if (score == int.MaxValue)
-                return new SnippetResult(Encode(text), int.MaxValue, false);
+                return new SnippetResult(Encode(rawHtml), int.MaxValue, false);
 
-            // 4. Expand window to a readable snippet length.
-            var (snapStart, snapEnd) = ExpandWindow(text, winStart, winEnd);
-
-            // 5. Render: plain text with <mark> tags around hits — no other HTML.
-            string html = Render(text, tokens, highlightTerms, snapStart, snapEnd);
-
+            var (snapStart, snapEnd) = ExpandWindow(rawHtml.Length, winStart, winEnd);
+            string html = RenderFromRaw(rawHtml, tokens, highlightTerms, snapStart, snapEnd);
             return new SnippetResult(html, score, true);
         }
 
-        // ── HTML stripper ────────────────────────────────────────────
+        // ── Window finding ────────────────────────────────────────────
 
-        /// <summary>
-        /// Removes all HTML tags in a single pass.
-        /// Block-level tags (div, p, br, li, tr, h1–h6 …) emit a space so adjacent
-        /// words don't merge. Inline tags (b, i, span, …) vanish silently.
-        /// Reuses a per-instance char buffer — no extra allocation on the hot path.
-        /// </summary>
-        private string StripHtml(string s)
+        private (int winStart, int winEnd, int score) FindWindowLiteral(
+            List<TextToken>             tokens,
+            IReadOnlyCollection<string> queryTerms)
         {
-            if (_stripBuf == null || _stripBuf.Length < s.Length)
-                _stripBuf = new char[s.Length];
+            _termToGroup.Clear();
+            int g = 0;
+            foreach (var t in queryTerms)
+                if (!_termToGroup.ContainsKey(t))
+                    _termToGroup[t] = g++;
 
-            int  outLen       = 0;
-            bool inTag        = false;
-            bool lastWasSpace = true;
-            // Collect tag name (up to 16 chars) to decide block vs inline.
-            int  tagNameLen   = 0;
-
-            for (int i = 0; i < s.Length; i++)
-            {
-                char c = s[i];
-
-                if (inTag)
-                {
-                    if (c == '>')
-                    {
-                        // Emit space for block tags only.
-                        if (HtmlScannerHelpers.IsBlockTag(_tagName, tagNameLen) && !lastWasSpace)
-                        {
-                            _stripBuf[outLen++] = ' ';
-                            lastWasSpace = true;
-                        }
-                        inTag      = false;
-                        tagNameLen = 0;
-                    }
-                    else if (tagNameLen < 16 && c != ' ' && c != '\t' && c != '/')
-                    {
-                        _tagName[tagNameLen++] = c;
-                    }
-                    continue;
-                }
-
-                if (c == '<')
-                {
-                    inTag      = true;
-                    tagNameLen = 0;
-                    continue;
-                }
-
-                // Collapse whitespace runs.
-                if (c == ' ' || c == '\t' || c == '\r' || c == '\n')
-                {
-                    if (!lastWasSpace)
-                    {
-                        _stripBuf[outLen++] = ' ';
-                        lastWasSpace = true;
-                    }
-                    continue;
-                }
-
-                _stripBuf[outLen++] = c;
-                lastWasSpace = false;
-            }
-
-            if (outLen > 0 && _stripBuf[outLen - 1] == ' ') outLen--;
-
-            return new string(_stripBuf, 0, outLen);
+            int required = _termToGroup.Count;
+            EnsureGroupCount(required);
+            for (int i = 0; i < required; i++) _groupCount[i] = 0;
+            return RunSlidingWindow(tokens, required);
         }
 
-        // Reusable buffers — allocated once, grown if needed.
-        private char[]  _stripBuf;
-        private readonly char[] _tagName = new char[16];
-
-        // ── Stage 3: expand + snap to word boundaries ────────────────
-
-        private (int start, int end) ExpandWindow(string text, int winStart, int winEnd)
+        private (int winStart, int winEnd, int score) FindWindowGroups(
+            List<TextToken>                            tokens,
+            IReadOnlyList<IReadOnlyCollection<string>> queryGroups)
         {
-            int len       = text.Length;
-            int windowLen = winEnd - winStart;
+            _termToGroup.Clear();
+            for (int gi = 0; gi < queryGroups.Count; gi++)
+                foreach (var t in queryGroups[gi])
+                    if (!_termToGroup.ContainsKey(t))
+                        _termToGroup[t] = gi;
 
-            // Distribute remaining snippet budget equally on each side,
-            // but never exceed _contextMargin — the snippet length controls
-            // the total output size, not how far we expand from the window.
+            int required = queryGroups.Count;
+            EnsureGroupCount(required);
+            for (int i = 0; i < required; i++) _groupCount[i] = 0;
+            return RunSlidingWindow(tokens, required);
+        }
+
+        private (int winStart, int winEnd, int score) RunSlidingWindow(
+            List<TextToken> tokens,
+            int             required)
+        {
+            int covered   = 0;
+            int bestStart = -1, bestEnd = -1, bestScore = int.MaxValue;
+            int L = 0;
+
+            for (int R = 0; R < tokens.Count; R++)
+            {
+                string rt = tokens[R].Normalized;
+                if (_termToGroup.TryGetValue(rt, out int rg))
+                    if (_groupCount[rg]++ == 0) covered++;
+
+                while (covered == required)
+                {
+                    int span = tokens[R].RawEnd - tokens[L].RawStart;
+                    if (span < bestScore)
+                    {
+                        bestScore = span;
+                        bestStart = tokens[L].RawStart;
+                        bestEnd   = tokens[R].RawEnd;
+                    }
+                    string lt = tokens[L].Normalized;
+                    if (_termToGroup.TryGetValue(lt, out int lg))
+                        if (--_groupCount[lg] == 0) covered--;
+                    L++;
+                }
+            }
+
+            return (bestStart, bestEnd, bestScore);
+        }
+
+        private void EnsureGroupCount(int required)
+        {
+            if (_groupCount.Length < required)
+                _groupCount = new int[required * 2];
+        }
+
+        // ── Window expansion ──────────────────────────────────────────
+
+        private (int start, int end) ExpandWindow(int rawLen, int winStart, int winEnd)
+        {
+            int windowLen = winEnd - winStart;
             int remaining = _snippetLength - windowLen;
             int half      = remaining > 0 ? remaining / 2 : 0;
             int margin    = half < _contextMargin ? half : _contextMargin;
             if (margin < 0) margin = 0;
-
-            int start = System.Math.Max(0,   winStart - margin);
-            int end   = System.Math.Min(len, winEnd   + margin);
-
-            return (start, end);
+            return (System.Math.Max(0,      winStart - margin),
+                    System.Math.Min(rawLen, winEnd   + margin));
         }
 
-        // ── Stage 5: render plain text + highlight tags ──────────────
+        // ── Single-pass renderer from raw HTML ────────────────────────
 
-        private string Render(
-            string                      text,
+        /// <summary>
+        /// Renders a snippet directly from the raw HTML string — no separate strip pass.
+        ///
+        /// Instead of walking character-by-character and checking every position
+        /// against the hit map, this iterates the token list to find the next hit,
+        /// then copies the raw HTML between tokens (skipping tags inline).
+        /// This is O(tokens) rather than O(characters) for the hit-check loop.
+        /// </summary>
+        private string RenderFromRaw(
+            string                      rawHtml,
             List<TextToken>             tokens,
             IReadOnlyCollection<string> queryTerms,
             int                         snapStart,
             int                         snapEnd)
         {
-            var termSet  = new HashSet<string>(queryTerms);
-            var hitIndex = new Dictionary<int, TextToken>();
+            // Build term set.
+            _termSet.Clear();
+            foreach (var t in queryTerms) _termSet.Add(t);
+
+            _renderBuf.Clear();
+            if (snapStart > 0) _renderBuf.Append('…');
+
+            // Walk the raw HTML from snapStart to snapEnd.
+            // Use the token list to know where matched words are — jump directly
+            // to each token rather than checking every character position.
+            int pos = snapStart;
+
             foreach (var tok in tokens)
-                if (tok.RawStart >= snapStart && tok.RawEnd <= snapEnd
-                    && termSet.Contains(tok.Normalized))
-                    hitIndex[tok.RawStart] = tok;
-
-            var sb = new StringBuilder((snapEnd - snapStart) + hitIndex.Count * 15);
-
-            if (snapStart > 0) sb.Append("…");
-
-            int i = snapStart;
-            while (i < snapEnd)
             {
-                if (hitIndex.TryGetValue(i, out TextToken hit))
-                {
-                    sb.Append(_preTag);
-                    int end = hit.RawEnd < snapEnd ? hit.RawEnd : snapEnd;
-                    sb.Append(text, hit.RawStart, end - hit.RawStart);
-                    sb.Append(_postTag);
-                    i = hit.RawEnd;
-                }
-                else
-                {
-                    // HTML-encode only the chars that matter in a plain-text context.
-                    char c = text[i];
-                    switch (c)
-                    {
-                        case '&': sb.Append("&amp;");  break;
-                        case '<': sb.Append("&lt;");   break;
-                        case '>': sb.Append("&gt;");   break;
-                        default:  sb.Append(c);        break;
-                    }
-                    i++;
-                }
+                // Skip tokens outside the window.
+                if (tok.RawEnd <= snapStart) continue;
+                if (tok.RawStart >= snapEnd) break;
+
+                if (!_termSet.Contains(tok.Normalized)) continue;
+
+                // Copy raw HTML from current position up to this token's start,
+                // stripping tags inline.
+                AppendRawStripped(rawHtml, pos, tok.RawStart, snapEnd);
+                pos = tok.RawStart;
+
+                // Emit the highlight tag + the raw token span.
+                _renderBuf.Append(_preTag);
+                int tokEnd = tok.RawEnd < snapEnd ? tok.RawEnd : snapEnd;
+                _renderBuf.Append(rawHtml, tok.RawStart, tokEnd - tok.RawStart);
+                _renderBuf.Append(_postTag);
+                pos = tok.RawEnd;
             }
 
-            if (snapEnd < text.Length) sb.Append("…");
+            // Copy any remaining raw HTML after the last hit.
+            AppendRawStripped(rawHtml, pos, snapEnd, snapEnd);
 
-            return sb.ToString();
+            if (snapEnd < rawHtml.Length) _renderBuf.Append('…');
+            return _renderBuf.ToString();
+        }
+
+        /// <summary>
+        /// Appends rawHtml[from..to) to _renderBuf, stripping HTML tags and
+        /// HTML-encoding &amp; and &gt; in plain text. Stops at limit.
+        /// </summary>
+        private void AppendRawStripped(string rawHtml, int from, int to, int limit)
+        {
+            if (to > limit) to = limit;
+            bool inTag = false;
+            for (int i = from; i < to; i++)
+            {
+                char c = rawHtml[i];
+                if (inTag)      { if (c == '>') inTag = false; continue; }
+                if (c == '<')   { inTag = true; continue; }
+                switch (c)
+                {
+                    case '&': _renderBuf.Append("&amp;"); break;
+                    case '>': _renderBuf.Append("&gt;");  break;
+                    default:  _renderBuf.Append(c);       break;
+                }
+            }
         }
 
         private static string Encode(string s)
         {
             if (string.IsNullOrEmpty(s)) return string.Empty;
-            // Minimal HTML encoding for plain-text fallback output.
             return s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
         }
     }
