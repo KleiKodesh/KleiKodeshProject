@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading;
 
 namespace FtsLib.Core
 {
@@ -21,10 +22,12 @@ namespace FtsLib.Core
         ///
         /// Zero heap allocation during iteration.
         /// </summary>
-        public static IEnumerable<int> Intersect(PostingIterator[] iters)
+        public static IEnumerable<int> Intersect(PostingIterator[] iters, CancellationToken ct = default)
         {
             while (!iters[0].IsDone)
             {
+                ct.ThrowIfCancellationRequested();
+
                 int  candidate = iters[0].Current;
                 bool match     = true;
 
@@ -64,7 +67,7 @@ namespace FtsLib.Core
         /// O(n log k) where n = total postings, k = number of iterators.
         /// Zero heap allocation during iteration beyond the fixed-size heap array.
         /// </summary>
-        public static IEnumerable<int> Union(PostingIterator[] iters)
+        public static IEnumerable<int> Union(PostingIterator[] iters, CancellationToken ct = default)
         {
             int   heapSize = iters.Length;
             int[] heap     = new int[heapSize];
@@ -76,6 +79,8 @@ namespace FtsLib.Core
 
             while (heapSize > 0)
             {
+                ct.ThrowIfCancellationRequested();
+
                 int topIdx = heap[0];
                 int val    = iters[topIdx].Current;
 

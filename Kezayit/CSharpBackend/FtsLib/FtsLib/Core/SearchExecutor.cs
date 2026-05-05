@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 
 namespace FtsLib.Core
 {
@@ -21,34 +22,37 @@ namespace FtsLib.Core
         // ── AND ──────────────────────────────────────────────────────
 
         public static IEnumerable<int> AndSearch(
-            IEnumerable<string>          terms,
+            IEnumerable<string>           terms,
             Func<string, PostingIterator> resolve,
-            Func<string, int>             getCount)
+            Func<string, int>             getCount,
+            CancellationToken             ct = default)
         {
             var termList = new List<string>(terms);
             if (termList.Count == 0) return Enumerable.Empty<int>();
 
             termList.Sort((a, b) => getCount(a).CompareTo(getCount(b)));
-            return AndMerge(termList, resolve);
+            return AndMerge(termList, resolve, ct);
         }
 
         // ── OR ───────────────────────────────────────────────────────
 
         public static IEnumerable<int> OrSearch(
-            IEnumerable<string>          terms,
-            Func<string, PostingIterator> resolve)
+            IEnumerable<string>           terms,
+            Func<string, PostingIterator> resolve,
+            CancellationToken             ct = default)
         {
             var started = StartedIterators(terms, resolve, skipMissing: true);
             if (started.Count == 0) return Enumerable.Empty<int>();
-            if (started.Count == 1) return DrainStarted(started[0]);
-            return PostingMatcher.Union(started.ToArray());
+            if (started.Count == 1) return DrainStarted(started[0], ct);
+            return PostingMatcher.Union(started.ToArray(), ct);
         }
 
         // ── Mixed AND/OR ─────────────────────────────────────────────
 
         public static IEnumerable<int> MixedSearch(
             IEnumerable<IEnumerable<string>> groups,
-            Func<string, PostingIterator>    resolve)
+            Func<string, PostingIterator>    resolve,
+            CancellationToken                ct = default)
         {
             var groupIters = new List<PostingIterator>();
             foreach (var group in groups)
@@ -61,15 +65,16 @@ namespace FtsLib.Core
             }
 
             if (groupIters.Count == 0) return Enumerable.Empty<int>();
-            if (groupIters.Count == 1) return DrainStarted(groupIters[0]);
-            return PostingMatcher.Intersect(groupIters.ToArray());
+            if (groupIters.Count == 1) return DrainStarted(groupIters[0], ct);
+            return PostingMatcher.Intersect(groupIters.ToArray(), ct);
         }
 
         // ── Helpers ──────────────────────────────────────────────────
 
         private static IEnumerable<int> AndMerge(
-            List<string>                 terms,
-            Func<string, PostingIterator> resolve)
+            List<string>                  terms,
+            Func<string, PostingIterator> resolve,
+            CancellationToken             ct)
         {
             var iters = new PostingIterator[terms.Count];
             for (int i = 0; i < terms.Count; i++)
@@ -81,14 +86,14 @@ namespace FtsLib.Core
             for (int i = 0; i < iters.Length; i++)
                 if (!iters[i].MoveNext()) yield break;
 
-            foreach (var id in PostingMatcher.Intersect(iters))
+            foreach (var id in PostingMatcher.Intersect(iters, ct))
                 yield return id;
         }
 
         private static List<PostingIterator> StartedIterators(
-            IEnumerable<string>          terms,
+            IEnumerable<string>           terms,
             Func<string, PostingIterator> resolve,
-            bool                         skipMissing)
+            bool                          skipMissing)
         {
             var result = new List<PostingIterator>();
             foreach (var term in terms)
@@ -105,9 +110,13 @@ namespace FtsLib.Core
         /// Unlike <see cref="PostingIterator.AsEnumerable"/>, this does NOT call
         /// MoveNext before yielding the first value.
         /// </summary>
-        private static IEnumerable<int> DrainStarted(PostingIterator it)
+        private static IEnumerable<int> DrainStarted(PostingIterator it, CancellationToken ct)
         {
-            do { yield return it.Current; }
+            do
+            {
+                ct.ThrowIfCancellationRequested();
+                yield return it.Current;
+            }
             while (it.MoveNext());
         }
     }

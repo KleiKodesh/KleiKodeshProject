@@ -1,6 +1,7 @@
 using FtsLib.Core;
 using FtsLib.Misc;
 using System.Collections.Generic;
+using System.Threading;
 
 namespace FtsLib.Seforim
 {
@@ -15,7 +16,10 @@ namespace FtsLib.Seforim
     ///   word~       — fuzzy, edit distance 1 (default)
     ///   word~2      — fuzzy, edit distance 2
     ///   word~3      — fuzzy, edit distance 3 (maximum)
-    /// Multiple tokens are AND-ed; wildcard/fuzzy tokens are OR-expanded internally.
+    ///   a | b       — OR: lines matching a OR b satisfy this AND slot
+    ///
+    /// Multiple tokens are AND-ed; '|'-separated tokens are OR-ed within one AND slot.
+    /// Wildcard/fuzzy tokens are OR-expanded internally; OR groups merge all expansions.
     /// </summary>
     internal static class SearchPipeline
     {
@@ -33,65 +37,50 @@ namespace FtsLib.Seforim
         /// <param name="indexPath">Directory containing the segment files.</param>
         /// <param name="dbPath">Path to the seforim SQLite database.</param>
         /// <param name="cap">Maximum results to return. 0 = no cap.</param>
+        /// <param name="ct">Cancellation token — checked during expansion, intersection, and DB fetch.</param>
         internal static IEnumerable<SearchResult> Search(
-            string query,
-            string indexPath,
-            string dbPath,
-            int    cap = 0)
+            string            query,
+            string            indexPath,
+            string            dbPath,
+            int               cap = 0,
+            CancellationToken ct  = default)
         {
             var parsed = QueryParser.Parse(query);
             if (parsed.IsEmpty) yield break;
 
             using (var reader = new IndexReader(indexPath))
             {
-                // Expand each token into a group of concrete terms.
+                // Expand each group into a flat list of concrete terms.
                 // Within a group terms are OR-ed; across groups they are AND-ed.
-                var groups       = new List<IEnumerable<string>>(parsed.Groups.Count);
-                // Per-group expanded terms — used for proximity window + highlighting.
+                var groups         = new List<IEnumerable<string>>(parsed.Groups.Count);
                 var expandedGroups = new List<IReadOnlyCollection<string>>(parsed.Groups.Count);
 
                 foreach (var group in parsed.Groups)
                 {
-                    List<string> expanded;
+                    ct.ThrowIfCancellationRequested();
 
-                    if (group.IsFuzzy)
-                    {
-                        expanded = reader.ExpandFuzzy(group.Pattern, group.FuzzyDistance);
-                        if (expanded.Count == 0) yield break; // no candidates → no results
-                    }
-                    else if (group.IsWildcard)
-                    {
-                        expanded = reader.ExpandWildcard(group.Pattern);
-                        if (expanded.Count == 0)
-                        {
-                            // Anchor too short or no matches — skip this token so the
-                            // remaining terms still produce results rather than killing
-                            // the whole query with a dead AND group.
-                            continue;
-                        }
-                    }
-                    else
-                    {
-                        expanded = new List<string> { group.Pattern };
-                    }
-
-                    groups.Add(expanded);
-                    expandedGroups.Add(expanded);
+                    var groupTerms = ExpandGroup(group, reader, ct, out bool hardMiss);
+                    if (hardMiss) yield break;   // a fuzzy alternative had no candidates
+                    if (groupTerms.Count == 0) continue; // wildcard anchor too short — skip
+                    groups.Add(groupTerms);
+                    expandedGroups.Add(groupTerms);
                 }
 
-                // Snapshot as a read-only list shared across all results.
+                if (groups.Count == 0) yield break;
+
                 IReadOnlyList<IReadOnlyCollection<string>> matchedGroups = expandedGroups;
 
-                // Collect matching IDs (lazy intersection across all groups).
-                var ids = new List<int>(reader.Search(groups));
+                var ids = new List<int>(reader.Search(groups, ct));
                 if (ids.Count == 0) yield break;
 
-                // Fetch rows from the DB and stream them out.
+                ct.ThrowIfCancellationRequested();
+
                 int yielded = 0;
                 using (var db = new ZayitDb(dbPath))
                 {
                     foreach (var (lineId, content, bookTitle) in db.FetchSearchResults(ids))
                     {
+                        ct.ThrowIfCancellationRequested();
                         yield return new SearchResult(lineId, bookTitle, content, matchedGroups);
                         yielded++;
                         if (cap > 0 && yielded >= cap) yield break;
@@ -111,7 +100,8 @@ namespace FtsLib.Seforim
             var parsed = QueryParser.Parse(query);
             var terms  = new List<string>(parsed.Groups.Count);
             foreach (var g in parsed.Groups)
-                terms.Add(g.Pattern);
+                foreach (var alt in g.Alternatives)
+                    terms.Add(alt.Pattern);
             return terms;
         }
 
@@ -119,7 +109,10 @@ namespace FtsLib.Seforim
         /// Returns only the matching line IDs — no database fetch at all.
         /// Use when the caller only needs IDs (counting, on-demand content loading).
         /// </summary>
-        internal static IEnumerable<int> SearchIds(string query, string indexPath)
+        internal static IEnumerable<int> SearchIds(
+            string            query,
+            string            indexPath,
+            CancellationToken ct = default)
         {
             var parsed = QueryParser.Parse(query);
             if (parsed.IsEmpty) yield break;
@@ -130,35 +123,82 @@ namespace FtsLib.Seforim
 
                 foreach (var group in parsed.Groups)
                 {
-                    List<string> expanded;
-                    if (group.IsFuzzy)
-                    {
-                        expanded = reader.ExpandFuzzy(group.Pattern, group.FuzzyDistance);
-                        if (expanded.Count == 0) yield break;
-                    }
-                    else if (group.IsWildcard)
-                    {
-                        expanded = reader.ExpandWildcard(group.Pattern);
-                        if (expanded.Count == 0)
-                        {
-                            // Anchor too short or no matches — skip, don't kill the query.
-                            continue;
-                        }
-                    }
-                    else
-                    {
-                        expanded = new List<string> { group.Pattern };
-                    }
-                    groups.Add(expanded);
+                    ct.ThrowIfCancellationRequested();
+
+                    var groupTerms = ExpandGroup(group, reader, ct, out bool hardMiss);
+                    if (hardMiss) yield break;
+                    if (groupTerms.Count == 0) continue;
+                    groups.Add(groupTerms);
                 }
 
-                foreach (var id in reader.Search(groups))
+                if (groups.Count == 0) yield break;
+
+                foreach (var id in reader.Search(groups, ct))
                     yield return id;
             }
         }
 
-        // ── Helpers ───────────────────────────────────────────────────
+        // ── Group expansion ───────────────────────────────────────────
 
-        // (no helpers currently needed)
+        /// <summary>
+        /// Expands all OR alternatives in <paramref name="group"/> into a single
+        /// deduplicated list of concrete index terms.
+        ///
+        /// <paramref name="hardMiss"/> is set to true when a fuzzy alternative
+        /// produced zero candidates — the caller should abort the whole query
+        /// (no results possible).  Wildcard alternatives that produce zero results
+        /// are silently skipped (anchor too short or no matches).
+        /// </summary>
+        private static List<string> ExpandGroup(
+            QueryGroup        group,
+            IndexReader       reader,
+            CancellationToken ct,
+            out bool          hardMiss)
+        {
+            hardMiss = false;
+
+            // Fast path: single literal alternative (the common case).
+            if (group.IsSingle && !group.IsWildcard && !group.IsFuzzy)
+                return new List<string> { group.Pattern };
+
+            var seen   = new HashSet<string>(System.StringComparer.Ordinal);
+            var result = new List<string>();
+
+            foreach (var alt in group.Alternatives)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                List<string> expanded;
+
+                if (alt.IsFuzzy)
+                {
+                    expanded = reader.ExpandFuzzy(alt.Pattern, alt.FuzzyDistance);
+                    if (expanded.Count == 0)
+                    {
+                        // A fuzzy alternative with no candidates is a hard miss:
+                        // the user explicitly asked for this word and it isn't in the
+                        // index at all, so the AND group can never be satisfied.
+                        hardMiss = true;
+                        return result;
+                    }
+                }
+                else if (alt.IsWildcard)
+                {
+                    expanded = reader.ExpandWildcard(alt.Pattern);
+                    // Wildcard with no matches: skip this alternative, keep others.
+                    if (expanded.Count == 0) continue;
+                }
+                else
+                {
+                    expanded = new List<string> { alt.Pattern };
+                }
+
+                foreach (var term in expanded)
+                    if (seen.Add(term))
+                        result.Add(term);
+            }
+
+            return result;
+        }
     }
 }

@@ -27,13 +27,14 @@ namespace FtsLib.Core
     ///   to tens of thousands of terms.  The caller receives an empty list and
     ///   should skip the group rather than killing the whole query.
     ///
-    ///   MaxWildcardChars (3): each '*' in the pattern may match at most 3 characters.
-    ///   After the DB query, any expanded term where the wildcard portion exceeds
-    ///   this limit is discarded.  Data from the full index shows that genuine
-    ///   Hebrew/Aramaic morphological prefixes and suffixes are 1–3 chars; anything
-    ///   longer is a compound run-on (e.g. "תלמודתורה", "במלכיישראל") not an affix.
-    ///   For infix patterns (*abc*) the budget is MaxWildcardChars per side (×2 total)
-    ///   since both a prefix and a suffix can be present simultaneously.
+    ///   MaxPrefixWildcardChars (3) / MaxSuffixWildcardChars (4):
+    ///   After the DB query, expanded terms are filtered by how many characters the
+    ///   wildcard portion actually matched:
+    ///     *abc  (suffix wildcard) — leading '*' capped at 3 chars (max Hebrew prefix)
+    ///     abc*  (prefix wildcard) — trailing '*' capped at 4 chars (max Hebrew suffix)
+    ///     *abc* (infix wildcard)  — leading capped at 3, trailing at 4 (7 total)
+    ///   Research basis: Hebrew stacked prefixes max at 3 (וּמִבְּ); pronominal suffixes
+    ///   max at 4 (יהֶם, יכֶם).  Anything longer is a compound run-on, not an affix.
     ///
     ///   MaxOptionalChars (4): a pattern may contain at most this many '?' operators.
     ///   Patterns with more are rejected to cap the 2^N combinatorial expansion.
@@ -47,15 +48,17 @@ namespace FtsLib.Core
         public const int MinAnchorLength = 2;
 
         /// <summary>
-        /// Maximum number of characters each '*' wildcard may match in an expanded term.
-        /// Grounded in the actual index data and Hebrew/Aramaic morphology:
-        ///   length 1–2: single-letter prefixes (ב, ו, ה, כ, ל, מ, ש) and two-letter
-        ///               stacks (וב, וה, דב, etc.) — always real morphological forms.
-        ///   length 3:   three-letter stacks (ובה, דמב, וכש, etc.) — still real.
-        ///   length 4+:  compound run-ons (דכשה, במלכי, תלמוד+word) — not affixes.
-        /// Cap at 3 keeps all genuine prefixes/suffixes and rejects compound noise.
+        /// Maximum characters the leading '*' of a suffix wildcard (*abc) may match.
+        /// Hebrew/Aramaic prefixes stack to at most 3 chars (e.g. וּמִבְּ = vav+mem+bet).
         /// </summary>
-        public const int MaxWildcardChars = 3;
+        public const int MaxPrefixWildcardChars = 3;
+
+        /// <summary>
+        /// Maximum characters the trailing '*' of a prefix wildcard (abc*) may match.
+        /// Hebrew pronominal suffixes reach at most 4 chars (e.g. יהֶם, יכֶם, יהֶן).
+        /// Verb conjugation suffixes top out at 3 chars (תֶּם, תֶּן), so 4 is the safe cap.
+        /// </summary>
+        public const int MaxSuffixWildcardChars = 4;
 
         /// <summary>
         /// Maximum number of '?' operators allowed in a single pattern.
@@ -148,20 +151,38 @@ namespace FtsLib.Core
                 }
             }
 
-            // Determine the wildcard budget.
-            // Prefix (abc*) or suffix (*abc): one wildcard slot → max MaxWildcardChars total.
-            // Infix (*abc*): two wildcard slots → max MaxWildcardChars per side, so
-            //   the total extra chars allowed is MaxWildcardChars * 2.
+            // Determine the wildcard budget per shape:
+            //   *abc  (suffix wildcard): leading '*' may match at most MaxPrefixWildcardChars
+            //   abc*  (prefix wildcard): trailing '*' may match at most MaxSuffixWildcardChars
+            //   *abc* (infix wildcard):  leading capped at MaxPrefixWildcardChars,
+            //                            trailing capped at MaxSuffixWildcardChars
             bool hasLeadingStar  = pattern.StartsWith("*");
             bool hasTrailingStar = pattern.EndsWith("*");
-            bool isInfix         = hasLeadingStar && hasTrailingStar;
-            int  maxExtra        = isInfix ? MaxWildcardChars * 2 : MaxWildcardChars;
 
             var results = new List<string>(raw.Count);
             foreach (var term in raw)
             {
-                if (term.Length - anchorLen <= maxExtra)
-                    results.Add(term);
+                int extra = term.Length - anchorLen; // total wildcard chars matched
+
+                if (hasLeadingStar && hasTrailingStar)
+                {
+                    // Infix: we don't know the exact split, but the total extra chars
+                    // cannot exceed the combined budget.
+                    if (extra <= MaxPrefixWildcardChars + MaxSuffixWildcardChars)
+                        results.Add(term);
+                }
+                else if (hasLeadingStar)
+                {
+                    // Suffix wildcard (*abc): extra chars are all prefix.
+                    if (extra <= MaxPrefixWildcardChars)
+                        results.Add(term);
+                }
+                else
+                {
+                    // Prefix wildcard (abc*): extra chars are all suffix.
+                    if (extra <= MaxSuffixWildcardChars)
+                        results.Add(term);
+                }
             }
 
             return results;

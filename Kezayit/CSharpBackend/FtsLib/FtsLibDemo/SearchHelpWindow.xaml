@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="תחביר חיפוש"
-        Width="480" Height="420"
+        Width="480" Height="480"
         MinWidth="380" MinHeight="320"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
@@ -187,7 +187,7 @@
                     </Border>
 
                     <!-- Row 5: fuzzy distance -->
-                    <Border Style="{StaticResource OddRow}" CornerRadius="0,0,4,4">
+                    <Border Style="{StaticResource OddRow}">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="160"/>
@@ -204,6 +204,29 @@
                         </Grid>
                     </Border>
 
+                    <!-- Row 6: OR -->
+                    <Border Style="{StaticResource EvenRow}" CornerRadius="0,0,4,4">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="160"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="א | ב" Style="{StaticResource PatternCell}"/>
+                            <TextBlock Grid.Column="1" Style="{StaticResource DescCell}">
+                                <Run Text="מקף אנכי — OR: מספיק שאחת מהמילות יופיע."/>
+                                <LineBreak/>
+                                <Run Text="דוגמה: " Foreground="#888888"/>
+                                <Run Text="משה | אהרן תורה" FontFamily="Consolas, Courier New" Foreground="#1A5490"/>
+                                <LineBreak/>
+                                <Run Text="→ שורות שיש בהן (משה או אהרן) וגם תורה"/>
+                                <LineBreak/>
+                                <Run Text="ניתן לשרשר: " Foreground="#888888"/>
+                                <Run Text="א | ב | ג*" FontFamily="Consolas, Courier New" Foreground="#1A5490"/>
+                                <Run Text=" — כולל הרחבת כוכבית"/>
+                            </TextBlock>
+                        </Grid>
+                    </Border>
+
                     <!-- Divider -->
                     <Border Height="1" Background="#E0E0E0" Margin="0,14,0,10"/>
 
@@ -211,6 +234,9 @@
                     <TextBlock TextWrapping="Wrap" Foreground="#555555" FontSize="12" LineHeight="20">
                         <Run FontWeight="SemiBold">שילוב מילים: </Run>
                         <Run>כל המילים מחוברות ב-AND — כולן חייבות להופיע באותה שורה.</Run>
+                        <LineBreak/>
+                        <Run FontWeight="SemiBold">OR (|): </Run>
+                        <Run>המקף האנכי חייב להיות מופרד ברווחים משני הצדדים.</Run>
                         <LineBreak/>
                         <Run FontWeight="SemiBold">ניקוד: </Run>
                         <Run>מתעלם מניקוד — ניתן לחפש עם ניקוד או בלעדיו.</Run>

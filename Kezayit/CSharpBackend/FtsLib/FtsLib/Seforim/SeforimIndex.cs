@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 
 namespace FtsLib.Seforim
 {
@@ -29,9 +30,12 @@ namespace FtsLib.Seforim
     ///   word~       — fuzzy match, edit distance 1
     ///   word~2      — fuzzy match, edit distance 2
     ///   word~3      — fuzzy match, edit distance 3 (maximum)
+    ///   a | b       — OR: lines matching a OR b satisfy this AND slot
     ///
     /// Multiple tokens are AND-ed together.
-    /// Wildcard and fuzzy tokens are OR-expanded internally before the intersection.
+    /// '|'-separated tokens are OR-ed within one AND slot.
+    /// Wildcard and fuzzy tokens are OR-expanded internally before the intersection;
+    /// OR groups merge all their expansions.
     /// </summary>
     public sealed class SeforimIndex
     {
@@ -94,7 +98,7 @@ namespace FtsLib.Seforim
         /// the database fetch. By default all matching results are returned.
         /// </summary>
         /// <param name="query">
-        /// Raw query string. Supports literal terms, wildcards (*), and fuzzy (~).
+        /// Raw query string. Supports literal terms, wildcards (*), fuzzy (~), and OR (|).
         /// </param>
         /// <param name="cap">
         /// Maximum number of results to return. 0 (default) = no cap.
@@ -103,8 +107,8 @@ namespace FtsLib.Seforim
         /// Lazy <see cref="IEnumerable{SearchResult}"/> of matching lines.
         /// Each item contains the line ID, book title, and raw HTML content.
         /// </returns>
-        public IEnumerable<SearchResult> Search(string query, int cap = 0)
-            => SearchPipeline.Search(query, _indexPath, _dbPath, cap);
+        public IEnumerable<SearchResult> Search(string query, int cap = 0, CancellationToken ct = default)
+            => SearchPipeline.Search(query, _indexPath, _dbPath, cap, ct);
 
         /// <summary>
         /// Searches the index and returns only the matching line IDs — no database
@@ -114,8 +118,8 @@ namespace FtsLib.Seforim
         /// Significantly faster than <see cref="Search"/> for large result sets because
         /// it skips the SQLite content fetch entirely.
         /// </summary>
-        public IEnumerable<int> SearchIds(string query)
-            => SearchPipeline.SearchIds(query, _indexPath);
+        public IEnumerable<int> SearchIds(string query, CancellationToken ct = default)
+            => SearchPipeline.SearchIds(query, _indexPath, ct);
 
         /// <summary>
         /// Generates a highlighted HTML snippet for a single search result line.

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 
 namespace FtsLib.Core
 {
@@ -70,26 +71,26 @@ namespace FtsLib.Core
 
         // ── AND search ───────────────────────────────────────────────
 
-        public IEnumerable<int> Search(IEnumerable<string> terms)
+        public IEnumerable<int> Search(IEnumerable<string> terms, CancellationToken ct = default)
         {
             if (_segments.Count == 0) return Enumerable.Empty<int>();
-            return SearchExecutor.AndSearch(terms, ResolveIterator, GetTermCount);
+            return SearchExecutor.AndSearch(terms, ResolveIterator, GetTermCount, ct);
         }
 
         // ── OR search ────────────────────────────────────────────────
 
-        public IEnumerable<int> SearchOr(IEnumerable<string> terms)
+        public IEnumerable<int> SearchOr(IEnumerable<string> terms, CancellationToken ct = default)
         {
             if (_segments.Count == 0) return Enumerable.Empty<int>();
-            return SearchExecutor.OrSearch(terms, ResolveIterator);
+            return SearchExecutor.OrSearch(terms, ResolveIterator, ct);
         }
 
         // ── Mixed AND/OR search ──────────────────────────────────────
 
-        public IEnumerable<int> Search(IEnumerable<IEnumerable<string>> groups)
+        public IEnumerable<int> Search(IEnumerable<IEnumerable<string>> groups, CancellationToken ct = default)
         {
             if (_segments.Count == 0) return Enumerable.Empty<int>();
-            return SearchExecutor.MixedSearch(groups, ResolveIterator);
+            return SearchExecutor.MixedSearch(groups, ResolveIterator, ct);
         }
 
         // ── Term count ───────────────────────────────────────────────

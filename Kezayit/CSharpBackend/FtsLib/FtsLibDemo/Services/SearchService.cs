@@ -42,7 +42,7 @@ namespace FtsLibDemo.Services
             var batch = new List<SearchResultItem>(BatchSize);
             int total = 0;
 
-            foreach (var result in index.Search(query))
+            foreach (var result in index.Search(query, ct: ct))
             {
                 if (ct.IsCancellationRequested) break;
 

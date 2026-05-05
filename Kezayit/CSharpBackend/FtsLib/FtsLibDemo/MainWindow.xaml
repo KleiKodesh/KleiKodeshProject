@@ -126,6 +126,7 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>  <!-- toolbar -->
+            <RowDefinition Height="Auto"/>  <!-- search progress bar -->
             <RowDefinition Height="Auto"/>  <!-- index progress bar -->
             <RowDefinition Height="*"/>     <!-- results -->
             <RowDefinition Height="Auto"/>  <!-- status bar -->
@@ -245,9 +246,20 @@
         </Border>
 
         <!-- ═══════════════════════════════════════════════════════════
-             Row 1 — Index progress bar (visible only while indexing)
+             Row 1 — Search progress bar (thin, indeterminate, while searching)
         ═══════════════════════════════════════════════════════════ -->
-        <Border Grid.Row="1"
+        <ProgressBar Grid.Row="1"
+                     IsIndeterminate="True"
+                     Height="3"
+                     BorderThickness="0"
+                     Foreground="#2E6DA4"
+                     Background="Transparent"
+                     Visibility="{Binding IsSearching, Converter={StaticResource BoolToVis}}"/>
+
+        <!-- ═══════════════════════════════════════════════════════════
+             Row 2 — Index progress bar (visible only while indexing)
+        ═══════════════════════════════════════════════════════════ -->
+        <Border Grid.Row="2"
                 Background="#FFFBF0"
                 BorderBrush="#F0C040"
                 BorderThickness="0,0,0,1"
@@ -279,9 +291,9 @@
         </Border>
 
         <!-- ═══════════════════════════════════════════════════════════
-             Row 2 — Results list
+             Row 3 — Results list
         ═══════════════════════════════════════════════════════════ -->
-        <Grid Grid.Row="2">
+        <Grid Grid.Row="3">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
@@ -344,9 +356,9 @@
         </Grid>
 
         <!-- ═══════════════════════════════════════════════════════════
-             Row 3 — Status bar
+             Row 4 — Status bar
         ═══════════════════════════════════════════════════════════ -->
-        <Border Grid.Row="3"
+        <Border Grid.Row="4"
                 Background="#EEEEEE"
                 BorderBrush="#DDDDDD"
                 BorderThickness="0,1,0,0"
