@@ -9,9 +9,10 @@ namespace FtsLib.Core
     ///
     /// Rules:
     ///   - Tokens are split on whitespace.
-    ///   - A token that contains '*' is a wildcard term.
+    ///   - A token that contains '*' or '?' is a wildcard term.
     ///   - A token that ends with '~' or '~N' (N = 1–3) is a fuzzy term.
-    ///     Wildcard and fuzzy cannot be combined on the same token.
+    ///     If a token has both a wildcard character and a fuzzy suffix, the wildcard
+    ///     wins: the fuzzy suffix is stripped and the token is treated as a wildcard.
     ///   - All others are literals.
     ///   - Nikud (U+05B0–U+05C7) and cantillation (U+0591–U+05AF) are stripped from
     ///     every token so patterns match the normalised terms stored in the index.
@@ -62,9 +63,11 @@ namespace FtsLib.Core
                 string normalised = Normalise(tokenText);
                 if (normalised.Length == 0) continue;
 
-                bool isWildcard = normalised.IndexOf('*') >= 0;
+                bool isWildcard = normalised.IndexOf('*') >= 0 || normalised.IndexOf('?') >= 0;
 
-                // Fuzzy + wildcard on the same token is not supported
+                // Fuzzy + wildcard ('*' or '?') on the same token is not supported.
+                // The wildcard wins: the fuzzy suffix is silently stripped and the
+                // token is treated as a plain wildcard pattern.
                 if (isFuzzy && isWildcard) isFuzzy = false;
 
                 groups.Add(new QueryGroup(normalised, isWildcard, isFuzzy, fuzzyDist));
@@ -88,6 +91,7 @@ namespace FtsLib.Core
                 if (c >= '\u0591' && c <= '\u05C7') continue;
 
                 if (c == '*') { sb.Append('*'); continue; }
+                if (c == '?') { sb.Append('?'); continue; }
 
                 // Hebrew letters U+05D0–U+05EA
                 if (c >= '\u05D0' && c <= '\u05EA') { sb.Append(c); continue; }

@@ -25,6 +25,7 @@ namespace FtsLib.Seforim
     /// Query syntax:
     ///   word        — literal AND term
     ///   word*       — wildcard (prefix / infix / suffix)
+    ///   wor?d       — optional char: the char before '?' is optional (matches "word" and "wrd")
     ///   word~       — fuzzy match, edit distance 1
     ///   word~2      — fuzzy match, edit distance 2
     ///   word~3      — fuzzy match, edit distance 3 (maximum)

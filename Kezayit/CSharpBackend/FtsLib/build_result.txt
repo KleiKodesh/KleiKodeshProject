@@ -1,0 +1,4 @@
+﻿MSBuild version 18.5.4+cb4e32d21 for .NET Framework
+
+  FtsLib -> C:\Users\Public\Documents\KleiKodeshProject\Kezayit\CSharpBackend\FtsLib\FtsLib\bin\Release\FtsLib.dll
+  FtsLibTest -> C:\Users\Public\Documents\KleiKodeshProject\Kezayit\CSharpBackend\FtsLib\FtsLibTest\bin\Release\FtsLibTest.exe

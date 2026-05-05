@@ -1,0 +1,18 @@
+﻿Term     : [ל]  (1 chars)
+UTF8 hex : D7 9C
+IndexDir : C:\Users\Public\Documents\KleiKodeshProject\Kezayit\CSharpBackend\FtsLib\FtsLibTest\bin\Release\index_full
+
+Segment: seg_0_42.dat
+  NOT FOUND in term_index
+  Raw SQL count: 0
+
+Segment: seg_2_20.dat
+  NOT FOUND in term_index
+  Raw SQL count: 0
+
+Segment: seg_2_41.dat
+  NOT FOUND in term_index
+  Raw SQL count: 0
+
+IndexReader.Search result:
+  (no results)

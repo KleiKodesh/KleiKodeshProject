@@ -40,7 +40,7 @@ namespace FtsLib.Core
         {
             var started = StartedIterators(terms, resolve, skipMissing: true);
             if (started.Count == 0) return Enumerable.Empty<int>();
-            if (started.Count == 1) return started[0].AsEnumerable();
+            if (started.Count == 1) return DrainStarted(started[0]);
             return PostingMatcher.Union(started.ToArray());
         }
 
@@ -61,7 +61,7 @@ namespace FtsLib.Core
             }
 
             if (groupIters.Count == 0) return Enumerable.Empty<int>();
-            if (groupIters.Count == 1) return groupIters[0].AsEnumerable();
+            if (groupIters.Count == 1) return DrainStarted(groupIters[0]);
             return PostingMatcher.Intersect(groupIters.ToArray());
         }
 
@@ -98,6 +98,17 @@ namespace FtsLib.Core
                 if (it.MoveNext()) result.Add(it);
             }
             return result;
+        }
+
+        /// <summary>
+        /// Yields all values from a pre-advanced iterator (Current is already valid).
+        /// Unlike <see cref="PostingIterator.AsEnumerable"/>, this does NOT call
+        /// MoveNext before yielding the first value.
+        /// </summary>
+        private static IEnumerable<int> DrainStarted(PostingIterator it)
+        {
+            do { yield return it.Current; }
+            while (it.MoveNext());
         }
     }
 }

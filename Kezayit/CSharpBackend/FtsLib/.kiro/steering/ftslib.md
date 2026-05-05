@@ -84,6 +84,18 @@ If you change the skip write logic, you must update `SkipTo` to match, and vice 
 
 ---
 
+## Adding new files — csproj registration required
+
+This solution uses the classic `.csproj` format (SDK-style glob includes are **not** used). Every new `.cs` file must be manually added to the relevant project file or the compiler will silently ignore it.
+
+- Adding to `FtsLib/`: add a `<Compile Include="..." />` entry in `FtsLib/FtsLib.csproj`
+- Adding to `FtsLibTest/`: add a `<Compile Include="..." />` entry in `FtsLibTest/FtsLibTest.csproj`
+- Adding to `FtsLibDemo/`: add a `<Compile Include="..." />` entry in `FtsLibDemo/FtsLibDemo.csproj`
+
+After adding the entry, rebuild to confirm the file is picked up. A missing entry causes a silent build success with the new class simply absent — the symptom is `CS0103: The name 'X' does not exist in the current context`.
+
+---
+
 ## File length rule
 
 - **Target: under 200 lines per file.** Files up to ~250 lines are acceptable if they have one clear, cohesive job.

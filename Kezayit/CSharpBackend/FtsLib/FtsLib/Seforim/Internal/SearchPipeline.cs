@@ -11,6 +11,7 @@ namespace FtsLib.Seforim
     /// Query syntax (handled by <see cref="QueryParser"/>):
     ///   word        — literal AND term
     ///   word*       — wildcard (prefix / infix / suffix)
+    ///   wor?d       — optional char: 'd' before '?' is optional → matches "word" and "wrd"
     ///   word~       — fuzzy, edit distance 1 (default)
     ///   word~2      — fuzzy, edit distance 2
     ///   word~3      — fuzzy, edit distance 3 (maximum)
@@ -62,7 +63,12 @@ namespace FtsLib.Seforim
                     {
                         expanded = reader.ExpandWildcard(group.Pattern);
                         if (expanded.Count == 0)
-                            expanded = new List<string> { WildcardExpander.StripWildcard(group.Pattern) };
+                        {
+                            // Anchor too short or no matches — skip this token so the
+                            // remaining terms still produce results rather than killing
+                            // the whole query with a dead AND group.
+                            continue;
+                        }
                     }
                     else
                     {
@@ -134,7 +140,10 @@ namespace FtsLib.Seforim
                     {
                         expanded = reader.ExpandWildcard(group.Pattern);
                         if (expanded.Count == 0)
-                            expanded = new List<string> { WildcardExpander.StripWildcard(group.Pattern) };
+                        {
+                            // Anchor too short or no matches — skip, don't kill the query.
+                            continue;
+                        }
                     }
                     else
                     {

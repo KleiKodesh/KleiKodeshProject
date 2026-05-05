@@ -55,6 +55,18 @@ namespace FtsLibTest
                     SpeedTest.Run(args);
                     return;
 
+                case "expand":
+                    ExpandDiag.Run(args);
+                    return;
+
+                case "lookup":
+                    LookupDiag.Run(args);
+                    return;
+
+                case "wdiag":
+                    WildcardDiag.Run(args);
+                    return;
+
                 default:
                     PrintUsage();
                     return;
@@ -106,6 +118,7 @@ namespace FtsLibTest
             Console.WriteLine("  FtsLibTest.exe search [tier]          — search index");
             Console.WriteLine("  FtsLibTest.exe runall [tier]          — build + search, combined report");
             Console.WriteLine("  FtsLibTest.exe query  [tier] \"query\"  — ad-hoc query with snippets");
+            Console.WriteLine("  FtsLibTest.exe wdiag  [tier] query    — wildcard expansion diagnostic");
             Console.WriteLine();
             Console.WriteLine("Tiers: 500k (default) | 1m | 3m | full");
             Console.WriteLine();

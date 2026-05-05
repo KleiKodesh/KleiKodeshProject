@@ -62,6 +62,9 @@
     <Compile Include="SearchIndex\QueryTest.cs" />
     <Compile Include="SearchIndex\VerifyTest.cs" />
     <Compile Include="SearchIndex\SpeedTest.cs" />
+    <Compile Include="SearchIndex\ExpandDiag.cs" />
+    <Compile Include="SearchIndex\LookupDiag.cs" />
+    <Compile Include="SearchIndex\WildcardDiag.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />

@@ -8,8 +8,9 @@
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance vm:MainViewModel}"
         Title="חיפוש בספרים"
-        Height="680" Width="1000"
-        MinHeight="480" MinWidth="700"
+        Height="620" Width="390"
+        MinHeight="400" MinWidth="320"
+        WindowStartupLocation="CenterScreen"
         FlowDirection="RightToLeft"
         FontFamily="Segoe UI"
         FontSize="14">
@@ -78,31 +79,44 @@
                     Padding="0,14,0,10">
                 <StackPanel>
 
-                    <!-- Title — blue link style -->
-                    <TextBlock Text="{Binding BookTitle, Mode=OneTime}"
-                               FontSize="18"
-                               Foreground="#1A0DAB"
-                               TextWrapping="Wrap"
-                               Margin="0,0,0,3">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Style.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="TextDecorations" Value="Underline"/>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
+                    <!-- Title — selectable, blue link style -->
+                    <TextBox Text="{Binding BookTitle, Mode=OneTime}"
+                             FontSize="18"
+                             Foreground="#1A0DAB"
+                             TextWrapping="Wrap"
+                             Margin="0,0,0,3"
+                             IsReadOnly="True"
+                             BorderThickness="0"
+                             Background="Transparent"
+                             Padding="0"
+                             Cursor="IBeam"/>
 
-                    <!-- Snippet with highlighted query terms -->
-                    <TextBlock FontSize="13"
-                               Foreground="#4D5156"
-                               TextWrapping="Wrap"
-                               LineHeight="20"
-                               local:HighlightBehavior.Text="{Binding Snippet, Mode=OneTime}"
-                               local:HighlightBehavior.Query="{Binding DataContext.CurrentQuery,
-                                   RelativeSource={RelativeSource AncestorType=Window}}"/>
+                    <!-- Snippet — selectable, with bold highlights via MarkupBehavior.
+                         Because TextBox doesn't support Inlines, we layer a transparent
+                         selectable TextBox on top of a TextBlock that renders the markup.
+                         The TextBox carries the plain text for copying; the TextBlock
+                         renders the highlights underneath. -->
+                    <Grid>
+                        <!-- Rendered highlights (not selectable, but visible) -->
+                        <TextBlock FontSize="13"
+                                   Foreground="#4D5156"
+                                   TextWrapping="Wrap"
+                                   LineHeight="20"
+                                   local:MarkupBehavior.Text="{Binding Snippet, Mode=OneTime}"/>
+                        <!-- Transparent overlay — selectable, carries plain text for copy -->
+                        <TextBox FontSize="13"
+                                 Foreground="Transparent"
+                                 TextWrapping="Wrap"
+                                 IsReadOnly="True"
+                                 BorderThickness="0"
+                                 Background="Transparent"
+                                 Padding="0"
+                                 Cursor="IBeam"
+                                 CaretBrush="#4D5156"
+                                 SelectionBrush="#3399FF"
+                                 SelectionOpacity="0.35"
+                                 Text="{Binding PlainSnippet, Mode=OneTime}"/>
+                    </Grid>
                 </StackPanel>
             </Border>
         </DataTemplate>
@@ -198,53 +212,65 @@
              Row 2 — Results list
         ═══════════════════════════════════════════════════════════ -->
         <Grid Grid.Row="2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
 
-            <ScrollViewer VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Disabled"
-                          Padding="16,0">
-                <StackPanel MaxWidth="680"
-                            HorizontalAlignment="Center"
-                            Margin="0,0,0,40">
+            <!-- Result count header — visible only when there is text -->
+            <TextBlock Grid.Row="0"
+                       Text="{Binding ResultCountText}"
+                       FontSize="13"
+                       Foreground="#70757A"
+                       Margin="12,10,12,4">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Visible"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding ResultCountText}" Value="">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding ResultCountText}" Value="{x:Null}">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
 
-                    <!-- Result count header — visible only when there is text -->
-                    <TextBlock Text="{Binding ResultCountText}"
-                               FontSize="13"
-                               Foreground="#70757A"
-                               Margin="0,12,0,4">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <!-- Default: visible -->
-                                <Setter Property="Visibility" Value="Visible"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding ResultCountText}" Value="">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding ResultCountText}" Value="{x:Null}">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-
-                    <!-- The result cards -->
-                    <ItemsControl ItemsSource="{Binding Results}"
-                                  ItemTemplate="{StaticResource ResultCardTemplate}"
-                                  VirtualizingPanel.IsVirtualizing="False"/>
-
-                </StackPanel>
-            </ScrollViewer>
-
-            <!-- Searching spinner overlay -->
-            <Border Background="#80FFFFFF"
-                    Visibility="{Binding IsSearching, Converter={StaticResource BoolToVis}}">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <TextBlock Text="מחפש…"
-                               FontSize="16"
-                               Foreground="#2E6DA4"
-                               HorizontalAlignment="Center"/>
-                </StackPanel>
-            </Border>
+            <!--
+                ListView with VirtualizingStackPanel (the default panel for ListView).
+                Only the visible items are realized as WPF elements — essential for
+                large result sets (tens of thousands of rows).
+                ScrollUnit=Item gives smooth per-item scrolling.
+            -->
+            <ListView Grid.Row="1"
+                      ItemsSource="{Binding Results}"
+                      ItemTemplate="{StaticResource ResultCardTemplate}"
+                      BorderThickness="0"
+                      Background="Transparent"
+                      VirtualizingPanel.IsVirtualizing="True"
+                      VirtualizingPanel.VirtualizationMode="Recycling"
+                      VirtualizingPanel.ScrollUnit="Item"
+                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                      Padding="0,0,0,40">
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="Padding" Value="12,0"/>
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Setter Property="BorderThickness" Value="0"/>
+                        <!-- Remove the default focus/selection highlight -->
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListViewItem">
+                                    <ContentPresenter Margin="{TemplateBinding Padding}"/>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListView.ItemContainerStyle>
+            </ListView>
         </Grid>
 
         <!-- ═══════════════════════════════════════════════════════════

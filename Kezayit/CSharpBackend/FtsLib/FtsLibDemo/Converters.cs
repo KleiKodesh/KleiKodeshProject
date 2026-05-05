@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
@@ -30,105 +29,69 @@ namespace FtsLibDemo
     }
 
     /// <summary>
-    /// Attached property that populates a TextBlock's Inlines with highlighted runs.
-    /// Usage: local:HighlightBehavior.Text="{Binding Snippet}"
-    ///        local:HighlightBehavior.Query="{Binding DataContext.CurrentQuery, RelativeSource={RelativeSource AncestorType=Window}}"
+    /// Attached property that renders a snippet containing &lt;mark&gt;...&lt;/mark&gt; tags
+    /// as bold highlighted Runs inside a TextBlock.
+    ///
+    /// The snippet produced by SnippetBuilder already has the correct highlight positions —
+    /// this just converts those tags to WPF Inlines. No second search pass needed.
+    ///
+    /// Usage: local:MarkupBehavior.Text="{Binding Snippet, Mode=OneTime}"
     /// </summary>
-    public static class HighlightBehavior
+    public static class MarkupBehavior
     {
-        // ── Text ─────────────────────────────────────────────────────────────
-
         public static readonly DependencyProperty TextProperty =
             DependencyProperty.RegisterAttached(
                 "Text",
                 typeof(string),
-                typeof(HighlightBehavior),
-                new PropertyMetadata(null, OnChanged));
+                typeof(MarkupBehavior),
+                new PropertyMetadata(null, OnTextChanged));
 
-        public static string GetText(DependencyObject obj)  => (string)obj.GetValue(TextProperty);
+        public static string GetText(DependencyObject obj)               => (string)obj.GetValue(TextProperty);
         public static void   SetText(DependencyObject obj, string value) => obj.SetValue(TextProperty, value);
 
-        // ── Query ─────────────────────────────────────────────────────────────
-
-        public static readonly DependencyProperty QueryProperty =
-            DependencyProperty.RegisterAttached(
-                "Query",
-                typeof(string),
-                typeof(HighlightBehavior),
-                new PropertyMetadata(null, OnChanged));
-
-        public static string GetQuery(DependencyObject obj)  => (string)obj.GetValue(QueryProperty);
-        public static void   SetQuery(DependencyObject obj, string value) => obj.SetValue(QueryProperty, value);
-
-        // ── Change handler ────────────────────────────────────────────────────
-
-        private static void OnChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        private static void OnTextChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            var tb = d as TextBlock;
-            if (tb == null) return;
+            if (!(d is TextBlock tb)) return;
 
-            string text  = GetText(tb)  ?? string.Empty;
-            string query = GetQuery(tb) ?? string.Empty;
-
+            string raw = (e.NewValue as string) ?? string.Empty;
             tb.Inlines.Clear();
 
-            var terms = ExtractTerms(query);
-            if (terms.Count == 0 || string.IsNullOrEmpty(text))
-            {
-                tb.Inlines.Add(new Run(text));
-                return;
-            }
+            // Split on <mark> / </mark> tags (case-insensitive, no attributes).
+            // Odd-indexed segments are inside <mark>…</mark>, even-indexed are plain text.
+            const string open  = "<mark>";
+            const string close = "</mark>";
 
-            string lower = text.ToLowerInvariant();
-            int    pos   = 0;
+            int pos       = 0;
+            int len       = raw.Length;
+            bool inMark   = false;
 
-            while (pos < text.Length)
+            while (pos < len)
             {
-                int bestStart = -1, bestLen = 0;
-                foreach (var term in terms)
+                string tag    = inMark ? close : open;
+                int    tagIdx = raw.IndexOf(tag, pos, StringComparison.OrdinalIgnoreCase);
+
+                string segment = tagIdx < 0
+                    ? raw.Substring(pos)
+                    : raw.Substring(pos, tagIdx - pos);
+
+                // Decode the two entities the renderer emits (&amp; → & and &gt; → >).
+                string text = segment
+                    .Replace("&amp;", "&")
+                    .Replace("&gt;",  ">");
+
+                if (text.Length > 0)
                 {
-                    int idx = lower.IndexOf(term, pos, StringComparison.Ordinal);
-                    if (idx < 0) continue;
-                    if (bestStart < 0 || idx < bestStart || (idx == bestStart && term.Length > bestLen))
-                    {
-                        bestStart = idx;
-                        bestLen   = term.Length;
-                    }
+                    if (inMark)
+                        tb.Inlines.Add(new Run(text) { FontWeight = FontWeights.Bold, Foreground = Brushes.Black });
+                    else
+                        tb.Inlines.Add(new Run(text));
                 }
 
-                if (bestStart < 0)
-                {
-                    tb.Inlines.Add(new Run(text.Substring(pos)));
-                    break;
-                }
+                if (tagIdx < 0) break;
 
-                if (bestStart > pos)
-                    tb.Inlines.Add(new Run(text.Substring(pos, bestStart - pos)));
-
-                tb.Inlines.Add(new Run(text.Substring(bestStart, bestLen))
-                {
-                    FontWeight = FontWeights.Bold,
-                    Foreground = Brushes.Black,
-                });
-
-                pos = bestStart + bestLen;
+                pos    = tagIdx + tag.Length;
+                inMark = !inMark;
             }
-        }
-
-        // ── Helpers ───────────────────────────────────────────────────────────
-
-        private static List<string> ExtractTerms(string query)
-        {
-            var terms = new List<string>();
-            if (string.IsNullOrWhiteSpace(query)) return terms;
-
-            foreach (var word in query.Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
-            {
-                var t = word.ToLowerInvariant().Trim();
-                if (t.Length > 0 && !terms.Contains(t))
-                    terms.Add(t);
-            }
-            return terms;
         }
     }
 }
