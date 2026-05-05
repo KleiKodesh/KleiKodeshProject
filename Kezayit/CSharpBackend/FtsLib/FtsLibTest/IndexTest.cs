@@ -1,6 +1,5 @@
 using FtsLib.Core;
 using FtsLib.Misc;
-using FtsLib;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;

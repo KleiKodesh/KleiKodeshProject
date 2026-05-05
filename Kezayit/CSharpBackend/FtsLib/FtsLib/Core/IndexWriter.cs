@@ -31,6 +31,8 @@ namespace FtsLib.Core
         private DeleteSet     _deletes;
         private readonly bool _useSkipList;
         private bool          _disposed;
+        private int           _lastLineId = -1;
+        private bool          _flushPending;
 
         public IndexWriter(string indexPath, bool useSkipList = true) : base(indexPath)
         {
@@ -38,7 +40,7 @@ namespace FtsLib.Core
             _ramIndex    = new RamIndex(useSkipList: useSkipList);
             _deletes     = DeleteSet.Load(DeletesFile);
 
-            string segDir = SegmentsDir;
+            string segDir = IndexPath;
             if (Directory.Exists(segDir) &&
                 (Directory.GetFiles(segDir, "seg_*.dat").Length > 0 ||
                  File.Exists(Path.Combine(segDir, "wal.log"))))
@@ -59,10 +61,22 @@ namespace FtsLib.Core
             if (_disposed)
                 throw new ObjectDisposedException(nameof(IndexWriter));
 
-            _ramIndex.Add(term, lineId);
-
-            if (_ramIndex.Count >= FlushThreshold)
+            // If a flush was triggered on the previous line, execute it now —
+            // before writing any terms for the new line, so no line is split
+            // across two segments.
+            if (_flushPending && lineId != _lastLineId)
+            {
                 FlushRam();
+                _flushPending = false;
+            }
+
+            _ramIndex.Add(term, lineId);
+            _lastLineId = lineId;
+
+            // Arm the flush flag once the threshold is reached, but don't flush
+            // yet — more terms for this same lineId may still arrive.
+            if (_ramIndex.Count >= FlushThreshold)
+                _flushPending = true;
         }
 
         /// <summary>
@@ -93,7 +107,7 @@ namespace FtsLib.Core
             FlushRam();
 
             if (_store == null)
-                _store = new SegmentStore(SegmentsDir);
+                _store = new SegmentStore(IndexPath);
 
             Console.WriteLine($"[IndexWriter] Purging {_deletes.Count:N0} deleted doc(s)...");
             _store.SetDeleteSet(_deletes);
@@ -114,7 +128,7 @@ namespace FtsLib.Core
             if (_disposed)
                 throw new ObjectDisposedException(nameof(IndexWriter));
             if (_store == null)
-                _store = new SegmentStore(SegmentsDir);
+                _store = new SegmentStore(IndexPath);
             _store.Commit();
         }
 
@@ -138,7 +152,7 @@ namespace FtsLib.Core
             if (_ramIndex.Count == 0) return;
 
             if (_store == null)
-                _store = new SegmentStore(SegmentsDir);
+                _store = new SegmentStore(IndexPath);
 
             Console.WriteLine($"[IndexWriter] Flushing {_ramIndex.Count:N0} terms to segment...");
             _store.Flush(_ramIndex);

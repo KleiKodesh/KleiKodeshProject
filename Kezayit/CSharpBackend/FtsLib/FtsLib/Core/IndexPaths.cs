@@ -8,12 +8,6 @@ namespace FtsLib.Core
         protected readonly string IndexPath;
 
         /// <summary>
-        /// Directory that holds all segment files (seg_L_ID.dat + seg_L_ID.db).
-        /// This is the only persistent storage — there is no separate postings.dat or Meta.db.
-        /// </summary>
-        protected string SegmentsDir => Path.Combine(IndexPath, "segments");
-
-        /// <summary>
         /// Sorted varint-delta file that records logically deleted doc IDs.
         /// Absent when no deletions have been made.
         /// </summary>

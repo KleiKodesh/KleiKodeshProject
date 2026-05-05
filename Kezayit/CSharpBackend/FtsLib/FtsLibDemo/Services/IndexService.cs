@@ -1,4 +1,3 @@
-using FtsLib;
 using FtsLib.Core;
 using FtsLib.Misc;
 using System;

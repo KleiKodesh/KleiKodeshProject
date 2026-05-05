@@ -1,7 +1,6 @@
 using FtsLib.Misc;
 using System;
 using System.Collections.Generic;
-using System.Text;
 
 namespace FtsLibDemo.Services
 {
@@ -42,12 +41,9 @@ namespace FtsLibDemo.Services
             EnsureOpen();
             var rows = new List<SearchResultItem>(ids.Count);
 
-            var results = _db.FetchSearchResults(ids);
-            foreach (var (lineId, lineIndex, heRef, content, bookTitle) in results)
+            foreach (var (lineId, content, bookTitle) in _db.FetchSearchResults(ids))
             {
-                string reference = heRef ?? $"שורה {lineIndex}";
-                string snippet   = StripHtml(content);
-                rows.Add(new SearchResultItem(lineId, bookTitle, reference, snippet));
+                rows.Add(new SearchResultItem(lineId, bookTitle, content));
             }
 
             return rows;
@@ -72,20 +68,6 @@ namespace FtsLibDemo.Services
         {
             if (_db == null)
                 throw new InvalidOperationException("DbService: database is not open.");
-        }
-
-        private static string StripHtml(string s)
-        {
-            if (string.IsNullOrEmpty(s)) return s;
-            var  sb    = new StringBuilder(s.Length);
-            bool inTag = false;
-            foreach (char c in s)
-            {
-                if (c == '<') { inTag = true;  continue; }
-                if (c == '>') { inTag = false; continue; }
-                if (!inTag) sb.Append(c);
-            }
-            return sb.ToString().Trim();
         }
     }
 }

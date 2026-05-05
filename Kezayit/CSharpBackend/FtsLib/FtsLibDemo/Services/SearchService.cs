@@ -1,20 +1,21 @@
-using FtsLib;
 using FtsLib.Core;
 using FtsLib.Misc;
 using FtsLibDemo.ViewModels;
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace FtsLibDemo.Services
 {
     /// <summary>
-    /// Searches the open index and fetches result rows from the source SQLite DB.
-    /// Depends on IIndexService for the live IndexReader.
+    /// Searches the open index and streams result rows from the source SQLite DB in batches.
     /// </summary>
     public sealed class SearchService : ISearchService
     {
+        private const int BatchSize = 200;
+
         private readonly IIndexService _indexService;
 
         public SearchService(IIndexService indexService)
@@ -22,58 +23,77 @@ namespace FtsLibDemo.Services
             _indexService = indexService ?? throw new ArgumentNullException(nameof(indexService));
         }
 
-        public Task<(List<SearchResultItem> rows, string statusMessage)> SearchAsync(
+        public Task<string> SearchStreamingAsync(
             string query,
             string dbPath,
+            Action<IReadOnlyList<SearchResultItem>> onBatch,
+            CancellationToken ct,
             IndexReader reader = null)
         {
             var indexReader = reader ?? _indexService.Reader;
             if (indexReader == null)
-                return Task.FromResult((new List<SearchResultItem>(), "אין אינדקס פתוח"));
+                return Task.FromResult("אין אינדקס פתוח");
 
-            return Task.Run(() => RunSearch(query, dbPath, indexReader));
+            return Task.Run(() => RunSearch(query, dbPath, indexReader, onBatch, ct), ct);
         }
 
         // ── Core search ───────────────────────────────────────────────
 
-        private static (List<SearchResultItem> rows, string statusMessage) RunSearch(
-            string      query,
-            string      dbPath,
-            IndexReader reader)
+        private static string RunSearch(
+            string query,
+            string dbPath,
+            IndexReader reader,
+            Action<IReadOnlyList<SearchResultItem>> onBatch,
+            CancellationToken ct)
         {
             var tokenizer = new Tokenizer();
             var terms     = new List<string>(tokenizer.Extract(query));
 
             if (terms.Count == 0)
-                return (new List<SearchResultItem>(), "אין מילות חיפוש תקינות");
+                return "אין מילות חיפוש תקינות";
 
             var ids = new List<int>(reader.Search(terms));
 
             if (ids.Count == 0)
-                return (new List<SearchResultItem>(), "לא נמצאו תוצאות");
+                return "לא נמצאו תוצאות";
 
-            var rows = FetchRows(dbPath, ids);
-            return (rows, $"נמצאו {rows.Count:N0} תוצאות");
+            int total = ids.Count;
+            StreamRows(dbPath, ids, onBatch, ct);
+
+            return ct.IsCancellationRequested
+                ? "החיפוש בוטל"
+                : $"נמצאו {total:N0} תוצאות";
         }
 
-        // ── DB fetch ──────────────────────────────────────────────────
+        // ── Streaming DB fetch ────────────────────────────────────────
 
-        private static List<SearchResultItem> FetchRows(string dbPath, List<int> ids)
+        private static void StreamRows(
+            string dbPath,
+            List<int> ids,
+            Action<IReadOnlyList<SearchResultItem>> onBatch,
+            CancellationToken ct)
         {
-            var rows = new List<SearchResultItem>(ids.Count);
-
             using (var db = new ZayitDb(dbPath))
             {
-                var results = db.FetchSearchResults(ids);
-                foreach (var (lineId, lineIndex, heRef, content, bookTitle) in results)
-                {
-                    string reference = heRef ?? $"שורה {lineIndex}";
-                    string snippet   = StripHtml(content);
-                    rows.Add(new SearchResultItem(lineId, bookTitle, reference, snippet));
-                }
-            }
+                var batch = new List<SearchResultItem>(BatchSize);
 
-            return rows;
+                foreach (var (lineId, content, bookTitle) in db.FetchSearchResults(ids))
+                {
+                    if (ct.IsCancellationRequested) break;
+
+                    string snippet = StripHtml(content);
+                    batch.Add(new SearchResultItem(lineId, bookTitle, snippet));
+
+                    if (batch.Count >= BatchSize)
+                    {
+                        onBatch(batch);
+                        batch = new List<SearchResultItem>(BatchSize);
+                    }
+                }
+
+                if (batch.Count > 0)
+                    onBatch(batch);
+            }
         }
 
         // ── Helpers ───────────────────────────────────────────────────

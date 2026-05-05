@@ -7,14 +7,12 @@ namespace FtsLibDemo.ViewModels
     {
         public int    LineId    { get; }
         public string BookTitle { get; }
-        public string Reference { get; }
         public string Snippet   { get; }
 
-        public SearchResultItem(int lineId, string bookTitle, string reference, string snippet)
+        public SearchResultItem(int lineId, string bookTitle, string snippet)
         {
             LineId    = lineId;
             BookTitle = bookTitle;
-            Reference = reference;
             Snippet   = snippet;
         }
     }

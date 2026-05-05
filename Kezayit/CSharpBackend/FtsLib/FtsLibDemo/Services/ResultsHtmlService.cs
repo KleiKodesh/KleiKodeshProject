@@ -1,4 +1,3 @@
-using FtsLib;
 using FtsLibDemo.ViewModels;
 using System.Collections.Generic;
 using System.Net;
@@ -7,34 +6,22 @@ using System.Text;
 namespace FtsLibDemo.Services
 {
     /// <summary>
-    /// Builds an RTL-aware HTML page from search results, styled like Google search results.
-    /// Each result is a card: book title as the blue link, reference as the green breadcrumb,
-    /// and the snippet with highlighted query terms below.
+    /// Builds an RTL-aware HTML page from search results (kept for reference; app uses native WPF rendering).
     /// </summary>
     public sealed class ResultsHtmlService : IResultsHtmlService
     {
-        // ── IResultsHtmlService ──────────────────────────────────────
-
         public string Render(IReadOnlyList<SearchResultItem> items, string query)
         {
-            var terms = ExtractTerms(query);
-            var sb    = new StringBuilder(items.Count * 300);
-
+            var sb = new StringBuilder(items.Count * 200);
             AppendHead(sb, items.Count);
-
             foreach (var item in items)
             {
                 sb.AppendLine("<div class='result'>");
-                sb.Append("  <div class='breadcrumb'>").Append(Encode(item.BookTitle));
-                if (!string.IsNullOrEmpty(item.Reference))
-                    sb.Append(" › ").Append(Encode(item.Reference));
-                sb.AppendLine("</div>");
                 sb.Append("  <div class='title'>").Append(Encode(item.BookTitle)).AppendLine("</div>");
-                sb.Append("  <div class='snippet'>").Append(Highlight(item.Snippet, terms)).AppendLine("</div>");
+                sb.Append("  <div class='snippet'>").Append(Encode(item.Snippet)).AppendLine("</div>");
                 sb.AppendLine("</div>");
             }
-
-            sb.AppendLine("</div></body></html>"); // close #results + body
+            sb.AppendLine("</div></body></html>");
             return sb.ToString();
         }
 
@@ -139,58 +126,6 @@ namespace FtsLibDemo.Services
 
             if (count > 0)
                 sb.Append("<div class='count'>").Append($"{count:N0} תוצאות").AppendLine("</div>");
-        }
-
-        // ── Term highlighting ────────────────────────────────────────
-
-        private static string Highlight(string text, IReadOnlyList<string> terms)
-        {
-            if (terms.Count == 0) return Encode(text);
-
-            var lower  = text.ToLowerInvariant();
-            var result = new StringBuilder(text.Length + terms.Count * 20);
-            int pos    = 0;
-
-            while (pos < text.Length)
-            {
-                int bestStart = -1, bestLen = 0;
-                foreach (var term in terms)
-                {
-                    int idx = lower.IndexOf(term, pos, System.StringComparison.Ordinal);
-                    if (idx >= 0 && (bestStart < 0 || idx < bestStart ||
-                        (idx == bestStart && term.Length > bestLen)))
-                    {
-                        bestStart = idx;
-                        bestLen   = term.Length;
-                    }
-                }
-
-                if (bestStart < 0)
-                {
-                    result.Append(Encode(text.Substring(pos)));
-                    break;
-                }
-
-                if (bestStart > pos)
-                    result.Append(Encode(text.Substring(pos, bestStart - pos)));
-
-                result.Append("<mark>")
-                      .Append(Encode(text.Substring(bestStart, bestLen)))
-                      .Append("</mark>");
-
-                pos = bestStart + bestLen;
-            }
-
-            return result.ToString();
-        }
-
-        private static IReadOnlyList<string> ExtractTerms(string query)
-        {
-            var tokenizer = new Tokenizer();
-            var terms     = new List<string>(tokenizer.Extract(query));
-            for (int i = 0; i < terms.Count; i++)
-                terms[i] = terms[i].ToLowerInvariant();
-            return terms;
         }
 
         private static string Encode(string s) => WebUtility.HtmlEncode(s ?? string.Empty);

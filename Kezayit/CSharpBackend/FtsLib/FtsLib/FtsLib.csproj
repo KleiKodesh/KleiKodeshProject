@@ -84,6 +84,12 @@
     <Compile Include="Core\WildcardExpander.cs" />
     <Compile Include="Misc\ZayitDb.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Core\HtmlScannerHelpers.cs" />
+    <Compile Include="Core\HtmlTextScanner.cs" />
+    <Compile Include="Core\ProximityWindow.cs" />
+    <Compile Include="Core\SnippetBuilder.cs" />
+    <Compile Include="Core\SnippetResult.cs" />
+    <Compile Include="Core\TokenStream.cs" />
     <Compile Include="Core\Tokenizer.cs" />
   </ItemGroup>
   <ItemGroup>

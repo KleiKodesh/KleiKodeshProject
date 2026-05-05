@@ -1,5 +1,7 @@
 using FtsLibDemo.ViewModels;
+using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace FtsLibDemo.Services
@@ -11,13 +13,15 @@ namespace FtsLibDemo.Services
     {
         /// <summary>
         /// Tokenizes the query, searches the index, fetches matching lines from the DB,
-        /// and returns them as display-ready items.
-        /// Returns an empty list (never null) when there are no results.
-        /// If reader is provided, uses it instead of the service's default reader.
+        /// and streams batches of results via <paramref name="onBatch"/> as they arrive.
+        /// Calls <paramref name="onBatch"/> on the thread-pool; callers must marshal to the UI thread.
+        /// Returns the final status message.
         /// </summary>
-        Task<(List<SearchResultItem> rows, string statusMessage)> SearchAsync(
+        Task<string> SearchStreamingAsync(
             string query,
             string dbPath,
+            Action<IReadOnlyList<SearchResultItem>> onBatch,
+            CancellationToken ct,
             FtsLib.Core.IndexReader reader = null);
     }
 }

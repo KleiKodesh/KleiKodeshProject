@@ -24,11 +24,10 @@ namespace FtsLib.Core
         {
             _deletes = DeleteSet.Load(DeletesFile);
 
-            string segDir = SegmentsDir;
-            if (!Directory.Exists(segDir)) return;
+            if (!Directory.Exists(IndexPath)) return;
 
             // Sort by segId so ConcatIterator sees doc IDs in ascending order
-            var datFiles = Directory.GetFiles(segDir, "seg_*.dat");
+            var datFiles = Directory.GetFiles(IndexPath, "seg_*.dat");
             System.Array.Sort(datFiles, (a, b) => ParseSegId(a).CompareTo(ParseSegId(b)));
 
             foreach (var datFile in datFiles)

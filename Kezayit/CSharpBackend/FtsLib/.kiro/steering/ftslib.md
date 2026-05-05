@@ -86,8 +86,9 @@ If you change the skip write logic, you must update `SkipTo` to match, and vice 
 
 ## File length rule
 
-- **No source file should exceed 200 lines.** If a file grows beyond that, split it by responsibility before adding more code.
-- Each file should have one clear job: orchestration, I/O, merge logic, codec, etc. Mixed concerns are a sign the file needs splitting.
+- **Target: under 200 lines per file.** Files up to ~250 lines are acceptable if they have one clear, cohesive job.
+- If a file exceeds 250 lines, split it by responsibility before adding more code.
+- Each file should have one clear job: orchestration, I/O, merge logic, codec, etc. Mixed concerns are a sign the file needs splitting regardless of line count.
 
 ---
 

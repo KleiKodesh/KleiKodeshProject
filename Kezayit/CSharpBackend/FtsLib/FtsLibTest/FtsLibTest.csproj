@@ -53,6 +53,7 @@
     <Compile Include="CostumeTest.cs" />
     <Compile Include="IndexTest.cs" />
     <Compile Include="Program.cs" />
+    <Compile Include="SnippetTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

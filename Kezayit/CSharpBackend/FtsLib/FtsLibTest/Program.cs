@@ -13,8 +13,9 @@ namespace FtsLibTest
     ///   FtsLibTest.exe                          — run all tiers
     ///   FtsLibTest.exe 500k|1m|3m|full         — run one tier
     ///   FtsLibTest.exe validate [dir]           — validate existing index
-    ///   FtsLibTest.exe search &lt;dir&gt; &lt;terms...&gt;  — AND search
-    ///   FtsLibTest.exe searchall [dir]          — full AND/OR/mixed suite, both multi-seg and merged
+    ///   FtsLibTest.exe search &lt;dir&gt; &lt;terms...&gt;  — AND search (literals only)
+    ///   FtsLibTest.exe searchall [dir]          — full AND/OR/mixed/wildcard suite, both multi-seg and merged
+    ///   FtsLibTest.exe searchwild &lt;tokens...&gt;   — ad-hoc query; tokens may contain '*' wildcards
     /// </summary>
     internal class Program
     {
@@ -53,6 +54,12 @@ namespace FtsLibTest
                 return;
             }
 
+            if (cmd == "snippet")
+            {
+                SnippetTests.Run();
+                return;
+            }
+
             if (cmd == "build")
             {
                 if (args.Length < 2) { Console.WriteLine("Usage: build <dir> [limit]"); return; }
@@ -64,7 +71,7 @@ namespace FtsLibTest
                 using (var db     = new FtsLib.Misc.ZayitDb(""))
                 using (var writer = new IndexWriter(buildDir))
                 {
-                    var tok = new FtsLib.Tokenizer();
+                    var tok = new Tokenizer();
                     foreach (var row in db.ReadLines(buildLimit))
                     {
                         foreach (var token in tok.Extract(row.Content))
@@ -100,6 +107,105 @@ namespace FtsLibTest
                 string dir = args.Length > 1 ? args[1]
                     : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "index_test_500k");
                 SearchAllTests(dir);
+                return;
+            }
+
+            // searchwild <term1> [term2...] — each token may contain '*' wildcards
+            // e.g.: searchwild וידבר מש* כן *ל בני
+            if (cmd == "searchwild")
+            {
+                if (args.Length < 2) { Console.WriteLine("Usage: searchwild <term1> [term2...]"); return; }
+                string dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "index_test_500k");
+                var tokens = args.Skip(1).ToArray();
+                RunWildcardQuery(dir, tokens);
+                return;
+            }
+
+            // dblookup <phrase> — find lines in the DB containing the exact phrase, show id + range info
+            if (cmd == "dblookup")
+            {
+                if (args.Length < 2) { Console.WriteLine("Usage: dblookup <phrase>"); return; }
+                string phrase = string.Join(" ", args.Skip(1));
+                DbLookup(phrase);
+                return;
+            }
+
+            // charmap <id> — dump every character in a line with its Unicode codepoint
+            if (cmd == "charmap")
+            {
+                if (args.Length < 2) { Console.WriteLine("Usage: charmap <lineid>"); return; }
+                int lineId = int.Parse(args[1]);
+                using (var db = new FtsLib.Misc.ZayitDb(""))
+                {
+                    string content = db.GetLineContent(lineId);
+                    if (content == null) { Console.WriteLine("Not found."); return; }
+                    Console.WriteLine($"Line {lineId} — {content.Length} chars:");
+                    for (int i = 0; i < content.Length; i++)
+                    {
+                        char c  = content[i];
+                        int  cp = (int)c;
+                        Console.WriteLine($"  [{i:D3}] U+{cp:X4}  '{c}'");
+                    }
+                }
+                return;
+            }
+            if (cmd == "dbstats")
+            {
+                using (var db = new FtsLib.Misc.ZayitDb(""))
+                {
+                    var stats = db.GetIdStats();
+                    Console.WriteLine($"Total rows : {stats.Count:N0}");
+                    Console.WriteLine($"Min id     : {stats.MinId}");
+                    Console.WriteLine($"Max id     : {stats.MaxId}");
+                    Console.WriteLine($"Row 1      : id={stats.FirstId}  book={stats.FirstBook}");
+                    Console.WriteLine($"Row 500000 : id={stats.Id500k}   book={stats.Book500k}");
+                    Console.WriteLine($"Row 500001 : id={stats.Id500k1}  book={stats.Book500k1}");
+                }
+                return;
+            }
+            if (cmd == "bookfind")
+            {
+                if (args.Length < 2) { Console.WriteLine("Usage: bookfind <title_fragment>"); return; }
+                string frag = string.Join(" ", args.Skip(1));
+                using (var db = new FtsLib.Misc.ZayitDb(""))
+                {
+                    foreach (var (id, title) in db.FindBooks(frag))
+                        Console.WriteLine($"  [{id}] {title}");
+                }
+                return;
+            }
+
+            // lineid <id> — show the content and book info for a specific line ID
+            if (cmd == "lineid")
+            {
+                if (args.Length < 2) { Console.WriteLine("Usage: lineid <id>"); return; }
+                int lineId = int.Parse(args[1]);
+                using (var db = new FtsLib.Misc.ZayitDb(""))
+                {
+                    var info = db.GetLineInfo(lineId);
+                    if (info == null) { Console.WriteLine("Not found."); return; }
+                    Console.WriteLine($"id={lineId}  book={info.Value.BookTitle}  ref={info.Value.HeRef}");
+                    Console.WriteLine(StripHtmlAndDiacritics(info.Value.Content));
+                }
+                return;
+            }
+
+            // bookphrase <booktitle_fragment> <phrase> — find lines in a specific book containing a phrase
+            if (cmd == "bookphrase")
+            {
+                if (args.Length < 3) { Console.WriteLine("Usage: bookphrase <booktitle_fragment> <phrase>"); return; }
+                string bookFrag  = args[1];
+                string phrase    = string.Join(" ", args.Skip(2));
+                BookPhraseLookup(bookFrag, phrase);
+                return;
+            }
+
+            // idcheck <id1> [id2...] — check whether specific doc IDs are returned by the AND search
+            if (cmd == "idcheck")
+            {
+                if (args.Length < 2) { Console.WriteLine("Usage: idcheck <id1> [id2...]"); return; }
+                var targetIds = args.Skip(1).Select(int.Parse).ToHashSet();
+                IdCheck(targetIds, new[] { "וידבר", "משה", "כן", "אל", "בני" });
                 return;
             }
 
@@ -303,6 +409,103 @@ namespace FtsLibTest
         private static string WildcardExpander_StripWildcard(string pattern)
             => pattern.Replace("*", string.Empty);
 
+        // ── Ad-hoc wildcard query (searchwild command) ────────────────
+
+        /// <summary>
+        /// Runs an arbitrary query where each token may be a literal or a wildcard.
+        /// Each token becomes one AND group; wildcard tokens are expanded to an OR group
+        /// of all matching terms. Prints expansion info, result count, timing, and
+        /// validates a sample of up to 50 results against the DB.
+        /// </summary>
+        private static void RunWildcardQuery(string indexDir, string[] tokens)
+        {
+            Console.OutputEncoding = Encoding.UTF8;
+            Console.WriteLine($"Index : {indexDir}");
+            Console.WriteLine($"Query : {string.Join(" ", tokens)}");
+            Console.WriteLine();
+
+            using (var reader = new IndexReader(indexDir))
+            using (var db     = new FtsLib.Misc.ZayitDb(""))
+            {
+                // Build one group per token
+                var groups        = new List<IEnumerable<string>>();
+                var groupLabels   = new List<string>();
+                var expandedSets  = new List<List<string>>(); // parallel to groups
+
+                foreach (var token in tokens)
+                {
+                    bool isWild = token.IndexOf('*') >= 0;
+                    if (isWild)
+                    {
+                        var expanded = reader.ExpandWildcard(token);
+                        if (expanded.Count == 0)
+                        {
+                            Console.WriteLine($"  '{token}' → no terms matched — query will return 0 results");
+                            return;
+                        }
+                        string preview = expanded.Count <= 5
+                            ? string.Join(", ", expanded)
+                            : string.Join(", ", expanded.Take(5)) + $"… (+{expanded.Count - 5} more)";
+                        Console.WriteLine($"  '{token}' → {expanded.Count} terms: {preview}");
+                        groups.Add(expanded);
+                        groupLabels.Add(token);
+                        expandedSets.Add(expanded);
+                    }
+                    else
+                    {
+                        int cnt = reader.GetTermCount(token);
+                        Console.WriteLine($"  '{token}' → {cnt:N0} postings (literal)");
+                        groups.Add(new[] { token });
+                        groupLabels.Add(token);
+                        expandedSets.Add(new List<string> { token });
+                    }
+                }
+
+                Console.WriteLine();
+                var sw  = Stopwatch.StartNew();
+                var ids = reader.Search(groups).ToList();
+                sw.Stop();
+                Console.WriteLine($"Results : {ids.Count:N0}  ({sw.ElapsedMilliseconds} ms)");
+
+                // Validate a sample
+                int sampleSize = Math.Min(50, ids.Count);
+                int ok = 0, bogus = 0, missing = 0;
+                foreach (int id in ids.Take(sampleSize))
+                {
+                    string content = db.GetLineContent(id);
+                    if (content == null) { missing++; continue; }
+                    string clean = StripHtmlAndDiacritics(content);
+
+                    bool valid = expandedSets.All(grp =>
+                        grp.Any(t => clean.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0));
+
+                    if (valid) ok++;
+                    else
+                    {
+                        bogus++;
+                        if (bogus <= 5)
+                            Console.WriteLine($"  [BOGUS] id={id} {Truncate(clean, 120)}");
+                    }
+                }
+
+                string status = bogus > 0 ? $"*** {bogus} BOGUS ***" : "✓ all valid";
+                Console.WriteLine($"Validate: {ok} ok, {bogus} bogus, {missing} missing (sample {sampleSize})  {status}");
+
+                // Print first 10 results
+                if (ids.Count > 0)
+                {
+                    Console.WriteLine();
+                    Console.WriteLine("First results:");
+                    foreach (int id in ids.Take(10))
+                    {
+                        string content = db.GetLineContent(id);
+                        string clean   = content != null ? StripHtmlAndDiacritics(content) : "(not found)";
+                        Console.WriteLine($"  [{id}] {Truncate(clean, 120)}");
+                    }
+                }
+            }
+        }
+
         // ── Validation ────────────────────────────────────────────────
 
         private static (int ok, int bogus, int missing) ValidateAll(
@@ -368,6 +571,136 @@ namespace FtsLibTest
                 File.Copy(f, Path.Combine(dst, Path.GetFileName(f)), overwrite: true);
             foreach (var d in Directory.GetDirectories(src))
                 CopyDirectory(d, Path.Combine(dst, Path.GetFileName(d)));
+        }
+
+        // ── Book phrase lookup ────────────────────────────────────────
+
+        private static void BookPhraseLookup(string bookTitleFragment, string phrase)
+        {
+            Console.OutputEncoding = Encoding.UTF8;
+            Console.WriteLine($"Book fragment : \"{bookTitleFragment}\"");
+            Console.WriteLine($"Phrase        : \"{phrase}\"");
+            Console.WriteLine();
+
+            string indexDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "index_test_500k");
+            long minId = 0, maxId = 0;
+            using (var reader = new IndexReader(indexDir))
+            {
+                var ids = reader.Search(new[] { "של" }).ToList();
+                if (ids.Count > 0) { minId = ids[0]; maxId = ids[ids.Count - 1]; }
+            }
+
+            using (var db = new FtsLib.Misc.ZayitDb(""))
+            {
+                var hits = db.FindByBookAndPhrase(bookTitleFragment, phrase, limit: 20);
+                if (hits.Count == 0)
+                {
+                    Console.WriteLine("  No lines found.");
+                    return;
+                }
+                Console.WriteLine($"  500k index covers approx id {minId:N0} – {maxId:N0}");
+                Console.WriteLine();
+                foreach (var (id, title, heRef, content) in hits)
+                {
+                    bool inRange = id >= minId && id <= maxId;
+                    Console.WriteLine($"  [{id}] {(inRange ? "IN INDEX ✓" : "OUT OF RANGE ✗")}  {title} | {heRef}");
+                    Console.WriteLine($"         {Truncate(StripHtmlAndDiacritics(content), 200)}");
+                    Console.WriteLine();
+                }
+            }
+        }
+
+        // ── ID check ─────────────────────────────────────────────────
+
+        /// <summary>
+        /// For each target ID, checks:
+        ///   1. Whether it appears in the AND search results for <paramref name="terms"/>
+        ///   2. Which of the terms are present in the index for that ID (per-term posting lookup)
+        ///   3. The raw line content from the DB
+        /// </summary>
+        private static void IdCheck(HashSet<int> targetIds, string[] terms)
+        {
+            Console.OutputEncoding = Encoding.UTF8;
+            string indexDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "index_test_500k");
+            Console.WriteLine($"Checking IDs: {string.Join(", ", targetIds)}");
+            Console.WriteLine($"Terms       : {string.Join(", ", terms)}");
+            Console.WriteLine();
+
+            using (var reader = new IndexReader(indexDir))
+            using (var db     = new FtsLib.Misc.ZayitDb(""))
+            {
+                // Get the full result set
+                var results = reader.Search(terms).ToHashSet();
+                Console.WriteLine($"AND search returned {results.Count:N0} total results.");
+                Console.WriteLine();
+
+                foreach (int id in targetIds.OrderBy(x => x))
+                {
+                    bool inResults = results.Contains(id);
+                    string content = db.GetLineContent(id);
+                    string clean   = content != null ? StripHtmlAndDiacritics(content) : "(not in DB)";
+
+                    Console.WriteLine($"  ID {id}: {(inResults ? "FOUND ✓" : "MISSING ✗")}");
+                    Console.WriteLine($"    Content: {Truncate(clean, 160)}");
+
+                    // Check each term individually
+                    foreach (var term in terms)
+                    {
+                        int count = reader.GetTermCount(term);
+                        // Check if this specific id is in the term's posting list
+                        bool hasTerm = reader.Search(new[] { term }).Any(x => x == id);
+                        Console.WriteLine($"    '{term}' (total {count:N0} postings): {(hasTerm ? "present ✓" : "ABSENT ✗")}");
+                    }
+                    Console.WriteLine();
+                }
+            }
+        }
+
+        // ── DB phrase lookup ──────────────────────────────────────────
+
+        /// <summary>
+        /// Finds lines in the source DB whose content contains <paramref name="phrase"/>,
+        /// reports their IDs and whether they fall within the 500k index range.
+        /// </summary>
+        private static void DbLookup(string phrase)
+        {
+            Console.OutputEncoding = Encoding.UTF8;
+            Console.WriteLine($"DB phrase lookup: \"{phrase}\"");
+            Console.WriteLine();
+
+            // Find the max line id in the 500k index so we know the cutoff
+            string indexDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "index_test_500k");
+
+            using (var db = new FtsLib.Misc.ZayitDb(""))
+            {
+                var hits = db.FindByPhrase(phrase, limit: 20);
+                if (hits.Count == 0)
+                {
+                    Console.WriteLine("  No lines found in DB containing that phrase.");
+                    return;
+                }
+
+                // Also get the id range covered by the 500k index
+                long minId = 0, maxId = 0;
+                using (var reader = new IndexReader(indexDir))
+                {
+                    // Probe with a very common term to find the id range
+                    var ids = reader.Search(new[] { "של" }).ToList();
+                    if (ids.Count > 0) { minId = ids[0]; maxId = ids[ids.Count - 1]; }
+                }
+
+                Console.WriteLine($"  500k index covers approx id {minId:N0} – {maxId:N0}");
+                Console.WriteLine();
+
+                foreach (var (id, content) in hits)
+                {
+                    bool inRange = id >= minId && id <= maxId;
+                    string flag  = inRange ? "IN INDEX ✓" : "OUT OF RANGE ✗";
+                    Console.WriteLine($"  [{id}] {flag}");
+                    Console.WriteLine($"         {Truncate(StripHtmlAndDiacritics(content), 160)}");
+                    Console.WriteLine();
+                }
+            }
         }
     }
 }

@@ -1,6 +1,8 @@
 using FtsLibDemo.Services;
 using Microsoft.Win32;
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,37 +14,36 @@ namespace FtsLibDemo.ViewModels
     public sealed class MainViewModel : ViewModelBase
     {
         // ── Services ─────────────────────────────────────────────────────────
-        private readonly ISettingsService    _settings;
-        private readonly IIndexService       _indexService;
-        private readonly ISearchService      _searchService;
-        private readonly IResultsHtmlService _htmlService;
+        private readonly ISettingsService _settings;
+        private readonly IIndexService    _indexService;
+        private readonly ISearchService   _searchService;
 
         // ── Backing fields ───────────────────────────────────────────────────
-        private string  _searchQuery    = string.Empty;
-        private string  _statusText     = "מוכן";
-        private string  _indexedDbPath  = string.Empty;
-        private double  _indexProgress;
-        private bool    _isIndexing;
-        private bool    _isSearching;
-        private string  _progressDetail = string.Empty;
-        private string  _elapsedTime    = string.Empty;
-        private string  _resultsHtml    = string.Empty;
+        private string _searchQuery    = string.Empty;
+        private string _statusText     = "מוכן";
+        private string _indexedDbPath  = string.Empty;
+        private double _indexProgress;
+        private bool   _isIndexing;
+        private bool   _isSearching;
+        private string _progressDetail = string.Empty;
+        private string _elapsedTime    = string.Empty;
+        private string _resultCountText = string.Empty;
+        private string _currentQuery   = string.Empty;   // query used for the current results
         private System.Diagnostics.Stopwatch _indexStopwatch;
         private System.Windows.Threading.DispatcherTimer _elapsedTimer;
         private CancellationTokenSource _indexCts;
-        private string  _liveIndexPath  = string.Empty;
+        private CancellationTokenSource _searchCts;
+        private string _liveIndexPath  = string.Empty;
 
         // ── Constructor ──────────────────────────────────────────────────────
         public MainViewModel(
-            ISettingsService    settings,
-            IIndexService       indexService,
-            ISearchService      searchService,
-            IResultsHtmlService htmlService)
+            ISettingsService settings,
+            IIndexService    indexService,
+            ISearchService   searchService)
         {
             _settings      = settings      ?? throw new ArgumentNullException(nameof(settings));
             _indexService  = indexService  ?? throw new ArgumentNullException(nameof(indexService));
             _searchService = searchService ?? throw new ArgumentNullException(nameof(searchService));
-            _htmlService   = htmlService   ?? throw new ArgumentNullException(nameof(htmlService));
 
             BuildIndexCommand  = new AsyncRelayCommand(OnBuildIndexAsync, () => !_isIndexing && !_isSearching);
             SearchCommand      = new AsyncRelayCommand(OnSearchAsync,     () => !_isSearching && (_indexService.IsReady || _isIndexing) && !string.IsNullOrWhiteSpace(_searchQuery));
@@ -53,6 +54,23 @@ namespace FtsLibDemo.ViewModels
         }
 
         // ── Public properties ────────────────────────────────────────────────
+
+        /// <summary>Live collection of search results — items are added as they stream in.</summary>
+        public ObservableCollection<SearchResultItem> Results { get; } = new ObservableCollection<SearchResultItem>();
+
+        /// <summary>The query string that produced the current Results (used for highlighting).</summary>
+        public string CurrentQuery
+        {
+            get => _currentQuery;
+            private set => SetField(ref _currentQuery, value);
+        }
+
+        /// <summary>E.g. "נמצאו 1,234 תוצאות" — shown above the list.</summary>
+        public string ResultCountText
+        {
+            get => _resultCountText;
+            private set => SetField(ref _resultCountText, value);
+        }
 
         public string SearchQuery
         {
@@ -116,16 +134,6 @@ namespace FtsLibDemo.ViewModels
             private set => SetField(ref _elapsedTime, value);
         }
 
-        /// <summary>
-        /// Full HTML document to display in the WebView2 results pane.
-        /// The View navigates to this via NavigateToString whenever it changes.
-        /// </summary>
-        public string ResultsHtml
-        {
-            get => _resultsHtml;
-            private set => SetField(ref _resultsHtml, value);
-        }
-
         // ── Commands ─────────────────────────────────────────────────────────
         public ICommand BuildIndexCommand  { get; }
         public ICommand SearchCommand      { get; }
@@ -159,7 +167,8 @@ namespace FtsLibDemo.ViewModels
 
             _indexService.Close();
             OnPropertyChanged(nameof(IndexReady));
-            ResultsHtml = string.Empty;
+            Results.Clear();
+            ResultCountText = string.Empty;
 
             IsIndexing     = true;
             IndexProgress  = 0;
@@ -229,6 +238,12 @@ namespace FtsLibDemo.ViewModels
 
         private async Task OnSearchAsync()
         {
+            // Cancel any previous search still streaming
+            _searchCts?.Cancel();
+            _searchCts?.Dispose();
+            _searchCts = new CancellationTokenSource();
+            var ct = _searchCts.Token;
+
             bool isLiveSearch = _isIndexing;
             var reader = isLiveSearch
                 ? _indexService.GetLiveReader(_liveIndexPath)
@@ -236,25 +251,48 @@ namespace FtsLibDemo.ViewModels
 
             if (reader == null || string.IsNullOrWhiteSpace(_searchQuery)) return;
 
-            ResultsHtml = string.Empty;
-            IsSearching = true;
-            StatusText  = isLiveSearch ? "מחפש (בזמן בניית אינדקס)…" : "מחפש…";
+            Results.Clear();
+            ResultCountText = string.Empty;
+            IsSearching     = true;
+            CurrentQuery    = _searchQuery.Trim();
+            StatusText      = isLiveSearch ? "מחפש (בזמן בניית אינדקס)…" : "מחפש…";
 
-            string query  = _searchQuery.Trim();
+            string query  = CurrentQuery;
             string dbPath = _indexedDbPath;
+
+            // Dispatcher used to marshal batches onto the UI thread
+            var dispatcher = System.Windows.Application.Current.Dispatcher;
+
+            void OnBatch(IReadOnlyList<SearchResultItem> batch)
+            {
+                if (ct.IsCancellationRequested) return;
+                dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (ct.IsCancellationRequested) return;
+                    foreach (var item in batch)
+                        Results.Add(item);
+                    ResultCountText = $"נמצאו {Results.Count:N0} תוצאות";
+                }));
+            }
 
             try
             {
-                var (rows, status) = await _searchService.SearchAsync(query, dbPath, reader);
-                StatusText  = status;
-                ResultsHtml = rows.Count > 0
-                    ? _htmlService.Render(rows, query)
-                    : _htmlService.RenderEmpty(status);
+                var status = await _searchService.SearchStreamingAsync(query, dbPath, OnBatch, ct, reader);
+                if (!ct.IsCancellationRequested)
+                {
+                    StatusText = status;
+                    if (Results.Count == 0)
+                        ResultCountText = status;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                StatusText = "החיפוש בוטל";
             }
             catch (Exception ex)
             {
-                StatusText  = $"שגיאה בחיפוש: {ex.Message}";
-                ResultsHtml = _htmlService.RenderEmpty(StatusText);
+                StatusText      = $"שגיאה בחיפוש: {ex.Message}";
+                ResultCountText = StatusText;
             }
             finally
             {

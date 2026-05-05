@@ -3,7 +3,6 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         xmlns:vm="clr-namespace:FtsLibDemo.ViewModels"
         xmlns:local="clr-namespace:FtsLibDemo"
         mc:Ignorable="d"
@@ -19,6 +18,8 @@
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <local:InvertBooleanConverter x:Key="InvertBool"/>
         <local:BoolToVisibilityInvertedConverter x:Key="BoolToVisInverted"/>
+
+        <!-- ── Shared styles ─────────────────────────────────────── -->
 
         <Style x:Key="SearchBoxStyle" TargetType="TextBox">
             <Setter Property="Padding" Value="6,4"/>
@@ -64,6 +65,48 @@
                 </Trigger>
             </Style.Triggers>
         </Style>
+
+        <!-- ── Result card DataTemplate ─────────────────────────── -->
+        <!--
+            Each SearchResultItem is rendered as:
+              title    (blue, Google-style)
+              snippet  (gray, with bold highlights)
+            A thin separator line sits below each card.
+        -->
+        <DataTemplate x:Key="ResultCardTemplate" DataType="{x:Type vm:SearchResultItem}">
+            <Border BorderBrush="#EBEBEB" BorderThickness="0,0,0,1"
+                    Padding="0,14,0,10">
+                <StackPanel>
+
+                    <!-- Title — blue link style -->
+                    <TextBlock Text="{Binding BookTitle, Mode=OneTime}"
+                               FontSize="18"
+                               Foreground="#1A0DAB"
+                               TextWrapping="Wrap"
+                               Margin="0,0,0,3">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="TextDecorations" Value="Underline"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
+                    <!-- Snippet with highlighted query terms -->
+                    <TextBlock FontSize="13"
+                               Foreground="#4D5156"
+                               TextWrapping="Wrap"
+                               LineHeight="20"
+                               local:HighlightBehavior.Text="{Binding Snippet, Mode=OneTime}"
+                               local:HighlightBehavior.Query="{Binding DataContext.CurrentQuery,
+                                   RelativeSource={RelativeSource AncestorType=Window}}"/>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
     </Window.Resources>
 
     <Grid>
@@ -86,7 +129,6 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Search box — always enabled -->
                 <TextBox Grid.Column="0"
                          Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
                          Style="{StaticResource SearchBoxStyle}"
@@ -96,14 +138,12 @@
                     </TextBox.InputBindings>
                 </TextBox>
 
-                <!-- Search button -->
                 <Button Grid.Column="1"
                         Content="חפש"
                         Command="{Binding SearchCommand}"
                         Style="{StaticResource PrimaryButton}"
                         Margin="0,0,6,0"/>
 
-                <!-- Build index button — hidden while indexing -->
                 <Button Grid.Column="2"
                         Content="צור אינדקס"
                         Command="{Binding BuildIndexCommand}"
@@ -111,7 +151,6 @@
                         Margin="0,0,6,0"
                         Visibility="{Binding IsIndexing, Converter={StaticResource BoolToVisInverted}}"/>
 
-                <!-- Cancel button — only visible while indexing -->
                 <Button Grid.Column="2"
                         Content="בטל"
                         Command="{Binding CancelIndexCommand}"
@@ -156,12 +195,45 @@
         </Border>
 
         <!-- ═══════════════════════════════════════════════════════════
-             Row 2 — Results WebView
+             Row 2 — Results list
         ═══════════════════════════════════════════════════════════ -->
         <Grid Grid.Row="2">
 
-            <wv2:WebView2 x:Name="ResultsWebView"
-                          DefaultBackgroundColor="White"/>
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Padding="16,0">
+                <StackPanel MaxWidth="680"
+                            HorizontalAlignment="Center"
+                            Margin="0,0,0,40">
+
+                    <!-- Result count header — visible only when there is text -->
+                    <TextBlock Text="{Binding ResultCountText}"
+                               FontSize="13"
+                               Foreground="#70757A"
+                               Margin="0,12,0,4">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <!-- Default: visible -->
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ResultCountText}" Value="">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ResultCountText}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
+                    <!-- The result cards -->
+                    <ItemsControl ItemsSource="{Binding Results}"
+                                  ItemTemplate="{StaticResource ResultCardTemplate}"
+                                  VirtualizingPanel.IsVirtualizing="False"/>
+
+                </StackPanel>
+            </ScrollViewer>
 
             <!-- Searching spinner overlay -->
             <Border Background="#80FFFFFF"

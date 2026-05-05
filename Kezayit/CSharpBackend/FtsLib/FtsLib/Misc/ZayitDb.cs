@@ -77,16 +77,16 @@ namespace FtsLib.Misc
             }
         }
 
-        public List<(int Id, int LineIndex, string HeRef, string Content, string BookTitle)> 
+        public List<(int Id, string Content, string BookTitle)> 
             FetchSearchResults(List<int> ids)
         {
             EnsureOpen();
-            var rows = new List<(int, int, string, string, string)>(ids.Count);
+            var rows = new List<(int, string, string)>(ids.Count);
 
             using (var cmd = _connection.CreateCommand())
             {
                 cmd.CommandText =
-                    $@"SELECT l.id, l.lineIndex, l.heRef, l.content, b.title
+                    $@"SELECT l.id, l.content, b.title
                          FROM line l JOIN book b ON b.id = l.bookId
                         WHERE l.id IN ({string.Join(",", ids)})
                         ORDER BY l.bookId, l.lineIndex";
@@ -96,12 +96,10 @@ namespace FtsLib.Misc
                     while (r.Read())
                     {
                         int    lineId    = r.GetInt32(0);
-                        int    lineIndex = r.GetInt32(1);
-                        string heRef     = r.IsDBNull(2) ? null : r.GetString(2);
-                        string content   = r.IsDBNull(3) ? string.Empty : r.GetString(3);
-                        string bookTitle = r.IsDBNull(4) ? string.Empty : r.GetString(4);
+                        string content   = r.IsDBNull(1) ? string.Empty : r.GetString(1);
+                        string bookTitle = r.IsDBNull(2) ? string.Empty : r.GetString(2);
 
-                        rows.Add((lineId, lineIndex, heRef, content, bookTitle));
+                        rows.Add((lineId, content, bookTitle));
                     }
                 }
             }
@@ -114,6 +112,136 @@ namespace FtsLib.Misc
             if (_disposed) return;
             _disposed = true;
             _connection?.Dispose();
+        }
+
+        /// <summary>
+        /// Returns up to <paramref name="limit"/> lines whose content contains
+        /// <paramref name="phrase"/> as a substring (case-insensitive via LIKE).
+        /// </summary>
+        public List<(long Id, string Content)> FindByPhrase(string phrase, int limit = 20)
+        {
+            EnsureOpen();
+            var results = new List<(long, string)>();
+            using (var cmd = _connection.CreateCommand())
+            {
+                // Escape LIKE special chars in the phrase
+                string escaped = phrase.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+                cmd.CommandText =
+                    "SELECT id, content FROM line WHERE content LIKE @p ESCAPE '\\' LIMIT @lim";
+                cmd.Parameters.AddWithValue("@p",   "%" + escaped + "%");
+                cmd.Parameters.AddWithValue("@lim", limit);
+                using (var r = cmd.ExecuteReader())
+                    while (r.Read())
+                        results.Add((r.GetInt64(0), r.IsDBNull(1) ? string.Empty : r.GetString(1)));
+            }
+            return results;
+        }
+
+        /// <summary>
+        /// Returns up to <paramref name="limit"/> lines from books whose title contains
+        /// <paramref name="bookTitleFragment"/>, whose content contains <paramref name="phrase"/>.
+        /// </summary>
+        public List<(long Id, string BookTitle, string HeRef, string Content)> FindByBookAndPhrase(
+            string bookTitleFragment, string phrase, int limit = 20)
+        {
+            EnsureOpen();
+            var results = new List<(long, string, string, string)>();
+            using (var cmd = _connection.CreateCommand())
+            {
+                string escapedPhrase = phrase.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+                string escapedBook   = bookTitleFragment.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+                cmd.CommandText = @"
+                    SELECT l.id, b.title, l.heRef, l.content
+                    FROM line l JOIN book b ON b.id = l.bookId
+                    WHERE b.title LIKE @book ESCAPE '\'
+                      AND l.content LIKE @phrase ESCAPE '\'
+                    LIMIT @lim";
+                cmd.Parameters.AddWithValue("@book",   "%" + escapedBook   + "%");
+                cmd.Parameters.AddWithValue("@phrase", "%" + escapedPhrase + "%");
+                cmd.Parameters.AddWithValue("@lim",    limit);
+                using (var r = cmd.ExecuteReader())
+                    while (r.Read())
+                        results.Add((
+                            r.GetInt64(0),
+                            r.IsDBNull(1) ? string.Empty : r.GetString(1),
+                            r.IsDBNull(2) ? string.Empty : r.GetString(2),
+                            r.IsDBNull(3) ? string.Empty : r.GetString(3)));
+            }
+            return results;
+        }
+
+        public (long Count, long MinId, long MaxId,
+                long FirstId, string FirstBook,
+                long Id500k, string Book500k,
+                long Id500k1, string Book500k1) GetIdStats()
+        {
+            EnsureOpen();
+            using (var cmd = _connection.CreateCommand())
+            {
+                // Count, min, max
+                cmd.CommandText = "SELECT COUNT(*), MIN(id), MAX(id) FROM line";
+                long count = 0, minId = 0, maxId = 0;
+                using (var r = cmd.ExecuteReader())
+                    if (r.Read()) { count = r.GetInt64(0); minId = r.GetInt64(1); maxId = r.GetInt64(2); }
+
+                // Row 1 (first by id)
+                cmd.CommandText = "SELECT l.id, b.title FROM line l JOIN book b ON b.id=l.bookId ORDER BY l.id LIMIT 1";
+                long firstId = 0; string firstBook = "";
+                using (var r = cmd.ExecuteReader())
+                    if (r.Read()) { firstId = r.GetInt64(0); firstBook = r.GetString(1); }
+
+                // Row 500,000
+                cmd.CommandText = "SELECT l.id, b.title FROM line l JOIN book b ON b.id=l.bookId ORDER BY l.id LIMIT 1 OFFSET 499999";
+                long id500k = 0; string book500k = "";
+                using (var r = cmd.ExecuteReader())
+                    if (r.Read()) { id500k = r.GetInt64(0); book500k = r.GetString(1); }
+
+                // Row 500,001
+                cmd.CommandText = "SELECT l.id, b.title FROM line l JOIN book b ON b.id=l.bookId ORDER BY l.id LIMIT 1 OFFSET 500000";
+                long id500k1 = 0; string book500k1 = "";
+                using (var r = cmd.ExecuteReader())
+                    if (r.Read()) { id500k1 = r.GetInt64(0); book500k1 = r.GetString(1); }
+
+                return (count, minId, maxId, firstId, firstBook, id500k, book500k, id500k1, book500k1);
+            }
+        }
+
+        public List<(int Id, string Title)> FindBooks(string titleFragment, int limit = 50)
+        {
+            EnsureOpen();
+            var results = new List<(int, string)>();
+            using (var cmd = _connection.CreateCommand())
+            {
+                string escaped = titleFragment.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+                cmd.CommandText = "SELECT id, title FROM book WHERE title LIKE @p ESCAPE '\\' ORDER BY id LIMIT @lim";
+                cmd.Parameters.AddWithValue("@p",   "%" + escaped + "%");
+                cmd.Parameters.AddWithValue("@lim", limit);
+                using (var r = cmd.ExecuteReader())
+                    while (r.Read())
+                        results.Add((r.GetInt32(0), r.IsDBNull(1) ? string.Empty : r.GetString(1)));
+            }
+            return results;
+        }
+
+        public (string BookTitle, string HeRef, string Content)? GetLineInfo(int id)
+        {
+            EnsureOpen();
+            using (var cmd = _connection.CreateCommand())
+            {
+                cmd.CommandText = @"
+                    SELECT b.title, l.heRef, l.content
+                    FROM line l JOIN book b ON b.id = l.bookId
+                    WHERE l.id = @id";
+                cmd.Parameters.AddWithValue("@id", id);
+                using (var r = cmd.ExecuteReader())
+                {
+                    if (!r.Read()) return null;
+                    return (
+                        r.IsDBNull(0) ? string.Empty : r.GetString(0),
+                        r.IsDBNull(1) ? string.Empty : r.GetString(1),
+                        r.IsDBNull(2) ? string.Empty : r.GetString(2));
+                }
+            }
         }
 
         // ── Helpers ──────────────────────────────────────────────────
