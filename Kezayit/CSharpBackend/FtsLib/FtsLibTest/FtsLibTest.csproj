@@ -60,6 +60,8 @@
     <!-- SearchIndex -->
     <Compile Include="SearchIndex\SearchTest.cs" />
     <Compile Include="SearchIndex\QueryTest.cs" />
+    <Compile Include="SearchIndex\QueryParserTest.cs" />
+    <Compile Include="SearchIndex\OrderedSearchTest.cs" />
     <Compile Include="SearchIndex\VerifyTest.cs" />
     <Compile Include="SearchIndex\SpeedTest.cs" />
     <Compile Include="SearchIndex\ExpandDiag.cs" />

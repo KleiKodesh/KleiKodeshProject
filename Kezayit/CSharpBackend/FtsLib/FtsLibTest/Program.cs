@@ -47,6 +47,14 @@ namespace FtsLibTest
                     QueryTest.Run(args);
                     return;
 
+                case "parsertest":
+                    QueryParserTest.Run(args);
+                    return;
+
+                case "orderedtest":
+                    OrderedSearchTest.Run(args);
+                    return;
+
                 case "verify":
                     VerifyTest.Run(args);
                     return;
@@ -126,6 +134,8 @@ namespace FtsLibTest
             Console.WriteLine("  FtsLibTest.exe search [tier]          — search index");
             Console.WriteLine("  FtsLibTest.exe runall [tier]          — build + search, combined report");
             Console.WriteLine("  FtsLibTest.exe query  [tier] \"query\"  — ad-hoc query with snippets");
+            Console.WriteLine("  FtsLibTest.exe parsertest              — QueryParser unit tests (no index needed)");
+            Console.WriteLine("  FtsLibTest.exe orderedtest             — ordered-search unit tests (no index needed)");
             Console.WriteLine("  FtsLibTest.exe wdiag  [tier] query    — wildcard expansion diagnostic");
             Console.WriteLine();
             Console.WriteLine("Tiers: 500k (default) | 1m | 3m | full");

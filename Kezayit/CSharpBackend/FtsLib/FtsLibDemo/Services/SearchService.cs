@@ -20,21 +20,23 @@ namespace FtsLibDemo.Services
             string                                  query,
             Action<IReadOnlyList<SearchResultItem>> onBatch,
             CancellationToken                       ct,
-            SeforimIndex                            index)
+            SeforimIndex                            index,
+            int                                     maxWordDistance = 10,
+            bool                                    requireOrdered  = false)
         {
             if (index == null)
                 return Task.FromResult("אין אינדקס פתוח");
 
-            return Task.Run(() => RunSearch(query, index, onBatch, ct), ct);
+            return Task.Run(() => RunSearch(query, index, onBatch, ct, maxWordDistance, requireOrdered), ct);
         }
-
-        // ── Core search ───────────────────────────────────────────────
 
         private static string RunSearch(
             string                                  query,
             SeforimIndex                            index,
             Action<IReadOnlyList<SearchResultItem>> onBatch,
-            CancellationToken                       ct)
+            CancellationToken                       ct,
+            int                                     maxWordDistance,
+            bool                                    requireOrdered)
         {
             if (string.IsNullOrWhiteSpace(query))
                 return "אין מילות חיפוש תקינות";
@@ -46,13 +48,14 @@ namespace FtsLibDemo.Services
             {
                 if (ct.IsCancellationRequested) break;
 
-                // Generate the snippet using already-fetched content — no second DB fetch.
-                // Snippet generation (tokenize + proximity window + render) is done here
-                // per result so the UI gets highlighted text immediately as results stream in.
-                var snippet = index.GenerateSnippet(result);
-                string display = snippet.IsMatch ? snippet.Html : result.Content;
+                var snippet = index.GenerateSnippet(result, requireOrdered);
 
-                batch.Add(new SearchResultItem(result.LineId, result.BookTitle, display));
+                // Filter: drop results where the query terms are too far apart,
+                // or (in ordered mode) where terms don't appear in query order.
+                if (!snippet.IsMatch || snippet.WordDistance > maxWordDistance)
+                    continue;
+
+                batch.Add(new SearchResultItem(result.LineId, result.BookTitle, snippet.Html));
                 total++;
 
                 if (batch.Count >= BatchSize)

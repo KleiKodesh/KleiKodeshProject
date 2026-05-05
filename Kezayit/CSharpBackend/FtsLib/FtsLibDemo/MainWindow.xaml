@@ -137,6 +137,7 @@
         ═══════════════════════════════════════════════════════════ -->
         <Border Grid.Row="0" Background="#F5F5F5" BorderBrush="#DDDDDD"
                 BorderThickness="0,0,0,1" Padding="10,8">
+            <StackPanel>
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -243,6 +244,46 @@
                         Margin="0,0,6,0"
                         Visibility="{Binding IsIndexing, Converter={StaticResource BoolToVis}}"/>
             </Grid>
+
+            <!-- Word distance row -->
+            <Grid Margin="0,6,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0"
+                           Text="מרחק מקסימלי בין מילים:"
+                           VerticalAlignment="Center"
+                           FontSize="12"
+                           Foreground="#555555"/>
+
+                <TextBox Grid.Column="1"
+                         Width="52"
+                         Text="{Binding MaxWordDistance, UpdateSourceTrigger=PropertyChanged}"
+                         Style="{StaticResource SearchBoxStyle}"
+                         TextAlignment="Center"
+                         FontSize="13"/>
+            </Grid>
+
+            <!-- Order mode row -->
+            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                <TextBlock Text="סדר מילים:"
+                           VerticalAlignment="Center"
+                           FontSize="12"
+                           Foreground="#555555"
+                           Margin="0,0,10,0"/>
+                <RadioButton Content="לא מסודר"
+                             FontSize="12"
+                             VerticalContentAlignment="Center"
+                             Margin="0,0,14,0"
+                             IsChecked="{Binding IsOrderedSearch, Converter={StaticResource InvertBool}}"/>
+                <RadioButton Content="לפי סדר השאילתה"
+                             FontSize="12"
+                             VerticalContentAlignment="Center"
+                             IsChecked="{Binding IsOrderedSearch}"/>
+            </StackPanel>
+        </StackPanel>
         </Border>
 
         <!-- ═══════════════════════════════════════════════════════════
@@ -278,6 +319,8 @@
                     <Run Text="{Binding ProgressDetail, Mode=OneWay}"/>
                     <Run Text="  "/>
                     <Run Text="{Binding ElapsedTime, Mode=OneWay}" FontWeight="SemiBold"/>
+                    <Run Text="  |  נותר: "/>
+                    <Run Text="{Binding EtaText, Mode=OneWay}" FontWeight="SemiBold"/>
                 </TextBlock>
 
                 <ProgressBar Grid.Row="1"

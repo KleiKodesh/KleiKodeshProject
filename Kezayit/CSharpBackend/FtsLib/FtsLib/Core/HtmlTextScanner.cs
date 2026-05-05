@@ -21,16 +21,18 @@ namespace FtsLib.Core
         private readonly char[] _tagName = new char[16];
         private int  _tagLen;
         private bool _inTag;
-        private int  _wordStart; // raw index of first letter in current word
+        private int  _wordStart;     // raw index of first letter in current word
+        private int  _visibleCount;  // cumulative visible chars up to current position
 
         // ── Entry point ──────────────────────────────────────────────
 
         protected void Scan(string text)
         {
             _buffer.Clear();
-            _tagLen    = 0;
-            _inTag     = false;
-            _wordStart = -1;
+            _tagLen       = 0;
+            _inTag        = false;
+            _wordStart    = -1;
+            _visibleCount = 0;
 
             int len = text.Length;
 
@@ -66,7 +68,10 @@ namespace FtsLib.Core
                 if (c == '&')
                 {
                     if (HtmlScannerHelpers.IsWhitespaceEntity(text, len, ref i))
+                    {
                         Flush(i);
+                        _visibleCount++; // whitespace entity counts as one visible char
+                    }
                     continue;
                 }
 
@@ -74,22 +79,11 @@ namespace FtsLib.Core
                 if (c == '\u05BE')
                 {
                     Flush(i);
+                    _visibleCount++;
                     continue;
                 }
 
                 // ── NIKUD + CANTILLATION REMOVAL ─────────────────────
-                // U+0591–U+05AF  Hebrew cantillation marks (טעמים)
-                // U+05B0–U+05BD  Hebrew nikud (ניקוד) — combining vowel points
-                // U+05BF          rafe — combining
-                // U+05C1–U+05C2  shin/sin dot — combining
-                // U+05C4–U+05C5  upper/lower dot — combining
-                // U+05C7          qamats qatan — combining
-                //
-                // NOT stripped (act as word separators via the else/Flush path):
-                // U+05BE  maqaf — handled explicitly above
-                // U+05C0  paseq ׀ — punctuation
-                // U+05C3  sof pasuq ׃ — punctuation
-                // U+05C6  nun hafukha — punctuation
                 if (c >= '\u0591' && c <= '\u05C7'
                     && c != '\u05C0'   // paseq ׀
                     && c != '\u05C3'   // sof pasuq ׃
@@ -109,10 +103,13 @@ namespace FtsLib.Core
                         _wordStart = i; // first letter of a new word
 
                     _buffer.Append(c);
+                    _visibleCount++;
                 }
                 else
                 {
                     Flush(i);
+                    // Non-letter separators (space, punctuation, etc.) count as visible.
+                    _visibleCount++;
                 }
             }
 
@@ -124,7 +121,11 @@ namespace FtsLib.Core
         private void Flush(int rawEnd)
         {
             if (_buffer.Length > 1 && _buffer.Length < 30)
-                OnWord(_wordStart, rawEnd);
+            {
+                // Pass the visible count at the start of this word.
+                int visibleStart = _visibleCount - _buffer.Length;
+                OnWord(_wordStart, rawEnd, visibleStart);
+            }
 
             _buffer.Clear();
             _wordStart = -1;
@@ -141,9 +142,12 @@ namespace FtsLib.Core
         /// </param>
         /// <param name="rawEnd">
         /// Index just past the separator that ended the word in the original string.
-        /// <see cref="_buffer"/> holds the normalized form at call time.
         /// </param>
-        protected abstract void OnWord(int rawStart, int rawEnd);
+        /// <param name="visibleStart">
+        /// Cumulative count of visible characters up to but not including the first
+        /// letter of this word. <see cref="_buffer"/> holds the normalized form at call time.
+        /// </param>
+        protected abstract void OnWord(int rawStart, int rawEnd, int visibleStart);
 
         // ── Shared letter test (used by SnippetBuilder for boundary snapping) ──
 

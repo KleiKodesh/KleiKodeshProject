@@ -5,31 +5,28 @@ namespace FtsLib.Core
     /// </summary>
     internal readonly struct SnippetResult
     {
-        /// <summary>
-        /// Ready-to-render HTML snippet with query terms wrapped in highlight tags.
-        /// Includes leading/trailing "…" when the snippet is a sub-range of the source.
-        /// </summary>
         public readonly string Html;
 
         /// <summary>
-        /// Character span (rawEnd - rawStart) of the tightest window that covers all
-        /// query terms. Smaller = terms are closer together = stronger match.
-        /// <see cref="int.MaxValue"/> means at least one query term was absent entirely.
+        /// Character span (rawEnd - rawStart) of the tightest window.
+        /// int.MaxValue = at least one term absent.
         /// </summary>
         public readonly int Score;
 
         /// <summary>
-        /// False when at least one query term was not found in the content at all.
-        /// When false, <see cref="Score"/> is <see cref="int.MaxValue"/> and
-        /// <see cref="Html"/> is the plain (non-highlighted) full content.
+        /// Number of tokens (words) between the leftmost and rightmost matched
+        /// tokens in the tightest window. 0 = adjacent. int.MaxValue = no match.
         /// </summary>
+        public readonly int WordDistance;
+
         public readonly bool IsMatch;
 
-        public SnippetResult(string html, int score, bool isMatch)
+        public SnippetResult(string html, int score, int wordDistance, bool isMatch)
         {
-            Html    = html;
-            Score   = score;
-            IsMatch = isMatch;
+            Html         = html;
+            Score        = score;
+            WordDistance = wordDistance;
+            IsMatch      = isMatch;
         }
     }
 }

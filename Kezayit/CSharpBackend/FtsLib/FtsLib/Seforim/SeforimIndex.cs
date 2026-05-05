@@ -167,11 +167,16 @@ namespace FtsLib.Seforim
         /// so the highlighter marks the actual word that appeared in the line.
         /// </summary>
         /// <param name="result">A result returned by <see cref="Search"/>.</param>
-        public SnippetResult GenerateSnippet(SearchResult result)
+        /// <param name="requireOrdered">
+        /// When true, the snippet is only considered a match when the query terms
+        /// appear in the same left-to-right order as the query groups.
+        /// False (default) = unordered, any arrangement satisfies the match.
+        /// </param>
+        public SnippetResult GenerateSnippet(SearchResult result, bool requireOrdered = false)
         {
             if (result == null) return SnippetResult.NoMatch;
             if (result.MatchedGroups.Count > 0)
-                return SnippetPipeline.Generate(result.Content, result.MatchedGroups);
+                return SnippetPipeline.Generate(result.Content, result.MatchedGroups, requireOrdered);
             return SnippetResult.NoMatch;
         }
     }

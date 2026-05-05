@@ -26,6 +26,8 @@ namespace FtsLibDemo.Services
             string                                  query,
             Action<IReadOnlyList<SearchResultItem>> onBatch,
             CancellationToken                       ct,
-            SeforimIndex                            index);
+            SeforimIndex                            index,
+            int                                     maxWordDistance = 10,
+            bool                                    requireOrdered  = false);
     }
 }

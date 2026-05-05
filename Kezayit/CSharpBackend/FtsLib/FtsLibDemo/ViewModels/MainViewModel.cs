@@ -27,8 +27,12 @@ namespace FtsLibDemo.ViewModels
         private bool   _isSearching;
         private string _progressDetail = string.Empty;
         private string _elapsedTime    = string.Empty;
+        private string _etaText        = string.Empty;
         private string _resultCountText = string.Empty;
-        private string _currentQuery   = string.Empty;   // query used for the current results
+        private string _currentQuery   = string.Empty;
+        private int    _maxWordDistance = 10;
+        private bool   _isOrderedSearch = false;
+        private double _lastReportedPct;                  // last pct received from progress callback
         private System.Diagnostics.Stopwatch _indexStopwatch;
         private System.Windows.Threading.DispatcherTimer _elapsedTimer;
         private CancellationTokenSource _indexCts;
@@ -64,6 +68,30 @@ namespace FtsLibDemo.ViewModels
         {
             get => _currentQuery;
             private set => SetField(ref _currentQuery, value);
+        }
+
+        /// <summary>
+        /// Maximum allowed word distance between matched query terms.
+        /// Results where terms are farther apart than this are filtered out.
+        /// </summary>
+        public int MaxWordDistance
+        {
+            get => _maxWordDistance;
+            set
+            {
+                if (value < 0) value = 0;
+                SetField(ref _maxWordDistance, value);
+            }
+        }
+
+        /// <summary>
+        /// When true, results are only returned when query terms appear in the
+        /// same left-to-right order as the query. False (default) = unordered.
+        /// </summary>
+        public bool IsOrderedSearch
+        {
+            get => _isOrderedSearch;
+            set => SetField(ref _isOrderedSearch, value);
         }
 
         /// <summary>E.g. "נמצאו 1,234 תוצאות" — shown above the list.</summary>
@@ -135,6 +163,12 @@ namespace FtsLibDemo.ViewModels
             private set => SetField(ref _elapsedTime, value);
         }
 
+        public string EtaText
+        {
+            get => _etaText;
+            private set => SetField(ref _etaText, value);
+        }
+
         // ── Commands ─────────────────────────────────────────────────────────
         public ICommand BuildIndexCommand    { get; }
         public ICommand SearchCommand        { get; }
@@ -176,8 +210,10 @@ namespace FtsLibDemo.ViewModels
             IndexProgress  = 0;
             ProgressDetail = string.Empty;
             ElapsedTime    = string.Empty;
+            EtaText        = string.Empty;
             StatusText     = "בונה אינדקס…";
-            _liveIndexPath = _indexService.GetIndexPath(dbPath);
+            _liveIndexPath    = _indexService.GetIndexPath(dbPath);
+            _lastReportedPct  = 0;
 
             _indexStopwatch = System.Diagnostics.Stopwatch.StartNew();
             _elapsedTimer   = new System.Windows.Threading.DispatcherTimer
@@ -185,7 +221,10 @@ namespace FtsLibDemo.ViewModels
                 Interval = TimeSpan.FromSeconds(1)
             };
             _elapsedTimer.Tick += (s, e) =>
+            {
                 ElapsedTime = _indexStopwatch.Elapsed.ToString(@"hh\:mm\:ss");
+                UpdateEta();
+            };
             _elapsedTimer.Start();
 
             _indexCts = new CancellationTokenSource();
@@ -193,8 +232,9 @@ namespace FtsLibDemo.ViewModels
 
             var progress = new Progress<(double pct, string detail)>(report =>
             {
-                IndexProgress  = report.pct;
-                ProgressDetail = report.detail;
+                IndexProgress    = report.pct;
+                ProgressDetail   = report.detail;
+                _lastReportedPct = report.pct;
                 AsyncRelayCommand.RaiseCanExecuteChanged();
             });
 
@@ -223,6 +263,7 @@ namespace FtsLibDemo.ViewModels
                 IndexProgress  = success ? 100 : 0;
                 ProgressDetail = string.Empty;
                 ElapsedTime    = string.Empty;
+                EtaText        = string.Empty;
                 _indexCts?.Dispose();
                 _indexCts = null;
             }
@@ -278,7 +319,7 @@ namespace FtsLibDemo.ViewModels
 
             try
             {
-                var status = await _searchService.SearchStreamingAsync(query, OnBatch, ct, index);
+                var status = await _searchService.SearchStreamingAsync(query, OnBatch, ct, index, _maxWordDistance, _isOrderedSearch);
                 if (!ct.IsCancellationRequested)
                 {
                     StatusText = status;
@@ -316,6 +357,48 @@ namespace FtsLibDemo.ViewModels
         }
 
         // ── Helpers ──────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Called every second from the elapsed timer.
+        /// Uses actual elapsed time + current progress percentage to compute ETA.
+        /// Falls back to the baseline estimate (25 min / 5.5M lines) until enough
+        /// progress has accumulated for a reliable dynamic estimate.
+        /// </summary>
+        private void UpdateEta()
+        {
+            const double BaselineMinutes = 25.0;   // empirical: ~25 min for 5.5M lines
+            const double MinPctForDynamic = 1.0;   // need at least 1% before trusting dynamic ETA
+
+            double pct = _lastReportedPct;
+
+            if (pct <= 0 || _indexStopwatch == null)
+            {
+                // Nothing indexed yet — show baseline estimate
+                EtaText = $"~{BaselineMinutes:F0} דק׳";
+                return;
+            }
+
+            double elapsedSec = _indexStopwatch.Elapsed.TotalSeconds;
+
+            TimeSpan remaining;
+            if (pct >= MinPctForDynamic)
+            {
+                // Dynamic: extrapolate from actual rate
+                double totalEstSec = elapsedSec / (pct / 100.0);
+                double remainSec   = totalEstSec - elapsedSec;
+                remaining = TimeSpan.FromSeconds(Math.Max(0, remainSec));
+            }
+            else
+            {
+                // Too early for dynamic — use baseline minus elapsed
+                double baselineSec = BaselineMinutes * 60.0;
+                remaining = TimeSpan.FromSeconds(Math.Max(0, baselineSec - elapsedSec));
+            }
+
+            EtaText = remaining.TotalHours >= 1
+                ? $"~{remaining:hh\\:mm\\:ss}"
+                : $"~{remaining:mm\\:ss}";
+        }
 
         private void TryOpenExistingIndex()
         {

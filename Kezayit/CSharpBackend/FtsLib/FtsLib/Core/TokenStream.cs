@@ -25,11 +25,19 @@ namespace FtsLib.Core
         /// </summary>
         public readonly string Normalized;
 
-        public TextToken(int rawStart, int rawEnd, string normalized)
+        /// <summary>
+        /// Cumulative count of visible characters (non-tag, non-nikud) in the source
+        /// string up to but not including the first letter of this token.
+        /// Used by SnippetBuilder to measure snippet length without re-scanning.
+        /// </summary>
+        public readonly int VisibleStart;
+
+        public TextToken(int rawStart, int rawEnd, string normalized, int visibleStart)
         {
-            RawStart   = rawStart;
-            RawEnd     = rawEnd;
-            Normalized = normalized;
+            RawStart     = rawStart;
+            RawEnd       = rawEnd;
+            Normalized   = normalized;
+            VisibleStart = visibleStart;
         }
 
         public override string ToString() => $"[{RawStart}–{RawEnd}] \"{Normalized}\"";
@@ -60,9 +68,9 @@ namespace FtsLib.Core
             return _tokens;
         }
 
-        protected override void OnWord(int rawStart, int rawEnd)
+        protected override void OnWord(int rawStart, int rawEnd, int visibleStart)
         {
-            _tokens.Add(new TextToken(rawStart, rawEnd, _buffer.ToString()));
+            _tokens.Add(new TextToken(rawStart, rawEnd, _buffer.ToString(), visibleStart));
         }
     }
 }

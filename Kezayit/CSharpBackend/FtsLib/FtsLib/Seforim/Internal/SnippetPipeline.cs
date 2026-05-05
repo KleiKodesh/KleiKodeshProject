@@ -37,20 +37,16 @@ namespace FtsLib.Seforim
         /// </summary>
         internal static SnippetResult Generate(
             string                                         content,
-            IReadOnlyList<IReadOnlyCollection<string>>     queryGroups)
+            IReadOnlyList<IReadOnlyCollection<string>>     queryGroups,
+            bool                                           requireOrdered = false)
         {
             if (string.IsNullOrEmpty(content) || queryGroups == null || queryGroups.Count == 0)
                 return SnippetResult.NoMatch;
 
-            var inner = _builder.Build(content, queryGroups);
-            return new SnippetResult(inner.Html, inner.Score, inner.IsMatch);
+            var inner = _builder.Build(content, queryGroups, requireOrdered);
+            return new SnippetResult(inner.Html, inner.Score, inner.WordDistance, inner.IsMatch);
         }
 
-        /// <summary>
-        /// Builds a snippet from already-fetched content using a flat term list.
-        /// Each term is treated as its own group (AND semantics across all terms).
-        /// Used by <see cref="SeforimIndex.GenerateSnippet(int,string)"/>.
-        /// </summary>
         internal static SnippetResult Generate(
             string                content,
             IReadOnlyList<string> queryTerms)
@@ -59,7 +55,7 @@ namespace FtsLib.Seforim
                 return SnippetResult.NoMatch;
 
             var inner = _builder.Build(content, queryTerms);
-            return new SnippetResult(inner.Html, inner.Score, inner.IsMatch);
+            return new SnippetResult(inner.Html, inner.Score, inner.WordDistance, inner.IsMatch);
         }
 
         // ── Fallback path: fetch content from DB ──────────────────────

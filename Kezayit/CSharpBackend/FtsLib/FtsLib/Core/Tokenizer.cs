@@ -25,9 +25,9 @@ namespace FtsLib.Core
             return _terms;
         }
 
-        protected override void OnWord(int rawStart, int rawEnd)
+        protected override void OnWord(int rawStart, int rawEnd, int visibleStart)
         {
-            // rawStart / rawEnd are available but not needed here —
+            // rawStart / rawEnd / visibleStart are available but not needed here —
             // the Tokenizer only cares about the normalized form.
             _terms.Add(_buffer.ToString());
         }

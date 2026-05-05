@@ -15,11 +15,17 @@ namespace FtsLib.Seforim
         public string Html { get; }
 
         /// <summary>
-        /// Character span of the tightest window covering all query terms.
-        /// Smaller = terms are closer together = stronger match.
-        /// <see cref="int.MaxValue"/> when at least one term was absent.
+        /// Raw character span (rawEnd - rawStart) of the tightest window covering
+        /// all query terms. Smaller = terms are closer together in the source text.
+        /// int.MaxValue = at least one term absent (no match).
         /// </summary>
         public int Score { get; }
+
+        /// <summary>
+        /// Number of tokens (words) between the leftmost and rightmost matched
+        /// tokens in the tightest window. 0 = adjacent. int.MaxValue = no match.
+        /// </summary>
+        public int WordDistance { get; }
 
         /// <summary>
         /// True when all query terms were found in the line content.
@@ -28,14 +34,15 @@ namespace FtsLib.Seforim
         /// </summary>
         public bool IsMatch { get; }
 
-        public SnippetResult(string html, int score, bool isMatch)
+        public SnippetResult(string html, int score, int wordDistance, bool isMatch)
         {
-            Html    = html    ?? string.Empty;
-            Score   = score;
-            IsMatch = isMatch;
+            Html         = html    ?? string.Empty;
+            Score        = score;
+            WordDistance = wordDistance;
+            IsMatch      = isMatch;
         }
 
         public static readonly SnippetResult NoMatch =
-            new SnippetResult(string.Empty, int.MaxValue, false);
+            new SnippetResult(string.Empty, int.MaxValue, int.MaxValue, false);
     }
 }

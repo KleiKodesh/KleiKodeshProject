@@ -8,10 +8,11 @@ namespace FtsLib.Core
     ///
     /// Single-pass design — the raw HTML is scanned exactly once:
     ///   1. <see cref="TokenStream"/> tokenizes the raw HTML, producing tokens with
-    ///      raw character positions pointing into the original string.
-    ///   2. <see cref="ProximityWindow"/> (inlined) finds the tightest window.
-    ///   3. The renderer walks the raw HTML in the window range, stripping tags
-    ///      and wrapping matched tokens in highlight tags — no separate strip pass.
+    ///      raw character positions AND cumulative visible-char offsets.
+    ///   2. A sliding-window algorithm finds the tightest token window covering all terms.
+    ///   3. ExpandWindow binary-searches the token list to add context — O(log n),
+    ///      no re-scanning of the raw string.
+    ///   4. The renderer walks only the snippet range, stripping tags inline.
     ///
     /// All internal data structures are reused across calls — zero per-call heap
     /// allocation on the hot path. Not thread-safe — one instance per thread.
@@ -20,8 +21,8 @@ namespace FtsLib.Core
     {
         private readonly string _preTag;
         private readonly string _postTag;
-        private readonly int    _snippetLength;
-        private readonly int    _contextMargin;
+        private readonly int    _snippetLength;  // budget in visible chars
+        private readonly int    _contextMargin;  // max context on each side, visible chars
 
         private readonly TokenStream _tokenStream = new TokenStream();
 
@@ -31,18 +32,15 @@ namespace FtsLib.Core
             new Dictionary<string, int>(System.StringComparer.Ordinal);
         private int[] _groupCount = new int[8];
 
-        private readonly HashSet<string>        _termSet  =
-            new HashSet<string>(System.StringComparer.Ordinal);
-        private readonly StringBuilder          _renderBuf = new StringBuilder(512);
-
-        private readonly HashSet<string> _allTerms =
-            new HashSet<string>(System.StringComparer.Ordinal);
+        private readonly HashSet<string> _termSet    = new HashSet<string>(System.StringComparer.Ordinal);
+        private readonly HashSet<string> _allTerms   = new HashSet<string>(System.StringComparer.Ordinal);
+        private readonly StringBuilder   _renderBuf  = new StringBuilder(512);
 
         public SnippetBuilder(
             string preTag        = "<mark>",
             string postTag       = "</mark>",
-            int    snippetLength = 300,
-            int    contextMargin = 60)
+            int    snippetLength = 400,
+            int    contextMargin = 150)
         {
             _preTag        = preTag;
             _postTag       = postTag;
@@ -55,71 +53,89 @@ namespace FtsLib.Core
         public SnippetResult Build(string rawHtml, IReadOnlyCollection<string> queryTerms)
         {
             if (string.IsNullOrEmpty(rawHtml) || queryTerms == null || queryTerms.Count == 0)
-                return new SnippetResult(Encode(rawHtml ?? string.Empty), int.MaxValue, false);
+                return new SnippetResult(Encode(rawHtml ?? string.Empty), int.MaxValue, int.MaxValue, false);
 
-            return BuildCoreLiteral(rawHtml, queryTerms);
+            var tokens = _tokenStream.Tokenize(rawHtml);
+            return BuildCoreLiteral(tokens, rawHtml, queryTerms);
         }
 
         public SnippetResult Build(
             string                                     rawHtml,
-            IReadOnlyList<IReadOnlyCollection<string>> queryGroups)
+            IReadOnlyList<IReadOnlyCollection<string>> queryGroups,
+            bool                                       requireOrdered = false)
         {
             if (string.IsNullOrEmpty(rawHtml) || queryGroups == null || queryGroups.Count == 0)
-                return new SnippetResult(Encode(rawHtml ?? string.Empty), int.MaxValue, false);
+                return new SnippetResult(Encode(rawHtml ?? string.Empty), int.MaxValue, int.MaxValue, false);
 
             _allTerms.Clear();
             foreach (var g in queryGroups)
                 foreach (var t in g)
                     _allTerms.Add(t);
 
-            return BuildCoreGroups(rawHtml, queryGroups, _allTerms);
+            // Tokenize once — the list is reused by window-finding, rendering,
+            // and (when requireOrdered) the order check below.
+            var tokens = _tokenStream.Tokenize(rawHtml);
+            var result = BuildCoreGroups(tokens, rawHtml, queryGroups, _allTerms);
+
+            // Ordered check: reuse the already-populated _termToGroup (set by
+            // FindWindowGroups inside BuildCoreGroups) and the same token list.
+            // No second tokenization pass.
+            if (requireOrdered && result.IsMatch && queryGroups.Count > 1)
+            {
+                if (!HasOrderedMatch(tokens))
+                    return new SnippetResult(result.Html, result.Score, result.WordDistance, false);
+            }
+
+            return result;
         }
 
         // ── Core pipelines ────────────────────────────────────────────
 
         private SnippetResult BuildCoreLiteral(
+            List<TextToken>             tokens,
             string                      rawHtml,
             IReadOnlyCollection<string> queryTerms)
         {
-            // 1. Tokenize raw HTML — tokens carry positions into rawHtml.
-            var tokens = _tokenStream.Tokenize(rawHtml);
             if (tokens.Count == 0)
-                return new SnippetResult(Encode(rawHtml), int.MaxValue, false);
+                return new SnippetResult(Encode(rawHtml), int.MaxValue, int.MaxValue, false);
 
-            // 2. Find window (literal: each term is its own group).
-            var (winStart, winEnd, score) = FindWindowLiteral(tokens, queryTerms);
+            var (iLeft, iRight, score) = FindWindowLiteral(tokens, queryTerms);
             if (score == int.MaxValue)
-                return new SnippetResult(Encode(rawHtml), int.MaxValue, false);
+                return new SnippetResult(Encode(rawHtml), int.MaxValue, int.MaxValue, false);
 
-            // 3. Expand window.
-            var (snapStart, snapEnd) = ExpandWindow(rawHtml.Length, winStart, winEnd);
-
-            // 4. Render directly from raw HTML — single pass, no strip step.
+            var (snapStart, snapEnd) = ExpandWindow(tokens, rawHtml.Length, iLeft, iRight);
             string html = RenderFromRaw(rawHtml, tokens, queryTerms, snapStart, snapEnd);
-            return new SnippetResult(html, score, true);
+            // WordDistance = extra words between matched terms (0 = all terms consecutive).
+            int wordDist = iRight - iLeft - (queryTerms.Count - 1);
+            if (wordDist < 0) wordDist = 0;
+            return new SnippetResult(html, score, wordDist, true);
         }
 
         private SnippetResult BuildCoreGroups(
+            List<TextToken>                            tokens,
             string                                     rawHtml,
             IReadOnlyList<IReadOnlyCollection<string>> queryGroups,
             IReadOnlyCollection<string>                highlightTerms)
         {
-            var tokens = _tokenStream.Tokenize(rawHtml);
             if (tokens.Count == 0)
-                return new SnippetResult(Encode(rawHtml), int.MaxValue, false);
+                return new SnippetResult(Encode(rawHtml), int.MaxValue, int.MaxValue, false);
 
-            var (winStart, winEnd, score) = FindWindowGroups(tokens, queryGroups);
+            var (iLeft, iRight, score) = FindWindowGroups(tokens, queryGroups);
             if (score == int.MaxValue)
-                return new SnippetResult(Encode(rawHtml), int.MaxValue, false);
+                return new SnippetResult(Encode(rawHtml), int.MaxValue, int.MaxValue, false);
 
-            var (snapStart, snapEnd) = ExpandWindow(rawHtml.Length, winStart, winEnd);
+            var (snapStart, snapEnd) = ExpandWindow(tokens, rawHtml.Length, iLeft, iRight);
             string html = RenderFromRaw(rawHtml, tokens, highlightTerms, snapStart, snapEnd);
-            return new SnippetResult(html, score, true);
+            // WordDistance = extra words between matched terms (0 = all terms consecutive).
+            int wordDist = iRight - iLeft - (queryGroups.Count - 1);
+            if (wordDist < 0) wordDist = 0;
+            return new SnippetResult(html, score, wordDist, true);
         }
 
         // ── Window finding ────────────────────────────────────────────
+        // Returns (iLeft, iRight, score) — token indices, not raw positions.
 
-        private (int winStart, int winEnd, int score) FindWindowLiteral(
+        private (int iLeft, int iRight, int score) FindWindowLiteral(
             List<TextToken>             tokens,
             IReadOnlyCollection<string> queryTerms)
         {
@@ -135,7 +151,7 @@ namespace FtsLib.Core
             return RunSlidingWindow(tokens, required);
         }
 
-        private (int winStart, int winEnd, int score) FindWindowGroups(
+        private (int iLeft, int iRight, int score) FindWindowGroups(
             List<TextToken>                            tokens,
             IReadOnlyList<IReadOnlyCollection<string>> queryGroups)
         {
@@ -151,12 +167,12 @@ namespace FtsLib.Core
             return RunSlidingWindow(tokens, required);
         }
 
-        private (int winStart, int winEnd, int score) RunSlidingWindow(
+        private (int iLeft, int iRight, int score) RunSlidingWindow(
             List<TextToken> tokens,
             int             required)
         {
-            int covered   = 0;
-            int bestStart = -1, bestEnd = -1, bestScore = int.MaxValue;
+            int covered    = 0;
+            int bestILeft  = -1, bestIRight = -1, bestScore = int.MaxValue;
             int L = 0;
 
             for (int R = 0; R < tokens.Count; R++)
@@ -167,12 +183,13 @@ namespace FtsLib.Core
 
                 while (covered == required)
                 {
+                    // Score in raw chars (used only for picking the tightest window).
                     int span = tokens[R].RawEnd - tokens[L].RawStart;
                     if (span < bestScore)
                     {
-                        bestScore = span;
-                        bestStart = tokens[L].RawStart;
-                        bestEnd   = tokens[R].RawEnd;
+                        bestScore  = span;
+                        bestILeft  = L;
+                        bestIRight = R;
                     }
                     string lt = tokens[L].Normalized;
                     if (_termToGroup.TryGetValue(lt, out int lg))
@@ -181,7 +198,7 @@ namespace FtsLib.Core
                 }
             }
 
-            return (bestStart, bestEnd, bestScore);
+            return (bestILeft, bestIRight, bestScore);
         }
 
         private void EnsureGroupCount(int required)
@@ -190,29 +207,139 @@ namespace FtsLib.Core
                 _groupCount = new int[required * 2];
         }
 
+        // ── Ordered-match validation ──────────────────────────────────
+
+        /// <summary>
+        /// Returns true when there exists a position in <paramref name="tokens"/>
+        /// where each query group is satisfied by a token appearing strictly after
+        /// the token satisfying the previous group (left-to-right order).
+        ///
+        /// Relies on <see cref="_termToGroup"/> already being populated by the
+        /// preceding <see cref="FindWindowGroups"/> call — no rebuild needed.
+        /// Uses a greedy forward scan: O(n) in token count.
+        /// </summary>
+        private bool HasOrderedMatch(List<TextToken> tokens)
+        {
+            // _termToGroup is already populated by FindWindowGroups.
+            // Determine the number of groups from the max value stored.
+            int numGroups = 0;
+            foreach (var kv in _termToGroup)
+                if (kv.Value >= numGroups) numGroups = kv.Value + 1;
+
+            if (numGroups <= 1) return true; // single group — order is trivially satisfied
+
+            // Try every starting token that belongs to group 0.
+            for (int start = 0; start < tokens.Count; start++)
+            {
+                if (!_termToGroup.TryGetValue(tokens[start].Normalized, out int g0) || g0 != 0)
+                    continue;
+
+                // Greedily advance through groups 1..numGroups-1.
+                int pos       = start + 1;
+                int nextGroup = 1;
+                while (nextGroup < numGroups && pos < tokens.Count)
+                {
+                    if (_termToGroup.TryGetValue(tokens[pos].Normalized, out int tg) && tg == nextGroup)
+                        nextGroup++;
+                    pos++;
+                }
+
+                if (nextGroup == numGroups)
+                    return true;
+            }
+
+            return false;
+        }
+
         // ── Window expansion ──────────────────────────────────────────
 
-        private (int start, int end) ExpandWindow(int rawLen, int winStart, int winEnd)
+        /// <summary>
+        /// Expands the match window (given as token indices iLeft..iRight) by up to
+        /// <see cref="_contextMargin"/> visible chars on each side, capped so the total
+        /// never exceeds <see cref="_snippetLength"/> visible chars.
+        ///
+        /// The context margin scales down when the match window is large (terms far apart),
+        /// so distant-term matches get a tight snippet rather than dumping the whole line.
+        ///
+        /// Uses binary search on VisibleStart — O(log n), no re-scanning.
+        /// Returns raw character positions (snapStart, snapEnd).
+        /// </summary>
+        private (int snapStart, int snapEnd) ExpandWindow(
+            List<TextToken> tokens, int rawLen, int iLeft, int iRight)
         {
-            int windowLen = winEnd - winStart;
-            int remaining = _snippetLength - windowLen;
-            int half      = remaining > 0 ? remaining / 2 : 0;
-            int margin    = half < _contextMargin ? half : _contextMargin;
-            if (margin < 0) margin = 0;
-            return (System.Math.Max(0,      winStart - margin),
-                    System.Math.Min(rawLen, winEnd   + margin));
+            if (iLeft < 0 || iRight < 0 || tokens.Count == 0)
+                return (0, rawLen);
+
+            int visLeft    = tokens[iLeft].VisibleStart;
+            int visRight   = tokens[iRight].VisibleStart + tokens[iRight].Normalized.Length;
+            int winVisible = visRight - visLeft;
+
+            // Total visible chars in the whole line.
+            int totalVisible = tokens[tokens.Count - 1].VisibleStart
+                               + tokens[tokens.Count - 1].Normalized.Length;
+
+            // If the whole line fits within the budget, show it all — no truncation.
+            if (totalVisible <= _snippetLength)
+                return (0, rawLen);
+
+            int sIdx, eIdx;
+
+            if (winVisible >= _snippetLength)
+            {
+                // Window alone exceeds budget — centre-crop by token count.
+                int centre = (iLeft + iRight) / 2;
+                int half   = _snippetLength / 2;
+                sIdx = System.Math.Max(0,              centre - half);
+                eIdx = System.Math.Min(tokens.Count-1, centre + half);
+            }
+            else
+            {
+                int remaining = _snippetLength - winVisible;
+
+                // Scale the margin: full margin for tight matches, near-zero for loose ones.
+                int scaledMargin = (int)(_contextMargin * (1.0 - (double)winVisible / _snippetLength));
+                int margin       = System.Math.Min(remaining / 2, scaledMargin);
+
+                int targetLeft  = visLeft  - margin;
+                int targetRight = visRight + margin;
+                sIdx = BinarySearchLeft (tokens, targetLeft);
+                eIdx = BinarySearchRight(tokens, targetRight);
+            }
+
+            int snapStart = tokens[sIdx].RawStart;
+            int snapEnd   = eIdx + 1 < tokens.Count ? tokens[eIdx + 1].RawStart : rawLen;
+
+            return (System.Math.Max(0, snapStart), System.Math.Min(rawLen, snapEnd));
+        }
+
+        /// <summary>First token index with VisibleStart >= target (or 0).</summary>
+        private static int BinarySearchLeft(List<TextToken> tokens, int target)
+        {
+            int lo = 0, hi = tokens.Count - 1;
+            while (lo < hi)
+            {
+                int mid = (lo + hi) / 2;
+                if (tokens[mid].VisibleStart < target) lo = mid + 1;
+                else hi = mid;
+            }
+            return lo;
+        }
+
+        /// <summary>Last token index with VisibleStart <= target (or tokens.Count-1).</summary>
+        private static int BinarySearchRight(List<TextToken> tokens, int target)
+        {
+            int lo = 0, hi = tokens.Count - 1;
+            while (lo < hi)
+            {
+                int mid = (lo + hi + 1) / 2;
+                if (tokens[mid].VisibleStart <= target) lo = mid;
+                else hi = mid - 1;
+            }
+            return lo;
         }
 
         // ── Single-pass renderer from raw HTML ────────────────────────
 
-        /// <summary>
-        /// Renders a snippet directly from the raw HTML string — no separate strip pass.
-        ///
-        /// Instead of walking character-by-character and checking every position
-        /// against the hit map, this iterates the token list to find the next hit,
-        /// then copies the raw HTML between tokens (skipping tags inline).
-        /// This is O(tokens) rather than O(characters) for the hit-check loop.
-        /// </summary>
         private string RenderFromRaw(
             string                      rawHtml,
             List<TextToken>             tokens,
@@ -220,32 +347,23 @@ namespace FtsLib.Core
             int                         snapStart,
             int                         snapEnd)
         {
-            // Build term set.
             _termSet.Clear();
             foreach (var t in queryTerms) _termSet.Add(t);
 
             _renderBuf.Clear();
             if (snapStart > 0) _renderBuf.Append('…');
 
-            // Walk the raw HTML from snapStart to snapEnd.
-            // Use the token list to know where matched words are — jump directly
-            // to each token rather than checking every character position.
             int pos = snapStart;
 
             foreach (var tok in tokens)
             {
-                // Skip tokens outside the window.
-                if (tok.RawEnd <= snapStart) continue;
-                if (tok.RawStart >= snapEnd) break;
-
+                if (tok.RawEnd   <= snapStart) continue;
+                if (tok.RawStart >= snapEnd)   break;
                 if (!_termSet.Contains(tok.Normalized)) continue;
 
-                // Copy raw HTML from current position up to this token's start,
-                // stripping tags inline.
                 AppendRawStripped(rawHtml, pos, tok.RawStart, snapEnd);
                 pos = tok.RawStart;
 
-                // Emit the highlight tag + the raw token span.
                 _renderBuf.Append(_preTag);
                 int tokEnd = tok.RawEnd < snapEnd ? tok.RawEnd : snapEnd;
                 _renderBuf.Append(rawHtml, tok.RawStart, tokEnd - tok.RawStart);
@@ -253,7 +371,6 @@ namespace FtsLib.Core
                 pos = tok.RawEnd;
             }
 
-            // Copy any remaining raw HTML after the last hit.
             AppendRawStripped(rawHtml, pos, snapEnd, snapEnd);
 
             if (snapEnd < rawHtml.Length) _renderBuf.Append('…');
@@ -261,18 +378,25 @@ namespace FtsLib.Core
         }
 
         /// <summary>
-        /// Appends rawHtml[from..to) to _renderBuf, stripping HTML tags and
-        /// HTML-encoding &amp; and &gt; in plain text. Stops at limit.
+        /// Appends rawHtml[from..to) to _renderBuf, stripping HTML tags.
+        /// If from lands mid-tag, scans backwards to detect and skip the partial tag.
         /// </summary>
         private void AppendRawStripped(string rawHtml, int from, int to, int limit)
         {
             if (to > limit) to = limit;
+
             bool inTag = false;
+            for (int k = from - 1; k >= 0; k--)
+            {
+                if (rawHtml[k] == '>') break;
+                if (rawHtml[k] == '<') { inTag = true; break; }
+            }
+
             for (int i = from; i < to; i++)
             {
                 char c = rawHtml[i];
-                if (inTag)      { if (c == '>') inTag = false; continue; }
-                if (c == '<')   { inTag = true; continue; }
+                if (inTag)    { if (c == '>') inTag = false; continue; }
+                if (c == '<') { inTag = true; continue; }
                 switch (c)
                 {
                     case '&': _renderBuf.Append("&amp;"); break;
