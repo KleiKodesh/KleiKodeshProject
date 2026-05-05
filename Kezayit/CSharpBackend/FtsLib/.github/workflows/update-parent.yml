@@ -1,0 +1,28 @@
+name: Update parent repo submodule pointer
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: KleiKodesh/KleiKodeshProject
+          token: ${{ secrets.PAT_TOKEN }}
+          submodules: true
+
+      - name: Update FtsLib submodule to latest
+        run: git submodule update --remote Kezayit/CSharpBackend/FtsLib
+
+      - name: Commit and push
+        run: |
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add Kezayit/CSharpBackend/FtsLib
+          git commit -m "Auto-update FtsLib submodule to latest" || echo "No changes to commit"
+          git push

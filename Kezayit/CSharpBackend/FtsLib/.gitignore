@@ -1,0 +1,45 @@
+# Build output
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# NuGet packages (restored on build)
+packages/
+*.nupkg
+*.snupkg
+
+# Visual Studio
+.vs/
+*.rsuser
+*.vsp
+*.vspx
+*.sap
+
+# MSBuild logs
+*.log
+msbuild.log
+
+# Test results
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+
+# Rider
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Kiro
+.kiro/
+
+# Scratch / dev scripts
+*.csx
+*.ps1
+query.sql
+notes.txt

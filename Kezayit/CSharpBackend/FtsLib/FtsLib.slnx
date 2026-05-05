@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="FtsLib/FtsLib.csproj" Id="76f9daa9-374f-40f9-8511-3239fb6e846e" />
+  <Project Path="FtsLibDemo/FtsLibDemo.csproj" Id="2b244ee1-a337-4a9a-afe5-5cee119bbaf1" />
+  <Project Path="FtsLibTest/FtsLibTest.csproj" Id="2574247f-b6d9-4d4d-b409-45a1fcc05eda" />
+</Solution>
