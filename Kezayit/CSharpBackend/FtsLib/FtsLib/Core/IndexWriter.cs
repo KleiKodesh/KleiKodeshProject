@@ -17,7 +17,7 @@ namespace FtsLib.Core
     internal sealed class IndexWriter : IndexPaths, IDisposable
     {
         /// <summary>Flush the RamIndex when it reaches this many distinct terms.</summary>
-        public int FlushThreshold { get; set; } = 250_000;
+        public int FlushThreshold { get; set; } = 500_000;
 
         /// <summary>
         /// When true, force-merges all segments into one on Dispose.
@@ -33,6 +33,13 @@ namespace FtsLib.Core
         private bool          _disposed;
         private int           _lastLineId = -1;
         private bool          _flushPending;
+
+        /// <summary>
+        /// The highest line ID that has been fully flushed to a segment file.
+        /// -1 if no flush has occurred yet in this session.
+        /// Safe to read from outside — updated atomically after each flush completes.
+        /// </summary>
+        public int LastFlushedLineId { get; private set; } = -1;
 
         public IndexWriter(string indexPath, bool useSkipList = true) : base(indexPath)
         {
@@ -157,6 +164,12 @@ namespace FtsLib.Core
             Console.WriteLine($"[IndexWriter] Flushing {_ramIndex.Count:N0} terms to segment...");
             _store.Flush(_ramIndex);
             Console.WriteLine("[IndexWriter] Flush complete.");
+
+            // Record the highest line ID now safely on disk.
+            // _lastLineId is the last id passed to Add() — all its terms just flushed.
+            if (_lastLineId >= 0)
+                LastFlushedLineId = _lastLineId;
+
             _ramIndex = new RamIndex(useSkipList: _useSkipList);
         }
     }

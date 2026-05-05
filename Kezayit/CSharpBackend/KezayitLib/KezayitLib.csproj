@@ -128,6 +128,12 @@
     <Compile Include="HebrewBooks\HebrewBooksCsvUpdater.cs" />
     <Compile Include="Pdf\PdfHandler.cs" />
     <Compile Include="Pdf\WordToPdfConverter.cs" />
+    <Compile Include="Search\FtsIndexState.cs" />
+    <Compile Include="Search\FtsIndexBuilder.cs" />
+    <Compile Include="Search\FtsSearchExecutor.cs" />
+    <Compile Include="Search\FtsIndexState.cs" />
+    <Compile Include="Search\FtsIndexBuilder.cs" />
+    <Compile Include="Search\FtsSearchExecutor.cs" />
     <Compile Include="Search\SearchHandler.cs" />
     <Compile Include="Settings\AppSettings.cs" />
     <Compile Include="Dictionary\DictionaryHandler.cs" />

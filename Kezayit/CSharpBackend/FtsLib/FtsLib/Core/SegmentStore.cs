@@ -58,6 +58,14 @@ namespace FtsLib.Core
 
         public void Recover()
         {
+            // Clean up any leftover temp files from an interrupted merge before
+            // rebuilding live state — temp files must never be treated as live segments.
+            foreach (var tmp in Directory.GetFiles(_dir, "*.tmp"))
+            {
+                try { File.Delete(tmp); }
+                catch { /* best-effort */ }
+            }
+
             RebuildLiveState();
             var recovery = Wal.Analyze();
 

@@ -222,13 +222,8 @@ namespace KezayitLib
                         case "FtsSearchStart": _search.HandleSearchStart(root, id); break;
                         case "FtsSearchCancel": _search.HandleSearchCancel(root, id); break;
                         case "DeleteFtsIndex":
-                            // Run cancel+delete on a background thread, reply when done
-                            // so the JS caller can await completion before reloading.
-                            _ = Task.Run(() =>
-                            {
-                                _search.HandleDeleteIndex(null);
-                                _bridge.Reply(id, new { });
-                            });
+                            // HandleDeleteIndex replies to JS after StopAll + delete complete.
+                            _search.HandleDeleteIndex(id);
                             break;
                         case "ResetFtsIndex": _search.HandleResetFtsIndex(id); break;
                         case "FtsConfirmReindex":

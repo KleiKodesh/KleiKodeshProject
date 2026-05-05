@@ -63,6 +63,22 @@ namespace FtsLib.Seforim
         // ── Build ─────────────────────────────────────────────────────
 
         /// <summary>
+        /// Returns the last line ID that was flushed to disk in a previous interrupted
+        /// build, or 0 if no interrupted build exists. Use this to show the user that
+        /// a resume is in progress rather than a fresh build.
+        /// </summary>
+        public int GetResumeLineId() => IndexingPipeline.ReadResumeLineId(_indexPath);
+
+        /// <summary>
+        /// Deletes the build progress file. Call this after the build completes and
+        /// the version stamp is written, so a subsequent startup does not mistake a
+        /// finished index for an interrupted one.
+        /// </summary>
+        public void DeleteBuildProgressFile() => IndexingPipeline.DeleteProgressFile(_indexPath);
+
+
+
+        /// <summary>
         /// Returns the total number of lines in the seforim database.
         /// Useful for computing build progress percentage.
         /// </summary>
@@ -74,7 +90,11 @@ namespace FtsLib.Seforim
 
         /// <summary>
         /// Builds (or rebuilds) the full-text index from the seforim database.
-        /// This is a blocking, long-running operation (~17 min for the full DB).
+        /// This is a blocking, long-running operation.
+        ///
+        /// The index is searchable as soon as this method returns. Call
+        /// <see cref="Optimize"/> afterwards (e.g. on a background thread) to
+        /// merge all segments into one for the fastest possible search performance.
         /// </summary>
         /// <param name="limit">
         /// Maximum number of lines to index. 0 (default) = all lines.
@@ -87,6 +107,15 @@ namespace FtsLib.Seforim
         /// </param>
         public void BuildIndex(int limit = 0, Action<long> onProgress = null)
             => IndexingPipeline.Build(_indexPath, _dbPath, limit, onProgress);
+
+        /// <summary>
+        /// Force-merges all index segments into one for the fastest possible search.
+        /// Optional — search works correctly across any number of segments.
+        /// Call this after <see cref="BuildIndex"/> returns, on a background thread,
+        /// so the app can start serving searches immediately while the merge runs.
+        /// </summary>
+        public void Optimize()
+            => IndexingPipeline.Optimize(_indexPath);
 
         // ── Search ────────────────────────────────────────────────────
 

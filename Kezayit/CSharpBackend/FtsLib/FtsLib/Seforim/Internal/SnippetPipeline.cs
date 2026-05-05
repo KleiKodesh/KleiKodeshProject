@@ -21,9 +21,11 @@ namespace FtsLib.Seforim
     /// </summary>
     internal static class SnippetPipeline
     {
-        // One SnippetBuilder per call — not thread-safe, but SeforimIndex is
-        // documented as single-threaded. Reuse avoids repeated allocation.
-        private static readonly SnippetBuilder _builder = new SnippetBuilder();
+        // One SnippetBuilder per thread — not safe to share across threads because
+        // SnippetBuilder reuses internal data structures across calls. [ThreadStatic]
+        // gives each thread its own instance with zero per-call allocation overhead.
+        [System.ThreadStatic]
+        private static SnippetBuilder _builder;
 
         // ── Primary path: content already in hand ────────────────────
 
@@ -44,6 +46,7 @@ namespace FtsLib.Seforim
             if (string.IsNullOrEmpty(content) || queryGroups == null || queryGroups.Count == 0)
                 return SnippetResult.NoMatch;
 
+            if (_builder == null) _builder = new SnippetBuilder();
             var inner = _builder.Build(content, queryGroups, requireOrdered, originalGroupCount);
             return new SnippetResult(inner.Html, inner.Score, inner.WordDistance, inner.IsMatch);
         }
@@ -55,6 +58,7 @@ namespace FtsLib.Seforim
             if (string.IsNullOrEmpty(content) || queryTerms == null || queryTerms.Count == 0)
                 return SnippetResult.NoMatch;
 
+            if (_builder == null) _builder = new SnippetBuilder();
             var inner = _builder.Build(content, queryTerms);
             return new SnippetResult(inner.Html, inner.Score, inner.WordDistance, inner.IsMatch);
         }

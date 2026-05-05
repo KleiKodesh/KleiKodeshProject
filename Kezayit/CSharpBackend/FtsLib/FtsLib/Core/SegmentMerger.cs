@@ -62,15 +62,31 @@ namespace FtsLib.Core
             string outDat    = _store.SegDatPath(nextLevel, newSegId);
             string outDb     = _store.SegDbPath(nextLevel, newSegId);
 
+            // Write to temp paths first — only rename to final paths once both files
+            // are fully written. This ensures that even if the process is killed mid-write,
+            // no partial file ever appears at a final segment path that RebuildLiveState
+            // could pick up. The WAL provides a second layer of protection, but temp-then-
+            // rename makes the output atomic regardless of WAL flush timing.
+            string tmpDat = outDat + ".tmp";
+            string tmpDb  = outDb  + ".tmp";
+
             Console.WriteLine($"[Merger] L{level}→L{nextLevel} seg {newSegId}: {segIds.Count} segs");
 
             _store.Wal.BeginMerge(level, segIds.ToArray(), newSegId);
 
+            // Clean up any leftover temp files from a previous interrupted attempt.
+            DeleteIfExists(tmpDat);
+            DeleteIfExists(tmpDb);
+
             var readers = OpenReaders(level, segIds);
-            var entries = WriteMergedDat(level, nextLevel, readers, outDat);
+            var entries = WriteMergedDat(level, nextLevel, readers, tmpDat);
             CloseReaders(readers);
 
-            SegmentStore.WriteMetaDb(outDb, entries);
+            SegmentStore.WriteMetaDb(tmpDb, entries);
+
+            // Both files are complete — rename atomically to final paths.
+            File.Move(tmpDat, outDat);
+            File.Move(tmpDb,  outDb);
 
             _store.Wal.EndMerge(level, newSegId);
 

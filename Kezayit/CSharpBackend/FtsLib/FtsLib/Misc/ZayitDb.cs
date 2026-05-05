@@ -78,6 +78,28 @@ namespace FtsLib.Misc
             }
         }
 
+        /// <summary>
+        /// Streams all lines with id strictly greater than <paramref name="afterId"/>,
+        /// in ascending id order. Used to resume an interrupted index build from the
+        /// last successfully flushed line.
+        /// </summary>
+        public IEnumerable<(int Id, string Content)> ReadLinesFrom(int afterId, int limit = 0)
+        {
+            EnsureOpen();
+            using (var cmd = _connection.CreateCommand())
+            {
+                cmd.CommandText = limit > 0
+                    ? "SELECT id, content FROM line WHERE id > @after ORDER BY id LIMIT @lim"
+                    : "SELECT id, content FROM line WHERE id > @after ORDER BY id";
+                cmd.Parameters.AddWithValue("@after", afterId);
+                if (limit > 0) cmd.Parameters.AddWithValue("@lim", limit);
+
+                using (var r = cmd.ExecuteReader())
+                    while (r.Read())
+                        yield return (r.GetInt32(0), r.IsDBNull(1) ? string.Empty : r.GetString(1));
+            }
+        }
+
         public IEnumerable<(int Id, string Content, string BookTitle)>
             FetchSearchResults(List<int> ids)
         {
