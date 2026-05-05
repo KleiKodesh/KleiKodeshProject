@@ -145,9 +145,9 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\BloomSearchEngineLib\BloomSearchEngineLib.csproj">
-      <Project>{0f7c9226-2c18-4cb8-8f39-a3a539b7122a}</Project>
-      <Name>BloomSearchEngineLib</Name>
+    <ProjectReference Include="..\FtsLib\FtsLib\FtsLib.csproj">
+      <Project>{76F9DAA9-374F-40F9-8511-3239FB6E846E}</Project>
+      <Name>FtsLib</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

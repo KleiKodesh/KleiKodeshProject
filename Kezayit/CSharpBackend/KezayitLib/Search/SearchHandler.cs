@@ -1,5 +1,7 @@
-using BloomSearchEngineLib;
-using KezayitLib.Bridge;using Microsoft.Web.WebView2.WinForms;
+using FtsLib.Seforim;
+using KezayitLib.Bridge;
+using KezayitLib.Settings;
+using Microsoft.Web.WebView2.WinForms;
 using Microsoft.Win32;
 using System;
 using System.Collections.Concurrent;
@@ -16,12 +18,25 @@ namespace KezayitLib.Search
         private volatile bool _isReady = false;
         private volatile bool _isIndexing = false;
         private string _dbPath;
-        private ZayitDbConnectionPool _dbPool;
+        private SeforimIndex _index;
         private Task _indexingTask;
         private readonly ConcurrentDictionary<string, CancellationTokenSource> _searches
             = new ConcurrentDictionary<string, CancellationTokenSource>();
         private int _nextSearchId = 1;
 
+        // ── Paths ─────────────────────────────────────────────────────────────────
+
+        private static string FtsIndexPath
+        {
+            get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "FtsIndex"); }
+        }
+
+        private static string FtsVersionStampPath
+        {
+            get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "FtsIndex", "fts.ver"); }
+        }
+
+        // Legacy Bloom index paths — detected on startup and deleted during migration.
         private static string BloomFilePath
         {
             get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BloomFilters", "lines.dat"); }
@@ -31,6 +46,13 @@ namespace KezayitLib.Search
         {
             get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BloomFilters", "lines.ver"); }
         }
+
+        private static string BloomFolderPath
+        {
+            get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BloomFilters"); }
+        }
+
+        // ── Version stamp ─────────────────────────────────────────────────────────
 
         private static string GetInstalledAppVersion()
         {
@@ -44,7 +66,7 @@ namespace KezayitLib.Search
 
         private static string ReadVersionStamp()
         {
-            try { return File.Exists(BloomVersionStampPath) ? File.ReadAllText(BloomVersionStampPath).Trim() : null; }
+            try { return File.Exists(FtsVersionStampPath) ? File.ReadAllText(FtsVersionStampPath).Trim() : null; }
             catch { return null; }
         }
 
@@ -52,62 +74,61 @@ namespace KezayitLib.Search
         {
             try
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(BloomVersionStampPath));
-                File.WriteAllText(BloomVersionStampPath, version ?? "");
+                Directory.CreateDirectory(FtsIndexPath);
+                File.WriteAllText(FtsVersionStampPath, version ?? "");
             }
             catch { }
         }
 
-        /// <summary>
-        /// Validates the .dat file format. Returns null if valid, or a reason string if not.
-        /// </summary>
-        private static string ValidateDatFile()
-        {
-            try
-            {
-                if (!File.Exists(BloomFilePath)) return "file missing";
-                using (var fs = new FileStream(BloomFilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
-                using (var r = new BinaryReader(fs))
-                {
-                    if (fs.Length < 10) return "header too short (" + fs.Length + " bytes)";
-                    int count = r.ReadInt32();
-                    short chunkSize = r.ReadInt16();
-                    r.ReadInt32();
-                    if (count < 0) return "negative chunk count (" + count + ")";
-                    if (chunkSize <= 0) return "invalid chunkSize (" + chunkSize + ")";
-                    return null;
-                }
-            }
-            catch (Exception ex) { return "read error: " + ex.Message; }
-        }
+        // ── FTS index validation ──────────────────────────────────────────────────
 
         /// <summary>
-        /// Reads count and lastLineId from the .dat file header in a single seek.
-        /// The header is patched on every flush so both values are always authoritative.
-        /// Returns (0, 0) if the file is missing or unreadable.
+        /// Returns null if the FTS index directory looks valid (exists and contains segment files),
+        /// or a reason string if it is missing or empty.
         /// </summary>
-        private static (int count, int lastLineId) ReadDatHeader()
+        private static string ValidateFtsIndex()
         {
             try
             {
-                if (!File.Exists(BloomFilePath)) return (0, 0);
-                using (var fs = new FileStream(BloomFilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
-                using (var r = new BinaryReader(fs))
+                if (!Directory.Exists(FtsIndexPath)) return "index directory missing";
+                // A valid FTS index contains at least one segment file.
+                var files = Directory.GetFiles(FtsIndexPath, "*.seg");
+                if (files.Length == 0) return "no segment files found";
+                return null;
+            }
+            catch (Exception ex) { return "validation error: " + ex.Message; }
+        }
+
+        // ── Bloom migration ───────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Deletes the legacy Bloom index folder if it exists.
+        /// Called once on startup before the FTS index is checked.
+        /// </summary>
+        private static void DeleteBloomIndexIfPresent()
+        {
+            try
+            {
+                if (Directory.Exists(BloomFolderPath))
                 {
-                    if (fs.Length < 10) return (0, 0);
-                    int count = r.ReadInt32();      // offset 0
-                    r.ReadInt16();                  // offset 4: chunkSize (skip)
-                    int lastLineId = r.ReadInt32(); // offset 6
-                    return (count, lastLineId);
+                    Directory.Delete(BloomFolderPath, recursive: true);
+                    Console.WriteLine("[SearchHandler] Deleted legacy Bloom index folder: " + BloomFolderPath);
                 }
             }
-            catch { return (0, 0); }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[SearchHandler] Failed to delete Bloom folder: " + ex.Message);
+            }
         }
+
+        // ── Constructor ───────────────────────────────────────────────────────────
 
         public SearchHandler(WebBridge bridge, WebView2 webView)
         {
             _bridge = bridge;
         }
+
+        // ── Lifecycle ─────────────────────────────────────────────────────────────
 
         public void OnDbReady(string dbPath)
         {
@@ -115,19 +136,24 @@ namespace KezayitLib.Search
             if (!File.Exists(dbPath)) { Console.WriteLine("[SearchHandler] OnDbReady: file does not exist, aborting"); return; }
             _dbPath = dbPath;
 
-            // lines.ver present → indexing completed in a previous session.
-            // Confirm the .dat is also present and valid before marking ready.
+            // Migration: delete legacy Bloom index before checking FTS state.
+            DeleteBloomIndexIfPresent();
+
+            _index?.Dispose();
+            _index = new SeforimIndex(FtsIndexPath, dbPath);
+
             string stampedVersion = ReadVersionStamp();
             if (stampedVersion != null)
             {
-                string validationError = ValidateDatFile();
+                // Version stamp present — FTS index was completed in a previous session.
+                // Validate that segment files are still present.
+                string validationError = ValidateFtsIndex();
                 if (validationError != null)
                 {
-                    Console.WriteLine("[SearchHandler] lines.ver present but .dat invalid (" + validationError + ") — deleting and rebuilding");
-                    try { if (File.Exists(BloomFilePath)) File.Delete(BloomFilePath); } catch { }
-                    try { File.Delete(BloomVersionStampPath); } catch { }
-                    _bridge.PushEvent(new { @event = "bloomIndexInvalidated", reason = validationError });
-                    StartIndexing(0, 0);
+                    Console.WriteLine("[SearchHandler] fts.ver present but index invalid (" + validationError + ") — deleting and rebuilding");
+                    DeleteFtsIndex();
+                    _bridge.PushEvent(new { @event = "ftsIndexInvalidated", reason = validationError });
+                    StartIndexing();
                     return;
                 }
 
@@ -140,7 +166,7 @@ namespace KezayitLib.Search
                     Console.WriteLine("[SearchHandler] App version changed — asking user whether to rebuild index");
                     _bridge.PushEvent(new
                     {
-                        @event = "bloomIndexVersionMismatch",
+                        @event = "ftsIndexVersionMismatch",
                         oldVersion = stampedVersion,
                         newVersion = installedVersion
                     });
@@ -149,63 +175,45 @@ namespace KezayitLib.Search
                     return;
                 }
 
-                Console.WriteLine("[SearchHandler] Bloom index complete and up-to-date, marking ready");
+                Console.WriteLine("[SearchHandler] FTS index complete and up-to-date, marking ready");
                 _isReady = true;
-                OpenPool();
                 PushProgress(true, false, 100, 0, 0, "");
                 return;
             }
 
-            // lines.ver absent — check if a partial index exists to resume from.
-            // Validate format before resuming; an old-format partial file must be discarded.
-            if (File.Exists(BloomFilePath))
+            // No version stamp — check if a partial index exists (segment files without stamp).
+            string partialError = ValidateFtsIndex();
+            if (partialError == null)
             {
-                string validationError = ValidateDatFile();
-                if (validationError != null)
-                {
-                    Console.WriteLine("[SearchHandler] Partial .dat invalid (" + validationError + ") — deleting and rebuilding");
-                    try { File.Delete(BloomFilePath); } catch { }
-                    _bridge.PushEvent(new { @event = "bloomIndexInvalidated", reason = validationError });
-                    StartIndexing(0, 0);
-                    return;
-                }
+                // Partial index present — resume is not supported by FtsLib's BuildIndex
+                // (it rebuilds from scratch). Delete and start fresh.
+                Console.WriteLine("[SearchHandler] Partial FTS index found without version stamp — deleting and rebuilding");
+                DeleteFtsIndex();
             }
 
-            // lines.ver absent — check if a partial index exists to resume from.
-            var (headerCount, resumeLineId) = ReadDatHeader();
-            if (headerCount > 0)
-            {
-                Console.WriteLine("[SearchHandler] Resuming — header=" + headerCount + " chunks, lastLineId=" + resumeLineId);
-                StartIndexing(resumeLineId, headerCount);
-                return;
-            }
-
-            Console.WriteLine("[SearchHandler] Starting fresh index build...");
-            StartIndexing(0, 0);
+            Console.WriteLine("[SearchHandler] Starting fresh FTS index build...");
+            StartIndexing();
         }
 
         public void ResetAndReindex(string newDbPath)
         {
             Console.WriteLine("[SearchHandler] ResetAndReindex called, newDbPath=" + newDbPath);
 
-            // Cancel any running indexer and wait for it to fully stop so it releases
-            // the file handle before we try to delete the .dat file.
-            BloomIndexingCoordinator.CancelIndexing();
+            // Cancel any running indexer and wait for it to fully stop.
+            var cts = _indexingCts;
+            if (cts != null) cts.Cancel();
             var task = _indexingTask;
             if (task != null)
             {
-                try { task.Wait(10000); } // wait up to 10s for clean shutdown
+                try { task.Wait(10000); }
                 catch { }
                 _indexingTask = null;
             }
             _isIndexing = false;
-            ClosePool();
-
-            try { if (File.Exists(BloomFilePath)) { File.Delete(BloomFilePath); Console.WriteLine("[SearchHandler] Deleted bloom file"); } }
-            catch (Exception ex) { Console.WriteLine("[SearchHandler] Delete bloom file failed: " + ex.Message); }
-            try { if (File.Exists(BloomVersionStampPath)) File.Delete(BloomVersionStampPath); } catch { }
-
             _isReady = false;
+
+            DeleteFtsIndex();
+
             if (!string.IsNullOrEmpty(newDbPath) && File.Exists(newDbPath))
                 OnDbReady(newDbPath);
         }
@@ -213,98 +221,106 @@ namespace KezayitLib.Search
         public void StopIndexing()
         {
             Console.WriteLine("[SearchHandler] StopIndexing called, _isIndexing=" + _isIndexing);
-            _isIndexing = false;
-            BloomIndexingCoordinator.CancelIndexing();
+            var cts = _indexingCts;
+            if (cts != null) cts.Cancel();
             var task = _indexingTask;
             if (task != null)
             {
-                try { task.Wait(10000); } catch { }
+                try { task.Wait(10000); }
+                catch { }
                 _indexingTask = null;
             }
+            _isIndexing = false;
         }
 
-        private void OpenPool()
+        private void DeleteFtsIndex()
         {
-            ClosePool();
-            if (!string.IsNullOrEmpty(_dbPath) && File.Exists(_dbPath))
+            try
             {
-                _dbPool = new ZayitDbConnectionPool(1, _dbPath);
-                Console.WriteLine("[SearchHandler] Connection pool opened (size=1)");
+                if (Directory.Exists(FtsIndexPath))
+                {
+                    Directory.Delete(FtsIndexPath, recursive: true);
+                    Console.WriteLine("[SearchHandler] Deleted FTS index directory");
+                }
             }
+            catch (Exception ex) { Console.WriteLine("[SearchHandler] Failed to delete FTS index: " + ex.Message); }
         }
 
-        private void ClosePool()
-        {
-            var pool = _dbPool;
-            _dbPool = null;
-            if (pool != null)
-            {
-                pool.Dispose();
-                Console.WriteLine("[SearchHandler] Connection pool closed");
-            }
-        }
+        // ── Indexing ──────────────────────────────────────────────────────────────
 
-        private void StartIndexing(int resumeAfterLineId, int resumeChunkCount)
+        private CancellationTokenSource _indexingCts;
+
+        private void StartIndexing()
         {
-            Console.WriteLine("[SearchHandler] StartIndexing called, _isIndexing=" + _isIndexing
-                + " resumeAfterLineId=" + resumeAfterLineId + " resumeChunkCount=" + resumeChunkCount);
+            Console.WriteLine("[SearchHandler] StartIndexing called, _isIndexing=" + _isIndexing);
             if (_isIndexing) { Console.WriteLine("[SearchHandler] Already indexing, skipping"); return; }
             _isIndexing = true;
             _isReady = false;
 
-            if (resumeChunkCount == 0)
-            {
-                // Fresh start — delete any stale bloom file and version stamp
-                try { if (File.Exists(BloomFilePath)) { File.Delete(BloomFilePath); Console.WriteLine("[SearchHandler] Deleted stale bloom file"); } } catch (Exception ex) { Console.WriteLine("[SearchHandler] Failed to delete bloom file: " + ex.Message); }
-                try { if (File.Exists(BloomVersionStampPath)) { File.Delete(BloomVersionStampPath); Console.WriteLine("[SearchHandler] Deleted version stamp"); } } catch (Exception ex) { Console.WriteLine("[SearchHandler] Failed to delete version stamp: " + ex.Message); }
-            }
+            // Delete any stale index directory before a fresh build.
+            DeleteFtsIndex();
+
+            var cts = new CancellationTokenSource();
+            _indexingCts = cts;
+
+            long totalLines = 0;
+            try { totalLines = _index.CountLines(); } catch { }
 
             _indexingTask = Task.Run(() =>
             {
-                Console.WriteLine("[SearchHandler] Task.Run started, resumeAfterLineId=" + resumeAfterLineId);
+                Console.WriteLine("[SearchHandler] FTS index build started");
                 try
                 {
-                    var indexer = new BloomFilterIndexer("lines", (short)500, 0.001, _dbPath);
-                    indexer.IndexProgressChanged += (s, e) => PushIndexProgress(e);
-                    indexer.CreateBloomFilters(resumeAfterLineId, resumeChunkCount);
-                    Console.WriteLine("[SearchHandler] CreateBloomFilters completed");
+                    long processed = 0;
+                    _index.BuildIndex(limit: 0, onProgress: (count) =>
+                    {
+                        if (cts.IsCancellationRequested) return;
+                        processed = count;
+                        if (totalLines > 0 && count % 5000 == 0)
+                        {
+                            double pct = Math.Min(99.9, count * 100.0 / totalLines);
+                            PushProgress(false, true, pct, (int)count, (int)totalLines, "");
+                        }
+                    });
+                    Console.WriteLine("[SearchHandler] FTS index build completed");
                 }
-                catch (Exception ex) { Console.WriteLine("[SearchHandler] EXCEPTION: " + ex); }
+                catch (OperationCanceledException)
+                {
+                    Console.WriteLine("[SearchHandler] FTS index build cancelled");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("[SearchHandler] FTS index build EXCEPTION: " + ex);
+                }
                 finally
                 {
                     _isIndexing = false;
-                    _isReady = File.Exists(BloomFilePath);
+                    _indexingCts = null;
+
+                    string validationError = ValidateFtsIndex();
+                    _isReady = validationError == null;
+
                     if (_isReady)
                     {
                         string ver = GetInstalledAppVersion();
                         if (!string.IsNullOrEmpty(ver)) WriteVersionStamp(ver);
-                        OpenPool();
-                        try
-                        {
-                            long bytes = new FileInfo(BloomFilePath).Length;
-                            Console.WriteLine("[SearchHandler] Index file size: {0:F1} MB ({1:N0} bytes)",
-                                bytes / (1024.0 * 1024.0), bytes);
-                        }
-                        catch { }
+                        Console.WriteLine("[SearchHandler] FTS index ready");
                     }
-                    Console.WriteLine("[SearchHandler] Indexing done, _isReady=" + _isReady + " bloom exists=" + File.Exists(BloomFilePath));
+                    else
+                    {
+                        Console.WriteLine("[SearchHandler] FTS index build finished but index invalid: " + validationError);
+                    }
+
                     PushProgress(_isReady, false, 100, 0, 0, "");
                 }
             });
-        }
-
-        private void PushIndexProgress(IndexProgressChangedEventArgs e)
-        {
-            bool done = e.TotalChunks > 0 && e.ProcessedChunks >= e.TotalChunks;
-            PushProgress(done, !done, e.Percentage, e.ProcessedChunks, e.TotalChunks,
-                done ? "" : FormatEta(e.Eta));
         }
 
         private void PushProgress(bool isReady, bool isIndexing, double pct, int processed, int total, string eta)
         {
             _bridge.PushEvent(new
             {
-                @event = "bloomIndexProgress",
+                @event = "ftsIndexProgress",
                 isReady = isReady,
                 isIndexing = isIndexing,
                 percentage = Math.Round(pct, 1),
@@ -325,28 +341,22 @@ namespace KezayitLib.Search
 
         public void HandleDeleteIndex(string id)
         {
-            // Cancel any running indexer first, wait for it to release the file handle,
-            // then delete. Used by full app reset — does NOT start a new index build.
-            BloomIndexingCoordinator.CancelIndexing();
+            var cts = _indexingCts;
+            if (cts != null) cts.Cancel();
             var task = _indexingTask;
             if (task != null)
             {
-                try { task.Wait(10000); } catch { }
+                try { task.Wait(10000); }
+                catch { }
                 _indexingTask = null;
             }
             _isIndexing = false;
-            ClosePool();
-            try
-            {
-                if (File.Exists(BloomFilePath)) File.Delete(BloomFilePath);
-                if (File.Exists(BloomVersionStampPath)) File.Delete(BloomVersionStampPath);
-                _isReady = false;
-            }
-            catch (Exception ex) { Console.WriteLine("[SearchHandler] Delete index error: " + ex.Message); }
+            _isReady = false;
+            DeleteFtsIndex();
             if (id != null) _bridge.Reply(id, new { });
         }
 
-        public void HandleResetSearchIndex(string id)
+        public void HandleResetFtsIndex(string id)
         {
             _bridge.Reply(id, new { });
             if (!string.IsNullOrEmpty(_dbPath) && File.Exists(_dbPath))
@@ -367,37 +377,24 @@ namespace KezayitLib.Search
 
         public void HandleGetProgress(string id)
         {
-            var p = BloomIndexingCoordinator.LastProgress;
-            double pct = 0;
-            int processed = 0, total = 0;
-            string eta = "";
-            if (p != null)
-            {
-                pct = Math.Round(p.Percentage, 1);
-                processed = p.ProcessedChunks;
-                total = p.TotalChunks;
-                eta = FormatEta(p.Eta);
-            }
-            else if (_isReady)
-            {
-                pct = 100;
-            }
             _bridge.Reply(id, new
             {
                 isReady = _isReady,
                 isIndexing = _isIndexing,
-                percentage = pct,
-                processedChunks = processed,
-                totalChunks = total,
-                eta = eta
+                percentage = _isReady ? 100.0 : 0.0,
+                processedChunks = 0,
+                totalChunks = 0,
+                eta = ""
             });
         }
+
+        // ── Search ────────────────────────────────────────────────────────────────
 
         public void HandleSearchStart(JsonElement root, string id)
         {
             string query = root.TryGetProperty("0", out var q) ? q.GetString() : null;
             int skipCount = root.TryGetProperty("1", out var s) ? s.GetInt32() : 0;
-            if (!_isReady || string.IsNullOrWhiteSpace(query))
+            if (!_isReady || _index == null || string.IsNullOrWhiteSpace(query))
             {
                 _bridge.Reply(id, new { searchId = (string)null });
                 return;
@@ -426,9 +423,9 @@ namespace KezayitLib.Search
             try
             {
                 const int InitialBatchSize = 1;
-                const int SwitchToTimerThreshold = 16;  // switch to timer-only after reaching 16
-                const int FlushTimeoutMs = 150;  // flush every 150ms before user perceives a pause
-                const int MemorySafetyCap = 200;  // flush immediately if batch exceeds this to prevent memory bloat
+                const int SwitchToTimerThreshold = 16;
+                const int FlushTimeoutMs = 150;
+                const int MemorySafetyCap = 200;
 
                 var batch = new System.Collections.Generic.List<object>(50);
                 int currentThreshold = InitialBatchSize;
@@ -437,45 +434,53 @@ namespace KezayitLib.Search
                 batchTimer.Start();
                 bool useTimerOnly = false;
 
-                foreach (var item in new BloomFilterSearcher("lines", _dbPool).Search(query))
+                foreach (var result in _index.Search(query, cap: 0, ct))
                 {
                     if (ct.IsCancellationRequested)
                     {
                         PostSearch(new { type = "searchCancelled", searchId = searchId });
                         return;
                     }
+
+                    // Generate snippet — filters out false positives (IsMatch == false)
+                    var snippet = _index.GenerateSnippet(result);
+                    if (!snippet.IsMatch) continue;
+
                     // Skip results the client already has from cache
                     if (skipped < skipCount) { skipped++; continue; }
+
+                    // Flatten MatchedGroups into a single list of concrete terms for the frontend
+                    var matchedTerms = new System.Collections.Generic.List<string>();
+                    foreach (var group in result.MatchedGroups)
+                        foreach (var term in group)
+                            if (!matchedTerms.Contains(term))
+                                matchedTerms.Add(term);
+
                     batch.Add(new
                     {
-                        lineId = item.LineId,
-                        bookId = item.BookId,
-                        bookTitle = item.BookTitle,
-                        tocText = item.TocText,
-                        score = item.Score,
-                        proximityScore = item.ProximityScore,
-                        snippet = item.Snippet
+                        lineId = result.LineId,
+                        bookId = 0,          // frontend fetches bookId via GET_LINE_INDEX_FROM_LINE_ID
+                        bookTitle = result.BookTitle,
+                        tocText = "",        // frontend enriches via GET_TOC_PATHS_FOR_LINES
+                        score = snippet.Score,
+                        snippet = snippet.Html,
+                        matchedTerms = matchedTerms.ToArray()
                     });
 
                     bool shouldFlush = false;
                     if (useTimerOnly)
                     {
-                        // Timer-only mode: flush if timeout OR memory cap reached
                         shouldFlush = batch.Count > 0 && (batchTimer.ElapsedMilliseconds >= FlushTimeoutMs || batch.Count >= MemorySafetyCap);
                     }
                     else
                     {
-                        // Exponential mode: check threshold, timeout, or memory cap
                         bool reachedThreshold = batch.Count >= currentThreshold;
                         bool timedOut = batch.Count > 0 && batchTimer.ElapsedMilliseconds >= FlushTimeoutMs;
                         bool memoryCapReached = batch.Count >= MemorySafetyCap;
                         shouldFlush = reachedThreshold || timedOut || memoryCapReached;
-                        
+
                         if (shouldFlush && reachedThreshold && currentThreshold >= SwitchToTimerThreshold)
-                        {
-                            // Switch to timer-only mode after this flush
                             useTimerOnly = true;
-                        }
                     }
 
                     if (shouldFlush)
@@ -483,31 +488,24 @@ namespace KezayitLib.Search
                         PostSearch(new { type = "searchBatch", searchId = searchId, results = batch.ToArray() });
                         batch.Clear();
                         batchTimer.Restart();
-                        
-                        // Only increment threshold if not in timer-only mode
+
                         if (!useTimerOnly && currentThreshold < SwitchToTimerThreshold)
-                        {
                             currentThreshold = Math.Min(currentThreshold * 2, SwitchToTimerThreshold);
-                        }
                     }
                 }
+
                 if (batch.Count > 0)
                     PostSearch(new { type = "searchBatch", searchId = searchId, results = batch.ToArray() });
                 PostSearch(new { type = "searchComplete", searchId = searchId });
             }
-            catch (InvalidOperationException ex)
+            catch (OperationCanceledException)
             {
-                // The index file is corrupt or was built with an incompatible format.
-                // Delete it and trigger a full rebuild — same path as OnDbReady validation.
-                Console.WriteLine("[SearchHandler] Index format error during search: " + ex.Message + " — invalidating and rebuilding");
-                PostSearch(new { type = "searchComplete", searchId = searchId });
-                _isReady = false;
-                try { if (File.Exists(BloomFilePath)) File.Delete(BloomFilePath); } catch { }
-                try { if (File.Exists(BloomVersionStampPath)) File.Delete(BloomVersionStampPath); } catch { }
-                _bridge.PushEvent(new { @event = "bloomIndexInvalidated", reason = ex.Message });
-                StartIndexing(0, 0);
+                PostSearch(new { type = "searchCancelled", searchId = searchId });
             }
-            catch (Exception ex) { PostSearch(new { type = "searchError", searchId = searchId, error = ex.Message }); }
+            catch (Exception ex)
+            {
+                PostSearch(new { type = "searchError", searchId = searchId, error = ex.Message });
+            }
             finally
             {
                 if (_searches.TryRemove(searchId, out var cts)) cts.Dispose();

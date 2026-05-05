@@ -10,10 +10,10 @@
  */
 import { defineStore } from 'pinia'
 import { idbGet, idbSet, idbDelete } from '@/utils/persistence'
-import type { BloomSearchResult } from '@/features/full-text-search/fullTextSearchTypes'
+import type { FullTextSearchResult } from '@/features/full-text-search/fullTextSearchTypes'
 
 export interface SearchCacheEntry {
-  results: BloomSearchResult[]
+  results: FullTextSearchResult[]
   complete: boolean
 }
 
@@ -60,7 +60,7 @@ export const useSearchCacheStore = defineStore('searchCache', () => {
   }
 
   /** Append a batch of results to an existing entry. Fire-and-forget safe — caller awaits. */
-  async function appendBatch(query: string, batch: BloomSearchResult[]): Promise<void> {
+  async function appendBatch(query: string, batch: FullTextSearchResult[]): Promise<void> {
     const entry = await idbGet<SearchCacheEntry>(cacheKey(query))
     if (!entry) return
     entry.results.push(...batch)

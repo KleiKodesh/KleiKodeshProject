@@ -1,5 +1,5 @@
 /**
- * Bloom search composable — wraps C# streaming search.
+ * Full-text search composable — wraps C# streaming search (FtsLib backend).
  *
  * C# sends search stream events via PostWebMessageAsString → chrome.webview message events.
  * C# sends indexing progress via ExecuteScriptAsync → window.__onWebviewEvent.
@@ -11,80 +11,80 @@ import { isHosted, query } from '@/webview-host/seforimDb'
 import { SQL } from '@/webview-host/queries.sql'
 import { callBridgeAction } from '@/webview-host/bridge'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
-import type { BloomSearchResult } from './fullTextSearchTypes'
+import type { FullTextSearchResult } from './fullTextSearchTypes'
 
-const DEV_SAMPLES: BloomSearchResult[] = [
+const DEV_SAMPLES: FullTextSearchResult[] = [
   {
     lineId: 1,
     bookId: 1,
     bookTitle: 'בראשית',
     tocText: 'פרק א',
-    score: 0.95,
-    proximityScore: 0.9,
+    score: 0,
     snippet: 'בראשית ברא אלקים את השמים ואת הארץ',
+    matchedTerms: [],
   },
   {
     lineId: 2,
     bookId: 1,
     bookTitle: 'בראשית',
     tocText: 'פרק א',
-    score: 0.92,
-    proximityScore: 0.88,
+    score: 0,
     snippet: 'והארץ היתה תהו ובהו וחשך על פני תהום',
+    matchedTerms: [],
   },
   {
     lineId: 3,
     bookId: 2,
     bookTitle: 'שמות',
     tocText: 'פרק א',
-    score: 0.88,
-    proximityScore: 0.85,
+    score: 0,
     snippet: 'ואלה שמות בני ישראל הבאים מצרימה',
+    matchedTerms: [],
   },
   {
     lineId: 4,
     bookId: 3,
     bookTitle: 'ויקרא',
     tocText: 'פרק א',
-    score: 0.85,
-    proximityScore: 0.82,
+    score: 0,
     snippet: 'ויקרא אל משה וידבר אליו מאהל מועד',
+    matchedTerms: [],
   },
   {
     lineId: 5,
     bookId: 1,
     bookTitle: 'בראשית',
     tocText: 'פרק ב',
-    score: 0.82,
-    proximityScore: 0.8,
+    score: 0,
     snippet: 'ויכלו השמים והארץ וכל צבאם',
+    matchedTerms: [],
   },
   {
     lineId: 6,
     bookId: 4,
     bookTitle: 'משנה תורה להרמב"ם - ספר המדע',
     tocText: 'הלכות יסודי התורה › פרק ראשון › הלכה א',
-    score: 0.78,
-    proximityScore: 0.75,
+    score: 0,
     snippet: 'יסוד היסודות ועמוד החכמות לידע שיש שם מצוי ראשון',
+    matchedTerms: [],
   },
   {
     lineId: 7,
     bookId: 5,
     bookTitle: 'שולחן ערוך עם כל הנושאי כלים - אורח חיים',
     tocText: 'סימן א › סעיף א',
-    score: 0.75,
-    proximityScore: 0.72,
+    score: 0,
     snippet: 'יתגבר כארי לעמוד בבוקר לעבודת בוראו שיהא הוא מעורר השחר',
+    matchedTerms: [],
   },
   {
     lineId: 8,
     bookId: 6,
     bookTitle: 'תלמוד בבלי - מסכת ברכות',
     tocText: 'פרק ראשון - מאימתי › דף ב עמוד א',
-    score: 0.72,
-    proximityScore: 0.7,
+    score: 0,
     snippet: 'מאימתי קורין את שמע בערבין משעה שהכהנים נכנסים לאכול בתרומתן',
+    matchedTerms: [],
   },
 ]
 
@@ -93,7 +93,7 @@ const DEV_SAMPLES: BloomSearchResult[] = [
 // We maintain a single shared listener and route by searchId.
 
 type SearchListeners = {
-  onBatch: (results: BloomSearchResult[]) => Promise<void>
+  onBatch: (results: FullTextSearchResult[]) => Promise<void>
   onComplete: () => Promise<void>
   onCancelled: () => void
   onError: (err: string) => void
@@ -132,7 +132,7 @@ function ensureWebviewListener() {
               _searchListeners.delete(msg.searchId)
               return listener.onComplete()
             })
-            .catch((err) => console.error('[useBloomSearch] onComplete failed:', err))
+            .catch((err) => console.error('[useFullTextSearch] onComplete failed:', err))
           break
         case 'searchCancelled':
           _pendingBatches.delete(msg.searchId)
@@ -151,7 +151,7 @@ function ensureWebviewListener() {
   })
 }
 
-async function enrichTocPaths(batch: BloomSearchResult[]): Promise<void> {
+async function enrichTocPaths(batch: FullTextSearchResult[]): Promise<void> {
   const lineIds = [...new Set(batch.map((r) => r.lineId))]
   if (!lineIds.length) return
   try {
@@ -165,13 +165,13 @@ async function enrichTocPaths(batch: BloomSearchResult[]): Promise<void> {
       if (path) r.tocText = path
     }
   } catch (err) {
-    console.error('[useBloomSearch] enrichTocPaths failed:', err)
+    console.error('[useFullTextSearch] enrichTocPaths failed:', err)
   }
 }
 
 export function useFullTextSearch() {
   const cache = useSearchCacheStore()
-  const results = ref<BloomSearchResult[]>([])
+  const results = ref<FullTextSearchResult[]>([])
   const isSearching = ref(false)
   const hasSearched = ref(false)
   const executedQuery = ref('')
@@ -192,7 +192,7 @@ export function useFullTextSearch() {
     _cleanup()
     isSearching.value = false
     try {
-      await callBridgeAction('BloomSearchCancel', id)
+      await callBridgeAction('FtsSearchCancel', id)
     } catch {
       /* ignore */
     }
@@ -202,7 +202,11 @@ export function useFullTextSearch() {
   // skipCount: number of results already in cache — C# will skip that many before streaming.
   async function _startStream(normalizedQuery: string, skipCount: number) {
     ensureWebviewListener()
-    const reply = await callBridgeAction<{ searchId: string }>('BloomSearchStart', normalizedQuery, skipCount)
+    const reply = await callBridgeAction<{ searchId: string }>(
+      'FtsSearchStart',
+      normalizedQuery,
+      skipCount,
+    )
     const searchId = reply?.searchId
     if (!searchId) {
       // Index not ready
@@ -239,7 +243,7 @@ export function useFullTextSearch() {
         _cleanup()
       },
       onError: (err) => {
-        console.error('[useBloomSearch] search error:', err)
+        console.error('[useFullTextSearch] search error:', err)
         if (currentSearchId !== searchId) return
         isSearching.value = false
         _cleanup()
@@ -282,7 +286,7 @@ export function useFullTextSearch() {
       try {
         await _startStream(normalizedQuery, cached.results.length)
       } catch (err) {
-        console.error('[useBloomSearch] failed to resume stream:', err)
+        console.error('[useFullTextSearch] failed to resume stream:', err)
         isSearching.value = false
       }
       return
@@ -293,7 +297,7 @@ export function useFullTextSearch() {
       await cache.init(normalizedQuery)
       await _startStream(normalizedQuery, 0)
     } catch (err) {
-      console.error('[useBloomSearch] failed to start search:', err)
+      console.error('[useFullTextSearch] failed to start search:', err)
       isSearching.value = false
     }
   }
@@ -313,14 +317,11 @@ export function useFullTextSearch() {
     hasSearched.value = true
     // If incomplete, resume streaming in the background
     if (!cached.complete) {
-      // If incomplete, resume streaming in the background
       isSearching.value = true
       _startStream(normalizedQuery, cached.results.length).catch((err) => {
-        console.error('[useBloomSearch] failed to resume stream after tab restore:', err)
+        console.error('[useFullTextSearch] failed to resume stream after tab restore:', err)
         isSearching.value = false
       })
-    } else {
-      // complete cache — nothing more to do
     }
     return true
   }

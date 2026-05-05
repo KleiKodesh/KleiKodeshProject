@@ -193,3 +193,11 @@ Practical rules for this codebase:
 - When a name feels generic or could belong to any project, stop and ask: what is the actual domain concept here? `file-system` describes a technology. `book-catalog` describes the feature. Always prefer the domain word.
 - A rename is not complete until every reference is updated: imports, exported function names, CSS class names, comments, READMEs, steering files, and the old folder deleted. A partial rename leaves the codebase in a worse state than before — half the names scream the old concept, half scream the new one.
 - Thin wrapper components that only forward props and delegate method calls do not earn their own file. Inline them into the parent. Every file must justify its existence with logic that cannot live elsewhere.
+
+## PowerShell and Non-ASCII Files
+
+Never use PowerShell to read and write files that contain Hebrew or any other non-ASCII text. PowerShell's `[System.IO.File]::ReadAllText` and `Set-Content` default to the system code page (Windows-1252 on this machine), which silently mangles Hebrew characters into garbage on write. The `Get-Content` / `Set-Content` cmdlets have the same problem unless `-Encoding UTF8` is explicitly passed, and even then `Set-Content` on older PowerShell versions writes a UTF-8 BOM which can break some toolchains.
+
+The only safe way to modify files that contain Hebrew is to use the dedicated file-editing tools (`fsWrite`, `strReplace`, `fsAppend`). These tools handle encoding correctly and must always be preferred over any PowerShell file I/O for this project.
+
+If a shell command is genuinely needed to inspect file content (not modify it), use `Get-Content -Encoding UTF8` and treat the output as read-only reference only — never pipe it back into a write operation.

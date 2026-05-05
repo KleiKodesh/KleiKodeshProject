@@ -112,7 +112,7 @@ export function togglePopOut(): void {
 }
 
 /**
- * Full app reset — deletes the Bloom index, resets C# settings, then reloads.
+ * Full app reset — deletes the FTS index, resets C# settings, then reloads.
  * Call tabStore.resetAll() before this to schedule the IDB wipe.
  */
 export async function resetHostApp(): Promise<void> {
@@ -120,16 +120,16 @@ export async function resetHostApp(): Promise<void> {
     window.location.reload()
     return
   }
-  await action('DeleteBloomIndex').catch(() => {})
+  await action('DeleteFtsIndex').catch(() => {})
   await action('resetSettings').catch(() => {})
   action('reload').catch(() => window.location.reload())
 }
 
 /**
- * Reset the Bloom search index on the C# side.
+ * Reset the FTS search index on the C# side.
  */
 export async function resetSearchIndex(): Promise<void> {
-  await action('ResetSearchIndex').catch(() => {})
+  await action('ResetFtsIndex').catch(() => {})
 }
 
 /**

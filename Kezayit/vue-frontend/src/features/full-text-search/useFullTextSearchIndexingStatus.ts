@@ -58,7 +58,7 @@ export function useFullTextSearchIndexingStatus() {
     }
 
     try {
-      const p = await callBridgeAction<IndexingState>('GetBloomIndexingProgress')
+      const p = await callBridgeAction<IndexingState>('GetFtsIndexingProgress')
       if (p)
         state.value = {
           isReady: p.isReady,
@@ -69,26 +69,26 @@ export function useFullTextSearchIndexingStatus() {
           eta: p.eta ?? '',
         }
     } catch (err) {
-      console.warn('[useIndexingStatus] poll failed:', err)
+      console.warn('[useFullTextSearchIndexingStatus] poll failed:', err)
     }
 
     unregister = onWebviewEvent((msg) => {
-      if (msg.event === 'bloomIndexVersionMismatch') {
-        const oldVer = msg.oldVersion as string
-        const newVer = msg.newVersion as string
+      if (msg.event === 'ftsIndexVersionMismatch') {
+        const oldVersion = msg.oldVersion as string
+        const newVersion = msg.newVersion as string
         const rebuild = window.confirm(
-          `הגרסה של האפליקציה עודכנה (${oldVer} ← ${newVer}).\nהאם לבנות מחדש את אינדקס החיפוש?`,
+          `הגרסה של האפליקציה עודכנה (${oldVersion} ← ${newVersion}).\nהאם לבנות מחדש את אינדקס החיפוש?`,
         )
-        callBridgeAction('ConfirmReindex', { confirm: rebuild }).catch(() => {})
+        callBridgeAction('FtsConfirmReindex', { confirm: rebuild }).catch(() => {})
         return
       }
-      if (msg.event === 'bloomIndexInvalidated') {
-        // Old or corrupt index format detected — rebuild started automatically, nothing to confirm.
-        console.warn('[useIndexingStatus] Bloom index invalidated:', msg.reason)
+      if (msg.event === 'ftsIndexInvalidated') {
+        // Old or corrupt index detected — rebuild started automatically, nothing to confirm.
+        console.warn('[useFullTextSearchIndexingStatus] FTS index invalidated:', msg.reason)
         state.value = { ...IDLE, isIndexing: true, totalChunks: 0, eta: '' }
         return
       }
-      if (msg.event !== 'bloomIndexProgress') return
+      if (msg.event !== 'ftsIndexProgress') return
       state.value = {
         isReady: msg.isReady as boolean,
         isIndexing: msg.isIndexing as boolean,

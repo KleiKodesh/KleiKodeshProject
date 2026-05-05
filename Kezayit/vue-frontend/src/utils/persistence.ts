@@ -8,7 +8,7 @@
  *   app-tabs               — tabs list, tab states, book states (workspace-scoped)
  *   app-lastread           — per-book last-read positions (LRU-capped at 1000)
  *   app-hb-history         — HebrewBooks download history
- *   app-search-cache       — Bloom search result cache (LRU-capped at 100 queries)
+ *   app-search-cache       — full-text search result cache (LRU-capped at 100 queries)
  *   app-catalog-toc-cache  — Book catalog TOC search result cache (LRU-capped at 25 queries)
  *
  * Reset: clear all localStorage keys + delete all IDB databases.

@@ -218,10 +218,10 @@ namespace KezayitLib
                         case "restoreHbPdf": _hb.HandleRestoreHbPdf(root, id); break;
                         case "triggerHbDownload": _hb.HandleTriggerHbDownload(root, id); break;
                         case "triggerHbSaveAs": _hb.HandleTriggerHbSaveAs(root, id); break;
-                        case "GetBloomIndexingProgress": _search.HandleGetProgress(id); break;
-                        case "BloomSearchStart": _search.HandleSearchStart(root, id); break;
-                        case "BloomSearchCancel": _search.HandleSearchCancel(root, id); break;
-                        case "DeleteBloomIndex":
+                        case "GetFtsIndexingProgress": _search.HandleGetProgress(id); break;
+                        case "FtsSearchStart": _search.HandleSearchStart(root, id); break;
+                        case "FtsSearchCancel": _search.HandleSearchCancel(root, id); break;
+                        case "DeleteFtsIndex":
                             // Run cancel+delete on a background thread, reply when done
                             // so the JS caller can await completion before reloading.
                             _ = Task.Run(() =>
@@ -230,8 +230,8 @@ namespace KezayitLib
                                 _bridge.Reply(id, new { });
                             });
                             break;
-                        case "ResetSearchIndex": _search.HandleResetSearchIndex(id); break;
-                        case "ConfirmReindex":
+                        case "ResetFtsIndex": _search.HandleResetFtsIndex(id); break;
+                        case "FtsConfirmReindex":
                             bool confirm = root.TryGetProperty("confirm", out var cv) && cv.GetBoolean();
                             _search.HandleConfirmReindex(confirm, id);
                             break;

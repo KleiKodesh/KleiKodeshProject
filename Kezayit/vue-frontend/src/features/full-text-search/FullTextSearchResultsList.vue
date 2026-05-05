@@ -6,10 +6,10 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useEventListener } from '@vueuse/core'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
-import type { BloomSearchResult } from './fullTextSearchTypes'
+import type { FullTextSearchResult } from './fullTextSearchTypes'
 
 const props = defineProps<{
-  results: BloomSearchResult[]
+  results: FullTextSearchResult[]
   totalResults: number
   searchQuery: string
   isSearching: boolean
@@ -20,7 +20,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  resultClick: [BloomSearchResult]
+  resultClick: [FullTextSearchResult]
   saveScroll: [{ scrollIndex: number; scrollOffset: number }]
 }>()
 
@@ -44,14 +44,9 @@ const virtualizer = useVirtualizer(
   })),
 )
 
-function highlight(snippet: string): string {
-  if (!props.searchQuery || !snippet) return snippet
-  let text = settingsStore.censorDivineNames ? censorDivineNames(snippet) : snippet
-  for (const term of props.searchQuery.trim().split(/\s+/).filter(Boolean)) {
-    const esc = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    text = text.replace(new RegExp(`(${esc})`, 'gi'), '<span class="match">$1</span>')
-  }
-  return text
+function renderSnippet(snippet: string): string {
+  if (!snippet) return snippet
+  return settingsStore.censorDivineNames ? censorDivineNames(snippet) : snippet
 }
 
 function captureScrollPos() {
@@ -177,7 +172,7 @@ defineExpose({ captureScrollPos })
                 }}</span>
               </div>
               <!-- eslint-disable-next-line vue/no-v-html -->
-              <div class="snippet" v-html="highlight(results[vRow.index]!.snippet)" />
+              <div class="snippet" v-html="renderSnippet(results[vRow.index]!.snippet)" />
             </div>
           </div>
         </div>
@@ -285,6 +280,12 @@ defineExpose({ captureScrollPos })
   user-select: text;
 }
 .snippet :deep(.match) {
+  color: var(--accent-color);
+  font-weight: 600;
+  user-select: text;
+}
+.snippet :deep(mark) {
+  background: transparent;
   color: var(--accent-color);
   font-weight: 600;
   user-select: text;

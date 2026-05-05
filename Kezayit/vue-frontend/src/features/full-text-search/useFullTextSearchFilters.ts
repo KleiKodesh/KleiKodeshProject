@@ -6,7 +6,7 @@ import { normalizeBookPath } from '../book-catalog/bookCatalogSearchNormalizer'
 import { useTabStore } from '@/stores/tabStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { filterBooksByWords } from '../book-catalog/bookCatalogSearch'
-import type { BloomSearchResult } from './fullTextSearchTypes'
+import type { FullTextSearchResult } from './fullTextSearchTypes'
 import type { CategoryNode } from '../book-catalog/bookCatalogTree'
 
 // ── Query parsing ─────────────────────────────────────────────────────────────
@@ -24,7 +24,7 @@ export function parseSearchQuery(raw: string): { term: string; atFilters: string
 }
 
 export function useFullTextSearchFilters(
-  results: () => BloomSearchResult[],
+  results: () => FullTextSearchResult[],
   executedQuery: () => string,
   executeSearch: (q: string) => Promise<void>,
   clearSearch: () => void,
@@ -43,7 +43,7 @@ export function useFullTextSearchFilters(
   // Plain refs — never computeds. Updated only when filter/checkboxes change,
   // not on every streaming batch.
   const effectiveBookIds = ref<Set<number>>(new Set())
-  const filteredResults = ref<BloomSearchResult[]>([])
+  const filteredResults = ref<FullTextSearchResult[]>([])
   const resultCounts = ref<Map<number, number>>(new Map())
   const initialized = ref(false)
 
@@ -170,26 +170,30 @@ export function useFullTextSearchFilters(
     tabStore.updateActiveTab({ title: 'חיפוש' })
   }
 
-  async function handleResultClick(result: BloomSearchResult) {
+  async function handleResultClick(result: FullTextSearchResult) {
     try {
       const rows = await query<{ lineIndex: number }>(SQL.GET_LINE_INDEX_FROM_LINE_ID, [
         result.lineId,
       ])
       const lineIndex = rows[0]?.lineIndex
       if (lineIndex == null) return
-      const q = executedQuery()
       tabStore.openTab({
         title: result.bookTitle,
         route: '/book-view',
         bookId: result.bookId,
         openTocLineIndex: lineIndex,
         searchHighlightLineIndex: lineIndex,
-        searchHighlightQuery: q,
+        searchHighlightQuery: executedQuery(),
         searchHighlightSnippet: result.snippet,
-        searchHighlightTerms: q.trim().split(/\s+/).filter(Boolean),
+        // Use the concrete matched terms from FtsLib (includes fuzzy/wildcard expansions)
+        // rather than splitting the raw query, so the book view highlights the actual
+        // words that appeared in the line.
+        searchHighlightTerms: result.matchedTerms.length
+          ? result.matchedTerms
+          : executedQuery().trim().split(/\s+/).filter(Boolean),
       })
     } catch (err) {
-      console.error('[useSearch] failed to open result:', err)
+      console.error('[useFullTextSearchFilters] failed to open result:', err)
     }
   }
 
