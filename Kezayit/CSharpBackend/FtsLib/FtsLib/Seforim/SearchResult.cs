@@ -19,25 +19,31 @@ namespace FtsLib.Seforim
         /// The query groups used to find this result — one group per query token,
         /// each containing the concrete index terms that were OR-expanded from that
         /// token (e.g. all fuzzy neighbors of יצחק~ form one group).
-        ///
-        /// Used by <see cref="SeforimIndex.GenerateSnippet(SearchResult)"/> to:
-        ///   - highlight the actual matched forms (not the raw pattern)
-        ///   - find the tightest proximity window with correct OR-group semantics
-        ///
-        /// Never null; may be empty for results produced outside the normal pipeline.
+        /// Skipped groups (e.g. wildcards with no expansions) are absent from this list.
         /// </summary>
         public System.Collections.Generic.IReadOnlyList<
             System.Collections.Generic.IReadOnlyCollection<string>> MatchedGroups { get; }
 
+        /// <summary>
+        /// The number of query groups in the original parsed query, before any
+        /// zero-expansion wildcards were skipped. Used to compute word distance
+        /// correctly when some groups were silently dropped.
+        /// </summary>
+        public int OriginalGroupCount { get; }
+
         public SearchResult(int lineId, string bookTitle, string content,
             System.Collections.Generic.IReadOnlyList<
-                System.Collections.Generic.IReadOnlyCollection<string>> matchedGroups = null)
+                System.Collections.Generic.IReadOnlyCollection<string>> matchedGroups = null,
+            int originalGroupCount = 0)
         {
-            LineId        = lineId;
-            BookTitle     = bookTitle     ?? string.Empty;
-            Content       = content      ?? string.Empty;
-            MatchedGroups = matchedGroups ??
+            LineId             = lineId;
+            BookTitle          = bookTitle ?? string.Empty;
+            Content            = content   ?? string.Empty;
+            MatchedGroups      = matchedGroups ??
                 System.Array.Empty<System.Collections.Generic.IReadOnlyCollection<string>>();
+            OriginalGroupCount = originalGroupCount > 0
+                ? originalGroupCount
+                : MatchedGroups.Count;
         }
 
         public override string ToString() => $"[{LineId}] {BookTitle}";

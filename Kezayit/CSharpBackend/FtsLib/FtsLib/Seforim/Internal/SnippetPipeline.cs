@@ -38,12 +38,13 @@ namespace FtsLib.Seforim
         internal static SnippetResult Generate(
             string                                         content,
             IReadOnlyList<IReadOnlyCollection<string>>     queryGroups,
-            bool                                           requireOrdered = false)
+            bool                                           requireOrdered = false,
+            int                                            originalGroupCount = 0)
         {
             if (string.IsNullOrEmpty(content) || queryGroups == null || queryGroups.Count == 0)
                 return SnippetResult.NoMatch;
 
-            var inner = _builder.Build(content, queryGroups, requireOrdered);
+            var inner = _builder.Build(content, queryGroups, requireOrdered, originalGroupCount);
             return new SnippetResult(inner.Html, inner.Score, inner.WordDistance, inner.IsMatch);
         }
 

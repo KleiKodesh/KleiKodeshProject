@@ -55,12 +55,20 @@ namespace FtsLibTest
                     OrderedSearchTest.Run(args);
                     return;
 
+                case "worddist":
+                    WordDistanceTest.Run(args);
+                    return;
+
                 case "verify":
                     VerifyTest.Run(args);
                     return;
 
                 case "speed":
                     SpeedTest.Run(args);
+                    return;
+
+                case "perf":
+                    PerformanceTest.Run(args);
                     return;
 
                 case "expand":
@@ -136,11 +144,14 @@ namespace FtsLibTest
             Console.WriteLine("  FtsLibTest.exe query  [tier] \"query\"  — ad-hoc query with snippets");
             Console.WriteLine("  FtsLibTest.exe parsertest              — QueryParser unit tests (no index needed)");
             Console.WriteLine("  FtsLibTest.exe orderedtest             — ordered-search unit tests (no index needed)");
+            Console.WriteLine("  FtsLibTest.exe worddist                — word-distance unit tests (no index needed)");
+            Console.WriteLine("  FtsLibTest.exe speed  [tier]          — speed breakdown by pipeline phase");
+            Console.WriteLine("  FtsLibTest.exe perf   [tier]          — full performance battery (all features)");
             Console.WriteLine("  FtsLibTest.exe wdiag  [tier] query    — wildcard expansion diagnostic");
             Console.WriteLine();
             Console.WriteLine("Tiers: 500k (default) | 1m | 3m | full");
             Console.WriteLine();
-            Console.WriteLine("Query syntax:  word  word*  word~  word~2");
+            Console.WriteLine("Query syntax:  word  word*  word~  word~2  a | b");
         }
     }
 }

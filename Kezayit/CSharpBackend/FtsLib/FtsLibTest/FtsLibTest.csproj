@@ -62,8 +62,10 @@
     <Compile Include="SearchIndex\QueryTest.cs" />
     <Compile Include="SearchIndex\QueryParserTest.cs" />
     <Compile Include="SearchIndex\OrderedSearchTest.cs" />
+    <Compile Include="SearchIndex\WordDistanceTest.cs" />
     <Compile Include="SearchIndex\VerifyTest.cs" />
     <Compile Include="SearchIndex\SpeedTest.cs" />
+    <Compile Include="SearchIndex\PerformanceTest.cs" />
     <Compile Include="SearchIndex\ExpandDiag.cs" />
     <Compile Include="SearchIndex\LookupDiag.cs" />
     <Compile Include="SearchIndex\WildcardDiag.cs" />

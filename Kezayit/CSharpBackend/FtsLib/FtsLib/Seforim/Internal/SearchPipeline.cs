@@ -69,6 +69,7 @@ namespace FtsLib.Seforim
                 if (groups.Count == 0) yield break;
 
                 IReadOnlyList<IReadOnlyCollection<string>> matchedGroups = expandedGroups;
+                int originalGroupCount = parsed.Groups.Count;
 
                 var ids = new List<int>(reader.Search(groups, ct));
                 if (ids.Count == 0) yield break;
@@ -81,7 +82,7 @@ namespace FtsLib.Seforim
                     foreach (var (lineId, content, bookTitle) in db.FetchSearchResults(ids))
                     {
                         ct.ThrowIfCancellationRequested();
-                        yield return new SearchResult(lineId, bookTitle, content, matchedGroups);
+                        yield return new SearchResult(lineId, bookTitle, content, matchedGroups, originalGroupCount);
                         yielded++;
                         if (cap > 0 && yielded >= cap) yield break;
                     }

@@ -62,7 +62,8 @@ namespace FtsLib.Core
         public SnippetResult Build(
             string                                     rawHtml,
             IReadOnlyList<IReadOnlyCollection<string>> queryGroups,
-            bool                                       requireOrdered = false)
+            bool                                       requireOrdered     = false,
+            int                                        originalGroupCount = 0)
         {
             if (string.IsNullOrEmpty(rawHtml) || queryGroups == null || queryGroups.Count == 0)
                 return new SnippetResult(Encode(rawHtml ?? string.Empty), int.MaxValue, int.MaxValue, false);
@@ -72,14 +73,11 @@ namespace FtsLib.Core
                 foreach (var t in g)
                     _allTerms.Add(t);
 
-            // Tokenize once — the list is reused by window-finding, rendering,
-            // and (when requireOrdered) the order check below.
-            var tokens = _tokenStream.Tokenize(rawHtml);
-            var result = BuildCoreGroups(tokens, rawHtml, queryGroups, _allTerms);
+            int denominator = originalGroupCount > 0 ? originalGroupCount : queryGroups.Count;
 
-            // Ordered check: reuse the already-populated _termToGroup (set by
-            // FindWindowGroups inside BuildCoreGroups) and the same token list.
-            // No second tokenization pass.
+            var tokens = _tokenStream.Tokenize(rawHtml);
+            var result = BuildCoreGroups(tokens, rawHtml, queryGroups, _allTerms, denominator);
+
             if (requireOrdered && result.IsMatch && queryGroups.Count > 1)
             {
                 if (!HasOrderedMatch(tokens))
@@ -115,7 +113,8 @@ namespace FtsLib.Core
             List<TextToken>                            tokens,
             string                                     rawHtml,
             IReadOnlyList<IReadOnlyCollection<string>> queryGroups,
-            IReadOnlyCollection<string>                highlightTerms)
+            IReadOnlyCollection<string>                highlightTerms,
+            int                                        originalGroupCount)
         {
             if (tokens.Count == 0)
                 return new SnippetResult(Encode(rawHtml), int.MaxValue, int.MaxValue, false);
@@ -126,8 +125,8 @@ namespace FtsLib.Core
 
             var (snapStart, snapEnd) = ExpandWindow(tokens, rawHtml.Length, iLeft, iRight);
             string html = RenderFromRaw(rawHtml, tokens, highlightTerms, snapStart, snapEnd);
-            // WordDistance = extra words between matched terms (0 = all terms consecutive).
-            int wordDist = iRight - iLeft - (queryGroups.Count - 1);
+            // Use originalGroupCount so skipped wildcards still count as a slot.
+            int wordDist = iRight - iLeft - (originalGroupCount - 1);
             if (wordDist < 0) wordDist = 0;
             return new SnippetResult(html, score, wordDist, true);
         }

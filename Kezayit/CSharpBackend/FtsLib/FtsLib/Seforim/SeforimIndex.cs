@@ -176,7 +176,11 @@ namespace FtsLib.Seforim
         {
             if (result == null) return SnippetResult.NoMatch;
             if (result.MatchedGroups.Count > 0)
-                return SnippetPipeline.Generate(result.Content, result.MatchedGroups, requireOrdered);
+                return SnippetPipeline.Generate(
+                    result.Content,
+                    result.MatchedGroups,
+                    requireOrdered,
+                    result.OriginalGroupCount);
             return SnippetResult.NoMatch;
         }
     }
