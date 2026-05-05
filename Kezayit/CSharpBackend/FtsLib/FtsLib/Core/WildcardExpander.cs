@@ -27,11 +27,11 @@ namespace FtsLib.Core
     ///   to tens of thousands of terms.  The caller receives an empty list and
     ///   should skip the group rather than killing the whole query.
     ///
-    ///   MaxWildcardChars (5): each '*' in the pattern may match at most 5 characters.
+    ///   MaxWildcardChars (3): each '*' in the pattern may match at most 3 characters.
     ///   After the DB query, any expanded term where the wildcard portion exceeds
-    ///   this limit is discarded.  This reflects the longest realistic morphological
-    ///   affix in Hebrew (stacked prefixes ≤ 4 chars, e.g. וּמִבְּ) and English
-    ///   (prefixes/suffixes ≤ 5 chars, e.g. "extra", "inter", "trans", "tion").
+    ///   this limit is discarded.  Data from the full index shows that genuine
+    ///   Hebrew/Aramaic morphological prefixes and suffixes are 1–3 chars; anything
+    ///   longer is a compound run-on (e.g. "תלמודתורה", "במלכיישראל") not an affix.
     ///   For infix patterns (*abc*) the budget is MaxWildcardChars per side (×2 total)
     ///   since both a prefix and a suffix can be present simultaneously.
     ///
@@ -48,11 +48,14 @@ namespace FtsLib.Core
 
         /// <summary>
         /// Maximum number of characters each '*' wildcard may match in an expanded term.
-        /// Grounded in linguistics: Hebrew stacked prefixes reach at most 4 chars;
-        /// common English affixes reach at most 5 chars ("extra", "inter", "trans").
-        /// Any expanded term where the wildcard portion exceeds this is discarded.
+        /// Grounded in the actual index data and Hebrew/Aramaic morphology:
+        ///   length 1–2: single-letter prefixes (ב, ו, ה, כ, ל, מ, ש) and two-letter
+        ///               stacks (וב, וה, דב, etc.) — always real morphological forms.
+        ///   length 3:   three-letter stacks (ובה, דמב, וכש, etc.) — still real.
+        ///   length 4+:  compound run-ons (דכשה, במלכי, תלמוד+word) — not affixes.
+        /// Cap at 3 keeps all genuine prefixes/suffixes and rejects compound noise.
         /// </summary>
-        public const int MaxWildcardChars = 5;
+        public const int MaxWildcardChars = 3;
 
         /// <summary>
         /// Maximum number of '?' operators allowed in a single pattern.

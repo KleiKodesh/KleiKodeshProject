@@ -65,6 +65,9 @@
     <Compile Include="SearchIndex\ExpandDiag.cs" />
     <Compile Include="SearchIndex\LookupDiag.cs" />
     <Compile Include="SearchIndex\WildcardDiag.cs" />
+    <Compile Include="SearchIndex\PrefixLenDiag.cs" />
+    <!-- Ad-hoc DB queries -->
+    <Compile Include="DbQuery.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />

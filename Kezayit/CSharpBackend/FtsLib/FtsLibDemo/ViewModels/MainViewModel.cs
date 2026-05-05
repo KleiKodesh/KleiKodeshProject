@@ -45,9 +45,10 @@ namespace FtsLibDemo.ViewModels
             _indexService  = indexService  ?? throw new ArgumentNullException(nameof(indexService));
             _searchService = searchService ?? throw new ArgumentNullException(nameof(searchService));
 
-            BuildIndexCommand  = new AsyncRelayCommand(OnBuildIndexAsync, () => !_isIndexing && !_isSearching);
-            SearchCommand      = new AsyncRelayCommand(OnSearchAsync,     () => !_isSearching && (_indexService.IsReady || _isIndexing) && !string.IsNullOrWhiteSpace(_searchQuery));
-            CancelIndexCommand = new RelayCommand(OnCancelIndex,          () => _isIndexing);
+            BuildIndexCommand    = new AsyncRelayCommand(OnBuildIndexAsync, () => !_isIndexing && !_isSearching);
+            SearchCommand        = new AsyncRelayCommand(OnSearchAsync,     () => !_isSearching && (_indexService.IsReady || _isIndexing) && !string.IsNullOrWhiteSpace(_searchQuery));
+            CancelIndexCommand   = new RelayCommand(OnCancelIndex,          () => _isIndexing);
+            ShowSyntaxHelpCommand = new RelayCommand(OnShowSyntaxHelp);
 
             _indexedDbPath = _settings.IndexedDbPath ?? string.Empty;
             TryOpenExistingIndex();
@@ -135,9 +136,10 @@ namespace FtsLibDemo.ViewModels
         }
 
         // ── Commands ─────────────────────────────────────────────────────────
-        public ICommand BuildIndexCommand  { get; }
-        public ICommand SearchCommand      { get; }
-        public ICommand CancelIndexCommand { get; }
+        public ICommand BuildIndexCommand    { get; }
+        public ICommand SearchCommand        { get; }
+        public ICommand CancelIndexCommand   { get; }
+        public ICommand ShowSyntaxHelpCommand { get; }
 
         // ── Command handlers ─────────────────────────────────────────────────
 
@@ -302,6 +304,15 @@ namespace FtsLibDemo.ViewModels
         private void OnCancelIndex()
         {
             _indexCts?.Cancel();
+        }
+
+        private void OnShowSyntaxHelp()
+        {
+            var win = new SearchHelpWindow
+            {
+                Owner = Application.Current.MainWindow
+            };
+            win.ShowDialog();
         }
 
         // ── Helpers ──────────────────────────────────────────────────────────

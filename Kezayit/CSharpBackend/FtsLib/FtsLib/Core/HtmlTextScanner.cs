@@ -79,9 +79,21 @@ namespace FtsLib.Core
 
                 // ── NIKUD + CANTILLATION REMOVAL ─────────────────────
                 // U+0591–U+05AF  Hebrew cantillation marks (טעמים)
-                // U+05B0–U+05C7  Hebrew nikud (ניקוד)
-                // Strip silently — do NOT update _wordStart.
-                if (c >= '\u0591' && c <= '\u05C7')
+                // U+05B0–U+05BD  Hebrew nikud (ניקוד) — combining vowel points
+                // U+05BF          rafe — combining
+                // U+05C1–U+05C2  shin/sin dot — combining
+                // U+05C4–U+05C5  upper/lower dot — combining
+                // U+05C7          qamats qatan — combining
+                //
+                // NOT stripped (act as word separators via the else/Flush path):
+                // U+05BE  maqaf — handled explicitly above
+                // U+05C0  paseq ׀ — punctuation
+                // U+05C3  sof pasuq ׃ — punctuation
+                // U+05C6  nun hafukha — punctuation
+                if (c >= '\u0591' && c <= '\u05C7'
+                    && c != '\u05C0'   // paseq ׀
+                    && c != '\u05C3'   // sof pasuq ׃
+                    && c != '\u05C6')  // nun hafukha
                     continue;
 
                 if (c > 127 && CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark)

@@ -1,0 +1,18 @@
+﻿
+╔══ WILDCARD DIAGNOSTIC ══════════════════════════════════════
+║  Query : "*ישראל"
+║  Tier  : FULL
+║  Index : C:\Users\Public\Documents\KleiKodeshProject\Kezayit\CSharpBackend\FtsLib\FtsLibTest\bin\Release\index_full
+╠══ TOKEN ANALYSIS ═══════════════════════════════════════════
+║  1 token(s) after parsing:
+║
+║  Pattern : "*ישראל"  [WILDCARD]
+║    LIKE pattern : "%ישראל"
+║    Shape        : SUFFIX  (*term)  ⚠ may expand to many terms
+║    DB returned  : 111 term(s)  (1210 ms)
+║    After filter : 92 term(s)  (19 discarded — wildcard portion > 3 chars)
+║    First 20     : אבישראל, אישראל, אתישראל, בדישראל, בהישראל, בישראל, בלישראל, בניישראל, בשהישראל, בשישראל, בשםישראל, בתישראל, דאישראל, דבדישראל, דבישראל, דבשישראל, דהישראל, דוישראל, דולישראל, דישראל
+║    … and 72 more
+║
+╠══ FULL QUERY SEARCH ════════════════════════════════════════
+[ZayitDb] Opening: C:\Users\Admin\AppData\Roaming\io.github.kdroidfilter.seforimapp\databases\seforim.db

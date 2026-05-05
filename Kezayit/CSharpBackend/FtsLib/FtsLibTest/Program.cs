@@ -67,6 +67,14 @@ namespace FtsLibTest
                     WildcardDiag.Run(args);
                     return;
 
+                case "prefixlen":
+                    PrefixLenDiag.Run(args);
+                    return;
+
+                case "dbquery":
+                    DbQuery.Run(args);
+                    return;
+
                 default:
                     PrintUsage();
                     return;

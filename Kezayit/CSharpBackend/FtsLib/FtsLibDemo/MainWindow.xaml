@@ -138,12 +138,63 @@
                 BorderThickness="0,0,0,1" Padding="10,8">
             <Grid>
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <TextBox Grid.Column="0"
+                <!-- Info / syntax help button — circle with "i" -->
+                <Button Grid.Column="0"
+                        Command="{Binding ShowSyntaxHelpCommand}"
+                        ToolTip="תחביר חיפוש"
+                        Width="22" Height="22"
+                        Margin="0,0,8,0">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="BorderBrush" Value="#2E6DA4"/>
+                            <Setter Property="BorderThickness" Value="1.5"/>
+                            <Setter Property="Cursor" Value="Hand"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                CornerRadius="11"
+                                                Width="22" Height="22">
+                                            <ContentPresenter HorizontalAlignment="Center"
+                                                              VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Background" Value="#E8F0FA"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                    <!-- "i" icon: dot + vertical stroke -->
+                    <Viewbox Width="10" Height="10" Stretch="Uniform">
+                        <Canvas Width="24" Height="24">
+                            <!-- dot -->
+                            <Ellipse Canvas.Left="10.5" Canvas.Top="3"
+                                     Width="3" Height="3"
+                                     Fill="#2E6DA4"/>
+                            <!-- stem -->
+                            <Path Data="M12,9 L12,19"
+                                  Stroke="#2E6DA4"
+                                  StrokeThickness="2."
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round"/>
+                        </Canvas>
+                    </Viewbox>
+                </Button>
+
+                <TextBox Grid.Column="1"
                          Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
                          Style="{StaticResource SearchBoxStyle}"
                          Margin="0,0,8,0">
@@ -152,20 +203,39 @@
                     </TextBox.InputBindings>
                 </TextBox>
 
-                <Button Grid.Column="1"
-                        Content="חפש"
-                        Command="{Binding SearchCommand}"
-                        Style="{StaticResource PrimaryButton}"
-                        Margin="0,0,6,0"/>
-
+                <!-- Search button — magnifying glass icon -->
                 <Button Grid.Column="2"
+                        Command="{Binding SearchCommand}"
+                        ToolTip="חפש"
+                        Style="{StaticResource PrimaryButton}"
+                        Width="36" MinWidth="0"
+                        Padding="0"
+                        Margin="0,0,6,0">
+                    <Viewbox Width="16" Height="16" Stretch="Uniform">
+                        <Canvas Width="24" Height="24">
+                            <!-- lens circle -->
+                            <Ellipse Canvas.Left="2" Canvas.Top="2"
+                                     Width="14" Height="14"
+                                     Stroke="White" StrokeThickness="2"
+                                     Fill="Transparent"/>
+                            <!-- handle -->
+                            <Path Data="M14,14 L21,21"
+                                  Stroke="White"
+                                  StrokeThickness="2.5"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round"/>
+                        </Canvas>
+                    </Viewbox>
+                </Button>
+
+                <Button Grid.Column="3"
                         Content="צור אינדקס"
                         Command="{Binding BuildIndexCommand}"
                         Style="{StaticResource PrimaryButton}"
                         Margin="0,0,6,0"
                         Visibility="{Binding IsIndexing, Converter={StaticResource BoolToVisInverted}}"/>
 
-                <Button Grid.Column="2"
+                <Button Grid.Column="3"
                         Content="בטל"
                         Command="{Binding CancelIndexCommand}"
                         Style="{StaticResource DangerButton}"
