@@ -1,5 +1,21 @@
 # FtsLib
 
+## Repository setup
+
+This folder exists in two git repos simultaneously:
+
+- **KleiKodeshProject** — the main app repo. Committing from the workspace root includes these files.
+- **FtsLib** (`github.com/KleiKodesh/FtsLib`) — a standalone repo for this library. The folder has its own `.git` pointing here.
+
+When you change files in this folder, push to both repos separately:
+
+1. From the workspace root — commits to KleiKodeshProject
+2. From inside this folder (`CSharpBackend/FtsLib`) — commits to the FtsLib repo
+
+Both repos share the same local files. There is no automatic sync between them.
+
+---
+
 A full-text search library for a Hebrew/Aramaic seforim database (~5.4M lines, SQLite). Answers one question: **which lines contain all the search terms?**
 
 Built on a custom LSM-style segment index with delta+varint compressed posting lists and skip-list accelerated intersection.
