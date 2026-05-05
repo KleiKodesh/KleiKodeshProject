@@ -51,6 +51,10 @@ namespace FtsLibTest
                     VerifyTest.Run(args);
                     return;
 
+                case "speed":
+                    SpeedTest.Run(args);
+                    return;
+
                 default:
                     PrintUsage();
                     return;
@@ -61,9 +65,9 @@ namespace FtsLibTest
 
         private static void RunAll(string[] args)
         {
-            string tierLabel = args.Length > 1 ? args[1] : "500k";
+            string tierLabel = args.Length > 1 ? args[1] : "full";
             string label;
-            int    limit;
+            int limit;
             try
             {
                 var tier = TestHelpers.ResolveTier(tierLabel);
@@ -72,9 +76,9 @@ namespace FtsLibTest
             }
             catch (ArgumentException ex) { Console.WriteLine(ex.Message); return; }
 
-            string dbPath   = BuildTest.ResolveDbPath();
+            string dbPath = BuildTest.ResolveDbPath();
             string indexDir = TestHelpers.IndexDir(label);
-            string path     = BuildTest.TempReportPath("full", label);
+            string path = BuildTest.TempReportPath("full", label);
 
             var fragments = new List<string>();
 
@@ -91,6 +95,7 @@ namespace FtsLibTest
                 fragments,
                 path);
         }
+
         // ── Usage ─────────────────────────────────────────────────────
 
         private static void PrintUsage()

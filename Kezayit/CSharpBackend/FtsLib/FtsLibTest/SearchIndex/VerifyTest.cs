@@ -54,7 +54,7 @@ namespace FtsLibTest
                 if (wantIds.Contains(r.LineId))
                 {
                     found.Add(r.LineId);
-                    var snippet = index.GenerateSnippet(r.LineId, query);
+                    var snippet = index.GenerateSnippet(r);
                     string plain = StripTags(snippet.Html, 120);
                     Console.WriteLine($"  ✓ FOUND  id={r.LineId}  [{r.BookTitle}]");
                     Console.WriteLine($"    {plain}");

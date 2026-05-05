@@ -109,6 +109,45 @@ namespace FtsLib.Seforim
             return terms;
         }
 
+        /// <summary>
+        /// Returns only the matching line IDs — no database fetch at all.
+        /// Use when the caller only needs IDs (counting, on-demand content loading).
+        /// </summary>
+        internal static IEnumerable<int> SearchIds(string query, string indexPath)
+        {
+            var parsed = QueryParser.Parse(query);
+            if (parsed.IsEmpty) yield break;
+
+            using (var reader = new IndexReader(indexPath))
+            {
+                var groups = new List<IEnumerable<string>>(parsed.Groups.Count);
+
+                foreach (var group in parsed.Groups)
+                {
+                    List<string> expanded;
+                    if (group.IsFuzzy)
+                    {
+                        expanded = reader.ExpandFuzzy(group.Pattern, group.FuzzyDistance);
+                        if (expanded.Count == 0) yield break;
+                    }
+                    else if (group.IsWildcard)
+                    {
+                        expanded = reader.ExpandWildcard(group.Pattern);
+                        if (expanded.Count == 0)
+                            expanded = new List<string> { WildcardExpander.StripWildcard(group.Pattern) };
+                    }
+                    else
+                    {
+                        expanded = new List<string> { group.Pattern };
+                    }
+                    groups.Add(expanded);
+                }
+
+                foreach (var id in reader.Search(groups))
+                    yield return id;
+            }
+        }
+
         // ── Helpers ───────────────────────────────────────────────────
 
         // (no helpers currently needed)

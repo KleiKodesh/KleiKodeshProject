@@ -105,6 +105,31 @@ namespace FtsLib.Seforim
         public IEnumerable<SearchResult> Search(string query, int cap = 0)
             => SearchPipeline.Search(query, _indexPath, _dbPath, cap);
 
+        /// <summary>
+        /// Searches the index and returns only the matching line IDs — no database
+        /// fetch. Use when you only need IDs (e.g. counting results, or when you will
+        /// fetch content yourself on demand).
+        ///
+        /// Significantly faster than <see cref="Search"/> for large result sets because
+        /// it skips the SQLite content fetch entirely.
+        /// </summary>
+        public IEnumerable<int> SearchIds(string query)
+            => SearchPipeline.SearchIds(query, _indexPath);
+
+        /// <summary>
+        /// Generates a highlighted HTML snippet for a single search result line.
+        ///
+        /// Fetches the line content from the database, finds the tightest window
+        /// covering all query terms, and returns highlighted HTML with a proximity
+        /// score. Results with <see cref="SnippetResult.IsMatch"/> = false are index
+        /// false positives and should be filtered out.
+        /// </summary>
+        /// <param name="lineId">The line ID from a <see cref="SearchResult"/>.</param>
+        /// <param name="query">
+        /// The same query string passed to <see cref="Search"/>. Fuzzy/wildcard
+        /// markers are stripped automatically — only the base word forms are used
+        /// for highlighting.
+        /// </param>
         // ── Snippet ───────────────────────────────────────────────────
 
         /// <summary>
@@ -121,33 +146,27 @@ namespace FtsLib.Seforim
         /// markers are stripped automatically — only the base word forms are used
         /// for highlighting.
         /// </param>
-        /// <returns>
-        /// A <see cref="SnippetResult"/> with the highlighted HTML, proximity score,
-        /// and a flag indicating whether all terms were actually found in the line.
-        /// </returns>
         public SnippetResult GenerateSnippet(int lineId, string query)
         {
             var terms = SearchPipeline.ExtractTerms(query);
-            return SnippetPipeline.Generate(lineId, terms, _dbPath);
+            return SnippetPipeline.GenerateFromDb(lineId, terms, _dbPath);
         }
 
         /// <summary>
-        /// Generates a highlighted HTML snippet using the pre-computed matched terms
-        /// stored on the <see cref="SearchResult"/>.
+        /// Generates a highlighted HTML snippet using the content and matched groups
+        /// already present on the <see cref="SearchResult"/> — no second DB fetch.
         ///
-        /// Preferred over <see cref="GenerateSnippet(int,string)"/> for results from
-        /// fuzzy or wildcard queries: the matched terms include all expanded forms
-        /// (e.g. ביצחק, יצחקי, … when the query was יצחק~), so the highlighter can
-        /// mark the actual word that appeared in the line rather than the raw pattern.
+        /// Preferred over <see cref="GenerateSnippet(int,string)"/> for all results
+        /// from <see cref="Search"/>: content is already in memory, and the matched
+        /// groups include all expanded forms (e.g. ביצחק when the query was יצחק~)
+        /// so the highlighter marks the actual word that appeared in the line.
         /// </summary>
         /// <param name="result">A result returned by <see cref="Search"/>.</param>
         public SnippetResult GenerateSnippet(SearchResult result)
         {
             if (result == null) return SnippetResult.NoMatch;
-            // Use pre-computed matched groups when available — gives correct OR-group
-            // proximity window semantics and highlights the actual matched forms.
             if (result.MatchedGroups.Count > 0)
-                return SnippetPipeline.Generate(result.LineId, result.MatchedGroups, _dbPath);
+                return SnippetPipeline.Generate(result.Content, result.MatchedGroups);
             return SnippetResult.NoMatch;
         }
     }

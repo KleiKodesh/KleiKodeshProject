@@ -27,10 +27,16 @@ Blocking. Reads every line from the DB, tokenizes it, and writes the index to di
 ## Search
 
 ```csharp
+// Full search — returns content + book title for each result.
+// Use when you need to display or process the line content.
 IEnumerable<SearchResult> results = index.Search(query, cap: 0);
+
+// ID-only search — no DB fetch, much faster for large result sets.
+// Use when you only need to count results or load content on demand.
+IEnumerable<int> ids = index.SearchIds(query);
 ```
 
-Returns results lazily. `cap: 0` means no limit. Each `SearchResult` has:
+`Search` returns results lazily. `cap: 0` means no limit. Each `SearchResult` has:
 
 | Property | Type | Description |
 |---|---|---|

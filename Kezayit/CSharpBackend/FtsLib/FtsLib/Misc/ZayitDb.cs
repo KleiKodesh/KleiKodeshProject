@@ -34,7 +34,8 @@ namespace FtsLib.Misc
                 cmd.CommandText =
                     "PRAGMA journal_mode=WAL;" +
                     "PRAGMA cache_size=-65536;" +  // up to 64 MB page cache
-                    "PRAGMA temp_store=MEMORY;";
+                    "PRAGMA temp_store=MEMORY;" +
+                    "PRAGMA mmap_size=268435456;"; // 256 MB memory-mapped I/O
                 cmd.ExecuteNonQuery();
             }
         }
@@ -77,34 +78,129 @@ namespace FtsLib.Misc
             }
         }
 
-        public List<(int Id, string Content, string BookTitle)> 
+        public IEnumerable<(int Id, string Content, string BookTitle)>
             FetchSearchResults(List<int> ids)
         {
             EnsureOpen();
-            var rows = new List<(int, string, string)>(ids.Count);
+            if (ids.Count == 0) yield break;
+
+            // Load book titles once — the book table is tiny so this is negligible.
+            var bookTitles = LoadBookTitles();
+
+            // Fetch line rows. Chunk to stay within SQLite's variable limit.
+            // Parameterized IN is faster than a temp table for typical result sizes.
+            const int ChunkSize = 999; // SQLITE_MAX_VARIABLE_NUMBER default
 
             using (var cmd = _connection.CreateCommand())
             {
-                cmd.CommandText =
-                    $@"SELECT l.id, l.content, b.title
-                         FROM line l JOIN book b ON b.id = l.bookId
-                        WHERE l.id IN ({string.Join(",", ids)})
-                        ORDER BY l.bookId, l.lineIndex";
-
-                using (var r = cmd.ExecuteReader())
+                // Pre-allocate parameter objects — reused across chunks.
+                var paramNames = new string[ChunkSize];
+                for (int i = 0; i < ChunkSize; i++)
                 {
-                    while (r.Read())
-                    {
-                        int    lineId    = r.GetInt32(0);
-                        string content   = r.IsDBNull(1) ? string.Empty : r.GetString(1);
-                        string bookTitle = r.IsDBNull(2) ? string.Empty : r.GetString(2);
+                    paramNames[i] = $"@p{i}";
+                    cmd.Parameters.Add(paramNames[i], System.Data.DbType.Int32);
+                }
 
-                        rows.Add((lineId, content, bookTitle));
+                for (int start = 0; start < ids.Count; start += ChunkSize)
+                {
+                    int end   = Math.Min(start + ChunkSize, ids.Count);
+                    int count = end - start;
+
+                    var sb = new System.Text.StringBuilder(
+                        "SELECT l.id, l.content, l.bookId FROM line l WHERE l.id IN (");
+                    for (int i = 0; i < count; i++)
+                    {
+                        if (i > 0) sb.Append(',');
+                        sb.Append(paramNames[i]);
+                        cmd.Parameters[paramNames[i]].Value = ids[start + i];
+                    }
+                    sb.Append(") ORDER BY l.bookId, l.lineIndex");
+                    cmd.CommandText = sb.ToString();
+
+                    using (var r = cmd.ExecuteReader())
+                    {
+                        while (r.Read())
+                        {
+                            int    lineId  = r.GetInt32(0);
+                            string content = r.IsDBNull(1) ? string.Empty : r.GetString(1);
+                            int    bookId  = r.GetInt32(2);
+                            bookTitles.TryGetValue(bookId, out string title);
+                            yield return (lineId, content, title ?? string.Empty);
+                        }
                     }
                 }
             }
+        }
 
-            return rows;
+        /// <summary>
+        /// Fetches only id + bookTitle for each matching line — no content column.
+        /// Use when the caller does not need content (e.g. counting, ID-only pipelines).
+        /// Significantly faster than <see cref="FetchSearchResults"/> for large result sets
+        /// because it skips reading the large content TEXT column from disk.
+        /// </summary>
+        public IEnumerable<(int Id, string BookTitle)>
+            FetchSearchResultsNoContent(List<int> ids)
+        {
+            EnsureOpen();
+            if (ids.Count == 0) yield break;
+
+            var bookTitles = LoadBookTitles();
+
+            const int ChunkSize = 999;
+            using (var cmd = _connection.CreateCommand())
+            {
+                var paramNames = new string[ChunkSize];
+                for (int i = 0; i < ChunkSize; i++)
+                {
+                    paramNames[i] = $"@p{i}";
+                    cmd.Parameters.Add(paramNames[i], System.Data.DbType.Int32);
+                }
+
+                for (int start = 0; start < ids.Count; start += ChunkSize)
+                {
+                    int end   = Math.Min(start + ChunkSize, ids.Count);
+                    int count = end - start;
+
+                    var sb = new System.Text.StringBuilder(
+                        "SELECT l.id, l.bookId FROM line l WHERE l.id IN (");
+                    for (int i = 0; i < count; i++)
+                    {
+                        if (i > 0) sb.Append(',');
+                        sb.Append(paramNames[i]);
+                        cmd.Parameters[paramNames[i]].Value = ids[start + i];
+                    }
+                    sb.Append(") ORDER BY l.bookId, l.lineIndex");
+                    cmd.CommandText = sb.ToString();
+
+                    using (var r = cmd.ExecuteReader())
+                    {
+                        while (r.Read())
+                        {
+                            int lineId = r.GetInt32(0);
+                            int bookId = r.GetInt32(1);
+                            bookTitles.TryGetValue(bookId, out string title);
+                            yield return (lineId, title ?? string.Empty);
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Loads all book titles into a dictionary. Called once per fetch — the book
+        /// table is small (~hundreds of rows) so this is negligible.
+        /// </summary>
+        private Dictionary<int, string> LoadBookTitles()
+        {
+            var dict = new Dictionary<int, string>(512);
+            using (var cmd = _connection.CreateCommand())
+            {
+                cmd.CommandText = "SELECT id, title FROM book";
+                using (var r = cmd.ExecuteReader())
+                    while (r.Read())
+                        dict[r.GetInt32(0)] = r.IsDBNull(1) ? string.Empty : r.GetString(1);
+            }
+            return dict;
         }
 
         public void Dispose()

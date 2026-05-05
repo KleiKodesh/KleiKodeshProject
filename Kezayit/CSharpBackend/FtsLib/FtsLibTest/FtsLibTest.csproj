@@ -61,6 +61,7 @@
     <Compile Include="SearchIndex\SearchTest.cs" />
     <Compile Include="SearchIndex\QueryTest.cs" />
     <Compile Include="SearchIndex\VerifyTest.cs" />
+    <Compile Include="SearchIndex\SpeedTest.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />

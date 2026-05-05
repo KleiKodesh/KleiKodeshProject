@@ -46,7 +46,13 @@ namespace FtsLibDemo.Services
             {
                 if (ct.IsCancellationRequested) break;
 
-                batch.Add(new SearchResultItem(result.LineId, result.BookTitle, result.Content));
+                // Generate the snippet using already-fetched content — no second DB fetch.
+                // Snippet generation (tokenize + proximity window + render) is done here
+                // per result so the UI gets highlighted text immediately as results stream in.
+                var snippet = index.GenerateSnippet(result);
+                string display = snippet.IsMatch ? snippet.Html : result.Content;
+
+                batch.Add(new SearchResultItem(result.LineId, result.BookTitle, display));
                 total++;
 
                 if (batch.Count >= BatchSize)
