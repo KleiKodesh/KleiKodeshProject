@@ -145,9 +145,8 @@ namespace KleiKodeshVstoInstallerWpf
         /// <summary>
         /// Returns the whitelist entries to show in the editor dialog.
         /// Priority:
-        ///   1. PendingWhitelist  — user already edited this session (in-memory)
-        ///   2. Embedded default + user's visibility from installed file — update scenario
-        ///   3. Embedded default  — fresh install
+        ///   1. PendingWhitelist — user already edited this session (in-memory)
+        ///   2. Embedded default — always use the installer's compiled whitelist
         /// </summary>
         private static ObservableCollection<WhitelistEntry> LoadEntries()
         {
@@ -155,30 +154,9 @@ namespace KleiKodeshVstoInstallerWpf
             if (AddinInstaller.PendingWhitelist != null)
                 return Deserialize(AddinInstaller.PendingWhitelist);
 
-            // Load the default list
+            // 2. Always start from the installer's compiled default
             string defaultJson = LoadDefaultJson();
-            var entries = defaultJson != null ? Deserialize(defaultJson) : new ObservableCollection<WhitelistEntry>();
-
-            // 2. Existing install — merge user's visibility choices
-            string installedPath = Path.Combine(AddinInstaller.InstallPath, "WebSitesWhitelist.json");
-            if (File.Exists(installedPath))
-            {
-                try
-                {
-                    string installedJson = File.ReadAllText(installedPath);
-                    var installedEntries = ParseWhitelistJson(installedJson);
-                    // For each installed entry, find matching default entry by Url and update IsVisible
-                    foreach (var installed in installedEntries)
-                    {
-                        var defaultEntry = entries.FirstOrDefault(e => e.Url == installed.Url);
-                        if (defaultEntry != null)
-                            defaultEntry.IsVisible = installed.IsVisible;
-                    }
-                }
-                catch { /* ignore errors, keep defaults */ }
-            }
-
-            return entries;
+            return defaultJson != null ? Deserialize(defaultJson) : new ObservableCollection<WhitelistEntry>();
         }
 
         /// <summary>
@@ -243,15 +221,14 @@ namespace KleiKodeshVstoInstallerWpf
             var sb = new System.Text.StringBuilder();
             sb.AppendLine("[");
             bool first = true;
-            foreach (var e in entries)
+            foreach (var e in entries.Where(e => e.IsVisible))
             {
                 if (!first) sb.AppendLine(",");
                 first = false;
                 sb.AppendLine("  {");
                 sb.AppendLine($"    \"Name\": {J(e.Name)},");
                 sb.AppendLine($"    \"Description\": {J(e.Description)},");
-                sb.AppendLine($"    \"Url\": {J(e.Url)},");
-                sb.Append    ($"    \"IsVisible\": {(e.IsVisible ? "true" : "false")}");
+                sb.Append    ($"    \"Url\": {J(e.Url)}");
                 sb.AppendLine();
                 sb.Append("  }");
             }

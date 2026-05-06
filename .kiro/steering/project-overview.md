@@ -24,12 +24,13 @@ The **main application** is the **WPF installer** (`Build/Installer`). It instal
 
 The installer lets users customize the website list before installation via `AdvancedPage` → `WhitelistEditorDialog`.
 
-**Single source of truth:** `WebSitesLib/WebSitesLib2/WebSitesWhitelist.json`
+**Single source of truth:** `KleiKodeshVsto/WebSitesLib/WebSitesLib/WebSitesWhitelist.json`
 
-**Extraction rules:**
-- Fresh install, user did not edit → extract from zip (default list)
-- Update (file exists), user did not edit → **skip** — never overwrite user's list
-- User edited via dialog → skip zip entry, `ApplyPendingWhitelist()` writes edited version
+**How it works:**
+- Source JSON contains all entries with `IsVisible` flags — the full catalogue shown in the dialog
+- User did not edit → zip entry always extracted (fresh install and updates both get the latest default)
+- User edited via dialog → zip entry skipped, `ApplyPendingWhitelist()` writes only the checked entries (no `IsVisible` field in output)
+- The VSTO add-in loads whatever is on disk and shows all of it — no `IsVisible` filtering at runtime
 
 `AddinInstaller.PendingWhitelist` is `null` until the user opens the dialog and clicks OK.
 

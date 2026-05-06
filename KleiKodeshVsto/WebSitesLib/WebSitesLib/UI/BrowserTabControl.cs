@@ -51,8 +51,7 @@ namespace WebSitesLib.UI
             }
         }
 
-        public IEnumerable<WebAddressModel> VisibleAddressModels =>
-            _webAddressModels?.Where(m => m.IsVisible == true) ?? Enumerable.Empty<WebAddressModel>();
+
 
         public ObservableCollection<BrowserTab> TabsCollection { get; }
             = new ObservableCollection<BrowserTab>();
@@ -119,13 +118,8 @@ namespace WebSitesLib.UI
                 return;
             }
             string json = File.ReadAllText(WhitelistPath);
-            WebAddressModels = JsonSerializer.Deserialize<ObservableCollection<WebAddressModel>>(json);
-        }
-
-        void SaveWhiteList()
-        {
-            string json = JsonSerializer.Serialize(_webAddressModels);
-            File.WriteAllText(WhitelistPath, json);
+            WebAddressModels = JsonSerializer.Deserialize<ObservableCollection<WebAddressModel>>(json,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
         }
 
         #endregion
@@ -146,9 +140,9 @@ namespace WebSitesLib.UI
             var models = session.Urls
                 .Select(url =>
                 {
-                    var match = VisibleAddressModels
+                    var match = WebAddressModels
                         .FirstOrDefault(m => url.StartsWith(m.Url, StringComparison.OrdinalIgnoreCase));
-                    return (model: match ?? new WebAddressModel { Url = url, Name = url, IsVisible = true },
+                    return (model: match ?? new WebAddressModel { Url = url, Name = url },
                             actualUrl: url);
                 })
                 .ToList();
@@ -213,7 +207,7 @@ namespace WebSitesLib.UI
 
         void AddTab()
         {
-            var first = VisibleAddressModels.FirstOrDefault();
+            var first = WebAddressModels?.FirstOrDefault();
             if (first == null) return;
             TabsCollection.Add(new BrowserTab(first, this));
             UpdateAddressModel(first, true);
@@ -256,7 +250,7 @@ namespace WebSitesLib.UI
             var actualUrl = tab.CurrentUrl;
             if (string.IsNullOrEmpty(actualUrl)) return;
 
-            var match = VisibleAddressModels
+            var match = WebAddressModels
                 .FirstOrDefault(m => actualUrl.StartsWith(m.Url, StringComparison.OrdinalIgnoreCase));
 
             if (match != null && match != _currentAddressModel)

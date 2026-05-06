@@ -60,7 +60,7 @@ Build/Installer/
 
 The default website list is the **single source of truth** at:
 ```
-WebSitesLib/WebSitesLib2/WebSitesWhitelist.json
+KleiKodeshVsto/WebSitesLib/WebSitesLib/WebSitesWhitelist.json
 ```
 It is embedded into the installer exe as a resource (linked path in csproj, not a copy).
 
@@ -68,16 +68,19 @@ It is embedded into the installer exe as a resource (linked path in csproj, not 
 
 | Condition | What happens to `WebSitesWhitelist.json` |
 |---|---|
-| Fresh install, user did not edit | Extracted from zip (default list) |
-| Update (file already exists), user did not edit | **Skipped** — user's list is preserved |
-| User edited via dialog (any scenario) | Zip entry skipped; `ApplyPendingWhitelist()` writes the edited version |
+| User did not open the editor dialog | Extracted from zip — always overwrites (fresh install and updates both get the latest default) |
+| User edited via dialog and clicked OK | Zip entry skipped; `ApplyPendingWhitelist()` writes only the checked entries (no `IsVisible` field) |
 
 `AddinInstaller.PendingWhitelist` is `null` until the user opens the dialog and clicks OK.
 `ApplyPendingWhitelist()` is a no-op when `PendingWhitelist` is null.
 
-### Do not
-- Add `System.Text.Json` or `System.Web.Extensions` to this project — the embedded-DLL resolver cannot find them at the point the whitelist page loads. The parser/serializer in `AdvancedPage.xaml.cs` is intentionally hand-rolled.
-- Call `ApplyPendingWhitelist()` before `ExtractAsync` — the install folder may not exist yet.
+### How the whitelist works end-to-end
+
+1. The source JSON (`WebSitesWhitelist.json`) contains all entries with `IsVisible` flags — this is the full catalogue shown in the editor dialog.
+2. The installer dialog shows all entries with checkboxes pre-set from `IsVisible`.
+3. On OK, `SerializeWhitelistJson` writes **only the checked entries** to `PendingWhitelist`, with no `IsVisible` field in the output.
+4. The installed JSON therefore contains only the entries the user wanted — no filtering needed at runtime.
+5. The VSTO add-in loads the file and shows every entry in it directly.
 
 ## Version Management
 

@@ -114,9 +114,6 @@
     <Compile Include="UI\WebSitesView.xaml.cs">
       <DependentUpon>WebSitesView.xaml</DependentUpon>
     </Compile>
-    <Compile Include="UI\WhiteListDialog.xaml.cs">
-      <DependentUpon>WhiteListDialog.xaml</DependentUpon>
-    </Compile>
     <!-- Properties -->
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
@@ -155,10 +152,6 @@
     </Page>
     <!-- Views -->
     <Page Include="UI\WebSitesView.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>
-    <Page Include="UI\WhiteListDialog.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

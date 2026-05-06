@@ -7,7 +7,6 @@ namespace WebSitesLib.UI
         string _name = "";
         string _description = "";
         string _url = "";
-        bool _isVisible = true;
 
         public string Name
         {
@@ -25,12 +24,6 @@ namespace WebSitesLib.UI
         {
             get => _url;
             set => SetProperty(ref _url, value);
-        }
-
-        public bool IsVisible
-        {
-            get => _isVisible;
-            set => SetProperty(ref _isVisible, value);
         }
 
         public override string ToString() => Name;

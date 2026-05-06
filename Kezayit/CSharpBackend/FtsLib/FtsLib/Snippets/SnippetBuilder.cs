@@ -283,15 +283,19 @@ namespace FtsLib.Snippets
 
             // Hard-cap: trim tokens from the outside until visible chars fit.
             // This only fires when contextWords is very large or the line is dense.
+            // Never trim past the match boundaries — iLeft..iRight must stay inside.
             while (sIdx < eIdx)
             {
                 int visStart = tokens[sIdx].VisibleStart;
                 int visEnd   = tokens[eIdx].VisibleStart + tokens[eIdx].Normalized.Length;
                 if (visEnd - visStart <= _snippetLength) break;
-                // Trim the side that contributes more chars.
-                int trimLeft  = tokens[sIdx + 1].VisibleStart - visStart;
-                int trimRight = visEnd - (tokens[eIdx - 1].VisibleStart + tokens[eIdx - 1].Normalized.Length);
-                if (trimLeft >= trimRight) sIdx++;
+                // Trim the side that contributes more chars, but never past the match.
+                bool canTrimLeft  = sIdx < iLeft;
+                bool canTrimRight = eIdx > iRight;
+                if (!canTrimLeft && !canTrimRight) break; // match itself exceeds cap — show it anyway
+                int trimLeft  = canTrimLeft  ? tokens[sIdx + 1].VisibleStart - visStart : int.MaxValue;
+                int trimRight = canTrimRight ? visEnd - (tokens[eIdx - 1].VisibleStart + tokens[eIdx - 1].Normalized.Length) : int.MaxValue;
+                if (trimLeft <= trimRight) sIdx++;
                 else                      eIdx--;
             }
 

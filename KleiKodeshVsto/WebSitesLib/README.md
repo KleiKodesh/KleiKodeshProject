@@ -10,7 +10,6 @@ The main library containing:
 - `BrowserTabControl` — Custom tab control for managing multiple browser tabs
 - `MyWebView` — WebView2 wrapper component
 - `WebAddressModel` — Model for website entries
-- `WhiteListDialog` — Dialog for editing the website whitelist
 - `WebSitesWhitelist.json` — Default list of curated websites
 
 ### WebSitesDemo
@@ -35,14 +34,15 @@ case "WebSites":
 
 ## Whitelist Management
 
-The installer embeds `WebSitesWhitelist.json` and extracts it to the user's installation directory. Users can customize the list before installation via the Advanced page in the installer.
+The installer embeds `WebSitesWhitelist.json` and extracts it to the user's installation directory on every install or update. Users can customize the list before installation via the Advanced page in the installer.
 
-**Extraction rules:**
-- Fresh install, user did not edit → extract from embedded resource
-- Update (file exists), user did not edit → skip (preserve user's list)
-- User edited via installer dialog → write edited version, skip embedded resource
+**How it works:**
+- The source JSON contains all entries with `IsVisible` flags — the full catalogue
+- The installer dialog shows all entries with checkboxes
+- On OK, only the checked entries are written to disk (no `IsVisible` field in the output)
+- The VSTO add-in loads whatever is in the file and shows all of it — no filtering
 
-See `Build/Installer/README.md` for full details on whitelist extraction logic.
+See `Build/Installer/README.md` for full details.
 
 ## Dependencies
 
@@ -61,8 +61,6 @@ WebSitesLib/
 │   ├── WebAddressModel.cs
 │   ├── WebSitesView.xaml
 │   ├── WebSitesView.xaml.cs
-│   ├── WhiteListDialog.xaml
-│   ├── WhiteListDialog.xaml.cs
 │   ├── WebSitesWhitelist.json
 │   └── Dictionary1.xaml      # Resource dictionary
 ├── WebSitesDemo/             # Demo application

@@ -59,6 +59,7 @@ namespace FtsLib.Tokenization
 
                 if (c == '<')
                 {
+                    Flush(i);
                     _inTag  = true;
                     _tagLen = 0;
                     continue;

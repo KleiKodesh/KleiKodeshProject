@@ -8,9 +8,9 @@ namespace FtsLibTest
     /// CLI entry point.
     ///
     /// Commands:
-    ///   build   [tier]  — build index, open HTML report
-    ///   search  [tier]  — search existing index, open HTML report
-    ///   runall  [tier]  — build + search in one run, open single combined HTML report
+    ///   build   [tier]  ï¿½ build index, open HTML report
+    ///   search  [tier]  ï¿½ search existing index, open HTML report
+    ///   runall  [tier]  ï¿½ build + search in one run, open single combined HTML report
     ///
     /// Tiers: 500k (default) | 1m | 3m | full
     ///
@@ -57,6 +57,14 @@ namespace FtsLibTest
 
                 case "worddist":
                     WordDistanceTest.Run(args);
+                    return;
+
+                case "snippettest":
+                    SnippetTest.Run(args);
+                    return;
+
+                case "snippetdiag":
+                    SnippetDiag.Run(args);
                     return;
 
                 case "verify":
@@ -127,7 +135,7 @@ namespace FtsLibTest
             fragments.Add(searchFragment);
 
             HtmlReport.CombineAndOpen(
-                $"FTS Full Report — {label.ToUpper()}",
+                $"FTS Full Report ï¿½ {label.ToUpper()}",
                 fragments,
                 path);
         }
@@ -137,17 +145,18 @@ namespace FtsLibTest
         private static void PrintUsage()
         {
             Console.WriteLine("Usage:");
-            Console.WriteLine("  FtsLibTest.exe                        — runall 500k (default)");
-            Console.WriteLine("  FtsLibTest.exe build  [tier]          — build index");
-            Console.WriteLine("  FtsLibTest.exe search [tier]          — search index");
-            Console.WriteLine("  FtsLibTest.exe runall [tier]          — build + search, combined report");
-            Console.WriteLine("  FtsLibTest.exe query  [tier] \"query\"  — ad-hoc query with snippets");
-            Console.WriteLine("  FtsLibTest.exe parsertest              — QueryParser unit tests (no index needed)");
-            Console.WriteLine("  FtsLibTest.exe orderedtest             — ordered-search unit tests (no index needed)");
-            Console.WriteLine("  FtsLibTest.exe worddist                — word-distance unit tests (no index needed)");
-            Console.WriteLine("  FtsLibTest.exe speed  [tier]          — speed breakdown by pipeline phase");
-            Console.WriteLine("  FtsLibTest.exe perf   [tier]          — full performance battery (all features)");
-            Console.WriteLine("  FtsLibTest.exe wdiag  [tier] query    — wildcard expansion diagnostic");
+            Console.WriteLine("  FtsLibTest.exe                        ï¿½ runall 500k (default)");
+            Console.WriteLine("  FtsLibTest.exe build  [tier]          ï¿½ build index");
+            Console.WriteLine("  FtsLibTest.exe search [tier]          ï¿½ search index");
+            Console.WriteLine("  FtsLibTest.exe runall [tier]          ï¿½ build + search, combined report");
+            Console.WriteLine("  FtsLibTest.exe query  [tier] \"query\"  ï¿½ ad-hoc query with snippets");
+            Console.WriteLine("  FtsLibTest.exe parsertest              ï¿½ QueryParser unit tests (no index needed)");
+            Console.WriteLine("  FtsLibTest.exe orderedtest             ï¿½ ordered-search unit tests (no index needed)");
+            Console.WriteLine("  FtsLibTest.exe worddist                â€” word-distance unit tests (no index needed)");
+            Console.WriteLine("  FtsLibTest.exe snippettest             â€” snippet builder unit tests (no index needed)");
+            Console.WriteLine("  FtsLibTest.exe speed  [tier]          ï¿½ speed breakdown by pipeline phase");
+            Console.WriteLine("  FtsLibTest.exe perf   [tier]          ï¿½ full performance battery (all features)");
+            Console.WriteLine("  FtsLibTest.exe wdiag  [tier] query    ï¿½ wildcard expansion diagnostic");
             Console.WriteLine();
             Console.WriteLine("Tiers: 500k (default) | 1m | 3m | full");
             Console.WriteLine();

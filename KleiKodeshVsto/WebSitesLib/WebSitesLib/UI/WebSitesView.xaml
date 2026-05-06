@@ -277,7 +277,7 @@
                           Grid.Column="0"
                           Style="{StaticResource AddressBarCombo}"
                           IsDropDownOpen="{Binding ElementName=BrowserTabs, Path=IsAddressDropDownOpen, Mode=TwoWay}"
-                          ItemsSource="{Binding ElementName=BrowserTabs, Path=VisibleAddressModels}"
+                          ItemsSource="{Binding ElementName=BrowserTabs, Path=WebAddressModels}"
                           SelectedValue="{Binding ElementName=BrowserTabs, Path=CurrentAddressModel}">
                     <ComboBox.InputBindings>
                         <KeyBinding Key="Return"
