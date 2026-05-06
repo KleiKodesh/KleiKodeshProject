@@ -371,5 +371,7 @@ export function useBookView(
     onQueryChange, onSearchNext, onSearchPrev, onModeChange,
     toggleTocPanel, toggleCommentaryTreePanel, closeSidePanel,
     ensureStaticFilterGroupsLoaded,
+    // toc lookup for copy-with-source
+    getActiveTocEntry, getTocPath,
   }
 }

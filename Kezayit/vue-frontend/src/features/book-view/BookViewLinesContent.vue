@@ -6,20 +6,19 @@ import { useTabStore } from '@/stores/tabStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import type { LineItem } from './useBookViewLinesTable'
+import type { TocEntry } from './useBookViewToc'
 import type { CommentaryTreeState, CommentaryVisibilityItem } from './bookViewTypes'
-import { applyDiacriticsFilter, removeDiacriticsForSearch } from '@/utils/hebrewTextProcessing'
-import { censorDivineNames } from '@/utils/censorDivineNames'
 import ContextMenu from '@/components/ContextMenu.vue'
-import type { ContextMenuItem } from '@/components/ContextMenu.vue'
 import { useEventListener } from '@vueuse/core'
 import { useScopedKeys } from '@/composables/useTextSelectionKeys'
 import { useScopedCopy } from '@/composables/useLineCopy'
 import { scrollToIndexWithRetry } from '@/utils/scrollToIndexWithRetry'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
+import { useBookViewLineRenderer } from './useBookViewLineRenderer'
+import { useBookViewLineCopyMenu } from './useBookViewLineCopyMenu'
 
 const emit = defineEmits<{ scrolled: [number, number]; lineSelected: [number]; 'ctrl-f': [] }>()
 const props = defineProps<{
-  // lines + prioritise passed from BookViewPage (single useLines call, no duplicate fetch)
   lines: LineItem[]
   prioritise: (lineIndex: number) => void
   altTocLabelMap?: Map<number, string>
@@ -42,6 +41,8 @@ const props = defineProps<{
   searchHighlightSnippet?: string
   searchHighlightTerms?: string[]
   searchBarVisible?: boolean
+  getActiveTocEntry?: (lineIndex: number) => TocEntry | null
+  getTocPath?: (entry: TocEntry) => string
 }>()
 
 const tabStore = useTabStore()
@@ -50,6 +51,7 @@ const bookViewStore = useBookViewStore()
 const { autoSelectTopLine } = storeToRefs(bookViewStore)
 const tabId = tabStore.activeTabId
 const bookId = tabStore.activeTab.bookId!
+const bookTitle = tabStore.activeTab.title
 
 // Read zoom directly by tabId+bookId — NOT via bookViewStore.zoom computed which is
 // gated on activeTab. If this tab is not active when savePos fires (e.g. user switched
@@ -63,269 +65,17 @@ const zoom = computed({
 const diacriticsState = computed(() => settingsStore.diacriticsState)
 const fontPx = computed(() => (zoom.value / 100) * (settingsStore.fontSize / 100) * 15)
 
-// ── Render helpers ────────────────────────────────────────────────────────────
+// ── Line rendering ────────────────────────────────────────────────────────────
 
-function highlightMatches(
-  raw: string,
-  content: string,
-  query: string,
-  isCurrentLine: boolean,
-  currentOccurrence: number,
-): string {
-  const q = removeDiacriticsForSearch(query.trim())
-  if (!q) return content
-  const stripped = removeDiacriticsForSearch(content.replace(/<[^>]*>/g, ''))
-  const matchStarts = new Set<number>()
-  let idx = 0
-  while ((idx = stripped.indexOf(q, idx)) !== -1) {
-    matchStarts.add(idx)
-    idx++
-  }
-  if (!matchStarts.size) return content
-
-  const out: string[] = []
-  let strippedPos = 0,
-    inTag = false,
-    inMatch = false,
-    matchStrippedCount = 0,
-    matchOccurrence = 0
-  for (let i = 0; i < content.length; i++) {
-    const ch = content[i]!
-    if (ch === '<') {
-      inTag = true
-      out.push(ch)
-      continue
-    }
-    if (ch === '>') {
-      inTag = false
-      out.push(ch)
-      continue
-    }
-    if (inTag) {
-      out.push(ch)
-      continue
-    }
-    const isDiacritic = /[\u0591-\u05C7]/.test(ch)
-    if (!isDiacritic && matchStarts.has(strippedPos) && !inMatch) {
-      out.push(
-        `<mark class="search-match${isCurrentLine && matchOccurrence === currentOccurrence ? ' current' : ''}">`,
-      )
-      inMatch = true
-      matchStrippedCount = 0
-    }
-    out.push(ch)
-    if (!isDiacritic) {
-      if (inMatch && ++matchStrippedCount === q.length) {
-        out.push('</mark>')
-        inMatch = false
-        matchOccurrence++
-      }
-      strippedPos++
-    }
-  }
-  return out.join('')
-}
-
-/**
- * Highlight search-result terms within the snippet region of a line.
- *
- * The C# backend strips HTML and all diacritics (Unicode Non-Spacing Marks) before
- * matching, so both the snippet and the terms are plain stripped text. We need to:
- *   1. Find where the snippet sits inside the stripped line text (with retry).
- *   2. Within that region, highlight each term using the same HTML-aware / diacritic-aware
- *      walk that highlightMatches uses.
- *
- * Retry strategy: if the full snippet isn't found, progressively drop words from both
- * ends (alternating) until at least 2 words remain. This handles edge cases where the
- * C# snippet was trimmed mid-word or the line content differs slightly.
- */
-function highlightSearchResult(
-  raw: string,
-  content: string,
-  snippet: string,
-  terms: string[],
-): string {
-  if (!snippet || !terms.length) return content
-
-  // Use raw (pre-censoring) for region detection — the C# snippet was built from uncensored text.
-  // Use content (post-censoring) for the output walk so the displayed text is correct.
-  const strippedContent = removeDiacriticsForSearch(raw.replace(/<[^>]*>/g, ''))
-  const strippedSnippet = removeDiacriticsForSearch(snippet)
-
-  // Find the snippet region in the stripped content, with word-dropping retry.
-  const region = findSnippetRegion(strippedContent, strippedSnippet)
-  if (!region) return content
-
-  const { start: regionStart, end: regionEnd } = region
-
-  // Build a set of (strippedPos, length) pairs for each term occurrence within the region.
-  const matchRanges: Array<{ start: number; len: number }> = []
-  for (const term of terms) {
-    const t = removeDiacriticsForSearch(term)
-    if (!t) continue
-    let idx = regionStart
-    while (idx < regionEnd && (idx = strippedContent.indexOf(t, idx)) !== -1 && idx < regionEnd) {
-      matchRanges.push({ start: idx, len: t.length })
-      idx++
-    }
-  }
-  if (!matchRanges.length) return content
-
-  // Sort by start position so we can walk left-to-right.
-  matchRanges.sort((a, b) => a.start - b.start)
-
-  // Walk the content HTML-aware + diacritic-aware, inserting <mark> tags at match boundaries.
-  const out: string[] = []
-  let strippedPos = 0
-  let inTag = false
-  let inMatch = false
-  let matchEndPos = 0
-  let rangeIdx = 0
-
-  for (let i = 0; i < content.length; i++) {
-    const ch = content[i]!
-
-    if (ch === '<') {
-      inTag = true
-      out.push(ch)
-      continue
-    }
-    if (ch === '>') {
-      inTag = false
-      out.push(ch)
-      continue
-    }
-    if (inTag) {
-      out.push(ch)
-      continue
-    }
-
-    const isDiacritic = /[\u0591-\u05C7]/.test(ch)
-
-    if (!isDiacritic) {
-      // Close any open match that has ended.
-      if (inMatch && strippedPos >= matchEndPos) {
-        out.push('</mark>')
-        inMatch = false
-      }
-
-      // Skip overlapping/consumed ranges.
-      while (rangeIdx < matchRanges.length && matchRanges[rangeIdx]!.start < strippedPos) {
-        rangeIdx++
-      }
-
-      // Open a new match if we're at a range start and not already inside one.
-      if (
-        !inMatch &&
-        rangeIdx < matchRanges.length &&
-        matchRanges[rangeIdx]!.start === strippedPos
-      ) {
-        out.push('<mark class="search-match">')
-        matchEndPos = strippedPos + matchRanges[rangeIdx]!.len
-        inMatch = true
-        rangeIdx++
-      }
-    }
-
-    out.push(ch)
-    if (!isDiacritic) strippedPos++
-  }
-
-  if (inMatch) out.push('</mark>')
-  return out.join('')
-}
-
-/**
- * Find the start/end positions (in stripped-text coordinates) of the snippet within the line.
- * Retries by progressively dropping words from the edges if the full snippet isn't found.
- * Returns null if no match found with at least 2 words.
- */
-function findSnippetRegion(
-  strippedLine: string,
-  strippedSnippet: string,
-): { start: number; end: number } | null {
-  // Strip leading/trailing ellipsis that C# adds when snippet is a substring.
-  const clean = strippedSnippet
-    .replace(/^\.{2,}/, '')
-    .replace(/\.{2,}$/, '')
-    .trim()
-  if (!clean) return null
-
-  // Try the full snippet first, then progressively drop words from edges.
-  const words = clean.split(/\s+/).filter(Boolean)
-  if (!words.length) return null
-
-  // Try substrings: full → drop last → drop first → drop both → ...
-  // We alternate dropping from end and start, keeping at least 2 words.
-  const candidates: string[] = []
-  let lo = 0,
-    hi = words.length
-  candidates.push(words.slice(lo, hi).join(' '))
-  while (hi - lo > 2) {
-    // drop from end
-    hi--
-    candidates.push(words.slice(lo, hi).join(' '))
-    if (hi - lo <= 2) break
-    // drop from start
-    lo++
-    candidates.push(words.slice(lo, hi).join(' '))
-  }
-
-  for (const candidate of candidates) {
-    const idx = strippedLine.indexOf(candidate)
-    if (idx !== -1) {
-      return { start: idx, end: idx + candidate.length }
-    }
-  }
-  return null
-}
-
-// Cache rendered HTML per line — avoids re-running applyDiacriticsFilter (DOM TreeWalker)
-// and censorDivineNames (6 regexes) on every render cycle for unchanged lines.
-// The cache is invalidated as a whole whenever any rendering input changes.
-const renderCache = new Map<number, string>()
-let renderCacheKey = ''
-
-function getRenderCacheKey(): string {
-  return `${diacriticsState.value}|${settingsStore.censorDivineNames}|${props.searchQuery ?? ''}|${props.currentMatchLineIndex ?? -1}|${props.currentMatchOccurrence ?? 0}|${props.searchHighlightLineIndex ?? -1}|${props.searchHighlightQuery ?? ''}|${props.searchHighlightSnippet ?? ''}|${props.searchHighlightTerms?.join(',') ?? ''}`
-}
-
-function lineContent(raw: string, lineIndex: number): string {
-  const key = getRenderCacheKey()
-  if (key !== renderCacheKey) {
-    renderCache.clear()
-    renderCacheKey = key
-  }
-  const cached = renderCache.get(lineIndex)
-  if (cached !== undefined) return cached
-
-  let content =
-    diacriticsState.value === 0 ? raw : applyDiacriticsFilter(raw, diacriticsState.value)
-  if (settingsStore.censorDivineNames) content = censorDivineNames(content)
-  if (props.searchQuery?.trim())
-    content = highlightMatches(
-      raw,
-      content,
-      props.searchQuery,
-      lineIndex === props.currentMatchLineIndex,
-      props.currentMatchOccurrence ?? 0,
-    )
-  if (lineIndex === props.searchHighlightLineIndex) {
-    if (props.searchHighlightSnippet && props.searchHighlightTerms?.length) {
-      content = highlightSearchResult(
-        raw,
-        content,
-        props.searchHighlightSnippet,
-        props.searchHighlightTerms,
-      )
-    } else if (props.searchHighlightQuery?.trim()) {
-      content = highlightMatches(raw, content, props.searchHighlightQuery, false, -1)
-    }
-  }
-
-  renderCache.set(lineIndex, content)
-  return content
-}
+const { lineContent } = useBookViewLineRenderer(settingsStore, diacriticsState, () => ({
+  searchQuery: props.searchQuery,
+  currentMatchLineIndex: props.currentMatchLineIndex,
+  currentMatchOccurrence: props.currentMatchOccurrence,
+  searchHighlightLineIndex: props.searchHighlightLineIndex,
+  searchHighlightQuery: props.searchHighlightQuery,
+  searchHighlightSnippet: props.searchHighlightSnippet,
+  searchHighlightTerms: props.searchHighlightTerms,
+}))
 
 // ── Scroller setup ────────────────────────────────────────────────────────────
 
@@ -346,44 +96,21 @@ useVirtualScrollerKeys(
   () => props.lines.length,
 )
 
+// ── Context menu ──────────────────────────────────────────────────────────────
+
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
-const contextMenuItems: ContextMenuItem[] = [
-  { label: 'העתק', action: () => document.execCommand('copy') },
-  {
-    label: 'העתק כבלוק',
-    action: () => {
-      let joined: string
-      if (isSelectAll.value) {
-        joined = props.lines
-          .map((l) => l.content)
-          .filter(Boolean)
-          .join(' ')
-      } else {
-        const sel = window.getSelection()
-        if (!sel || sel.rangeCount === 0) return
-        const range = sel.getRangeAt(0)
-        const fragment = range.cloneContents()
-        const tmp = document.createElement('div')
-        tmp.appendChild(fragment)
-        joined = Array.from(tmp.querySelectorAll('.line'))
-          .map((el) => el.innerHTML)
-          .join(' ')
-        if (!joined) joined = tmp.innerHTML
-      }
-      if (!joined.trim()) return
-      const htmlContent = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{direction:rtl;}</style></head><body><div>${joined}</div></body></html>`
-      const tempDiv = document.createElement('div')
-      tempDiv.innerHTML = joined
-      navigator.clipboard.write([
-        new ClipboardItem({
-          'text/html': new Blob([htmlContent], { type: 'text/html' }),
-          'text/plain': new Blob([tempDiv.textContent ?? ''], { type: 'text/plain' }),
-        }),
-      ])
-    },
-  },
-  { label: 'בחר הכל', action: selectAllInContainer },
-]
+const contextMenuItems = useBookViewLineCopyMenu({
+  scrollerEl,
+  lines: () => props.lines,
+  isSelectAll,
+  selectAllInContainer,
+  bookTitle,
+  tabStore,
+  getActiveTocEntry: props.getActiveTocEntry,
+  getTocPath: props.getTocPath,
+})
+
+// ── Virtualizer ───────────────────────────────────────────────────────────────
 
 const virtualizer = useVirtualizer(
   computed(() => ({
@@ -420,13 +147,9 @@ function restoreScrollPos(lineIndex: number, scrollOffset = 0) {
   requestAnimationFrame(() => {
     const item = virtualizer.value.measurementsCache.find((m) => m.index === lineIndex)
     if (item && scrollerEl.value) scrollerEl.value.scrollTop = item.start + scrollOffset
-    requestAnimationFrame(() => {
-      programmaticScrolling = false
-    })
+    requestAnimationFrame(() => { programmaticScrolling = false })
   })
 }
-
-// ── Initial scroll on load ────────────────────────────────────────────────────
 
 // ── Initial scroll on load ────────────────────────────────────────────────────
 // Watches lines and initialScrollIndex together. Waits for:
@@ -445,11 +168,7 @@ function restoreScrollPos(lineIndex: number, scrollOffset = 0) {
     ([val]) => {
       if (!val.length) return
       const targetIndex = props.initialLineIndex ?? props.initialScrollIndex
-      if (targetIndex == null) {
-        // No target yet — keep watching in case initialScrollIndex arrives from IDB
-        return
-      }
-      // Target is known — stop the outer watch and wait for content
+      if (targetIndex == null) return
       stop?.()
       stop = null
       props.prioritise(targetIndex)
@@ -457,10 +176,7 @@ function restoreScrollPos(lineIndex: number, scrollOffset = 0) {
         () => props.lines[targetIndex]?.content,
         (content) => {
           if (content == null) return
-          if (restored) {
-            stopContentWatch?.()
-            return
-          }
+          if (restored) { stopContentWatch?.(); return }
           restored = true
           stopContentWatch?.()
           nextTick(() => {
@@ -472,16 +188,12 @@ function restoreScrollPos(lineIndex: number, scrollOffset = 0) {
                 const items = virtualizer.value.getVirtualItems()
                 const firstVisible = items.find((v) => v.start + v.size > scrollTop) ?? items[0]
                 const firstFull = items.find((v) => v.start >= scrollTop) ?? firstVisible
-                const visibleIndex = firstVisible?.index ?? targetIndex
-                const fullIndex = firstFull?.index ?? visibleIndex
-                emit('scrolled', visibleIndex, fullIndex)
+                emit('scrolled', firstVisible?.index ?? targetIndex, firstFull?.index ?? firstVisible?.index ?? targetIndex)
               }),
             )
             if (props.searchHighlightLineIndex != null && scrollerEl.value) {
               nextTick(() => {
-                const mark = scrollerEl.value!.querySelector(
-                  'mark.search-match',
-                ) as HTMLElement | null
+                const mark = scrollerEl.value!.querySelector('mark.search-match') as HTMLElement | null
                 mark?.scrollIntoView({ block: 'center' })
               })
             }
@@ -526,7 +238,9 @@ function savePos() {
       ? {
           searchQuery: props.commentaryFilterState.searchQuery,
           tokens: [...props.commentaryFilterState.tokens],
-          visibilityList: props.commentaryFilterState.visibilityList.map((item: CommentaryVisibilityItem) => ({ ...item })),
+          visibilityList: props.commentaryFilterState.visibilityList.map(
+            (item: CommentaryVisibilityItem) => ({ ...item }),
+          ),
         }
       : undefined
     tabStore.setBookViewState(tabId, bookId, {
@@ -583,9 +297,7 @@ function onScroll() {
 function setProgrammaticScroll() {
   programmaticScrolling = true
   if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer)
-  programmaticScrollTimer = setTimeout(() => {
-    programmaticScrolling = false
-  }, 300)
+  programmaticScrollTimer = setTimeout(() => { programmaticScrolling = false }, 300)
 }
 
 function scrollToLineId(lineId: number, fallbackLineIndex?: number) {
@@ -614,8 +326,6 @@ function scrollToLineIndex(lineIndex: number) {
   )
 }
 
-defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller })
-
 function onLineClick(index: number) {
   const line = props.lines[index]
   if (props.bottomVisible && line) emit('lineSelected', line.id)
@@ -624,6 +334,8 @@ function onLineClick(index: number) {
 function focusScroller() {
   scrollerEl.value?.focus({ preventScroll: true })
 }
+
+defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller })
 </script>
 
 <template>

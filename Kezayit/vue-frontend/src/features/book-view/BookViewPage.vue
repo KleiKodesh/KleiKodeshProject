@@ -36,6 +36,7 @@ const {
   onQueryChange, onSearchNext, onSearchPrev, onModeChange,
   toggleTocPanel, toggleCommentaryTreePanel, closeSidePanel,
   ensureStaticFilterGroupsLoaded,
+  getActiveTocEntry, getTocPath,
 } = useBookView(
   () => toolbarRef.value,
   () => linesContentRef.value,
@@ -116,6 +117,8 @@ const {
               :current-match-occurrence="
                 searchMode === 'content' ? contentSearch.currentMatchOccurrence.value : undefined
               "
+              :get-active-toc-entry="getActiveTocEntry"
+              :get-toc-path="getTocPath"
               @scrolled="onLinesScrolled"
               @line-selected="onLineSelected"
               @ctrl-f="openContentSearch"

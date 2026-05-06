@@ -19,52 +19,6 @@ function stripHtml(source: string): string {
   return source.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
 }
 
-// ── מחברת מנחם ───────────────────────────────────────────────────────────────
-
-const menchemEntries = computed(() => {
-  const seen = new Set<string>()
-  return props.data.menchemRows.filter(row => {
-    const key = `${row.lineId}`
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
-})
-
-function onMenchemClick(event: MouseEvent, row: { bookId: number; lineIndex: number }) {
-  if (!event.ctrlKey) return
-  event.preventDefault()
-  tabStore.openTab({
-    title: 'מחברת מנחם',
-    route: '/book-view',
-    bookId: row.bookId,
-    openTocLineIndex: row.lineIndex,
-  })
-}
-
-// ── ספר הערוך ─────────────────────────────────────────────────────────────────
-
-const aruchEntries = computed(() => {
-  const seen = new Set<string>()
-  return props.data.aruchRows.filter(row => {
-    const key = `${row.lineId}`
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
-})
-
-function onAruchClick(event: MouseEvent, row: { bookId: number; lineIndex: number }) {
-  if (!event.ctrlKey) return
-  event.preventDefault()
-  tabStore.openTab({
-    title: 'ספר הערוך',
-    route: '/book-view',
-    bookId: row.bookId,
-    openTocLineIndex: row.lineIndex,
-  })
-}
-
 // ── Definitions grouped by word form ─────────────────────────────────────────
 
 const SOURCE_ORDER: Record<number, number> = { 5: 0, 1: 1, 6: 2, 2: 3, 4: 4, 3: 5 }
@@ -147,6 +101,40 @@ const senseGroups = computed((): SenseGroup[] => {
   }))
 })
 
+// ── Special sources (מחברת מנחם and הערוך) — shown after all definitions ──────
+
+const specialEntries = computed((): SenseItem[] => {
+  const items: SenseItem[] = []
+
+  // מחברת מנחם
+  const seenMenchem = new Set<string>()
+  for (const row of props.data.menchemRows) {
+    if (seenMenchem.has(`${row.lineId}`)) continue
+    seenMenchem.add(`${row.lineId}`)
+    items.push({
+      text: row.text,
+      sourceLabel: `מחברת מנחם — ${row.word}`,
+      bookLocation: { bookId: row.bookId, bookTitle: 'מחברת מנחם', lineIndex: row.lineIndex },
+      isSpecialSource: true,
+    })
+  }
+
+  // ספר הערוך
+  const seenAruch = new Set<string>()
+  for (const row of props.data.aruchRows) {
+    if (seenAruch.has(`${row.lineId}`)) continue
+    seenAruch.add(`${row.lineId}`)
+    items.push({
+      text: row.text,
+      sourceLabel: `הערוך — ${row.word}`,
+      bookLocation: { bookId: row.bookId, bookTitle: 'ספר הערוך', lineIndex: row.lineIndex },
+      isSpecialSource: true,
+    })
+  }
+
+  return items
+})
+
 function onSourceClick(event: MouseEvent, location: BookLocation | null) {
   if (!event.ctrlKey || !location) return
   event.preventDefault()
@@ -183,38 +171,8 @@ const allRelated = computed(() => [
 
     <h1 class="word-title">{{ data.headword }}</h1>
 
-    <!-- מחברת מנחם — shown directly under the title -->
-    <div v-if="menchemEntries.length" class="menchem-wrapper">
-      <div class="menchem-scroll">
-        <div
-          v-for="(row, rowIndex) in menchemEntries"
-          :key="rowIndex"
-          class="menchem-entry"
-          @click="onMenchemClick($event, row)"
-        >
-          <div class="menchem-label">מחברת מנחם — {{ row.word }}</div>
-          {{ maybeFilter(row.text) }}
-        </div>
-      </div>
-    </div>
-
-    <!-- ספר הערוך — shown after מחברת מנחם -->
-    <div v-if="aruchEntries.length" class="aruch-wrapper">
-      <div class="aruch-scroll">
-        <div
-          v-for="(row, rowIndex) in aruchEntries"
-          :key="rowIndex"
-          class="aruch-entry"
-          @click="onAruchClick($event, row)"
-        >
-          <div class="aruch-label">ספר הערוך — {{ row.word }}</div>
-          {{ maybeFilter(row.text) }}
-        </div>
-      </div>
-    </div>
-
-    <!-- All definitions grouped by word form -->
-    <section v-if="senseGroups.length" class="defs-section">
+    <!-- All definitions grouped by word form, followed by מחברת מנחם and הערוך -->
+    <section v-if="senseGroups.length || specialEntries.length" class="defs-section">
       <div v-for="(group, groupIndex) in senseGroups" :key="groupIndex" class="def-group">
         <span v-if="group.heading" class="def-group-heading">{{ group.heading }}</span>
         <ol class="def-list">
@@ -227,6 +185,15 @@ const allRelated = computed(() => [
             > ({{ item.sourceLabel }})</span>
           </li>
         </ol>
+      </div>
+      <div
+        v-for="(item, itemIndex) in specialEntries"
+        :key="`special-${itemIndex}`"
+        class="special-entry"
+        @click="onSourceClick($event, item.bookLocation)"
+      >
+        <span class="special-entry-label">{{ item.sourceLabel }}</span>
+        {{ maybeFilter(item.text) }}
       </div>
     </section>
 
@@ -364,67 +331,30 @@ const allRelated = computed(() => [
   color: color-mix(in srgb, var(--accent-color) 80%, var(--text-primary));
 }
 
-.menchem-wrapper {
-  flex-shrink: 0;
-  padding-bottom: 8px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
-}
-
-.menchem-scroll {
-  max-height: 80px;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
-}
-
-.menchem-entry {
+.special-entry {
   font-size: 0.92em;
   line-height: 1.6;
   color: color-mix(in srgb, var(--text-primary) 80%, var(--text-secondary));
   overflow-wrap: break-word;
   cursor: default;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
 }
-.menchem-entry:hover {
+.special-entry:first-of-type {
+  margin-top: 8px;
+  padding-top: 8px;
+}
+.special-entry:hover {
   color: var(--text-primary);
 }
 
-.menchem-label {
+.special-entry-label {
   display: block;
   font-size: 0.77em;
   font-weight: 700;
   color: var(--text-secondary);
   letter-spacing: 0.06em;
-}
-
-.aruch-wrapper {
-  flex-shrink: 0;
-  padding-bottom: 8px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
-}
-
-.aruch-scroll {
-  max-height: 80px;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
-}
-
-.aruch-entry {
-  font-size: 0.92em;
-  line-height: 1.6;
-  color: color-mix(in srgb, var(--text-primary) 80%, var(--text-secondary));
-  overflow-wrap: break-word;
-  cursor: default;
-}
-.aruch-entry:hover {
-  color: var(--text-primary);
-}
-
-.aruch-label {
-  display: block;
-  font-size: 0.77em;
-  font-weight: 700;
-  color: var(--text-secondary);
-  letter-spacing: 0.06em;
+  margin-bottom: 2px;
 }
 </style>

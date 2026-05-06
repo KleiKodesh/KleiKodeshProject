@@ -208,8 +208,10 @@ export async function menchemLookup(term: string): Promise<MenchemRow[]> {
 // → exact match only: term must equal the extracted headword exactly.
 
 function parseBigBoldLine(content: string): { word: string; text: string } | null {
-  // Match <b><big>WORD</big></b> followed by the rest of the line
-  const match = content.match(/<b><big>([^<]+)<\/big><\/b>\s*(.+)$/)
+  // Match <b><big>WORD</big></b> followed by the rest of the line.
+  // The separator between </b> and the definition is \xa0 (non-breaking spaces),
+  // so use [\s\xa0]* to handle both regular and non-breaking whitespace.
+  const match = content.match(/<b><big>([^<]+)<\/big><\/b>[\s\u00a0]*(.+)$/)
   if (!match) return null
   const word = (match[1] ?? '').trim()
   const text = (match[2] ?? '').trim()
@@ -218,9 +220,17 @@ function parseBigBoldLine(content: string): { word: string; text: string } | nul
 }
 
 export async function aruchLookup(term: string): Promise<AruchRow[]> {
-  const bookIds = await getBookIds('%ספר הערוך%', _aruchCache)
-  if (bookIds.length === 0) return []
-  const bookId = bookIds[0]!
+  // Use exact title match via a dedicated query — '%ספר הערוך%' also matches
+  // 'הפלאה שבערכין על ספר הערוך' which is a different book with no <big> entries.
+  if (_aruchCache.ids === null) {
+    const rows = await querySeforim<{ id: number }>(
+      `SELECT id FROM book WHERE title = ?`,
+      ['ספר הערוך']
+    )
+    _aruchCache.ids = rows.map(r => r.id)
+  }
+  if (_aruchCache.ids.length === 0) return []
+  const bookId = _aruchCache.ids[0]!
 
   type RawLine = { id: number; lineIndex: number; content: string }
 
