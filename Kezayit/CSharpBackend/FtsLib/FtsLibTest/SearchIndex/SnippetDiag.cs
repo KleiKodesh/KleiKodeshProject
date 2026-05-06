@@ -1,9 +1,7 @@
 using FtsLib.SeforimDb;
-using FtsLib.Snippets;
 using FtsLib.Tokenization;
 using System;
 using System.Collections.Generic;
-using System.Data.SQLite;
 using System.IO;
 using System.Text;
 
@@ -14,6 +12,9 @@ namespace FtsLibTest
     /// the matched terms, and the snippet HTML side-by-side so snippet bugs are
     /// immediately visible.
     ///
+    /// Also prints a word-distance histogram and shows which results would be
+    /// filtered at various maxWordDistance thresholds.
+    ///
     /// Usage:
     ///   FtsLibTest.exe snippetdiag [tier] "query"
     ///
@@ -22,7 +23,7 @@ namespace FtsLibTest
     /// </summary>
     internal static class SnippetDiag
     {
-        private const int MaxResults = 50;
+        private const int MaxResults = 201;
 
         public static void Run(string[] args)
         {
@@ -69,20 +70,22 @@ namespace FtsLibTest
             var tokenStream = new TokenStream();
             int bugs        = 0;
 
-            for (int i = 0; i < results.Count; i++)
-            {
-                var r       = results[i];
-                var snippet = index.GenerateSnippet(r);
+            // Collect all snippets for histogram
+            var snippets = new List<(SearchResult result, FtsLib.SeforimDb.SnippetResult snippet)>(results.Count);
+            foreach (var r in results)
+                snippets.Add((r, index.GenerateSnippet(r)));
 
-                // Collect all matched terms flat
+            // ── Per-result detail (bugs + first 5 OK) ────────────────
+            for (int i = 0; i < snippets.Count; i++)
+            {
+                var (r, snippet) = snippets[i];
+
                 var allTerms = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var g in r.MatchedGroups)
                     foreach (var t in g)
                         allTerms.Add(t);
 
-                // Check: does the snippet HTML actually contain at least one matched term?
-                // Tokenize the snippet (strip tags first) and see which terms appear.
-                string snippetPlain = StripTags(snippet.Html);
+                string snippetPlain  = StripTags(snippet.Html);
                 var    snippetTokens = tokenStream.Tokenize(snippetPlain);
                 var    foundInSnippet = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var tok in snippetTokens)
@@ -92,14 +95,12 @@ namespace FtsLibTest
                 bool snippetHasMatch = foundInSnippet.Count > 0;
                 bool markPresent     = snippet.Html.Contains("<mark>");
 
-                // Also check: does the raw content actually contain the matched terms?
-                var rawTokens = tokenStream.Tokenize(r.Content);
+                var rawTokens  = tokenStream.Tokenize(r.Content);
                 var foundInRaw = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var tok in rawTokens)
                     if (allTerms.Contains(tok.Normalized))
                         foundInRaw.Add(tok.Normalized);
 
-                // Classify the result
                 string status;
                 bool   isBug = false;
 
@@ -124,7 +125,6 @@ namespace FtsLibTest
                     status = "OK";
                 }
 
-                // Print everything for bugs and the first 5 OK results
                 bool print = isBug || !snippet.IsMatch || i < 5;
                 if (!print) continue;
 
@@ -134,16 +134,9 @@ namespace FtsLibTest
                 Console.WriteLine($"║      Terms   : [{string.Join(", ", allTerms)}]");
                 Console.WriteLine($"║      InRaw   : [{string.Join(", ", foundInRaw)}]");
                 Console.WriteLine($"║      InSnip  : [{string.Join(", ", foundInSnippet)}]");
-
-                // Raw content — first 200 visible chars
-                string rawPlain = StripTags(r.Content);
-                Console.WriteLine($"║      Raw     : {TestHelpers.Truncate(rawPlain, 200)}");
-
-                // Snippet HTML with marks visible
+                Console.WriteLine($"║      Raw     : {TestHelpers.Truncate(StripTags(r.Content), 200)}");
                 Console.WriteLine($"║      Snippet : {TestHelpers.Truncate(snippet.Html, 300)}");
 
-                // For bugs: dump the token list from the raw content so we can see
-                // what the tokenizer actually produces
                 if (isBug)
                 {
                     Console.WriteLine($"║      Tokens  :");
@@ -158,16 +151,61 @@ namespace FtsLibTest
                 Console.WriteLine("║");
             }
 
-            // Summary
-            int shown = 0;
-            foreach (var r in results)
+            // ── Word-distance histogram ───────────────────────────────
+            Console.WriteLine("║");
+            Console.WriteLine("║  ── Word-distance distribution ──────────────────────────");
+
+            var distBuckets = new SortedDictionary<int, int>();
+            int noMatchCount = 0;
+            foreach (var (_, snippet) in snippets)
             {
-                var s = index.GenerateSnippet(r);
-                if (s.IsMatch) shown++;
+                if (!snippet.IsMatch) { noMatchCount++; continue; }
+                int bucket = snippet.WordDistance <= 0  ? 0
+                           : snippet.WordDistance <= 2  ? 2
+                           : snippet.WordDistance <= 5  ? 5
+                           : snippet.WordDistance <= 10 ? 10
+                           : snippet.WordDistance <= 20 ? 20
+                           : snippet.WordDistance <= 50 ? 50
+                           : 999;
+                if (!distBuckets.ContainsKey(bucket)) distBuckets[bucket] = 0;
+                distBuckets[bucket]++;
             }
 
+            string BucketLabel(int b) => b == 0   ? "dist=0 (adjacent)"
+                                       : b == 2   ? "dist 1–2"
+                                       : b == 5   ? "dist 3–5"
+                                       : b == 10  ? "dist 6–10"
+                                       : b == 20  ? "dist 11–20"
+                                       : b == 50  ? "dist 21–50"
+                                       : "dist >50";
+
+            int matchTotal = snippets.Count - noMatchCount;
+            foreach (var kv in distBuckets)
+            {
+                int pct = matchTotal > 0 ? kv.Value * 100 / matchTotal : 0;
+                Console.WriteLine($"║    {BucketLabel(kv.Key),-22}  {kv.Value,4} results  ({pct,3}%)");
+            }
+            if (noMatchCount > 0)
+                Console.WriteLine($"║    {"no match (filtered)",-22}  {noMatchCount,4} results");
+
+            // ── maxWordDistance filter simulation ─────────────────────
+            Console.WriteLine("║");
+            Console.WriteLine("║  ── maxWordDistance filter simulation ───────────────────");
+            int[] thresholds = { 0, 2, 5, 10, 20, 50 };
+            foreach (int threshold in thresholds)
+            {
+                int kept = 0;
+                foreach (var (_, snippet) in snippets)
+                    if (snippet.IsMatch && snippet.WordDistance <= threshold)
+                        kept++;
+                int filteredOut = matchTotal - kept;
+                Console.WriteLine($"║    maxWordDistance={threshold,-3}  keeps {kept,4}/{matchTotal}  (filters {filteredOut})");
+            }
+
+            // ── Summary ───────────────────────────────────────────────
+            Console.WriteLine("║");
             Console.WriteLine($"║  Total results : {results.Count}");
-            Console.WriteLine($"║  IsMatch=true  : {shown}");
+            Console.WriteLine($"║  IsMatch=true  : {matchTotal}");
             Console.WriteLine($"║  Bugs found    : {bugs}");
             Console.WriteLine("╚══ SNIPPET DIAG DONE ══");
             Console.WriteLine();

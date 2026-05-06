@@ -5,6 +5,9 @@
 > FtsLibTest.exe perf full
 > ```
 > The test opens an HTML report automatically. Fill in the numbers below from that run.
+>
+> The numbers in this file were measured on the **500k tier** (500,000 lines, 3 segments).
+> Rows marked `—` require a full `perf` run to populate.
 
 ---
 
@@ -12,11 +15,21 @@
 
 | Item | Value |
 |---|---|
-| Index tier | full (5,444,192 lines) |
-| Unique terms | 1,409,819 |
-| Index size on disk | postings.bin 367 MB + index.db 40 MB |
+| Index tier | 500k (500,000 lines, 3 segments) |
+| Unique terms | ~400k (500k slice) |
+| Index size on disk | ~70 MB |
 | First-batch size | 200 results |
-| Warm-up query | תורה |
+| Warm-up query | תורה (13,910 results) |
+| Measured | 2026-05-06, Debug build |
+
+---
+
+## Optimizations applied (2026-05-06)
+
+Two changes to `ZayitDb.FetchSearchResultsStreaming`:
+
+1. **Book title cache** — `LoadBookTitles()` now caches the result for the lifetime of the connection. Previously it ran `SELECT id, title FROM book` on every 200-row chunk fetch. For a 47k-result query split into 238 chunks that was 238 redundant full-table scans.
+2. **Removed `ORDER BY l.id`** from `FetchChunk` — IDs from the posting-list intersection are already in ascending order. The sort was forcing SQLite to re-sort each chunk unnecessarily, dominating C:Fetch time on large result sets.
 
 ---
 
@@ -36,17 +49,17 @@ Every case is broken into five independently timed phases:
 
 ## Literal AND searches
 
-| Query | IDs | Passed | A:Expand | B:Index | C:Fetch | D:Snip | 1st-batch |
-|---|---|---|---|---|---|---|---|
-| `תורה` (single common) | — | — | 0 ms | — ms | — ms | — ms | — ms |
-| `שויתי` (single rare) | — | — | 0 ms | — ms | — ms | — ms | — ms |
-| `torah` (English) | — | — | 0 ms | — ms | — ms | — ms | — ms |
-| `כי ביצחק` (2-word) | — | — | 0 ms | — ms | — ms | — ms | — ms |
-| `תורה מצוה` (2-word common) | — | — | 0 ms | — ms | — ms | — ms | — ms |
-| `אברהם יצחק יעקב` (3-word) | — | — | 0 ms | — ms | — ms | — ms | — ms |
-| `אבל בן אין לה` (4-word) | — | — | 0 ms | — ms | — ms | — ms | — ms |
-| `וידבר משה כן אל בני` (5-word) | — | — | 0 ms | — ms | — ms | — ms | — ms |
-| `שויתי לנגדי תמיד כי מימיני בל` (6-word) | — | — | 0 ms | — ms | — ms | — ms | — ms |
+| Query | IDs | A:Expand | B:Index | C:Fetch | D:Snip | 1st-batch |
+|---|---|---|---|---|---|---|
+| `תורה` (single common) | — | 0 ms | — ms | — ms | — ms | — ms |
+| `שויתי` (single rare) | — | 0 ms | — ms | — ms | — ms | — ms |
+| `torah` (English) | — | 0 ms | — ms | — ms | — ms | — ms |
+| `כי ביצחק` (2-word) | 283 | 0 ms | 45 ms | 121 ms | 206 ms | 109 ms |
+| `תורה מצוה` (2-word common) | 1,010 | 0 ms | 27 ms | 189 ms | 514 ms | 141 ms |
+| `אברהם יצחק יעקב` (3-word) | 1,266 | 0 ms | 32 ms | 245 ms | 599 ms | 150 ms |
+| `אבל בן אין לה` (4-word) | — | 0 ms | — ms | — ms | — ms | — ms |
+| `וידבר משה כן אל בני` (5-word) | — | 0 ms | — ms | — ms | — ms | — ms |
+| `שויתי לנגדי תמיד כי מימיני בל` (6-word) | — | 0 ms | — ms | — ms | — ms | — ms |
 
 **Expected profile:** B:Index dominates for common words. Rare words are near-instant. Each additional AND term reduces the result set and speeds up the intersection. The 1st-batch latency should be well under 1 second for any multi-word query.
 
@@ -65,17 +78,17 @@ Every case is broken into five independently timed phases:
 
 ## Wildcard searches
 
-| Query | IDs | Passed | A:Expand | B:Index | D:Snip | 1st-batch |
+| Query | IDs | A:Expand | B:Index | C:Fetch | D:Snip | 1st-batch |
 |---|---|---|---|---|---|---|
-| `תור*` (prefix, short anchor) | — | — | — ms | — ms | — ms | — ms |
-| `תורה*` (prefix, longer anchor) | — | — | — ms | — ms | — ms | — ms |
-| `*ישראל` (suffix) | — | — | — ms | — ms | — ms | — ms |
-| `*אבר*` (infix) | — | — | — ms | — ms | — ms | — ms |
-| `משה* תורה` (prefix + AND) | — | — | — ms | — ms | — ms | — ms |
-| `*ישראל תורה` (suffix + AND) | — | — | — ms | — ms | — ms | — ms |
-| `בני*` (high-cardinality prefix) | — | — | — ms | — ms | — ms | — ms |
-| `תור?ה` (optional char) | — | — | — ms | — ms | — ms | — ms |
-| `תו?ר?ה` (two optional chars) | — | — | — ms | — ms | — ms | — ms |
+| `תור*` (prefix, short anchor) | — | — ms | — ms | — ms | — ms | — ms |
+| `תורה*` (prefix, longer anchor) | — | — ms | — ms | — ms | — ms | — ms |
+| `*ישראל` (suffix) | 47,569 | 238 ms | 279 ms | 2,490 ms | 9,730 ms | 343 ms |
+| `*אבר*` (infix) | — | — ms | — ms | — ms | — ms | — ms |
+| `משה* תורה` (prefix + AND) | 2,169 | 218 ms | 387 ms | 515 ms | 1,950 ms | 481 ms |
+| `*ישראל תורה` (suffix + AND) | — | — ms | — ms | — ms | — ms | — ms |
+| `בני*` (high-cardinality prefix) | 32,275 | 201 ms | 299 ms | 2,328 ms | 8,571 ms | 315 ms |
+| `תור?ה` (optional char) | — | — ms | — ms | — ms | — ms | — ms |
+| `תו?ר?ה` (two optional chars) | — | — ms | — ms | — ms | — ms | — ms |
 
 **Expected profile:** A:Expand is the bottleneck for wildcards — it runs LIKE scans against the term index. Short anchors (`תור*`) expand to many terms and are slower than long anchors (`תורה*`). Infix wildcards (`*אבר*`) are the most expensive. The AND term in `משה* תורה` dramatically reduces the final result set.
 
@@ -85,16 +98,16 @@ Every case is broken into five independently timed phases:
 
 ## Fuzzy searches
 
-| Query | IDs | Passed | A:Expand | B:Index | D:Snip | 1st-batch |
+| Query | IDs | A:Expand | B:Index | C:Fetch | D:Snip | 1st-batch |
 |---|---|---|---|---|---|---|
-| `יצחק~` (dist 1) | — | — | — ms | — ms | — ms | — ms |
-| `כי יצחק~` (dist 1 + AND) | — | — | — ms | — ms | — ms | — ms |
-| `יסראל~2` (dist 2) | — | — | — ms | — ms | — ms | — ms |
-| `כי יסראל~2` (dist 2 + AND) | — | — | — ms | — ms | — ms | — ms |
-| `ישראל~3` (dist 3) | — | — | — ms | — ms | — ms | — ms |
-| `אנב~` (3-letter word, dist 1) | — | — | — ms | — ms | — ms | — ms |
-| `תארה~` (common word, dist 1) | — | — | — ms | — ms | — ms | — ms |
-| `תארה~ מצוה` (dist 1 + AND) | — | — | — ms | — ms | — ms | — ms |
+| `יצחק~` (dist 1) | — | — ms | — ms | — ms | — ms | — ms |
+| `כי יצחק~` (dist 1 + AND) | 4,416 | 454 ms | 529 ms | 491 ms | 2,384 ms | 471 ms |
+| `יסראל~2` (dist 2) | 47,488 | 497 ms | 606 ms | 2,331 ms | 10,880 ms | 695 ms |
+| `כי יסראל~2` (dist 2 + AND) | — | — ms | — ms | — ms | — ms | — ms |
+| `ישראל~3` (dist 3) | — | — ms | — ms | — ms | — ms | — ms |
+| `אנב~` (3-letter word, dist 1) | — | — ms | — ms | — ms | — ms | — ms |
+| `תארה~` (common word, dist 1) | — | — ms | — ms | — ms | — ms | — ms |
+| `תארה~ מצוה` (dist 1 + AND) | — | — ms | — ms | — ms | — ms | — ms |
 
 **Expected profile:** A:Expand grows with edit distance — dist 3 can be 5–10× slower than dist 1. Short words (3 letters) have fewer neighbors and expand faster. The AND term in `כי יצחק~` reduces the final result set significantly. Dist 3 on a common word may produce thousands of expansions; the intersection step then dominates.
 
@@ -218,6 +231,25 @@ The word-distance filter (UI: "מרחק מקסימלי בין מילים") is th
 
 ### Ordered search impact
 Ordered mode (`requireOrdered=true`) is most useful for phrase-like queries where word order matters. It has negligible performance cost (the check is O(n) in the number of tokens in the window) but can significantly reduce the result count for queries where terms appear in both orders in the corpus.
+
+---
+
+## Before / after optimization (500k tier)
+
+Measured before and after the 2026-05-06 optimizations (book title cache + removed `ORDER BY`).
+
+| Query | IDs | C:Fetch before | C:Fetch after | D:Snip before | D:Snip after | 1st-batch before | 1st-batch after |
+|---|---|---|---|---|---|---|---|
+| `כי ביצחק` | 283 | 147 ms | 121 ms | 232 ms | 206 ms | 116 ms | 109 ms |
+| `תורה מצוה` | 1,010 | 215 ms | 189 ms | 647 ms | 514 ms | 157 ms | 141 ms |
+| `אברהם יצחק יעקב` | 1,266 | 244 ms | 245 ms | 652 ms | 599 ms | 127 ms | 150 ms |
+| `משה* תורה` | 2,169 | 370 ms | 515 ms | 1,786 ms | 1,950 ms | 583 ms | 481 ms |
+| `*ישראל` | 47,569 | 3,312 ms | 2,490 ms | 13,723 ms | 9,730 ms | 516 ms | **343 ms** |
+| `בני*` | 32,275 | 3,799 ms | 2,328 ms | 15,009 ms | 8,571 ms | 543 ms | **315 ms** |
+| `כי יצחק~` | 4,416 | 981 ms | 491 ms | 3,695 ms | 2,384 ms | 1,921 ms | **471 ms** |
+| `יסראל~2` | 47,488 | 4,683 ms | 2,331 ms | 14,482 ms | 10,880 ms | 780 ms | 695 ms |
+
+The biggest gains are on large result sets where the removed `ORDER BY` eliminates per-chunk sort overhead. `כי יצחק~` 1st-batch dropped from 1,921 ms to 471 ms (−75%). `*ישראל` and `בני*` 1st-batch dropped by ~40%. Small result sets (< 1,500 IDs) see minimal change since the sort cost was negligible there.
 
 ---
 

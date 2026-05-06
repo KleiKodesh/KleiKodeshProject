@@ -37,10 +37,10 @@ case "WebSites":
 The installer embeds `WebSitesWhitelist.json` and extracts it to the user's installation directory on every install or update. Users can customize the list before installation via the Advanced page in the installer.
 
 **How it works:**
-- The source JSON contains all entries with `IsVisible` flags — the full catalogue
-- The installer dialog shows all entries with checkboxes
-- On OK, only the checked entries are written to disk (no `IsVisible` field in the output)
-- The VSTO add-in loads whatever is in the file and shows all of it — no filtering
+- User never opens the dialog → whitelist untouched (existing file preserved on update, default extracted on fresh install)
+- User opens the dialog → full catalogue shown; each entry pre-checked based on the installed file (present = checked, absent = unchecked; fresh install uses default `IsVisible`)
+- On OK → only checked entries written to disk, no `IsVisible` field in output
+- The VSTO add-in loads whatever is on disk and shows all of it — no filtering
 
 See `Build/Installer/README.md` for full details.
 

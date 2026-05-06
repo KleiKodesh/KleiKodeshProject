@@ -286,33 +286,8 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
 
     const normalizedQuery = q.trim().toLowerCase()
 
-    // Skip cache entirely while the index is still building — cached results
-    // would be partial and would be served as complete on the next search.
-    if (!isIndexing?.()) {
-      const cached = await cache.get(normalizedQuery)
-
-      if (cached?.complete) {
-        // Full result set available — show immediately, no stream needed
-        results.value = cached.results
-        isSearching.value = false
-        return
-      }
-
-      if (cached && cached.results.length > 0) {
-        // Partial result set from a previous interrupted search — show what we have,
-        // then resume streaming from where C# left off
-        results.value = cached.results
-        try {
-          await _startStream(normalizedQuery, cached.results.length)
-        } catch (err) {
-          console.error('[useFullTextSearch] failed to resume stream:', err)
-          isSearching.value = false
-        }
-        return
-      }
-    }
-
-    // No cache (or indexing in progress) — fresh search
+    // Always run a fresh search — the cache is only used for session restore
+    // and tab switching (see loadCachedResults), never for a user-initiated search.
     try {
       if (!isIndexing?.()) await cache.init(normalizedQuery)
       await _startStream(normalizedQuery, 0)
@@ -326,6 +301,12 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     results.value = []
     hasSearched.value = false
     executedQuery.value = ''
+  }
+
+  function clearCachedResults(q: string): void {
+    const normalizedQuery = q.trim().toLowerCase()
+    // Fire-and-forget — tab is closing, no need to await
+    cache.remove(normalizedQuery).catch(() => {/* non-fatal */})
   }
 
   async function loadCachedResults(q: string): Promise<boolean> {
@@ -359,6 +340,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     executeSearch,
     cancelSearch,
     clearSearch,
+    clearCachedResults,
     loadCachedResults,
   }
 }

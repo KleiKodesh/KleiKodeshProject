@@ -27,9 +27,9 @@ The installer lets users customize the website list before installation via `Adv
 **Single source of truth:** `KleiKodeshVsto/WebSitesLib/WebSitesLib/WebSitesWhitelist.json`
 
 **How it works:**
-- Source JSON contains all entries with `IsVisible` flags — the full catalogue shown in the dialog
-- User did not edit → zip entry always extracted (fresh install and updates both get the latest default)
-- User edited via dialog → zip entry skipped, `ApplyPendingWhitelist()` writes only the checked entries (no `IsVisible` field in output)
+- User never opens the dialog → whitelist untouched (existing file preserved on update, default extracted on fresh install)
+- User opens the dialog → full catalogue shown; each entry pre-checked based on the installed file (present = checked, absent = unchecked; fresh install uses default `IsVisible`)
+- On OK → only checked entries written to disk, no `IsVisible` field in output
 - The VSTO add-in loads whatever is on disk and shows all of it — no `IsVisible` filtering at runtime
 
 `AddinInstaller.PendingWhitelist` is `null` until the user opens the dialog and clicks OK.

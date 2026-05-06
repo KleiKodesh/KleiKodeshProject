@@ -80,5 +80,15 @@ export const useSearchCacheStore = defineStore('searchCache', () => {
     await Promise.all([...lru.map((q) => idbDelete(cacheKey(q))), idbDelete(LRU_KEY)])
   }
 
-  return { get, init, appendBatch, markComplete, clear }
+  /** Remove a single query entry and evict it from the LRU list. */
+  async function remove(query: string): Promise<void> {
+    const lru = await getLru()
+    const updated = lru.filter((q) => q !== query)
+    await Promise.all([
+      idbDelete(cacheKey(query)),
+      idbSet(LRU_KEY, updated),
+    ])
+  }
+
+  return { get, init, appendBatch, markComplete, clear, remove }
 })

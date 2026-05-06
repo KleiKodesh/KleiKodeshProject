@@ -95,13 +95,14 @@ namespace KleiKodeshVstoInstallerWpf
 
         private void EditWhitelistButton_Click(object sender, RoutedEventArgs e)
         {
-            // Load entries using priority order:
-            //   1. PendingWhitelist — user already edited this session
-            //   2. Installed file   — update scenario, preserve user's existing list
-            //   3. Embedded default — fresh install
-            // If user clicks OK, serialize back into PendingWhitelist so ExtractAsync
-            // skips the zip entry and ApplyPendingWhitelist() writes the edited version.
-            // If user clicks Cancel, PendingWhitelist is unchanged (null or prior edit).
+            // Load the full default catalogue, with IsVisible pre-set from the user's
+            // installed file (or from a prior edit this session).
+            // - Entries absent from the installed file → unchecked
+            // - Entries present but unchecked in the installed file → unchecked
+            // - Entries present and checked in the installed file → checked
+            // - Fresh install (no installed file) → use IsVisible from the default catalogue
+            // On OK → serialize only the checked entries into PendingWhitelist.
+            // On Cancel → PendingWhitelist unchanged (null or prior edit).
             var entries = LoadEntries();
             var dialog  = new WhitelistEditorDialog(entries) { Owner = Window.GetWindow(this) };
             if (dialog.ShowDialog() == true)
@@ -144,19 +145,49 @@ namespace KleiKodeshVstoInstallerWpf
 
         /// <summary>
         /// Returns the whitelist entries to show in the editor dialog.
-        /// Priority:
-        ///   1. PendingWhitelist — user already edited this session (in-memory)
-        ///   2. Embedded default — always use the installer's compiled whitelist
+        ///
+        /// Always starts from the full default catalogue (all entries, with their
+        /// default IsVisible values). Then adjusts IsVisible for each entry based on
+        /// the user's currently installed file:
+        ///   - Entry URL present in installed file  → checked   (it was checked last time)
+        ///   - Entry URL absent from installed file → unchecked (it was unchecked or is new)
+        ///   - No installed file (fresh install)    → keep default IsVisible from source JSON
+        ///
+        /// If the user already edited the list this session (PendingWhitelist != null),
+        /// that is used instead so re-opening the dialog shows their prior choices.
         /// </summary>
         private static ObservableCollection<WhitelistEntry> LoadEntries()
         {
-            // 1. Already edited this session
+            // Already edited this session — show their prior choices
             if (AddinInstaller.PendingWhitelist != null)
                 return Deserialize(AddinInstaller.PendingWhitelist);
 
-            // 2. Always start from the installer's compiled default
+            // Start from the full default catalogue
             string defaultJson = LoadDefaultJson();
-            return defaultJson != null ? Deserialize(defaultJson) : new ObservableCollection<WhitelistEntry>();
+            var entries = defaultJson != null
+                ? Deserialize(defaultJson)
+                : new ObservableCollection<WhitelistEntry>();
+
+            // Merge visibility from the user's installed file.
+            // The installed file contains only the entries that were checked —
+            // presence means checked, absence means unchecked.
+            string installedPath = Path.Combine(AddinInstaller.InstallPath, "WebSitesWhitelist.json");
+            if (File.Exists(installedPath))
+            {
+                try
+                {
+                    var installedEntries = ParseWhitelistJson(File.ReadAllText(installedPath));
+                    var installedUrls = new System.Collections.Generic.HashSet<string>(
+                        installedEntries.Select(e => e.Url ?? ""),
+                        StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var entry in entries)
+                        entry.IsVisible = installedUrls.Contains(entry.Url ?? "");
+                }
+                catch { /* ignore — keep default IsVisible values */ }
+            }
+
+            return entries;
         }
 
         /// <summary>

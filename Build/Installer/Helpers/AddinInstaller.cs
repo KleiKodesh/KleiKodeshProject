@@ -87,10 +87,11 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
 
                         // If the user customised the whitelist this session, skip the zip entry —
                         // ApplyPendingWhitelist() will write their version after extraction completes.
-                        // Otherwise always extract from zip (fresh install or update both get the latest default).
+                        // Also skip if the file already exists on disk (update) — the user never
+                        // opened the dialog so we leave their current list untouched.
                         if (string.Equals(entry.Name, "WebSitesWhitelist.json",
                                 StringComparison.OrdinalIgnoreCase) &&
-                            PendingWhitelist != null)
+                            (PendingWhitelist != null || File.Exists(fullPath)))
                         {
                             current++;
                             progress?.Report((double)current / total * 100);

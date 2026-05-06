@@ -57,7 +57,7 @@ namespace FtsLib.SeforimDb
             EnsureStore();
         }
 
-        // ── Store lifecycle ───────────────────────────────────────────────────────
+        // ── Store lifecycle ───────────────────────────────────────────
 
         private void EnsureStore()
         {
@@ -97,38 +97,24 @@ namespace FtsLib.SeforimDb
         internal List<(string dat, string db)> GetLiveSegmentPaths()
             => _store != null ? _store.GetLiveSegmentPaths() : new List<(string, string)>();
 
-        // ── Build ─────────────────────────────────────────────────────────────────
+        // ── Build ─────────────────────────────────────────────────────
 
-        /// <summary>
-        /// Returns the last line ID flushed in a previous interrupted build, or 0.
-        /// </summary>
         public int GetResumeLineId() => IndexingPipeline.ReadResumeLineId(_indexPath);
 
-        /// <summary>
-        /// Deletes the build progress file after a completed build.
-        /// </summary>
         public void DeleteBuildProgressFile() => IndexingPipeline.DeleteProgressFile(_indexPath);
 
-        /// <summary>Returns the total number of lines in the seforim database.</summary>
         public long CountLines()
         {
             using (var db = new ZayitDb(_dbPath))
                 return db.CountLines();
         }
 
-        /// <summary>Returns the number of lines with id &lt;= <paramref name="upToId"/>.</summary>
         public long CountLinesUpTo(int upToId)
         {
             using (var db = new ZayitDb(_dbPath))
                 return db.CountLinesUpTo(upToId);
         }
 
-        /// <summary>
-        /// Builds (or resumes) the full-text index. Blocking, long-running.
-        /// Returns true when all lines were processed; false when only WAL recovery ran.
-        /// Throws <see cref="OperationCanceledException"/> on cancellation — the partial
-        /// index is valid and will be resumed on the next call.
-        /// </summary>
         public bool BuildIndex(int limit = 0, Action<long> onProgress = null,
                                Action onFlush = null,
                                CancellationToken ct = default)
@@ -138,46 +124,24 @@ namespace FtsLib.SeforimDb
             return result;
         }
 
-        /// <summary>
-        /// Force-merges all segments into one for fastest search.
-        /// Optional — search works across any number of segments.
-        /// Run on a background thread after BuildIndex returns.
-        /// </summary>
         public void Optimize() => IndexingPipeline.Optimize(_indexPath, _store);
 
-        // ── Search ────────────────────────────────────────────────────────────────
+        // ── Search ────────────────────────────────────────────────────
 
-        /// <summary>
-        /// Searches the index and streams matching rows from the database.
-        /// Results are lazy — iteration drives both the index scan and the DB fetch.
-        /// </summary>
         public IEnumerable<SearchResult> Search(string query, int cap = 0, CancellationToken ct = default)
             => SearchPipeline.Search(query, _indexPath, _dbPath, GetLiveSegmentPaths(), cap, ct);
 
-        /// <summary>
-        /// Returns only matching line IDs — no database fetch.
-        /// Faster than Search for large result sets when content is not needed.
-        /// </summary>
         public IEnumerable<int> SearchIds(string query, CancellationToken ct = default)
             => SearchPipeline.SearchIds(query, _indexPath, GetLiveSegmentPaths(), ct);
 
-        // ── Snippets ──────────────────────────────────────────────────────────────
+        // ── Snippets ──────────────────────────────────────────────────
 
-        /// <summary>
-        /// Generates a highlighted snippet by fetching line content from the database.
-        /// Prefer the SearchResult overload when content is already in memory.
-        /// </summary>
         public SnippetResult GenerateSnippet(int lineId, string query)
         {
             var terms = SearchPipeline.ExtractTerms(query);
             return SnippetPipeline.GenerateFromDb(lineId, terms, _dbPath);
         }
 
-        /// <summary>
-        /// Generates a highlighted snippet from a SearchResult already in memory.
-        /// Preferred over the lineId overload — no second DB fetch, and matched groups
-        /// include all expanded forms (e.g. ביצחק when the query was יצחק~).
-        /// </summary>
         public SnippetResult GenerateSnippet(SearchResult result, bool requireOrdered = false,
             int snippetLength = DefaultSnippetLength,
             int contextWords  = DefaultContextWords)

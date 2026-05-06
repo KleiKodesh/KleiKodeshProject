@@ -68,19 +68,25 @@ It is embedded into the installer exe as a resource (linked path in csproj, not 
 
 | Condition | What happens to `WebSitesWhitelist.json` |
 |---|---|
-| User did not open the editor dialog | Extracted from zip — always overwrites (fresh install and updates both get the latest default) |
-| User edited via dialog and clicked OK | Zip entry skipped; `ApplyPendingWhitelist()` writes only the checked entries (no `IsVisible` field) |
+| User never opened the editor dialog, fresh install | Extracted from zip (default list) |
+| User never opened the editor dialog, update (file exists) | **Skipped** — existing file preserved |
+| User opened dialog and clicked OK | Zip entry skipped; `ApplyPendingWhitelist()` writes only the checked entries (no `IsVisible` field) |
+| User opened dialog and clicked Cancel | Same as "never opened" — `PendingWhitelist` stays null |
 
 `AddinInstaller.PendingWhitelist` is `null` until the user opens the dialog and clicks OK.
 `ApplyPendingWhitelist()` is a no-op when `PendingWhitelist` is null.
 
 ### How the whitelist works end-to-end
 
-1. The source JSON (`WebSitesWhitelist.json`) contains all entries with `IsVisible` flags — this is the full catalogue shown in the editor dialog.
-2. The installer dialog shows all entries with checkboxes pre-set from `IsVisible`.
+1. The source JSON (`WebSitesWhitelist.json`) contains all entries with `IsVisible` flags — the full catalogue shown in the editor dialog.
+2. When the user opens the dialog, the full catalogue is loaded. Each entry's checkbox is pre-set from the user's currently installed file: entries present in the installed file are checked, entries absent are unchecked. On a fresh install (no installed file), the default `IsVisible` values are used.
 3. On OK, `SerializeWhitelistJson` writes **only the checked entries** to `PendingWhitelist`, with no `IsVisible` field in the output.
 4. The installed JSON therefore contains only the entries the user wanted — no filtering needed at runtime.
 5. The VSTO add-in loads the file and shows every entry in it directly.
+
+### Do not
+- Add `System.Text.Json` or `System.Web.Extensions` to this project — the embedded-DLL resolver cannot find them at the point the whitelist page loads. The parser/serializer in `AdvancedPage.xaml.cs` is intentionally hand-rolled.
+- Call `ApplyPendingWhitelist()` before `ExtractAsync` — the install folder may not exist yet.
 
 ## Version Management
 
