@@ -31,19 +31,22 @@ export function useFullTextSearchIndexingStatus() {
 
   onMounted(async () => {
     if (!isHosted || typeof window.__webviewAction !== 'function') {
-      // Dev simulation: 0→100% over ~3s
-      state.value = { ...IDLE, isIndexing: true, totalChunks: 100, eta: '3s', segmentCount: 0, latestSegmentPct: null }
-      let pct = 0
+      // Dev simulation: 0→100% over ~3s, ticking every 10,000 lines out of 1,000,000
+      const TOTAL_LINES = 1_000_000
+      const TICK_LINES  = 10_000
+      state.value = { ...IDLE, isIndexing: true, totalChunks: TOTAL_LINES, eta: '3s', segmentCount: 0, latestSegmentPct: null }
+      let processed = 0
       let devLatestSegmentPct: number | null = null
       const tick = () => {
-        pct += 10
+        processed += TICK_LINES
+        const pct = Math.min(100, (processed / TOTAL_LINES) * 100)
         if (pct >= 100) {
           state.value = {
             isReady: true,
             isIndexing: false,
             percentage: 100,
-            processedChunks: 100,
-            totalChunks: 100,
+            processedChunks: TOTAL_LINES,
+            totalChunks: TOTAL_LINES,
             eta: '',
             segmentCount: devLatestSegmentPct !== null ? 2 : 0,
             latestSegmentPct: devLatestSegmentPct,
@@ -51,14 +54,15 @@ export function useFullTextSearchIndexingStatus() {
           return
         }
         // Simulate a segment flush at ~20% and ~60%
-        if (pct === 20 || pct === 60) devLatestSegmentPct = pct
+        if (pct >= 20 && devLatestSegmentPct === null) devLatestSegmentPct = pct
+        if (pct >= 60 && devLatestSegmentPct !== null && devLatestSegmentPct < 60) devLatestSegmentPct = pct
         state.value = {
           isReady: pct >= 20,
           isIndexing: true,
           percentage: pct,
-          processedChunks: pct,
-          totalChunks: 100,
-          eta: `${Math.round((100 - pct) * 0.03)}s`,
+          processedChunks: processed,
+          totalChunks: TOTAL_LINES,
+          eta: `${Math.round((TOTAL_LINES - processed) / TOTAL_LINES * 3)}s`,
           segmentCount: devLatestSegmentPct !== null ? (pct >= 60 ? 2 : 1) : 0,
           latestSegmentPct: devLatestSegmentPct,
         }

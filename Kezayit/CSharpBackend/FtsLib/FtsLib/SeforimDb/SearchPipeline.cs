@@ -72,15 +72,10 @@ namespace FtsLib.SeforimDb
                 IReadOnlyList<IReadOnlyCollection<string>> matchedGroups = expandedGroups;
                 int originalGroupCount = parsed.Groups.Count;
 
-                var ids = new List<int>(reader.Search(groups, ct));
-                if (ids.Count == 0) yield break;
-
-                ct.ThrowIfCancellationRequested();
-
                 int yielded = 0;
                 using (var db = new ZayitDb(dbPath))
                 {
-                    foreach (var (lineId, content, bookTitle) in db.FetchSearchResults(ids))
+                    foreach (var (lineId, content, bookTitle) in db.FetchSearchResultsStreaming(reader.Search(groups, ct)))
                     {
                         ct.ThrowIfCancellationRequested();
                         yield return new SearchResult(lineId, bookTitle, content, matchedGroups, originalGroupCount);

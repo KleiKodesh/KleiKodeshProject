@@ -129,7 +129,7 @@ namespace FtsLib.SeforimDb
             EnsureOpen();
             if (ids.Count == 0) yield break;
 
-            // Load book titles once — the book table is tiny so this is negligible.
+            // Load book titles once ï¿½ the book table is tiny so this is negligible.
             var bookTitles = LoadBookTitles();
 
             // Fetch line rows. Chunk to stay within SQLite's variable limit.
@@ -138,7 +138,7 @@ namespace FtsLib.SeforimDb
 
             using (var cmd = _connection.CreateCommand())
             {
-                // Pre-allocate parameter objects — reused across chunks.
+                // Pre-allocate parameter objects ï¿½ reused across chunks.
                 var paramNames = new string[ChunkSize];
                 for (int i = 0; i < ChunkSize; i++)
                 {
@@ -159,7 +159,7 @@ namespace FtsLib.SeforimDb
                         sb.Append(paramNames[i]);
                         cmd.Parameters[paramNames[i]].Value = ids[start + i];
                     }
-                    sb.Append(") ORDER BY l.bookId, l.lineIndex");
+                    sb.Append(") ORDER BY l.id");
                     cmd.CommandText = sb.ToString();
 
                     using (var r = cmd.ExecuteReader())
@@ -178,7 +178,81 @@ namespace FtsLib.SeforimDb
         }
 
         /// <summary>
-        /// Fetches only id + bookTitle for each matching line — no content column.
+        /// Streaming overload â€” accepts a lazy ID sequence and fetches rows in batches
+        /// of up to 999 (SQLite's variable limit), yielding results as each batch
+        /// completes. No upfront materialization of the full ID list.
+        /// </summary>
+        public IEnumerable<(int Id, string Content, string BookTitle)>
+            FetchSearchResultsStreaming(IEnumerable<int> ids)
+        {
+            EnsureOpen();
+
+            var bookTitles = LoadBookTitles();
+
+            const int ChunkSize = 200;
+            var chunk = new List<int>(ChunkSize);
+
+            using (var cmd = _connection.CreateCommand())
+            {
+                // Pre-allocate parameter objects â€” reused across chunks.
+                var paramNames = new string[ChunkSize];
+                for (int i = 0; i < ChunkSize; i++)
+                {
+                    paramNames[i] = $"@p{i}";
+                    cmd.Parameters.Add(paramNames[i], System.Data.DbType.Int32);
+                }
+
+                foreach (int id in ids)
+                {
+                    chunk.Add(id);
+                    if (chunk.Count == ChunkSize)
+                    {
+                        foreach (var row in FetchChunk(cmd, paramNames, chunk, bookTitles))
+                            yield return row;
+                        chunk.Clear();
+                    }
+                }
+
+                if (chunk.Count > 0)
+                {
+                    foreach (var row in FetchChunk(cmd, paramNames, chunk, bookTitles))
+                        yield return row;
+                }
+            }
+        }
+
+        private static IEnumerable<(int Id, string Content, string BookTitle)> FetchChunk(
+            SQLiteCommand           cmd,
+            string[]                paramNames,
+            List<int>               ids,
+            Dictionary<int, string> bookTitles)
+        {
+            var sb = new System.Text.StringBuilder(
+                "SELECT l.id, l.content, l.bookId FROM line l WHERE l.id IN (");
+            for (int i = 0; i < ids.Count; i++)
+            {
+                if (i > 0) sb.Append(',');
+                sb.Append(paramNames[i]);
+                cmd.Parameters[paramNames[i]].Value = ids[i];
+            }
+            sb.Append(") ORDER BY l.id");
+            cmd.CommandText = sb.ToString();
+
+            using (var r = cmd.ExecuteReader())
+            {
+                while (r.Read())
+                {
+                    int    lineId  = r.GetInt32(0);
+                    string content = r.IsDBNull(1) ? string.Empty : r.GetString(1);
+                    int    bookId  = r.GetInt32(2);
+                    bookTitles.TryGetValue(bookId, out string title);
+                    yield return (lineId, content, title ?? string.Empty);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Fetches only id + bookTitle for each matching line ï¿½ no content column.
         /// Use when the caller does not need content (e.g. counting, ID-only pipelines).
         /// Significantly faster than <see cref="FetchSearchResults"/> for large result sets
         /// because it skips reading the large content TEXT column from disk.
@@ -232,7 +306,7 @@ namespace FtsLib.SeforimDb
         }
 
         /// <summary>
-        /// Loads all book titles into a dictionary. Called once per fetch — the book
+        /// Loads all book titles into a dictionary. Called once per fetch ï¿½ the book
         /// table is small (~hundreds of rows) so this is negligible.
         /// </summary>
         private Dictionary<int, string> LoadBookTitles()

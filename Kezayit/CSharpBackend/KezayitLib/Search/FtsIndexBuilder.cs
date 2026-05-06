@@ -52,6 +52,7 @@ namespace KezayitLib.Search
 
             Console.WriteLine("[SearchHandler] FTS index build started");
             bool buildSucceeded    = false;
+            int  flushCount        = 0;
 
             // On resume, existing segments are already searchable — mark ready immediately
             // rather than waiting for the first progress tick to detect the first segment.

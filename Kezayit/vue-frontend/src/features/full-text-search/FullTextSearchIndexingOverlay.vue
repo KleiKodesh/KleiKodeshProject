@@ -11,7 +11,11 @@ defineProps<{ state: IndexingState }>()
         <template v-else-if="!state.isReady">אנא המתן בעת בניית האינדקס</template>
         <template v-else>תוצאות חיפוש חלקיות — האינדקס עדיין בבנייה</template>
       </span>
-      <span class="percentage">{{ Math.round(state.percentage) }}%<span v-if="state.eta"> · {{ state.eta }}</span></span>
+      <span class="percentage">
+        {{ Math.round(state.percentage) }}%
+        <template v-if="state.processedChunks > 0"> · {{ state.processedChunks.toLocaleString('he-IL') }}</template>
+        <span v-if="state.eta"> · {{ state.eta }}</span>
+      </span>
     </div>
     <div class="progress-track">
       <div class="progress-fill" :style="{ width: `${state.percentage}%` }" />
