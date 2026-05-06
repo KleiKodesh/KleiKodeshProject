@@ -33,6 +33,7 @@ interface SenseItem {
   text:         string
   sourceLabel:  string
   bookLocation: BookLocation | null  // non-null for seforim sources — enables Ctrl+click
+  isSpecialSource?: boolean  // true for מחברת מנחם and הערוך entries
 }
 
 interface SenseGroup {

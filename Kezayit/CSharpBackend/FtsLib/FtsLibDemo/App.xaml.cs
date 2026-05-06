@@ -1,4 +1,4 @@
-﻿using FtsLibDemo.Services;
+using FtsLibDemo.Services;
 using FtsLibDemo.ViewModels;
 using System.Windows;
 

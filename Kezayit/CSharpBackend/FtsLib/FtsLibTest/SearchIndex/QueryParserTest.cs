@@ -1,4 +1,4 @@
-using FtsLib.Core;
+using FtsLib.Search;
 using System;
 using System.Collections.Generic;
 using System.Text;

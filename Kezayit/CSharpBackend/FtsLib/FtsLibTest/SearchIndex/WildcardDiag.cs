@@ -1,5 +1,6 @@
-using FtsLib.Core;
-using FtsLib.Seforim;
+using FtsLib.Indexing;
+using FtsLib.Search;
+using FtsLib.SeforimDb;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -110,7 +111,7 @@ namespace FtsLibTest
                         }
                         else
                         {
-                            string likePattern = WildcardExpander.ToLikePattern(group.Pattern);
+                            string likePattern = HebrewWildcardExpander.ToLikePattern(group.Pattern);
                             Console.WriteLine($"║    LIKE pattern : \"{likePattern}\"");
 
                             // Classify the wildcard shape
@@ -126,7 +127,7 @@ namespace FtsLibTest
                         }
 
                         var sw = Stopwatch.StartNew();
-                        var expanded = WildcardExpander.Expand(group.Pattern, segments);
+                        var expanded = HebrewWildcardExpander.Expand(group.Pattern, segments);
                         sw.Stop();
 
                         if (hasOptional)
@@ -139,7 +140,7 @@ namespace FtsLibTest
                         {
                             // Also show raw DB count vs. post-filter count for transparency
                             // (re-run the LIKE without the length filter to get the raw number)
-                            string likeRaw = WildcardExpander.ToLikePattern(group.Pattern);
+                            string likeRaw = HebrewWildcardExpander.ToLikePattern(group.Pattern);
                             var rawSet = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
                             foreach (var seg in segments)
                             {
@@ -156,14 +157,14 @@ namespace FtsLibTest
 
                             Console.WriteLine($"║    DB returned  : {rawCount:N0} term(s)  ({sw.ElapsedMilliseconds} ms)");
                             if (filtered > 0)
-                                Console.WriteLine($"║    After filter : {expanded.Count:N0} term(s)  ({filtered:N0} discarded — prefix cap={WildcardExpander.MaxPrefixWildcardChars}, suffix cap={WildcardExpander.MaxSuffixWildcardChars})");
+                                Console.WriteLine($"║    After filter : {expanded.Count:N0} term(s)  ({filtered:N0} discarded — prefix cap={HebrewWildcardExpander.MaxPrefixWildcardChars}, suffix cap={HebrewWildcardExpander.MaxSuffixWildcardChars})");
                             else
                                 Console.WriteLine($"║    After filter : {expanded.Count:N0} term(s)  (none discarded)");
                         }
 
                         if (expanded.Count == 0)
                         {
-                            string fallback = WildcardExpander.StripWildcard(group.Pattern);
+                            string fallback = HebrewWildcardExpander.StripWildcard(group.Pattern);
                             Console.WriteLine($"║    Fallback     : \"{fallback}\" (literal, no wildcard matches)");
                             expanded = new List<string> { fallback };
                         }

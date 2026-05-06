@@ -67,84 +67,61 @@ function highlightMatches(
 }
 
 /**
- * Find the start/end positions (in stripped-text coordinates) of the snippet within the line.
- * Retries by progressively dropping words from the edges if the full snippet isn't found.
- * Returns null if no match found with at least 2 words.
+ * Extract the highlighted terms from a C# snippet by pulling text inside <mark>…</mark> tags.
+ * Returns a deduplicated list of stripped (no-diacritics) terms in the order they appear.
  */
-function findSnippetRegion(
-  strippedLine: string,
-  strippedSnippet: string,
-): { start: number; end: number } | null {
-  const clean = strippedSnippet
-    .replace(/^\.{2,}/, '')
-    .replace(/\.{2,}$/, '')
-    .trim()
-  if (!clean) return null
-
-  const words = clean.split(/\s+/).filter(Boolean)
-  if (!words.length) return null
-
-  // Try substrings: full → drop last → drop first → drop both → ...
-  // Alternate dropping from end and start, keeping at least 2 words.
-  const candidates: string[] = []
-  let lo = 0, hi = words.length
-  candidates.push(words.slice(lo, hi).join(' '))
-  while (hi - lo > 2) {
-    hi--
-    candidates.push(words.slice(lo, hi).join(' '))
-    if (hi - lo <= 2) break
-    lo++
-    candidates.push(words.slice(lo, hi).join(' '))
+function extractSnippetTerms(snippet: string): string[] {
+  const terms: string[] = []
+  const seen = new Set<string>()
+  const re = /<mark>([\s\S]*?)<\/mark>/g
+  let match: RegExpExecArray | null
+  while ((match = re.exec(snippet)) !== null) {
+    const term = removeDiacriticsForSearch(match[1]!.replace(/<[^>]*>/g, '').trim())
+    if (term && !seen.has(term)) {
+      seen.add(term)
+      terms.push(term)
+    }
   }
-
-  for (const candidate of candidates) {
-    const idx = strippedLine.indexOf(candidate)
-    if (idx !== -1) return { start: idx, end: idx + candidate.length }
-  }
-  return null
+  return terms
 }
 
 /**
- * Highlight search-result terms within the snippet region of a line.
- *
- * The C# backend strips HTML and all diacritics before matching, so both the snippet
- * and the terms are plain stripped text. We find where the snippet sits inside the
- * stripped line text, then highlight each term within that region using an
- * HTML-aware / diacritic-aware walk.
- *
- * raw is the pre-censoring content used for region detection (the C# snippet was built
- * from uncensored text). content is the post-censoring content used for the output walk.
+ * Highlight all occurrences of the snippet's marked terms anywhere in the full line content.
+ * Uses the same diacritic-aware, HTML-aware walk as highlightMatches.
  */
-function highlightSearchResult(
-  raw: string,
+function highlightFromSnippet(
   content: string,
   snippet: string,
-  terms: string[],
 ): string {
-  if (!snippet || !terms.length) return content
+  const terms = extractSnippetTerms(snippet)
+  if (!terms.length) return content
 
-  const strippedContent = removeDiacriticsForSearch(raw.replace(/<[^>]*>/g, ''))
-  const strippedSnippet = removeDiacriticsForSearch(snippet)
+  const strippedContent = removeDiacriticsForSearch(content.replace(/<[^>]*>/g, ''))
 
-  const region = findSnippetRegion(strippedContent, strippedSnippet)
-  if (!region) return content
-
-  const { start: regionStart, end: regionEnd } = region
-
+  // Collect all match start positions for all terms
   const matchRanges: Array<{ start: number; len: number }> = []
   for (const term of terms) {
-    const t = removeDiacriticsForSearch(term)
-    if (!t) continue
-    let idx = regionStart
-    while (idx < regionEnd && (idx = strippedContent.indexOf(t, idx)) !== -1 && idx < regionEnd) {
-      matchRanges.push({ start: idx, len: t.length })
+    let idx = 0
+    while ((idx = strippedContent.indexOf(term, idx)) !== -1) {
+      matchRanges.push({ start: idx, len: term.length })
       idx++
     }
   }
   if (!matchRanges.length) return content
 
+  // Sort and merge overlapping ranges
   matchRanges.sort((a, b) => a.start - b.start)
+  const merged: Array<{ start: number; end: number }> = []
+  for (const r of matchRanges) {
+    const last = merged[merged.length - 1]
+    if (last && r.start < last.end) {
+      last.end = Math.max(last.end, r.start + r.len)
+    } else {
+      merged.push({ start: r.start, end: r.start + r.len })
+    }
+  }
 
+  // Walk the content HTML, inserting <mark> tags at the right stripped-text positions
   const out: string[] = []
   let strippedPos = 0, inTag = false, inMatch = false, matchEndPos = 0, rangeIdx = 0
 
@@ -158,10 +135,10 @@ function highlightSearchResult(
 
     if (!isDiacritic) {
       if (inMatch && strippedPos >= matchEndPos) { out.push('</mark>'); inMatch = false }
-      while (rangeIdx < matchRanges.length && matchRanges[rangeIdx]!.start < strippedPos) rangeIdx++
-      if (!inMatch && rangeIdx < matchRanges.length && matchRanges[rangeIdx]!.start === strippedPos) {
+      while (rangeIdx < merged.length && merged[rangeIdx]!.start < strippedPos) rangeIdx++
+      if (!inMatch && rangeIdx < merged.length && merged[rangeIdx]!.start === strippedPos) {
         out.push('<mark class="search-match">')
-        matchEndPos = strippedPos + matchRanges[rangeIdx]!.len
+        matchEndPos = merged[rangeIdx]!.end
         inMatch = true
         rangeIdx++
       }
@@ -179,7 +156,7 @@ function highlightSearchResult(
 
 export function useBookViewLineRenderer(
   settings: SettingsStore,
-  diacriticsState: ReturnType<typeof computed<number>>,
+  diacriticsState: import('vue').ComputedRef<number>,
   getProps: () => LineRenderProps,
 ) {
   // Cache rendered HTML per line — avoids re-running applyDiacriticsFilter (DOM TreeWalker)
@@ -213,8 +190,8 @@ export function useBookViewLineRenderer(
         p.currentMatchOccurrence ?? 0,
       )
     if (lineIndex === p.searchHighlightLineIndex) {
-      if (p.searchHighlightSnippet && p.searchHighlightTerms?.length) {
-        content = highlightSearchResult(raw, content, p.searchHighlightSnippet, p.searchHighlightTerms)
+      if (p.searchHighlightSnippet) {
+        content = highlightFromSnippet(content, p.searchHighlightSnippet)
       } else if (p.searchHighlightQuery?.trim()) {
         content = highlightMatches(content, p.searchHighlightQuery, false, -1)
       }

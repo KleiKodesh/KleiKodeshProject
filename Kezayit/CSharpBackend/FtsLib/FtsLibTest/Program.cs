@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -8,18 +8,18 @@ namespace FtsLibTest
     /// CLI entry point.
     ///
     /// Commands:
-    ///   build   [tier]  — build index, open HTML report
-    ///   search  [tier]  — search existing index, open HTML report
-    ///   runall  [tier]  — build + search in one run, open single combined HTML report
+    ///   build   [tier]  � build index, open HTML report
+    ///   search  [tier]  � search existing index, open HTML report
+    ///   runall  [tier]  � build + search in one run, open single combined HTML report
     ///
     /// Tiers: 500k (default) | 1m | 3m | full
     ///
     /// Examples:
-    ///   FtsLibTest.exe                  → runall 500k
-    ///   FtsLibTest.exe build            → build 500k
-    ///   FtsLibTest.exe build full       → build full DB
-    ///   FtsLibTest.exe search 3m        → search 3m index
-    ///   FtsLibTest.exe runall 1m        → build + search 1m, combined report
+    ///   FtsLibTest.exe                  ? runall 500k
+    ///   FtsLibTest.exe build            ? build 500k
+    ///   FtsLibTest.exe build full       ? build full DB
+    ///   FtsLibTest.exe search 3m        ? search 3m index
+    ///   FtsLibTest.exe runall 1m        ? build + search 1m, combined report
     /// </summary>
     internal class Program
     {
@@ -97,7 +97,7 @@ namespace FtsLibTest
             }
         }
 
-        // ── Combined build + search ───────────────────────────────────
+        // ?? Combined build + search ???????????????????????????????????
 
         private static void RunAll(string[] args)
         {
@@ -127,27 +127,27 @@ namespace FtsLibTest
             fragments.Add(searchFragment);
 
             HtmlReport.CombineAndOpen(
-                $"FTS Full Report — {label.ToUpper()}",
+                $"FTS Full Report � {label.ToUpper()}",
                 fragments,
                 path);
         }
 
-        // ── Usage ─────────────────────────────────────────────────────
+        // ?? Usage ?????????????????????????????????????????????????????
 
         private static void PrintUsage()
         {
             Console.WriteLine("Usage:");
-            Console.WriteLine("  FtsLibTest.exe                        — runall 500k (default)");
-            Console.WriteLine("  FtsLibTest.exe build  [tier]          — build index");
-            Console.WriteLine("  FtsLibTest.exe search [tier]          — search index");
-            Console.WriteLine("  FtsLibTest.exe runall [tier]          — build + search, combined report");
-            Console.WriteLine("  FtsLibTest.exe query  [tier] \"query\"  — ad-hoc query with snippets");
-            Console.WriteLine("  FtsLibTest.exe parsertest              — QueryParser unit tests (no index needed)");
-            Console.WriteLine("  FtsLibTest.exe orderedtest             — ordered-search unit tests (no index needed)");
-            Console.WriteLine("  FtsLibTest.exe worddist                — word-distance unit tests (no index needed)");
-            Console.WriteLine("  FtsLibTest.exe speed  [tier]          — speed breakdown by pipeline phase");
-            Console.WriteLine("  FtsLibTest.exe perf   [tier]          — full performance battery (all features)");
-            Console.WriteLine("  FtsLibTest.exe wdiag  [tier] query    — wildcard expansion diagnostic");
+            Console.WriteLine("  FtsLibTest.exe                        � runall 500k (default)");
+            Console.WriteLine("  FtsLibTest.exe build  [tier]          � build index");
+            Console.WriteLine("  FtsLibTest.exe search [tier]          � search index");
+            Console.WriteLine("  FtsLibTest.exe runall [tier]          � build + search, combined report");
+            Console.WriteLine("  FtsLibTest.exe query  [tier] \"query\"  � ad-hoc query with snippets");
+            Console.WriteLine("  FtsLibTest.exe parsertest              � QueryParser unit tests (no index needed)");
+            Console.WriteLine("  FtsLibTest.exe orderedtest             � ordered-search unit tests (no index needed)");
+            Console.WriteLine("  FtsLibTest.exe worddist                � word-distance unit tests (no index needed)");
+            Console.WriteLine("  FtsLibTest.exe speed  [tier]          � speed breakdown by pipeline phase");
+            Console.WriteLine("  FtsLibTest.exe perf   [tier]          � full performance battery (all features)");
+            Console.WriteLine("  FtsLibTest.exe wdiag  [tier] query    � wildcard expansion diagnostic");
             Console.WriteLine();
             Console.WriteLine("Tiers: 500k (default) | 1m | 3m | full");
             Console.WriteLine();

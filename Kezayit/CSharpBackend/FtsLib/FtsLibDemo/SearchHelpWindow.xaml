@@ -107,47 +107,28 @@
                         </Grid>
                     </Border>
 
-                    <!-- Row 1: literal -->
+                    <!-- Row 1: wildcard -->
                     <Border Style="{StaticResource OddRow}">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="160"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="מילה" Style="{StaticResource PatternCell}"/>
+                            <TextBlock Grid.Column="0" Text="*מילה*" Style="{StaticResource PatternCell}"/>
                             <TextBlock Grid.Column="1" Style="{StaticResource DescCell}">
-                                <Run Text="חיפוש מדויק. כל המילים חייבות להופיע בשורה."/>
-                                <LineBreak/>
-                                <Run Text="דוגמה: " Foreground="#888888"/>
-                                <Run Text="משה תורה" FontFamily="Consolas, Courier New" Foreground="#1A5490"/>
-                            </TextBlock>
-                        </Grid>
-                    </Border>
-
-                    <!-- Row 2: prefix wildcard -->
-                    <Border Style="{StaticResource EvenRow}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="160"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="מילה*" Style="{StaticResource PatternCell}"/>
-                            <TextBlock Grid.Column="1" Style="{StaticResource DescCell}">
-                                <Run Text="כוכבית — תו-כלשהו (אפס או יותר תווים)."/>
+                                <Run Text="כוכבית — (לפני או אחרי המילה) תחיליות וסופיות."/>
                                 <LineBreak/>
                                 <Run Text="דוגמה: " Foreground="#888888"/>
                                 <Run Text="ישר*" FontFamily="Consolas, Courier New" Foreground="#1A5490"/>
-                                <Run Text=" → ישראל, ישרים, ישרות…"/>
-                                <LineBreak/>
-                                <Run Text="דוגמה: " Foreground="#888888"/>
+                                <Run Text=" → ישראל, ישרים…   "/>
                                 <Run Text="*לום" FontFamily="Consolas, Courier New" Foreground="#1A5490"/>
-                                <Run Text=" → שלום, עולם, ירושלום…"/>
+                                <Run Text=" → שלום, עולם…"/>
                             </TextBlock>
                         </Grid>
                     </Border>
 
-                    <!-- Row 3: optional char -->
-                    <Border Style="{StaticResource OddRow}">
+                    <!-- Row 2: optional char -->
+                    <Border Style="{StaticResource EvenRow}">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="160"/>
@@ -155,21 +136,17 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="מיל?ה" Style="{StaticResource PatternCell}"/>
                             <TextBlock Grid.Column="1" Style="{StaticResource DescCell}">
-                                <Run Text="שאלתית — התו שלפניה אופציונלי (עם או בלי)."/>
+                                <Run Text="שאלתית — (כתיב חסר) התו שלפני הסימן שאלה אופציונלי."/>
                                 <LineBreak/>
                                 <Run Text="דוגמה: " Foreground="#888888"/>
                                 <Run Text="שלו?ם" FontFamily="Consolas, Courier New" Foreground="#1A5490"/>
                                 <Run Text=" → שלום או שלם"/>
-                                <LineBreak/>
-                                <Run Text="דוגמה: " Foreground="#888888"/>
-                                <Run Text="בו?א" FontFamily="Consolas, Courier New" Foreground="#1A5490"/>
-                                <Run Text=" → בוא או בא"/>
                             </TextBlock>
                         </Grid>
                     </Border>
 
-                    <!-- Row 4: fuzzy -->
-                    <Border Style="{StaticResource EvenRow}">
+                    <!-- Row 3: fuzzy -->
+                    <Border Style="{StaticResource OddRow}">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="160"/>
@@ -177,7 +154,7 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="מילה~" Style="{StaticResource PatternCell}"/>
                             <TextBlock Grid.Column="1" Style="{StaticResource DescCell}">
-                                <Run Text="טילדה — חיפוש מטושטש, מרחק עריכה 1 (ברירת מחדל)."/>
+                                <Run Text="טילדה — חיפוש מטושטש, מרחק עריכה 1."/>
                                 <LineBreak/>
                                 <Run Text="דוגמה: " Foreground="#888888"/>
                                 <Run Text="יצחק~" FontFamily="Consolas, Courier New" Foreground="#1A5490"/>
@@ -186,8 +163,8 @@
                         </Grid>
                     </Border>
 
-                    <!-- Row 5: fuzzy distance -->
-                    <Border Style="{StaticResource OddRow}">
+                    <!-- Row 4: fuzzy distance -->
+                    <Border Style="{StaticResource EvenRow}">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="160"/>
@@ -204,8 +181,8 @@
                         </Grid>
                     </Border>
 
-                    <!-- Row 6: OR -->
-                    <Border Style="{StaticResource EvenRow}" CornerRadius="0,0,4,4">
+                    <!-- Row 5: OR -->
+                    <Border Style="{StaticResource OddRow}" CornerRadius="0,0,4,4">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="160"/>
@@ -213,16 +190,15 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="א | ב" Style="{StaticResource PatternCell}"/>
                             <TextBlock Grid.Column="1" Style="{StaticResource DescCell}">
-                                <Run Text="מקף אנכי — OR: מספיק שאחת מהמילות יופיע."/>
+                                <Run Text="מקף אנכי — OR: מספיק שאחת מהמילים תופיע. ניתן לכתוב עם רווחים או בלעדיהם."/>
                                 <LineBreak/>
                                 <Run Text="דוגמה: " Foreground="#888888"/>
                                 <Run Text="משה | אהרן תורה" FontFamily="Consolas, Courier New" Foreground="#1A5490"/>
+                                <Run Text=" → (משה או אהרן) וגם תורה"/>
                                 <LineBreak/>
-                                <Run Text="→ שורות שיש בהן (משה או אהרן) וגם תורה"/>
-                                <LineBreak/>
-                                <Run Text="ניתן לשרשר: " Foreground="#888888"/>
-                                <Run Text="א | ב | ג*" FontFamily="Consolas, Courier New" Foreground="#1A5490"/>
-                                <Run Text=" — כולל הרחבת כוכבית"/>
+                                <Run Text="דוגמה: " Foreground="#888888"/>
+                                <Run Text="משה|אהרן תורה" FontFamily="Consolas, Courier New" Foreground="#1A5490"/>
+                                <Run Text=" → זהה לדוגמה למעלה"/>
                             </TextBlock>
                         </Grid>
                     </Border>
@@ -230,25 +206,80 @@
                     <!-- Divider -->
                     <Border Height="1" Background="#E0E0E0" Margin="0,14,0,10"/>
 
-                    <!-- Notes -->
-                    <TextBlock TextWrapping="Wrap" Foreground="#555555" FontSize="12" LineHeight="20">
-                        <Run FontWeight="SemiBold">שילוב מילים: </Run>
-                        <Run>כל המילים מחוברות ב-AND — כולן חייבות להופיע באותה שורה.</Run>
-                        <LineBreak/>
-                        <Run FontWeight="SemiBold">OR (|): </Run>
-                        <Run>המקף האנכי חייב להיות מופרד ברווחים משני הצדדים.</Run>
-                        <LineBreak/>
-                        <Run FontWeight="SemiBold">ניקוד: </Run>
-                        <Run>מתעלם מניקוד — ניתן לחפש עם ניקוד או בלעדיו.</Run>
-                        <LineBreak/>
-                        <Run FontWeight="SemiBold">כוכבית ושאלתית: </Run>
-                        <Run>ניתן לשלב באותה מילה, למשל </Run>
-                        <Run FontFamily="Consolas, Courier New" Foreground="#1A5490">שלו?ם*</Run>
-                        <Run>.</Run>
-                        <LineBreak/>
-                        <Run FontWeight="SemiBold">טילדה + כוכבית/שאלתית: </Run>
-                        <Run>לא ניתן לשלב — הכוכבית/שאלתית גוברת.</Run>
-                    </TextBlock>
+                    <!-- Notes section header -->
+                    <TextBlock Text="הערות נוספות"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               Foreground="#888888"
+                               Margin="0,0,0,6"/>
+
+                    <!-- Notes table -->
+                    <Border Background="#E8EEF5" CornerRadius="4,4,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="160"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="תבנית" Style="{StaticResource HeaderCell}"/>
+                            <TextBlock Grid.Column="1" Text="הסבר" Style="{StaticResource HeaderCell}"/>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource OddRow}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="160"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="שרשרת OR" Style="{StaticResource PatternCell}"/>
+                            <TextBlock Grid.Column="1" Style="{StaticResource DescCell}">
+                                <Run Text="א | ב | ג תורה" FontFamily="Consolas, Courier New" Foreground="#1A5490"/>
+                                <Run Text=" → (א או ב או ג) וגם תורה. השרשרת נשברת כשמילה מופיעה ללא מקף לפניה."/>
+                            </TextBlock>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource EvenRow}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="160"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="קבוצות נפרדות" Style="{StaticResource PatternCell}"/>
+                            <TextBlock Grid.Column="1" Style="{StaticResource DescCell}">
+                                <Run Text="א | ב ג | ד" FontFamily="Consolas, Courier New" Foreground="#1A5490"/>
+                                <Run Text=" → (א או ב) וגם (ג או ד)."/>
+                            </TextBlock>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource OddRow}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="160"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="כוכבית + שאלתית" Style="{StaticResource PatternCell}"/>
+                            <TextBlock Grid.Column="1" Style="{StaticResource DescCell}">
+                                <Run Text="ניתן לשלב באותה מילה, למשל "/>
+                                <Run Text="שלו?ם*" FontFamily="Consolas, Courier New" Foreground="#1A5490"/>
+                                <Run Text="."/>
+                            </TextBlock>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource EvenRow}" CornerRadius="0,0,4,4">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="160"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="טילדה + כוכבית" Style="{StaticResource PatternCell}" Foreground="#C0392B"/>
+                            <TextBlock Grid.Column="1" Style="{StaticResource DescCell}" Foreground="#C0392B">
+                                <Run Text="לא ניתן לשלב — הכוכבית/שאלתית גוברת."/>
+                            </TextBlock>
+                        </Grid>
+                    </Border>
 
                 </StackPanel>
             </ScrollViewer>

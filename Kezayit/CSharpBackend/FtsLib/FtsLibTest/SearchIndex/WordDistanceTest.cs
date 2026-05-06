@@ -1,5 +1,6 @@
-using FtsLib.Core;
-using FtsLib.Seforim;
+using FtsLib.Search;
+using FtsLib.SeforimDb;
+using FtsLib.Snippets;
 using System;
 using System.Collections.Generic;
 using System.Text;

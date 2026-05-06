@@ -1,4 +1,5 @@
-using FtsLib.Core;
+using FtsLib.Snippets;
+using FtsLib.Tokenization;
 using System;
 using System.Collections.Generic;
 using System.Text;

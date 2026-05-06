@@ -1,4 +1,5 @@
-using FtsLib.Core;
+using FtsLib.Indexing;
+using FtsLib.Search;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -47,8 +48,8 @@ namespace FtsLibTest
 
             try
             {
-                int anchorLen = WildcardExpander.AnchorLength(pattern);
-                string like   = WildcardExpander.ToLikePattern(pattern);
+                int anchorLen = HebrewWildcardExpander.AnchorLength(pattern);
+                string like   = HebrewWildcardExpander.ToLikePattern(pattern);
 
                 Console.WriteLine($"Pattern    : {pattern}");
                 Console.WriteLine($"LIKE       : {like}");

@@ -1,4 +1,4 @@
-using FtsLib.Seforim;
+using FtsLib.SeforimDb;
 using KezayitLib.Bridge;
 using Microsoft.Web.WebView2.WinForms;
 using System;

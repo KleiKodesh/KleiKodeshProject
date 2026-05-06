@@ -1,4 +1,4 @@
-using FtsLib.Seforim;
+using FtsLib.SeforimDb;
 using System;
 using System.IO;
 using System.Threading;

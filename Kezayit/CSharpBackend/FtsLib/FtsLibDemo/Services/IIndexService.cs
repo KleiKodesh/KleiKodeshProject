@@ -38,15 +38,15 @@ namespace FtsLibDemo.Services
         void Close();
 
         /// <summary>
-        /// The active <see cref="FtsLib.Seforim.SeforimIndex"/> instance.
+        /// The active <see cref="FtsLib.SeforimDb.SeforimIndex"/> instance.
         /// Null when no index is open. Used by ISearchService.
         /// </summary>
-        FtsLib.Seforim.SeforimIndex Index { get; }
+        FtsLib.SeforimDb.SeforimIndex Index { get; }
 
         /// <summary>
         /// Opens a temporary index for the partially-built index path during a live build.
         /// Returns null if no segments exist yet.
         /// </summary>
-        FtsLib.Seforim.SeforimIndex GetLiveIndex(string indexPath, string dbPath);
+        FtsLib.SeforimDb.SeforimIndex GetLiveIndex(string indexPath, string dbPath);
     }
 }

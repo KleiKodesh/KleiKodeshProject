@@ -61,46 +61,53 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Core\ConcatIterator.cs" />
-    <Compile Include="Core\DeleteSet.cs" />
-    <Compile Include="Core\FilteringIterator.cs" />
-    <Compile Include="Core\IndexPaths.cs" />
-    <Compile Include="Core\PostingIterator.cs" />
-    <Compile Include="Core\PostingMatcher.cs" />
-    <Compile Include="Core\QueryParser.cs" />
-    <Compile Include="Core\SearchExecutor.cs" />
-    <Compile Include="Core\SegmentHandle.cs" />
-    <Compile Include="Core\UnionIterator.cs" />
-    <Compile Include="Core\SegmentWal.cs" />
-    <Compile Include="Core\PostingStream.cs" />
-    <Compile Include="Core\RamIndex.cs" />
-    <Compile Include="Core\IndexWriter.cs" />
-    <Compile Include="Core\IndexReader.cs" />
-    <Compile Include="Core\VarInt.cs" />
-    <Compile Include="Core\SegmentStore.cs" />
-    <Compile Include="Core\SegmentLiveState.cs" />
-    <Compile Include="Core\SegmentWriter.cs" />
-    <Compile Include="Core\SegmentMerger.cs" />
-    <Compile Include="Core\SegmentReader.cs" />
-    <Compile Include="Core\RamIndexEntry.cs" />
-    <Compile Include="Core\FuzzyExpander.cs" />
-    <Compile Include="Core\Levenshtein.cs" />
-    <Compile Include="Core\WildcardExpander.cs" />
-    <Compile Include="Misc\ZayitDb.cs" />
-    <Compile Include="Seforim\SearchResult.cs" />
-    <Compile Include="Seforim\SnippetResult.cs" />
-    <Compile Include="Seforim\SeforimIndex.cs" />
-    <Compile Include="Seforim\Internal\IndexingPipeline.cs" />
-    <Compile Include="Seforim\Internal\SearchPipeline.cs" />
-    <Compile Include="Seforim\Internal\SnippetPipeline.cs" />
+    <!-- Indexing: building and maintaining the on-disk index -->
+    <Compile Include="Indexing\CorruptIndexException.cs" />
+    <Compile Include="Indexing\DeleteSet.cs" />
+    <Compile Include="Indexing\IndexDirectory.cs" />
+    <Compile Include="Indexing\IndexWriter.cs" />
+    <Compile Include="Indexing\RamIndex.cs" />
+    <Compile Include="Indexing\RamIndexEntry.cs" />
+    <Compile Include="Indexing\SegmentHandle.cs" />
+    <Compile Include="Indexing\SegmentLiveState.cs" />
+    <Compile Include="Indexing\SegmentMerger.cs" />
+    <Compile Include="Indexing\SegmentReader.cs" />
+    <Compile Include="Indexing\SegmentStore.cs" />
+    <Compile Include="Indexing\SegmentWal.cs" />
+    <Compile Include="Indexing\SegmentWriter.cs" />
+    <!-- Search: query execution, posting list iteration, expansion -->
+    <Compile Include="Search\ConcatIterator.cs" />
+    <Compile Include="Search\FilteringIterator.cs" />
+    <Compile Include="Search\FuzzyExpander.cs" />
+    <Compile Include="Search\IndexReader.cs" />
+    <Compile Include="Search\Levenshtein.cs" />
+    <Compile Include="Search\PostingIntersector.cs" />
+    <Compile Include="Search\PostingIterator.cs" />
+    <Compile Include="Search\PostingMatcher.cs" />
+    <Compile Include="Search\PostingStream.cs" />
+    <Compile Include="Search\ProximityWindow.cs" />
+    <Compile Include="Search\QueryParser.cs" />
+    <Compile Include="Search\UnionIterator.cs" />
+    <Compile Include="Search\VarInt.cs" />
+    <Compile Include="Search\HebrewWildcardExpander.cs" />
+    <!-- Tokenization: HTML-aware word extraction and normalization -->
+    <Compile Include="Tokenization\HtmlBlockTags.cs" />
+    <Compile Include="Tokenization\HtmlWordScanner.cs" />
+    <Compile Include="Tokenization\Tokenizer.cs" />
+    <Compile Include="Tokenization\TokenStream.cs" />
+    <!-- Snippets: highlighted excerpt generation -->
+    <Compile Include="Snippets\SnippetBuilder.cs" />
+    <Compile Include="Snippets\SnippetResult.cs" />
+    <!-- Seforim: public API over the seforim database -->
+    <Compile Include="SeforimDb\IndexingPipeline.cs" />
+    <Compile Include="SeforimDb\SearchPipeline.cs" />
+    <Compile Include="SeforimDb\SearchResult.cs" />
+    <Compile Include="SeforimDb\SeforimIndex.cs" />
+    <Compile Include="SeforimDb\SnippetPipeline.cs" />
+    <Compile Include="SeforimDb\SnippetResult.cs" />
+    <!-- Misc -->
+    <Compile Include="SeforimDb\ZayitDb.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Core\HtmlScannerHelpers.cs" />
-    <Compile Include="Core\HtmlTextScanner.cs" />
-    <Compile Include="Core\ProximityWindow.cs" />
-    <Compile Include="Core\SnippetBuilder.cs" />
-    <Compile Include="Core\SnippetResult.cs" />
-    <Compile Include="Core\TokenStream.cs" />
-    <Compile Include="Core\Tokenizer.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

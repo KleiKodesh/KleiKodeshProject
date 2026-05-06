@@ -1,6 +1,7 @@
-using FtsLib.Core;
-using FtsLib.Misc;
-using FtsLib.Seforim;
+using FtsLib.Indexing;
+using FtsLib.Search;
+using FtsLib.SeforimDb;
+using FtsLib.Tokenization;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -349,7 +350,7 @@ namespace FtsLibTest
                 if (group.IsFuzzy)
                     FuzzyExpander.Expand(group.Pattern, group.FuzzyDistance, segments);
                 else if (group.IsWildcard)
-                    WildcardExpander.Expand(group.Pattern, segments);
+                    HebrewWildcardExpander.Expand(group.Pattern, segments);
             }
             swA.Stop();
             long expandMs = swA.ElapsedMilliseconds;

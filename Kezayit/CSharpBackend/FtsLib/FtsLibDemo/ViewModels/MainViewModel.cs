@@ -276,6 +276,16 @@ namespace FtsLibDemo.ViewModels
 
                 TryOpenExistingIndex();
                 StatusText = "האינדקס נבנה בהצלחה";
+
+                // If the user already ran a search during the build (live search),
+                // automatically resume it now against the complete index so they
+                // get the full result set without having to search again manually.
+                if (!string.IsNullOrEmpty(_currentQuery) && Results.Count > 0)
+                {
+                    _searchQuery = _currentQuery;
+                    OnPropertyChanged(nameof(SearchQuery));
+                    await OnSearchAsync();
+                }
             }
         }
 
@@ -294,11 +304,20 @@ namespace FtsLibDemo.ViewModels
 
             if (index == null || string.IsNullOrWhiteSpace(_searchQuery)) return;
 
-            Results.Clear();
-            ResultCountText = string.Empty;
-            IsSearching     = true;
-            CurrentQuery    = _searchQuery.Trim();
-            StatusText      = isLiveSearch ? "מחפש (בזמן בניית אינדקס)…" : "מחפש…";
+            // Resume: if the query is the same as the current results and we are
+            // resuming after a live-index search was interrupted, skip already-shown results.
+            bool isSameQuery = string.Equals(_searchQuery.Trim(), _currentQuery, StringComparison.Ordinal);
+            int skipCount = (isSameQuery && Results.Count > 0) ? Results.Count : 0;
+
+            if (skipCount == 0)
+            {
+                Results.Clear();
+                ResultCountText = string.Empty;
+            }
+
+            IsSearching  = true;
+            CurrentQuery = _searchQuery.Trim();
+            StatusText   = isLiveSearch ? "מחפש (בזמן בניית אינדקס)…" : "מחפש…";
 
             string query = CurrentQuery;
 
@@ -319,7 +338,8 @@ namespace FtsLibDemo.ViewModels
 
             try
             {
-                var status = await _searchService.SearchStreamingAsync(query, OnBatch, ct, index, _maxWordDistance, _isOrderedSearch);
+                var status = await _searchService.SearchStreamingAsync(
+                    query, OnBatch, ct, index, _maxWordDistance, _isOrderedSearch, skipCount);
                 if (!ct.IsCancellationRequested)
                 {
                     StatusText = status;

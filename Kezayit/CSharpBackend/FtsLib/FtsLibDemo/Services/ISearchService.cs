@@ -1,4 +1,4 @@
-using FtsLib.Seforim;
+using FtsLib.SeforimDb;
 using FtsLibDemo.ViewModels;
 using System;
 using System.Collections.Generic;
@@ -22,12 +22,17 @@ namespace FtsLibDemo.Services
         /// The <see cref="SeforimIndex"/> to search against.
         /// Pass the live index during a build, or the open index for normal searches.
         /// </param>
+        /// <param name="skipCount">
+        /// Number of matching results to skip before streaming — used to resume a
+        /// previously interrupted search from where it left off.
+        /// </param>
         Task<string> SearchStreamingAsync(
             string                                  query,
             Action<IReadOnlyList<SearchResultItem>> onBatch,
             CancellationToken                       ct,
             SeforimIndex                            index,
             int                                     maxWordDistance = 10,
-            bool                                    requireOrdered  = false);
+            bool                                    requireOrdered  = false,
+            int                                     skipCount       = 0);
     }
 }

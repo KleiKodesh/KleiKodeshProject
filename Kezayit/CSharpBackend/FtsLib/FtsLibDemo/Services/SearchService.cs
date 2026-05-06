@@ -1,4 +1,4 @@
-using FtsLib.Seforim;
+using FtsLib.SeforimDb;
 using FtsLibDemo.ViewModels;
 using System;
 using System.Collections.Generic;
@@ -22,12 +22,13 @@ namespace FtsLibDemo.Services
             CancellationToken                       ct,
             SeforimIndex                            index,
             int                                     maxWordDistance = 10,
-            bool                                    requireOrdered  = false)
+            bool                                    requireOrdered  = false,
+            int                                     skipCount       = 0)
         {
             if (index == null)
                 return Task.FromResult("אין אינדקס פתוח");
 
-            return Task.Run(() => RunSearch(query, index, onBatch, ct, maxWordDistance, requireOrdered), ct);
+            return Task.Run(() => RunSearch(query, index, onBatch, ct, maxWordDistance, requireOrdered, skipCount), ct);
         }
 
         private static string RunSearch(
@@ -36,13 +37,15 @@ namespace FtsLibDemo.Services
             Action<IReadOnlyList<SearchResultItem>> onBatch,
             CancellationToken                       ct,
             int                                     maxWordDistance,
-            bool                                    requireOrdered)
+            bool                                    requireOrdered,
+            int                                     skipCount)
         {
             if (string.IsNullOrWhiteSpace(query))
                 return "אין מילות חיפוש תקינות";
 
-            var batch = new List<SearchResultItem>(BatchSize);
-            int total = 0;
+            var batch   = new List<SearchResultItem>(BatchSize);
+            int total   = 0;
+            int skipped = 0;
 
             foreach (var result in index.Search(query, ct: ct))
             {
@@ -50,10 +53,11 @@ namespace FtsLibDemo.Services
 
                 var snippet = index.GenerateSnippet(result, requireOrdered);
 
-                // Filter: drop results where the query terms are too far apart,
-                // or (in ordered mode) where terms don't appear in query order.
                 if (!snippet.IsMatch || snippet.WordDistance > maxWordDistance)
                     continue;
+
+                // Skip already-shown results when resuming an interrupted search
+                if (skipped < skipCount) { skipped++; continue; }
 
                 batch.Add(new SearchResultItem(result.LineId, result.BookTitle, snippet.Html));
                 total++;
@@ -68,12 +72,12 @@ namespace FtsLibDemo.Services
             if (batch.Count > 0 && !ct.IsCancellationRequested)
                 onBatch(batch);
 
-            if (total == 0)
+            if (total == 0 && skipCount == 0)
                 return "לא נמצאו תוצאות";
 
             return ct.IsCancellationRequested
                 ? "החיפוש בוטל"
-                : $"נמצאו {total:N0} תוצאות";
+                : $"נמצאו {total + skipCount:N0} תוצאות";
         }
     }
 }

@@ -1,4 +1,5 @@
-using FtsLib.Core;
+using FtsLib.Indexing;
+using FtsLib.Search;
 using System;
 using System.Collections.Generic;
 using System.IO;
