@@ -94,6 +94,7 @@ namespace FtsLib.SeforimDb
             SegmentStore       store      = null,
             int                limit      = 0,
             Action<long>       onProgress = null,
+            Action             onFlush    = null,
             CancellationToken  ct         = default)
         {
             int resumeLineId = ReadResumeLineId(indexPath);
@@ -198,6 +199,7 @@ namespace FtsLib.SeforimDb
                         WriteProgressFile(indexPath, flushed);
                         Console.WriteLine($"[IndexingPipeline] Progress file updated: lineId={flushed} (written={lastWrittenLineId}, n={n})");
                         lastProgressLineId = flushed;
+                        onFlush?.Invoke();
                     }
                 }
 

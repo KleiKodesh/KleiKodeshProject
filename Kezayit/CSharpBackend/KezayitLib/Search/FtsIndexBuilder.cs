@@ -61,8 +61,10 @@ namespace KezayitLib.Search
                 _state.MarkReadyDirect();
             }
 
-            int  lastSegmentCount = 0;
-            var  segmentMarkers   = new System.Collections.Generic.List<double>();
+            var  segmentMarkers = new System.Collections.Generic.List<double>();
+            double lastPct      = resumeOffset > 0 && totalLines > 0
+                                    ? Math.Min(99.9, resumeOffset * 100.0 / totalLines)
+                                    : 0.0;
 
             // Push an initial progress event so the frontend shows the correct
             // starting percentage immediately — before the first 5000-line tick.
@@ -81,34 +83,29 @@ namespace KezayitLib.Search
                     if (totalLines > 0 && sessionCount % 5000 == 0)
                     {
                         long  totalIndexed = resumeOffset + sessionCount;
-                        double pct = Math.Min(99.9, totalIndexed * 100.0 / totalLines);
-
-                        // Check if a new segment was flushed since the last tick.
-                        int currentSegmentCount = 0;
-                        try
-                        {
-                            if (Directory.Exists(FtsIndexState.FtsIndexPath))
-                                currentSegmentCount = Directory.GetFiles(FtsIndexState.FtsIndexPath, "seg_*.dat").Length;
-                        }
-                        catch { }
-
-                        if (currentSegmentCount > lastSegmentCount)
-                        {
-                            for (int i = lastSegmentCount; i < currentSegmentCount; i++)
-                                segmentMarkers.Add(Math.Round(pct, 1));
-                            lastSegmentCount = currentSegmentCount;
-                        }
+                        lastPct = Math.Min(99.9, totalIndexed * 100.0 / totalLines);
 
                         // As soon as the first segment is flushed the index is searchable.
-                        // Push isReady=true once so the frontend can enable search immediately,
-                        // while isIndexing=true signals that results are still partial.
                         if (!partialReadyPushed && FtsIndexState.ValidateFtsIndex() == null)
                         {
                             partialReadyPushed = true;
                             _state.MarkReadyDirect();
                         }
 
-                        PushProgress(partialReadyPushed, true, pct, (int)totalIndexed, (int)totalLines, "", segmentMarkers);
+                        PushProgress(partialReadyPushed, true, lastPct, (int)totalIndexed, (int)totalLines, "", segmentMarkers);
+                    }
+                }, onFlush: () =>
+                {
+                    // Fires on the indexing thread each time a segment write completes —
+                    // independently of the 5000-line tick, so the marker lands at the
+                    // exact percentage when the flush actually finished.
+                    flushCount++;
+                    segmentMarkers.Add(Math.Round(lastPct, 1));
+
+                    if (!partialReadyPushed && FtsIndexState.ValidateFtsIndex() == null)
+                    {
+                        partialReadyPushed = true;
+                        _state.MarkReadyDirect();
                     }
                 }, ct: cts.Token);
 

@@ -130,9 +130,10 @@ namespace FtsLib.SeforimDb
         /// index is valid and will be resumed on the next call.
         /// </summary>
         public bool BuildIndex(int limit = 0, Action<long> onProgress = null,
+                               Action onFlush = null,
                                CancellationToken ct = default)
         {
-            bool result = IndexingPipeline.Build(_indexPath, _dbPath, _store, limit, onProgress, ct);
+            bool result = IndexingPipeline.Build(_indexPath, _dbPath, _store, limit, onProgress, onFlush, ct);
             if (_store.IsWiped) ResetStore();
             return result;
         }
