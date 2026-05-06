@@ -53,6 +53,8 @@ namespace KezayitLib.Search
             _searches[searchId] = cts;
             _bridge.Reply(id, new { searchId = searchId });
 
+            Console.WriteLine($"[FtsSearchExecutor] Search {searchId} started — query=\"{query}\" skip={skipCount} maxDist={maxWordDist} ordered={reqOrdered} context={contextWords}");
+
             Task searchTask = Task.Run(
                 () => RunSearch(searchId, query, skipCount, maxWordDist, reqOrdered, contextWords, index, cts.Token));
 
@@ -80,6 +82,7 @@ namespace KezayitLib.Search
                                int maxWordDistance, bool requireOrdered, int contextWords,
                                SeforimIndex index, CancellationToken ct)
         {
+            int totalResults = 0;
             try
             {
                 // Batching strategy:
@@ -134,6 +137,7 @@ namespace KezayitLib.Search
                         snippet      = snippet.Html,
                         matchedTerms = matchedTerms.ToArray()
                     });
+                    totalResults++;
 
                     bool shouldFlush;
                     if (useTimerOnly)
@@ -168,10 +172,12 @@ namespace KezayitLib.Search
                     PostSearch(new { type = "searchBatch", searchId = searchId,
                                      results = batch.ToArray() });
 
+                Console.WriteLine($"[FtsSearchExecutor] Search {searchId} complete — query=\"{query}\" results={totalResults} skipped={skipped}");
                 PostSearch(new { type = "searchComplete", searchId = searchId });
             }
             catch (OperationCanceledException)
             {
+                Console.WriteLine($"[FtsSearchExecutor] Search {searchId} cancelled — query=\"{query}\" results so far={totalResults}");
                 PostSearch(new { type = "searchCancelled", searchId = searchId });
             }
             catch (Exception ex)

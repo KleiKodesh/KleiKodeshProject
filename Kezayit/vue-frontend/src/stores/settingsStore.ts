@@ -25,7 +25,7 @@ const DEFAULTS = {
   defaultAutoSyncCommentary: false,
   // Number of words of context shown before and after the matched terms in a search snippet.
   // Converted to visible chars (× CHARS_PER_WORD) before being sent to the C# snippet builder.
-  searchContextMarginWords: 8,
+  searchContextMarginWords: 30,
 }
 
 export const useSettingsStore = defineStore('settings', () => {

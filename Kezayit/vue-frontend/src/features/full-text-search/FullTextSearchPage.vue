@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useZoomHandler, ZOOM_CONFIG } from '@/composables/useZoom'
@@ -27,6 +27,25 @@ const isSearchActive = computed(() => tabStore.activeTab?.route === '/search')
 useZoomHandler({ zoom, enabled: isSearchActive })
 
 const { state: indexingState } = useFullTextSearchIndexingStatus()
+
+// Keep the overlay visible for a short window after indexing completes so the
+// "finalizing" message is readable. C# sends isIndexing=false at 100% in one shot —
+// without this delay the overlay would disappear before the user sees the message.
+const showIndexingOverlay = ref(false)
+let overlayHideTimer: ReturnType<typeof setTimeout> | null = null
+watch(
+  indexingState,
+  (s) => {
+    if (s.isIndexing) {
+      if (overlayHideTimer) { clearTimeout(overlayHideTimer); overlayHideTimer = null }
+      showIndexingOverlay.value = true
+    } else if (showIndexingOverlay.value) {
+      // Was showing — keep it up briefly so the user sees the final state
+      overlayHideTimer = setTimeout(() => { showIndexingOverlay.value = false }, 1500)
+    }
+  },
+  { deep: true },
+)
 
 const {
   results,
@@ -78,7 +97,7 @@ let lastScrollOffset: number | undefined
 
 const isAdvancedActive = computed(
   () => maxWordDistance.value !== 10 || requireOrdered.value
-     || settings.searchContextMarginWords !== 8,
+     || settings.searchContextMarginWords !== 30,
 )
 
 useDropdownClose(
@@ -178,7 +197,10 @@ onMounted(async () => {
 useEventListener(document, 'visibilitychange', () => {
   if (document.visibilityState === 'hidden') saveFilterState()
 })
-onBeforeUnmount(saveFilterState)
+onBeforeUnmount(() => {
+  saveFilterState()
+  if (overlayHideTimer) clearTimeout(overlayHideTimer)
+})
 </script>
 
 <template>
@@ -197,7 +219,7 @@ onBeforeUnmount(saveFilterState)
       @save-scroll="onSaveScroll"
     />
 
-    <FullTextSearchIndexingOverlay v-if="indexingState.isIndexing" :state="indexingState" />
+    <FullTextSearchIndexingOverlay v-if="showIndexingOverlay" :state="indexingState" />
 
     <FullTextSearchAdvancedPanel
       v-if="isAdvancedOpen"

@@ -111,7 +111,6 @@ namespace FtsLib.Indexing
             string outPath)
         {
             var entries = new List<(string, long, int, int)>();
-            const int REPORT_EVERY = 10_000;
             int  written  = 0;
             long writePos = 0;
 
@@ -159,8 +158,6 @@ namespace FtsLib.Indexing
                     ArrayPool<byte>.Shared.Return(termBytes);
 
                     written++;
-                    if (written % REPORT_EVERY == 0)
-                        Console.WriteLine($"[Merger]   L{srcLevel}→L{dstLevel}: {written:N0} terms  {writePos / 1024 / 1024:N0} MB");
                 }
             }
 

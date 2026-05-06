@@ -42,13 +42,14 @@ namespace FtsLib.SeforimDb
             string            query,
             string            indexPath,
             string            dbPath,
+            List<(string dat, string db)> livePaths,
             int               cap = 0,
             CancellationToken ct  = default)
         {
             var parsed = QueryParser.Parse(query);
             if (parsed.IsEmpty) yield break;
 
-            using (var reader = new IndexReader(indexPath))
+            using (var reader = new IndexReader(indexPath, livePaths))
             {
                 // Expand each group into a flat list of concrete terms.
                 // Within a group terms are OR-ed; across groups they are AND-ed.
@@ -113,12 +114,13 @@ namespace FtsLib.SeforimDb
         internal static IEnumerable<int> SearchIds(
             string            query,
             string            indexPath,
+            List<(string dat, string db)> livePaths,
             CancellationToken ct = default)
         {
             var parsed = QueryParser.Parse(query);
             if (parsed.IsEmpty) yield break;
 
-            using (var reader = new IndexReader(indexPath))
+            using (var reader = new IndexReader(indexPath, livePaths))
             {
                 var groups = new List<IEnumerable<string>>(parsed.Groups.Count);
 

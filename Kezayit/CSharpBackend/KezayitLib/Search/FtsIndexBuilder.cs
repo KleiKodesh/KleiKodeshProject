@@ -29,10 +29,7 @@ namespace KezayitLib.Search
         {
             CancellationTokenSource cts;
             if (!_state.TryStartBuilding(out cts))
-            {
-                Console.WriteLine("[SearchHandler] Already building, skipping");
                 return;
-            }
 
             SeforimIndex index = _state.GetIndex();
             Task task = Task.Run(() => RunBuild(cts, index));
@@ -51,7 +48,6 @@ namespace KezayitLib.Search
             if (resumeLineId > 0)
             {
                 try { resumeOffset = index.CountLinesUpTo(resumeLineId); } catch { }
-                Console.WriteLine($"[SearchHandler] Resume offset: {resumeOffset:N0} lines already indexed");
             }
 
             Console.WriteLine("[SearchHandler] FTS index build started");
@@ -63,7 +59,6 @@ namespace KezayitLib.Search
             if (partialReadyPushed)
             {
                 _state.MarkReadyDirect();
-                Console.WriteLine("[SearchHandler] Resuming with existing segments — partial index searchable");
             }
 
             int  lastSegmentCount = 0;
@@ -111,7 +106,6 @@ namespace KezayitLib.Search
                         {
                             partialReadyPushed = true;
                             _state.MarkReadyDirect();
-                            Console.WriteLine("[SearchHandler] First segment flushed — partial index searchable");
                         }
 
                         PushProgress(partialReadyPushed, true, pct, (int)totalIndexed, (int)totalLines, "", segmentMarkers);
@@ -124,16 +118,11 @@ namespace KezayitLib.Search
                 // but the DB had no new lines to index past the resume point yet).
                 // In that case we must not write the version stamp — the build is not done.
                 buildSucceeded = ranToCompletion;
-                if (!ranToCompletion)
-                    Console.WriteLine("[SearchHandler] BuildIndex returned no new lines — WAL recovery only, not marking complete");
             }
-            catch (OperationCanceledException)
-            {
-                Console.WriteLine("[SearchHandler] FTS index build cancelled");
-            }
+            catch (OperationCanceledException) { }
             catch (Exception ex)
             {
-                Console.WriteLine("[SearchHandler] FTS index build EXCEPTION: " + ex);
+                System.Diagnostics.Debug.WriteLine("[SearchHandler] FTS index build EXCEPTION: " + ex);
             }
 
             if (!buildSucceeded)
@@ -154,7 +143,6 @@ namespace KezayitLib.Search
             string validationError = FtsIndexState.ValidateFtsIndex();
             if (validationError != null)
             {
-                Console.WriteLine("[SearchHandler] FTS index invalid after build: " + validationError);
                 _state.TryMarkIdle(cts);
                 PushProgress(false, false, 100, 0, 0, "", null);
                 return;
@@ -188,18 +176,15 @@ namespace KezayitLib.Search
             SeforimIndex index;
             if (!_state.TryStartMerging(out index)) return;
 
-            Console.WriteLine("[SearchHandler] Background merge started");
-
             Task task = Task.Run(() =>
             {
                 try
                 {
                     index.Optimize();
-                    Console.WriteLine("[SearchHandler] Background merge complete");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine("[SearchHandler] Background merge failed (non-fatal): " + ex);
+                    System.Diagnostics.Debug.WriteLine("[SearchHandler] Background merge failed (non-fatal): " + ex);
                 }
                 finally
                 {

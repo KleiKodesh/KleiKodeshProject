@@ -1,5 +1,6 @@
 using FtsLib.Search;
 using System;
+using System.Collections.Generic;
 using System.IO;
 
 namespace FtsLib.Indexing
@@ -61,6 +62,19 @@ namespace FtsLib.Indexing
         public int LastFlushedLineId =>
             _store != null ? _store.LastFlushedLineId : int.MinValue;
 
+        /// <summary>
+        /// Returns a consistent snapshot of all live segment paths at the moment of
+        /// the call. Safe to call from any thread — the underlying SegmentLiveState
+        /// is locked during the snapshot.
+        ///
+        /// Use this to construct an IndexReader that never races with concurrent merges.
+        /// </summary>
+        public List<(string dat, string db)> GetLiveSegmentPaths()
+        {
+            if (_store == null) return new List<(string, string)>();
+            return _store.GetLiveSegmentPaths();
+        }
+
         public IndexWriter(string indexPath, bool useSkipList = true) : base(indexPath)
         {
             _useSkipList = useSkipList;
@@ -79,6 +93,22 @@ namespace FtsLib.Indexing
                 _store.Recover();
                 Console.WriteLine("[IndexWriter] Recovery complete.");
             }
+        }
+
+        /// <summary>
+        /// Creates an IndexWriter that reuses an existing SegmentStore.
+        /// Use this when the SegmentStore is owned externally (e.g. by SeforimIndex)
+        /// so that live segment state persists across build sessions and can be
+        /// shared with concurrent readers.
+        /// Recovery must have already been run on the store before passing it here.
+        /// </summary>
+        public IndexWriter(string indexPath, SegmentStore store, bool useSkipList = true)
+            : base(indexPath)
+        {
+            _useSkipList = useSkipList;
+            _ramIndex    = new RamIndex(useSkipList: useSkipList);
+            _deletes     = DeleteSet.Load(DeletesFile);
+            _store       = store;
         }
 
         /// <summary>

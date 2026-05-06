@@ -46,6 +46,10 @@ namespace FtsLib.Indexing
         // Read by the indexing thread — volatile for safe cross-thread visibility.
         internal volatile int LastFlushedLineId = int.MinValue;
 
+        // Set to true when WipeIndexDirectory() is called during recovery.
+        // SeforimIndex checks this after BuildIndex to know whether to reset the store.
+        internal bool IsWiped { get; private set; }
+
         internal SegmentStore(string dir)
         {
             if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
@@ -197,6 +201,7 @@ namespace FtsLib.Indexing
 
         private void WipeIndexDirectory()
         {
+            IsWiped = true;
             foreach (var file in Directory.GetFiles(_dir))
             {
                 try { File.Delete(file); } catch { /* best-effort */ }

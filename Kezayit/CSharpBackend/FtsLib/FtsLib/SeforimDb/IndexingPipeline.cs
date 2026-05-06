@@ -91,13 +91,25 @@ namespace FtsLib.SeforimDb
         internal static bool Build(
             string             indexPath,
             string             dbPath,
+            SegmentStore       store      = null,
             int                limit      = 0,
             Action<long>       onProgress = null,
             CancellationToken  ct         = default)
         {
             int resumeLineId = ReadResumeLineId(indexPath);
             if (resumeLineId != 0)
-                Console.WriteLine($"[IndexingPipeline] Resuming from line id {resumeLineId}");
+            {
+                // Log what's on disk so we can verify the segments actually cover
+                // the lines the progress file claims they do.
+                int segCount = 0;
+                try
+                {
+                    if (System.IO.Directory.Exists(indexPath))
+                        segCount = System.IO.Directory.GetFiles(indexPath, "seg_*.dat").Length;
+                }
+                catch { }
+                Console.WriteLine($"[IndexingPipeline] Resuming from line id {resumeLineId} — {segCount} segment file(s) on disk");
+            }
             else
                 Console.WriteLine("[IndexingPipeline] Starting fresh build");
 
@@ -115,7 +127,9 @@ namespace FtsLib.SeforimDb
             IndexWriter writer;
             try
             {
-                writer = new IndexWriter(indexPath) { AutoOptimize = false };
+                writer = store != null
+                    ? new IndexWriter(indexPath, store) { AutoOptimize = false }
+                    : new IndexWriter(indexPath)        { AutoOptimize = false };
             }
             catch (CorruptIndexException ex)
             {
@@ -138,6 +152,7 @@ namespace FtsLib.SeforimDb
                 }
                 Console.WriteLine("[IndexingPipeline] Starting fresh build from scratch...");
                 resumeLineId = 0;
+                // Store is now inconsistent (index wiped) — don't reuse it.
                 writer = new IndexWriter(indexPath) { AutoOptimize = false };
             }
 
@@ -146,6 +161,9 @@ namespace FtsLib.SeforimDb
             // value if recovery succeeded).
             int lastWrittenLineId  = resumeLineId;
             int lastProgressLineId = resumeLineId;
+
+            if (resumeLineId != 0)
+                Console.WriteLine($"[IndexingPipeline] Writer ready — LastFlushedLineId={writer.LastFlushedLineId}, resumeLineId={resumeLineId}");
 
             using (var db = new ZayitDb(dbPath))
             using (writer)
@@ -178,6 +196,7 @@ namespace FtsLib.SeforimDb
                     if (flushed > lastProgressLineId)
                     {
                         WriteProgressFile(indexPath, flushed);
+                        Console.WriteLine($"[IndexingPipeline] Progress file updated: lineId={flushed} (written={lastWrittenLineId}, n={n})");
                         lastProgressLineId = flushed;
                     }
                 }
@@ -191,7 +210,14 @@ namespace FtsLib.SeforimDb
             // last line ID on disk. This is safe because Dispose() has already drained
             // the entire flush pipeline via WaitForMerge().
             if (anyLinesProcessed)
+            {
                 WriteProgressFile(indexPath, lastWrittenLineId);
+                Console.WriteLine($"[IndexingPipeline] Build complete — final progress lineId={lastWrittenLineId}");
+            }
+            else
+            {
+                Console.WriteLine($"[IndexingPipeline] No lines processed (WAL recovery only or empty DB) — progress file unchanged at {resumeLineId}");
+            }
 
             // Return true only when lines were actually processed — this distinguishes
             // a real completed build from a no-op (WAL recovery only, or empty DB).
@@ -203,10 +229,18 @@ namespace FtsLib.SeforimDb
         /// Call this after <see cref="Build"/> returns — the index is already
         /// searchable before this completes, so it can run in the background.
         /// </summary>
-        internal static void Optimize(string indexPath)
+        internal static void Optimize(string indexPath, SegmentStore store = null)
         {
-            using (var writer = new IndexWriter(indexPath) { AutoOptimize = false })
-                writer.Optimize();
+            if (store != null)
+            {
+                using (var writer = new IndexWriter(indexPath, store) { AutoOptimize = false })
+                    writer.Optimize();
+            }
+            else
+            {
+                using (var writer = new IndexWriter(indexPath) { AutoOptimize = false })
+                    writer.Optimize();
+            }
         }
     }
 }

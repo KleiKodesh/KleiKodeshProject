@@ -7,7 +7,7 @@ defineProps<{ state: IndexingState }>()
   <div class="indexing-banner">
     <div class="banner-top">
       <span class="status-message">
-        <template v-if="!state.isReady && state.isIndexing && state.percentage >= 100">מסיים בניית האינדקס…</template>
+        <template v-if="state.percentage >= 100">מסיים בניית האינדקס…</template>
         <template v-else-if="!state.isReady">אנא המתן בעת בניית האינדקס</template>
         <template v-else>תוצאות חיפוש חלקיות — האינדקס עדיין בבנייה</template>
       </span>

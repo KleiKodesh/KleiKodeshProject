@@ -22,6 +22,34 @@ namespace FtsLib.Search
         private readonly DeleteSet           _deletes;
         private bool _disposed;
 
+        /// <summary>
+        /// Opens an IndexReader using an explicit snapshot of live segment paths.
+        /// Use this overload when a SegmentStore is available — it reads the live
+        /// path list under the store's lock, so the snapshot is consistent and never
+        /// races with a concurrent merge that is deleting source segments.
+        /// </summary>
+        public IndexReader(string indexPath, List<(string dat, string db)> livePaths)
+            : base(indexPath)
+        {
+            _deletes = DeleteSet.Load(DeletesFile);
+            if (livePaths == null || livePaths.Count == 0) return;
+
+            // Sort by segId so ConcatIterator sees doc IDs in ascending order.
+            livePaths.Sort((a, b) => ParseSegId(a.dat).CompareTo(ParseSegId(b.dat)));
+
+            foreach (var (dat, db) in livePaths)
+            {
+                if (File.Exists(dat) && File.Exists(db))
+                    _segments.Add(new SegmentHandle(dat, db));
+            }
+        }
+
+        /// <summary>
+        /// Opens an IndexReader by scanning the index directory for seg_*.dat files.
+        /// Only use this when no SegmentStore is available (e.g. a read-only search
+        /// process that never writes). During an active build, use the overload that
+        /// accepts a live-path snapshot to avoid racing with concurrent merges.
+        /// </summary>
         public IndexReader(string indexPath) : base(indexPath)
         {
             _deletes = DeleteSet.Load(DeletesFile);
