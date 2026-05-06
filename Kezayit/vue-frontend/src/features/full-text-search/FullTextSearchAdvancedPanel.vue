@@ -5,6 +5,7 @@ const props = defineProps<{
   maxWordDistance: number
   requireOrdered: boolean
   contextWords: number
+  expandKetiv: boolean
   showSyntaxHelp: boolean
 }>()
 
@@ -12,6 +13,7 @@ const emit = defineEmits<{
   'update:maxWordDistance': [number]
   'update:requireOrdered': [boolean]
   'update:contextWords': [number]
+  'update:expandKetiv': [boolean]
   'update:showSyntaxHelp': [boolean]
   close: []
 }>()
@@ -82,6 +84,18 @@ function onContextWordsInput(event: Event) {
         />
       </div>
 
+      <!-- כתיב expansion -->
+      <div class="option-row">
+        <label class="option-label" for="ketiv-expand-input">הרחב כתיב חסר/מלא</label>
+        <input
+          id="ketiv-expand-input"
+          type="checkbox"
+          class="ketiv-checkbox"
+          :checked="props.expandKetiv"
+          @change="emit('update:expandKetiv', ($event.target as HTMLInputElement).checked)"
+        />
+      </div>
+
       <!-- Syntax help toggle -->
       <div class="option-row syntax-row">
         <button
@@ -146,6 +160,14 @@ function onContextWordsInput(event: Event) {
             <tr class="warning-row">
               <td class="pattern">טילדה + כוכבית</td>
               <td>לא ניתן לשלב — הכוכבית/שאלתית גוברת.</td>
+            </tr>
+            <tr>
+              <td class="pattern">כתיב חסר/מלא</td>
+              <td>
+                כשהאפשרות מופעלת, כל מילה רגילה מורחבת אוטומטית לגרסאות כתיב חסר ומלא.<br>
+                <span class="example">שישים גבורים</span> ← מוצא גם ששים, גברים וכו׳.<br>
+                <span class="example">לא פועל</span> עם טילדה (~) — הרחבה מטושטשת כבר מכסה וריאציות.
+              </td>
             </tr>
           </tbody>
         </table>
@@ -340,6 +362,12 @@ function onContextWordsInput(event: Event) {
 }
 .warning-row .pattern {
   color: #f14c4c;
+}
+.ketiv-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--accent-color);
 }
 
 </style>

@@ -65,6 +65,8 @@
     <Compile Include="SearchIndex\WordDistanceTest.cs" />
     <Compile Include="SearchIndex\SnippetTest.cs" />
     <Compile Include="SearchIndex\SnippetDiag.cs" />
+    <Compile Include="SearchIndex\KetivExpanderTest.cs" />
+    <Compile Include="SearchIndex\KetivQueryTest.cs" />
     <Compile Include="SearchIndex\VerifyTest.cs" />
     <Compile Include="SearchIndex\SpeedTest.cs" />
     <Compile Include="SearchIndex\PerformanceTest.cs" />

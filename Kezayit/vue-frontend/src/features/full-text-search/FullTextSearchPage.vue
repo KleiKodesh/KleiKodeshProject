@@ -54,6 +54,7 @@ const {
   executedQuery,
   maxWordDistance,
   requireOrdered,
+  expandKetiv,
   executeSearch,
   cancelSearch,
   clearSearch,
@@ -98,6 +99,7 @@ let lastScrollOffset: number | undefined
 
 const isAdvancedActive = computed(
   () => maxWordDistance.value !== 10 || requireOrdered.value
+     || !expandKetiv.value
      || settings.searchContextMarginWords !== 30,
 )
 
@@ -234,10 +236,12 @@ onBeforeUnmount(() => {
       :max-word-distance="maxWordDistance"
       :require-ordered="requireOrdered"
       :context-words="settings.searchContextMarginWords"
+      :expand-ketiv="expandKetiv"
       :show-syntax-help="showSyntaxHelp"
       @update:max-word-distance="maxWordDistance = $event"
       @update:require-ordered="requireOrdered = $event"
       @update:context-words="settings.searchContextMarginWords = $event"
+      @update:expand-ketiv="expandKetiv = $event"
       @update:show-syntax-help="showSyntaxHelp = $event"
       @close="isAdvancedOpen = false"
     />

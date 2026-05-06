@@ -33,11 +33,12 @@ namespace KezayitLib.Search
 
         internal void HandleSearchStart(JsonElement root, string id)
         {
-            string query       = root.TryGetProperty("0", out var q) ? q.GetString() : null;
-            int    skipCount   = root.TryGetProperty("1", out var s) ? s.GetInt32() : 0;
-            int    maxWordDist = root.TryGetProperty("2", out var d) ? d.GetInt32() : 10;
-            bool   reqOrdered  = root.TryGetProperty("3", out var o) && o.GetBoolean();
+            string query        = root.TryGetProperty("0", out var q) ? q.GetString() : null;
+            int    skipCount    = root.TryGetProperty("1", out var s) ? s.GetInt32() : 0;
+            int    maxWordDist  = root.TryGetProperty("2", out var d) ? d.GetInt32() : 10;
+            bool   reqOrdered   = root.TryGetProperty("3", out var o) && o.GetBoolean();
             int    contextWords = root.TryGetProperty("4", out var cw) ? cw.GetInt32() : SeforimIndex.DefaultContextWords;
+            bool   expandKetiv  = root.TryGetProperty("5", out var ek) && ek.GetBoolean();
 
             bool         ready = _state.IsReady;
             SeforimIndex index = _state.GetIndex();
@@ -53,10 +54,10 @@ namespace KezayitLib.Search
             _searches[searchId] = cts;
             _bridge.Reply(id, new { searchId = searchId });
 
-            Console.WriteLine($"[FtsSearchExecutor] Search {searchId} started — query=\"{query}\" skip={skipCount} maxDist={maxWordDist} ordered={reqOrdered} context={contextWords}");
+            Console.WriteLine($"[FtsSearchExecutor] Search {searchId} started — query=\"{query}\" skip={skipCount} maxDist={maxWordDist} ordered={reqOrdered} context={contextWords} ketiv={expandKetiv}");
 
             Task searchTask = Task.Run(
-                () => RunSearch(searchId, query, skipCount, maxWordDist, reqOrdered, contextWords, index, cts.Token));
+                () => RunSearch(searchId, query, skipCount, maxWordDist, reqOrdered, contextWords, expandKetiv, index, cts.Token));
 
             // Observe the task so that any exception escaping RunSearch's own try/catch
             // is logged rather than silently swallowed by the thread pool.
@@ -80,6 +81,7 @@ namespace KezayitLib.Search
 
         private void RunSearch(string searchId, string query, int skipCount,
                                int maxWordDistance, bool requireOrdered, int contextWords,
+                               bool expandKetiv,
                                SeforimIndex index, CancellationToken ct)
         {
             int totalResults = 0;
@@ -107,7 +109,7 @@ namespace KezayitLib.Search
                 var     timer   = new Stopwatch();
                 timer.Start();
 
-                foreach (var result in index.Search(query, cap: 0, ct))
+                foreach (var result in index.Search(query, cap: 0, expandKetiv: expandKetiv, ct: ct))
                 {
                     if (ct.IsCancellationRequested)
                     {

@@ -67,6 +67,14 @@ namespace FtsLibTest
                     SnippetDiag.Run(args);
                     return;
 
+                case "ketivtest":
+                    KetivExpanderTest.Run(args);
+                    return;
+
+                case "ketivquery":
+                    KetivQueryTest.Run(args);
+                    return;
+
                 case "verify":
                     VerifyTest.Run(args);
                     return;

@@ -90,6 +90,7 @@
     <Compile Include="Search\UnionIterator.cs" />
     <Compile Include="Search\VarInt.cs" />
     <Compile Include="Search\HebrewWildcardExpander.cs" />
+    <Compile Include="Search\KetivExpander.cs" />
     <!-- Tokenization: HTML-aware word extraction and normalization -->
     <Compile Include="Tokenization\HtmlBlockTags.cs" />
     <Compile Include="Tokenization\HtmlWordScanner.cs" />

@@ -2,7 +2,6 @@ using FtsLib.Indexing;
 using FtsLib.Search;
 using System.Collections.Generic;
 using System.Threading;
-
 namespace FtsLib.SeforimDb
 {
     /// <summary>
@@ -44,6 +43,7 @@ namespace FtsLib.SeforimDb
             string            dbPath,
             List<(string dat, string db)> livePaths,
             int               cap = 0,
+            bool              expandKetiv = false,
             CancellationToken ct  = default)
         {
             var parsed = QueryParser.Parse(query);
@@ -51,8 +51,6 @@ namespace FtsLib.SeforimDb
 
             using (var reader = new IndexReader(indexPath, livePaths))
             {
-                // Expand each group into a flat list of concrete terms.
-                // Within a group terms are OR-ed; across groups they are AND-ed.
                 var groups         = new List<IEnumerable<string>>(parsed.Groups.Count);
                 var expandedGroups = new List<IReadOnlyCollection<string>>(parsed.Groups.Count);
 
@@ -60,9 +58,9 @@ namespace FtsLib.SeforimDb
                 {
                     ct.ThrowIfCancellationRequested();
 
-                    var groupTerms = ExpandGroup(group, reader, ct, out bool hardMiss);
-                    if (hardMiss) yield break;   // a fuzzy alternative had no candidates
-                    if (groupTerms.Count == 0) continue; // wildcard anchor too short — skip
+                    var groupTerms = ExpandGroup(group, reader, expandKetiv, ct, out bool hardMiss);
+                    if (hardMiss) yield break;
+                    if (groupTerms.Count == 0) continue;
                     groups.Add(groupTerms);
                     expandedGroups.Add(groupTerms);
                 }
@@ -110,6 +108,7 @@ namespace FtsLib.SeforimDb
             string            query,
             string            indexPath,
             List<(string dat, string db)> livePaths,
+            bool              expandKetiv = false,
             CancellationToken ct = default)
         {
             var parsed = QueryParser.Parse(query);
@@ -123,7 +122,7 @@ namespace FtsLib.SeforimDb
                 {
                     ct.ThrowIfCancellationRequested();
 
-                    var groupTerms = ExpandGroup(group, reader, ct, out bool hardMiss);
+                    var groupTerms = ExpandGroup(group, reader, expandKetiv, ct, out bool hardMiss);
                     if (hardMiss) yield break;
                     if (groupTerms.Count == 0) continue;
                     groups.Add(groupTerms);
@@ -150,6 +149,7 @@ namespace FtsLib.SeforimDb
         private static List<string> ExpandGroup(
             QueryGroup        group,
             IndexReader       reader,
+            bool              expandKetiv,
             CancellationToken ct,
             out bool          hardMiss)
         {
@@ -157,10 +157,20 @@ namespace FtsLib.SeforimDb
 
             // Fast path: single literal alternative (the common case).
             if (group.IsSingle && !group.IsWildcard && !group.IsFuzzy)
-                return new List<string> { group.Pattern };
+            {
+                var result = new List<string> { group.Pattern };
+                // כתיב expansion: add spelling variants as additional OR alternatives.
+                // Only for plain literals — wildcards and fuzzy already cover variants.
+                if (expandKetiv)
+                {
+                    foreach (var variant in KetivExpander.Expand(group.Pattern))
+                        result.Add(variant);
+                }
+                return result;
+            }
 
             var seen   = new HashSet<string>(System.StringComparer.Ordinal);
-            var result = new List<string>();
+            var list   = new List<string>();
 
             foreach (var alt in group.Alternatives)
             {
@@ -173,30 +183,30 @@ namespace FtsLib.SeforimDb
                     expanded = reader.ExpandFuzzy(alt.Pattern, alt.FuzzyDistance);
                     if (expanded.Count == 0)
                     {
-                        // A fuzzy alternative with no candidates is a hard miss:
-                        // the user explicitly asked for this word and it isn't in the
-                        // index at all, so the AND group can never be satisfied.
                         hardMiss = true;
-                        return result;
+                        return list;
                     }
                 }
                 else if (alt.IsWildcard)
                 {
                     expanded = reader.ExpandWildcard(alt.Pattern);
-                    // Wildcard with no matches: skip this alternative, keep others.
                     if (expanded.Count == 0) continue;
                 }
                 else
                 {
+                    // Literal alternative — add כתיב variants if requested.
                     expanded = new List<string> { alt.Pattern };
+                    if (expandKetiv)
+                        foreach (var variant in KetivExpander.Expand(alt.Pattern))
+                            expanded.Add(variant);
                 }
 
                 foreach (var term in expanded)
                     if (seen.Add(term))
-                        result.Add(term);
+                        list.Add(term);
             }
 
-            return result;
+            return list;
         }
     }
 }

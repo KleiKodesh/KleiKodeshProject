@@ -128,11 +128,11 @@ namespace FtsLib.SeforimDb
 
         // ── Search ────────────────────────────────────────────────────
 
-        public IEnumerable<SearchResult> Search(string query, int cap = 0, CancellationToken ct = default)
-            => SearchPipeline.Search(query, _indexPath, _dbPath, GetLiveSegmentPaths(), cap, ct);
+        public IEnumerable<SearchResult> Search(string query, int cap = 0, bool expandKetiv = false, CancellationToken ct = default)
+            => SearchPipeline.Search(query, _indexPath, _dbPath, GetLiveSegmentPaths(), cap, expandKetiv, ct);
 
-        public IEnumerable<int> SearchIds(string query, CancellationToken ct = default)
-            => SearchPipeline.SearchIds(query, _indexPath, GetLiveSegmentPaths(), ct);
+        public IEnumerable<int> SearchIds(string query, bool expandKetiv = false, CancellationToken ct = default)
+            => SearchPipeline.SearchIds(query, _indexPath, GetLiveSegmentPaths(), expandKetiv, ct);
 
         // ── Snippets ──────────────────────────────────────────────────
 

@@ -12,6 +12,7 @@ import { SQL } from '@/webview-host/queries.sql'
 import { callBridgeAction } from '@/webview-host/bridge'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { expandKetivHaser } from '@/utils/hebrewKetivExpander'
 import type { FullTextSearchResult } from './fullTextSearchTypes'
 
 const DEV_SAMPLES: FullTextSearchResult[] = [
@@ -182,7 +183,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   const executedQuery = ref('')
   const maxWordDistance = ref(10)
   const requireOrdered = ref(false)
-
+  const expandKetiv = ref(true)
   let currentSearchId: string | null = null
 
   function _cleanup() {
@@ -216,6 +217,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       maxWordDistance.value,
       requireOrdered.value,
       settings.searchContextMarginWords,
+      expandKetiv.value,
     )
     const searchId = reply?.searchId
     if (!searchId) {
@@ -337,6 +339,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     executedQuery,
     maxWordDistance,
     requireOrdered,
+    expandKetiv,
     executeSearch,
     cancelSearch,
     clearSearch,
