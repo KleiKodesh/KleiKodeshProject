@@ -107,20 +107,20 @@ export const SQL = {
       JOIN tocText tt ON tt.id = te.textId
     ),
     ordered AS (
-      SELECT a.lineId, a.text, a.depth,
+      SELECT a.lineId, a.bookId, a.text, a.depth,
              MAX(a.depth) OVER (PARTITION BY a.lineId) AS maxDepth,
              b.title AS bookTitle
       FROM ancestors a
       JOIN book b ON b.id = a.bookId
     )
-    SELECT lineId, group_concat(text, ' > ') AS tocPath
+    SELECT lineId, bookId, group_concat(text, ' > ') AS tocPath
     FROM (
-      SELECT lineId, text
+      SELECT lineId, bookId, text
       FROM ordered
       WHERE NOT (depth = maxDepth AND text = bookTitle)
       ORDER BY lineId, depth DESC
     )
-    GROUP BY lineId
+    GROUP BY lineId, bookId
   `,
 
   // ── Lines ────────────────────────────────────────────────────────────────────

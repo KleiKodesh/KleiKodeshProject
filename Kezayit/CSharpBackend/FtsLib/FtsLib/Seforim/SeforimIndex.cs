@@ -42,6 +42,12 @@ namespace FtsLib.Seforim
         private readonly string _indexPath;
         private readonly string _dbPath;
 
+        /// <summary>Default visible-character budget for the snippet window.</summary>
+        public const int DefaultSnippetLength = SnippetPipeline.DefaultSnippetLength;
+
+        /// <summary>Default number of words of context shown on each side of the match.</summary>
+        public const int DefaultContextWords = SnippetPipeline.DefaultContextWords;
+
         /// <param name="indexPath">
         /// Directory where the FTS index segment files are stored.
         /// Will be created on first <see cref="BuildIndex"/> call if it does not exist.
@@ -213,7 +219,13 @@ namespace FtsLib.Seforim
         /// appear in the same left-to-right order as the query groups.
         /// False (default) = unordered, any arrangement satisfies the match.
         /// </param>
-        public SnippetResult GenerateSnippet(SearchResult result, bool requireOrdered = false)
+        /// <param name="contextWords">
+        /// Number of words of context shown on each side of the match window.
+        /// Defaults to <see cref="DefaultContextWords"/> (8).
+        /// </param>
+        public SnippetResult GenerateSnippet(SearchResult result, bool requireOrdered = false,
+            int snippetLength = DefaultSnippetLength,
+            int contextWords = DefaultContextWords)
         {
             if (result == null) return SnippetResult.NoMatch;
             if (result.MatchedGroups.Count > 0)
@@ -221,7 +233,9 @@ namespace FtsLib.Seforim
                     result.Content,
                     result.MatchedGroups,
                     requireOrdered,
-                    result.OriginalGroupCount);
+                    result.OriginalGroupCount,
+                    snippetLength,
+                    contextWords);
             return SnippetResult.NoMatch;
         }
     }

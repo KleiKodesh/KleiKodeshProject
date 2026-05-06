@@ -21,8 +21,8 @@ namespace FtsLib.Core
     {
         private readonly string _preTag;
         private readonly string _postTag;
-        private readonly int    _snippetLength;  // budget in visible chars
-        private readonly int    _contextMargin;  // max context on each side, visible chars
+        private readonly int    _snippetLength;   // hard cap in visible chars — safety net
+        private readonly int    _contextWords;    // words of context on each side of the match
 
         private readonly TokenStream _tokenStream = new TokenStream();
 
@@ -40,12 +40,12 @@ namespace FtsLib.Core
             string preTag        = "<mark>",
             string postTag       = "</mark>",
             int    snippetLength = 400,
-            int    contextMargin = 150)
+            int    contextWords  = 8)
         {
             _preTag        = preTag;
             _postTag       = postTag;
             _snippetLength = snippetLength;
-            _contextMargin = contextMargin;
+            _contextWords  = contextWords;
         }
 
         // ── Public API ───────────────────────────────────────────────
@@ -254,13 +254,12 @@ namespace FtsLib.Core
 
         /// <summary>
         /// Expands the match window (given as token indices iLeft..iRight) by up to
-        /// <see cref="_contextMargin"/> visible chars on each side, capped so the total
-        /// never exceeds <see cref="_snippetLength"/> visible chars.
+        /// <see cref="_contextWords"/> tokens on each side, then caps the result so
+        /// the total visible-char count never exceeds <see cref="_snippetLength"/>.
         ///
-        /// The context margin scales down when the match window is large (terms far apart),
-        /// so distant-term matches get a tight snippet rather than dumping the whole line.
+        /// Word-based expansion is exact — no char approximation needed because the
+        /// token list is already in hand from the tokenization step.
         ///
-        /// Uses binary search on VisibleStart — O(log n), no re-scanning.
         /// Returns raw character positions (snapStart, snapEnd).
         /// </summary>
         private (int snapStart, int snapEnd) ExpandWindow(
@@ -269,72 +268,36 @@ namespace FtsLib.Core
             if (iLeft < 0 || iRight < 0 || tokens.Count == 0)
                 return (0, rawLen);
 
-            int visLeft    = tokens[iLeft].VisibleStart;
-            int visRight   = tokens[iRight].VisibleStart + tokens[iRight].Normalized.Length;
-            int winVisible = visRight - visLeft;
-
             // Total visible chars in the whole line.
             int totalVisible = tokens[tokens.Count - 1].VisibleStart
                                + tokens[tokens.Count - 1].Normalized.Length;
 
-            // If the whole line fits within the budget, show it all — no truncation.
+            // If the whole line fits within the hard cap, show it all.
             if (totalVisible <= _snippetLength)
                 return (0, rawLen);
 
-            int sIdx, eIdx;
+            // Expand by word count on each side.
+            int sIdx = System.Math.Max(0,              iLeft  - _contextWords);
+            int eIdx = System.Math.Min(tokens.Count-1, iRight + _contextWords);
 
-            if (winVisible >= _snippetLength)
+            // Hard-cap: trim tokens from the outside until visible chars fit.
+            // This only fires when contextWords is very large or the line is dense.
+            while (sIdx < eIdx)
             {
-                // Window alone exceeds budget — centre-crop by token count.
-                int centre = (iLeft + iRight) / 2;
-                int half   = _snippetLength / 2;
-                sIdx = System.Math.Max(0,              centre - half);
-                eIdx = System.Math.Min(tokens.Count-1, centre + half);
-            }
-            else
-            {
-                int remaining = _snippetLength - winVisible;
-
-                // Scale the margin: full margin for tight matches, near-zero for loose ones.
-                int scaledMargin = (int)(_contextMargin * (1.0 - (double)winVisible / _snippetLength));
-                int margin       = System.Math.Min(remaining / 2, scaledMargin);
-
-                int targetLeft  = visLeft  - margin;
-                int targetRight = visRight + margin;
-                sIdx = BinarySearchLeft (tokens, targetLeft);
-                eIdx = BinarySearchRight(tokens, targetRight);
+                int visStart = tokens[sIdx].VisibleStart;
+                int visEnd   = tokens[eIdx].VisibleStart + tokens[eIdx].Normalized.Length;
+                if (visEnd - visStart <= _snippetLength) break;
+                // Trim the side that contributes more chars.
+                int trimLeft  = tokens[sIdx + 1].VisibleStart - visStart;
+                int trimRight = visEnd - (tokens[eIdx - 1].VisibleStart + tokens[eIdx - 1].Normalized.Length);
+                if (trimLeft >= trimRight) sIdx++;
+                else                      eIdx--;
             }
 
             int snapStart = tokens[sIdx].RawStart;
             int snapEnd   = eIdx + 1 < tokens.Count ? tokens[eIdx + 1].RawStart : rawLen;
 
             return (System.Math.Max(0, snapStart), System.Math.Min(rawLen, snapEnd));
-        }
-
-        /// <summary>First token index with VisibleStart >= target (or 0).</summary>
-        private static int BinarySearchLeft(List<TextToken> tokens, int target)
-        {
-            int lo = 0, hi = tokens.Count - 1;
-            while (lo < hi)
-            {
-                int mid = (lo + hi) / 2;
-                if (tokens[mid].VisibleStart < target) lo = mid + 1;
-                else hi = mid;
-            }
-            return lo;
-        }
-
-        /// <summary>Last token index with VisibleStart <= target (or tokens.Count-1).</summary>
-        private static int BinarySearchRight(List<TextToken> tokens, int target)
-        {
-            int lo = 0, hi = tokens.Count - 1;
-            while (lo < hi)
-            {
-                int mid = (lo + hi + 1) / 2;
-                if (tokens[mid].VisibleStart <= target) lo = mid;
-                else hi = mid - 1;
-            }
-            return lo;
         }
 
         // ── Single-pass renderer from raw HTML ────────────────────────

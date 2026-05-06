@@ -8,6 +8,7 @@ import { useFullTextSearchFilters, parseSearchQuery } from './useFullTextSearchF
 import { useFullTextSearchIndexingStatus } from './useFullTextSearchIndexingStatus'
 import { useTabStore } from '@/stores/tabStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
+import { useSettingsStore } from '@/stores/settingsStore'
 import FullTextSearchBar from './FullTextSearchBar.vue'
 import FullTextSearchResultsList from './FullTextSearchResultsList.vue'
 import FullTextSearchFilterPanel from './FullTextSearchFilterPanel.vue'
@@ -16,6 +17,7 @@ import FullTextSearchIndexingOverlay from './FullTextSearchIndexingOverlay.vue'
 
 const tabStore = useTabStore()
 const booksStore = useBooksDataStore()
+const settings = useSettingsStore()
 
 // Capture tabId at mount time — stable for this component's lifetime (/search is keyed by tabId)
 const tabId = tabStore.activeTabId
@@ -75,7 +77,8 @@ let lastScrollIndex: number | undefined
 let lastScrollOffset: number | undefined
 
 const isAdvancedActive = computed(
-  () => maxWordDistance.value !== 10 || requireOrdered.value,
+  () => maxWordDistance.value !== 10 || requireOrdered.value
+     || settings.searchContextMarginWords !== 8,
 )
 
 useDropdownClose(
@@ -200,9 +203,11 @@ onBeforeUnmount(saveFilterState)
       v-if="isAdvancedOpen"
       :max-word-distance="maxWordDistance"
       :require-ordered="requireOrdered"
+      :context-words="settings.searchContextMarginWords"
       :show-syntax-help="showSyntaxHelp"
       @update:max-word-distance="maxWordDistance = $event"
       @update:require-ordered="requireOrdered = $event"
+      @update:context-words="settings.searchContextMarginWords = $event"
       @update:show-syntax-help="showSyntaxHelp = $event"
       @close="isAdvancedOpen = false"
     />

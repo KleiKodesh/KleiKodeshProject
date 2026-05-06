@@ -21,8 +21,11 @@ const DEFAULTS = {
   dictionaryZoom: 100,
   newTabPage: 'homepage' as NewTabPage,
   pdfPageFilters: false,
-  resumeLastRead: true,
+  resumeLastRead: false,
   defaultAutoSyncCommentary: false,
+  // Number of words of context shown before and after the matched terms in a search snippet.
+  // Converted to visible chars (× CHARS_PER_WORD) before being sent to the C# snippet builder.
+  searchContextMarginWords: 8,
 }
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -45,6 +48,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const defaultAutoSyncCommentary = ref(DEFAULTS.defaultAutoSyncCommentary)
   const setupDone = ref(false)
   const midotDisclaimerAccepted = ref(false)
+  const searchContextMarginWords = ref(DEFAULTS.searchContextMarginWords)
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -102,6 +106,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_SETUP_DONE, setupDone)
     loadSetting(KEYS.SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY, defaultAutoSyncCommentary)
     loadSetting(KEYS.SETTINGS_MIDOT_DISCLAIMER, midotDisclaimerAccepted)
+    loadSetting(KEYS.SETTINGS_SEARCH_CONTEXT_MARGIN, searchContextMarginWords)
     applyCSSVariables()
   }
 
@@ -124,6 +129,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(pdfPageFilters, KEYS.SETTINGS_PDF_FILTERS)
   persistSetting(resumeLastRead, KEYS.SETTINGS_RESUME_LAST_READ)
   persistSetting(defaultAutoSyncCommentary, KEYS.SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY)
+  persistSetting(searchContextMarginWords, KEYS.SETTINGS_SEARCH_CONTEXT_MARGIN)
 
   // ── Actions ───────────────────────────────────────────────────────────────
 
@@ -169,6 +175,7 @@ export const useSettingsStore = defineStore('settings', () => {
     pdfPageFilters.value = DEFAULTS.pdfPageFilters
     resumeLastRead.value = DEFAULTS.resumeLastRead
     defaultAutoSyncCommentary.value = DEFAULTS.defaultAutoSyncCommentary
+    searchContextMarginWords.value = DEFAULTS.searchContextMarginWords
     lsClearSettingsOnly()
     applyCSSVariables()
   }
@@ -177,7 +184,7 @@ export const useSettingsStore = defineStore('settings', () => {
     censorDivineNames, diacriticsState, headerFont, textFont, fontSize, linePadding,
     commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryLinePadding,
     useSeparateCommentarySettings, appZoom, dictionaryZoom, newTabPage, pdfPageFilters, resumeLastRead,
-    defaultAutoSyncCommentary, setupDone, midotDisclaimerAccepted,
+    defaultAutoSyncCommentary, setupDone, midotDisclaimerAccepted, searchContextMarginWords,
     init, cycleDiacritics, togglePdfPageFilters, reset, completeSetup, acceptMidotDisclaimer,
   }
 })

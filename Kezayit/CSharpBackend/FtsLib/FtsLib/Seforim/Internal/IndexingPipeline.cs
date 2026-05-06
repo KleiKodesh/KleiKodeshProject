@@ -95,7 +95,7 @@ namespace FtsLib.Seforim
             CancellationToken  ct         = default)
         {
             int resumeLineId = ReadResumeLineId(indexPath);
-            if (resumeLineId > 0)
+            if (resumeLineId != 0)
                 Console.WriteLine($"[IndexingPipeline] Resuming from line id {resumeLineId}");
             else
                 Console.WriteLine("[IndexingPipeline] Starting fresh build");
@@ -116,7 +116,7 @@ namespace FtsLib.Seforim
             using (var db     = new ZayitDb(dbPath))
             using (var writer = new IndexWriter(indexPath) { AutoOptimize = false })
             {
-                var lineSource = resumeLineId > 0
+                var lineSource = resumeLineId != 0
                     ? db.ReadLinesFrom(resumeLineId, limit, ct)
                     : db.ReadLines(limit, ct);
 

@@ -7,7 +7,8 @@ defineProps<{ state: IndexingState }>()
   <div class="indexing-banner">
     <div class="banner-top">
       <span class="status-message">
-        <template v-if="!state.isReady">אנא המתן בעת בניית האינדקס</template>
+        <template v-if="!state.isReady && state.isIndexing && state.percentage >= 100">מסיים בניית האינדקס…</template>
+        <template v-else-if="!state.isReady">אנא המתן בעת בניית האינדקס</template>
         <template v-else>תוצאות חיפוש חלקיות — האינדקס עדיין בבנייה</template>
       </span>
       <span class="percentage">{{ Math.round(state.percentage) }}%<span v-if="state.eta"> · {{ state.eta }}</span></span>
@@ -17,7 +18,7 @@ defineProps<{ state: IndexingState }>()
       <div
         v-if="state.latestSegmentPct !== null"
         class="segment-marker"
-        :style="{ right: `${100 - state.latestSegmentPct}%` }"
+        :style="{ left: `${100 - state.latestSegmentPct}%` }"
       />
     </div>
   </div>
@@ -59,17 +60,19 @@ defineProps<{ state: IndexingState }>()
   border-radius: 2px;
   background: color-mix(in srgb, var(--text-secondary) 20%, transparent);
   overflow: visible;
+  direction: ltr;
 }
 .progress-fill {
   height: 100%;
   border-radius: 2px;
   background: var(--accent-color);
   transition: width 0.4s ease;
+  margin-inline-start: auto;
 }
 .segment-marker {
   position: absolute;
   top: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate(50%, -50%);
   width: 3px;
   height: 10px;
   border-radius: 1px;

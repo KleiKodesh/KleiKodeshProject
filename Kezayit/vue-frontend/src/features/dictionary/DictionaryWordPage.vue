@@ -42,6 +42,29 @@ function onMenchemClick(event: MouseEvent, row: { bookId: number; lineIndex: num
   })
 }
 
+// ── ספר הערוך ─────────────────────────────────────────────────────────────────
+
+const aruchEntries = computed(() => {
+  const seen = new Set<string>()
+  return props.data.aruchRows.filter(row => {
+    const key = `${row.lineId}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+})
+
+function onAruchClick(event: MouseEvent, row: { bookId: number; lineIndex: number }) {
+  if (!event.ctrlKey) return
+  event.preventDefault()
+  tabStore.openTab({
+    title: 'ספר הערוך',
+    route: '/book-view',
+    bookId: row.bookId,
+    openTocLineIndex: row.lineIndex,
+  })
+}
+
 // ── Definitions grouped by word form ─────────────────────────────────────────
 
 const SOURCE_ORDER: Record<number, number> = { 5: 0, 1: 1, 6: 2, 2: 3, 4: 4, 3: 5 }
@@ -170,6 +193,21 @@ const allRelated = computed(() => [
           @click="onMenchemClick($event, row)"
         >
           <div class="menchem-label">מחברת מנחם — {{ row.word }}</div>
+          {{ maybeFilter(row.text) }}
+        </div>
+      </div>
+    </div>
+
+    <!-- ספר הערוך — shown after מחברת מנחם -->
+    <div v-if="aruchEntries.length" class="aruch-wrapper">
+      <div class="aruch-scroll">
+        <div
+          v-for="(row, rowIndex) in aruchEntries"
+          :key="rowIndex"
+          class="aruch-entry"
+          @click="onAruchClick($event, row)"
+        >
+          <div class="aruch-label">ספר הערוך — {{ row.word }}</div>
           {{ maybeFilter(row.text) }}
         </div>
       </div>
@@ -351,6 +389,38 @@ const allRelated = computed(() => [
 }
 
 .menchem-label {
+  display: block;
+  font-size: 0.77em;
+  font-weight: 700;
+  color: var(--text-secondary);
+  letter-spacing: 0.06em;
+}
+
+.aruch-wrapper {
+  flex-shrink: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
+}
+
+.aruch-scroll {
+  max-height: 80px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+.aruch-entry {
+  font-size: 0.92em;
+  line-height: 1.6;
+  color: color-mix(in srgb, var(--text-primary) 80%, var(--text-secondary));
+  overflow-wrap: break-word;
+  cursor: default;
+}
+.aruch-entry:hover {
+  color: var(--text-primary);
+}
+
+.aruch-label {
   display: block;
   font-size: 0.77em;
   font-weight: 700;

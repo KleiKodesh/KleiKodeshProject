@@ -11,6 +11,7 @@ import { isHosted, query } from '@/webview-host/seforimDb'
 import { SQL } from '@/webview-host/queries.sql'
 import { callBridgeAction } from '@/webview-host/bridge'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
+import { useSettingsStore } from '@/stores/settingsStore'
 import type { FullTextSearchResult } from './fullTextSearchTypes'
 
 const DEV_SAMPLES: FullTextSearchResult[] = [
@@ -155,14 +156,17 @@ async function enrichTocPaths(batch: FullTextSearchResult[]): Promise<void> {
   const lineIds = [...new Set(batch.map((r) => r.lineId))]
   if (!lineIds.length) return
   try {
-    const rows = await query<{ lineId: number; tocPath: string }>(
+    const rows = await query<{ lineId: number; bookId: number; tocPath: string }>(
       SQL.GET_TOC_PATHS_FOR_LINES(lineIds.length),
       lineIds,
     )
-    const pathMap = new Map(rows.map((r) => [r.lineId, r.tocPath]))
+    const dataMap = new Map(rows.map((r) => [r.lineId, { bookId: r.bookId, tocPath: r.tocPath }]))
     for (const r of batch) {
-      const path = pathMap.get(r.lineId)
-      if (path) r.tocText = path
+      const data = dataMap.get(r.lineId)
+      if (data) {
+        r.bookId = data.bookId
+        r.tocText = data.tocPath
+      }
     }
   } catch (err) {
     console.error('[useFullTextSearch] enrichTocPaths failed:', err)
@@ -171,6 +175,7 @@ async function enrichTocPaths(batch: FullTextSearchResult[]): Promise<void> {
 
 export function useFullTextSearch(isIndexing?: () => boolean) {
   const cache = useSearchCacheStore()
+  const settings = useSettingsStore()
   const results = ref<FullTextSearchResult[]>([])
   const isSearching = ref(false)
   const hasSearched = ref(false)
@@ -210,6 +215,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       skipCount,
       maxWordDistance.value,
       requireOrdered.value,
+      settings.searchContextMarginWords,
     )
     const searchId = reply?.searchId
     if (!searchId) {

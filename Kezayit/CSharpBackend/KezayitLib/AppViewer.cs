@@ -132,10 +132,7 @@ namespace KezayitLib
             _hbCsvUpdater = new HebrewBooksCsvUpdater();
             _search = new SearchHandler(_bridge, _webView);
             _dictionary = new DictionaryHandler(AppDir);
-            _db.OnDbPathPicked = path =>
-            {
-                Task.Run(() => _search.ResetAndReindex(path));
-            };
+            _db.OnDbPathPicked = path => _search.ResetAndReindex(path);
 
             _webView.CoreWebView2.WebMessageReceived += OnMessageReceived;
             _webView.CoreWebView2.DownloadStarting += (s, e) => _hb.OnDownloadStarting(s, e);
@@ -179,10 +176,7 @@ namespace KezayitLib
 
             // Re-init the DB handler; keep the existing search handler and its index state
             _db = new DbHandler(_bridge, _webView, savedPath);
-            _db.OnDbPathPicked = path =>
-            {
-                Task.Run(() => _search.ResetAndReindex(path));
-            };
+            _db.OnDbPathPicked = path => _search.ResetAndReindex(path);
 
             // Only kick off indexing if the DB changed or bloom is missing/stale
             if (dbReady)
@@ -192,6 +186,18 @@ namespace KezayitLib
         }
 
         private async void OnMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)
+        {
+            try
+            {
+                await OnMessageReceivedAsync(e);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[AppViewer] Unhandled exception in OnMessageReceived: " + ex);
+            }
+        }
+
+        private async Task OnMessageReceivedAsync(CoreWebView2WebMessageReceivedEventArgs e)
         {
             string id = null;
             try
@@ -222,7 +228,6 @@ namespace KezayitLib
                         case "FtsSearchStart": _search.HandleSearchStart(root, id); break;
                         case "FtsSearchCancel": _search.HandleSearchCancel(root, id); break;
                         case "DeleteFtsIndex":
-                            // HandleDeleteIndex replies to JS after StopAll + delete complete.
                             _search.HandleDeleteIndex(id);
                             break;
                         case "ResetFtsIndex": _search.HandleResetFtsIndex(id); break;

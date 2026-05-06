@@ -73,7 +73,11 @@ namespace BloomSearchEngineLib
         public static void NotifyProgress(IndexProgressChangedEventArgs progress)
         {
             lock (_lock) { _lastProgress = progress; }
-            ThreadPool.QueueUserWorkItem(_ => { try { ProgressChanged?.Invoke(null, progress); } catch { } });
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try { ProgressChanged?.Invoke(null, progress); }
+                catch (Exception ex) { Console.WriteLine("[BloomIndexingCoordinator] ProgressChanged handler exception: " + ex); }
+            });
         }
     }
 }

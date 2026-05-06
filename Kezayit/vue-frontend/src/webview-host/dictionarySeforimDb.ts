@@ -1,5 +1,5 @@
 // Seforim DB queries for the dictionary feature.
-// Queries מצודת ציון, מלבי"ם באור המילות, and מחברת מנחם from the main seforim DB.
+// Queries מצודת ציון, מלבי"ם באור המילות, מחברת מנחם, and ספר הערוך from the main seforim DB.
 // Book IDs are looked up at runtime by title pattern and cached — never hardcoded.
 
 import { query as querySeforim } from './seforimDb'
@@ -26,6 +26,15 @@ export interface MenchemRow {
   lineIndex: number
 }
 
+/** A result row from ספר הערוך. */
+export interface AruchRow {
+  word:      string
+  text:      string
+  bookId:    number
+  lineId:    number
+  lineIndex: number
+}
+
 // ── Book ID cache ─────────────────────────────────────────────────────────────
 
 async function getBookIds(titlePattern: string, cache: { ids: number[] | null }): Promise<number[]> {
@@ -41,6 +50,7 @@ async function getBookIds(titlePattern: string, cache: { ids: number[] | null })
 const _metzudatCache = { ids: null as number[] | null }
 const _malbimCache   = { ids: null as number[] | null }
 const _menchemCache  = { ids: null as number[] | null }
+const _aruchCache    = { ids: null as number[] | null }
 
 // ── מצודת ציון / מלבי"ם shared helpers ───────────────────────────────────────
 
@@ -182,6 +192,57 @@ export async function menchemLookup(term: string): Promise<MenchemRow[]> {
       word,
       text:      stripAllHtml(nextLine.content),
       title:     null,
+      bookId,
+      lineId:    row.id,
+      lineIndex: row.lineIndex,
+    })
+  }
+
+  return results
+}
+
+// ── ספר הערוך ─────────────────────────────────────────────────────────────────
+//
+// Structure: <b><big>HEADWORD</big></b> followed by definition on the same line.
+// The headword is wrapped in both <b> and <big> tags.
+// → exact match only: term must equal the extracted headword exactly.
+
+function parseBigBoldLine(content: string): { word: string; text: string } | null {
+  // Match <b><big>WORD</big></b> followed by the rest of the line
+  const match = content.match(/<b><big>([^<]+)<\/big><\/b>\s*(.+)$/)
+  if (!match) return null
+  const word = (match[1] ?? '').trim()
+  const text = (match[2] ?? '').trim()
+  if (!word || !text) return null
+  return { word, text }
+}
+
+export async function aruchLookup(term: string): Promise<AruchRow[]> {
+  const bookIds = await getBookIds('%ספר הערוך%', _aruchCache)
+  if (bookIds.length === 0) return []
+  const bookId = bookIds[0]!
+
+  type RawLine = { id: number; lineIndex: number; content: string }
+
+  // Query lines with <b><big>TERM</big></b> pattern
+  // Pattern covers both with and without trailing space before </big>
+  const rows = await querySeforim<RawLine>(
+    `SELECT id, lineIndex, content FROM line
+     WHERE bookId = ? AND (content LIKE ? OR content LIKE ?)
+     ORDER BY lineIndex LIMIT 20`,
+    [bookId, `%<big>${term}</big>%`, `%<big>${term} </big>%`]
+  )
+
+  const results: AruchRow[] = []
+  for (const row of rows) {
+    const parsed = parseBigBoldLine(row.content)
+    if (!parsed) continue
+    const normalized = parsed.word.replace(/[.,;:״"]/g, '').trim()
+    if (!normalized.includes(term)) continue
+
+    results.push({
+      word:      parsed.word,
+      text:      stripAllHtml(parsed.text),
       bookId,
       lineId:    row.id,
       lineIndex: row.lineIndex,

@@ -44,7 +44,7 @@ namespace FtsLib.Core
 
         // Written by the background flush task after the segment is fully on disk.
         // Read by the indexing thread — volatile for safe cross-thread visibility.
-        internal volatile int LastFlushedLineId = -1;
+        internal volatile int LastFlushedLineId = int.MinValue;
 
         internal SegmentStore(string dir)
         {
@@ -91,8 +91,14 @@ namespace FtsLib.Core
                     Live.AddToLive(op.Level, sid);
 
             Wal.Open();
-            _merger.MergeLevel(op.Level);
-            Wal.Close();
+            try
+            {
+                _merger.MergeLevel(op.Level);
+            }
+            finally
+            {
+                Wal.Close();
+            }
         }
 
         // ── Flush ─────────────────────────────────────────────────────
@@ -133,7 +139,7 @@ namespace FtsLib.Core
                     {
                         SegmentWriter.WriteSegment(ramIndex, terms, datPath, dbPath);
                         Live.AddToLive(0, segId);
-                        if (lineId >= 0) LastFlushedLineId = lineId;
+                        LastFlushedLineId = lineId;
                     }
                     finally
                     {
@@ -141,8 +147,14 @@ namespace FtsLib.Core
                     }
 
                     Wal.Open();
-                    _merger.MergeIfNeeded(0);
-                    Wal.Close();
+                    try
+                    {
+                        _merger.MergeIfNeeded(0);
+                    }
+                    finally
+                    {
+                        Wal.Close();
+                    }
 
                 }, TaskContinuationOptions.None);
             }
@@ -158,7 +170,11 @@ namespace FtsLib.Core
         {
             Task task;
             lock (_pipelineLock) { task = _pipelineTask; }
-            try { task.Wait(); } catch { /* non-fatal; Commit validates */ }
+            try { task.Wait(); }
+            catch (AggregateException ae)
+            {
+                Console.WriteLine("[SegmentStore] Pipeline exception (non-fatal): " + ae.InnerException?.Message);
+            }
         }
 
         // ── Commit ────────────────────────────────────────────────────
@@ -171,8 +187,14 @@ namespace FtsLib.Core
         {
             WaitForMerge();
             Wal.Open();
-            _merger.ForceMergeAll();
-            Wal.Clear();
+            try
+            {
+                _merger.ForceMergeAll();
+            }
+            finally
+            {
+                Wal.Clear(); // clears and closes
+            }
             Console.WriteLine("[SegmentStore] Commit complete.");
         }
 

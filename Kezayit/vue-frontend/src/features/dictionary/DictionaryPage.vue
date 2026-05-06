@@ -12,7 +12,7 @@ import { dictionaryCacheGet, dictionaryCacheSet, dictionaryCacheClear } from './
 import { dictLinks, dictSynonyms, dictVariants, dictSpellCandidates, dictKetivVariants, combinedLookup } from '@/webview-host/dictionaryDb'
 import { expandKetivHaser } from '@/utils/hebrewKetivExpander'
 import { isHosted } from '@/webview-host/seforimDb'
-import type { SenseRow, DictLink, MetzudatRow, MenchemRow } from '@/webview-host/dictionaryDb'
+import type { SenseRow, DictLink, MetzudatRow, MenchemRow, AruchRow } from '@/webview-host/dictionaryDb'
 import type { WordPageData } from './dictionaryTypes'
 
 function levenshtein(a: string, b: string): number {
@@ -92,7 +92,7 @@ watch(debouncedQuery, async (q) => {
       return
     }
 
-    const [{ dictRows, metzudatRows, malbimRows, menchemRows, isExact }] = await Promise.all([
+    const [{ dictRows, metzudatRows, malbimRows, menchemRows, aruchRows, isExact }] = await Promise.all([
       combinedLookup(trimmed),
     ])
 
@@ -140,7 +140,7 @@ watch(debouncedQuery, async (q) => {
       }
     }
 
-    if (!dictRows.length && !metzudatRows.length && !malbimRows.length && !menchemRows.length && !synonyms.length) {
+    if (!dictRows.length && !metzudatRows.length && !malbimRows.length && !menchemRows.length && !aruchRows.length && !synonyms.length) {
       pageData.value = null
       noResults.value = true
       tabStore.updateActiveTab({ title: 'מילון' })
@@ -152,6 +152,7 @@ watch(debouncedQuery, async (q) => {
         metzudat:    metzudatRows,
         malbim:      malbimRows,
         menchemRows,
+        aruchRows,
         links, synonyms, variants,
         ketivSuggestions,
         levenshteinSuggestions,

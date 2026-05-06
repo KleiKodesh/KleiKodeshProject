@@ -158,11 +158,25 @@ namespace BloomSearchEngineLib
                         });
                     }
 
-                    // Close resultQueue when all workers finish
-                    Task.Run(() =>
+                    // Close resultQueue when all workers finish.
+                    // The task is stored so its exceptions are observed by the
+                    // readerTask.Wait() / writer-loop path below.
+                    Task workerDrainTask = Task.Run(() =>
                     {
-                        Task.WaitAll(workerTasks);
-                        resultQueue.CompleteAdding();
+                        try
+                        {
+                            Task.WaitAll(workerTasks);
+                        }
+                        catch (AggregateException ae)
+                        {
+                            Console.WriteLine("[BloomFilterIndexer] Worker exception: " + ae);
+                        }
+                        finally
+                        {
+                            // Always signal the writer — even on worker failure —
+                            // so the writer loop can drain and exit rather than hang.
+                            resultQueue.CompleteAdding();
+                        }
                     });
 
                     // ── Writer (this thread) ──────────────────────────────────
@@ -205,6 +219,7 @@ namespace BloomSearchEngineLib
                     }
 
                     readerTask.Wait();
+                    workerDrainTask.Wait();
 
                     sw.Stop();
                     Console.WriteLine("[BloomFilterIndexer] Done — total={0}s  chunks={1}  write={2}ms",

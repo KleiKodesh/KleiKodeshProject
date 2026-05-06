@@ -6,7 +6,7 @@ import { devQueryDict } from './devFallbacks'
 import {
   boldExact, boldPrefix, boldContains,
   getMetzudatBookIds, getMalbimBookIds,
-  menchemLookup,
+  menchemLookup, aruchLookup,
 } from './dictionarySeforimDb'
 import {
   SQL_DICT_EXACT, SQL_DICT_PREFIX, SQL_DICT_CONTAINS, SQL_DICT_EXACT_IN_WORD,
@@ -30,7 +30,7 @@ export interface DictLink {
   word: string
 }
 
-export type { MetzudatRow, MenchemRow } from './dictionarySeforimDb'
+export type { MetzudatRow, MenchemRow, AruchRow } from './dictionarySeforimDb'
 
 declare global {
   interface Window {
@@ -127,6 +127,7 @@ export interface CombinedLookupResult {
   metzudatRows: import('./dictionarySeforimDb').MetzudatRow[]
   malbimRows:   import('./dictionarySeforimDb').MetzudatRow[]
   menchemRows:  import('./dictionarySeforimDb').MenchemRow[]
+  aruchRows:    import('./dictionarySeforimDb').AruchRow[]
   isExact:      boolean
 }
 
@@ -135,8 +136,8 @@ export interface CombinedLookupResult {
  * progression: exact → prefix → contains. All three exact queries fire together;
  * if any source finds results the tier is done and lower tiers are skipped.
  *
- * מחברת מנחם runs independently in parallel (exact-only, different structure)
- * and does not participate in the tier gating.
+ * מחברת מנחם and ספר הערוך run independently in parallel (exact-only, different structure)
+ * and do not participate in the tier gating.
  */
 export async function combinedLookup(term: string): Promise<CombinedLookupResult> {
   const [metzudatIds, malbimIds] = await Promise.all([
@@ -144,8 +145,9 @@ export async function combinedLookup(term: string): Promise<CombinedLookupResult
     getMalbimBookIds(),
   ])
 
-  // מחברת מנחם is exact-only — fire it immediately and collect at the end
+  // מחברת מנחם and ספר הערוך are exact-only — fire them immediately and collect at the end
   const menchemPromise = menchemLookup(term)
+  const aruchPromise = aruchLookup(term)
 
   // Tier 1 — exact
   const [dictExactResult, metzudatExactRows, malbimExactRows] = await Promise.all([
@@ -160,6 +162,7 @@ export async function combinedLookup(term: string): Promise<CombinedLookupResult
       metzudatRows: metzudatExactRows,
       malbimRows:   malbimExactRows,
       menchemRows:  await menchemPromise,
+      aruchRows:    await aruchPromise,
       isExact:      true,
     }
   }
@@ -177,6 +180,7 @@ export async function combinedLookup(term: string): Promise<CombinedLookupResult
       metzudatRows: metzudatPrefixRows,
       malbimRows:   malbimPrefixRows,
       menchemRows:  await menchemPromise,
+      aruchRows:    await aruchPromise,
       isExact:      false,
     }
   }
@@ -193,6 +197,7 @@ export async function combinedLookup(term: string): Promise<CombinedLookupResult
     metzudatRows: metzudatContainsRows,
     malbimRows:   malbimContainsRows,
     menchemRows:  await menchemPromise,
+    aruchRows:    await aruchPromise,
     isExact:      false,
   }
 }

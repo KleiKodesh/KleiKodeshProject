@@ -199,7 +199,7 @@ namespace KezayitLib.Search
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine("[SearchHandler] Background merge failed (non-fatal): " + ex.Message);
+                    Console.WriteLine("[SearchHandler] Background merge failed (non-fatal): " + ex);
                 }
                 finally
                 {

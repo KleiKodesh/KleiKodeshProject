@@ -37,6 +37,7 @@ namespace KezayitLib.Search
             int    skipCount   = root.TryGetProperty("1", out var s) ? s.GetInt32() : 0;
             int    maxWordDist = root.TryGetProperty("2", out var d) ? d.GetInt32() : 10;
             bool   reqOrdered  = root.TryGetProperty("3", out var o) && o.GetBoolean();
+            int    contextWords = root.TryGetProperty("4", out var cw) ? cw.GetInt32() : SeforimIndex.DefaultContextWords;
 
             bool         ready = _state.IsReady;
             SeforimIndex index = _state.GetIndex();
@@ -51,7 +52,15 @@ namespace KezayitLib.Search
             var cts = new CancellationTokenSource();
             _searches[searchId] = cts;
             _bridge.Reply(id, new { searchId = searchId });
-            Task.Run(() => RunSearch(searchId, query, skipCount, maxWordDist, reqOrdered, index, cts.Token));
+
+            Task searchTask = Task.Run(
+                () => RunSearch(searchId, query, skipCount, maxWordDist, reqOrdered, contextWords, index, cts.Token));
+
+            // Observe the task so that any exception escaping RunSearch's own try/catch
+            // is logged rather than silently swallowed by the thread pool.
+            searchTask.ContinueWith(
+                t => Console.WriteLine("[FtsSearchExecutor] Unhandled search exception: " + t.Exception),
+                TaskContinuationOptions.OnlyOnFaulted);
         }
 
         internal void HandleSearchCancel(JsonElement root, string id)
@@ -68,22 +77,32 @@ namespace KezayitLib.Search
         // ── Search execution ──────────────────────────────────────────────────────
 
         private void RunSearch(string searchId, string query, int skipCount,
-                               int maxWordDistance, bool requireOrdered,
+                               int maxWordDistance, bool requireOrdered, int contextWords,
                                SeforimIndex index, CancellationToken ct)
         {
             try
             {
-                const int InitialBatchSize       = 1;
-                const int SwitchToTimerThreshold = 16;
-                const int FlushTimeoutMs         = 150;
-                const int MemorySafetyCap        = 200;
+                // Batching strategy:
+                //   Phase 1 — doubling: flush at 1, 2, 4, 8, 16 results.
+                //              Gives the user instant first-result feedback and
+                //              progressively larger batches as results accumulate.
+                //   Phase 2 — timer: once the doubling sequence is exhausted (after
+                //              the 16-result flush), switch to flushing every 250ms
+                //              regardless of batch size. A memory safety cap of 200
+                //              forces a flush even if the timer hasn't fired yet.
+                const int TimerIntervalMs = 250;
+                const int MemorySafetyCap = 200;
 
-                var  batch            = new List<object>(50);
-                int  currentThreshold = InitialBatchSize;
-                int  skipped          = 0;
-                var  batchTimer       = new Stopwatch();
-                bool useTimerOnly     = false;
-                batchTimer.Start();
+                // Doubling thresholds: flush when batch reaches each of these sizes.
+                // After the last threshold is flushed we switch to timer-only mode.
+                var doublingThresholds = new[] { 1, 2, 4, 8, 16 };
+                int doublingIndex = 0;          // index into doublingThresholds
+                bool useTimerOnly = false;
+
+                var     batch   = new List<object>(MemorySafetyCap);
+                int     skipped = 0;
+                var     timer   = new Stopwatch();
+                timer.Start();
 
                 foreach (var result in index.Search(query, cap: 0, ct))
                 {
@@ -93,10 +112,9 @@ namespace KezayitLib.Search
                         return;
                     }
 
-                    var snippet = index.GenerateSnippet(result, requireOrdered);
+                    var snippet = index.GenerateSnippet(result, requireOrdered, contextWords: contextWords);
                     if (!snippet.IsMatch) continue;
                     if (snippet.WordDistance > maxWordDistance) continue;
-
                     if (skipped < skipCount) { skipped++; continue; }
 
                     // Flatten MatchedGroups into a deduplicated list of concrete terms.
@@ -109,9 +127,9 @@ namespace KezayitLib.Search
                     batch.Add(new
                     {
                         lineId       = result.LineId,
-                        bookId       = 0,       // frontend fetches via GET_LINE_INDEX_FROM_LINE_ID
+                        bookId       = 0,
                         bookTitle    = result.BookTitle,
-                        tocText      = "",      // frontend enriches via GET_TOC_PATHS_FOR_LINES
+                        tocText      = "",
                         score        = snippet.Score,
                         snippet      = snippet.Html,
                         matchedTerms = matchedTerms.ToArray()
@@ -120,21 +138,14 @@ namespace KezayitLib.Search
                     bool shouldFlush;
                     if (useTimerOnly)
                     {
-                        shouldFlush = batch.Count > 0 &&
-                            (batchTimer.ElapsedMilliseconds >= FlushTimeoutMs ||
-                             batch.Count >= MemorySafetyCap);
+                        shouldFlush = timer.ElapsedMilliseconds >= TimerIntervalMs
+                                   || batch.Count >= MemorySafetyCap;
                     }
                     else
                     {
-                        bool reachedThreshold = batch.Count >= currentThreshold;
-                        bool timedOut         = batch.Count > 0 &&
-                                                batchTimer.ElapsedMilliseconds >= FlushTimeoutMs;
-                        bool memoryCapReached = batch.Count >= MemorySafetyCap;
-                        shouldFlush = reachedThreshold || timedOut || memoryCapReached;
-
-                        if (shouldFlush && reachedThreshold &&
-                            currentThreshold >= SwitchToTimerThreshold)
-                            useTimerOnly = true;
+                        int threshold = doublingThresholds[doublingIndex];
+                        shouldFlush = batch.Count >= threshold
+                                   || batch.Count >= MemorySafetyCap;
                     }
 
                     if (shouldFlush)
@@ -142,17 +153,21 @@ namespace KezayitLib.Search
                         PostSearch(new { type = "searchBatch", searchId = searchId,
                                          results = batch.ToArray() });
                         batch.Clear();
-                        batchTimer.Restart();
+                        timer.Restart();
 
-                        if (!useTimerOnly && currentThreshold < SwitchToTimerThreshold)
-                            currentThreshold = Math.Min(currentThreshold * 2,
-                                                        SwitchToTimerThreshold);
+                        if (!useTimerOnly)
+                        {
+                            doublingIndex++;
+                            if (doublingIndex >= doublingThresholds.Length)
+                                useTimerOnly = true;
+                        }
                     }
                 }
 
                 if (batch.Count > 0)
                     PostSearch(new { type = "searchBatch", searchId = searchId,
                                      results = batch.ToArray() });
+
                 PostSearch(new { type = "searchComplete", searchId = searchId });
             }
             catch (OperationCanceledException)
@@ -161,6 +176,7 @@ namespace KezayitLib.Search
             }
             catch (Exception ex)
             {
+                Console.WriteLine("[FtsSearchExecutor] Search error: " + ex);
                 PostSearch(new { type = "searchError", searchId = searchId,
                                  error = ex.Message });
             }

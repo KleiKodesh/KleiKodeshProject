@@ -39,6 +39,11 @@ namespace FtsLib.Core
             if (string.IsNullOrWhiteSpace(query))
                 return new ParsedQuery(groups);
 
+            // Pre-process: pad every '|' character with spaces so that "א|ב" and
+            // "א | ב" are treated identically.  This lets users omit spaces around
+            // the pipe without affecting the tokenisation logic below.
+            query = query.Replace("|", " | ");
+
             // First pass: tokenise into SubPatterns and bare OR-pipe markers.
             // A raw token of exactly "|" (after whitespace split) is an OR separator.
             // We accumulate SubPatterns into a pending OR group; when we see a

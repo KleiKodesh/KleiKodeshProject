@@ -46,7 +46,7 @@ namespace FtsLib.Core
         private DeleteSet     _deletes;
         private readonly bool _useSkipList;
         private bool          _disposed;
-        private int           _lastLineId = -1;
+        private int           _lastLineId = int.MinValue;
         private bool          _flushPending;
 
         /// <summary>
@@ -58,7 +58,7 @@ namespace FtsLib.Core
         /// in SegmentStore is volatile.
         /// </summary>
         public int LastFlushedLineId =>
-            _store != null ? _store.LastFlushedLineId : -1;
+            _store != null ? _store.LastFlushedLineId : int.MinValue;
 
         public IndexWriter(string indexPath, bool useSkipList = true) : base(indexPath)
         {
@@ -101,7 +101,7 @@ namespace FtsLib.Core
 
             // Arm the flush flag once the threshold is reached, but don't flush
             // yet — more terms for this same lineId may still arrive.
-            int activeThreshold = (FirstFlushThreshold > 0 && LastFlushedLineId < 0)
+            int activeThreshold = (FirstFlushThreshold > 0 && LastFlushedLineId == int.MinValue)
                 ? FirstFlushThreshold
                 : FlushThreshold;
             if (_ramIndex.Count >= activeThreshold)

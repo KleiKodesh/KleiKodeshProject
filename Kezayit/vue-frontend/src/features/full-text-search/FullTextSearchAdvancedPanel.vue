@@ -4,12 +4,14 @@ import { IconDismiss20Regular, IconInfo20Regular } from '@iconify-prerendered/vu
 const props = defineProps<{
   maxWordDistance: number
   requireOrdered: boolean
+  contextWords: number
   showSyntaxHelp: boolean
 }>()
 
 const emit = defineEmits<{
   'update:maxWordDistance': [number]
   'update:requireOrdered': [boolean]
+  'update:contextWords': [number]
   'update:showSyntaxHelp': [boolean]
   close: []
 }>()
@@ -17,6 +19,11 @@ const emit = defineEmits<{
 function onDistanceInput(event: Event) {
   const value = parseInt((event.target as HTMLInputElement).value, 10)
   if (!isNaN(value) && value >= 0) emit('update:maxWordDistance', value)
+}
+
+function onContextWordsInput(event: Event) {
+  const value = parseInt((event.target as HTMLInputElement).value, 10)
+  if (!isNaN(value) && value >= 0) emit('update:contextWords', value)
 }
 </script>
 
@@ -61,6 +68,20 @@ function onDistanceInput(event: Event) {
         </div>
       </div>
 
+      <!-- Context words -->
+      <div class="option-row">
+        <label class="option-label" for="context-words-input">הקשר לפני ואחרי (מילים)</label>
+        <input
+          id="context-words-input"
+          type="number"
+          class="distance-input"
+          :value="props.contextWords"
+          min="0"
+          max="9999"
+          @input="onContextWordsInput"
+        />
+      </div>
+
       <!-- Syntax help toggle -->
       <div class="option-row syntax-row">
         <button
@@ -85,16 +106,12 @@ function onDistanceInput(event: Event) {
           </thead>
           <tbody>
             <tr>
-              <td class="pattern">מילה</td>
-              <td>חיפוש מדויק — כל המילים חייבות להופיע בשורה.<br><span class="example">משה תורה</span></td>
+              <td class="pattern">*מילה*</td>
+              <td>כוכבית — (לפני או אחרי המילה) - תחיליות וסופיות.<br><span class="example">ישר*</span> ← ישראל, ישרים… &nbsp; <span class="example">*לום</span> ← שלום, עולם…</td>
             </tr>
             <tr>
-              <td class="pattern">מילה*</td>
-              <td>כוכבית — אפס תווים או יותר.<br><span class="example">ישר*</span> ← ישראל, ישרים… &nbsp; <span class="example">*לום</span> ← שלום, עולם…</td>
-            </tr>
-            <tr>
-              <td class="pattern">מיל?ה</td>
-              <td>שאלתית — התו שלפניה אופציונלי.<br><span class="example">שלו?ם</span> ← שלום או שלם</td>
+              <td class="pattern">מי?לה</td>
+              <td>שאלתית — (כתיב חסר) התו שלפני הסימן שאלה אופציונלי.<br><span class="example">שלו?ם</span> ← שלום או שלם</td>
             </tr>
             <tr>
               <td class="pattern">מילה~</td>
@@ -106,17 +123,32 @@ function onDistanceInput(event: Event) {
             </tr>
             <tr>
               <td class="pattern">א | ב</td>
-              <td>מקף אנכי — OR: מספיק שאחת מהמילים תופיע.<br><span class="example">משה | אהרן תורה</span> ← (משה או אהרן) וגם תורה</td>
+              <td>
+                מקף אנכי — OR: מספיק שאחת מהמילים תופיע. ניתן לכתוב עם רווחים או בלעדיהם.<br>
+                <span class="example">משה | אהרן תורה</span> ← (משה או אהרן) וגם תורה<br>
+                <span class="example">משה|אהרן תורה</span> ← זהה לדוגמה למעלה
+              </td>
+            </tr>
+          </tbody>
+          <tbody class="syntax-notes-section">
+            <tr>
+              <td class="pattern">שרשרת או</td>
+              <td><span class="example">א | ב | ג תורה</span> ← (א או ב או ג) וגם תורה. השרשרת נשברת כשמילה מופיעה ללא מקף לפניה.</td>
+            </tr>
+            <tr>
+              <td class="pattern">קבוצות נפרדות</td>
+              <td><span class="example">א | ב ג | ד</span> ← (א או ב) וגם (ג או ד).</td>
+            </tr>
+            <tr>
+              <td class="pattern">כוכבית + שאלתית</td>
+              <td>ניתן לשלב באותה מילה, למשל <span class="example">שלו?ם*</span>.</td>
+            </tr>
+            <tr class="warning-row">
+              <td class="pattern">טילדה + כוכבית</td>
+              <td>לא ניתן לשלב — הכוכבית/שאלתית גוברת.</td>
             </tr>
           </tbody>
         </table>
-        <div class="syntax-notes">
-          <p><strong>שילוב מילים:</strong> כל המילים מחוברות ב-AND — כולן חייבות להופיע באותה שורה.</p>
-          <p><strong>OR (|):</strong> המקף האנכי חייב להיות מופרד ברווחים משני הצדדים.</p>
-          <p><strong>ניקוד:</strong> מתעלם מניקוד — ניתן לחפש עם ניקוד או בלעדיו.</p>
-          <p><strong>כוכבית ושאלתית:</strong> ניתן לשלב באותה מילה, למשל <span class="example">שלו?ם*</span>.</p>
-          <p><strong>טילדה + כוכבית/שאלתית:</strong> לא ניתן לשלב — הכוכבית/שאלתית גוברת.</p>
-        </div>
       </div>
   </div>
 </template>
@@ -192,27 +224,27 @@ function onDistanceInput(event: Event) {
 }
 .toggle-group {
   display: flex;
-  border-radius: 4px;
-  overflow: hidden;
-  border: 1px solid var(--border-color);
+  gap: 4px;
 }
 .toggle-btn {
-  padding: 0 8px;
+  flex: 1;
   height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
   font-size: 11px;
-  color: var(--text-secondary);
-  background: var(--input-bg);
-  border-radius: 0;
-  border: none;
-  border-right: 1px solid var(--border-color);
   white-space: nowrap;
+  border-radius: 4px;
+  transition: all 100ms ease;
 }
-.toggle-btn:last-child {
-  border-right: none;
+.toggle-btn:hover:not(.active) {
+  background: color-mix(in srgb, var(--text-primary) 6%, var(--bg-secondary));
 }
 .toggle-btn.active {
   background: var(--accent-color);
   color: #fff;
+  border-color: var(--accent-color);
 }
 .syntax-row {
   justify-content: flex-start;
@@ -255,6 +287,16 @@ function onDistanceInput(event: Event) {
   border-bottom: 1px solid var(--border-color);
   background: color-mix(in srgb, var(--text-primary) 4%, transparent);
 }
+.syntax-table th:first-child,
+.syntax-table td:first-child {
+  padding-inline-end: 6px;
+  padding-inline-start: 0;
+}
+.syntax-table th:last-child,
+.syntax-table td:last-child {
+  padding-inline-start: 6px;
+  padding-inline-end: 0;
+}
 .syntax-table td {
   padding: 5px 6px;
   vertical-align: top;
@@ -277,16 +319,27 @@ function onDistanceInput(event: Event) {
   color: var(--accent-color);
   font-size: 11px;
 }
-.syntax-notes {
-  margin-top: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.syntax-notes p {
-  font-size: 11px;
+.syntax-notes-section .section-header-row .section-header-cell {
+  padding-top: 8px;
+  padding-bottom: 4px;
+  padding-inline-start: 0;
+  padding-inline-end: 0;
+  font-size: 10px;
+  font-weight: 600;
   color: var(--text-secondary);
-  line-height: 1.5;
-  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-top: 1px solid var(--border-color);
+  border-bottom: none;
 }
+.syntax-notes-section td {
+  color: var(--text-secondary);
+}
+.warning-row td {
+  color: #f14c4c;
+}
+.warning-row .pattern {
+  color: #f14c4c;
+}
+
 </style>

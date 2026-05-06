@@ -224,6 +224,7 @@ export const KEYS = {
   SETTINGS_CALENDAR_VIEW: 'calendar.viewMode',
   SETTINGS_MIDOT_DISCLAIMER: 'midot.disclaimerAccepted',
   SETTINGS_DICTIONARY_ZOOM: 'dictionaryZoom',
+  SETTINGS_SEARCH_CONTEXT_MARGIN: 'search.contextMargin',
   // tab list is also localStorage (small JSON, needed synchronously at boot)
   tabsList: (wsId: string) => `tabs:${wsId}`,
 
