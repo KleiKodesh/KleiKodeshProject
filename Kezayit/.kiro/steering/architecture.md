@@ -124,18 +124,23 @@ The main book reader. Orchestrates a split pane (text above, commentary below), 
 
 ### full-text-search/
 
-Full-text search using Bloom filters. Supports category/book filters and caches results.
+Full-text search backed by FtsLib (LSM-style segment index with delta+varint compressed posting lists). Supports category/book filters and caches results in IDB.
 
 - `FullTextSearchPage.vue` — main page
 - `FullTextSearchBar.vue` — search input + filter toggle
 - `FullTextSearchResultsList.vue` — results (virtual scroller)
 - `FullTextSearchFilterPanel.vue` — category/book filter tree
 - `FullTextSearchFilterNode.vue` — filter tree node
-- `FullTextSearchIndexingOverlay.vue` — indexing progress overlay
-- `useFullTextSearch.ts` — Bloom filter search execution and caching
-- `useFullTextSearchIndexingStatus.ts` — indexing status polling
+- `FullTextSearchIndexingOverlay.vue` — indexing progress overlay; shown while the index is building; search is enabled as soon as the first segment is flushed (partial index)
+- `useFullTextSearch.ts` — search execution and IDB caching; streams results from C# in batches via `chrome.webview` message events; enriches each batch with TOC paths via a SQL query; resumes interrupted searches from the cache skip offset
+- `useFullTextSearchIndexingStatus.ts` — subscribes to `ftsIndexProgress` push events from C#; handles `ftsIndexVersionMismatch` (prompts user to rebuild) and `ftsIndexInvalidated` (automatic rebuild)
 - `useFullTextSearchFilters.ts` — filter state (checked books/categories), result filtering, and result click handler
 - `fullTextSearchTypes.ts` — TypeScript types
+
+#### Query syntax (passed verbatim to FtsLib)
+
+- Multiple words are AND-ed. `word*` is a wildcard (prefix, infix, or suffix). `word~` / `word~2` / `word~3` is fuzzy (edit distance 1–3). `a | b` is OR within one AND slot.
+- The frontend passes two additional parameters: `maxWordDistance` (default 10 — maximum token distance between matched terms in a line) and `requireOrdered` (default false — whether terms must appear in query order). These are applied inside FtsLib's snippet pipeline, not during index intersection.
 
 ### settings/
 
@@ -230,7 +235,7 @@ Reusable UI primitives used across multiple features. No feature-specific logic 
 
 **zimStore** — Kiwix ZIM file handling. Manages virtual host URL and session restore for `/kiwix-view` tabs. Listens to the `zimReady` C# push event. No conversion pipeline — ZIM files are always local and served directly.
 
-**searchCacheStore** — LRU cache for search results (capped at 100 entries), stored in `app-search-cache` IDB.
+**searchCacheStore** — LRU cache for FTS search results (capped at 100 entries), stored in `app-search-cache` IDB.
 
 **hebrewBooksHistoryStore** — HebrewBooks download history, stored in `app-hb-history` IDB, LRU-capped at 25 entries.
 
@@ -272,14 +277,14 @@ C# host actions for file operations. All functions have dev fallbacks.
 - `restoreHbPdf(bookId, bookTitle, tabId)` — restore HebrewBooks PDF from cache
 - `disposePdfHost(filePath)` — decrement virtual host ref count on tab close
 - `callBridgeAction(name, ...params)` — call any C# action with positional params (used by search/indexing)
-- `resetHostApp()` — full app reset: deletes Bloom index, resets C# settings, reloads
-- `resetSearchIndex()` — resets the Bloom search index on the C# side
+- `resetHostApp()` — full app reset: deletes FTS index, resets C# settings, reloads
+- `resetSearchIndex()` — resets the FTS index on the C# side (triggers a fresh rebuild)
 
 ### queries.sql.ts
 
 All raw SQL strings for the frontend live here. No inline SQL anywhere else in the Vue/TypeScript codebase — every query a composable or store needs must be added to this file and imported from it.
 
-The one exception is `ZayitDbManager.cs` in the C# backend, which owns the SQL used exclusively by the Bloom filter pipeline (indexing and search result hydration). That SQL never crosses into the frontend and is not duplicated in `queries.sql.ts`. No other C# file may contain inline SQL — `DbHandler.cs` is a passthrough that executes whatever SQL the frontend sends; it has no queries of its own.
+The one exception is `ZayitDb.cs` in FtsLib (`CSharpBackend/FtsLib/FtsLib/Misc/ZayitDb.cs`), which owns the SQL used exclusively by the FTS indexing and search pipeline. That SQL never crosses into the frontend and is not duplicated in `queries.sql.ts`. No other C# file may contain inline SQL — `DbHandler.cs` is a passthrough that executes whatever SQL the frontend sends; it has no queries of its own.
 
 ## Utilities (`src/utils/`)
 
@@ -345,8 +350,43 @@ Key C# handlers:
 - `JsBridge.cs` — handles `__webviewAction` calls (file picker, PDF restore, virtual host management)
 - `WebBridge.cs` — WebView2 setup, message routing
 - `DbAccess.cs` / `DbHandler.cs` — SQLite access via Dapper
-- `SearchHandler.cs` — Bloom filter search
+- `SearchHandler.cs` — FTS index lifecycle orchestrator (actor-thread pattern); delegates to `FtsIndexBuilder`, `FtsIndexState`, and `FtsSearchExecutor` in `KezayitLib/Search/`
 - `HebrewBooksHandler.cs` — HebrewBooks download via WebView2 browser engine
 - `PdfHandler.cs` — PDF virtual host management
 - `ZimHandler.cs` — ZIM virtual host management (Kiwix reader)
 - `WordToPdfConverter.cs` — Word-to-PDF conversion
+
+### FTS Search Pipeline
+
+The full-text search pipeline spans three layers: FtsLib (the index engine), KezayitLib (the C# orchestration layer), and the Vue frontend.
+
+**FtsLib** (`CSharpBackend/FtsLib/`) is a standalone library with its own git repo. It exposes a single public entry point: `SeforimIndex` in `FtsLib/Seforim/`. The `Core/` folder contains the index engine internals — `IndexWriter`, `IndexReader`, `SegmentMerger`, `QueryParser`, `SearchExecutor`, `SnippetBuilder`, `Tokenizer`, `FuzzyExpander`, `WildcardExpander`, and the posting-list iterators. The `Misc/` folder contains `ZayitDb.cs`, which owns all SQL for reading lines from the seforim database during indexing and search result hydration. `SeforimIndex` is the only class the rest of the app ever touches.
+
+**KezayitLib/Search/** contains four classes that orchestrate the lifecycle:
+
+- `FtsIndexState` — owns all mutable state (current state machine position, `SeforimIndex` instance, DB path, running tasks). All field mutations go through its named transition methods. State machine: Idle → Building → Ready → Merging → Ready.
+- `FtsIndexBuilder` — starts and runs the build (`Task.Run`) and background merge. Pushes `ftsIndexProgress` events to the frontend every 5000 lines. Marks the index partially ready as soon as the first segment is flushed so search is available before the build completes.
+- `FtsSearchExecutor` — runs each search on a `Task.Run` thread, streams results back to the frontend in batches via `WebBridge.PushEvent` (which calls `PostWebMessageAsString` → `chrome.webview` message events). Batch size starts at 1 and doubles up to 16, then switches to a 150ms timer flush. Applies `maxWordDistance` and `requireOrdered` filters inside the snippet loop.
+- `SearchHandler` — thin orchestrator. Serializes all lifecycle operations (OnDbReady, ResetAndReindex, HandleDeleteIndex) through a `BlockingCollection<Action>` actor thread so they never race. Delegates search start/cancel to `FtsSearchExecutor`.
+
+**Vue frontend** (`src/features/full-text-search/`):
+
+- `useFullTextSearch.ts` — calls `FtsSearchStart` via `callBridgeAction`, receives batches via a `chrome.webview` message listener keyed by `searchId`, enriches each batch with TOC paths via `GET_TOC_PATHS_FOR_LINES`, appends to the IDB cache via `searchCacheStore`. On a cache hit with a complete result set, skips the stream entirely. On a partial cache hit, passes `skipCount` to C# so the stream resumes from where it left off.
+- `useFullTextSearchIndexingStatus.ts` — subscribes to `ftsIndexProgress` push events via `onWebviewEvent`. Handles `ftsIndexVersionMismatch` (prompts user to confirm rebuild) and `ftsIndexInvalidated` (automatic rebuild, no prompt).
+
+**Bridge actions** (all handled by `SearchHandler` via `JsBridge.cs`):
+
+| Action | Direction | Description |
+| --- | --- | --- |
+| `FtsSearchStart` | Vue → C# | Start a search; returns `{ searchId }` |
+| `FtsSearchCancel` | Vue → C# | Cancel an in-flight search by `searchId` |
+| `GetFtsIndexingProgress` | Vue → C# | Poll current indexing state on mount |
+| `FtsConfirmReindex` | Vue → C# | User's response to the version-mismatch prompt |
+| `ResetFtsIndex` | Vue → C# | Delete index and rebuild from scratch |
+| `searchBatch` | C# → Vue | Batch of `FullTextSearchResult` objects |
+| `searchComplete` | C# → Vue | Stream finished |
+| `searchCancelled` | C# → Vue | Stream cancelled |
+| `searchError` | C# → Vue | Stream error |
+| `ftsIndexProgress` | C# → Vue | Indexing progress tick |
+| `ftsIndexVersionMismatch` | C# → Vue | App version changed; user must confirm rebuild |
+| `ftsIndexInvalidated` | C# → Vue | Index corrupt or missing; rebuild started automatically |

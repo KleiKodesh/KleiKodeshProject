@@ -131,9 +131,6 @@
     <Compile Include="Search\FtsIndexState.cs" />
     <Compile Include="Search\FtsIndexBuilder.cs" />
     <Compile Include="Search\FtsSearchExecutor.cs" />
-    <Compile Include="Search\FtsIndexState.cs" />
-    <Compile Include="Search\FtsIndexBuilder.cs" />
-    <Compile Include="Search\FtsSearchExecutor.cs" />
     <Compile Include="Search\SearchHandler.cs" />
     <Compile Include="Settings\AppSettings.cs" />
     <Compile Include="Dictionary\DictionaryHandler.cs" />

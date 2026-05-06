@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -23,25 +24,25 @@ namespace FtsLib.Core
 
         public void MergeIfNeeded(int level)
         {
-            if (_store.LiveSegCount(level) < SegmentStore.Fanout) return;
-            EnsureLevel(level + 1);
+            if (_store.Live.LiveSegCount(level) < SegmentStore.Fanout) return;
+            _store.Live.EnsureLevel(level + 1);
             MergeLevel(level);
             MergeIfNeeded(level + 1);
         }
 
         public void ForceMergeAll()
         {
-            int total = _store.TotalLiveSegs();
+            int total = _store.Live.TotalLiveSegs();
             Console.WriteLine($"[SegmentStore] Force-merge: {total} segment(s)");
 
             bool progress;
             do
             {
                 progress = false;
-                int level = _store.FindLevelWithMultiple();
+                int level = _store.Live.FindLevelWithMultiple();
                 if (level >= 0)
                 {
-                    EnsureLevel(level + 1);
+                    _store.Live.EnsureLevel(level + 1);
                     MergeLevel(level);
                     progress = true;
                 }
@@ -54,19 +55,14 @@ namespace FtsLib.Core
 
         public void MergeLevel(int level)
         {
-            var segIds = _store.GetLiveSegIds(level);
+            var segIds = _store.Live.GetLiveSegIds(level);
             if (segIds.Count < 2) return;
 
-            int    newSegId  = _store.NextSegId();
+            int    newSegId  = _store.Live.NextSegId();
             int    nextLevel = level + 1;
-            string outDat    = _store.SegDatPath(nextLevel, newSegId);
-            string outDb     = _store.SegDbPath(nextLevel, newSegId);
+            string outDat    = _store.Live.SegDatPath(nextLevel, newSegId);
+            string outDb     = _store.Live.SegDbPath(nextLevel, newSegId);
 
-            // Write to temp paths first — only rename to final paths once both files
-            // are fully written. This ensures that even if the process is killed mid-write,
-            // no partial file ever appears at a final segment path that RebuildLiveState
-            // could pick up. The WAL provides a second layer of protection, but temp-then-
-            // rename makes the output atomic regardless of WAL flush timing.
             string tmpDat = outDat + ".tmp";
             string tmpDb  = outDb  + ".tmp";
 
@@ -74,7 +70,6 @@ namespace FtsLib.Core
 
             _store.Wal.BeginMerge(level, segIds.ToArray(), newSegId);
 
-            // Clean up any leftover temp files from a previous interrupted attempt.
             DeleteIfExists(tmpDat);
             DeleteIfExists(tmpDb);
 
@@ -82,22 +77,20 @@ namespace FtsLib.Core
             var entries = WriteMergedDat(level, nextLevel, readers, tmpDat);
             CloseReaders(readers);
 
-            SegmentStore.WriteMetaDb(tmpDb, entries);
+            SegmentWriter.WriteMetaDb(tmpDb, entries);
 
-            // Both files are complete — rename atomically to final paths.
             File.Move(tmpDat, outDat);
             File.Move(tmpDb,  outDb);
 
             _store.Wal.EndMerge(level, newSegId);
 
-            // Delete source files — safe now that END_MERGE is logged
             foreach (int sid in segIds)
             {
-                DeleteIfExists(_store.SegDatPath(level, sid));
-                DeleteIfExists(_store.SegDbPath(level, sid));
+                DeleteIfExists(_store.Live.SegDatPath(level, sid));
+                DeleteIfExists(_store.Live.SegDbPath(level, sid));
             }
 
-            _store.PromoteSegment(level, segIds, nextLevel, newSegId);
+            _store.Live.PromoteSegment(level, segIds, nextLevel, newSegId);
 
             Console.WriteLine($"[Merger] Done → L{nextLevel} seg {newSegId} ({entries.Count:N0} terms)");
         }
@@ -114,6 +107,10 @@ namespace FtsLib.Core
             int  written  = 0;
             long writePos = 0;
 
+            // Reusable merge buffer — grown as needed, never shrunk.
+            // Avoids one MemoryStream allocation per term (1.4M+ over a full merge).
+            byte[] mergeBuffer = new byte[256];
+
             using (var outFs = new FileStream(outPath, FileMode.Create,
                                               FileAccess.Write, FileShare.None,
                                               bufferSize: 4 * 1024 * 1024))
@@ -124,26 +121,34 @@ namespace FtsLib.Core
                     string minTerm = FindMinTerm(readers);
                     if (minTerm == null) break;
 
-                    var (mergedChunk, totalCount, lastEncoded) = MergeChunks(readers, minTerm, _store.GetDeleteSet());
+                    int mergedLen;
+                    int totalCount;
+                    uint lastEncoded;
+                    MergeChunks(readers, minTerm, _store.GetDeleteSet(),
+                                ref mergeBuffer, out mergedLen, out totalCount, out lastEncoded);
 
                     // Skip terms whose entire posting list was purged
                     if (totalCount == 0) continue;
 
-                    byte[] termBytes  = Encoding.UTF8.GetBytes(minTerm);
-                    int    chunkLen   = mergedChunk.Length;
+                    int    termByteLen = Encoding.UTF8.GetByteCount(minTerm);
+                    byte[] termBytes   = ArrayPool<byte>.Shared.Rent(termByteLen);
+                    Encoding.UTF8.GetBytes(minTerm, 0, minTerm.Length, termBytes, 0);
+                    int    chunkLen    = mergedLen;
 
-                    bw.Write(termBytes.Length);
-                    bw.Write(termBytes);
+                    bw.Write(termByteLen);
+                    bw.Write(termBytes, 0, termByteLen);
                     bw.Write(chunkLen);
                     bw.Write(totalCount);
                     bw.Write(lastEncoded);
                     bw.Flush();
 
                     long outOff = outFs.Position; // offset of posting data, after the header
-                    outFs.Write(mergedChunk, 0, chunkLen);
+                    outFs.Write(mergeBuffer, 0, chunkLen);
 
-                    writePos += 4 + termBytes.Length + 4 + 4 + 4 + chunkLen;
+                    writePos += 4 + termByteLen + 4 + 4 + 4 + chunkLen;
                     entries.Add((minTerm, outOff, chunkLen, totalCount));
+
+                    ArrayPool<byte>.Shared.Return(termBytes);
 
                     written++;
                     if (written % REPORT_EVERY == 0)
@@ -156,13 +161,20 @@ namespace FtsLib.Core
 
         // ── Chunk merge ──────────────────────────────────────────────
 
-        private static (byte[] chunk, int count, uint lastEncoded) MergeChunks(
-            SegmentReader[] readers, string term, DeleteSet deletes)
+        /// <summary>
+        /// Merges posting chunks for <paramref name="term"/> from all readers into
+        /// <paramref name="buf"/>, growing it as needed. Writes <paramref name="mergedLen"/>
+        /// bytes starting at index 0. Avoids per-term heap allocation.
+        /// </summary>
+        private static void MergeChunks(
+            SegmentReader[] readers, string term, DeleteSet deletes,
+            ref byte[] buf, out int mergedLen, out int totalCount, out uint lastEncoded)
         {
             uint prevEncoded = 0;
-            int  totalCount  = 0;
-            bool firstChunk  = true;
-            var  buf         = new MemoryStream(256);
+            totalCount  = 0;
+            lastEncoded = 0;
+            bool firstChunk = true;
+            int  pos        = 0; // write cursor into buf
 
             foreach (var r in readers)
             {
@@ -173,37 +185,46 @@ namespace FtsLib.Core
 
                 if (deletes == null || deletes.IsEmpty)
                 {
-                    // Fast path: no deletions — copy chunks verbatim (original behaviour)
+                    // Fast path: no deletions — copy chunks verbatim.
                     if (firstChunk)
                     {
-                        buf.Write(chunk, 0, chunkLen);
+                        EnsureCapacity(ref buf, pos + chunkLen);
+                        Buffer.BlockCopy(chunk, 0, buf, pos, chunkLen);
+                        pos       += chunkLen;
                         firstChunk = false;
                     }
                     else
                     {
-                        int  pos          = 0;
-                        uint firstEncoded = VarInt.Read(chunk, ref pos, chunkLen);
-                        uint newDelta     = firstEncoded - prevEncoded;
-                        byte[] hdr        = new byte[5];
-                        int    hdrLen     = VarInt.Encode(newDelta, hdr);
-                        buf.Write(hdr, 0, hdrLen);
-                        int rest = chunkLen - pos;
-                        if (rest > 0) buf.Write(chunk, pos, rest);
+                        // Re-encode the first delta relative to the previous chunk's last value.
+                        int    readPos        = 0;
+                        uint   firstEncoded2  = VarInt.Read(chunk, ref readPos, chunkLen);
+                        uint   newDelta       = firstEncoded2 - prevEncoded;
+                        byte[] hdr            = new byte[5];
+                        int    hdrLen         = VarInt.Encode(newDelta, hdr);
+                        int    rest           = chunkLen - readPos;
+                        EnsureCapacity(ref buf, pos + hdrLen + rest);
+                        Buffer.BlockCopy(hdr, 0, buf, pos, hdrLen);
+                        pos += hdrLen;
+                        if (rest > 0)
+                        {
+                            Buffer.BlockCopy(chunk, readPos, buf, pos, rest);
+                            pos += rest;
+                        }
                     }
 
-                    prevEncoded = r.CurrentLastEncoded;
-                    totalCount += r.CurrentCount;
+                    prevEncoded  = r.CurrentLastEncoded;
+                    totalCount  += r.CurrentCount;
                 }
                 else
                 {
-                    // Purge path: decode every doc ID and skip deleted ones
-                    int  pos     = 0;
+                    // Purge path: decode every doc ID and skip deleted ones.
+                    int  readPos = 0;
                     uint encoded = 0;
                     var  tmp     = new byte[5];
 
-                    while (pos < chunkLen)
+                    while (readPos < chunkLen)
                     {
-                        uint delta = VarInt.Read(chunk, ref pos, chunkLen);
+                        uint delta = VarInt.Read(chunk, ref readPos, chunkLen);
                         encoded   += delta;
                         int docId  = (int)((long)encoded + int.MinValue);
 
@@ -211,7 +232,9 @@ namespace FtsLib.Core
 
                         uint outDelta = firstChunk ? encoded : encoded - prevEncoded;
                         int  nBytes   = VarInt.Encode(outDelta, tmp);
-                        buf.Write(tmp, 0, nBytes);
+                        EnsureCapacity(ref buf, pos + nBytes);
+                        Buffer.BlockCopy(tmp, 0, buf, pos, nBytes);
+                        pos += nBytes;
 
                         prevEncoded = encoded;
                         totalCount++;
@@ -222,7 +245,16 @@ namespace FtsLib.Core
                 r.MoveNext();
             }
 
-            return (buf.ToArray(), totalCount, prevEncoded);
+            mergedLen   = pos;
+            lastEncoded = prevEncoded;
+        }
+
+        private static void EnsureCapacity(ref byte[] buf, int required)
+        {
+            if (required <= buf.Length) return;
+            int newSize = buf.Length;
+            while (newSize < required) newSize *= 2;
+            Array.Resize(ref buf, newSize);
         }
 
         // ── Helpers ──────────────────────────────────────────────────
@@ -231,7 +263,7 @@ namespace FtsLib.Core
         {
             var readers = new SegmentReader[segIds.Count];
             for (int i = 0; i < segIds.Count; i++)
-                readers[i] = new SegmentReader(_store.SegDatPath(level, segIds[i]));
+                readers[i] = new SegmentReader(_store.Live.SegDatPath(level, segIds[i]));
             for (int i = 0; i < readers.Length; i++)
                 readers[i].MoveNext();
             return readers;
@@ -254,7 +286,7 @@ namespace FtsLib.Core
             return min;
         }
 
-        private void EnsureLevel(int level) => _store.EnsureLevel(level);
+        private void EnsureLevel(int level) => _store.Live.EnsureLevel(level);
 
         private static void DeleteIfExists(string path)
         {

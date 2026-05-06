@@ -10,6 +10,13 @@ namespace FtsLib.Core
     /// The index is stored as segment pairs (seg_L_ID.dat + seg_L_ID.db).
     /// IndexReader can search at any point — mid-build or after Dispose.
     ///
+    /// Flush pipeline: when a flush is triggered (threshold or ForceFlush), the
+    /// current RamIndex is handed off to SegmentStore and a fresh one is started
+    /// immediately. The actual segment write runs on a background task so the
+    /// indexing loop is never blocked on I/O. A depth-1 semaphore in SegmentStore
+    /// provides back-pressure: if the previous flush write has not yet finished,
+    /// the next flush waits only until that write completes before returning.
+    ///
     /// Set <see cref="AutoOptimize"/> = true to force-merge all segments into one
     /// on Dispose. Recommended for a one-shot build that will be searched many times.
     /// Leave false (default) for incremental append scenarios.
@@ -18,6 +25,14 @@ namespace FtsLib.Core
     {
         /// <summary>Flush the RamIndex when it reaches this many distinct terms.</summary>
         public int FlushThreshold { get; set; } = 500_000;
+
+        /// <summary>
+        /// Threshold used for the very first flush only. Allows the first segment to
+        /// be written early so the index becomes partially searchable sooner.
+        /// After the first flush this is ignored and <see cref="FlushThreshold"/> applies.
+        /// 0 (default) = disabled, use <see cref="FlushThreshold"/> from the start.
+        /// </summary>
+        public int FirstFlushThreshold { get; set; } = 100_000;
 
         /// <summary>
         /// When true, force-merges all segments into one on Dispose.
@@ -35,11 +50,15 @@ namespace FtsLib.Core
         private bool          _flushPending;
 
         /// <summary>
-        /// The highest line ID that has been fully flushed to a segment file.
-        /// -1 if no flush has occurred yet in this session.
-        /// Safe to read from outside — updated atomically after each flush completes.
+        /// The highest line ID that has been fully written to a segment file on disk.
+        /// -1 if no flush has completed yet in this session.
+        ///
+        /// Updated by the background flush task after the segment is fully written.
+        /// Safe to read from the indexing thread at any time — the underlying field
+        /// in SegmentStore is volatile.
         /// </summary>
-        public int LastFlushedLineId { get; private set; } = -1;
+        public int LastFlushedLineId =>
+            _store != null ? _store.LastFlushedLineId : -1;
 
         public IndexWriter(string indexPath, bool useSkipList = true) : base(indexPath)
         {
@@ -82,8 +101,34 @@ namespace FtsLib.Core
 
             // Arm the flush flag once the threshold is reached, but don't flush
             // yet — more terms for this same lineId may still arrive.
-            if (_ramIndex.Count >= FlushThreshold)
+            int activeThreshold = (FirstFlushThreshold > 0 && LastFlushedLineId < 0)
+                ? FirstFlushThreshold
+                : FlushThreshold;
+            if (_ramIndex.Count >= activeThreshold)
                 _flushPending = true;
+        }
+
+        /// <summary>
+        /// Immediately hands the current RAM index off for background writing to a
+        /// new level-0 segment, regardless of whether the flush threshold has been
+        /// reached. A fresh RAM index is started on the calling thread before this
+        /// returns.
+        ///
+        /// Use this to guarantee a segment boundary at a known point — for example,
+        /// after every N lines processed — so that the progress file stays current
+        /// and a resume after a crash re-indexes as little as possible.
+        ///
+        /// The segment write runs on a background task. If the previous flush write
+        /// has not yet finished, this call blocks briefly until it does (depth-1
+        /// back-pressure), then returns. Does nothing if the RAM index is empty.
+        /// </summary>
+        public void ForceFlush()
+        {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(IndexWriter));
+
+            _flushPending = false;
+            FlushRam();
         }
 
         /// <summary>
@@ -116,6 +161,10 @@ namespace FtsLib.Core
             if (_store == null)
                 _store = new SegmentStore(IndexPath);
 
+            // Drain any in-flight flush before starting the purge merge so the
+            // delete set is applied to all segments.
+            _store.WaitForMerge();
+
             Console.WriteLine($"[IndexWriter] Purging {_deletes.Count:N0} deleted doc(s)...");
             _store.SetDeleteSet(_deletes);
             _store.Commit();
@@ -146,6 +195,9 @@ namespace FtsLib.Core
             try
             {
                 FlushRam();
+                // Drain the entire background pipeline (flush write + any triggered
+                // LSM merge) before proceeding to Commit or exiting.
+                _store?.WaitForMerge();
                 if (AutoOptimize) Optimize();
             }
             catch { /* swallow so Dispose never throws */ }
@@ -161,16 +213,17 @@ namespace FtsLib.Core
             if (_store == null)
                 _store = new SegmentStore(IndexPath);
 
-            Console.WriteLine($"[IndexWriter] Flushing {_ramIndex.Count:N0} terms to segment...");
-            _store.Flush(_ramIndex);
-            Console.WriteLine("[IndexWriter] Flush complete.");
+            Console.WriteLine($"[IndexWriter] Scheduling flush of {_ramIndex.Count:N0} terms...");
 
-            // Record the highest line ID now safely on disk.
-            // _lastLineId is the last id passed to Add() — all its terms just flushed.
-            if (_lastLineId >= 0)
-                LastFlushedLineId = _lastLineId;
-
+            // Hand the completed RamIndex to SegmentStore and start a fresh one
+            // immediately. The actual write happens on a background task inside Flush().
+            // _lastLineId is captured now — it is the highest line ID in this batch.
+            RamIndex batch = _ramIndex;
             _ramIndex = new RamIndex(useSkipList: _useSkipList);
+
+            _store.Flush(batch, _lastLineId);
+
+            Console.WriteLine("[IndexWriter] Flush scheduled.");
         }
     }
 }

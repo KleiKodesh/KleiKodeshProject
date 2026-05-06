@@ -89,24 +89,36 @@ namespace FtsLib.Seforim
         }
 
         /// <summary>
+        /// Returns the number of lines with id &lt;= <paramref name="upToId"/>.
+        /// Used to compute the correct starting offset for progress percentage
+        /// when resuming an interrupted build.
+        /// </summary>
+        public long CountLinesUpTo(int upToId)
+        {
+            using (var db = new Misc.ZayitDb(_dbPath))
+                return db.CountLinesUpTo(upToId);
+        }
+
+        /// <summary>
         /// Builds (or rebuilds) the full-text index from the seforim database.
         /// This is a blocking, long-running operation.
         ///
         /// The index is searchable as soon as this method returns. Call
         /// <see cref="Optimize"/> afterwards (e.g. on a background thread) to
         /// merge all segments into one for the fastest possible search performance.
+        ///
+        /// Throws <see cref="OperationCanceledException"/> if <paramref name="ct"/>
+        /// is cancelled — the partial index on disk is valid and can be resumed on
+        /// the next call.
+        ///
+        /// Returns true if indexing ran to completion (all lines processed).
+        /// Returns false if no lines were available to index (e.g. only WAL recovery
+        /// ran, or the DB is empty) — the caller should not treat this as a completed
+        /// build and must not write the version stamp.
         /// </summary>
-        /// <param name="limit">
-        /// Maximum number of lines to index. 0 (default) = all lines.
-        /// Pass a smaller value (e.g. 500_000) for faster partial builds during testing.
-        /// </param>
-        /// <param name="onProgress">
-        /// Optional callback invoked after each line is processed.
-        /// Receives the running count of lines indexed so far.
-        /// Useful for driving a progress bar or console output.
-        /// </param>
-        public void BuildIndex(int limit = 0, Action<long> onProgress = null)
-            => IndexingPipeline.Build(_indexPath, _dbPath, limit, onProgress);
+        public bool BuildIndex(int limit = 0, Action<long> onProgress = null,
+                               System.Threading.CancellationToken ct = default)
+            => IndexingPipeline.Build(_indexPath, _dbPath, limit, onProgress, ct);
 
         /// <summary>
         /// Force-merges all index segments into one for the fastest possible search.

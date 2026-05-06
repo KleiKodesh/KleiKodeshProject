@@ -4,95 +4,76 @@ defineProps<{ state: IndexingState }>()
 </script>
 
 <template>
-  <div class="overlay">
-    <div class="card">
-      <div class="ring-wrap">
-        <svg viewBox="0 0 48 48" width="64" height="64" style="transform: rotate(-90deg)">
-          <circle
-            cx="24"
-            cy="24"
-            r="20"
-            fill="none"
-            stroke-width="3"
-            stroke="color-mix(in srgb, var(--text-secondary) 20%, transparent)"
-          />
-          <circle
-            cx="24"
-            cy="24"
-            r="20"
-            fill="none"
-            stroke-width="3"
-            stroke="var(--accent-color)"
-            stroke-linecap="round"
-            :stroke-dasharray="`${(state.percentage / 100) * 125.66} 125.66`"
-            style="transition: stroke-dasharray 0.4s ease"
-          />
-        </svg>
-        <span class="pct">{{ Math.round(state.percentage) }}%</span>
-      </div>
-      <p class="title">בונה אינדקס חיפוש</p>
-      <p class="sub">
-        {{ state.processedChunks }} / {{ state.totalChunks }} קטעים<span v-if="state.eta">
-          · {{ state.eta }}</span
-        >
-      </p>
-      <p class="note">ניתן לחפש לאחר סיום הבנייה</p>
+  <div class="indexing-banner">
+    <div class="banner-top">
+      <span class="status-message">
+        <template v-if="!state.isReady">אנא המתן בעת בניית האינדקס</template>
+        <template v-else>תוצאות חיפוש חלקיות — האינדקס עדיין בבנייה</template>
+      </span>
+      <span class="percentage">{{ Math.round(state.percentage) }}%<span v-if="state.eta"> · {{ state.eta }}</span></span>
+    </div>
+    <div class="progress-track">
+      <div class="progress-fill" :style="{ width: `${state.percentage}%` }" />
+      <div
+        v-if="state.latestSegmentPct !== null"
+        class="segment-marker"
+        :style="{ right: `${100 - state.latestSegmentPct}%` }"
+      />
     </div>
   </div>
 </template>
 
 <style scoped>
-.overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: color-mix(in srgb, var(--bg-primary) 85%, transparent);
-  backdrop-filter: blur(4px);
-}
-.card {
+.indexing-banner {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding: 28px 32px;
+  gap: 5px;
+  padding: 6px 12px 5px;
   background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  min-width: 220px;
-  text-align: center;
+  border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
 }
-.ring-wrap {
-  position: relative;
-  width: 64px;
-  height: 64px;
+.banner-top {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  gap: 8px;
 }
-.pct {
-  position: absolute;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-.title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0;
-}
-.sub {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin: 0;
-}
-.note {
+.status-message {
   font-size: 11px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.percentage {
+  font-size: 10px;
   color: var(--text-secondary);
-  opacity: 0.7;
-  margin: 0;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.progress-track {
+  position: relative;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--text-secondary) 20%, transparent);
+  overflow: visible;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent-color);
+  transition: width 0.4s ease;
+}
+.segment-marker {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 3px;
+  height: 10px;
+  border-radius: 1px;
+  background: var(--bg-secondary);
+  pointer-events: none;
 }
 </style>

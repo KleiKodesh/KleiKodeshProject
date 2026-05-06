@@ -33,12 +33,13 @@ namespace KezayitLib.Search
 
         internal void HandleSearchStart(JsonElement root, string id)
         {
-            string query    = root.TryGetProperty("0", out var q) ? q.GetString() : null;
-            int    skipCount = root.TryGetProperty("1", out var s) ? s.GetInt32() : 0;
+            string query       = root.TryGetProperty("0", out var q) ? q.GetString() : null;
+            int    skipCount   = root.TryGetProperty("1", out var s) ? s.GetInt32() : 0;
+            int    maxWordDist = root.TryGetProperty("2", out var d) ? d.GetInt32() : 10;
+            bool   reqOrdered  = root.TryGetProperty("3", out var o) && o.GetBoolean();
 
-            SeforimIndex index;
-            bool ready;
-            lock (_state.Lock) { ready = _state.IsReady; index = _state.Index; }
+            bool         ready = _state.IsReady;
+            SeforimIndex index = _state.GetIndex();
 
             if (!ready || index == null || string.IsNullOrWhiteSpace(query))
             {
@@ -50,10 +51,7 @@ namespace KezayitLib.Search
             var cts = new CancellationTokenSource();
             _searches[searchId] = cts;
             _bridge.Reply(id, new { searchId = searchId });
-            // Capture index at call time — safe even if _state.Index is replaced by a
-            // concurrent ResetAndReindex, because the old SeforimIndex object remains
-            // valid for the duration of this search.
-            Task.Run(() => RunSearch(searchId, query, skipCount, index, cts.Token));
+            Task.Run(() => RunSearch(searchId, query, skipCount, maxWordDist, reqOrdered, index, cts.Token));
         }
 
         internal void HandleSearchCancel(JsonElement root, string id)
@@ -70,6 +68,7 @@ namespace KezayitLib.Search
         // ── Search execution ──────────────────────────────────────────────────────
 
         private void RunSearch(string searchId, string query, int skipCount,
+                               int maxWordDistance, bool requireOrdered,
                                SeforimIndex index, CancellationToken ct)
         {
             try
@@ -94,8 +93,9 @@ namespace KezayitLib.Search
                         return;
                     }
 
-                    var snippet = index.GenerateSnippet(result);
+                    var snippet = index.GenerateSnippet(result, requireOrdered);
                     if (!snippet.IsMatch) continue;
+                    if (snippet.WordDistance > maxWordDistance) continue;
 
                     if (skipped < skipCount) { skipped++; continue; }
 

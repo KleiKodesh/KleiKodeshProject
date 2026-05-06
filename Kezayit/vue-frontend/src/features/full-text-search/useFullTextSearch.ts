@@ -169,12 +169,14 @@ async function enrichTocPaths(batch: FullTextSearchResult[]): Promise<void> {
   }
 }
 
-export function useFullTextSearch() {
+export function useFullTextSearch(isIndexing?: () => boolean) {
   const cache = useSearchCacheStore()
   const results = ref<FullTextSearchResult[]>([])
   const isSearching = ref(false)
   const hasSearched = ref(false)
   const executedQuery = ref('')
+  const maxWordDistance = ref(10)
+  const requireOrdered = ref(false)
 
   let currentSearchId: string | null = null
 
@@ -206,6 +208,8 @@ export function useFullTextSearch() {
       'FtsSearchStart',
       normalizedQuery,
       skipCount,
+      maxWordDistance.value,
+      requireOrdered.value,
     )
     const searchId = reply?.searchId
     if (!searchId) {
@@ -220,20 +224,25 @@ export function useFullTextSearch() {
         if (currentSearchId !== searchId) return
         await enrichTocPaths(batch)
         results.value = [...results.value, ...batch]
-        // Persist batch to IDB — strip proxies before writing
-        try {
-          await cache.appendBatch(normalizedQuery, JSON.parse(JSON.stringify(batch)))
-        } catch {
-          /* non-fatal — cache is best-effort */
+        // Only persist to IDB when the index is fully built — partial results
+        // from a mid-build search would be cached as complete and served stale.
+        if (!isIndexing?.()) {
+          try {
+            await cache.appendBatch(normalizedQuery, JSON.parse(JSON.stringify(batch)))
+          } catch {
+            /* non-fatal — cache is best-effort */
+          }
         }
       },
       onComplete: async () => {
         if (currentSearchId !== searchId) return
         isSearching.value = false
-        try {
-          await cache.markComplete(normalizedQuery)
-        } catch {
-          /* non-fatal */
+        if (!isIndexing?.()) {
+          try {
+            await cache.markComplete(normalizedQuery)
+          } catch {
+            /* non-fatal */
+          }
         }
         _cleanup()
       },
@@ -270,31 +279,36 @@ export function useFullTextSearch() {
     }
 
     const normalizedQuery = q.trim().toLowerCase()
-    const cached = await cache.get(normalizedQuery)
 
-    if (cached?.complete) {
-      // Full result set available — show immediately, no stream needed
-      results.value = cached.results
-      isSearching.value = false
-      return
-    }
+    // Skip cache entirely while the index is still building — cached results
+    // would be partial and would be served as complete on the next search.
+    if (!isIndexing?.()) {
+      const cached = await cache.get(normalizedQuery)
 
-    if (cached && cached.results.length > 0) {
-      // Partial result set from a previous interrupted search — show what we have,
-      // then resume streaming from where C# left off
-      results.value = cached.results
-      try {
-        await _startStream(normalizedQuery, cached.results.length)
-      } catch (err) {
-        console.error('[useFullTextSearch] failed to resume stream:', err)
+      if (cached?.complete) {
+        // Full result set available — show immediately, no stream needed
+        results.value = cached.results
         isSearching.value = false
+        return
       }
-      return
+
+      if (cached && cached.results.length > 0) {
+        // Partial result set from a previous interrupted search — show what we have,
+        // then resume streaming from where C# left off
+        results.value = cached.results
+        try {
+          await _startStream(normalizedQuery, cached.results.length)
+        } catch (err) {
+          console.error('[useFullTextSearch] failed to resume stream:', err)
+          isSearching.value = false
+        }
+        return
+      }
     }
 
-    // No cache — fresh search
+    // No cache (or indexing in progress) — fresh search
     try {
-      await cache.init(normalizedQuery)
+      if (!isIndexing?.()) await cache.init(normalizedQuery)
       await _startStream(normalizedQuery, 0)
     } catch (err) {
       console.error('[useFullTextSearch] failed to start search:', err)
@@ -309,6 +323,9 @@ export function useFullTextSearch() {
   }
 
   async function loadCachedResults(q: string): Promise<boolean> {
+    // Don't restore from cache while indexing — the cached results are partial
+    // and would be served as if they were complete.
+    if (isIndexing?.()) return false
     const normalizedQuery = q.trim().toLowerCase()
     const cached = await cache.get(normalizedQuery)
     if (!cached || cached.results.length === 0) return false
@@ -331,6 +348,8 @@ export function useFullTextSearch() {
     isSearching,
     hasSearched,
     executedQuery,
+    maxWordDistance,
+    requireOrdered,
     executeSearch,
     cancelSearch,
     clearSearch,

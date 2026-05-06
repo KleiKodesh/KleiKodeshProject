@@ -9,6 +9,8 @@ export interface IndexingState {
   processedChunks: number
   totalChunks: number
   eta: string
+  segmentCount: number
+  latestSegmentPct: number | null
 }
 
 const IDLE: IndexingState = {
@@ -18,6 +20,8 @@ const IDLE: IndexingState = {
   processedChunks: 0,
   totalChunks: 0,
   eta: '',
+  segmentCount: 0,
+  latestSegmentPct: null,
 }
 
 export function useFullTextSearchIndexingStatus() {
@@ -28,8 +32,9 @@ export function useFullTextSearchIndexingStatus() {
   onMounted(async () => {
     if (!isHosted || typeof window.__webviewAction !== 'function') {
       // Dev simulation: 0→100% over ~3s
-      state.value = { ...IDLE, isIndexing: true, totalChunks: 100, eta: '3s' }
+      state.value = { ...IDLE, isIndexing: true, totalChunks: 100, eta: '3s', segmentCount: 0, latestSegmentPct: null }
       let pct = 0
+      let devLatestSegmentPct: number | null = null
       const tick = () => {
         pct += 10
         if (pct >= 100) {
@@ -40,16 +45,22 @@ export function useFullTextSearchIndexingStatus() {
             processedChunks: 100,
             totalChunks: 100,
             eta: '',
+            segmentCount: devLatestSegmentPct !== null ? 2 : 0,
+            latestSegmentPct: devLatestSegmentPct,
           }
           return
         }
+        // Simulate a segment flush at ~20% and ~60%
+        if (pct === 20 || pct === 60) devLatestSegmentPct = pct
         state.value = {
-          isReady: false,
+          isReady: pct >= 20,
           isIndexing: true,
           percentage: pct,
           processedChunks: pct,
           totalChunks: 100,
           eta: `${Math.round((100 - pct) * 0.03)}s`,
+          segmentCount: devLatestSegmentPct !== null ? (pct >= 60 ? 2 : 1) : 0,
+          latestSegmentPct: devLatestSegmentPct,
         }
         devTimer = setTimeout(tick, 300)
       }
@@ -67,6 +78,8 @@ export function useFullTextSearchIndexingStatus() {
           processedChunks: p.processedChunks ?? 0,
           totalChunks: p.totalChunks ?? 0,
           eta: p.eta ?? '',
+          segmentCount: p.segmentCount ?? 0,
+          latestSegmentPct: p.latestSegmentPct ?? null,
         }
     } catch (err) {
       console.warn('[useFullTextSearchIndexingStatus] poll failed:', err)
@@ -85,7 +98,7 @@ export function useFullTextSearchIndexingStatus() {
       if (msg.event === 'ftsIndexInvalidated') {
         // Old or corrupt index detected — rebuild started automatically, nothing to confirm.
         console.warn('[useFullTextSearchIndexingStatus] FTS index invalidated:', msg.reason)
-        state.value = { ...IDLE, isIndexing: true, totalChunks: 0, eta: '' }
+        state.value = { ...IDLE, isIndexing: true, totalChunks: 0, eta: '', segmentCount: 0, latestSegmentPct: null }
         return
       }
       if (msg.event !== 'ftsIndexProgress') return
@@ -96,6 +109,8 @@ export function useFullTextSearchIndexingStatus() {
         processedChunks: msg.processedChunks as number,
         totalChunks: msg.totalChunks as number,
         eta: (msg.eta as string) ?? '',
+        segmentCount: (msg.segmentCount as number) ?? 0,
+        latestSegmentPct: (msg.latestSegmentPct as number | null) ?? null,
       }
     })
   })

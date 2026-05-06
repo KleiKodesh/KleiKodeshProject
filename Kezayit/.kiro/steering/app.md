@@ -375,7 +375,7 @@ Current caches and their caps:
 | ------------------- | ---------------------------------------------------------------- |
 | `app-tabs`          | Tabs list, tab states, book states (workspace-scoped keys)       |
 | `app-lastread`      | Per-book last-read positions (LRU-capped at 1000)                |
-| `app-search-cache`  | Bloom search result cache (LRU-capped at 100 queries)            |
+| `app-search-cache`  | FTS search result cache (LRU-capped at 100 queries)              |
 
 All scalar settings (fonts, zoom, theme, toolbar state, workspaces, calendar prefs, etc.) live in localStorage via `lsGet`/`lsSet` — synchronous, zero async cost. IDB is only used for data that is too large or structured for localStorage (custom themes, tab/book state, last-read positions, search cache).
 

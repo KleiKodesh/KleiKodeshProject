@@ -5,6 +5,7 @@ import {
   IconSearch20Regular,
   IconDismiss20Regular,
   IconFilter20Regular,
+  IconOptions20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import BottomSearchBar from '@/components/BottomSearchBar.vue'
 
@@ -13,18 +14,22 @@ const props = defineProps<{
   isSearching: boolean
   filterCount: number
   atFilterCount: number
+  isAdvancedOpen: boolean
+  isAdvancedActive: boolean
   disabled?: boolean
 }>()
 const emit = defineEmits<{
   search: [string]
   cancel: []
   toggleFilter: []
+  toggleAdvanced: []
   clear: []
   'update:searchQuery': [string]
 }>()
 
 const inputRef = ref<HTMLInputElement | null>(null)
 const filterBtnRef = ref<HTMLElement | null>(null)
+const advancedBtnRef = ref<HTMLElement | null>(null)
 const localQuery = ref(props.searchQuery)
 
 watch(
@@ -70,7 +75,7 @@ function handleClear() {
   inputRef.value?.focus()
 }
 
-defineExpose({ focus: () => inputRef.value?.focus(), filterBtnRef })
+defineExpose({ focus: () => inputRef.value?.focus(), filterBtnRef, advancedBtnRef })
 </script>
 
 <template>
@@ -84,6 +89,15 @@ defineExpose({ focus: () => inputRef.value?.focus(), filterBtnRef })
         @click.stop="$emit('toggleFilter')"
       >
         <IconFilter20Regular />
+      </button>
+      <button
+        ref="advancedBtnRef"
+        class="bar-btn"
+        :class="{ 'filter-active': isAdvancedOpen || isAdvancedActive }"
+        title="אפשרויות מתקדמות"
+        @click.stop="$emit('toggleAdvanced')"
+      >
+        <IconOptions20Regular />
       </button>
     </template>
     <input

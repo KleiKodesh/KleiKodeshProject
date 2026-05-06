@@ -2,6 +2,7 @@ using FtsLib.Core;
 using FtsLib.Misc;
 using System;
 using System.IO;
+using System.Threading;
 
 namespace FtsLib.Seforim
 {
@@ -86,11 +87,12 @@ namespace FtsLib.Seforim
         /// Optional callback invoked after each line is processed.
         /// Receives the running count of lines processed in this session.
         /// </param>
-        internal static void Build(
-            string       indexPath,
-            string       dbPath,
-            int          limit      = 0,
-            Action<long> onProgress = null)
+        internal static bool Build(
+            string             indexPath,
+            string             dbPath,
+            int                limit      = 0,
+            Action<long>       onProgress = null,
+            CancellationToken  ct         = default)
         {
             int resumeLineId = ReadResumeLineId(indexPath);
             if (resumeLineId > 0)
@@ -98,34 +100,43 @@ namespace FtsLib.Seforim
             else
                 Console.WriteLine("[IndexingPipeline] Starting fresh build");
 
-            var tokenizer = new Tokenizer();
-            long n = 0;
+            var  tokenizer          = new Tokenizer();
+            long n                  = 0;
+            int  lastWrittenLineId  = resumeLineId;
+            int  lastProgressLineId = resumeLineId;
+            bool anyLinesProcessed  = false;
+
+            // Force a segment flush at least every this many lines, independent of
+            // how many terms have accumulated. Keeps the progress file current and
+            // limits re-indexing work after a crash. Writing the segment file blocks
+            // briefly on the calling thread; an LSM merge is only triggered in the
+            // background if level 0 has reached the fanout threshold (4 segments).
+            const long ForceFlushLineInterval = 250_000;
 
             using (var db     = new ZayitDb(dbPath))
             using (var writer = new IndexWriter(indexPath) { AutoOptimize = false })
             {
-                // IndexWriter's constructor already ran Recover() when existing segments
-                // were found, so the on-disk state is consistent and ready to append to.
-
                 var lineSource = resumeLineId > 0
-                    ? db.ReadLinesFrom(resumeLineId, limit)
-                    : db.ReadLines(limit);
-
-                int lastWrittenLineId = resumeLineId;
-                int lastProgressLineId = resumeLineId; // last id written to progress file
+                    ? db.ReadLinesFrom(resumeLineId, limit, ct)
+                    : db.ReadLines(limit, ct);
 
                 foreach (var (id, content) in lineSource)
                 {
-                    foreach (var token in tokenizer.Extract(content))
-                        writer.Add(id, token);
+                    ct.ThrowIfCancellationRequested();
+                    anyLinesProcessed = true;
+
+                    foreach (var term in tokenizer.Extract(content))
+                        writer.Add(id, term);
 
                     lastWrittenLineId = id;
                     n++;
                     onProgress?.Invoke(n);
 
-                    // After each flush, IndexWriter.LastFlushedLineId advances to the
-                    // last line ID that is now safely on disk. Write the progress file
-                    // whenever it advances so a resume skips as much work as possible.
+                    // Force a flush on the interval boundary so a segment is written
+                    // even if the term-count threshold has not been reached yet.
+                    if (n % ForceFlushLineInterval == 0)
+                        writer.ForceFlush();
+
                     int flushed = writer.LastFlushedLineId;
                     if (flushed > lastProgressLineId)
                     {
@@ -133,14 +144,14 @@ namespace FtsLib.Seforim
                         lastProgressLineId = flushed;
                     }
                 }
-
-                // Dispose flushes the final RAM batch — all lines are now in segments.
             }
 
-            // Final flush is complete. Update the progress file to the last written id
-            // so a resume (if the app is killed before the version stamp is written)
-            // skips all lines. SearchHandler deletes this file after writing the stamp.
-            WriteProgressFile(indexPath, lastWrittenLineId);
+            if (anyLinesProcessed)
+                WriteProgressFile(indexPath, lastWrittenLineId);
+
+            // Return true only when lines were actually processed — this distinguishes
+            // a real completed build from a no-op (WAL recovery only, or empty DB).
+            return anyLinesProcessed;
         }
 
         /// <summary>

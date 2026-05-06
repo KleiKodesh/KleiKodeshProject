@@ -11,6 +11,7 @@ import { useBooksDataStore } from '@/stores/booksDataStore'
 import FullTextSearchBar from './FullTextSearchBar.vue'
 import FullTextSearchResultsList from './FullTextSearchResultsList.vue'
 import FullTextSearchFilterPanel from './FullTextSearchFilterPanel.vue'
+import FullTextSearchAdvancedPanel from './FullTextSearchAdvancedPanel.vue'
 import FullTextSearchIndexingOverlay from './FullTextSearchIndexingOverlay.vue'
 
 const tabStore = useTabStore()
@@ -23,16 +24,21 @@ const zoom = ref<number>(ZOOM_CONFIG.DEFAULT)
 const isSearchActive = computed(() => tabStore.activeTab?.route === '/search')
 useZoomHandler({ zoom, enabled: isSearchActive })
 
+const { state: indexingState } = useFullTextSearchIndexingStatus()
+
 const {
   results,
   isSearching,
   hasSearched,
   executedQuery,
+  maxWordDistance,
+  requireOrdered,
   executeSearch,
   cancelSearch,
   clearSearch,
   loadCachedResults,
-} = useFullTextSearch()
+} = useFullTextSearch(() => indexingState.value.isIndexing)
+
 const {
   searchQuery,
   isFilterOpen,
@@ -56,16 +62,21 @@ const {
   executeSearch,
   clearSearch,
 )
-const { state: indexingState } = useFullTextSearchIndexingStatus()
 
 const searchBarRef = ref<InstanceType<typeof FullTextSearchBar> | null>(null)
 const filterPanelRef = ref<HTMLElement | null>(null)
 const resultsListRef = ref<InstanceType<typeof FullTextSearchResultsList> | null>(null)
 const initialScrollIndex = ref<number | undefined>()
 const initialScrollOffset = ref<number | undefined>()
+const isAdvancedOpen = ref(false)
+const showSyntaxHelp = ref(false)
 // Scroll position owned here — updated by SearchResultsList via saveScroll emit
 let lastScrollIndex: number | undefined
 let lastScrollOffset: number | undefined
+
+const isAdvancedActive = computed(
+  () => maxWordDistance.value !== 10 || requireOrdered.value,
+)
 
 useDropdownClose(
   filterPanelRef,
@@ -183,16 +194,31 @@ onBeforeUnmount(saveFilterState)
       @save-scroll="onSaveScroll"
     />
 
+    <FullTextSearchIndexingOverlay v-if="indexingState.isIndexing" :state="indexingState" />
+
+    <FullTextSearchAdvancedPanel
+      v-if="isAdvancedOpen"
+      :max-word-distance="maxWordDistance"
+      :require-ordered="requireOrdered"
+      :show-syntax-help="showSyntaxHelp"
+      @update:max-word-distance="maxWordDistance = $event"
+      @update:require-ordered="requireOrdered = $event"
+      @update:show-syntax-help="showSyntaxHelp = $event"
+      @close="isAdvancedOpen = false"
+    />
+
     <FullTextSearchBar
       ref="searchBarRef"
       v-model:search-query="searchQuery"
       :is-searching="isSearching"
       :filter-count="checkedBookIds.size"
       :at-filter-count="atFilters.length"
-      :disabled="indexingState.isIndexing"
+      :is-advanced-open="isAdvancedOpen"
+      :is-advanced-active="isAdvancedActive"
       @search="onSearch"
       @cancel="cancelSearch"
       @toggle-filter="isFilterOpen = !isFilterOpen"
+      @toggle-advanced="isAdvancedOpen = !isAdvancedOpen"
       @clear="onClearSearch"
     />
 
@@ -210,8 +236,6 @@ onBeforeUnmount(saveFilterState)
       @close="isFilterOpen = false"
       @update:at-filters="setAtFilters"
     />
-
-    <FullTextSearchIndexingOverlay v-if="indexingState.isIndexing" :state="indexingState" />
   </div>
 </template>
 

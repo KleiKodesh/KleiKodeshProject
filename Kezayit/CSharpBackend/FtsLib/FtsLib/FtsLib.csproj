@@ -78,6 +78,8 @@
     <Compile Include="Core\IndexReader.cs" />
     <Compile Include="Core\VarInt.cs" />
     <Compile Include="Core\SegmentStore.cs" />
+    <Compile Include="Core\SegmentLiveState.cs" />
+    <Compile Include="Core\SegmentWriter.cs" />
     <Compile Include="Core\SegmentMerger.cs" />
     <Compile Include="Core\SegmentReader.cs" />
     <Compile Include="Core\RamIndexEntry.cs" />

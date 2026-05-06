@@ -379,6 +379,9 @@ namespace FtsLib.Core
         /// <summary>
         /// Appends rawHtml[from..to) to _renderBuf, stripping HTML tags.
         /// If from lands mid-tag, scans backwards to detect and skip the partial tag.
+        /// HTML entities (e.g. &amp;nbsp;) are passed through as-is — the raw HTML
+        /// already contains valid entities and the output is rendered via v-html.
+        /// Paragraph markers of the form {X} where X is a Hebrew letter are stripped.
         /// </summary>
         private void AppendRawStripped(string rawHtml, int from, int to, int limit)
         {
@@ -394,21 +397,43 @@ namespace FtsLib.Core
             for (int i = from; i < to; i++)
             {
                 char c = rawHtml[i];
-                if (inTag)    { if (c == '>') inTag = false; continue; }
+                if (inTag) { if (c == '>') inTag = false; continue; }
                 if (c == '<') { inTag = true; continue; }
-                switch (c)
+
+                // Strip {X} paragraph markers where X is a Hebrew letter (U+05D0–U+05EA).
+                if (c == '{' && i + 2 < to && rawHtml[i + 2] == '}')
                 {
-                    case '&': _renderBuf.Append("&amp;"); break;
-                    case '>': _renderBuf.Append("&gt;");  break;
-                    default:  _renderBuf.Append(c);       break;
+                    char inner = rawHtml[i + 1];
+                    if (inner >= '\u05D0' && inner <= '\u05EA') { i += 2; continue; }
                 }
+
+                // Pass through as-is — raw HTML already contains valid entities.
+                _renderBuf.Append(c);
             }
         }
 
+        /// <summary>
+        /// Strips HTML tags and {X} paragraph markers from a raw HTML string,
+        /// returning plain renderable text. Used for the no-match fallback path.
+        /// </summary>
         private static string Encode(string s)
         {
             if (string.IsNullOrEmpty(s)) return string.Empty;
-            return s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+            var sb = new StringBuilder(s.Length);
+            bool inTag = false;
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                if (inTag) { if (c == '>') inTag = false; continue; }
+                if (c == '<') { inTag = true; continue; }
+                if (c == '{' && i + 2 < s.Length && s[i + 2] == '}')
+                {
+                    char inner = s[i + 1];
+                    if (inner >= '\u05D0' && inner <= '\u05EA') { i += 2; continue; }
+                }
+                sb.Append(c);
+            }
+            return sb.ToString();
         }
     }
 }

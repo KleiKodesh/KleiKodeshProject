@@ -24,8 +24,20 @@ namespace FtsLib.Seforim
         // One SnippetBuilder per thread — not safe to share across threads because
         // SnippetBuilder reuses internal data structures across calls. [ThreadStatic]
         // gives each thread its own instance with zero per-call allocation overhead.
+        //
+        // snippetLength = 120 visible chars — tight window around the match.
+        // contextMargin = 40  visible chars — context on each side.
+        // These values are tuned for dense Hebrew text where lines can be long
+        // paragraphs; showing the whole line is not useful.
         [System.ThreadStatic]
         private static SnippetBuilder _builder;
+
+        private static SnippetBuilder GetBuilder()
+        {
+            if (_builder == null)
+                _builder = new SnippetBuilder(snippetLength: 120, contextMargin: 40);
+            return _builder;
+        }
 
         // ── Primary path: content already in hand ────────────────────
 
@@ -46,8 +58,7 @@ namespace FtsLib.Seforim
             if (string.IsNullOrEmpty(content) || queryGroups == null || queryGroups.Count == 0)
                 return SnippetResult.NoMatch;
 
-            if (_builder == null) _builder = new SnippetBuilder();
-            var inner = _builder.Build(content, queryGroups, requireOrdered, originalGroupCount);
+            var inner = GetBuilder().Build(content, queryGroups, requireOrdered, originalGroupCount);
             return new SnippetResult(inner.Html, inner.Score, inner.WordDistance, inner.IsMatch);
         }
 
@@ -58,8 +69,7 @@ namespace FtsLib.Seforim
             if (string.IsNullOrEmpty(content) || queryTerms == null || queryTerms.Count == 0)
                 return SnippetResult.NoMatch;
 
-            if (_builder == null) _builder = new SnippetBuilder();
-            var inner = _builder.Build(content, queryTerms);
+            var inner = GetBuilder().Build(content, queryTerms);
             return new SnippetResult(inner.Html, inner.Score, inner.WordDistance, inner.IsMatch);
         }
 
