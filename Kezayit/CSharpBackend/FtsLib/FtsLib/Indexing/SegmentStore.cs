@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -73,16 +74,51 @@ namespace FtsLib.Indexing
 
         public void Recover()
         {
-            // Step 1: Delete all .tmp files — these are incomplete writes.
+            // Step 1: Scan all segment files (including .tmp) AND the WAL to find
+            // the highest segment ID ever allocated, so _nextSegId is set correctly
+            // even if a .tmp file or a WAL-mentioned segment is about to be deleted.
+            int maxSegId = -1;
+            foreach (var file in Directory.GetFiles(_dir, "seg_*.*"))
+            {
+                string name  = Path.GetFileNameWithoutExtension(file);
+                // Handle both "seg_0_5.dat" and "seg_0_5.dat.tmp"
+                if (name.EndsWith(".dat")) name = name.Substring(0, name.Length - 4);
+                var parts = name.Split('_');
+                if (parts.Length == 3 && int.TryParse(parts[2], out int segId))
+                {
+                    if (segId > maxSegId) maxSegId = segId;
+                }
+            }
+
+            // Also scan the WAL for any target segment IDs mentioned in BEGIN_MERGE
+            // entries — these may be higher than any file on disk if a merge was
+            // interrupted before the target file was created.
+            var walRecovery = Wal.Analyze();
+            if (walRecovery.PendingMerge != null && walRecovery.PendingMerge.Target > maxSegId)
+                maxSegId = walRecovery.PendingMerge.Target;
+
+            // Step 2: Delete all .tmp files — these are incomplete writes.
             foreach (var tmp in Directory.GetFiles(_dir, "*.tmp"))
             {
                 try { File.Delete(tmp); } catch { /* best-effort */ }
             }
 
-            // Step 2: Rebuild live state from disk.
-            Live.RebuildFromDisk();
+            // Step 2b: Clean up orphaned SQLite WAL files (left behind from deleted segments).
+            // These are -shm and -wal files whose corresponding .db file no longer exists.
+            foreach (var walFile in Directory.GetFiles(_dir, "*.db-shm").Concat(Directory.GetFiles(_dir, "*.db-wal")))
+            {
+                string dbFile = walFile.Replace("-shm", "").Replace("-wal", "");
+                if (!File.Exists(dbFile))
+                {
+                    try { File.Delete(walFile); } catch { /* best-effort */ }
+                }
+            }
 
-            // Step 3: Validate all segment files — if any are corrupt, wipe the index.
+            // Step 3: Rebuild live state from disk, passing the max segment ID
+            // so _nextSegId starts at maxSegId + 1.
+            Live.RebuildFromDisk(maxSegId);
+
+            // Step 4: Validate all segment files — if any are corrupt, wipe the index.
             try
             {
                 ValidateAllSegments();
@@ -94,11 +130,10 @@ namespace FtsLib.Indexing
                 throw new CorruptIndexException("Corrupt segment detected during validation — index wiped for rebuild.", ex);
             }
 
-            // Step 4: Check for interrupted merge and redo it if needed.
-            var recovery = Wal.Analyze();
-            if (recovery.PendingMerge == null) return;
+            // Step 5: Check for interrupted merge and redo it if needed.
+            if (walRecovery.PendingMerge == null) return;
 
-            var op = recovery.PendingMerge;
+            var op = walRecovery.PendingMerge;
             Console.WriteLine($"[Recovery] Interrupted merge: L{op.Level} → target {op.Target}");
 
             string targetDat = Live.SegDatPath(op.Level + 1, op.Target);
@@ -135,6 +170,9 @@ namespace FtsLib.Indexing
             // target and re-run the merge from the source segments.
             DeleteIfExists(targetDat);
             DeleteIfExists(targetDb);
+            // Also delete SQLite's WAL files
+            DeleteIfExists(targetDb + "-shm");
+            DeleteIfExists(targetDb + "-wal");
             Live.RemoveFromLive(op.Level + 1, op.Target);
 
             foreach (int sid in op.Sources)
@@ -152,7 +190,7 @@ namespace FtsLib.Indexing
             Wal.Open();
             try
             {
-                _merger.MergeLevel(op.Level);
+                _merger.MergeLevel(op.Level, targetSegId: op.Target);
             }
             catch (InvalidDataException ex)
             {

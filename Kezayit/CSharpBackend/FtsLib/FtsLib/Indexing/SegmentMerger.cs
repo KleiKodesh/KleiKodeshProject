@@ -56,10 +56,15 @@ namespace FtsLib.Indexing
 
         public void MergeLevel(int level)
         {
+            MergeLevel(level, targetSegId: null);
+        }
+
+        public void MergeLevel(int level, int? targetSegId)
+        {
             var segIds = _store.Live.GetLiveSegIds(level);
             if (segIds.Count < 2) return;
 
-            int    newSegId  = _store.Live.NextSegId();
+            int    newSegId  = targetSegId ?? _store.Live.NextSegId();
             int    nextLevel = level + 1;
             string outDat    = _store.Live.SegDatPath(nextLevel, newSegId);
             string outDb     = _store.Live.SegDbPath(nextLevel, newSegId);
@@ -92,8 +97,13 @@ namespace FtsLib.Indexing
             // re-runs the merge from the sources.
             foreach (int sid in segIds)
             {
-                DeleteIfExists(_store.Live.SegDatPath(level, sid));
-                DeleteIfExists(_store.Live.SegDbPath(level, sid));
+                string datPath = _store.Live.SegDatPath(level, sid);
+                string dbPath  = _store.Live.SegDbPath(level, sid);
+                DeleteIfExists(datPath);
+                DeleteIfExists(dbPath);
+                // Also delete SQLite's WAL files (shared memory and write-ahead log)
+                DeleteIfExists(dbPath + "-shm");
+                DeleteIfExists(dbPath + "-wal");
             }
 
             _store.Wal.EndMerge(level, newSegId);

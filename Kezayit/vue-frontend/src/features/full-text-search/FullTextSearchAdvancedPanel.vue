@@ -53,22 +53,22 @@ function onContextWordsInput(event: Event) {
         />
       </div>
 
-      <!-- Order mode -->
-      <div class="option-row">
-        <span class="option-label">סדר מילים</span>
-        <div class="toggle-group">
-          <button
-            class="toggle-btn"
-            :class="{ active: !props.requireOrdered }"
-            @click="emit('update:requireOrdered', false)"
-          >לא מסודר</button>
-          <button
-            class="toggle-btn"
-            :class="{ active: props.requireOrdered }"
-            @click="emit('update:requireOrdered', true)"
-          >לפי סדר השאילתה</button>
-        </div>
-      </div>
+   <!-- Order mode -->
+<div class="option-row">
+  <span class="option-label">סדר מילים לפי שאילתא</span>
+  <div class="toggle-group">
+    <button
+      class="toggle-btn"
+      :class="{ active: !props.requireOrdered }"
+      @click="emit('update:requireOrdered', false)"
+    >לא</button>
+    <button
+      class="toggle-btn"
+      :class="{ active: props.requireOrdered }"
+      @click="emit('update:requireOrdered', true)"
+    >כן</button>
+  </div>
+</div>
 
       <!-- Context words -->
       <div class="option-row">
@@ -84,17 +84,22 @@ function onContextWordsInput(event: Event) {
         />
       </div>
 
-      <!-- כתיב expansion -->
-      <div class="option-row">
-        <label class="option-label" for="ketiv-expand-input">הרחב כתיב חסר/מלא</label>
-        <input
-          id="ketiv-expand-input"
-          type="checkbox"
-          class="ketiv-checkbox"
-          :checked="props.expandKetiv"
-          @change="emit('update:expandKetiv', ($event.target as HTMLInputElement).checked)"
-        />
-      </div>
+     <!-- כתיב expansion -->
+<div class="option-row">
+  <span class="option-label">הרחב כתיב חסר/מלא</span>
+  <div class="toggle-group">
+    <button
+      class="toggle-btn"
+      :class="{ active: !props.expandKetiv }"
+      @click="emit('update:expandKetiv', false)"
+    >לא</button>
+    <button
+      class="toggle-btn"
+      :class="{ active: props.expandKetiv }"
+      @click="emit('update:expandKetiv', true)"
+    >כן</button>
+  </div>
+</div>
 
       <!-- Syntax help toggle -->
       <div class="option-row syntax-row">
