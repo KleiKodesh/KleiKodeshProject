@@ -23,6 +23,22 @@ namespace FtsLib.Search
         private bool _disposed;
 
         /// <summary>
+        /// Opens an IndexReader using pre-opened segment handles.
+        /// The handles were opened inside the live-state lock in
+        /// <see cref="SegmentLiveState.OpenLiveSegmentHandles"/>, so they are
+        /// guaranteed to be consistent — no TOCTOU race with concurrent merges.
+        /// This IndexReader takes ownership of the handles and disposes them on Dispose.
+        /// </summary>
+        public IndexReader(string indexPath, List<SegmentHandle> handles)
+            : base(indexPath)
+        {
+            _deletes = DeleteSet.Load(DeletesFile);
+            if (handles == null || handles.Count == 0) return;
+            // Handles are already sorted by segId from OpenLiveSegmentHandles.
+            _segments.AddRange(handles);
+        }
+
+        /// <summary>
         /// Opens an IndexReader using an explicit snapshot of live segment paths.
         /// Use this overload when a SegmentStore is available — it reads the live
         /// path list under the store's lock, so the snapshot is consistent and never

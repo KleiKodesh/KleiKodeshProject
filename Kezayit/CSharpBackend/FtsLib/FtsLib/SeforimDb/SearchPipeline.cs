@@ -1,8 +1,7 @@
 using FtsLib.Indexing;
 using FtsLib.Search;
 using System.Collections.Generic;
-using System.Threading;
-namespace FtsLib.SeforimDb
+using System.Threading;namespace FtsLib.SeforimDb
 {
     /// <summary>
     /// Executes a parsed query against the index and fetches matching rows
@@ -41,15 +40,19 @@ namespace FtsLib.SeforimDb
             string            query,
             string            indexPath,
             string            dbPath,
-            List<(string dat, string db)> livePaths,
+            List<SegmentHandle> handles,
             int               cap = 0,
             bool              expandKetiv = false,
             CancellationToken ct  = default)
         {
             var parsed = QueryParser.Parse(query);
-            if (parsed.IsEmpty) yield break;
+            if (parsed.IsEmpty)
+            {
+                foreach (var h in handles) h.Dispose();
+                yield break;
+            }
 
-            using (var reader = new IndexReader(indexPath, livePaths))
+            using (var reader = new IndexReader(indexPath, handles))
             {
                 var groups         = new List<IEnumerable<string>>(parsed.Groups.Count);
                 var expandedGroups = new List<IReadOnlyCollection<string>>(parsed.Groups.Count);
@@ -107,14 +110,18 @@ namespace FtsLib.SeforimDb
         internal static IEnumerable<int> SearchIds(
             string            query,
             string            indexPath,
-            List<(string dat, string db)> livePaths,
+            List<SegmentHandle> handles,
             bool              expandKetiv = false,
             CancellationToken ct = default)
         {
             var parsed = QueryParser.Parse(query);
-            if (parsed.IsEmpty) yield break;
+            if (parsed.IsEmpty)
+            {
+                foreach (var h in handles) h.Dispose();
+                yield break;
+            }
 
-            using (var reader = new IndexReader(indexPath, livePaths))
+            using (var reader = new IndexReader(indexPath, handles))
             {
                 var groups = new List<IEnumerable<string>>(parsed.Groups.Count);
 

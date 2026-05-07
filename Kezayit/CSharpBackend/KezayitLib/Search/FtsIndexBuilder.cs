@@ -38,17 +38,21 @@ namespace KezayitLib.Search
 
         private void RunBuild(CancellationTokenSource cts, SeforimIndex index)
         {
-            long totalLines = 0;
-            try { totalLines = index.CountLines(); } catch { }
+            // Read all resume state from the progress file — zero DB queries on resume.
+            index.GetResumeState(out int resumeLineId, out long cachedTotalLines, out long cachedResumeOffset);
 
-            // On a resumed build, onProgress counts lines processed in this session
-            // starting from 0. Compute the offset so the percentage starts correctly.
-            long resumeOffset = 0;
-            int  resumeLineId = index.GetResumeLineId();
-            if (resumeLineId > 0)
+            // CountLines() is a full table scan (~2-5s cold). Only run it when we have
+            // no cached value (i.e. the very first build session, or after a wipe).
+            long totalLines = cachedTotalLines > 0 ? cachedTotalLines : 0;
+            if (totalLines == 0)
             {
-                try { resumeOffset = index.CountLinesUpTo(resumeLineId); } catch { }
+                try { totalLines = index.CountLines(); } catch { }
             }
+
+            // resumeOffset is the number of lines already indexed before this session.
+            // On the first session it is 0. On resume it comes from the progress file —
+            // no CountLinesUpTo() query needed.
+            long resumeOffset = cachedResumeOffset;
 
             Console.WriteLine("[SearchHandler] FTS index build started");
             bool buildSucceeded    = false;
@@ -79,7 +83,7 @@ namespace KezayitLib.Search
 
             try
             {
-                bool ranToCompletion = index.BuildIndex(limit: 0, onProgress: (sessionCount) =>
+                bool ranToCompletion = index.BuildIndex(limit: 0, totalLines: totalLines, resumeOffset: resumeOffset, onProgress: (sessionCount) =>
                 {
                     if (totalLines > 0 && sessionCount % 5000 == 0)
                     {

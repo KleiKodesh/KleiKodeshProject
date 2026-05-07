@@ -70,6 +70,9 @@ namespace FtsLib.Indexing
         public List<(string dat, string db)> GetLiveSegmentPaths() =>
             Live.GetLiveSegmentPaths();
 
+        public List<SegmentHandle> OpenLiveSegmentHandles() =>
+            Live.OpenLiveSegmentHandles();
+
         // ── Recovery ─────────────────────────────────────────────────
 
         public void Recover()

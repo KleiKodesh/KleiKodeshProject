@@ -18,8 +18,15 @@ namespace FtsLib.SeforimDb
     /// </summary>
     internal static class IndexingPipeline
     {
-        // Written after every flush — stores the last line ID confirmed in a segment.
-        // Plain text: one integer on a single line.
+        // Written after every flush — stores the last line ID confirmed in a segment,
+        // the total line count of the database, and the count of lines up to the
+        // resume point. All three are needed to compute the resume percentage without
+        // any DB queries on restart.
+        // Format: three integers separated by newlines.
+        //   Line 1: last flushed line ID
+        //   Line 2: total line count
+        //   Line 3: count of lines up to (and including) the last flushed line ID
+        // Lines 2 and 3 are optional — absent in files written by older builds.
         private const string ProgressFileName = "build.progress";
 
         // ── Progress file helpers ─────────────────────────────────────
@@ -30,21 +37,41 @@ namespace FtsLib.SeforimDb
         /// </summary>
         internal static int ReadResumeLineId(string indexPath)
         {
+            ReadProgressFile(indexPath, out int lineId, out _, out _);
+            return lineId;
+        }
+
+        /// <summary>
+        /// Returns the last flushed line ID, the cached total line count, and the
+        /// cached count of lines up to the resume point.
+        /// Any value is 0 if the file is absent or was written by an older build.
+        /// </summary>
+        internal static void ReadProgressFile(string indexPath, out int lineId,
+                                              out long totalLines, out long resumeOffset)
+        {
+            lineId       = 0;
+            totalLines   = 0;
+            resumeOffset = 0;
             string path = Path.Combine(indexPath, ProgressFileName);
             try
             {
-                if (!File.Exists(path)) return 0;
-                string text = File.ReadAllText(path).Trim();
-                return int.TryParse(text, out int id) ? id : 0;
+                if (!File.Exists(path)) return;
+                string[] lines = File.ReadAllText(path).Trim().Split('\n');
+                if (lines.Length >= 1) int.TryParse(lines[0].Trim(), out lineId);
+                if (lines.Length >= 2) long.TryParse(lines[1].Trim(), out totalLines);
+                if (lines.Length >= 3) long.TryParse(lines[2].Trim(), out resumeOffset);
             }
-            catch { return 0; }
+            catch { }
         }
 
-        private static void WriteProgressFile(string indexPath, int lineId)
+        private static void WriteProgressFile(string indexPath, int lineId,
+                                              long totalLines, long resumeOffset)
         {
             try
             {
-                File.WriteAllText(Path.Combine(indexPath, ProgressFileName), lineId.ToString());
+                File.WriteAllText(
+                    Path.Combine(indexPath, ProgressFileName),
+                    lineId.ToString() + "\n" + totalLines.ToString() + "\n" + resumeOffset.ToString());
             }
             catch { /* best-effort — a missed write means slightly more re-work on resume */ }
         }
@@ -93,11 +120,13 @@ namespace FtsLib.SeforimDb
             string             dbPath,
             SegmentStore       store      = null,
             int                limit      = 0,
+            long               totalLines = 0,
+            long               resumeOffset = 0,
             Action<long>       onProgress = null,
             Action             onFlush    = null,
             CancellationToken  ct         = default)
         {
-            int resumeLineId = ReadResumeLineId(indexPath);
+            ReadProgressFile(indexPath, out int resumeLineId, out long cachedTotalLines, out _);
             if (resumeLineId != 0)
             {
                 // Log what's on disk so we can verify the segments actually cover
@@ -163,6 +192,11 @@ namespace FtsLib.SeforimDb
             int lastWrittenLineId  = resumeLineId;
             int lastProgressLineId = resumeLineId;
 
+            // Use the caller-supplied totals if available; fall back to values
+            // cached in the progress file from the previous session.
+            long effectiveTotalLines   = totalLines   > 0 ? totalLines   : cachedTotalLines;
+            long effectiveResumeOffset = resumeOffset > 0 ? resumeOffset : 0;
+
             if (resumeLineId != 0)
                 Console.WriteLine($"[IndexingPipeline] Writer ready — LastFlushedLineId={writer.LastFlushedLineId}, resumeLineId={resumeLineId}");
 
@@ -196,7 +230,7 @@ namespace FtsLib.SeforimDb
                     int flushed = writer.LastFlushedLineId;
                     if (flushed > lastProgressLineId)
                     {
-                        WriteProgressFile(indexPath, flushed);
+                        WriteProgressFile(indexPath, flushed, effectiveTotalLines, effectiveResumeOffset + n);
                         Console.WriteLine($"[IndexingPipeline] Progress file updated: lineId={flushed} (written={lastWrittenLineId}, n={n})");
                         lastProgressLineId = flushed;
                         onFlush?.Invoke();
@@ -213,7 +247,7 @@ namespace FtsLib.SeforimDb
             // the entire flush pipeline via WaitForMerge().
             if (anyLinesProcessed)
             {
-                WriteProgressFile(indexPath, lastWrittenLineId);
+                WriteProgressFile(indexPath, lastWrittenLineId, effectiveTotalLines, effectiveResumeOffset + n);
                 Console.WriteLine($"[IndexingPipeline] Build complete — final progress lineId={lastWrittenLineId}");
             }
             else

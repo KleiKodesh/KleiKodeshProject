@@ -155,7 +155,7 @@ namespace KezayitLib.Search
             // If there is a progress file, BuildIndex will call ReadLinesFrom to skip
             // already-indexed lines. If there is no progress file, it starts from the
             // beginning — which is safe because IndexWriter appends to existing segments.
-            int resumeLineId = _indexState.GetIndex().GetResumeLineId();
+            _indexState.GetIndex().GetResumeState(out int resumeLineId, out _, out _);
             if (resumeLineId > 0)
             {
                 Console.WriteLine("[SearchHandler] Interrupted build detected — resuming from line id "
