@@ -162,39 +162,6 @@ namespace KezayitLib.Search
 
             Console.WriteLine("[SearchHandler] FTS index ready");
             PushCurrentProgress();
-            StartBackgroundMergeIfNeeded();
-        }
-
-        // ── Merge ─────────────────────────────────────────────────────────────────
-
-        internal void StartBackgroundMergeIfNeeded()
-        {
-            if (!FtsIndexState.MergeNeeded()) return;
-            StartBackgroundMerge();
-        }
-
-        internal void StartBackgroundMerge()
-        {
-            SeforimIndex index;
-            if (!_state.TryStartMerging(out index)) return;
-
-            Task task = Task.Run(() =>
-            {
-                try
-                {
-                    index.Optimize();
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine("[SearchHandler] Background merge failed (non-fatal): " + ex);
-                }
-                finally
-                {
-                    _state.MarkMergeComplete();
-                }
-            });
-
-            _state.SetMergeTask(task);
         }
 
         // ── Progress ──────────────────────────────────────────────────────────────

@@ -16,20 +16,18 @@ namespace KezayitLib.Search
     ///
     /// Lifecycle serialization (OnDbReady, ResetAndReindex, HandleDeleteIndex) is
     /// handled by the actor thread in SearchHandler — not by a semaphore here.
-    /// Background tasks (build, merge) run on Task.Run threads and communicate back
+    /// Background tasks (build) run on Task.Run threads and communicate back
     /// only through the named transition methods below.
     ///
     /// State machine:
     ///   Idle     → Building : TryStartBuilding()
     ///   Building → Ready    : TryMarkReady()
     ///   Building → Idle     : TryMarkIdle()
-    ///   Ready    → Merging  : TryStartMerging()
-    ///   Merging  → Ready    : MarkMergeComplete()
     ///   Any      → Idle     : StopAll()
     /// </summary>
     internal sealed class FtsIndexState
     {
-        private enum State { Idle, Building, Ready, Merging }
+        private enum State { Idle, Building, Ready }
 
         // Guards all field reads and writes. Never held during long-running I/O.
         private readonly object _lock = new object();
@@ -38,14 +36,13 @@ namespace KezayitLib.Search
         private string                  _dbPath;
         private SeforimIndex            _index;
         private Task                    _indexingTask;
-        private Task                    _mergeTask;
         private CancellationTokenSource _indexingCts;
 
         // ── Read-only snapshots (safe to call from any thread) ────────────────────
 
         internal bool IsReady
         {
-            get { lock (_lock) { return _state == State.Ready || _state == State.Merging; } }
+            get { lock (_lock) { return _state == State.Ready; } }
         }
 
         internal bool IsIndexing
@@ -137,46 +134,6 @@ namespace KezayitLib.Search
         }
 
         /// <summary>
-        /// Transitions Ready → Merging and returns the current index snapshot.
-        /// Returns false if not Ready or a merge is already running.
-        /// </summary>
-        internal bool TryStartMerging(out SeforimIndex index)
-        {
-            lock (_lock)
-            {
-                if (_state != State.Ready || _mergeTask != null)
-                {
-                    index = null;
-                    return false;
-                }
-                _state = State.Merging;
-                index  = _index;
-                return true;
-            }
-        }
-
-        /// <summary>
-        /// Records the Task for the current merge so StopAll can wait for it.
-        /// Called immediately after TryStartMerging succeeds.
-        /// </summary>
-        internal void SetMergeTask(Task task)
-        {
-            lock (_lock) { _mergeTask = task; }
-        }
-
-        /// <summary>
-        /// Transitions Merging → Ready. Called from the merge task's finally block.
-        /// </summary>
-        internal void MarkMergeComplete()
-        {
-            lock (_lock)
-            {
-                if (_state == State.Merging) _state = State.Ready;
-                _mergeTask = null;
-            }
-        }
-
-        /// <summary>
         /// Marks the index as Ready without going through a build.
         /// Used by the actor thread when the index is already complete on disk.
         /// </summary>
@@ -188,31 +145,28 @@ namespace KezayitLib.Search
         // ── StopAll ───────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Cancels any running build, waits for it and any running merge to fully stop,
-        /// then resets all state to Idle. Safe to call from any thread.
+        /// Cancels any running build, waits for it to fully stop, then resets all
+        /// state to Idle. Safe to call from any thread.
         /// After this returns, no background work is touching the index directory.
         /// </summary>
         internal void StopAll()
         {
-            Task indexingTask, mergeTask;
+            Task indexingTask;
             CancellationTokenSource cts;
             lock (_lock)
             {
                 cts          = _indexingCts;
                 indexingTask = _indexingTask;
-                mergeTask    = _mergeTask;
             }
 
             cts?.Cancel();
 
             if (indexingTask != null) { try { indexingTask.Wait(15000); } catch { } }
-            if (mergeTask    != null) { try { mergeTask.Wait(30000);    } catch { } }
 
             lock (_lock)
             {
                 _state        = State.Idle;
                 _indexingTask = null;
-                _mergeTask    = null;
                 _indexingCts  = null;
             }
         }
@@ -265,16 +219,6 @@ namespace KezayitLib.Search
             catch (Exception ex) { return "validation error: " + ex.Message; }
         }
 
-        internal static bool MergeNeeded()
-        {
-            try
-            {
-                if (!Directory.Exists(FtsIndexPath)) return false;
-                return Directory.GetFiles(FtsIndexPath, "seg_*.dat").Length > 1;
-            }
-            catch { return false; }
-        }
-
         // ── Paths ─────────────────────────────────────────────────────────────────
 
         internal static string FtsIndexPath =>
@@ -292,7 +236,7 @@ namespace KezayitLib.Search
         {
             try
             {
-                using (var key = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\KleiKodesh"))
+                using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"SOFTWARE\KleiKodesh"))
                     return key?.GetValue("Version")?.ToString();
             }
             catch { return null; }

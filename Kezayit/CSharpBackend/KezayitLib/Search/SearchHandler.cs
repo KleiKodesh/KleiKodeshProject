@@ -26,8 +26,6 @@ namespace KezayitLib.Search
     ///   Idle     → Building : FtsIndexBuilder.StartIndexing()
     ///   Building → Ready    : build completes successfully
     ///   Building → Idle     : build cancelled or failed
-    ///   Ready    → Merging  : FtsIndexBuilder.StartBackgroundMerge()
-    ///   Merging  → Ready    : merge completes or fails (non-fatal)
     ///   Any      → Idle     : FtsIndexState.StopAll() + DeleteFtsIndex()
     /// </summary>
     public class SearchHandler
@@ -139,14 +137,12 @@ namespace KezayitLib.Search
                         newVersion = installedVersion
                     });
                     _builder.PushCurrentProgress();
-                    _builder.StartBackgroundMergeIfNeeded();
                     return;
                 }
 
                 Console.WriteLine("[SearchHandler] FTS index complete and up-to-date, marking ready");
                 _indexState.MarkReadyDirect();
                 _builder.PushCurrentProgress();
-                _builder.StartBackgroundMergeIfNeeded();
                 return;
             }
 

@@ -13,7 +13,7 @@ import { callBridgeAction } from '@/webview-host/bridge'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { expandKetivHaser } from '@/utils/hebrewKetivExpander'
-import type { FullTextSearchResult } from './fullTextSearchTypes'
+import type { FullTextSearchResult, SearchFailReason } from './fullTextSearchTypes'
 
 const DEV_SAMPLES: FullTextSearchResult[] = [
   {
@@ -98,7 +98,7 @@ type SearchListeners = {
   onBatch: (results: FullTextSearchResult[]) => Promise<void>
   onComplete: () => Promise<void>
   onCancelled: () => void
-  onError: (err: string) => void
+  onError: (reason: SearchFailReason) => void
 }
 
 // Tracks in-flight onBatch promises so onComplete waits for all enrichment to finish
@@ -143,7 +143,7 @@ function ensureWebviewListener() {
           break
         case 'searchError':
           _pendingBatches.delete(msg.searchId)
-          listener.onError(msg.error ?? '')
+          listener.onError(msg.failReason ?? 'searchFailed')
           _searchListeners.delete(msg.searchId)
           break
       }
@@ -181,6 +181,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   const isSearching = ref(false)
   const hasSearched = ref(false)
   const executedQuery = ref('')
+  const searchError = ref<SearchFailReason | null>(null)
   const maxWordDistance = ref(10)
   const requireOrdered = ref(false)
   const expandKetiv = ref(true)
@@ -210,7 +211,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   // skipCount: number of results already in cache — C# will skip that many before streaming.
   async function _startStream(normalizedQuery: string, skipCount: number) {
     ensureWebviewListener()
-    const reply = await callBridgeAction<{ searchId: string }>(
+    const reply = await callBridgeAction<{ searchId: string; failReason: SearchFailReason | null }>(
       'FtsSearchStart',
       normalizedQuery,
       skipCount,
@@ -221,7 +222,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     )
     const searchId = reply?.searchId
     if (!searchId) {
-      // Index not ready
+      searchError.value = reply?.failReason ?? 'indexNotReady'
       isSearching.value = false
       return
     }
@@ -231,6 +232,9 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       onBatch: async (batch) => {
         if (currentSearchId !== searchId) return
         await enrichTocPaths(batch)
+        // Re-check after the async enrichment — currentSearchId may have changed
+        // while enrichTocPaths was awaiting the SQL query.
+        if (currentSearchId !== searchId) return
         results.value = [...results.value, ...batch]
         // Only persist to IDB when the index is fully built — partial results
         // from a mid-build search would be cached as complete and served stale.
@@ -259,9 +263,10 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         isSearching.value = false
         _cleanup()
       },
-      onError: (err) => {
-        console.error('[useFullTextSearch] search error:', err)
+      onError: (reason) => {
+        console.error('[useFullTextSearch] search error:', reason)
         if (currentSearchId !== searchId) return
+        searchError.value = reason
         isSearching.value = false
         _cleanup()
       },
@@ -276,6 +281,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     isSearching.value = true
     hasSearched.value = true
     results.value = []
+    searchError.value = null
     executedQuery.value = q
 
     // Dev fallback — bridge not available in browser dev
@@ -303,6 +309,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     results.value = []
     hasSearched.value = false
     executedQuery.value = ''
+    searchError.value = null
   }
 
   function clearCachedResults(q: string): void {
@@ -337,6 +344,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     isSearching,
     hasSearched,
     executedQuery,
+    searchError,
     maxWordDistance,
     requireOrdered,
     expandKetiv,

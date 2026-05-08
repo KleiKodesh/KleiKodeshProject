@@ -1,3 +1,4 @@
+using FtsLib.Indexing;
 using FtsLib.SeforimDb;
 using KezayitLib.Bridge;
 using System;
@@ -43,16 +44,23 @@ namespace KezayitLib.Search
             bool         ready = _state.IsReady;
             SeforimIndex index = _state.GetIndex();
 
-            if (!ready || index == null || string.IsNullOrWhiteSpace(query))
+            if (string.IsNullOrWhiteSpace(query))
             {
-                _bridge.Reply(id, new { searchId = (string)null });
+                _bridge.Reply(id, new { searchId = (string)null, failReason = (string)null });
+                return;
+            }
+
+            if (!ready || index == null)
+            {
+                string reason = !ready ? "indexNotReady" : "indexNotReady";
+                _bridge.Reply(id, new { searchId = (string)null, failReason = reason });
                 return;
             }
 
             string searchId = "s" + Interlocked.Increment(ref _nextSearchId);
             var cts = new CancellationTokenSource();
             _searches[searchId] = cts;
-            _bridge.Reply(id, new { searchId = searchId });
+            _bridge.Reply(id, new { searchId = searchId, failReason = (string)null });
 
             Console.WriteLine($"[FtsSearchExecutor] Search {searchId} started — query=\"{query}\" skip={skipCount} maxDist={maxWordDist} ordered={reqOrdered} context={contextWords} ketiv={expandKetiv}");
 
@@ -182,11 +190,17 @@ namespace KezayitLib.Search
                 Console.WriteLine($"[FtsSearchExecutor] Search {searchId} cancelled — query=\"{query}\" results so far={totalResults}");
                 PostSearch(new { type = "searchCancelled", searchId = searchId });
             }
+            catch (IndexMergingException)
+            {
+                Console.WriteLine($"[FtsSearchExecutor] Search {searchId} rejected — index is merging");
+                PostSearch(new { type = "searchError", searchId = searchId,
+                                 failReason = "indexMerging" });
+            }
             catch (Exception ex)
             {
                 Console.WriteLine("[FtsSearchExecutor] Search error: " + ex);
                 PostSearch(new { type = "searchError", searchId = searchId,
-                                 error = ex.Message });
+                                 failReason = "searchFailed", error = ex.Message });
             }
             finally
             {

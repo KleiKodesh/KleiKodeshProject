@@ -112,11 +112,8 @@ namespace FtsLibTest
                     return;
 
                 case "buildmerge":
-                    MergeCompareTest.Run(args, forcemerge: true);
-                    return;
-
                 case "buildnomerge":
-                    MergeCompareTest.Run(args, forcemerge: false);
+                    Console.WriteLine("Force-merge has been removed. Use 'build' instead.");
                     return;
 
                 case "monitor":
@@ -124,11 +121,8 @@ namespace FtsLibTest
                     return;
 
                 case "beforeafter":
-                    BeforeMergeAfterMergeTest.Run(args);
-                    return;
-
                 case "concurrentmerge":
-                    ConcurrentMergeSearchTest.Run(args);
+                    Console.WriteLine("Force-merge has been removed. These tests are no longer applicable.");
                     return;
 
                 case "buildfresh":
@@ -137,6 +131,14 @@ namespace FtsLibTest
 
                 case "probe":
                     ProbeSearch.Run(args);
+                    return;
+
+                case "fstsize":
+                    FstSizeDiag.Run(args);
+                    return;
+
+                case "fileload":
+                    FileLoadDiag.Run(args);
                     return;
 
                 default:
@@ -189,7 +191,8 @@ namespace FtsLibTest
             Console.WriteLine("  FtsLibTest.exe build  [tier]          � build index");
             Console.WriteLine("  FtsLibTest.exe search [tier]          � search index");
             Console.WriteLine("  FtsLibTest.exe runall [tier]          � build + search, combined report");
-            Console.WriteLine("  FtsLibTest.exe query  [tier] \"query\"  � ad-hoc query with snippets");
+            Console.WriteLine("  FtsLibTest.exe query  [tier] \"query\"  — ad-hoc query with snippets");
+            Console.WriteLine("  FtsLibTest.exe fstsize [tier]         — estimate FST term-dict size vs current SQLite .db");
             Console.WriteLine("  FtsLibTest.exe parsertest              � QueryParser unit tests (no index needed)");
             Console.WriteLine("  FtsLibTest.exe orderedtest             � ordered-search unit tests (no index needed)");
             Console.WriteLine("  FtsLibTest.exe worddist                — word-distance unit tests (no index needed)");

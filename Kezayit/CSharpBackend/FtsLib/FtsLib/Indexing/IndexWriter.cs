@@ -16,12 +16,8 @@ namespace FtsLib.Indexing
     /// current RamIndex is handed off to SegmentStore and a fresh one is started
     /// immediately. The actual segment write runs on a background task so the
     /// indexing loop is never blocked on I/O. A depth-1 semaphore in SegmentStore
-    /// provides back-pressure: if the previous flush write has not yet finished,
-    /// the next flush waits only until that write completes before returning.
-    ///
-    /// Set <see cref="AutoOptimize"/> = true to force-merge all segments into one
-    /// on Dispose. Recommended for a one-shot build that will be searched many times.
-    /// Leave false (default) for incremental append scenarios.
+    /// provides back-pressure: the next flush cannot start until the previous
+    /// flush write AND any triggered merge both finish.
     /// </summary>
     internal sealed class IndexWriter : IndexDirectory, IDisposable
     {
@@ -35,13 +31,6 @@ namespace FtsLib.Indexing
         /// 0 (default) = disabled, use <see cref="FlushThreshold"/> from the start.
         /// </summary>
         public int FirstFlushThreshold { get; set; } = 100_000;
-
-        /// <summary>
-        /// When true, force-merges all segments into one on Dispose.
-        /// Produces the fastest possible search at the cost of extra merge time at the end.
-        /// Default: false.
-        /// </summary>
-        public bool AutoOptimize { get; set; } = false;
 
         private RamIndex      _ramIndex;
         private SegmentStore  _store;
@@ -180,9 +169,8 @@ namespace FtsLib.Indexing
         }
 
         /// <summary>
-        /// Permanently removes all deleted doc IDs from segment files by forcing a
-        /// full merge, then clears the delete set.
-        /// After Purge the index is a single segment with no deleted IDs.
+        /// Permanently removes all deleted doc IDs from segment files by running a
+        /// merge pass across all levels, then clears the delete set.
         /// </summary>
         public void Purge()
         {
@@ -200,25 +188,11 @@ namespace FtsLib.Indexing
 
             Console.WriteLine($"[IndexWriter] Purging {_deletes.Count:N0} deleted doc(s)...");
             _store.SetDeleteSet(_deletes);
-            _store.Commit();
-
+            _store.MergeAllUnderWriteLock();
             _deletes.Clear();
             _deletes.Save(DeletesFile); // removes the file
             _store.SetDeleteSet(null);
             Console.WriteLine("[IndexWriter] Purge complete.");
-        }
-
-        /// <summary>
-        /// Force-merges all segments into one for fastest subsequent search.
-        /// Optional — search works correctly across any number of segments.
-        /// </summary>
-        public void Optimize()
-        {
-            if (_disposed)
-                throw new ObjectDisposedException(nameof(IndexWriter));
-            if (_store == null)
-                _store = new SegmentStore(IndexPath);
-            _store.Commit();
         }
 
         public void Dispose()
@@ -229,9 +203,8 @@ namespace FtsLib.Indexing
             {
                 FlushRam();
                 // Drain the entire background pipeline (flush write + any triggered
-                // LSM merge) before proceeding to Commit or exiting.
+                // LSM merge) before exiting.
                 _store?.WaitForMerge();
-                if (AutoOptimize) Optimize();
             }
             catch { /* swallow so Dispose never throws */ }
             Console.WriteLine("[IndexWriter] Done.");

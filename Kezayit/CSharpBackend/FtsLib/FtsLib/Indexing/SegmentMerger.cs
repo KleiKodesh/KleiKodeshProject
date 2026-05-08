@@ -10,7 +10,6 @@ namespace FtsLib.Indexing
     /// <summary>
     /// Handles LSM-style segment merging.
     /// Called by SegmentStore when a level reaches FANOUT segments.
-    /// Also exposes ForceMergeAll for use at commit / optimize time.
     /// </summary>
     internal sealed class SegmentMerger
     {
@@ -29,27 +28,6 @@ namespace FtsLib.Indexing
             _store.Live.EnsureLevel(level + 1);
             MergeLevel(level);
             MergeIfNeeded(level + 1);
-        }
-
-        public void ForceMergeAll()
-        {
-            int total = _store.Live.TotalLiveSegs();
-            Console.WriteLine($"[SegmentStore] Force-merge: {total} segment(s)");
-
-            bool progress;
-            do
-            {
-                progress = false;
-                int level = _store.Live.FindLevelWithMultiple();
-                if (level >= 0)
-                {
-                    _store.Live.EnsureLevel(level + 1);
-                    MergeLevel(level);
-                    progress = true;
-                }
-            } while (progress);
-
-            Console.WriteLine("[SegmentStore] Force-merge complete.");
         }
 
         // ── Core merge ───────────────────────────────────────────────
@@ -88,43 +66,19 @@ namespace FtsLib.Indexing
             File.Move(tmpDat, outDat);
             File.Move(tmpDb,  outDb);
 
-            // Delete source segments BEFORE logging END_MERGE.
-            // Crash-safety invariant: if END_MERGE is not in the WAL, recovery knows
-            // the merge may be incomplete and checks whether sources still exist.
-            // If sources are gone and the target exists, the merge completed — recovery
-            // just writes END_MERGE and registers the target.
-            // If sources still exist, the target is partial — recovery deletes it and
-            // re-runs the merge from the sources.
-            //
-            // Rename-before-delete: File.Delete on a file with an open SQLite connection
-            // throws IOException on Windows (SQLite does not open with FILE_SHARE_DELETE).
-            // Renaming to a .del tombstone succeeds even with open handles, so any
-            // in-flight search can finish reading the renamed file. The .del files are
-            // cleaned up at the end of this method (if no handle is open) and on the
-            // next recovery pass.
-            foreach (int sid in segIds)
-            {
-                string datPath = _store.Live.SegDatPath(level, sid);
-                string dbPath  = _store.Live.SegDbPath(level, sid);
-                RenameToDelAndDelete(datPath);
-                RenameToDelAndDelete(dbPath);
-                // Also delete SQLite's WAL files (shared memory and write-ahead log).
-                // These are never held open by searches so plain delete is fine.
-                DeleteIfExists(dbPath + "-shm");
-                DeleteIfExists(dbPath + "-wal");
-            }
-
+            // Register the target segment as live BEFORE deleting sources.
             _store.Wal.EndMerge(level, newSegId);
-
             _store.Live.PromoteSegment(level, segIds, nextLevel, newSegId);
 
-            // Best-effort cleanup of any .del tombstones left by this merge.
-            // If a search still holds a handle the delete will fail silently —
-            // the next recovery pass will clean them up.
-            foreach (var delFile in System.IO.Directory.GetFiles(
-                System.IO.Path.GetDirectoryName(outDat), "*.del"))
+            // Delete the source segments. Search is blocked for the duration of this
+            // merge (SegmentStore holds the write lock on _searchMergeLock), so no
+            // reader can have these files open — plain File.Delete is safe.
+            foreach (int sid in segIds)
             {
-                try { File.Delete(delFile); } catch { /* held open — recovery will clean up */ }
+                DeleteIfExists(_store.Live.SegDatPath(level, sid));
+                DeleteIfExists(_store.Live.SegDbPath(level, sid));
+                DeleteIfExists(_store.Live.SegDbPath(level, sid) + "-shm");
+                DeleteIfExists(_store.Live.SegDbPath(level, sid) + "-wal");
             }
 
             Console.WriteLine($"[Merger] Done → L{nextLevel} seg {newSegId} ({entries.Count:N0} terms)");
@@ -372,34 +326,5 @@ namespace FtsLib.Indexing
         {
             if (File.Exists(path)) File.Delete(path);
         }
-
-        /// <summary>
-        /// Renames <paramref name="path"/> to a <c>.del</c> tombstone and then
-        /// immediately tries to delete the tombstone.
-        ///
-        /// Rename succeeds even when a search holds an open SQLite connection or
-        /// FileStream on the file (Windows allows rename with FILE_SHARE_READ).
-        /// The immediate delete succeeds when no handle is open; if it fails the
-        /// tombstone is left for the next recovery pass to clean up.
-        ///
-        /// If the file does not exist the call is a no-op.
-        /// </summary>
-        private static void RenameToDelAndDelete(string path)
-        {
-            if (!File.Exists(path)) return;
-            string tombstone = path + ".del";
-            DeleteIfExists(tombstone); // remove any stale tombstone from a previous crash
-            try
-            {
-                File.Move(path, tombstone);
-                File.Delete(tombstone);
-            }
-            catch
-            {
-                // Delete failed — handle still open. Tombstone stays for recovery.
-            }
-        }
-
-
     }
 }

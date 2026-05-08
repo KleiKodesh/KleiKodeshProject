@@ -6,7 +6,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useEventListener } from '@vueuse/core'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
-import type { FullTextSearchResult } from './fullTextSearchTypes'
+import type { FullTextSearchResult, SearchFailReason } from './fullTextSearchTypes'
 
 const props = defineProps<{
   results: FullTextSearchResult[]
@@ -14,6 +14,7 @@ const props = defineProps<{
   searchQuery: string
   isSearching: boolean
   hasSearched: boolean
+  searchError?: SearchFailReason | null
   initialScrollIndex?: number
   initialScrollOffset?: number
   zoom?: number
@@ -24,6 +25,11 @@ const emit = defineEmits<{
   saveScroll: [{ scrollIndex: number; scrollOffset: number }]
 }>()
 
+const SEARCH_ERROR_MESSAGES: Record<string, string> = {
+  indexNotReady: 'האינדקס עדיין לא מוכן לחיפוש',
+  indexMerging:  'האינדקס מבצע מיזוג — נסה שוב בעוד כמה רגעים',
+  searchFailed:  'אירעה שגיאה בחיפוש',
+}
 const settingsStore = useSettingsStore()
 const scrollEl = ref<HTMLElement | null>(null)
 
@@ -123,7 +129,10 @@ defineExpose({ captureScrollPos })
   <div class="results-wrap">
     <div v-if="!hasSearched || (!results.length && !isSearching)" class="empty-state">
       <IconSearchSparkle24Regular class="empty-icon" />
-      <span v-if="hasSearched && !results.length" class="empty-msg">לא נמצאו תוצאות</span>
+      <span v-if="searchError" class="empty-msg error-msg">
+        {{ SEARCH_ERROR_MESSAGES[searchError] ?? SEARCH_ERROR_MESSAGES.searchFailed }}
+      </span>
+      <span v-else-if="hasSearched && !results.length" class="empty-msg">לא נמצאו תוצאות</span>
     </div>
     <template v-else>
       <div class="results-count">
@@ -205,6 +214,9 @@ defineExpose({ captureScrollPos })
 .empty-msg {
   font-size: 14px;
   color: var(--text-secondary);
+}
+.error-msg {
+  color: color-mix(in srgb, var(--text-primary) 70%, #e05252);
 }
 .results-count {
   padding: 4px 14px;

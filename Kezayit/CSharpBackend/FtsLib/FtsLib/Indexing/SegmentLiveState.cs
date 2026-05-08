@@ -71,13 +71,18 @@ namespace FtsLib.Indexing
             }
         }
 
-        internal int FindLevelWithMultiple()
+        /// <summary>
+        /// Returns all level numbers that currently have more than one live segment.
+        /// Used by MergeAllUnderWriteLock to drive the purge merge pass.
+        /// </summary>
+        internal List<int> GetLevelsWithMultiple()
         {
             lock (_lock)
             {
+                var result = new List<int>();
                 foreach (var kv in _liveSegs)
-                    if (kv.Value.Count >= 2) return kv.Key;
-                return -1;
+                    if (kv.Value.Count >= 2) result.Add(kv.Key);
+                return result;
             }
         }
 

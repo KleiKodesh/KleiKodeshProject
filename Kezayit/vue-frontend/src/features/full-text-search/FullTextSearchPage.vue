@@ -52,6 +52,7 @@ const {
   isSearching,
   hasSearched,
   executedQuery,
+  searchError,
   maxWordDistance,
   requireOrdered,
   expandKetiv,
@@ -222,6 +223,7 @@ onBeforeUnmount(() => {
       :search-query="executedQuery"
       :is-searching="isSearching"
       :has-searched="hasSearched"
+      :search-error="searchError"
       :initial-scroll-index="initialScrollIndex"
       :initial-scroll-offset="initialScrollOffset"
       :zoom="zoom"

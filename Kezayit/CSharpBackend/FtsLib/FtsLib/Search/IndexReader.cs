@@ -231,25 +231,8 @@ namespace FtsLib.Search
             if (_disposed) return;
             _disposed = true;
             foreach (var seg in _segments)
-            {
-                string datPath = seg.DatPath;
                 seg.Dispose();
-                // If this segment was renamed to a .del tombstone by a concurrent merge
-                // while we were reading it, clean up the tombstone now that our handle
-                // is released. Best-effort — ignore any failure.
-                TryDeleteTombstone(datPath);
-                TryDeleteTombstone(Path.ChangeExtension(datPath, ".db"));
-            }
             _segments.Clear();
-        }
-
-        private static void TryDeleteTombstone(string originalPath)
-        {
-            string tombstone = originalPath + ".del";
-            if (File.Exists(tombstone))
-            {
-                try { File.Delete(tombstone); } catch { /* best-effort */ }
-            }
         }
     }
 }

@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 namespace FtsLib.Indexing
 {
     /// <summary>
-    /// Orchestrates the segment lifecycle: flush pipeline, crash recovery, and commit.
+    /// Orchestrates the segment lifecycle: flush pipeline and crash recovery.
     ///
     /// Delegates to:
     ///   <see cref="SegmentLiveState"/> — thread-safe registry of live segments
@@ -18,12 +18,20 @@ namespace FtsLib.Indexing
     ///
     /// Flush pipeline (fully non-blocking on the indexing thread):
     ///   Flush() hands a completed RamIndex to a background task and returns.
-    ///   A depth-1 SemaphoreSlim provides back-pressure: if the previous write is
-    ///   still in flight, the indexing thread blocks only until that write finishes,
+    ///   A depth-1 SemaphoreSlim provides back-pressure: the next flush cannot
+    ///   start until the previous flush write AND any triggered merge both finish,
     ///   keeping at most one RamIndex queued in memory at any time.
     ///   After the write, MergeIfNeeded runs on the same task — an LSM merge fires
     ///   only when a level reaches the fanout threshold (4 segments).
-    ///   WaitForMerge() drains the entire pipeline and must be called before Commit.
+    ///   WaitForMerge() drains the entire pipeline.
+    ///
+    /// Search / merge exclusion:
+    ///   A ReaderWriterLockSlim (_searchMergeLock) ensures that no search can read
+    ///   the live segment list while a merge is rewriting it.  GetLiveSegmentPaths()
+    ///   acquires the read lock; MergeIfNeeded holds the write lock for the duration
+    ///   of the merge.  Flush writes (segment writes that do not trigger a merge) do
+    ///   not need the lock — they only add a new segment to the live set, which is
+    ///   safe to observe mid-search.
     /// </summary>
     internal sealed class SegmentStore
     {
@@ -32,9 +40,14 @@ namespace FtsLib.Indexing
         internal readonly SegmentLiveState Live;
         internal readonly SegmentWal       Wal;
 
-        private readonly SegmentMerger _merger;
-        private DeleteSet              _deleteSet;
-        private readonly string        _dir;
+        private readonly SegmentMerger        _merger;
+        private DeleteSet                     _deleteSet;
+        private readonly string               _dir;
+
+        // Excludes searches from observing a partially-merged live set.
+        // Write lock: held for the entire duration of any merge (MergeIfNeeded).
+        // Read lock: held while snapshotting live segment paths for a search.
+        private readonly ReaderWriterLockSlim _searchMergeLock = new ReaderWriterLockSlim();
 
         // ── Flush pipeline ────────────────────────────────────────────
         // _flushSlot: depth-1 semaphore — back-pressure gate between indexing and I/O.
@@ -67,8 +80,26 @@ namespace FtsLib.Indexing
 
         // ── Live segment paths (used by IndexReader) ──────────────────
 
-        public List<(string dat, string db)> GetLiveSegmentPaths() =>
-            Live.GetLiveSegmentPaths();
+        /// <summary>
+        /// Returns a consistent snapshot of all live segment paths.
+        /// Throws <see cref="IndexMergingException"/> if a merge is currently in
+        /// progress — the caller should surface this to the user rather than blocking.
+        /// </summary>
+        public List<(string dat, string db)> GetLiveSegmentPaths()
+        {
+            // Non-blocking: if the write lock is held (merge in progress), fail fast
+            // so the search returns an actionable error instead of silently stalling.
+            if (!_searchMergeLock.TryEnterReadLock(0))
+                throw new IndexMergingException();
+            try
+            {
+                return Live.GetLiveSegmentPaths();
+            }
+            finally
+            {
+                _searchMergeLock.ExitReadLock();
+            }
+        }
 
         // ── Recovery ─────────────────────────────────────────────────
 
@@ -103,9 +134,9 @@ namespace FtsLib.Indexing
                 try { File.Delete(tmp); } catch { /* best-effort */ }
             }
 
-            // Step 2b: Delete all .del tombstones — these are source segments that were
-            // renamed by a previous merge but whose delete was deferred because a search
-            // held an open handle. They are now safe to delete (no searches run during recovery).
+            // Step 2b: Delete all .del tombstones left by a previous version of the code.
+            // The current merge implementation uses plain File.Delete (no tombstones),
+            // but clean up any that remain from an older build.
             foreach (var del in Directory.GetFiles(_dir, "*.del"))
             {
                 try { File.Delete(del); } catch { /* best-effort */ }
@@ -148,17 +179,24 @@ namespace FtsLib.Indexing
             string targetDb  = Live.SegDbPath(op.Level + 1, op.Target);
 
             // Determine how far the merge got before the crash.
-            // With the new deletion order: sources are deleted BEFORE END_MERGE is logged.
-            // So if sources are gone and the target exists, the merge completed — just
-            // clean up the WAL and register the target as live.
+            // New deletion order: END_MERGE is logged and PromoteSegment() is called
+            // BEFORE sources are deleted. So a PendingMerge entry in the WAL means
+            // BEGIN_MERGE was written but END_MERGE was not yet written — the merge
+            // was interrupted before it completed.
+            //
+            // Possible crash states:
+            //   A) Target exists, sources exist  → crash during write; delete target, re-run merge
+            //   B) Target exists, sources gone   → crash after sources deleted but before END_MERGE
+            //                                      (shouldn't happen with new order, but handle it)
+            //                                      → target is complete; register it, clear WAL
+            //   C) Target missing, sources exist → crash before File.Move; re-run merge
+            //   D) Target missing, sources gone  → unrecoverable; wipe and rebuild
             bool targetExists  = File.Exists(targetDat) && File.Exists(targetDb);
             bool sourcesExist  = false;
             foreach (int sid in op.Sources)
             {
                 string srcDat = Live.SegDatPath(op.Level, sid);
-                // A source exists if its .dat file is present OR if a .del tombstone
-                // remains (rename succeeded but delete was deferred — treat as present).
-                if (File.Exists(srcDat) || File.Exists(srcDat + ".del"))
+                if (File.Exists(srcDat))
                 {
                     sourcesExist = true;
                     break;
@@ -167,8 +205,7 @@ namespace FtsLib.Indexing
 
             if (targetExists && !sourcesExist)
             {
-                // Sources already deleted, target is complete — merge finished, WAL just
-                // didn't get END_MERGE written. Register the target and clear the WAL.
+                // Case B: sources already deleted, target is complete — register it.
                 Console.WriteLine($"[Recovery] Merge was complete (sources gone, target exists) — registering target and clearing WAL");
                 Live.AddToLive(op.Level + 1, op.Target);
                 Wal.Open();
@@ -273,7 +310,7 @@ namespace FtsLib.Indexing
         /// </summary>
         public void Flush(RamIndex ramIndex, int lineId)
         {
-            // Back-pressure: block until the previous write slot is free.
+            // Back-pressure: block until the previous flush+merge cycle is free.
             _flushSlot.Wait();
 
             int    segId   = Live.NextSegId();
@@ -290,25 +327,36 @@ namespace FtsLib.Indexing
             {
                 _pipelineTask = _pipelineTask.ContinueWith(_ =>
                 {
+                    // The slot is released only after both the write AND any triggered
+                    // merge complete, so the next flush never starts while a merge is
+                    // still running on this thread.
                     try
                     {
                         SegmentWriter.WriteSegment(ramIndex, terms, datPath, dbPath);
                         Live.AddToLive(0, segId);
                         LastFlushedLineId = lineId;
+
+                        Wal.Open();
+                        try
+                        {
+                            _searchMergeLock.EnterWriteLock();
+                            try
+                            {
+                                _merger.MergeIfNeeded(0);
+                            }
+                            finally
+                            {
+                                _searchMergeLock.ExitWriteLock();
+                            }
+                        }
+                        finally
+                        {
+                            Wal.Close();
+                        }
                     }
                     finally
                     {
                         _flushSlot.Release();
-                    }
-
-                    Wal.Open();
-                    try
-                    {
-                        _merger.MergeIfNeeded(0);
-                    }
-                    finally
-                    {
-                        Wal.Close();
                     }
 
                 }, TaskContinuationOptions.None);
@@ -332,28 +380,44 @@ namespace FtsLib.Indexing
             }
         }
 
-        // ── Commit ────────────────────────────────────────────────────
+        // ── Helpers ───────────────────────────────────────────────────
 
         /// <summary>
-        /// Force-merges all segments into one for fastest subsequent search.
-        /// Optional — search works correctly across any number of live segments.
+        /// Runs a merge pass across every level that has more than one segment,
+        /// holding the write lock so no search can observe the intermediate state.
+        /// Used by Purge to physically remove deleted doc IDs from all segments.
         /// </summary>
-        public void Commit()
+        internal void MergeAllUnderWriteLock()
         {
-            WaitForMerge();
             Wal.Open();
             try
             {
-                _merger.ForceMergeAll();
+                _searchMergeLock.EnterWriteLock();
+                try
+                {
+                    bool progress;
+                    do
+                    {
+                        progress = false;
+                        foreach (var level in Live.GetLevelsWithMultiple())
+                        {
+                            Live.EnsureLevel(level + 1);
+                            _merger.MergeLevel(level);
+                            progress = true;
+                            break; // restart after each merge — level counts change
+                        }
+                    } while (progress);
+                }
+                finally
+                {
+                    _searchMergeLock.ExitWriteLock();
+                }
             }
             finally
             {
-                Wal.Clear(); // clears and closes
+                Wal.Clear();
             }
-            Console.WriteLine("[SegmentStore] Commit complete.");
         }
-
-        // ── Helpers ───────────────────────────────────────────────────
 
         private static void DeleteIfExists(string path)
         {

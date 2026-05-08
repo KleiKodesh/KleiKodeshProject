@@ -132,8 +132,6 @@ namespace FtsLib.SeforimDb
             }
         }
 
-        public void Optimize() => IndexingPipeline.Optimize(_indexPath, _store);
-
         // ── Search ────────────────────────────────────────────────────
 
         public IEnumerable<SearchResult> Search(string query, int cap = 0, bool expandKetiv = false, CancellationToken ct = default)

@@ -158,8 +158,8 @@ namespace FtsLib.SeforimDb
             try
             {
                 writer = store != null
-                    ? new IndexWriter(indexPath, store) { AutoOptimize = false }
-                    : new IndexWriter(indexPath)        { AutoOptimize = false };
+                    ? new IndexWriter(indexPath, store)
+                    : new IndexWriter(indexPath);
             }
             catch (CorruptIndexException ex)
             {
@@ -183,7 +183,7 @@ namespace FtsLib.SeforimDb
                 Console.WriteLine("[IndexingPipeline] Starting fresh build from scratch...");
                 resumeLineId = 0;
                 // Store is now inconsistent (index wiped) — don't reuse it.
-                writer = new IndexWriter(indexPath) { AutoOptimize = false };
+                writer = new IndexWriter(indexPath);
             }
 
             // Initialize progress tracking after the catch block so they reflect
@@ -258,25 +258,6 @@ namespace FtsLib.SeforimDb
             // Return true only when lines were actually processed — this distinguishes
             // a real completed build from a no-op (WAL recovery only, or empty DB).
             return anyLinesProcessed;
-        }
-
-        /// <summary>
-        /// Force-merges all segments into one for fastest subsequent search.
-        /// Call this after <see cref="Build"/> returns — the index is already
-        /// searchable before this completes, so it can run in the background.
-        /// </summary>
-        internal static void Optimize(string indexPath, SegmentStore store = null)
-        {
-            if (store != null)
-            {
-                using (var writer = new IndexWriter(indexPath, store) { AutoOptimize = false })
-                    writer.Optimize();
-            }
-            else
-            {
-                using (var writer = new IndexWriter(indexPath) { AutoOptimize = false })
-                    writer.Optimize();
-            }
         }
     }
 }
