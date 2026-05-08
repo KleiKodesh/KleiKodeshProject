@@ -13,6 +13,8 @@ namespace FtsLib.Indexing
     ///   4 bytes  int    chunkByteLen
     ///   4 bytes  int    docCount
     ///   4 bytes  uint   lastEncoded
+    ///   4 bytes  int    skipCount
+    ///   skipCount × 12 bytes  skip table (int32 docId, int32 byteOffset, int32 prevEncoded)
     ///   M bytes         varint posting data
     /// </summary>
     internal sealed class SegmentReader : System.IDisposable
@@ -25,6 +27,12 @@ namespace FtsLib.Indexing
         public int    CurrentChunkLen    { get; private set; }
         public int    CurrentCount       { get; private set; }
         public uint   CurrentLastEncoded { get; private set; }
+        /// <summary>
+        /// Skip table for the current term, as a flat int[] triplets
+        /// (docId, byteOffset, prevEncoded). Null when skipCount is 0.
+        /// </summary>
+        public int[]  CurrentSkip        { get; private set; }
+        public int    CurrentSkipLen     { get; private set; }
         public bool   Done               { get; private set; }
 
         public SegmentReader(string path)
@@ -52,13 +60,26 @@ namespace FtsLib.Indexing
 
             int    count       = _br.ReadInt32();
             uint   lastEncoded = _br.ReadUInt32();
-            byte[] chunk       = _br.ReadBytes(chunkLen);
+            int    skipCount   = _br.ReadInt32();
+
+            int[]  skip    = null;
+            int    skipLen = skipCount * 3;
+            if (skipCount > 0)
+            {
+                skip = new int[skipLen];
+                for (int i = 0; i < skipLen; i++)
+                    skip[i] = _br.ReadInt32();
+            }
+
+            byte[] chunk = _br.ReadBytes(chunkLen);
 
             CurrentTerm        = Encoding.UTF8.GetString(termBytes);
             CurrentChunk       = chunk;
             CurrentChunkLen    = chunkLen;
             CurrentCount       = count;
             CurrentLastEncoded = lastEncoded;
+            CurrentSkip        = skip;
+            CurrentSkipLen     = skipLen;
             return true;
         }
 

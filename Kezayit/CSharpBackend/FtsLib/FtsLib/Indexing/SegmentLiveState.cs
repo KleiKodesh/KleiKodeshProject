@@ -106,59 +106,6 @@ namespace FtsLib.Indexing
             }
         }
 
-        /// <summary>
-        /// Opens a <see cref="SegmentHandle"/> for every live segment while holding
-        /// the live-state lock, then returns the handles.
-        ///
-        /// Opening the file handles inside the lock eliminates the TOCTOU race: a
-        /// concurrent merge cannot delete a source segment after we have already
-        /// opened a FileStream on it — on Windows, an open handle keeps the file
-        /// data alive even after the directory entry is removed. Because
-        /// <see cref="PromoteSegment"/> also acquires this same lock, the live set
-        /// and the set of open handles are always consistent: we either see the
-        /// sources (merge hasn't started) or the merged target (merge is done), never
-        /// a partial view where sources are gone but the target isn't registered yet.
-        ///
-        /// File opens (FileStream + SQLite connection) are fast — microseconds — so
-        /// holding the lock across them is acceptable.
-        /// </summary>
-        internal List<SegmentHandle> OpenLiveSegmentHandles()
-        {
-            lock (_lock)
-            {
-                // Collect paths under the lock and sort by segId so ConcatIterator
-                // sees doc IDs in ascending order.
-                var paths = new List<(string dat, string db)>();
-                foreach (var kv in _liveSegs)
-                    foreach (int sid in kv.Value)
-                        paths.Add((SegDatPath(kv.Key, sid), SegDbPath(kv.Key, sid)));
-
-                paths.Sort((a, b) => ParseSegId(a.dat).CompareTo(ParseSegId(b.dat)));
-
-                var handles = new List<SegmentHandle>(paths.Count);
-                foreach (var (dat, db) in paths)
-                {
-                    try { handles.Add(new SegmentHandle(dat, db)); }
-                    catch
-                    {
-                        // Should never happen on Windows (open handle keeps file alive),
-                        // but dispose what we opened so far and retry from scratch if it does.
-                        foreach (var h in handles) h.Dispose();
-                        handles.Clear();
-                        break;
-                    }
-                }
-                return handles;
-            }
-        }
-
-        private static int ParseSegId(string path)
-        {
-            string name  = System.IO.Path.GetFileNameWithoutExtension(path);
-            var    parts = name.Split('_');
-            return parts.Length == 3 && int.TryParse(parts[2], out int id) ? id : 0;
-        }
-
         // ── Mutations ────────────────────────────────────────────────
 
         internal void AddToLive(int level, int segId)

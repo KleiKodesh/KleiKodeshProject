@@ -70,9 +70,6 @@ namespace FtsLib.Indexing
         public List<(string dat, string db)> GetLiveSegmentPaths() =>
             Live.GetLiveSegmentPaths();
 
-        public List<SegmentHandle> OpenLiveSegmentHandles() =>
-            Live.OpenLiveSegmentHandles();
-
         // ── Recovery ─────────────────────────────────────────────────
 
         public void Recover()
@@ -106,7 +103,15 @@ namespace FtsLib.Indexing
                 try { File.Delete(tmp); } catch { /* best-effort */ }
             }
 
-            // Step 2b: Clean up orphaned SQLite WAL files (left behind from deleted segments).
+            // Step 2b: Delete all .del tombstones — these are source segments that were
+            // renamed by a previous merge but whose delete was deferred because a search
+            // held an open handle. They are now safe to delete (no searches run during recovery).
+            foreach (var del in Directory.GetFiles(_dir, "*.del"))
+            {
+                try { File.Delete(del); } catch { /* best-effort */ }
+            }
+
+            // Step 2c: Clean up orphaned SQLite WAL files (left behind from deleted segments).
             // These are -shm and -wal files whose corresponding .db file no longer exists.
             foreach (var walFile in Directory.GetFiles(_dir, "*.db-shm").Concat(Directory.GetFiles(_dir, "*.db-wal")))
             {
@@ -150,7 +155,10 @@ namespace FtsLib.Indexing
             bool sourcesExist  = false;
             foreach (int sid in op.Sources)
             {
-                if (File.Exists(Live.SegDatPath(op.Level, sid)))
+                string srcDat = Live.SegDatPath(op.Level, sid);
+                // A source exists if its .dat file is present OR if a .del tombstone
+                // remains (rename succeeded but delete was deferred — treat as present).
+                if (File.Exists(srcDat) || File.Exists(srcDat + ".del"))
                 {
                     sourcesExist = true;
                     break;
@@ -181,7 +189,6 @@ namespace FtsLib.Indexing
             foreach (int sid in op.Sources)
                 if (File.Exists(Live.SegDatPath(op.Level, sid)))
                     Live.AddToLive(op.Level, sid);
-
             if (!sourcesExist)
             {
                 // Neither target nor sources exist — the index is unrecoverable.

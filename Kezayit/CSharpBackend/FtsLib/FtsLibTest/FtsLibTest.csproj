@@ -57,7 +57,12 @@
     <Compile Include="Shared\TestHelpers.cs" />
     <!-- BuildIndex -->
     <Compile Include="BuildIndex\BuildTest.cs" />
+    <Compile Include="BuildIndex\MergeCompareTest.cs" />
+    <Compile Include="BuildIndex\BeforeMergeAfterMergeTest.cs" />
+    <Compile Include="BuildIndex\ConcurrentMergeSearchTest.cs" />
+    <Compile Include="BuildIndex\BuildFreshTest.cs" />
     <!-- SearchIndex -->
+    <Compile Include="SearchIndex\ProbeSearch.cs" />
     <Compile Include="SearchIndex\SearchTest.cs" />
     <Compile Include="SearchIndex\QueryTest.cs" />
     <Compile Include="SearchIndex\QueryParserTest.cs" />
@@ -72,10 +77,12 @@
     <Compile Include="SearchIndex\PerformanceTest.cs" />
     <Compile Include="SearchIndex\ExpandDiag.cs" />
     <Compile Include="SearchIndex\LookupDiag.cs" />
+    <Compile Include="SearchIndex\MonitorTest.cs" />
     <Compile Include="SearchIndex\WildcardDiag.cs" />
     <Compile Include="SearchIndex\PrefixLenDiag.cs" />
     <!-- Ad-hoc DB queries -->
     <Compile Include="DbQuery.cs" />
+    <Compile Include="Shared\DiffIds.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />

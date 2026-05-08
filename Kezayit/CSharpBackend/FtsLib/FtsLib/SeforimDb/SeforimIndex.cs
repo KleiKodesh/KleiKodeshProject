@@ -97,13 +97,6 @@ namespace FtsLib.SeforimDb
         internal List<(string dat, string db)> GetLiveSegmentPaths()
             => _store != null ? _store.GetLiveSegmentPaths() : new List<(string, string)>();
 
-        /// <summary>
-        /// Opens file handles for all live segments under the store lock.
-        /// This eliminates the TOCTOU race between snapshot and file-open.
-        /// </summary>
-        internal List<SegmentHandle> OpenLiveSegmentHandles()
-            => _store != null ? _store.OpenLiveSegmentHandles() : new List<SegmentHandle>();
-
         // ── Build ─────────────────────────────────────────────────────
 
         public int GetResumeLineId() => IndexingPipeline.ReadResumeLineId(_indexPath);
@@ -144,10 +137,10 @@ namespace FtsLib.SeforimDb
         // ── Search ────────────────────────────────────────────────────
 
         public IEnumerable<SearchResult> Search(string query, int cap = 0, bool expandKetiv = false, CancellationToken ct = default)
-            => SearchPipeline.Search(query, _indexPath, _dbPath, OpenLiveSegmentHandles(), cap, expandKetiv, ct);
+            => SearchPipeline.Search(query, _indexPath, _dbPath, GetLiveSegmentPaths(), cap, expandKetiv, ct);
 
         public IEnumerable<int> SearchIds(string query, bool expandKetiv = false, CancellationToken ct = default)
-            => SearchPipeline.SearchIds(query, _indexPath, OpenLiveSegmentHandles(), expandKetiv, ct);
+            => SearchPipeline.SearchIds(query, _indexPath, GetLiveSegmentPaths(), expandKetiv, ct);
 
         // ── Snippets ──────────────────────────────────────────────────
 

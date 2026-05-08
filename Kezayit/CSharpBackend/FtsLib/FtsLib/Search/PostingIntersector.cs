@@ -59,9 +59,22 @@ namespace FtsLib.Search
             {
                 var started = StartedIterators(group, resolve, skipMissing: true);
                 if (started.Count == 0) return Enumerable.Empty<int>();
-                groupIters.Add(started.Count == 1
-                    ? started[0]
-                    : new UnionIterator(started.ToArray()));
+                PostingIterator groupIter;
+                if (started.Count == 1)
+                {
+                    groupIter = started[0]; // already pre-advanced by StartedIterators
+                }
+                else
+                {
+                    // UnionIterator is not pre-advanced — advance it now so it is
+                    // consistent with the single-iterator case and with the
+                    // pre-advanced contract expected by PostingMatcher.Intersect
+                    // and DrainStarted.
+                    var union = new UnionIterator(started.ToArray());
+                    if (!union.MoveNext()) continue; // all sub-iterators exhausted
+                    groupIter = union;
+                }
+                groupIters.Add(groupIter);
             }
 
             if (groupIters.Count == 0) return Enumerable.Empty<int>();

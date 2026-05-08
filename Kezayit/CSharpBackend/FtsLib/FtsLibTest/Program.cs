@@ -107,6 +107,38 @@ namespace FtsLibTest
                     DbQuery.Run(args);
                     return;
 
+                case "diffids":
+                    DiffIds.Run(args);
+                    return;
+
+                case "buildmerge":
+                    MergeCompareTest.Run(args, forcemerge: true);
+                    return;
+
+                case "buildnomerge":
+                    MergeCompareTest.Run(args, forcemerge: false);
+                    return;
+
+                case "monitor":
+                    MonitorTest.Run(args);
+                    return;
+
+                case "beforeafter":
+                    BeforeMergeAfterMergeTest.Run(args);
+                    return;
+
+                case "concurrentmerge":
+                    ConcurrentMergeSearchTest.Run(args);
+                    return;
+
+                case "buildfresh":
+                    BuildFreshTest.Run(args);
+                    return;
+
+                case "probe":
+                    ProbeSearch.Run(args);
+                    return;
+
                 default:
                     PrintUsage();
                     return;

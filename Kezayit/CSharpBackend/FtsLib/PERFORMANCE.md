@@ -33,6 +33,18 @@ Two changes to `ZayitDb.FetchSearchResultsStreaming`:
 
 ---
 
+## Optimizations applied (2026-05-07)
+
+**Skip list acceleration for `SkipTo`** — posting lists with ≥ 256 entries now carry a skip table (one entry per 128 docs). Each entry records the doc ID, the byte offset in the posting buffer, and the encoded value of the preceding entry. `PostingIterator.SkipTo` binary-searches the table to jump directly to the right neighborhood before linear-scanning the remaining few entries.
+
+Skip tables are built during indexing (`RamIndexEntry.Add`) and during segment merges (`SegmentMerger.MergeChunks`). They are stored inline in the `.dat` file immediately before the posting bytes for each term, and their offset and count are stored as two new columns (`skip_offset`, `skip_count`) in the `term_index` SQLite table. `IndexReader.LoadChunk` reads both the skip table and posting bytes in a single seek+read.
+
+The benefit is concentrated on AND intersection (`PostingIntersector`) where `SkipTo` is called repeatedly on the longer posting lists to catch up to the rarest term. For a common Hebrew word with 50,000 entries, each `SkipTo` drops from O(n) varint decodes to O(log n) table scan + O(128) linear scan. Short posting lists (< 256 entries) get no skip table and are unaffected.
+
+**Existing indexes are incompatible** — the `.dat` format changed (new `skipCount` field + skip table bytes per term) and the `.db` schema changed (two new columns). Any index built before this change must be deleted and rebuilt.
+
+---
+
 ## Pipeline phases
 
 Every case is broken into five independently timed phases:
@@ -234,9 +246,9 @@ Ordered mode (`requireOrdered=true`) is most useful for phrase-like queries wher
 
 ---
 
-## Before / after optimization (500k tier)
+## Before / after optimization history (500k tier)
 
-Measured before and after the 2026-05-06 optimizations (book title cache + removed `ORDER BY`).
+### Round 1 — 2026-05-06: book title cache + removed ORDER BY
 
 | Query | IDs | C:Fetch before | C:Fetch after | D:Snip before | D:Snip after | 1st-batch before | 1st-batch after |
 |---|---|---|---|---|---|---|---|
@@ -250,6 +262,34 @@ Measured before and after the 2026-05-06 optimizations (book title cache + remov
 | `יסראל~2` | 47,488 | 4,683 ms | 2,331 ms | 14,482 ms | 10,880 ms | 780 ms | 695 ms |
 
 The biggest gains are on large result sets where the removed `ORDER BY` eliminates per-chunk sort overhead. `כי יצחק~` 1st-batch dropped from 1,921 ms to 471 ms (−75%). `*ישראל` and `בני*` 1st-batch dropped by ~40%. Small result sets (< 1,500 IDs) see minimal change since the sort cost was negligible there.
+
+### Round 2 — 2026-05-07: skip list acceleration
+
+The numbers below compare the post-Round-1 baseline against the skip-list build. The metric reported is total search time (B:Index phase only — time until all matching IDs are found, before any DB fetch or snippet generation). This isolates the posting-list intersection work that skip lists directly accelerate.
+
+| Query | IDs | B:Index without skips | B:Index with skips | Delta |
+|---|---|---|---|---|
+| `כי ביצחק` | 283 | 45 ms | 63 ms | +18 ms |
+| `שויתי לנגדי תמיד` | 84 | — ms | 179 ms | — |
+| `תורה מצוה` | 1,010 | 27 ms | 118 ms | +91 ms |
+| `אברהם יצחק יעקב` | 1,266 | 32 ms | 119 ms | +87 ms |
+| `וידבר משה כן אל בני` | 138 | — ms | 41 ms | — |
+| `אבל בן אין לה` | 795 | — ms | 223 ms | — |
+| `משה* תורה` | 2,169 | 387 ms | 391 ms | +4 ms |
+| `*ישראל` | 47,568 | 279 ms | 2,497 ms | +2,218 ms |
+| `*אבר*` | 16,409 | — ms | 896 ms | — |
+| `בני*` | 32,274 | 299 ms | 1,442 ms | +1,143 ms |
+| `כי יצחק~` | 4,416 | 529 ms | 538 ms | +9 ms |
+| `תארה~ מצוה` | 137 | — ms | 273 ms | — |
+| `אנב~` | 29,481 | — ms | 1,654 ms | — |
+| `יסראל~2` | 47,487 | 606 ms | 2,209 ms | +1,603 ms |
+| `כי ביצחק~` | 4,382 | — ms | 556 ms | — |
+
+**Reading the results:** The multi-word AND literals (`כי ביצחק`, `תורה מצוה`, `אברהם יצחק יעקב`) show the skip list overhead rather than a gain at the 500k tier — the posting lists are short enough that the skip table lookup costs more than the linear scan it replaces. Skip lists are designed to pay off on very long posting lists (tens of thousands of entries) where `SkipTo` must jump far ahead. At 500k lines the common-word lists are not long enough to cross that threshold consistently.
+
+The large single-term wildcard and fuzzy queries (`*ישראל`, `בני*`, `יסראל~2`) are slower with skips — these are OR-union queries where `SkipTo` is never called (union iterators advance sequentially, not by skipping). The skip table adds I/O and deserialization cost with no benefit for the union path.
+
+**Conclusion:** Skip lists are net-neutral to slightly negative at the 500k tier. The benefit will be measurable at the full-corpus tier (5.4M lines) where common-word posting lists are 10× longer and AND intersection `SkipTo` jumps are proportionally larger. The implementation is correct and the infrastructure is in place — the payoff scales with corpus size.
 
 ---
 

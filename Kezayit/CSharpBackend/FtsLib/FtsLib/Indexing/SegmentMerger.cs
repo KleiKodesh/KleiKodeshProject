@@ -95,13 +95,21 @@ namespace FtsLib.Indexing
             // just writes END_MERGE and registers the target.
             // If sources still exist, the target is partial — recovery deletes it and
             // re-runs the merge from the sources.
+            //
+            // Rename-before-delete: File.Delete on a file with an open SQLite connection
+            // throws IOException on Windows (SQLite does not open with FILE_SHARE_DELETE).
+            // Renaming to a .del tombstone succeeds even with open handles, so any
+            // in-flight search can finish reading the renamed file. The .del files are
+            // cleaned up at the end of this method (if no handle is open) and on the
+            // next recovery pass.
             foreach (int sid in segIds)
             {
                 string datPath = _store.Live.SegDatPath(level, sid);
                 string dbPath  = _store.Live.SegDbPath(level, sid);
-                DeleteIfExists(datPath);
-                DeleteIfExists(dbPath);
-                // Also delete SQLite's WAL files (shared memory and write-ahead log)
+                RenameToDelAndDelete(datPath);
+                RenameToDelAndDelete(dbPath);
+                // Also delete SQLite's WAL files (shared memory and write-ahead log).
+                // These are never held open by searches so plain delete is fine.
                 DeleteIfExists(dbPath + "-shm");
                 DeleteIfExists(dbPath + "-wal");
             }
@@ -110,19 +118,27 @@ namespace FtsLib.Indexing
 
             _store.Live.PromoteSegment(level, segIds, nextLevel, newSegId);
 
+            // Best-effort cleanup of any .del tombstones left by this merge.
+            // If a search still holds a handle the delete will fail silently —
+            // the next recovery pass will clean them up.
+            foreach (var delFile in System.IO.Directory.GetFiles(
+                System.IO.Path.GetDirectoryName(outDat), "*.del"))
+            {
+                try { File.Delete(delFile); } catch { /* held open — recovery will clean up */ }
+            }
+
             Console.WriteLine($"[Merger] Done → L{nextLevel} seg {newSegId} ({entries.Count:N0} terms)");
         }
 
         // ── Merge write ──────────────────────────────────────────────
 
-        private List<(string term, long offset, int length, int count)> WriteMergedDat(
+        private List<(string term, long skipOffset, int skipCount, long offset, int length, int count)> WriteMergedDat(
             int srcLevel, int dstLevel,
             SegmentReader[] readers,
             string outPath)
         {
-            var entries = new List<(string, long, int, int)>();
+            var entries = new List<(string, long, int, long, int, int)>();
             int  written  = 0;
-            long writePos = 0;
 
             // Reusable merge buffer — grown as needed, never shrunk.
             // Avoids one MemoryStream allocation per term (1.4M+ over a full merge).
@@ -141,8 +157,11 @@ namespace FtsLib.Indexing
                     int mergedLen;
                     int totalCount;
                     uint lastEncoded;
+                    int[] skipTable;
+                    int   skipLen;
                     MergeChunks(readers, minTerm, _store.GetDeleteSet(),
-                                ref mergeBuffer, out mergedLen, out totalCount, out lastEncoded);
+                                ref mergeBuffer, out mergedLen, out totalCount, out lastEncoded,
+                                out skipTable, out skipLen);
 
                     // Skip terms whose entire posting list was purged
                     if (totalCount == 0) continue;
@@ -151,19 +170,25 @@ namespace FtsLib.Indexing
                     byte[] termBytes   = ArrayPool<byte>.Shared.Rent(termByteLen);
                     Encoding.UTF8.GetBytes(minTerm, 0, minTerm.Length, termBytes, 0);
                     int    chunkLen    = mergedLen;
+                    int    skipCount   = skipLen / 3;
 
                     bw.Write(termByteLen);
                     bw.Write(termBytes, 0, termByteLen);
                     bw.Write(chunkLen);
                     bw.Write(totalCount);
                     bw.Write(lastEncoded);
+                    bw.Write(skipCount);
                     bw.Flush();
 
-                    long outOff = outFs.Position; // offset of posting data, after the header
+                    long skipOff = outFs.Position;
+                    for (int i = 0; i < skipLen; i++)
+                        bw.Write(skipTable[i]);
+                    bw.Flush();
+
+                    long outOff = outFs.Position; // offset of posting data
                     outFs.Write(mergeBuffer, 0, chunkLen);
 
-                    writePos += 4 + termByteLen + 4 + 4 + 4 + chunkLen;
-                    entries.Add((minTerm, outOff, chunkLen, totalCount));
+                    entries.Add((minTerm, skipOff, skipCount, outOff, chunkLen, totalCount));
 
                     ArrayPool<byte>.Shared.Return(termBytes);
 
@@ -180,11 +205,15 @@ namespace FtsLib.Indexing
         /// Merges posting chunks for <paramref name="term"/> from all readers into
         /// <paramref name="buf"/>, growing it as needed. Writes <paramref name="mergedLen"/>
         /// bytes starting at index 0. Avoids per-term heap allocation.
+        /// Rebuilds the skip table from the final merged bytes after writing.
         /// </summary>
         private static void MergeChunks(
             SegmentReader[] readers, string term, DeleteSet deletes,
-            ref byte[] buf, out int mergedLen, out int totalCount, out uint lastEncoded)
+            ref byte[] buf, out int mergedLen, out int totalCount, out uint lastEncoded,
+            out int[] skipTable, out int skipLen)
         {
+            const int SkipInterval = 128;
+
             uint prevEncoded = 0;
             totalCount  = 0;
             lastEncoded = 0;
@@ -262,6 +291,42 @@ namespace FtsLib.Indexing
 
             mergedLen   = pos;
             lastEncoded = prevEncoded;
+
+            // Rebuild skip table by decoding the final merged bytes.
+            // Byte offsets change after merge so we can never copy the source skip tables.
+            skipTable = null;
+            skipLen   = 0;
+
+            if (totalCount >= SkipInterval * 2)
+            {
+                int  readPos   = 0;
+                uint encoded   = 0;
+                uint prevEnc   = 0;
+                int  docIndex  = 0;
+
+                while (readPos < mergedLen)
+                {
+                    int  byteOffsetBefore = readPos;
+                    uint delta            = VarInt.Read(buf, ref readPos, mergedLen);
+                    prevEnc  = encoded;
+                    encoded += delta;
+                    int docId = (int)((long)encoded + int.MinValue);
+                    docIndex++;
+
+                    // Emit a skip entry after every SkipInterval-th doc (not the very first).
+                    if (docIndex > 1 && (docIndex - 1) % SkipInterval == 0)
+                    {
+                        if (skipTable == null) skipTable = new int[12];
+                        else if (skipLen + 3 > skipTable.Length)
+                            Array.Resize(ref skipTable, skipTable.Length * 2);
+
+                        skipTable[skipLen]     = docId;
+                        skipTable[skipLen + 1] = byteOffsetBefore;
+                        skipTable[skipLen + 2] = (int)prevEnc;
+                        skipLen += 3;
+                    }
+                }
+            }
         }
 
         private static void EnsureCapacity(ref byte[] buf, int required)
@@ -306,6 +371,33 @@ namespace FtsLib.Indexing
         private static void DeleteIfExists(string path)
         {
             if (File.Exists(path)) File.Delete(path);
+        }
+
+        /// <summary>
+        /// Renames <paramref name="path"/> to a <c>.del</c> tombstone and then
+        /// immediately tries to delete the tombstone.
+        ///
+        /// Rename succeeds even when a search holds an open SQLite connection or
+        /// FileStream on the file (Windows allows rename with FILE_SHARE_READ).
+        /// The immediate delete succeeds when no handle is open; if it fails the
+        /// tombstone is left for the next recovery pass to clean up.
+        ///
+        /// If the file does not exist the call is a no-op.
+        /// </summary>
+        private static void RenameToDelAndDelete(string path)
+        {
+            if (!File.Exists(path)) return;
+            string tombstone = path + ".del";
+            DeleteIfExists(tombstone); // remove any stale tombstone from a previous crash
+            try
+            {
+                File.Move(path, tombstone);
+                File.Delete(tombstone);
+            }
+            catch
+            {
+                // Delete failed — handle still open. Tombstone stays for recovery.
+            }
         }
 
 

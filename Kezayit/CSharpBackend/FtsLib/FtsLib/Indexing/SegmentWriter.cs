@@ -21,6 +21,9 @@ namespace FtsLib.Indexing
     /// </summary>
     internal static class SegmentWriter
     {
+        // Each skip entry is 3 × int32 = 12 bytes: docId, byteOffset, prevEncoded.
+        private const int SkipEntryBytes = 12;
+
         /// <summary>
         /// Writes a RamIndex to a new segment pair (.dat + .db).
         /// <paramref name="sortedTerms"/> must be the terms from
@@ -28,6 +31,16 @@ namespace FtsLib.Indexing
         ///
         /// Writes to .tmp files first, then renames atomically so a crash mid-write
         /// never leaves a corrupt file at the final path.
+        ///
+        /// Per-term record layout in .dat:
+        ///   4 bytes  int    termByteLen
+        ///   N bytes         term (UTF-8)
+        ///   4 bytes  int    chunkByteLen
+        ///   4 bytes  int    docCount
+        ///   4 bytes  uint   lastEncoded
+        ///   4 bytes  int    skipCount
+        ///   skipCount × 12 bytes  skip table (int32 docId, int32 byteOffset, int32 prevEncoded)
+        ///   M bytes         varint posting data
         /// </summary>
         internal static void WriteSegment(
             RamIndex     ramIndex,
@@ -44,7 +57,7 @@ namespace FtsLib.Indexing
 
             try
             {
-                var meta = new List<(string term, long offset, int length, int count)>(sortedTerms.Count);
+                var meta = new List<(string term, long skipOffset, int skipCount, long offset, int length, int count)>(sortedTerms.Count);
 
                 using (var fs = new FileStream(tmpDat, FileMode.Create,
                                                FileAccess.Write, FileShare.None,
@@ -58,20 +71,28 @@ namespace FtsLib.Indexing
                         byte[] termBytes   = ArrayPool<byte>.Shared.Rent(termByteLen);
                         Encoding.UTF8.GetBytes(term, 0, term.Length, termBytes, 0);
 
-                        byte[] postBuf = entry.Stream.Buffer;
-                        int    postLen = entry.Stream.ByteLength;
+                        byte[] postBuf   = entry.Stream.Buffer;
+                        int    postLen   = entry.Stream.ByteLength;
+                        int    skipCount = entry.SkipLen / 3;
 
                         bw.Write(termByteLen);
                         bw.Write(termBytes, 0, termByteLen);
                         bw.Write(postLen);
                         bw.Write(entry.Stream.Count);
                         bw.Write(entry.Stream.LastEncoded);
+                        bw.Write(skipCount);
                         bw.Flush();
 
-                        long off = fs.Position; // offset of posting data, after the header
+                        // Write skip table — each entry is 3 × int32.
+                        long skipOff = fs.Position;
+                        for (int i = 0; i < entry.SkipLen; i++)
+                            bw.Write(entry.Skip[i]);
+                        bw.Flush();
+
+                        long postOff = fs.Position; // offset of posting data
                         fs.Write(postBuf, 0, postLen);
 
-                        meta.Add((term, off, postLen, entry.Stream.Count));
+                        meta.Add((term, skipOff, skipCount, postOff, postLen, entry.Stream.Count));
 
                         ArrayPool<byte>.Shared.Return(termBytes);
                     }
@@ -98,7 +119,7 @@ namespace FtsLib.Indexing
         /// </summary>
         internal static void WriteMetaDb(
             string path,
-            List<(string term, long offset, int length, int count)> rows)
+            List<(string term, long skipOffset, int skipCount, long offset, int length, int count)> rows)
         {
             string connStr = $"Data Source={path};Version=3;Page Size=65536;Cache Size=8000;";
             using (var conn = new SQLiteConnection(connStr))
@@ -109,21 +130,29 @@ namespace FtsLib.Indexing
                     "PRAGMA temp_store=MEMORY;PRAGMA mmap_size=1073741824;");
                 Exec(conn,
                     "CREATE TABLE term_index(" +
-                    "term TEXT NOT NULL,offset INTEGER NOT NULL," +
-                    "length INTEGER NOT NULL,count INTEGER NOT NULL);");
+                    "term TEXT NOT NULL,skip_offset INTEGER NOT NULL,skip_count INTEGER NOT NULL," +
+                    "offset INTEGER NOT NULL,length INTEGER NOT NULL,count INTEGER NOT NULL);");
 
                 using (var tx  = conn.BeginTransaction())
                 using (var ins = conn.CreateCommand())
                 {
                     ins.CommandText =
-                        "INSERT INTO term_index(term,offset,length,count) VALUES(@t,@o,@l,@c)";
-                    var pT = ins.Parameters.Add("@t", System.Data.DbType.String);
-                    var pO = ins.Parameters.Add("@o", System.Data.DbType.Int64);
-                    var pL = ins.Parameters.Add("@l", System.Data.DbType.Int32);
-                    var pC = ins.Parameters.Add("@c", System.Data.DbType.Int32);
-                    foreach (var (term, off, len, cnt) in rows)
+                        "INSERT INTO term_index(term,skip_offset,skip_count,offset,length,count) " +
+                        "VALUES(@t,@so,@sc,@o,@l,@c)";
+                    var pT  = ins.Parameters.Add("@t",  System.Data.DbType.String);
+                    var pSO = ins.Parameters.Add("@so", System.Data.DbType.Int64);
+                    var pSC = ins.Parameters.Add("@sc", System.Data.DbType.Int32);
+                    var pO  = ins.Parameters.Add("@o",  System.Data.DbType.Int64);
+                    var pL  = ins.Parameters.Add("@l",  System.Data.DbType.Int32);
+                    var pC  = ins.Parameters.Add("@c",  System.Data.DbType.Int32);
+                    foreach (var (term, skipOff, skipCnt, off, len, cnt) in rows)
                     {
-                        pT.Value = term; pO.Value = off; pL.Value = len; pC.Value = cnt;
+                        pT.Value  = term;
+                        pSO.Value = skipOff;
+                        pSC.Value = skipCnt;
+                        pO.Value  = off;
+                        pL.Value  = len;
+                        pC.Value  = cnt;
                         ins.ExecuteNonQuery();
                     }
                     tx.Commit();

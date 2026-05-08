@@ -23,22 +23,6 @@ namespace FtsLib.Search
         private bool _disposed;
 
         /// <summary>
-        /// Opens an IndexReader using pre-opened segment handles.
-        /// The handles were opened inside the live-state lock in
-        /// <see cref="SegmentLiveState.OpenLiveSegmentHandles"/>, so they are
-        /// guaranteed to be consistent — no TOCTOU race with concurrent merges.
-        /// This IndexReader takes ownership of the handles and disposes them on Dispose.
-        /// </summary>
-        public IndexReader(string indexPath, List<SegmentHandle> handles)
-            : base(indexPath)
-        {
-            _deletes = DeleteSet.Load(DeletesFile);
-            if (handles == null || handles.Count == 0) return;
-            // Handles are already sorted by segId from OpenLiveSegmentHandles.
-            _segments.AddRange(handles);
-        }
-
-        /// <summary>
         /// Opens an IndexReader using an explicit snapshot of live segment paths.
         /// Use this overload when a SegmentStore is available — it reads the live
         /// path list under the store's lock, so the snapshot is consistent and never
@@ -161,7 +145,13 @@ namespace FtsLib.Search
                 using (var r = seg.Lookup.ExecuteReader())
                 {
                     if (r.Read())
-                        result.Add(new SegmentChunk(seg, r.GetInt64(0), r.GetInt32(1), r.GetInt32(2)));
+                        result.Add(new SegmentChunk(seg,
+                            r.GetInt64(0),  // skip_offset
+                            r.GetInt32(1),  // skip_count
+                            r.GetInt64(2),  // offset
+                            r.GetInt32(3),  // length
+                            r.GetInt32(4)   // count
+                        ));
                 }
             }
             return result;
@@ -189,10 +179,49 @@ namespace FtsLib.Search
 
         private static PostingIterator LoadChunk(SegmentChunk chunk)
         {
-            var buf = new byte[chunk.Length];
-            chunk.Seg.DataStream.Seek(chunk.Offset, SeekOrigin.Begin);
-            chunk.Seg.DataStream.Read(buf, 0, chunk.Length);
-            return new PostingIterator(buf, chunk.Length, null, 0);
+            int skipBytes  = chunk.SkipCount * 3 * sizeof(int); // 12 bytes per entry
+            int totalBytes = skipBytes + chunk.Length;
+
+            var buf = new byte[totalBytes];
+            chunk.Seg.DataStream.Seek(chunk.SkipCount > 0 ? chunk.SkipOffset : chunk.Offset,
+                                      SeekOrigin.Begin);
+
+            // FileStream.Read may return fewer bytes than requested — read in a loop
+            // to guarantee the full buffer is populated before decoding.
+            int read = 0;
+            while (read < totalBytes)
+            {
+                int n = chunk.Seg.DataStream.Read(buf, read, totalBytes - read);
+                if (n == 0) break; // end of stream — should never happen on a valid segment
+                read += n;
+            }
+
+            // Deserialise skip table from the front of the buffer.
+            int[] skip    = null;
+            int   skipLen = 0;
+            if (chunk.SkipCount > 0)
+            {
+                skipLen = chunk.SkipCount * 3;
+                skip    = new int[skipLen];
+                for (int i = 0; i < skipLen; i++)
+                    skip[i] = BitConverter.ToInt32(buf, i * sizeof(int));
+            }
+
+            // Posting bytes follow immediately after the skip table.
+            // Since PostingIterator reads from index 0, copy the posting slice to a
+            // separate array when a skip table precedes it.
+            byte[] postBuf;
+            if (skipBytes == 0)
+            {
+                postBuf = buf; // no skip table — buf is already just posting bytes
+            }
+            else
+            {
+                postBuf = new byte[chunk.Length];
+                Buffer.BlockCopy(buf, skipBytes, postBuf, 0, chunk.Length);
+            }
+
+            return new PostingIterator(postBuf, chunk.Length, skip, skipLen);
         }
 
         // ── Dispose ──────────────────────────────────────────────────
@@ -201,8 +230,26 @@ namespace FtsLib.Search
         {
             if (_disposed) return;
             _disposed = true;
-            foreach (var seg in _segments) seg.Dispose();
+            foreach (var seg in _segments)
+            {
+                string datPath = seg.DatPath;
+                seg.Dispose();
+                // If this segment was renamed to a .del tombstone by a concurrent merge
+                // while we were reading it, clean up the tombstone now that our handle
+                // is released. Best-effort — ignore any failure.
+                TryDeleteTombstone(datPath);
+                TryDeleteTombstone(Path.ChangeExtension(datPath, ".db"));
+            }
             _segments.Clear();
+        }
+
+        private static void TryDeleteTombstone(string originalPath)
+        {
+            string tombstone = originalPath + ".del";
+            if (File.Exists(tombstone))
+            {
+                try { File.Delete(tombstone); } catch { /* best-effort */ }
+            }
         }
     }
 }

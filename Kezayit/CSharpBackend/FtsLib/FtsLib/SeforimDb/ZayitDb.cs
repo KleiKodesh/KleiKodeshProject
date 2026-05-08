@@ -146,7 +146,7 @@ namespace FtsLib.SeforimDb
 
                     var sb = new System.Text.StringBuilder(
                         "SELECT l.id, l.content, b.title" +
-                        " FROM line l JOIN book b ON b.id = l.bookId" +
+                        " FROM line l LEFT JOIN book b ON b.id = l.bookId" +
                         " WHERE l.id IN (");
                     for (int i = 0; i < count; i++)
                     {
@@ -217,7 +217,7 @@ namespace FtsLib.SeforimDb
         {
             var sb = new System.Text.StringBuilder(
                 "SELECT l.id, l.content, b.title" +
-                " FROM line l JOIN book b ON b.id = l.bookId" +
+                " FROM line l LEFT JOIN book b ON b.id = l.bookId" +
                 " WHERE l.id IN (");
             for (int i = 0; i < ids.Count; i++)
             {

@@ -6,12 +6,25 @@ namespace FtsLib.Indexing
     internal sealed class SegmentChunk
     {
         public readonly SegmentHandle Seg;
-        public readonly long          Offset;
-        public readonly int           Length;
-        public readonly int           Count;
+        /// <summary>Byte offset of the skip table in the .dat file (0 when no skip table).</summary>
+        public readonly long SkipOffset;
+        /// <summary>Number of skip entries (triplets). 0 means no skip table.</summary>
+        public readonly int  SkipCount;
+        /// <summary>Byte offset of the posting data in the .dat file.</summary>
+        public readonly long Offset;
+        public readonly int  Length;
+        public readonly int  Count;
 
-        public SegmentChunk(SegmentHandle seg, long offset, int length, int count)
-        { Seg = seg; Offset = offset; Length = length; Count = count; }
+        public SegmentChunk(SegmentHandle seg, long skipOffset, int skipCount,
+                            long offset, int length, int count)
+        {
+            Seg        = seg;
+            SkipOffset = skipOffset;
+            SkipCount  = skipCount;
+            Offset     = offset;
+            Length     = length;
+            Count      = count;
+        }
     }
 
     /// <summary>Holds open resources for one segment pair (.dat + .db).</summary>
@@ -34,7 +47,7 @@ namespace FtsLib.Indexing
                 Conn.Open();
                 Lookup = Conn.CreateCommand();
                 Lookup.CommandText =
-                    "SELECT offset, length, count FROM term_index WHERE term = @t";
+                    "SELECT skip_offset, skip_count, offset, length, count FROM term_index WHERE term = @t";
                 Lookup.Parameters.Add("@t", System.Data.DbType.String);
             }
             catch
