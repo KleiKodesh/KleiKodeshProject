@@ -225,6 +225,9 @@ export const KEYS = {
   SETTINGS_MIDOT_DISCLAIMER: 'midot.disclaimerAccepted',
   SETTINGS_DICTIONARY_ZOOM: 'dictionaryZoom',
   SETTINGS_SEARCH_CONTEXT_MARGIN: 'search.contextMargin',
+  SETTINGS_SEARCH_MAX_WORD_DISTANCE: 'search.maxWordDistance',
+  SETTINGS_SEARCH_REQUIRE_ORDERED: 'search.requireOrdered',
+  SETTINGS_SEARCH_EXPAND_KETIV: 'search.expandKetiv',
   // tab list is also localStorage (small JSON, needed synchronously at boot)
   tabsList: (wsId: string) => `tabs:${wsId}`,
 

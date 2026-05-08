@@ -182,9 +182,6 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   const hasSearched = ref(false)
   const executedQuery = ref('')
   const searchError = ref<SearchFailReason | null>(null)
-  const maxWordDistance = ref(10)
-  const requireOrdered = ref(false)
-  const expandKetiv = ref(true)
   let currentSearchId: string | null = null
 
   function _cleanup() {
@@ -215,10 +212,10 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       'FtsSearchStart',
       normalizedQuery,
       skipCount,
-      maxWordDistance.value,
-      requireOrdered.value,
+      settings.searchMaxWordDistance,
+      settings.searchRequireOrdered,
       settings.searchContextMarginWords,
-      expandKetiv.value,
+      settings.searchExpandKetiv,
     )
     const searchId = reply?.searchId
     if (!searchId) {
@@ -345,9 +342,9 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     hasSearched,
     executedQuery,
     searchError,
-    maxWordDistance,
-    requireOrdered,
-    expandKetiv,
+    maxWordDistance: settings.searchMaxWordDistance,
+    requireOrdered: settings.searchRequireOrdered,
+    expandKetiv: settings.searchExpandKetiv,
     executeSearch,
     cancelSearch,
     clearSearch,

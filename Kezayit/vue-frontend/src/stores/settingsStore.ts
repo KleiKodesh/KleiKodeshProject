@@ -26,6 +26,10 @@ const DEFAULTS = {
   // Number of words of context shown before and after the matched terms in a search snippet.
   // Converted to visible chars (× CHARS_PER_WORD) before being sent to the C# snippet builder.
   searchContextMarginWords: 30,
+  // Advanced full-text search settings
+  searchMaxWordDistance: 10,
+  searchRequireOrdered: false,
+  searchExpandKetiv: true,
 }
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -49,6 +53,9 @@ export const useSettingsStore = defineStore('settings', () => {
   const setupDone = ref(false)
   const midotDisclaimerAccepted = ref(false)
   const searchContextMarginWords = ref(DEFAULTS.searchContextMarginWords)
+  const searchMaxWordDistance = ref(DEFAULTS.searchMaxWordDistance)
+  const searchRequireOrdered = ref(DEFAULTS.searchRequireOrdered)
+  const searchExpandKetiv = ref(DEFAULTS.searchExpandKetiv)
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -107,6 +114,9 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY, defaultAutoSyncCommentary)
     loadSetting(KEYS.SETTINGS_MIDOT_DISCLAIMER, midotDisclaimerAccepted)
     loadSetting(KEYS.SETTINGS_SEARCH_CONTEXT_MARGIN, searchContextMarginWords)
+    loadSetting(KEYS.SETTINGS_SEARCH_MAX_WORD_DISTANCE, searchMaxWordDistance)
+    loadSetting(KEYS.SETTINGS_SEARCH_REQUIRE_ORDERED, searchRequireOrdered)
+    loadSetting(KEYS.SETTINGS_SEARCH_EXPAND_KETIV, searchExpandKetiv)
     applyCSSVariables()
   }
 
@@ -130,6 +140,9 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(resumeLastRead, KEYS.SETTINGS_RESUME_LAST_READ)
   persistSetting(defaultAutoSyncCommentary, KEYS.SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY)
   persistSetting(searchContextMarginWords, KEYS.SETTINGS_SEARCH_CONTEXT_MARGIN)
+  persistSetting(searchMaxWordDistance, KEYS.SETTINGS_SEARCH_MAX_WORD_DISTANCE)
+  persistSetting(searchRequireOrdered, KEYS.SETTINGS_SEARCH_REQUIRE_ORDERED)
+  persistSetting(searchExpandKetiv, KEYS.SETTINGS_SEARCH_EXPAND_KETIV)
 
   // ── Actions ───────────────────────────────────────────────────────────────
 
@@ -176,6 +189,9 @@ export const useSettingsStore = defineStore('settings', () => {
     resumeLastRead.value = DEFAULTS.resumeLastRead
     defaultAutoSyncCommentary.value = DEFAULTS.defaultAutoSyncCommentary
     searchContextMarginWords.value = DEFAULTS.searchContextMarginWords
+    searchMaxWordDistance.value = DEFAULTS.searchMaxWordDistance
+    searchRequireOrdered.value = DEFAULTS.searchRequireOrdered
+    searchExpandKetiv.value = DEFAULTS.searchExpandKetiv
     lsClearSettingsOnly()
     applyCSSVariables()
   }
@@ -185,6 +201,7 @@ export const useSettingsStore = defineStore('settings', () => {
     commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryLinePadding,
     useSeparateCommentarySettings, appZoom, dictionaryZoom, newTabPage, pdfPageFilters, resumeLastRead,
     defaultAutoSyncCommentary, setupDone, midotDisclaimerAccepted, searchContextMarginWords,
+    searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv,
     init, cycleDiacritics, togglePdfPageFilters, reset, completeSetup, acceptMidotDisclaimer,
   }
 })
