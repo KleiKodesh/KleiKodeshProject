@@ -55,6 +55,7 @@ namespace KezayitLib.Db
             if (_db != null) _db.Dispose();
             _db = new DbAccess(path);
             _bridge.Reply(id, new { path });
+            OnDbPathPicked?.Invoke(path);
         }
 
         public void HandlePickDbPath(string id, Control owner)

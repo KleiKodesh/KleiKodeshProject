@@ -86,7 +86,8 @@ namespace KezayitLib.Search
             Console.WriteLine("[SearchHandler] OnDbReady executing, dbPath=" + dbPath);
             if (!File.Exists(dbPath))
             {
-                Console.WriteLine("[SearchHandler] OnDbReady: file does not exist, aborting");
+                Console.WriteLine("[SearchHandler] OnDbReady: file does not exist — notifying frontend");
+                _bridge.PushEvent(new { @event = "ftsDbNotFound", path = dbPath });
                 return;
             }
 

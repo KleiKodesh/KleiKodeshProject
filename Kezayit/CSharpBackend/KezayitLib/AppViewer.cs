@@ -143,11 +143,9 @@ namespace KezayitLib
             // Safety net: if NavigationCompleted never fires (e.g. WebView2 runtime issue),
             // hide the splash after 8 seconds so the user isn't stuck on a blank screen.
             _ = Task.Delay(8000).ContinueWith(_ => _HideSplash());
+            _search.OnDbReady(savedPath);
             if (dbReady)
-            {
-                _search.OnDbReady(savedPath);
                 _hbCsvUpdater.RunIfDue();
-            }
         }
 
         private void OnNavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
@@ -178,9 +176,9 @@ namespace KezayitLib
             _db = new DbHandler(_bridge, _webView, savedPath);
             _db.OnDbPathPicked = path => _search.ResetAndReindex(path);
 
-            // Only kick off indexing if the DB changed or bloom is missing/stale
-            if (dbReady)
-                _search.OnDbReady(savedPath);
+            // Always call OnDbReady — if the file doesn't exist it pushes ftsDbNotFound
+            // to the frontend; if it does exist it starts or resumes indexing.
+            _search.OnDbReady(savedPath);
 
             _webView.CoreWebView2.Navigate("http://kezayit-vue-app/index.html");
         }

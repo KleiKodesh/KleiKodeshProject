@@ -15,6 +15,7 @@ const props = defineProps<{
   isSearching: boolean
   hasSearched: boolean
   searchError?: SearchFailReason | null
+  dbNotFound?: boolean
   initialScrollIndex?: number
   initialScrollOffset?: number
   zoom?: number
@@ -127,9 +128,10 @@ defineExpose({ captureScrollPos })
 
 <template>
   <div class="results-wrap">
-    <div v-if="!hasSearched || (!results.length && !isSearching)" class="empty-state">
+    <div v-if="dbNotFound || !hasSearched || (!results.length && !isSearching)" class="empty-state">
       <IconSearchSparkle24Regular class="empty-icon" />
-      <span v-if="searchError" class="empty-msg error-msg">
+      <span v-if="dbNotFound" class="empty-msg error-msg">מסד הנתונים לא נמצא — בחר קובץ מסד נתונים בהגדרות</span>
+      <span v-else-if="searchError" class="empty-msg error-msg">
         {{ SEARCH_ERROR_MESSAGES[searchError] ?? SEARCH_ERROR_MESSAGES.searchFailed }}
       </span>
       <span v-else-if="hasSearched && !results.length" class="empty-msg">לא נמצאו תוצאות</span>

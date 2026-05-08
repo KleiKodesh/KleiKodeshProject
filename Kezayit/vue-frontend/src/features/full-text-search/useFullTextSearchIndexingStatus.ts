@@ -11,6 +11,7 @@ export interface IndexingState {
   eta: string
   segmentCount: number
   latestSegmentPct: number | null
+  dbNotFound: boolean
 }
 
 const IDLE: IndexingState = {
@@ -22,6 +23,7 @@ const IDLE: IndexingState = {
   eta: '',
   segmentCount: 0,
   latestSegmentPct: null,
+  dbNotFound: false,
 }
 
 export function useFullTextSearchIndexingStatus() {
@@ -90,6 +92,10 @@ export function useFullTextSearchIndexingStatus() {
     }
 
     unregister = onWebviewEvent((msg) => {
+      if (msg.event === 'ftsDbNotFound') {
+        state.value = { ...IDLE, dbNotFound: true }
+        return
+      }
       if (msg.event === 'ftsIndexVersionMismatch') {
         const oldVersion = msg.oldVersion as string
         const newVersion = msg.newVersion as string
@@ -115,6 +121,7 @@ export function useFullTextSearchIndexingStatus() {
         eta: (msg.eta as string) ?? '',
         segmentCount: (msg.segmentCount as number) ?? 0,
         latestSegmentPct: (msg.latestSegmentPct as number | null) ?? null,
+        dbNotFound: false,
       }
     })
   })

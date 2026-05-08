@@ -224,6 +224,7 @@ onBeforeUnmount(() => {
       :is-searching="isSearching"
       :has-searched="hasSearched"
       :search-error="searchError"
+      :db-not-found="indexingState.dbNotFound"
       :initial-scroll-index="initialScrollIndex"
       :initial-scroll-offset="initialScrollOffset"
       :zoom="zoom"
