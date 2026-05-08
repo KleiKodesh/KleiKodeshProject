@@ -47,7 +47,6 @@ namespace WebSitesLib.UI
             {
                 _webAddressModels = value;
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(WebAddressModels)));
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(VisibleAddressModels)));
             }
         }
 

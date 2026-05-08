@@ -7,6 +7,7 @@
  * Falls back to sample data in dev when the C# host is not present.
  */
 import { ref } from 'vue'
+import { storeToRefs } from 'pinia'
 import { isHosted, query } from '@/webview-host/seforimDb'
 import { SQL } from '@/webview-host/queries.sql'
 import { callBridgeAction } from '@/webview-host/bridge'
@@ -177,6 +178,7 @@ async function enrichTocPaths(batch: FullTextSearchResult[]): Promise<void> {
 export function useFullTextSearch(isIndexing?: () => boolean) {
   const cache = useSearchCacheStore()
   const settings = useSettingsStore()
+  const { searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv } = storeToRefs(settings)
   const results = ref<FullTextSearchResult[]>([])
   const isSearching = ref(false)
   const hasSearched = ref(false)
@@ -342,9 +344,9 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     hasSearched,
     executedQuery,
     searchError,
-    maxWordDistance: settings.searchMaxWordDistance,
-    requireOrdered: settings.searchRequireOrdered,
-    expandKetiv: settings.searchExpandKetiv,
+    maxWordDistance: searchMaxWordDistance,
+    requireOrdered: searchRequireOrdered,
+    expandKetiv: searchExpandKetiv,
     executeSearch,
     cancelSearch,
     clearSearch,

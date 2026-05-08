@@ -1,0 +1,2 @@
+ngrams table
+make sure that the roaring bitmaps is actually faster and at what threshold

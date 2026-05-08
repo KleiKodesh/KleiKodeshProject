@@ -52,6 +52,7 @@ export function useFullTextSearchIndexingStatus() {
             eta: '',
             segmentCount: devLatestSegmentPct !== null ? 2 : 0,
             latestSegmentPct: devLatestSegmentPct,
+            dbNotFound: false,
           }
           return
         }
@@ -67,6 +68,7 @@ export function useFullTextSearchIndexingStatus() {
           eta: `${Math.round((TOTAL_LINES - processed) / TOTAL_LINES * 3)}s`,
           segmentCount: devLatestSegmentPct !== null ? (pct >= 60 ? 2 : 1) : 0,
           latestSegmentPct: devLatestSegmentPct,
+          dbNotFound: false,
         }
         devTimer = setTimeout(tick, 300)
       }
@@ -86,6 +88,7 @@ export function useFullTextSearchIndexingStatus() {
           eta: p.eta ?? '',
           segmentCount: p.segmentCount ?? 0,
           latestSegmentPct: p.latestSegmentPct ?? null,
+          dbNotFound: p.dbNotFound ?? false,
         }
     } catch (err) {
       console.warn('[useFullTextSearchIndexingStatus] poll failed:', err)
