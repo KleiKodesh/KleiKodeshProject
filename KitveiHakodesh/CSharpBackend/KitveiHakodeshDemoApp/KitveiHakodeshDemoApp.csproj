@@ -166,7 +166,6 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="KitveiHakodesh.ico" />
-    <Content Include="KleiKodesh_Main.ico" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Project="..\KitveiHakodesh.targets" />
