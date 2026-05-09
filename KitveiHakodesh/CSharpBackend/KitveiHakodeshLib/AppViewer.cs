@@ -53,6 +53,7 @@ namespace KitveiHakodeshLib
         public AppViewer()
         {
             AutoScaleMode = AutoScaleMode.None;
+            BackColorChanged += (_, __) => _SyncSplashBackColor();
             Controls.Add(_webView);
             _InitSplash();
             _ = InitAsync();
@@ -70,7 +71,14 @@ namespace KitveiHakodeshLib
 
             _splash = new SplashOverlay(logo) { Dock = DockStyle.Fill };
             Controls.Add(_splash);
+            _SyncSplashBackColor();
             _splash.BringToFront();
+        }
+
+        private void _SyncSplashBackColor()
+        {
+            if (_splash == null) return;
+            _splash.BackColor = BackColor;
         }
 
         private void _HideSplash()

@@ -1,7 +1,7 @@
 ﻿
 ΓץפΓץנΓץנ SEARCH Γאפ FULL ΓץנΓץנ
 Γץס  DB    : C:\Users\Admin\AppData\Roaming\io.github.kdroidfilter.seforimapp\databases\seforim.db
-Γץס  Index : C:\Users\Public\Documents\KleiKodeshProject\Kezayit\CSharpBackend\FtsLib\FtsLibTest\bin\Release\index_full
+Γץס  Index : C:\Users\Public\Documents\KleiKodeshProject\KitveiHakodesh\CSharpBackend\FtsLib\FtsLibTest\bin\Release\index_full
 Γץס  Mode  : FULL validation Γאפ every result checked
 [SeforimIndex] Segments found Γאפ running crash recovery...
 [Recovery] Found 1 segment(s), nextSegId=40

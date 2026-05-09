@@ -563,7 +563,7 @@ C:\Users\Public\Documents\KleiKodeshProject\KleiKodeshVsto\KleiKodeshVsto.csproj
     <Content Include="Resources\DocDesign.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="Resources\KeZayit.png">
+    <Content Include="Resources\KitveiHakodesh.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="Resources\DuplicatePane.png">

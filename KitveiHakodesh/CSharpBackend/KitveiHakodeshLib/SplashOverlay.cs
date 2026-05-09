@@ -8,12 +8,6 @@ namespace KitveiHakodeshLib
 {
     internal class SplashOverlay : Control
     {
-        private static bool IsDarkTheme()
-        {
-            var c = SystemColors.Window;
-            return (c.R + c.G + c.B) / 3 < 128;
-        }
-
         // Dot config — matches Vue LoadingAnimation.vue exactly
         // 1.2s cycle @ 60fps = 72 ticks per cycle
         private const int   DotCount   = 3;
@@ -34,12 +28,10 @@ namespace KitveiHakodeshLib
         private bool  _fading = false;
         private float _phase  = 0f;   // advances each tick
         private readonly Timer _timer;
-        private readonly bool  _dark;
 
         public SplashOverlay(Image logo)
         {
             _logo = logo;
-            _dark = IsDarkTheme();
 
             SetStyle(
                 ControlStyles.AllPaintingInWmPaint |
@@ -90,7 +82,7 @@ namespace KitveiHakodeshLib
             int w = Width, h = Height, cx = w / 2, cy = h / 2;
 
             // ── Background ───────────────────────────────────────────────────────
-            Color bg = _dark ? Color.FromArgb(13, 12, 17) : Color.FromArgb(235, 233, 243);
+            Color bg = BackColor;
             using (var b = new SolidBrush(Color.FromArgb(a, bg)))
                 g.FillRectangle(b, ClientRectangle);
 
@@ -134,6 +126,12 @@ namespace KitveiHakodeshLib
                 using (var brush = new SolidBrush(Color.FromArgb(dotA, AR, AG, AB)))
                     g.FillEllipse(brush, dx - r, dotsY - r, r * 2, r * 2);
             }
+        }
+
+        protected override void OnBackColorChanged(EventArgs e)
+        {
+            base.OnBackColorChanged(e);
+            Invalidate();
         }
 
         protected override void Dispose(bool disposing)

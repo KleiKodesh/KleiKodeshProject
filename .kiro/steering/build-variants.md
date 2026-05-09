@@ -20,7 +20,7 @@ RegexFindLib
 DocDesignLib
 UpdateCheckerLib
 FtsLib
-KezayitLib  ←── KezayitDemoApp (standalone host, also in chain)
+KitveiHakodeshLib  ←── KitveiHakodeshDemoApp (standalone host, also in chain)
 KiwixLib
 WebSitesLib
   └─→ KleiKodeshVsto
@@ -84,4 +84,4 @@ Each should output to a distinct `bin\Release*\` folder.
 
 Projects that are **not** in the `KleiKodeshVsto` dependency chain (demo apps, test harnesses) only need `Debug|AnyCPU` and `Release|AnyCPU`. Examples: `FtsLibDemo`, `FtsLibTest`, `DocDesignDemo`, `RegexFindDemo`, `KiwixDemoApp`, `WebSitesDemo`.
 
-Note: `KezayitDemoApp` **is** in the chain (it references `KezayitLib` and is built as part of the VSTO output) so it requires all three variants.
+Note: `KitveiHakodeshDemoApp` **is** in the chain (it references `KitveiHakodeshLib` and is built as part of the VSTO output) so it requires all three variants.
