@@ -588,7 +588,7 @@ C:\Users\Public\Documents\KleiKodeshProject\KleiKodeshVsto\KleiKodeshVsto.csproj
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <!-- SQLite.Interop.dll — must be explicitly copied here because SQLite is only
-         referenced transitively via KezayitLib. The native interop DLL is not
+         referenced transitively via KitveiHakodeshLib. The native interop DLL is not
          propagated through project references and throws DllNotFoundException at runtime. -->
     <Content Include="..\packages\Stub.System.Data.SQLite.Core.NetFramework.1.0.119.0\build\net46\x64\SQLite.Interop.dll">
       <Link>x64\SQLite.Interop.dll</Link>
@@ -620,9 +620,9 @@ C:\Users\Public\Documents\KleiKodeshProject\KleiKodeshVsto\KleiKodeshVsto.csproj
       <Project>{B8F3E2A1-4C5D-4E6F-8A9B-1C2D3E4F5A6B}</Project>
       <Name>UpdateCheckerLib</Name>
     </ProjectReference>
-    <ProjectReference Include="..\Kezayit\CSharpBackend\KezayitLib\KezayitLib.csproj">
+    <ProjectReference Include="..\KitveiHakodesh\CSharpBackend\KitveiHakodeshLib\KitveiHakodeshLib.csproj">
       <Project>{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}</Project>
-      <Name>KezayitLib</Name>
+      <Name>KitveiHakodeshLib</Name>
     </ProjectReference>
     <ProjectReference Include="Kiwix\KiwixLib\KiwixLib.csproj">
       <Project>{235001E0-16C9-4AEA-9260-99CF489A79C2}</Project>
@@ -11800,23 +11800,23 @@ C:\Users\Public\Documents\KleiKodeshProject\packages\Stub.System.Data.SQLite.Cor
 C:\Users\Public\Documents\KleiKodeshProject\KleiKodeshVsto\KleiKodeshVsto.csproj
 ============================================================================================================================================
 -->
-  <!-- Import Kezayit.targets for automatic Vue build and deployment -->
+  <!-- Import KitveiHakodesh.targets for automatic Vue build and deployment -->
   <!--
 ============================================================================================================================================
-  <Import Project="..\Kezayit\CSharpBackend\Kezayit.targets" Condition="Exists('..\Kezayit\CSharpBackend\Kezayit.targets')">
+  <Import Project="..\KitveiHakodesh\CSharpBackend\KitveiHakodesh.targets" Condition="Exists('..\KitveiHakodesh\CSharpBackend\KitveiHakodesh.targets')">
 
-C:\Users\Public\Documents\KleiKodeshProject\Kezayit\CSharpBackend\Kezayit.targets
+C:\Users\Public\Documents\KleiKodeshProject\KitveiHakodesh\CSharpBackend\KitveiHakodesh.targets
 ============================================================================================================================================
 -->
   <!-- 
-    kezayit.targets - Vue Build Integration
+    KitveiHakodesh.targets - Vue Build Integration
 
     Builds the Vue project and copies the entire dist/ folder into
     {OutputDir}/frontend/ for both Debug and Release configurations.
 
     Usage:
       Add to your .csproj before the closing </Project> tag:
-        <Import Project="kezayit.targets" />
+        <Import Project="KitveiHakodesh.targets" />
 
     Requirements:
       - Vue project root at ../../ relative to this file
@@ -11825,7 +11825,7 @@ C:\Users\Public\Documents\KleiKodeshProject\Kezayit\CSharpBackend\Kezayit.target
   <PropertyGroup>
     <VueProjectDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\vue-frontend\'))</VueProjectDir>
     <VueDistDir>$(VueProjectDir)dist</VueDistDir>
-    <VueFrontendOut>$(OutDir)kezayit</VueFrontendOut>
+    <VueFrontendOut>$(OutDir)KitveiHakodesh</VueFrontendOut>
     <NodeJsInstallPath Condition="'$(NodeJsInstallPath)' == ''">C:\Program Files\nodejs</NodeJsInstallPath>
     <NpmCmd>$(NodeJsInstallPath)\npm.cmd</NpmCmd>
   </PropertyGroup>
@@ -11845,7 +11845,7 @@ C:\Users\Public\Documents\KleiKodeshProject\Kezayit\CSharpBackend\Kezayit.target
     <Message Text="[3/3] Verifying..." Importance="high" />
     <Error Text="ERROR: index.html not found in frontend output!" Condition="!Exists('$(VueFrontendOut)\index.html')" />
     <Error Text="ERROR: PDF.js not found in frontend output!" Condition="!Exists('$(VueFrontendOut)\pdfjs\build\pdf.mjs')" />
-    <Error Text="ERROR: kezayit_dictionary.db not found in frontend output!" Condition="!Exists('$(VueFrontendOut)\dictionary\kezayit_dictionary.db')" />
+    <Error Text="ERROR: KitveiHakodesh_dictionary.db not found in frontend output!" Condition="!Exists('$(VueFrontendOut)\dictionary\KitveiHakodesh_dictionary.db')" />
     <Message Text="========================================" Importance="high" />
     <Message Text="[Vue] Done — frontend at $(VueFrontendOut)" Importance="high" />
     <Message Text="========================================" Importance="high" />

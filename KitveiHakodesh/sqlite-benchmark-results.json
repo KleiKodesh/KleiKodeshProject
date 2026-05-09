@@ -1,0 +1,1167 @@
+{
+  "db_paths": {
+    "seforim": "C:\\Users\\Admin\\AppData\\Roaming\\io.github.kdroidfilter.seforimapp\\databases\\seforim.db",
+    "dictionary": "C:\\Users\\Admin\\AppData\\Local\\KleiKodesh\\KitveiHakodesh\\dictionary\\KitveiHakodesh_dictionary.db",
+    "wiki": "C:\\Users\\Public\\Documents\\KleiKodeshProject\\KitveiHakodesh\\Misc\\wikidictionary.db"
+  },
+  "sample_params": {
+    "heavy_book_id": 2492,
+    "heavy_book_lines": 60014,
+    "source_line_id": 676462,
+    "source_line_range_entry_id": 978203,
+    "source_line_range_count": 200,
+    "toc_book_id": 2492,
+    "toc_books_batch_count": 8,
+    "alt_book_id": 4307,
+    "alt_structure_id": 307,
+    "toc_path_line_count": 50,
+    "pair_source_book_id": 383,
+    "pair_target_book_id": 2492,
+    "default_commentator_book": 6,
+    "static_source_book": 383,
+    "dict_exact_headword": "א\"א",
+    "dict_link_headword": "ערב",
+    "dict_prefix2": "רב",
+    "dict_prefix3": "רבי",
+    "dict_inner_frag": "בי",
+    "metzudat_count": 31,
+    "malbim_count": 0,
+    "menchem_count": 1
+  },
+  "results": [
+    {
+      "group": "main_ui",
+      "name": "PRAGMA_TABLE_INFO_CATEGORY",
+      "note": null,
+      "plan": [],
+      "mode": "fetchall",
+      "repeat": 3,
+      "rowcount": 5,
+      "mean_ms": 0.051,
+      "median_ms": 0.05,
+      "max_ms": 0.059,
+      "times_ms": [
+        0.059,
+        0.05,
+        0.044
+      ]
+    },
+    {
+      "group": "main_ui",
+      "name": "GET_ALL_CATEGORIES_ORDER",
+      "note": null,
+      "plan": [
+        "SCAN category",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ],
+      "mode": "fetchall",
+      "repeat": 3,
+      "rowcount": 1459,
+      "mean_ms": 4.585,
+      "median_ms": 4.822,
+      "max_ms": 5.264,
+      "times_ms": [
+        5.264,
+        4.822,
+        3.668
+      ]
+    },
+    {
+      "group": "main_ui",
+      "name": "GET_ALL_CATEGORIES_FALLBACK",
+      "note": null,
+      "plan": [
+        "SCAN category",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ],
+      "mode": "fetchall",
+      "repeat": 3,
+      "rowcount": 1459,
+      "mean_ms": 2.198,
+      "median_ms": 2.177,
+      "max_ms": 2.309,
+      "times_ms": [
+        2.108,
+        2.309,
+        2.177
+      ]
+    },
+    {
+      "group": "main_ui",
+      "name": "GET_ALL_BOOKS",
+      "note": null,
+      "plan": [
+        "SCAN b",
+        "SEARCH ba USING COVERING INDEX sqlite_autoindex_book_author_1 (bookId=?) LEFT-JOIN",
+        "SEARCH a USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ],
+      "mode": "fetchall",
+      "repeat": 3,
+      "rowcount": 6855,
+      "mean_ms": 30.335,
+      "median_ms": 24.53,
+      "max_ms": 47.401,
+      "times_ms": [
+        47.401,
+        24.53,
+        19.076
+      ]
+    },
+    {
+      "group": "main_ui",
+      "name": "GET_BOOK_BY_ID",
+      "note": null,
+      "plan": [
+        "SEARCH book USING INTEGER PRIMARY KEY (rowid=?)"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 1,
+      "mean_ms": 0.023,
+      "median_ms": 0.014,
+      "max_ms": 0.06,
+      "times_ms": [
+        0.06,
+        0.016,
+        0.014,
+        0.013,
+        0.013
+      ]
+    },
+    {
+      "group": "main_ui",
+      "name": "GET_ALL_TOC_ENTRIES",
+      "note": null,
+      "plan": [
+        "SEARCH te USING INDEX idx_toc_book (bookId=?)",
+        "SEARCH tt USING INTEGER PRIMARY KEY (rowid=?)",
+        "SEARCH l USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN"
+      ],
+      "mode": "fetchall",
+      "repeat": 3,
+      "rowcount": 30041,
+      "mean_ms": 145.104,
+      "median_ms": 115.745,
+      "max_ms": 224.823,
+      "times_ms": [
+        224.823,
+        94.744,
+        115.745
+      ]
+    },
+    {
+      "group": "main_ui",
+      "name": "GET_TOC_TITLES_FOR_BOOKS_8",
+      "note": "count=8",
+      "plan": [
+        "SEARCH te USING INDEX idx_toc_book (bookId=?)",
+        "SEARCH tt USING INTEGER PRIMARY KEY (rowid=?)",
+        "SEARCH l USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ],
+      "mode": "fetchall",
+      "repeat": 3,
+      "rowcount": 142165,
+      "mean_ms": 1002.31,
+      "median_ms": 837.723,
+      "max_ms": 1357.742,
+      "times_ms": [
+        1357.742,
+        837.723,
+        811.464
+      ]
+    },
+    {
+      "group": "main_ui",
+      "name": "GET_ALT_TOC_STRUCTURES",
+      "note": null,
+      "plan": [
+        "SEARCH alt_toc_structure USING INDEX idx_alt_toc_structure_book (bookId=?)"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 2,
+      "mean_ms": 0.039,
+      "median_ms": 0.019,
+      "max_ms": 0.116,
+      "times_ms": [
+        0.116,
+        0.023,
+        0.019,
+        0.018,
+        0.018
+      ]
+    },
+    {
+      "group": "main_ui",
+      "name": "GET_ALL_ALT_TOC_ENTRIES",
+      "note": null,
+      "plan": [
+        "SEARCH ae USING INDEX idx_alt_toc_entry_structure (structureId=?)",
+        "SEARCH tt USING INTEGER PRIMARY KEY (rowid=?)",
+        "SEARCH l USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN"
+      ],
+      "mode": "fetchall",
+      "repeat": 3,
+      "rowcount": 6601,
+      "mean_ms": 76.416,
+      "median_ms": 34.252,
+      "max_ms": 162.577,
+      "times_ms": [
+        162.577,
+        32.421,
+        34.252
+      ]
+    },
+    {
+      "group": "main_ui",
+      "name": "GET_LINE_INDEX_FROM_LINE_ID",
+      "note": null,
+      "plan": [
+        "SEARCH line USING INTEGER PRIMARY KEY (rowid=?)"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 1,
+      "mean_ms": 0.047,
+      "median_ms": 0.024,
+      "max_ms": 0.134,
+      "times_ms": [
+        0.134,
+        0.03,
+        0.024,
+        0.023,
+        0.023
+      ]
+    },
+    {
+      "group": "main_ui",
+      "name": "GET_TOC_PATHS_FOR_LINES_50",
+      "note": "count=50",
+      "plan": [
+        "CO-ROUTINE (subquery-4)",
+        "CO-ROUTINE ordered",
+        "CO-ROUTINE (subquery-6)",
+        "CO-ROUTINE ancestors",
+        "SETUP",
+        "SEARCH lt USING INTEGER PRIMARY KEY (rowid=?)",
+        "SEARCH te USING INTEGER PRIMARY KEY (rowid=?)",
+        "SEARCH tt USING INTEGER PRIMARY KEY (rowid=?)",
+        "RECURSIVE STEP",
+        "SCAN a",
+        "SEARCH te USING INTEGER PRIMARY KEY (rowid=?)",
+        "SEARCH tt USING INTEGER PRIMARY KEY (rowid=?)",
+        "SCAN a",
+        "SEARCH b USING INTEGER PRIMARY KEY (rowid=?)",
+        "USE TEMP B-TREE FOR ORDER BY",
+        "SCAN (subquery-6)",
+        "SCAN ordered",
+        "USE TEMP B-TREE FOR ORDER BY",
+        "SCAN (subquery-4)"
+      ],
+      "mode": "fetchall",
+      "repeat": 3,
+      "rowcount": 48,
+      "mean_ms": 1.723,
+      "median_ms": 1.564,
+      "max_ms": 2.089,
+      "times_ms": [
+        2.089,
+        1.564,
+        1.516
+      ]
+    },
+    {
+      "group": "main_ui",
+      "name": "GET_LINES_PAGED_FIRST",
+      "note": null,
+      "plan": [
+        "SEARCH line USING INDEX idx_line_book_index (bookId=?)"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 200,
+      "mean_ms": 1.061,
+      "median_ms": 0.952,
+      "max_ms": 1.541,
+      "times_ms": [
+        1.541,
+        0.974,
+        0.952,
+        0.942,
+        0.896
+      ]
+    },
+    {
+      "group": "main_ui",
+      "name": "GET_LINES_PAGED_MID",
+      "note": null,
+      "plan": [
+        "SEARCH line USING INDEX idx_line_book_index (bookId=?)"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 200,
+      "mean_ms": 5.475,
+      "median_ms": 5.299,
+      "max_ms": 6.182,
+      "times_ms": [
+        6.182,
+        5.299,
+        5.26,
+        5.338,
+        5.298
+      ]
+    },
+    {
+      "group": "main_ui",
+      "name": "GET_COMMENTARY_DATA_FOR_SOURCE_LINE",
+      "note": null,
+      "plan": [
+        "SEARCH l USING INDEX idx_link_source_line (sourceLineId=?)",
+        "SEARCH ln USING INTEGER PRIMARY KEY (rowid=?)"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 2158,
+      "mean_ms": 59.848,
+      "median_ms": 19.234,
+      "max_ms": 223.258,
+      "times_ms": [
+        223.258,
+        26.482,
+        19.234,
+        15.132,
+        15.132
+      ]
+    },
+    {
+      "group": "main_ui",
+      "name": "GET_COMMENTARY_DATA_FOR_SOURCE_LINE_RANGE",
+      "note": "count=200",
+      "plan": [
+        "SEARCH l USING INDEX idx_link_source_line (sourceLineId=?)",
+        "SEARCH ln USING INTEGER PRIMARY KEY (rowid=?)"
+      ],
+      "mode": "fetchall",
+      "repeat": 3,
+      "rowcount": 198,
+      "mean_ms": 2.071,
+      "median_ms": 1.611,
+      "max_ms": 3.095,
+      "times_ms": [
+        3.095,
+        1.611,
+        1.508
+      ]
+    },
+    {
+      "group": "main_ui",
+      "name": "GET_ALL_CONNECTION_TYPES",
+      "note": null,
+      "plan": [
+        "SCAN connection_type"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 5,
+      "mean_ms": 0.034,
+      "median_ms": 0.027,
+      "max_ms": 0.065,
+      "times_ms": [
+        0.065,
+        0.028,
+        0.026,
+        0.025,
+        0.027
+      ]
+    },
+    {
+      "group": "main_ui",
+      "name": "GET_STATIC_COMMENTARY_FILTER_BOOKS_FOR_SOURCE_BOOK",
+      "note": null,
+      "plan": [
+        "SEARCH l USING INDEX idx_link_source_book (sourceBookId=?)",
+        "USE TEMP B-TREE FOR DISTINCT"
+      ],
+      "mode": "fetchall",
+      "repeat": 3,
+      "rowcount": 51,
+      "mean_ms": 233.432,
+      "median_ms": 240.149,
+      "max_ms": 240.388,
+      "times_ms": [
+        219.759,
+        240.388,
+        240.149
+      ]
+    },
+    {
+      "group": "main_ui",
+      "name": "GET_STATIC_COMMENTARY_BOOK_IDS",
+      "note": "optimized path; ids resolved against in-memory books",
+      "plan": [
+        "SEARCH l USING INDEX idx_link_type (connectionTypeId=?)",
+        "USE TEMP B-TREE FOR DISTINCT"
+      ],
+      "mode": "fetchall",
+      "repeat": 3,
+      "rowcount": 5555,
+      "mean_ms": 2594.812,
+      "median_ms": 2673.727,
+      "max_ms": 3046.53,
+      "times_ms": [
+        2064.18,
+        2673.727,
+        3046.53
+      ]
+    },
+    {
+      "group": "main_ui",
+      "name": "GET_NEXT_SECTION_WITH_COMMENTARY",
+      "note": null,
+      "plan": [
+        "SEARCH ln USING COVERING INDEX idx_line_book_index (bookId=? AND lineIndex>?)",
+        "SEARCH lk USING INDEX idx_link_source_line (sourceLineId=?)"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 1,
+      "mean_ms": 2.235,
+      "median_ms": 0.015,
+      "max_ms": 11.102,
+      "times_ms": [
+        11.102,
+        0.032,
+        0.015,
+        0.014,
+        0.013
+      ]
+    },
+    {
+      "group": "main_ui",
+      "name": "GET_PREV_SECTION_WITH_COMMENTARY",
+      "note": null,
+      "plan": [
+        "SEARCH ln USING COVERING INDEX idx_line_book_index (bookId=? AND lineIndex<?)",
+        "SEARCH lk USING INDEX idx_link_source_line (sourceLineId=?)"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 1,
+      "mean_ms": 0.049,
+      "median_ms": 0.02,
+      "max_ms": 0.162,
+      "times_ms": [
+        0.162,
+        0.027,
+        0.02,
+        0.019,
+        0.019
+      ]
+    },
+    {
+      "group": "main_ui",
+      "name": "GET_DEFAULT_COMMENTATORS",
+      "note": null,
+      "plan": [
+        "SEARCH default_commentator USING INDEX idx_default_commentator_book (bookId=?)",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 4,
+      "mean_ms": 0.024,
+      "median_ms": 0.013,
+      "max_ms": 0.066,
+      "times_ms": [
+        0.066,
+        0.017,
+        0.013,
+        0.013,
+        0.013
+      ]
+    },
+    {
+      "group": "main_ui",
+      "name": "HAS_COMMENTARY_IN_RANGE",
+      "note": null,
+      "plan": [
+        "SEARCH ln USING COVERING INDEX idx_line_book_index (bookId=? AND lineIndex>? AND lineIndex<?)",
+        "SEARCH lk USING INDEX idx_link_source_line (sourceLineId=?)"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 1,
+      "mean_ms": 0.061,
+      "median_ms": 0.014,
+      "max_ms": 0.247,
+      "times_ms": [
+        0.247,
+        0.02,
+        0.014,
+        0.013,
+        0.012
+      ]
+    },
+    {
+      "group": "dict_db",
+      "name": "SQL_DICT_EXACT",
+      "note": null,
+      "plan": [
+        "SEARCH w USING COVERING INDEX sqlite_autoindex_word_1 (headword=?)",
+        "SEARCH s USING INDEX index_sense_word (word_id=?)",
+        "SEARCH sk USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 28,
+      "mean_ms": 0.061,
+      "median_ms": 0.048,
+      "max_ms": 0.109,
+      "times_ms": [
+        0.109,
+        0.053,
+        0.048,
+        0.047,
+        0.047
+      ]
+    },
+    {
+      "group": "dict_db",
+      "name": "SQL_DICT_PREFIX",
+      "note": null,
+      "plan": [
+        "SCAN s",
+        "SEARCH w USING INTEGER PRIMARY KEY (rowid=?)",
+        "SEARCH sk USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 100,
+      "mean_ms": 0.522,
+      "median_ms": 0.474,
+      "max_ms": 0.703,
+      "times_ms": [
+        0.703,
+        0.496,
+        0.474,
+        0.47,
+        0.468
+      ]
+    },
+    {
+      "group": "dict_db",
+      "name": "SQL_DICT_CONTAINS",
+      "note": null,
+      "plan": [
+        "SCAN s",
+        "SEARCH w USING INTEGER PRIMARY KEY (rowid=?)",
+        "SEARCH sk USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 100,
+      "mean_ms": 0.542,
+      "median_ms": 0.513,
+      "max_ms": 0.649,
+      "times_ms": [
+        0.533,
+        0.513,
+        0.508,
+        0.509,
+        0.649
+      ]
+    },
+    {
+      "group": "dict_db",
+      "name": "SQL_DICT_EXACT_IN_WORD",
+      "note": null,
+      "plan": [
+        "SEARCH word USING COVERING INDEX sqlite_autoindex_word_1 (headword=?)"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 1,
+      "mean_ms": 0.012,
+      "median_ms": 0.009,
+      "max_ms": 0.023,
+      "times_ms": [
+        0.023,
+        0.01,
+        0.009,
+        0.009,
+        0.009
+      ]
+    },
+    {
+      "group": "dict_db",
+      "name": "SQL_DICT_LINKS",
+      "note": null,
+      "plan": [
+        "SEARCH w1 USING COVERING INDEX sqlite_autoindex_word_1 (headword=?)",
+        "SEARCH l USING COVERING INDEX sqlite_autoindex_link_1 (word_id=?)",
+        "SEARCH w2 USING INTEGER PRIMARY KEY (rowid=?)",
+        "SEARCH lk USING INTEGER PRIMARY KEY (rowid=?)",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 16,
+      "mean_ms": 0.045,
+      "median_ms": 0.033,
+      "max_ms": 0.093,
+      "times_ms": [
+        0.093,
+        0.035,
+        0.033,
+        0.031,
+        0.031
+      ]
+    },
+    {
+      "group": "dict_db",
+      "name": "SQL_DICT_SYNONYMS",
+      "note": null,
+      "plan": [
+        "SEARCH w1 USING COVERING INDEX sqlite_autoindex_word_1 (headword=?)",
+        "SEARCH lk USING COVERING INDEX sqlite_autoindex_link_kind_1 (name=?)",
+        "SEARCH l USING COVERING INDEX sqlite_autoindex_link_1 (word_id=?)",
+        "SEARCH w2 USING INTEGER PRIMARY KEY (rowid=?)",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 4,
+      "mean_ms": 0.026,
+      "median_ms": 0.017,
+      "max_ms": 0.063,
+      "times_ms": [
+        0.063,
+        0.019,
+        0.017,
+        0.016,
+        0.016
+      ]
+    },
+    {
+      "group": "dict_db",
+      "name": "SQL_DICT_VARIANTS",
+      "note": null,
+      "plan": [
+        "SEARCH w1 USING COVERING INDEX sqlite_autoindex_word_1 (headword=?)",
+        "SEARCH lk USING COVERING INDEX sqlite_autoindex_link_kind_1 (name=?)",
+        "SEARCH l USING COVERING INDEX sqlite_autoindex_link_1 (word_id=?)",
+        "SEARCH w2 USING INTEGER PRIMARY KEY (rowid=?)",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 0,
+      "mean_ms": 0.012,
+      "median_ms": 0.012,
+      "max_ms": 0.016,
+      "times_ms": [
+        0.016,
+        0.012,
+        0.012,
+        0.011,
+        0.011
+      ]
+    },
+    {
+      "group": "dict_db",
+      "name": "SQL_DICT_SPELL_CANDIDATES_FRAG2",
+      "note": null,
+      "plan": [
+        "SCAN word"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 400,
+      "mean_ms": 0.932,
+      "median_ms": 0.934,
+      "max_ms": 0.963,
+      "times_ms": [
+        0.904,
+        0.909,
+        0.934,
+        0.963,
+        0.953
+      ]
+    },
+    {
+      "group": "dict_db",
+      "name": "SQL_DICT_SPELL_CANDIDATES_FRAG3",
+      "note": null,
+      "plan": [
+        "SCAN word"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 200,
+      "mean_ms": 0.86,
+      "median_ms": 0.858,
+      "max_ms": 0.881,
+      "times_ms": [
+        0.842,
+        0.867,
+        0.853,
+        0.858,
+        0.881
+      ]
+    },
+    {
+      "group": "dict_db",
+      "name": "SQL_DICT_KETIV_EXISTS_20",
+      "note": null,
+      "plan": [
+        "SEARCH word USING COVERING INDEX sqlite_autoindex_word_1 (headword=?)"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 20,
+      "mean_ms": 0.043,
+      "median_ms": 0.037,
+      "max_ms": 0.067,
+      "times_ms": [
+        0.067,
+        0.041,
+        0.037,
+        0.036,
+        0.036
+      ]
+    },
+    {
+      "group": "dict_seforim",
+      "name": "DICT_GET_BOOK_IDS_METZUDAT",
+      "note": null,
+      "plan": [
+        "SCAN book USING COVERING INDEX idx_book_title"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 31,
+      "mean_ms": 1.472,
+      "median_ms": 1.37,
+      "max_ms": 1.78,
+      "times_ms": [
+        1.78,
+        1.361,
+        1.37,
+        1.48,
+        1.369
+      ]
+    },
+    {
+      "group": "dict_seforim",
+      "name": "DICT_GET_BOOK_IDS_MALBIM",
+      "note": null,
+      "plan": [
+        "SCAN book USING COVERING INDEX idx_book_title"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 0,
+      "mean_ms": 1.357,
+      "median_ms": 1.365,
+      "max_ms": 1.383,
+      "times_ms": [
+        1.332,
+        1.336,
+        1.383,
+        1.365,
+        1.369
+      ]
+    },
+    {
+      "group": "dict_seforim",
+      "name": "DICT_GET_BOOK_IDS_MENCHEM",
+      "note": null,
+      "plan": [
+        "SCAN book USING COVERING INDEX idx_book_title"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 1,
+      "mean_ms": 1.393,
+      "median_ms": 1.371,
+      "max_ms": 1.482,
+      "times_ms": [
+        1.371,
+        1.367,
+        1.375,
+        1.367,
+        1.482
+      ]
+    },
+    {
+      "group": "dict_seforim",
+      "name": "DICT_BOLD_LINES_EXACT_PATTERN",
+      "note": null,
+      "plan": [
+        "SEARCH b USING INTEGER PRIMARY KEY (rowid=?)",
+        "SEARCH l USING INDEX idx_line_book_index (bookId=?)"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 0,
+      "mean_ms": 7.684,
+      "median_ms": 2.463,
+      "max_ms": 28.225,
+      "times_ms": [
+        28.225,
+        2.84,
+        2.463,
+        2.446,
+        2.444
+      ]
+    },
+    {
+      "group": "dict_seforim",
+      "name": "DICT_BOLD_LINES_PREFIX_PATTERN",
+      "note": null,
+      "plan": [
+        "SEARCH b USING INTEGER PRIMARY KEY (rowid=?)",
+        "SEARCH l USING INDEX idx_line_book_index (bookId=?)"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 17,
+      "mean_ms": 2.751,
+      "median_ms": 2.603,
+      "max_ms": 3.43,
+      "times_ms": [
+        2.53,
+        2.57,
+        2.603,
+        3.43,
+        2.621
+      ]
+    },
+    {
+      "group": "dict_seforim",
+      "name": "DICT_BOLD_LINES_CONTAINS_PATTERN",
+      "note": null,
+      "plan": [
+        "SEARCH b USING INTEGER PRIMARY KEY (rowid=?)",
+        "SEARCH l USING INDEX idx_line_book_index (bookId=?)"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 50,
+      "mean_ms": 3.557,
+      "median_ms": 3.538,
+      "max_ms": 3.614,
+      "times_ms": [
+        3.614,
+        3.536,
+        3.578,
+        3.538,
+        3.522
+      ]
+    },
+    {
+      "group": "dict_seforim",
+      "name": "DICT_MENCHEM_BIG_ROWS",
+      "note": null,
+      "plan": [
+        "SEARCH line USING INDEX idx_line_book_index (bookId=?)"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 7,
+      "mean_ms": 6.444,
+      "median_ms": 5.615,
+      "max_ms": 9.854,
+      "times_ms": [
+        9.854,
+        5.525,
+        5.702,
+        5.615,
+        5.524
+      ]
+    },
+    {
+      "group": "dict_seforim",
+      "name": "DICT_MENCHEM_NEXT_LINE",
+      "note": null,
+      "plan": [
+        "SEARCH line USING INDEX idx_line_book_index (bookId=? AND lineIndex=?)"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 1,
+      "mean_ms": 0.02,
+      "median_ms": 0.015,
+      "max_ms": 0.04,
+      "times_ms": [
+        0.04,
+        0.018,
+        0.015,
+        0.015,
+        0.014
+      ]
+    },
+    {
+      "group": "backend_search",
+      "name": "SEARCH_GET_LINE_COUNT",
+      "note": null,
+      "plan": [
+        "SCAN line USING COVERING INDEX idx_line_toc"
+      ],
+      "mode": "fetchall",
+      "repeat": 3,
+      "rowcount": 1,
+      "mean_ms": 18.934,
+      "median_ms": 1.427,
+      "max_ms": 54.087,
+      "times_ms": [
+        54.087,
+        1.427,
+        1.29
+      ]
+    },
+    {
+      "group": "backend_search",
+      "name": "SEARCH_GET_ALL_LINE_CONTENTS_STARTUP",
+      "note": "timed first 5000-row fetch only",
+      "plan": [
+        "SCAN line"
+      ],
+      "mode": "first_batch_5000",
+      "repeat": 3,
+      "rowcount": 5000,
+      "mean_ms": 7.165,
+      "median_ms": 7.131,
+      "max_ms": 7.348,
+      "times_ms": [
+        7.348,
+        7.017,
+        7.131
+      ]
+    },
+    {
+      "group": "backend_search",
+      "name": "SEARCH_GET_ALL_LINE_CONTENTS_AFTER_STARTUP",
+      "note": "timed first 5000-row fetch only",
+      "plan": [
+        "SEARCH line USING INTEGER PRIMARY KEY (rowid>?)"
+      ],
+      "mode": "first_batch_5000",
+      "repeat": 3,
+      "rowcount": 5000,
+      "mean_ms": 7.799,
+      "median_ms": 7.83,
+      "max_ms": 8.114,
+      "times_ms": [
+        8.114,
+        7.454,
+        7.83
+      ]
+    },
+    {
+      "group": "backend_search",
+      "name": "SEARCH_GET_ALL_LINE_CONTENTS_BULK",
+      "note": null,
+      "plan": [
+        "SEARCH line USING INTEGER PRIMARY KEY (rowid>?)"
+      ],
+      "mode": "fetchall",
+      "repeat": 3,
+      "rowcount": 5000,
+      "mean_ms": 7.23,
+      "median_ms": 7.229,
+      "max_ms": 7.875,
+      "times_ms": [
+        6.587,
+        7.875,
+        7.229
+      ]
+    },
+    {
+      "group": "backend_search",
+      "name": "SEARCH_GET_LINE_CONTENTS_CHUNK",
+      "note": null,
+      "plan": [
+        "SEARCH line USING INTEGER PRIMARY KEY (rowid>? AND rowid<?)"
+      ],
+      "mode": "fetchall",
+      "repeat": 3,
+      "rowcount": 5001,
+      "mean_ms": 7.484,
+      "median_ms": 7.54,
+      "max_ms": 8.06,
+      "times_ms": [
+        6.85,
+        7.54,
+        8.06
+      ]
+    },
+    {
+      "group": "backend_search",
+      "name": "SEARCH_GET_LINE_CONTENT",
+      "note": null,
+      "plan": [
+        "SEARCH line USING INTEGER PRIMARY KEY (rowid=?)"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 1,
+      "mean_ms": 0.023,
+      "median_ms": 0.011,
+      "max_ms": 0.069,
+      "times_ms": [
+        0.069,
+        0.014,
+        0.011,
+        0.011,
+        0.01
+      ]
+    },
+    {
+      "group": "backend_search",
+      "name": "SEARCH_GET_LINE_METADATA_BATCH_1",
+      "note": "count=100",
+      "plan": [
+        "SEARCH line USING INTEGER PRIMARY KEY (rowid=?)"
+      ],
+      "mode": "fetchall",
+      "repeat": 3,
+      "rowcount": 100,
+      "mean_ms": 0.125,
+      "median_ms": 0.089,
+      "max_ms": 0.2,
+      "times_ms": [
+        0.2,
+        0.089,
+        0.085
+      ]
+    },
+    {
+      "group": "backend_search",
+      "name": "SEARCH_GET_LINE_METADATA_BATCH_2",
+      "note": "count=25",
+      "plan": [
+        "SEARCH book USING INTEGER PRIMARY KEY (rowid=?)"
+      ],
+      "mode": "fetchall",
+      "repeat": 3,
+      "rowcount": 25,
+      "mean_ms": 0.054,
+      "median_ms": 0.037,
+      "max_ms": 0.091,
+      "times_ms": [
+        0.091,
+        0.037,
+        0.035
+      ]
+    },
+    {
+      "group": "backend_search",
+      "name": "SEARCH_GET_LINE_METADATA_BATCH_3",
+      "note": "count=100",
+      "plan": [
+        "SEARCH lt USING INTEGER PRIMARY KEY (rowid=?)",
+        "SEARCH te USING INTEGER PRIMARY KEY (rowid=?)",
+        "SEARCH tt USING INTEGER PRIMARY KEY (rowid=?)"
+      ],
+      "mode": "fetchall",
+      "repeat": 3,
+      "rowcount": 100,
+      "mean_ms": 0.262,
+      "median_ms": 0.112,
+      "max_ms": 0.57,
+      "times_ms": [
+        0.57,
+        0.112,
+        0.105
+      ]
+    },
+    {
+      "group": "backend_search",
+      "name": "SEARCH_GET_LINE_METADATA",
+      "note": null,
+      "plan": [
+        "SEARCH l USING INTEGER PRIMARY KEY (rowid=?)",
+        "SEARCH b USING INTEGER PRIMARY KEY (rowid=?)",
+        "SEARCH lt USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN",
+        "SEARCH te USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN",
+        "SEARCH tt USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 1,
+      "mean_ms": 0.036,
+      "median_ms": 0.015,
+      "max_ms": 0.118,
+      "times_ms": [
+        0.118,
+        0.018,
+        0.015,
+        0.014,
+        0.014
+      ]
+    },
+    {
+      "group": "backend_search",
+      "name": "SEARCH_GET_LINE_INDEX_FROM_LINE_ID",
+      "note": null,
+      "plan": [
+        "SEARCH line USING INTEGER PRIMARY KEY (rowid=?)"
+      ],
+      "mode": "fetchall",
+      "repeat": 5,
+      "rowcount": 1,
+      "mean_ms": 0.013,
+      "median_ms": 0.01,
+      "max_ms": 0.023,
+      "times_ms": [
+        0.023,
+        0.011,
+        0.01,
+        0.01,
+        0.01
+      ]
+    },
+    {
+      "group": "backend_search",
+      "name": "SEARCH_GET_LINE_IDS_BY_TOC_ENTRY",
+      "note": null,
+      "plan": [
+        "SEARCH line_toc USING COVERING INDEX idx_linetoc_toc (tocEntryId=?)"
+      ],
+      "mode": "fetchall",
+      "repeat": 3,
+      "rowcount": 3715,
+      "mean_ms": 1.795,
+      "median_ms": 1.802,
+      "max_ms": 1.854,
+      "times_ms": [
+        1.729,
+        1.854,
+        1.802
+      ]
+    },
+    {
+      "group": "backend_search",
+      "name": "SEARCH_GET_LINES_BY_IDS",
+      "note": "count=100",
+      "plan": [
+        "SEARCH line USING INDEX idx_line_book_index (bookId=?)"
+      ],
+      "mode": "fetchall",
+      "repeat": 3,
+      "rowcount": 0,
+      "mean_ms": 0.874,
+      "median_ms": 0.633,
+      "max_ms": 1.396,
+      "times_ms": [
+        1.396,
+        0.593,
+        0.633
+      ]
+    }
+  ]
+}

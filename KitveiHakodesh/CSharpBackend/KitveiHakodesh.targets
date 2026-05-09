@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- 
+    KitveiHakodesh.targets - Vue Build Integration
+
+    Builds the Vue project and copies the entire dist/ folder into
+    {OutputDir}/KitveiHakodesh/ for both Debug and Release configurations.
+
+    Incremental build: the Vue build is skipped entirely if no source file
+    under src/, public/, or the config files is newer than dist/.build-stamp.
+    Touch dist/.build-stamp manually (or delete it) to force a rebuild.
+
+    Usage:
+      Add to your .csproj before the closing </Project> tag:
+        <Import Project="KitveiHakodesh.targets" />
+
+    Requirements:
+      - Vue project root at ../../vue-frontend/ relative to this file
+      - npm available in PATH
+  -->
+
+  <PropertyGroup>
+    <VueProjectDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\vue-frontend\'))</VueProjectDir>
+    <VueDistDir>$(VueProjectDir)dist</VueDistDir>
+    <VueFrontendOut>$(OutDir)KitveiHakodesh</VueFrontendOut>
+    <!-- Sentinel file — touched after every successful build -->
+    <VueBuildStamp>$(VueDistDir)\.build-stamp</VueBuildStamp>
+  </PropertyGroup>
+
+  <!--
+    Collect Vue source files as MSBuild inputs.
+    MSBuild compares the newest input timestamp against the stamp file.
+    If stamp is newer → target is up-to-date → skipped automatically.
+  -->
+  <ItemGroup>
+    <VueSourceFiles Include="$(VueProjectDir)src\**\*.*" />
+    <VueSourceFiles Include="$(VueProjectDir)public\**\*.*" />
+    <VueSourceFiles Include="$(VueProjectDir)package.json" />
+    <VueSourceFiles Include="$(VueProjectDir)vite.config.ts" />
+    <VueSourceFiles Include="$(VueProjectDir)vite.config.js" />
+    <VueSourceFiles Include="$(VueProjectDir)tsconfig*.json" />
+    <VueSourceFiles Include="$(VueProjectDir)index.html" />
+  </ItemGroup>
+
+  <!--
+    BuildVue — runs npm run build only when sources are newer than the stamp.
+    Inputs/Outputs enables MSBuild incremental check.
+  -->
+  <Target Name="BuildVue"
+          AfterTargets="Build"
+          Inputs="@(VueSourceFiles)"
+          Outputs="$(VueBuildStamp)">
+
+    <Message Text="========================================" Importance="high" />
+    <Message Text="[Vue] Building for $(MSBuildProjectName) ($(Configuration))" Importance="high" />
+    <Message Text="========================================" Importance="high" />
+
+    <Message Text="[1/2] Running npm run build..." Importance="high" />
+    <Exec Command="set &quot;PATH=C:\Program Files\nodejs;%PATH%&quot; &amp;&amp; &quot;C:\Program Files\nodejs\npm.cmd&quot; run build"
+          WorkingDirectory="$(VueProjectDir)"
+          ContinueOnError="false" />
+
+    <!-- Touch the stamp so the next build sees dist as up-to-date -->
+    <Touch Files="$(VueBuildStamp)" AlwaysCreate="true" />
+
+    <Message Text="[2/2] Vue build complete — stamp updated." Importance="high" />
+    <Message Text="========================================" Importance="high" />
+  </Target>
+
+  <!--
+    SyncVue — always copies dist/ to the C# output folder.
+    Runs after BuildVue (whether it ran or was skipped).
+    Robocopy's /XO flag skips files that are already up-to-date.
+  -->
+  <Target Name="SyncVue" AfterTargets="BuildVue">
+
+    <Message Text="[Vue] Syncing dist to $(VueFrontendOut)..." Importance="high" />
+    <MakeDir Directories="$(VueFrontendOut)" />
+
+    <!-- /E = recurse, /IS = overwrite same-size, /IT = overwrite tweaked, /PURGE = remove stale, /XO = skip older -->
+    <Exec Command="robocopy &quot;$(VueDistDir)&quot; &quot;$(VueFrontendOut)&quot; /E /IS /IT /PURGE /XO /NFL /NDL /NJH /NJS /NC /NS /NP"
+          ContinueOnError="true"
+          IgnoreExitCode="true" />
+
+    <Error Text="ERROR: index.html not found in frontend output!"
+           Condition="!Exists('$(VueFrontendOut)\index.html')" />
+    <Error Text="ERROR: PDF.js not found in frontend output!"
+           Condition="!Exists('$(VueFrontendOut)\pdfjs\build\pdf.mjs')" />
+    <Error Text="ERROR: KitveiHakodesh_dictionary.db not found in frontend output!"
+           Condition="!Exists('$(VueFrontendOut)\dictionary\KitveiHakodesh_dictionary.db')" />
+
+    <Message Text="[Vue] Sync done — frontend at $(VueFrontendOut)" Importance="high" />
+  </Target>
+
+</Project>

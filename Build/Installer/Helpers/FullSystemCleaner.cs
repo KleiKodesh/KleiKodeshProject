@@ -185,7 +185,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         /// Deletes all WebView2 user-data folders written by KleiKodesh components.
         ///
         /// Current path (v3.x+):  %LocalAppData%\KleiKodesh\WebView2Cache
-        ///   Written by: KleiKodeshWebView.cs (Kezayit panel)
+        ///   Written by: KleiKodeshWebView.cs (KitveiHakodesh panel)
         ///   Lives inside the install folder — deleted with it, but cleaned explicitly here.
         ///
         /// Old scattered paths — written by WebViewHost.cs / WebViewControl.cs before the
@@ -253,7 +253,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         ///   HKCU\Software\VB and VBA Program Settings\KleiKodesh\**
         /// That entire subtree is safe to delete.
         ///
-        /// ZayitApp is written by our installer and the Kezayit app — entirely ours, safe to delete.
+        /// ZayitApp is written by our installer and the KitveiHakodesh app — entirely ours, safe to delete.
         ///
         /// ⚠ We do NOT touch HKCU\...\WINWORD\** — that key is shared with Word itself
         ///   and potentially with other add-ins. The old GitHub repo (v2.0.1) used
@@ -275,7 +275,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                     result, log);
 
                 // ZayitApp — delete the entire subtree.
-                // Written by our installer (Database\Path) and by the Kezayit app
+                // Written by our installer (Database\Path) and by the KitveiHakodesh app
                 // (HebrewBooks\CsvLastUpdated, etc.). Entirely owned by KleiKodesh.
                 DeleteRegistrySubtree(
                     Registry.CurrentUser,

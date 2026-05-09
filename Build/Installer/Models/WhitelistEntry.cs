@@ -6,7 +6,7 @@ namespace KleiKodeshVstoInstallerWpf
     /// Installer-side model for a website whitelist entry.
     /// Mirrors WebAddressModel from WebSitesLib2 — kept separate so the installer
     /// has no project reference to WebSitesLib2.
-    /// Serialized/deserialized by the hand-rolled parser in AdvancedPage.xaml.cs.
+    /// Serialized/deserialized by the hand-rolled parser in ComponentSettingsPage.xaml.cs.
     /// Implements INotifyPropertyChanged so checkbox bindings update live
     /// (e.g. when Check All / Uncheck All is clicked).
     /// </summary>

@@ -1,18 +1,19 @@
 <Solution>
-  <Project Path="KleiKodeshVsto/DocDesign/DocDesignLib/DocDesignLib.csproj" Id="74e59bc0-41e5-475a-85cb-eacdc2ef6415" />
+  <Project Path="Build/Installer/KleiKodeshVstoInstallerWpf.csproj" Id="2444948f-973d-4cdd-a5be-3596a400b7ba" />
+  <Project Path="Build/scripts/SvgToPng/SvgToPng.csproj" Id="a1b2c3d4-e5f6-7890-abcd-ef1234567891" />
+  <Project Path="KitveiHakodesh/CSharpBackend/BloomSearchEngineLib/BloomSearchEngineLib.csproj" Id="0f7c9226-2c18-4cb8-8f39-a3a539b7122a" />
+  <Project Path="KitveiHakodesh/CSharpBackend/FtsLib/FtsLib/FtsLib.csproj" Id="76f9daa9-374f-40f9-8511-3239fb6e846e" />
+  <Project Path="KitveiHakodesh/CSharpBackend/KitveiHakodeshDemoApp/KitveiHakodeshDemoApp.csproj" Id="2b6e5acb-2062-4281-aacb-c46681fcfe42" />
+  <Project Path="KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/KitveiHakodeshLib.csproj" Id="a1b2c3d4-e5f6-7890-abcd-ef1234567890" />
   <Project Path="KleiKodeshVsto/DocDesign/DocDesignDemo/DocDesignDemo.csproj" Id="e5f6a7b8-c9d0-1234-efab-567890123cde" />
-  <Project Path="KleiKodeshVsto/RegexInWord/RegexFindLib/RegexFindLib.csproj" Id="c3d4e5f6-a7b8-9012-cdef-123456789abc" />
-  <Project Path="KleiKodeshVsto/RegexInWord/RegexFindDemo/RegexFindDemo.csproj" Id="d1e2f3a4-b5c6-7890-defa-123456789bcd" />
-  <Project Path="Kezayit/CSharpBackend/BloomSearchEngineLib/BloomSearchEngineLib.csproj" Id="0f7c9226-2c18-4cb8-8f39-a3a539b7122a" />
-  <Project Path="Kezayit/CSharpBackend/KezayitDemoApp/KezayitDemoApp.csproj" Id="2b6e5acb-2062-4281-aacb-c46681fcfe42" />
-  <Project Path="Kezayit/CSharpBackend/KezayitLib/KezayitLib.csproj" Id="a1b2c3d4-e5f6-7890-abcd-ef1234567890" />
+  <Project Path="KleiKodeshVsto/DocDesign/DocDesignLib/DocDesignLib.csproj" Id="74e59bc0-41e5-475a-85cb-eacdc2ef6415" />
   <Project Path="KleiKodeshVsto/Kiwix/KiwixDemoApp/KiwixDemoApp.csproj" Id="3fe46d77-1bce-4356-a171-071a2328c03d" />
   <Project Path="KleiKodeshVsto/Kiwix/KiwixLib/KiwixLib.csproj" Id="235001e0-16c9-4aea-9260-99cf489a79c2" />
   <Project Path="KleiKodeshVsto/KleiKodeshVsto.csproj" Id="47dbe4db-2a18-46ed-838a-2114fd44d016" />
-  <Project Path="Build/Installer/KleiKodeshVstoInstallerWpf.csproj" Id="2444948f-973d-4cdd-a5be-3596a400b7ba" />
+  <Project Path="KleiKodeshVsto/RegexInWord/RegexFindDemo/RegexFindDemo.csproj" Id="d1e2f3a4-b5c6-7890-defa-123456789bcd" />
+  <Project Path="KleiKodeshVsto/RegexInWord/RegexFindLib/RegexFindLib.csproj" Id="c3d4e5f6-a7b8-9012-cdef-123456789abc" />
   <Project Path="KleiKodeshVsto/WebSitesLib/WebSitesDemo/WebSitesDemo.csproj" Id="a5b8c9d1-e2f3-4a5b-8c9d-1e2f3a5b8c9d" />
   <Project Path="KleiKodeshVsto/WebSitesLib/WebSitesLib/WebSitesLib.csproj" Id="8100c454-b34e-45a2-98b5-7f766487c9ff" />
   <Project Path="UpdateCheckerLib/UpdateCheckerLib.csproj" Id="b8f3e2a1-4c5d-4e6f-8a9b-1c2d3e4f5a6b" />
   <Project Path="WpfLib/WpfLib.csproj" Id="494b02c1-54f2-4244-9a90-23c9984970e7" />
-  <Project Path="Build/scripts/SvgToPng/SvgToPng.csproj" Id="a1b2c3d4-e5f6-7890-abcd-ef1234567891" />
 </Solution>

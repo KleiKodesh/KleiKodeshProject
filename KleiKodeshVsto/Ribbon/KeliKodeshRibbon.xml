@@ -17,9 +17,9 @@
 
 						<menu itemSize="large">
 
-							<button id="Kezayit"
-									label="ספריית כזית"
-									screentip="ספריית כזית"
+							<button id="KitveiHakodesh"
+									label="כתבי הקודש"
+									screentip="כתבי הקודש"
 									supertip="תוסף לוורד עבור מאגר הספרים - זית"
 									getImage="getImage"
 									onAction="button_Click"

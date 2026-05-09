@@ -6,6 +6,17 @@ using System.Windows.Controls;
 
 namespace KleiKodeshVstoInstallerWpf
 {
+    /// <summary>
+    /// Step 2 of the installer flow — runs the actual installation (extract, register, save version).
+    ///
+    /// Reached two ways:
+    ///   - Normal:  LandingPage "התקן" → NavigateToInstall(showSettingsAfter: true)
+    ///              After install completes, navigates to SettingsPage (post-install config).
+    ///   - Silent:  App.xaml.cs --silent arg → NavigateToInstall(showSettingsAfter: false)
+    ///              After install completes, exits with code 0.
+    ///
+    /// The close button is hidden for the duration of the install to prevent mid-install abort.
+    /// </summary>
     public partial class InstallPage : Page
     {
         readonly IProgress<double> _progress;
@@ -39,11 +50,6 @@ namespace KleiKodeshVstoInstallerWpf
 
                 _status.Report("מחלץ קבצים...");
                 await AddinInstaller.ExtractAsync(_progress);
-
-                // Write the user-edited whitelist (if any) over the extracted default.
-                // Must run after ExtractAsync — the install folder must exist first.
-                // No-op when PendingWhitelist is null (user did not edit the list).
-                AddinInstaller.ApplyPendingWhitelist();
 
                 _status.Report("רושם תוסף...");
                 await AddinInstaller.RegisterAddInAsync(_progress);

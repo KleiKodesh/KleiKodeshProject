@@ -50,8 +50,8 @@ namespace KleiKodesh.Ribbon
             {
                 switch (id)
                 {
-                    case "Kezayit":
-                        TaskPaneManager.Show(new KezayitLib.AppViewer(), "כזית", 610, popOutBehavior: true);
+                    case "KitveiHakodesh":
+                        TaskPaneManager.Show(new KitveiHakodeshLib.AppViewer(), "כתבי הקודש", 610, popOutBehavior: true);
                         break;
                     case "Kiwix":
                         TaskPaneManager.Show(new KiwixLib.KiwixWebview(), "קיוויקס", 610, popOutBehavior: true);

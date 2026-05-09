@@ -19,8 +19,8 @@ InstallPage   ○●○  Extraction + registration + version stamp
     ↓
 SettingsPage  ○○●  Ribbon components + default button
     ↓ הבא
-    ├─ Kezayit OR WebSites checked → AdvancedPage  ○○○
-    │     Kezayit DB picker  (hidden if Kezayit unchecked)
+    ├─ KitveiHakodesh OR WebSites checked → AdvancedPage  ○○○
+    │     KitveiHakodesh DB picker  (hidden if KitveiHakodesh unchecked)
     │     Websites list      (hidden if WebSites unchecked)
     │       └─ "ערוך רשימת אתרים" → WhitelistEditorDialog (modal)
     │     ↓ סיום
@@ -49,7 +49,7 @@ Build/Installer/
 ├── Pages/
 │   ├── LandingPage.xaml(.cs)     — Step 1: welcome
 │   ├── SettingsPage.xaml(.cs)    — Step 2: ribbon settings
-│   ├── AdvancedPage.xaml(.cs)    — Step 3: Kezayit DB + website whitelist (conditional)
+│   ├── AdvancedPage.xaml(.cs)    — Step 3: KitveiHakodesh DB + website whitelist (conditional)
 │   ├── InstallPage.xaml(.cs)     — Extraction + registration progress
 │   └── RepairPage.xaml(.cs)      — Repair / uninstall flow
 └── Dialogs/

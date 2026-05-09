@@ -6,13 +6,9 @@ namespace KleiKodeshVstoInstallerWpf
 {
     public partial class MainWindow : Window
     {
-        private bool _showSettingsAfterInstall;
-
         public MainWindow(bool startInstallImmediately = false)
         {
             InitializeComponent();
-
-            _showSettingsAfterInstall = !startInstallImmediately;
 
             if (startInstallImmediately)
                 NavigateToInstall(false);
@@ -63,15 +59,26 @@ namespace KleiKodeshVstoInstallerWpf
         }
 
         // ── Navigation ───────────────────────────────────────────────────────────
+        //
+        // Normal install flow (interactive):
+        //   LandingPage → InstallPage → SettingsPage → ComponentSettingsPage → exit
+        //
+        // Silent install flow (--silent / --install arg):
+        //   InstallPage → exit  (no UI pages shown)
+        //
+        // Repair flow:
+        //   LandingPage "תיקון" → RepairPage
+        //   or --repair arg     → RepairPage (autoRun: true, skips confirm dialog)
 
         public void NavigateToLanding()  => MainFrame.Navigate(new LandingPage(this));
         public void NavigateToSettings() => MainFrame.Navigate(new SettingsPage(this));
         public void NavigateToRepair()   => MainFrame.Navigate(new RepairPage(this));
-        public void NavigateToAdvanced(bool showKezayit, bool showWebsites)
-            => MainFrame.Navigate(new AdvancedPage(this, showKezayit, showWebsites));
+        public void NavigateToComponentSettings(bool showKitveiHakodesh, bool showWebsites)
+            => MainFrame.Navigate(new ComponentSettingsPage(this, showKitveiHakodesh, showWebsites));
 
         public void NavigateToInstall(bool showSettingsAfter = false)
         {
+            // RemoveBackEntry prevents the user navigating back to LandingPage mid-install.
             MainFrame.Navigate(new InstallPage(showSettingsAfter));
             MainFrame.NavigationService.RemoveBackEntry();
         }

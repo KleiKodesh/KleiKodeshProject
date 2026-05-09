@@ -65,7 +65,7 @@
 //            var availableFlow = CreateFlow();
 
 //            var checkBoxes = new[] {
-//                CreateCheckBox("כזית", "Kezayit_Visible"),
+//                CreateCheckBox("כתבי הקודש", "KitveiHakodesh_Visible"),
 //                //CreateCheckBox("היברו בוקס", "HebrewBooks_Visible"),
 //                CreateCheckBox("דרך האתרים", "WebSites_Visible"),
 //                CreateCheckBox("עיצוב תורני", "KleiKodesh_Visible"),
@@ -88,7 +88,7 @@
 //            var primaryFlow = CreateFlow();
 
 //            var radioButtons = new[] {
-//                CreateRadioButton("כזית", "Kezayit_Option"),
+//                CreateRadioButton("כתבי הקודש", "KitveiHakodesh_Option"),
 //                //CreateRadioButton("היברו בוקס", "HebrewBooks_Option"),
 //                CreateRadioButton("דרך האתרים", "WebSites_Option"),
 //                CreateRadioButton("עיצוב תורני", "KleiKodesh_Option"),

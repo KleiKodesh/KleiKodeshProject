@@ -1,2 +1,5 @@
 ngrams table
-make sure that the roaring bitmaps is actually faster and at what threshold
+maee sure that the roaring bitmaps is actually faster and at what threshold
+remember window size for eezyit demo app
+add shotcurt to the eezayit demo app in the menu
+need a new name for the eezayit demo app

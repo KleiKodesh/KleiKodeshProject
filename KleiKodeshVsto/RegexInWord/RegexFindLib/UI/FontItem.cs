@@ -5,7 +5,7 @@ namespace RegexFindLib.UI
     /// <summary>
     /// Represents a single font in the font picker.
     /// IsHebrew is true when the font's glyph map contains 'א' — same detection
-    /// used by KezayitLib.Helpers.FontsProvider.
+    /// used by KitveiHakodeshLib.Helpers.FontsProvider.
     /// </summary>
     public class FontItem
     {

@@ -43,23 +43,6 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         public static string AddinRegistryPath     => $@"Software\Microsoft\Office\Word\Addins\{AppName}";
         public static string AddinDataRegistryPath => $@"Software\Microsoft\Office\Word\AddinsData\{AppName}";
 
-        /// <summary>
-        /// Holds the user-edited whitelist JSON for the current installer session.
-        ///
-        /// null     = user has not opened the whitelist dialog this session.
-        ///            ExtractAsync will either extract the default from the zip (fresh install)
-        ///            or leave the existing file untouched (update).
-        ///
-        /// non-null = user opened WhitelistEditorDialog and clicked OK.
-        ///            ExtractAsync skips the zip entry entirely, and ApplyPendingWhitelist()
-        ///            writes this value to disk after extraction completes.
-        ///
-        /// Set by:   AdvancedPage.EditWhitelistButton_Click (via dialog OK)
-        /// Read by:  AddinInstaller.ExtractAsync, AddinInstaller.ApplyPendingWhitelist
-        /// See also: whitelist-management.md steering file
-        /// </summary>
-        public static string PendingWhitelist { get; set; }
-
         // ── Extract ──────────────────────────────────────────────────────────────
 
         public static async Task ExtractAsync(IProgress<double> progress)
@@ -85,13 +68,13 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                             continue;
                         }
 
-                        // If the user customised the whitelist this session, skip the zip entry —
-                        // ApplyPendingWhitelist() will write their version after extraction completes.
-                        // Also skip if the file already exists on disk (update) — the user never
-                        // opened the dialog so we leave their current list untouched.
+                        // Skip the whitelist file if it already exists on disk — either the user
+                        // edited it this session (written immediately on dialog OK) or this is an
+                        // update (leave the user's existing list untouched).
+                        // On a fresh install with no prior edits, extract the default from the zip.
                         if (string.Equals(entry.Name, "WebSitesWhitelist.json",
                                 StringComparison.OrdinalIgnoreCase) &&
-                            (PendingWhitelist != null || File.Exists(fullPath)))
+                            File.Exists(fullPath))
                         {
                             current++;
                             progress?.Report((double)current / total * 100);
@@ -207,22 +190,16 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         // ── Whitelist ────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Writes the user-edited whitelist to disk after extraction.
-        ///
-        /// Called unconditionally from InstallPage after ExtractAsync — it is a no-op
-        /// when PendingWhitelist is null (user did not edit the list this session).
-        ///
-        /// Do NOT call this before ExtractAsync — the install folder may not exist yet.
-        /// Do NOT call this from anywhere other than InstallPage.
+        /// Writes the given whitelist JSON to disk immediately.
+        /// Called directly from ComponentSettingsPage when the user clicks OK in
+        /// WhitelistEditorDialog — self-contained, no dependency on install order.
         /// </summary>
-        public static void ApplyPendingWhitelist()
+        public static void ApplyPendingWhitelist(string json)
         {
-            // null = user never opened the dialog → nothing to do, existing or default file is correct
-            if (string.IsNullOrEmpty(PendingWhitelist)) return;
             try
             {
                 string dest = Path.Combine(InstallPath, "WebSitesWhitelist.json");
-                File.WriteAllText(dest, PendingWhitelist, System.Text.Encoding.UTF8);
+                File.WriteAllText(dest, json, System.Text.Encoding.UTF8);
             }
             catch { }
         }

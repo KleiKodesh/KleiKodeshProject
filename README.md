@@ -10,7 +10,7 @@
 
 ## מה התוסף כולל
 
-- **כזית** — גישה למאגר הספרים של זית ישירות בתוך וורד
+- **כתבי הקודש** — גישה למאגר הספרים של זית ישירות בתוך וורד
 - **חיפוש רגקס** — חיפוש והחלפה עם ביטויים רגולריים מעבר ליכולות וורד
 - **עיצוב תורני** — כלים לעיצוב מסמכים כפי שמקובל בספרי קודש
 - **קורא קיוויקס** - קורא קבצי זים (אתרי ויקי ללא חיבור לאינטרנט)
@@ -28,9 +28,9 @@
 | [`KleiKodeshVsto/Kiwix`](KleiKodeshVsto/Kiwix/KIWIX_CHANGES.md)                                     | WinForms + JS         | קורא קבצי ZIM (Kiwix) — WebView2 עם kiwix-js מותאם   |
 | [`WpfLib`](WpfLib/README.md)                                                                         | WPF Class Library     | כלי WPF משותפים — ViewModelBase, converters, controls |
 | [`UpdateCheckerLib`](UpdateCheckerLib/UpdateChecker.cs)                                              | .NET Library          | בדיקת עדכונים מ-GitHub והורדתם                        |
-| [`Kezayit`](Kezayit/README.md)                                                                       | Vue 3 + TypeScript    | ספרייה לצפייה במאגר הספרים של זית / אוצריא            |
-| [`Kezayit/CSharpBackend/KezayitLib`](Kezayit/CSharpBackend/KezayitLib/README.md)                     | .NET Library          | WebView2 host לממשק Kezayit                           |
-| [`Kezayit/CSharpBackend/ftslib`](Kezayit/CSharpBackend/ftslib/README.md) | .NET Library          | מנוע חיפוש Bloom filter                               |
+| [`KitveiHakodesh`](KitveiHakodesh/README.md)                                                                       | Vue 3 + TypeScript    | ספרייה לצפייה במאגר הספרים של זית / אוצריא            |
+| [`KitveiHakodesh/CSharpBackend/KitveiHakodeshLib`](KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/README.md)                     | .NET Library          | WebView2 host לממשק KitveiHakodesh                           |
+| [`KitveiHakodesh/CSharpBackend/FtsLib`](KitveiHakodesh/CSharpBackend/FtsLib/README.md) | .NET Library          | מנוע חיפוש Bloom filter                               |
 | [`kleikodesh.github.io`](kleikodesh.github.io/README.md)                                             | Static HTML/CSS/JS    | אתר הפרויקט הציבורי ודף ההורדה                        |
 
 ## ארכיטקטורה
@@ -46,10 +46,10 @@ Build/Installer  ──installs──▶  KleiKodeshVsto (Word add-in)
                             │
           ┌─────────────────┼──────────────────┬──────────────┐
           │                 │                  │              │
-      Kezayit           DocDesign         RegexFindLib   WebSitesLib
+   KitveiHakodesh      DocDesign         RegexFindLib   WebSitesLib
   (Vue in WebView2)  (WPF formatting)    (WPF regex UI)  (WPF + WebView2)
           │
-    KezayitLib (C# backend)
+    KitveiHakodeshLib (C# backend)
           │
   FtsLib + SQLite database
 

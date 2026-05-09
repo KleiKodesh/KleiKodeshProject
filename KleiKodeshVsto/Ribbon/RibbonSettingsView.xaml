@@ -93,11 +93,11 @@
                     <!--
                         IMPORTANT — control names are registry settings keys.
                         InitializeControls() iterates VisibleSettingsPanel.Children and passes cb.Name
-                        directly to SettingsManager as the key (e.g. "Kezayit_Visible").
+                        directly to SettingsManager as the key (e.g. "KitveiHakodesh_Visible").
                         Do NOT rename these — the name IS the key.
                         Format: {ComponentId}_Visible
                     -->
-                    <CheckBox x:Name="Kezayit_Visible"    Content="כזית"/>
+                    <CheckBox x:Name="KitveiHakodesh_Visible"    Content="כתבי הקודש"/>
                     <CheckBox x:Name="Kiwix_Visible"      Content="קיוויקס"/>
                     <CheckBox x:Name="WebSites_Visible"   Content="דרך האתרים"/>
                     <CheckBox x:Name="KleiKodesh_Visible" Content="עיצוב תורני"/>
@@ -112,12 +112,12 @@
                     <!--
                         IMPORTANT — control names encode the settings value.
                         InitializeControls() iterates OptionsSettingsPanel.Children and derives the
-                        DefaultButton value by stripping "_Option" from rb.Name (e.g. "Kezayit_Option" → "Kezayit").
+                        DefaultButton value by stripping "_Option" from rb.Name (e.g. "KitveiHakodesh_Option" → "KitveiHakodesh").
                         Do NOT rename these — the name IS the value.
                         Format: {ComponentId}_Option  (ComponentId must match the one used in _Visible above)
                         Settings_Option is the fallback and is not tied to a visibility checkbox.
                     -->
-                    <RadioButton x:Name="Kezayit_Option"    Content="כזית"        IsEnabled="{Binding IsChecked, ElementName=Kezayit_Visible}"/>
+                    <RadioButton x:Name="KitveiHakodesh_Option"    Content="כתבי הקודש"        IsEnabled="{Binding IsChecked, ElementName=KitveiHakodesh_Visible}"/>
                     <RadioButton x:Name="Kiwix_Option"      Content="קיוויקס"     IsEnabled="{Binding IsChecked, ElementName=Kiwix_Visible}"/>
                     <RadioButton x:Name="WebSites_Option"   Content="דרך האתרים"  IsEnabled="{Binding IsChecked, ElementName=WebSites_Visible}"/>
                     <RadioButton x:Name="KleiKodesh_Option" Content="עיצוב תורני" IsEnabled="{Binding IsChecked, ElementName=KleiKodesh_Visible}"/>

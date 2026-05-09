@@ -168,7 +168,7 @@
                 <!--
                     IMPORTANT — control names are registry settings keys.
                     LoadSettings() iterates VisibleSettingsPanel.Children and passes cb.Name
-                    directly to SettingsManager as the key (e.g. "Kezayit_Visible").
+                    directly to SettingsManager as the key (e.g. "KitveiHakodesh_Visible").
                     Do NOT rename these to follow UI naming conventions — the name IS the key.
                     Format: {ComponentId}_Visible
                 -->
@@ -182,7 +182,7 @@
                             <Setter Property="Cursor"                  Value="Hand"/>
                         </Style>
                     </StackPanel.Resources>
-                    <CheckBox x:Name="Kezayit_Visible"    Content="ספריית כזית"/>
+                    <CheckBox x:Name="KitveiHakodesh_Visible"    Content="ספריית כתבי הקודש"/>
                     <CheckBox x:Name="Kiwix_Visible"      Content="ספריית קיוויקס"/>
                     <CheckBox x:Name="WebSites_Visible"   Content="דרך האתרים"/>
                     <CheckBox x:Name="DocDesign_Visible"  Content="עיצוב תורני"/>
@@ -201,9 +201,9 @@
                 <!--
                     IMPORTANT — control names encode the settings value.
                     LoadSettings() iterates OptionsSettingsPanel.Children and derives the
-                    DefaultButton value by stripping "_Option" from rb.Name (e.g. "Kezayit_Option"
-                    → saves "Kezayit"). Do NOT rename these to follow UI naming conventions.
-                    Format: {ComponentId}_Option  (must match the ComponentId used in Kezayit_Visible etc.)
+                    DefaultButton value by stripping "_Option" from rb.Name (e.g. "KitveiHakodesh_Option"
+                    → saves "KitveiHakodesh"). Do NOT rename these to follow UI naming conventions.
+                    Format: {ComponentId}_Option  (must match the ComponentId used in KitveiHakodesh_Visible etc.)
                 -->
                 <StackPanel x:Name="OptionsSettingsPanel">
                     <StackPanel.Resources>
@@ -215,7 +215,7 @@
                             <Setter Property="Cursor"                  Value="Hand"/>
                         </Style>
                     </StackPanel.Resources>
-                    <RadioButton x:Name="Kezayit_Option"    Content="ספריית כזית"/>
+                    <RadioButton x:Name="KitveiHakodesh_Option"    Content="ספריית כתבי הקודש"/>
                     <RadioButton x:Name="Kiwix_Option"      Content="ספריית קיוויקס"/>
                     <RadioButton x:Name="WebSites_Option"   Content="דרך האתרים"/>
                     <RadioButton x:Name="DocDesign_Option"  Content="עיצוב תורני"/>

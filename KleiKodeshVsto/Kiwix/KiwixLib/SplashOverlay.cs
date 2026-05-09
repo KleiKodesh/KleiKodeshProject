@@ -14,7 +14,7 @@ namespace KiwixLib
             return (c.R + c.G + c.B) / 3 < 128;
         }
 
-        // Dot config — matches KezayitLib SplashOverlay exactly
+        // Dot config — matches KitveiHakodeshLib SplashOverlay exactly
         private const int   DotCount    = 3;
         private const float DotBaseR    = 9f;
         private const float DotMinScale = 0.6f;

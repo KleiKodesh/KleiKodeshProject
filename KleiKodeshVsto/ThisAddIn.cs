@@ -1,6 +1,6 @@
-﻿using KezayitLib.Dictionary;
+﻿using KitveiHakodeshLib.Dictionary;
 using KleiKodesh.Ribbon;
-using KezayitLib.Pdf;
+using KitveiHakodeshLib.Pdf;
 using UpdateCheckerLib;
 using Office = Microsoft.Office.Core;
 

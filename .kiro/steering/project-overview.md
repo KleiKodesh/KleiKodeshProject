@@ -16,9 +16,9 @@ The **main application** is the **WPF installer** (`Build/Installer`). It instal
 - `WebSitesLib` — WPF library for curated website browser task pane
 - `UpdateCheckerLib` — Library for checking and downloading updates from GitHub
 - `WpfLib` — Shared WPF utilities and helpers
-- `Kezayit` (Vue/TypeScript) — frontend for the Kezayit seforim viewer
-- `Kezayit/CSharpBackend/KezayitLib` — C# backend for the Kezayit WebView2 app
-- `Kezayit/CSharpBackend/BloomSearchEngineLib` — Bloom filter search engine
+- `KitveiHakodesh` (Vue/TypeScript) — frontend for the KitveiHakodesh seforim viewer
+- `KitveiHakodesh/CSharpBackend/KitveiHakodeshLib` — C# backend for the KitveiHakodesh WebView2 app
+- `KitveiHakodesh/CSharpBackend/BloomSearchEngineLib` — Bloom filter search engine
 
 ## Website Whitelist (Installer)
 
@@ -46,7 +46,7 @@ On startup (`SearchHandler.OnDbReady`), if the installed app version (from regis
 
 - **MSBuild** (for VSTO and WPF projects requiring VS tools): `C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe`
 - **Full solution build**: `& "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe" KleiKodeshProject.slnx /m /nologo /verbosity:minimal`
-- **dotnet build** works for SDK-style projects only (`Build/Installer`, `KezayitLib`, `BloomSearchEngineLib`). Old-style WPF/VSTO projects (`KleiKodeshVsto`, `WpfLib`) require MSBuild from VS.
+- **dotnet build** works for SDK-style projects only (`Build/Installer`, `KitveiHakodeshLib`, `BloomSearchEngineLib`). Old-style WPF/VSTO projects (`KleiKodeshVsto`, `WpfLib`) require MSBuild from VS.
 
 ## NuGet Quirk — Native Interop DLLs Don't Propagate Transitively
 
@@ -54,7 +54,7 @@ On startup (`SearchHandler.OnDbReady`), if the installed app version (from regis
 
 **Consequence:** If project A references project B, and B uses SQLite, A's output will be missing `SQLite.Interop.dll` → `DllNotFoundException` at runtime (not at build time).
 
-**Fix applied:** `KleiKodeshVsto` references `KezayitLib` which uses SQLite. Since `KleiKodeshVsto` doesn't directly reference SQLite, the interop DLL was explicitly added as `Content` items in `KleiKodeshVsto.csproj`:
+**Fix applied:** `KleiKodeshVsto` references `KitveiHakodeshLib` which uses SQLite. Since `KleiKodeshVsto` doesn't directly reference SQLite, the interop DLL was explicitly added as `Content` items in `KleiKodeshVsto.csproj`:
 
 ```xml
 <Content Include="..\packages\Stub.System.Data.SQLite.Core.NetFramework.1.0.119.0\build\net46\x64\SQLite.Interop.dll">
@@ -81,8 +81,8 @@ Each project folder contains a `README.md` describing its purpose, folder struct
 | [`KleiKodeshVsto/DocDesign/README.md`](../../KleiKodeshVsto/DocDesign/README.md)                                                                   | Torah formatting library: Columns, Paragraphs, Spacing             |
 | [`KleiKodeshVsto/RegexInWord/RegexFindLib/README.md`](../../KleiKodeshVsto/RegexInWord/RegexFindLib/README.md)                                         | Regex find & replace library for Word                              |
 | [`WebSitesLib/README.md`](../../WebSitesLib/README.md)                                                               | Curated website browser task pane                                  |
-| [`Kezayit/README.md`](../../Kezayit/README.md)                                                                       | Vue 3 frontend: components, stores, host bridge, build             |
-| [`Kezayit/CSharpBackend/README.md`](../../Kezayit/CSharpBackend/README.md)                                           | C# backend projects overview                                       |
-| [`Kezayit/CSharpBackend/KezayitLib/README.md`](../../Kezayit/CSharpBackend/KezayitLib/README.md)                     | WebView2 host, message bridge, all handlers                        |
-| [`Kezayit/CSharpBackend/BloomSearchEngineLib/README.md`](../../Kezayit/CSharpBackend/BloomSearchEngineLib/README.md) | Bloom filter search engine: indexing, searching, version detection |
+| [`KitveiHakodesh/README.md`](../../KitveiHakodesh/README.md)                                                                       | Vue 3 frontend: components, stores, host bridge, build             |
+| [`KitveiHakodesh/CSharpBackend/README.md`](../../KitveiHakodesh/CSharpBackend/README.md)                                           | C# backend projects overview                                       |
+| [`KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/README.md`](../../KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/README.md)                     | WebView2 host, message bridge, all handlers                        |
+| [`KitveiHakodesh/CSharpBackend/BloomSearchEngineLib/README.md`](../../KitveiHakodesh/CSharpBackend/BloomSearchEngineLib/README.md) | Bloom filter search engine: indexing, searching, version detection |
 | [`kleikodesh.github.io/README.md`](../../kleikodesh.github.io/README.md)                                             | Public website (GitHub Pages)                                      |

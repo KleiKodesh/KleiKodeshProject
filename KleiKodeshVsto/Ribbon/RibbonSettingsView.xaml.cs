@@ -18,7 +18,7 @@ namespace KleiKodesh.Ribbon
 
         private void InitializeControls()
         {
-            // cb.Name IS the registry key (e.g. "Kezayit_Visible") — do not rename the controls.
+            // cb.Name IS the registry key (e.g. "KitveiHakodesh_Visible") — do not rename the controls.
             foreach (CheckBox cb in VisibleSettingsPanel.Children.OfType<CheckBox>())
             {
                 cb.IsChecked = SettingsManager.GetBool("Ribbon", cb.Name, true);

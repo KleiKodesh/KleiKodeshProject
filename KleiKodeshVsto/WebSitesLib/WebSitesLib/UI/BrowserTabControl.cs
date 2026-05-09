@@ -117,8 +117,15 @@ namespace WebSitesLib.UI
                 return;
             }
             string json = File.ReadAllText(WhitelistPath);
-            WebAddressModels = JsonSerializer.Deserialize<ObservableCollection<WebAddressModel>>(json,
+            var all = JsonSerializer.Deserialize<List<WebAddressModel>>(json,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            // Filter out entries marked IsVisible=false.
+            // The default whitelist ships with IsVisible fields to hide certain entries.
+            // User-customised files (written by the installer) omit the field entirely,
+            // so IsVisible defaults to true and all entries are shown.
+            WebAddressModels = new ObservableCollection<WebAddressModel>(
+                all.Where(m => m.IsVisible));
         }
 
         #endregion
