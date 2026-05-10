@@ -86,7 +86,11 @@ namespace KleiKodesh.Helpers
                 content.Dock = DockStyle.Fill;
                 _form.Controls.Add(content);
 
-                SetOwner(_form.Handle);
+                _form.Load += (_, __) => { FormSettingsHelper.LoadFormSettings(_form, "KleiKodesh", content.AccessibleName); };
+                _form.FormClosing += (_, __) => { FormSettingsHelper.SaveFormSettings(_form, "KleiKodesh", content.AccessibleName); };
+         
+
+            SetOwner(_form.Handle);
 
                 _form.FormClosing += OnFormClosing;
                 _pane.VisibleChanged += OnPaneVisibilityChanged;
@@ -137,7 +141,7 @@ namespace KleiKodesh.Helpers
         {
             // When user closes popout window, make host visible (which triggers pop-in)
             if (!_host.IsDisposed)
-                _host.Invoke(new Action(() => _host.Visible = true));
+                PopIn();
         }
 
         void OnPaneVisibilityChanged(object sender, EventArgs e)

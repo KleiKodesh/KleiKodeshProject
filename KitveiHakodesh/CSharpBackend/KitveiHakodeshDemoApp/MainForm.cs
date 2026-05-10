@@ -24,6 +24,16 @@ namespace KitveiHakodeshDemoApp
             Controls.Add(_viewer);
         }
 
+        private void MainForm_Load(object sender, EventArgs e)
+        {
+            FormSettingsHelper.LoadFormSettings(this, "ZayitApp", "KitveiHakodeshMain");
+        }
+
+        private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            FormSettingsHelper.SaveFormSettings(this, "ZayitApp", "KitveiHakodeshMain");
+        }
+
         private static Icon CreateWindowIcon()
         {
             using (var executableIcon = Icon.ExtractAssociatedIcon(Application.ExecutablePath))

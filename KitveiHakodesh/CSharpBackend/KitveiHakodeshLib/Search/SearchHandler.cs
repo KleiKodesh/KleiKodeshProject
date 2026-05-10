@@ -147,11 +147,18 @@ namespace KitveiHakodeshLib.Search
                 return;
             }
 
-            // No version stamp — interrupted build. Resume from where we left off.
-            // IndexWriter handles crash recovery internally (WAL replay).
-            // If there is a progress file, BuildIndex will call ReadLinesFrom to skip
-            // already-indexed lines. If there is no progress file, it starts from the
-            // beginning — which is safe because IndexWriter appends to existing segments.
+            // No version stamp — could be an interrupted build or a stale index from
+            // a previous install. Decide whether to resume or wipe based on the
+            // progress file.
+            //
+            // Resume is only safe when a progress file exists: it records the exact
+            // line ID up to which segments are consistent, so BuildIndex can call
+            // ReadLinesFrom and append without duplicating anything.
+            //
+            // If there is no progress file but segments already exist on disk, we
+            // cannot know whether those segments are complete, partial, or from a
+            // different database version. Appending would duplicate every line that
+            // was already indexed. Wipe and rebuild from scratch.
             _indexState.GetIndex().GetResumeState(out int resumeLineId, out _, out _);
             if (resumeLineId > 0)
             {
@@ -160,7 +167,27 @@ namespace KitveiHakodeshLib.Search
             }
             else
             {
-                Console.WriteLine("[SearchHandler] No progress file — starting fresh build");
+                // No progress file. Check whether stale segments exist.
+                bool staleSegmentsExist = false;
+                try
+                {
+                    staleSegmentsExist = Directory.Exists(FtsIndexState.FtsIndexPath) &&
+                                         Directory.GetFiles(FtsIndexState.FtsIndexPath, "seg_*.dat").Length > 0;
+                }
+                catch { }
+
+                if (staleSegmentsExist)
+                {
+                    Console.WriteLine("[SearchHandler] No progress file but stale segments found " +
+                        "(reinstall or leftover index) — wiping index for clean rebuild");
+                    FtsIndexState.DeleteFtsIndex();
+                    _indexState.SetDatabase(_indexState.GetDbPath(),
+                        new SeforimIndex(FtsIndexState.FtsIndexPath, dbPath));
+                }
+                else
+                {
+                    Console.WriteLine("[SearchHandler] No progress file — starting fresh build");
+                }
             }
 
             Console.WriteLine("[SearchHandler] Starting FTS index build...");
