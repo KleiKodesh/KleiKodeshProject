@@ -154,6 +154,7 @@ function onSearchEnter() {
       <LoadingAnimation v-if="loading" />
       <div v-else-if="error" class="state error">
         <span class="error-msg">{{ error }}</span>
+        <button class="retry-btn" @click="load()">נסה שוב</button>
         <template v-if="isBitnessMismatch(error)">
           <div v-if="diagLoading" class="diag-loading">אוסף נתוני אבחון...</div>
           <div v-else-if="diagData" class="diag-panel">
@@ -263,6 +264,14 @@ function onSearchEnter() {
 }
 .error-msg {
   display: block;
+  margin-bottom: 12px;
+}
+.retry-btn {
+  height: 32px;
+  padding: 0 16px;
+  font-size: 13px;
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
   margin-bottom: 16px;
 }
 .diag-loading {

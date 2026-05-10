@@ -139,6 +139,19 @@ namespace KitveiHakodeshLib.Pdf
             _bridge.Reply(id, new { ok = true });
         }
 
+        /// <summary>
+        /// Releases all remaining virtual host mappings. Call on app shutdown so WebView2
+        /// does not hold folder handles after the process exits.
+        /// </summary>
+        public void DisposeAllHosts()
+        {
+            foreach (var kvp in _hosts)
+            {
+                try { _webView.CoreWebView2?.ClearVirtualHostNameToFolderMapping(kvp.Value.HostName); } catch { }
+            }
+            _hosts.Clear();
+        }
+
         private string RegisterFolder(string filePath)
         {
             string folder = Path.GetDirectoryName(filePath);

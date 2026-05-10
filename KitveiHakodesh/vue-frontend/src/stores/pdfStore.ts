@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, watch } from 'vue'
 import { useTabStore } from './tabStore'
-import { restoreLocalPdf, restoreHbPdf } from '@/webview-host/bridge'
+import { disposePdfHost, restoreLocalPdf, restoreHbPdf } from '@/webview-host/bridge'
 import { onWebviewEvent } from '@/webview-host/seforimDb'
 
 export const usePdfStore = defineStore('pdf', () => {
@@ -116,6 +116,9 @@ export const usePdfStore = defineStore('pdf', () => {
         pdfConverting: false,
       })
     } else {
+      // Conversion failed — dispose any virtual host that was registered for this tab
+      // before navigating away, so the mapping is not left open.
+      if (tab.pdfFilePath) disposePdfHost(tab.pdfFilePath)
       tabStore.updateTab(tabId, {
         route: '/',
         title: 'בית',
@@ -130,6 +133,9 @@ export const usePdfStore = defineStore('pdf', () => {
   /** Cancel an in-progress conversion — resets the tab to home. */
   function cancelConversion(tabId: string) {
     _converting.delete(tabId)
+    // Dispose the virtual host before clearing pdfFilePath so the mapping is released.
+    const tab = tabStore.tabs.find((t) => t.id === tabId)
+    if (tab?.pdfFilePath) disposePdfHost(tab.pdfFilePath)
     tabStore.updateTab(tabId, {
       route: '/',
       title: 'בית',

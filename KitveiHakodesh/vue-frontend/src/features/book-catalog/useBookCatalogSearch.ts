@@ -129,6 +129,8 @@ export function useBookCatalogSearch(searchQuery: ReturnType<typeof ref<string>>
 
         // Persist to disk cache (fire-and-forget — UI is already updated)
         if (items.length > 0) setCatalogTocCache(normalizedQuery, items)
+      } catch {
+        if (generation === searchGeneration) results.value = []
       } finally {
         if (generation === searchGeneration) searching.value = false
       }

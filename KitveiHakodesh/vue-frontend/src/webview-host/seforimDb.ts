@@ -26,11 +26,19 @@ let _schemaDetecting: Promise<void> | null = null
 export function ensureCategorySchema(): Promise<void> {
   if (_schemaDetected) return Promise.resolve()
   if (_schemaDetecting) return _schemaDetecting
-  _schemaDetecting = query<{ name: string }>('PRAGMA table_info(category)', []).then((cols) => {
-    categoryHasOrderIndex = cols.some((c) => c.name === 'orderIndex')
-    _schemaDetected = true
-    _schemaDetecting = null
-  })
+  _schemaDetecting = query<{ name: string }>('PRAGMA table_info(category)', [])
+    .then((cols) => {
+      categoryHasOrderIndex = cols.some((c) => c.name === 'orderIndex')
+      _schemaDetected = true
+    })
+    .catch(() => {
+      // Schema detection failed — proceed with the safe default (no orderIndex)
+      categoryHasOrderIndex = false
+      _schemaDetected = true
+    })
+    .finally(() => {
+      _schemaDetecting = null
+    })
   return _schemaDetecting
 }
 
@@ -74,5 +82,8 @@ export async function query<T = unknown>(sql: string, params: unknown[] = []): P
   if (typeof window.__webviewQuery === 'function') {
     return (await window.__webviewQuery(sql, params)).rows as T[]
   }
+  // In the hosted environment without a DB (user skipped setup), return empty
+  // results rather than falling through to the dev fetch which would fail.
+  if (isHosted && !dbReady.value) return []
   return devQuery<T>(sql, params)
 }

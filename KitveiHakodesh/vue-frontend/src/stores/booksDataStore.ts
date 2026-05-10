@@ -37,10 +37,22 @@ export const useBooksDataStore = defineStore('booksData', () => {
     loadPromise = (async () => {
       try {
         await ensureCategorySchema()
-        const [categories, books] = await Promise.all([
-          query<CategoryRow>(SQL.GET_ALL_CATEGORIES(categoryHasOrderIndex)),
-          query<BookRow>(SQL.GET_ALL_BOOKS),
-        ])
+        let categories: CategoryRow[] = []
+        let books: BookRow[] = []
+        try {
+          ;[categories, books] = await Promise.all([
+            query<CategoryRow>(SQL.GET_ALL_CATEGORIES(categoryHasOrderIndex)),
+            query<BookRow>(SQL.GET_ALL_BOOKS),
+          ])
+        } catch (e) {
+          // If the combined fetch fails, try each query individually so a broken
+          // books table doesn't prevent categories from loading (and vice versa).
+          try { categories = await query<CategoryRow>(SQL.GET_ALL_CATEGORIES(categoryHasOrderIndex)) } catch { /* use empty */ }
+          try { books = await query<BookRow>(SQL.GET_ALL_BOOKS) } catch { /* use empty */ }
+          // Only surface an error if we got nothing at all
+          if (!categories.length && !books.length) throw e
+        }
+
         const children = buildTree(categories, books)
         const orderedBooks = assignFullPaths(children)
 

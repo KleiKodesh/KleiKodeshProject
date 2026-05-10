@@ -9237,7 +9237,7 @@ class RenderableView {
 ;// ./web/pdf_rendering_queue.js
 
 
-const CLEANUP_TIMEOUT = 30000;
+const CLEANUP_TIMEOUT = 5000; // Custom: reduced from 30000ms to 5000ms — frees canvas memory sooner when the user stops scrolling
 class PDFRenderingQueue {
   #highestPriorityPage = null;
   #idleTimeout = null;
@@ -20384,6 +20384,42 @@ function getViewerConfiguration() {
 }
 function webViewerLoad() {
   const config = getViewerConfiguration();
+
+  // Custom: override AppOptions before the viewer initialises.
+  // Most viewer options cannot be set via URL params — they are only readable
+  // from the URL hash for a small allowlisted set (disableAutoFetch etc.).
+  // All other options must be set here, before PDFViewerApplication.run().
+  //
+  // These overrides reduce memory consumption for a read-only Hebrew book
+  // reader where editing, scripting, and auto-linking are never needed.
+  AppOptions.setAll({
+    // Disable PDF JavaScript scripting. Hebrew books are scanned documents
+    // with no embedded JS. The scripting engine (PDFScriptingManager) loads
+    // a full sandbox and costs memory even when no scripts exist in the PDF.
+    enableScripting: false,
+
+    // Disable the detail canvas overlay. This second high-resolution canvas
+    // is created on top of the main canvas when the user zooms in. It doubles
+    // canvas memory at high zoom levels. Hebrew text is readable without it.
+    enableDetailCanvas: false,
+
+    // Leave annotationMode and annotationEditorMode at their defaults so the
+    // full annotation editor toolbar (highlight, freetext, signature, etc.)
+    // remains available and existing PDF annotations render normally.
+
+    // Disable auto-linking. PDF.js scans every text span for URLs and wraps
+    // them in anchor tags. Hebrew books have no hyperlinks in body text.
+    // This saves DOM nodes on every rendered page.
+    enableAutoLinking: false,
+
+    // Cap the maximum canvas size to ~16 million pixels (4096×4096).
+    // The default is 2^25 (~33M pixels). At high zoom levels a single canvas
+    // can consume hundreds of MB. This cap forces tiled rendering for very
+    // large pages instead of one giant canvas, keeping peak memory bounded.
+    // Normal reading zoom levels are well under this cap.
+    maxCanvasPixels: 4096 * 4096,
+  });
+
   const event = new CustomEvent("webviewerloaded", {
     bubbles: true,
     cancelable: true,

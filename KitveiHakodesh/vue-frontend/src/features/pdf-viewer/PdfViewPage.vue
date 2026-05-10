@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { usePdfStore } from '@/stores/pdfStore'
 import { useTabStore } from '@/stores/tabStore'
 import { syncPdfViewerTheme } from '@/theme/themes'
@@ -16,6 +16,17 @@ const pdfOcrStore = usePdfOcrStore()
 
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 const ocr = usePdfOcrSelection(() => iframeRef.value)
+
+// Aggressively tear down the iframe when this tab unmounts so the PDF.js worker,
+// all rendered canvases, and the WebView2 sub-frame are released immediately
+// rather than waiting for the browser's garbage collector.
+onBeforeUnmount(() => {
+  if (iframeRef.value) {
+    iframeRef.value.src = 'about:blank'
+    iframeRef.value.remove()
+    iframeRef.value = null
+  }
+})
 
 // Sync composable active state with store
 watch(pdfOcrStore, () => {
@@ -41,7 +52,10 @@ const iframeSrc = computed(() => {
   if (!url) return null
   const p = new URLSearchParams({ file: url, locale: 'he', cMapPacked: 'true' })
   if (pdfStore.fileName) p.set('filename', encodeURIComponent(pdfStore.fileName))
-  return `/pdfjs/web/viewer.html?${p}`
+  // disableAutoFetch is passed via hash — it is the only memory-relevant option
+  // that viewer.mjs reads from the URL. All other memory options are patched
+  // directly into viewer.mjs via the AppOptions override block near webViewerLoad.
+  return `/pdfjs/web/viewer.html?${p}#disableAutoFetch=true`
 })
 
 function cancelConversion() {

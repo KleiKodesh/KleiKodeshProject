@@ -29,16 +29,37 @@ function customLast(a: { id: number }, b: { id: number }): number {
 export function buildTree(categories: CategoryRow[], books: BookRow[]): CategoryNode[] {
   const map = new Map<number, CategoryNode>()
   for (const cat of categories) map.set(cat.id, { ...cat, children: [], books: [] })
-  for (const book of books) map.get(book.categoryId)?.books.push(book)
+
+  const orphanedBooks: BookRow[] = []
+  for (const book of books) {
+    const node = map.get(book.categoryId)
+    if (node) node.books.push(book)
+    else orphanedBooks.push(book)
+  }
+
   const roots: CategoryNode[] = []
   for (const node of map.values())
-    node.parentId == null ? roots.push(node) : map.get(node.parentId)?.children.push(node)
+    node.parentId == null ? roots.push(node) : (map.get(node.parentId)?.children.push(node) ?? roots.push(node))
+
   // Sort custom entries (negative IDs) to the end at every level
   for (const node of map.values()) {
     node.children.sort(customLast)
     node.books.sort(customLast)
   }
   roots.sort(customLast)
+
+  // Attach orphaned books (missing category row) to a synthetic node at the end
+  if (orphanedBooks.length > 0) {
+    roots.push({
+      id: -999999,
+      parentId: null,
+      title: 'ספרים נוספים',
+      level: 0,
+      children: [],
+      books: orphanedBooks,
+    })
+  }
+
   return roots
 }
 

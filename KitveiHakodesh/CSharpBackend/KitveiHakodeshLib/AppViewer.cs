@@ -32,9 +32,70 @@ namespace KitveiHakodeshLib
         private static Task<CoreWebView2Environment> GetSharedEnv()
         {
             if (_sharedEnvTask == null)
+            {
+                var options = new CoreWebView2EnvironmentOptions
+                {
+                    // Disable background features that are irrelevant for a local book reader
+                    // and consume memory/CPU unnecessarily.
+                    //
+                    // --disable-background-networking   — no background sync, prefetch, or
+                    //                                     safe-browsing pings
+                    // --disable-client-side-phishing-detection — no ML phishing model loaded
+                    // --disable-default-apps            — no default app installation checks
+                    // --disable-extensions              — no browser extension support
+                    // --disable-sync                    — no Edge/Chrome profile sync
+                    // --disable-translate               — no translation bar or model download
+                    // --no-first-run                    — skip first-run experience dialogs
+                    // --no-default-browser-check        — skip default browser prompt
+                    //
+                    // V8 heap limits:
+                    // --js-flags=--max_old_space_size=512
+                    //   Caps the V8 old-generation (long-lived objects) heap at 512 MB.
+                    //   Default is ~4 GB on 64-bit. A book reader does not need gigabytes
+                    //   of JS heap; capping it forces V8 to run GC more aggressively and
+                    //   prevents runaway memory growth from accumulated closures, caches,
+                    //   and PDF.js decoded page data.
+                    // --js-flags=--max_semi_space_size=4
+                    //   Caps the young-generation (short-lived objects) semi-space at 4 MB.
+                    //   Default is ~8 MB. Smaller semi-space = more frequent minor GCs,
+                    //   which keeps short-lived allocations (render frames, event objects)
+                    //   from accumulating before collection.
+                    //
+                    // --disable-features=CalculateNativeWinOcclusion
+                    //   Disables Windows occlusion tracking (detecting when the window is
+                    //   covered by another window). We handle our own suspension via
+                    //   TrySuspendAsync on VisibleChanged; the native occlusion tracker
+                    //   adds background thread overhead with no benefit here.
+                    AdditionalBrowserArguments =
+                        "--disable-background-networking " +
+                        "--disable-client-side-phishing-detection " +
+                        "--disable-default-apps " +
+                        "--disable-extensions " +
+                        "--disable-sync " +
+                        "--disable-translate " +
+                        "--no-first-run " +
+                        "--no-default-browser-check " +
+                        "--js-flags=\"--max_old_space_size=512 --max_semi_space_size=4\" " +
+                        "--disable-features=CalculateNativeWinOcclusion",
+
+                    // Disable tracking prevention — all content is local or from a single
+                    // trusted domain; the feature adds overhead with no benefit here.
+                    EnableTrackingPrevention = false,
+                };
+
+                // Keep the User Data Folder in LocalApplicationData, not in the app's
+                // install directory. The performance article recommends a fast local disk
+                // path; LocalApplicationData is always on the system drive and avoids
+                // ACL overhead that can occur inside Program Files.
+                string udf = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "KitveiHakodesh", "webcache");
+
                 _sharedEnvTask = CoreWebView2Environment.CreateAsync(
                     browserExecutableFolder: null,
-                    userDataFolder: Path.Combine(AppDir, "webcache"));
+                    userDataFolder: udf,
+                    options: options);
+            }
             return _sharedEnvTask;
         }
 
@@ -54,9 +115,57 @@ namespace KitveiHakodeshLib
         {
             AutoScaleMode = AutoScaleMode.None;
             BackColorChanged += (_, __) => _SyncSplashBackColor();
+            VisibleChanged += OnVisibleChanged;
             Controls.Add(_webView);
             _InitSplash();
             _ = InitAsync();
+        }
+
+        // Suspend the WebView2 renderer when the control is hidden (e.g. the host
+        // task pane is collapsed or the window is minimised) to free CPU and allow
+        // the OS to reclaim the renderer's memory pages.
+        // WebView2 resumes automatically when Visible becomes true again, so we
+        // only need to handle the hide direction explicitly.
+        private async void OnVisibleChanged(object sender, EventArgs e)
+        {
+            if (Visible)
+            {
+                // Restore the inner WebView2 control visibility so the resumed
+                // renderer can paint. WebView2 auto-resumes internally when its
+                // control becomes visible, but we hid _webView explicitly on
+                // suspend so we must un-hide it here.
+                _webView.Visible = true;
+
+                // Restore normal memory target so the renderer can use full resources
+                // now that the app is active again.
+                if (_webView.CoreWebView2 != null)
+                    _webView.CoreWebView2.MemoryUsageTargetLevel =
+                        CoreWebView2MemoryUsageTargetLevel.Normal;
+                return;
+            }
+
+            if (_webView.CoreWebView2 == null) return;   // not yet initialised
+            if (_webView.CoreWebView2.IsSuspended) return; // already suspended
+
+            // Signal the browser engine to drop cached data and swap memory to disk
+            // before suspending. This is the two-step pattern recommended by the
+            // WebView2 performance article: set Low first, then TrySuspendAsync.
+            _webView.CoreWebView2.MemoryUsageTargetLevel =
+                CoreWebView2MemoryUsageTargetLevel.Low;
+
+            // The API requires the WebView2 control's own Visible to be false.
+            // Our _webView fills the UserControl (Dock = Fill), so hiding the
+            // UserControl also hides _webView — but we set it explicitly to be safe.
+            _webView.Visible = false;
+            try
+            {
+                await _webView.CoreWebView2.TrySuspendAsync();
+            }
+            catch (Exception ex)
+            {
+                // Non-fatal — suspension is best-effort. Log and continue.
+                System.Diagnostics.Debug.WriteLine("[AppViewer] TrySuspendAsync failed: " + ex.Message);
+            }
         }
 
         private void _InitSplash()
@@ -117,6 +226,51 @@ namespace KitveiHakodeshLib
 
             await _webView.EnsureCoreWebView2Async(env);
 
+            // ── Disable WebView2 features the app does not use ────────────────────────
+            // These are set once after EnsureCoreWebView2Async and before the first
+            // navigation so they take effect for the entire session.
+            var settings = _webView.CoreWebView2.Settings;
+
+            // The app has its own zoom controls (Ctrl+±, pinch) — block the browser's
+            // built-in zoom so the two systems don't fight each other.
+            settings.IsZoomControlEnabled = false;
+
+            // No swipe-to-navigate — the app is a single-page reader, not a browser.
+            settings.IsSwipeNavigationEnabled = false;
+
+            // No autofill or password saving — the app has no login forms.
+            settings.IsGeneralAutofillEnabled = false;
+            settings.IsPasswordAutosaveEnabled = false;
+
+            // No status bar — the hover-URL tooltip at the bottom left is irrelevant
+            // in a native app and wastes a few pixels.
+            settings.IsStatusBarEnabled = false;
+
+            // Disable SmartScreen reputation checks — all content is served from local
+            // virtual hosts or trusted origins (HebrewBooks download). SmartScreen adds
+            // network round-trips and is meaningless for a local book reader.
+            settings.IsReputationCheckingRequired = false;
+
+            // Disable the default right-click context menu — the app provides its own
+            // context menus where needed. The browser menu exposes irrelevant items
+            // (Save image, Inspect, etc.) and is confusing in a native app context.
+            settings.AreDefaultContextMenusEnabled = false;
+
+            // Disable DevTools in production — users cannot open the inspector via
+            // F12 or right-click. This also prevents accidental exposure of internals.
+            // Remove this line (or set to true) during development if needed.
+            settings.AreDevToolsEnabled = false;
+
+            // Disable browser-specific accelerator keys (Ctrl+F, Ctrl+P, Ctrl+R, F5,
+            // F12, etc.). The app intercepts the keys it needs (Ctrl+F, Ctrl+W, etc.)
+            // via its own keyboard handling; the browser defaults would interfere.
+            settings.AreBrowserAcceleratorKeysEnabled = false;
+
+            // Show a blank page on navigation failure instead of the browser's styled
+            // error page. The app is a local reader — navigation errors are internal
+            // bugs, not user-facing web errors, so the browser error page is noise.
+            settings.IsBuiltInErrorPageEnabled = false;
+
             _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                 "KitveiHakodesh-vue-app", AppDir, CoreWebView2HostResourceAccessKind.Allow);
 
@@ -143,7 +297,7 @@ namespace KitveiHakodeshLib
             _db.OnDbPathPicked = path => _search.ResetAndReindex(path);
 
             _webView.CoreWebView2.WebMessageReceived += OnMessageReceived;
-            _webView.CoreWebView2.DownloadStarting += (s, e) => _hb.OnDownloadStarting(s, e);
+            _webView.CoreWebView2.DownloadStarting += OnDownloadStarting;
             _webView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
 
             _webView.Source = new Uri("http://KitveiHakodesh-vue-app/index.html");
@@ -190,6 +344,9 @@ namespace KitveiHakodeshLib
 
             _webView.CoreWebView2.Navigate("http://KitveiHakodesh-vue-app/index.html");
         }
+
+        private void OnDownloadStarting(object sender, CoreWebView2DownloadStartingEventArgs e)
+            => _hb.OnDownloadStarting(sender, e);
 
         private async void OnMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)
         {
@@ -315,5 +472,26 @@ namespace KitveiHakodeshLib
         /// Called by TaskPaneManager via reflection to wire up the popout toggle.
         /// </summary>
         public void SetPopOutToggleAction(Action action) => TogglePopOut = action;
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                // Unsubscribe all CoreWebView2 event handlers before the control is
+                // torn down. Leaving them attached creates reference cycles that prevent
+                // the renderer process from being released (per the WebView2 performance
+                // article: "Remove native event handlers before disposing WebView2 objects").
+                if (_webView.CoreWebView2 != null)
+                {
+                    _webView.CoreWebView2.WebMessageReceived -= OnMessageReceived;
+                    _webView.CoreWebView2.DownloadStarting -= _hb.OnDownloadStarting;
+                }
+
+                // Release all PDF virtual host mappings so WebView2 does not hold
+                // folder handles after the process exits.
+                _pdf?.DisposeAllHosts();
+            }
+            base.Dispose(disposing);
+        }
     }
 }

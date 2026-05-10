@@ -46,6 +46,9 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
       tocEntries.value = stripped
       tocSearchTree.value = new SearchableTree(stripped)
     } catch (e) {
+      // TOC load failed — show the book with no TOC rather than a blank page
+      tocEntries.value = []
+      tocSearchTree.value = new SearchableTree([])
       error.value = e instanceof Error ? e.message : 'שגיאה בטעינת תוכן עניינים'
     } finally {
       loading.value = false

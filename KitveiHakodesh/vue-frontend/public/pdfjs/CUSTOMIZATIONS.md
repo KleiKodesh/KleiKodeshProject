@@ -14,13 +14,15 @@ These files do not exist in the vanilla PDF.js dist and must be created fresh ea
 
 ### `web/pixel-ratio-override.js`
 
-Forces a minimum `devicePixelRatio` of 2 for sharp PDF rendering on low-DPI displays.
+Forces a minimum `devicePixelRatio` of 1.5 for sharp PDF rendering on low-DPI displays.
 Must be loaded **before** `viewer.mjs`.
+
+Why 1.5× and not 2×: each canvas uses `width × height × devicePixelRatio²` bytes. At 2× every canvas is 4× larger than at 1×; at 1.5× canvases are 2.25× larger — still noticeably sharper than 1×, but using only 56% of the memory that 2× would require. On displays already at ≥1.5× (125%+ Windows scaling, retina) this script is a no-op.
 
 ```js
 (function () {
   const original = window.devicePixelRatio || 1;
-  const enhanced = Math.max(original, 2);
+  const enhanced = Math.max(original, 1.5);
   if (enhanced !== original) {
     Object.defineProperty(window, 'devicePixelRatio', {
       get: function () { return enhanced; },
@@ -78,6 +80,41 @@ The `pixel-ratio-override.js` script tag must appear **before** `<script src="vi
 ---
 
 ## `web/viewer.mjs` — Patches
+
+### 0. Canvas cleanup timeout (memory)
+
+Search for: `const CLEANUP_TIMEOUT = 30000;`
+
+Replace with:
+```js
+const CLEANUP_TIMEOUT = 5000; // Custom: reduced from 30000ms to 5000ms — frees canvas memory sooner when the user stops scrolling
+```
+
+PDF.js waits this many milliseconds of idle time before calling `cleanup()` on off-screen pages, which releases their canvas memory. 30 seconds is too long for a book reader where users frequently switch tabs or close PDFs. 5 seconds releases memory much sooner without any visible impact on scrolling performance.
+
+---
+
+### 0b. Memory-reduction AppOptions overrides
+
+Search for: `function webViewerLoad() {`
+
+Add the following block immediately after `const config = getViewerConfiguration();` and before the `const event = new CustomEvent(...)` line:
+
+```js
+// Custom: override AppOptions before the viewer initialises.
+AppOptions.setAll({
+  enableScripting: false,       // no embedded JS in Hebrew books
+  enableDetailCanvas: false,    // no second high-res canvas overlay
+  // annotationMode and annotationEditorMode left at defaults so the full
+  // annotation editor (highlight, freetext, signature, etc.) is available
+  enableAutoLinking: false,     // no URL scanning in text layer
+  maxCanvasPixels: 4096 * 4096, // cap canvas at ~16M px, not 33M
+});
+```
+
+These options cannot be set via URL params — they are only settable via `AppOptions.setAll()` from inside the viewer's JS context. Setting them here, before `PDFViewerApplication.run()`, ensures they take effect before any page is rendered.
+
+---
 
 ### 1. Hebrew locale default
 

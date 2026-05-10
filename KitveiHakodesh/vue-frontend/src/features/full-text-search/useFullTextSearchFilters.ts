@@ -172,15 +172,17 @@ export function useFullTextSearchFilters(
 
   async function handleResultClick(result: FullTextSearchResult) {
     try {
-      const rows = await query<{ lineIndex: number }>(SQL.GET_LINE_INDEX_FROM_LINE_ID, [
-        result.lineId,
-      ])
+      const rows = await query<{ lineIndex: number; bookId: number }>(
+        SQL.GET_LINE_INDEX_FROM_LINE_ID,
+        [result.lineId],
+      )
       const lineIndex = rows[0]?.lineIndex
-      if (lineIndex == null) return
+      const bookId = rows[0]?.bookId
+      if (lineIndex == null || bookId == null) return
       tabStore.openTab({
         title: result.bookTitle,
         route: '/book-view',
-        bookId: result.bookId,
+        bookId,
         openTocLineIndex: lineIndex,
         searchHighlightLineIndex: lineIndex,
         searchHighlightQuery: executedQuery(),
