@@ -112,6 +112,22 @@ useDropdownClose(
   { toggleButton: computed(() => searchBarRef.value?.filterBtnRef ?? null) },
 )
 
+// Re-run the search whenever any advanced setting changes — the current results
+// were generated with the old setting values and are now stale.
+watch(
+  [
+    maxWordDistance,
+    requireOrdered,
+    expandKetiv,
+    () => settings.searchContextMarginWords,
+  ],
+  () => {
+    if (hasSearched.value && executedQuery.value) {
+      handleSearch(executedQuery.value)
+    }
+  },
+)
+
 function onSearch(q: string) {
   const { term, atFilters: tokens } = parseSearchQuery(q)
   setAtFilters(tokens)

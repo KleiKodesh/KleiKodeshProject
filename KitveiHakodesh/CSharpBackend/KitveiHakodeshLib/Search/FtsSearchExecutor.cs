@@ -125,7 +125,8 @@ namespace KitveiHakodeshLib.Search
                         return;
                     }
 
-                    var snippet = index.GenerateSnippet(result, requireOrdered, contextWords: contextWords);
+                    var snippet = index.GenerateSnippet(result, requireOrdered,
+                                                        contextWords: contextWords);
                     if (!snippet.IsMatch) continue;
                     if (snippet.WordDistance > maxWordDistance) continue;
                     if (skipped < skipCount) { skipped++; continue; }
