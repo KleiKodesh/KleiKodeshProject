@@ -1,0 +1,462 @@
+﻿
+╔══ SEARCH — 500K ══
+║  DB    : C:\Users\Admin\AppData\Roaming\io.github.kdroidfilter.seforimapp\databases\seforim.db
+║  Index : C:\Users\Public\Documents\KleiKodeshProject\KitveiHakodesh\CSharpBackend\FtsLib\Ftslib-Csharp\FtsLibTest\bin\Release\index_500k
+║  Mode  : FULL validation — every result checked
+[SeforimIndex] Segments found — running crash recovery...
+[Recovery] Found 1 segment(s), nextSegId=5
+[SeforimIndex] Recovery complete.
+║  Warm-up…
+[ZayitDb] Opening: C:\Users\Admin\AppData\Roaming\io.github.kdroidfilter.seforimapp\databases\seforim.db
+║  Warm-up: 13,910 results  (791 ms)
+║
+║  ── Literal: כי ביצחק
+[ZayitDb] Opening: C:\Users\Admin\AppData\Roaming\io.github.kdroidfilter.seforimapp\databases\seforim.db
+║    Results : 283  (26 ms)
+║    Required IDs: all 1 found ✓
+║    Content: ✓ all 283 valid  (12 ms)
+║    First 5 results:
+║      [548] בראשית  score=16  ✓
+║        …אֲמָתֶ֔ךָ כֹּל֩ אֲשֶׁ֨ר תֹּאמַ֥ר אֵלֶ֛יךָ שָׂרָ֖ה שְׁמַ֣ע בְּקֹלָ֑הּ כִּ֣י בְיִצְחָ֔ק יִקָּרֵ֥א לְךָ֖ זָֽרַע׃
+║      [61857] נדרים  score=14  ✓
+║        גְּמָ׳ וְהָאִיכָּא יִשְׁמָעֵאל! ״כִּי בְיִצְחָק יִקָּרֵא לְךָ זָרַע״ כְּתִיב. וְהָאִיכָּא עֵשָׂו! ״בְּיִצְחָק״, וְלֹא…
+║      [86755] סנהדרין  score=14  ✓
+║        אֶלָּא מֵעַתָּה, בְּנֵי יִשְׁמָעֵאל לִחַיְּיבוּ? ״כִּי בְיִצְחָק יִקָּרֵא לְךָ זָרַע״.
+║      [123628] תלמוד ירושלמי תענית  score=14  ✓
+║        …לִי מַה לְהָשִׁיב וְלוֹמַר לְפָנֶיךָ. אֶתְמוֹל אָמַרְתָּ לִי כִּי בְיִצְחָק יִקָּרֵא לְךָ זָרַע וְעַכְשָׁיו אַתְּ אוֹמֵ…
+║      [125997] תלמוד ירושלמי נדרים  score=14  ✓
+║        …וּמוּתָּר בְּאוּמּוֹת כול׳. וְאֵין יִשְׁמָעֵאל בִּכְלַל זַרְעוֹ שֶׁלָּאַבְרָהָם. כִּי בְיִצְחָק יִקָּרֵא לְךָ זָרַע. וְ…
+║    Snippets: ✓ all 283 IsMatch=true  (47 ms)
+║    SearchIds: 283 IDs  (7 ms)  ✓ consistent
+║    STATUS: ✓ PASS
+║
+║  ── Literal: שויתי לנגדי תמיד
+[ZayitDb] Opening: C:\Users\Admin\AppData\Roaming\io.github.kdroidfilter.seforimapp\databases\seforim.db
+║    Results : 84  (16 ms)
+║    Content: ✓ all 84 valid  (3 ms)
+║    First 5 results:
+║      [16011] תהילים  score=40  ✓
+║        (ח) שִׁוִּ֬יתִי יְהֹוָ֣ה לְנֶגְדִּ֣י תָמִ֑יד כִּ֥י מִֽ֝ימִינִ֗י בַּל־אֶמּֽוֹט׃
+║      [85070] סנהדרין  score=31  ✓
+║        …עִמּוֹ, עוֹשֶׂה אוֹתָהּ כְּמִין קָמֵיעַ וְתוֹלָהּ בִּזְרוֹעוֹ, שֶׁנֶּאֱמַר: ״שִׁוִּיתִי ה׳ לְנֶגְדִּי תָמִיד כִּי מִימִ…
+║      [85081] סנהדרין  score=33  ✓
+║        …עִמּוֹ – עוֹשֶׂה אוֹתָהּ כְּמִין קָמֵיעַ וְתוֹלָהּ בִּזְרוֹעוֹ, שֶׁנֶּאֱמַר: ״שִׁוִּיתִי ה׳ לְנֶגְדִּי תָּמִיד״.
+║      [85082] סנהדרין  score=32  ✓
+║        …הַמִּתְפַּלֵּל צָרִיךְ שֶׁיִּרְאֶה עַצְמוֹ כְּאִילּוּ שְׁכִינָה כְּנֶגְדּוֹ, שֶׁנֶּאֱמַר: ״שִׁוִּיתִי ה׳ לְנֶגְדִּי תָמ…
+║      [116269] תלמוד ירושלמי ברכות  score=31  ✓
+║        …כִּיס שֶׁל טֶפַח וְנוֹתְנָן עַל לִבּוֹ. מַה טַעַם שִׁוִּיתִי יי לְנֶגְדִּי תָמִיד. תַּמָּן אָמְרִין כָּל שֶׁאֵינוֹ כֶאֱ…
+║    Snippets: ✓ all 84 IsMatch=true  (7 ms)
+║    SearchIds: 84 IDs  (26 ms)  ✓ consistent
+║    STATUS: ✓ PASS
+║
+║  ── Literal: תורה מצוה
+[ZayitDb] Opening: C:\Users\Admin\AppData\Roaming\io.github.kdroidfilter.seforimapp\databases\seforim.db
+║    Results : 1,010  (271 ms)
+║    Content: ✓ all 1,010 valid  (194 ms)
+║    First 5 results:
+║      [27431] משנה חולין  score=47  ✓
+║        …עַל הַבָּנִים, אֲפִלּוּ לְטַהֵר אֶת הַמְּצֹרָע. וּמָה אִם מִצְוָה קַלָּה שֶׁהִיא כְאִסָּר, אָמְרָה תוֹרָה (דברים כב), ל…
+║      [30394] ברכות  score=22  ✓
+║        …לֵיהּ: אֲנַן מָה נַעֲנֵי בָּתְרָךְ? אֲמַר לְהוּ: הֵי תּוֹרָה, וְהֵי מִצְוָה דְּמַגְּנוּ עֲלַן.
+║      [31783] ברכות  score=170  ✓
+║        …טָבִי אָמַר רַבִּי יֹאשִׁיָּה: כׇּל הַמַּרְפֶּה עַצְמוֹ מִדִּבְרֵי תוֹרָה, אֵין בּוֹ כֹּחַ לַעֲמוֹד בְּיוֹם צָרָה, שֶׁנ…
+║      [32131] שבת  score=190  ✓
+║        …דְּאָמַר רַבִּי פַּרְנָךְ אָמַר רַבִּי יוֹחָנָן: הָאוֹחֵז סֵפֶר תּוֹרָה עָרוֹם, נִקְבָּר עָרוֹם. עָרוֹם סָלְקָא דַּעְתּ…
+║      [32348] שבת  score=65  ✓
+║        …אָמַר רַב: כְּשֵׁם שֶׁמִּצְוָה לִשְׂרוֹף הַקֳּדָשִׁים שֶׁנִּטְמְאוּ, כָּךְ מִצְוָה לִשְׂרוֹף אֶת הַתְּרוּמָה שֶׁנִּטְמֵ…
+║    [SNIPPET FP] id=235536  IsMatch=false
+║    [FAIL] 1/1,010 snippets IsMatch=false (0.1%)
+║    Snippets: ✗ 1/1,010 false-positive  (375 ms)
+║    SearchIds: 1,010 IDs  (9 ms)  ✓ consistent
+║    STATUS: ✗ FAIL — 1 issue(s):
+║      • 1/1,010 snippets IsMatch=false (0.1%)
+║
+║  ── Literal: אברהם יצחק יעקב
+[ZayitDb] Opening: C:\Users\Admin\AppData\Roaming\io.github.kdroidfilter.seforimapp\databases\seforim.db
+║    Results : 1,266  (174 ms)
+║    Content: ✓ all 1,266 valid  (111 ms)
+║    First 5 results:
+║      [959] בראשית  score=122  ✓
+║        (נג) אֱלֹהֵ֨י אַבְרָהָ֜ם וֵֽאלֹהֵ֤י נָחוֹר֙ יִשְׁפְּט֣וּ בֵינֵ֔ינוּ אֱלֹהֵ֖י אֲבִיהֶ֑ם וַיִּשָּׁבַ֣ע יַעֲקֹ֔ב בְּפַ֖חַד …
+║      [971] בראשית  score=61  ✓
+║        (י) וַיֹּ֘אמֶר֮ יַעֲקֹב֒ אֱלֹהֵי֙ אָבִ֣י אַבְרָהָ֔ם וֵאלֹהֵ֖י אָבִ֣י יִצְחָ֑ק יְהֹוָ֞ה הָאֹמֵ֣ר אֵלַ֗י שׁ֧וּב לְאַרְצְךָ…
+║      [1075] בראשית  score=106  ✓
+║        (כז) וַיָּבֹ֤א יַעֲקֹב֙ אֶל־יִצְחָ֣ק אָבִ֔יו מַמְרֵ֖א קִרְיַ֣ת הָֽאַרְבַּ֑ע הִ֣וא חֶבְר֔וֹן אֲשֶׁר־גָּֽר־שָׁ֥ם אַבְרָהָ֖…
+║      [1633] שמות  score=39  ✓
+║        …אֱלֹהִ֖ים אֶת־נַאֲקָתָ֑ם וַיִּזְכֹּ֤ר אֱלֹהִים֙ אֶת־בְּרִית֔וֹ אֶת־אַבְרָהָ֖ם אֶת־יִצְחָ֥ק וְאֶֽת־יַעֲקֹֽב׃
+║      [1641] שמות  score=47  ✓
+║        (ו) וַיֹּ֗אמֶר אָנֹכִי֙ אֱלֹהֵ֣י אָבִ֔יךָ אֱלֹהֵ֧י אַבְרָהָ֛ם אֱלֹהֵ֥י יִצְחָ֖ק וֵאלֹהֵ֣י יַעֲקֹ֑ב וַיַּסְתֵּ֤ר מֹשֶׁה֙ …
+║    Snippets: ✓ all 1,266 IsMatch=true  (232 ms)
+║    SearchIds: 1,266 IDs  (7 ms)  ✓ consistent
+║    STATUS: ✓ PASS
+║
+║  ── Literal: אבל בן אין לה
+[ZayitDb] Opening: C:\Users\Admin\AppData\Roaming\io.github.kdroidfilter.seforimapp\databases\seforim.db
+║    Results : 795  (219 ms)
+║    Content: ✓ all 795 valid  (121 ms)
+║    First 5 results:
+║      [9853] מלכים ב  score=24  ✓
+║        (יד) וַיֹּ֕אמֶר וּמֶ֖ה לַעֲשׂ֣וֹת לָ֑הּ וַיֹּ֣אמֶר גֵּיחֲזִ֗י אֲבָ֛ל בֵּ֥ן אֵֽין־לָ֖הּ וְאִישָׁ֥הּ זָקֵֽן׃
+║      [51468] מגילה  score=333  ✓
+║        …לֹא שָׁנוּ אֶלָּא שֶׁעָתִיד לַחְזוֹר בְּלֵילֵי אַרְבָּעָה עָשָׂר, אֲבָל אֵין עָתִיד לַחְזוֹר בְּלֵילֵי אַרְבָּעָה עָשָׂ…
+║      [60356] כתובות  score=274  ✓
+║        וְאִיכָּא דְּאָמְרִי לַהּ, מַתְנִיתָא אַבָּא שָׁאוּל בֶּן אִימָּא מִרְיָם אָמַר: בֵּין ״דְּלָא שְׁבוּעָה״, בֵּין ״דִּנְק…
+║      [116440] תלמוד ירושלמי ברכות  score=628  ✓
+║        …הֲווּן בָּעִין מֵימַר כְּשֶׁאֵין בַּיּוֹם כְּדֵי לְהִתְפַּלֵּל שְׁנֵיהֶן אֲבָל אִם יֵשׁ בַּיּוֹם כְּדֵי לְהִתְפַּלֵּל ש…
+║      [118298] תלמוד ירושלמי שביעית  score=667  ✓
+║        …קִיבְּלוּ עֲלֵיהֶן. מַה מְקַיֵים רִבִּי לָעְזָר מֵאֲבֹתֶיךָ. פָּתַר לָהּ לְעָתִיד לָבוֹא. דְּאָמַר רִבִּי חֶלְבּוֹ שִׁמ…
+║    [SNIPPET FP] id=335760  IsMatch=false
+║    [SNIPPET FP] id=435062  IsMatch=false
+║    [SNIPPET FP] id=485858  IsMatch=false
+║    [SNIPPET FP] id=487864  IsMatch=false
+║    [SNIPPET FP] id=493100  IsMatch=false
+║    [FAIL] 6/795 snippets IsMatch=false (0.8%)
+║    Snippets: ✗ 6/795 false-positive  (293 ms)
+║    SearchIds: 795 IDs  (39 ms)  ✓ consistent
+║    STATUS: ✗ FAIL — 1 issue(s):
+║      • 6/795 snippets IsMatch=false (0.8%)
+║
+║  ── Literal: וידבר משה כן אל בני
+[ZayitDb] Opening: C:\Users\Admin\AppData\Roaming\io.github.kdroidfilter.seforimapp\databases\seforim.db
+║    Results : 138  (76 ms)
+║    Content: ✓ all 138 valid  (26 ms)
+║    First 5 results:
+║      [1723] שמות  score=37  ✓
+║        (ט) וַיְדַבֵּ֥ר מֹשֶׁ֛ה כֵּ֖ן אֶל־בְּנֵ֣י יִשְׂרָאֵ֑ל וְלֹ֤א שָֽׁמְעוּ֙ אֶל־מֹשֶׁ֔ה מִקֹּ֣צֶר ר֔וּחַ וּמֵעֲבֹדָ֖ה…
+║      [121912] תלמוד ירושלמי פסחים  score=334  ✓
+║        …וְלִשְׁתֵּי הַלֶּחֶם וּלְקָרֵב עִמָּהֶן לֹא שָׁמַעְנוּ. וּכְשֶׁהוּא אוֹמֵר וַיְדַבֵּר מֹשֶׁה אֶת מוֹעֲדֵי יְי אֶל בְּנֵ…
+║      [139917] אוצר מדרשים  score=1525  ✓
+║        …מהלך ג׳ ימים. וישאר אך אהרן מתנבא בתוך מצרים וידבר אל בני ישראל לאמר: איש שקוצי עיניו השליכו ובגלולי מצרים אל תטמאו, הה…
+║      [139927] אוצר מדרשים  score=1353  ✓
+║        …א״ל הקב״ה כלום אתה גדול מנח ודורו? א״ל כן, נח הבאת עליו ועל דורו מי המבול ונח לא בקש רחמים על דורו ואני אמרתי ועתה אם ת…
+║      [149186] ילקוט שמעוני על התורה  score=1057  ✓
+║        …יִשְׁתֶּה אֲדֹנִי בּוֹ, הֲרֵי רַךְ. וְכֵן עָשָׂה, וַיַשִּׂגֵם וַיְדַבֵּר אֲלֵהֶם, שִׁגֵּשׁ אוֹתָן בִּדְבָרִים. (בראשית …
+║    Snippets: ✓ all 138 IsMatch=true  (40 ms)
+║    SearchIds: 138 IDs  (9 ms)  ✓ consistent
+║    STATUS: ✓ PASS
+║
+║  ── Literal: nonexistentword123
+[ZayitDb] Opening: C:\Users\Admin\AppData\Roaming\io.github.kdroidfilter.seforimapp\databases\seforim.db
+║    Results : 0  (12 ms)
+║    (no results expected — ok)
+║
+║  ── Wildcard: משה* תורה
+[ZayitDb] Opening: C:\Users\Admin\AppData\Roaming\io.github.kdroidfilter.seforimapp\databases\seforim.db
+║    Results : 2,169  (342 ms)
+║    Content: ✓ all 2,169 valid  (150 ms)
+║    First 5 results:
+║      [6000] דברים  score=30  ✓
+║        (ד) תּוֹרָ֥ה צִוָּה־לָ֖נוּ מֹשֶׁ֑ה מוֹרָשָׁ֖ה קְהִלַּ֥ת יַעֲקֹֽב׃
+║      [26985] משנה אבות  score=20  ✓
+║        (א) משֶׁה קִבֵּל תּוֹרָה מִסִּינַי, וּמְסָרָהּ לִיהוֹשֻׁעַ, וִיהוֹשֻׁעַ לִזְקֵנִים, וּזְקֵנִים לִנְבִיאִים, וּנְבִיאִים…
+║      [31510] ברכות  score=27  ✓
+║        …תִקְרָא״. הַבָּא עַל נַעֲרָה מְאוֹרָסָה — יְצַפֶּה לְתוֹרָה, שֶׁנֶּאֱמַר: ״תּוֹרָה צִוָּה לָנוּ מֹשֶׁה מוֹרָשָׁה קְהִלּ…
+║      [33903] שבת  score=112  ✓
+║        …אַף כָּאן רֹאשׁ חֹדֶשׁ. וּדְכוּלֵּי עָלְמָא, בְּשַׁבָּת נִיתְּנָה תּוֹרָה לְיִשְׂרָאֵל. כְּתִיב הָכָא: ״זָכוֹר אֶת יוֹם…
+║      [33925] שבת  score=280  ✓
+║        תָּא שְׁמַע, רַבִּי יוֹסֵי אוֹמֵר: בַּשֵּׁנִי עָלָה מֹשֶׁה וְיָרַד, בַּשְּׁלִישִׁי עָלָה וְיָרַד, בִּרְבִיעִי יָרַד וְשׁ…
+║    [SNIPPET FP] id=138530  IsMatch=false
+║    [SNIPPET FP] id=464727  IsMatch=false
+║    [SNIPPET FP] id=491849  IsMatch=false
+║    [FAIL] 3/2,169 snippets IsMatch=false (0.1%)
+║    Snippets: ✗ 3/2,169 false-positive  (369 ms)
+║    SearchIds: 2,169 IDs  (77 ms)  ✓ consistent
+║    STATUS: ✗ FAIL — 1 issue(s):
+║      • 3/2,169 snippets IsMatch=false (0.1%)
+║
+║  ── Wildcard: *ישראל
+[ZayitDb] Opening: C:\Users\Admin\AppData\Roaming\io.github.kdroidfilter.seforimapp\databases\seforim.db
+║    Results : 47,568  (2362 ms)
+║    Content: ✓ all 47,568 valid  (12843 ms)
+║    First 5 results:
+║      [990] בראשית  score=11  ✓
+║        …וַיֹּ֗אמֶר לֹ֤א יַעֲקֹב֙ יֵאָמֵ֥ר עוֹד֙ שִׁמְךָ֔ כִּ֖י אִם־יִשְׂרָאֵ֑ל כִּֽי־שָׂרִ֧יתָ עִם־אֱלֹהִ֛ים וְעִם־אֲנָשִׁ֖ים ו…
+║      [994] בראשית  score=11  ✓
+║        (לג) עַל־כֵּ֡ן לֹֽא־יֹאכְל֨וּ בְנֵֽי־יִשְׂרָאֵ֜ל אֶת־גִּ֣יד הַנָּשֶׁ֗ה אֲשֶׁר֙ עַל־כַּ֣ף הַיָּרֵ֔ךְ עַ֖ד…
+║      [1015] בראשית  score=11  ✓
+║        (כ) וַיַּצֶּב־שָׁ֖ם מִזְבֵּ֑חַ וַיִּ֨קְרָא־ל֔וֹ אֵ֖ל אֱלֹהֵ֥י יִשְׂרָאֵֽל׃&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbs…
+║      [1023] בראשית  score=13  ✓
+║        …וַיִּֽתְעַצְּבוּ֙ הָֽאֲנָשִׁ֔ים וַיִּ֥חַר לָהֶ֖ם מְאֹ֑ד כִּֽי־נְבָלָ֞ה עָשָׂ֣ה בְיִשְׂרָאֵ֗ל לִשְׁכַּב֙ אֶת־בַּֽת־יַעֲק…
+║      [1058] בראשית  score=11  ✓
+║        …יַעֲקֹ֑ב לֹֽא־יִקָּרֵא֩ שִׁמְךָ֨ ע֜וֹד יַעֲקֹ֗ב כִּ֤י אִם־יִשְׂרָאֵל֙ יִהְיֶ֣ה שְׁמֶ֔ךָ וַיִּקְרָ֥א אֶת־שְׁמ֖וֹ יִשְׂרָ…
+║    Snippets: ✓ all 47,568 IsMatch=true  (3104 ms)
+║    SearchIds: 47,568 IDs  (142 ms)  ✓ consistent
+║    STATUS: ✓ PASS
+║
+║  ── Wildcard: *אבר*
+[ZayitDb] Opening: C:\Users\Admin\AppData\Roaming\io.github.kdroidfilter.seforimapp\databases\seforim.db
+║    Results : 16,409  (875 ms)
+║    Content: ✓ all 16,409 valid  (790 ms)
+║    First 5 results:
+║      [305] בראשית  score=8  ✓
+║        (כו) וַֽיְחִי־תֶ֖רַח שִׁבְעִ֣ים שָׁנָ֑ה וַיּ֙וֹלֶד֙ אֶת־אַבְרָ֔ם אֶת־נָח֖וֹר וְאֶת־הָרָֽן׃
+║      [306] בראשית  score=8  ✓
+║        (כז) וְאֵ֙לֶּה֙ תּוֹלְדֹ֣ת תֶּ֔רַח תֶּ֚רַח הוֹלִ֣יד אֶת־אַבְרָ֔ם אֶת־נָח֖וֹר וְאֶת־הָרָ֑ן וְהָרָ֖ן הוֹלִ֥יד אֶת־לֽוֹט׃
+║      [308] בראשית  score=8  ✓
+║        (כט) וַיִּקַּ֨ח אַבְרָ֧ם וְנָח֛וֹר לָהֶ֖ם נָשִׁ֑ים שֵׁ֤ם אֵֽשֶׁת־אַבְרָם֙ שָׂרָ֔י וְשֵׁ֤ם…
+║      [310] בראשית  score=8  ✓
+║        (לא) וַיִּקַּ֨ח תֶּ֜רַח אֶת־אַבְרָ֣ם בְּנ֗וֹ וְאֶת־ל֤וֹט בֶּן־הָרָן֙ בֶּן־בְּנ֔וֹ וְאֵת֙…
+║      [313] בראשית  score=8  ✓
+║        (א) וַיֹּ֤אמֶר יְהֹוָה֙ אֶל־אַבְרָ֔ם לֶךְ־לְךָ֛ מֵאַרְצְךָ֥ וּמִמּֽוֹלַדְתְּךָ֖ וּמִבֵּ֣ית אָבִ֑יךָ אֶל־הָאָ֖רֶץ…
+║    [SNIPPET FP] id=141844  IsMatch=false
+║    [SNIPPET FP] id=342494  IsMatch=false
+║    [SNIPPET FP] id=448532  IsMatch=false
+║    [SNIPPET FP] id=450620  IsMatch=false
+║    [SNIPPET FP] id=450757  IsMatch=false
+║    [FAIL] 11/16,409 snippets IsMatch=false (0.1%)
+║    Snippets: ✗ 11/16,409 false-positive  (2449 ms)
+║    SearchIds: 16,409 IDs  (110 ms)  ✓ consistent
+║    STATUS: ✗ FAIL — 1 issue(s):
+║      • 11/16,409 snippets IsMatch=false (0.1%)
+║
+║  ── Wildcard: בני*
+[ZayitDb] Opening: C:\Users\Admin\AppData\Roaming\io.github.kdroidfilter.seforimapp\databases\seforim.db
+║    Results : 32,274  (1835 ms)
+║    Content: ✓ all 32,274 valid  (681 ms)
+║    First 5 results:
+║      [76] בראשית  score=7  ✓
+║        …הָאִשָּׁ֣ה אָמַ֗ר הַרְבָּ֤ה אַרְבֶּה֙ עִצְּבוֹנֵ֣ךְ וְהֵֽרֹנֵ֔ךְ בְּעֶ֖צֶב תֵּֽלְדִ֣י בָנִ֑ים וְאֶל־אִישֵׁךְ֙ תְּשׁ֣וּק…
+║      [116] בראשית  score=8  ✓
+║        …אַֽחֲרֵי֙ הוֹלִיד֣וֹ אֶת־שֵׁ֔ת שְׁמֹנֶ֥ה מֵאֹ֖ת שָׁנָ֑ה וַיּ֥וֹלֶד בָּנִ֖ים וּבָנֽוֹת׃
+║      [119] בראשית  score=8  ✓
+║        …אֶת־אֱנ֔וֹשׁ שֶׁ֣בַע שָׁנִ֔ים וּשְׁמֹנֶ֥ה מֵא֖וֹת שָׁנָ֑ה וַיּ֥וֹלֶד בָּנִ֖ים וּבָנֽוֹת׃
+║      [122] בראשית  score=8  ✓
+║        …קֵינָ֔ן חֲמֵ֤שׁ עֶשְׂרֵה֙ שָׁנָ֔ה וּשְׁמֹנֶ֥ה מֵא֖וֹת שָׁנָ֑ה וַיּ֥וֹלֶד בָּנִ֖ים וּבָנֽוֹת׃
+║      [125] בראשית  score=8  ✓
+║        …אֶת־מַֽהֲלַלְאֵ֔ל אַרְבָּעִ֣ים שָׁנָ֔ה וּשְׁמֹנֶ֥ה מֵא֖וֹת שָׁנָ֑ה וַיּ֥וֹלֶד בָּנִ֖ים וּבָנֽוֹת׃
+║    [SNIPPET FP] id=220309  IsMatch=false
+║    [SNIPPET FP] id=469479  IsMatch=false
+║    [SNIPPET FP] id=477711  IsMatch=false
+║    [SNIPPET FP] id=478853  IsMatch=false
+║    [SNIPPET FP] id=478854  IsMatch=false
+║    [FAIL] 5/32,274 snippets IsMatch=false (0.0%)
+║    Snippets: ✗ 5/32,274 false-positive  (3622 ms)
+║    SearchIds: 32,274 IDs  (64 ms)  ✓ consistent
+║    STATUS: ✗ FAIL — 1 issue(s):
+║      • 5/32,274 snippets IsMatch=false (0.0%)
+║
+║  ── Fuzzy: כי יצחק~
+[ZayitDb] Opening: C:\Users\Admin\AppData\Roaming\io.github.kdroidfilter.seforimapp\databases\seforim.db
+║    Results : 4,416  (380 ms)
+║    Required IDs: all 4 found ✓
+║    Content: ✓ all 4,416 valid  (706 ms)
+║    First 5 results:
+║      [546] בראשית  score=67  ✓
+║        (י) וַתֹּ֙אמֶר֙ לְאַבְרָהָ֔ם גָּרֵ֛שׁ הָאָמָ֥ה הַזֹּ֖את וְאֶת־בְּנָ֑הּ כִּ֣י לֹ֤א יִירַשׁ֙ בֶּן־הָאָמָ֣ה הַזֹּ֔את עִם־בּ…
+║      [548] בראשית  score=16  ✓
+║        …אֲמָתֶ֔ךָ כֹּל֩ אֲשֶׁ֨ר תֹּאמַ֥ר אֵלֶ֛יךָ שָׂרָ֖ה שְׁמַ֣ע בְּקֹלָ֑הּ כִּ֣י בְיִצְחָ֔ק יִקָּרֵ֥א לְךָ֖ זָֽרַע׃
+║      [621] בראשית  score=88  ✓
+║        (ד) כִּ֧י אֶל־אַרְצִ֛י וְאֶל־מוֹלַדְתִּ֖י תֵּלֵ֑ךְ וְלָקַחְתָּ֥ אִשָּׁ֖ה לִבְנִ֥י לְיִצְחָֽק׃
+║      [631] בראשית  score=30  ✓
+║        …וְאָמְרָ֣ה שְׁתֵ֔ה וְגַם־גְּמַלֶּ֖יךָ אַשְׁקֶ֑ה אֹתָ֤הּ הֹכַ֙חְתָּ֙ לְעַבְדְּךָ֣ לְיִצְחָ֔ק וּבָ֣הּ אֵדַ֔ע כִּי־עָשִׂ֥י…
+║      [706] בראשית  score=45  ✓
+║        (כא) וַיֶּעְתַּ֨ר יִצְחָ֤ק לַֽיהֹוָה֙ לְנֹ֣כַח אִשְׁתּ֔וֹ כִּ֥י עֲקָרָ֖ה הִ֑וא וַיֵּעָ֤תֶר לוֹ֙ יְהֹוָ֔ה וַתַּ֖הַר רִבְק…
+║    [SNIPPET FP] id=51906  IsMatch=false
+║    [SNIPPET FP] id=51921  IsMatch=false
+║    [SNIPPET FP] id=388180  IsMatch=false
+║    [FAIL] 3/4,416 snippets IsMatch=false (0.1%)
+║    Snippets: ✗ 3/4,416 false-positive  (489 ms)
+║    SearchIds: 4,416 IDs  (126 ms)  ✓ consistent
+║    STATUS: ✗ FAIL — 1 issue(s):
+║      • 3/4,416 snippets IsMatch=false (0.1%)
+║
+║  ── Fuzzy: תארה~ מצוה
+[ZayitDb] Opening: C:\Users\Admin\AppData\Roaming\io.github.kdroidfilter.seforimapp\databases\seforim.db
+║    Results : 137  (220 ms)
+║    Content: ✓ all 137 valid  (21 ms)
+║    First 5 results:
+║      [149155] ילקוט שמעוני על התורה  score=1256  ✓
+║        …מַה כְּתִיב לְמַעְלָה מִן הָעִנְיָן, וַיְהִי יוֹסֵף יְפֵה תֹאַר וְגוֹ' וַתִּשָּׂא אֵשֶׁת אֲדֹנָיו, מָשָׁל לְגִבּוֹר שֶׁ…
+║      [150024] ילקוט שמעוני על התורה  score=324  ✓
+║        …הוּא אָבִיךָ, הֲרֵי הוּא בִּכְלַל "וְנָשִׂיא בְעַמְּךָ לֹא תָאֹר", אֵינוֹ לֹא דַּיָּן וְלֹא נָשִׂיא, הֲרֵי אַתָּה דָן ב…
+║      [151077] ילקוט שמעוני על התורה  score=864  ✓
+║        …וּלְאַחַר מִיתָתוֹ, אָסַרְתִּי לְךָ נָכְרִית הִתַּרְתִּי לְךָ] יְפַת תֹּאַר, (דברים כא, יא) "וְרָאִיתָ בַשִּׁבְיָה", אָ…
+║      [153470] ילקוט שמעוני על התורה  score=96  ✓
+║        …טו) כִּי תִהְיֶיןָ לְאִישׁ. שָׁנוּ רַבּוֹתֵינוּ מִצְוָה גּוֹרֶרֶת מִצְוָה וַעֲבֵירָה גּוֹרֶרֶת עֲבֵירָה. (לעיל פסוק יא)…
+║      [183171] במדבר רבה  score=1979  ✓
+║        …אָאֹר, וְאוֹמֵר (בראשית כז, כט): אֹרְרֶיךָ אָרוּר. לְכָה אָרָה לִי יַעֲקֹב וּלְכָה זֹעֲמָה יִשְׂרָאֵל, אִלּוּ לְאֻמָּה …
+║    Snippets: ✓ all 137 IsMatch=true  (45 ms)
+║    SearchIds: 137 IDs  (249 ms)  ✓ consistent
+║    STATUS: ✓ PASS
+║
+║  ── Fuzzy: אנב~
+[ZayitDb] Opening: C:\Users\Admin\AppData\Roaming\io.github.kdroidfilter.seforimapp\databases\seforim.db
+║    Results : 29,481  (1480 ms)
+║    Content: ✓ all 29,481 valid  (1248 ms)
+║    First 5 results:
+║      [228] בראשית  score=6  ✓
+║        (יב) וַיֹּ֣אמֶר אֱלֹהִ֗ים זֹ֤את אֽוֹת־הַבְּרִית֙ אֲשֶׁר־אֲנִ֣י נֹתֵ֗ן בֵּינִי֙ וּבֵ֣ינֵיכֶ֔ם וּבֵ֛ין כׇּל־נֶ֥פֶשׁ חַיָּ֖…
+║      [375] בראשית  score=6  ✓
+║        …נַ֔עַל וְאִם־אֶקַּ֖ח מִכׇּל־אֲשֶׁר־לָ֑ךְ וְלֹ֣א תֹאמַ֔ר אֲנִ֖י הֶעֱשַׁ֥רְתִּי אֶת־אַבְרָֽם׃
+║      [384] בראשית  score=6  ✓
+║        (ז) וַיֹּ֖אמֶר אֵלָ֑יו אֲנִ֣י יְהֹוָ֗ה אֲשֶׁ֤ר הוֹצֵאתִ֙יךָ֙ מֵא֣וּר כַּשְׂדִּ֔ים לָ֧תֶת לְךָ֛ אֶת…
+║      [417] בראשית  score=5  ✓
+║        …וְתֵ֣שַׁע שָׁנִ֑ים וַיֵּרָ֨א יְהֹוָ֜ה אֶל־אַבְרָ֗ם וַיֹּ֤אמֶר אֵלָיו֙ אֲנִי־אֵ֣ל שַׁדַּ֔י הִתְהַלֵּ֥ךְ לְפָנַ֖י וֶהְיֵ֥…
+║      [420] בראשית  score=6  ✓
+║        (ד) אֲנִ֕י הִנֵּ֥ה בְרִיתִ֖י אִתָּ֑ךְ וְהָיִ֕יתָ לְאַ֖ב הֲמ֥וֹן גּוֹיִֽם׃
+║    [SNIPPET FP] id=44409  IsMatch=false
+║    [SNIPPET FP] id=44410  IsMatch=false
+║    [SNIPPET FP] id=46974  IsMatch=false
+║    [SNIPPET FP] id=137725  IsMatch=false
+║    [SNIPPET FP] id=141852  IsMatch=false
+║    [FAIL] 54/29,481 snippets IsMatch=false (0.2%)
+║    Snippets: ✗ 54/29,481 false-positive  (1622 ms)
+║    SearchIds: 29,481 IDs  (119 ms)  ✓ consistent
+║    STATUS: ✗ FAIL — 1 issue(s):
+║      • 54/29,481 snippets IsMatch=false (0.2%)
+║
+║  ── Fuzzy: יסראל~2
+[ZayitDb] Opening: C:\Users\Admin\AppData\Roaming\io.github.kdroidfilter.seforimapp\databases\seforim.db
+║    Results : 47,487  (1667 ms)
+║    Content: ✓ all 47,487 valid  (20590 ms)
+║    First 5 results:
+║      [990] בראשית  score=11  ✓
+║        …וַיֹּ֗אמֶר לֹ֤א יַעֲקֹב֙ יֵאָמֵ֥ר עוֹד֙ שִׁמְךָ֔ כִּ֖י אִם־יִשְׂרָאֵ֑ל כִּֽי־שָׂרִ֧יתָ עִם־אֱלֹהִ֛ים וְעִם־אֲנָשִׁ֖ים ו…
+║      [994] בראשית  score=11  ✓
+║        (לג) עַל־כֵּ֡ן לֹֽא־יֹאכְל֨וּ בְנֵֽי־יִשְׂרָאֵ֜ל אֶת־גִּ֣יד הַנָּשֶׁ֗ה אֲשֶׁר֙ עַל־כַּ֣ף הַיָּרֵ֔ךְ עַ֖ד…
+║      [1015] בראשית  score=11  ✓
+║        (כ) וַיַּצֶּב־שָׁ֖ם מִזְבֵּ֑חַ וַיִּ֨קְרָא־ל֔וֹ אֵ֖ל אֱלֹהֵ֥י יִשְׂרָאֵֽל׃&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbs…
+║      [1023] בראשית  score=13  ✓
+║        …וַיִּֽתְעַצְּבוּ֙ הָֽאֲנָשִׁ֔ים וַיִּ֥חַר לָהֶ֖ם מְאֹ֑ד כִּֽי־נְבָלָ֞ה עָשָׂ֣ה בְיִשְׂרָאֵ֗ל לִשְׁכַּב֙ אֶת־בַּֽת־יַעֲק…
+║      [1058] בראשית  score=11  ✓
+║        …יַעֲקֹ֑ב לֹֽא־יִקָּרֵא֩ שִׁמְךָ֨ ע֜וֹד יַעֲקֹ֗ב כִּ֤י אִם־יִשְׂרָאֵל֙ יִהְיֶ֣ה שְׁמֶ֔ךָ וַיִּקְרָ֥א אֶת־שְׁמ֖וֹ יִשְׂרָ…
+║    Snippets: ✓ all 47,487 IsMatch=true  (2311 ms)
+║    SearchIds: 47,487 IDs  (155 ms)  ✓ consistent
+║    STATUS: ✓ PASS
+║
+║  ── Fuzzy: כי ביצחק~
+[ZayitDb] Opening: C:\Users\Admin\AppData\Roaming\io.github.kdroidfilter.seforimapp\databases\seforim.db
+║    Results : 4,382  (330 ms)
+║    Required IDs: all 1 found ✓
+║    Content: ✓ all 4,382 valid  (789 ms)
+║    First 5 results:
+║      [546] בראשית  score=67  ✓
+║        (י) וַתֹּ֙אמֶר֙ לְאַבְרָהָ֔ם גָּרֵ֛שׁ הָאָמָ֥ה הַזֹּ֖את וְאֶת־בְּנָ֑הּ כִּ֣י לֹ֤א יִירַשׁ֙ בֶּן־הָאָמָ֣ה הַזֹּ֔את עִם־בּ…
+║      [548] בראשית  score=16  ✓
+║        …אֲמָתֶ֔ךָ כֹּל֩ אֲשֶׁ֨ר תֹּאמַ֥ר אֵלֶ֛יךָ שָׂרָ֖ה שְׁמַ֣ע בְּקֹלָ֑הּ כִּ֣י בְיִצְחָ֔ק יִקָּרֵ֥א לְךָ֖ זָֽרַע׃
+║      [621] בראשית  score=88  ✓
+║        (ד) כִּ֧י אֶל־אַרְצִ֛י וְאֶל־מוֹלַדְתִּ֖י תֵּלֵ֑ךְ וְלָקַחְתָּ֥ אִשָּׁ֖ה לִבְנִ֥י לְיִצְחָֽק׃
+║      [631] בראשית  score=30  ✓
+║        …וְאָמְרָ֣ה שְׁתֵ֔ה וְגַם־גְּמַלֶּ֖יךָ אַשְׁקֶ֑ה אֹתָ֤הּ הֹכַ֙חְתָּ֙ לְעַבְדְּךָ֣ לְיִצְחָ֔ק וּבָ֣הּ אֵדַ֔ע כִּי־עָשִׂ֥י…
+║      [706] בראשית  score=45  ✓
+║        (כא) וַיֶּעְתַּ֨ר יִצְחָ֤ק לַֽיהֹוָה֙ לְנֹ֣כַח אִשְׁתּ֔וֹ כִּ֥י עֲקָרָ֖ה הִ֑וא וַיֵּעָ֤תֶר לוֹ֙ יְהֹוָ֔ה וַתַּ֖הַר רִבְק…
+║    [SNIPPET FP] id=51906  IsMatch=false
+║    [SNIPPET FP] id=51921  IsMatch=false
+║    [SNIPPET FP] id=388180  IsMatch=false
+║    [FAIL] 3/4,382 snippets IsMatch=false (0.1%)
+║    Snippets: ✗ 3/4,382 false-positive  (825 ms)
+║    SearchIds: 4,382 IDs  (383 ms)  ✓ consistent
+║    STATUS: ✗ FAIL — 1 issue(s):
+║      • 3/4,382 snippets IsMatch=false (0.1%)
+║
+║  ── Grammar: %תורה
+[ZayitDb] Opening: C:\Users\Admin\AppData\Roaming\io.github.kdroidfilter.seforimapp\databases\seforim.db
+║    Results : 28,146  (972 ms)
+║    Content: ✓ all 28,146 valid  (419 ms)
+║    First 5 results:
+║      [1930] שמות  score=8  ✓
+║        (מט) תּוֹרָ֣ה אַחַ֔ת יִהְיֶ֖ה לָֽאֶזְרָ֑ח וְלַגֵּ֖ר הַגָּ֥ר בְּתוֹכְכֶֽם׃
+║      [2263] שמות  score=12  ✓
+║        …הָהָ֖רָה וֶהְיֵה־שָׁ֑ם וְאֶתְּנָ֨ה לְךָ֜ אֶת־לֻחֹ֣ת הָאֶ֗בֶן וְהַתּוֹרָה֙ וְהַמִּצְוָ֔ה אֲשֶׁ֥ר כָּתַ֖בְתִּי לְהוֹרֹתָֽ…
+║      [2984] ויקרא  score=8  ✓
+║        (ז) כַּֽחַטָּאת֙ כָּֽאָשָׁ֔ם תּוֹרָ֥ה אַחַ֖ת לָהֶ֑ם הַכֹּהֵ֛ן אֲשֶׁ֥ר יְכַפֶּר־בּ֖וֹ ל֥וֹ יִהְיֶֽה׃
+║      [3014] ויקרא  score=10  ✓
+║        (לז) זֹ֣את הַתּוֹרָ֗ה לָֽעֹלָה֙ לַמִּנְחָ֔ה וְלַֽחַטָּ֖את וְלָאָשָׁ֑ם וְלַ֨מִּלּוּאִ֔ים וּלְזֶ֖בַח הַשְּׁלָמִֽים׃
+║      [3270] ויקרא  score=10  ✓
+║        (נד) זֹ֖את הַתּוֹרָ֑ה לְכׇל־נֶ֥גַע הַצָּרַ֖עַת וְלַנָּֽתֶק׃
+║    [SNIPPET FP] id=469523  IsMatch=false
+║    [FAIL] 1/28,146 snippets IsMatch=false (0.0%)
+║    Snippets: ✗ 1/28,146 false-positive  (1247 ms)
+║    SearchIds: 28,146 IDs  (11 ms)  ✓ consistent
+║    STATUS: ✗ FAIL — 1 issue(s):
+║      • 1/28,146 snippets IsMatch=false (0.0%)
+║
+║  ── Grammar: תורה%
+[ZayitDb] Opening: C:\Users\Admin\AppData\Roaming\io.github.kdroidfilter.seforimapp\databases\seforim.db
+║    Results : 13,910  (486 ms)
+║    Content: ✓ all 13,910 valid  (221 ms)
+║    First 5 results:
+║      [1930] שמות  score=8  ✓
+║        (מט) תּוֹרָ֣ה אַחַ֔ת יִהְיֶ֖ה לָֽאֶזְרָ֑ח וְלַגֵּ֖ר הַגָּ֥ר בְּתוֹכְכֶֽם׃
+║      [2984] ויקרא  score=8  ✓
+║        (ז) כַּֽחַטָּאת֙ כָּֽאָשָׁ֔ם תּוֹרָ֥ה אַחַ֖ת לָהֶ֑ם הַכֹּהֵ֛ן אֲשֶׁ֥ר יְכַפֶּר־בּ֖וֹ ל֥וֹ יִהְיֶֽה׃
+║      [4303] במדבר  score=8  ✓
+║        (טז) תּוֹרָ֥ה אַחַ֛ת וּמִשְׁפָּ֥ט אֶחָ֖ד יִהְיֶ֣ה לָכֶ֑ם וְלַגֵּ֖ר הַגָּ֥ר אִתְּכֶֽם׃&nbsp;
+║      [4316] במדבר  score=8  ✓
+║        (כט) הָֽאֶזְרָח֙ בִּבְנֵ֣י יִשְׂרָאֵ֔ל וְלַגֵּ֖ר הַגָּ֣ר בְּתוֹכָ֑ם תּוֹרָ֤ה אַחַת֙ יִהְיֶ֣ה לָכֶ֔ם לָעֹשֶׂ֖ה בִּשְׁגָגָ…
+║      [6000] דברים  score=8  ✓
+║        (ד) תּוֹרָ֥ה צִוָּה־לָ֖נוּ מֹשֶׁ֑ה מוֹרָשָׁ֖ה קְהִלַּ֥ת יַעֲקֹֽב׃
+║    Snippets: ✓ all 13,910 IsMatch=true  (672 ms)
+║    SearchIds: 13,910 IDs  (4 ms)  ✓ consistent
+║    STATUS: ✓ PASS
+║
+║  ── Grammar: %תורה%
+[ZayitDb] Opening: C:\Users\Admin\AppData\Roaming\io.github.kdroidfilter.seforimapp\databases\seforim.db
+║    Results : 28,147  (1022 ms)
+║    Content: ✓ all 28,147 valid  (506 ms)
+║    First 5 results:
+║      [1930] שמות  score=8  ✓
+║        (מט) תּוֹרָ֣ה אַחַ֔ת יִהְיֶ֖ה לָֽאֶזְרָ֑ח וְלַגֵּ֖ר הַגָּ֥ר בְּתוֹכְכֶֽם׃
+║      [2263] שמות  score=12  ✓
+║        …הָהָ֖רָה וֶהְיֵה־שָׁ֑ם וְאֶתְּנָ֨ה לְךָ֜ אֶת־לֻחֹ֣ת הָאֶ֗בֶן וְהַתּוֹרָה֙ וְהַמִּצְוָ֔ה אֲשֶׁ֥ר כָּתַ֖בְתִּי לְהוֹרֹתָֽ…
+║      [2984] ויקרא  score=8  ✓
+║        (ז) כַּֽחַטָּאת֙ כָּֽאָשָׁ֔ם תּוֹרָ֥ה אַחַ֖ת לָהֶ֑ם הַכֹּהֵ֛ן אֲשֶׁ֥ר יְכַפֶּר־בּ֖וֹ ל֥וֹ יִהְיֶֽה׃
+║      [3014] ויקרא  score=10  ✓
+║        (לז) זֹ֣את הַתּוֹרָ֗ה לָֽעֹלָה֙ לַמִּנְחָ֔ה וְלַֽחַטָּ֖את וְלָאָשָׁ֑ם וְלַ֨מִּלּוּאִ֔ים וּלְזֶ֖בַח הַשְּׁלָמִֽים׃
+║      [3270] ויקרא  score=10  ✓
+║        (נד) זֹ֖את הַתּוֹרָ֑ה לְכׇל־נֶ֥גַע הַצָּרַ֖עַת וְלַנָּֽתֶק׃
+║    [SNIPPET FP] id=469523  IsMatch=false
+║    [FAIL] 1/28,147 snippets IsMatch=false (0.0%)
+║    Snippets: ✗ 1/28,147 false-positive  (1947 ms)
+║    SearchIds: 28,147 IDs  (29 ms)  ✓ consistent
+║    STATUS: ✗ FAIL — 1 issue(s):
+║      • 1/28,147 snippets IsMatch=false (0.0%)
+║
+║  ── Grammar: %ישראל כי
+[ZayitDb] Opening: C:\Users\Admin\AppData\Roaming\io.github.kdroidfilter.seforimapp\databases\seforim.db
+║    Results : 19,270  (831 ms)
+║    Content: ✓ all 19,270 valid  (428 ms)
+║    First 5 results:
+║      [990] בראשית  score=17  ✓
+║        …וַיֹּ֗אמֶר לֹ֤א יַעֲקֹב֙ יֵאָמֵ֥ר עוֹד֙ שִׁמְךָ֔ כִּ֖י אִם־יִשְׂרָאֵ֑ל כִּֽי־שָׂרִ֧יתָ עִם־אֱלֹהִ֛ים וְעִם־אֲנָשִׁ֖ים ו…
+║      [994] בראשית  score=90  ✓
+║        (לג) עַל־כֵּ֡ן לֹֽא־יֹאכְל֨וּ בְנֵֽי־יִשְׂרָאֵ֜ל אֶת־גִּ֣יד הַנָּשֶׁ֗ה אֲשֶׁר֙ עַל־כַּ֣ף הַיָּרֵ֔ךְ עַ֖ד הַיּ֣וֹם הַזֶּ֑…
+║      [1023] בראשית  score=36  ✓
+║        …מִן־הַשָּׂדֶה֙ כְּשׇׁמְעָ֔ם וַיִּֽתְעַצְּבוּ֙ הָֽאֲנָשִׁ֔ים וַיִּ֥חַר לָהֶ֖ם מְאֹ֑ד כִּֽי־נְבָלָ֞ה עָשָׂ֣ה בְיִשְׂרָאֵ֗…
+║      [1058] בראשית  score=21  ✓
+║        …אֱלֹהִ֖ים שִׁמְךָ֣ יַעֲקֹ֑ב לֹֽא־יִקָּרֵא֩ שִׁמְךָ֨ ע֜וֹד יַעֲקֹ֗ב כִּ֤י אִם־יִשְׂרָאֵל֙ יִהְיֶ֣ה שְׁמֶ֔ךָ וַיִּקְרָ֥א …
+║      [1125] בראשית  score=54  ✓
+║        (ג) וְיִשְׂרָאֵ֗ל אָהַ֤ב אֶת־יוֹסֵף֙ מִכׇּל־בָּנָ֔יו כִּֽי־בֶן־זְקֻנִ֥ים ה֖וּא ל֑וֹ וְעָ֥שָׂה ל֖וֹ כְּתֹ֥נֶת פַּסִּֽים׃
+║    [SNIPPET FP] id=80553  IsMatch=false
+║    [SNIPPET FP] id=173884  IsMatch=false
+║    [SNIPPET FP] id=281702  IsMatch=false
+║    [SNIPPET FP] id=329717  IsMatch=false
+║    [SNIPPET FP] id=331035  IsMatch=false
+║    [FAIL] 15/19,270 snippets IsMatch=false (0.1%)
+║    Snippets: ✗ 15/19,270 false-positive  (1318 ms)
+║    SearchIds: 19,270 IDs  (37 ms)  ✓ consistent
+║    STATUS: ✗ FAIL — 1 issue(s):
+║      • 15/19,270 snippets IsMatch=false (0.1%)
+║
+║  ── Grammar: %שלו?ם
+[ZayitDb] Opening: C:\Users\Admin\AppData\Roaming\io.github.kdroidfilter.seforimapp\databases\seforim.db
+║    Results : 6,001  (285 ms)
+║    Content: ✓ all 6,001 valid  (140 ms)
+║    First 5 results:
+║      [370] בראשית  score=7  ✓
+║        (יח) וּמַלְכִּי־צֶ֙דֶק֙ מֶ֣לֶךְ שָׁלֵ֔ם הוֹצִ֖יא לֶ֣חֶם וָיָ֑יִן וְה֥וּא כֹהֵ֖ן לְאֵ֥ל עֶלְיֽוֹן׃
+║      [393] בראשית  score=7  ✓
+║        (טז) וְד֥וֹר רְבִיעִ֖י יָשׁ֣וּבוּ הֵ֑נָּה כִּ֧י לֹא־שָׁלֵ֛ם עֲוֺ֥ן הָאֱמֹרִ֖י עַד־הֵֽנָּה׃
+║      [832] בראשית  score=8  ✓
+║        (ו) וַיֹּ֥אמֶר לָהֶ֖ם הֲשָׁל֣וֹם ל֑וֹ וַיֹּאמְר֣וּ שָׁל֔וֹם וְהִנֵּה֙ רָחֵ֣ל בִּתּ֔וֹ בָּאָ֖ה עִם־הַצֹּֽאן׃
+║      [1013] בראשית  score=7  ✓
+║        (יח) וַיָּבֹא֩ יַעֲקֹ֨ב שָׁלֵ֜ם עִ֣יר שְׁכֶ֗ם אֲשֶׁר֙ בְּאֶ֣רֶץ כְּנַ֔עַן בְּבֹא֖וֹ מִפַּדַּ֣ן אֲרָ֑ם…
+║      [1136] בראשית  score=8  ✓
+║        (יד) וַיֹּ֣אמֶר ל֗וֹ לֶךְ־נָ֨א רְאֵ֜ה אֶת־שְׁל֤וֹם אַחֶ֙יךָ֙ וְאֶת־שְׁל֣וֹם הַצֹּ֔אן וַהֲשִׁבֵ֖נִי דָּבָ֑ר וַיִּשְׁלָחֵ֙…
+║    Snippets: ✓ all 6,001 IsMatch=true  (402 ms)
+║    SearchIds: 6,001 IDs  (5 ms)  ✓ consistent
+║    STATUS: ✓ PASS
+║
+║  Overall: ✗  11 query/queries FAILED
+╚══ SEARCH DONE ══
+Report → C:\Users\Admin\AppData\Local\Temp\fts_search_500k_20260512_001413.html

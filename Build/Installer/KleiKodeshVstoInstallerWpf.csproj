@@ -4,7 +4,7 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net48</TargetFramework>
     <UseWPF>true</UseWPF>
-    <Version>5.0.2</Version>
+    <Version>5.0.3</Version>
     <ApplicationIcon>KleiKodesh_Main.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>AnyCPU</Platforms>

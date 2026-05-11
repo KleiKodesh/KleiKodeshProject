@@ -18,6 +18,8 @@ import { applyDiacriticsFilter, removeDiacriticsForSearch } from '@/utils/hebrew
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { scrollToIndexWithRetry } from '@/utils/scrollToIndexWithRetry'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
+import { query } from '@/webview-host/seforimDb'
+import { SQL } from '@/webview-host/queries.sql'
 
 const props = defineProps<{
   selectedLineId: number | null
@@ -41,6 +43,38 @@ const emit = defineEmits<{
 
 const settingsStore = useSettingsStore()
 const { zoom } = storeToRefs(useBookViewStore())
+
+// Keyed by bookId — resolved asynchronously after groups load, never blocks rendering
+const commentaryTocPaths = ref<Map<number, string>>(new Map())
+
+async function fetchCommentaryTocPaths(groups: CommentaryGroup[]) {
+  if (!groups.length) return
+  const lineIds = groups.map((g) => g.lines[0]?.lineId).filter((id): id is number => id != null)
+  if (!lineIds.length) return
+  const rows = await query<{ lineId: number; bookId: number; tocPath: string }>(
+    SQL.GET_TOC_PATHS_FOR_LINES(lineIds.length),
+    lineIds,
+  )
+  const pathsByLineId = new Map(rows.map((r) => [r.lineId, r.tocPath]))
+  const resolved = new Map<number, string>()
+  for (const g of groups) {
+    const lineId = g.lines[0]?.lineId
+    if (lineId != null) {
+      const tocPath = pathsByLineId.get(lineId)
+      if (tocPath) resolved.set(g.bookId, tocPath)
+    }
+  }
+  commentaryTocPaths.value = resolved
+}
+
+watch(
+  () => props.groups,
+  (groups) => {
+    commentaryTocPaths.value = new Map()
+    void fetchCommentaryTocPaths(groups)
+  },
+  { flush: 'post', immediate: true },
+)
 const diacriticsState = computed(() => settingsStore.diacriticsState)
 const commentaryFontPx = computed(() => {
   const effectiveFontSize = settingsStore.useSeparateCommentarySettings
@@ -372,6 +406,10 @@ function asHeader(item: FlatItem | undefined) {
 function asLine(item: FlatItem | undefined) {
   return item?.type === 'line' ? item : null
 }
+function ownTocPathForHeader(bookTitle: string): string | undefined {
+  const bookId = visibleGroups.value.find((g) => g.bookTitle === bookTitle)?.bookId
+  return bookId != null ? commentaryTocPaths.value.get(bookId) : undefined
+}
 </script>
 
 <template>
@@ -428,6 +466,7 @@ function asLine(item: FlatItem | undefined) {
                 :section-label="asHeader(flatItems[vItem.index])!.sectionLabel"
                 :sub-section-label="asHeader(flatItems[vItem.index])!.subSectionLabel"
                 :groups="visibleGroups"
+                :own-toc-path="ownTocPathForHeader(asHeader(flatItems[vItem.index])!.bookTitle)"
                 @navigate-section="(d, id) => emit('navigate-section', d, id)"
                 @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)"
               />

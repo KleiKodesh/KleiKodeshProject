@@ -12,6 +12,8 @@ const props = defineProps<{
   sectionLabel?: string
   subSectionLabel?: string
   groups: CommentaryGroup[]
+  /** Async-resolved TOC path for this commentary book's current line in its own TOC */
+  ownTocPath?: string
 }>()
 const emit = defineEmits<{
   'navigate-section': [direction: 'next' | 'prev', bookId: number]
@@ -23,6 +25,12 @@ const headerEl = ref<HTMLElement | null>(null)
 const fullPath = computed(() => {
   const group = props.groups.find((g) => g.bookTitle === props.bookTitle)
   return group?.path ?? props.bookTitle
+})
+
+const tooltipText = computed(() => {
+  const hint = 'Ctrl+לחיצה (או לחיצה ממושכת במסך מגע) לפתיחת הספר בלשונית חדשה'
+  const path = props.ownTocPath ? `${fullPath.value} · ${props.ownTocPath}` : fullPath.value
+  return `${path}\n${hint}`
 })
 
 const bookId = computed(
@@ -45,7 +53,7 @@ function onHeaderClick(e: MouseEvent) {
   <div
     ref="headerEl"
     class="commentary-header"
-    :title="fullPath + '\nCtrl+לחיצה (או לחיצה ממושכת במסך מגע) לפתיחת הספר בלשונית חדשה'"
+    :title="tooltipText"
     @click="onHeaderClick"
   >
     <div class="title-block">
