@@ -148,12 +148,6 @@
       <LogicalName>KitveiHakodesh.png</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\FtsLib\FtsLib\FtsLib.csproj">
-      <Project>{76F9DAA9-374F-40F9-8511-3239FB6E846E}</Project>
-      <Name>FtsLib</Name>
-    </ProjectReference>
-  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
     <PropertyGroup>

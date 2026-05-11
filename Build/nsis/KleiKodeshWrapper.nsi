@@ -75,6 +75,11 @@ UninstallIcon "..\Installer\KleiKodesh_Main.ico"
   !define OUTPUT_SUFFIX ""
 !endif
 
+; WPF installer exe path - passed from build script to pick the correct variant output folder
+!ifndef WPF_EXE_PATH
+  !define WPF_EXE_PATH "..\Installer\bin\Release\net48\KleiKodeshVstoInstallerWpf.exe"
+!endif
+
 Name "מתקין ${PRODUCT_NAME}"
 OutFile "${OUTPUT_DIR}\KleiKodeshSetup-${PRODUCT_VERSION}${OUTPUT_SUFFIX}.exe"
 InstallDir "$LOCALAPPDATA\KleiKodesh"
@@ -228,8 +233,8 @@ Section "Main"
   SetOutPath "$TEMP\KleiKodeshInstaller"
   
   ; Copy WPF installer files (built for .NET Framework 4.8)
-  File "..\Installer\bin\Release\net48\KleiKodeshVstoInstallerWpf.exe"
-  File /nonfatal "..\Installer\bin\Release\net48\*.config"
+  File "${WPF_EXE_PATH}"
+  File /nonfatal "${WPF_EXE_PATH}\..\*.config"
   File "..\Installer\KleiKodesh.zip"
   
   ; Pass all command-line arguments through to the WPF installer unchanged

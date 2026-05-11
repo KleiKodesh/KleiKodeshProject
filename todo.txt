@@ -5,3 +5,16 @@ add shotcurt to the eezayit demo app in the menu
 need a new name for the eezayit demo app
 fixup app clash of kitveihkosdesh running from owrd and independently
 add otional word to searc options
+
+message הפליצקייה עודכנה האם לנסות מחדש את האינדקס is cutoff? is it even needed?
+
+after indeing wrte lock is stil there?
+need to enable sevarl apps to read inde progress poll progress pridocally very siple really/
+
+personal books not showing in fts filter
+settings זהה לתצוגת ספר is not working
+
+מפרשים filter in רמבם shows מפרשים twice
+ alt toc ראש השנה ירושלמי Toc is showing up twice
+ששאלוהו was changed to שאלוקו solution switch to ד instead more natural
+bug rmoving of : cases bug in דפים כט:

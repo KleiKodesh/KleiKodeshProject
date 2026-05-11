@@ -98,15 +98,25 @@ function Build-Variant {
     Write-Host ""
     Write-Host "Building WPF installer (Release|$Platform)..." -ForegroundColor Yellow
 
+    # SDK-style projects ignore PropertyGroup conditions — must pass OutputPath explicitly
+    $outputPath = switch ($Platform) {
+        "x64"    { "bin\Release-x64\net48\" }
+        "x86"    { "bin\Release-x86\net48\" }
+        "AnyCPU" { "bin\Release\net48\" }
+    }
+
     dotnet build $WpfProjectPath -c Release `
         -p:VstoConfiguration=Release -p:VstoPlatform=$Platform `
         -p:InstallerVariant=$Platform `
+        -p:OutputPath=$outputPath `
         --verbosity normal
     if ($LASTEXITCODE -ne 0) {
         Write-Host "ERROR: WPF build failed for $Platform." -ForegroundColor Red
         exit 1
     }
 
+    $wpfExeDir = Join-Path (Split-Path $WpfProjectPath) $outputPath
+    $wpfExePath = Join-Path $wpfExeDir "KleiKodeshVstoInstallerWpf.exe"
     $outFile = Join-Path $ReleasesDir "KleiKodeshSetup-${version}${Suffix}.exe"
 
     Write-Host "Building NSIS wrapper ($version$Suffix)..." -ForegroundColor Yellow
@@ -114,6 +124,7 @@ function Build-Variant {
         "/DPRODUCT_VERSION=$version" `
         "/DOUTPUT_DIR=$ReleasesDir" `
         "/DOUTPUT_SUFFIX=$Suffix" `
+        "/DWPF_EXE_PATH=$wpfExePath" `
         $NsisScriptPath
     if ($LASTEXITCODE -ne 0) {
         Write-Host "ERROR: NSIS build failed for $Platform." -ForegroundColor Red

@@ -1,8 +1,7 @@
 <Solution>
   <Project Path="Build/Installer/KleiKodeshVstoInstallerWpf.csproj" Id="2444948f-973d-4cdd-a5be-3596a400b7ba" />
   <Project Path="Build/scripts/SvgToPng/SvgToPng.csproj" Id="a1b2c3d4-e5f6-7890-abcd-ef1234567891" />
-  <Project Path="KitveiHakodesh/CSharpBackend/BloomSearchEngineLib/BloomSearchEngineLib.csproj" Id="0f7c9226-2c18-4cb8-8f39-a3a539b7122a" />
-  <Project Path="KitveiHakodesh/CSharpBackend/FtsLib/FtsLib/FtsLib.csproj" Id="76f9daa9-374f-40f9-8511-3239fb6e846e" />
+  <Project Path="KitveiHakodesh/CSharpBackend/FtsLib/Ftslib-Csharp/FtsLib/FtsLib.csproj" Id="76f9daa9-374f-40f9-8511-3239fb6e846e" />
   <Project Path="KitveiHakodesh/CSharpBackend/KitveiHakodeshDemoApp/KitveiHakodeshDemoApp.csproj" Id="2b6e5acb-2062-4281-aacb-c46681fcfe42" />
   <Project Path="KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/KitveiHakodeshLib.csproj" Id="a1b2c3d4-e5f6-7890-abcd-ef1234567890" />
   <Project Path="KleiKodeshVsto/DocDesign/DocDesignDemo/DocDesignDemo.csproj" Id="e5f6a7b8-c9d0-1234-efab-567890123cde" />

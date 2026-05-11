@@ -93,7 +93,6 @@ const resultsListRef = ref<InstanceType<typeof FullTextSearchResultsList> | null
 const initialScrollIndex = ref<number | undefined>()
 const initialScrollOffset = ref<number | undefined>()
 const isAdvancedOpen = ref(false)
-const showSyntaxHelp = ref(false)
 // Scroll position owned here — updated by SearchResultsList via saveScroll emit
 let lastScrollIndex: number | undefined
 let lastScrollOffset: number | undefined
@@ -256,12 +255,10 @@ onBeforeUnmount(() => {
       :require-ordered="requireOrdered"
       :context-words="settings.searchContextMarginWords"
       :expand-ketiv="expandKetiv"
-      :show-syntax-help="showSyntaxHelp"
       @update:max-word-distance="maxWordDistance = $event"
       @update:require-ordered="requireOrdered = $event"
       @update:context-words="settings.searchContextMarginWords = $event"
       @update:expand-ketiv="expandKetiv = $event"
-      @update:show-syntax-help="showSyntaxHelp = $event"
       @close="isAdvancedOpen = false"
     />
 
