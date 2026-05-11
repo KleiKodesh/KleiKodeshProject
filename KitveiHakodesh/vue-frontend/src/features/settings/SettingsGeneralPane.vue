@@ -87,12 +87,12 @@ const { toolbarPosition } = storeToRefs(bookViewStore)
       />
     </SettingRow>
 
-    <SettingRow label="כיסוי שם ה'" hint="מחליף את האות ה׳ בשמות הקודש באות ק׳">
+    <SettingRow label="כיסוי שם ה'" hint="מחליף את האות ה׳ בשמות הקודש באות ד׳">
       <ToggleGroup
         v-model="censorDivineNames"
         :options="[
           { label: 'כתיב מלא', value: false },
-          { label: 'כיסוי (ה←ק)', value: true },
+          { label: 'כיסוי (ה←ד)', value: true },
         ]"
       />
     </SettingRow>

@@ -243,7 +243,7 @@ const progressPct = computed(() => Math.round((stepIndex.value / (steps.value.le
                   v-model="censorDivineNames"
                   :options="[
                     { label: 'כתיב מלא', value: false },
-                    { label: 'כיסוי (ה←ק)', value: true },
+                    { label: 'כיסוי (ה←ד)', value: true },
                   ]"
                 />
               </SettingRow>
