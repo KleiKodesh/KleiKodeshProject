@@ -321,14 +321,39 @@ function captureScrollPos(): { scrollIndex: number; scrollOffset: number } | nul
 }
 
 function restoreCommentaryScrollPos(scrollIndex: number, scrollOffset: number) {
-  // Same two-rAF pattern as BookViewLinesContent:
-  // scrollToIndex triggers TanStack's internal correction — wait one rAF for it to settle,
-  // then set scrollTop directly using the real measured item.start.
-  virtualizer.value.scrollToIndex(scrollIndex, { align: 'start' })
-  requestAnimationFrame(() => {
-    const item = virtualizer.value.measurementsCache.find((m) => m.index === scrollIndex)
-    if (item && scrollerEl.value) scrollerEl.value.scrollTop = item.start + scrollOffset
-  })
+  // Use TanStack's scrollToIndex to get the item into view, then apply the sub-item
+  // offset. We must wait for the virtualizer to actually render and measure the target
+  // item before applying the offset — otherwise item.start is based on estimated sizes
+  // (40px headers, 48px lines) which are wrong for variable-height commentary content.
+  //
+  // Strategy: call scrollToIndex, then poll measurementsCache until the item's measured
+  // size stabilises (two consecutive rAFs with the same start value), then apply offset.
+  // Cap at MAX_ATTEMPTS to avoid infinite loops if the item never measures.
+  const MAX_ATTEMPTS = 12
+  let attempts = 0
+  let lastStart: number | undefined
+
+  function attempt() {
+    virtualizer.value.scrollToIndex(scrollIndex, { align: 'start' })
+    requestAnimationFrame(() => {
+      const item = virtualizer.value.measurementsCache.find((m) => m.index === scrollIndex)
+      if (!item || !scrollerEl.value) {
+        if (++attempts < MAX_ATTEMPTS) attempt()
+        return
+      }
+      // Wait for the measured start to stabilise — if it changed since last rAF,
+      // the virtualizer is still correcting positions, try again.
+      if (item.start !== lastStart) {
+        lastStart = item.start
+        if (++attempts < MAX_ATTEMPTS) attempt()
+        return
+      }
+      // Start is stable — apply the sub-item offset.
+      scrollerEl.value.scrollTop = item.start + scrollOffset
+    })
+  }
+
+  attempt()
 }
 
 defineExpose({

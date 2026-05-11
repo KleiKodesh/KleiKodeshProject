@@ -398,7 +398,12 @@ export function useCommentary(
 
       groups.value = await buildCommentaryGroupsFromCombined(rows, booksDataStore.allBooksMap)
     } finally {
-      loading.value = false
+      // If this was a single-line fallback load that returned nothing, and the section
+      // range is already available, the selectedLineIds watcher will fire synchronously
+      // after this finally block and start gen=2. Keep loading=true so the restore
+      // watcher doesn't fire between gen=1 and gen=2.
+      const refetchImminent = lastLoadUsedSingleLine && selectedLineIds() != null && selectedLineIds()!.length > 0
+      if (!refetchImminent) loading.value = false
     }
   }
 
