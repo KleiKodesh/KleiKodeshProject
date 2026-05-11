@@ -87,6 +87,16 @@ export const SQL = {
   `,
 
   /**
+   * Get bookId directly from the line table for a batch of line ids.
+   * Used as a fallback for lines that have no line_toc entry (e.g. custom books).
+   */
+  GET_BOOK_IDS_FOR_LINES: (count: number) => `
+    SELECT id AS lineId, bookId
+    FROM line
+    WHERE id IN (${Array(count).fill('?').join(', ')})
+  `,
+
+  /**
    * Get the full TOC path for a batch of line ids.
    * Uses a recursive CTE to walk tocEntry.parentId up to the root,
    * then concatenates ancestor texts root→leaf separated by ' / '.

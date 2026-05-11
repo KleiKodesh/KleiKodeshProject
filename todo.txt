@@ -8,10 +8,6 @@ add otional word to searc options
 smid optimizations
 deletion handling and update handling
 
-personal books not showing in fts filter
-settings זהה לתצוגת ספר is not working
 
-מפרשים filter in רמבם shows מפרשים twice
+personal books not showing in fts filter
  alt toc ראש השנה ירושלמי Toc is showing up twice
-ששאלוהו was changed to שאלוקו solution switch to ד instead more natural
-bug rmoving of : cases bug in דפים כט:
