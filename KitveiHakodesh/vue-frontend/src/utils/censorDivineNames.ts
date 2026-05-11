@@ -6,43 +6,43 @@ export function censorDivineNames(text: string): string {
   const D = '[\\u0591-\\u05C7]*'
 
   const patterns: { regex: RegExp; replacement: string | ((...args: string[]) => string) }[] = [
-    // יהוה → יקוק
+    // יהוה → ידוד
     {
       regex: new RegExp(`(י${D})(ה${D})(ו${D})(ה${D})`, 'g'),
       replacement: (_m: string, y: string, h1: string, v: string, h2: string) =>
-        y + h1.replace('ה', 'ק') + v + h2.replace('ה', 'ק'),
+        y + h1.replace('ה', 'ד') + v + h2.replace('ה', 'ד'),
     },
     // אדני → אדנ-י
     {
       regex: new RegExp(`(א${D})(ד${D})(נ${D})(י${D})`, 'g'),
       replacement: '$1$2$3-$4',
     },
-    // אלהים → אלקים (not followed by אחרים)
+    // אלהים → אלדים (not followed by אחרים)
     {
       regex: new RegExp(`(א${D})(ל${D})(ה${D})(י${D})(ם${D})(?!\\s*א${D}ח${D}ר${D}י${D}ם)`, 'g'),
       replacement: (_m: string, a: string, l: string, h: string, y: string, m: string) =>
-        a + l + h.replace('ה', 'ק') + y + m,
+        a + l + h.replace('ה', 'ד') + y + m,
     },
-    // אלוהים → אלוקים (not followed by אחרים)
+    // אלוהים → אלודים (not followed by אחרים)
     {
       regex: new RegExp(
         `(א${D})(ל${D})(ו${D})(ה${D})(י${D})(ם${D})(?!\\s*א${D}ח${D}ר${D}י${D}ם)`,
         'g',
       ),
       replacement: (_m: string, a: string, l: string, v: string, h: string, y: string, m: string) =>
-        a + l + v + h.replace('ה', 'ק') + y + m,
+        a + l + v + h.replace('ה', 'ד') + y + m,
     },
-    // אלהי → אלקי
+    // אלהי → אלדי
     {
       regex: new RegExp(`(א${D})(ל${D})(ה${D})(י${D})`, 'g'),
       replacement: (_m: string, a: string, l: string, h: string, y: string) =>
-        a + l + h.replace('ה', 'ק') + y,
+        a + l + h.replace('ה', 'ד') + y,
     },
-    // אלוה → אלוק (not followed by י or ם)
+    // אלוה → אלוד (not followed by י or ם)
     {
       regex: new RegExp(`(א${D})(ל${D})(ו${D})(ה${D})(?![יםא])`, 'g'),
       replacement: (_m: string, a: string, l: string, v: string, h: string) =>
-        a + l + v + h.replace('ה', 'ק'),
+        a + l + v + h.replace('ה', 'ד'),
     },
   ]
 

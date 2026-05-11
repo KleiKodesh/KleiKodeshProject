@@ -99,15 +99,6 @@ export function useFullTextSearchIndexingStatus() {
         state.value = { ...IDLE, dbNotFound: true }
         return
       }
-      if (msg.event === 'ftsIndexVersionMismatch') {
-        const oldVersion = msg.oldVersion as string
-        const newVersion = msg.newVersion as string
-        const rebuild = window.confirm(
-          `הגרסה של האפליקציה עודכנה (${oldVersion} ← ${newVersion}).\nהאם לבנות מחדש את אינדקס החיפוש?`,
-        )
-        callBridgeAction('FtsConfirmReindex', { confirm: rebuild }).catch(() => {})
-        return
-      }
       if (msg.event === 'ftsIndexInvalidated') {
         // Old or corrupt index detected — rebuild started automatically, nothing to confirm.
         console.warn('[useFullTextSearchIndexingStatus] FTS index invalidated:', msg.reason)

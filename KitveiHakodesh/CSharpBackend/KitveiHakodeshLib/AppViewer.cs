@@ -394,10 +394,6 @@ namespace KitveiHakodeshLib
                             _search.HandleDeleteIndex(id);
                             break;
                         case "ResetFtsIndex": _search.HandleResetFtsIndex(id); break;
-                        case "FtsConfirmReindex":
-                            bool confirm = root.TryGetProperty("confirm", out var cv) && cv.GetBoolean();
-                            _search.HandleConfirmReindex(confirm, id);
-                            break;
                         case "TogglePopOut": HandleTogglePopOut(id); break;
                         case "getWordSynonyms": HandleGetWordSynonyms(root, id); break;
                         case "getFonts": HandleGetFonts(id); break;

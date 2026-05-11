@@ -27,6 +27,15 @@ namespace KitveiHakodeshLib.Search
     ///   Building → Ready    : build completes successfully
     ///   Building → Idle     : build cancelled or failed
     ///   Any      → Idle     : FtsIndexState.StopAll() + DeleteFtsIndex()
+    ///
+    /// Cross-process coordination:
+    ///   When another instance of the app is already building the index, this
+    ///   instance does not start a second build. Instead it starts a watcher
+    ///   thread that polls the progress file every 2 seconds and pushes
+    ///   ftsIndexProgress events to its own frontend so the UI stays live.
+    ///   When the other process releases the build lock (finishes or crashes),
+    ///   the watcher re-queues ExecuteOnDbReady on the actor thread so this
+    ///   instance picks up and completes any interrupted build.
     /// </summary>
     public class SearchHandler
     {
@@ -41,6 +50,10 @@ namespace KitveiHakodeshLib.Search
         private readonly BlockingCollection<Action> _lifecycleQueue
             = new BlockingCollection<Action>();
         private readonly Thread _actorThread;
+
+        // ── Cross-process watcher ─────────────────────────────────────────────────
+        // Cancels the watcher thread when this instance takes over the build or shuts down.
+        private CancellationTokenSource _watcherCts;
 
         public SearchHandler(WebBridge bridge, WebView2 webView)
         {
@@ -84,6 +97,10 @@ namespace KitveiHakodeshLib.Search
         private void ExecuteOnDbReady(string dbPath)
         {
             Console.WriteLine("[SearchHandler] OnDbReady executing, dbPath=" + dbPath);
+
+            // Cancel any running watcher from a previous cross-process wait.
+            StopWatcher();
+
             if (!File.Exists(dbPath))
             {
                 Console.WriteLine("[SearchHandler] OnDbReady: file does not exist — notifying frontend");
@@ -117,7 +134,7 @@ namespace KitveiHakodeshLib.Search
                         + validationError + ") — deleting and rebuilding");
                     FtsIndexState.DeleteFtsIndex();
                     _bridge.PushEvent(new { @event = "ftsIndexInvalidated", reason = validationError });
-                    _builder.StartIndexing();
+                    StartBuildOrWatch(dbPath);
                     return;
                 }
 
@@ -129,15 +146,11 @@ namespace KitveiHakodeshLib.Search
                     !string.Equals(installedVersion, stampedVersion,
                                    StringComparison.OrdinalIgnoreCase))
                 {
-                    Console.WriteLine("[SearchHandler] App version changed — asking user whether to rebuild index");
-                    _indexState.MarkReadyDirect();
-                    _bridge.PushEvent(new
-                    {
-                        @event     = "ftsIndexVersionMismatch",
-                        oldVersion = stampedVersion,
-                        newVersion = installedVersion
-                    });
-                    _builder.PushCurrentProgress();
+                    Console.WriteLine("[SearchHandler] DB changed (app version " + stampedVersion
+                        + " → " + installedVersion + ") — rebuilding index automatically");
+                    FtsIndexState.DeleteFtsIndex();
+                    _bridge.PushEvent(new { @event = "ftsIndexInvalidated", reason = "db updated" });
+                    StartBuildOrWatch(dbPath);
                     return;
                 }
 
@@ -191,7 +204,119 @@ namespace KitveiHakodeshLib.Search
             }
 
             Console.WriteLine("[SearchHandler] Starting FTS index build...");
-            _builder.StartIndexing();
+            StartBuildOrWatch(dbPath);
+        }
+
+        // ── Cross-process coordination ────────────────────────────────────────────
+
+        /// <summary>
+        /// Starts the index build if no other process holds the build lock.
+        /// If another process is already building, starts a watcher thread instead:
+        /// the watcher polls the progress file every 2 seconds, pushes progress
+        /// events to this instance's frontend, and re-queues ExecuteOnDbReady when
+        /// the other process releases the lock (finishes or crashes).
+        /// </summary>
+        private void StartBuildOrWatch(string dbPath)
+        {
+            if (!FtsIndexState.IsAnotherProcessBuilding())
+            {
+                // Lock is free — we will acquire it inside FtsIndexBuilder.StartIndexing.
+                _builder.StartIndexing();
+                return;
+            }
+
+            Console.WriteLine("[SearchHandler] Another process is building the FTS index — watching for completion");
+
+            // Push an initial progress event so the frontend shows the indexing overlay.
+            PushProgressFromFile(isReady: false);
+
+            // Start the watcher thread.
+            var cts = new CancellationTokenSource();
+            _watcherCts = cts;
+
+            Thread watcher = new Thread(() => WatchOtherProcessBuild(dbPath, cts.Token))
+            {
+                IsBackground = true,
+                Name         = "FtsIndexWatcher"
+            };
+            watcher.Start();
+        }
+
+        /// <summary>
+        /// Runs on a background thread while another process holds the build lock.
+        /// Polls the progress file every 2 seconds and pushes ftsIndexProgress events.
+        /// When the lock is released, re-queues ExecuteOnDbReady on the actor thread.
+        /// </summary>
+        private void WatchOtherProcessBuild(string dbPath, CancellationToken ct)
+        {
+            const int PollIntervalMs = 2000;
+
+            while (!ct.IsCancellationRequested)
+            {
+                Thread.Sleep(PollIntervalMs);
+                if (ct.IsCancellationRequested) break;
+
+                // Push current progress from the file so the frontend stays live.
+                PushProgressFromFile(isReady: false);
+
+                // Check whether the other process has released the lock.
+                if (!FtsIndexState.IsAnotherProcessBuilding())
+                {
+                    Console.WriteLine("[SearchHandler] Other process released build lock — taking over");
+                    // Re-queue the full startup sequence on the actor thread.
+                    // This will resume or complete the interrupted build.
+                    _lifecycleQueue.Add(() => ExecuteOnDbReady(dbPath));
+                    return;
+                }
+            }
+        }
+
+        private void StopWatcher()
+        {
+            var cts = _watcherCts;
+            _watcherCts = null;
+            cts?.Cancel();
+        }
+
+        /// <summary>
+        /// Reads the progress file and pushes an ftsIndexProgress event to the frontend.
+        /// Used by the watcher thread to keep the UI live while another process builds.
+        /// </summary>
+        private void PushProgressFromFile(bool isReady)
+        {
+            double pct;
+            int processed, total;
+            if (FtsIndexState.TryReadProgressFile(out pct, out processed, out total))
+            {
+                _bridge.PushEvent(new
+                {
+                    @event           = "ftsIndexProgress",
+                    isReady          = isReady,
+                    isIndexing       = true,
+                    percentage       = Math.Round(pct, 1),
+                    processedChunks  = processed,
+                    totalChunks      = total,
+                    eta              = "",
+                    segmentCount     = 0,
+                    latestSegmentPct = (double?)null
+                });
+            }
+            else
+            {
+                // No progress file yet — push a "started but no data" event.
+                _bridge.PushEvent(new
+                {
+                    @event           = "ftsIndexProgress",
+                    isReady          = false,
+                    isIndexing       = true,
+                    percentage       = 0.0,
+                    processedChunks  = 0,
+                    totalChunks      = 0,
+                    eta              = "",
+                    segmentCount     = 0,
+                    latestSegmentPct = (double?)null
+                });
+            }
         }
 
         /// <summary>
@@ -203,6 +328,7 @@ namespace KitveiHakodeshLib.Search
             _lifecycleQueue.Add(() =>
             {
                 Console.WriteLine("[SearchHandler] ResetAndReindex executing");
+                StopWatcher();
                 _indexState.StopAll();
                 FtsIndexState.DeleteFtsIndex();
                 if (!string.IsNullOrEmpty(newDbPath) && File.Exists(newDbPath))
@@ -213,6 +339,7 @@ namespace KitveiHakodeshLib.Search
         public void StopIndexing()
         {
             Console.WriteLine("[SearchHandler] StopIndexing called");
+            StopWatcher();
             _indexState.StopAll();
         }
 
@@ -225,6 +352,7 @@ namespace KitveiHakodeshLib.Search
             _lifecycleQueue.Add(() =>
             {
                 Console.WriteLine("[SearchHandler] HandleDeleteIndex executing");
+                StopWatcher();
                 _indexState.StopAll();
                 FtsIndexState.DeleteFtsIndex();
             });
@@ -238,19 +366,47 @@ namespace KitveiHakodeshLib.Search
                 ResetAndReindex(dbPath);
         }
 
-        public void HandleConfirmReindex(bool confirm, string id)
-        {
-            _bridge.Reply(id, new { });
-            if (!confirm) return;
-            Console.WriteLine("[SearchHandler] User confirmed reindex after app update");
-            string dbPath = _indexState.GetDbPath();
-            ResetAndReindex(dbPath);
-        }
-
         public void HandleGetProgress(string id)
         {
             bool ready    = _indexState.IsReady;
             bool indexing = _indexState.IsIndexing;
+
+            // If this instance is not building but another process is, read the
+            // progress file so the frontend gets real percentage data on mount.
+            if (!ready && !indexing && FtsIndexState.IsAnotherProcessBuilding())
+            {
+                double pct;
+                int processed, total;
+                if (FtsIndexState.TryReadProgressFile(out pct, out processed, out total))
+                {
+                    _bridge.Reply(id, new
+                    {
+                        isReady         = false,
+                        isIndexing      = true,
+                        percentage      = Math.Round(pct, 1),
+                        processedChunks = processed,
+                        totalChunks     = total,
+                        eta             = "",
+                        segmentCount    = 0,
+                        latestSegmentPct = (double?)null
+                    });
+                    return;
+                }
+
+                _bridge.Reply(id, new
+                {
+                    isReady         = false,
+                    isIndexing      = true,
+                    percentage      = 0.0,
+                    processedChunks = 0,
+                    totalChunks     = 0,
+                    eta             = "",
+                    segmentCount    = 0,
+                    latestSegmentPct = (double?)null
+                });
+                return;
+            }
+
             _bridge.Reply(id, new
             {
                 isReady         = ready,

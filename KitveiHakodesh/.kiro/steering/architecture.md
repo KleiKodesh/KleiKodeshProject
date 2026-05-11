@@ -133,7 +133,7 @@ Full-text search backed by FtsLib (LSM-style segment index with delta+varint com
 - `FullTextSearchFilterNode.vue` — filter tree node
 - `FullTextSearchIndexingOverlay.vue` — indexing progress overlay; shown while the index is building; search is enabled as soon as the first segment is flushed (partial index)
 - `useFullTextSearch.ts` — search execution and IDB caching; streams results from C# in batches via `chrome.webview` message events; enriches each batch with TOC paths via a SQL query; resumes interrupted searches from the cache skip offset
-- `useFullTextSearchIndexingStatus.ts` — subscribes to `ftsIndexProgress` push events from C#; handles `ftsIndexVersionMismatch` (prompts user to rebuild) and `ftsIndexInvalidated` (automatic rebuild)
+- `useFullTextSearchIndexingStatus.ts` — subscribes to `ftsIndexProgress` push events from C#; handles `ftsIndexInvalidated` (automatic rebuild when DB changes or index is corrupt)
 - `useFullTextSearchFilters.ts` — filter state (checked books/categories), result filtering, and result click handler
 - `fullTextSearchTypes.ts` — TypeScript types
 
@@ -372,7 +372,7 @@ The full-text search pipeline spans three layers: FtsLib (the index engine), Kit
 **Vue frontend** (`src/features/full-text-search/`):
 
 - `useFullTextSearch.ts` — calls `FtsSearchStart` via `callBridgeAction`, receives batches via a `chrome.webview` message listener keyed by `searchId`, enriches each batch with TOC paths via `GET_TOC_PATHS_FOR_LINES`, appends to the IDB cache via `searchCacheStore`. On a cache hit with a complete result set, skips the stream entirely. On a partial cache hit, passes `skipCount` to C# so the stream resumes from where it left off.
-- `useFullTextSearchIndexingStatus.ts` — subscribes to `ftsIndexProgress` push events via `onWebviewEvent`. Handles `ftsIndexVersionMismatch` (prompts user to confirm rebuild) and `ftsIndexInvalidated` (automatic rebuild, no prompt).
+- `useFullTextSearchIndexingStatus.ts` — subscribes to `ftsIndexProgress` push events via `onWebviewEvent`. Handles `ftsIndexInvalidated` (automatic rebuild when DB changes or index is corrupt).
 
 **Bridge actions** (all handled by `SearchHandler` via `JsBridge.cs`):
 
@@ -381,12 +381,10 @@ The full-text search pipeline spans three layers: FtsLib (the index engine), Kit
 | `FtsSearchStart` | Vue → C# | Start a search; returns `{ searchId }` |
 | `FtsSearchCancel` | Vue → C# | Cancel an in-flight search by `searchId` |
 | `GetFtsIndexingProgress` | Vue → C# | Poll current indexing state on mount |
-| `FtsConfirmReindex` | Vue → C# | User's response to the version-mismatch prompt |
 | `ResetFtsIndex` | Vue → C# | Delete index and rebuild from scratch |
 | `searchBatch` | C# → Vue | Batch of `FullTextSearchResult` objects |
 | `searchComplete` | C# → Vue | Stream finished |
 | `searchCancelled` | C# → Vue | Stream cancelled |
 | `searchError` | C# → Vue | Stream error |
 | `ftsIndexProgress` | C# → Vue | Indexing progress tick |
-| `ftsIndexVersionMismatch` | C# → Vue | App version changed; user must confirm rebuild |
 | `ftsIndexInvalidated` | C# → Vue | Index corrupt or missing; rebuild started automatically |

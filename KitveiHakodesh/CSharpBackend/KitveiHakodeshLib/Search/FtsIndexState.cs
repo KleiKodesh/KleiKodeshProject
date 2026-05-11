@@ -24,10 +24,134 @@ namespace KitveiHakodeshLib.Search
     ///   Building → Ready    : TryMarkReady()
     ///   Building → Idle     : TryMarkIdle()
     ///   Any      → Idle     : StopAll()
+    ///
+    /// Cross-process coordination:
+    ///   A named system Mutex (FtsIndexBuildLock) ensures only one process builds
+    ///   at a time. The building process acquires it before starting and releases it
+    ///   when the build finishes or is cancelled. Other processes detect the held
+    ///   mutex via TryAcquireBuildLock() and poll the progress file for display.
     /// </summary>
     internal sealed class FtsIndexState
     {
         private enum State { Idle, Building, Ready }
+
+        // ── Cross-process build lock ──────────────────────────────────────────────
+        // Named mutex scoped to the current user session (Local\ prefix) so it works
+        // correctly when multiple Windows user sessions are active simultaneously.
+        // The mutex name encodes the index path so two instances pointing at different
+        // index directories do not block each other.
+        private static Mutex _buildMutex;
+        private static bool  _buildMutexOwned;
+        private static readonly object _mutexLock = new object();
+
+        private static string BuildMutexName
+        {
+            get
+            {
+                // Sanitise the path into a valid mutex name (no backslashes, colons, etc.)
+                string sanitised = FtsIndexPath
+                    .Replace('\\', '_').Replace('/', '_')
+                    .Replace(':', '_').Replace(' ', '_');
+                // Mutex names are limited to MAX_PATH (260) chars; truncate if needed.
+                if (sanitised.Length > 200) sanitised = sanitised.Substring(sanitised.Length - 200);
+                return @"Local\FtsIndexBuild_" + sanitised;
+            }
+        }
+
+        /// <summary>
+        /// Tries to acquire the cross-process build lock without blocking.
+        /// Returns true if this process now owns the lock; false if another process
+        /// already holds it.
+        /// </summary>
+        internal static bool TryAcquireBuildLock()
+        {
+            lock (_mutexLock)
+            {
+                if (_buildMutexOwned) return true; // already ours
+
+                try
+                {
+                    if (_buildMutex == null)
+                        _buildMutex = new Mutex(false, BuildMutexName);
+
+                    bool acquired = _buildMutex.WaitOne(0); // non-blocking
+                    _buildMutexOwned = acquired;
+                    return acquired;
+                }
+                catch (AbandonedMutexException)
+                {
+                    // Previous owner crashed — we now own it.
+                    _buildMutexOwned = true;
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("[FtsIndexState] TryAcquireBuildLock failed: " + ex.Message);
+                    return true; // fail open — don't block the build on mutex errors
+                }
+            }
+        }
+
+        /// <summary>
+        /// Releases the cross-process build lock. Safe to call even if not owned.
+        /// </summary>
+        internal static void ReleaseBuildLock()
+        {
+            lock (_mutexLock)
+            {
+                if (!_buildMutexOwned) return;
+                try
+                {
+                    _buildMutex?.ReleaseMutex();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("[FtsIndexState] ReleaseBuildLock failed: " + ex.Message);
+                }
+                finally
+                {
+                    _buildMutexOwned = false;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Returns true if another process currently holds the build lock.
+        /// Does not acquire the lock.
+        /// </summary>
+        internal static bool IsAnotherProcessBuilding()
+        {
+            lock (_mutexLock)
+            {
+                if (_buildMutexOwned) return false; // we own it — no other process
+
+                try
+                {
+                    if (_buildMutex == null)
+                        _buildMutex = new Mutex(false, BuildMutexName);
+
+                    bool acquired = _buildMutex.WaitOne(0);
+                    if (acquired)
+                    {
+                        // We got it — release immediately, nobody else is building.
+                        _buildMutex.ReleaseMutex();
+                        return false;
+                    }
+                    return true;
+                }
+                catch (AbandonedMutexException)
+                {
+                    // Previous owner crashed — mutex is now ours; release it.
+                    try { _buildMutex?.ReleaseMutex(); } catch { }
+                    return false;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("[FtsIndexState] IsAnotherProcessBuilding check failed: " + ex.Message);
+                    return false; // fail open
+                }
+            }
+        }
 
         // Guards all field reads and writes. Never held during long-running I/O.
         private readonly object _lock = new object();
@@ -202,6 +326,50 @@ namespace KitveiHakodeshLib.Search
             catch (Exception ex)
             {
                 Console.WriteLine("[SearchHandler] Failed to delete Bloom folder: " + ex.Message);
+            }
+        }
+
+        // ── Cross-process progress reading ───────────────────────────────────────
+
+        /// <summary>
+        /// Reads the progress file written by the building process and returns
+        /// display data (percentage, processed, total) without needing a live
+        /// SeforimIndex instance. Used by the watcher thread in the non-building
+        /// process to push progress events to its own frontend.
+        /// Returns false if no progress file exists or it cannot be read.
+        /// </summary>
+        internal static bool TryReadProgressFile(out double percentage, out int processed, out int total)
+        {
+            percentage = 0;
+            processed  = 0;
+            total      = 0;
+            try
+            {
+                // The progress file is "build.progress" in the index directory.
+                // Format: 3 newline-separated integers — lineId, totalLines, resumeOffset.
+                // Written by IndexingPipeline.WriteProgressFile.
+                string progressPath = Path.Combine(FtsIndexPath, "build.progress");
+                if (!File.Exists(progressPath)) return false;
+
+                string[] lines = File.ReadAllText(progressPath).Trim().Split('\n');
+                // lines[0] = last flushed lineId (not needed for display)
+                // lines[1] = total lines in the database
+                // lines[2] = count of lines indexed so far (resumeOffset)
+                long cachedTotal  = 0;
+                long cachedOffset = 0;
+                if (lines.Length >= 2) long.TryParse(lines[1].Trim(), out cachedTotal);
+                if (lines.Length >= 3) long.TryParse(lines[2].Trim(), out cachedOffset);
+
+                if (cachedTotal <= 0) return false;
+
+                total      = (int)Math.Min(cachedTotal, int.MaxValue);
+                processed  = (int)Math.Min(cachedOffset, int.MaxValue);
+                percentage = Math.Min(99.9, cachedOffset * 100.0 / cachedTotal);
+                return true;
+            }
+            catch
+            {
+                return false;
             }
         }
 

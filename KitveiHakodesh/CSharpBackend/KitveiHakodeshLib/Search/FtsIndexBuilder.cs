@@ -31,12 +31,35 @@ namespace KitveiHakodeshLib.Search
             if (!_state.TryStartBuilding(out cts))
                 return;
 
+            // Acquire the cross-process build lock before starting the build task.
+            // If another process holds it, TryStartBuilding already returned false
+            // (the actor thread in SearchHandler checks IsAnotherProcessBuilding first),
+            // so we should always be able to acquire here. Fail open if not.
+            if (!FtsIndexState.TryAcquireBuildLock())
+            {
+                Console.WriteLine("[FtsIndexBuilder] Could not acquire build lock — another process may be building");
+                _state.TryMarkIdle(cts);
+                return;
+            }
+
             SeforimIndex index = _state.GetIndex();
             Task task = Task.Run(() => RunBuild(cts, index));
             _state.SetIndexingTask(task);
         }
 
         private void RunBuild(CancellationTokenSource cts, SeforimIndex index)
+        {
+            try
+            {
+                RunBuildCore(cts, index);
+            }
+            finally
+            {
+                FtsIndexState.ReleaseBuildLock();
+            }
+        }
+
+        private void RunBuildCore(CancellationTokenSource cts, SeforimIndex index)
         {
             // Read all resume state from the progress file — zero DB queries on resume.
             index.GetResumeState(out int resumeLineId, out long cachedTotalLines, out long cachedResumeOffset);
