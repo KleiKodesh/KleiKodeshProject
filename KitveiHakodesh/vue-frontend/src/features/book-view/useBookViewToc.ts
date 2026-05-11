@@ -1,4 +1,4 @@
-import { ref, shallowRef, watch } from 'vue'
+import { ref, shallowRef, computed, watch } from 'vue'
 import { query } from '@/webview-host/seforimDb'
 import { SQL } from '@/webview-host/queries.sql'
 import { SearchableTree, stripTocTitleRoots } from './tocSearchUtils'
@@ -20,6 +20,25 @@ export interface AltTocSection {
   searchTree: SearchableTree | null // built lazily on first search use
 }
 
+// Priority order for picking the default alt-toc structure when multiple exist.
+// Keys not in this list get priority 100 and fall back to the first by id.
+function altTocStructurePriority(key: string): number {
+  switch (key.toLowerCase()) {
+    case 'daf':      return 0
+    case 'parasha':  return 1
+    case 'chapters': return 2
+    case 'topic':    return 3
+    case 'section':  return 4
+    default:         return 100
+  }
+}
+
+function pickPreferredAltTocStructure(structures: AltTocStructure[]): AltTocStructure {
+  return structures.reduce((best, current) =>
+    altTocStructurePriority(current.key) < altTocStructurePriority(best.key) ? current : best,
+  )
+}
+
 function stripBookTitleRoot(
   entries: TocEntry[],
   bookTitle: string | undefined,
@@ -32,10 +51,21 @@ function stripBookTitleRoot(
 export function useToc(bookId: () => number | undefined, bookTitle?: () => string | undefined) {
   const tocEntries = ref<TocEntry[]>([])
   const altTocSections = shallowRef<AltTocSection[]>([])
+  const selectedAltTocStructureId = ref<number | null>(null)
   const loading = ref(false)
   const tocLoaded = ref(false) // true once the first load completes, even if entries is empty
   const error = ref<string | null>(null)
   const tocSearchTree = shallowRef<SearchableTree>(new SearchableTree([]))
+
+  const selectedAltTocSection = computed<AltTocSection | null>(() => {
+    const sections = altTocSections.value
+    if (!sections.length) return null
+    return sections.find((s) => s.structure.id === selectedAltTocStructureId.value) ?? sections[0]!
+  })
+
+  function selectAltTocStructure(structure: AltTocStructure) {
+    selectedAltTocStructureId.value = structure.id
+  }
 
   async function load(id: number) {
     loading.value = true
@@ -75,6 +105,7 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
         }),
       )
       altTocSections.value = sections
+      selectedAltTocStructureId.value = pickPreferredAltTocStructure(sections.map((s) => s.structure)).id
     } catch {
       // alt TOC is non-critical — silently ignore errors
     } finally {
@@ -88,6 +119,7 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
       if (id != null) {
         tocLoaded.value = false
         altTocSections.value = []
+        selectedAltTocStructureId.value = null
         _altTocBookId = undefined
         load(id)
       }
@@ -136,6 +168,8 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
   return {
     tocEntries,
     altTocSections,
+    selectedAltTocSection,
+    selectAltTocStructure,
     loading,
     tocLoaded,
     error,

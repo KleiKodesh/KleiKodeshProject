@@ -1,0 +1,10 @@
+<svg width="256" height="256" viewBox="2 1.8 12 12.2" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+  <!-- Left Page -->
+  <path d="M8 3V14C7.5 14 7 13.9 7 13.9C5.5 13.2 3.5 12.5 2 12.3V3.3C2 2.5 2.7 1.8 3.5 1.9C5 2 7 2.8 8 3.3V3Z" fill="#A78BFA" fill-opacity="0.35"/>
+  
+  <!-- Right Page -->
+  <path d="M8 3.3V14C8.5 14 9 13.9 9 13.9C10.5 13.2 12.5 12.5 14 12.3V3.3C14 2.5 13.3 1.8 12.5 1.9C11 2 9 2.8 8 3.3Z" fill="#7C3AED"/>  
+
+  <!-- Bookmark -->
+  <path d="M5 2.2 7 2.8V7.5L6 6.7 5 7.2V4Z" fill="#534AB7" fill-opacity="0.9"/>
+</svg>

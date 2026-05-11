@@ -11,10 +11,19 @@ export function useVirtualListKeys(
 ) {
   const focusedIndex = ref(-1)
   const containerFocused = ref(false)
+  // Track whether focus arrived via pointer so we skip the scroll-to-top
+  // that is only appropriate for keyboard-initiated focus.
+  let focusFromPointer = false
+
+  useEventListener(scrollerEl, 'pointerdown', () => {
+    focusFromPointer = true
+  })
 
   useEventListener(scrollerEl, 'focus', () => {
     containerFocused.value = true
-    if (focusedIndex.value < 0 && getCount() > 0) {
+    const fromPointer = focusFromPointer
+    focusFromPointer = false
+    if (!fromPointer && focusedIndex.value < 0 && getCount() > 0) {
       focusedIndex.value = 0
       getVirtualizer().scrollToIndex(0, { align: 'auto' })
     }

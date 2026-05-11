@@ -7,7 +7,6 @@ fixup app clash of kitveihkosdesh running from owrd and independently
 add otional word to searc options
 smid optimizations
 deletion handling and update handling
-
-
 personal books not showing in fts filter
- alt toc ראש השנה ירושלמי Toc is showing up twice
+
+optimize verification

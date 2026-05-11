@@ -178,6 +178,15 @@ function onContextWordsInput(event: Event) {
               <span class="example">לא פועל</span> עם טילדה (~) — הרחבה מטושטשת כבר מכסה וריאציות.
             </td>
           </tr>
+          <tr>
+            <td class="pattern">@מילה@</td>
+            <td>
+              קידומות / סיומות דקדוקיות — @ לפני המילה מרחיב קידומות דקדוקיות (ו, ב, ל, מ, ש, ה, כ…), @ אחרי המילה מרחיב סיומות דקדוקיות (ים, ות, י, ך, נו…).<br>
+              <span class="example">@שלום@</span> ← שלום, לשלום, בשלום, שלומך, שלומנו…<br>
+              ניתן לסמן רק קידומות: <span class="example">@שלום</span>, רק סיומות: <span class="example">שלום@</span>, או שניהם: <span class="example">@שלום@</span>.<br>
+              <span class="example">לא פועל</span> עם טילדה (~) — לא ניתן לשלב הרחבה דקדוקית עם חיפוש מטושטש.
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>

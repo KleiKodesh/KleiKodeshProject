@@ -100,7 +100,8 @@ export function useBookView(
 
   const {
     getActiveTocEntry, getTocPath,
-    altTocSections, tocEntries, tocSearchTree,
+    altTocSections, selectedAltTocSection,
+    tocEntries, tocSearchTree,
     loading: tocLoading, error: tocError, tocLoaded,
     loadAltTocSections,
   } = useToc(() => bookId, () => bookTitle)
@@ -138,12 +139,12 @@ export function useBookView(
 
   const altTocLabelMap = computed(() => {
     const map = new Map<number, string>()
-    for (const section of altTocSections.value)
-      for (const entry of section.entries) {
-        if (entry.lineIndex == null) continue
-        const existing = map.get(entry.lineIndex)
-        map.set(entry.lineIndex, existing ? `${existing} / ${entry.text}` : entry.text)
-      }
+    const section = selectedAltTocSection.value
+    if (!section) return map
+    for (const entry of section.entries) {
+      if (entry.lineIndex == null) continue
+      map.set(entry.lineIndex, entry.text)
+    }
     return map
   })
 
@@ -357,7 +358,7 @@ export function useBookView(
     bookId,
     lines, prioritise, hasCommentaries, hasRelatedBooks, hasToc,
     groups, filterGroups, staticFilterGroups, commentaryLoading,
-    tocEntries, tocSearchTree, altTocSections, tocLoading, tocError,
+    tocEntries, tocSearchTree, altTocSections, selectedAltTocSection, tocLoading, tocError,
     altTocLabelMap, pinnedCommentaryBookId,
     // scroll / search state
     currentScrollLineIndex,

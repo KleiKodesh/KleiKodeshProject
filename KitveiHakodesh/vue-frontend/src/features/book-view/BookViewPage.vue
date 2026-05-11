@@ -24,7 +24,7 @@ const {
   tocVisible, commentaryTreeVisible, sidePanelVisible, sidePanelToggleButtonEl,
   bookId, lines, prioritise, hasCommentaries, hasRelatedBooks, hasToc,
   groups, filterGroups, staticFilterGroups, commentaryLoading,
-  tocEntries, tocSearchTree, altTocSections, tocLoading, tocError,
+  tocEntries, tocSearchTree, selectedAltTocSection, tocLoading, tocError,
   altTocLabelMap, pinnedCommentaryBookId,
   currentScrollLineIndex,
   scrollStateReady, initialLineIndex, initialScrollTop, initialScrollOffset,
@@ -177,7 +177,7 @@ const {
             :active-toc-entry-id="activeTocEntryId"
             :toc-entries="tocEntries"
             :toc-search-tree="tocSearchTree"
-            :alt-toc-sections="altTocSections"
+            :selected-alt-toc-section="selectedAltTocSection"
             :loading="tocLoading"
             :error="tocError"
             @select="onTocSelect"

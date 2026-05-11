@@ -8,7 +8,7 @@ import SplitPane from '@/components/SplitPane.vue'
 const props = defineProps<{
   activeTocEntryId?: number
   tocEntries: TocEntry[]
-  altTocSections: AltTocSection[]
+  selectedAltTocSection: AltTocSection | null
   loading: boolean
   error: string | null
   tocSearchTree?: SearchableTree
@@ -38,19 +38,14 @@ function focusTocList() {
   el?.focus()
 }
 
-function onSelect(entry: TocEntry) {
-  emit('select', entry)
-}
-
 const hasToc = computed(() => props.tocEntries.length > 0)
-const hasAlt = computed(() => props.altTocSections.length > 0)
+const hasAlt = computed(() => props.selectedAltTocSection != null)
 
 watch(searchQuery, (q) => {
   if (!q) return
-  for (const section of props.altTocSections) {
-    if (section.searchTree == null) {
-      section.searchTree = new SearchableTree(section.entries)
-    }
+  const section = props.selectedAltTocSection
+  if (section != null && section.searchTree == null) {
+    section.searchTree = new SearchableTree(section.entries)
   }
 })
 </script>
@@ -70,18 +65,18 @@ watch(searchQuery, (q) => {
             :filter="searchQuery"
             :active-entry-id="activeTocEntryId"
             :search-tree="tocSearchTree"
-            @select="onSelect"
+            @select="$emit('select', $event)"
           />
         </template>
         <template #bottom>
           <BookViewTocTreeSection
-            v-for="section in altTocSections"
-            :key="section.structure.id"
+            v-if="selectedAltTocSection"
+            :key="selectedAltTocSection.structure.id"
             :title="null"
-            :entries="section.entries"
+            :entries="selectedAltTocSection.entries"
             :filter="searchQuery"
-            :search-tree="section.searchTree ?? undefined"
-            @select="emit('altSelect', $event)"
+            :search-tree="selectedAltTocSection.searchTree ?? undefined"
+            @select="$emit('altSelect', $event)"
           />
         </template>
       </SplitPane>
