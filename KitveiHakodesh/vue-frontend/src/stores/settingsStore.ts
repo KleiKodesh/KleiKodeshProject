@@ -82,10 +82,15 @@ export const useSettingsStore = defineStore('settings', () => {
     style.setProperty('--text-font', textFont.value)
     style.setProperty('--font-size', `${fontSize.value}%`)
     style.setProperty('--line-height', linePadding.value.toString())
-    style.setProperty('--commentary-header-font', commentaryHeaderFont.value)
-    style.setProperty('--commentary-text-font', commentaryTextFont.value)
-    style.setProperty('--commentary-font-size', `${commentaryFontSize.value}%`)
-    style.setProperty('--commentary-line-height', commentaryLinePadding.value.toString())
+    // When not using separate commentary settings, mirror the book settings.
+    const effectiveCommentaryHeaderFont = useSeparateCommentarySettings.value ? commentaryHeaderFont.value : headerFont.value
+    const effectiveCommentaryTextFont = useSeparateCommentarySettings.value ? commentaryTextFont.value : textFont.value
+    const effectiveCommentaryFontSize = useSeparateCommentarySettings.value ? commentaryFontSize.value : fontSize.value
+    const effectiveCommentaryLinePadding = useSeparateCommentarySettings.value ? commentaryLinePadding.value : linePadding.value
+    style.setProperty('--commentary-header-font', effectiveCommentaryHeaderFont)
+    style.setProperty('--commentary-text-font', effectiveCommentaryTextFont)
+    style.setProperty('--commentary-font-size', `${effectiveCommentaryFontSize}%`)
+    style.setProperty('--commentary-line-height', effectiveCommentaryLinePadding.toString())
     document.documentElement.setAttribute('data-pdf-filters', pdfPageFilters.value ? 'true' : 'false')
     const app = document.getElementById('app')
     if (app) app.style.zoom = appZoom.value.toString()
@@ -134,7 +139,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(commentaryTextFont, KEYS.SETTINGS_COMMENTARY_TEXT_FONT, applyCSSVariables)
   persistSetting(commentaryFontSize, KEYS.SETTINGS_COMMENTARY_FONT_SIZE, applyCSSVariables)
   persistSetting(commentaryLinePadding, KEYS.SETTINGS_COMMENTARY_LINE_PADDING, applyCSSVariables)
-  persistSetting(useSeparateCommentarySettings, KEYS.SETTINGS_SEPARATE_COMMENTARY)
+  persistSetting(useSeparateCommentarySettings, KEYS.SETTINGS_SEPARATE_COMMENTARY, applyCSSVariables)
   persistSetting(appZoom, KEYS.SETTINGS_APP_ZOOM, applyCSSVariables)
   persistSetting(dictionaryZoom, KEYS.SETTINGS_DICTIONARY_ZOOM)
   persistSetting(newTabPage, KEYS.SETTINGS_NEW_TAB_PAGE)

@@ -96,6 +96,7 @@ function onHeaderClick(e: MouseEvent) {
 }
 .book-title {
   margin: 0;
+  font-family: var(--commentary-header-font);
   font-size: 1em;
   font-weight: 600;
   white-space: nowrap;

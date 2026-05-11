@@ -42,9 +42,12 @@ const emit = defineEmits<{
 const settingsStore = useSettingsStore()
 const { zoom } = storeToRefs(useBookViewStore())
 const diacriticsState = computed(() => settingsStore.diacriticsState)
-const commentaryFontPx = computed(
-  () => (zoom.value / 100) * (settingsStore.commentaryFontSize / 100) * 15,
-)
+const commentaryFontPx = computed(() => {
+  const effectiveFontSize = settingsStore.useSeparateCommentarySettings
+    ? settingsStore.commentaryFontSize
+    : settingsStore.fontSize
+  return (zoom.value / 100) * (effectiveFontSize / 100) * 15
+})
 
 function highlightMatches(
   content: string,

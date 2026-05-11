@@ -67,15 +67,19 @@ export function useCommentaryTreeSearch(
       }
       const sectionId = sectionIdMap.get(sectionKey)!
 
+      // When the subsection label duplicates the section label, skip the intermediate
+      // node and attach the book directly to the section.
+      const effectiveSubLabel = subLabel && subLabel !== sectionLabel ? subLabel : null
+
       let parentId = sectionId
-      if (subLabel) {
-        const subKey = `${sectionLabel}::${subLabel}`
+      if (effectiveSubLabel) {
+        const subKey = `${sectionLabel}::${effectiveSubLabel}`
         if (!sectionIdMap.has(subKey)) {
           sectionIdMap.set(subKey, sectionIdCounter--)
           nodes.push({
             id: sectionIdMap.get(subKey)!,
             parentId: sectionId,
-            text: subLabel,
+            text: effectiveSubLabel,
             hasChildren: true,
             itemIndex: -1,
           })
@@ -149,9 +153,13 @@ export function useCommentaryTreeSearch(
         root.push(currentSection)
       }
 
-      if (subLabel) {
-        if (!currentSubSection || currentSubSection.label !== subLabel) {
-          currentSubSection = { label: subLabel, children: [] }
+      // When the subsection label duplicates the section label, promote the book
+      // directly into the section rather than nesting a redundant child node.
+      const effectiveSubLabel = subLabel && subLabel !== sectionLabel ? subLabel : null
+
+      if (effectiveSubLabel) {
+        if (!currentSubSection || currentSubSection.label !== effectiveSubLabel) {
+          currentSubSection = { label: effectiveSubLabel, children: [] }
           currentSection.children.push(currentSubSection)
         }
         currentSubSection.children.push(item)

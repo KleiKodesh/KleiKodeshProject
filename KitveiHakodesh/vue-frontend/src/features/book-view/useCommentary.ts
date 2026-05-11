@@ -98,9 +98,13 @@ export function buildCommentaryTree(groups: CommentaryGroup[]): CommentaryTreeNo
       root.push(currentSection)
     }
 
-    if (subLabel) {
-      if (!currentSubSection || currentSubSection.label !== subLabel) {
-        currentSubSection = { type: 'section', label: subLabel, children: [] }
+    // When the subsection label duplicates the section label, promote the books
+    // directly into the section rather than nesting a redundant child node.
+    const effectiveSubLabel = subLabel && subLabel !== sectionLabel ? subLabel : null
+
+    if (effectiveSubLabel) {
+      if (!currentSubSection || currentSubSection.label !== effectiveSubLabel) {
+        currentSubSection = { type: 'section', label: effectiveSubLabel, children: [] }
         currentSection.children.push(currentSubSection)
       }
       currentSubSection.children.push({
