@@ -14242,7 +14242,11 @@ class PDFPageView extends BasePDFPageView {
 
 
 
-const DEFAULT_CACHE_SIZE = 10;
+// Reduced from 10 to 3 (current page + 1 on each side) to cut page-cache
+// memory by ~70%. Each cached page holds a rendered canvas bitmap; at 1.5x
+// devicePixelRatio a typical A4 page costs ~10 MB, so 10 pages = ~100 MB.
+// 3 pages is sufficient for smooth scrolling in a read-only book reader.
+const DEFAULT_CACHE_SIZE = 3;
 const PagesCountLimit = {
   FORCE_SCROLL_MODE_PAGE: 10000,
   FORCE_LAZY_PAGE_INIT: 5000,
@@ -20393,6 +20397,12 @@ function webViewerLoad() {
   // These overrides reduce memory consumption for a read-only Hebrew book
   // reader where editing, scripting, and auto-linking are never needed.
   AppOptions.setAll({
+    // Prevent the viewer's Preferences system from loading stored browser
+    // preferences and overwriting the options set here. Without this flag,
+    // PDFViewerApplication calls AppOptions.setAll() a second time after init
+    // with whatever the user previously saved, silently undoing our overrides.
+    disablePreferences: true,
+
     // Disable PDF JavaScript scripting. Hebrew books are scanned documents
     // with no embedded JS. The scripting engine (PDFScriptingManager) loads
     // a full sandbox and costs memory even when no scripts exist in the PDF.
@@ -20418,6 +20428,13 @@ function webViewerLoad() {
     // large pages instead of one giant canvas, keeping peak memory bounded.
     // Normal reading zoom levels are well under this cap.
     maxCanvasPixels: 4096 * 4096,
+
+    // Disable auto-fetching of the entire PDF on load. Hebrew books are large
+    // scanned PDFs; fetching the whole file upfront wastes memory and bandwidth.
+    // Previously passed via URL hash (#disableAutoFetch=true), but any hash
+    // value is picked up as initialBookmark by PDF.js and takes priority over
+    // the stored scroll/zoom position from ViewHistory, breaking session restore.
+    disableAutoFetch: true,
   });
 
   const event = new CustomEvent("webviewerloaded", {

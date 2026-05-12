@@ -52,10 +52,11 @@ const iframeSrc = computed(() => {
   if (!url) return null
   const p = new URLSearchParams({ file: url, locale: 'he', cMapPacked: 'true' })
   if (pdfStore.fileName) p.set('filename', encodeURIComponent(pdfStore.fileName))
-  // disableAutoFetch is passed via hash — it is the only memory-relevant option
-  // that viewer.mjs reads from the URL. All other memory options are patched
-  // directly into viewer.mjs via the AppOptions override block near webViewerLoad.
-  return `/pdfjs/web/viewer.html?${p}#disableAutoFetch=true`
+  // No hash fragment — any hash value becomes initialBookmark in PDF.js and
+  // takes priority over the stored scroll/zoom position from ViewHistory,
+  // breaking session restore. All options (including disableAutoFetch) are
+  // set via AppOptions.setAll() in the viewer.mjs patch instead.
+  return `/pdfjs/web/viewer.html?${p}`
 })
 
 function cancelConversion() {

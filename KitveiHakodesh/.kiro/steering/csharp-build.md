@@ -24,4 +24,4 @@ The second restore (`KitveiHakodesh.slnx`) covers `KitveiHakodeshLib`, `KitveiHa
 & "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe" "CSharpBackend\KitveiHakodesh.slnx" /p:Configuration=Release /v:minimal
 ```
 
-The build also runs `npm run build` and copies the Vue bundle to `bin\Release\KitveiHakodesh\` via `ZayitVue.targets`.
+The build also runs `npm run build` and copies the Vue bundle to `bin\Release\KitveiHakodesh\` via `KitveiHakodesh.targets`.

@@ -5,7 +5,7 @@
 
 export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
 (function() {
-  if (window.__zayitOcrTool) return; // already injected
+  if (window.__kitveiHakodeshOcrTool) return; // already injected
 
   const tool = {
     isActive: false,
@@ -17,17 +17,17 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
     langFile: 'heb',
   };
 
-  window.__zayitOcrTool = tool;
+  window.__kitveiHakodeshOcrTool = tool;
 
   // ── Styles ──────────────────────────────────────────────────────────────
 
   const style = document.createElement('style');
   style.textContent = \`
-    #viewerContainer.zayit-ocr-mode { cursor: crosshair !important; }
-    #viewerContainer.zayit-ocr-mode * { cursor: crosshair !important; }
-    #viewerContainer.zayit-ocr-drawing { cursor: default !important; }
-    #viewerContainer.zayit-ocr-drawing * { cursor: default !important; }
-    .zayit-ocr-rect {
+    #viewerContainer.kitvei-hakodesh-ocr-mode { cursor: crosshair !important; }
+    #viewerContainer.kitvei-hakodesh-ocr-mode * { cursor: crosshair !important; }
+    #viewerContainer.kitvei-hakodesh-ocr-drawing { cursor: default !important; }
+    #viewerContainer.kitvei-hakodesh-ocr-drawing * { cursor: default !important; }
+    .kitvei-hakodesh-ocr-rect {
       position: absolute;
       border: 2px dashed #0078d4;
       background: rgba(0,120,212,0.12);
@@ -38,7 +38,7 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
       transition: box-shadow 100ms ease;
       box-sizing: content-box;
     }
-    .zayit-ocr-rect.active {
+    .kitvei-hakodesh-ocr-rect.active {
       box-shadow: 0 0 8px rgba(0,120,212,0.4), inset 0 0 0 1px rgba(0,120,212,0.3);
     }
   \`;
@@ -129,7 +129,7 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
     tool.centerY = e.clientY - cr.top  + container.scrollTop;
 
     tool.selectionDiv = document.createElement('div');
-    tool.selectionDiv.className = 'zayit-ocr-rect';
+    tool.selectionDiv.className = 'kitvei-hakodesh-ocr-rect';
     tool.selectionDiv.style.left   = tool.centerX + 'px';
     tool.selectionDiv.style.top    = tool.centerY + 'px';
     tool.selectionDiv.style.width  = '0px';
@@ -137,7 +137,7 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
     container.appendChild(tool.selectionDiv);
 
     // Switch to default cursor — cursor now tracks the bottom-right corner
-    container.classList.add('zayit-ocr-drawing');
+    container.classList.add('kitvei-hakodesh-ocr-drawing');
   }
 
   function onMouseMove(e) {
@@ -171,7 +171,7 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
 
     // Restore crosshair cursor
     const container = document.getElementById('viewerContainer');
-    if (container) container.classList.remove('zayit-ocr-drawing');
+    if (container) container.classList.remove('kitvei-hakodesh-ocr-drawing');
 
     const div = tool.selectionDiv;
     if (div) {
@@ -196,15 +196,15 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
   function processRect(rect) {
     const text = extractText(rect);
     if (text) {
-      window.parent.postMessage({ type: 'zayit-ocr-result', text, isOcr: false }, '*');
+      window.parent.postMessage({ type: 'kitvei-hakodesh-ocr-result', text, isOcr: false }, '*');
       return;
     }
     // Need OCR — send canvas data to parent
     const dataUrl = captureCanvas(rect);
     if (dataUrl) {
-      window.parent.postMessage({ type: 'zayit-ocr-canvas', dataUrl, langFile: tool.langFile, hasExistingText: false }, '*');
+      window.parent.postMessage({ type: 'kitvei-hakodesh-ocr-canvas', dataUrl, langFile: tool.langFile, hasExistingText: false }, '*');
     } else {
-      window.parent.postMessage({ type: 'zayit-ocr-result', text: '', isOcr: true }, '*');
+      window.parent.postMessage({ type: 'kitvei-hakodesh-ocr-result', text: '', isOcr: true }, '*');
     }
   }
 
@@ -215,7 +215,7 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
     tool.langFile = langFile || 'heb';
     const container = document.getElementById('viewerContainer');
     if (!container) return;
-    container.classList.add('zayit-ocr-mode');
+    container.classList.add('kitvei-hakodesh-ocr-mode');
     container.addEventListener('mousedown', onMouseDown);
     container.addEventListener('mousemove', onMouseMove);
     container.addEventListener('mouseup',   onMouseUp);
@@ -226,14 +226,14 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
     tool.isActive = false;
     const container = document.getElementById('viewerContainer');
     if (!container) return;
-    container.classList.remove('zayit-ocr-mode');
-    container.classList.remove('zayit-ocr-drawing');
+    container.classList.remove('kitvei-hakodesh-ocr-mode');
+    container.classList.remove('kitvei-hakodesh-ocr-drawing');
     container.removeEventListener('mousedown', onMouseDown);
     container.removeEventListener('mousemove', onMouseMove);
     container.removeEventListener('mouseup',   onMouseUp);
     container.style.userSelect = '';
     if (tool.selectionDiv) { tool.selectionDiv.remove(); tool.selectionDiv = null; }
-    window.parent.postMessage({ type: 'zayit-ocr-deactivated' }, '*');
+    window.parent.postMessage({ type: 'kitvei-hakodesh-ocr-deactivated' }, '*');
   };
 })();
 `

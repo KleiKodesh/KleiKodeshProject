@@ -43,7 +43,7 @@ namespace KitveiHakodeshLib.Db
 
         public void HandleResetSettings(string id)
         {
-            try { Interaction.DeleteSetting("ZayitApp", "Database"); } catch { }
+            try { Interaction.DeleteSetting("KitveiHakodesh", "Database"); } catch { }
             _bridge.Reply(id, new { });
         }
 

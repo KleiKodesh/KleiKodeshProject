@@ -34,11 +34,16 @@ export function usePinnedCommentary(
 
   // When the selected line changes, update the pin to follow the user's active book
   // or fall back to the first default commentator.
+  // activeBookId must be captured synchronously before any await — by the time
+  // ensureDefaultCommentatorsLoaded() resolves, useCommentary has already cleared
+  // groups (groups.value = []) and CommentaryView has re-rendered with no items,
+  // making activeBookId return 0 or null. Capturing it first ensures we always
+  // get the book the user was actually looking at before the line change.
   watch(commentaryLineId, async () => {
+    const capturedBookId = commentaryViewRef()?.activeBookId ?? null
     await ensureDefaultCommentatorsLoaded()
-    const viewRef = commentaryViewRef()
-    if (viewRef?.activeBookId) {
-      pinnedCommentaryBookId.value = viewRef.activeBookId
+    if (capturedBookId) {
+      pinnedCommentaryBookId.value = capturedBookId
     } else if (defaultCommentatorBookIds.length > 0) {
       pinnedCommentaryBookId.value = defaultCommentatorBookIds[0]!
     }

@@ -59,7 +59,7 @@ namespace KleiKodeshVstoInstallerWpf
 
         private void LoadDbPath()
         {
-            string existing = Interaction.GetSetting("ZayitApp", "Database", "Path", "");
+            string existing = Interaction.GetSetting("KitveiHakodesh", "Database", "Path", "");
             if (!string.IsNullOrEmpty(existing))
                 DbPathText.Text = existing;
             UpdateDbHint();
@@ -73,7 +73,7 @@ namespace KleiKodeshVstoInstallerWpf
             }
             else
             {
-                string existing = Interaction.GetSetting("ZayitApp", "Database", "Path", "");
+                string existing = Interaction.GetSetting("KitveiHakodesh", "Database", "Path", "");
                 DbHintText.Text = string.IsNullOrEmpty(existing)
                     ? "לא הוגדר נתיב — ישתמש בברירת המחדל של אפליקציית זית"
                     : "לחץ לשינוי הנתיב";
@@ -91,7 +91,7 @@ namespace KleiKodeshVstoInstallerWpf
                     CheckFileExists = true
                 };
 
-                string seedPath = _pendingDbPath ?? Interaction.GetSetting("ZayitApp", "Database", "Path", "");
+                string seedPath = _pendingDbPath ?? Interaction.GetSetting("KitveiHakodesh", "Database", "Path", "");
                 if (!string.IsNullOrEmpty(seedPath) && File.Exists(seedPath))
                 {
                     dialog.InitialDirectory = Path.GetDirectoryName(seedPath);
@@ -149,7 +149,7 @@ namespace KleiKodeshVstoInstallerWpf
         private void Commit()
         {
             if (_pendingDbPath != null)
-                Interaction.SaveSetting("ZayitApp", "Database", "Path", _pendingDbPath);
+                Interaction.SaveSetting("KitveiHakodesh", "Database", "Path", _pendingDbPath);
         }
 
         // ── Whitelist helpers ─────────────────────────────────────────────────────

@@ -98,7 +98,7 @@ function detectPeriod(title: string): string | null {
 }
 
 /** Single-pass traversal: returns a meaningful commentary group label and root category.
- *  Mirrors Zayit's resolveGroupLabel logic so the result is computed once at catalog load. */
+ *  Mirrors the resolveGroupLabel logic so the result is computed once at catalog load. */
 export function findCategoryMeta(
   categoryId: number,
   map: Map<number, CategoryNode>,

@@ -17,6 +17,7 @@ const props = defineProps<{
   scrollToGroup: (bookId: number) => void
   activeBookId: number
   filterVisible?: boolean
+  activeTocPath?: string
 }>()
 
 const emit = defineEmits<{
@@ -43,6 +44,19 @@ function navigateToGroup(bookId: number) {
   emit('update:activeBookId', bookId)
   if (inputRef.value) inputRef.value.value = ''
 }
+
+const activeGroup = computed(() => props.groups.find((g) => g.bookId === props.activeBookId))
+
+const openBookTooltip = computed(() => {
+  const path = activeGroup.value?.path ?? ''
+  const full = props.activeTocPath ? `${path} · ${props.activeTocPath}` : path
+  return full ? `פתח ספר זה בלשונית חדשה\n${full}` : 'פתח ספר זה בלשונית חדשה'
+})
+
+const activeFullLabel = computed(() => {
+  const path = activeGroup.value?.path ?? ''
+  return props.activeTocPath ? `${path} · ${props.activeTocPath}` : path
+})
 
 const activeIndex = computed(() => props.groups.findIndex((g) => g.bookId === props.activeBookId))
 const hasPrevious = computed(() => activeIndex.value > 0)
@@ -91,7 +105,7 @@ function handleKeydown(e: KeyboardEvent) {
       <IconFilter20Regular />
     </button>
     <div class="sep" />
-    <div class="search-wrapper">
+    <div class="search-wrapper" :title="activeFullLabel || undefined">
       <IconChevronDown20Regular class="search-icon" />
       <input
         ref="inputRef"
@@ -99,7 +113,7 @@ function handleKeydown(e: KeyboardEvent) {
         name="commentary-search"
         class="search-input"
         :list="`commentary-list-${componentId}`"
-        :placeholder="groups.find((g) => g.bookId === activeBookId)?.path || 'חפש מפרש...'"
+        :placeholder="activeFullLabel || 'חפש מפרש...'"
         @change="handleSelect"
         @keydown="handleKeydown"
       />
@@ -141,7 +155,7 @@ function handleKeydown(e: KeyboardEvent) {
     <div class="sep" />
     <button
       class="btn c-pointer hover-bg"
-      title="פתח ספר זה בלשונית חדשה"
+      :title="openBookTooltip"
       @click.stop="openActiveBook()"
     >
       <IconBookOpen20Regular />

@@ -81,6 +81,23 @@ The `pixel-ratio-override.js` script tag must appear **before** `<script src="vi
 
 ## `web/viewer.mjs` — Patches
 
+### 0a. Page cache size (memory)
+
+Search for: `const DEFAULT_CACHE_SIZE = 10;`
+
+Replace with:
+```js
+// Reduced from 10 to 3 (current page + 1 on each side) to cut page-cache
+// memory by ~70%. Each cached page holds a rendered canvas bitmap; at 1.5x
+// devicePixelRatio a typical A4 page costs ~10 MB, so 10 pages = ~100 MB.
+// 3 pages is sufficient for smooth scrolling in a read-only book reader.
+const DEFAULT_CACHE_SIZE = 3;
+```
+
+PDF.js dynamically grows the cache to `max(DEFAULT_CACHE_SIZE, 2 * visiblePages + 1)` as the user scrolls, but the floor is this constant. Reducing it from 10 to 3 cuts the minimum page-cache footprint by ~70% with no visible impact on scrolling.
+
+---
+
 ### 0. Canvas cleanup timeout (memory)
 
 Search for: `const CLEANUP_TIMEOUT = 30000;`
@@ -103,16 +120,20 @@ Add the following block immediately after `const config = getViewerConfiguration
 ```js
 // Custom: override AppOptions before the viewer initialises.
 AppOptions.setAll({
+  disablePreferences: true,     // prevent stored browser prefs from overwriting these settings
   enableScripting: false,       // no embedded JS in Hebrew books
   enableDetailCanvas: false,    // no second high-res canvas overlay
   // annotationMode and annotationEditorMode left at defaults so the full
   // annotation editor (highlight, freetext, signature, etc.) is available
   enableAutoLinking: false,     // no URL scanning in text layer
   maxCanvasPixels: 4096 * 4096, // cap canvas at ~16M px, not 33M
+  disableAutoFetch: true,       // don't fetch the whole PDF upfront; MUST be set here, not in the URL hash
 });
 ```
 
 These options cannot be set via URL params — they are only settable via `AppOptions.setAll()` from inside the viewer's JS context. Setting them here, before `PDFViewerApplication.run()`, ensures they take effect before any page is rendered.
+
+**Critical — why `disableAutoFetch` must not be in the URL hash:** PDF.js reads `document.location.hash.substring(1)` at startup and stores it verbatim as `initialBookmark`. Any hash value — even one containing only option flags like `disableAutoFetch=true` — is treated as a navigation destination and takes priority over the stored scroll/zoom position from `ViewHistory`. Putting `#disableAutoFetch=true` in the iframe URL therefore breaks session restore: the stored page/zoom is never applied because `initialBookmark` is always truthy. Setting it via `AppOptions.setAll()` here avoids this entirely. The iframe URL must have no hash fragment.
 
 ---
 

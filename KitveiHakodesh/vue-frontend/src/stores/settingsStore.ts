@@ -4,6 +4,8 @@ import type { Ref } from 'vue'
 import { lsGet, lsSet, lsClearSettingsOnly, KEYS } from '@/utils/persistence'
 
 export type NewTabPage = 'homepage' | 'openfile' | 'hebrewbooks' | 'search'
+// Legacy values from previous app name iterations — kept only for migrating old user data.
+// Do not remove these; they are matched in normalizeNewTabPage below.
 type LegacyNewTabPage = NewTabPage | 'kezayit-search' | 'kitveihakodesh-search'
 
 const DEFAULTS = {

@@ -19,7 +19,7 @@ const LASTREAD_MAX = 1000
 
 // ── localStorage helpers (synchronous) ───────────────────────────────────────
 
-const LS_PREFIX = 'zayit.'
+const LS_PREFIX = 'kitvei-hakodesh.'
 
 export function lsGet<T>(key: string): T | null {
   try {
@@ -37,7 +37,7 @@ export function lsDelete(key: string): void {
   try { localStorage.removeItem(LS_PREFIX + key) } catch {}
 }
 
-/** Remove all zayit.* keys from localStorage (used during full app reset). */
+/** Remove all kitvei-hakodesh.* keys from localStorage (used during full app reset). */
 export function lsClearAll(): void {
   try {
     const toRemove: string[] = []

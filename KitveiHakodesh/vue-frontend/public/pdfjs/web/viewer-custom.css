@@ -1,4 +1,4 @@
-/* Zayit theme integration — CSS variable hooks injected by syncPdfViewerTheme() in themes.ts */
+/* KitveiHakodesh theme integration — CSS variable hooks injected by syncPdfViewerTheme() in themes.ts */
 
 :root {
   --toolbar-bg-color: var(--bg-primary-custom, light-dark(rgb(249 249 250), rgb(56 56 61)));

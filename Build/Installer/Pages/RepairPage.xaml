@@ -251,7 +251,7 @@
                         <Viewbox Width="11" Height="11" VerticalAlignment="Top" FlowDirection="LeftToRight">
                             <Path Data="M8,0 C5.8,0 4,1.8 4,4 C4,5.1 4.4,6.1 5.1,6.8 L0,12 L1,13 L2,12 L3,13 L4,12 L4,10 L6,10 L6,8 L6.8,8 C7.5,8.4 8.2,8.6 9,8.6 C11.2,8.6 13,6.8 13,4.6 C13,2.4 11.2,0.6 9,0.6 Z M9,2 C10.4,2 11.5,3.1 11.5,4.5 C11.5,5.9 10.4,7 9,7 C7.6,7 6.5,5.9 6.5,4.5 C6.5,3.1 7.6,2 9,2 Z" Stroke="#5A5A5A" StrokeThickness="0.5" Fill="#5A5A5A"/>
                         </Viewbox>
-                        <TextBlock Grid.Column="1">רגיסטרי: הגדרות זמן-ריצה (KleiKodesh, ZayitApp)</TextBlock>
+                        <TextBlock Grid.Column="1">רגיסטרי: הגדרות זמן-ריצה (KleiKodesh, ZayitApp, KitveiHakodesh)</TextBlock>
                     </Grid>
                     <Grid Margin="0,2" Style="{StaticResource IconRow}">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>

@@ -324,15 +324,47 @@ export function useBookView(
     // Wait until the first chunk has real content so the commentary query doesn't
     // compete with line chunk fetches.
     if (visible && selectedLineId.value != null && commentaryLineId.value == null) {
-      const stop = watch(
+      let stop: (() => void) | undefined
+      stop = watch(
         () => lines.value.some((l) => l.content !== null),
         (hasContent) => {
           if (!hasContent) return
-          stop()
+          stop?.()
           if (bottomVisible.value && selectedLineId.value != null && commentaryLineId.value == null)
             commentaryLineId.value = selectedLineId.value
         },
         { immediate: true },
+      )
+    }
+    // Restore commentary scroll position when the panel is toggled back on.
+    // CommentaryView is fully unmounted when bottomVisible is false (v-if in SplitPane),
+    // so the one-time restore() at mount is not enough — we must re-apply the saved
+    // position every time the panel reopens.
+    if (visible && commentaryScrollIndex.value != null && commentaryScrollOffset.value != null) {
+      const si = commentaryScrollIndex.value
+      const so = commentaryScrollOffset.value
+      let stopLoading: (() => void) | undefined
+      stopLoading = watch(
+        commentaryLoading,
+        async (loading) => {
+          if (loading) return
+          stopLoading?.()
+          await nextTick()
+          const viewRef = commentaryViewRef()
+          if (viewRef) {
+            viewRef.restoreCommentaryScrollPos(si, so)
+          } else {
+            const stopRef = watch(
+              () => commentaryViewRef(),
+              (newRef) => {
+                if (!newRef) return
+                stopRef()
+                newRef.restoreCommentaryScrollPos(si, so)
+              },
+            )
+          }
+        },
+        { flush: 'sync', immediate: true },
       )
     }
   })

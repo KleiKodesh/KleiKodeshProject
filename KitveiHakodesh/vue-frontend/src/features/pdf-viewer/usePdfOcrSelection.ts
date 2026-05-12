@@ -50,7 +50,7 @@ export function usePdfOcrSelection(getIframe: () => HTMLIFrameElement | null) {
     const iframe = getIframe()
     if (!iframe?.contentWindow) return false
     const win = iframe.contentWindow as any
-    if (!win.__zayitOcrTool) {
+    if (!win.__kitveiHakodeshOcrTool) {
       try {
         win.eval(PDF_OCR_INJECTED_SCRIPT)
       } catch (error) {
@@ -64,7 +64,7 @@ export function usePdfOcrSelection(getIframe: () => HTMLIFrameElement | null) {
   // ── postMessage handler ────────────────────────────────────────────────────
 
   async function onMessage(event: MessageEvent) {
-    if (event.data?.type === 'zayit-ocr-result') {
+    if (event.data?.type === 'kitvei-hakodesh-ocr-result') {
       const cleanText = event.data.text
         .split('\n')
         .map((line: string) => line.trim())
@@ -73,7 +73,7 @@ export function usePdfOcrSelection(getIframe: () => HTMLIFrameElement | null) {
         .replace(/\s+/g, ' ')
       result.value = { text: cleanText, isOcr: event.data.isOcr }
       isProcessing.value = false
-    } else if (event.data?.type === 'zayit-ocr-canvas') {
+    } else if (event.data?.type === 'kitvei-hakodesh-ocr-canvas') {
       // Check if user wants to skip OCR for existing text
       if (event.data.hasExistingText && !event.data.forceOcr) {
         // Text layer exists and user didn't force OCR, so skip
@@ -116,7 +116,7 @@ export function usePdfOcrSelection(getIframe: () => HTMLIFrameElement | null) {
         isProcessing.value = false
         processingProgress.value = 0
       }
-    } else if (event.data?.type === 'zayit-ocr-deactivated') {
+    } else if (event.data?.type === 'kitvei-hakodesh-ocr-deactivated') {
       isActive.value = false
     }
   }
@@ -128,13 +128,13 @@ export function usePdfOcrSelection(getIframe: () => HTMLIFrameElement | null) {
   function activate() {
     if (!ensureInjected()) return
     const win = (getIframe()?.contentWindow as any)
-    win.__zayitOcrTool.activate(LANG_FILES[script.value])
+    win.__kitveiHakodeshOcrTool.activate(LANG_FILES[script.value])
     isActive.value = true
   }
 
   function deactivate() {
     const win = (getIframe()?.contentWindow as any)
-    win?.__zayitOcrTool?.deactivate()
+    win?.__kitveiHakodeshOcrTool?.deactivate()
     isActive.value = false
     result.value = null
   }
@@ -152,8 +152,8 @@ export function usePdfOcrSelection(getIframe: () => HTMLIFrameElement | null) {
     initWorker(value).catch(() => {})
     // Update lang in iframe if active
     const win = (getIframe()?.contentWindow as any)
-    if (win?.__zayitOcrTool?.isActive) {
-      win.__zayitOcrTool.langFile = LANG_FILES[value]
+    if (win?.__kitveiHakodeshOcrTool?.isActive) {
+      win.__kitveiHakodeshOcrTool.langFile = LANG_FILES[value]
     }
   }
 

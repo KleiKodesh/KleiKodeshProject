@@ -132,6 +132,9 @@ function pickDbPath() {
   window.__webviewPickDbPath?.()
 }
 
+// NOTE: "זית" (Zayit) here refers to the external Zayit app (zayitapp.com) — a separate
+// Torah study program whose database this app can use. This is NOT this app's old name.
+// Do not rename or remove this function or URL.
 function downloadZayit() {
   window.open('https://zayitapp.com/#/download', '_blank')
 }

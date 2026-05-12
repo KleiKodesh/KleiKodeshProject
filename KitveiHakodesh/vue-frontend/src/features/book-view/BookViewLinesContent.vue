@@ -296,6 +296,14 @@ function savePos() {
   }
 }
 
+// Save when the commentary panel closes so the commentary scroll position
+// (which just arrived via prop update from onCommentaryScroll) is flushed to
+// IDB before CommentaryView unmounts and the position would otherwise be lost.
+watch(
+  () => props.bottomVisible,
+  (visible) => { if (!visible) savePos() },
+)
+
 useEventListener(document, 'visibilitychange', () => {
   if (document.visibilityState === 'hidden') savePos()
 })

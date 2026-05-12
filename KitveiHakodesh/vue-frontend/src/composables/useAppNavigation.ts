@@ -42,6 +42,9 @@ export function useAppNavigation() {
     else tabStore.updateActiveTab(tabData)
   }
 
+  // NOTE: "זית" (Zayit) here refers to the external Zayit app (zayitapp.com) — a separate
+  // Torah study program whose database this app can use. This is NOT this app's old name.
+  // Do not rename or remove this URL.
   function handleExternalLink(): void {
     window.open('https://zayitapp.com/#/download', '_blank')
   }

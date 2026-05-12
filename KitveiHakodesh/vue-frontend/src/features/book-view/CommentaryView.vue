@@ -424,6 +424,7 @@ function ownTocPathForHeader(bookTitle: string): string | undefined {
           :scroll-to-group="scrollToGroup"
           :active-book-id="activeBookId"
           :filter-visible="props.filterVisible"
+          :active-toc-path="commentaryTocPaths.get(activeBookId) ?? undefined"
           @update:active-book-id="() => {}"
           @navigate-section="(d, id) => emit('navigate-section', d, id)"
           @toggle-filter="emit('toggle-filter-panel')"

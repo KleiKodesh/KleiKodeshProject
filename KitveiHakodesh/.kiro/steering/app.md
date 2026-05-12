@@ -385,7 +385,7 @@ Components and composables must never import from `src/utils/persistence.ts` dir
 
 ### Key scheme
 
-localStorage keys are prefixed with `zayit.` automatically by `lsGet`/`lsSet`. The `KEYS` constants in `persistence.ts` are the unprefixed names.
+localStorage keys are prefixed with `kitvei-hakodesh.` automatically by `lsGet`/`lsSet`. The `KEYS` constants in `persistence.ts` are the unprefixed names.
 
 `app-tabs` keys are workspace-scoped:
 
@@ -440,7 +440,7 @@ Always use `tabStore.setLastReadPos()` — it calls `idbSetLastRead()` which enf
 ### Build pipeline
 
 - Vue builds as a single-file bundle via `vite-plugin-singlefile` — all JS/CSS is inlined into one `index.html`, no separate `assets/` folder
-- `ZayitVue.targets` is imported by the `.csproj` and runs `npm run build` after every C# build, then copies `dist/` to `bin/{Config}/KitveiHakodesh/` via robocopy
+- `KitveiHakodesh.targets` is imported by the `.csproj` and runs `npm run build` after every C# build, then copies `dist/` to `bin/{Config}/KitveiHakodesh/` via robocopy
 - After any Vue code change, rebuild the C# project to get the fresh bundle into `KitveiHakodesh/` — the WebView serves from that folder
 - If the category tree or any data appears stuck loading in C# mode but works in dev, it is almost always a stale `KitveiHakodesh/index.html` — rebuild C# first before debugging further
 

@@ -22,16 +22,19 @@ namespace KitveiHakodeshDemoApp
             _viewer = new AppViewer { Dock = DockStyle.Fill };
             _viewer.TogglePopOut = Toggle;
             Controls.Add(_viewer);
+
+            Load        += MainForm_Load;
+            FormClosing += MainForm_FormClosing;
         }
 
         private void MainForm_Load(object sender, EventArgs e)
         {
-            FormSettingsHelper.LoadFormSettings(this, "ZayitApp", "KitveiHakodeshMain");
+            FormSettingsHelper.LoadFormSettings(this, "KitveiHakodesh", "KitveiHakodeshMain");
         }
 
         private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
         {
-            FormSettingsHelper.SaveFormSettings(this, "ZayitApp", "KitveiHakodeshMain");
+            FormSettingsHelper.SaveFormSettings(this, "KitveiHakodesh", "KitveiHakodeshMain");
         }
 
         private static Icon CreateWindowIcon()
@@ -57,7 +60,7 @@ namespace KitveiHakodeshDemoApp
 
             _popoutWindow = new Form
             {
-                Text = "זית",
+                Text = "כתבי הקודש",
                 Size = new System.Drawing.Size(saved.Width, saved.Height),
                 StartPosition = hasSaved ? FormStartPosition.Manual : FormStartPosition.CenterScreen,
                 Icon = CreateWindowIcon(),

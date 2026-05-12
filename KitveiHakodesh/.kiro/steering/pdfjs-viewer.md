@@ -10,11 +10,12 @@ The git branch `pdf-vue-toolbar` preserves a previous experiment adding a Vue to
 
 ## Customized Files
 
-- `web/viewer.mjs` — 4 patches:
-  1. Hebrew locale default: reads `?locale=` URL param, falls back to `he`
-  2. Cross-origin allow: permits `http://` origins for WebView2 virtual hosts
-  3. Filename param: reads `?filename=` and sets `_contentDispositionFilename`
-  4. Save dialog: `_triggerDownload` uses `showSaveFilePicker()` with anchor fallback
+- `web/viewer.mjs` — 5 patches:
+  1. Page cache size: `DEFAULT_CACHE_SIZE` reduced from 10 to 3 to cut canvas bitmap memory by ~70%
+  2. Hebrew locale default: reads `?locale=` URL param, falls back to `he`
+  3. Cross-origin allow: permits `http://` origins for WebView2 virtual hosts
+  4. Filename param: reads `?filename=` and sets `_contentDispositionFilename`
+  5. Save dialog: `_triggerDownload` uses `showSaveFilePicker()` with anchor fallback
 - `web/viewer.html` — adds `viewer-custom.css` stylesheet and `pixel-ratio-override.js` script
 - `web/viewer-custom.css` — CSS variable hooks for theme sync; PDF page filter via `data-pdf-filters` attribute
 - `web/pixel-ratio-override.js` — forces minimum 2x `devicePixelRatio` for sharp rendering (added file)

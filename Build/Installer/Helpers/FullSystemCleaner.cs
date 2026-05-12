@@ -282,6 +282,14 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                     $@"{vbBase}\ZayitApp",
                     result, log);
 
+                // KitveiHakodesh — delete the entire subtree.
+                // Written by our installer (Database\Path) and by the KitveiHakodesh app
+                // (HebrewBooks\CsvLastUpdated, etc.). Entirely owned by KleiKodesh.
+                DeleteRegistrySubtree(
+                    Registry.CurrentUser,
+                    $@"{vbBase}\KitveiHakodesh",
+                    result, log);
+
                 // ⚠ WINWORD key intentionally NOT touched — shared with Word and other add-ins.
             });
         }
