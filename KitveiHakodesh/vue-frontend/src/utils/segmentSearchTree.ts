@@ -35,6 +35,8 @@
  *     match (not just prefix). If that yields results, use them — this prevents
  *     "פרק ל" from surfacing "פרק לא" when an exact "פרק ל" entry exists. If the
  *     exact-last-word attempt yields nothing, fall back to prefix on all words.
+ *     Talmud-page suffix tokens ("ד." / "ד:") count as exact matches for the bare
+ *     word ("ד") so both forms are found when the exact attempt succeeds.
  *
  *   Pass 2 — bond detection + filter:
  *     From the best-scoring result, detect "bonded" consecutive word pairs — pairs
@@ -149,9 +151,10 @@ export class SegmentSearchTree {
    *   score      — lower is better; Infinity means no match
    *   segIndices — which segment index each query word matched in
    *
-   * When lastWordExact is true, the final word must equal a token exactly
-   * (not just be a prefix). This is the first-attempt strategy that prevents
-   * "פרק ל" from surfacing "פרק לא" when an exact match exists.
+   * When lastWordExact is true, the final word must match a token exactly.
+   * A token with a trailing Talmud-page punctuation suffix ("." or ":") is
+   * treated as an exact match for the bare word — so query "ד" is exact against
+   * token "ד." and "ד:", enabling "פסחים דף ד" to find both "דף ד." and "דף ד:".
    */
   private _score(
     nodeId: number,
@@ -173,7 +176,14 @@ export class SegmentSearchTree {
       for (let si = segFrom; si < segs.length; si++) {
         const seg = segs[si]!
         for (let ti = 0; ti < seg.length; ti++) {
-          const matches = requireExact ? seg[ti] === w : seg[ti]!.startsWith(w)
+          const tok = seg[ti]!
+          // A token matches exactly when it equals the query word, or when it is
+          // the query word followed by a single Talmud-page suffix ("." or ":").
+          // This lets "ד" match both "ד." and "ד:" as exact hits so the two-attempt
+          // strategy doesn't suppress them when a bare "ד" entry also exists.
+          const isTalmudSuffix = tok.length === w.length + 1 && (tok.endsWith('.') || tok.endsWith(':')) && tok.startsWith(w)
+          const isExact = tok === w || isTalmudSuffix
+          const matches = requireExact ? isExact : tok.startsWith(w)
           if (matches) {
             segIndices.push(si)
             tokenIndices.push(ti)

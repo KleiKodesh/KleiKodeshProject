@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "com.niqqud-dicta.newplugin",
+  "name": "ניקוד אוטומטי",
+  "version": "1.0.0",
+  "description": "ניקוד אוטומטי לעברית באמצעות שירות דיקטה של האוניברסיטה העברית",
+  "author": "YairDaniel",
+  "stability": "beta",
+  "entrypoint": "index.html",
+  "minAppVersion": "0.9.91",
+  "sdkVersion": "1.x",
+  "permissions": [
+    "ui.feedback",
+    "network.access",
+    "reader.context_menu",
+    "events.subscribe:theme.changed"
+  ],
+  "network": {
+    "enabled": true,
+    "allowlist": [
+      "nakdan-u1-0.loadbalancer.dicta.org.il",
+      "nakdan-5-1.loadbalancer.dicta.org.il"
+    ]
+  },
+  "contributes": {
+    "toolTab": {
+      "title": "ניקוד אוטומטי",
+      "iconSvg": "<svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M11.5 13.5a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM14.75 14a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM18 13.5a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM2.75 4h18.5a.75.75 0 0 1 .102 1.493l-.102.007H2.75a.75.75 0 0 1-.102-1.493L2.75 4h18.5-18.5ZM2.75 8h12.5a.75.75 0 0 1 .102 1.493L15.25 9.5H2.75a.75.75 0 0 1-.102-1.493L2.75 8h12.5-12.5ZM2.75 12h5.5a.75.75 0 0 1 .102 1.493L8.25 13.5h-5.5a.75.75 0 0 1-.102-1.493L2.75 12h5.5-5.5ZM2.75 16h18.5a.75.75 0 0 1 .102 1.493l-.102.007H2.75a.75.75 0 0 1-.102-1.493L2.75 16h18.5-18.5ZM2.75 20h12.5a.75.75 0 0 1 .102 1.493L15.25 21.5H2.75a.75.75 0 0 1-.102-1.493L2.75 20h12.5-12.5Z\" fill=\"currentColor\"/></svg>",
+      "order": 100,
+      "defaultPinned": false
+    }
+  }
+}

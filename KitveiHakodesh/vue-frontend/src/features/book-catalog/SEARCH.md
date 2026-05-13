@@ -26,7 +26,19 @@ For each query word, the scoring pass first finds the highest tier achieved by a
 
 ## The mid-typing fallback
 
-When the normal search (catalog-best on all words) returns nothing, `filterBooksByWords` retries with the last word's required tier capped at PREFIX. This handles the common case where the user is mid-word on the last token: מסילת יש finds no results normally because יש is not an exact or prefix match under catalog-best rules (ישרים is an exact match elsewhere, raising the bar). The fallback caps the last word at PREFIX, so מסילת scores EXACT and יש scores PREFIX against ישרים, and מסילת ישרים appears.
+When the normal search (catalog-best on all words) returns nothing, `filterBooksByWords` previously retried with the last word's required tier capped at PREFIX. This fallback has been removed — every word is now treated uniformly. The catalog-best rule applies to all words equally.
+
+## Result ranking
+
+When multiple books pass the catalog-best filter, they are sorted by four tiers in order:
+
+1. Total score — sum of per-word match tiers across all query words. Higher is better. A book that scores EXACT on every word ranks above one that scores PREFIX on any word.
+
+2. Title match count — how many query words appear in the book's title tokens (exact or prefix). More title hits means the query is describing the book itself rather than something in its category path. This puts "תלמוד ירושלמי פסחים" above commentaries on it whose titles are "שיירי קרבן על תלמוד ירושלמי פסחים" — the query words appear in the base book's title directly, not just in the path.
+
+3. Title token count — within the same title-match tier, fewer title tokens means the query fills a larger fraction of the title. "תלמוד ירושלמי פסחים" (3 title tokens) ranks above "תלמוד ירושלמי פסחים חלק א" (4 title tokens) when both have the same title match count.
+
+4. Catalog tree order — final tiebreak. Whatever appears first in the catalog tree wins.
 
 ## The title-startsWith promotion
 
@@ -37,6 +49,12 @@ When no word in the query reached EXACT anywhere in the catalog, results are re-
 Phase 1 runs on every keystroke, synchronously. It calls `filterBooksByWords` against the in-memory catalog and shows results immediately with no loading state. If Phase 1 finds anything, Phase 2 never runs.
 
 Phase 2 runs only when Phase 1 finds nothing, debounced at 300ms. It interprets the query as a combination of book words and TOC words — for example, בראשית פרק ד splits into book=בראשית and toc=פרק ד. It finds the longest prefix of the query that matches at least one book, fetches the TOC entries for those books from the database, and scores the remaining words against the TOC text. Results are capped at 50 candidate books to prevent runaway DB fetches on broad prefixes. A generation counter ensures that if the user types again while Phase 2 is in flight, the stale results are discarded.
+
+## TOC search — Talmud page references
+
+The TOC tokenizer in `segmentSearchTree.ts` keeps `.` and `:` attached to a preceding letter or digit so Talmud page references survive as single tokens: `דף י.` tokenizes to `["דף", "י."]` and `דף י:` to `["דף", "י:"]`. Without special handling, the exact-last-word strategy (which prevents `פרק ל` from surfacing `פרק לא`) would suppress `דף ד.` and `דף ד:` when the user types `דף ד`, because neither `ד.` nor `ד:` equals `ד` exactly.
+
+The fix: in `_score`, a token is treated as an exact match for a query word when the token equals the word with a single `.` or `:` appended. So `ד.` and `ד:` are exact matches for `ד`. Both forms appear in results when the exact-last-word attempt succeeds, and the `פרק ל` / `פרק לא` disambiguation is fully preserved because `לא` is not `ל` plus a single suffix character.
 
 ## Adapting this design to another feature
 

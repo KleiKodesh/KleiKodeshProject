@@ -37,35 +37,14 @@ await Promise.all([
 function warmBooksDataInBackground() {
   if (!dbReady.value) return
 
-  const run = () => {
+  // Delay briefly so the initial render and any active book-view line fetches
+  // settle first, then kick off the catalog load in the background.
+  // Plain setTimeout — no requestIdleCallback — so it fires predictably after
+  // the delay rather than waiting indefinitely for an idle window that may
+  // never come while the book view is streaming line chunks.
+  window.setTimeout(() => {
     void useBooksDataStore().ensureLoaded()
-  }
-
-  // Wait for the browser to be genuinely idle before loading the catalog.
-  // A minimum wall-clock delay of 8s ensures the book view's line chunks have
-  // all finished before the catalog queries compete for the DB connection.
-  const MIN_DELAY = 8000
-  const startTime = Date.now()
-
-  if (typeof window.requestIdleCallback === 'function') {
-    const tryIdle = () => {
-      window.requestIdleCallback(
-        (deadline) => {
-          const elapsed = Date.now() - startTime
-          if (elapsed >= MIN_DELAY && deadline.timeRemaining() > 50) {
-            run()
-          } else {
-            // Not ready yet — reschedule
-            window.setTimeout(tryIdle, Math.max(0, MIN_DELAY - elapsed))
-          }
-        },
-        { timeout: MIN_DELAY + 5000 },
-      )
-    }
-    window.setTimeout(tryIdle, MIN_DELAY)
-  } else {
-    window.setTimeout(run, MIN_DELAY)
-  }
+  }, 500)
 }
 
 app.mount('#app')

@@ -23,7 +23,7 @@ The top-level `runTocHeuristics` function runs all four stages in sequence and a
 
 **bookCatalogTree.ts** - builds the category tree from flat DB rows, assigns full category paths to books, and computes period and root-category metadata. Negative IDs on categories or books indicate user-defined custom entries; `buildTree` always sorts them after DB entries at every level of the tree.
 
-**bookCatalogSearch.ts** - inverted index, word lookup, scoring, and `filterBooksByWords`. See `SEARCH.md` for the full design.
+**bookCatalogSearch.ts** - inverted index, word lookup, scoring, and `filterBooksByWords`. Stores title-only token sets and counts per book in addition to the full-path token counts, enabling the four-tier ranking: total score → title match count → title token count → catalog tree order. See `SEARCH.md` for the full design.
 
 **bookCatalogSearchNormalizer.ts** - all Hebrew-specific text normalization: abbreviation expansion, spelling variant rules, חסר/מלא decomposition, and ה-prefix stripping. Apply symmetrically to both indexed tokens and query words — never add normalization rules anywhere else.
 

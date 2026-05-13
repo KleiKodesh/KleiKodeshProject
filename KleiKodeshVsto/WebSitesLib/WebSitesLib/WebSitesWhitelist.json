@@ -29,6 +29,12 @@
     "Url": "https://tablet.otzar.org/",
     "IsVisible": true
   },
+    {
+    "Name": "אוצר הפוסקים",
+    "Description": "מראי מקומות לפוסקים ומחברים באבן העזר",
+    "Url": "https://www.poskim.org/%d7%9e%d7%90%d7%92%d7%a8-%d7%94%d7%a1%d7%a4%d7%a8%d7%99%d7%9d/",
+    "IsVisible": true
+  },
   {
     "Name": "גניזת FJMS - פרוייקט פרידברג",
     "Description": "השוואת נוסחאות חז\"ל ותצלומי כתב יד מהגניזה.",

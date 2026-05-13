@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    :root {
+      --radius-card: 16px;
+      --radius-btn:  24px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-family, system-ui, sans-serif);
+      font-size:   var(--font-size, 16px);
+      line-height: var(--line-height, 1.5);
+      background:  var(--otzaria-color-surface);
+      color:       var(--otzaria-color-on-surface);
+      padding: 24px;
+      min-height: 100vh;
+      direction: rtl;
+    }
+
+    /* ── כותרת ── */
+    .page-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .page-header h2 {
+      color: var(--otzaria-color-primary);
+      font-size: 1.5rem;
+    }
+    .page-header .subtitle {
+      font-size: 0.82rem;
+      color: var(--otzaria-color-on-surface-variant, #888);
+      margin-top: 3px;
+    }
+
+    /* ── כרטיס ── */
+    .card {
+      background: var(--otzaria-color-surface-container-high, var(--otzaria-color-surface-container-highest));
+      border: 1px solid var(--otzaria-color-outline-variant, var(--otzaria-color-outline));
+      border-radius: var(--radius-card);
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+
+    .label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--otzaria-color-on-surface-variant, #888);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 130px;
+      padding: 12px 14px;
+      border: 1.5px solid var(--otzaria-color-outline-variant, var(--otzaria-color-outline));
+      border-radius: 12px;
+      background: var(--otzaria-color-surface);
+      color: var(--otzaria-color-on-surface);
+      font-family: inherit;
+      font-size: inherit;
+      line-height: inherit;
+      resize: vertical;
+      outline: none;
+      direction: rtl;
+      transition: border-color 0.15s;
+    }
+    textarea:focus { border-color: var(--otzaria-color-primary); }
+    textarea::placeholder { color: var(--otzaria-color-on-surface-variant, #aaa); }
+
+    .char-count {
+      font-size: 0.7rem;
+      color: var(--otzaria-color-on-surface-variant, #aaa);
+      text-align: left;
+      margin-top: 4px;
+    }
+
+    /* ── בחירת סגנון ── */
+    .genre-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 4px;
+    }
+    .genre-chip {
+      padding: 6px 16px;
+      border-radius: var(--radius-btn);
+      border: 1.5px solid var(--otzaria-color-outline-variant, var(--otzaria-color-outline));
+      background: transparent;
+      color: var(--otzaria-color-on-surface);
+      font-family: inherit;
+      font-size: 0.82rem;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .genre-chip.active {
+      background:   var(--otzaria-color-primary);
+      color:        var(--otzaria-color-on-primary);
+      border-color: var(--otzaria-color-primary);
+    }
+    .genre-chip:not(.active):hover {
+      background:   var(--otzaria-color-surface-container-highest);
+      border-color: var(--otzaria-color-primary);
+    }
+
+    /* ── כפתורים ── */
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 22px;
+      border-radius: var(--radius-btn);
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: 700;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    .btn:active   { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .btn-primary {
+      background: var(--otzaria-color-primary);
+      color:      var(--otzaria-color-on-primary);
+    }
+    .btn-primary:hover:not(:disabled) { opacity: 0.88; }
+
+    .btn-tonal {
+      background: var(--otzaria-color-surface-container-highest);
+      color:      var(--otzaria-color-on-surface);
+    }
+    .btn-tonal:hover:not(:disabled) { opacity: 0.8; }
+
+    /* ── Loading ── */
+    .loading-bar {
+      display: none;
+      height: 3px;
+      background: var(--otzaria-color-surface-container-highest);
+      border-radius: 99px;
+      overflow: hidden;
+      margin-bottom: 14px;
+    }
+    .loading-bar.active { display: block; }
+    .loading-bar-inner {
+      height: 100%;
+      width: 30%;
+      background: var(--otzaria-color-primary);
+      border-radius: 99px;
+      animation: slide 1.2s ease-in-out infinite;
+    }
+    @keyframes slide {
+      0%   { transform: translateX(300%); }
+      100% { transform: translateX(-100%); }
+    }
+
+    /* ── שגיאה ── */
+    .error-box {
+      display: none;
+      background: var(--otzaria-color-error-container, rgba(179,38,30,0.08));
+      border: 1px solid var(--otzaria-color-error, #B3261E);
+      color: var(--otzaria-color-on-error-container, var(--otzaria-color-error, #B3261E));
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 0.82rem;
+      margin-bottom: 14px;
+    }
+    .error-box.visible { display: block; }
+
+    /* ── תוצאה ── */
+    .result-section { display: none; }
+    .result-section.visible { display: block; }
+
+    .result-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .result-label {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--otzaria-color-on-surface-variant, #888);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .result-box {
+      background: var(--otzaria-color-surface-container-highest);
+      border: 1.5px solid var(--otzaria-color-outline-variant, var(--otzaria-color-outline));
+      border-radius: 12px;
+      padding: 16px;
+      font-size: inherit;
+      line-height: inherit;
+      direction: rtl;
+      word-break: break-word;
+      white-space: pre-wrap;
+      color: var(--otzaria-color-on-surface);
+      min-height: 80px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 99px;
+      background: var(--otzaria-color-surface-container-highest);
+      color: var(--otzaria-color-on-surface-variant, #888);
+      font-size: 0.72rem;
+      font-weight: 600;
+    }
+    .copy-btn {
+      padding: 4px 12px;
+      border-radius: 99px;
+      border: 1.5px solid var(--otzaria-color-outline-variant, var(--otzaria-color-outline));
+      background: transparent;
+      color: var(--otzaria-color-on-surface);
+      font-family: inherit;
+      font-size: 0.72rem;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .copy-btn:hover { background: var(--otzaria-color-surface-container-highest); }
+
+    /* ── מידע ── */
+    .info-card {
+      background: var(--otzaria-color-surface-container-high, var(--otzaria-color-surface-container-highest));
+      border: 1px solid var(--otzaria-color-outline-variant, var(--otzaria-color-outline));
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-size: 0.8rem;
+      line-height: 1.6;
+      margin-top: 16px;
+    }
+    .info-card strong { color: var(--otzaria-color-primary); }
+
+    .divider {
+      height: 1px;
+      background: var(--otzaria-color-outline-variant, var(--otzaria-color-outline));
+      opacity: 0.4;
+      margin: 18px 0;
+    }
+    .source-badge {
+      font-size: 0.66rem;
+      color: var(--otzaria-color-on-surface-variant, #aaa);
+      text-align: center;
+      margin-top: 16px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="page-header">
+    <div>
+      <h2>ניקוד אוטומטי</h2>
+      <div class="subtitle">מבוסס על שירות דיקטה — האוניברסיטה העברית</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <label class="label" for="inputText">הדבק או הקלד טקסט לניקוד</label>
+    <textarea
+      id="inputText"
+      placeholder="לדוגמה: בראשית ברא אלהים את השמים ואת הארץ..."
+      maxlength="5000"
+    ></textarea>
+    <div class="char-count"><span id="charCount">0</span> / 5,000 תווים</div>
+  </div>
+
+  <div class="card">
+    <label class="label">סגנון טקסט</label>
+    <div class="genre-row">
+      <button class="genre-chip active"  data-genre="modern"         onclick="setGenre(this)">מודרני</button>
+      <button class="genre-chip"         data-genre="rabbinic"       onclick="setGenre(this)">רבני</button>
+      <button class="genre-chip"         data-genre="talmud"         onclick="setGenre(this)">תלמוד</button>
+      <button class="genre-chip"         data-genre="modernpoetry"   onclick="setGenre(this)">שירה</button>
+      <button class="genre-chip"         data-genre="medievalpoetry" onclick="setGenre(this)">שירה קלאסית</button>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-primary" id="btnNiqqud" onclick="runNiqqud()">✦ נקד טקסט</button>
+    <button class="btn btn-tonal"   id="btnClear"  onclick="clearAll()">נקה</button>
+  </div>
+
+  <div class="error-box" id="errorBox"></div>
+
+  <div class="loading-bar" id="loadingBar">
+    <div class="loading-bar-inner"></div>
+  </div>
+
+  <div class="result-section" id="resultSection">
+    <div class="result-header">
+      <span class="result-label">טקסט מנוקד</span>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span class="badge">✓ דיקטה</span>
+        <button class="copy-btn" onclick="copyResult()">העתק</button>
+      </div>
+    </div>
+    <div class="result-box" id="resultBox"></div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="info-card">
+    <strong>כיצד להשתמש:</strong><br>
+    הדבק טקסט עברי ללא ניקוד (עד 5,000 תווים) ולחץ "נקד טקסט".<br>
+    ניתן גם לסמן טקסט בקורא ולבחור <strong>"ניקוד אוטומטי"</strong> מתפריט הלחיצה הימנית.<br><br>
+    <strong>שירות:</strong> הניקוד מבוצע על-ידי שרת דיקטה של האוניברסיטה העברית. נדרש חיבור לאינטרנט.
+  </div>
+
+  <div class="source-badge">Powered by Dicta NLP · האוניברסיטה העברית בירושלים</div>
+
+  <script src="otzaria_plugin.js"></script>
+  <script>
+    /* ═══════════════════════════════
+       ערכת צבעים
+    ═══════════════════════════════ */
+    (function () {
+      function applyTheme(theme) {
+        if (!theme) return;
+        const root = document.documentElement;
+        const cs   = theme.colorScheme || {};
+        const map  = {
+          '--otzaria-color-primary':                   cs.primary,
+          '--otzaria-color-on-primary':                cs.onPrimary,
+          '--otzaria-color-secondary':                 cs.secondary,
+          '--otzaria-color-on-secondary':              cs.onSecondary,
+          '--otzaria-color-surface':                   cs.surface,
+          '--otzaria-color-on-surface':                cs.onSurface,
+          '--otzaria-color-surface-container-highest': cs.surfaceContainerHighest,
+          '--otzaria-color-surface-container-high':    cs.surfaceContainerHighest,
+          '--otzaria-color-outline':                   cs.outline,
+          '--otzaria-color-outline-variant':           cs.outline,
+          '--otzaria-color-error':                     cs.error,
+          '--otzaria-color-on-error':                  cs.onError,
+        };
+        Object.entries(map).forEach(([k, v]) => { if (v) root.style.setProperty(k, v); });
+
+        const t = theme.typography || {};
+        if (t.fontFamily) {
+          const ff = "'" + t.fontFamily + "', system-ui, sans-serif";
+          root.style.setProperty('--font-family', ff);
+          document.body.style.fontFamily = ff;
+        }
+        if (t.fontSize)   root.style.setProperty('--font-size',   t.fontSize   + 'px');
+        if (t.lineHeight) root.style.setProperty('--line-height', t.lineHeight);
+      }
+
+      if (window.Otzaria) {
+        Otzaria.on('plugin.boot',   p => applyTheme(p.theme));
+        Otzaria.on('theme.changed', t => applyTheme(t));
+      }
+    })();
+
+    /* ═══════════════════════════════
+       ג'אנר
+    ═══════════════════════════════ */
+    let selectedGenre = 'modern';
+    function setGenre(btn) {
+      document.querySelectorAll('.genre-chip').forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+      selectedGenre = btn.dataset.genre;
+    }
+
+    /* ═══════════════════════════════
+       ספירת תווים
+    ═══════════════════════════════ */
+    document.getElementById('inputText').addEventListener('input', updateCharCount);
+    function updateCharCount() {
+      document.getElementById('charCount').textContent =
+        document.getElementById('inputText').value.length.toLocaleString('he');
+    }
+
+    /* ═══════════════════════════════
+       תפריט הקשר
+    ═══════════════════════════════ */
+    if (window.Otzaria) {
+      Otzaria.on('plugin.boot', async () => {
+        try {
+          await Otzaria.call('reader.addContextMenuItem', {
+            id:    'niqqud-selected',
+            label: 'ניקוד אוטומטי (דיקטה)',
+            icon:  'text_grammar_wand_24_regular'
+          });
+        } catch (e) {
+          console.warn('לא ניתן לרשום פריט תפריט הקשר:', e);
+        }
+
+        Otzaria.on('reader.context_menu_item_clicked', async (data) => {
+          if (data.itemId !== 'niqqud-selected') return;
+          if (!data.selectedText?.trim()) {
+            await Otzaria.call('ui.showMessage', { message: 'יש לסמן טקסט לפני ניקוד' });
+            return;
+          }
+          document.getElementById('inputText').value = data.selectedText;
+          updateCharCount();
+          runNiqqud();
+        });
+      });
+    }
+
+    /* ═══════════════════════════════
+       Dicta API
+    ═══════════════════════════════ */
+    const DICTA_ENDPOINTS = [
+      'https://nakdan-u1-0.loadbalancer.dicta.org.il/api',
+      'https://nakdan-5-1.loadbalancer.dicta.org.il/api'
+    ];
+    const METEG = '\u05BD';
+
+    async function callDicta(text) {
+      const body = JSON.stringify({
+        task:            'nakdan',
+        data:            text,
+        genre:           selectedGenre,
+        addmorph:        true,
+        keepmetagim:     true,
+        useTokenization: true,
+        keepqq:          false,
+        nodageshdefmem:  false,
+        patachma:        false,
+        matchpartial:    true,
+        userData:        'gave permission'
+      });
+
+      let lastError;
+      for (const url of DICTA_ENDPOINTS) {
+        try {
+          const res = await fetch(url, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json;charset=UTF-8' },
+            body,
+            signal: AbortSignal.timeout(25000)
+          });
+          if (!res.ok) { lastError = new Error('שגיאת שרת: ' + res.status); continue; }
+          const json = await res.json();
+          return extractNiqqud(json.data);
+        } catch (err) {
+          lastError = err;
+        }
+      }
+      throw lastError || new Error('כל השרתים לא זמינים');
+    }
+
+    /* זהה לפונקציית extract_word ב-nakdan.py */
+    function extractNiqqud(data) {
+      return data.map(item => {
+        const options = item?.nakdan?.options;
+        if (options && options.length > 0) {
+          return options[0].w
+            .replace(/\|/g, '')
+            .replace(new RegExp(METEG, 'g'), '');
+        }
+        return item?.nakdan?.word || item?.str || '';
+      }).join('');
+    }
+
+    /* ═══════════════════════════════
+       הרצת ניקוד
+    ═══════════════════════════════ */
+    async function runNiqqud() {
+      const text = document.getElementById('inputText').value.trim();
+      if (!text)          { showError('יש להזין טקסט לניקוד.'); return; }
+      if (text.length > 5000) { showError('הטקסט ארוך מדי. מקסימום 5,000 תווים.'); return; }
+
+      setLoading(true);
+      hideError();
+      hideResult();
+
+      try {
+        const result = await callDicta(text);
+        showResult(result);
+        if (window.Otzaria) await Otzaria.call('ui.showSuccess', { message: 'הניקוד הושלם בהצלחה!' });
+      } catch (err) {
+        const msg = err.name === 'TimeoutError'
+          ? 'פג הזמן — ייתכן שהשרת עמוס. נסה שוב.'
+          : 'שגיאה: ' + (err.message || 'לא ניתן להתחבר לשרת דיקטה');
+        showError(msg);
+        if (window.Otzaria) await Otzaria.call('ui.showError', { message: 'שגיאה בניקוד — בדוק חיבור לאינטרנט' });
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    /* ═══════════════════════════════
+       UI helpers
+    ═══════════════════════════════ */
+    function setLoading(on) {
+      document.getElementById('loadingBar').classList.toggle('active', on);
+      const btn = document.getElementById('btnNiqqud');
+      btn.disabled    = on;
+      btn.textContent = on ? '⏳ מעבד...' : '✦ נקד טקסט';
+    }
+    function showResult(text) {
+      document.getElementById('resultBox').textContent = text;
+      document.getElementById('resultSection').classList.add('visible');
+    }
+    function hideResult() { document.getElementById('resultSection').classList.remove('visible'); }
+    function showError(msg) {
+      const b = document.getElementById('errorBox');
+      b.textContent = msg;
+      b.classList.add('visible');
+    }
+    function hideError() { document.getElementById('errorBox').classList.remove('visible'); }
+    function clearAll() {
+      document.getElementById('inputText').value = '';
+      updateCharCount();
+      hideResult();
+      hideError();
+    }
+    async function copyResult() {
+      const text = document.getElementById('resultBox').textContent;
+      try {
+        await navigator.clipboard.writeText(text);
+        if (window.Otzaria) await Otzaria.call('ui.showSuccess', { message: 'הטקסט הועתק ללוח!' });
+      } catch {
+        if (window.Otzaria) await Otzaria.call('ui.showError',   { message: 'לא ניתן להעתיק' });
+      }
+    }
+  </script>
+</body>
+</html>

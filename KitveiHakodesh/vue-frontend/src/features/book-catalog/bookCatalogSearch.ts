@@ -18,12 +18,21 @@ import type { BookRow } from './bookCatalogTree'
 
 // ─── Tokenization ─────────────────────────────────────────────────────────────
 
-/** Compute the normalized token list for a book without storing it on the book object. */
+/** Compute the normalized token list for a book's full indexed string (path + title + authors). */
 function _tokenizeBook(book: BookRow): string[] {
   const fullPath = book.parentPath ? `${book.parentPath} / ${book.title}` : book.title
   const authorPart = book.authors ? ` ${normalizeBookPath(normalize(book.authors))}` : ''
   const searchString = normalizeBookPath(normalize(fullPath)) + authorPart
   return searchString.split(/\s+/).filter((w) => w.length > 0)
+}
+
+/** Compute the normalized token set for a book's title alone (no parent path, no authors). */
+function _tokenizeTitle(book: BookRow): Set<string> {
+  return new Set(
+    normalizeBookPath(normalize(book.title))
+      .split(/\s+/)
+      .filter((w) => w.length > 0),
+  )
 }
 
 // ─── Inverted index ───────────────────────────────────────────────────────────
@@ -54,6 +63,12 @@ interface InvertedIndex {
   sortedTokenBooks: Uint16Array[]
   skeleton: Map<string, SkeletonEntry>
   books: BookRow[]
+  /** Number of indexed tokens per book (full path + authors). Fewer = tighter overall match. */
+  tokenCounts: Uint16Array
+  /** Title-only token set per book — for checking whether a query word hits the title. */
+  titleTokenSets: Set<string>[]
+  /** Number of title-only tokens per book — tiebreaker within the same title-match tier. */
+  titleTokenCounts: Uint16Array
 }
 
 let _index: InvertedIndex | null = null
@@ -61,6 +76,9 @@ let _index: InvertedIndex | null = null
 function _buildInvertedIndex(books: BookRow[]): void {
   const tokenSets = new Map<string, Set<BookIndex>>()
   const skelSets = new Map<string, Map<BookIndex, DecomposedToken>>()
+  const tokenCountsArr: number[] = []
+  const titleTokenSets: Set<string>[] = []
+  const titleTokenCountsArr: number[] = []
 
   const addToTokenSet = (key: string, bi: BookIndex) => {
     let s = tokenSets.get(key)
@@ -70,6 +88,11 @@ function _buildInvertedIndex(books: BookRow[]): void {
 
   for (let bi = 0; bi < books.length; bi++) {
     const tokens = _tokenizeBook(books[bi]!)
+    tokenCountsArr.push(tokens.length)
+
+    const titleSet = _tokenizeTitle(books[bi]!)
+    titleTokenSets.push(titleSet)
+    titleTokenCountsArr.push(titleSet.size)
 
     for (const token of tokens) {
       // Index original token
@@ -99,7 +122,12 @@ function _buildInvertedIndex(books: BookRow[]): void {
     })
   }
 
-  _index = { sortedTokens, sortedTokenBooks, skeleton, books }
+  _index = {
+    sortedTokens, sortedTokenBooks, skeleton, books,
+    tokenCounts: new Uint16Array(tokenCountsArr),
+    titleTokenSets,
+    titleTokenCounts: new Uint16Array(titleTokenCountsArr),
+  }
 }
 
 /**
@@ -175,11 +203,18 @@ function _lookupWord(word: string, decomp: DecomposedToken): Map<BookIndex, numb
 
 /**
  * Score all books against the given words and return them sorted best-first.
- * When lastWordPrefixOnly is true, the last word's required tier is capped at
- * PREFIX — it is never required to reach EXACT even if exact matches exist
- * elsewhere in the catalog. Used for the mid-typing fallback.
+ *
+ * Ranking tiers (applied in order):
+ *   1. Total score (sum of per-word match tiers) — higher is better
+ *   2. Title match count — how many query words hit the title tokens directly.
+ *      More title hits = closer match. A book whose title contains all query words
+ *      ranks above a commentary that only matches because its path contains them.
+ *   3. Title token count — within the same title-match tier, fewer title tokens
+ *      means the query fills a larger fraction of the title (tighter fit).
+ *   4. Catalog tree order — final tiebreak by catalog position
  */
-function _scoreBooks(words: string[], lastWordPrefixOnly: boolean): BookRow[] {
+function _scoreBooks(words: string[]): BookRow[] {
+  const { tokenCounts, titleTokenSets, titleTokenCounts } = _index!
   const wordMaps = words.map((w) => _lookupWord(w, decomposeHebrewWord(w)))
 
   // Catalog-best tier per word
@@ -189,13 +224,6 @@ function _scoreBooks(words: string[], lastWordPrefixOnly: boolean): BookRow[] {
     return best
   })
 
-  // In prefix-fallback mode, cap the last word's required tier at PREFIX so a
-  // partial word like "יש" qualifies books even when "ישרים" is an exact match.
-  if (lastWordPrefixOnly) {
-    const last = catalogBest.length - 1
-    if (catalogBest[last]! > SCORE_PREFIX) catalogBest[last] = SCORE_PREFIX
-  }
-
   if (catalogBest.some((b) => b === SCORE_NONE)) return []
 
   // Intersect word maps, smallest first
@@ -203,7 +231,7 @@ function _scoreBooks(words: string[], lastWordPrefixOnly: boolean): BookRow[] {
     .map((m, i) => ({ m, best: catalogBest[i]! }))
     .sort((a, b) => a.m.size - b.m.size)
 
-  const scored: { book: BookRow; total: number }[] = []
+  const scored: { book: BookRow; total: number; titleMatchCount: number; titleTokenCount: number; tokenCount: number }[] = []
   for (const [bi, tier0] of sorted[0]!.m) {
     if (tier0 < sorted[0]!.best) continue
     let total = tier0
@@ -213,10 +241,36 @@ function _scoreBooks(words: string[], lastWordPrefixOnly: boolean): BookRow[] {
       if (tier < sorted[wi]!.best) { qualified = false; break }
       total += tier
     }
-    if (qualified) scored.push({ book: _index!.books[bi]!, total })
+    if (!qualified) continue
+
+    // Count how many query words appear in the title tokens (exact or prefix match).
+    const titleToks = titleTokenSets[bi]!
+    let titleMatchCount = 0
+    for (const w of words) {
+      for (const tok of titleToks) {
+        if (tok === w || tok.startsWith(w)) { titleMatchCount++; break }
+      }
+    }
+
+    scored.push({
+      book: _index!.books[bi]!,
+      total,
+      titleMatchCount,
+      titleTokenCount: titleTokenCounts[bi]!,
+      tokenCount: tokenCounts[bi]!,
+    })
   }
 
-  scored.sort((a, b) => b.total - a.total || (a.book.treeOrder ?? 0) - (b.book.treeOrder ?? 0))
+  scored.sort((a, b) => {
+    // 1. Higher total score first
+    if (b.total !== a.total) return b.total - a.total
+    // 2. More query words hitting the title = closer match
+    if (b.titleMatchCount !== a.titleMatchCount) return b.titleMatchCount - a.titleMatchCount
+    // 3. Fewer title tokens = query fills more of the title
+    if (a.titleTokenCount !== b.titleTokenCount) return a.titleTokenCount - b.titleTokenCount
+    // 4. Catalog tree order
+    return (a.book.treeOrder ?? 0) - (b.book.treeOrder ?? 0)
+  })
 
   // When no word reached EXACT, promote books whose title starts with the full
   // raw query to the front.
@@ -238,9 +292,6 @@ function _scoreBooks(words: string[], lastWordPrefixOnly: boolean): BookRow[] {
 /**
  * Filter and rank books against a normalized query word list.
  * Uses the inverted index for O(results) lookup instead of O(all books) scan.
- *
- * Falls back to prefix-only matching on the last word when the normal search
- * returns nothing — handles mid-typing like "מסילת יש" → "מסילת ישרים".
  */
 export function filterBooksByWords(allBooks: BookRow[], words: string[]): BookRow[] {
   if (!words.length) return []
@@ -248,10 +299,5 @@ export function filterBooksByWords(allBooks: BookRow[], words: string[]): BookRo
   // Build index synchronously on first call if async build hasn't completed yet
   if (!_index) _buildInvertedIndex(allBooks)
 
-  const results = _scoreBooks(words, false)
-  if (results.length) return results
-
-  // Fallback: treat the last word as a pure prefix (minimum tier = PREFIX).
-  if (words.length > 1) return _scoreBooks(words, true)
-  return []
+  return _scoreBooks(words)
 }
