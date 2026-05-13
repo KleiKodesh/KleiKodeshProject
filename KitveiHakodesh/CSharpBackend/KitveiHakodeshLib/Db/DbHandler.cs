@@ -43,7 +43,8 @@ namespace KitveiHakodeshLib.Db
 
         public void HandleResetSettings(string id)
         {
-            try { Interaction.DeleteSetting("KitveiHakodesh", "Database"); } catch { }
+            // Wipe the entire KitveiHakodesh VB settings subtree (Database, Popout, HebrewBooks, etc.)
+            try { Interaction.DeleteSetting("KitveiHakodesh"); } catch { }
             _bridge.Reply(id, new { });
         }
 

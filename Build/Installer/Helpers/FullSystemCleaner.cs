@@ -142,6 +142,10 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                     Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Klei Kodesh"),
                     // Old addin wrote RibbonSettings.csv here (%AppData%, not %LocalAppData%)
                     Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "KleiKodesh"),
+                    // Legacy WebView2 webcache location — AppViewer.cs used %LocalAppData%\KitveiHakodesh\webcache
+                    // before it was moved to AppDomain.CurrentDomain.BaseDirectory (inside the install folder).
+                    // The entire KitveiHakodesh folder under LocalAppData is ours and can be fully removed.
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KitveiHakodesh"),
                 };
 
                 foreach (string folder in foldersToDelete)
@@ -187,6 +191,10 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         /// Current path (v3.x+):  %LocalAppData%\KleiKodesh\WebView2Cache
         ///   Written by: KleiKodeshWebView.cs (KitveiHakodesh panel)
         ///   Lives inside the install folder — deleted with it, but cleaned explicitly here.
+        ///
+        /// Legacy path (before webcache was moved into the install folder):
+        ///   %LocalAppData%\KitveiHakodesh\webcache
+        ///   The entire %LocalAppData%\KitveiHakodesh folder is deleted by CleanFileSystem.
         ///
         /// Old scattered paths — written by WebViewHost.cs / WebViewControl.cs before the
         /// fix that moved them inside the install folder. WebView2 creates an "EBWebView"

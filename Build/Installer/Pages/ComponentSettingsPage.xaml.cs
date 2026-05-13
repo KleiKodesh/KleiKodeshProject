@@ -74,10 +74,32 @@ namespace KleiKodeshVstoInstallerWpf
             else
             {
                 string existing = Interaction.GetSetting("KitveiHakodesh", "Database", "Path", "");
-                DbHintText.Text = string.IsNullOrEmpty(existing)
-                    ? "לא הוגדר נתיב — ישתמש בברירת המחדל של אפליקציית זית"
-                    : "לחץ לשינוי הנתיב";
+                if (string.IsNullOrEmpty(existing))
+                {
+                    string detected = ResolveDefaultDbPath();
+                    DbHintText.Text = File.Exists(detected)
+                        ? $"ברירת מחדל: {detected}"
+                        : "לא נמצאה אפליקציית זית או אוצריה — הגדר נתיב ידנית";
+                }
+                else
+                {
+                    DbHintText.Text = "לחץ לשינוי הנתיב";
+                }
             }
+        }
+
+        /// <summary>
+        /// Resolves the default seforim DB path — ZayitApp first, Otzaria as fallback.
+        /// Mirrors AppSettings.ResolveDefaultDbPath() in KitveiHakodeshLib.
+        /// </summary>
+        private static string ResolveDefaultDbPath()
+        {
+            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            string zayit   = Path.Combine(appData, "io.github.kdroidfilter.seforimapp", "databases", "seforim.db");
+            string otzaria = Path.Combine(appData, "otzaria", "books", "seforim.db");
+            if (File.Exists(zayit))   return zayit;
+            if (File.Exists(otzaria)) return otzaria;
+            return zayit;
         }
 
         private void ZayitDbButton_Click(object sender, RoutedEventArgs e)

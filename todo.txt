@@ -7,5 +7,8 @@ switching lines doesnt maintain same conmmentry
 show the toc also in the stickey header at the top
 
 eroors in console take care of them
+taamey fonts
+
+searchbar show 0/1
 
 default background slightly offwhit nt bright white?

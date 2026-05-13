@@ -354,7 +354,9 @@ namespace KitveiHakodeshLib.Search
                 Console.WriteLine("[SearchHandler] HandleDeleteIndex executing");
                 StopWatcher();
                 _indexState.StopAll();
-                FtsIndexState.DeleteFtsIndex();
+                // Full reset — wipe all cache folders (FTS index, Bloom, Word PDFs,
+                // HebrewBooks downloads, WebView2 webcache).
+                FtsIndexState.DeleteAllCaches();
             });
         }
 

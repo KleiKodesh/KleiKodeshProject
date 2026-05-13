@@ -81,6 +81,31 @@ The `pixel-ratio-override.js` script tag must appear **before** `<script src="vi
 
 ## `web/viewer.mjs` — Patches
 
+### 0a. Partial render delay (jump performance)
+
+Search for:
+```js
+  minDurationToUpdateCanvas: {
+    value: 500,
+    kind: OptionKind.VIEWER
+  },
+```
+
+Replace with:
+```js
+  minDurationToUpdateCanvas: {
+    // PATCH: reduced from 500 to 0 so partial renders appear immediately on
+    // large page jumps (e.g. page 5 → 350) rather than waiting 500ms before
+    // showing any content. The page renders progressively as tiles complete.
+    value: 0,
+    kind: OptionKind.VIEWER
+  },
+```
+
+PDF.js uses `enableOptimizedPartialRendering` to render pages in tiles. `minDurationToUpdateCanvas` is the minimum time that must pass before a partial tile update is shown to the user. At 500ms, a cold jump to a distant page shows nothing for half a second even though tiles are already rendered. Setting it to 0 makes content appear as soon as the first tile is ready.
+
+---
+
 ### 0a. Page cache size (memory)
 
 Search for: `const DEFAULT_CACHE_SIZE = 10;`

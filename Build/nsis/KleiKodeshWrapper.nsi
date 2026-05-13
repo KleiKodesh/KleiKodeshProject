@@ -356,6 +356,11 @@ Section Uninstall
   RMDir /r "$APPDATA\KleiKodesh"
   ; Old standalone WebView2 cache (pre-v3.x)
   RMDir /r "$LOCALAPPDATA\WebView2SharedCache"
+  ; Legacy WebView2 webcache — AppViewer.cs used %LocalAppData%\KitveiHakodesh\webcache
+  ; before it was moved into the install folder. Entirely owned by KleiKodesh.
+  RMDir /r "$LOCALAPPDATA\KitveiHakodesh"
+  ; Split-name variant (defensive)
+  RMDir /r "$LOCALAPPDATA\Klei Kodesh"
 
   ; ── Office Add-in registry — HKCU ────────────────────────────────────────────
   DetailPrint "מנקה רישומי Office..."
@@ -386,6 +391,8 @@ Section Uninstall
   ; ── Runtime settings (VB Program Settings) ───────────────────────────────────
   DeleteRegKey HKCU "Software\VB and VBA Program Settings\KleiKodesh"
   DeleteRegKey HKCU "Software\VB and VBA Program Settings\ZayitApp"
+  ; KitveiHakodesh — written by the KitveiHakodesh app (HebrewBooks\CsvLastUpdated, etc.)
+  DeleteRegKey HKCU "Software\VB and VBA Program Settings\KitveiHakodesh"
 
   ; ── Word per-addin metadata values ───────────────────────────────────────────
   ; Delete the KleiKodesh-named values from Word's per-addin tracking keys.

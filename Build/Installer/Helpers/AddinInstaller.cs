@@ -68,13 +68,11 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                             continue;
                         }
 
-                        // Skip the whitelist file if it already exists on disk — either the user
-                        // edited it this session (written immediately on dialog OK) or this is an
-                        // update (leave the user's existing list untouched).
-                        // On a fresh install with no prior edits, extract the default from the zip.
-                        if (string.Equals(entry.Name, "WebSitesWhitelist.json",
-                                StringComparison.OrdinalIgnoreCase) &&
-                            File.Exists(fullPath))
+                        // Skip files that should be preserved across updates:
+                        // 1. WebSitesWhitelist.json — user's website list customization
+                        // 2. Cache folders — user's cached PDFs, conversions, downloads
+                        // 3. BloomFilters — search index (rebuilt on version mismatch)
+                        if (ShouldSkipOnUpdate(entry.FullName) && File.Exists(fullPath))
                         {
                             current++;
                             progress?.Report((double)current / total * 100);
@@ -92,6 +90,33 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Returns true if this entry should be skipped during extraction on update.
+        /// Preserves user data and caches across installer updates.
+        /// </summary>
+        private static bool ShouldSkipOnUpdate(string entryPath)
+        {
+            // Normalize path separators
+            string normalized = entryPath.Replace('/', '\\');
+
+            // User's website list customization
+            if (string.Equals(normalized, "WebSitesWhitelist.json", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            // Cache folders: Word→PDF conversions, HebrewBooks downloads, WebView2 webcache
+            if (normalized.StartsWith("KitveiHakodesh\\cache\\", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (normalized.StartsWith("KitveiHakodesh\\webcache\\", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            // Bloom filter search index (rebuilt on version mismatch)
+            if (normalized.StartsWith("BloomFilters\\", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            return false;
         }
 
         // ── Register ─────────────────────────────────────────────────────────────

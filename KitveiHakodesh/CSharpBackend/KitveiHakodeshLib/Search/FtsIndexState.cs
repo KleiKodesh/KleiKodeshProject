@@ -313,6 +313,40 @@ namespace KitveiHakodeshLib.Search
             }
         }
 
+        /// <summary>
+        /// Deletes all user-generated cache folders under the app's base directory:
+        /// FTS index, Bloom filters, Word→PDF cache, HebrewBooks cache, and WebView2 webcache.
+        /// Called by the full app reset flow (איפוס האפליקציה).
+        /// </summary>
+        internal static void DeleteAllCaches()
+        {
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            string[] cacheDirs =
+            {
+                FtsIndexPath,
+                BloomFolderPath,
+                Path.Combine(baseDir, "KitveiHakodesh", "cache", "word"),
+                Path.Combine(baseDir, "KitveiHakodesh", "cache", "hebrewbooks"),
+                Path.Combine(baseDir, "KitveiHakodesh", "webcache"),
+            };
+
+            foreach (string dir in cacheDirs)
+            {
+                try
+                {
+                    if (Directory.Exists(dir))
+                    {
+                        Directory.Delete(dir, recursive: true);
+                        Console.WriteLine("[SearchHandler] Deleted cache: " + dir);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("[SearchHandler] Failed to delete cache " + dir + ": " + ex.Message);
+                }
+            }
+        }
+
         internal static void DeleteBloomIndexIfPresent()
         {
             try

@@ -764,7 +764,10 @@ const defaultOptions = {
     kind: OptionKind.VIEWER
   },
   minDurationToUpdateCanvas: {
-    value: 500,
+    // PATCH: reduced from 500 to 0 so partial renders appear immediately on
+    // large page jumps (e.g. page 5 → 350) rather than waiting 500ms before
+    // showing any content. The page renders progressively as tiles complete.
+    value: 0,
     kind: OptionKind.VIEWER
   },
   forcePageColors: {

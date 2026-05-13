@@ -66,12 +66,15 @@ It is embedded into the installer exe as a resource (linked path in csproj, not 
 
 ### Extraction rules
 
-| Condition | What happens to `WebSitesWhitelist.json` |
-|---|---|
-| User never opened the editor dialog, fresh install | Extracted from zip (default list) |
-| User never opened the editor dialog, update (file exists) | **Skipped** — existing file preserved |
-| User opened dialog and clicked OK | Zip entry skipped; `ApplyPendingWhitelist()` writes only the checked entries (no `IsVisible` field) |
-| User opened dialog and clicked Cancel | Same as "never opened" — `PendingWhitelist` stays null |
+| File/Folder | Fresh Install | Update | Reason |
+|---|---|---|---|
+| `WebSitesWhitelist.json` | Extracted from zip (default list) | **Skipped** — existing file preserved | User's website customization |
+| `KitveiHakodesh/cache/word/` | Extracted (empty) | **Skipped** — existing files preserved | User's cached Word→PDF conversions |
+| `KitveiHakodesh/cache/hebrewbooks/` | Extracted (empty) | **Skipped** — existing files preserved | User's cached HebrewBooks downloads |
+| `BloomFilters/` | Extracted (empty) | **Skipped** — existing files preserved | Search index (rebuilt on version mismatch) |
+| All other files | Extracted | Extracted (overwritten) | App code and resources |
+
+**Cache preservation logic:** `AddinInstaller.ShouldSkipOnUpdate()` checks if a file exists on disk before extraction. If it does, the file is skipped. This preserves user data and caches across installer updates while still allowing fresh installs to extract the default/empty folders.
 
 `AddinInstaller.PendingWhitelist` is `null` until the user opens the dialog and clicks OK.
 `ApplyPendingWhitelist()` is a no-op when `PendingWhitelist` is null.

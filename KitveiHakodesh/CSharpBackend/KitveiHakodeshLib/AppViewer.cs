@@ -83,13 +83,10 @@ namespace KitveiHakodeshLib
                     EnableTrackingPrevention = false,
                 };
 
-                // Keep the User Data Folder in LocalApplicationData, not in the app's
-                // install directory. The performance article recommends a fast local disk
-                // path; LocalApplicationData is always on the system drive and avoids
-                // ACL overhead that can occur inside Program Files.
-                string udf = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "KitveiHakodesh", "webcache");
+                // Keep the webcache alongside the other cache folders under the app's
+                // install directory (AppDomain.CurrentDomain.BaseDirectory), consistent
+                // with PdfHandler and HebrewBooksHandler.
+                string udf = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KitveiHakodesh", "webcache");
 
                 _sharedEnvTask = CoreWebView2Environment.CreateAsync(
                     browserExecutableFolder: null,
