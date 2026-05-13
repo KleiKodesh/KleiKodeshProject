@@ -148,7 +148,7 @@ App settings across three tabs: general, reading, and advanced. Also contains th
 
 - `SettingsPage.vue` — three-tab page shell
 - `SettingsGeneralPane.vue` — general tab: theme, zoom, toolbar position, reading behavior, divine name censoring
-- `SettingsReadingPane.vue` — reading tab: book and commentary font/size/padding settings
+- `SettingsFontsPane.vue` — fonts tab: book and commentary font/size/padding settings
 - `SettingsAdvancedPane.vue` — advanced tab: database path picker (hosted only), reset settings, full app reset
 - `SettingRow.vue`, `HintIcon.vue`, `SliderSetting.vue`, `ToggleGroup.vue`
 - `ThemePicker.vue`, `FontDisplaySettings.vue`, `FontSelector.vue`

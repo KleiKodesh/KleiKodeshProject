@@ -24,7 +24,7 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
 </script>
 
 <template>
-  <div class="reading-pane">
+  <div class="fonts-pane">
     <div class="section-label">תצוגת ספר</div>
 
     <FontDisplaySettings
@@ -61,7 +61,7 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
 </template>
 
 <style scoped>
-.reading-pane {
+.fonts-pane {
   display: contents;
 }
 .section-label {

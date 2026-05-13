@@ -2,18 +2,18 @@
 import { ref, computed } from 'vue'
 import TabStrip from '@/components/TabStrip.vue'
 import SettingsGeneralPane from './SettingsGeneralPane.vue'
-import SettingsReadingPane from './SettingsReadingPane.vue'
+import SettingsFontsPane from './SettingsFontsPane.vue'
 import SettingsAdvancedPane from './SettingsAdvancedPane.vue'
 
 const TABS = [
   { key: 'general', label: 'כללי' },
-  { key: 'reading', label: 'קריאה' },
+  { key: 'fonts', label: 'גופנים' },
   { key: 'advanced', label: 'מתקדם' },
 ]
 
 const PANE_MAP = {
   general: SettingsGeneralPane,
-  reading: SettingsReadingPane,
+  fonts: SettingsFontsPane,
   advanced: SettingsAdvancedPane,
 }
 

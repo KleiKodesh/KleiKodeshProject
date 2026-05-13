@@ -2,11 +2,11 @@
 
 App settings UI and first-launch setup wizard.
 
-**SettingsPage.vue** — three-tab settings page: general, reading, and advanced. Each tab renders its own pane component.
+**SettingsPage.vue** — three-tab settings page: general, fonts, and advanced. Each tab renders its own pane component.
 
 **SettingsGeneralPane.vue** — general settings tab: theme, app zoom, toolbar position, resume last read, commentary auto-sync, new tab destination, and divine name censoring.
 
-**SettingsReadingPane.vue** — reading display tab: book font/size/padding settings and optional separate commentary font settings.
+**SettingsFontsPane.vue** — fonts tab: book font/size/padding settings and optional separate commentary font settings.
 
 **SettingsAdvancedPane.vue** — advanced tab: database path picker (hosted only), reset settings, and full app reset with confirmation dialogs.
 
@@ -20,7 +20,7 @@ App settings UI and first-launch setup wizard.
 
 **ThemePicker.vue** — theme preset selector with custom theme builder.
 
-**FontDisplaySettings.vue** — font and size controls for main text or commentary with live preview. Used in `SettingsReadingPane`.
+**FontDisplaySettings.vue** — font and size controls for main text or commentary with live preview. Used in `SettingsFontsPane`.
 
 **FontSelector.vue** — font family dropdown. Detects installed fonts via `detectFonts.ts` from `src/utils/`.
 
