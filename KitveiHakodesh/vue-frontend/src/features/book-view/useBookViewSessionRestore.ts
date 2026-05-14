@@ -39,6 +39,11 @@ export function useBookViewSessionRestore(
   // BookViewLinesContent watches initialScrollTop reactively and will apply
   // the saved position when IDB resolves, even if that's after mount.
   const scrollStateReady = ref(true)
+  // Becomes true once the IDB read has settled (with or without a saved position).
+  // BookViewLinesContent uses this to know it is safe to give up waiting for a
+  // restore target — before this is true, the absence of initialScrollTop does not
+  // mean there is no saved position; it just means IDB hasn't responded yet.
+  const idbResolved = ref(false)
 
   // Start IDB reads immediately at composable setup — not deferred to onMounted —
   // so they run in parallel with the DB queries rather than racing mid-stream.
@@ -56,6 +61,8 @@ export function useBookViewSessionRestore(
         _restoredSi = result.si
         _restoredSo = result.so
       })
+
+  _idbPromise.then(() => { idbResolved.value = true })
 
   function _applyRestoreData(
     bookSaved: Awaited<ReturnType<typeof tabStore.getBookViewState>>,
@@ -134,5 +141,5 @@ export function useBookViewSessionRestore(
     }
   }
 
-  return { initialLineIndex, initialScrollTop, initialScrollOffset, scrollStateReady, restore }
+  return { initialLineIndex, initialScrollTop, initialScrollOffset, scrollStateReady, idbResolved, restore }
 }

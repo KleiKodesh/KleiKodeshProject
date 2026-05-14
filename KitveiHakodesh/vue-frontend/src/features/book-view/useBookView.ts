@@ -304,7 +304,7 @@ export function useBookView(
 
   const {
     initialLineIndex, initialScrollTop, initialScrollOffset,
-    scrollStateReady, restore: restoreSession,
+    scrollStateReady, idbResolved, restore: restoreSession,
   } = useBookViewSessionRestore(
     tabId, bookId, openTocLineIndex,
     bottomVisible, selectedLineId, commentaryLineId,
@@ -394,7 +394,7 @@ export function useBookView(
     altTocLabelMap, pinnedCommentaryBookId,
     // scroll / search state
     currentScrollLineIndex,
-    scrollStateReady, initialLineIndex, initialScrollTop, initialScrollOffset,
+    scrollStateReady, idbResolved, initialLineIndex, initialScrollTop, initialScrollOffset,
     activeMatchCount, activeMatchIdx, contentSearch, commentarySearch,
     // handlers
     onLinesScrolled, onTocSelect, onAltTocSelect,

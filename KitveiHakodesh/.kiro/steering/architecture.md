@@ -146,10 +146,8 @@ Full-text search backed by FtsLib (LSM-style segment index with delta+varint com
 
 App settings across three tabs: general, reading, and advanced. Also contains the setup wizard.
 
-- `SettingsPage.vue` — three-tab page shell
-- `SettingsGeneralPane.vue` — general tab: theme, zoom, toolbar position, reading behavior, divine name censoring
-- `SettingsFontsPane.vue` — fonts tab: book and commentary font/size/padding settings
-- `SettingsAdvancedPane.vue` — advanced tab: database path picker (hosted only), reset settings, full app reset
+- `SettingsPage.vue` — single-page settings view with a sticky search bar and a nav panel dropdown for jumping to sections; all settings rendered in one continuous scroll
+- `SettingsAdvancedPane.vue` — calendar city picker, database path picker (hosted only), and reset actions; accepts `visibleSections` prop for search filtering
 - `SettingRow.vue`, `HintIcon.vue`, `SliderSetting.vue`, `ToggleGroup.vue`
 - `ThemePicker.vue`, `FontDisplaySettings.vue`, `FontSelector.vue`
 - `useSettingsPage.ts`

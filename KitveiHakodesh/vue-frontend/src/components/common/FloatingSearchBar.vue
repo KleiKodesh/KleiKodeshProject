@@ -40,7 +40,7 @@ watch(
 
 const matchLabel = computed(() => {
   if (props.notFound) return 'לא נמצא'
-  if (props.matchCount !== null) return `${props.matchIndex} / ${props.matchCount}`
+  if (props.matchCount !== null && props.matchCount > 0) return `${props.matchIndex} / ${props.matchCount}`
   return ''
 })
 

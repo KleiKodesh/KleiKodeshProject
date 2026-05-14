@@ -81,6 +81,7 @@ function confirmResetSettings() {
     action: resetSettingsAndReload,
   })
 }
+
 function confirmResetSearchIndex() {
   confirmAction({
     label: 'איפוס אינדקס החיפוש',
@@ -88,6 +89,7 @@ function confirmResetSearchIndex() {
     action: resetSearchIndex,
   })
 }
+
 const { activeCity, setCity, init: initZmanim } = useZmanim()
 onMounted(() => initZmanim())
 
@@ -137,8 +139,9 @@ function pickCity(name: string) {
 </script>
 
 <template>
-  <div class="advanced-pane">
-    <div class="section-label">לוח שנה</div>
+  <!-- ── לוח שנה ── -->
+  <div data-section="section-calendar" data-section-label="לוח שנה">
+    <div id="section-calendar" class="section-label">לוח שנה</div>
 
     <SettingRow label="עיר לזמני היום" hint="העיר שלפיה יחושבו זמני היום בלוח השנה">
       <div ref="cityBoxRef" class="select-box" tabindex="0" @click="toggleCityDropdown">
@@ -168,8 +171,11 @@ function pickCity(name: string) {
         </div>
       </Teleport>
     </SettingRow>
+  </div>
 
-    <div class="section-label">מסד נתונים</div>
+  <!-- ── מסד נתונים ── -->
+  <div data-section="section-database" data-section-label="מסד נתונים">
+    <div id="section-database" class="section-label">מסד נתונים</div>
 
     <template v-if="isHosted">
       <div class="db-path-row">
@@ -189,48 +195,52 @@ function pickCity(name: string) {
             @keydown.enter="commitPath"
             @keydown.escape="editingPath = false"
           />
-          <span v-else class="db-path-text" :class="{ placeholder: !dbPath }" @click="startEditing">
+          <span
+            v-else
+            class="db-path-text"
+            :class="{ placeholder: !dbPath }"
+            @click="startEditing"
+          >
             {{ dbPath || 'לא נבחר נתיב' }}
           </span>
         </div>
       </div>
     </template>
+    <p v-else class="db-path-label">זמין רק בתוך האפליקציה המארחת</p>
+  </div>
 
-    <div class="section-label">איפוס</div>
+  <!-- ── איפוס ── -->
+  <div data-section="section-reset" data-section-label="איפוס">
+    <div id="section-reset" class="section-label">איפוס</div>
 
-    <p class="reset-desc">
-      מאפס רק את הגדרות התצוגה והקריאה לברירות המחדל. מסד הנתונים, היסטוריית הקריאה, והטאבים הפתוחים
-      נשמרים.
+    <p class="reset-desc" data-search-ignore>
+      מאפס רק את הגדרות התצוגה והקריאה לברירות המחדל. מסד הנתונים, היסטוריית הקריאה, והטאבים
+      הפתוחים נשמרים.
     </p>
     <button class="reset-all-btn" @click="confirmResetSettings">איפוס ההגדרות</button>
-    <p class="reset-desc">
+
+    <p class="reset-desc" data-search-ignore>
       מוחק את אינדקס החיפוש ובונה אותו מחדש. שאר נתוני האפליקציה לא יושפעו.
     </p>
     <button class="reset-all-btn" @click="confirmResetSearchIndex">איפוס אינדקס החיפוש</button>
-    <p class="reset-desc">
+
+    <p class="reset-desc" data-search-ignore>
       מוחק את כל נתוני האפליקציה — הגדרות, היסטוריית קריאה, מיקומי גלילה, טאבים פתוחים, ואינדקס
       החיפוש. לא ניתן לבטל פעולה זו.
     </p>
     <button class="reset-all-btn" @click="confirmResetAll">איפוס האפליקציה</button>
-
-    <ConfirmDialog
-      v-if="pendingConfirm"
-      :title="pendingConfirm.label"
-      :desc="pendingConfirm.desc"
-      @confirm="runConfirmed"
-      @cancel="cancelConfirm"
-    />
   </div>
+
+  <ConfirmDialog
+    v-if="pendingConfirm"
+    :title="pendingConfirm.label"
+    :desc="pendingConfirm.desc"
+    @confirm="runConfirmed"
+    @cancel="cancelConfirm"
+  />
 </template>
 
 <style scoped>
-.advanced-pane {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  width: 100%;
-}
-
 .reset-desc {
   font-size: 12px;
   color: var(--text-secondary);
@@ -329,19 +339,6 @@ function pickCity(name: string) {
 .folder-btn:hover {
   color: var(--text-primary);
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
-}
-
-.section-label {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-primary);
-  padding: 4px 0;
-  margin-bottom: 10px;
-  border-bottom: 1px solid var(--border-color);
-  width: 100%;
-}
-.section-label:not(:first-child) {
-  margin-top: 16px;
 }
 
 .select-box {

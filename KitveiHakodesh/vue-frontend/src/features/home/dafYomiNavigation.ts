@@ -1,25 +1,15 @@
 import { normalize } from '@/utils/normalizeText'
-import { splitQuery, SearchableTree, stripTocTitleRoots } from '../book-view/tocSearchUtils'
-import { query } from '@/webview-host/seforimDb'
-import { SQL } from '@/webview-host/queries.sql'
+import { normalizeBookPath } from '../book-catalog/bookCatalogSearchNormalizer'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useTabStore } from '@/stores/tabStore'
 import { filterBooksByWords } from '../book-catalog/bookCatalogSearch'
-import type { BookRow } from '../book-catalog/bookCatalogTree'
-
-type TocRow = {
-  id: number
-  parentId: number | null
-  bookId: number
-  text: string
-  lineIndex: number | null
-  hasChildren: number | boolean
-}
+import { runTocHeuristics } from '../book-catalog/bookCatalogSearchTocHeuristics'
 
 /**
  * Navigate to the daf yomi entry in book-view.
  * Prepends "בבלי" to the query to avoid matching Mishna tractates.
- * Among TOC matches, prefers the shortest path (fewest total words = most precise match).
+ * Uses the same catalog search pipeline as the book catalog search UI —
+ * filterBooksByWords for the book, then runTocHeuristics for the daf entry.
  */
 export async function navigateToDafYomi(dafYomi: string): Promise<void> {
   const store = useBooksDataStore()
@@ -27,65 +17,38 @@ export async function navigateToDafYomi(dafYomi: string): Promise<void> {
 
   await store.ensureLoaded()
 
-  // Prepend בבלי so we match Talmud Bavli, not Mishna
+  // Prepend בבלי so we match Talmud Bavli, not Mishna tractates
   const fullQuery = `בבלי ${dafYomi}`
-  const words = normalize(fullQuery.trim()).split(/\s+/).filter((w) => w.length > 0)
+  const words = normalizeBookPath(normalize(fullQuery.trim()))
+    .split(/\s+/)
+    .filter((w) => w.length > 0)
   if (!words.length) return
 
-  const split = splitQuery(words, (bw) => filterBooksByWords(store.allBooks, bw).length > 0)
-  if (!split) return
+  const { items, splitFound } = await runTocHeuristics(
+    words,
+    (bookWords) => filterBooksByWords(store.allBooks, bookWords),
+    () => false,
+  )
 
-  const { bookWords, tocWords } = split
-  if (!tocWords.length) return
-
-  const candidateBooks = filterBooksByWords(store.allBooks, bookWords)
-  if (!candidateBooks.length) return
-
-  const bookMap = new Map(candidateBooks.map((b) => [b.id, b]))
-  const ids = candidateBooks.map((b) => b.id)
-  const bookTitles = new Map(candidateBooks.map((b) => [b.id, b.title]))
-  const tocQuery = tocWords.join(' ')
-
-  // Fetch TOC rows for all candidate books in one shot (small set for a single tractate)
-  const rows = await query<TocRow>(SQL.GET_TOC_TITLES_FOR_BOOKS(ids.length), ids)
-
-  // Strip root entries that duplicate the book title
-  const byBook = new Map<number, TocRow[]>()
-  for (const r of rows) {
-    const group = byBook.get(r.bookId) ?? []
-    group.push(r)
-    byBook.set(r.bookId, group)
-  }
-  const stripped: TocRow[] = []
-  for (const [bookId, group] of byBook) {
-    stripped.push(...stripTocTitleRoots(group, bookTitles.get(bookId) ?? '', { bookId }))
-  }
-
-  const tree = new SearchableTree(stripped)
-  const matched = tree.search(stripped, tocQuery)
-  if (!matched.length) {
-    // Fall back: open the book at the start
-    const book = candidateBooks[0]!
-    tabStore.updateActiveTab({ route: '/book-view', title: book.title, bookId: book.id })
+  if (items.length > 0) {
+    const first = items[0]!
+    tabStore.updateActiveTab({
+      route: '/book-view',
+      title: first.book.title,
+      bookId: first.book.id,
+      openTocEntryId: first.tocEntryId,
+      openTocLineIndex: first.tocLineIndex ?? undefined,
+    })
     return
   }
 
-  // Among matches, prefer the one with the shortest display path (fewest extra words = best fit)
-  const best = matched.reduce((a, b) => {
-    const pathA = tree.displayPaths.get(a.id) ?? ''
-    const pathB = tree.displayPaths.get(b.id) ?? ''
-    return pathA.length <= pathB.length ? a : b
-  })
-
-  const bestRow = best as TocRow
-  const book = bookMap.get(bestRow.bookId)
-  if (!book) return
-
-  tabStore.updateActiveTab({
-    route: '/book-view',
-    title: book.title,
-    bookId: book.id,
-    openTocEntryId: best.id,
-    openTocLineIndex: bestRow.lineIndex ?? undefined,
-  })
+  // splitFound but no TOC match — open the book at the start
+  if (splitFound) {
+    const bookWords = words.slice(0, words.length - 1)
+    const candidates = filterBooksByWords(store.allBooks, bookWords)
+    if (candidates.length) {
+      const book = candidates[0]!
+      tabStore.updateActiveTab({ route: '/book-view', title: book.title, bookId: book.id })
+    }
+  }
 }

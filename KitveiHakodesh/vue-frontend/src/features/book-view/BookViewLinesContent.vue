@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, onBeforeUnmount } from 'vue'
-import { useResizeObserver } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useTabStore } from '@/stores/tabStore'
@@ -42,6 +41,7 @@ const props = defineProps<{
   searchHighlightSnippet?: string
   searchHighlightTerms?: string[]
   searchBarVisible?: boolean
+  idbResolved?: boolean
   getActiveTocEntry?: (lineIndex: number) => TocEntry | null
   getTocPath?: (entry: TocEntry) => string
 }>()
@@ -124,38 +124,6 @@ const virtualizer = useVirtualizer(
 
 const virtualItems = computed(() => virtualizer.value.getVirtualItems())
 const totalSize = computed(() => virtualizer.value.getTotalSize())
-
-// ── Resize anchor ─────────────────────────────────────────────────────────────
-// When the container is resized (window resize, split pane drag), lines reflow
-// and the virtualizer's pixel positions become stale. We anchor to the middle
-// visible line so the user's reading position stays on screen after reflow.
-// The middle line is a better anchor than the first: when the window narrows and
-// lines grow taller, the first line would be pushed to the top leaving the user's
-// actual reading position off screen, whereas the middle line stays centered.
-{
-  let resizeAnchorIndex: number | null = null
-
-  useResizeObserver(scrollerEl, () => {
-    if (programmaticScrolling) return
-    const items = virtualItems.value
-    if (!items.length) return
-
-    if (resizeAnchorIndex === null) {
-      // Capture the middle visible line before the layout changes
-      const middleItem = items[Math.floor(items.length / 2)]
-      resizeAnchorIndex = middleItem?.index ?? items[0]!.index
-    }
-
-    const anchorIndex = resizeAnchorIndex
-    resizeAnchorIndex = null
-
-    virtualizer.value!.measure()
-    nextTick(() => {
-      setProgrammaticScroll()
-      virtualizer.value!.scrollToIndex(anchorIndex, { align: 'center' })
-    })
-  })
-}
 
 // ── Scroll capture ────────────────────────────────────────────────────────────
 
@@ -241,10 +209,13 @@ function restoreScrollPos(lineIndex: number, scrollOffset = 0) {
 
   // If no target ever arrives (no saved position, no TOC nav), focus the scroller
   // once lines are loaded so keyboard navigation works immediately.
+  // Gate on idbResolved so we don't give up before IDB has had a chance to respond —
+  // on page reload, lines (placeholders) arrive before IDB resolves, and without this
+  // guard the fallback would kill the outer watcher before the saved position is known.
   watch(
-    () => props.lines,
-    (val) => {
-      if (!val.length || restored) return
+    () => [props.lines, props.idbResolved] as const,
+    ([val, resolved]) => {
+      if (!val.length || restored || !resolved) return
       if (props.initialLineIndex == null && props.initialScrollIndex == null) {
         stop?.()
         stop = null

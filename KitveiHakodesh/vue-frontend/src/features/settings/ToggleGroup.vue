@@ -4,19 +4,28 @@ defineEmits<{ 'update:modelValue': [T] }>()
 </script>
 
 <template>
-  <button
-    v-for="opt in options"
-    :key="String(opt.value)"
-    :class="['toggle-btn', { active: modelValue === opt.value }]"
-    @click="$emit('update:modelValue', opt.value)"
-  >
-    {{ opt.label }}
-  </button>
+  <div class="toggle-group">
+    <button
+      v-for="opt in options"
+      :key="String(opt.value)"
+      :class="['toggle-btn', { active: modelValue === opt.value }]"
+      @click="$emit('update:modelValue', opt.value)"
+    >
+      {{ opt.label }}
+    </button>
+  </div>
 </template>
 
 <style scoped>
+.toggle-group {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 4px;
+  width: 100%;
+}
+
 .toggle-btn {
-  flex: 1;
   height: 28px;
   padding: 0 10px;
   border: 1px solid var(--border-color);

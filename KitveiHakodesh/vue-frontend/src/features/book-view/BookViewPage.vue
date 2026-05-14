@@ -27,7 +27,7 @@ const {
   tocEntries, tocSearchTree, selectedAltTocSection, tocLoading, tocError,
   altTocLabelMap, pinnedCommentaryBookId,
   currentScrollLineIndex,
-  scrollStateReady, initialLineIndex, initialScrollTop, initialScrollOffset,
+  scrollStateReady, idbResolved, initialLineIndex, initialScrollTop, initialScrollOffset,
   activeMatchCount, activeMatchIdx, contentSearch, commentarySearch,
   onLinesScrolled, onTocSelect, onAltTocSelect,
   onLineSelected, onNavigateSection, onCommentaryScroll,
@@ -102,6 +102,7 @@ const {
               :initial-line-index="initialLineIndex"
               :initial-scroll-index="initialScrollTop"
               :initial-scroll-offset="initialScrollOffset"
+              :idb-resolved="idbResolved"
               :search-highlight-line-index="searchHighlightLineIndex"
               :search-highlight-query="searchHighlightQuery"
               :search-highlight-snippet="searchHighlightSnippet"
