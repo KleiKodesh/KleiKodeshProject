@@ -3,13 +3,43 @@ import { normalizeBookPath } from '../book-catalog/bookCatalogSearchNormalizer'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useTabStore } from '@/stores/tabStore'
 import { filterBooksByWords } from '../book-catalog/bookCatalogSearch'
-import { runTocHeuristics } from '../book-catalog/bookCatalogSearchTocHeuristics'
+import { query } from '@/webview-host/seforimDb'
+import { SQL } from '@/webview-host/queries.sql'
+
+// ─── Daf string parsing ───────────────────────────────────────────────────────
+
+/**
+ * The daf yomi string from hebcal looks like "חולין דף יד" (amud alef) or
+ * "חולין דף יד:" (amud bet). The format is always "<tractate> דף <number>[punctuation]".
+ *
+ * Returns null when the string does not match the expected shape.
+ */
+function parseDafYomiString(dafYomi: string): { tractate: string; dafPrefix: string } | null {
+  // Find the last occurrence of "דף" — everything before it is the tractate,
+  // everything after it is the daf number (possibly with trailing . or :)
+  const dafIndex = dafYomi.lastIndexOf('דף')
+  if (dafIndex === -1) return null
+
+  const tractate = dafYomi.slice(0, dafIndex).trim()
+  const afterDaf = dafYomi.slice(dafIndex + 2).trim()
+  // Strip trailing punctuation (. : ׃) from the daf number
+  const dafNumber = afterDaf.replace(/[.:׃]+$/, '').trim()
+
+  if (!tractate || !dafNumber) return null
+
+  // TOC entries in Bavli are "דף יד עמוד א" — match by "דף <number>" prefix
+  const dafPrefix = `דף ${dafNumber}`
+  return { tractate, dafPrefix }
+}
+
+// ─── Navigation ───────────────────────────────────────────────────────────────
 
 /**
  * Navigate to the daf yomi entry in book-view.
- * Prepends "בבלי" to the query to avoid matching Mishna tractates.
- * Uses the same catalog search pipeline as the book catalog search UI —
- * filterBooksByWords for the book, then runTocHeuristics for the daf entry.
+ *
+ * Finds the Bavli tractate book using the in-memory catalog index, then queries
+ * the TOC directly with a LIKE prefix — no full TOC load or tree scoring needed
+ * because the daf structure is always "דף X עמוד Y".
  */
 export async function navigateToDafYomi(dafYomi: string): Promise<void> {
   const store = useBooksDataStore()
@@ -17,38 +47,48 @@ export async function navigateToDafYomi(dafYomi: string): Promise<void> {
 
   await store.ensureLoaded()
 
-  // Prepend בבלי so we match Talmud Bavli, not Mishna tractates
-  const fullQuery = `בבלי ${dafYomi}`
+  console.log('[dafYomi] input:', JSON.stringify(dafYomi))
+
+  const parsed = parseDafYomiString(dafYomi)
+  console.log('[dafYomi] parsed:', parsed)
+  if (!parsed) return
+
+  const { tractate, dafPrefix } = parsed
+
+  // Find the Bavli tractate — prepend בבלי to avoid matching Mishna tractates
+  const fullQuery = `בבלי ${tractate}`
   const words = normalizeBookPath(normalize(fullQuery.trim()))
     .split(/\s+/)
-    .filter((w) => w.length > 0)
+    .filter((word) => word.length > 0)
+  console.log('[dafYomi] search words:', words)
   if (!words.length) return
 
-  const { items, splitFound } = await runTocHeuristics(
-    words,
-    (bookWords) => filterBooksByWords(store.allBooks, bookWords),
-    () => false,
-  )
+  const candidates = filterBooksByWords(store.allBooks, words)
+  console.log('[dafYomi] candidates:', candidates.map((b) => `${b.id}: ${b.title}`))
+  if (!candidates.length) return
 
-  if (items.length > 0) {
-    const first = items[0]!
+  const book = candidates[0]!
+  console.log('[dafYomi] book:', book.id, book.title, '| dafPrefix:', dafPrefix)
+
+  // Query the TOC directly — no need to load all entries and run the tree scorer
+  type TocEntryRow = { id: number; lineIndex: number | null }
+  const rows = await query<TocEntryRow>(SQL.GET_TOC_ENTRY_BY_TEXT_PREFIX, [
+    book.id,
+    `${dafPrefix}%`,
+  ])
+  console.log('[dafYomi] toc rows:', rows)
+
+  if (rows.length > 0) {
+    const tocEntry = rows[0]!
     tabStore.updateActiveTab({
       route: '/book-view',
-      title: first.book.title,
-      bookId: first.book.id,
-      openTocEntryId: first.tocEntryId,
-      openTocLineIndex: first.tocLineIndex ?? undefined,
+      title: book.title,
+      bookId: book.id,
+      openTocEntryId: tocEntry.id,
+      openTocLineIndex: tocEntry.lineIndex ?? undefined,
     })
-    return
-  }
-
-  // splitFound but no TOC match — open the book at the start
-  if (splitFound) {
-    const bookWords = words.slice(0, words.length - 1)
-    const candidates = filterBooksByWords(store.allBooks, bookWords)
-    if (candidates.length) {
-      const book = candidates[0]!
-      tabStore.updateActiveTab({ route: '/book-view', title: book.title, bookId: book.id })
-    }
+  } else {
+    // TOC entry not found — open the book at the start
+    tabStore.updateActiveTab({ route: '/book-view', title: book.title, bookId: book.id })
   }
 }

@@ -205,6 +205,22 @@ export const SQL = {
     LIMIT 1
   `,
 
+  /**
+   * Find the first TOC entry for a book whose text starts with a given prefix.
+   * Used by daf yomi navigation to locate a specific daf without loading the full TOC.
+   * Bind: bookId, textPrefix (e.g. 'דף יח')
+   */
+  GET_TOC_ENTRY_BY_TEXT_PREFIX: `
+    SELECT te.id, l.lineIndex
+    FROM tocEntry te
+    JOIN tocText tt ON tt.id = te.textId
+    LEFT JOIN line l ON l.id = te.lineId
+    WHERE te.bookId = ?
+      AND tt.text LIKE ?
+    ORDER BY te.id ASC
+    LIMIT 1
+  `,
+
   /** First default commentator for a book (lowest position) */
   GET_DEFAULT_COMMENTATORS: `
     SELECT commentatorBookId
