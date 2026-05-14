@@ -41,6 +41,13 @@ Write-Host "Notes source : $ReleaseNotesSource" -ForegroundColor Gray
 Write-Host "GitHub rel.  : $(if ($NoRelease) { 'skip' } else { 'yes' })" -ForegroundColor Gray
 Write-Host ""
 
+# ── 0. Delete Vue build stamp (forces fresh Vue rebuild every release build) ──
+$vueStamp = Join-Path $ProjectRoot "KitveiHakodesh\vue-frontend\dist\.build-stamp"
+if (Test-Path $vueStamp) {
+    Remove-Item $vueStamp -Force
+    Write-Host "Deleted Vue build stamp" -ForegroundColor Gray
+}
+
 # ── 1. Wipe VSTO Release folders (ensures clean VSTO output for all variants) ─
 foreach ($folder in @("bin\Release", "bin\Release-x64", "bin\Release-x86")) {
     $path = Join-Path $ProjectRoot "KleiKodeshVsto\$folder"
