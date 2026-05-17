@@ -47,10 +47,7 @@ export async function navigateToDafYomi(dafYomi: string): Promise<void> {
 
   await store.ensureLoaded()
 
-  console.log('[dafYomi] input:', JSON.stringify(dafYomi))
-
   const parsed = parseDafYomiString(dafYomi)
-  console.log('[dafYomi] parsed:', parsed)
   if (!parsed) return
 
   const { tractate, dafPrefix } = parsed
@@ -60,15 +57,12 @@ export async function navigateToDafYomi(dafYomi: string): Promise<void> {
   const words = normalizeBookPath(normalize(fullQuery.trim()))
     .split(/\s+/)
     .filter((word) => word.length > 0)
-  console.log('[dafYomi] search words:', words)
   if (!words.length) return
 
   const candidates = filterBooksByWords(store.allBooks, words)
-  console.log('[dafYomi] candidates:', candidates.map((b) => `${b.id}: ${b.title}`))
   if (!candidates.length) return
 
   const book = candidates[0]!
-  console.log('[dafYomi] book:', book.id, book.title, '| dafPrefix:', dafPrefix)
 
   // Query the TOC directly — no need to load all entries and run the tree scorer
   type TocEntryRow = { id: number; lineIndex: number | null }
@@ -76,7 +70,6 @@ export async function navigateToDafYomi(dafYomi: string): Promise<void> {
     book.id,
     `${dafPrefix}%`,
   ])
-  console.log('[dafYomi] toc rows:', rows)
 
   if (rows.length > 0) {
     const tocEntry = rows[0]!

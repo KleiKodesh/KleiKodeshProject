@@ -261,7 +261,7 @@ namespace KitveiHakodeshLib
             // Disable browser-specific accelerator keys (Ctrl+F, Ctrl+P, Ctrl+R, F5,
             // F12, etc.). The app intercepts the keys it needs (Ctrl+F, Ctrl+W, etc.)
             // via its own keyboard handling; the browser defaults would interfere.
-            settings.AreBrowserAcceleratorKeysEnabled = false;
+            //settings.AreBrowserAcceleratorKeysEnabled = false;
 
             // Show a blank page on navigation failure instead of the browser's styled
             // error page. The app is a local reader — navigation errors are internal

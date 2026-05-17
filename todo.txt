@@ -11,4 +11,6 @@ searchbar show 0/1
 
 default background slightly offwhit nt bright white?
 
-lines move when opening the commentary pane due to rsize adjustment logic
+lines move when opening the commentary pane due to rsize adjustment logicvg,e go neur cnpraho
+
+does updating the app trigger a reindex?
