@@ -27,6 +27,7 @@ defineProps<{
   hasRelatedBooks: boolean
   bookId: number | undefined
   filterGroups: CommentaryGroup[]
+  relatedBooksLoaded: boolean
   currentScrollLineIndex: number
   lines: LineItem[]
   onRelatedBooksOpen?: () => void
@@ -60,6 +61,7 @@ defineExpose({ tocBtnRef })
     <BookViewRelatedBooksDropdown
       :book-id="bookId"
       :filter-groups="filterGroups"
+      :related-books-loaded="relatedBooksLoaded"
       :current-scroll-line-index="currentScrollLineIndex"
       :lines="lines"
       :disabled="!hasRelatedBooks"
@@ -192,10 +194,18 @@ defineExpose({ tocBtnRef })
 .toolbar-bottom {
   flex-direction: row;
   height: 32px;
+  justify-content: center;
+}
+@media (min-width: 600px) {
+  .toolbar-top,
+  .toolbar-bottom {
+    justify-content: flex-start;
+  }
 }
 .toolbar-left,
 .toolbar-right {
   flex-direction: column;
+  justify-content: flex-start;
   width: 40px;
   height: auto;
   padding: 4px 2px;

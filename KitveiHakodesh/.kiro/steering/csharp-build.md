@@ -1,3 +1,8 @@
+---
+inclusion: fileMatch
+fileMatchPattern: '**/CSharpBackend/**|**/build/**'
+---
+
 # C# Build Environment
 
 ## Tool Locations

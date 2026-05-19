@@ -44,4 +44,15 @@ export function useScopedCopy(
     event.clipboardData?.setData('text/plain', plainText)
     event.preventDefault()
   })
+
+  useEventListener(scrollerEl, 'dragstart', (event: DragEvent) => {
+    const innerHtml = isSelectAll.value ? linesToHtml(getLines()) : selectedHtml()
+    if (!innerHtml.trim()) return
+
+    const htmlContent = wrapRtlHtml(innerHtml)
+    const plainText = htmlToPlainText(innerHtml)
+
+    event.dataTransfer?.setData('text/html', htmlContent)
+    event.dataTransfer?.setData('text/plain', plainText)
+  })
 }

@@ -1,3 +1,8 @@
+---
+inclusion: fileMatch
+fileMatchPattern: '**/PdfViewPage.vue|**/pdf-viewer/**|**/pdfjs/**|**/themes.ts|**/settingsStore.ts'
+---
+
 # PDF.js Viewer Management
 
 ## Overview

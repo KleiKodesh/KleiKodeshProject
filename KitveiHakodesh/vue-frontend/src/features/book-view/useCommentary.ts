@@ -462,5 +462,5 @@ export function useCommentary(
     { immediate: true },
   )
 
-  return { groups, filterGroups, staticFilterGroups, loading, ensureStaticFilterGroupsLoaded }
+  return { groups, filterGroups, staticFilterGroups, loading, staticFilterGroupsLoaded, ensureStaticFilterGroupsLoaded }
 }

@@ -35,7 +35,7 @@ const {
   openContentSearch, openCommentarySearch,
   onQueryChange, onSearchNext, onSearchPrev, onModeChange,
   toggleTocPanel, toggleCommentaryTreePanel, closeSidePanel,
-  ensureStaticFilterGroupsLoaded,
+  ensureStaticFilterGroupsLoaded, staticFilterGroupsLoaded,
   getActiveTocEntry, getTocPath,
 } = useBookView(
   () => toolbarRef.value,
@@ -59,6 +59,7 @@ const {
       :has-related-books="hasRelatedBooks"
       :book-id="bookId"
       :filter-groups="staticFilterGroups"
+      :related-books-loaded="staticFilterGroupsLoaded"
       :current-scroll-line-index="currentScrollLineIndex"
       :lines="lines"
       :on-related-books-open="ensureStaticFilterGroupsLoaded"
@@ -80,6 +81,7 @@ const {
         :has-related-books="hasRelatedBooks"
         :book-id="bookId"
         :filter-groups="staticFilterGroups"
+        :related-books-loaded="staticFilterGroupsLoaded"
         :current-scroll-line-index="currentScrollLineIndex"
         :lines="lines"
         :class="toolbarPosition === 'left' ? 'toolbar-order-end' : ''"
@@ -205,6 +207,7 @@ const {
       :has-related-books="hasRelatedBooks"
       :book-id="bookId"
       :filter-groups="staticFilterGroups"
+      :related-books-loaded="staticFilterGroupsLoaded"
       :current-scroll-line-index="currentScrollLineIndex"
       :lines="lines"
       :on-related-books-open="ensureStaticFilterGroupsLoaded"

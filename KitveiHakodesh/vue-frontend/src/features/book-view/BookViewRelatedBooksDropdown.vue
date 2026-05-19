@@ -15,9 +15,11 @@
  *   4. Fallback — open the book at its beginning (lineIndex 0).
  */
 import { ref, computed } from 'vue'
+import { storeToRefs } from 'pinia'
 import { IconLibrary16Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useTabStore } from '@/stores/tabStore'
+import { useBookViewStore } from '@/stores/bookViewStore'
 import { query } from '@/webview-host/seforimDb'
 import { SQL } from '@/webview-host/queries.sql'
 import type { CommentaryGroup } from './useCommentary'
@@ -26,6 +28,7 @@ import type { LineItem } from './useBookViewLinesTable'
 const props = defineProps<{
   bookId: number | undefined
   filterGroups: CommentaryGroup[]
+  relatedBooksLoaded: boolean
   currentScrollLineIndex: number
   lines: LineItem[]
   disabled?: boolean
@@ -35,6 +38,8 @@ const props = defineProps<{
 const emit = defineEmits<{ 'open-change': [isOpen: boolean] }>()
 
 const tabStore = useTabStore()
+const bookViewStore = useBookViewStore()
+const { toolbarPosition } = storeToRefs(bookViewStore)
 
 // ── Open / close ──────────────────────────────────────────────────────────────
 
@@ -75,6 +80,10 @@ interface RelatedBooksSection {
   label: string
   books: RelatedBook[]
 }
+
+const dropdownPositionClass = computed(() => {
+  return `dropdown-${toolbarPosition.value}`
+})
 
 const sections = computed<RelatedBooksSection[]>(() => {
   const sectionMap = new Map<string, RelatedBook[]>()
@@ -178,9 +187,10 @@ async function onBookClick(book: RelatedBook) {
       <IconLibrary16Regular />
     </button>
 
-    <div v-if="isOpen" ref="dropdownRef" class="related-books-dropdown">
-      <div v-if="sections.length === 0" class="empty-message">אין ספרים קרובים</div>
-      <template v-for="section in sections" :key="section.label">
+    <div v-if="isOpen" ref="dropdownRef" class="related-books-dropdown" :class="dropdownPositionClass">
+      <div v-if="!relatedBooksLoaded" class="loading-message">בסריקה...</div>
+      <div v-else-if="sections.length === 0" class="empty-message">אין ספרים קרובים</div>
+      <template v-else v-for="section in sections" :key="section.label">
         <div class="section-caption">{{ section.label }}</div>
         <button
           v-for="book in section.books"
@@ -219,8 +229,6 @@ button.active {
 /* ── Dropdown panel ── */
 .related-books-dropdown {
   position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
   min-width: 180px;
   max-width: 280px;
   max-height: 320px;
@@ -234,7 +242,34 @@ button.active {
   scrollbar-color: var(--border-color) transparent;
 }
 
+/* ── Positioning based on toolbar position ── */
+.dropdown-top {
+  top: calc(100% + 4px);
+  right: 0;
+}
+
+.dropdown-bottom {
+  bottom: calc(100% + 4px);
+  right: 0;
+}
+
+.dropdown-left {
+  top: 0;
+  left: calc(100% + 4px);
+}
+
+.dropdown-right {
+  top: 0;
+  right: calc(100% + 4px);
+}
+
 .empty-message {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.loading-message {
   padding: 8px 12px;
   font-size: 12px;
   color: var(--text-secondary);

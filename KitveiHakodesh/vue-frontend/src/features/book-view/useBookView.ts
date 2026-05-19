@@ -128,7 +128,7 @@ export function useBookView(
     return ids.length > 0 ? ids : null
   })
 
-  const { groups, filterGroups, staticFilterGroups, loading: commentaryLoading, ensureStaticFilterGroupsLoaded } = useCommentary(
+  const { groups, filterGroups, staticFilterGroups, loading: commentaryLoading, staticFilterGroupsLoaded, ensureStaticFilterGroupsLoaded } = useCommentary(
     () => commentaryLineId.value,
     () => selectedSectionLineIds.value,
     () => bookId ?? undefined,
@@ -403,7 +403,7 @@ export function useBookView(
     openContentSearch, openCommentarySearch,
     onQueryChange, onSearchNext, onSearchPrev, onModeChange,
     toggleTocPanel, toggleCommentaryTreePanel, closeSidePanel,
-    ensureStaticFilterGroupsLoaded,
+    ensureStaticFilterGroupsLoaded, staticFilterGroupsLoaded,
     // toc lookup for copy-with-source
     getActiveTocEntry, getTocPath,
   }
