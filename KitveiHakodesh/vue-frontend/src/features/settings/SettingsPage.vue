@@ -41,10 +41,11 @@ useSettings() // wires the commentary-mirror watcher
 
 // ── Search (DOM walker) ──────────────────────────────────────────────────────
 
+// scrollContainerRef is the full-width body — scrollbar lives at the page edge
 const scrollContainerRef = ref<HTMLElement | null>(null)
 const { searchQuery, getSectionNavEntries } = useSettingsSearch(scrollContainerRef)
 
-// ── Nav panel ────────────────────────────────────────────────────────────────
+// ── Nav dropdown ─────────────────────────────────────────────────────────────
 
 const navPanelOpen = ref(false)
 const navToggleRef = ref<HTMLElement | null>(null)
@@ -56,7 +57,6 @@ const { justClosed } = useDropdownClose(navPanelRef, () => { navPanelOpen.value 
 })
 
 onMounted(() => {
-  // Read nav entries from the DOM after first render
   nextTick(() => { navEntries.value = getSectionNavEntries() })
 })
 
@@ -66,15 +66,14 @@ function toggleNavPanel() {
   navPanelOpen.value = !navPanelOpen.value
 }
 
+// ── Section navigation ───────────────────────────────────────────────────────
+
 async function navigateToSection(sectionId: string) {
   navPanelOpen.value = false
   await nextTick()
-  const el = document.getElementById(sectionId)
-  if (el && scrollContainerRef.value) {
-    const containerTop = scrollContainerRef.value.getBoundingClientRect().top
-    const elTop = el.getBoundingClientRect().top
-    scrollContainerRef.value.scrollTop += elTop - containerTop - 12
-  }
+  // Target the card element (data-section) so scroll-margin-top on the card is respected
+  const el = document.querySelector<HTMLElement>(`[data-section="${sectionId}"]`)
+  el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 // ── Font display refs for cross-instance close coordination ──────────────────
@@ -86,172 +85,173 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
 <template>
   <div class="settings-page">
 
-    <!-- ── Top bar: full-width search with nav toggle inside ── -->
-    <div class="settings-top-bar">
-      <div class="search-container">
-        <IconSearch20Regular class="search-icon" />
-        <input
-          v-model="searchQuery"
-          class="search-input"
-          type="search"
-          placeholder="חיפוש הגדרות..."
-          autocomplete="off"
-        />
-        <button
-          ref="navToggleRef"
-          class="nav-toggle-btn"
-          :class="{ active: navPanelOpen }"
-          @click="toggleNavPanel"
-        >
-          <IconNavigation20Regular />
-        </button>
-      </div>
+    <!-- ── Full-width scroller — scrollbar at page edge ── -->
+    <div ref="scrollContainerRef" class="settings-body">
+      <!-- ── Centered content column ── -->
+      <div class="settings-body-inner">
 
-      <!-- Nav panel -->
-      <div v-if="navPanelOpen" ref="navPanelRef" class="nav-panel">
-        <button
-          v-for="entry in navEntries"
-          :key="entry.id"
-          class="nav-panel-item"
-          @click="navigateToSection(entry.id)"
-        >
-          {{ entry.label }}
-        </button>
-      </div>
-    </div>
+        <!-- ── Sticky search bar + nav dropdown ── -->
+        <div class="settings-toolbar">
+          <div class="search-container">
+            <div class="nav-toggle-wrapper">
+              <button
+                ref="navToggleRef"
+                class="nav-toggle-btn"
+                :class="{ active: navPanelOpen }"
+                @click="toggleNavPanel"
+                aria-label="ניווט הגדרות"
+              >
+                <IconNavigation20Regular />
+              </button>
+              <!-- Nav dropdown — anchored directly below the toggle button -->
+              <div v-if="navPanelOpen" ref="navPanelRef" class="nav-panel">
+                <button
+                  v-for="entry in navEntries"
+                  :key="entry.id"
+                  class="nav-panel-item"
+                  @click="navigateToSection(entry.id)"
+                >
+                  {{ entry.label }}
+                </button>
+              </div>
+            </div>
+            <input
+              v-model="searchQuery"
+              class="search-input"
+              type="search"
+              placeholder="חיפוש הגדרות..."
+              autocomplete="off"
+            />
+            <IconSearch20Regular class="search-icon" />
+          </div>
+        </div>
 
-    <!-- ── Scrollable content ── -->
-    <div ref="scrollContainerRef" class="settings-scroll">
+        <!-- ── אפליקציה ── -->
+        <div data-section="section-app" data-section-label="אפליקציה">
+          <div id="section-app" class="section-label">אפליקציה</div>
 
-      <!-- ── אפליקציה ── -->
-      <div data-section="section-app" data-section-label="אפליקציה">
-        <div id="section-app" class="section-label">אפליקציה</div>
+          <SettingRow label="ערכת נושא" hint="צבעי הממשק של האפליקציה">
+            <ThemePicker />
+          </SettingRow>
 
-        <SettingRow label="ערכת נושא" hint="צבעי הממשק של האפליקציה">
-          <ThemePicker />
-        </SettingRow>
-
-        <SliderSetting
-          label="גודל תצוגה"
-          v-model="appZoom"
-          :min="0.5"
-          :max="1.5"
-          :step="0.05"
-          hint="משנה את גודל כל ממשק האפליקציה"
-        />
-      </div>
-
-      <!-- ── ניווט ── -->
-      <div data-section="section-navigation" data-section-label="ניווט">
-        <div id="section-navigation" class="section-label">ניווט</div>
-
-        <SettingRow label="מיקום סרגל הכלים בתצוגת ספר" wrap>
-          <ToggleGroup
-            v-model="toolbarPosition"
-            :options="[
-              { label: 'למעלה', value: 'top' },
-              { label: 'למטה', value: 'bottom' },
-              { label: 'שמאל', value: 'left' },
-              { label: 'ימין', value: 'right' },
-            ]"
-            @update:model-value="bookViewStore.setToolbarPosition($event)"
+          <SliderSetting
+            label="גודל תצוגה"
+            v-model="appZoom"
+            :min="0.5"
+            :max="1.5"
+            :step="0.05"
+            hint="משנה את גודל כל ממשק האפליקציה"
           />
-        </SettingRow>
+          
+          <SettingRow label="מיקום סרגל הכלים בתצוגת ספר" wrap>
+            <ToggleGroup
+              v-model="toolbarPosition"
+              :options="[
+                { label: 'למעלה', value: 'top' },
+                { label: 'למטה', value: 'bottom' },
+                { label: 'שמאל', value: 'left' },
+                { label: 'ימין', value: 'right' },
+              ]"
+              @update:model-value="bookViewStore.setToolbarPosition($event)"
+            />
+          </SettingRow>
 
-        <SettingRow label="פתח טאב חדש אל" hint="הדף שיפתח בלחיצה על טאב חדש" wrap>
-          <ToggleGroup
-            v-model="newTabPage"
-            :options="[
-              { label: 'דף הבית', value: 'homepage' },
-              { label: 'פתיחת ספר', value: 'openfile' },
-              { label: 'היברו בוקס', value: 'hebrewbooks' },
-              { label: 'חיפוש', value: 'search' },
-            ]"
+          <SettingRow label="פתח טאב חדש אל" hint="הדף שיפתח בלחיצה על טאב חדש" wrap>
+            <ToggleGroup
+              v-model="newTabPage"
+              :options="[
+                { label: 'דף הבית', value: 'homepage' },
+                { label: 'פתיחת ספר', value: 'openfile' },
+                { label: 'היברו בוקס', value: 'hebrewbooks' },
+                { label: 'חיפוש', value: 'search' },
+              ]"
+            />
+          </SettingRow>
+        </div>
+
+        <!-- ── קריאה ── -->
+        <div data-section="section-reading" data-section-label="קריאה">
+          <div id="section-reading" class="section-label">קריאה</div>
+
+          <SettingRow
+            label="זכור מיקום אחרון בספר"
+            hint="בפתיחת ספר מחדש, האפליקציה תחזור אוטומטית למקום שבו הפסקת לקרוא"
+          >
+            <ToggleGroup
+              v-model="resumeLastRead"
+              :options="[
+                { label: 'כן', value: true },
+                { label: 'לא', value: false },
+              ]"
+            />
+          </SettingRow>
+
+          <SettingRow
+            label="סנכרן מפרשים כברירת מחדל"
+            hint="ניתן לשנות לכל ספר בנפרד דרך כפתור סנכרן מפרשים בסרגל הכלים"
+          >
+            <ToggleGroup
+              v-model="defaultAutoSyncCommentary"
+              :options="[
+                { label: 'כן', value: true },
+                { label: 'לא', value: false },
+              ]"
+            />
+          </SettingRow>
+
+          <SettingRow label="כיסוי שם ה'" hint="מחליף את האות ה׳ בשמות הקודש באות ד׳">
+            <ToggleGroup
+              v-model="censorDivineNames"
+              :options="[
+                { label: 'כתיב מלא', value: false },
+                { label: 'כיסוי (ה←ד)', value: true },
+              ]"
+            />
+          </SettingRow>
+        </div>
+
+        <!-- ── תצוגת ספר + תצוגת פירושים ── -->
+        <div data-section="section-book-display" data-section-label="תצוגת ספר">
+          <div id="section-book-display" class="section-label">תצוגת ספר</div>
+
+          <FontDisplaySettings
+            ref="bookDisplayRef"
+            v-model:header-font="headerFont"
+            v-model:text-font="textFont"
+            v-model:font-size="fontSize"
+            v-model:line-padding="linePadding"
+            @close-other="commentaryDisplayRef?.closeDropdowns()"
           />
-        </SettingRow>
-      </div>
 
-      <!-- ── קריאה ── -->
-      <div data-section="section-reading" data-section-label="קריאה">
-        <div id="section-reading" class="section-label">קריאה</div>
+          <div id="section-commentary-display" class="subsection-label">תצוגת פירושים</div>
 
-        <SettingRow
-          label="זכור מיקום אחרון בספר"
-          hint="בפתיחת ספר מחדש, האפליקציה תחזור אוטומטית למקום שבו הפסקת לקרוא"
-        >
-          <ToggleGroup
-            v-model="resumeLastRead"
-            :options="[
-              { label: 'כן', value: true },
-              { label: 'לא', value: false },
-            ]"
+          <SettingRow hint="האם להשתמש בהגדרות גופן נפרדות לפירושים, או לרשת את הגדרות הספר">
+            <ToggleGroup
+              v-model="useSeparateCommentarySettings"
+              :options="[
+                { label: 'זהה לתצוגת ספר', value: false },
+                { label: 'הגדרות נפרדות', value: true },
+              ]"
+            />
+          </SettingRow>
+
+          <FontDisplaySettings
+            v-if="useSeparateCommentarySettings"
+            ref="commentaryDisplayRef"
+            v-model:header-font="commentaryHeaderFont"
+            v-model:text-font="commentaryTextFont"
+            v-model:font-size="commentaryFontSize"
+            v-model:line-padding="commentaryLinePadding"
+            @close-other="bookDisplayRef?.closeDropdowns()"
           />
-        </SettingRow>
+        </div>
 
-        <SettingRow
-          label="סנכרן מפרשים כברירת מחדל"
-          hint="ניתן לשנות לכל ספר בנפרד דרך כפתור סנכרן מפרשים בסרגל הכלים"
-        >
-          <ToggleGroup
-            v-model="defaultAutoSyncCommentary"
-            :options="[
-              { label: 'כן', value: true },
-              { label: 'לא', value: false },
-            ]"
-          />
-        </SettingRow>
+        <!-- ── Advanced sections (calendar + db + reset) ── -->
+        <SettingsAdvancedPane />
 
-        <SettingRow label="כיסוי שם ה'" hint="מחליף את האות ה׳ בשמות הקודש באות ד׳">
-          <ToggleGroup
-            v-model="censorDivineNames"
-            :options="[
-              { label: 'כתיב מלא', value: false },
-              { label: 'כיסוי (ה←ד)', value: true },
-            ]"
-          />
-        </SettingRow>
-      </div>
+      </div><!-- end settings-body-inner -->
+    </div><!-- end settings-body -->
 
-      <!-- ── תצוגת ספר + תצוגת פירושים (subsection) ── -->
-      <div data-section="section-book-display" data-section-label="תצוגת ספר">
-        <div id="section-book-display" class="section-label">תצוגת ספר</div>
-
-        <FontDisplaySettings
-          ref="bookDisplayRef"
-          v-model:header-font="headerFont"
-          v-model:text-font="textFont"
-          v-model:font-size="fontSize"
-          v-model:line-padding="linePadding"
-          @close-other="commentaryDisplayRef?.closeDropdowns()"
-        />
-
-        <div id="section-commentary-display" class="subsection-label">תצוגת פירושים</div>
-
-        <SettingRow hint="האם להשתמש בהגדרות גופן נפרדות לפירושים, או לרשת את הגדרות הספר">
-          <ToggleGroup
-            v-model="useSeparateCommentarySettings"
-            :options="[
-              { label: 'זהה לתצוגת ספר', value: false },
-              { label: 'הגדרות נפרדות', value: true },
-            ]"
-          />
-        </SettingRow>
-
-        <FontDisplaySettings
-          v-if="useSeparateCommentarySettings"
-          ref="commentaryDisplayRef"
-          v-model:header-font="commentaryHeaderFont"
-          v-model:text-font="commentaryTextFont"
-          v-model:font-size="commentaryFontSize"
-          v-model:line-padding="commentaryLinePadding"
-          @close-other="bookDisplayRef?.closeDropdowns()"
-        />
-      </div>
-
-      <!-- ── Advanced sections (calendar + db + reset) ── -->
-      <SettingsAdvancedPane />
-
-    </div>
   </div>
 </template>
 
@@ -262,24 +262,33 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
   height: 100%;
   direction: rtl;
   background: var(--bg-primary);
-}
-
-/* ── Top bar ── */
-.settings-top-bar {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
   position: relative;
 }
 
+/* ── Sticky search bar — lives inside the scroll flow, sticks to the top ── */
+.settings-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg-primary);
+  padding: 8px 0;
+  margin-bottom: 4px;
+  /* Bleed background to the edges of the inner column */
+  margin-inline: -16px;
+  padding-inline: 16px;
+}
+
+/* Anchor for the dropdown — wraps the toggle button */
+.nav-toggle-wrapper {
+  position: relative;
+  flex-shrink: 0;
+}
+
 .search-container {
-  flex: 1;
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 30px;
+  height: 32px;
   padding: 0 10px;
   background: var(--input-bg, var(--bg-secondary));
   border: 1px solid var(--border-color);
@@ -317,12 +326,16 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
   color: var(--text-primary);
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
+.nav-toggle-btn.active {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
 
-/* ── Nav panel — anchored to the left edge of the search container ── */
+/* Nav dropdown — anchored to physical right, below the toggle button */
 .nav-panel {
   position: absolute;
   top: calc(100% + 4px);
-  left: 12px;
+  right: 0;
   min-width: 160px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
@@ -350,40 +363,54 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 
-/* ── Scroll area ── */
-.settings-scroll {
+/* ── Full-width scroller: scrollbar at the page edge ── */
+.settings-body {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 12px 16px 24px;
+}
+
+/* ── Centered content column inside the scroller ── */
+.settings-body-inner {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 12px 16px 40px;
+  box-sizing: border-box;
+}
+
+/* ── Section cards ── */
+:deep([data-section]) {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  scroll-margin-top: 64px;
 }
 
 /* ── Section headers ── */
 :deep(.section-label) {
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text-primary);
-  padding: 4px 0;
-  margin-bottom: 10px;
+  padding: 0 0 8px;
+  margin-bottom: 12px;
   border-bottom: 1px solid var(--border-color);
-  scroll-margin-top: 12px;
+  scroll-margin-top: 56px;
 }
 
-/* ── Subsection headers (e.g. תצוגת פירושים inside תצוגת ספר) ── */
 :deep(.subsection-label) {
   font-size: 11px;
   font-weight: 600;
   color: var(--text-secondary);
   padding: 4px 0;
-  margin-top: 14px;
+  margin-top: 16px;
   margin-bottom: 10px;
   border-bottom: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
-  scroll-margin-top: 12px;
+  scroll-margin-top: 56px;
 }
 </style>
 
-<!-- Hide sections that don't match the search — applied globally so it reaches
-     data-section wrappers inside child components (SettingsAdvancedPane). -->
 <style>
 [data-section-hidden] {
   display: none !important;

@@ -2,7 +2,7 @@
 
 App settings UI and first-launch setup wizard.
 
-**SettingsPage.vue** — single-page settings view. All settings sections are rendered in one continuous scroll. A sticky top bar contains a search input (filters visible sections by label) and a nav toggle button that opens a side panel listing all section headers as scroll anchors. Sections: אפליקציה, ניווט, קריאה, תצוגת ספר, תצוגת פירושים, לוח שנה, מסד נתונים, איפוס.
+**SettingsPage.vue** — settings layout with a search bar + nav dropdown in a top toolbar, and a centered content column (max 680px) below it. The content column is inside a full-width scroller so the scrollbar sits at the page edge. Each section is a card (rounded border, bg-secondary). Sections: אפליקציה, ניווט, קריאה, תצוגת ספר, תצוגת פירושים, לוח שנה, מסד נתונים, איפוס.
 
 **SettingsAdvancedPane.vue** — the calendar, database, and reset sections. Each section is wrapped in `data-section` / `data-section-label` divs so the DOM walker in `useSettingsSearch` can find and filter them. No props.
 
@@ -22,12 +22,12 @@ App settings UI and first-launch setup wizard.
 
 **SetupWizard.vue** — full-screen onboarding overlay shown when `settingsStore.setupDone` is false. Steps: welcome, database setup (hosted only), theme, general, book display. Completion sets `setupDone = true` in IDB and the wizard never shows again.
 
-**useSettingsSearch.ts** — DOM-walker search composable. Accepts a ref to the scroll container, watches `searchQuery`, and after each render tick walks every `[data-section]` element, reads all its text nodes via `TreeWalker`, and toggles `data-section-hidden` on sections that don't match. No keyword arrays — the search always reflects exactly what is rendered, including text inside child components. Also exposes `getSectionNavEntries()` which reads `data-section` and `data-section-label` attributes to build the nav panel list.
+**useSettingsSearch.ts** — DOM-walker search composable. Accepts a ref to the scroll container, watches `searchQuery`, and after each render tick walks every `[data-section]` element, reads all its text nodes, and toggles `data-section-hidden` on sections that don't match. Also exposes `getSectionNavEntries()` which reads `data-section` and `data-section-label` attributes to build the nav dropdown list.
 
 **appResetState.ts** — single exported `resetting` ref used to block UI during a reset/reload.
 
 ## Adding a new settings section
 
-1. Add a `{ id: 'section-xxx', label: 'Hebrew label' }` entry to the `SECTIONS` array in `SettingsPage.vue`.
-2. Add a `<template v-if="isSectionVisible('section-xxx')">` block with the section content in the scroll area.
-3. If the section belongs to the advanced group (calendar/db/reset), add it to `SettingsAdvancedPane.vue` instead and pass the section id through `visibleSections`.
+1. Add a `<div data-section="section-xxx" data-section-label="Hebrew label">` block with the section content in the scroll area of `SettingsPage.vue`.
+2. The sidebar nav, drawer nav, and search filter all pick it up automatically from the DOM — no manual registration needed.
+3. If the section belongs to the advanced group (calendar/db/reset), add it to `SettingsAdvancedPane.vue` instead.
