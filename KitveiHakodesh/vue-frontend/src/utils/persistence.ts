@@ -379,7 +379,10 @@ export function idbScheduleReset(): void {
 
 /**
  * Call once at boot. Synchronous localStorage check — zero cost on normal boots.
- * If the flag is set, wipes all IDB databases and reloads.
+ * Safety net: if a reset was scheduled but the page reloaded before IDB could be
+ * cleared (e.g. a crash mid-reset), clears IDB and reloads now.
+ * Under normal operation, idbClearAll() is called directly before the reload so
+ * this function returns immediately without touching IDB.
  */
 export async function idbCheckAndExecReset(): Promise<void> {
   let flagSet = false

@@ -14,7 +14,7 @@ import { usePdfStore } from './stores/pdfStore'
 import { idbCheckAndExecReset } from './utils/persistence'
 
 // Synchronous localStorage check — zero cost on normal boots.
-// Only opens IDB if a reset was scheduled (rare).
+// Only opens IDB if a reset was scheduled (rare safety net).
 await idbCheckAndExecReset()
 
 const pinia = createPinia()

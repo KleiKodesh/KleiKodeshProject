@@ -110,6 +110,7 @@ namespace KitveiHakodeshLib
 
         public AppViewer()
         {
+            RightToLeft = RightToLeft.No;
             AutoScaleMode = AutoScaleMode.None;
             BackColorChanged += (_, __) => _SyncSplashBackColor();
             VisibleChanged += OnVisibleChanged;

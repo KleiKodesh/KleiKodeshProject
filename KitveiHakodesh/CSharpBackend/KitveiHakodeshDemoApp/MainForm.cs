@@ -18,6 +18,8 @@ namespace KitveiHakodeshDemoApp
             StartPosition = FormStartPosition.CenterScreen;
             AutoScaleMode = AutoScaleMode.Font;
             Icon = CreateWindowIcon();
+            RightToLeftLayout = true;
+            RightToLeft = RightToLeft.Yes;
 
             _viewer = new AppViewer { Dock = DockStyle.Fill };
             _viewer.TogglePopOut = Toggle;
@@ -64,6 +66,8 @@ namespace KitveiHakodeshDemoApp
                 Size = new System.Drawing.Size(saved.Width, saved.Height),
                 StartPosition = hasSaved ? FormStartPosition.Manual : FormStartPosition.CenterScreen,
                 Icon = CreateWindowIcon(),
+                RightToLeftLayout = true,
+                RightToLeft = RightToLeft.Yes,
             };
             if (hasSaved)
                 _popoutWindow.Location = new System.Drawing.Point(saved.X, saved.Y);

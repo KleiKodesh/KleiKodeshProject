@@ -36,7 +36,7 @@ export function useSettings() {
   })
 
   async function resetAll() {
-    tabStore.resetAll()
+    await tabStore.resetAll()
     await resetHostApp()
   }
 

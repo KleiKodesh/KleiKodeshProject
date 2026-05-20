@@ -10,7 +10,6 @@ import {
   idbSetLastRead,
   idbGetLastRead,
   idbClearAll,
-  idbScheduleReset,
   KEYS,
 } from '@/utils/persistence'
 import type { TabState, BookState, LastReadState } from '@/utils/persistence'
@@ -238,8 +237,8 @@ export const useTabStore = defineStore('tabs', () => {
 
   // ── App reset ─────────────────────────────────────────────────────────────
 
-  function resetAll(): void {
-    idbScheduleReset()
+  async function resetAll(): Promise<void> {
+    await idbClearAll()
   }
 
   // ── Tab lifecycle ─────────────────────────────────────────────────────────
