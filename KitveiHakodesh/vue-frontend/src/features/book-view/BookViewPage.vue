@@ -44,6 +44,7 @@ const {
   altTocLabelMap, pinnedCommentaryBookId,
   currentScrollLineIndex,
   scrollStateReady, idbResolved, initialLineIndex, initialScrollTop, initialScrollOffset,
+  restoredCommentaryMode,
   activeMatchCount, activeMatchIdx, contentSearch, commentarySearch,
   onLinesScrolled, onTocSelect, onAltTocSelect,
   onLineSelected, onNavigateSection, onCommentaryScroll,
@@ -66,6 +67,8 @@ watch(commentaryMode, (mode) => { bottomVisible.value = mode !== 'off' })
 watch(bottomVisible, (v) => { if (!v) commentaryMode.value = 'off' })
 // Snap back to bottom layout when screen becomes too narrow for side-by-side.
 watch(isWideScreen, (wide) => { if (!wide && commentaryMode.value === 'side') commentaryMode.value = 'bottom' })
+// Restore commentaryMode from IDB once session restore resolves.
+watch(restoredCommentaryMode, (mode) => { if (mode) commentaryMode.value = mode }, { once: true })
 </script>
 
 <template>
@@ -126,6 +129,7 @@ watch(isWideScreen, (wide) => { if (!wide && commentaryMode.value === 'side') co
               :alt-toc-label-map="altTocLabelMap"
               :selected-line-id="selectedLineId"
               :bottom-visible="bottomVisible"
+              :commentary-mode="commentaryMode"
               :initial-line-index="initialLineIndex"
               :initial-scroll-index="initialScrollTop"
               :initial-scroll-offset="initialScrollOffset"

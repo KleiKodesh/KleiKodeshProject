@@ -89,6 +89,7 @@ export interface BookState {
   commentaryFilterState?: import('@/features/book-view/bookViewTypes').CommentaryTreeState
   zoom?: number
   bottomVisible?: boolean
+  commentaryMode?: 'off' | 'bottom' | 'side'
   autoSelectTopLine?: boolean
 }
 

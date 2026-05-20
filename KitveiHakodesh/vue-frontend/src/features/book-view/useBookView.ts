@@ -78,6 +78,7 @@ export function useBookView(
 
   const bottomVisible = ref(false)
   const searchVisible = ref(false)
+  const restoredCommentaryMode = ref<'off' | 'bottom' | 'side' | undefined>(undefined)
   const sidePanelMode = ref<SidePanelMode | null>(null)
   const selectedLineId = ref<number | null>(null)
   const commentaryLineId = ref<number | null>(null)
@@ -311,7 +312,10 @@ export function useBookView(
     commentaryTreeState, commentaryLoading, commentaryViewRef,
   )
 
-  onMounted(restoreSession)
+  onMounted(async () => {
+    const result = await restoreSession()
+    if (result?.commentaryMode) restoredCommentaryMode.value = result.commentaryMode
+  })
   onBeforeUnmount(() => tabStore.updateActiveTab({ tocPath: undefined }))
 
   // ── Watchers ──────────────────────────────────────────────────────────────
@@ -395,6 +399,7 @@ export function useBookView(
     // scroll / search state
     currentScrollLineIndex,
     scrollStateReady, idbResolved, initialLineIndex, initialScrollTop, initialScrollOffset,
+    restoredCommentaryMode,
     activeMatchCount, activeMatchIdx, contentSearch, commentarySearch,
     // handlers
     onLinesScrolled, onTocSelect, onAltTocSelect,

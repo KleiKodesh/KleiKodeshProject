@@ -24,6 +24,7 @@ const props = defineProps<{
   altTocLabelMap?: Map<number, string>
   selectedLineId?: number | null
   bottomVisible?: boolean
+  commentaryMode?: 'off' | 'bottom' | 'side'
   commentaryScrollIndex?: number | null
   commentaryScrollOffset?: number | null
   hiddenCommentaryBookIds?: Set<string>
@@ -255,6 +256,7 @@ function savePos() {
       commentaryFilterState: filterState,
       zoom: zoom.value,
       bottomVisible: props.bottomVisible,
+      commentaryMode: props.commentaryMode,
       autoSelectTopLine: autoSelectTopLine.value,
     })
     tabStore.setLastReadPos(bookId, {

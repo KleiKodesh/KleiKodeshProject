@@ -50,6 +50,7 @@ export function useBookViewSessionRestore(
   // Store the resolved values so restore() can use them without a second read.
   let _restoredSi: number | null | undefined
   let _restoredSo: number | null | undefined
+  let _restoredCommentaryMode: 'off' | 'bottom' | 'side' | undefined
 
   const _idbPromise: Promise<void> = bookId == null
     ? Promise.resolve()
@@ -60,6 +61,7 @@ export function useBookViewSessionRestore(
         const result = _applyRestoreData(bookSaved ?? null, lastRead ?? null)
         _restoredSi = result.si
         _restoredSo = result.so
+        _restoredCommentaryMode = result.commentaryMode
       })
 
   _idbPromise.then(() => { idbResolved.value = true })
@@ -104,11 +106,11 @@ export function useBookViewSessionRestore(
       bottomVisible.value = true
     }
 
-    return { si, so }
+    return { si, so, commentaryMode: bookSaved?.commentaryMode as 'off' | 'bottom' | 'side' | undefined }
   }
 
-  async function restore() {
-    if (bookId == null) return
+  async function restore(): Promise<{ commentaryMode?: 'off' | 'bottom' | 'side' }> {
+    if (bookId == null) return {}
 
     await _idbPromise
 
@@ -139,6 +141,8 @@ export function useBookViewSessionRestore(
         { flush: 'sync' },
       )
     }
+
+    return { commentaryMode: _restoredCommentaryMode }
   }
 
   return { initialLineIndex, initialScrollTop, initialScrollOffset, scrollStateReady, idbResolved, restore }
