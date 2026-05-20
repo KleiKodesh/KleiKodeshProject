@@ -9,7 +9,7 @@ export type NewTabPage = 'homepage' | 'openfile' | 'hebrewbooks' | 'search'
 type LegacyNewTabPage = NewTabPage | 'kezayit-search' | 'kitveihakodesh-search'
 
 const DEFAULTS = {
-  censorDivineNames: false,
+  censorDivineNames: true,
   diacriticsState: 0,
   headerFont: "'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif",
   textFont: "'Times New Roman', Times, serif",
