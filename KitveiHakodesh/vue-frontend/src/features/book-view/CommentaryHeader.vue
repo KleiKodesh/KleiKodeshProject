@@ -27,10 +27,13 @@ const fullPath = computed(() => {
   return group?.path ?? props.bookTitle
 })
 
+const displayPath = computed(() => {
+  return props.ownTocPath ? `${fullPath.value} · ${props.ownTocPath}` : fullPath.value
+})
+
 const tooltipText = computed(() => {
   const hint = 'Ctrl+לחיצה (או לחיצה ממושכת במסך מגע) לפתיחת הספר בלשונית חדשה'
-  const path = props.ownTocPath ? `${fullPath.value} · ${props.ownTocPath}` : fullPath.value
-  return `${path}\n${hint}`
+  return `${displayPath.value}\n${hint}`
 })
 
 const bookId = computed(
@@ -57,7 +60,7 @@ function onHeaderClick(e: MouseEvent) {
     @click="onHeaderClick"
   >
     <div class="title-block">
-      <span class="book-title">{{ fullPath }}</span>
+      <span class="book-title">{{ displayPath }}</span>
     </div>
     <div class="header-actions" @click.stop>
       <button
