@@ -20,6 +20,7 @@ type CommentaryMode = 'off' | 'bottom' | 'side'
 const commentaryMode = ref<CommentaryMode>('off')
 const sideBySide = computed(() => commentaryMode.value === 'side')
 const isWideScreen = useMediaQuery('(min-width: 650px)')
+const commentaryFraction = ref(0.4)
 
 function cycleCommentaryMode() {
   if (commentaryMode.value === 'off') {
@@ -44,7 +45,7 @@ const {
   altTocLabelMap, pinnedCommentaryBookId,
   currentScrollLineIndex,
   scrollStateReady, idbResolved, initialLineIndex, initialScrollTop, initialScrollOffset,
-  restoredCommentaryMode,
+  restoredCommentaryMode, restoredCommentaryFraction,
   activeMatchCount, activeMatchIdx, contentSearch, commentarySearch,
   onLinesScrolled, onTocSelect, onAltTocSelect,
   onLineSelected, onNavigateSection, onCommentaryScroll,
@@ -69,6 +70,8 @@ watch(bottomVisible, (v) => { if (!v) commentaryMode.value = 'off' })
 watch(isWideScreen, (wide) => { if (!wide && commentaryMode.value === 'side') commentaryMode.value = 'bottom' })
 // Restore commentaryMode from IDB once session restore resolves.
 watch(restoredCommentaryMode, (mode) => { if (mode) commentaryMode.value = mode }, { once: true })
+// Restore commentaryFraction from IDB once session restore resolves.
+watch(restoredCommentaryFraction, (fraction) => { if (fraction != null) commentaryFraction.value = fraction }, { once: true })
 </script>
 
 <template>
@@ -119,7 +122,12 @@ watch(restoredCommentaryMode, (mode) => { if (mode) commentaryMode.value = mode 
         @toggle-toc="toggleTocPanel"
     />
       <div class="content-area">
-        <BookViewSplitPane :bottom-visible="bottomVisible" :side-by-side="sideBySide">
+        <BookViewSplitPane
+          :bottom-visible="bottomVisible"
+          :side-by-side="sideBySide"
+          :commentary-fraction="commentaryFraction"
+          @update:commentary-fraction="commentaryFraction = $event"
+        >
           <template #top>
             <BookViewLinesContent
               v-if="scrollStateReady"
@@ -130,6 +138,7 @@ watch(restoredCommentaryMode, (mode) => { if (mode) commentaryMode.value = mode 
               :selected-line-id="selectedLineId"
               :bottom-visible="bottomVisible"
               :commentary-mode="commentaryMode"
+              :commentary-fraction="commentaryFraction"
               :initial-line-index="initialLineIndex"
               :initial-scroll-index="initialScrollTop"
               :initial-scroll-offset="initialScrollOffset"

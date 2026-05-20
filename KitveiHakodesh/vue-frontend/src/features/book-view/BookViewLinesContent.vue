@@ -25,6 +25,7 @@ const props = defineProps<{
   selectedLineId?: number | null
   bottomVisible?: boolean
   commentaryMode?: 'off' | 'bottom' | 'side'
+  commentaryFraction?: number
   commentaryScrollIndex?: number | null
   commentaryScrollOffset?: number | null
   hiddenCommentaryBookIds?: Set<string>
@@ -257,6 +258,7 @@ function savePos() {
       zoom: zoom.value,
       bottomVisible: props.bottomVisible,
       commentaryMode: props.commentaryMode,
+      commentaryFraction: props.commentaryFraction,
       autoSelectTopLine: autoSelectTopLine.value,
     })
     tabStore.setLastReadPos(bookId, {
@@ -265,6 +267,8 @@ function savePos() {
       commentaryScrollIndex: props.commentaryScrollIndex,
       commentaryScrollOffset: props.commentaryScrollOffset,
       commentaryFilterState: filterState,
+      commentaryMode: props.commentaryMode,
+      commentaryFraction: props.commentaryFraction,
     })
   }
 }

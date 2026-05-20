@@ -88,8 +88,9 @@ export interface BookState {
   commentaryScrollOffset?: number | null
   commentaryFilterState?: import('@/features/book-view/bookViewTypes').CommentaryTreeState
   zoom?: number
-  bottomVisible?: boolean
+  bottomVisible?: boolean        // kept for backward compat with old saves
   commentaryMode?: 'off' | 'bottom' | 'side'
+  commentaryFraction?: number    // side-by-side divider position (0.1–0.9)
   autoSelectTopLine?: boolean
 }
 
@@ -100,6 +101,8 @@ export interface LastReadState {
   commentaryScrollIndex?: number | null
   commentaryScrollOffset?: number | null
   commentaryFilterState?: import('@/features/book-view/bookViewTypes').CommentaryTreeState
+  commentaryMode?: 'off' | 'bottom' | 'side'
+  commentaryFraction?: number
 }
 
 export interface Workspace {

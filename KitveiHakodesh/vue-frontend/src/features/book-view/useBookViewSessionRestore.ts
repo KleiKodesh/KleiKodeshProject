@@ -1,7 +1,7 @@
 /**
  * Restores per-book view state from IDB on mount:
- * scroll position, selected line, commentary scroll, zoom, bottom panel visibility,
- * auto-sync setting, and commentary filter.
+ * scroll position, selected line, commentary scroll, zoom, commentary mode,
+ * divider fraction, auto-sync setting, and commentary filter.
  *
  * Also exposes the initial scroll refs that BookViewLinesContent needs before
  * the IDB read completes.
@@ -35,22 +35,13 @@ export function useBookViewSessionRestore(
   const initialLineIndex = ref<number | undefined>(openTocLineIndex)
   const initialScrollTop = ref<number | undefined>()
   const initialScrollOffset = ref<number>(0)
-  // Mount immediately — don't wait for IDB. The initial scroll watcher in
-  // BookViewLinesContent watches initialScrollTop reactively and will apply
-  // the saved position when IDB resolves, even if that's after mount.
   const scrollStateReady = ref(true)
-  // Becomes true once the IDB read has settled (with or without a saved position).
-  // BookViewLinesContent uses this to know it is safe to give up waiting for a
-  // restore target — before this is true, the absence of initialScrollTop does not
-  // mean there is no saved position; it just means IDB hasn't responded yet.
   const idbResolved = ref(false)
 
-  // Start IDB reads immediately at composable setup — not deferred to onMounted —
-  // so they run in parallel with the DB queries rather than racing mid-stream.
-  // Store the resolved values so restore() can use them without a second read.
   let _restoredSi: number | null | undefined
   let _restoredSo: number | null | undefined
   let _restoredCommentaryMode: 'off' | 'bottom' | 'side' | undefined
+  let _restoredCommentaryFraction: number | undefined
 
   const _idbPromise: Promise<void> = bookId == null
     ? Promise.resolve()
@@ -62,6 +53,7 @@ export function useBookViewSessionRestore(
         _restoredSi = result.si
         _restoredSo = result.so
         _restoredCommentaryMode = result.commentaryMode
+        _restoredCommentaryFraction = result.commentaryFraction
       })
 
   _idbPromise.then(() => { idbResolved.value = true })
@@ -75,7 +67,6 @@ export function useBookViewSessionRestore(
     const so = bookSaved?.commentaryScrollOffset ?? lastRead?.commentaryScrollOffset
 
     if (bookSaved?.zoom != null) bookViewStore.setZoom(tabId, bookId!, bookSaved.zoom)
-    if (bookSaved?.bottomVisible != null) bottomVisible.value = bookSaved.bottomVisible
     if (bookSaved?.autoSelectTopLine != null) {
       bookViewStore.autoSelectTopLine = bookSaved.autoSelectTopLine
     }
@@ -106,10 +97,24 @@ export function useBookViewSessionRestore(
       bottomVisible.value = true
     }
 
-    return { si, so, commentaryMode: bookSaved?.commentaryMode as 'off' | 'bottom' | 'side' | undefined }
+    // Derive commentaryMode — prefer explicit saved value, fall back to lastRead,
+    // then fall back to old saves that only have bottomVisible (backward compat).
+    const commentaryMode: 'off' | 'bottom' | 'side' | undefined =
+      bookSaved?.commentaryMode ??
+      (settingsStore.resumeLastRead ? lastRead?.commentaryMode : undefined) ??
+      (bookSaved?.bottomVisible ? 'bottom' : undefined)
+
+    const commentaryFraction: number | undefined =
+      bookSaved?.commentaryFraction ??
+      (settingsStore.resumeLastRead ? lastRead?.commentaryFraction : undefined)
+
+    return { si, so, commentaryMode, commentaryFraction }
   }
 
-  async function restore(): Promise<{ commentaryMode?: 'off' | 'bottom' | 'side' }> {
+  async function restore(): Promise<{
+    commentaryMode?: 'off' | 'bottom' | 'side'
+    commentaryFraction?: number
+  }> {
     if (bookId == null) return {}
 
     await _idbPromise
@@ -142,7 +147,10 @@ export function useBookViewSessionRestore(
       )
     }
 
-    return { commentaryMode: _restoredCommentaryMode }
+    return {
+      commentaryMode: _restoredCommentaryMode,
+      commentaryFraction: _restoredCommentaryFraction,
+    }
   }
 
   return { initialLineIndex, initialScrollTop, initialScrollOffset, scrollStateReady, idbResolved, restore }

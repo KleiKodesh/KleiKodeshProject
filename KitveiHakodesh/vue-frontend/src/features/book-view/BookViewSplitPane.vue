@@ -1,12 +1,20 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import SplitPane from '@/components/SplitPane.vue'
 
-defineProps<{ bottomVisible: boolean; sideBySide?: boolean }>()
+const props = defineProps<{
+  bottomVisible: boolean
+  sideBySide?: boolean
+  commentaryFraction?: number
+}>()
+const emit = defineEmits<{ 'update:commentaryFraction': [value: number] }>()
 
 const container = ref<HTMLElement | null>(null)
-const commentaryFraction = ref(0.4)
+const commentaryFraction = ref(props.commentaryFraction ?? 0.4)
 const isDragging = ref(false)
+
+// Sync from parent when restored from IDB
+watch(() => props.commentaryFraction, (v) => { if (v != null) commentaryFraction.value = v })
 
 function onDividerPointerDown(e: PointerEvent) {
   isDragging.value = true
@@ -16,8 +24,8 @@ function onDividerPointerDown(e: PointerEvent) {
 function onPointerMove(e: PointerEvent) {
   if (!isDragging.value || !container.value) return
   const rect = container.value.getBoundingClientRect()
-  // Commentary is on the right (RTL first child), so measure from the right edge.
   commentaryFraction.value = Math.min(0.9, Math.max(0.1, (rect.right - e.clientX) / rect.width))
+  emit('update:commentaryFraction', commentaryFraction.value)
 }
 
 function onPointerUp() {

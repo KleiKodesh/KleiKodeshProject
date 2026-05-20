@@ -199,12 +199,6 @@ defineExpose({ tocBtnRef })
   height: 32px;
   justify-content: center;
 }
-@media (min-width: 600px) {
-  .toolbar-top,
-  .toolbar-bottom {
-    justify-content: flex-start;
-  }
-}
 .toolbar-left,
 .toolbar-right {
   flex-direction: column;
