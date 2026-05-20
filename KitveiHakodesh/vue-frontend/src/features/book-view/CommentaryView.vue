@@ -319,8 +319,7 @@ function copyWithSource(sourceAtEnd: boolean): void {
 const contextMenuItems: ContextMenuItem[] = [
   { label: 'העתק', action: () => document.execCommand('copy') },
   { label: 'העתק כבלוק', action: copyAsBlock },
-  { label: 'העתק עם מקור (בסוף)', action: () => copyWithSource(true) },
-  { label: 'העתק עם מקור (בהתחלה)', action: () => copyWithSource(false) },
+  { label: 'העתק עם מקור בסוף', action: () => copyWithSource(true) },
   { label: 'בחר הכל', action: selectAllInContainer },
 ]
 

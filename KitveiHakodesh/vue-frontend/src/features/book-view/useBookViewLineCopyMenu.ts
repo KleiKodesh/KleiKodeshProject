@@ -95,14 +95,15 @@ function extractSelection(
 export function useBookViewLineCopyMenu(options: CopyMenuOptions): ContextMenuItem[] {
   const { scrollerEl, lines, isSelectAll, selectAllInContainer, bookTitle, tabStore } = options
 
-  function buildSource(firstLineIndex: number | null): string {
+  function buildSource(firstLineIndex: number | null, includeComma: boolean = true): string {
+    const separator = includeComma ? ', ' : ' '
     if (firstLineIndex != null && options.getActiveTocEntry && options.getTocPath) {
       const entry = options.getActiveTocEntry(firstLineIndex)
-      if (entry) return `${bookTitle}, ${options.getTocPath(entry)}`
+      if (entry) return `${bookTitle}${separator}${options.getTocPath(entry)}`
     }
     // Fall back to the live scroll-position TOC path
     const tocPath = tabStore.activeTab.tocPath
-    return tocPath ? `${bookTitle}, ${tocPath}` : bookTitle
+    return tocPath ? `${bookTitle}${separator}${tocPath}` : bookTitle
   }
 
   function copyAsBlock(): void {
@@ -115,7 +116,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): ContextMenuIt
     const result = extractSelection(scrollerEl.value, lines(), isSelectAll.value)
     if (!result) return
     const { joined, firstLineIndex } = result
-    const source = buildSource(firstLineIndex)
+    const source = buildSource(firstLineIndex, sourceAtEnd)
 
     // sourceAtEnd: append "(source)" inline after the text
     // sourceAtStart: <h2> is a block element — no <br> needed, it creates its own break
@@ -129,8 +130,8 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): ContextMenuIt
   return [
     { label: 'העתק', action: () => document.execCommand('copy') },
     { label: 'העתק כבלוק', action: copyAsBlock },
-    { label: 'העתק עם מקור (בסוף)', action: () => copyWithSource(true) },
-    { label: 'העתק עם מקור (בהתחלה)', action: () => copyWithSource(false) },
+    { label: 'העתק עם מקור בסוף', action: () => copyWithSource(true) },
+    { label: 'העתק עם מקור בהתחלה', action: () => copyWithSource(false) },
     { label: 'בחר הכל', action: selectAllInContainer },
   ]
 }
