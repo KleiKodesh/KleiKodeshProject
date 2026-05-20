@@ -1,5 +1,6 @@
 ﻿<script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, watch } from 'vue'
+import { useMediaQuery } from '@vueuse/core'
 import { useBookView } from './useBookView'
 import BookViewToolbar from './BookViewToolbar.vue'
 import BookViewSplitPane from './BookViewSplitPane.vue'
@@ -14,6 +15,21 @@ const toolbarRef = ref<InstanceType<typeof BookViewToolbar> | null>(null)
 const linesContentRef = ref<InstanceType<typeof BookViewLinesContent> | null>(null)
 const searchBarRef = ref<InstanceType<typeof BookViewSearchBar> | null>(null)
 const commentaryViewRef = ref<InstanceType<typeof CommentaryView> | null>(null)
+
+type CommentaryMode = 'off' | 'bottom' | 'side'
+const commentaryMode = ref<CommentaryMode>('off')
+const sideBySide = computed(() => commentaryMode.value === 'side')
+const isWideScreen = useMediaQuery('(min-width: 650px)')
+
+function cycleCommentaryMode() {
+  if (commentaryMode.value === 'off') {
+    commentaryMode.value = 'bottom'
+  } else if (commentaryMode.value === 'bottom') {
+    commentaryMode.value = isWideScreen.value ? 'side' : 'off'
+  } else {
+    commentaryMode.value = 'off'
+  }
+}
 
 const {
   toolbarPosition, toolbarVisible,
@@ -43,6 +59,13 @@ const {
   () => searchBarRef.value,
   () => commentaryViewRef.value,
 )
+
+// Keep commentaryMode and useBookView's bottomVisible in sync.
+// commentaryMode is the source of truth for the UI; bottomVisible drives internal logic.
+watch(commentaryMode, (mode) => { bottomVisible.value = mode !== 'off' })
+watch(bottomVisible, (v) => { if (!v) commentaryMode.value = 'off' })
+// Snap back to bottom layout when screen becomes too narrow for side-by-side.
+watch(isWideScreen, (wide) => { if (!wide && commentaryMode.value === 'side') commentaryMode.value = 'bottom' })
 </script>
 
 <template>
@@ -63,7 +86,8 @@ const {
       :current-scroll-line-index="currentScrollLineIndex"
       :lines="lines"
       :on-related-books-open="ensureStaticFilterGroupsLoaded"
-      @toggle-bottom="bottomVisible = !bottomVisible"
+      :commentary-mode="commentaryMode"
+      @cycle-commentary-mode="cycleCommentaryMode"
       @toggle-search="searchVisible = !searchVisible"
       @toggle-toc="toggleTocPanel"
     />
@@ -86,12 +110,13 @@ const {
         :lines="lines"
         :class="toolbarPosition === 'left' ? 'toolbar-order-end' : ''"
         :on-related-books-open="ensureStaticFilterGroupsLoaded"
-        @toggle-bottom="bottomVisible = !bottomVisible"
+        :commentary-mode="commentaryMode"
+        @cycle-commentary-mode="cycleCommentaryMode"
         @toggle-search="searchVisible = !searchVisible"
         @toggle-toc="toggleTocPanel"
     />
       <div class="content-area">
-        <BookViewSplitPane :bottom-visible="bottomVisible">
+        <BookViewSplitPane :bottom-visible="bottomVisible" :side-by-side="sideBySide">
           <template #top>
             <BookViewLinesContent
               v-if="scrollStateReady"
@@ -211,7 +236,8 @@ const {
       :current-scroll-line-index="currentScrollLineIndex"
       :lines="lines"
       :on-related-books-open="ensureStaticFilterGroupsLoaded"
-      @toggle-bottom="bottomVisible = !bottomVisible"
+      :commentary-mode="commentaryMode"
+      @cycle-commentary-mode="cycleCommentaryMode"
       @toggle-search="searchVisible = !searchVisible"
       @toggle-toc="toggleTocPanel"
     />

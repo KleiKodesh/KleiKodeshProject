@@ -5,6 +5,7 @@ import {
   IconSearch20Regular,
   IconLayoutRowTwo20Regular,
   IconLayoutRowTwoFocusBottom20Filled,
+  IconLayoutColumnTwoFocusLeft20Filled,
   IconZoomIn20Regular,
   IconZoomOut20Regular,
   IconTimeline20Regular,
@@ -31,8 +32,9 @@ defineProps<{
   currentScrollLineIndex: number
   lines: LineItem[]
   onRelatedBooksOpen?: () => void
+  commentaryMode?: 'off' | 'bottom' | 'side'
 }>()
-defineEmits<{ toggleBottom: []; toggleSearch: []; toggleToc: [] }>()
+defineEmits<{ cycleCommentaryMode: []; toggleSearch: []; toggleToc: [] }>()
 
 const settingsStore = useSettingsStore()
 const bookViewStore = useBookViewStore()
@@ -68,12 +70,13 @@ defineExpose({ tocBtnRef })
       :on-open="onRelatedBooksOpen"
     />
     <button
-      :class="{ active: bottomVisible }"
+      :class="{ active: commentaryMode !== 'off' }"
       :disabled="!hasCommentaries"
-      title="פאנל תחתון (Ctrl+J)"
-      @click="$emit('toggleBottom')"
+      :title="commentaryMode === 'off' ? 'פאנל מפרשים (Ctrl+J)' : commentaryMode === 'bottom' ? 'עבור לתצוגה צדדית' : 'סגור פאנל מפרשים'"
+      @click="$emit('cycleCommentaryMode')"
     >
-      <IconLayoutRowTwoFocusBottom20Filled v-if="bottomVisible" />
+      <IconLayoutColumnTwoFocusLeft20Filled v-if="commentaryMode === 'side'" />
+      <IconLayoutRowTwoFocusBottom20Filled v-else-if="commentaryMode === 'bottom'" />
       <IconLayoutRowTwo20Regular v-else />
     </button>
     <button
