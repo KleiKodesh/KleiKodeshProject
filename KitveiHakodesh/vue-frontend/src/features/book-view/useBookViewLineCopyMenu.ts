@@ -98,11 +98,11 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): ContextMenuIt
   function buildSource(firstLineIndex: number | null): string {
     if (firstLineIndex != null && options.getActiveTocEntry && options.getTocPath) {
       const entry = options.getActiveTocEntry(firstLineIndex)
-      if (entry) return `${bookTitle} - ${options.getTocPath(entry)}`
+      if (entry) return `${bookTitle}, ${options.getTocPath(entry)}`
     }
     // Fall back to the live scroll-position TOC path
     const tocPath = tabStore.activeTab.tocPath
-    return tocPath ? `${bookTitle} - ${tocPath}` : bookTitle
+    return tocPath ? `${bookTitle}, ${tocPath}` : bookTitle
   }
 
   function copyAsBlock(): void {

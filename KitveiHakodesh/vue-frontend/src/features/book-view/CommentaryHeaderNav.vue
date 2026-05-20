@@ -48,14 +48,14 @@ function navigateToGroup(bookId: number) {
 const activeGroup = computed(() => props.groups.find((g) => g.bookId === props.activeBookId))
 
 const openBookTooltip = computed(() => {
-  const path = activeGroup.value?.path ?? ''
-  const full = props.activeTocPath ? `${path} · ${props.activeTocPath}` : path
+  const bookTitle = activeGroup.value?.bookTitle ?? ''
+  const full = props.activeTocPath ? `${bookTitle} ${props.activeTocPath}` : bookTitle
   return full ? `פתח ספר זה בלשונית חדשה\n${full}` : 'פתח ספר זה בלשונית חדשה'
 })
 
 const activeFullLabel = computed(() => {
-  const path = activeGroup.value?.path ?? ''
-  return props.activeTocPath ? `${path} · ${props.activeTocPath}` : path
+  const bookTitle = activeGroup.value?.bookTitle ?? ''
+  return props.activeTocPath ? `${bookTitle} ${props.activeTocPath}` : bookTitle
 })
 
 const activeIndex = computed(() => props.groups.findIndex((g) => g.bookId === props.activeBookId))

@@ -28,7 +28,7 @@ const fullPath = computed(() => {
 })
 
 const displayPath = computed(() => {
-  return props.ownTocPath ? `${fullPath.value} · ${props.ownTocPath}` : fullPath.value
+  return props.ownTocPath ? `${props.bookTitle} ${props.ownTocPath}` : props.bookTitle
 })
 
 const tooltipText = computed(() => {
