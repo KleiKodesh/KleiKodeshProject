@@ -15358,12 +15358,7 @@ var KiwixJSBundle = (function () {
   openSection(sectionsToOpen);// open all parents
   // why..? because if the section is inside a details element, it will be closed by default
   sectionEle.scrollIntoView();// highlighting the section
-  sectionEle.style.backgroundColor='#bdd1e5';setTimeout(function(){sectionEle.style.backgroundColor='';},2000);sectionEle.style.transition='background-color 300ms ease-out';});});}// Event listeners to handle 
-
-
-
-
-s with dropup button and TOCList
+  sectionEle.style.backgroundColor='#bdd1e5';setTimeout(function(){sectionEle.style.backgroundColor='';},2000);sectionEle.style.transition='background-color 300ms ease-out';});});}// Event listeners to handle interactions with dropup button and TOCList
   document.addEventListener('DOMContentLoaded',function(){var dropup=document.getElementById('dropup');dropup.setAttribute('tabindex','0');// dropup focusable with the keyboard
   var ToCList=document.getElementById('ToCList');// to close TOC when clicking inside the iframe
   var onContainerLoad=function onContainerLoad(){if(!articleContainer$1.contentDocument&&!articleContainer$1.contentWindow)return;var innerDoc=articleContainer$1.contentDocument||articleContainer$1.contentWindow.document;if(innerDoc){innerDoc.addEventListener('click',function(){closeTOC();});}};articleContainer$1.removeEventListener('load',onContainerLoad);articleContainer$1.addEventListener('load',onContainerLoad);// to close toc when user clicks outside of it

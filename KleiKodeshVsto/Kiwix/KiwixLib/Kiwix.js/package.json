@@ -13,6 +13,7 @@
     "build-min": "rollup --config --file dist/www/js/bundle.min.js --environment BUILD:production",
     "prebuild-src": "del-cli dist",
     "build-src": "rollup --config --file dist/www/js/bundle.js",
+    "kiwix-lib-refresh": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/kiwix-lib-refresh.ps1",
     "del-dist": "del-cli dist",
     "test": "mocha",
     "test-unit": "mocha",
