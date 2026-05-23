@@ -1,4 +1,6 @@
 using KleiKodesh.Helpers;
+using Microsoft.Office.Interop.Word;
+using Microsoft.Office.Tools.Ribbon;
 using System;
 using System.IO;
 using System.Reflection;
@@ -51,7 +53,8 @@ namespace KleiKodesh.Ribbon
                 switch (id)
                 {
                     case "KitveiHakodesh":
-                        TaskPaneManager.Show(new KitveiHakodeshLib.AppViewer(), "כתבי הקודש", 610, popOutBehavior: true);
+                        Nakdan();
+                        //TaskPaneManager.Show(new KitveiHakodeshLib.AppViewer(), "כתבי הקודש", 610, popOutBehavior: true);
                         break;
                     case "Kiwix":
                         TaskPaneManager.Show(new KiwixLib.KiwixWebview(), "קיוויקס", 610, popOutBehavior: true);
@@ -92,6 +95,21 @@ namespace KleiKodesh.Ribbon
             {
                 MessageBox.Show(ex.Message);
             }
+        }
+
+        private async void Nakdan()
+        {
+            var doc = Globals.ThisAddIn.Application.ActiveDocument;
+
+            // 1. Get the full OOXML from Word
+            string originalOoxml = doc.WordOpenXML;
+
+            // 2. Vowelize
+            var nakdan = new HebrewNakdan.HebrewNakdan(HebrewNakdan.DictaGenre.Modern);
+            string newOoxml = await nakdan.VowelizeOoxmlAsync(originalOoxml);
+
+            // 3. Write back — replace the entire document content
+            doc.Range().InsertXML(newOoxml);
         }
 
         public System.Drawing.Image getImage(Office.IRibbonControl control)

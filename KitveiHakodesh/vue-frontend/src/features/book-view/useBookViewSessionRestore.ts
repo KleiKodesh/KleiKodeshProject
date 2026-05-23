@@ -21,7 +21,7 @@ export function useBookViewSessionRestore(
   tabId: string,
   bookId: number | undefined,
   openTocLineIndex: number | undefined,
-  bottomVisible: Ref<boolean>,
+  commentaryVisible: Ref<boolean>,
   selectedLineId: Ref<number | null>,
   commentaryLineId: Ref<number | null>,
   commentaryTreeState: CommentaryTreeState,
@@ -93,16 +93,16 @@ export function useBookViewSessionRestore(
       selectedLineId.value = restoredLineId
       // Don't set commentaryLineId here — that would trigger a booksDataStore load
       // (GET_ALL_CATEGORIES + GET_ALL_BOOKS) before line chunks have finished loading.
-      // commentaryLineId is set by useBookView when bottomVisible first becomes true.
-      bottomVisible.value = true
+      // commentaryLineId is set by useBookView when commentaryVisible first becomes true.
+      commentaryVisible.value = true
     }
 
     // Derive commentaryMode — prefer explicit saved value, fall back to lastRead,
-    // then fall back to old saves that only have bottomVisible (backward compat).
+    // then fall back to old saves that only have commentaryVisible (backward compat).
     const commentaryMode: 'off' | 'bottom' | 'side' | undefined =
       bookSaved?.commentaryMode ??
       (settingsStore.resumeLastRead ? lastRead?.commentaryMode : undefined) ??
-      (bookSaved?.bottomVisible ? 'bottom' : undefined)
+      (bookSaved?.commentaryVisible ? 'bottom' : undefined)
 
     const commentaryFraction: number | undefined =
       bookSaved?.commentaryFraction ??

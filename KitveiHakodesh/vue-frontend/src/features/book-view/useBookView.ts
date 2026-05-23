@@ -76,7 +76,7 @@ export function useBookView(
 
   // ── UI state ──────────────────────────────────────────────────────────────
 
-  const bottomVisible = ref(false)
+  const commentaryVisible = ref(false)
   const searchVisible = ref(false)
   const restoredCommentaryMode = ref<'off' | 'bottom' | 'side' | undefined>(undefined)
   const restoredCommentaryFraction = ref<number | undefined>(undefined)
@@ -169,7 +169,6 @@ export function useBookView(
     activeTocEntryId,
     selectedLineId,
     commentaryLineId,
-    bottomVisible,
     checkTocScrollProgress,
     getActiveTocEntry,
     getTocPath,
@@ -257,7 +256,7 @@ export function useBookView(
   }
 
   function toggleCommentaryTreePanel() {
-    if (!bottomVisible.value) return
+    if (!commentaryVisible.value) return
     sidePanelMode.value = sidePanelMode.value === 'commentary-tree' ? null : 'commentary-tree'
     if (sidePanelMode.value === 'commentary-tree') ensureStaticFilterGroupsLoaded()
   }
@@ -294,7 +293,7 @@ export function useBookView(
   }
 
   const { onNavigateSection } = useCommentaryNavigation(
-    bookId, selectedLineId, commentaryLineId, bottomVisible, commentaryLoading,
+    bookId, selectedLineId, commentaryLineId, commentaryVisible, commentaryLoading,
     () => lines.value, () => tocEntries.value, linesContentRef, commentaryViewRef,
   )
 
@@ -309,7 +308,7 @@ export function useBookView(
     scrollStateReady, idbResolved, restore: restoreSession,
   } = useBookViewSessionRestore(
     tabId, bookId, openTocLineIndex,
-    bottomVisible, selectedLineId, commentaryLineId,
+    commentaryVisible, selectedLineId, commentaryLineId,
     commentaryTreeState, commentaryLoading, commentaryViewRef,
   )
 
@@ -322,11 +321,11 @@ export function useBookView(
 
   // ── Watchers ──────────────────────────────────────────────────────────────
 
-  watch(() => bookViewStore.toggleBottomPanelSignal, () => { bottomVisible.value = !bottomVisible.value })
-  watch(bottomVisible, (visible) => {
+  watch(() => bookViewStore.toggleBottomPanelSignal, () => { commentaryVisible.value = !commentaryVisible.value })
+  watch(commentaryVisible, (visible) => {
     if (!visible && sidePanelMode.value === 'commentary-tree') closeSidePanel()
-    // Sync commentaryLineId from selectedLineId when the bottom panel first opens
-    // after session restore (bottomVisible=true but commentaryLineId still null).
+    // Sync commentaryLineId from selectedLineId when the commentary panel first opens
+    // after session restore (commentaryVisible=true but commentaryLineId still null).
     // Wait until the first chunk has real content so the commentary query doesn't
     // compete with line chunk fetches.
     if (visible && selectedLineId.value != null && commentaryLineId.value == null) {
@@ -336,14 +335,14 @@ export function useBookView(
         (hasContent) => {
           if (!hasContent) return
           stop?.()
-          if (bottomVisible.value && selectedLineId.value != null && commentaryLineId.value == null)
+          if (commentaryVisible.value && selectedLineId.value != null && commentaryLineId.value == null)
             commentaryLineId.value = selectedLineId.value
         },
         { immediate: true },
       )
     }
     // Restore commentary scroll position when the panel is toggled back on.
-    // CommentaryView is fully unmounted when bottomVisible is false (v-if in SplitPane),
+    // CommentaryView is fully unmounted when commentaryVisible is false (v-if in SplitPane),
     // so the one-time restore() at mount is not enough — we must re-apply the saved
     // position every time the panel reopens.
     if (visible && commentaryScrollIndex.value != null && commentaryScrollOffset.value != null) {
@@ -375,7 +374,7 @@ export function useBookView(
     }
   })
   watch(hasCommentaries, (has) => {
-    if (!has) { bottomVisible.value = false; if (sidePanelMode.value === 'commentary-tree') closeSidePanel() }
+    if (!has) { commentaryVisible.value = false; if (sidePanelMode.value === 'commentary-tree') closeSidePanel() }
   })
   watch(searchVisible, (v) => { if (!v) { contentSearch.clear(); commentarySearch.clear() } })
 
@@ -388,7 +387,7 @@ export function useBookView(
     // tab data
     searchHighlightLineIndex, searchHighlightQuery, searchHighlightSnippet, searchHighlightTerms,
     // UI state
-    bottomVisible, searchVisible, sidePanelMode,
+    commentaryVisible, searchVisible, sidePanelMode,
     selectedLineId, commentaryTreeState, searchMode,
     activeTocEntryId, commentaryScrollIndex, commentaryScrollOffset,
     tocVisible, commentaryTreeVisible, sidePanelVisible, sidePanelToggleButtonEl,

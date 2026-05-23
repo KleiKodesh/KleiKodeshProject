@@ -19,7 +19,6 @@ export function useBookViewScrollSync(
   activeTocEntryId: Ref<number | undefined>,
   selectedLineId: Ref<number | null>,
   commentaryLineId: Ref<number | null>,
-  bottomVisible: Ref<boolean>,
   checkTocScrollProgress: (lineIndex: number) => boolean,
   getActiveTocEntry: (lineIndex: number) => TocEntry | null,
   getTocPath: (entry: TocEntry) => string,
@@ -48,7 +47,6 @@ export function useBookViewScrollSync(
     const line = lines().find((l) => l.lineIndex === currentFullLineIndex.value)
     if (line && line.content !== null) {
       selectedLineId.value = line.id
-      bottomVisible.value = true
       if (autoSelectCommentaryTimer) clearTimeout(autoSelectCommentaryTimer)
       autoSelectCommentaryTimer = setTimeout(() => {
         commentaryLineId.value = line.id

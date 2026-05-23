@@ -20,7 +20,7 @@ import type { CommentaryGroup } from './useCommentary'
 import type { LineItem } from './useBookViewLinesTable'
 
 defineProps<{
-  bottomVisible: boolean
+  commentaryVisible: boolean
   searchVisible: boolean
   tocVisible: boolean
   hasToc: boolean

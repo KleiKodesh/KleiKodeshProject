@@ -27,7 +27,7 @@ export function useCommentaryNavigation(
   bookId: number | undefined,
   selectedLineId: Ref<number | null>,
   commentaryLineId: Ref<number | null>,
-  bottomVisible: Ref<boolean>,
+  commentaryVisible: Ref<boolean>,
   commentaryLoading: Ref<boolean>,
   lines: () => LineItem[],
   tocEntries: () => TocEntry[],
@@ -46,7 +46,7 @@ export function useCommentaryNavigation(
     function afterNavigate(targetLineId: number) {
       selectedLineId.value = targetLineId
       commentaryLineId.value = targetLineId
-      bottomVisible.value = true
+      commentaryVisible.value = true
       linesContentRef()?.scrollToLineId(targetLineId)
       const stop = watch(
         commentaryLoading,

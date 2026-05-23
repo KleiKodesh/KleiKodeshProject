@@ -277,6 +277,7 @@
     <Compile Include="Common\KleiKodeshWebView.cs">
       <SubType>Component</SubType>
     </Compile>
+    <Compile Include="Features\Nakdan.cs" />
     <Compile Include="Helpers\FormSettings.cs" />
     <Compile Include="Helpers\WordWindowHelper.cs" />
     <Compile Include="Helpers\WpfTaskPane.cs">

@@ -23,7 +23,7 @@ const props = defineProps<{
   prioritise: (lineIndex: number) => void
   altTocLabelMap?: Map<number, string>
   selectedLineId?: number | null
-  bottomVisible?: boolean
+  commentaryVisible?: boolean
   commentaryMode?: 'off' | 'bottom' | 'side'
   commentaryFraction?: number
   commentaryScrollIndex?: number | null
@@ -256,7 +256,7 @@ function savePos() {
       commentaryScrollOffset: props.commentaryScrollOffset,
       commentaryFilterState: filterState,
       zoom: zoom.value,
-      bottomVisible: props.bottomVisible,
+      commentaryVisible: props.commentaryVisible,
       commentaryMode: props.commentaryMode,
       commentaryFraction: props.commentaryFraction,
       autoSelectTopLine: autoSelectTopLine.value,
@@ -277,7 +277,7 @@ function savePos() {
 // (which just arrived via prop update from onCommentaryScroll) is flushed to
 // IDB before CommentaryView unmounts and the position would otherwise be lost.
 watch(
-  () => props.bottomVisible,
+  () => props.commentaryVisible,
   (visible) => { if (!visible) savePos() },
 )
 
@@ -346,7 +346,7 @@ function scrollToLineIndex(lineIndex: number) {
 
 function onLineClick(index: number) {
   const line = props.lines[index]
-  if (props.bottomVisible && line) emit('lineSelected', line.id)
+  if (props.commentaryVisible && line) emit('lineSelected', line.id)
 }
 
 function focusScroller() {
@@ -385,7 +385,7 @@ defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller })
           <div
             v-if="lines[vItem.index]?.content != null"
             class="line"
-            :class="{ selected: props.bottomVisible && selectedLineId === lines[vItem.index]?.id }"
+            :class="{ selected: props.commentaryVisible && selectedLineId === lines[vItem.index]?.id }"
             :data-alt-toc="props.altTocLabelMap?.get(vItem.index)"
             v-html="lineContent(lines[vItem.index]!.content!, vItem.index)"
             @click="onLineClick(vItem.index)"

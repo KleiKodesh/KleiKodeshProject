@@ -35,7 +35,7 @@ function cycleCommentaryMode() {
 const {
   toolbarPosition, toolbarVisible,
   searchHighlightLineIndex, searchHighlightQuery, searchHighlightSnippet, searchHighlightTerms,
-  bottomVisible, searchVisible, sidePanelMode,
+  commentaryVisible, searchVisible, sidePanelMode,
   selectedLineId, commentaryTreeState, searchMode,
   activeTocEntryId, commentaryScrollIndex, commentaryScrollOffset,
   tocVisible, commentaryTreeVisible, sidePanelVisible, sidePanelToggleButtonEl,
@@ -62,10 +62,10 @@ const {
   () => commentaryViewRef.value,
 )
 
-// Keep commentaryMode and useBookView's bottomVisible in sync.
-// commentaryMode is the source of truth for the UI; bottomVisible drives internal logic.
-watch(commentaryMode, (mode) => { bottomVisible.value = mode !== 'off' })
-watch(bottomVisible, (v) => { if (!v) commentaryMode.value = 'off' })
+// Keep commentaryMode and useBookView's commentaryVisible in sync.
+// commentaryMode is the source of truth for the UI; commentaryVisible drives internal logic.
+watch(commentaryMode, (mode) => { commentaryVisible.value = mode !== 'off' })
+watch(commentaryVisible, (v) => { if (!v) commentaryMode.value = 'off' })
 // Snap back to bottom layout when screen becomes too narrow for side-by-side.
 watch(isWideScreen, (wide) => { if (!wide && commentaryMode.value === 'side') commentaryMode.value = 'bottom' })
 // Restore commentaryMode from IDB once session restore resolves.
@@ -80,7 +80,7 @@ watch(restoredCommentaryFraction, (fraction) => { if (fraction != null) commenta
     <BookViewToolbar
       v-if="toolbarVisible && toolbarPosition === 'top'"
       ref="toolbarRef"
-      :bottom-visible="bottomVisible"
+      :commentary-visible="commentaryVisible"
       :search-visible="searchVisible"
       :toc-visible="tocVisible"
       :has-toc="hasToc"
@@ -103,7 +103,7 @@ watch(restoredCommentaryFraction, (fraction) => { if (fraction != null) commenta
       <BookViewToolbar
         v-if="toolbarVisible && (toolbarPosition === 'right' || toolbarPosition === 'left')"
         ref="toolbarRef"
-        :bottom-visible="bottomVisible"
+        :commentary-visible="commentaryVisible"
         :search-visible="searchVisible"
         :toc-visible="tocVisible"
         :has-toc="hasToc"
@@ -123,7 +123,7 @@ watch(restoredCommentaryFraction, (fraction) => { if (fraction != null) commenta
     />
       <div class="content-area">
         <BookViewSplitPane
-          :bottom-visible="bottomVisible"
+          :commentary-visible="commentaryVisible"
           :side-by-side="sideBySide"
           :commentary-fraction="commentaryFraction"
           @update:commentary-fraction="commentaryFraction = $event"
@@ -136,7 +136,7 @@ watch(restoredCommentaryFraction, (fraction) => { if (fraction != null) commenta
               :prioritise="prioritise"
               :alt-toc-label-map="altTocLabelMap"
               :selected-line-id="selectedLineId"
-              :bottom-visible="bottomVisible"
+              :bottom-visible="commentaryVisible"
               :commentary-mode="commentaryMode"
               :commentary-fraction="commentaryFraction"
               :initial-line-index="initialLineIndex"
@@ -185,7 +185,7 @@ watch(restoredCommentaryFraction, (fraction) => { if (fraction != null) commenta
                   ? commentarySearch.currentMatchOccurrence.value
                   : undefined
               "
-              @close="bottomVisible = false"
+              @close="commentaryVisible = false"
               @navigate-section="onNavigateSection"
               @scroll="onCommentaryScroll"
               @toggle-filter-panel="toggleCommentaryTreePanel"
@@ -200,7 +200,7 @@ watch(restoredCommentaryFraction, (fraction) => { if (fraction != null) commenta
           :toolbar-visible="toolbarVisible"
           :match-count="activeMatchCount"
           :current-match="activeMatchIdx"
-          :commentary-visible="bottomVisible"
+          :commentary-visible="commentaryVisible"
           :mode="searchMode"
           @close="searchVisible = false"
           @query-change="onQueryChange"
@@ -237,7 +237,7 @@ watch(restoredCommentaryFraction, (fraction) => { if (fraction != null) commenta
     <BookViewToolbar
       v-if="toolbarVisible && toolbarPosition === 'bottom'"
       ref="toolbarRef"
-      :bottom-visible="bottomVisible"
+      :commentary-visible="commentaryVisible"
       :search-visible="searchVisible"
       :toc-visible="tocVisible"
       :has-toc="hasToc"

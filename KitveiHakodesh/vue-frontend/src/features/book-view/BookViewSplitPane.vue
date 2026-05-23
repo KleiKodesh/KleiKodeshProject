@@ -3,7 +3,7 @@ import { ref, watch } from 'vue'
 import SplitPane from '@/components/SplitPane.vue'
 
 const props = defineProps<{
-  bottomVisible: boolean
+  commentaryVisible: boolean
   sideBySide?: boolean
   commentaryFraction?: number
 }>()
@@ -35,7 +35,7 @@ function onPointerUp() {
 
 <template>
   <div
-    v-if="sideBySide && bottomVisible"
+    v-if="sideBySide && commentaryVisible"
     ref="container"
     class="side-by-side"
     @pointermove="onPointerMove"
@@ -49,7 +49,7 @@ function onPointerUp() {
       <slot name="top" />
     </div>
   </div>
-  <SplitPane v-else :bottom-visible="bottomVisible">
+  <SplitPane v-else :bottom-visible="commentaryVisible">
     <template #top><slot name="top" /></template>
     <template #bottom><slot name="bottom" /></template>
   </SplitPane>
