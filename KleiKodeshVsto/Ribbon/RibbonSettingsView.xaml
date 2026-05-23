@@ -27,7 +27,6 @@
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-            <Setter Property="Margin" Value="0,0,0,8"/>
         </Style>
 
         <Style x:Key="Card" TargetType="Border">
@@ -43,7 +42,49 @@
         <Style TargetType="Separator">
             <Setter Property="Background" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
             <Setter Property="Opacity" Value="0.2"/>
-            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="Margin" Value="0,8"/>
+        </Style>
+
+        <!-- ── Thin Edge-style scrollbar ─────────────────────────────── -->
+        <ControlTemplate x:Key="ScrollThumb" TargetType="Thumb">
+            <Border x:Name="Bd" Background="#4D808080" CornerRadius="0"
+                    Margin="2,2,2,2" MinHeight="20" MinWidth="8"/>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Bd" Property="Background" Value="#66808080"/>
+                </Trigger>
+                <Trigger Property="IsDragging" Value="True">
+                    <Setter TargetName="Bd" Property="Background" Value="#80808080"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <ControlTemplate x:Key="VertScrollBar" TargetType="ScrollBar">
+            <Grid Width="12">
+                <Track x:Name="PART_Track" IsDirectionReversed="True">
+                    <Track.DecreaseRepeatButton>
+                        <RepeatButton Command="ScrollBar.PageUpCommand"
+                                      Background="Transparent" BorderThickness="0" Opacity="0"/>
+                    </Track.DecreaseRepeatButton>
+                    <Track.Thumb><Thumb Template="{StaticResource ScrollThumb}"/></Track.Thumb>
+                    <Track.IncreaseRepeatButton>
+                        <RepeatButton Command="ScrollBar.PageDownCommand"
+                                      Background="Transparent" BorderThickness="0" Opacity="0"/>
+                    </Track.IncreaseRepeatButton>
+                </Track>
+            </Grid>
+        </ControlTemplate>
+
+        <Style TargetType="ScrollBar">
+            <Setter Property="Background"      Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Style.Triggers>
+                <Trigger Property="Orientation" Value="Vertical">
+                    <Setter Property="Width"    Value="12"/>
+                    <Setter Property="MinWidth" Value="12"/>
+                    <Setter Property="Template" Value="{StaticResource VertScrollBar}"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <Style TargetType="Button">
@@ -79,7 +120,6 @@
                 </Setter.Value>
             </Setter>
         </Style>
-
     </UserControl.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto"
@@ -87,29 +127,37 @@
         <StackPanel Margin="12" Background="Transparent">
 
             <Border Style="{StaticResource Card}">
-                <StackPanel x:Name="VisibleSettingsPanel">
-                    <TextBlock Style="{StaticResource GroupHeader}" Text="רכיבים זמינים"/>
-                    <Separator/>
-                    <!--
+                <Expander>
+                    <Expander.Header>
+                        <TextBlock Style="{StaticResource GroupHeader}" Text="רכיבים זמינים"/>
+                    </Expander.Header>
+                    <StackPanel x:Name="VisibleSettingsPanel">
+                        <Separator/>
+                        <!--
                         IMPORTANT — control names are registry settings keys.
                         InitializeControls() iterates VisibleSettingsPanel.Children and passes cb.Name
                         directly to SettingsManager as the key (e.g. "KitveiHakodesh_Visible").
                         Do NOT rename these — the name IS the key.
                         Format: {ComponentId}_Visible
                     -->
-                    <CheckBox x:Name="KitveiHakodesh_Visible"    Content="כתבי הקודש"/>
-                    <CheckBox x:Name="Kiwix_Visible"      Content="קיוויקס"/>
-                    <CheckBox x:Name="WebSites_Visible"   Content="דרך האתרים"/>
-                    <CheckBox x:Name="KleiKodesh_Visible" Content="עיצוב תורני"/>
-                    <CheckBox x:Name="RegexFind_Visible"  Content="חיפוש רגקס" Margin="0"/>
-                </StackPanel>
+                        <CheckBox x:Name="KitveiHakodesh_Visible"    Content="כתבי הקודש"/>
+                        <CheckBox x:Name="Kiwix_Visible"      Content="קיוויקס"/>
+                        <CheckBox x:Name="WebSites_Visible"   Content="דרך האתרים"/>
+                        <CheckBox x:Name="KleiKodesh_Visible" Content="עיצוב תורני"/>
+                        <CheckBox x:Name="Nakdan_Visible" Content="נקדן דיקטה"/>
+                        <CheckBox x:Name="RegexFind_Visible"  Content="חיפוש רגקס" Margin="0"/>
+                    </StackPanel>
+                </Expander>
             </Border>
 
             <Border Style="{StaticResource Card}">
-                <StackPanel x:Name="OptionsSettingsPanel">
-                    <TextBlock Style="{StaticResource GroupHeader}" Text="לחצן ראשי"/>
-                    <Separator/>
-                    <!--
+                <Expander>
+                    <Expander.Header>
+                        <TextBlock Style="{StaticResource GroupHeader}" Text="לחצן ראשי"/>
+                    </Expander.Header>
+                    <StackPanel x:Name="OptionsSettingsPanel">
+                        <Separator/>
+                        <!--
                         IMPORTANT — control names encode the settings value.
                         InitializeControls() iterates OptionsSettingsPanel.Children and derives the
                         DefaultButton value by stripping "_Option" from rb.Name (e.g. "KitveiHakodesh_Option" → "KitveiHakodesh").
@@ -117,13 +165,15 @@
                         Format: {ComponentId}_Option  (ComponentId must match the one used in _Visible above)
                         Settings_Option is the fallback and is not tied to a visibility checkbox.
                     -->
-                    <RadioButton x:Name="KitveiHakodesh_Option"    Content="כתבי הקודש"        IsEnabled="{Binding IsChecked, ElementName=KitveiHakodesh_Visible}"/>
-                    <RadioButton x:Name="Kiwix_Option"      Content="קיוויקס"     IsEnabled="{Binding IsChecked, ElementName=Kiwix_Visible}"/>
-                    <RadioButton x:Name="WebSites_Option"   Content="דרך האתרים"  IsEnabled="{Binding IsChecked, ElementName=WebSites_Visible}"/>
-                    <RadioButton x:Name="KleiKodesh_Option" Content="עיצוב תורני" IsEnabled="{Binding IsChecked, ElementName=KleiKodesh_Visible}"/>
-                    <RadioButton x:Name="RegexFind_Option"  Content="חיפוש רגקס"  IsEnabled="{Binding IsChecked, ElementName=RegexFind_Visible}"/>
-                    <RadioButton x:Name="Settings_Option"   Content="הגדרות"      Margin="0"/>
-                </StackPanel>
+                        <RadioButton x:Name="KitveiHakodesh_Option"    Content="כתבי הקודש"        IsEnabled="{Binding IsChecked, ElementName=KitveiHakodesh_Visible}"/>
+                        <RadioButton x:Name="Kiwix_Option"      Content="קיוויקס"     IsEnabled="{Binding IsChecked, ElementName=Kiwix_Visible}"/>
+                        <RadioButton x:Name="WebSites_Option"   Content="דרך האתרים"  IsEnabled="{Binding IsChecked, ElementName=WebSites_Visible}"/>
+                        <RadioButton x:Name="KleiKodesh_Option" Content="עיצוב תורני" IsEnabled="{Binding IsChecked, ElementName=KleiKodesh_Visible}"/>
+                        <RadioButton x:Name="Nakdan_Option" Content="נקדן דיקטה" IsEnabled="{Binding IsChecked, ElementName=KleiKodesh_Visible}"/>
+                        <RadioButton x:Name="RegexFind_Option"  Content="חיפוש רגקס"  IsEnabled="{Binding IsChecked, ElementName=RegexFind_Visible}"/>
+                        <RadioButton x:Name="Settings_Option"   Content="הגדרות"      Margin="0"/>
+                    </StackPanel>
+                </Expander>
             </Border>
 
             <CheckBox x:Name="ChkTurnOffUpdates"

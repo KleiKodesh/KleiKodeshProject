@@ -9,6 +9,7 @@
   <Project Path="KleiKodeshVsto/Kiwix/KiwixDemoApp/KiwixDemoApp.csproj" Id="3fe46d77-1bce-4356-a171-071a2328c03d" />
   <Project Path="KleiKodeshVsto/Kiwix/KiwixLib/KiwixLib.csproj" Id="235001e0-16c9-4aea-9260-99cf489a79c2" />
   <Project Path="KleiKodeshVsto/KleiKodeshVsto.csproj" Id="47dbe4db-2a18-46ed-838a-2114fd44d016" />
+  <Project Path="KleiKodeshVsto/Nakdan/Nakdan/Nakdan.csproj" Id="fb53810f-e350-4554-9f5b-d8f42fbe1e9d" />
   <Project Path="KleiKodeshVsto/RegexInWord/RegexFindDemo/RegexFindDemo.csproj" Id="d1e2f3a4-b5c6-7890-defa-123456789bcd" />
   <Project Path="KleiKodeshVsto/RegexInWord/RegexFindLib/RegexFindLib.csproj" Id="c3d4e5f6-a7b8-9012-cdef-123456789abc" />
   <Project Path="KleiKodeshVsto/WebSitesLib/WebSitesDemo/WebSitesDemo.csproj" Id="a5b8c9d1-e2f3-4a5b-8c9d-1e2f3a5b8c9d" />

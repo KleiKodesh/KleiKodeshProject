@@ -1,0 +1,242 @@
+<!-- NakdanView.xaml  |  Hebrew vowelization task-pane  |  RTL  |  MVVM -->
+<UserControl x:Class="Nakdan.NakdanView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:Nakdan"
+             mc:Ignorable="d"
+             d:DesignHeight="600" d:DesignWidth="300"
+             d:DataContext="{d:DesignInstance Type=local:NakdanViewModel, IsDesignTimeCreatable=False}"
+             FlowDirection="RightToLeft"
+             FontFamily="Segoe UI"
+             FontSize="13"
+             Background="White"
+             Foreground="Black">
+    <!--
+        Background must be set (not Transparent) so ComboBox dropdown popups work correctly.
+        ElementHost overrides this with the Office theme color at runtime.
+    -->
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="NakdanDictionary.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- ── Converters ────────────────────────────────────── -->
+            <local:BoolToVisibilityConverter  x:Key="BoolToVis"/>
+            <local:GenreDescriptionConverter  x:Key="GenreDesc"/>
+
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         ROOT
+    ═══════════════════════════════════════════════════════════ -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="12,12,12,12">
+
+            <!-- ─────────────────────────────────────────────────
+                 SECTION LABEL: VOWELIZE ACTIONS
+            ───────────────────────────────────────────────── -->
+            <TextBlock Text="פעולות ניקוד"
+                       FontSize="11" FontWeight="SemiBold"
+                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource OpacityConverter}}"
+                       Margin="0,0,0,8"/>
+
+            <!-- Vowelize full document -->
+            <Button Style="{StaticResource ActionButton}"
+                    Command="{Binding VowelizeDocumentCommand}"
+                    Margin="0,0,0,6"
+                    ToolTip="נקד את כל הטקסט במסמך">
+                <TextBlock Text="נקד את כל המסמך" VerticalAlignment="Center"/>
+            </Button>
+
+            <!-- Vowelize selection -->
+            <Button Style="{StaticResource ActionButton}"
+                    Command="{Binding VowelizeSelectionCommand}"
+                    Margin="0,0,0,6"
+                    ToolTip="נקד רק את הטקסט המסומן">
+                <TextBlock Text="נקד טקסט מסומן" VerticalAlignment="Center"/>
+            </Button>
+
+            <!-- Vowelize footnotes -->
+            <Button Style="{StaticResource ActionButton}"
+                    Command="{Binding VowelizeFootnotesCommand}"
+                    Margin="0,0,0,12"
+                    ToolTip="נקד את כל הערות השוליים">
+                <TextBlock Text="נקד הערות שוליים" VerticalAlignment="Center"/>
+            </Button>
+
+            <!-- ─────────────────────────────────────────────────
+                 GENRE SELECTOR
+            ───────────────────────────────────────────────── -->
+            <TextBlock Text="סוג הטקסט"
+                       FontSize="11" FontWeight="SemiBold"
+                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource OpacityConverter}}"
+                       Margin="0,0,0,4"/>
+            <ComboBox ItemsSource="{Binding Genres}"
+                      SelectedItem="{Binding SelectedGenre, Mode=TwoWay}"
+                      Height="28"
+                      Margin="0,0,0,12">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding DisplayName}"/>
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+
+            <!-- ─────────────────────────────────────────────────
+                 BUSY INDICATOR & STATUS / ERROR MESSAGE
+            ───────────────────────────────────────────────── -->
+            <!-- Busy indicator (shown while processing) -->
+            <Border Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"
+                    Background="{StaticResource BgSecBrush}"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="1" CornerRadius="4"
+                    Padding="8,6" Margin="0,0,0,12">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                        <ProgressBar IsIndeterminate="True"
+                                     Width="80" Height="2"
+                                     Foreground="{StaticResource AccentBrush}"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     Margin="0,0,8,0"
+                                     VerticalAlignment="Center"/>
+                        <TextBlock Text="מנקד… אנא המתן"
+                                   FontSize="12"
+                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource OpacityConverter}}"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                    
+                    <Button Grid.Column="1"
+                            Command="{Binding CancelCommand}"
+                            Background="Transparent" BorderThickness="0"
+                            Cursor="Hand" Padding="8,0" Margin="6,0,0,0"
+                            VerticalAlignment="Center"
+                            ToolTip="בטל את הניקוד">
+                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE711;"
+                                   FontSize="12"
+                                   Foreground="{StaticResource TextSecBrush}"/>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- Status / error message (shown after processing) -->
+            <Border Visibility="{Binding HasStatus, Converter={StaticResource BoolToVis}}"
+                    Margin="0,0,0,12" Padding="8,6" CornerRadius="4"
+                    BorderThickness="1">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Background"  Value="{StaticResource BgSecBrush}"/>
+                        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding HasError}" Value="True">
+                                <Setter Property="Background"  Value="#18DC3545"/>
+                                <Setter Property="BorderBrush" Value="#DC3545"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding StatusMessage}"
+                               FontSize="12" TextWrapping="Wrap"
+                               VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource OpacityConverter}}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasError}" Value="True">
+                                        <Setter Property="Foreground" Value="#DC3545"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
+                    <Button Grid.Column="1"
+                            Command="{Binding ClearStatusCommand}"
+                            Background="Transparent" BorderThickness="0"
+                            Cursor="Hand" Padding="4,0" Margin="6,0,0,0"
+                            VerticalAlignment="Center">
+                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE711;"
+                                   FontSize="10"
+                                   Foreground="{StaticResource TextSecBrush}"/>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- ─────────────────────────────────────────────────
+                 SECTION LABEL: IGNORE STYLES
+            ───────────────────────────────────────────────── -->
+
+            <TextBlock Text="סמן סגנונות שיידלגו בתהליך הניקוד:"
+                       FontSize="12" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource OpacityConverter}}"
+                       TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+            <!-- Dropdown with checkboxes -->
+            <ToggleButton x:Name="IgnoreStylesToggle"
+                          Style="{StaticResource CheckedToggle}"
+                          Content="בחר סגנונות ▾"
+                          Height="28"
+                          Padding="8,0"
+                          FontSize="12"
+                          HorizontalAlignment="Stretch"
+                          Margin="0,0,0,0"/>
+            <Popup x:Name="IgnoreStylesPopup"
+                   StaysOpen="False"
+                   PlacementTarget="{Binding ElementName=IgnoreStylesToggle}"
+                   IsOpen="{Binding IsChecked, ElementName=IgnoreStylesToggle}"
+                   AllowsTransparency="False"
+                   MaxHeight="220">
+                <Border BorderBrush="#50808080"
+                        BorderThickness="1"
+                        MinWidth="{Binding ActualWidth, ElementName=IgnoreStylesToggle}"
+                        Background="{Binding Background, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                  VerticalScrollBarVisibility="Auto"
+                                  MaxHeight="200">
+                        <ItemsControl ItemsSource="{Binding Styles}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="Transparent" Cursor="Hand">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="Transparent"/>
+                                                <Style.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="Background" Value="#0A808080"/>
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <CheckBox Content="{Binding DisplayName}"
+                                                  IsChecked="{Binding IsIgnored, Mode=TwoWay}"
+                                                  Padding="4,0"
+                                                  Margin="8,4"/>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Border>
+            </Popup>
+
+        </StackPanel>
+    </ScrollViewer>
+
+</UserControl>

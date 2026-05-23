@@ -1,0 +1,33 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        Adaptive color tokens — work with any Office theme (light, dark, black).
+
+        Primary bg/fg come from the UserControl.Background/Foreground set by
+        WpfTaskPane.CreateNew via OfficeThemeWatcher. All secondary surfaces
+        use opacity overlays so they adapt automatically.
+
+        Mid-gray (#808080) is equidistant from black and white, so overlays
+        are visible on both light and dark themes.
+    -->
+
+    <!-- Background overlays -->
+    <SolidColorBrush x:Key="BgSecBrush"    Color="#0F808080"/>  <!-- ~6%  -->
+    <SolidColorBrush x:Key="BgTerBrush"    Color="#1A808080"/>  <!-- ~10% -->
+    <SolidColorBrush x:Key="HoverBrush"    Color="#0A808080"/>  <!-- ~4%  -->
+    <SolidColorBrush x:Key="PressedBrush"  Color="#14808080"/>  <!-- ~8%  -->
+    <SolidColorBrush x:Key="BorderBrush"   Color="#50808080"/>  <!-- ~31% -->
+    <SolidColorBrush x:Key="BorderStrong"  Color="#80808080"/>  <!-- ~50% -->
+
+    <!-- Accent — fixed, contrasts on both light and dark -->
+    <SolidColorBrush x:Key="AccentBrush"   Color="#0078D4"/>
+    <SolidColorBrush x:Key="AccentHover"   Color="#106EBE"/>
+    <SolidColorBrush x:Key="AccentPressed" Color="#005A9E"/>
+
+    <!-- Selected state — light blue tint, works on light and dark -->
+    <SolidColorBrush x:Key="SelectedBrush" Color="#3300B4FF"/>  <!-- 20% accent blue -->
+
+    <!-- Secondary text — 60% opacity mid-gray -->
+    <SolidColorBrush x:Key="TextSecBrush"  Color="#99808080"/>
+
+</ResourceDictionary>

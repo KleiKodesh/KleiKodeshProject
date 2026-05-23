@@ -59,6 +59,14 @@
 									getImage="getImage"
 									onAction="button_Click"
 									getVisible="getVisible"/>
+
+							<button id="Nakdan"
+								label="נקדן דיקטה"
+								screentip="נקדן דיקטה"
+								supertip="נקדן דיקטה עם אפשרויות משודרגות"
+								getImage="getImage"
+								onAction="button_Click"
+								getVisible="getVisible"/>
 							
 							<button id="RegexFind"
 									label="חיפוש רגקס"

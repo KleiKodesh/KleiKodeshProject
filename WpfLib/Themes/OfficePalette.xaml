@@ -1,0 +1,25 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        OfficePalette — shared style palette for all KleiKodesh task pane libraries.
+
+        Merging this single dictionary gives a library:
+          - Adaptive brush tokens (Brushes.xaml)
+          - Implicit ComboBox + ComboBoxItem (ComboBoxStyles.xaml)
+          - Implicit Button, ToggleButton + keyed CheckedToggle, ActionButton (ButtonStyles.xaml)
+          - Implicit CheckBox with VSCode-style square tick (CheckBoxStyles.xaml)
+          - Implicit ScrollBar — thin Edge-style, no arrows (ScrollBarStyles.xaml)
+
+        Usage in a library's root dictionary:
+            <ResourceDictionary Source="/WpfLib;component/themes/officepalette.xaml"/>
+
+        NOTE: Pack URI paths must be all-lowercase (WPF BAML compiler lowercases them).
+    -->
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/WpfLib;component/themes/brushes.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/scrollbarstyles.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/comboboxstyles.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/buttonstyles.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/checkboxstyles.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+</ResourceDictionary>

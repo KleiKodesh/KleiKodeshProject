@@ -277,7 +277,6 @@
     <Compile Include="Common\KleiKodeshWebView.cs">
       <SubType>Component</SubType>
     </Compile>
-    <Compile Include="Features\Nakdan.cs" />
     <Compile Include="Helpers\FormSettings.cs" />
     <Compile Include="Helpers\WordWindowHelper.cs" />
     <Compile Include="Helpers\WpfTaskPane.cs">
@@ -328,6 +327,9 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <!-- RegexFind HTML removed — replaced by XAML UI in RegexFindLib -->
+    <Content Include="Resources\Nakdan.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="Resources\RegexFind.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
@@ -398,6 +400,10 @@
     <ProjectReference Include="..\KitveiHakodesh\CSharpBackend\KitveiHakodeshLib\KitveiHakodeshLib.csproj">
       <Project>{a1b2c3d4-e5f6-7890-abcd-ef1234567890}</Project>
       <Name>KitveiHakodeshLib</Name>
+    </ProjectReference>
+    <ProjectReference Include="Nakdan\Nakdan\Nakdan.csproj">
+      <Project>{FB53810F-E350-4554-9F5B-D8F42FBE1E9D}</Project>
+      <Name>Nakdan</Name>
     </ProjectReference>
     <ProjectReference Include="RegexInWord\RegexFindLib\RegexFindLib.csproj">
       <Project>{c3d4e5f6-a7b8-9012-cdef-123456789abc}</Project>
