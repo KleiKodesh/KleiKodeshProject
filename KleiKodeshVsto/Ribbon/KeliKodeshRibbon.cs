@@ -2,6 +2,7 @@ using KleiKodesh.Helpers;
 using Microsoft.Office.Interop.Word;
 using Microsoft.Office.Tools.Ribbon;
 using Nakdan;
+using Nakdan.UI;
 using System;
 using System.IO;
 using System.Reflection;
@@ -70,8 +71,7 @@ namespace KleiKodesh.Ribbon
                         WpfTaskPane.Show(docDesign, "עיצוב תורני", 520);
                         break;
                     case "Nakdan":
-                        var nakdan = new NakdanView();
-                        nakdan.Initialize(new NakdanApi(Globals.ThisAddIn.Application));
+                        var nakdan = new NakdanView(Globals.ThisAddIn.Application, Globals.Factory);
                         WpfTaskPane.Show(nakdan, "נקדן דיקטה", 520);
                         break;
                     case "RegexFind":

@@ -2,9 +2,9 @@
 using Microsoft.Win32;
 using System;
 
-namespace KleiKodesh.Helpers
+namespace Nakdan.UI
 {
-    public static class SettingsManager
+    internal static class SettingsManager
     {
         const string AppName = "KleiKodesh";
 

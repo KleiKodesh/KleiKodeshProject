@@ -1,11 +1,14 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
+using System.Xml.Linq;
 using System.Threading.Tasks;
 using System.Windows;
+using Nakdan.Core;
 using Word = Microsoft.Office.Interop.Word;
 
-namespace Nakdan
+namespace Nakdan.Core
 {
     // ═══════════════════════════════════════════════════════════
     //  NAKDAN API
@@ -17,9 +20,7 @@ namespace Nakdan
     //      NakdanApi Api = new NakdanApi(Globals.ThisAddIn.Application);
     //
     //  Then wire buttons:
-    //      btnAll.Click       += (s,e) => Api.RunSafe(Api.VowelizeDocumentAsync);
     //      btnSelection.Click += (s,e) => Api.RunSafe(Api.VowelizeSelectionAsync);
-    //      btnFootnotes.Click += (s,e) => Api.RunSafe(Api.VowelizeFootnotesAsync);
     // ═══════════════════════════════════════════════════════════
     public class NakdanApi
     {
@@ -35,24 +36,7 @@ namespace Nakdan
         }
 
         // ════════════════════════════════════════════════════════
-        //  BUTTON 1 — Vowelize entire document
-        // ════════════════════════════════════════════════════════
-        public async Task VowelizeDocumentAsync(CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            
-            Word.Document doc      = _app.ActiveDocument;
-            string        ooxml    = doc.WordOpenXML;
-            string        vowelized = await _engine.VowelizeOoxmlAsync(ooxml, Options, cancellationToken);
-
-            cancellationToken.ThrowIfCancellationRequested();
-            
-            Word.Range content = doc.Content;
-            content.InsertXML(vowelized);
-        }
-
-        // ════════════════════════════════════════════════════════
-        //  BUTTON 2 — Vowelize current selection only
+        //  BUTTON — Vowelize current selection only
         // ════════════════════════════════════════════════════════
         public async Task VowelizeSelectionAsync(CancellationToken cancellationToken = default)
         {
@@ -76,47 +60,12 @@ namespace Nakdan
         }
 
         // ════════════════════════════════════════════════════════
-        //  BUTTON 3 — Vowelize all footnotes in the document
-        // ════════════════════════════════════════════════════════
-        public async Task VowelizeFootnotesAsync(CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            
-            Word.Document    doc       = _app.ActiveDocument;
-            Word.Footnotes   footnotes = doc.Footnotes;
-
-            if (footnotes.Count == 0)
-                throw new InvalidOperationException("אין הערות שוליים במסמך.");
-
-            // Process each footnote independently so we can map
-            // the result back to the right footnote range.
-            for (int i = 1; i <= footnotes.Count; i++)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                
-                Word.Footnote fn    = footnotes[i];
-                string        ooxml = fn.Range.WordOpenXML;
-
-                // Skip footnotes that contain no Hebrew text
-                if (!ContainsHebrew(fn.Range.Text)) continue;
-
-                string vowelized = await _engine.VowelizeOoxmlAsync(ooxml, Options, cancellationToken);
-
-                cancellationToken.ThrowIfCancellationRequested();
-                
-                // Capture loop variable for closure
-                int capturedI = i;
-                    doc.Footnotes[capturedI].Range.InsertXML(vowelized);
-            }
-        }
-
-        // ════════════════════════════════════════════════════════
         //  SAFE RUNNER
         //  Call this from any button click to handle threading,
         //  busy cursor, and error display automatically.
         //
         //  Usage:
-        //      button.Click += (s, e) => RunSafe(VowelizeDocumentAsync);
+        //      button.Click += (s, e) => RunSafe(VowelizeSelectionAsync);
         // ════════════════════════════════════════════════════════
         public void RunSafe(Func<Task> action)
         {
@@ -167,8 +116,14 @@ namespace Nakdan
         /// </summary>
         public void AddIgnoredStyle(string styleName)
         {
-            if (!Options.IgnoredStyles.Contains(styleName))
+            if (string.IsNullOrWhiteSpace(styleName))
+                return;
+
+            if (!Options.IgnoredStyles
+                .Any(s => string.Equals(s, styleName, StringComparison.OrdinalIgnoreCase)))
+            {
                 Options.IgnoredStyles.Add(styleName);
+            }
         }
 
         /// <summary>
@@ -176,7 +131,15 @@ namespace Nakdan
         /// </summary>
         public void RemoveIgnoredStyle(string styleName)
         {
-            Options.IgnoredStyles.Remove(styleName);
+            if (string.IsNullOrWhiteSpace(styleName))
+                return;
+
+            var matches = Options.IgnoredStyles
+                .Where(s => string.Equals(s, styleName, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            foreach (var m in matches)
+                Options.IgnoredStyles.Remove(m);
         }
 
         /// <summary>

@@ -1,14 +1,36 @@
-using KleiKodesh.Helpers;
+using Microsoft.Office.Interop.Word;
+using Nakdan.Core;
+using Nakdan.Styles;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using System.Windows.Threading;
 
-namespace Nakdan
+namespace Nakdan.UI
 {
+    // ═══════════════════════════════════════════════════════════
+    //  VSTO HELPER — access to Word application and styles
+    // ═══════════════════════════════════════════════════════════
+    public static class VstoHelper
+    {
+        public static Microsoft.Office.Interop.Word.Application Application { get; set; }
+        public static Microsoft.Office.Tools.Word.ApplicationFactory ApplicationFactory { get; set; }
+
+        public static Document ActiveDocument => Application?.ActiveDocument;
+
+        public static IEnumerable<Style> ActiveStyles =>
+            ActiveDocument?.Styles.Cast<Style>().Where(s => s.InUse) ?? Enumerable.Empty<Style>();
+
+        public static DocumentStyleProvider StyleProvider =>
+            new DocumentStyleProvider(Application);
+    }
+
     // ═══════════════════════════════════════════════════════════
     //  RELAY COMMAND — lightweight ICommand for MVVM bindings
     // ═══════════════════════════════════════════════════════════
@@ -44,8 +66,9 @@ namespace Nakdan
     {
         private bool _isIgnored;
 
-        public string Name      { get; set; }
-        public string DisplayName { get; set; }   // human-friendly Hebrew label
+        public string Name         { get; set; }
+        public string DisplayName  { get; set; }   // human-friendly Hebrew label
+        public string InternalName { get; set; }   // Word style internal/English name
 
         public bool IsIgnored
         {
@@ -72,8 +95,10 @@ namespace Nakdan
     // ═══════════════════════════════════════════════════════════
     public class NakdanViewModel : INotifyPropertyChanged
     {
+        // ── Static API instance ───────────────────────────────
+        public static NakdanApi Api { get; set; }
+
         // ── Internal state ────────────────────────────────────
-        private NakdanApi _api;
         private bool      _isBusy;
         private string    _statusMessage;
         private bool      _hasError;
@@ -82,14 +107,12 @@ namespace Nakdan
         private const int StatusAutoHideDelayMs = 3000; // Auto-hide notification after 3 seconds
 
         // ── Constructor ───────────────────────────────────────
-        /// <param name="api">
-        ///   Pass in the NakdanApi instance created in ThisAddIn.cs.
-        ///   The ViewModel takes ownership of the Options property.
-        /// </param>
-        public NakdanViewModel(NakdanApi api)
+        /// <summary>
+        /// Parameterless constructor for XAML instantiation.
+        /// The Vsto helper is set up by NakdanView before the view is shown.
+        /// </summary>
+        public NakdanViewModel()
         {
-            _api = api ?? throw new ArgumentNullException(nameof(api));
-
             // ── Genre list ──────────────────────────────────────
             Genres = new ObservableCollection<GenreItem>
             {
@@ -103,40 +126,28 @@ namespace Nakdan
             DictaGenre savedGenre = SettingsManager.GetEnum("Nakdan", "SelectedGenre", DictaGenre.Modern);
             _selectedGenre = FindGenreItem(savedGenre) ?? Genres[0];
 
-            // ── Styles list (common Word styles; UI can add more) ─
-            Styles = new ObservableCollection<StyleItem>
-            {
-                new StyleItem { Name = "Heading1",       DisplayName = "כותרת 1"        },
-                new StyleItem { Name = "Heading2",       DisplayName = "כותרת 2"        },
-                new StyleItem { Name = "Heading3",       DisplayName = "כותרת 3"        },
-                new StyleItem { Name = "Title",          DisplayName = "כותרת ראשית"     },
-                new StyleItem { Name = "Subtitle",       DisplayName = "כותרת משנה"      },
-                new StyleItem { Name = "Quote",          DisplayName = "ציטוט"           },
-                new StyleItem { Name = "IntenseQuote",   DisplayName = "ציטוט מודגש"     },
-                new StyleItem { Name = "Caption",        DisplayName = "כיתוב"           },
-                new StyleItem { Name = "Footnote Text",  DisplayName = "טקסט הערת שוליים"},
-                new StyleItem { Name = "Normal",         DisplayName = "רגיל"            },
-            };
+            // ── Styles list (loaded dynamically from Word) ─
+            Styles = new ObservableCollection<StyleItem>();
 
             // Propagate checkbox changes into the API options immediately
             foreach (var s in Styles)
                 s.PropertyChanged += OnStyleItemChanged;
 
             // ── Commands ──────────────────────────────────────────
-            VowelizeDocumentCommand  = new RelayCommand(VowelizeDocument,  () => !IsBusy);
             VowelizeSelectionCommand = new RelayCommand(VowelizeSelection,  () => !IsBusy);
-            VowelizeFootnotesCommand = new RelayCommand(VowelizeFootnotes,  () => !IsBusy);
             CancelCommand            = new RelayCommand(Cancel,            () => IsBusy);
             ClearStatusCommand       = new RelayCommand(() => { StatusMessage = string.Empty; HasError = false; });
         }
-
-        // ── Parameterless constructor for XAML design-time support ─
-        public NakdanViewModel() { }
 
         // ── Bindable properties ────────────────────────────────
 
         public ObservableCollection<GenreItem>  Genres { get; }
         public ObservableCollection<StyleItem>  Styles { get; }
+
+        public bool RefreshStyles
+        {
+            set => RefreshActiveStylesAction();
+        }
 
         public bool IsBusy
         {
@@ -182,7 +193,7 @@ namespace Nakdan
             {
                 _selectedGenre = value;
                 OnPropertyChanged();
-                if (_api != null) _api.Options.Genre = value?.Genre ?? DictaGenre.Modern;
+                if (Api != null) Api.Options.Genre = value?.Genre ?? DictaGenre.Modern;
                 
                 // Persist the user's choice to registry
                 if (value != null)
@@ -191,37 +202,11 @@ namespace Nakdan
         }
 
         // ── Commands ──────────────────────────────────────────
-        public ICommand VowelizeDocumentCommand  { get; }
         public ICommand VowelizeSelectionCommand { get; }
-        public ICommand VowelizeFootnotesCommand { get; }
         public ICommand CancelCommand            { get; }
         public ICommand ClearStatusCommand       { get; }
 
         // ── Command implementations ───────────────────────────
-        private void VowelizeDocument()
-        {
-            SyncIgnoredStyles();
-            SetStatus(string.Empty, false);
-            IsBusy = true;
-            _cancellationTokenSource = new CancellationTokenSource();
-
-            _api.RunSafe(async () =>
-            {
-                try
-                {
-                    await _api.VowelizeDocumentAsync(_cancellationTokenSource.Token);
-                    SetStatus("הניקוד הושלם בהצלחה ✓", false);
-                    await AutoHideStatusAsync();
-                }
-                catch (OperationCanceledException)
-                {
-                    SetStatus("הניקוד בוטל על ידי המשתמש", false);
-                    await AutoHideStatusAsync();
-                }
-                finally { IsBusy = false; }
-            });
-        }
-
         private void VowelizeSelection()
         {
             SyncIgnoredStyles();
@@ -229,36 +214,12 @@ namespace Nakdan
             IsBusy = true;
             _cancellationTokenSource = new CancellationTokenSource();
 
-            _api.RunSafe(async () =>
+            Api.RunSafe(async () =>
             {
                 try
                 {
-                    await _api.VowelizeSelectionAsync(_cancellationTokenSource.Token);
+                    await Api.VowelizeSelectionAsync(_cancellationTokenSource.Token);
                     SetStatus("ניקוד הסימון הושלם ✓", false);
-                    await AutoHideStatusAsync();
-                }
-                catch (OperationCanceledException)
-                {
-                    SetStatus("הניקוד בוטל על ידי המשתמש", false);
-                    await AutoHideStatusAsync();
-                }
-                finally { IsBusy = false; }
-            });
-        }
-
-        private void VowelizeFootnotes()
-        {
-            SyncIgnoredStyles();
-            SetStatus(string.Empty, false);
-            IsBusy = true;
-            _cancellationTokenSource = new CancellationTokenSource();
-
-            _api.RunSafe(async () =>
-            {
-                try
-                {
-                    await _api.VowelizeFootnotesAsync(_cancellationTokenSource.Token);
-                    SetStatus("ניקוד הערות השוליים הושלם ✓", false);
                     await AutoHideStatusAsync();
                 }
                 catch (OperationCanceledException)
@@ -279,9 +240,9 @@ namespace Nakdan
         /// Auto-hide the status notification after a delay.
         /// This allows the user to see the completion message briefly before it disappears.
         /// </summary>
-        private async Task AutoHideStatusAsync()
+        private async System.Threading.Tasks.Task AutoHideStatusAsync()
         {
-            await Task.Delay(StatusAutoHideDelayMs);
+            await System.Threading.Tasks.Task.Delay(StatusAutoHideDelayMs);
             StatusMessage = string.Empty;
             HasError = false;
         }
@@ -300,15 +261,84 @@ namespace Nakdan
         }
 
         /// <summary>
+        /// Refresh the styles list from the active Word document.
+        /// Loads all in-use styles directly from the document's OOXML.
+        /// Uses style IDs internally for efficient comparison.
+        /// Called on view load (ApplicationIdle priority) to avoid blocking the UI.
+        /// </summary>
+        public void RefreshActiveStylesAction()
+        {
+            Dispatcher.CurrentDispatcher.InvokeAsync(() =>
+            {
+                // Snapshot currently ignored style IDs before clearing
+                var previouslyIgnored = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var s in Styles)
+                    if (s.IsIgnored) previouslyIgnored.Add(s.Name);
+
+                Styles.Clear();
+
+                try
+                {
+                    System.Diagnostics.Debug.WriteLine($"[NAKDAN-VM] RefreshActiveStylesAction called");
+                    
+                    var documentStyles = VstoHelper.StyleProvider.GetUsedStyles();
+                    
+                    System.Diagnostics.Debug.WriteLine($"[NAKDAN-VM] Got {documentStyles.Count} styles from provider");
+
+                    foreach (var docStyle in documentStyles)
+                    {
+                        var styleItem = new StyleItem
+                        {
+                            Name = docStyle.Id,
+                            DisplayName = docStyle.Name,
+                            InternalName = docStyle.Id,
+                            IsIgnored = previouslyIgnored.Contains(docStyle.Id)
+                        };
+
+                        Styles.Add(styleItem);
+                        styleItem.PropertyChanged += OnStyleItemChanged;
+
+                        System.Diagnostics.Debug.WriteLine($"[NAKDAN-VM] Style loaded: ID='{docStyle.Id}' Display='{docStyle.Name}'");
+                    }
+
+                    OnPropertyChanged(nameof(Styles));
+                    System.Diagnostics.Debug.WriteLine($"[NAKDAN-VM] Loaded {Styles.Count} styles from document OOXML");
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[NAKDAN-VM] Error loading styles: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"[NAKDAN-VM] Stack trace: {ex.StackTrace}");
+                }
+            }, DispatcherPriority.ApplicationIdle);
+        }
+
+        
+
+        /// <summary>
         /// Push the current checkbox state into NakdanApi.Options.IgnoredStyles.
         /// Called before every vowelize operation.
         /// </summary>
         private void SyncIgnoredStyles()
         {
-            _api.ClearIgnoredStyles();
-            foreach (var s in Styles)
+            Api.ClearIgnoredStyles();
+            System.Diagnostics.Debug.WriteLine($"[NAKDAN-VM] ===== SYNC IGNORED STYLES =====");
+            System.Diagnostics.Debug.WriteLine($"[NAKDAN-VM] Total styles in UI: {Styles.Count}");
+            
+            int ignoredCount = 0;
+            foreach (StyleItem s in Styles)
+            {
                 if (s.IsIgnored)
-                    _api.AddIgnoredStyle(s.Name);
+                {
+                    System.Diagnostics.Debug.WriteLine($"[NAKDAN-VM] Adding ignored style: '{s.Name}'");
+                    Api.AddIgnoredStyle(s.Name);
+                    ignoredCount++;
+                }
+            }
+            
+            System.Diagnostics.Debug.WriteLine($"[NAKDAN-VM] Total ignored styles: {ignoredCount}");
+            System.Diagnostics.Debug.WriteLine($"[NAKDAN-VM] API Options.IgnoredStyles count: {Api.Options.IgnoredStyles.Count}");
+            foreach (var style in Api.Options.IgnoredStyles)
+                System.Diagnostics.Debug.WriteLine($"[NAKDAN-VM]   - '{style}'");
         }
 
         private void OnStyleItemChanged(object sender, PropertyChangedEventArgs e)

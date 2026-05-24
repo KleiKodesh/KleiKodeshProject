@@ -1,13 +1,12 @@
 <!-- NakdanView.xaml  |  Hebrew vowelization task-pane  |  RTL  |  MVVM -->
-<UserControl x:Class="Nakdan.NakdanView"
+<UserControl x:Class="Nakdan.UI.NakdanView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:local="clr-namespace:Nakdan"
+             xmlns:local="clr-namespace:Nakdan.UI"
              mc:Ignorable="d"
              d:DesignHeight="600" d:DesignWidth="300"
-             d:DataContext="{d:DesignInstance Type=local:NakdanViewModel, IsDesignTimeCreatable=False}"
              FlowDirection="RightToLeft"
              FontFamily="Segoe UI"
              FontSize="13"
@@ -17,6 +16,10 @@
         Background must be set (not Transparent) so ComboBox dropdown popups work correctly.
         ElementHost overrides this with the Office theme color at runtime.
     -->
+
+    <UserControl.DataContext>
+        <local:NakdanViewModel/>
+    </UserControl.DataContext>
 
     <UserControl.Resources>
         <ResourceDictionary>
@@ -46,28 +49,12 @@
                        Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource OpacityConverter}}"
                        Margin="0,0,0,8"/>
 
-            <!-- Vowelize full document -->
-            <Button Style="{StaticResource ActionButton}"
-                    Command="{Binding VowelizeDocumentCommand}"
-                    Margin="0,0,0,6"
-                    ToolTip="נקד את כל הטקסט במסמך">
-                <TextBlock Text="נקד את כל המסמך" VerticalAlignment="Center"/>
-            </Button>
-
             <!-- Vowelize selection -->
             <Button Style="{StaticResource ActionButton}"
                     Command="{Binding VowelizeSelectionCommand}"
-                    Margin="0,0,0,6"
+                    Margin="0,0,0,12"
                     ToolTip="נקד רק את הטקסט המסומן">
                 <TextBlock Text="נקד טקסט מסומן" VerticalAlignment="Center"/>
-            </Button>
-
-            <!-- Vowelize footnotes -->
-            <Button Style="{StaticResource ActionButton}"
-                    Command="{Binding VowelizeFootnotesCommand}"
-                    Margin="0,0,0,12"
-                    ToolTip="נקד את כל הערות השוליים">
-                <TextBlock Text="נקד הערות שוליים" VerticalAlignment="Center"/>
             </Button>
 
             <!-- ─────────────────────────────────────────────────
@@ -184,7 +171,7 @@
                  SECTION LABEL: IGNORE STYLES
             ───────────────────────────────────────────────── -->
 
-            <TextBlock Text="סמן סגנונות שיידלגו בתהליך הניקוד:"
+            <TextBlock Text="סמן סגנונות לדלג בתהליך הניקוד:"
                        FontSize="12" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource OpacityConverter}}"
                        TextWrapping="Wrap" Margin="0,0,0,8"/>
 
