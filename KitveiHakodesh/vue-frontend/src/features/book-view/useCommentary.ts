@@ -473,21 +473,48 @@ export function useCommentary(
     if (!pinned || loading.value || groups.value.some((g) => g.bookId === pinned))
       return groups.value
 
-    // Pinned book is absent from this line's commentary — inject a placeholder at the front
+    // Pinned book is absent from this line's commentary — inject a placeholder at the
+    // correct position using staticFilterGroups as the canonical order reference.
     const book = booksDataStore.allBooksMap.get(pinned)
     const bookTitle = book?.title ?? String(pinned)
-    console.log('[groupsForDisplay] injecting placeholder for bookId:', pinned, 'title:', bookTitle)
+
+    // Find the pinned book's rank in the static order
+    const staticOrder = staticFilterGroups.value
+    const pinnedRank = staticOrder.findIndex((g) => g.bookId === pinned)
+    // Use the static group's path/sectionLabel/subSectionLabel so the placeholder
+    // shows the full label (e.g. "רש"י · מפרשים · ראשונים") matching real groups
+    const staticGroup = pinnedRank !== -1 ? staticOrder[pinnedRank] : undefined
+
     const placeholder: CommentaryGroup = {
       bookId: pinned,
       bookTitle,
-      path: bookTitle,
-      connectionTypes: [],
+      path: staticGroup?.path ?? bookTitle,
+      connectionTypes: staticGroup?.connectionTypes ?? [],
       lines: [{ lineId: -1, lineIndex: -1, content: NO_TEXT_PLACEHOLDER_CONTENT }],
-      category: '',
-      sectionLabel: undefined,
-      subSectionLabel: undefined,
+      category: staticGroup?.category ?? '',
+      sectionLabel: staticGroup?.sectionLabel,
+      subSectionLabel: staticGroup?.subSectionLabel,
     }
-    return [placeholder, ...groups.value]
+
+    if (pinnedRank === -1 || !staticOrder.length) {
+      // Not in static order — fall back to inserting at the front
+      return [placeholder, ...groups.value]
+    }
+
+    // Find the first real group whose static rank comes after the pinned book
+    const insertBefore = groups.value.findIndex((g) => {
+      const rank = staticOrder.findIndex((s) => s.bookId === g.bookId)
+      return rank !== -1 && rank > pinnedRank
+    })
+
+    if (insertBefore === -1) {
+      // All real groups come before the pinned book — append at the end
+      return [...groups.value, placeholder]
+    }
+
+    const result = [...groups.value]
+    result.splice(insertBefore, 0, placeholder)
+    return result
   })
 
   return { groups, groupsForDisplay, filterGroups, staticFilterGroups, loading, staticFilterGroupsLoaded, ensureStaticFilterGroupsLoaded }

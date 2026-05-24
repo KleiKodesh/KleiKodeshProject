@@ -324,7 +324,6 @@ export function useBookView(
     if (result?.commentaryMode) restoredCommentaryMode.value = result.commentaryMode
     if (result?.commentaryFraction != null) restoredCommentaryFraction.value = result.commentaryFraction
     if (result?.pinnedCommentaryBookId != null) {
-      console.log('[pin] restorePin from session:', result.pinnedCommentaryBookId)
       restorePin(result.pinnedCommentaryBookId)
     }
   })
@@ -335,6 +334,9 @@ export function useBookView(
   watch(() => bookViewStore.toggleBottomPanelSignal, () => { commentaryVisible.value = !commentaryVisible.value })
   watch(commentaryVisible, (visible) => {
     if (!visible && sidePanelMode.value === 'commentary-tree') closeSidePanel()
+    // Pre-load static filter groups as soon as commentary is visible so the
+    // placeholder insertion in groupsForDisplay has the correct order data.
+    if (visible) void ensureStaticFilterGroupsLoaded()
     // Sync commentaryLineId from selectedLineId when the commentary panel first opens
     // after session restore (commentaryVisible=true but commentaryLineId still null).
     // Wait until the first chunk has real content so the commentary query doesn't
@@ -368,7 +370,6 @@ export function useBookView(
         async (ready) => {
           if (!ready) return
           stopLoading?.()
-          console.log('[scroll-restore] ready, si:', si, 'so:', so, 'groups:', groups.value.length)
           await nextTick()
           const viewRef = commentaryViewRef()
           if (viewRef) {

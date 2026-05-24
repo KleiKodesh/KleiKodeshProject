@@ -136,7 +136,6 @@ export function useBookViewSessionRestore(
         async (ready) => {
           if (!ready) return
           stop()
-          console.log('[session-restore] ready, restoring scroll si:', si, 'so:', so)
           await nextTick()
           const viewRef = commentaryViewRef()
           if (viewRef) {

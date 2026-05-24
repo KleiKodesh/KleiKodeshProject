@@ -225,6 +225,8 @@ const visibleGroups = computed(() => {
   )
   return props.groups.filter(
     (group) =>
+      // Always show placeholder groups — they are never in the visibilityList
+      group.lines[0]?.lineId === -1 ||
       visibleKeys.has(
         `${group.bookId}::${group.sectionLabel ?? ''}::${group.subSectionLabel ?? ''}`,
       ),
