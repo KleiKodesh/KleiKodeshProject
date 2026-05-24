@@ -545,6 +545,7 @@ function ownTocPathForHeader(bookTitle: string): string | undefined {
               <div
                 v-else
                 class="line"
+                :class="{ 'line-no-text': asLine(flatItems[vItem.index])!.lineId === -1 }"
                 v-html="renderContent(asLine(flatItems[vItem.index])!.content, vItem.index)"
               />
             </div>
@@ -610,6 +611,9 @@ function ownTocPathForHeader(bookTitle: string): string | undefined {
 .line :deep(h5),
 .line :deep(h6) {
   font-family: var(--commentary-header-font);
+}
+.line-no-text {
+  color: var(--text-secondary);
 }
 .line :deep(mark.search-match) {
   background: rgba(255, 165, 0, 0.4);

@@ -40,7 +40,7 @@ const {
   activeTocEntryId, commentaryScrollIndex, commentaryScrollOffset,
   tocVisible, commentaryTreeVisible, sidePanelVisible, sidePanelToggleButtonEl,
   bookId, lines, prioritise, hasCommentaries, hasRelatedBooks, hasToc,
-  groups, filterGroups, staticFilterGroups, commentaryLoading,
+  groups, groupsForDisplay, filterGroups, staticFilterGroups, commentaryLoading,
   tocEntries, tocSearchTree, selectedAltTocSection, tocLoading, tocError,
   altTocLabelMap, pinnedCommentaryBookId,
   currentScrollLineIndex,
@@ -136,7 +136,7 @@ watch(restoredCommentaryFraction, (fraction) => { if (fraction != null) commenta
               :prioritise="prioritise"
               :alt-toc-label-map="altTocLabelMap"
               :selected-line-id="selectedLineId"
-              :bottom-visible="commentaryVisible"
+              :commentary-visible="commentaryVisible"
               :commentary-mode="commentaryMode"
               :commentary-fraction="commentaryFraction"
               :initial-line-index="initialLineIndex"
@@ -160,6 +160,7 @@ watch(restoredCommentaryFraction, (fraction) => { if (fraction != null) commenta
               "
               :get-active-toc-entry="getActiveTocEntry"
               :get-toc-path="getTocPath"
+              :pinned-commentary-book-id="pinnedCommentaryBookId"
               @scrolled="onLinesScrolled"
               @line-selected="onLineSelected"
               @ctrl-f="openContentSearch"
@@ -169,7 +170,7 @@ watch(restoredCommentaryFraction, (fraction) => { if (fraction != null) commenta
             <CommentaryView
               ref="commentaryViewRef"
               :selected-line-id="selectedLineId"
-              :groups="groups"
+              :groups="groupsForDisplay"
               :loading="commentaryLoading"
               :visibility-list="commentaryTreeState.visibilityList"
               :pinned-book-id="pinnedCommentaryBookId"

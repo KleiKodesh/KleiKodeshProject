@@ -92,6 +92,7 @@ export interface BookState {
   commentaryMode?: 'off' | 'bottom' | 'side'
   commentaryFraction?: number    // side-by-side divider position (0.1–0.9)
   autoSelectTopLine?: boolean
+  pinnedCommentaryBookId?: number | null
 }
 
 export interface LastReadState {
@@ -103,6 +104,7 @@ export interface LastReadState {
   commentaryFilterState?: import('@/features/book-view/bookViewTypes').CommentaryTreeState
   commentaryMode?: 'off' | 'bottom' | 'side'
   commentaryFraction?: number
+  pinnedCommentaryBookId?: number | null
 }
 
 export interface Workspace {

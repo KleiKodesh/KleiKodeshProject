@@ -24,6 +24,9 @@ export function usePinnedCommentary(
   const pinnedCommentaryBookId = ref<number | null>(null)
   let defaultCommentatorBookIds: number[] = []
   let defaultCommentatorsLoaded = false
+  // Set to true when the pin is restored from session so the first commentaryLineId
+  // watcher fire doesn't overwrite it before the view has rendered.
+  let restoredFromSession = false
 
   async function ensureDefaultCommentatorsLoaded() {
     if (defaultCommentatorsLoaded || bookId == null) return
@@ -40,26 +43,45 @@ export function usePinnedCommentary(
   // making activeBookId return 0 or null. Capturing it first ensures we always
   // get the book the user was actually looking at before the line change.
   watch(commentaryLineId, async () => {
+    if (restoredFromSession) {
+      console.log('[pin] commentaryLineId fired — skipping (restoredFromSession), pin stays:', pinnedCommentaryBookId.value)
+      restoredFromSession = false
+      return
+    }
     const capturedBookId = commentaryViewRef()?.activeBookId ?? null
+    console.log('[pin] commentaryLineId fired — capturedBookId:', capturedBookId)
     await ensureDefaultCommentatorsLoaded()
     if (capturedBookId) {
+      console.log('[pin] setting pin to capturedBookId:', capturedBookId)
       pinnedCommentaryBookId.value = capturedBookId
     } else if (defaultCommentatorBookIds.length > 0) {
+      console.log('[pin] no capturedBookId, falling back to default:', defaultCommentatorBookIds[0])
       pinnedCommentaryBookId.value = defaultCommentatorBookIds[0]!
     }
   })
 
   // When groups load for a new line, if the current pin is a default that has no
-  // links for this line, fall back to the next default that does.
+  // links for this line, fall back to the next default that does — but only if
+  // there is no default at all in the new groups. If the pinned book is simply
+  // absent for this line, keep the pin and let groupsForDisplay show a placeholder.
   watch(groups, async (newGroups) => {
+    console.log('[pin] groups watcher fired, length:', newGroups.length, 'currentPin:', pinnedCommentaryBookId.value)
     if (!newGroups.length) return
     await ensureDefaultCommentatorsLoaded()
     if (!defaultCommentatorBookIds.length) return
     const currentPin = pinnedCommentaryBookId.value
     if (currentPin == null || !defaultCommentatorBookIds.includes(currentPin)) return
-    const available = defaultCommentatorBookIds.find((id) => newGroups.some((g) => g.bookId === id))
-    if (available != null) pinnedCommentaryBookId.value = available
+    const anyDefaultPresent = defaultCommentatorBookIds.some((id) => newGroups.some((g) => g.bookId === id))
+    console.log('[pin] anyDefaultPresent:', anyDefaultPresent, 'defaults:', defaultCommentatorBookIds)
+    if (anyDefaultPresent) return
+    console.log('[pin] no defaults present — falling back to:', defaultCommentatorBookIds[0])
+    pinnedCommentaryBookId.value = defaultCommentatorBookIds[0]!
   })
 
-  return { pinnedCommentaryBookId }
+  function restorePin(bookId: number) {
+    pinnedCommentaryBookId.value = bookId
+    restoredFromSession = true
+  }
+
+  return { pinnedCommentaryBookId, restorePin }
 }

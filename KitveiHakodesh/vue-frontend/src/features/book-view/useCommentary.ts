@@ -340,11 +340,14 @@ async function buildStaticCommentaryFilterGroups(
   return result
 }
 
+const NO_TEXT_PLACEHOLDER_CONTENT = 'אין טקסט לשורה זו'
+
 export function useCommentary(
   selectedLineId: () => number | null,
   selectedLineIds: () => number[] | null = () => null,
   sourceBookId: () => number | undefined = () => undefined,
   filterPanelVisible: () => boolean = () => false,
+  pinnedBookId: () => number | null = () => null,
 ) {
   const groups = ref<CommentaryGroup[]>([])
   const staticFilterGroups = ref<CommentaryGroup[]>([])
@@ -462,5 +465,30 @@ export function useCommentary(
     { immediate: true },
   )
 
-  return { groups, filterGroups, staticFilterGroups, loading, staticFilterGroupsLoaded, ensureStaticFilterGroupsLoaded }
+  // When the pinned book has no commentary for the current line, insert a placeholder
+  // group so the user can see the book they were reading rather than a confusing jump.
+  const groupsForDisplay = computed<CommentaryGroup[]>(() => {
+    const pinned = pinnedBookId()
+    // No pin, still loading, or pinned book is present — nothing to inject
+    if (!pinned || loading.value || groups.value.some((g) => g.bookId === pinned))
+      return groups.value
+
+    // Pinned book is absent from this line's commentary — inject a placeholder at the front
+    const book = booksDataStore.allBooksMap.get(pinned)
+    const bookTitle = book?.title ?? String(pinned)
+    console.log('[groupsForDisplay] injecting placeholder for bookId:', pinned, 'title:', bookTitle)
+    const placeholder: CommentaryGroup = {
+      bookId: pinned,
+      bookTitle,
+      path: bookTitle,
+      connectionTypes: [],
+      lines: [{ lineId: -1, lineIndex: -1, content: NO_TEXT_PLACEHOLDER_CONTENT }],
+      category: '',
+      sectionLabel: undefined,
+      subSectionLabel: undefined,
+    }
+    return [placeholder, ...groups.value]
+  })
+
+  return { groups, groupsForDisplay, filterGroups, staticFilterGroups, loading, staticFilterGroupsLoaded, ensureStaticFilterGroupsLoaded }
 }

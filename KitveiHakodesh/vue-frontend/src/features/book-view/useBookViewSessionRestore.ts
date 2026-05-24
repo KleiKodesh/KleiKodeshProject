@@ -27,6 +27,7 @@ export function useBookViewSessionRestore(
   commentaryTreeState: CommentaryTreeState,
   commentaryLoading: Ref<boolean>,
   commentaryViewRef: () => CommentaryViewRef | null,
+  commentaryGroups: () => { length: number },
 ) {
   const tabStore = useTabStore()
   const bookViewStore = useBookViewStore()
@@ -42,6 +43,7 @@ export function useBookViewSessionRestore(
   let _restoredSo: number | null | undefined
   let _restoredCommentaryMode: 'off' | 'bottom' | 'side' | undefined
   let _restoredCommentaryFraction: number | undefined
+  let _restoredPinnedCommentaryBookId: number | null | undefined
 
   const _idbPromise: Promise<void> = bookId == null
     ? Promise.resolve()
@@ -54,6 +56,7 @@ export function useBookViewSessionRestore(
         _restoredSo = result.so
         _restoredCommentaryMode = result.commentaryMode
         _restoredCommentaryFraction = result.commentaryFraction
+        _restoredPinnedCommentaryBookId = result.pinnedCommentaryBookId
       })
 
   _idbPromise.then(() => { idbResolved.value = true })
@@ -108,12 +111,17 @@ export function useBookViewSessionRestore(
       bookSaved?.commentaryFraction ??
       (settingsStore.resumeLastRead ? lastRead?.commentaryFraction : undefined)
 
-    return { si, so, commentaryMode, commentaryFraction }
+    const pinnedCommentaryBookId: number | null | undefined =
+      bookSaved?.pinnedCommentaryBookId ??
+      (settingsStore.resumeLastRead ? lastRead?.pinnedCommentaryBookId : undefined)
+
+    return { si, so, commentaryMode, commentaryFraction, pinnedCommentaryBookId }
   }
 
   async function restore(): Promise<{
     commentaryMode?: 'off' | 'bottom' | 'side'
     commentaryFraction?: number
+    pinnedCommentaryBookId?: number | null
   }> {
     if (bookId == null) return {}
 
@@ -124,10 +132,11 @@ export function useBookViewSessionRestore(
 
     if (si != null && so != null) {
       const stop = watch(
-        commentaryLoading,
-        async (loading) => {
-          if (loading) return
+        () => !commentaryLoading.value && commentaryGroups().length > 0,
+        async (ready) => {
+          if (!ready) return
           stop()
+          console.log('[session-restore] ready, restoring scroll si:', si, 'so:', so)
           await nextTick()
           const viewRef = commentaryViewRef()
           if (viewRef) {
@@ -150,6 +159,7 @@ export function useBookViewSessionRestore(
     return {
       commentaryMode: _restoredCommentaryMode,
       commentaryFraction: _restoredCommentaryFraction,
+      pinnedCommentaryBookId: _restoredPinnedCommentaryBookId,
     }
   }
 

@@ -46,6 +46,7 @@ const props = defineProps<{
   idbResolved?: boolean
   getActiveTocEntry?: (lineIndex: number) => TocEntry | null
   getTocPath?: (entry: TocEntry) => string
+  pinnedCommentaryBookId?: number | null
 }>()
 
 const tabStore = useTabStore()
@@ -260,6 +261,7 @@ function savePos() {
       commentaryMode: props.commentaryMode,
       commentaryFraction: props.commentaryFraction,
       autoSelectTopLine: autoSelectTopLine.value,
+      pinnedCommentaryBookId: props.pinnedCommentaryBookId,
     })
     tabStore.setLastReadPos(bookId, {
       ...pos,
@@ -269,6 +271,7 @@ function savePos() {
       commentaryFilterState: filterState,
       commentaryMode: props.commentaryMode,
       commentaryFraction: props.commentaryFraction,
+      pinnedCommentaryBookId: props.pinnedCommentaryBookId,
     })
   }
 }

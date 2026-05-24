@@ -130,11 +130,14 @@ export function useBookView(
     return ids.length > 0 ? ids : null
   })
 
-  const { groups, filterGroups, staticFilterGroups, loading: commentaryLoading, staticFilterGroupsLoaded, ensureStaticFilterGroupsLoaded } = useCommentary(
+  const pinnedCommentaryBookIdForDisplay = ref<number | null>(null)
+
+  const { groups, groupsForDisplay, filterGroups, staticFilterGroups, loading: commentaryLoading, staticFilterGroupsLoaded, ensureStaticFilterGroupsLoaded } = useCommentary(
     () => commentaryLineId.value,
     () => selectedSectionLineIds.value,
     () => bookId ?? undefined,
     () => commentaryTreeVisible.value,
+    () => pinnedCommentaryBookIdForDisplay.value,
   )
 
   // ── TOC ───────────────────────────────────────────────────────────────────
@@ -297,9 +300,12 @@ export function useBookView(
     () => lines.value, () => tocEntries.value, linesContentRef, commentaryViewRef,
   )
 
-  const { pinnedCommentaryBookId } = usePinnedCommentary(
+  const { pinnedCommentaryBookId, restorePin } = usePinnedCommentary(
     bookId, () => commentaryLineId.value, () => groups.value, commentaryViewRef,
   )
+
+  // Keep the display ref in sync so useCommentary can inject the placeholder
+  watch(pinnedCommentaryBookId, (id) => { pinnedCommentaryBookIdForDisplay.value = id }, { immediate: true })
 
   // ── Session restore ───────────────────────────────────────────────────────
 
@@ -310,12 +316,17 @@ export function useBookView(
     tabId, bookId, openTocLineIndex,
     commentaryVisible, selectedLineId, commentaryLineId,
     commentaryTreeState, commentaryLoading, commentaryViewRef,
+    () => groups.value,
   )
 
   onMounted(async () => {
     const result = await restoreSession()
     if (result?.commentaryMode) restoredCommentaryMode.value = result.commentaryMode
     if (result?.commentaryFraction != null) restoredCommentaryFraction.value = result.commentaryFraction
+    if (result?.pinnedCommentaryBookId != null) {
+      console.log('[pin] restorePin from session:', result.pinnedCommentaryBookId)
+      restorePin(result.pinnedCommentaryBookId)
+    }
   })
   onBeforeUnmount(() => tabStore.updateActiveTab({ tocPath: undefined }))
 
@@ -350,10 +361,14 @@ export function useBookView(
       const so = commentaryScrollOffset.value
       let stopLoading: (() => void) | undefined
       stopLoading = watch(
-        commentaryLoading,
-        async (loading) => {
-          if (loading) return
+        // Wait for loading to finish AND real groups to arrive — the placeholder alone
+        // (groups.length === 0, groupsForDisplay.length === 1) gives the virtualizer
+        // wrong measurements and the scroll lands in the wrong place.
+        () => !commentaryLoading.value && groups.value.length > 0,
+        async (ready) => {
+          if (!ready) return
           stopLoading?.()
+          console.log('[scroll-restore] ready, si:', si, 'so:', so, 'groups:', groups.value.length)
           await nextTick()
           const viewRef = commentaryViewRef()
           if (viewRef) {
@@ -394,7 +409,7 @@ export function useBookView(
     // data
     bookId,
     lines, prioritise, hasCommentaries, hasRelatedBooks, hasToc,
-    groups, filterGroups, staticFilterGroups, commentaryLoading,
+    groups, groupsForDisplay, filterGroups, staticFilterGroups, commentaryLoading,
     tocEntries, tocSearchTree, altTocSections, selectedAltTocSection, tocLoading, tocError,
     altTocLabelMap, pinnedCommentaryBookId,
     // scroll / search state
