@@ -65,9 +65,14 @@ export function useBookViewSessionRestore(
     bookSaved: Awaited<ReturnType<typeof tabStore.getBookViewState>>,
     lastRead: Awaited<ReturnType<typeof tabStore.getLastReadPos>>,
   ) {
-    const restoredLineId = bookSaved?.selectedLineId ?? lastRead?.selectedLineId
-    const si = bookSaved?.commentaryScrollIndex ?? lastRead?.commentaryScrollIndex
-    const so = bookSaved?.commentaryScrollOffset ?? lastRead?.commentaryScrollOffset
+    // When resumeLastRead is off, only use lastRead as a fallback if there is
+    // already a per-tab bookSaved entry — i.e. the user has visited this book
+    // in this tab before. Opening the same book in a brand-new tab should start
+    // from scratch when the setting is disabled.
+    const useLastRead = settingsStore.resumeLastRead || bookSaved != null
+    const restoredLineId = bookSaved?.selectedLineId ?? (useLastRead ? lastRead?.selectedLineId : undefined)
+    const si = bookSaved?.commentaryScrollIndex ?? (useLastRead ? lastRead?.commentaryScrollIndex : undefined)
+    const so = bookSaved?.commentaryScrollOffset ?? (useLastRead ? lastRead?.commentaryScrollOffset : undefined)
 
     if (bookSaved?.zoom != null) bookViewStore.setZoom(tabId, bookId!, bookSaved.zoom)
     if (bookSaved?.autoSelectTopLine != null) {
@@ -84,8 +89,8 @@ export function useBookViewSessionRestore(
     }
 
     if (openTocLineIndex == null) {
-      const scrollIndex = bookSaved?.scrollIndex ?? lastRead?.scrollIndex
-      const scrollOffset = bookSaved?.scrollOffset ?? lastRead?.scrollOffset
+      const scrollIndex = bookSaved?.scrollIndex ?? (useLastRead ? lastRead?.scrollIndex : undefined)
+      const scrollOffset = bookSaved?.scrollOffset ?? (useLastRead ? lastRead?.scrollOffset : undefined)
       if (scrollIndex != null) {
         initialScrollTop.value = scrollIndex
         initialScrollOffset.value = scrollOffset ?? 0
