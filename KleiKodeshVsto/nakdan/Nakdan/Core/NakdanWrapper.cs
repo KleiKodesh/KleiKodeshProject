@@ -22,17 +22,21 @@ namespace Nakdan.Core
     //  Then wire buttons:
     //      btnSelection.Click += (s,e) => Api.RunSafe(Api.VowelizeSelectionAsync);
     // ═══════════════════════════════════════════════════════════
-    public class NakdanApi
+    public class NakdanWrapper
     {
-        private readonly Word.Application _app;
         private readonly NakdanEngine     _engine = new NakdanEngine();
 
         // ── Options (set from UI before running) ─────────────────
         public NakdanOptions Options { get; set; } = new NakdanOptions();
 
-        public NakdanApi(Word.Application app)
+        /// <summary>
+        /// Callback for progress updates during vowelization.
+        /// Set this before calling VowelizeSelectionAsync.
+        /// </summary>
+        public Action<string> OnProgress
         {
-            _app = app;
+            get => _engine.OnProgress;
+            set => _engine.OnProgress = value;
         }
 
         // ════════════════════════════════════════════════════════
@@ -42,7 +46,7 @@ namespace Nakdan.Core
         {
             cancellationToken.ThrowIfCancellationRequested();
             
-            Word.Selection sel = _app.Selection;
+            Word.Selection sel = Helpers.VstoHelper.Application.Selection;
 
             // Guard: make sure something is actually selected
             if (sel.Type == Word.WdSelectionType.wdSelectionIP ||
@@ -57,6 +61,57 @@ namespace Nakdan.Core
             
             Word.Range r = sel.Range;
             r.InsertXML(vowelized);
+            r.Select();
+        }
+
+        // ════════════════════════════════════════════════════════
+        //  Remove nikkud from current selection
+        // ════════════════════════════════════════════════════════
+        public void RemoveNikkud()
+        {            
+            Word.Selection selection = Helpers.VstoHelper.Application.Selection;
+
+            // Guard: make sure something is actually selected
+            if (selection.Type == Word.WdSelectionType.wdSelectionIP ||
+                string.IsNullOrWhiteSpace(selection.Range.Text))
+                throw new InvalidOperationException(
+                    "אין טקסט מסומן.\nיש לסמן טקסט לפני הסרת הניקוד.");
+
+            var find = selection.Range.Find;
+            find.Text = "[^0192-^0204^0209^0210]";
+            find.Replacement.Text = "";
+            find.MatchWildcards = true;
+            find.Wrap = Word.WdFindWrap.wdFindStop;
+            find.Execute(Replace: Word.WdReplace.wdReplaceAll);
+        }
+
+        // ════════════════════════════════════════════════════════
+        //  Remove cantillations (ta'amim) from current selection
+        // ════════════════════════════════════════════════════════
+        public void RemoveCantillations()
+        {
+            Word.Selection selection = Helpers.VstoHelper.Application.Selection;
+
+            if (selection.Type == Word.WdSelectionType.wdSelectionIP ||
+                string.IsNullOrWhiteSpace(selection.Range.Text))
+                throw new InvalidOperationException(
+                    "אין טקסט מסומן.\nיש לסמן טקסט לפני הסרת הטעמים.");
+
+            var find = selection.Range.Find;
+            find.MatchWildcards = true;
+            find.Wrap = Word.WdFindWrap.wdFindStop;
+
+            find.Text = " ׀ ";
+            find.Replacement.Text = " ";
+            find.Execute(Replace: Word.WdReplace.wdReplaceAll);
+
+            // Build a range string with the actual first and last cantillation characters
+            // U+0591 (Etnahta) through U+05AF (Masora Circle)
+            string first = "\u0591";
+            string last = "\u05AF";
+            find.Text = "[" + first + "-" + last + "׀]";
+            find.Replacement.Text = "";
+            find.Execute(Replace: Word.WdReplace.wdReplaceAll);         
         }
 
         // ════════════════════════════════════════════════════════
@@ -163,17 +218,9 @@ namespace Nakdan.Core
         // ════════════════════════════════════════════════════════
         private void SetCursor(bool busy)
         {
-            _app.System.Cursor = busy
+            Helpers.VstoHelper.Application.System.Cursor = busy
                 ? Word.WdCursorType.wdCursorWait
                 : Word.WdCursorType.wdCursorNormal;
-        }
-
-        private static bool ContainsHebrew(string text)
-        {
-            if (string.IsNullOrEmpty(text)) return false;
-            foreach (char c in text)
-                if (c >= '\u05D0' && c <= '\u05EA') return true;
-            return false;
         }
     }
 }

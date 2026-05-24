@@ -1,4 +1,4 @@
-namespace Nakdan.Styles
+namespace Nakdan.WdStyles
 {
     /// <summary>
     /// Represents a style from the document with both ID and display name.

@@ -31,5 +31,13 @@ namespace Nakdan.Core
 
             return sb.ToString();
         }
+
+        private static bool ContainsHebrew(this string text)
+        {
+            if (string.IsNullOrEmpty(text)) return false;
+            foreach (char c in text)
+                if (c >= '\u05D0' && c <= '\u05EA') return true;
+            return false;
+        }
     }
 }

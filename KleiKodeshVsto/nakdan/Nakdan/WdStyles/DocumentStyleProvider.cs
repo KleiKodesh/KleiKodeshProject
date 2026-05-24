@@ -4,7 +4,7 @@ using System.Xml.Linq;
 using Nakdan.Core;
 using Word = Microsoft.Office.Interop.Word;
 
-namespace Nakdan.Styles
+namespace Nakdan.WdStyles
 {
     /// <summary>
     /// Utility for extracting and providing style information from Word documents.
@@ -28,24 +28,17 @@ namespace Nakdan.Styles
         {
             try
             {
-                System.Diagnostics.Debug.WriteLine($"[DocumentStyleProvider] GetUsedStyles called");
-
                 Word.Document doc = _app.ActiveDocument;
                 if (doc == null)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[DocumentStyleProvider] No active document");
                     return new List<DocumentStyle>();
                 }
-
-                System.Diagnostics.Debug.WriteLine($"[DocumentStyleProvider] Active document found: {doc.Name}");
 
                 // Use doc.Styles directly — already in memory, no OOXML fetch needed.
                 // Get the style IDs from a small OOXML sample (first character only).
                 string ooxml = doc.Range(0, 0).WordOpenXML;
                 var xdoc = XDocument.Parse(ooxml);
                 var allStyles = StyleExtractor.ExtractStylesFromOoxml(xdoc);
-
-                System.Diagnostics.Debug.WriteLine($"[DocumentStyleProvider] Extracted {allStyles.Count} style definitions");
 
                 var result = new List<DocumentStyle>();
                 foreach (var kvp in allStyles)
@@ -56,18 +49,14 @@ namespace Nakdan.Styles
                     string displayName = StyleNameResolver.Resolve(ooxmlName, doc);
 
                     result.Add(new DocumentStyle(styleId, displayName));
-                    System.Diagnostics.Debug.WriteLine($"[DocumentStyleProvider]   - {styleId} = {displayName}");
                 }
 
                 result.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.CurrentCulture));
 
-                System.Diagnostics.Debug.WriteLine($"[DocumentStyleProvider] Returning {result.Count} styles");
                 return result;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                System.Diagnostics.Debug.WriteLine($"[DocumentStyleProvider] Error: {ex.Message}");
-                System.Diagnostics.Debug.WriteLine($"[DocumentStyleProvider] Stack trace: {ex.StackTrace}");
                 return new List<DocumentStyle>();
             }
         }

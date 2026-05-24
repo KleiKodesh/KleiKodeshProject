@@ -1,5 +1,6 @@
 using Nakdan.Core;
-using Nakdan.Styles;
+using Nakdan.Helpers;
+using Nakdan.WdStyles;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
@@ -27,7 +28,6 @@ namespace Nakdan.UI
         {
             VstoHelper.Application = app;
             VstoHelper.ApplicationFactory = factory;
-            NakdanViewModel.Api = new NakdanApi(app);
             InitializeComponent();
             SetupStyleRefresh();
         }

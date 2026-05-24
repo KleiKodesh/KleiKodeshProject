@@ -186,6 +186,7 @@
                     <CheckBox x:Name="Kiwix_Visible"      Content="ספריית קיוויקס"/>
                     <CheckBox x:Name="WebSites_Visible"   Content="דרך האתרים"/>
                     <CheckBox x:Name="DocDesign_Visible"  Content="עיצוב תורני"/>
+                    <CheckBox x:Name="Nakdan_Visible"  Content="נקדן דיקטה"/>
                     <CheckBox x:Name="RegexFind_Visible"  Content="חיפוש רגקס בוורד"/>
                 </StackPanel>
 
@@ -219,6 +220,7 @@
                     <RadioButton x:Name="Kiwix_Option"      Content="ספריית קיוויקס"/>
                     <RadioButton x:Name="WebSites_Option"   Content="דרך האתרים"/>
                     <RadioButton x:Name="DocDesign_Option"  Content="עיצוב תורני"/>
+                    <RadioButton x:Name="Nakdan_Option"  Content="נקדן דיקטה"/>
                     <RadioButton x:Name="RegexFind_Option"  Content="חיפוש רגקס בוורד"/>
                     <RadioButton x:Name="Settings_Option"   Content="הגדרות"/>
                 </StackPanel>

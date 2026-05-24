@@ -385,4 +385,14 @@
     <!-- ── OpacityConverter — for section labels ────────────────── -->
     <local:OpacityConverter x:Key="OpacityConverter"/>
 
+    <!-- ── SectionLabel — reusable style for all section title TextBlocks ── -->
+    <Style x:Key="SectionLabel" TargetType="TextBlock">
+        <Setter Property="FontSize"     Value="11"/>
+        <Setter Property="FontWeight"   Value="SemiBold"/>
+        <Setter Property="Foreground"   Value="{Binding Foreground,
+                    RelativeSource={RelativeSource AncestorType=UserControl},
+                    Converter={StaticResource OpacityConverter}}"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+
 </ResourceDictionary>

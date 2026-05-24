@@ -1,4 +1,5 @@
-using Nakdan.Styles;
+using Nakdan.WdStyles;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -14,6 +15,12 @@ namespace Nakdan.Core
         private readonly DictaApiClient _dictaApi =
             new DictaApiClient();
 
+        /// <summary>
+        /// Callback for progress updates during vowelization.
+        /// Called with stage name and optional details.
+        /// </summary>
+        public Action<string> OnProgress { get; set; }
+
         public async Task<string> VowelizeOoxmlAsync(
             string ooxml,
             NakdanOptions opts,
@@ -22,23 +29,28 @@ namespace Nakdan.Core
             if (opts == null)
                 opts = new NakdanOptions();
 
+            OnProgress?.Invoke("📄 ניתוח מבנה המסמך");
             XDocument doc = XDocument.Parse(ooxml);
 
+            OnProgress?.Invoke("🏷️ חילוץ סגנונות");
             var styleIdToName = StyleExtractor.ExtractStylesFromOoxml(doc);
 
             var ignored = new HashSet<string>(
                 (opts.IgnoredStyles ?? Enumerable.Empty<string>())
                 .Select(s => s.ToLowerInvariant()));
 
+            OnProgress?.Invoke("📝 איסוף קטעי טקסט");
             List<RunInfo> runs =
                 CollectRuns(doc, ignored, styleIdToName);
 
             if (runs.Count == 0)
                 return ooxml;
 
+            OnProgress?.Invoke($"🔤 בניית זרם אותיות - {runs.Count} קטעים");
             List<Token> tokens =
                 BuildTokenStream(runs);
 
+            OnProgress?.Invoke($"✂️ חלוקת טקסט לחלקים - {tokens.Count} אותיות");
             List<List<Token>> chunks =
                 TokenChunker.Chunk(
                     tokens,
@@ -47,6 +59,7 @@ namespace Nakdan.Core
             string genre =
                 opts.Genre.ToString().ToLowerInvariant();
 
+            OnProgress?.Invoke($"🌐 שליחה ל-Dicta - {chunks.Count} בקשות");
             Task<string>[] tasks = chunks
                 .Select(c => _dictaApi.NakdanAsync(
                     TokenTextConverter.ToPlainText(c),
@@ -57,6 +70,7 @@ namespace Nakdan.Core
             string[] vowelizedChunks =
                 await Task.WhenAll(tasks);
 
+            OnProgress?.Invoke("🎯 הוספת ניקוד לטקסט");
             for (int i = 0; i < chunks.Count; i++)
             {
                 TokenTextConverter.FillVowels(
@@ -64,8 +78,10 @@ namespace Nakdan.Core
                     vowelizedChunks[i]);
             }
 
+            OnProgress?.Invoke("💾 כתיבת התוצאה למסמך");
             RunWriter.WriteTokensToRuns(tokens, runs);
 
+            OnProgress?.Invoke("✅ ניקוד הושלם בהצלחה");
             return doc.ToString(
                 SaveOptions.DisableFormatting);
         }

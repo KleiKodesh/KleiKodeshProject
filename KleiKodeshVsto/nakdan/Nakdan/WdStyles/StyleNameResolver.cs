@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Word = Microsoft.Office.Interop.Word;
 
-namespace Nakdan.Styles
+namespace Nakdan.WdStyles
 {
     /// <summary>
     /// Resolves style names to localized display names using Word's built-in style enum.

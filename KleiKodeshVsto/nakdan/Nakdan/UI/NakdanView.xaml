@@ -45,8 +45,7 @@
                  SECTION LABEL: VOWELIZE ACTIONS
             ───────────────────────────────────────────────── -->
             <TextBlock Text="פעולות ניקוד"
-                       FontSize="11" FontWeight="SemiBold"
-                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource OpacityConverter}}"
+                       Style="{StaticResource SectionLabel}"
                        Margin="0,0,0,8"/>
 
             <!-- Vowelize selection -->
@@ -57,12 +56,27 @@
                 <TextBlock Text="נקד טקסט מסומן" VerticalAlignment="Center"/>
             </Button>
 
+            <!-- Remove nikkud from selection -->
+            <Button Style="{StaticResource ActionButton}"
+                    Command="{Binding RemoveNikkudCommand}"
+                    Margin="0,0,0,12"
+                    ToolTip="הסר ניקוד מהטקסט המסומן">
+                <TextBlock Text="הסר ניקוד מטקסט" VerticalAlignment="Center"/>
+            </Button>
+
+            <!-- Remove cantillations from selection -->
+            <Button Style="{StaticResource ActionButton}"
+                    Command="{Binding RemoveCantillationsCommand}"
+                    Margin="0,0,0,12"
+                    ToolTip="הסר טעמים מהטקסט המסומן">
+                <TextBlock Text="הסר טעמים מטקסט" VerticalAlignment="Center"/>
+            </Button>
+
             <!-- ─────────────────────────────────────────────────
                  GENRE SELECTOR
             ───────────────────────────────────────────────── -->
             <TextBlock Text="סוג הטקסט"
-                       FontSize="11" FontWeight="SemiBold"
-                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource OpacityConverter}}"
+                       Style="{StaticResource SectionLabel}"
                        Margin="0,0,0,4"/>
             <ComboBox ItemsSource="{Binding Genres}"
                       SelectedItem="{Binding SelectedGenre, Mode=TwoWay}"
@@ -76,104 +90,12 @@
             </ComboBox>
 
             <!-- ─────────────────────────────────────────────────
-                 BUSY INDICATOR & STATUS / ERROR MESSAGE
-            ───────────────────────────────────────────────── -->
-            <!-- Busy indicator (shown while processing) -->
-            <Border Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"
-                    Background="{StaticResource BgSecBrush}"
-                    BorderBrush="{StaticResource BorderBrush}"
-                    BorderThickness="1" CornerRadius="4"
-                    Padding="8,6" Margin="0,0,0,12">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    
-                    <StackPanel Grid.Column="0" Orientation="Horizontal">
-                        <ProgressBar IsIndeterminate="True"
-                                     Width="80" Height="2"
-                                     Foreground="{StaticResource AccentBrush}"
-                                     Background="Transparent"
-                                     BorderThickness="0"
-                                     Margin="0,0,8,0"
-                                     VerticalAlignment="Center"/>
-                        <TextBlock Text="מנקד… אנא המתן"
-                                   FontSize="12"
-                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource OpacityConverter}}"
-                                   VerticalAlignment="Center"/>
-                    </StackPanel>
-                    
-                    <Button Grid.Column="1"
-                            Command="{Binding CancelCommand}"
-                            Background="Transparent" BorderThickness="0"
-                            Cursor="Hand" Padding="8,0" Margin="6,0,0,0"
-                            VerticalAlignment="Center"
-                            ToolTip="בטל את הניקוד">
-                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE711;"
-                                   FontSize="12"
-                                   Foreground="{StaticResource TextSecBrush}"/>
-                    </Button>
-                </Grid>
-            </Border>
-
-            <!-- Status / error message (shown after processing) -->
-            <Border Visibility="{Binding HasStatus, Converter={StaticResource BoolToVis}}"
-                    Margin="0,0,0,12" Padding="8,6" CornerRadius="4"
-                    BorderThickness="1">
-                <Border.Style>
-                    <Style TargetType="Border">
-                        <Setter Property="Background"  Value="{StaticResource BgSecBrush}"/>
-                        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding HasError}" Value="True">
-                                <Setter Property="Background"  Value="#18DC3545"/>
-                                <Setter Property="BorderBrush" Value="#DC3545"/>
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </Border.Style>
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-
-                    <TextBlock Grid.Column="0"
-                               Text="{Binding StatusMessage}"
-                               FontSize="12" TextWrapping="Wrap"
-                               VerticalAlignment="Center">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource OpacityConverter}}"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding HasError}" Value="True">
-                                        <Setter Property="Foreground" Value="#DC3545"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-
-                    <Button Grid.Column="1"
-                            Command="{Binding ClearStatusCommand}"
-                            Background="Transparent" BorderThickness="0"
-                            Cursor="Hand" Padding="4,0" Margin="6,0,0,0"
-                            VerticalAlignment="Center">
-                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE711;"
-                                   FontSize="10"
-                                   Foreground="{StaticResource TextSecBrush}"/>
-                    </Button>
-                </Grid>
-            </Border>
-
-            <!-- ─────────────────────────────────────────────────
                  SECTION LABEL: IGNORE STYLES
             ───────────────────────────────────────────────── -->
 
             <TextBlock Text="סמן סגנונות לדלג בתהליך הניקוד:"
-                       FontSize="12" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource OpacityConverter}}"
-                       TextWrapping="Wrap" Margin="0,0,0,8"/>
+                       Style="{StaticResource SectionLabel}"
+                       Margin="0,0,0,8"/>
 
             <!-- Dropdown with checkboxes -->
             <ToggleButton x:Name="IgnoreStylesToggle"
@@ -222,6 +144,110 @@
                     </ScrollViewer>
                 </Border>
             </Popup>
+
+            <!-- ─────────────────────────────────────────────────
+                 STATUS / BUSY BLOCK — always visible at bottom
+                 Label on top, status area below.
+                 When inactive: dimmed with prompt text.
+                 When active: full opacity with status/busy message.
+            ───────────────────────────────────────────────── -->
+            <TextBlock Text="סטטוס"
+                       Style="{StaticResource SectionLabel}"
+                       Margin="0,12,0,4"/>
+
+            <Border CornerRadius="4" BorderThickness="1" ClipToBounds="True">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Background"  Value="{StaticResource BgSecBrush}"/>
+                        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+                        <Setter Property="Opacity"     Value="0.5"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                <Setter Property="Opacity" Value="1.0"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding HasError}" Value="True">
+                                <Setter Property="Background"  Value="#18DC3545"/>
+                                <Setter Property="BorderBrush" Value="#DC3545"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Top row: status text + X button -->
+                    <Grid Grid.Row="0" Margin="8,6,8,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Status / busy text or prompt -->
+                        <TextBlock Grid.Column="0"
+                                   FontSize="12" TextWrapping="Wrap"
+                                   VerticalAlignment="Center">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Text"       Value=""/>
+                                    <Setter Property="Foreground" Value="{Binding Foreground,
+                                                RelativeSource={RelativeSource AncestorType=UserControl},
+                                                Converter={StaticResource OpacityConverter}}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsBusy}" Value="True">
+                                            <Setter Property="Text" Value="מנקד… אנא המתן"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                            <Setter Property="Text" Value="{Binding StatusMessage}"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding HasError}" Value="True">
+                                            <Setter Property="Foreground" Value="#DC3545"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+
+                        <!-- X button: cancel while busy, clear status when done -->
+                        <Button Grid.Column="1"
+                                Background="Transparent" BorderThickness="0"
+                                Cursor="Hand" Padding="6,0" Margin="6,0,0,0"
+                                VerticalAlignment="Center">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                    <Setter Property="Command"  Value="{Binding ClearStatusCommand}"/>
+                                    <Setter Property="ToolTip"  Value="סגור"/>
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsBusy}" Value="True">
+                                            <Setter Property="Command" Value="{Binding CancelCommand}"/>
+                                            <Setter Property="ToolTip" Value="בטל את הניקוד"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE711;"
+                                       FontSize="11"
+                                       Foreground="{StaticResource TextSecBrush}"/>
+                        </Button>
+                    </Grid>
+
+                    <!-- Bottom row: indeterminate progress bar (busy only) -->
+                    <ProgressBar Grid.Row="1"
+                                 Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"
+                                 IsIndeterminate="True"
+                                 Height="2"
+                                 Foreground="{StaticResource AccentBrush}"
+                                 Background="Transparent"
+                                 BorderThickness="0"/>
+                </Grid>
+            </Border>
 
         </StackPanel>
     </ScrollViewer>

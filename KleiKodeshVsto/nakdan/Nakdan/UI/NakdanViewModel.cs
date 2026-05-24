@@ -1,86 +1,19 @@
-using Microsoft.Office.Interop.Word;
 using Nakdan.Core;
-using Nakdan.Styles;
+using Nakdan.Helpers;
+using Nakdan.WdStyles;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Threading;
-using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
+using WpfLib;
+using WpfLib.ViewModels;
 
 namespace Nakdan.UI
 {
-    // ═══════════════════════════════════════════════════════════
-    //  VSTO HELPER — access to Word application and styles
-    // ═══════════════════════════════════════════════════════════
-    public static class VstoHelper
-    {
-        public static Microsoft.Office.Interop.Word.Application Application { get; set; }
-        public static Microsoft.Office.Tools.Word.ApplicationFactory ApplicationFactory { get; set; }
-
-        public static Document ActiveDocument => Application?.ActiveDocument;
-
-        public static IEnumerable<Style> ActiveStyles =>
-            ActiveDocument?.Styles.Cast<Style>().Where(s => s.InUse) ?? Enumerable.Empty<Style>();
-
-        public static DocumentStyleProvider StyleProvider =>
-            new DocumentStyleProvider(Application);
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    //  RELAY COMMAND — lightweight ICommand for MVVM bindings
-    // ═══════════════════════════════════════════════════════════
-    public class RelayCommand : ICommand
-    {
-        private readonly Action    _execute;
-        private readonly Func<bool> _canExecute;
-
-        public RelayCommand(Action execute, Func<bool> canExecute = null)
-        {
-            _execute    = execute ?? throw new ArgumentNullException(nameof(execute));
-            _canExecute = canExecute;
-        }
-
-        public event EventHandler CanExecuteChanged
-        {
-            add    => CommandManager.RequerySuggested += value;
-            remove => CommandManager.RequerySuggested -= value;
-        }
-
-        public bool CanExecute(object parameter) => _canExecute?.Invoke() ?? true;
-        public void Execute(object parameter)    => _execute();
-
-        /// <summary>Forces WPF to re-evaluate CanExecute on all RelayCommands.</summary>
-        public static void RaiseCanExecuteChanged()
-            => CommandManager.InvalidateRequerySuggested();
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    //  STYLE ITEM — one row in the "ignored styles" checklist
-    // ═══════════════════════════════════════════════════════════
-    public class StyleItem : INotifyPropertyChanged
-    {
-        private bool _isIgnored;
-
-        public string Name         { get; set; }
-        public string DisplayName  { get; set; }   // human-friendly Hebrew label
-        public string InternalName { get; set; }   // Word style internal/English name
-
-        public bool IsIgnored
-        {
-            get => _isIgnored;
-            set { _isIgnored = value; OnPropertyChanged(); }
-        }
-
-        public event PropertyChangedEventHandler PropertyChanged;
-        protected void OnPropertyChanged([CallerMemberName] string name = null)
-            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
-    }
-
     // ═══════════════════════════════════════════════════════════
     //  GENRE ITEM — one row in the genre ComboBox
     // ═══════════════════════════════════════════════════════════
@@ -93,10 +26,10 @@ namespace Nakdan.UI
     // ═══════════════════════════════════════════════════════════
     //  NAKDAN VIEW-MODEL
     // ═══════════════════════════════════════════════════════════
-    public class NakdanViewModel : INotifyPropertyChanged
+    public class NakdanViewModel : ViewModelBase
     {
         // ── Static API instance ───────────────────────────────
-        public static NakdanApi Api { get; set; }
+        public static NakdanWrapper _nakdanWrapper { get; set; }
 
         // ── Internal state ────────────────────────────────────
         private bool      _isBusy;
@@ -113,6 +46,8 @@ namespace Nakdan.UI
         /// </summary>
         public NakdanViewModel()
         {
+            _nakdanWrapper = new NakdanWrapper();
+
             // ── Genre list ──────────────────────────────────────
             Genres = new ObservableCollection<GenreItem>
             {
@@ -135,6 +70,8 @@ namespace Nakdan.UI
 
             // ── Commands ──────────────────────────────────────────
             VowelizeSelectionCommand = new RelayCommand(VowelizeSelection,  () => !IsBusy);
+            RemoveNikkudCommand      = new RelayCommand(RemoveNikkud,       () => !IsBusy);
+            RemoveCantillationsCommand = new RelayCommand(RemoveCantillations, () => !IsBusy);
             CancelCommand            = new RelayCommand(Cancel,            () => IsBusy);
             ClearStatusCommand       = new RelayCommand(() => { StatusMessage = string.Empty; HasError = false; });
         }
@@ -155,17 +92,21 @@ namespace Nakdan.UI
             private set
             {
                 _isBusy = value;
-                OnPropertyChanged();
-                RelayCommand.RaiseCanExecuteChanged();
+                OnPropertyChanged(nameof(IsBusy));
+                OnPropertyChanged(nameof(IsActive));
+                CommandManager.InvalidateRequerySuggested();
             }
         }
 
         public string StatusMessage
         {
             get => _statusMessage;
-            private set { _statusMessage = value; OnPropertyChanged(); OnPropertyChanged(nameof(HasStatus)); }
+            private set { _statusMessage = value; OnPropertyChanged(nameof(StatusMessage)); OnPropertyChanged(nameof(HasStatus)); OnPropertyChanged(nameof(IsActive)); }
         }
         public bool HasStatus => !string.IsNullOrEmpty(_statusMessage);
+
+        /// <summary>True when the status/busy block should be visible (busy or has a message).</summary>
+        public bool IsActive => _isBusy || !string.IsNullOrEmpty(_statusMessage);
 
         /// <summary>Number of styles currently marked as ignored — drives the badge.</summary>
         public int IgnoredCount
@@ -183,7 +124,7 @@ namespace Nakdan.UI
         public bool HasError
         {
             get => _hasError;
-            private set { _hasError = value; OnPropertyChanged(); }
+            private set { _hasError = value; OnPropertyChanged(nameof(HasError)); }
         }
 
         public GenreItem SelectedGenre
@@ -192,8 +133,8 @@ namespace Nakdan.UI
             set
             {
                 _selectedGenre = value;
-                OnPropertyChanged();
-                if (Api != null) Api.Options.Genre = value?.Genre ?? DictaGenre.Modern;
+                OnPropertyChanged(nameof(SelectedGenre));
+                if (_nakdanWrapper != null) _nakdanWrapper.Options.Genre = value?.Genre ?? DictaGenre.Modern;
                 
                 // Persist the user's choice to registry
                 if (value != null)
@@ -203,6 +144,8 @@ namespace Nakdan.UI
 
         // ── Commands ──────────────────────────────────────────
         public ICommand VowelizeSelectionCommand { get; }
+        public ICommand RemoveNikkudCommand      { get; }
+        public ICommand RemoveCantillationsCommand { get; }
         public ICommand CancelCommand            { get; }
         public ICommand ClearStatusCommand       { get; }
 
@@ -214,21 +157,74 @@ namespace Nakdan.UI
             IsBusy = true;
             _cancellationTokenSource = new CancellationTokenSource();
 
-            Api.RunSafe(async () =>
+            // Wire up progress callback
+            _nakdanWrapper.OnProgress = (msg) =>
+            {
+                Dispatcher.CurrentDispatcher.Invoke(() =>
+                {
+                    StatusMessage = msg;
+                });
+            };
+
+            _nakdanWrapper.RunSafe(async () =>
             {
                 try
                 {
-                    await Api.VowelizeSelectionAsync(_cancellationTokenSource.Token);
-                    SetStatus("ניקוד הסימון הושלם ✓", false);
-                    await AutoHideStatusAsync();
+                    await _nakdanWrapper.VowelizeSelectionAsync(_cancellationTokenSource.Token);
+                    SetStatus("הניקוד הושלם ✓", false);
                 }
                 catch (OperationCanceledException)
                 {
                     SetStatus("הניקוד בוטל על ידי המשתמש", false);
+                }
+                finally
+                {
+                    IsBusy = false;
                     await AutoHideStatusAsync();
                 }
-                finally { IsBusy = false; }
             });
+        }
+
+        private async void RemoveNikkud()
+        {
+            SetStatus(string.Empty, false);
+            IsBusy = true;
+
+            try
+            {
+                _nakdanWrapper.RemoveNikkud();
+                SetStatus("הניקוד הוסר ✓", false);
+            }
+            catch( Exception ex)
+            {
+                MessageBox.Show(ex.Message);
+            }
+            finally
+            {
+                IsBusy = false;
+                await AutoHideStatusAsync();
+            }
+        }
+
+        private async void RemoveCantillations()
+        {
+            SetStatus(string.Empty, false);
+            IsBusy = true;
+
+            try
+            {
+                _nakdanWrapper.RemoveCantillations();
+                SetStatus("הטעמים הוסרו ✓", false);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message);
+            }
+            finally
+            {
+                IsBusy = false;
+                await AutoHideStatusAsync();
+            }
         }
 
         private void Cancel()
@@ -279,11 +275,7 @@ namespace Nakdan.UI
 
                 try
                 {
-                    System.Diagnostics.Debug.WriteLine($"[NAKDAN-VM] RefreshActiveStylesAction called");
-                    
                     var documentStyles = VstoHelper.StyleProvider.GetUsedStyles();
-                    
-                    System.Diagnostics.Debug.WriteLine($"[NAKDAN-VM] Got {documentStyles.Count} styles from provider");
 
                     foreach (var docStyle in documentStyles)
                     {
@@ -297,17 +289,13 @@ namespace Nakdan.UI
 
                         Styles.Add(styleItem);
                         styleItem.PropertyChanged += OnStyleItemChanged;
-
-                        System.Diagnostics.Debug.WriteLine($"[NAKDAN-VM] Style loaded: ID='{docStyle.Id}' Display='{docStyle.Name}'");
                     }
 
                     OnPropertyChanged(nameof(Styles));
-                    System.Diagnostics.Debug.WriteLine($"[NAKDAN-VM] Loaded {Styles.Count} styles from document OOXML");
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[NAKDAN-VM] Error loading styles: {ex.Message}");
-                    System.Diagnostics.Debug.WriteLine($"[NAKDAN-VM] Stack trace: {ex.StackTrace}");
+                    // Silently handle style loading errors — styles list remains unchanged
                 }
             }, DispatcherPriority.ApplicationIdle);
         }
@@ -320,25 +308,15 @@ namespace Nakdan.UI
         /// </summary>
         private void SyncIgnoredStyles()
         {
-            Api.ClearIgnoredStyles();
-            System.Diagnostics.Debug.WriteLine($"[NAKDAN-VM] ===== SYNC IGNORED STYLES =====");
-            System.Diagnostics.Debug.WriteLine($"[NAKDAN-VM] Total styles in UI: {Styles.Count}");
+            _nakdanWrapper.ClearIgnoredStyles();
             
-            int ignoredCount = 0;
             foreach (StyleItem s in Styles)
             {
                 if (s.IsIgnored)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[NAKDAN-VM] Adding ignored style: '{s.Name}'");
-                    Api.AddIgnoredStyle(s.Name);
-                    ignoredCount++;
+                    _nakdanWrapper.AddIgnoredStyle(s.Name);
                 }
             }
-            
-            System.Diagnostics.Debug.WriteLine($"[NAKDAN-VM] Total ignored styles: {ignoredCount}");
-            System.Diagnostics.Debug.WriteLine($"[NAKDAN-VM] API Options.IgnoredStyles count: {Api.Options.IgnoredStyles.Count}");
-            foreach (var style in Api.Options.IgnoredStyles)
-                System.Diagnostics.Debug.WriteLine($"[NAKDAN-VM]   - '{style}'");
         }
 
         private void OnStyleItemChanged(object sender, PropertyChangedEventArgs e)
@@ -355,10 +333,5 @@ namespace Nakdan.UI
             StatusMessage = message;
             HasError      = isError;
         }
-
-        // ── INotifyPropertyChanged ────────────────────────────
-        public event PropertyChangedEventHandler PropertyChanged;
-        protected void OnPropertyChanged([CallerMemberName] string name = null)
-            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 }

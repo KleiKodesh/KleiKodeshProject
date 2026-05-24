@@ -1,4 +1,5 @@
 using System;
+using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -46,6 +47,7 @@ namespace Nakdan.Core
 
             string body = JsonSerializer.Serialize(payload);
             Exception lastError = null;
+            bool isNetworkError = false;
 
             foreach (string url in DictaEndpoints)
             {
@@ -80,15 +82,30 @@ namespace Nakdan.Core
 
                     return ExtractNiqqud(dataArr);
                 }
+                catch (HttpRequestException ex)
+                {
+                    // Network-level errors: DNS failure, connection refused, etc.
+                    lastError = ex;
+                    isNetworkError = true;
+                }
+                catch (TaskCanceledException ex)
+                {
+                    // Timeout or cancellation
+                    lastError = ex;
+                    isNetworkError = true;
+                }
                 catch (Exception ex)
                 {
                     lastError = ex;
                 }
             }
 
-            throw new Exception(
-                "Dicta API unavailable: " + lastError?.Message,
-                lastError);
+            // Provide user-friendly error message
+            string errorMessage = isNetworkError
+                ? "אין חיבור לאינטרנט או שהשרת אינו זמין.\nבדוק את החיבור שלך ונסה שוב."
+                : "Dicta API unavailable: " + lastError?.Message;
+
+            throw new Exception(errorMessage, lastError);
         }
 
         private string ExtractNiqqud(JsonArray data)
@@ -111,7 +128,7 @@ namespace Nakdan.Core
                 if (optionsArr != null && optionsArr.Count > 0 && optionsArr[0] is JsonObject firstOption)
                 {
                     string w = firstOption["w"]?.GetValue<string>() ?? string.Empty;
-                    w = w.Replace("|", "");
+                    w = w.Replace("|", "").Replace("ֽ", "");
                     sb.Append(w);
                 }
                 else

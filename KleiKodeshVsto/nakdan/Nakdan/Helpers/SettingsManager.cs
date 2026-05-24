@@ -1,8 +1,8 @@
-﻿using Microsoft.VisualBasic;
+using Microsoft.VisualBasic;
 using Microsoft.Win32;
 using System;
 
-namespace Nakdan.UI
+namespace Nakdan.Helpers
 {
     internal static class SettingsManager
     {

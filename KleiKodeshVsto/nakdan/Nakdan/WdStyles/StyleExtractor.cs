@@ -4,7 +4,7 @@ using System.Linq;
 using System.Xml.Linq;
 using Nakdan.Core;
 
-namespace Nakdan.Styles
+namespace Nakdan.WdStyles
 {
     /// <summary>
     /// Extracts style information directly from OOXML document.

@@ -102,25 +102,27 @@
     <Compile Include="Core\DictaApiClient.cs" />
     <Compile Include="Core\NakdanCofiguration.cs" />
     <Compile Include="Core\NakdanEngine.cs" />
-    <Compile Include="Core\NakdanApi.cs" />
-    <Compile Include="Styles\DocumentStyle.cs" />
-    <Compile Include="Styles\DocumentStyleProvider.cs" />
-    <Compile Include="Styles\StyleExtractor.cs" />
-    <Compile Include="Styles\StyleNameResolver.cs" />
+    <Compile Include="Core\NakdanWrapper.cs" />
+    <Compile Include="Helpers\SettingsManager.cs" />
+    <Compile Include="Helpers\VstoHelper.cs" />
+    <Compile Include="WdStyles\DocumentStyle.cs" />
+    <Compile Include="WdStyles\DocumentStyleProvider.cs" />
+    <Compile Include="WdStyles\StyleExtractor.cs" />
+    <Compile Include="WdStyles\StyleItem.cs" />
+    <Compile Include="WdStyles\StyleNameResolver.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="UI\Converters.cs" />
     <Compile Include="UI\NakdanView.xaml.cs">
       <DependentUpon>NakdanView.xaml</DependentUpon>
     </Compile>
     <Compile Include="UI\NakdanViewModel.cs" />
-    <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="UI\SettingsManager.cs" />
   </ItemGroup>
   <ItemGroup>
-    <Page Include="UI\NakdanView.xaml">
+    <Page Include="UI\NakdanDictionary.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="UI\NakdanDictionary.xaml">
+    <Page Include="UI\NakdanView.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

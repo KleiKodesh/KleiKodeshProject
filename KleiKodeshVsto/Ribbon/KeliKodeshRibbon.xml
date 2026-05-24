@@ -63,7 +63,7 @@
 							<button id="Nakdan"
 								label="נקדן דיקטה"
 								screentip="נקדן דיקטה"
-								supertip="נקדן דיקטה עם אפשרויות משודרגות"
+								supertip="נקדן דיקטה עם אפשרויות משודרגות (דרוש חיבור לאינטרנט)"
 								getImage="getImage"
 								onAction="button_Click"
 								getVisible="getVisible"/>
