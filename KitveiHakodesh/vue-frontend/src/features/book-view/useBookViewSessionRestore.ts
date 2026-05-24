@@ -92,20 +92,24 @@ export function useBookViewSessionRestore(
       }
     }
 
-    if (restoredLineId != null) {
-      selectedLineId.value = restoredLineId
-      // Don't set commentaryLineId here — that would trigger a booksDataStore load
-      // (GET_ALL_CATEGORIES + GET_ALL_BOOKS) before line chunks have finished loading.
-      // commentaryLineId is set by useBookView when commentaryVisible first becomes true.
-      commentaryVisible.value = true
-    }
-
-    // Derive commentaryMode — prefer explicit saved value, fall back to lastRead,
+    // Derive commentaryMode first so we can use it to guard commentaryVisible below.
+    // Prefer explicit saved value, fall back to lastRead,
     // then fall back to old saves that only have commentaryVisible (backward compat).
     const commentaryMode: 'off' | 'bottom' | 'side' | undefined =
       bookSaved?.commentaryMode ??
       (settingsStore.resumeLastRead ? lastRead?.commentaryMode : undefined) ??
       (bookSaved?.commentaryVisible ? 'bottom' : undefined)
+
+    if (restoredLineId != null) {
+      selectedLineId.value = restoredLineId
+      // Don't set commentaryLineId here — that would trigger a booksDataStore load
+      // (GET_ALL_CATEGORIES + GET_ALL_BOOKS) before line chunks have finished loading.
+      // commentaryLineId is set by useBookView when commentaryVisible first becomes true.
+      // Only open the commentary panel if it was actually open when the user left.
+      if (commentaryMode !== 'off') {
+        commentaryVisible.value = true
+      }
+    }
 
     const commentaryFraction: number | undefined =
       bookSaved?.commentaryFraction ??
