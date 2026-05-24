@@ -87,6 +87,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Converters.cs" />
+    <Compile Include="Models.cs" />
     <Compile Include="NakdanDicta.cs" />
     <Compile Include="NakdanApi.cs" />
     <Compile Include="NakdanView.xaml.cs">

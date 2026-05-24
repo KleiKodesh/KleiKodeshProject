@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Input;
 
 namespace Nakdan
@@ -78,6 +79,7 @@ namespace Nakdan
         private bool      _hasError;
         private GenreItem _selectedGenre;
         private CancellationTokenSource _cancellationTokenSource;
+        private const int StatusAutoHideDelayMs = 3000; // Auto-hide notification after 3 seconds
 
         // ── Constructor ───────────────────────────────────────
         /// <param name="api">
@@ -209,10 +211,12 @@ namespace Nakdan
                 {
                     await _api.VowelizeDocumentAsync(_cancellationTokenSource.Token);
                     SetStatus("הניקוד הושלם בהצלחה ✓", false);
+                    await AutoHideStatusAsync();
                 }
                 catch (OperationCanceledException)
                 {
                     SetStatus("הניקוד בוטל על ידי המשתמש", false);
+                    await AutoHideStatusAsync();
                 }
                 finally { IsBusy = false; }
             });
@@ -231,10 +235,12 @@ namespace Nakdan
                 {
                     await _api.VowelizeSelectionAsync(_cancellationTokenSource.Token);
                     SetStatus("ניקוד הסימון הושלם ✓", false);
+                    await AutoHideStatusAsync();
                 }
                 catch (OperationCanceledException)
                 {
                     SetStatus("הניקוד בוטל על ידי המשתמש", false);
+                    await AutoHideStatusAsync();
                 }
                 finally { IsBusy = false; }
             });
@@ -253,10 +259,12 @@ namespace Nakdan
                 {
                     await _api.VowelizeFootnotesAsync(_cancellationTokenSource.Token);
                     SetStatus("ניקוד הערות השוליים הושלם ✓", false);
+                    await AutoHideStatusAsync();
                 }
                 catch (OperationCanceledException)
                 {
                     SetStatus("הניקוד בוטל על ידי המשתמש", false);
+                    await AutoHideStatusAsync();
                 }
                 finally { IsBusy = false; }
             });
@@ -265,6 +273,17 @@ namespace Nakdan
         private void Cancel()
         {
             _cancellationTokenSource?.Cancel();
+        }
+
+        /// <summary>
+        /// Auto-hide the status notification after a delay.
+        /// This allows the user to see the completion message briefly before it disappears.
+        /// </summary>
+        private async Task AutoHideStatusAsync()
+        {
+            await Task.Delay(StatusAutoHideDelayMs);
+            StatusMessage = string.Empty;
+            HasError = false;
         }
 
         // ── Helpers ───────────────────────────────────────────

@@ -28,7 +28,7 @@
     <!-- ── Implicit Button — flat icon button ────────────────────── -->
     <Style TargetType="Button">
         <Setter Property="Background"       Value="Transparent"/>
-        <Setter Property="Foreground"       Value="Black"/>
+        <Setter Property="Foreground"       Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
         <Setter Property="BorderThickness"  Value="0"/>
         <Setter Property="Padding"          Value="6"/>
         <Setter Property="Cursor"           Value="Hand"/>
@@ -41,7 +41,8 @@
                             CornerRadius="2"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="Center"
-                                          VerticalAlignment="Center"/>
+                                          VerticalAlignment="Center"
+                                          TextBlock.Foreground="{TemplateBinding Foreground}"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
@@ -65,7 +66,7 @@
         <Setter Property="FontSize"         Value="12"/>
         <Setter Property="FontFamily"       Value="Segoe UI"/>
         <Setter Property="Cursor"           Value="Hand"/>
-        <Setter Property="Foreground"       Value="Black"/>
+        <Setter Property="Foreground"       Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="Template">
             <Setter.Value>
@@ -77,7 +78,8 @@
                             Background="#0F808080"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="Center"
-                                          VerticalAlignment="Center"/>
+                                          VerticalAlignment="Center"
+                                          TextBlock.Foreground="{TemplateBinding Foreground}"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
