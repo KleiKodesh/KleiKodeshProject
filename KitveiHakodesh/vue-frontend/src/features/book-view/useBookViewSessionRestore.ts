@@ -145,33 +145,33 @@ export function useBookViewSessionRestore(
     const si = _restoredSi
     const so = _restoredSo
 
-    console.log(`[sessionRestore] si=${si} so=${so} — registering watcher`)
+    
 
     if (si != null && so != null) {
       const stop = watch(
         () => !commentaryLoading.value && commentaryGroups().length > 0,
         async (ready) => {
-          console.log(`[sessionRestore] watcher fired ready=${ready} loading=${commentaryLoading.value} groups=${commentaryGroups().length}`)
+          
           if (!ready) return
           stop()
           await nextTick()
           const doRestore = async (viewRef: CommentaryViewRef) => {
-            console.log(`[sessionRestore] calling restoreCommentaryScrollPos(${si}, ${so})`)
+            
             await viewRef.restoreCommentaryScrollPos(si, so)
           }
           const viewRef = commentaryViewRef()
           if (viewRef) {
-            console.log(`[sessionRestore] viewRef=present`)
+            
             nextTick(() => {
               void doRestore(viewRef)
             })
           } else {
-            console.log(`[sessionRestore] viewRef null — setting up fallback watch`)
+            
             const stopRef = watch(
               () => commentaryViewRef(),
               (newRef) => {
                 if (!newRef) return
-                console.log(`[sessionRestore] viewRef arrived via fallback`)
+                
                 stopRef()
                 nextTick(() => {
                   void doRestore(newRef)

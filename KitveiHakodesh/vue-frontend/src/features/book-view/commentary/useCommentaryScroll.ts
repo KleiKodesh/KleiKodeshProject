@@ -105,7 +105,7 @@ export function useCommentaryScroll(
       function startRestore() {
         const el = scrollerEl()
         const itemsLength = flatItems().length
-        console.log(`[restoreCommentaryScrollPos] start si=${scrollIndex} so=${scrollOffset} el=${el ? 'present' : 'null'} flatItems=${itemsLength}`)
+        
 
         if (!el || itemsLength === 0) {
           if (attempts < MAX_ATTEMPTS) {
@@ -113,26 +113,26 @@ export function useCommentaryScroll(
             nextTick(() => requestAnimationFrame(startRestore))
             return
           }
-          console.log(`[restoreCommentaryScrollPos] no el or no items after ${MAX_ATTEMPTS} attempts, resolving`)
+          
           resolve()
           return
         }
 
         // Scroll to the target index — this is synchronous for already-measured items
         virtualizer().scrollToIndex(scrollIndex, { align: 'start' })
-        console.log(`[restoreCommentaryScrollPos] called scrollToIndex(${scrollIndex})`)
+        
 
         function tryApplyScroll() {
           const el2 = scrollerEl()
           const item = virtualizer().measurementsCache.find((m) => m.index === scrollIndex)
-          console.log(`[restoreCommentaryScrollPos] attempt=${attempts} item=${item ? `start=${item.start} end=${item.end}` : 'not found'} el2=${el2 ? `scrollTop=${el2.scrollTop}` : 'null'}`)
+          
           if (!el2) {
             if (attempts < MAX_ATTEMPTS) {
               attempts++
               nextTick(() => requestAnimationFrame(tryApplyScroll))
               return
             }
-            console.log(`[restoreCommentaryScrollPos] el2 null after ${MAX_ATTEMPTS} attempts, resolving`)
+            
             resolve()
             return
           }
@@ -143,15 +143,15 @@ export function useCommentaryScroll(
             const maxScrollTop = Math.max(0, el2.scrollHeight - el2.clientHeight)
             const desiredScrollTop = Math.min(targetScrollTop, maxScrollTop)
             el2.scrollTop = desiredScrollTop
-            console.log(`[restoreCommentaryScrollPos] set scrollTop=${desiredScrollTop} actual=${el2.scrollTop} (target=${targetScrollTop} max=${maxScrollTop})`)
+            
             requestAnimationFrame(() => {
               if (Math.abs(el2.scrollTop - desiredScrollTop) > 1 && attempts < MAX_ATTEMPTS) {
                 attempts++
-                console.log(`[restoreCommentaryScrollPos] retrying after final rAF, mismatch=${el2.scrollTop - desiredScrollTop}`)
+                
                 nextTick(() => requestAnimationFrame(tryApplyScroll))
                 return
               }
-              console.log(`[restoreCommentaryScrollPos] final rAF el2.scrollTop=${el2.scrollTop}`)
+              
               resolve()
             })
           } else if (attempts < MAX_ATTEMPTS) {
@@ -160,7 +160,7 @@ export function useCommentaryScroll(
             nextTick(() => requestAnimationFrame(tryApplyScroll))
           } else {
             // Give up after max attempts
-            console.log(`[restoreCommentaryScrollPos] gave up after ${MAX_ATTEMPTS} attempts`)
+            
             resolve()
           }
         }

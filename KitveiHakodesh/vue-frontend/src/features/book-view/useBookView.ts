@@ -89,6 +89,7 @@ export function useBookView(
   const activeTocEntryId = ref<number | undefined>(undefined)
   const commentaryScrollIndex = ref<number | null>(null)
   const commentaryScrollOffset = ref<number | null>(null)
+  let lastRestoredCommentaryKey: string | null = null
 
   const tocVisible = computed(() => sidePanelMode.value === 'toc')
   const commentaryTreeVisible = computed(() => sidePanelMode.value === 'commentary-tree')
@@ -373,33 +374,39 @@ export function useBookView(
     if (visible && commentaryScrollIndex.value != null && commentaryScrollOffset.value != null) {
       const si = commentaryScrollIndex.value
       const so = commentaryScrollOffset.value
-      console.log(`[commentaryVisible watcher] panel opened si=${si} so=${so} loading=${commentaryLoading.value} groups=${groups.value.length}`)
+      const restoreKey = `${si}:${so}`
+      if (restoreKey === lastRestoredCommentaryKey) {
+        return
+      }
+      
       let stopLoading: (() => void) | undefined
       let stopViewRef: (() => void) | undefined
       const cancelRestore = () => { stopLoading?.(); stopViewRef?.() }
-      const stopVisibleGuard = watch(commentaryVisible, (v) => { if (!v) { cancelRestore(); stopVisibleGuard() } })
+      const stopVisibleGuard = watch(commentaryVisible, (v) => { if (!v) { cancelRestore(); lastRestoredCommentaryKey = null; stopVisibleGuard() } })
       stopLoading = watch(
         () => !commentaryLoading.value && groups.value.length > 0,
         (ready) => {
-          console.log(`[commentaryVisible watcher] inner watch fired ready=${ready} loading=${commentaryLoading.value} groups=${groups.value.length} viewRef=${commentaryViewRef() ? 'present' : 'null'}`)
+          
           if (!ready) return
           stopLoading?.()
           const viewRef = commentaryViewRef()
           if (viewRef) {
-            console.log(`[commentaryVisible watcher] calling restore with si=${si} so=${so}`)
-            nextTick(() => {
-              void viewRef.restoreCommentaryScrollPos(si, so)
+            
+            nextTick(async () => {
+              await viewRef.restoreCommentaryScrollPos(si, so)
+              lastRestoredCommentaryKey = restoreKey
             })
           } else {
-            console.log(`[commentaryVisible watcher] viewRef null — setting up fallback watch`)
+            
             stopViewRef = watch(
               () => commentaryViewRef(),
               (newRef) => {
                 if (!newRef) return
-                console.log(`[commentaryVisible watcher] viewRef arrived via fallback`)
+                
                 stopViewRef?.()
-                nextTick(() => {
-                  void newRef.restoreCommentaryScrollPos(si, so)
+                nextTick(async () => {
+                  await newRef.restoreCommentaryScrollPos(si, so)
+                  lastRestoredCommentaryKey = restoreKey
                 })
               },
             )
