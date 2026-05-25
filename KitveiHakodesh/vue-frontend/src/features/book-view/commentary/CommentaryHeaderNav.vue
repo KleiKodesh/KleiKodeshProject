@@ -11,11 +11,12 @@ import {
   IconFilter20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import type { CommentaryGroup } from './useCommentary'
+import type { PinnedCommentaryGroup } from '../bookViewTypes'
 
 const props = defineProps<{
   groups: CommentaryGroup[]
-  scrollToGroup: (bookId: number) => void
-  activeBookId: number
+  scrollToGroup: (bookId: number, sectionLabel?: string, subSectionLabel?: string) => void
+  activePinnedGroup: PinnedCommentaryGroup | null
   filterVisible?: boolean
   activeTocPath?: string
 }>()
@@ -26,7 +27,6 @@ const emit = defineEmits<{
   'toggle-search': []
   'open-book': [bookId: number, lineIndex: number]
   close: []
-  'update:activeBookId': [bookId: number]
 }>()
 
 const filterBtnRef = ref<HTMLElement | null>(null)
@@ -39,13 +39,21 @@ onMounted(() => nextTick(() => inputRef.value?.focus()))
 
 const groupLabel = (g: CommentaryGroup) => g.path
 
-function navigateToGroup(bookId: number) {
-  props.scrollToGroup(bookId)
-  emit('update:activeBookId', bookId)
+function navigateToGroup(g: CommentaryGroup) {
+  props.scrollToGroup(g.bookId, g.sectionLabel, g.subSectionLabel)
   if (inputRef.value) inputRef.value.value = ''
 }
 
-const activeGroup = computed(() => props.groups.find((g) => g.bookId === props.activeBookId))
+const activeGroup = computed(() =>
+  props.activePinnedGroup
+    ? props.groups.find(
+        (g) =>
+          g.bookId === props.activePinnedGroup!.bookId &&
+          (g.sectionLabel ?? '') === props.activePinnedGroup!.sectionLabel &&
+          (g.subSectionLabel ?? '') === props.activePinnedGroup!.subSectionLabel,
+      ) ?? null
+    : null,
+)
 
 const openBookTooltip = computed(() => {
   const bookTitle = activeGroup.value?.bookTitle ?? ''
@@ -58,14 +66,22 @@ const activeFullLabel = computed(() => {
   return props.activeTocPath ? `${bookTitle} ${props.activeTocPath}` : bookTitle
 })
 
-const activeIndex = computed(() => props.groups.findIndex((g) => g.bookId === props.activeBookId))
+const activeIndex = computed(() => {
+  if (!props.activePinnedGroup) return -1
+  return props.groups.findIndex(
+    (g) =>
+      g.bookId === props.activePinnedGroup!.bookId &&
+      (g.sectionLabel ?? '') === props.activePinnedGroup!.sectionLabel &&
+      (g.subSectionLabel ?? '') === props.activePinnedGroup!.subSectionLabel,
+  )
+})
 const hasPrevious = computed(() => activeIndex.value > 0)
 const hasNext = computed(
   () => activeIndex.value !== -1 && activeIndex.value < props.groups.length - 1,
 )
 
 function openActiveBook() {
-  const group = props.groups.find((g) => g.bookId === props.activeBookId)
+  const group = activeGroup.value
   if (group?.lines[0] != null) emit('open-book', group.bookId, group.lines[0].lineIndex)
 }
 
@@ -74,7 +90,7 @@ function handleSelect() {
   const match = props.groups.find(
     (g) => normalize(groupLabel(g)) === val || normalize(g.bookTitle) === val,
   )
-  if (match) navigateToGroup(match.bookId)
+  if (match) navigateToGroup(match)
 }
 
 function handleKeydown(e: KeyboardEvent) {
@@ -89,7 +105,7 @@ function handleKeydown(e: KeyboardEvent) {
   const matches = props.groups.filter(
     (g) => normalize(groupLabel(g)).includes(val) || normalize(g.bookTitle).includes(val),
   )
-  if (matches.length === 1) navigateToGroup(matches[0]!.bookId)
+  if (matches.length === 1) navigateToGroup(matches[0]!)
 }
 </script>
 
@@ -118,14 +134,14 @@ function handleKeydown(e: KeyboardEvent) {
         @keydown="handleKeydown"
       />
       <datalist :id="`commentary-list-${componentId}`">
-        <option v-for="g in groups" :key="g.bookId" :value="groupLabel(g)" />
+        <option v-for="g in groups" :key="`${g.bookId}::${g.sectionLabel ?? ''}::${g.subSectionLabel ?? ''}`" :value="groupLabel(g)" />
       </datalist>
     </div>
     <button
       class="btn c-pointer hover-bg"
       :disabled="!hasPrevious"
       title="מפרש קודם"
-      @click="navigateToGroup(groups[activeIndex - 1]!.bookId)"
+      @click="navigateToGroup(groups[activeIndex - 1]!)"
     >
       <IconChevronUp20Regular />
     </button>
@@ -133,7 +149,7 @@ function handleKeydown(e: KeyboardEvent) {
       class="btn c-pointer hover-bg"
       :disabled="!hasNext"
       title="מפרש הבא"
-      @click="navigateToGroup(groups[activeIndex + 1]!.bookId)"
+      @click="navigateToGroup(groups[activeIndex + 1]!)"
     >
       <IconChevronDown20Regular />
     </button>
@@ -141,14 +157,14 @@ function handleKeydown(e: KeyboardEvent) {
     <button
       class="btn c-pointer hover-bg"
       title="קטע קודם"
-      @click="emit('navigate-section', 'prev', props.activeBookId)"
+      @click="emit('navigate-section', 'prev', activePinnedGroup?.bookId ?? 0)"
     >
       <IconChevronRight20Regular />
     </button>
     <button
       class="btn c-pointer hover-bg"
       title="קטע הבא"
-      @click="emit('navigate-section', 'next', props.activeBookId)"
+      @click="emit('navigate-section', 'next', activePinnedGroup?.bookId ?? 0)"
     >
       <IconChevronLeft20Regular />
     </button>

@@ -43,7 +43,7 @@ export function useBookViewSessionRestore(
   let _restoredSo: number | null | undefined
   let _restoredCommentaryMode: 'off' | 'bottom' | 'side' | undefined
   let _restoredCommentaryFraction: number | undefined
-  let _restoredPinnedCommentaryBookId: number | null | undefined
+  let _restoredPinnedCommentaryGroup: import('./bookViewTypes').PinnedCommentaryGroup | null | undefined
 
   const _idbPromise: Promise<void> = bookId == null
     ? Promise.resolve()
@@ -56,7 +56,7 @@ export function useBookViewSessionRestore(
         _restoredSo = result.so
         _restoredCommentaryMode = result.commentaryMode
         _restoredCommentaryFraction = result.commentaryFraction
-        _restoredPinnedCommentaryBookId = result.pinnedCommentaryBookId
+        _restoredPinnedCommentaryGroup = result.pinnedCommentaryGroup
       })
 
   _idbPromise.then(() => { idbResolved.value = true })
@@ -120,17 +120,23 @@ export function useBookViewSessionRestore(
       bookSaved?.commentaryFraction ??
       (settingsStore.resumeLastRead ? lastRead?.commentaryFraction : undefined)
 
-    const pinnedCommentaryBookId: number | null | undefined =
-      bookSaved?.pinnedCommentaryBookId ??
-      (settingsStore.resumeLastRead ? lastRead?.pinnedCommentaryBookId : undefined)
+    const pinnedCommentaryGroup: import('./bookViewTypes').PinnedCommentaryGroup | null | undefined =
+      bookSaved?.pinnedCommentaryGroup ??
+      (settingsStore.resumeLastRead ? lastRead?.pinnedCommentaryGroup : undefined) ??
+      // Backward compat: old saves only have pinnedCommentaryBookId (bare number)
+      (bookSaved?.pinnedCommentaryBookId != null
+        ? { bookId: bookSaved.pinnedCommentaryBookId, sectionLabel: '', subSectionLabel: '' }
+        : settingsStore.resumeLastRead && lastRead?.pinnedCommentaryBookId != null
+          ? { bookId: lastRead.pinnedCommentaryBookId, sectionLabel: '', subSectionLabel: '' }
+          : undefined)
 
-    return { si, so, commentaryMode, commentaryFraction, pinnedCommentaryBookId }
+    return { si, so, commentaryMode, commentaryFraction, pinnedCommentaryGroup }
   }
 
   async function restore(): Promise<{
     commentaryMode?: 'off' | 'bottom' | 'side'
     commentaryFraction?: number
-    pinnedCommentaryBookId?: number | null
+    pinnedCommentaryGroup?: import('./bookViewTypes').PinnedCommentaryGroup | null
   }> {
     if (bookId == null) return {}
 
@@ -167,7 +173,7 @@ export function useBookViewSessionRestore(
     return {
       commentaryMode: _restoredCommentaryMode,
       commentaryFraction: _restoredCommentaryFraction,
-      pinnedCommentaryBookId: _restoredPinnedCommentaryBookId,
+      pinnedCommentaryGroup: _restoredPinnedCommentaryGroup,
     }
   }
 

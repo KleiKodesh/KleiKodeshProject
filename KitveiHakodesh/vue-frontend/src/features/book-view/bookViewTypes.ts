@@ -33,3 +33,15 @@ export interface CommentaryTreeState {
   tokens: string[]
   visibilityList: CommentaryVisibilityItem[]
 }
+
+/**
+ * Identifies a specific commentary group by book + section.
+ * A book can appear in multiple sections (e.g. once as COMMENTARY and once as
+ * REFERENCE), so bookId alone is not a unique key — sectionLabel and
+ * subSectionLabel are required to pinpoint the exact group.
+ */
+export interface PinnedCommentaryGroup {
+  bookId: number
+  sectionLabel: string      // e.g. "מפרשים"
+  subSectionLabel: string   // e.g. "ראשונים", or "" if none
+}

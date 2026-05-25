@@ -23,7 +23,7 @@
 
 import { query } from '@/webview-host/seforimDb'
 import { SQL } from '@/webview-host/queries.sql'
-import { SearchableTree, stripTocTitleRoots } from '../book-view/tocSearchUtils'
+import { SearchableTree, stripTocTitleRoots } from '../book-view/toc/tocSearchUtils'
 import type { BookRow } from './bookCatalogTree'
 import type { TocFsItem } from './useBookCatalogSearch'
 

@@ -2,7 +2,7 @@ import { computed, ref, watch } from 'vue'
 import { query } from '@/webview-host/seforimDb'
 import { SQL } from '@/webview-host/queries.sql'
 import { useBooksDataStore } from '@/stores/booksDataStore'
-import type { BookRow } from '../book-catalog/bookCatalogTree'
+import type { BookRow } from '../../book-catalog/bookCatalogTree'
 
 export interface CommentaryLine {
   lineId: number
@@ -180,7 +180,8 @@ function isStaticFilterConnectionType(type: string): type is StaticFilterConnect
   return STATIC_FILTER_CONNECTION_TYPES.has(type as StaticFilterConnectionType)
 }
 
-type ByBookMap = Map<number, { lineIds: Set<number>; connectionTypes: Set<string> }>
+type ByBookConnectionKey = string // `${bookId}::${connectionTypeName}`
+type ByBookConnectionMap = Map<ByBookConnectionKey, { bookId: number; lineIds: Set<number>; connectionType: string }>
 
 function buildCommentaryGroupsFromEntries(entries: CommentaryBookEntry[]): CommentaryGroup[] {
   const byType = new Map<string, CommentaryBookEntry[]>()
@@ -259,28 +260,35 @@ async function buildCommentaryGroupsFromCombined(
   allBooksMap: Map<number, BookRow>,
 ): Promise<CommentaryGroup[]> {
   await ensureConnectionTypeNamesLoaded()
-  const byBook: ByBookMap = new Map()
+  const byBookConnection: ByBookConnectionMap = new Map()
   const lineData = new Map<number, { lineIndex: number; content: string }>()
 
   for (const row of rows) {
-    if (!byBook.has(row.targetBookId))
-      byBook.set(row.targetBookId, { lineIds: new Set(), connectionTypes: new Set() })
-    const group = byBook.get(row.targetBookId)!
-    group.lineIds.add(row.targetLineId)
-    group.connectionTypes.add(getConnectionTypeName(row.connectionTypeId))
-
+    const connectionTypeName = getConnectionTypeName(row.connectionTypeId)
+    const key: ByBookConnectionKey = `${row.targetBookId}::${connectionTypeName}`
+    if (!byBookConnection.has(key))
+      byBookConnection.set(key, { bookId: row.targetBookId, lineIds: new Set(), connectionType: connectionTypeName })
+    byBookConnection.get(key)!.lineIds.add(row.targetLineId)
     lineData.set(row.targetLineId, { lineIndex: row.lineIndex, content: row.content })
   }
 
-  const entries: CommentaryBookEntry[] = [...byBook.entries()].map(([bookId, group]) => {
+  // Collect all connection types per book so each entry's connectionTypes field
+  // reflects the full set of ways this book is linked (used for display/filtering).
+  const allConnectionTypesByBook = new Map<number, Set<string>>()
+  for (const { bookId, connectionType } of byBookConnection.values()) {
+    if (!allConnectionTypesByBook.has(bookId)) allConnectionTypesByBook.set(bookId, new Set())
+    allConnectionTypesByBook.get(bookId)!.add(connectionType)
+  }
+
+  const entries: CommentaryBookEntry[] = [...byBookConnection.values()].map(({ bookId, lineIds, connectionType }) => {
     const book = allBooksMap.get(bookId)
-    const connectionTypes = [...group.connectionTypes]
+    const connectionTypes = [...(allConnectionTypesByBook.get(bookId) ?? new Set())]
 
     return {
       bookId,
       bookTitle: book?.title ?? String(bookId),
       connectionTypes,
-      lines: [...group.lineIds]
+      lines: [...lineIds]
         .map((id) => ({
           lineId: id,
           lineIndex: lineData.get(id)?.lineIndex ?? 0,
@@ -289,7 +297,7 @@ async function buildCommentaryGroupsFromCombined(
         .sort((a, b) => a.lineIndex - b.lineIndex),
       category: resolveCategory(book),
       treeOrder: book?.treeOrder ?? 999999,
-      primaryConnectionType: getPrimaryConnectionType(connectionTypes),
+      primaryConnectionType: connectionType,
     }
   })
 

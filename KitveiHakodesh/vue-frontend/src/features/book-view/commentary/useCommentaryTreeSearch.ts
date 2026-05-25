@@ -8,7 +8,7 @@ import { SegmentSearchTree } from '@/utils/segmentSearchTree'
 import type { SearchableNode } from '@/utils/segmentSearchTree'
 import { normalize } from '@/utils/normalizeText'
 import type { CommentaryGroup } from './useCommentary'
-import type { CommentaryTreeState, CommentaryVisibilityItem } from './bookViewTypes'
+import type { CommentaryTreeState, CommentaryVisibilityItem } from '../bookViewTypes'
 import type { CommentaryTreeNode } from './commentaryTreeTypes'
 
 interface CommentarySearchNode extends SearchableNode {

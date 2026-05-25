@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import type { TocEntry, AltTocSection } from './useBookViewToc'
-import { SearchableTree } from '@/features/book-view/tocSearchUtils'
+import { SearchableTree } from './tocSearchUtils'
 import BookViewTocTreeSection from './BookViewTocTreeSection.vue'
 import SplitPane from '@/components/SplitPane.vue'
 

@@ -11,8 +11,8 @@ import { storeToRefs } from 'pinia'
 import { useTabStore } from '@/stores/tabStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import type { Ref } from 'vue'
-import type { LineItem } from './useBookViewLinesTable'
-import type { TocEntry } from './useBookViewToc'
+import type { LineItem } from './lines/useBookViewLinesTable'
+import type { TocEntry } from './toc/useBookViewToc'
 
 export function useBookViewScrollSync(
   lines: () => LineItem[],

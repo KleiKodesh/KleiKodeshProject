@@ -8,17 +8,17 @@ import { storeToRefs } from 'pinia'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useTabStore } from '@/stores/tabStore'
 import { useZoomHandler } from '@/composables/useZoom'
-import { useToc } from './useBookViewToc'
-import { useLines } from './useBookViewLinesTable'
-import { useCommentary } from './useCommentary'
+import { useToc } from './toc/useBookViewToc'
+import { useLines } from './lines/useBookViewLinesTable'
+import { useCommentary } from './commentary/useCommentary'
 import { useBookViewSearch } from './useBookViewSearch'
-import { useCommentarySearch } from './useCommentarySearch'
-import { useBookViewTocScrollTracking } from './useBookViewTocScrollTracking'
+import { useCommentarySearch } from './commentary/useCommentarySearch'
+import { useBookViewTocScrollTracking } from './toc/useBookViewTocScrollTracking'
 import { usePinnedCommentary } from './useBookViewPinnedCommentary'
-import { useCommentaryNavigation } from './useCommentaryNavigation'
+import { useCommentaryNavigation } from './commentary/useCommentaryNavigation'
 import { useBookViewScrollSync } from './useBookViewScrollSync'
 import { useBookViewSessionRestore } from './useBookViewSessionRestore'
-import type { TocEntry } from './useBookViewToc'
+import type { TocEntry } from './toc/useBookViewToc'
 import type { SearchMode, SidePanelMode, CommentaryTreeState } from './bookViewTypes'
 export type { SearchMode } from './bookViewTypes'
 
@@ -33,6 +33,7 @@ type SearchBarInstance = { focus: () => void }
 type CommentaryViewInstance = {
   topVisibleFlatIndex: number
   activeBookId: number | null
+  activePinnedGroup: { bookId: number; sectionLabel: string; subSectionLabel: string } | null
   getFilterButtonEl?: () => HTMLElement | null
   scrollToGroup: (bookId: number) => void
   scrollToFlatIndex: (index: number) => void
@@ -130,14 +131,14 @@ export function useBookView(
     return ids.length > 0 ? ids : null
   })
 
-  const pinnedCommentaryBookIdForDisplay = ref<number | null>(null)
+  const pinnedCommentaryGroupForDisplay = ref<import('./bookViewTypes').PinnedCommentaryGroup | null>(null)
 
   const { groups, groupsForDisplay, filterGroups, staticFilterGroups, loading: commentaryLoading, staticFilterGroupsLoaded, ensureStaticFilterGroupsLoaded } = useCommentary(
     () => commentaryLineId.value,
     () => selectedSectionLineIds.value,
     () => bookId ?? undefined,
     () => commentaryTreeVisible.value,
-    () => pinnedCommentaryBookIdForDisplay.value,
+    () => pinnedCommentaryGroupForDisplay.value?.bookId ?? null,
   )
 
   // ── TOC ───────────────────────────────────────────────────────────────────
@@ -300,12 +301,12 @@ export function useBookView(
     () => lines.value, () => tocEntries.value, linesContentRef, commentaryViewRef,
   )
 
-  const { pinnedCommentaryBookId, restorePin } = usePinnedCommentary(
+  const { pinnedCommentaryGroup, restorePin } = usePinnedCommentary(
     bookId, () => commentaryLineId.value, () => groups.value, commentaryViewRef,
   )
 
   // Keep the display ref in sync so useCommentary can inject the placeholder
-  watch(pinnedCommentaryBookId, (id) => { pinnedCommentaryBookIdForDisplay.value = id }, { immediate: true })
+  watch(pinnedCommentaryGroup, (g) => { pinnedCommentaryGroupForDisplay.value = g }, { immediate: true })
 
   // ── Session restore ───────────────────────────────────────────────────────
 
@@ -323,8 +324,8 @@ export function useBookView(
     const result = await restoreSession()
     if (result?.commentaryMode) restoredCommentaryMode.value = result.commentaryMode
     if (result?.commentaryFraction != null) restoredCommentaryFraction.value = result.commentaryFraction
-    if (result?.pinnedCommentaryBookId != null) {
-      restorePin(result.pinnedCommentaryBookId)
+    if (result?.pinnedCommentaryGroup != null) {
+      restorePin(result.pinnedCommentaryGroup)
     }
   })
   onBeforeUnmount(() => tabStore.updateActiveTab({ tocPath: undefined }))
@@ -412,7 +413,7 @@ export function useBookView(
     lines, prioritise, hasCommentaries, hasRelatedBooks, hasToc,
     groups, groupsForDisplay, filterGroups, staticFilterGroups, commentaryLoading,
     tocEntries, tocSearchTree, altTocSections, selectedAltTocSection, tocLoading, tocError,
-    altTocLabelMap, pinnedCommentaryBookId,
+    altTocLabelMap, pinnedCommentaryGroup,
     // scroll / search state
     currentScrollLineIndex,
     scrollStateReady, idbResolved, initialLineIndex, initialScrollTop, initialScrollOffset,

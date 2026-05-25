@@ -4,12 +4,12 @@ import { useMediaQuery } from '@vueuse/core'
 import { useBookView } from './useBookView'
 import BookViewToolbar from './BookViewToolbar.vue'
 import BookViewSplitPane from './BookViewSplitPane.vue'
-import BookViewLinesContent from './BookViewLinesContent.vue'
+import BookViewLinesContent from './lines/BookViewLinesContent.vue'
 import BookViewSearchBar from './BookViewSearchBar.vue'
 import BookViewSidePanel from './BookViewSidePanel.vue'
-import BookViewTocTree from './BookViewTocTree.vue'
-import CommentaryTreePanel from './CommentaryTreePanel.vue'
-import CommentaryView from './CommentaryView.vue'
+import BookViewTocTree from './toc/BookViewTocTree.vue'
+import CommentaryTreePanel from './commentary/CommentaryTreePanel.vue'
+import CommentaryView from './commentary/CommentaryView.vue'
 
 const toolbarRef = ref<InstanceType<typeof BookViewToolbar> | null>(null)
 const linesContentRef = ref<InstanceType<typeof BookViewLinesContent> | null>(null)
@@ -42,7 +42,7 @@ const {
   bookId, lines, prioritise, hasCommentaries, hasRelatedBooks, hasToc,
   groups, groupsForDisplay, filterGroups, staticFilterGroups, commentaryLoading,
   tocEntries, tocSearchTree, selectedAltTocSection, tocLoading, tocError,
-  altTocLabelMap, pinnedCommentaryBookId,
+  altTocLabelMap, pinnedCommentaryGroup,
   currentScrollLineIndex,
   scrollStateReady, idbResolved, initialLineIndex, initialScrollTop, initialScrollOffset,
   restoredCommentaryMode, restoredCommentaryFraction,
@@ -160,7 +160,7 @@ watch(restoredCommentaryFraction, (fraction) => { if (fraction != null) commenta
               "
               :get-active-toc-entry="getActiveTocEntry"
               :get-toc-path="getTocPath"
-              :pinned-commentary-book-id="pinnedCommentaryBookId"
+              :pinned-commentary-group="pinnedCommentaryGroup"
               @scrolled="onLinesScrolled"
               @line-selected="onLineSelected"
               @ctrl-f="openContentSearch"
@@ -173,7 +173,7 @@ watch(restoredCommentaryFraction, (fraction) => { if (fraction != null) commenta
               :groups="groupsForDisplay"
               :loading="commentaryLoading"
               :visibility-list="commentaryTreeState.visibilityList"
-              :pinned-book-id="pinnedCommentaryBookId"
+              :pinned-group="pinnedCommentaryGroup"
               :filter-visible="commentaryTreeVisible"
               :search-query="searchMode === 'commentary' ? commentarySearch.query.value : ''"
               :current-match-flat-index="

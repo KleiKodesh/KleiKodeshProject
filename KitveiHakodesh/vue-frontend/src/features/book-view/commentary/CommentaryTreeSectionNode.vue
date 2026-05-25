@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { IconChevronDown20Regular } from '@iconify-prerendered/vue-fluent'
-import type { CommentaryVisibilityItem } from './bookViewTypes'
+import type { CommentaryVisibilityItem } from '../bookViewTypes'
 import type { CommentaryTreeNode } from './commentaryTreeTypes'
 import { isTreeNode } from './commentaryTreeTypes'
 

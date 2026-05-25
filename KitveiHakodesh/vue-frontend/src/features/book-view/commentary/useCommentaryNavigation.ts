@@ -17,8 +17,8 @@ import {
   findPrevTocCommentarySection,
 } from './commentaryNavigation'
 import type { Ref } from 'vue'
-import type { LineItem } from './useBookViewLinesTable'
-import type { TocEntry } from './useBookViewToc'
+import type { LineItem } from '../lines/useBookViewLinesTable'
+import type { TocEntry } from '../toc/useBookViewToc'
 
 interface LinesContentRef { scrollToLineId: (lineId: number, lineIndex?: number) => void }
 interface CommentaryViewRef { scrollToGroup: (bookId: number) => void }

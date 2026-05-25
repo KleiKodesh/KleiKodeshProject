@@ -92,7 +92,9 @@ export interface BookState {
   commentaryMode?: 'off' | 'bottom' | 'side'
   commentaryFraction?: number    // side-by-side divider position (0.1–0.9)
   autoSelectTopLine?: boolean
+  /** @deprecated use pinnedCommentaryGroup — kept for reading old saves */
   pinnedCommentaryBookId?: number | null
+  pinnedCommentaryGroup?: import('@/features/book-view/bookViewTypes').PinnedCommentaryGroup | null
 }
 
 export interface LastReadState {
@@ -104,7 +106,9 @@ export interface LastReadState {
   commentaryFilterState?: import('@/features/book-view/bookViewTypes').CommentaryTreeState
   commentaryMode?: 'off' | 'bottom' | 'side'
   commentaryFraction?: number
+  /** @deprecated use pinnedCommentaryGroup — kept for reading old saves */
   pinnedCommentaryBookId?: number | null
+  pinnedCommentaryGroup?: import('@/features/book-view/bookViewTypes').PinnedCommentaryGroup | null
 }
 
 export interface Workspace {

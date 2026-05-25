@@ -6,8 +6,8 @@ import { useTabStore } from '@/stores/tabStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import type { LineItem } from './useBookViewLinesTable'
-import type { TocEntry } from './useBookViewToc'
-import type { CommentaryTreeState, CommentaryVisibilityItem } from './bookViewTypes'
+import type { TocEntry } from '../toc/useBookViewToc'
+import type { CommentaryTreeState, CommentaryVisibilityItem, PinnedCommentaryGroup } from '../bookViewTypes'
 import ContextMenu from '@/components/ContextMenu.vue'
 import { useEventListener } from '@vueuse/core'
 import { useScopedKeys } from '@/composables/useTextSelectionKeys'
@@ -46,7 +46,7 @@ const props = defineProps<{
   idbResolved?: boolean
   getActiveTocEntry?: (lineIndex: number) => TocEntry | null
   getTocPath?: (entry: TocEntry) => string
-  pinnedCommentaryBookId?: number | null
+  pinnedCommentaryGroup?: PinnedCommentaryGroup | null
 }>()
 
 const tabStore = useTabStore()
@@ -261,7 +261,7 @@ function savePos() {
       commentaryMode: props.commentaryMode,
       commentaryFraction: props.commentaryFraction,
       autoSelectTopLine: autoSelectTopLine.value,
-      pinnedCommentaryBookId: props.pinnedCommentaryBookId,
+      pinnedCommentaryGroup: props.pinnedCommentaryGroup,
     })
     tabStore.setLastReadPos(bookId, {
       ...pos,
@@ -271,7 +271,7 @@ function savePos() {
       commentaryFilterState: filterState,
       commentaryMode: props.commentaryMode,
       commentaryFraction: props.commentaryFraction,
-      pinnedCommentaryBookId: props.pinnedCommentaryBookId,
+      pinnedCommentaryGroup: props.pinnedCommentaryGroup,
     })
   }
 }

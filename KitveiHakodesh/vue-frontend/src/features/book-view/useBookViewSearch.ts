@@ -1,7 +1,7 @@
 import { ref, computed, watch } from 'vue'
 import { refDebounced } from '@vueuse/core'
 import { removeDiacriticsForSearch } from '@/utils/hebrewTextProcessing'
-import type { LineItem } from './useBookViewLinesTable'
+import type { LineItem } from './lines/useBookViewLinesTable'
 
 export interface BookViewMatch {
   lineIndex: number

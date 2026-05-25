@@ -5,13 +5,13 @@ import {
   IconChevronRight20Regular,
   IconChevronLeft20Regular,
 } from '@iconify-prerendered/vue-fluent'
-import type { CommentaryGroup } from './useCommentary'
 
 const props = defineProps<{
+  bookId: number
   bookTitle: string
+  firstLineIndex?: number
   sectionLabel?: string
   subSectionLabel?: string
-  groups: CommentaryGroup[]
   /** Async-resolved TOC path for this commentary book's current line in its own TOC */
   ownTocPath?: string
 }>()
@@ -22,11 +22,6 @@ const emit = defineEmits<{
 
 const headerEl = ref<HTMLElement | null>(null)
 
-const fullPath = computed(() => {
-  const group = props.groups.find((g) => g.bookTitle === props.bookTitle)
-  return group?.path ?? props.bookTitle
-})
-
 const displayPath = computed(() => {
   return props.ownTocPath ? `${props.bookTitle} ${props.ownTocPath}` : props.bookTitle
 })
@@ -36,13 +31,8 @@ const tooltipText = computed(() => {
   return `${displayPath.value}\n${hint}`
 })
 
-const bookId = computed(
-  () => props.groups.find((g) => g.bookTitle === props.bookTitle)?.bookId ?? 0,
-)
-
 function openBook() {
-  const group = props.groups.find((g) => g.bookTitle === props.bookTitle)
-  if (group?.lines[0] != null) emit('open-book', group.bookId, group.lines[0].lineIndex)
+  if (props.firstLineIndex != null) emit('open-book', props.bookId, props.firstLineIndex)
 }
 
 onLongPress(headerEl, openBook, { delay: 500 })
@@ -66,14 +56,14 @@ function onHeaderClick(e: MouseEvent) {
       <button
         class="action-btn c-pointer hover-bg"
         title="קטע קודם"
-        @click.stop="emit('navigate-section', 'prev', bookId)"
+        @click.stop="emit('navigate-section', 'prev', props.bookId)"
       >
         <IconChevronRight20Regular />
       </button>
       <button
         class="action-btn c-pointer hover-bg"
         title="קטע הבא"
-        @click.stop="emit('navigate-section', 'next', bookId)"
+        @click.stop="emit('navigate-section', 'next', props.bookId)"
       >
         <IconChevronLeft20Regular />
       </button>

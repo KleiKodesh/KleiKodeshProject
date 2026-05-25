@@ -4,7 +4,7 @@ import CommentaryTreeSectionNode from './CommentaryTreeSectionNode.vue'
 import { IconDismiss12Regular } from '@iconify-prerendered/vue-fluent'
 import { useIntervalFn } from '@vueuse/core'
 import type { CommentaryGroup } from './useCommentary'
-import type { CommentaryTreeState, CommentaryVisibilityItem } from './bookViewTypes'
+import type { CommentaryTreeState, CommentaryVisibilityItem } from '../bookViewTypes'
 import { useCommentaryTreeSearch } from './useCommentaryTreeSearch'
 
 const props = defineProps<{

@@ -1,6 +1,6 @@
-﻿import { normalize } from '../../utils/normalizeText'
-export { SegmentSearchTree as SearchableTree } from '../../utils/segmentSearchTree'
-export type { SearchableNode } from '../../utils/segmentSearchTree'
+﻿import { normalize } from '@/utils/normalizeText'
+export { SegmentSearchTree as SearchableTree } from '@/utils/segmentSearchTree'
+export type { SearchableNode } from '@/utils/segmentSearchTree'
 
 export interface TocNode {
   id: number

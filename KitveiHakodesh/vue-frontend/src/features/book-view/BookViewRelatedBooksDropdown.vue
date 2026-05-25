@@ -22,8 +22,8 @@ import { useTabStore } from '@/stores/tabStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { query } from '@/webview-host/seforimDb'
 import { SQL } from '@/webview-host/queries.sql'
-import type { CommentaryGroup } from './useCommentary'
-import type { LineItem } from './useBookViewLinesTable'
+import type { CommentaryGroup } from './commentary/useCommentary'
+import type { LineItem } from './lines/useBookViewLinesTable'
 
 const props = defineProps<{
   bookId: number | undefined

@@ -1,4 +1,4 @@
-import type { CommentaryVisibilityItem } from './bookViewTypes'
+import type { CommentaryVisibilityItem } from '../bookViewTypes'
 
 /** Internal tree node — sections and subsections only. Books are leaves (CommentaryVisibilityItem). */
 export interface CommentaryTreeNode {

@@ -2,6 +2,8 @@
 
 Main book reader. Split pane with text above and commentary below, shared side panel for tools, floating search bar, and toolbar.
 
+## Top-Level Components
+
 **BookViewPage.vue** - top-level orchestrator. The right place to add new panels or cross-cutting book-view behavior.
 
 **BookViewToolbar.vue** - zoom, search, TOC toggle, and bottom panel toggle. Add new toolbar actions here.
@@ -10,32 +12,43 @@ Main book reader. Split pane with text above and commentary below, shared side p
 
 **BookViewSidePanel.vue** - shared side-panel shell for book-view tools such as TOC and commentary filters.
 
-**BookViewLinesContent.vue** - virtual-scrolled main text. Handles line selection and communicates the selected line to the commentary panel. Any change to how lines are rendered or selected belongs here.
-
 **BookViewSearchBar.vue** - floating in-book search bar. Query input, mode selection, and match navigation.
 
-**BookViewTocTree.vue** - TOC content rendered inside the shared side panel.
+## Lines Subfolder
 
-**BookViewTocTreeSection.vue** - section header separating main and alternate TOC structures.
+All line-display logic lives in `lines/`. See `lines/README.md` for details.
 
-**CommentaryView.vue** - commentary display grouped by book.
+Import line components from the subfolder:
 
-**CommentaryHeader.vue** - header for a commentary book group with connection type selector and navigation.
+```typescript
+import BookViewLinesContent from './lines/BookViewLinesContent.vue'
+import { useLines } from './lines/useBookViewLinesTable'
+```
 
-**CommentaryHeaderNav.vue** - previous/next section navigation within a commentary book.
+## TOC Subfolder
 
-**CommentaryFilterPanel.vue** - side-panel content for toggling individual commentary books on/off. Uses `buildCommentaryTree` from `useCommentary.ts` to render the tree in normal mode. In search mode, renders a flat result list using `SegmentSearchTree` from `segmentSearchTree.ts` — matches query words across the full path (sectionLabel / subSectionLabel / bookTitle). When a search is active, emits an effective hidden set that merges the user's explicit hidden set with all groups outside the search results, so the commentary view automatically shows only what is both checked and in the search results.
+All table-of-contents logic lives in `toc/`. See `toc/README.md` for details.
 
-**CommentaryTreeViewNode.vue** - single node in the commentary filter tree.
+Import TOC components from the subfolder:
 
-**CommentaryTypeDropdown.vue** - dropdown for selecting the commentary connection type.
+```typescript
+import BookViewTocTree from './toc/BookViewTocTree.vue'
+import { useToc } from './toc/useBookViewToc'
+```
 
-**useToc.ts** - loads TOC entries and alternate structures for a book. Builds an entry-id-to-breadcrumb path map. Use `getActiveTocEntry` and `getTocPath` rather than computing paths manually.
+## Commentary Subfolder
 
-**useLinesTable.ts** - paginated line fetching in chunks of 200. Pre-allocates placeholder slots for correct virtualizer height. Use `prioritise(lineIndex)` to move a chunk to the front of the queue when the user jumps to a specific position.
+All commentary-related components, composables, and utilities live in `commentary/`. See `commentary/README.md` for details.
 
-**useCommentary.ts** - fetches linked commentary for a selected line or range, groups by connection type and category, and also prepares the commentary-filter data. Returns live `groups` for the commentary panel plus `filterGroups` for the filter tree. All commentary data fetching goes through here.
+Import commentary components from the subfolder:
+
+```typescript
+import CommentaryView from './commentary/CommentaryView.vue'
+import { useCommentary } from './commentary/useCommentary'
+```
+
+## Composables
 
 **useBookViewSearch.ts** - in-book content search, line-based.
 
-**useCommentarySearch.ts** - commentary search against a flat index.
+

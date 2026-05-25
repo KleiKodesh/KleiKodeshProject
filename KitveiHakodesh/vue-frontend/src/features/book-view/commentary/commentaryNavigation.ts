@@ -1,6 +1,6 @@
 import { query } from '@/webview-host/seforimDb'
 import { SQL } from '@/webview-host/queries.sql'
-import type { TocEntry } from '@/features/book-view/useBookViewToc'
+import type { TocEntry } from '@/features/book-view/toc/useBookViewToc'
 
 export interface SectionNavResult {
   id: number
