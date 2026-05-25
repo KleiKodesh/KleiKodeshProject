@@ -380,8 +380,8 @@ namespace KitveiHakodeshLib
                         case "resetSettings": _db.HandleResetSettings(id); break;
                         case "reload": _bridge.Reply(id, new { }); await HandleReload(); break;
                         case "pickFile": _pdf.HandlePickFile(id, this); break;
-                        case "restoreLocalPdf": await _pdf.HandleRestoreLocalPdf(root, id); break;
-                        case "disposePdfHost": _pdf.HandleDisposePdfHost(root, id); break;
+                        case "restoreLocalFile": await _pdf.HandleRestoreLocalPdf(root, id); break;
+                        case "disposeLocalFileHost": _pdf.HandleDisposePdfHost(root, id); break;
                         case "restoreHbPdf": _hb.HandleRestoreHbPdf(root, id); break;
                         case "triggerHbDownload": _hb.HandleTriggerHbDownload(root, id); break;
                         case "triggerHbSaveAs": _hb.HandleTriggerHbSaveAs(root, id); break;

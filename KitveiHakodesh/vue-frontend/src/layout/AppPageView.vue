@@ -10,6 +10,7 @@ const pages: Record<string, unknown> = {
   '/books': defineAsyncComponent(() => import('@/features/book-catalog/BookCatalogPage.vue')),
   '/book-view': defineAsyncComponent(() => import('@/features/book-view/BookViewPage.vue')),
   '/pdf-view': defineAsyncComponent(() => import('@/features/pdf-viewer/PdfViewPage.vue')),
+  '/addin-view': defineAsyncComponent(() => import('@/features/addin-view/AddinViewPage.vue')),
   '/settings': defineAsyncComponent(() => import('@/features/settings/SettingsPage.vue')),
   '/hebrewbooks': defineAsyncComponent(
     () => import('@/features/hebrewbooks/HebrewBooksPage.vue'),

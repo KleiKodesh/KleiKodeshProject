@@ -5,7 +5,7 @@
  * `typeof window.__webviewXxx === 'function'` or `isHosted` before falling back here.
  */
 
-import type { PdfFileResult } from './bridge'
+import type { LocalFileResult } from './bridge'
 
 // ── Database fallbacks ────────────────────────────────────────────────────────
 
@@ -33,11 +33,11 @@ export async function devQueryDict<T = unknown>(sql: string, params: unknown[]):
 }
 
 /** Browser file input fallback for pickFile() — accepts PDF only. */
-export function devPickPdf(): Promise<PdfFileResult | null> {
+export function devPickPdf(): Promise<LocalFileResult | null> {
   return new Promise((resolve) => {
     const input = Object.assign(document.createElement('input'), {
       type: 'file',
-      accept: '.pdf',
+      accept: '.pdf,.htm,.html',
     })
     input.onchange = () => {
       const file = input.files?.[0]

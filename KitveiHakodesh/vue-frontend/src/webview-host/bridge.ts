@@ -27,7 +27,7 @@ export function callBridgeAction<T>(name: string, ...params: unknown[]): Promise
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export interface PdfFileResult {
+export interface LocalFileResult {
   /** Ready-to-use URL served via virtual host */
   url: string
   fileName: string
@@ -35,19 +35,19 @@ export interface PdfFileResult {
   filePath: string
 }
 
-export interface PdfRestoreResult {
+export interface LocalFileRestoreResult {
   url: string
 }
 
 // ── Hosted actions ────────────────────────────────────────────────────────────
 
 /**
- * Open native file picker (PDF + Word-compatible formats).
- * For Word files, C# pushes a `conversionStarted` event before replying,
+ * Open native file picker (PDF, Word, HTML formats).
+ * For Word files, C# pushes a `localFileConversionStarted` event before replying,
  * so the tab can show a converting placeholder while waiting.
  * Returns null if the user cancels.
  */
-export async function pickFile(): Promise<PdfFileResult | null> {
+export async function pickLocalFile(): Promise<LocalFileResult | null> {
   if (typeof window.__webviewAction !== 'function') return devPickPdf()
   const res = await action<{
     cancelled?: boolean
@@ -61,12 +61,12 @@ export async function pickFile(): Promise<PdfFileResult | null> {
 }
 
 /**
- * Restore a local PDF tab from a persisted file path.
+ * Restore a local file tab from a persisted file path.
  * C# re-registers the virtual host and returns the URL.
  */
-export async function restoreLocalPdf(filePath: string): Promise<PdfRestoreResult | null> {
+export async function restoreLocalFile(filePath: string): Promise<LocalFileRestoreResult | null> {
   if (!isHosted) return null
-  const res = await action<{ url?: string; error?: string }>('restoreLocalPdf', { filePath })
+  const res = await action<{ url?: string; error?: string }>('restoreLocalFile', { filePath })
   if (res.error || !res.url) return null
   return { url: res.url }
 }
@@ -94,12 +94,12 @@ export async function restoreHbPdf(
 }
 
 /**
- * Notify C# that a PDF tab was closed so it can decrement the virtual host ref count.
+ * Notify C# that a local file tab was closed so it can decrement the virtual host ref count.
  * Only relevant for local files (not cache-based files).
  */
-export function disposePdfHost(filePath: string): void {
+export function disposeLocalFileHost(filePath: string): void {
   if (!isHosted || !filePath) return
-  action('disposePdfHost', { filePath }).catch(() => {})
+  action('disposeLocalFileHost', { filePath }).catch(() => {})
 }
 
 /**

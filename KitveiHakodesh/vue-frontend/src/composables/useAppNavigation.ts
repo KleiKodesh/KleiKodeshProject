@@ -1,6 +1,6 @@
 import { useTabStore } from '@/stores/tabStore'
 import { usePdfStore } from '@/stores/pdfStore'
-import { pickFile } from '@/webview-host/bridge'
+import { pickLocalFile } from '@/webview-host/bridge'
 import type { TabRoute } from '@/stores/tabStore'
 
 /**
@@ -26,17 +26,21 @@ export function useAppNavigation() {
   // ── Shared side-effect actions ────────────────────────────────────────────
 
   async function handleFilePicker(newTab: boolean): Promise<void> {
-    const result = await pickFile()
-    // In hosted mode, push events handle navigation — pickFile() returns null.
+    const result = await pickLocalFile()
+    // In hosted mode, push events handle navigation — pickLocalFile() returns null.
     // In dev mode, navigate directly with the blob URL.
     if (!result) return
+    // Determine route based on file extension: HTML opens in addin view.
+    const fn = result.fileName ?? ''
+    const ext = fn.substring(fn.lastIndexOf('.')).toLowerCase()
+    const route = ext === '.htm' || ext === '.html' ? '/addin-view' : '/pdf-view'
     const tabData = {
-      route: '/pdf-view' as TabRoute,
+      route: route as TabRoute,
       title: result.fileName,
-      pdfFileName: result.fileName,
-      pdfFilePath: result.filePath,
-      pdfVirtualUrl: result.url,
-      pdfConverting: false,
+      localFileName: result.fileName,
+      localFilePath: result.filePath,
+      localFileVirtualUrl: result.url,
+      localFileConverting: false,
     }
     if (newTab) tabStore.openTab(tabData)
     else tabStore.updateActiveTab(tabData)

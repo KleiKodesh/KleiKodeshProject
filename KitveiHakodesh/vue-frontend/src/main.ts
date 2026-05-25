@@ -31,7 +31,9 @@ useTabStore().init()
 const pdfStore = usePdfStore()
 const tabStore = useTabStore()
 await Promise.all([
-  ...tabStore.tabs.filter((t) => t.route === '/pdf-view').map((t) => pdfStore.restoreTab(t.id)),
+  ...tabStore.tabs
+    .filter((t) => t.route === '/pdf-view' || t.route === '/addin-view')
+    .map((t) => pdfStore.restoreTab(t.id)),
 ])
 
 function warmBooksDataInBackground() {

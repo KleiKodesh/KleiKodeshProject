@@ -46,18 +46,20 @@ namespace KitveiHakodeshLib.Pdf
                     string filePath = dlg.FileName;
                     string ext = Path.GetExtension(filePath).ToLowerInvariant();
 
-                    if (ext == ".pdf")
+                    // Handle already-webview-hostable files (PDF and HTML) by registering
+                    // the parent folder as a virtual host and returning the URL immediately.
+                    if (ext == ".pdf" || ext == ".htm" || ext == ".html")
                     {
                         string url = RegisterFolder(filePath);
-                        _bridge.PushEvent(new { @event = "localPdfReady", url, fileName = Path.GetFileName(filePath), filePath });
-                        _bridge.Reply(id, new { cancelled = false });
+                        _bridge.PushEvent(new { @event = "localFileReady", url, fileName = Path.GetFileName(filePath), filePath });
+                        _bridge.Reply(id, new { cancelled = false, url, fileName = Path.GetFileName(filePath), filePath });
                     }
                     else
                     {
                         string displayName = Path.GetFileNameWithoutExtension(filePath) + ".pdf";
                         string destPath = GetCachePath(filePath);
                         string destFileName = Path.GetFileName(destPath);
-                        _bridge.PushEvent(new { @event = "conversionStarted", fileName = displayName, filePath });
+                        _bridge.PushEvent(new { @event = "localFileConversionStarted", fileName = displayName, filePath });
 
                         // Watch for the output PDF to appear — fires as soon as ExportAsFixedFormat
                         // writes the file, before Word has finished closing. This lets the tab
@@ -82,7 +84,7 @@ namespace KitveiHakodeshLib.Pdf
                                 watcher.EnableRaisingEvents = false;
                                 watcher.Dispose();
                                 string url2 = "http://KitveiHakodesh-vue-app/cache/word/" + destFileName;
-                                _bridge.PushEvent(new { @event = "conversionReady", url = url2, fileName = displayName, filePath });
+                                _bridge.PushEvent(new { @event = "localFileConversionReady", url = url2, fileName = displayName, filePath });
                             };
                             watcher.Created += onReady;
                             watcher.Changed += onReady;
@@ -110,7 +112,7 @@ namespace KitveiHakodeshLib.Pdf
             if (!File.Exists(filePath)) { _bridge.Reply(id, new { error = "הקובץ לא נמצא" }); return; }
 
             string ext = Path.GetExtension(filePath).ToLowerInvariant();
-            if (ext == ".pdf")
+            if (ext == ".pdf" || ext == ".htm" || ext == ".html")
             {
                 _bridge.Reply(id, new { url = RegisterFolder(filePath) });
                 return;

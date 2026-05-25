@@ -1,44 +1,49 @@
 import { defineStore } from 'pinia'
 import { computed, watch } from 'vue'
 import { useTabStore } from './tabStore'
-import { disposePdfHost, restoreLocalPdf, restoreHbPdf } from '@/webview-host/bridge'
+import { disposeLocalFileHost, restoreLocalFile, restoreHbPdf } from '@/webview-host/bridge'
 import { onWebviewEvent } from '@/webview-host/seforimDb'
 
 export const usePdfStore = defineStore('pdf', () => {
   const tabStore = useTabStore()
 
-  const virtualUrl = computed(() => tabStore.activeTab.pdfVirtualUrl ?? null)
-  const fileName = computed(() => tabStore.activeTab.pdfFileName ?? null)
-  const converting = computed(() => tabStore.activeTab.pdfConverting ?? false)
-  const loadingType = computed(() => tabStore.activeTab.pdfLoadingType ?? 'converting')
+  const virtualUrl = computed(() => tabStore.activeTab.localFileVirtualUrl ?? null)
+  const fileName = computed(() => tabStore.activeTab.localFileName ?? null)
+  const converting = computed(() => tabStore.activeTab.localFileConverting ?? false)
+  const loadingType = computed(() => tabStore.activeTab.localFileLoadingType ?? 'converting')
 
   // Set of tabIds currently converting — used to ignore results after cancel/navigate/close
   const _converting = new Set<string>()
 
   // Listen for C# push events
-  onWebviewEvent((msg) => {
-    if (msg.event === 'conversionStarted') {
+  onWebviewEvent((msg: any) => {
+    if (msg.event === 'localFileConversionStarted') {
       startLocalFileConversion(msg.fileName as string, msg.filePath as string)
     }
-    if (msg.event === 'localPdfReady') {
+    if (msg.event === 'localFileReady') {
       const tabId = tabStore.activeTabId
+      // Choose the route based on the picked file type: HTML files open in the addin
+      // view (iframe), PDFs open in the PDF viewer.
+      const path = (msg.filePath as string) ?? ''
+      const ext = path.substring(path.lastIndexOf('.')).toLowerCase()
+      const route = ext === '.htm' || ext === '.html' ? '/addin-view' : '/pdf-view'
       tabStore.updateActiveTab({
-        route: '/pdf-view',
+        route,
         title: msg.fileName as string,
-        pdfFileName: msg.fileName as string,
-        pdfFilePath: msg.filePath as string,
-        pdfVirtualUrl: msg.url as string,
-        pdfConverting: false,
+        localFileName: msg.fileName as string,
+        localFilePath: msg.filePath as string,
+        localFileVirtualUrl: msg.url as string,
+        localFileConverting: false,
       })
       // Ensure the tab is tracked so finishLocalFileConversion no-ops if called again
       _converting.delete(tabId)
     }
-    if (msg.event === 'conversionReady') {
+    if (msg.event === 'localFileConversionReady') {
       // Find the tab that started this conversion — it's the one still in _converting
       // with pdfLoadingType 'converting'. Only one Word conversion runs at a time.
       const convertingTabId = Array.from(_converting).find((tid) => {
         const t = tabStore.tabs.find((x) => x.id === tid)
-        return t?.pdfLoadingType === 'converting'
+        return t?.localFileLoadingType === 'converting'
       })
       if (convertingTabId) {
         finishLocalFileConversion(convertingTabId, {
@@ -70,7 +75,8 @@ export const usePdfStore = defineStore('pdf', () => {
       const currentIds = new Set(current.map((t) => t.id))
       for (const tabId of Array.from(_converting)) {
         const wasRemoved = !currentIds.has(tabId)
-        const navigatedAway = current.find((t) => t.id === tabId)?.route !== '/pdf-view'
+        const route = current.find((t) => t.id === tabId)?.route
+        const navigatedAway = route !== '/pdf-view' && route !== '/addin-view'
         if (wasRemoved || navigatedAway) _converting.delete(tabId)
       }
     },
@@ -83,11 +89,11 @@ export const usePdfStore = defineStore('pdf', () => {
     tabStore.updateActiveTab({
       route: '/pdf-view',
       title: fileName,
-      pdfFileName: fileName,
-      pdfFilePath: filePath,
-      pdfConverting: true,
-      pdfLoadingType: 'converting',
-      pdfVirtualUrl: undefined,
+      localFileName: fileName,
+      localFilePath: filePath,
+      localFileConverting: true,
+      localFileLoadingType: 'converting',
+      localFileVirtualUrl: undefined,
     })
   }
 
@@ -100,7 +106,7 @@ export const usePdfStore = defineStore('pdf', () => {
     if (!tab) return
 
     // Bail if already finished (e.g. conversionReady fired before the RPC reply)
-    if (!tab.pdfConverting) return
+    if (!tab.localFileConverting) return
 
     // For Word conversions, check the cancellation set
     if (!_converting.has(tabId)) return
@@ -110,22 +116,22 @@ export const usePdfStore = defineStore('pdf', () => {
       tabStore.updateTab(tabId, {
         route: '/pdf-view',
         title: result.fileName,
-        pdfVirtualUrl: result.url,
-        pdfFileName: result.fileName,
-        pdfFilePath: result.filePath,
-        pdfConverting: false,
+        localFileVirtualUrl: result.url,
+        localFileName: result.fileName,
+        localFilePath: result.filePath,
+        localFileConverting: false,
       })
     } else {
       // Conversion failed — dispose any virtual host that was registered for this tab
       // before navigating away, so the mapping is not left open.
-      if (tab.pdfFilePath) disposePdfHost(tab.pdfFilePath)
+      if (tab.localFilePath) disposeLocalFileHost(tab.localFilePath)
       tabStore.updateTab(tabId, {
         route: '/',
         title: 'בית',
-        pdfVirtualUrl: undefined,
-        pdfFileName: undefined,
-        pdfFilePath: undefined,
-        pdfConverting: false,
+        localFileVirtualUrl: undefined,
+        localFileName: undefined,
+        localFilePath: undefined,
+        localFileConverting: false,
       })
     }
   }
@@ -133,29 +139,29 @@ export const usePdfStore = defineStore('pdf', () => {
   /** Cancel an in-progress conversion — resets the tab to home. */
   function cancelConversion(tabId: string) {
     _converting.delete(tabId)
-    // Dispose the virtual host before clearing pdfFilePath so the mapping is released.
+    // Dispose the virtual host before clearing localFilePath so the mapping is released.
     const tab = tabStore.tabs.find((t) => t.id === tabId)
-    if (tab?.pdfFilePath) disposePdfHost(tab.pdfFilePath)
+    if (tab?.localFilePath) disposeLocalFileHost(tab.localFilePath)
     tabStore.updateTab(tabId, {
       route: '/',
       title: 'בית',
-      pdfVirtualUrl: undefined,
-      pdfFileName: undefined,
-      pdfFilePath: undefined,
-      pdfConverting: false,
+      localFileVirtualUrl: undefined,
+      localFileName: undefined,
+      localFilePath: undefined,
+      localFileConverting: false,
     })
   }
 
   /** Navigate a tab to /pdf-view placeholder while a HebrewBooks download is in progress. */
-  function startHbDownload(bookTitle: string, tabId: string) {
+    function startHbDownload(bookTitle: string, tabId: string) {
     _converting.add(tabId)
     tabStore.updateTab(tabId, {
       route: '/pdf-view',
       title: bookTitle,
-      pdfFileName: bookTitle,
-      pdfConverting: true,
-      pdfLoadingType: 'downloading',
-      pdfVirtualUrl: undefined,
+      localFileName: bookTitle,
+      localFileConverting: true,
+      localFileLoadingType: 'downloading',
+      localFileVirtualUrl: undefined,
     })
   }
 
@@ -166,11 +172,11 @@ export const usePdfStore = defineStore('pdf', () => {
     tabStore.updateTab(tabId, {
       route: '/pdf-view',
       title: bookTitle,
-      pdfVirtualUrl: url,
-      pdfFileName: bookTitle,
-      pdfHbBookId: bookId,
-      pdfHbBookTitle: bookTitle,
-      pdfConverting: false,
+      localFileVirtualUrl: url,
+      localFileName: bookTitle,
+      localFileHbBookId: bookId,
+      localFileHbBookTitle: bookTitle,
+      localFileConverting: false,
     })
   }
 
@@ -185,37 +191,41 @@ export const usePdfStore = defineStore('pdf', () => {
     tabStore.updateActiveTab({
       route: '/pdf-view',
       title: bookTitle,
-      pdfVirtualUrl: url,
-      pdfFileName: bookTitle,
-      pdfHbBookId: bookId,
-      pdfHbBookTitle: bookTitle,
+      localFileVirtualUrl: url,
+      localFileName: bookTitle,
+      localFileHbBookId: bookId,
+      localFileHbBookTitle: bookTitle,
     })
   }
 
-  /** Called on app init for every restored /pdf-view tab. */
+  /** Called on app init for every restored /pdf-view or /addin-view tab. */
   async function restoreTab(tabId: string) {
     const tab = tabStore.tabs.find((t) => t.id === tabId)
-    if (!tab || tab.route !== '/pdf-view') return
+    if (!tab || (tab.route !== '/pdf-view' && tab.route !== '/addin-view')) return
 
-    if (tab.pdfHbBookId) {
-      tabStore.updateTab(tabId, { pdfConverting: true, pdfLoadingType: 'downloading' })
+    if (tab.localFileHbBookId) {
+      tabStore.updateTab(tabId, { localFileConverting: true, localFileLoadingType: 'downloading' })
       _converting.add(tabId)
-      const res = await restoreHbPdf(tab.pdfHbBookId, tab.pdfHbBookTitle ?? '', tabId)
+      const res = await restoreHbPdf(tab.localFileHbBookId, tab.localFileHbBookTitle ?? '', tabId)
       if (!res) {
         _converting.delete(tabId)
         tabStore.closeTab(tabId)
       } else if ('url' in res) {
         _converting.delete(tabId)
         tabStore.updateTab(tabId, {
-          pdfVirtualUrl: res.url,
-          pdfConverting: false,
-          pdfLoadingType: undefined,
+          localFileVirtualUrl: res.url,
+          localFileConverting: false,
+          localFileLoadingType: undefined,
         })
       }
       // redownload: true — stays in _converting, hbPdfReady push event will finish it
-    } else if (tab.pdfFilePath) {
-      const res = await restoreLocalPdf(tab.pdfFilePath)
-      if (res) tabStore.updateTab(tabId, { pdfVirtualUrl: res.url })
+    } else if (tab.localFilePath) {
+      const res = await restoreLocalFile(tab.localFilePath)
+      if (res) {
+        const ext = tab.localFilePath.substring(tab.localFilePath.lastIndexOf('.')).toLowerCase()
+        const route = ext === '.htm' || ext === '.html' ? '/addin-view' : '/pdf-view'
+        tabStore.updateTab(tabId, { localFileVirtualUrl: res.url, route })
+      }
     }
   }
 

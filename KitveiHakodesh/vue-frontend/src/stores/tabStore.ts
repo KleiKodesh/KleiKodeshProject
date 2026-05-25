@@ -14,11 +14,12 @@ import {
 } from '@/utils/persistence'
 import type { TabState, BookState, LastReadState } from '@/utils/persistence'
 import { useWorkspaceStore } from './workspaceStore'
-import { disposePdfHost } from '@/webview-host/bridge'
+import { disposeLocalFileHost } from '@/webview-host/bridge'
 
 export type TabRoute =
   | '/'
   | '/pdf-view'
+  | '/addin-view'
   | '/settings'
   | '/books'
   | '/book-view'
@@ -33,14 +34,14 @@ export interface Tab {
   id: string
   title: string
   route: TabRoute
-  // PDF state
-  pdfVirtualUrl?: string // in-memory only — not persisted, reconstructed on restore
-  pdfFileName?: string
-  pdfFilePath?: string // persisted — local file path (for local PDF / Word files)
-  pdfHbBookId?: string // persisted — HebrewBooks book ID (for cache restore / re-download)
-  pdfHbBookTitle?: string // persisted — HebrewBooks book title (used as cache filename)
-  pdfConverting?: boolean // in-memory only — true while Word conversion is in progress
-  pdfLoadingType?: 'converting' | 'downloading' // in-memory only — drives placeholder message
+  // Local file state (PDF, HTML, Word)
+  localFileVirtualUrl?: string // in-memory only — not persisted, reconstructed on restore
+  localFileName?: string
+  localFilePath?: string // persisted — local file path (for local PDF / Word / HTML files)
+  localFileHbBookId?: string // persisted — HebrewBooks book ID (for cache restore / re-download)
+  localFileHbBookTitle?: string // persisted — HebrewBooks book title (used as cache filename)
+  localFileConverting?: boolean // in-memory only — true while Word conversion is in progress
+  localFileLoadingType?: 'converting' | 'downloading' // in-memory only — drives placeholder message
   // Kiwix ZIM state — removed; feature deferred to a later stage
   // Book reader state
   bookId?: number
@@ -56,7 +57,7 @@ export interface Tab {
 }
 
 interface PersistedTabList {
-  tabs: Omit<Tab, 'pdfVirtualUrl' | 'openToc'>[]
+  tabs: Omit<Tab, 'localFileVirtualUrl' | 'openToc'>[]
   activeTabId: string
   nextId: number
 }
@@ -111,9 +112,9 @@ export const useTabStore = defineStore('tabs', () => {
     lsSet<PersistedTabList>(KEYS.tabsList(wsId), {
       tabs: persistable.map(
         ({
-          pdfVirtualUrl,
-          pdfConverting,
-          pdfLoadingType,
+          localFileVirtualUrl,
+          localFileConverting,
+          localFileLoadingType,
           openToc,
           openTocEntryId,
           openTocLineIndex,
@@ -138,10 +139,10 @@ export const useTabStore = defineStore('tabs', () => {
         id: t.id,
         title: t.title,
         route: t.route,
-        pdfFileName: t.pdfFileName,
-        pdfFilePath: t.pdfFilePath,
-        pdfHbBookId: t.pdfHbBookId,
-        pdfHbBookTitle: t.pdfHbBookTitle,
+        localFileName: t.localFileName,
+        localFilePath: t.localFilePath,
+        localFileHbBookId: t.localFileHbBookId,
+        localFileHbBookTitle: t.localFileHbBookTitle,
         bookId: t.bookId,
         searchQuery: t.searchQuery,
         tocPath: t.tocPath,
@@ -266,7 +267,7 @@ export const useTabStore = defineStore('tabs', () => {
   function closeAllTabs() {
     const wsId = useWorkspaceStore().activeId
     for (const tab of tabs.value) {
-      if (tab.pdfFilePath) disposePdfHost(tab.pdfFilePath)
+        if (tab.localFilePath) disposeLocalFileHost(tab.localFilePath)
       idbTabsDelete(KEYS.tab(wsId, tab.id))
       idbTabsDeleteByPrefix(KEYS.tabPrefix(wsId, tab.id))
     }
@@ -280,7 +281,7 @@ export const useTabStore = defineStore('tabs', () => {
     const idx = tabs.value.findIndex((t) => t.id === id)
     if (idx === -1) return
     const tab = tabs.value[idx]!
-    if (tab.pdfFilePath) disposePdfHost(tab.pdfFilePath)
+    if (tab.localFilePath) disposeLocalFileHost(tab.localFilePath)
     const wsId = useWorkspaceStore().activeId
     idbTabsDelete(KEYS.tab(wsId, id))
     idbTabsDeleteByPrefix(KEYS.tabPrefix(wsId, id))
