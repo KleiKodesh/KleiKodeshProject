@@ -325,9 +325,13 @@ export function useBookView(
   watch(() => bookId, () => {
     selectedLineId.value = null
     commentaryLineId.value = null
+    // Also clear groups directly to ensure loading animation shows immediately
+    groups.value = []
   })
 
   onMounted(async () => {
+    // Clear groups before session restore so loading animation shows immediately
+    groups.value = []
     const result = await restoreSession()
     if (result?.commentaryMode) restoredCommentaryMode.value = result.commentaryMode
     if (result?.commentaryFraction != null) restoredCommentaryFraction.value = result.commentaryFraction
