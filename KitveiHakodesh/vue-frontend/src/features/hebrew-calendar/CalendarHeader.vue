@@ -94,13 +94,15 @@ function selectGregYear(y: number) {
 }
 
 function openYearDrop(drop: ReturnType<typeof makeDropdown>) {
-  drop.show.value = true
-  nextTick(() => {
-    const list = drop.listRef.value
-    const active = list?.querySelector<HTMLElement>('.active')
-    if (!list || !active) return
-    list.scrollTop = active.offsetTop - list.clientHeight / 2 + active.offsetHeight / 2
-  })
+  drop.show.value = !drop.show.value
+  if (drop.show.value) {
+    nextTick(() => {
+      const list = drop.listRef.value
+      const active = list?.querySelector<HTMLElement>('.active')
+      if (!list || !active) return
+      list.scrollTop = active.offsetTop - list.clientHeight / 2 + active.offsetHeight / 2
+    })
+  }
 }
 </script>
 
@@ -238,6 +240,9 @@ function openYearDrop(drop: ReturnType<typeof makeDropdown>) {
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
+  overflow: visible;
+  position: relative;
+  z-index: 1;
 }
 .side {
   display: flex;
@@ -245,7 +250,6 @@ function openYearDrop(drop: ReturnType<typeof makeDropdown>) {
   gap: 1px;
   flex: 1;
   min-width: 0;
-  overflow: hidden;
 }
 .side--he {
   justify-content: flex-start;
@@ -283,7 +287,6 @@ function openYearDrop(drop: ReturnType<typeof makeDropdown>) {
 .picker {
   position: relative;
   min-width: 0;
-  overflow: hidden;
 }
 .label-btn {
   display: block;
@@ -310,7 +313,7 @@ function openYearDrop(drop: ReturnType<typeof makeDropdown>) {
   border: 1px solid var(--border-color);
   border-radius: 6px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
-  z-index: 100;
+  z-index: 10000;
   overflow: hidden;
 }
 .side--he .drop {
