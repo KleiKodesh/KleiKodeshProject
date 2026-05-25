@@ -168,6 +168,7 @@ watch(restoredCommentaryFraction, (fraction) => { if (fraction != null) commenta
           </template>
           <template #bottom>
             <CommentaryView
+              :key="bookId"
               ref="commentaryViewRef"
               :selected-line-id="selectedLineId"
               :groups="groupsForDisplay"

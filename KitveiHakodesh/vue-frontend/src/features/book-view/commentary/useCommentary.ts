@@ -387,8 +387,10 @@ export function useCommentary(
     const multiIds = selectedLineIds()
     const isMulti = multiIds != null && multiIds.length > 0
     lastLoadUsedSingleLine = !isMulti
-    loading.value = true
+    // Clear groups BEFORE setting loading=true so the loading state shows immediately
+    // without displaying stale groups from the previous line first.
     groups.value = []
+    loading.value = true
     try {
       await booksDataStore.ensureLoaded()
       await booksDataStore.ensureCommentaryMetadataLoaded()
@@ -477,8 +479,8 @@ export function useCommentary(
   // group so the user can see the book they were reading rather than a confusing jump.
   const groupsForDisplay = computed<CommentaryGroup[]>(() => {
     const pinned = pinnedBookId()
-    // No pin, still loading, or pinned book is present — nothing to inject
-    if (!pinned || loading.value || groups.value.some((g) => g.bookId === pinned))
+    // No pin, still loading, no real groups, or pinned book is present — nothing to inject
+    if (!pinned || loading.value || !groups.value.length || groups.value.some((g) => g.bookId === pinned))
       return groups.value
 
     // Pinned book is absent from this line's commentary — inject a placeholder at the

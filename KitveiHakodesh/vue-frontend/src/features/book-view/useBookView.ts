@@ -320,6 +320,13 @@ export function useBookView(
     () => groups.value,
   )
 
+  // Reset selectedLineId and commentaryLineId when the book changes so old commentary
+  // doesn't load while waiting for the new book's lines to finish loading.
+  watch(() => bookId, () => {
+    selectedLineId.value = null
+    commentaryLineId.value = null
+  })
+
   onMounted(async () => {
     const result = await restoreSession()
     if (result?.commentaryMode) restoredCommentaryMode.value = result.commentaryMode

@@ -250,6 +250,13 @@ function savePos() {
           ),
         }
       : undefined
+    const pinnedGroup = props.pinnedCommentaryGroup
+      ? {
+          bookId: props.pinnedCommentaryGroup.bookId,
+          sectionLabel: props.pinnedCommentaryGroup.sectionLabel,
+          subSectionLabel: props.pinnedCommentaryGroup.subSectionLabel,
+        }
+      : null
     tabStore.setBookViewState(tabId, bookId, {
       ...pos,
       selectedLineId: props.selectedLineId,
@@ -261,7 +268,7 @@ function savePos() {
       commentaryMode: props.commentaryMode,
       commentaryFraction: props.commentaryFraction,
       autoSelectTopLine: autoSelectTopLine.value,
-      pinnedCommentaryGroup: props.pinnedCommentaryGroup,
+      pinnedCommentaryGroup: pinnedGroup,
     })
     tabStore.setLastReadPos(bookId, {
       ...pos,
@@ -271,7 +278,7 @@ function savePos() {
       commentaryFilterState: filterState,
       commentaryMode: props.commentaryMode,
       commentaryFraction: props.commentaryFraction,
-      pinnedCommentaryGroup: props.pinnedCommentaryGroup,
+      pinnedCommentaryGroup: pinnedGroup,
     })
   }
 }
