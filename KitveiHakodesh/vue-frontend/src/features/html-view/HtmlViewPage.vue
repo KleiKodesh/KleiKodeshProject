@@ -71,58 +71,17 @@ function hexToRgbObj(hex: string): { r: number; g: number; b: number } {
     : { r: 0, g: 0, b: 0 }
 }
 
-// Compute theme-aware filter for HTML content
+// Simple filter: invert colors + apply theme tint when toggle is ON
 const htmlFilter = computed(() => {
   if (!htmlMaskEnabled.value) return 'none'
   
   const preset = document.documentElement.getAttribute('data-theme-preset') as ThemePreset | null
   const theme = preset ? getTheme(preset) : null
-  if (!theme) return 'invert(0.95) hue-rotate(180deg)'
+  if (!theme) return 'invert(0.85) hue-rotate(180deg) sepia(0.2)'
   
-  // Use lighter filter logic for HTML content (less aggressive than PDF viewer)
-  if (theme.isDark) {
-    const { r, g, b } = hexToRgbObj(theme.reading.accentColor)
-    const [rv, gv, bv] = [r / 255, g / 255, b / 255]
-    const max = Math.max(rv, gv, bv),
-      min = Math.min(rv, gv, bv),
-      delta = max - min
-    let hue = 0
-    if (delta) {
-      if (max === rv) hue = 60 * (((gv - bv) / delta) % 6)
-      else if (max === gv) hue = 60 * ((bv - rv) / delta + 2)
-      else hue = 60 * ((rv - gv) / delta + 4)
-    }
-    if (hue < 0) hue += 360
-    const sat = max === 0 ? 0 : delta / max
-    let f = 'invert(0.5) hue-rotate(180deg)'
-    if (sat > 0.3)
-      f += ` sepia(${Math.min(0.5, sat * 0.6)}) hue-rotate(${Math.round(hue)}deg) saturate(${Math.min(1.3, 1.1 + sat * 0.4)})`
-    return f + ' brightness(0.9) contrast(0.95)'
-  }
-
-  const bg = hexToRgbObj(theme.reading.bgPrimary)
-  const warmth = bg.r > bg.b && bg.g > bg.b ? (bg.r + bg.g - 2 * bg.b) / 255 : 0
-  if (warmth > 0.2) {
-    const s = Math.min(0.5, warmth)
-    return `sepia(${s * 0.5}) brightness(${0.95 + (1 - s) * 0.02})`
-  }
-  const { r, g, b } = hexToRgbObj(theme.reading.accentColor)
-  const [rv, gv, bv] = [r / 255, g / 255, b / 255]
-  const max = Math.max(rv, gv, bv),
-    min = Math.min(rv, gv, bv),
-    delta = max - min
-  const sat = max === 0 ? 0 : delta / max
-  if (sat > 0.4) {
-    let hue = 0
-    if (delta) {
-      if (max === rv) hue = 60 * (((gv - bv) / delta) % 6)
-      else if (max === gv) hue = 60 * ((bv - rv) / delta + 2)
-      else hue = 60 * ((rv - gv) / delta + 4)
-    }
-    if (hue < 0) hue += 360
-    return `sepia(${Math.min(0.5, sat * 0.75)}) hue-rotate(${Math.round(hue)}deg) saturate(${Math.min(1.3, 1.1 + sat * 0.3)})`
-  }
-  return 'none'
+  // Apply invert + light sepia for tint + hue-rotate for color balance
+  // Light sepia (0.2) gives the warm tint without making it monochrome
+  return 'invert(0.85) hue-rotate(180deg) sepia(0.2) brightness(0.95) contrast(0.95)'
 })
 </script>
 
