@@ -14,7 +14,7 @@ import type { Ref } from 'vue'
 import type { CommentaryTreeState } from './bookViewTypes'
 
 interface CommentaryViewRef {
-  restoreCommentaryScrollPos: (index: number, offset: number) => void
+  restoreCommentaryScrollPos: (index: number, offset: number) => Promise<void>
 }
 
 export function useBookViewSessionRestore(
@@ -151,17 +151,24 @@ export function useBookViewSessionRestore(
         async (ready) => {
           if (!ready) return
           stop()
+          // Keep loading=true while the scroll restore rAF loop runs so the loading
+          // animation doesn't disappear before the scroll position is actually applied.
+          commentaryLoading.value = true
           await nextTick()
+          const doRestore = async (viewRef: CommentaryViewRef) => {
+            await viewRef.restoreCommentaryScrollPos(si, so)
+            commentaryLoading.value = false
+          }
           const viewRef = commentaryViewRef()
           if (viewRef) {
-            viewRef.restoreCommentaryScrollPos(si, so)
+            void doRestore(viewRef)
           } else {
             const stopRef = watch(
               () => commentaryViewRef(),
               (newRef) => {
                 if (!newRef) return
                 stopRef()
-                newRef.restoreCommentaryScrollPos(si, so)
+                void doRestore(newRef)
               },
             )
           }

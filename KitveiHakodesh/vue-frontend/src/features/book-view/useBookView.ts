@@ -38,7 +38,7 @@ type CommentaryViewInstance = {
   scrollToGroup: (bookId: number) => void
   scrollToFlatIndex: (index: number) => void
   captureScrollPos?: () => { scrollIndex: number; scrollOffset: number } | null
-  restoreCommentaryScrollPos: (index: number, offset: number) => void
+  restoreCommentaryScrollPos: (index: number, offset: number) => Promise<void>
 }
 
 export function useBookView(

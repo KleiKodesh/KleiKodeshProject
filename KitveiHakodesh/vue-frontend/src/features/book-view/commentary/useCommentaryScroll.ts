@@ -85,7 +85,7 @@ export function useCommentaryScroll(
     }
   }
 
-  function restoreCommentaryScrollPos(scrollIndex: number, scrollOffset: number) {
+  function restoreCommentaryScrollPos(scrollIndex: number, scrollOffset: number): Promise<void> {
     // Use TanStack's scrollToIndex to get the item into view, then apply the sub-item
     // offset. We must wait for the virtualizer to actually render and measure the target
     // item before applying the offset — otherwise item.start is based on estimated sizes
@@ -99,27 +99,32 @@ export function useCommentaryScroll(
     let lastStart: number | undefined
     const el = scrollerEl()
 
-    function attempt() {
-      virtualizer().scrollToIndex(scrollIndex, { align: 'start' })
-      requestAnimationFrame(() => {
-        const item = virtualizer().measurementsCache.find((m) => m.index === scrollIndex)
-        if (!item || !el) {
-          if (++attempts < MAX_ATTEMPTS) attempt()
-          return
-        }
-        // Wait for the measured start to stabilise — if it changed since last rAF,
-        // the virtualizer is still correcting positions, try again.
-        if (item.start !== lastStart) {
-          lastStart = item.start
-          if (++attempts < MAX_ATTEMPTS) attempt()
-          return
-        }
-        // Start is stable — apply the sub-item offset.
-        el.scrollTop = item.start + scrollOffset
-      })
-    }
+    return new Promise<void>((resolve) => {
+      function attempt() {
+        virtualizer().scrollToIndex(scrollIndex, { align: 'start' })
+        requestAnimationFrame(() => {
+          const item = virtualizer().measurementsCache.find((m) => m.index === scrollIndex)
+          if (!item || !el) {
+            if (++attempts < MAX_ATTEMPTS) attempt()
+            else resolve()
+            return
+          }
+          // Wait for the measured start to stabilise — if it changed since last rAF,
+          // the virtualizer is still correcting positions, try again.
+          if (item.start !== lastStart) {
+            lastStart = item.start
+            if (++attempts < MAX_ATTEMPTS) attempt()
+            else resolve()
+            return
+          }
+          // Start is stable — apply the sub-item offset.
+          el.scrollTop = item.start + scrollOffset
+          resolve()
+        })
+      }
 
-    attempt()
+      attempt()
+    })
   }
 
   const topVisibleFlatIndex = computed(() => {
