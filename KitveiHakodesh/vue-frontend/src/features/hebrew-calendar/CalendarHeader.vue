@@ -236,7 +236,7 @@ function openYearDrop(drop: ReturnType<typeof makeDropdown>) {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 3px 6px;
+  padding: 6px 12px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;

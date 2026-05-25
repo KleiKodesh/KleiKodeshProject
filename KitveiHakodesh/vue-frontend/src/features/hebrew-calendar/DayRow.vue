@@ -72,15 +72,11 @@ const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
 
       <!-- Center: events + action pills -->
       <div class="center">
-        <span v-if="day.parasha" class="ev parasha">{{ day.parasha }}</span>
-        <span v-if="day.parasha && day.holidays.length" class="sep">·</span>
+        <span v-if="day.parasha" class="pill-dummy">{{ day.parasha }}</span>
         <template v-for="(h, i) in day.holidays" :key="h">
           <span class="ev holiday">{{ h }}</span>
-          <span v-if="i < day.holidays.length - 1" class="sep">·</span>
         </template>
-        <span v-if="day.chanukahCandles" class="sep">·</span>
         <span v-if="day.chanukahCandles" class="ev chanukah">{{ day.chanukahCandles }}</span>
-        <span v-if="day.parasha || day.holidays.length || day.chanukahCandles" class="sep">·</span>
         <button class="pill" :class="{ on: zmanimOpen }" @click="$emit('toggle-zmanim')">
           זמני היום
         </button>
@@ -240,11 +236,9 @@ const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
   font-size: 11px;
 }
 .ev {
-  font-size: 12px;
-}
-.parasha {
-  font-weight: 600;
-  color: var(--text-primary);
+  font-size: 11px;
+  line-height: 1;
+  display: inline-block;
 }
 .holiday {
   font-weight: 600;
@@ -280,6 +274,9 @@ const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
   cursor: pointer;
   white-space: nowrap;
   -webkit-tap-highlight-color: transparent;
+  line-height: 1;
+  display: inline-block;
+  font-variant-numeric: normal;
 }
 .pill:hover,
 .pill.on {
@@ -292,6 +289,13 @@ const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
 .pill.green:hover,
 .pill.green.on {
   background: color-mix(in srgb, #3a9e6e 10%, transparent);
+}
+
+/* ── Dummy pill (non-interactive) ── */
+.pill-dummy {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-secondary);
 }
 
 /* ── Expand panels ── */
