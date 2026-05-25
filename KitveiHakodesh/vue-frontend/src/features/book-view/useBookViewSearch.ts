@@ -62,6 +62,14 @@ export function useBookViewSearch(
   const currentMatchLineIndex = computed(() => currentMatch.value?.lineIndex ?? -1)
   const currentMatchOccurrence = computed(() => currentMatch.value?.occurrenceInLine ?? 0)
 
+  function gotoNearestMatch() {
+    const newMatches = matches.value
+    if (!newMatches.length) return
+    const cur = currentLineIndex()
+    const nearestIdx = newMatches.findIndex((m) => m.lineIndex >= cur)
+    currentMatchIdx.value = nearestIdx === -1 ? 0 : nearestIdx
+  }
+
   function next() {
     if (matchCount.value) currentMatchIdx.value = (currentMatchIdx.value + 1) % matchCount.value
   }
@@ -82,5 +90,6 @@ export function useBookViewSearch(
     next,
     prev,
     clear,
+    gotoNearestMatch,
   }
 }

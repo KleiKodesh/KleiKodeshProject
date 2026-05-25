@@ -169,7 +169,7 @@ export function useBookView(
 
   const { beginTocScroll, checkTocScrollProgress } = useBookViewTocScrollTracking()
 
-  const { currentScrollLineIndex, onLinesScrolled } = useBookViewScrollSync(
+  const { currentScrollLineIndex, currentFullLineIndex, onLinesScrolled } = useBookViewScrollSync(
     () => lines.value,
     activeTocEntryId,
     selectedLineId,
@@ -201,7 +201,7 @@ export function useBookView(
 
   // ── Search ────────────────────────────────────────────────────────────────
 
-  const contentSearch = useBookViewSearch(() => lines.value, () => currentScrollLineIndex.value)
+  const contentSearch = useBookViewSearch(() => lines.value, () => currentFullLineIndex.value)
   const commentarySearch = useCommentarySearch(
     () => groups.value,
     () => commentaryViewRef()?.topVisibleFlatIndex ?? 0,
@@ -210,6 +210,11 @@ export function useBookView(
   const activeSearch = computed(() => searchMode.value === 'content' ? contentSearch : commentarySearch)
   const activeMatchCount = computed(() => activeSearch.value.matchCount.value)
   const activeMatchIdx = computed(() => activeSearch.value.currentMatchIdx.value)
+
+  const searchNavigationState = {
+    content: false,
+    commentary: false,
+  }
 
   function scrollContentMatch() {
     if (searchMode.value === 'content') {
@@ -229,12 +234,14 @@ export function useBookView(
     }
     searchVisible.value = true
     searchMode.value = 'content'
+    searchNavigationState.content = false
     nextTick(() => searchBarRef()?.focus())
   }
 
   function openCommentarySearch() {
     searchVisible.value = true
     searchMode.value = 'commentary'
+    searchNavigationState.commentary = false
     nextTick(() => searchBarRef()?.focus())
   }
 
@@ -243,15 +250,42 @@ export function useBookView(
     contentSearch.clear()
     commentarySearch.clear()
     searchMode.value = mode
+    searchNavigationState[mode] = false
     if (!currentQuery) return
     const target = mode === 'content' ? contentSearch : commentarySearch
     target.query.value = currentQuery
-    nextTick(() => scrollContentMatch())
   }
 
-  function onQueryChange(q: string) { activeSearch.value.query.value = q; scrollContentMatch() }
-  function onSearchNext() { activeSearch.value.next(); scrollContentMatch() }
-  function onSearchPrev() { activeSearch.value.prev(); scrollContentMatch() }
+  function onQueryChange(q: string) {
+    activeSearch.value.query.value = q
+    searchNavigationState[searchMode.value] = false
+  }
+
+  function onSearchNext() {
+    const search = activeSearch.value
+    if (search.matchCount.value === 0) return
+    if (!searchNavigationState[searchMode.value]) {
+      searchNavigationState[searchMode.value] = true
+      search.gotoNearestMatch?.()
+      scrollContentMatch()
+      return
+    }
+    search.next()
+    scrollContentMatch()
+  }
+
+  function onSearchPrev() {
+    const search = activeSearch.value
+    if (search.matchCount.value === 0) return
+    if (!searchNavigationState[searchMode.value]) {
+      searchNavigationState[searchMode.value] = true
+      search.gotoNearestMatch?.()
+      scrollContentMatch()
+      return
+    }
+    search.prev()
+    scrollContentMatch()
+  }
 
   // ── Side panel ────────────────────────────────────────────────────────────
 

@@ -60,6 +60,14 @@ export function useCommentarySearch(
   const currentMatchFlatIndex = computed(() => currentMatch.value?.flatIndex ?? -1)
   const currentMatchOccurrence = computed(() => currentMatch.value?.occurrenceInLine ?? 0)
 
+  function gotoNearestMatch() {
+    const newMatches = matches.value
+    if (!newMatches.length) return
+    const cur = currentFlatIndex()
+    const nearestIdx = newMatches.findIndex((m) => m.flatIndex >= cur)
+    currentMatchIdx.value = nearestIdx === -1 ? 0 : nearestIdx
+  }
+
   function next() {
     if (matchCount.value) currentMatchIdx.value = (currentMatchIdx.value + 1) % matchCount.value
   }
@@ -80,5 +88,6 @@ export function useCommentarySearch(
     next,
     prev,
     clear,
+    gotoNearestMatch,
   }
 }
