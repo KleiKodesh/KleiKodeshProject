@@ -373,26 +373,34 @@ export function useBookView(
     if (visible && commentaryScrollIndex.value != null && commentaryScrollOffset.value != null) {
       const si = commentaryScrollIndex.value
       const so = commentaryScrollOffset.value
+      console.log(`[commentaryVisible watcher] panel opened si=${si} so=${so} loading=${commentaryLoading.value} groups=${groups.value.length}`)
       let stopLoading: (() => void) | undefined
+      let stopViewRef: (() => void) | undefined
+      const cancelRestore = () => { stopLoading?.(); stopViewRef?.() }
+      const stopVisibleGuard = watch(commentaryVisible, (v) => { if (!v) { cancelRestore(); stopVisibleGuard() } })
       stopLoading = watch(
-        // Wait for loading to finish AND real groups to arrive — the placeholder alone
-        // (groups.length === 0, groupsForDisplay.length === 1) gives the virtualizer
-        // wrong measurements and the scroll lands in the wrong place.
         () => !commentaryLoading.value && groups.value.length > 0,
-        async (ready) => {
+        (ready) => {
+          console.log(`[commentaryVisible watcher] inner watch fired ready=${ready} loading=${commentaryLoading.value} groups=${groups.value.length} viewRef=${commentaryViewRef() ? 'present' : 'null'}`)
           if (!ready) return
           stopLoading?.()
-          await nextTick()
           const viewRef = commentaryViewRef()
           if (viewRef) {
-            viewRef.restoreCommentaryScrollPos(si, so)
+            console.log(`[commentaryVisible watcher] calling restore with si=${si} so=${so}`)
+            nextTick(() => {
+              void viewRef.restoreCommentaryScrollPos(si, so)
+            })
           } else {
-            const stopRef = watch(
+            console.log(`[commentaryVisible watcher] viewRef null — setting up fallback watch`)
+            stopViewRef = watch(
               () => commentaryViewRef(),
               (newRef) => {
                 if (!newRef) return
-                stopRef()
-                newRef.restoreCommentaryScrollPos(si, so)
+                console.log(`[commentaryVisible watcher] viewRef arrived via fallback`)
+                stopViewRef?.()
+                nextTick(() => {
+                  void newRef.restoreCommentaryScrollPos(si, so)
+                })
               },
             )
           }

@@ -145,35 +145,42 @@ export function useBookViewSessionRestore(
     const si = _restoredSi
     const so = _restoredSo
 
+    console.log(`[sessionRestore] si=${si} so=${so} — registering watcher`)
+
     if (si != null && so != null) {
       const stop = watch(
         () => !commentaryLoading.value && commentaryGroups().length > 0,
         async (ready) => {
+          console.log(`[sessionRestore] watcher fired ready=${ready} loading=${commentaryLoading.value} groups=${commentaryGroups().length}`)
           if (!ready) return
           stop()
-          // Keep loading=true while the scroll restore rAF loop runs so the loading
-          // animation doesn't disappear before the scroll position is actually applied.
-          commentaryLoading.value = true
           await nextTick()
           const doRestore = async (viewRef: CommentaryViewRef) => {
+            console.log(`[sessionRestore] calling restoreCommentaryScrollPos(${si}, ${so})`)
             await viewRef.restoreCommentaryScrollPos(si, so)
-            commentaryLoading.value = false
           }
           const viewRef = commentaryViewRef()
           if (viewRef) {
-            void doRestore(viewRef)
+            console.log(`[sessionRestore] viewRef=present`)
+            nextTick(() => {
+              void doRestore(viewRef)
+            })
           } else {
+            console.log(`[sessionRestore] viewRef null — setting up fallback watch`)
             const stopRef = watch(
               () => commentaryViewRef(),
               (newRef) => {
                 if (!newRef) return
+                console.log(`[sessionRestore] viewRef arrived via fallback`)
                 stopRef()
-                void doRestore(newRef)
+                nextTick(() => {
+                  void doRestore(newRef)
+                })
               },
             )
           }
         },
-        { flush: 'sync' },
+        { flush: 'sync', immediate: true },
       )
     }
 

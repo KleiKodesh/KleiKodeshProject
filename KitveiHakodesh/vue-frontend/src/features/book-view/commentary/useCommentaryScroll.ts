@@ -76,54 +76,100 @@ export function useCommentaryScroll(
   }
 
   function captureScrollPos(): { scrollIndex: number; scrollOffset: number } | null {
-    const first = virtualizer().getVirtualItems()[0]
     const el = scrollerEl()
-    if (!first || !el) return null
+    if (!el) return null
+
+    const items = virtualizer().getVirtualItems()
+    if (!items.length) return null
+
+    const scrollTopValue = el.scrollTop
+    const measured = virtualizer().measurementsCache
+
+    let first = measured.find((item) => item.start <= scrollTopValue && scrollTopValue < item.end)
+
+    if (!first) {
+      first = items.find((item) => item.start <= scrollTopValue && scrollTopValue < item.end) ?? items[0]
+    }
+
     return {
       scrollIndex: first.index,
-      scrollOffset: Math.max(0, el.scrollTop - first.start),
+      scrollOffset: Math.max(0, scrollTopValue - first.start),
     }
   }
 
   function restoreCommentaryScrollPos(scrollIndex: number, scrollOffset: number): Promise<void> {
-    // Use TanStack's scrollToIndex to get the item into view, then apply the sub-item
-    // offset. We must wait for the virtualizer to actually render and measure the target
-    // item before applying the offset — otherwise item.start is based on estimated sizes
-    // (40px headers, 48px lines) which are wrong for variable-height commentary content.
-    //
-    // Strategy: call scrollToIndex, then poll measurementsCache until the item's measured
-    // size stabilises (two consecutive rAFs with the same start value), then apply offset.
-    // Cap at MAX_ATTEMPTS to avoid infinite loops if the item never measures.
-    const MAX_ATTEMPTS = 12
-    let attempts = 0
-    let lastStart: number | undefined
-    const el = scrollerEl()
-
     return new Promise<void>((resolve) => {
-      function attempt() {
-        virtualizer().scrollToIndex(scrollIndex, { align: 'start' })
-        requestAnimationFrame(() => {
-          const item = virtualizer().measurementsCache.find((m) => m.index === scrollIndex)
-          if (!item || !el) {
-            if (++attempts < MAX_ATTEMPTS) attempt()
-            else resolve()
+      let attempts = 0
+      const MAX_ATTEMPTS = 20
+
+      function startRestore() {
+        const el = scrollerEl()
+        const itemsLength = flatItems().length
+        console.log(`[restoreCommentaryScrollPos] start si=${scrollIndex} so=${scrollOffset} el=${el ? 'present' : 'null'} flatItems=${itemsLength}`)
+
+        if (!el || itemsLength === 0) {
+          if (attempts < MAX_ATTEMPTS) {
+            attempts++
+            nextTick(() => requestAnimationFrame(startRestore))
             return
           }
-          // Wait for the measured start to stabilise — if it changed since last rAF,
-          // the virtualizer is still correcting positions, try again.
-          if (item.start !== lastStart) {
-            lastStart = item.start
-            if (++attempts < MAX_ATTEMPTS) attempt()
-            else resolve()
-            return
-          }
-          // Start is stable — apply the sub-item offset.
-          el.scrollTop = item.start + scrollOffset
+          console.log(`[restoreCommentaryScrollPos] no el or no items after ${MAX_ATTEMPTS} attempts, resolving`)
           resolve()
-        })
+          return
+        }
+
+        // Scroll to the target index — this is synchronous for already-measured items
+        virtualizer().scrollToIndex(scrollIndex, { align: 'start' })
+        console.log(`[restoreCommentaryScrollPos] called scrollToIndex(${scrollIndex})`)
+
+        function tryApplyScroll() {
+          const el2 = scrollerEl()
+          const item = virtualizer().measurementsCache.find((m) => m.index === scrollIndex)
+          console.log(`[restoreCommentaryScrollPos] attempt=${attempts} item=${item ? `start=${item.start} end=${item.end}` : 'not found'} el2=${el2 ? `scrollTop=${el2.scrollTop}` : 'null'}`)
+          if (!el2) {
+            if (attempts < MAX_ATTEMPTS) {
+              attempts++
+              nextTick(() => requestAnimationFrame(tryApplyScroll))
+              return
+            }
+            console.log(`[restoreCommentaryScrollPos] el2 null after ${MAX_ATTEMPTS} attempts, resolving`)
+            resolve()
+            return
+          }
+
+          const measuredHeight = item && item.start !== undefined && item.end !== undefined ? item.end - item.start : 0
+          if (item && measuredHeight > 0) {
+            const targetScrollTop = item.start + scrollOffset
+            const maxScrollTop = Math.max(0, el2.scrollHeight - el2.clientHeight)
+            const desiredScrollTop = Math.min(targetScrollTop, maxScrollTop)
+            el2.scrollTop = desiredScrollTop
+            console.log(`[restoreCommentaryScrollPos] set scrollTop=${desiredScrollTop} actual=${el2.scrollTop} (target=${targetScrollTop} max=${maxScrollTop})`)
+            requestAnimationFrame(() => {
+              if (Math.abs(el2.scrollTop - desiredScrollTop) > 1 && attempts < MAX_ATTEMPTS) {
+                attempts++
+                console.log(`[restoreCommentaryScrollPos] retrying after final rAF, mismatch=${el2.scrollTop - desiredScrollTop}`)
+                nextTick(() => requestAnimationFrame(tryApplyScroll))
+                return
+              }
+              console.log(`[restoreCommentaryScrollPos] final rAF el2.scrollTop=${el2.scrollTop}`)
+              resolve()
+            })
+          } else if (attempts < MAX_ATTEMPTS) {
+            // Item not yet measured — retry
+            attempts++
+            nextTick(() => requestAnimationFrame(tryApplyScroll))
+          } else {
+            // Give up after max attempts
+            console.log(`[restoreCommentaryScrollPos] gave up after ${MAX_ATTEMPTS} attempts`)
+            resolve()
+          }
+        }
+
+        attempts = 0
+        requestAnimationFrame(tryApplyScroll)
       }
 
-      attempt()
+      startRestore()
     })
   }
 
@@ -140,12 +186,16 @@ export function useCommentaryScroll(
     groups: () => any[],
     pinnedGroup: () => any,
   ) {
+    let isFirstLoad = true
     watch(
       groups,
       async (newGroups) => {
+        // Skip the initial load — the session restore watcher handles the first scroll
+        // position. Only scroll to the pinned group on subsequent reloads (line navigation).
+        if (isFirstLoad) { isFirstLoad = false; return }
         const pinned = pinnedGroup()
         if (!pinned || !newGroups.length) return
-        if (newGroups.some((g) => g.bookId === pinned.bookId)) {
+        if (newGroups.some((g: any) => g.bookId === pinned.bookId)) {
           await nextTick()
           scrollToGroup(pinned.bookId, pinned.sectionLabel, pinned.subSectionLabel)
         }

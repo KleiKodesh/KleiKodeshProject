@@ -1,4 +1,4 @@
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { query } from '@/webview-host/seforimDb'
 import { SQL } from '@/webview-host/queries.sql'
 import { useBooksDataStore } from '@/stores/booksDataStore'
@@ -378,7 +378,7 @@ export function useCommentary(
   })
 
   let loadedForLineId: number | null = null
-  let lastLoadUsedSingleLine = false
+  let loadUsedSectionRange = false
 
   async function load(lineId: number) {
     loadedForLineId = lineId
@@ -386,7 +386,7 @@ export function useCommentary(
     // async steps below complete, tocEntries/lines may have loaded and changed it.
     const multiIds = selectedLineIds()
     const isMulti = multiIds != null && multiIds.length > 0
-    lastLoadUsedSingleLine = !isMulti
+    loadUsedSectionRange = isMulti
     // Clear groups BEFORE setting loading=true so the loading state shows immediately
     // without displaying stale groups from the previous line first.
     groups.value = []
@@ -411,11 +411,11 @@ export function useCommentary(
 
       groups.value = await buildCommentaryGroupsFromCombined(rows, booksDataStore.allBooksMap)
     } finally {
-      // If this was a single-line fallback load that returned nothing, and the section
-      // range is already available, the selectedLineIds watcher will fire synchronously
-      // after this finally block and start gen=2. Keep loading=true so the restore
-      // watcher doesn't fire between gen=1 and gen=2.
-      const refetchImminent = lastLoadUsedSingleLine && selectedLineIds() != null && selectedLineIds()!.length > 0
+      // If this was a single-line fallback load and the section range is now available,
+      // the watch(selectedLineIds) safety-net will fire a second load() immediately after
+      // this finally block. Keep loading=true so the scroll restore watcher doesn't fire
+      // between the two loads and attempt to restore scroll against an empty/partial result.
+      const refetchImminent = !loadUsedSectionRange && selectedLineIds() != null && selectedLineIds()!.length > 0
       if (!refetchImminent) loading.value = false
     }
   }
@@ -433,24 +433,35 @@ export function useCommentary(
 
   watch(
     selectedLineId,
-    (id) => {
-      if (id != null) void load(id)
-      else { loadedForLineId = null; lastLoadUsedSingleLine = false; groups.value = [] }
+    async (id) => {
+      if (id == null) {
+        loadedForLineId = null
+        loadUsedSectionRange = false
+        groups.value = []
+        return
+      }
+      // If selectedLineIds is null right now, yield one tick to give the computed
+      // (which depends on tocEntries + lines) a chance to resolve before we decide
+      // whether to use the single-line or section-range query.
+      // On an interactive tap with the TOC already loaded, selectedLineIds is
+      // non-null synchronously and we skip the yield entirely.
+      if (selectedLineIds() == null) await nextTick()
+      // After the tick, check that this load is still current (the line may have
+      // changed again while we were yielding).
+      if (selectedLineId() !== id) return
+      void load(id)
     },
     { immediate: true },
   )
 
   // Re-fetch when selectedLineIds becomes available after the initial load.
-  // On session restore, commentaryLineId is set before tocEntries/lines are ready,
-  // so the first load() call has selectedLineIds() = null and falls back to the
-  // single-line query (which returns nothing for TOC entry lines). Once tocEntries
-  // and lines load, selectedLineIds becomes non-null — re-fetch with the section range.
-  // Only re-fetch if the last load used the single-line fallback (lastLoadUsedSingleLine),
-  // meaning the section range wasn't available yet. If load() already used the section
-  // range (interactive click with tocEntries loaded), skip to avoid a double-fetch.
+  // This handles the rare case where selectedLineIds was still null after the
+  // nextTick yield above (e.g. lines or TOC took more than one tick to arrive).
   watch(selectedLineIds, (ids) => {
     const lineId = selectedLineId()
-    if (lineId != null && lineId === loadedForLineId && lastLoadUsedSingleLine && ids != null && ids.length > 0)
+    // Only re-fetch if: a line is selected, we already ran a load for it using
+    // the single-line fallback, and the section range is now available.
+    if (lineId != null && lineId === loadedForLineId && !loadUsedSectionRange && ids != null && ids.length > 0)
       void load(lineId)
   })
 
