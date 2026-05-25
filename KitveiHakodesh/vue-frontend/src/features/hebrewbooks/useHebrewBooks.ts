@@ -2,12 +2,12 @@ import { ref, computed } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
 import { useHebrewBooksHistoryStore } from '@/stores/hebrewBooksHistoryStore'
 import { loadHbCatalog, searchHbCatalog, getHbPdfUrl, type HebrewBook } from './hebrewBooksCatalog'
-import { usePdfStore } from '@/stores/pdfStore'
+import { useLocalFileStore } from '@/stores/localFileStore'
 import { useTabStore } from '@/stores/tabStore'
 import { isHosted } from '@/webview-host/seforimDb'
 
 export function useHebrewBooks() {
-  const pdfStore = usePdfStore()
+  const localFileStore = useLocalFileStore()
   const history = useHebrewBooksHistoryStore()
 
   // Catalog lives here — freed automatically when the component unmounts
@@ -62,7 +62,7 @@ export function useHebrewBooks() {
         if (!file) return
         trackAccess(book)
         const tabId = useTabStore().activeTabId
-        pdfStore.finishLocalFileConversion(tabId, {
+        localFileStore.finishLocalFileConversion(tabId, {
           url: URL.createObjectURL(file),
           fileName: file.name,
           filePath: '',
@@ -73,7 +73,7 @@ export function useHebrewBooks() {
     }
     trackAccess(book)
     const tabId = useTabStore().activeTabId
-    pdfStore.startHbDownload(book.title, tabId)
+    localFileStore.startHbDownload(book.title, tabId)
     window.__webviewAction?.('triggerHbDownload', {
       bookId: book.id,
       bookTitle: book.title,

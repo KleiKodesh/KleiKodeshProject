@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
-import { usePdfStore } from '@/stores/pdfStore'
+import { useLocalFileStore } from '@/stores/localFileStore'
 import { useTabStore } from '@/stores/tabStore'
 import { syncPdfViewerTheme } from '@/theme/themes'
 import { IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
@@ -10,7 +10,7 @@ import { usePdfOcrSelection } from './usePdfOcrSelection'
 
 import { usePdfOcrStore } from '@/stores/pdfOcrStore'
 
-const pdfStore = usePdfStore()
+const localFileStore = useLocalFileStore()
 const tabStore = useTabStore()
 const pdfOcrStore = usePdfOcrStore()
 
@@ -48,10 +48,10 @@ function onIframeLoad() {
 }
 
 const iframeSrc = computed(() => {
-  const url = pdfStore.virtualUrl
+  const url = localFileStore.virtualUrl
   if (!url) return null
   const p = new URLSearchParams({ file: url, locale: 'he', cMapPacked: 'true' })
-  if (pdfStore.fileName) p.set('filename', encodeURIComponent(pdfStore.fileName))
+  if (localFileStore.fileName) p.set('filename', encodeURIComponent(localFileStore.fileName))
   // No hash fragment — any hash value becomes initialBookmark in PDF.js and
   // takes priority over the stored scroll/zoom position from ViewHistory,
   // breaking session restore. All options (including disableAutoFetch) are
@@ -60,20 +60,20 @@ const iframeSrc = computed(() => {
 })
 
 function cancelConversion() {
-  pdfStore.cancelConversion(tabStore.activeTabId)
+  localFileStore.cancelConversion(tabStore.activeTabId)
 }
 
 </script>
 
 <template>
   <div class="pdf-page">
-    <div v-if="pdfStore.converting" class="converting">
+    <div v-if="localFileStore.converting" class="converting">
       <div class="converting-card">
         <LoadingAnimation />
-        <div class="converting-name">{{ pdfStore.fileName }}</div>
+        <div class="converting-name">{{ localFileStore.fileName }}</div>
         <div class="converting-sub">
           {{
-            pdfStore.loadingType === 'downloading'
+            localFileStore.loadingType === 'downloading'
               ? 'מוריד את הספר — אנא המתן'
               : 'ממיר לקובץ PDF — התהליך עשוי לארוך זמן מה'
           }}

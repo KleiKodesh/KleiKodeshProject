@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch, onBeforeUnmount } from 'vue'
-import { usePdfStore } from '@/stores/pdfStore'
+import { useLocalFileStore } from '@/stores/localFileStore'
 import { useTabStore } from '@/stores/tabStore'
 
-const pdfStore = usePdfStore()
+const localFileStore = useLocalFileStore()
 const tabStore = useTabStore()
-const src = computed(() => pdfStore.virtualUrl)
+const src = computed(() => localFileStore.virtualUrl)
 
 const loaded = ref(false)
 const error = ref<string | null>(null)
@@ -51,7 +51,7 @@ async function retry() {
   error.value = null
   loading.value = true
   const tabId = tabStore.activeTabId
-  await pdfStore.restoreTab(tabId)
+  await localFileStore.restoreTab(tabId)
 }
 </script>
 

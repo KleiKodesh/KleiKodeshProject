@@ -1,5 +1,5 @@
 import { useTabStore } from '@/stores/tabStore'
-import { usePdfStore } from '@/stores/pdfStore'
+import { useLocalFileStore } from '@/stores/localFileStore'
 import { pickLocalFile } from '@/webview-host/bridge'
 import type { TabRoute } from '@/stores/tabStore'
 
@@ -11,7 +11,7 @@ import type { TabRoute } from '@/stores/tabStore'
  */
 export function useAppNavigation() {
   const tabStore = useTabStore()
-  const pdfStore = usePdfStore()
+  const localFileStore = useLocalFileStore()
 
   const SINGLETON_ROUTES: Partial<Record<string, TabRoute>> = {
     ספרים: '/books',

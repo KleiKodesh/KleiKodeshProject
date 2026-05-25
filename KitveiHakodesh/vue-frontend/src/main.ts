@@ -10,7 +10,7 @@ import { useThemeStore } from './theme/themeStore'
 import { initPdfThemeObserver } from './theme/themes'
 import { dbReady } from './webview-host/seforimDb'
 import { useBooksDataStore } from './stores/booksDataStore'
-import { usePdfStore } from './stores/pdfStore'
+import { useLocalFileStore } from './stores/localFileStore'
 import { idbCheckAndExecReset } from './utils/persistence'
 
 // Synchronous localStorage check — zero cost on normal boots.
@@ -27,13 +27,13 @@ useBookViewStore().init()
 useThemeStore().init()
 useTabStore().init()
 
-// Restore any persisted PDF tabs — must run after tabStore.init()
-const pdfStore = usePdfStore()
+// Restore any persisted local file tabs — must run after tabStore.init()
+const localFileStore = useLocalFileStore()
 const tabStore = useTabStore()
 await Promise.all([
   ...tabStore.tabs
     .filter((t) => t.route === '/pdf-view' || t.route === '/addin-view')
-    .map((t) => pdfStore.restoreTab(t.id)),
+    .map((t) => localFileStore.restoreTab(t.id)),
 ])
 
 function warmBooksDataInBackground() {

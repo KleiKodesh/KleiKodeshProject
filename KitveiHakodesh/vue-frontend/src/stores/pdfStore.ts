@@ -4,7 +4,7 @@ import { useTabStore } from './tabStore'
 import { disposeLocalFileHost, restoreLocalFile, restoreHbPdf } from '@/webview-host/bridge'
 import { onWebviewEvent } from '@/webview-host/seforimDb'
 
-export const usePdfStore = defineStore('pdf', () => {
+export const useLocalFileStore = defineStore('localFile', () => {
   const tabStore = useTabStore()
 
   const virtualUrl = computed(() => tabStore.activeTab.localFileVirtualUrl ?? null)
