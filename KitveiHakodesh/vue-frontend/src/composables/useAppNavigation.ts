@@ -1,5 +1,4 @@
 import { useTabStore } from '@/stores/tabStore'
-import { useLocalFileStore } from '@/stores/localFileStore'
 import { pickLocalFile } from '@/webview-host/bridge'
 import type { TabRoute } from '@/stores/tabStore'
 
@@ -11,7 +10,6 @@ import type { TabRoute } from '@/stores/tabStore'
  */
 export function useAppNavigation() {
   const tabStore = useTabStore()
-  const localFileStore = useLocalFileStore()
 
   const SINGLETON_ROUTES: Partial<Record<string, TabRoute>> = {
     ספרים: '/books',
@@ -30,10 +28,10 @@ export function useAppNavigation() {
     // In hosted mode, push events handle navigation — pickLocalFile() returns null.
     // In dev mode, navigate directly with the blob URL.
     if (!result) return
-    // Determine route based on file extension: HTML opens in addin view.
+    // Determine route based on file extension: HTML opens in html-view.
     const fn = result.fileName ?? ''
     const ext = fn.substring(fn.lastIndexOf('.')).toLowerCase()
-    const route = ext === '.htm' || ext === '.html' ? '/addin-view' : '/pdf-view'
+    const route = ext === '.htm' || ext === '.html' ? '/html-view' : '/pdf-view'
     const tabData = {
       route: route as TabRoute,
       title: result.fileName,

@@ -1,4 +1,5 @@
 using KitveiHakodeshLib.Bridge;
+using KitveiHakodeshLib.Pdf;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using System;
@@ -8,13 +9,13 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace KitveiHakodeshLib.Pdf
+namespace KitveiHakodeshLib.LocalFile
 {
     /// <summary>
     /// Handles local file picking, Word-to-PDF conversion, virtual host registration,
-    /// and session restore for local PDF/Word tabs.
+    /// and session restore for local file tabs.
     /// </summary>
-    public class PdfHandler
+    public class LocalFileHandler
     {
         private static readonly string WordCacheDir =
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KitveiHakodesh", "cache", "word");
@@ -27,7 +28,7 @@ namespace KitveiHakodeshLib.Pdf
 
         private struct FolderMapping { public string HostName; public int RefCount; }
 
-        public PdfHandler(WebBridge bridge, WebView2 webView)
+        public LocalFileHandler(WebBridge bridge, WebView2 webView)
         {
             _bridge = bridge;
             _webView = webView;
@@ -106,7 +107,7 @@ namespace KitveiHakodeshLib.Pdf
             }));
         }
 
-        public async Task HandleRestoreLocalPdf(JsonElement root, string id)
+        public async Task HandleRestoreLocalFile(JsonElement root, string id)
         {
             string filePath = root.GetProperty("filePath").GetString();
             if (!File.Exists(filePath)) { _bridge.Reply(id, new { error = "הקובץ לא נמצא" }); return; }
@@ -124,7 +125,7 @@ namespace KitveiHakodeshLib.Pdf
             _bridge.Reply(id, new { url = "http://KitveiHakodesh-vue-app/cache/word/" + Path.GetFileName(cached) });
         }
 
-        public void HandleDisposePdfHost(JsonElement root, string id)
+        public void HandleDisposeLocalFileHost(JsonElement root, string id)
         {
             string filePath = root.GetProperty("filePath").GetString();
             string folder = File.Exists(filePath) ? Path.GetDirectoryName(filePath) : filePath;
@@ -159,7 +160,7 @@ namespace KitveiHakodeshLib.Pdf
             string folder = Path.GetDirectoryName(filePath);
             if (!_hosts.TryGetValue(folder, out var m))
             {
-                string host = "KitveiHakodesh-pdf-" + (++_hostCounter);
+                string host = "KitveiHakodesh-localfile-" + (++_hostCounter);
                 _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                     host, folder, CoreWebView2HostResourceAccessKind.Allow);
                 m = new FolderMapping { HostName = host, RefCount = 0 };

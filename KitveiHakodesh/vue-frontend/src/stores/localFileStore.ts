@@ -22,11 +22,11 @@ export const useLocalFileStore = defineStore('localFile', () => {
     }
     if (msg.event === 'localFileReady') {
       const tabId = tabStore.activeTabId
-      // Choose the route based on the picked file type: HTML files open in the addin
+      // Choose the route based on the picked file type: HTML files open in the html-view
       // view (iframe), PDFs open in the PDF viewer.
       const path = (msg.filePath as string) ?? ''
       const ext = path.substring(path.lastIndexOf('.')).toLowerCase()
-      const route = ext === '.htm' || ext === '.html' ? '/addin-view' : '/pdf-view'
+      const route = ext === '.htm' || ext === '.html' ? '/html-view' : '/pdf-view'
       tabStore.updateActiveTab({
         route,
         title: msg.fileName as string,
@@ -76,7 +76,7 @@ export const useLocalFileStore = defineStore('localFile', () => {
       for (const tabId of Array.from(_converting)) {
         const wasRemoved = !currentIds.has(tabId)
         const route = current.find((t) => t.id === tabId)?.route
-        const navigatedAway = route !== '/pdf-view' && route !== '/addin-view'
+        const navigatedAway = route !== '/pdf-view' && route !== '/html-view'
         if (wasRemoved || navigatedAway) _converting.delete(tabId)
       }
     },
@@ -198,10 +198,10 @@ export const useLocalFileStore = defineStore('localFile', () => {
     })
   }
 
-  /** Called on app init for every restored /pdf-view or /addin-view tab. */
+  /** Called on app init for every restored /pdf-view or /html-view tab. */
   async function restoreTab(tabId: string) {
     const tab = tabStore.tabs.find((t) => t.id === tabId)
-    if (!tab || (tab.route !== '/pdf-view' && tab.route !== '/addin-view')) return
+    if (!tab || (tab.route !== '/pdf-view' && tab.route !== '/html-view')) return
 
     if (tab.localFileHbBookId) {
       tabStore.updateTab(tabId, { localFileConverting: true, localFileLoadingType: 'downloading' })
@@ -223,7 +223,7 @@ export const useLocalFileStore = defineStore('localFile', () => {
       const res = await restoreLocalFile(tab.localFilePath)
       if (res) {
         const ext = tab.localFilePath.substring(tab.localFilePath.lastIndexOf('.')).toLowerCase()
-        const route = ext === '.htm' || ext === '.html' ? '/addin-view' : '/pdf-view'
+        const route = ext === '.htm' || ext === '.html' ? '/html-view' : '/pdf-view'
         tabStore.updateTab(tabId, { localFileVirtualUrl: res.url, route })
       }
     }

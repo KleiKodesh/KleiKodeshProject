@@ -14,7 +14,7 @@ Initialization order matters: `workspaceStore` must init before `tabStore`. See 
 
 **workspaceStore** — workspace management. All tab and book IDB keys are workspace-scoped. Switching workspaces changes `activeId` and reloads tabs.
 
-**pdfStore** — PDF and Word file state. Manages conversion, HebrewBooks download state, and PDF tab session restore. Listens to C# push events. Any code opening or closing a PDF tab should go through this store.
+**localFileStore** — Local file and Word file state. Manages conversion, HebrewBooks download state, and PDF/HTML tab session restore. Listens to C# push events. Any code opening or closing a local file tab should go through this store.
 
 **searchCacheStore** — LRU cache for Bloom filter search results, capped at 100 entries. Do not cache search results anywhere else.
 

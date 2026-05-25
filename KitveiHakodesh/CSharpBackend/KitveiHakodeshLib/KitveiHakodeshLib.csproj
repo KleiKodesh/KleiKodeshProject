@@ -126,7 +126,7 @@
     <Compile Include="Db\DbHandler.cs" />
     <Compile Include="HebrewBooks\HebrewBooksHandler.cs" />
     <Compile Include="HebrewBooks\HebrewBooksCsvUpdater.cs" />
-    <Compile Include="Pdf\PdfHandler.cs" />
+    <Compile Include="Pdf\LocalFileHandler.cs" />
     <Compile Include="Pdf\WordToPdfConverter.cs" />
     <Compile Include="Search\FtsIndexState.cs" />
     <Compile Include="Search\FtsIndexBuilder.cs" />

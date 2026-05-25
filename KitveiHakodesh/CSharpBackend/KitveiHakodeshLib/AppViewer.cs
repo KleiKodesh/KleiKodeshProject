@@ -4,7 +4,7 @@ using KitveiHakodeshLib.Diagnostics;
 using KitveiHakodeshLib.Dictionary;
 using KitveiHakodeshLib.Helpers;
 using KitveiHakodeshLib.HebrewBooks;
-using KitveiHakodeshLib.Pdf;
+using KitveiHakodeshLib.LocalFile;
 using KitveiHakodeshLib.Search;
 using KitveiHakodeshLib.Settings;
 using Microsoft.Web.WebView2.Core;
@@ -85,7 +85,7 @@ namespace KitveiHakodeshLib
 
                 // Keep the webcache alongside the other cache folders under the app's
                 // install directory (AppDomain.CurrentDomain.BaseDirectory), consistent
-                // with PdfHandler and HebrewBooksHandler.
+                // with LocalFileHandler and HebrewBooksHandler.
                 string udf = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KitveiHakodesh", "webcache");
 
                 _sharedEnvTask = CoreWebView2Environment.CreateAsync(
@@ -99,7 +99,7 @@ namespace KitveiHakodeshLib
         private readonly WebView2 _webView = new WebView2 { Dock = DockStyle.Fill };
         private WebBridge _bridge;
         private DbHandler _db;
-        private PdfHandler _pdf;
+        private LocalFileHandler _localFile;
         private HebrewBooksHandler _hb;
         private HebrewBooksCsvUpdater _hbCsvUpdater;
         private SearchHandler _search;
@@ -287,7 +287,7 @@ namespace KitveiHakodeshLib
             _bridge = new WebBridge(_webView, this);
             _db = new DbHandler(_bridge, _webView, savedPath);
 
-            _pdf = new PdfHandler(_bridge, _webView);
+            _localFile = new LocalFileHandler(_bridge, _webView);
             _hb = new HebrewBooksHandler(_bridge, _webView, this);
             _hbCsvUpdater = new HebrewBooksCsvUpdater();
             _search = new SearchHandler(_bridge, _webView);
@@ -379,9 +379,9 @@ namespace KitveiHakodeshLib
                         case "pickDbPath": _db.HandlePickDbPath(id, this); break;
                         case "resetSettings": _db.HandleResetSettings(id); break;
                         case "reload": _bridge.Reply(id, new { }); await HandleReload(); break;
-                        case "pickFile": _pdf.HandlePickFile(id, this); break;
-                        case "restoreLocalFile": await _pdf.HandleRestoreLocalPdf(root, id); break;
-                        case "disposeLocalFileHost": _pdf.HandleDisposePdfHost(root, id); break;
+                        case "pickFile": _localFile.HandlePickFile(id, this); break;
+                        case "restoreLocalFile": await _localFile.HandleRestoreLocalFile(root, id); break;
+                        case "disposeLocalFileHost": _localFile.HandleDisposeLocalFileHost(root, id); break;
                         case "restoreHbPdf": _hb.HandleRestoreHbPdf(root, id); break;
                         case "triggerHbDownload": _hb.HandleTriggerHbDownload(root, id); break;
                         case "triggerHbSaveAs": _hb.HandleTriggerHbSaveAs(root, id); break;
@@ -483,7 +483,7 @@ namespace KitveiHakodeshLib
 
                 // Release all PDF virtual host mappings so WebView2 does not hold
                 // folder handles after the process exits.
-                _pdf?.DisposeAllHosts();
+                _localFile?.DisposeAllHosts();
             }
             base.Dispose(disposing);
         }

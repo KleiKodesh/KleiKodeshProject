@@ -34,7 +34,7 @@ const barRef = ref<HTMLElement | null>(null)
 const navBtnRef = ref<HTMLElement | null>(null)
 
 const isPdfTab = computed(
-  () => activeTab.value?.route === '/pdf-view' || activeTab.value?.route === '/hebrewbooks',
+  () => activeTab.value?.route === '/pdf-view' || activeTab.value?.route === '/hebrewbooks' || activeTab.value?.route === '/html-view',
 )
 
 const barTitle = computed(() => {
@@ -49,7 +49,7 @@ const toolbarTitle = computed(() =>
 )
 
 const pdfFilterTitle = computed(() =>
-  settingsStore.pdfPageFilters ? 'ביטול פילטרים לעמודי PDF' : 'החלת פילטרים לעמודי PDF',
+  settingsStore.pdfPageFilters ? 'ביטול פילטרים' : 'החלת פילטרים',
 )
 
 const { justClosed } = useDropdownClose(barRef, () => {
@@ -154,7 +154,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
         <IconColor24Regular v-else />
       </button>
       <button
-        v-if="isPdfTab"
+        v-if="activeTab?.route === '/pdf-view' || activeTab?.route === '/hebrewbooks'"
         class="bar-btn"
         :class="{ active: pdfOcrStore.isActive }"
         title="בחירת טקסט באזור (OCR)"

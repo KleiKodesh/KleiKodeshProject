@@ -21,7 +21,7 @@ KitveiHakodeshLib/
 ├── Search/
 │   └── SearchHandler.cs      — Bloom filter indexing & search; version-mismatch detection
 ├── Pdf/
-│   └── PdfHandler.cs         — File picker for PDF/Word; virtual host mapping; Word→PDF conversion
+│   └── LocalFileHandler.cs   — File picker for local files; virtual host mapping; Word→PDF conversion
 ├── HebrewBooks/
 │   ├── HebrewBooksHandler.cs — Download, cache, and serve HebrewBooks PDFs
 │   └── HebrewBooksCsvUpdater.cs — Updates the HebrewBooks catalogue CSV
@@ -54,9 +54,9 @@ Push events (e.g. `bloomIndexVersionMismatch`, indexing progress) use `WebBridge
 | -------------------------- | --------------- | --------------------------------------------- |
 | `sql`                      | `DbHandler`     | Execute a parameterised SQL query             |
 | `pickDbPath`               | `DbHandler`     | Open file picker for the seforim SQLite DB    |
-| `pickFile`                 | `PdfHandler`    | Open file picker for a local PDF or Word file |
-| `restoreLocalPdf`          | `PdfHandler`    | Re-open a PDF from its persisted file path    |
-| `restoreHbPdf`             | `PdfHandler`    | Re-open a cached HebrewBooks PDF              |
+| `pickFile`                 | `LocalFileHandler` | Open file picker for a local file or Word document |
+| `restoreLocalFile`         | `LocalFileHandler` | Re-open a local file from its persisted file path |
+| `restoreHbPdf`             | `LocalFileHandler` | Re-open a cached HebrewBooks PDF              |
 | `BloomSearchStart`         | `SearchHandler` | Start a Bloom filter search                   |
 | `BloomSearchCancel`        | `SearchHandler` | Cancel an in-progress search                  |
 | `GetBloomIndexingProgress` | `SearchHandler` | Poll indexing progress                        |

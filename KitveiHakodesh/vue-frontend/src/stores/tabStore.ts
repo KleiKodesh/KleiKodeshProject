@@ -19,7 +19,7 @@ import { disposeLocalFileHost } from '@/webview-host/bridge'
 export type TabRoute =
   | '/'
   | '/pdf-view'
-  | '/addin-view'
+  | '/html-view'
   | '/settings'
   | '/books'
   | '/book-view'

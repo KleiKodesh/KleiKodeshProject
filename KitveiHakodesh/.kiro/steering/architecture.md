@@ -229,7 +229,7 @@ Reusable UI primitives used across multiple features. No feature-specific logic 
 
 **workspaceStore** — workspace management. All tab/book IDB keys are workspace-scoped; switching workspaces changes `activeId` and reloads tabs.
 
-**pdfStore** — PDF and Word file handling. Manages conversion state, HebrewBooks download state, and session restore for PDF tabs. Listens to C# push events (`conversionStarted`, `hbPdfReady`, `hbPdfCancelled`).
+**localFileStore** — Local file and Word handling state. Manages conversion state, HebrewBooks download state, and session restore for PDF/HTML tabs. Listens to C# push events (`conversionStarted`, `hbPdfReady`, `hbPdfCancelled`).
 
 **zimStore** — Kiwix ZIM file handling. Manages virtual host URL and session restore for `/kiwix-view` tabs. Listens to the `zimReady` C# push event. No conversion pipeline — ZIM files are always local and served directly.
 
@@ -271,9 +271,9 @@ The database access layer. Exports:
 C# host actions for file operations. All functions have dev fallbacks.
 
 - `pickFile()` — native file picker (PDF + Word)
-- `restoreLocalPdf(filePath)` — re-register virtual host for a local file
+- `restoreLocalFile(filePath)` — re-register virtual host for a local file
 - `restoreHbPdf(bookId, bookTitle, tabId)` — restore HebrewBooks PDF from cache
-- `disposePdfHost(filePath)` — decrement virtual host ref count on tab close
+- `disposeLocalFileHost(filePath)` — decrement virtual host ref count on tab close
 - `callBridgeAction(name, ...params)` — call any C# action with positional params (used by search/indexing)
 - `resetHostApp()` — full app reset: deletes FTS index, resets C# settings, reloads
 - `resetSearchIndex()` — resets the FTS index on the C# side (triggers a fresh rebuild)
@@ -328,7 +328,7 @@ Default theme is `vscode-dark`. Custom themes are stored in `app-settings` IDB a
 2. Create Pinia
 3. `workspaceStore.init()` — must be first; `tabStore` depends on `activeId`
 4. In parallel: `tabStore.init()`, `bookViewStore.init()`, `settingsStore.init()`, `themeStore.init()`, `loadCustomThemes()`
-5. Restore persisted PDF tabs via `pdfStore.restoreTab()`
+5. Restore persisted local file tabs via `localFileStore.restoreTab()`
 6. Mount app to `#app`
 7. `initPdfThemeObserver()` — sync PDF iframe theme with app theme
 8. `booksDataStore.ensureLoaded()` — lazy-load book catalog in background
@@ -350,7 +350,7 @@ Key C# handlers:
 - `DbAccess.cs` / `DbHandler.cs` — SQLite access via Dapper
 - `SearchHandler.cs` — FTS index lifecycle orchestrator (actor-thread pattern); delegates to `FtsIndexBuilder`, `FtsIndexState`, and `FtsSearchExecutor` in `KitveiHakodeshLib/Search/`
 - `HebrewBooksHandler.cs` — HebrewBooks download via WebView2 browser engine
-- `PdfHandler.cs` — PDF virtual host management
+- `LocalFileHandler.cs` — local file virtual host management
 - `ZimHandler.cs` — ZIM virtual host management (Kiwix reader)
 - `WordToPdfConverter.cs` — Word-to-PDF conversion
 
