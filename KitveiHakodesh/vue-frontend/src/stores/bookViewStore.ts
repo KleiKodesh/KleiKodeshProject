@@ -11,18 +11,12 @@ import {
 } from '@/composables/useZoom'
 export type ToolbarPosition = 'top' | 'bottom' | 'left' | 'right'
 
-export interface SearchBarPos {
-  x: number
-  y: number
-}
-
 export const useBookViewStore = defineStore('bookView', () => {
   const tabStore = useTabStore()
 
   const toolbarVisible = ref(true)
   const toolbarPosition = ref<ToolbarPosition>('top')
   const toggleBottomPanelSignal = ref(0)
-  const searchBarPos = ref<SearchBarPos | null>(null)
   const autoSelectTopLine = ref(false)
 
   function toggleBottomPanel() {
@@ -77,8 +71,6 @@ export const useBookViewStore = defineStore('bookView', () => {
     if (toolbar != null) toolbarVisible.value = toolbar
     const pos = lsGet<ToolbarPosition>(KEYS.SETTINGS_TOOLBAR_POSITION)
     if (pos != null) toolbarPosition.value = pos
-    const sbPos = lsGet<SearchBarPos>(KEYS.SETTINGS_SEARCH_BAR_POS)
-    if (sbPos != null) searchBarPos.value = sbPos
     const autoSelect = lsGet<boolean>(KEYS.SETTINGS_AUTO_SELECT_TOP_LINE)
     if (autoSelect != null) autoSelectTopLine.value = autoSelect
     else autoSelectTopLine.value = useSettingsStore().defaultAutoSyncCommentary
@@ -92,11 +84,6 @@ export const useBookViewStore = defineStore('bookView', () => {
   function setToolbarPosition(pos: ToolbarPosition) {
     toolbarPosition.value = pos
     lsSet(KEYS.SETTINGS_TOOLBAR_POSITION, pos)
-  }
-
-  function setSearchBarPos(pos: SearchBarPos) {
-    searchBarPos.value = pos
-    lsSet(KEYS.SETTINGS_SEARCH_BAR_POS, pos)
   }
 
   function toggleAutoSelectTopLine() {
@@ -128,8 +115,6 @@ export const useBookViewStore = defineStore('bookView', () => {
     zoom,
     getZoom,
     setZoom,
-    searchBarPos,
-    setSearchBarPos,
     autoSelectTopLine,
     toggleAutoSelectTopLine,
     setAutoSelectTopLine,

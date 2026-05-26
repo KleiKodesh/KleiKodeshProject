@@ -204,6 +204,7 @@ watch(restoredCommentaryFraction, (fraction) => { if (fraction != null) commenta
           :current-match="activeMatchIdx"
           :commentary-visible="commentaryVisible"
           :mode="searchMode"
+          :query="searchMode === 'content' ? contentSearch.query.value : commentarySearch.query.value"
           @close="searchVisible = false"
           @query-change="onQueryChange"
           @next="onSearchNext"

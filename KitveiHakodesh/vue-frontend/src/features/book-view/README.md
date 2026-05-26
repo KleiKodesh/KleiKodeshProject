@@ -1,6 +1,6 @@
 # book-view
 
-Main book reader. Split pane with text above and commentary below, shared side panel for tools, floating search bar, and toolbar.
+Main book reader. Split pane with text above and commentary below, shared side panel for tools, search bar, and toolbar.
 
 ## Top-Level Components
 
@@ -12,7 +12,7 @@ Main book reader. Split pane with text above and commentary below, shared side p
 
 **BookViewSidePanel.vue** - shared side-panel shell for book-view tools such as TOC and commentary filters.
 
-**BookViewSearchBar.vue** - floating in-book search bar. Query input, mode selection, and match navigation.
+**BookViewSearchBar.vue** - inline search bar. Query input, mode selection, and match navigation.
 
 ## Lines Subfolder
 

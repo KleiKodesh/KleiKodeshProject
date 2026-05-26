@@ -3,7 +3,7 @@ import type { Virtualizer } from '@tanstack/vue-virtual'
 /**
  * Scrolls a virtualizer to a target index. If the item is already fully visible
  * (accounting for topReserved), does nothing. Otherwise scrolls it to the top
- * with a topReserved gap so it isn't hidden behind a floating element (e.g. search bar).
+ * with a topReserved gap so it isn't hidden behind a fixed overlay.
  * Retries if the item hasn't rendered yet.
  */
 export function scrollToIndexWithRetry(
