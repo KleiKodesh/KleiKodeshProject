@@ -91,6 +91,8 @@ export function useCommentaryScroll(
       first = items.find((item) => item.start <= scrollTopValue && scrollTopValue < item.end) ?? items[0]
     }
 
+    if (!first) return null
+
     return {
       scrollIndex: first.index,
       scrollOffset: Math.max(0, scrollTopValue - first.start),
