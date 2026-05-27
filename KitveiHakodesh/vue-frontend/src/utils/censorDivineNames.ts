@@ -4,6 +4,9 @@
  */
 export function censorDivineNames(text: string): string {
   const D = '[\\u0591-\\u05C7]*'
+  // Tsere (צרה) = \u05B5
+  // Patach (פתח) = \u05B7
+  // Kamatz (קמץ) = \u05B8
 
   const patterns: { regex: RegExp; replacement: string | ((...args: string[]) => string) }[] = [
     // יהוה → ידוד
@@ -43,6 +46,24 @@ export function censorDivineNames(text: string): string {
       regex: new RegExp(`(א${D})(ל${D})(ו${D})(ה${D})(?![יםא])`, 'g'),
       replacement: (_m: string, a: string, l: string, v: string, h: string) =>
         a + l + v + h.replace('ה', 'ד'),
+    },
+    // אל with tsere (צרה) → א-ל
+    // Tsere is \u05B5, so we match alef with any diacritics, then lamed with any diacritics,
+    // but only if the alef's diacritics include tsere
+    {
+      regex: new RegExp(`(א[\\u0591-\\u05C7]*\\u05B5[\\u0591-\\u05C7]*)(ל${D})`, 'g'),
+      replacement: (_m: string, a: string, l: string) => a + '-' + l,
+    },
+    // שדי with patach under shin and kamatz under dalet → ש-די
+    // Patach = \u05B7, Kamatz = \u05B8
+    {
+      regex: new RegExp(`(ש\\u05B7[\\u0591-\\u05C7]*)(ד\\u05B8[\\u0591-\\u05C7]*)(י${D})`, 'g'),
+      replacement: (_m: string, sh: string, d: string, y: string) => sh + '-' + d + y,
+    },
+    // שדי with patach under shin and patach under dalet → ש-די
+    {
+      regex: new RegExp(`(ש\\u05B7[\\u0591-\\u05C7]*)(ד\\u05B7[\\u0591-\\u05C7]*)(י${D})`, 'g'),
+      replacement: (_m: string, sh: string, d: string, y: string) => sh + '-' + d + y,
     },
   ]
 
