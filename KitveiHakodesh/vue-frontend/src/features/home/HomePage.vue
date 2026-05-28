@@ -27,10 +27,10 @@ const tiles = computed(() => {
   const dbMissing = isHosted && !dbReady.value
   return [
     dbMissing
-      ? { label: 'התקן כתבי הקודש', icon: IconArrowDownload24Filled, color: '#B5451B' }
+      ? { label: 'הורד מסד ספרים', icon: IconArrowDownload24Filled, color: '#B5451B' }
       : { label: 'ספרים', icon: IconLibrary24Filled, color: '#B5451B' },
     dbMissing
-      ? { label: 'בחר מסד נתונים', icon: IconDatabase24Filled, color: '#3478f6' }
+      ? { label: 'בחר מסד ספרים', icon: IconDatabase24Filled, color: '#3478f6' }
       : { label: 'חיפוש', icon: IconSearchSparkle24 },
     { label: 'פתח קובץ', icon: IconFolder24Filled, color: '#f0a500' },
     { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#D94F1E' },
