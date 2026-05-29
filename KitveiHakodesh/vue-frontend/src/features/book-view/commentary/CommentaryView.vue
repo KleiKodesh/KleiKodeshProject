@@ -61,12 +61,8 @@ const visibleGroups = computed(() => {
       .filter(isCommentaryItemVisible)
       .map((item) => `${item.bookId}::${item.sectionLabel}::${item.subSectionLabel}`),
   )
-  return props.groups.filter(
-    (group) =>
-      group.lines[0]?.lineId === -1 ||
-      visibleKeys.has(
-        `${group.bookId}::${group.sectionLabel ?? ''}::${group.subSectionLabel ?? ''}`,
-      ),
+  return props.groups.filter((group) =>
+    visibleKeys.has(`${group.bookId}::${group.sectionLabel ?? ''}::${group.subSectionLabel ?? ''}`),
   )
 })
 

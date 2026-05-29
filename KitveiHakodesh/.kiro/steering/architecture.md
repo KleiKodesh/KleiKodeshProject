@@ -64,8 +64,8 @@ Multi-instance routes (`/book-view`, `/search`, `/pdf-view`) can have multiple t
 | `/search`          | `FullTextSearchPage.vue`   | multi-instance (keyed by tabId) |
 | `/settings`        | `SettingsPage.vue`         | singleton                       |
 | `/hebrewbooks`     | `HebrewBooksPage.vue`      | singleton                       |
-| `/pdf-view`        | `PdfViewPage.vue`          | multi-instance                  |
-| `/kiwix-view`      | `KiwixViewPage.vue`        | multi-instance                  |
+| `/pdf-viewer`      | `PdfViewPage.vue`          | multi-instance                  |
+| `/html-view`       | `HtmlViewPage.vue`         | multi-instance                  |
 | `/workspaces`      | `WorkspaceManagerPage.vue` | singleton                       |
 | `/hebrew-calendar` | `HebrewCalendarPage.vue`   | singleton                       |
 | `/dictionary`      | `DictionaryPage.vue`       | singleton                       |
@@ -93,34 +93,52 @@ Book catalog browser. Supports list, tiles, and full tree views with search.
 
 ### book-view/
 
-The main book reader. Orchestrates a split pane (text above, commentary below), a TOC side panel, a floating search bar, and a toolbar.
+The main book reader. Orchestrates a split pane (text above, commentary below), a TOC side panel, a floating search bar, and a toolbar. Organized into three subfolders: `lines/`, `toc/`, and `commentary/`.
 
+**Main components:**
 - `BookViewPage.vue` — orchestrator
 - `BookViewToolbar.vue` — zoom, search, TOC, bottom panel toggles
 - `BookViewSplitPane.vue` — thin wrapper around `SplitPane` that wires the top/bottom slots
-- `BookViewLinesContent.vue` — main text (virtual scroller, line selection)
+- `BookViewSidePanel.vue` — side panel container for TOC
 - `BookViewSearchBar.vue` — floating search (query, mode, match navigation)
+- `BookViewRelatedBooksDropdown.vue` — dropdown for related books
+- `bookViewTypes.ts` — shared types: `SearchMode`, `SidePanelMode`
+
+**Main composables:**
+- `useBookView.ts` — central composable; owns all data loading, state, event handlers, and watchers. `BookViewPage.vue` is a shell that calls this.
+- `useBookViewSearch.ts` — content search (line-based)
+- `useBookViewScrollSync.ts` — syncs active TOC entry and auto-selects commentary on scroll
+- `useBookViewSessionRestore.ts` — restores per-book view state from IDB on mount
+- `useBookViewPinnedCommentary.ts` — tracks the pinned commentary book with default-commentator fallback
+
+**lines/ subfolder** — main text rendering with virtual scroller and line selection:
+- `BookViewLinesContent.vue` — main text (virtual scroller, line selection)
+- `useBookViewLinesTable.ts` — paginated line fetching from the `line` table in chunks of 200; pre-allocates placeholder slots so the virtualizer has the correct total height immediately, then fills content as chunks arrive; exposes `prioritise(lineIndex)` to move a chunk to the front of the fetch queue
+- `useBookViewLineRenderer.ts` — line rendering logic
+- `useBookViewLineCopyMenu.ts` — context menu for line copying
+
+**toc/ subfolder** — table of contents side panel:
 - `BookViewTocTree.vue` — TOC side panel (main + alt structures)
 - `BookViewTocTreeSection.vue` — TOC section header
-- `BookViewCommentaryPanel.vue` — thin wrapper passing props into `CommentaryView`
+- `useBookViewToc.ts` — loads TOC entries and alt TOC structures for a book; builds a path map (entry id → full breadcrumb string); exposes `getActiveTocEntry` and `getTocPath`
+- `useBookViewTocScrollTracking.ts` — tracks programmatic TOC scrolls to suppress active-entry updates during animation
+- `tocSearchUtils.ts` — TOC search utilities
+
+**commentary/ subfolder** — commentary display and navigation:
 - `CommentaryView.vue` — commentary display grouped by book
 - `CommentaryHeader.vue` — commentary book header (type selector, nav)
 - `CommentaryHeaderNav.vue` — prev/next section navigation
-- `CommentaryFilterPanel.vue` — dropdown to toggle individual commentary books on/off
-- `CommentaryTreeViewNode.vue` — node in the commentary filter tree
-- `CommentaryTypeDropdown.vue` — commentary type selector
-- `useToc.ts` — loads TOC entries and alt TOC structures for a book; builds a path map (entry id → full breadcrumb string); exposes `getActiveTocEntry` and `getTocPath`
-- `useLinesTable.ts` — paginated line fetching from the `line` table in chunks of 200; pre-allocates placeholder slots so the virtualizer has the correct total height immediately, then fills content as chunks arrive; exposes `prioritise(lineIndex)` to move a chunk to the front of the fetch queue
-- `useCommentary.ts` — fetches linked commentary for a selected line (or range), groups results by connection type and category, returns `CommentaryGroup[]`
-- `useBookViewSearch.ts` — content search (line-based)
+- `CommentaryTreePanel.vue` — tree panel for commentary filtering
+- `CommentaryTreeSectionNode.vue` — node in the commentary tree
+- `commentaryTreeTypes.ts` — types for commentary tree
+- `useCommentary.ts` — fetches linked commentary for a selected line (or range), groups results by connection type and category
 - `useCommentarySearch.ts` — commentary search (flat index-based)
-- `useBookView.ts` — central composable; owns all data loading, state, event handlers, and watchers. `BookViewPage.vue` is a shell that calls this.
-- `useBookViewScrollSync.ts` — syncs active TOC entry and auto-selects commentary on scroll
-- `useBookViewSessionRestore.ts` — restores per-book view state from IDB on mount
 - `useCommentaryNavigation.ts` — next/prev section navigation for the commentary panel
-- `usePinnedCommentary.ts` — tracks the pinned commentary book with default-commentator fallback
-- `useTocScrollTracking.ts` — tracks programmatic TOC scrolls to suppress active-entry updates during animation
-- `bookViewTypes.ts` — shared types: `SearchMode`, `SidePanelMode`
+- `useCommentaryRender.ts` — commentary rendering logic
+- `useCommentaryScroll.ts` — commentary scroll handling
+- `useCommentaryTocPaths.ts` — TOC path building for commentary
+- `useCommentaryTreeSearch.ts` — search within commentary tree
+- `useCommentaryCopy.ts` — copy functionality for commentary
 
 ### full-text-search/
 
@@ -170,15 +188,27 @@ Halachic unit converter. Singleton route `/midot`. Converts between biblical, Ta
 
 ### pdf-viewer/
 
-PDF viewer. Embeds a PDF.js iframe.
+PDF viewer with OCR support. Embeds a PDF.js iframe and provides OCR text extraction.
 
-- `PdfViewPage.vue`
+- `PdfViewPage.vue` — main PDF viewer page
+- `PdfOcrResultPopup.vue` — OCR result display popup
+- `usePdfOcrSelection.ts` — OCR selection and text extraction
+- `pdfOcrInjectedScript.ts` — script injected into PDF.js iframe
 
-### kiwix/
+### html-view/
 
-Kiwix ZIM file reader. Embeds Kiwix JS in an iframe to render offline ZIM archives (Wikipedia, reference works, etc.). FTS is disabled by default to avoid loading the Xapian WASM index; a future per-tab setting can enable it.
+HTML file viewer for local HTML documents.
 
-- `KiwixViewPage.vue` — iframe wrapper loading `/kiwix/www/index.html` with the ZIM virtual host URL
+- `HtmlViewPage.vue` — main HTML viewer page
+
+### dictionary/
+
+Hebrew dictionary lookup. Singleton route `/dictionary`.
+
+- `DictionaryPage.vue` — main dictionary page
+- `DictionaryWordPage.vue` — individual word page
+- `dictionaryCache.ts` — LRU cache for dictionary lookups
+- `dictionaryTypes.ts` — TypeScript types
 
 ### workspace/
 
@@ -223,7 +253,7 @@ Reusable UI primitives used across multiple features. No feature-specific logic 
 
 **bookViewStore** — book viewer UI state: toolbar visibility, floating search bar position, per-tab+book zoom map. Exposes a reactive `zoom` computed for the active tab+book.
 
-**settingsStore** — all app-wide settings (fonts, sizes, padding, zoom, diacritics, censoring, etc.). Each setting has its own IDB key and is watched individually.
+**settingsStore** — all app-wide settings (fonts, sizes, padding, zoom, diacritics, censoring, etc.). Each setting has its own localStorage key and is watched individually.
 
 **booksDataStore** — lazy-loaded book catalog. Fetches all categories and books on first access, builds the category tree, assigns period metadata.
 
@@ -231,11 +261,11 @@ Reusable UI primitives used across multiple features. No feature-specific logic 
 
 **localFileStore** — Local file and Word handling state. Manages conversion state, HebrewBooks download state, and session restore for PDF/HTML tabs. Listens to C# push events (`conversionStarted`, `hbPdfReady`, `hbPdfCancelled`).
 
-**zimStore** — Kiwix ZIM file handling. Manages virtual host URL and session restore for `/kiwix-view` tabs. Listens to the `zimReady` C# push event. No conversion pipeline — ZIM files are always local and served directly.
-
 **searchCacheStore** — LRU cache for FTS search results (capped at 100 entries), stored in `app-search-cache` IDB.
 
 **hebrewBooksHistoryStore** — HebrewBooks download history, stored in `app-hb-history` IDB, LRU-capped at 25 entries.
+
+**pdfOcrStore** — PDF OCR state and results caching.
 
 ## Composables (`src/composables/`)
 
@@ -257,14 +287,32 @@ Reusable UI primitives used across multiple features. No feature-specific logic 
 
 **useDropdownClose.ts** — drop-in replacement for `onClickOutside` that also closes on window blur and handles the toggle-button race condition. Use on every dropdown instead of `onClickOutside` directly.
 
-### db.ts
+### seforimDb.ts
 
-The database access layer. Exports:
+The main seforim database access layer. Exports:
 
 - `isHosted` — true when running inside C# WebView2 host (or in dev mode)
 - `dbReady` — reactive ref, true once a DB path is available
 - `query<T>(sql, params)` — executes SQL via `window.__webviewQuery` (C# host) or a `/query` POST to the Vite dev middleware
 - `onWebviewEvent(fn)` — subscribe to C# push events
+
+### dictionaryDb.ts
+
+Dictionary database access layer. Separate from the main seforim DB.
+
+- `queryDict<T>(sql, params)` — executes SQL against the dictionary database
+
+### dictionarySeforimDb.ts
+
+Seforim-specific dictionary queries.
+
+### queries.sql.ts
+
+All raw SQL strings for the seforim database live here. No inline SQL anywhere else in the Vue/TypeScript codebase — every query a composable or store needs must be added to this file and imported from it.
+
+### dictionaryDb.sql.ts
+
+All raw SQL strings for the dictionary database.
 
 ### bridge.ts
 
@@ -278,17 +326,13 @@ C# host actions for file operations. All functions have dev fallbacks.
 - `resetHostApp()` — full app reset: deletes FTS index, resets C# settings, reloads
 - `resetSearchIndex()` — resets the FTS index on the C# side (triggers a fresh rebuild)
 
-### queries.sql.ts
+### devFallbacks.ts
 
-All raw SQL strings for the frontend live here. No inline SQL anywhere else in the Vue/TypeScript codebase — every query a composable or store needs must be added to this file and imported from it.
-
-The one exception is `ZayitDb.cs` in FtsLib (`CSharpBackend/FtsLib/FtsLib/Misc/ZayitDb.cs`), which owns the SQL used exclusively by the FTS indexing and search pipeline. That SQL never crosses into the frontend and is not duplicated in `queries.sql.ts`. No other C# file may contain inline SQL — `DbHandler.cs` is a passthrough that executes whatever SQL the frontend sends; it has no queries of its own.
+Development fallback implementations for C# bridge functions when running in browser dev mode.
 
 ## Utilities (`src/utils/`)
 
 **persistence.ts** — the only file that touches IndexedDB and localStorage directly. All stores import from here; components and composables never do. Manages 3 IDB databases, all key patterns, LRU cap for lastread, the app reset mechanism, and the `__pendingReset` localStorage flag.
-
-**commentaryNav.ts** — commentary section navigation (next/prev section, TOC-aware).
 
 **hebrewTextProcessing.ts** — diacritics handling and text normalization for Hebrew.
 
@@ -296,19 +340,13 @@ The one exception is `ZayitDb.cs` in FtsLib (`CSharpBackend/FtsLib/FtsLib/Misc/Z
 
 **normalizeText.ts** — `normalize(s)`: lowercases and strips Hebrew/ASCII quote characters. Import this as the base normalization step before any search comparison.
 
-**tocSearchUtils.ts** — TOC search path building (`buildTocSearchPaths`), query splitting (`splitQuery`), and ordered subsequence word matching (`matchWords`). Re-exports `SegmentSearchTree` as `SearchableTree` for backward compatibility — new code should import `SegmentSearchTree` from `segmentSearchTree.ts` directly.
-
-**segmentSearchTree.ts** — generic segment-aware search tree for any hierarchical node list. `SegmentSearchTree` matches query words as an ordered subsequence across ancestor path segments. Used by `TreeView.vue`, `CommentaryFilterPanel.vue`, `bookCatalogSearchTocHeuristics.ts`, and `dafYomiNavigation.ts`.
+**segmentSearchTree.ts** — generic segment-aware search tree for any hierarchical node list. `SegmentSearchTree` matches query words as an ordered subsequence across ancestor path segments. Used by `TreeView.vue`, commentary filter panels, and search utilities.
 
 **detectFonts.ts** — `detectAvailableFonts()` uses canvas measurement to detect which Hebrew and general fonts are installed. Used by `FontSelector.vue`.
 
 **scrollToIndexWithRetry.ts** — virtual scroller scroll-to-index with retry for async rendering.
 
-**resetState.ts** — exports a single `resetting` ref that is set to `true` just before an app reset/reload, blocking all interaction until the page reloads.
-
-**hebrewLearning.ts** — `getDailyLearning(hd)` returns today's schedule for all daily learning cycles (Daf Yomi, Mishna Yomi, Nach Yomi, Rambam, etc.). Used by the home page and the calendar weekly view.
-
-**booksCategoryTree.ts** — pure data logic for the book catalog tree. Exports `buildTree`, `assignFullPaths`, `findCategoryMeta`, `ensureBookSearchMetadata`, and the `BookRow`, `CategoryRow`, `CategoryNode` types. No Vue or Pinia dependencies.
+**hebrewKetivExpander.ts** — Hebrew text expansion utilities for ketiv/keri handling.
 
 ## Theme System (`src/theme/`)
 

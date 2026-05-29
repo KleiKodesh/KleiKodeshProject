@@ -12,7 +12,6 @@ using Microsoft.Web.WebView2.WinForms;
 using System;
 using System.Drawing;
 using System.IO;
-using System.Linq;
 using System.Reflection;
 using System.Text.Json;
 using System.Threading.Tasks;

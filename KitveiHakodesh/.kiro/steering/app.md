@@ -10,7 +10,8 @@
 ## Folder Structure
 
 - `src/features/` — one folder per app feature (e.g. `book-catalog/`, `book-view/`, `full-text-search/`)
-- Each feature folder contains its page component, composables, and sub-components — keep flat, no nested subfolders
+- Most feature folders keep files flat with no nested subfolders
+- Exception: `book-view/` has three subfolders (`lines/`, `toc/`, `commentary/`) for organizational clarity due to complexity
 - Sub-components named after parent: `BookCard.vue` → `BookCardCover.vue`, `BookCardMeta.vue`
 - Shared reusable components (used across features): `src/components/`
 - App shell components (title bar, page router): `src/layout/`
