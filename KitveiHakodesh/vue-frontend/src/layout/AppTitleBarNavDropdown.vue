@@ -74,7 +74,7 @@ function onPopOut() {
 <style scoped>
 .nav-dropdown {
   position: absolute;
-  top: calc(100% + 4px);
+  top: calc(100% + 3px);
   right: 0;
   z-index: 200;
   background: var(--bg-secondary);

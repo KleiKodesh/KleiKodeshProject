@@ -246,10 +246,22 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
           />
         </div>
 
+        <!-- ── Advanced sections (calendar + db + reset) ── -->
+        <SettingsAdvancedPane />
+
         <!-- ── קיצורי מקשים ── -->
         <div data-section="section-shortcuts" data-section-label="קיצורי מקשים">
           <div id="section-shortcuts" class="section-label">קיצורי מקשים</div>
           <div class="shortcuts-grid">
+            <!-- Tab management -->
+            <div class="shortcut-row">
+              <kbd>Alt</kbd><span class="kbd-plus">+</span><kbd>N</kbd>
+              <span class="shortcut-desc">לשונית חדשה</span>
+            </div>
+            <div class="shortcut-row">
+              <kbd>Alt</kbd><span class="kbd-plus">+</span><kbd>T</kbd>
+              <span class="shortcut-desc">פתח רשימת לשוניות</span>
+            </div>
             <div class="shortcut-row">
               <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>W</kbd>
               <span class="shortcut-desc">סגור לשונית</span>
@@ -258,14 +270,33 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
               <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>X</kbd>
               <span class="shortcut-desc">סגור את כל הלשוניות</span>
             </div>
+            <!-- Navigation -->
+            <div class="shortcut-row">
+              <kbd>Alt</kbd><span class="kbd-plus">+</span><kbd>Home</kbd>
+              <span class="shortcut-desc">עבור לדף הבית</span>
+            </div>
+            <div class="shortcut-row">
+              <kbd>Alt</kbd><span class="kbd-plus">+</span><kbd>M</kbd>
+              <span class="shortcut-desc">פתח תפריט ראשי</span>
+            </div>
+            <div class="shortcut-row">
+              <kbd>Alt</kbd><span class="kbd-plus">+</span><kbd>L</kbd>
+              <span class="shortcut-desc">החלף ערכת נושא</span>
+            </div>
+            <!-- Book view controls -->
+            <div class="shortcut-row">
+              <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>B</kbd>
+              <span class="shortcut-desc">הצג / הסתר סרגל כלים (בתצוגת ספר)</span>
+            </div>
             <div class="shortcut-row">
               <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>J</kbd>
-              <span class="shortcut-desc">הצג / הסתר פאנל פירושים (בתצוגת ספר)</span>
+              <span class="shortcut-desc">הצג / הסתר מפרשים (בתצוגת ספר)</span>
             </div>
             <div class="shortcut-row">
               <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>F</kbd>
-              <span class="shortcut-desc">פתח שורת חיפוש (בתצוגת ספר)</span>
+              <span class="shortcut-desc">חיפוש (בתצוגת ספר)</span>
             </div>
+            <!-- Zoom controls -->
             <div class="shortcut-row">
               <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>+</kbd>
               <span class="shortcut-desc">הגדל תצוגה</span>
@@ -278,19 +309,21 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
               <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>0</kbd>
               <span class="shortcut-desc">אפס גודל תצוגה</span>
             </div>
+            <!-- Display modes -->
+            <div class="shortcut-row">
+              <kbd>Alt</kbd><span class="kbd-plus">+</span><kbd>F</kbd>
+              <span class="shortcut-desc">הצג / הסתר סרגל האפליקציה</span>
+            </div>
+            <div class="shortcut-row">
+              <kbd>F11</kbd>
+              <span class="shortcut-desc">מסך מלא</span>
+            </div>
             <div class="shortcut-row">
               <kbd>F7</kbd>
               <span class="shortcut-desc">הפעלת סמן טקסט מהבהב, בדומה לעורך טקסט</span>
             </div>
-            <div class="shortcut-row">
-              <kbd>F11</kbd>
-              <span class="shortcut-desc">הצג / הסתר סרגל כלים של האפליקציה (מצב מיקוד)</span>
-            </div>
           </div>
         </div>
-
-        <!-- ── Advanced sections (calendar + db + reset) ── -->
-        <SettingsAdvancedPane />
 
       </div><!-- end settings-body-inner -->
     </div><!-- end settings-body -->

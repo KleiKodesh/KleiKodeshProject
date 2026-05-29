@@ -42,6 +42,7 @@ export interface Tab {
   localFileHbBookTitle?: string // persisted — HebrewBooks book title (used as cache filename)
   localFileConverting?: boolean // in-memory only — true while Word conversion is in progress
   localFileLoadingType?: 'converting' | 'downloading' // in-memory only — drives placeholder message
+  pdfViewerTitleBarVisible?: boolean // persisted — whether to show PDF.js viewer title bar (default true)
   // Kiwix ZIM state — removed; feature deferred to a later stage
   // Book reader state
   bookId?: number
@@ -339,6 +340,15 @@ export const useTabStore = defineStore('tabs', () => {
     }
   }
 
+  // ── PDF viewer title bar visibility ───────────────────────────────────────
+
+  function togglePdfViewerTitleBar() {
+    const tab = tabs.value.find((t) => t.id === activeTabId.value)
+    if (tab) {
+      tab.pdfViewerTitleBarVisible = tab.pdfViewerTitleBarVisible !== false ? false : true
+    }
+  }
+
   return {
     tabs,
     activeTabId,
@@ -362,5 +372,6 @@ export const useTabStore = defineStore('tabs', () => {
     setBookViewState,
     clearBookViewState,
     resetAll,
+    togglePdfViewerTitleBar,
   }
 })

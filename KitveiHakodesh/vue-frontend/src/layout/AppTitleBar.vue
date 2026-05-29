@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { useDropdownClose } from '@/composables/useDropdownClose'
+import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
 import {
   IconLineHorizontal320Regular,
   IconAdd20Regular,
@@ -21,11 +22,15 @@ import type { TabRoute } from '@/stores/tabStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { usePdfOcrStore } from '@/stores/pdfOcrStore'
+import { useThemeStore } from '@/theme/themeStore'
+import { toggleFullscreen } from '@/webview-host/bridge'
 
 const bookViewStore = useBookViewStore()
 const settingsStore = useSettingsStore()
 const tabStore = useTabStore()
 const pdfOcrStore = usePdfOcrStore()
+const themeStore = useThemeStore()
+const { titleBarVisible } = useUiChromeVisibility()
 
 const activeTab = computed(() => tabStore.activeTab)
 const dropdownOpen = ref(false)
@@ -41,12 +46,15 @@ const barTitle = computed(() => {
   const full = activeTab.value?.tocPath
     ? activeTab.value.title + ' · ' + activeTab.value.tocPath
     : activeTab.value?.title
-  return full ? full + '\n(לחץ להצגת רשימת הלשוניות)' : '(לחץ להצגת רשימת הלשוניות)'
+  return full ? full + '\n(לחץ להצגת רשימת הלשוניות - Alt+T)' : '(לחץ להצגת רשימת הלשוניות - Alt+T)'
 })
 
-const toolbarTitle = computed(() =>
-  bookViewStore.toolbarVisible ? 'הסתר סרגל כלים' : 'הצג סרגל כלים',
-)
+const toolbarTitle = computed(() => {
+  const baseTitle = bookViewStore.isBookViewActive
+    ? bookViewStore.toolbarVisible ? 'הסתר סרגל כלים' : 'הצג סרגל כלים'
+    : activeTab.value?.pdfViewerTitleBarVisible !== false ? 'הסתר סרגל כותרת PDF' : 'הצג סרגל כותרת PDF'
+  return `${baseTitle} (Ctrl+B)`
+})
 
 const pdfFilterTitle = computed(() =>
   settingsStore.pdfPageFilters ? 'ביטול פילטרים' : 'החלת פילטרים',
@@ -100,6 +108,9 @@ function goHome() {
   }
 }
 
+// Keyboard event listener — always active, even when title bar is hidden.
+// Uses capture phase to intercept shortcuts before child elements (e.g. the book view scroller)
+// can consume them with preventDefault().
 useEventListener('keydown', (e: KeyboardEvent) => {
   if (e.ctrlKey && e.key === 'w') {
     e.preventDefault()
@@ -107,40 +118,70 @@ useEventListener('keydown', (e: KeyboardEvent) => {
   } else if (e.ctrlKey && e.key === 'x') {
     e.preventDefault()
     tabStore.closeAllTabs()
+  } else if (e.ctrlKey && e.key === 'Tab') {
+    e.preventDefault()
+    dropdownOpen.value = !dropdownOpen.value
+  } else if (e.ctrlKey && e.key === 'b') {
+    e.preventDefault()
+    if (bookViewStore.isBookViewActive) {
+      bookViewStore.toggleToolbar()
+    } else if (tabStore.activeTab?.route === '/pdf-view' || tabStore.activeTab?.route === '/hebrewbooks') {
+      tabStore.togglePdfViewerTitleBar()
+    }
   } else if (e.ctrlKey && e.key === 'j') {
     e.preventDefault()
     if (bookViewStore.isBookViewActive) bookViewStore.toggleBottomPanel()
+  } else if (e.ctrlKey && e.shiftKey && e.key === 'F') {
+    e.preventDefault()
+    toggleFullscreen()
+  } else if (e.key === 'F11') {
+    e.preventDefault()
+    toggleFullscreen()
   } else if (e.ctrlKey && e.key === 'f') {
-    const active = document.activeElement as HTMLElement | null
-    if (!active?.dataset.ctrlfEnabled) e.preventDefault()
+    e.preventDefault()
+    if (bookViewStore.isBookViewActive) {
+      // Open search bar in book view from anywhere (no focus required)
+      bookViewStore.openSearch()
+    }
   } else if (e.ctrlKey && e.key === 'p') {
     e.preventDefault()
+  } else if (e.altKey && e.key === 'm') {
+    e.preventDefault()
+    toggleNavDropdown()
+  } else if (e.altKey && e.key === 't') {
+    e.preventDefault()
+    toggleTabDropdown()
+  } else if (e.altKey && e.key === 'n') {
+    e.preventDefault()
+    openNewTab()
+  } else if (e.altKey && e.key === 'l') {
+    e.preventDefault()
+    themeStore.toggleDarkMode()
+  } else if (e.altKey && e.key === 'Home') {
+    e.preventDefault()
+    goHome()
   }
-})
+}, { capture: true })
 </script>
 
 <template>
-  <header ref="barRef" class="title-bar" @click="toggleTabDropdown">
+  <!-- Keyboard event listener is always active (above), but only render the visual header when titleBarVisible is true -->
+  <div ref="barRef" class="title-bar-container" :class="{ hidden: !titleBarVisible }">
+    <header class="title-bar" @click="toggleTabDropdown">
     <div class="bar-start">
       <div class="nav-btn-wrap">
-        <button ref="navBtnRef" class="bar-btn" @click.stop="toggleNavDropdown">
+        <button ref="navBtnRef" class="bar-btn" title="תפריט (Alt+M)" @click.stop="toggleNavDropdown">
           <IconLineHorizontal320Regular />
         </button>
-        <AppTitleBarNavDropdown
-          v-if="navDropdownOpen"
-          :toggle-button-el="navBtnRef"
-          @close="navDropdownOpen = false"
-          @click.stop
-        />
       </div>
       <ThemeToggle @click.stop />
       <button
-        v-if="bookViewStore.isBookViewActive"
+        v-if="bookViewStore.isBookViewActive || (activeTab?.route === '/pdf-view' || activeTab?.route === '/hebrewbooks')"
         class="bar-btn"
         :title="toolbarTitle"
-        @click.stop="bookViewStore.toggleToolbar"
+        @click.stop="bookViewStore.isBookViewActive ? bookViewStore.toggleToolbar() : tabStore.togglePdfViewerTitleBar()"
       >
-        <IconOptions24Filled v-if="bookViewStore.toolbarVisible" />
+        <IconOptions24Filled v-if="bookViewStore.isBookViewActive ? bookViewStore.toolbarVisible : activeTab?.pdfViewerTitleBarVisible !== false" />
         <IconOptions24Regular v-else />
       </button>
       <button
@@ -153,6 +194,14 @@ useEventListener('keydown', (e: KeyboardEvent) => {
         <IconColor24Filled v-if="settingsStore.pdfPageFilters" />
         <IconColor24Regular v-else />
       </button>
+    </div>
+
+    <span class="bar-title" :title="barTitle">
+      {{ activeTab?.title }}
+      <span v-if="activeTab?.tocPath" class="bar-toc-path"> · {{ activeTab?.tocPath }}</span>
+    </span>
+
+    <div class="bar-end">
       <button
         v-if="activeTab?.route === '/pdf-view' || activeTab?.route === '/hebrewbooks'"
         class="bar-btn"
@@ -162,16 +211,8 @@ useEventListener('keydown', (e: KeyboardEvent) => {
       >
         <IconCrop20Regular />
       </button>
-    </div>
-
-    <span class="bar-title" :title="barTitle">
-      {{ activeTab?.title }}
-      <span v-if="activeTab?.tocPath" class="bar-toc-path"> · {{ activeTab?.tocPath }}</span>
-    </span>
-
-    <div class="bar-end">
-      <button class="bar-btn" title="בית" @click.stop="goHome"><IconHome20Regular /></button>
-      <button class="bar-btn" title="לשונית חדשה" @click.stop="openNewTab">
+      <button class="bar-btn" title="בית (Alt+Home)" @click.stop="goHome"><IconHome20Regular /></button>
+      <button class="bar-btn" title="לשונית חדשה (Alt+N)" @click.stop="openNewTab">
         <IconAdd20Regular />
       </button>
       <button
@@ -183,20 +224,36 @@ useEventListener('keydown', (e: KeyboardEvent) => {
       </button>
     </div>
 
-    <!-- Tab list dropdown — opens on click anywhere on the title bar; all icons use Regular (non-filled) variants -->
-    <AppTitleBarTabDropdown
-      v-if="dropdownOpen"
-      :tabs="tabStore.tabs"
-      :active-tab-id="tabStore.activeTabId"
-      @select="selectTab"
-      @close="tabStore.closeTab"
-      @dismiss="dropdownOpen = false"
-      @click.stop
-    />
   </header>
+
+  <!-- Tab dropdown — kept outside header so it stays visible when header is hidden -->
+  <AppTitleBarTabDropdown
+    v-if="dropdownOpen"
+    :tabs="tabStore.tabs"
+    :active-tab-id="tabStore.activeTabId"
+    @select="selectTab"
+    @close="tabStore.closeTab"
+    @dismiss="dropdownOpen = false"
+    @click.stop
+  />
+
+  <!-- Nav dropdown — kept outside header so it stays visible when header is hidden -->
+  <AppTitleBarNavDropdown
+    v-if="navDropdownOpen"
+    :toggle-button-el="navBtnRef"
+    @close="navDropdownOpen = false"
+    @click.stop
+  />
+  </div>
 </template>
 
 <style scoped>
+.title-bar-container {
+  position: relative;
+}
+.title-bar-container.hidden .title-bar {
+  display: none;
+}
 .title-bar {
   display: flex;
   align-items: center;

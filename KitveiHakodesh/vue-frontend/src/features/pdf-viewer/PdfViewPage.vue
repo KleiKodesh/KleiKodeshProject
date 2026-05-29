@@ -43,8 +43,30 @@ watch(ocr.isActive, (active) => {
   if (!active && pdfOcrStore.isActive) pdfOcrStore.deactivate()
 })
 
+// Update PDF.js toolbar visibility when the setting changes
+watch(
+  () => tabStore.activeTab?.pdfViewerTitleBarVisible,
+  (visible) => {
+    if (iframeRef.value?.contentWindow) {
+      const toolbarEl = iframeRef.value.contentWindow.document.querySelector('.toolbar')
+      if (toolbarEl) {
+        (toolbarEl as HTMLElement).style.display = visible !== false ? 'flex' : 'none'
+      }
+    }
+  },
+)
+
 function onIframeLoad() {
-  setTimeout(syncPdfViewerTheme, 100)
+  setTimeout(() => {
+    syncPdfViewerTheme()
+    // Hide toolbar if setting is false
+    if (tabStore.activeTab?.pdfViewerTitleBarVisible === false && iframeRef.value?.contentWindow) {
+      const toolbarEl = iframeRef.value.contentWindow.document.querySelector('.toolbar')
+      if (toolbarEl) {
+        (toolbarEl as HTMLElement).style.display = 'none'
+      }
+    }
+  }, 100)
 }
 
 const iframeSrc = computed(() => {

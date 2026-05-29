@@ -10,22 +10,29 @@ import {
   IconDocumentPdf20Regular,
   IconApps20Regular,
 } from '@iconify-prerendered/vue-fluent'
+import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
 import type { Tab } from '@/stores/tabStore'
 
 const props = defineProps<{ tabs: Tab[]; activeTabId: string }>()
 const emit = defineEmits<{ select: [id: string]; close: [id: string]; dismiss: [] }>()
 
+const { titleBarVisible } = useUiChromeVisibility()
 const containerRef = ref<HTMLElement | null>(null)
-const visibleTabs = computed(() =>
-  props.tabs.filter((t) => t.id !== props.activeTabId && t.route !== '/settings'),
-)
+const visibleTabs = computed(() => {
+  const filtered = props.tabs.filter((t) => t.route !== '/settings')
+  // Only hide the active tab if the title bar is visible
+  if (titleBarVisible.value) {
+    return filtered.filter((t) => t.id !== props.activeTabId)
+  }
+  return filtered
+})
 
 nextTick(() => containerRef.value?.focus())
 </script>
 
 <template>
   <div ref="containerRef" class="tab-dropdown" tabindex="0" @keydown.esc.stop="emit('dismiss')">
-    <div v-for="tab in visibleTabs" :key="tab.id" class="tab-row" @click="emit('select', tab.id)">
+    <div v-for="tab in visibleTabs" :key="tab.id" class="tab-row" :class="{ active: tab.id === activeTabId }" @click="emit('select', tab.id)">
       <div class="tab-row-start">
         <IconHome20Regular v-if="tab.route === '/'" class="tab-icon" />
         <IconBook20Filled v-else-if="tab.route === '/book-view'" class="tab-icon book-icon" />
@@ -73,6 +80,10 @@ nextTick(() => containerRef.value?.focus())
 }
 .tab-row:hover {
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+.tab-row.active {
+  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
+  border-top-color: var(--accent-color);
 }
 
 .tab-row-start {

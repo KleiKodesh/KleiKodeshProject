@@ -11,7 +11,7 @@ const titleBarVisible = ref(true)
 
 export function useUiChromeVisibility() {
   useEventListener('keydown', (e: KeyboardEvent) => {
-    if (e.key === 'F11') {
+    if (e.altKey && e.key === 'f') {
       e.preventDefault()
       titleBarVisible.value = !titleBarVisible.value
     }

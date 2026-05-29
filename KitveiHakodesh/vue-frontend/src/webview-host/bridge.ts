@@ -150,4 +150,12 @@ export async function getDiagnostics(): Promise<Record<string, string> | null> {
   }
 }
 
-
+/**
+ * Toggle fullscreen mode on the host window.
+ * Sets FormBorderStyle.None and WindowState.Maximized when entering fullscreen,
+ * restores normal state when exiting.
+ */
+export async function toggleFullscreen(): Promise<void> {
+  if (!isHosted) return
+  await action('toggleFullscreen').catch(() => {})
+}

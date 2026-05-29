@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
 import { useBookView } from './useBookView'
+import { useBookViewStore } from '@/stores/bookViewStore'
 import BookViewToolbar from './BookViewToolbar.vue'
 import BookViewSplitPane from './BookViewSplitPane.vue'
 import BookViewLinesContent from './lines/BookViewLinesContent.vue'
@@ -15,6 +16,7 @@ const toolbarRef = ref<InstanceType<typeof BookViewToolbar> | null>(null)
 const linesContentRef = ref<InstanceType<typeof BookViewLinesContent> | null>(null)
 const searchBarRef = ref<InstanceType<typeof BookViewSearchBar> | null>(null)
 const commentaryViewRef = ref<InstanceType<typeof CommentaryView> | null>(null)
+const bookViewStore = useBookViewStore()
 
 type CommentaryMode = 'off' | 'bottom' | 'side'
 const commentaryMode = ref<CommentaryMode>('off')
@@ -72,6 +74,15 @@ watch(isWideScreen, (wide) => { if (!wide && commentaryMode.value === 'side') co
 watch(restoredCommentaryMode, (mode) => { if (mode) commentaryMode.value = mode }, { once: true })
 // Restore commentaryFraction from IDB once session restore resolves.
 watch(restoredCommentaryFraction, (fraction) => { if (fraction != null) commentaryFraction.value = fraction }, { once: true })
+// Listen for Ctrl+F from AppTitleBar to open search
+watch(() => bookViewStore.openSearchSignal, () => {
+  searchVisible.value = true
+  openContentSearch()
+})
+// Listen for Ctrl+J from AppTitleBar to toggle commentary panel
+watch(() => bookViewStore.toggleBottomPanelSignal, () => {
+  cycleCommentaryMode()
+})
 </script>
 
 <template>

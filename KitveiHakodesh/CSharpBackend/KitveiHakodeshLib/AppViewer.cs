@@ -392,6 +392,7 @@ namespace KitveiHakodeshLib
                             break;
                         case "ResetFtsIndex": _search.HandleResetFtsIndex(id); break;
                         case "TogglePopOut": HandleTogglePopOut(id); break;
+                        case "toggleFullscreen": HandleToggleFullscreen(id); break;
                         case "getWordSynonyms": HandleGetWordSynonyms(root, id); break;
                         case "getFonts": HandleGetFonts(id); break;
                         case "getDiagnostics": HandleGetDiagnostics(id); break;
@@ -443,6 +444,34 @@ namespace KitveiHakodeshLib
                 Invoke(new Action(() => TogglePopOut?.Invoke()));
             else
                 TogglePopOut?.Invoke();
+        }
+
+        private void HandleToggleFullscreen(string id)
+        {
+            _bridge.Reply(id, new { });
+            if (InvokeRequired)
+                Invoke(new Action(() => ToggleFormFullscreen()));
+            else
+                ToggleFormFullscreen();
+        }
+
+        private void ToggleFormFullscreen()
+        {
+            Form hostForm = FindForm();
+            if (hostForm == null) return;
+            
+            if (hostForm.FormBorderStyle == FormBorderStyle.None && hostForm.WindowState == FormWindowState.Maximized)
+            {
+                // Exit fullscreen
+                hostForm.FormBorderStyle = FormBorderStyle.Sizable;
+                hostForm.WindowState = FormWindowState.Normal;
+            }
+            else
+            {
+                // Enter fullscreen
+                hostForm.FormBorderStyle = FormBorderStyle.None;
+                hostForm.WindowState = FormWindowState.Maximized;
+            }
         }
 
         private void HandleGetFonts(string id)

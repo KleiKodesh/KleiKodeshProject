@@ -120,75 +120,32 @@ function onContextWordsInput(event: Event) {
     </div>
 
     <div v-else-if="activeTab === 'syntax'" class="syntax-help">
-      <table class="syntax-table">
-        <thead>
-          <tr>
-            <th>תבנית</th>
-            <th>משמעות ודוגמה</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td class="pattern">*מילה*</td>
-            <td>כוכבית — (לפני או אחרי המילה) - תחיליות וסופיות.<br><span class="example">ישר*</span> ← ישראל, ישרים… &nbsp; <span class="example">*לום</span> ← שלום, עולם…</td>
-          </tr>
-          <tr>
-            <td class="pattern">מי?לה</td>
-            <td>שאלתית — (כתיב חסר) התו שלפני הסימן שאלה אופציונלי.<br><span class="example">שלו?ם</span> ← שלום או שלם</td>
-          </tr>
-          <tr>
-            <td class="pattern">מילה~</td>
-            <td>טילדה — חיפוש מטושטש, מרחק עריכה 1.<br><span class="example">יצחק~</span> ← יצחק, ביצחק, ליצחק…</td>
-          </tr>
-          <tr>
-            <td class="pattern">מילה~2 / מילה~3</td>
-            <td>טילדה עם מספר — מרחק עריכה מותאם (1–3).<br><span class="example">משה~2</span> ← משה, למשה, ממשה…</td>
-          </tr>
-          <tr>
-            <td class="pattern">א | ב</td>
-            <td>
-              מקף אנכי — OR: מספיק שאחת מהמילים תופיע. ניתן לכתוב עם רווחים או בלעדיהם.<br>
-              <span class="example">משה | אהרן תורה</span> ← (משה או אהרן) וגם תורה<br>
-              <span class="example">משה|אהרן תורה</span> ← זהה לדוגמה למעלה
-            </td>
-          </tr>
-        </tbody>
-        <tbody class="syntax-notes-section">
-          <tr>
-            <td class="pattern">שרשרת או</td>
-            <td><span class="example">א | ב | ג תורה</span> ← (א או ב או ג) וגם תורה. השרשרת נשברת כשמילה מופיעה ללא מקף לפניה.</td>
-          </tr>
-          <tr>
-            <td class="pattern">קבוצות נפרדות</td>
-            <td><span class="example">א | ב ג | ד</span> ← (א או ב) וגם (ג או ד).</td>
-          </tr>
-          <tr>
-            <td class="pattern">כוכבית + שאלתית</td>
-            <td>ניתן לשלב באותה מילה, למשל <span class="example">שלו?ם*</span>.</td>
-          </tr>
-          <tr class="warning-row">
-            <td class="pattern">טילדה + כוכבית</td>
-            <td>לא ניתן לשלב — הכוכבית/שאלתית גוברת.</td>
-          </tr>
-          <tr>
-            <td class="pattern">כתיב חסר/מלא</td>
-            <td>
-              כשהאפשרות מופעלת, כל מילה רגילה מורחבת אוטומטית לגרסאות כתיב חסר ומלא.<br>
-              <span class="example">שישים גבורים</span> ← מוצא גם ששים, גברים וכו׳.<br>
-              <span class="example">לא פועל</span> עם טילדה (~) — הרחבה מטושטשת כבר מכסה וריאציות.
-            </td>
-          </tr>
-          <tr>
-            <td class="pattern">%מילה%</td>
-            <td>
-              קידומות / סיומות דקדוקיות — % לפני המילה מרחיב קידומות דקדוקיות (ו, ב, ל, מ, ש, ה, כ…), % אחרי המילה מרחיב סיומות דקדוקיות (ים, ות, י, ך, נו…).<br>
-              <span class="example">%שלום%</span> ← שלום, לשלום, בשלום, שלומך, שלומנו…<br>
-              ניתן לסמן רק קידומות: <span class="example">%שלום</span>, רק סיומות: <span class="example">שלום%</span>, או שניהם: <span class="example">%שלום%</span>.<br>
-              <span class="example">לא פועל</span> עם טילדה (~) — לא ניתן לשלב הרחבה דקדוקית עם חיפוש מטושטש.
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="syntax-reference">
+        <div class="syntax-row">
+          <div class="intent">תחיליות וסופיות</div>
+          <div class="usage"><span class="example">ישר*</span> <span class="example">*לום</span></div>
+        </div>
+        <div class="syntax-row">
+          <div class="intent">תו אופציונלי (כתיב חסר/מלא)</div>
+          <div class="usage"><span class="example">שלו?ם</span></div>
+        </div>
+        <div class="syntax-row">
+          <div class="intent">דומה עם שגיאה (מרחק 1)</div>
+          <div class="usage"><span class="example">יצחק~</span></div>
+        </div>
+        <div class="syntax-row">
+          <div class="intent">דומה עם שגיאה מותאמת (1–3)</div>
+          <div class="usage"><span class="example">משה~2</span> <span class="example">משה~3</span></div>
+        </div>
+        <div class="syntax-row">
+          <div class="intent">או (בחירה אחת או יותר)</div>
+          <div class="usage"><span class="example">משה | אהרן</span></div>
+        </div>
+        <div class="syntax-row">
+          <div class="intent">קידומות/סיומות דקדוקיות</div>
+          <div class="usage"><span class="example">%שלום%</span> <span class="example">%שלום</span> <span class="example">שלום%</span></div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -316,79 +273,43 @@ function onContextWordsInput(event: Event) {
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
 }
-.syntax-table {
-  width: 100%;
-  border-collapse: collapse;
+.syntax-reference {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.syntax-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+}
+.intent {
+  flex: 0 0 auto;
+  min-width: 140px;
   font-size: 11px;
-  direction: rtl;
-}
-.syntax-table th {
-  text-align: right;
-  padding: 4px 6px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  border-bottom: 1px solid var(--border-color);
-  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
-}
-.syntax-table th:first-child,
-.syntax-table td:first-child {
-  padding-inline-end: 6px;
-  padding-inline-start: 0;
-}
-.syntax-table th:last-child,
-.syntax-table td:last-child {
-  padding-inline-start: 6px;
-  padding-inline-end: 0;
-}
-.syntax-table td {
-  padding: 5px 6px;
-  vertical-align: top;
+  font-weight: 500;
   color: var(--text-primary);
-  font-size: 11px;
-  line-height: 1.5;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
+  line-height: 1.4;
 }
-.syntax-table tr:last-child td {
-  border-bottom: none;
-}
-.pattern {
-  font-family: 'Consolas', 'Courier New', monospace;
-  color: var(--accent-color);
-  white-space: nowrap;
-  width: 130px;
+.usage {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
 }
 .example {
   font-family: 'Consolas', 'Courier New', monospace;
   color: var(--accent-color);
-  font-size: 11px;
-}
-.syntax-notes-section .section-header-row .section-header-cell {
-  padding-top: 8px;
-  padding-bottom: 4px;
-  padding-inline-start: 0;
-  padding-inline-end: 0;
   font-size: 10px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border-top: 1px solid var(--border-color);
-  border-bottom: none;
-}
-.syntax-notes-section td {
-  color: var(--text-secondary);
-}
-.warning-row td {
-  color: #f14c4c;
-}
-.warning-row .pattern {
-  color: #f14c4c;
-}
-.ketiv-checkbox {
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-  accent-color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 8%, transparent);
+  padding: 2px 4px;
+  border-radius: 3px;
+  white-space: nowrap;
 }
 
 </style>
