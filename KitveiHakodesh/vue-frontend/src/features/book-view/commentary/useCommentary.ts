@@ -56,7 +56,7 @@ const STATIC_FILTER_CONNECTION_TYPE_LIST: StaticFilterConnectionType[] = [
   'COMMENTARY',
 ]
 
-const STATIC_FILTER_CONNECTION_TYPES = new Set<StaticFilterConnectionType>(
+export const STATIC_FILTER_CONNECTION_TYPES = new Set<StaticFilterConnectionType>(
   STATIC_FILTER_CONNECTION_TYPE_LIST,
 )
 
@@ -66,6 +66,15 @@ const CONNECTION_TYPE_SECTION_LABELS: Record<CommentaryConnectionType, string> =
   COMMENTARY: '\u05DE\u05E4\u05E8\u05E9\u05D9\u05DD',
   OTHER: '\u05E7\u05E9\u05E8\u05D9\u05DD',
   REFERENCE: '\u05E6\u05D9\u05D5\u05E0\u05D9\u05DD',
+}
+
+// Reverse mapping: Hebrew label → connection type
+export const SECTION_LABEL_TO_CONNECTION_TYPE: Record<string, CommentaryConnectionType> = {
+  '\u05DE\u05E7\u05D5\u05E8': 'SOURCE',
+  '\u05EA\u05E8\u05D2\u05D5\u05DE\u05D9\u05DD': 'TARGUM',
+  '\u05DE\u05E4\u05E8\u05E9\u05D9\u05DD': 'COMMENTARY',
+  '\u05E7\u05E9\u05E8\u05D9\u05DD': 'OTHER',
+  '\u05E6\u05D9\u05D5\u05E0\u05D9\u05DD': 'REFERENCE',
 }
 
 const OTHER_CATEGORY = '\u05D0\u05D7\u05E8'

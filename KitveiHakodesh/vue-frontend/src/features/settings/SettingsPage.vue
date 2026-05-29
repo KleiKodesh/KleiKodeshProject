@@ -246,6 +246,49 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
           />
         </div>
 
+        <!-- ── קיצורי מקשים ── -->
+        <div data-section="section-shortcuts" data-section-label="קיצורי מקשים">
+          <div id="section-shortcuts" class="section-label">קיצורי מקשים</div>
+          <div class="shortcuts-grid">
+            <div class="shortcut-row">
+              <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>W</kbd>
+              <span class="shortcut-desc">סגור לשונית</span>
+            </div>
+            <div class="shortcut-row">
+              <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>X</kbd>
+              <span class="shortcut-desc">סגור את כל הלשוניות</span>
+            </div>
+            <div class="shortcut-row">
+              <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>J</kbd>
+              <span class="shortcut-desc">הצג / הסתר פאנל פירושים (בתצוגת ספר)</span>
+            </div>
+            <div class="shortcut-row">
+              <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>F</kbd>
+              <span class="shortcut-desc">פתח שורת חיפוש (בתצוגת ספר)</span>
+            </div>
+            <div class="shortcut-row">
+              <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>+</kbd>
+              <span class="shortcut-desc">הגדל תצוגה</span>
+            </div>
+            <div class="shortcut-row">
+              <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>-</kbd>
+              <span class="shortcut-desc">הקטן תצוגה</span>
+            </div>
+            <div class="shortcut-row">
+              <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>0</kbd>
+              <span class="shortcut-desc">אפס גודל תצוגה</span>
+            </div>
+            <div class="shortcut-row">
+              <kbd>F7</kbd>
+              <span class="shortcut-desc">הפעלת סמן טקסט מהבהב, בדומה לעורך טקסט</span>
+            </div>
+            <div class="shortcut-row">
+              <kbd>F11</kbd>
+              <span class="shortcut-desc">הצג / הסתר סרגל כלים של האפליקציה (מצב מיקוד)</span>
+            </div>
+          </div>
+        </div>
+
         <!-- ── Advanced sections (calendar + db + reset) ── -->
         <SettingsAdvancedPane />
 
@@ -397,6 +440,51 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
   margin-bottom: 12px;
   border-bottom: 1px solid var(--border-color);
   scroll-margin-top: 56px;
+}
+
+/* ── Keyboard shortcuts grid ── */
+.shortcuts-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+}
+
+.shortcut-desc {
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-inline-start: 8px;
+}
+
+kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 22px;
+  padding: 0 6px;
+  font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  box-shadow: 0 1px 0 var(--border-color);
+  white-space: nowrap;
+  direction: ltr;
+}
+
+.kbd-plus {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1;
 }
 
 :deep(.subsection-label) {

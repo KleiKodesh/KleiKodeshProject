@@ -4,15 +4,17 @@ import AppPageView from '@/layout/AppPageView.vue'
 import SetupWizard from '@/features/settings/SetupWizard.vue'
 import { resetting } from '@/features/settings/appResetState'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
 import { storeToRefs } from 'pinia'
 
 const settingsStore = useSettingsStore()
 const { setupDone } = storeToRefs(settingsStore)
+const { titleBarVisible } = useUiChromeVisibility()
 </script>
 
 <template>
   <div class="app-layout">
-    <AppTitleBar />
+    <AppTitleBar v-if="titleBarVisible" />
     <main class="app-content">
       <AppPageView />
     </main>

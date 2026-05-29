@@ -8,6 +8,7 @@ import { SegmentSearchTree } from '@/utils/segmentSearchTree'
 import type { SearchableNode } from '@/utils/segmentSearchTree'
 import { normalize } from '@/utils/normalizeText'
 import type { CommentaryGroup } from './useCommentary'
+import { STATIC_FILTER_CONNECTION_TYPES, SECTION_LABEL_TO_CONNECTION_TYPE } from './useCommentary'
 import type { CommentaryTreeState, CommentaryVisibilityItem } from '../bookViewTypes'
 import type { CommentaryTreeNode } from './commentaryTreeTypes'
 
@@ -32,12 +33,20 @@ export function useCommentaryTreeSearch(
     const existing = new Map(treeState.visibilityList.map((item) => [itemKey(item), item]))
     treeState.visibilityList = groups().map((group) => {
       const found = existing.get(groupKey(group))
+      // Check if this group belongs to a static category by looking up the connection type
+      // from the Hebrew sectionLabel and checking if it's in STATIC_FILTER_CONNECTION_TYPES
+      const connectionType = group.sectionLabel
+        ? SECTION_LABEL_TO_CONNECTION_TYPE[group.sectionLabel]
+        : undefined
+      const isStaticCategory = connectionType
+        ? STATIC_FILTER_CONNECTION_TYPES.has(connectionType as any)
+        : false
       return found ?? {
         bookId: group.bookId,
         sectionLabel: group.sectionLabel ?? '',
         subSectionLabel: group.subSectionLabel ?? '',
         bookTitle: group.bookTitle,
-        isChecked: true,
+        isChecked: isStaticCategory, // Only check by default if it's a static category
         isInSearchResults: true,
       }
     })
