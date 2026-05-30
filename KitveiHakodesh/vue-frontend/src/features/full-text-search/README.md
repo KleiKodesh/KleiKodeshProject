@@ -1,6 +1,6 @@
 # full-text-search
 
-Full-text search using Bloom filters. Category and book filters, virtual-scrolled results, indexing progress overlay.
+Full-text search using Category and book filters, virtual-scrolled results, indexing progress bar.
 
 ## Components
 

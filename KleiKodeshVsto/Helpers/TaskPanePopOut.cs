@@ -53,15 +53,15 @@ namespace KleiKodesh.Helpers
             }
         }
 
-        public void Toggle()
+        public void Toggle(bool goFullScreen = false)
         {
             if (_form == null || _form.IsDisposed)
-                PopOut();
+                PopOut(goFullScreen);
             else
                 PopIn();
         }
 
-        void PopOut()
+        void PopOut(bool goFullScreen = false)
         {
             try
             {
@@ -97,6 +97,13 @@ namespace KleiKodesh.Helpers
 
                 _pane.Visible = false;
                 _form.Show();
+
+                // If requested, enter fullscreen mode immediately after showing
+                if (goFullScreen)
+                {
+                    _form.FormBorderStyle = FormBorderStyle.None;
+                    _form.WindowState = FormWindowState.Maximized;
+                }
             }
             catch (Exception ex) { Console.WriteLine(ex.Message); }
         }

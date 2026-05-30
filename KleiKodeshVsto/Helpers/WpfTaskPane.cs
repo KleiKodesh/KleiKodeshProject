@@ -98,7 +98,7 @@ namespace KleiKodesh.Helpers
                     // TaskPaneManager wired the action to hostControl; we need to re-wire to the WPF view.
                     // Create a fresh TaskPanePopOut for the hostControl and pass its Toggle to the WPF view.
                     var popOut = new TaskPanePopOut(hostControl, pane);
-                    setPopOut.Invoke(userControl, new object[] { new Action(popOut.Toggle) });
+                    setPopOut.Invoke(userControl, new object[] { new Action<bool>(popOut.Toggle) });
                 }
 
                 setColor();

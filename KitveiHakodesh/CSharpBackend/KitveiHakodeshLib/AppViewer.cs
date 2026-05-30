@@ -107,6 +107,17 @@ namespace KitveiHakodeshLib
 
         private SplashOverlay _splash;
 
+        /// <summary>
+        /// Controls whether the "חלון עצמאי / חלונית" (pop-out) button is shown in the
+        /// hamburger navigation dropdown.
+        /// Set to <c>true</c> when hosting inside the VSTO task pane (where toggling
+        /// between task-pane and floating-window makes sense).
+        /// Defaults to <c>false</c> so standalone / demo hosts don't show the button.
+        /// Must be set before the WebView2 finishes initialising (i.e. before
+        /// <see cref="InitAsyncCore"/> injects the startup script).
+        /// </summary>
+        public bool ShowPopOutButton { get; set; } = false;
+
         public AppViewer()
         {
             RightToLeft = RightToLeft.No;
@@ -279,7 +290,8 @@ namespace KitveiHakodeshLib
             // each call is a browser-process round-trip, so one call is faster than two.
             string dbScript =
                 "window.__webviewDbPath=\"" + escapedPath + "\";" +
-                "window.__webviewDbReady=" + (dbReady ? "true" : "false") + ";";
+                "window.__webviewDbReady=" + (dbReady ? "true" : "false") + ";" +
+                "window.__webviewShowPopOut=" + (ShowPopOutButton ? "true" : "false") + ";";
             _dbInjectionScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
                 JsBridge.Script + "\n" + dbScript);
 
@@ -327,7 +339,8 @@ namespace KitveiHakodeshLib
             string escapedPath = savedPath.Replace("\\", "\\\\");
             string dbScript =
                 "window.__webviewDbPath=\"" + escapedPath + "\";" +
-                "window.__webviewDbReady=" + (dbReady ? "true" : "false") + ";";
+                "window.__webviewDbReady=" + (dbReady ? "true" : "false") + ";" +
+                "window.__webviewShowPopOut=" + (ShowPopOutButton ? "true" : "false") + ";";
             _dbInjectionScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
                 JsBridge.Script + "\n" + dbScript);
 
@@ -441,9 +454,9 @@ namespace KitveiHakodeshLib
         {
             _bridge.Reply(id, new { });
             if (InvokeRequired)
-                Invoke(new Action(() => TogglePopOut?.Invoke()));
+                Invoke(new Action(() => TogglePopOut?.Invoke(false)));
             else
-                TogglePopOut?.Invoke();
+                TogglePopOut?.Invoke(false);
         }
 
         private void HandleToggleFullscreen(string id)
@@ -457,9 +470,19 @@ namespace KitveiHakodeshLib
 
         private void ToggleFormFullscreen()
         {
-            Form hostForm = FindForm();
-            if (hostForm == null) return;
-            
+            // AppViewer itself stays in the task pane host even when popped out —
+            // TaskPanePopOut moves _webView (the first child) into the floating form.
+            // So we must look for the form that contains _webView, not AppViewer itself.
+            Form hostForm = _webView.FindForm();
+
+            // If not hosted in a window (e.g., still in the VSTO task pane), pop out first
+            if (hostForm == null)
+            {
+                TogglePopOut?.Invoke(true); // pop out and go fullscreen in one step
+                return;
+            }
+
+            // Already in a floating window — just toggle fullscreen, never touch popout
             if (hostForm.FormBorderStyle == FormBorderStyle.None && hostForm.WindowState == FormWindowState.Maximized)
             {
                 // Exit fullscreen
@@ -487,13 +510,18 @@ namespace KitveiHakodeshLib
 
         /// <summary>
         /// Set by the host to handle the popout toggle.
+        /// The bool parameter indicates whether to enter fullscreen mode after popping out.
         /// </summary>
-        public Action TogglePopOut { get; set; }
+        public Action<bool> TogglePopOut { get; set; }
 
         /// <summary>
         /// Called by TaskPaneManager via reflection to wire up the popout toggle.
+        /// Accepts Action<bool> from the new TaskPanePopOut.Toggle(bool) signature.
         /// </summary>
-        public void SetPopOutToggleAction(Action action) => TogglePopOut = action;
+        public void SetPopOutToggleAction(Action<bool> action)
+        {
+            TogglePopOut = action;
+        }
 
         protected override void Dispose(bool disposing)
         {

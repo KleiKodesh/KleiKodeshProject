@@ -45,15 +45,15 @@ namespace KitveiHakodeshDemoApp
                 return executableIcon == null ? null : (Icon)executableIcon.Clone();
         }
 
-        private void Toggle()
+        private void Toggle(bool goFullScreen = false)
         {
             if (_popoutWindow == null || _popoutWindow.IsDisposed)
-                PopOut();
+                PopOut(goFullScreen);
             else
                 PopIn();
         }
 
-        private void PopOut()
+        private void PopOut(bool goFullScreen = false)
         {
             Controls.Remove(_viewer);
 
@@ -78,6 +78,13 @@ namespace KitveiHakodeshDemoApp
             _popoutWindow.ResizeEnd += OnPopoutBoundsChanged;
             _popoutWindow.Move += OnPopoutBoundsChanged;
             _popoutWindow.Show();
+
+            // If requested, enter fullscreen mode immediately after showing
+            if (goFullScreen)
+            {
+                _popoutWindow.FormBorderStyle = FormBorderStyle.None;
+                _popoutWindow.WindowState = FormWindowState.Maximized;
+            }
         }
 
         private void OnPopoutBoundsChanged(object sender, EventArgs e)

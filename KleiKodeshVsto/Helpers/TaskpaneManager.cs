@@ -117,7 +117,7 @@ namespace KleiKodesh.Helpers
                     var setPopOutMethod = userControl.GetType().GetMethod("SetPopOutToggleAction");
                     if (setPopOutMethod != null)
                     {
-                        setPopOutMethod.Invoke(userControl, new object[] { new Action(popOutHandler.Toggle) });
+                        setPopOutMethod.Invoke(userControl, new object[] { new Action<bool>(popOutHandler.Toggle) });
                     }
                 }
 
