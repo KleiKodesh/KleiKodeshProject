@@ -124,13 +124,13 @@ namespace KitveiHakodeshLib.Search
             _indexState.SetDatabase(dbPath,
                 new SeforimIndex(FtsIndexState.FtsIndexPath, dbPath));
 
-            string stampedVersion = FtsIndexState.ReadVersionStamp();
-            if (stampedVersion != null)
+            string stampedDbHash = FtsIndexState.ReadDbHashStamp();
+            if (stampedDbHash != null)
             {
                 string validationError = FtsIndexState.ValidateFtsIndex();
                 if (validationError != null)
                 {
-                    Console.WriteLine("[SearchHandler] fts.ver present but index invalid ("
+                    Console.WriteLine("[SearchHandler] fts.dbhash present but index invalid ("
                         + validationError + ") — deleting and rebuilding");
                     FtsIndexState.DeleteFtsIndex();
                     _bridge.PushEvent(new { @event = "ftsIndexInvalidated", reason = validationError });
@@ -138,18 +138,18 @@ namespace KitveiHakodeshLib.Search
                     return;
                 }
 
-                string installedVersion = FtsIndexState.GetInstalledAppVersion();
-                Console.WriteLine("[SearchHandler] Version check — installed="
-                    + installedVersion + " stamped=" + stampedVersion);
+                string currentDbHash = FtsIndexState.ComputeDbHash(dbPath);
+                Console.WriteLine("[SearchHandler] Database hash check — current="
+                    + currentDbHash + " stamped=" + stampedDbHash);
 
-                if (!string.IsNullOrEmpty(installedVersion) &&
-                    !string.Equals(installedVersion, stampedVersion,
+                if (!string.IsNullOrEmpty(currentDbHash) &&
+                    !string.Equals(currentDbHash, stampedDbHash,
                                    StringComparison.OrdinalIgnoreCase))
                 {
-                    Console.WriteLine("[SearchHandler] DB changed (app version " + stampedVersion
-                        + " → " + installedVersion + ") — rebuilding index automatically");
+                    Console.WriteLine("[SearchHandler] Database changed (hash " + stampedDbHash
+                        + " → " + currentDbHash + ") — rebuilding index automatically");
                     FtsIndexState.DeleteFtsIndex();
-                    _bridge.PushEvent(new { @event = "ftsIndexInvalidated", reason = "db updated" });
+                    _bridge.PushEvent(new { @event = "ftsIndexInvalidated", reason = "database changed" });
                     StartBuildOrWatch(dbPath);
                     return;
                 }

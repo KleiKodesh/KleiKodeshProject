@@ -2,6 +2,7 @@ using SearchEngine.SeforimDb;
 using Microsoft.Win32;
 using System;
 using System.IO;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -440,35 +441,54 @@ namespace KitveiHakodeshLib.Search
         internal static string BloomFolderPath =>
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BloomFilters");
 
-        // ── Version stamp ─────────────────────────────────────────────────────────
+        // ── Database hash (replaces version stamp) ────────────────────────────────
 
-        internal static string GetInstalledAppVersion()
+        internal static string FtsDbHashPath =>
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "FtsIndex", "fts.dbhash");
+
+        /// <summary>
+        /// Computes the SHA256 hash of the database file.
+        /// Returns null if the file does not exist or cannot be read.
+        /// </summary>
+        internal static string ComputeDbHash(string dbPath)
         {
             try
             {
-                using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"SOFTWARE\KleiKodesh"))
-                    return key?.GetValue("Version")?.ToString();
+                if (!File.Exists(dbPath)) return null;
+                using (var sha256 = SHA256.Create())
+                using (var stream = File.OpenRead(dbPath))
+                {
+                    byte[] hash = sha256.ComputeHash(stream);
+                    return Convert.ToHexString(hash);
+                }
             }
             catch { return null; }
         }
 
-        internal static string ReadVersionStamp()
+        /// <summary>
+        /// Reads the stored database hash from the stamp file.
+        /// Returns null if the file does not exist or cannot be read.
+        /// </summary>
+        internal static string ReadDbHashStamp()
         {
             try
             {
-                return File.Exists(FtsVersionStampPath)
-                    ? File.ReadAllText(FtsVersionStampPath).Trim()
+                return File.Exists(FtsDbHashPath)
+                    ? File.ReadAllText(FtsDbHashPath).Trim()
                     : null;
             }
             catch { return null; }
         }
 
-        internal static void WriteVersionStamp(string version)
+        /// <summary>
+        /// Writes the database hash to the stamp file.
+        /// </summary>
+        internal static void WriteDbHashStamp(string dbHash)
         {
             try
             {
                 Directory.CreateDirectory(FtsIndexPath);
-                File.WriteAllText(FtsVersionStampPath, version ?? "");
+                File.WriteAllText(FtsDbHashPath, dbHash ?? "");
             }
             catch { }
         }

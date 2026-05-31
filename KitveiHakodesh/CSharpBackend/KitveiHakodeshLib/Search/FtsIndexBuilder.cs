@@ -173,8 +173,8 @@ namespace KitveiHakodeshLib.Search
                 return;
             }
 
-            string version = FtsIndexState.GetInstalledAppVersion();
-            if (!string.IsNullOrEmpty(version)) FtsIndexState.WriteVersionStamp(version);
+            string dbHash = FtsIndexState.ComputeDbHash(_state.GetDbPath());
+            if (!string.IsNullOrEmpty(dbHash)) FtsIndexState.WriteDbHashStamp(dbHash);
             index.DeleteBuildProgressFile();
 
             if (!_state.TryMarkReady(cts))
