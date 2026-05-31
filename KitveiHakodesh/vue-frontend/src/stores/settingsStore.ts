@@ -33,6 +33,8 @@ const DEFAULTS = {
   searchMaxWordDistance: 10,
   searchRequireOrdered: false,
   searchExpandKetiv: true,
+  searchWildcardWrap: false,
+  searchGrammarWrap: false,
 }
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -59,6 +61,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const searchMaxWordDistance = ref(DEFAULTS.searchMaxWordDistance)
   const searchRequireOrdered = ref(DEFAULTS.searchRequireOrdered)
   const searchExpandKetiv = ref(DEFAULTS.searchExpandKetiv)
+  const searchWildcardWrap = ref(DEFAULTS.searchWildcardWrap)
+  const searchGrammarWrap = ref(DEFAULTS.searchGrammarWrap)
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -126,6 +130,8 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_SEARCH_MAX_WORD_DISTANCE, searchMaxWordDistance)
     loadSetting(KEYS.SETTINGS_SEARCH_REQUIRE_ORDERED, searchRequireOrdered)
     loadSetting(KEYS.SETTINGS_SEARCH_EXPAND_KETIV, searchExpandKetiv)
+    loadSetting(KEYS.SETTINGS_SEARCH_WILDCARD_WRAP, searchWildcardWrap)
+    loadSetting(KEYS.SETTINGS_SEARCH_GRAMMAR_WRAP, searchGrammarWrap)
     applyCSSVariables()
   }
 
@@ -152,6 +158,8 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(searchMaxWordDistance, KEYS.SETTINGS_SEARCH_MAX_WORD_DISTANCE)
   persistSetting(searchRequireOrdered, KEYS.SETTINGS_SEARCH_REQUIRE_ORDERED)
   persistSetting(searchExpandKetiv, KEYS.SETTINGS_SEARCH_EXPAND_KETIV)
+  persistSetting(searchWildcardWrap, KEYS.SETTINGS_SEARCH_WILDCARD_WRAP)
+  persistSetting(searchGrammarWrap, KEYS.SETTINGS_SEARCH_GRAMMAR_WRAP)
 
   // ── Actions ───────────────────────────────────────────────────────────────
 
@@ -201,6 +209,8 @@ export const useSettingsStore = defineStore('settings', () => {
     searchMaxWordDistance.value = DEFAULTS.searchMaxWordDistance
     searchRequireOrdered.value = DEFAULTS.searchRequireOrdered
     searchExpandKetiv.value = DEFAULTS.searchExpandKetiv
+    searchWildcardWrap.value = DEFAULTS.searchWildcardWrap
+    searchGrammarWrap.value = DEFAULTS.searchGrammarWrap
     lsClearSettingsOnly()
     applyCSSVariables()
   }
@@ -210,7 +220,7 @@ export const useSettingsStore = defineStore('settings', () => {
     commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryLinePadding,
     useSeparateCommentarySettings, appZoom, dictionaryZoom, newTabPage, pdfPageFilters, resumeLastRead,
     defaultAutoSyncCommentary, setupDone, midotDisclaimerAccepted, searchContextMarginWords,
-    searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv,
+    searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchWildcardWrap, searchGrammarWrap,
     init, cycleDiacritics, togglePdfPageFilters, reset, completeSetup, acceptMidotDisclaimer,
   }
 })

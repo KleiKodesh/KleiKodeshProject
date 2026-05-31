@@ -237,6 +237,8 @@ export const KEYS = {
   SETTINGS_SEARCH_MAX_WORD_DISTANCE: 'search.maxWordDistance',
   SETTINGS_SEARCH_REQUIRE_ORDERED: 'search.requireOrdered',
   SETTINGS_SEARCH_EXPAND_KETIV: 'search.expandKetiv',
+  SETTINGS_SEARCH_WILDCARD_WRAP: 'search.wildcardWrap',
+  SETTINGS_SEARCH_GRAMMAR_WRAP: 'search.grammarWrap',
   // tab list is also localStorage (small JSON, needed synchronously at boot)
   tabsList: (wsId: string) => `tabs:${wsId}`,
 

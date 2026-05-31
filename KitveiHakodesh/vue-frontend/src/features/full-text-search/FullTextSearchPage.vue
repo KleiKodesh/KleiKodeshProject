@@ -100,6 +100,8 @@ let lastScrollOffset: number | undefined
 const isAdvancedActive = computed(
   () => maxWordDistance.value !== 10 || requireOrdered.value
      || !expandKetiv.value
+     || settings.searchWildcardWrap
+     || settings.searchGrammarWrap
      || settings.searchContextMarginWords !== 30,
 )
 
@@ -119,6 +121,8 @@ watch(
     requireOrdered,
     expandKetiv,
     () => settings.searchContextMarginWords,
+    () => settings.searchWildcardWrap,
+    () => settings.searchGrammarWrap,
   ],
   () => {
     if (hasSearched.value && executedQuery.value) {
@@ -173,7 +177,7 @@ async function restoreFromTab() {
   setAtFilters(tokens)
   tabStore.updateActiveTab({ title: `חיפוש: ${term || savedQuery}` })
   const fromCache = await loadCachedResults(term || savedQuery)
-  if (!fromCache) handleSearch(term || savedQuery)
+  if (!fromCache) await handleSearch(term || savedQuery)
 }
 
 onMounted(async () => {
@@ -199,6 +203,11 @@ onMounted(async () => {
     zoom.value = saved.searchZoom
   }
 
+  // Restore search query and results from cache/session BEFORE setting scroll position.
+  // The virtualizer needs the items to be rendered before it can scroll to an index.
+  await restoreFromTab()
+
+  // Now that results are loaded, restore scroll position
   if (saved?.searchScrollIndex != null) {
     initialScrollIndex.value = saved.searchScrollIndex
     initialScrollOffset.value = saved.searchScrollOffset ?? 0
@@ -206,7 +215,6 @@ onMounted(async () => {
     lastScrollOffset = saved.searchScrollOffset ?? 0
   }
 
-  await restoreFromTab()
   searchBarRef.value?.focus()
 })
 
@@ -255,10 +263,14 @@ onBeforeUnmount(() => {
       :require-ordered="requireOrdered"
       :context-words="settings.searchContextMarginWords"
       :expand-ketiv="expandKetiv"
+      :wildcard-wrap="settings.searchWildcardWrap"
+      :grammar-wrap="settings.searchGrammarWrap"
       @update:max-word-distance="maxWordDistance = $event"
       @update:require-ordered="requireOrdered = $event"
       @update:context-words="settings.searchContextMarginWords = $event"
       @update:expand-ketiv="expandKetiv = $event"
+      @update:wildcard-wrap="settings.searchWildcardWrap = $event"
+      @update:grammar-wrap="settings.searchGrammarWrap = $event"
       @close="isAdvancedOpen = false"
     />
 

@@ -196,7 +196,7 @@ async function enrichTocPaths(batch: FullTextSearchResult[]): Promise<void> {
 export function useFullTextSearch(isIndexing?: () => boolean) {
   const cache = useSearchCacheStore()
   const settings = useSettingsStore()
-  const { searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv } = storeToRefs(settings)
+  const { searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchWildcardWrap, searchGrammarWrap } = storeToRefs(settings)
   const results = ref<FullTextSearchResult[]>([])
   const isSearching = ref(false)
   const hasSearched = ref(false)
@@ -311,11 +311,29 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
 
     const normalizedQuery = q.trim().toLowerCase()
 
+    // Apply wrap operators to each word when the corresponding toggle is on.
+    // Wildcard wrap (*word*) takes precedence over grammar wrap (%word%) — *word*
+    // is broader coverage so adding % on top would be redundant. Words that already
+    // carry any operator are left untouched so the user's explicit syntax is preserved.
+    const queryToSend =
+      settings.searchWildcardWrap || settings.searchGrammarWrap
+        ? normalizedQuery
+            .split(/\s+/)
+            .map((word) => {
+              if (!word) return word
+              // Leave words that already have *, ?, ~, | or % operators as-is
+              if (/[*?~|%]/.test(word)) return word
+              if (settings.searchWildcardWrap) return `*${word}*`
+              return `%${word}%`
+            })
+            .join(' ')
+        : normalizedQuery
+
     // Always run a fresh search — the cache is only used for session restore
     // and tab switching (see loadCachedResults), never for a user-initiated search.
     try {
       if (!isIndexing?.()) await cache.init(normalizedQuery)
-      await _startStream(normalizedQuery, 0)
+      await _startStream(queryToSend, 0)
     } catch (err) {
       console.error('[useFullTextSearch] failed to start search:', err)
       isSearching.value = false
@@ -365,6 +383,8 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     maxWordDistance: searchMaxWordDistance,
     requireOrdered: searchRequireOrdered,
     expandKetiv: searchExpandKetiv,
+    wildcardWrap: searchWildcardWrap,
+    grammarWrap: searchGrammarWrap,
     executeSearch,
     cancelSearch,
     clearSearch,

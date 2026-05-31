@@ -171,8 +171,8 @@ defineExpose({ captureScrollPos })
                     ? results[vRow.index]!.bookTitle +
                       ' › ' +
                       results[vRow.index]!.tocText +
-                      '\n\nלחץ לניווט למיקום'
-                    : results[vRow.index]!.bookTitle + '\n\nלחץ לניווט למיקום'
+                      '\nלחץ לניווט למיקום'
+                    : results[vRow.index]!.bookTitle + '\nלחץ לניווט למיקום'
                 "
                 @click="emit('resultClick', results[vRow.index]!)"
               >
