@@ -276,6 +276,8 @@ namespace LuceneDemo
       window.chrome.webview.postMessage('slop:');   // empty = no limit
       window.chrome.webview.postMessage('order:0');
     }
+    const fs = document.getElementById('fragsize').value.trim();
+    window.chrome.webview.postMessage('fragsize:' + (fs === '' ? '2000' : fs));
   }
 
   // ── search ────────────────────────────────────────────────────────────────

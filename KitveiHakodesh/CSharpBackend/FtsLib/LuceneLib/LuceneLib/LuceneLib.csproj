@@ -106,7 +106,9 @@
     <!-- Indexing: write rows into a Lucene index -->
     <Compile Include="Indexing\LuceneIndexWriter.cs" />
     <!-- Search: query the index and return matching doc IDs -->
+    <Compile Include="Search\GrammarExpander.cs" />
     <Compile Include="Search\HebrewQueryBuilder.cs" />
+    <Compile Include="Search\KetivExpander.cs" />
     <Compile Include="Search\LuceneSearcher.cs" />
     <!-- Tokenization: Hebrew-aware text processing matching FtsLib -->
     <Compile Include="Tokenization\HebrewAnalyzer.cs" />

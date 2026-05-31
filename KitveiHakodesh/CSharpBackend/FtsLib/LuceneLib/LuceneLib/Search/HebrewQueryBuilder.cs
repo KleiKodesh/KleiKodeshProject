@@ -13,155 +13,88 @@ using LuceneLib.Tokenization;
 namespace LuceneLib.Search
 {
     /// <summary>
-    /// Builds a Lucene <see cref="Query"/> from a raw Hebrew query string,
-    /// matching FtsLib's query semantics:
+    /// Builds a Lucene <see cref="Query"/> from a raw Hebrew query string.
     ///
+    /// Supported syntax:
     ///   word        — literal AND term (analyzed through HebrewAnalyzer)
-    ///   word*       — prefix wildcard  → Lucene PrefixQuery
-    ///   *word       — suffix wildcard  → Lucene WildcardQuery
-    ///   *word*      — infix  wildcard  → Lucene WildcardQuery
-    ///   wor?d       — optional char: the char before '?' is optional
-    ///                 → two WildcardQuery / TermQuery alternatives OR'd together
+    ///   word*       — prefix wildcard  → PrefixQuery
+    ///   *word       — suffix wildcard  → WildcardQuery
+    ///   *word*      — infix  wildcard  → WildcardQuery
+    ///   wor?d       — optional char (FtsLib-style): the char before '?' is optional
     ///   a | b       — OR: both alternatives satisfy one AND slot
+    ///   %word       — grammar prefix expansion (ו, ב, כ, ל, מ, ש, ה + stacked forms)
+    ///   word%       — grammar suffix expansion (ים, ות, ין, ך, ו, ה, …)
+    ///   %word%      — both prefix and suffix expansion
+    ///   ~word       — כתיב חסר/מלא expansion (inserts/removes ו and י variants)
     ///
-    /// Wildcard limits (matching FtsLib's HebrewWildcardExpander):
-    ///   MinAnchorLength      = 2  — anchor must be ≥ 2 non-wildcard chars
-    ///   MaxPrefixWildcardChars = 3  — leading '*' may match at most 3 chars
-    ///   MaxSuffixWildcardChars = 4  — trailing '*' may match at most 4 chars
-    ///   MaxOptionalChars     = 4  — at most 4 '?' operators per token
+    /// Rules:
+    ///   - '*' overrides '%': a token with '*' is a plain wildcard; '%' is ignored.
+    ///   - '~' and '%' are compatible: ~%word% applies both expansions.
+    ///   - Multiple space-separated tokens are AND-ed.
+    ///   - '|'-separated tokens within one AND slot are OR-ed.
     ///
-    /// Multiple space-separated tokens are AND-ed.
-    /// '|'-separated tokens within one AND slot are OR-ed.
+    /// Wildcard limits:
+    ///   MinAnchorLength      = 2
+    ///   MaxOptionalChars     = 4
     /// </summary>
     public static class HebrewQueryBuilder
     {
-        // ── Limits (mirror FtsLib's HebrewWildcardExpander constants) ────────
-        private const int MinAnchorLength       = 2;
-        private const int MaxPrefixWildcardChars = 3;
-        private const int MaxSuffixWildcardChars = 4;
-        private const int MaxOptionalChars       = 4;
+        // ── Limits ────────────────────────────────────────────────────────────
+        private const int MinAnchorLength   = 2;
+        private const int MaxOptionalChars  = 4;
 
-        // ── Public entry point ────────────────────────────────────────────────
+        // ── Parsed token ──────────────────────────────────────────────────────
+
+        private struct ParsedToken
+        {
+            public string Pattern;       // normalised, no '%' or '~'
+            public bool   GrammarPrefix; // leading '%'
+            public bool   GrammarSuffix; // trailing '%'
+            public bool   Ketiv;         // leading '~'
+            public bool   IsWildcard;    // contains '*' or '?'
+        }
+
+        // ── Public entry points ───────────────────────────────────────────────
 
         /// <summary>
-        /// Parses <paramref name="queryText"/> and returns a Lucene query,
-        /// or null when the query is empty / all tokens are invalid.
+        /// Builds a <see cref="BooleanQuery"/> (AND of OR-groups) for index search.
+        /// Returns null when the query is empty / all tokens are invalid.
         /// </summary>
         public static Query Build(string queryText, HebrewAnalyzer analyzer)
         {
-            if (string.IsNullOrWhiteSpace(queryText))
-                return null;
-
-            // Pad '|' so "א|ב" and "א | ב" are equivalent.
-            queryText = queryText.Replace("|", " | ");
+            var slots = ParseSlots(queryText);
+            if (slots == null) return null;
 
             var andClauses = new List<Query>();
-            var pendingOr  = new List<string>(); // raw tokens in the current OR group
-            bool lastWasPipe = false;
-
-            foreach (var raw in queryText.Split(new[] { ' ', '\t', '\r', '\n' },
-                                                StringSplitOptions.RemoveEmptyEntries))
+            foreach (var slot in slots)
             {
-                if (IsPipe(raw))
-                {
-                    lastWasPipe = true;
-                    continue;
-                }
-
-                string token = Normalise(raw);
-                if (token.Length == 0) continue;
-
-                if (!lastWasPipe && pendingOr.Count > 0)
-                {
-                    // Flush the accumulated OR group as one AND clause.
-                    Query clause = BuildOrGroup(pendingOr, analyzer);
-                    if (clause != null) andClauses.Add(clause);
-                    pendingOr.Clear();
-                }
-
-                pendingOr.Add(token);
-                lastWasPipe = false;
-            }
-
-            if (pendingOr.Count > 0)
-            {
-                Query clause = BuildOrGroup(pendingOr, analyzer);
+                Query clause = BuildBoolOrGroup(slot, analyzer);
                 if (clause != null) andClauses.Add(clause);
             }
 
             if (andClauses.Count == 0) return null;
             if (andClauses.Count == 1) return andClauses[0];
 
-            // AND all clauses together.
             var bq = new BooleanQuery();
             foreach (var c in andClauses)
                 bq.Add(c, Occur.MUST);
             return bq;
         }
 
-        // ── OR group → single Query ───────────────────────────────────────────
-
         /// <summary>
-        /// Parses <paramref name="queryText"/> and returns a <see cref="SpanQuery"/> suitable
-        /// for proximity-aware highlighting via <see cref="Lucene.Net.Search.Highlight.QueryScorer"/>.
-        ///
-        /// Each AND slot becomes a <see cref="SpanTermQuery"/> or
-        /// <see cref="SpanMultiTermQueryWrapper{Q}"/> (for wildcards/prefix), and OR groups
-        /// become <see cref="SpanOrQuery"/>.  All slots are combined into a
-        /// <see cref="SpanNearQuery"/> with the given <paramref name="slop"/> and
-        /// <paramref name="inOrder"/> flag.
-        ///
-        /// Single-slot queries return the slot's <see cref="SpanQuery"/> directly
-        /// (no <see cref="SpanNearQuery"/> wrapper needed).
-        ///
+        /// Builds a <see cref="SpanQuery"/> for proximity-aware highlighting.
         /// Returns null when the query is empty / all tokens are invalid.
         /// </summary>
-        /// <param name="slop">
-        /// Maximum number of intervening token positions allowed between consecutive
-        /// AND slots.  0 = adjacent, 1 = one word between them, etc.
-        /// </param>
-        /// <param name="inOrder">
-        /// When true the slots must appear in left-to-right query order in the text.
-        /// When false either order is accepted.
-        /// </param>
         public static SpanQuery BuildSpan(string queryText, HebrewAnalyzer analyzer,
                                           int slop, bool inOrder)
         {
-            if (string.IsNullOrWhiteSpace(queryText))
-                return null;
+            var slots = ParseSlots(queryText);
+            if (slots == null) return null;
 
-            queryText = queryText.Replace("|", " | ");
-
-            var spanClauses  = new List<SpanQuery>();
-            var pendingOr    = new List<string>();
-            bool lastWasPipe = false;
-
-            foreach (var raw in queryText.Split(new[] { ' ', '\t', '\r', '\n' },
-                                                StringSplitOptions.RemoveEmptyEntries))
+            var spanClauses = new List<SpanQuery>();
+            foreach (var slot in slots)
             {
-                if (IsPipe(raw))
-                {
-                    lastWasPipe = true;
-                    continue;
-                }
-
-                string token = Normalise(raw);
-                if (token.Length == 0) continue;
-
-                if (!lastWasPipe && pendingOr.Count > 0)
-                {
-                    SpanQuery clause = BuildSpanOrGroup(pendingOr, analyzer);
-                    if (clause != null) spanClauses.Add(clause);
-                    pendingOr.Clear();
-                }
-
-                pendingOr.Add(token);
-                lastWasPipe = false;
-            }
-
-            if (pendingOr.Count > 0)
-            {
-                SpanQuery clause = BuildSpanOrGroup(pendingOr, analyzer);
+                SpanQuery clause = BuildSpanOrGroup(slot, analyzer);
                 if (clause != null) spanClauses.Add(clause);
             }
 
@@ -171,18 +104,200 @@ namespace LuceneLib.Search
             return new SpanNearQuery(spanClauses.ToArray(), slop, inOrder);
         }
 
-        // ── Span OR group → single SpanQuery ─────────────────────────────────
+        // ── Slot parsing ──────────────────────────────────────────────────────
 
-        private static SpanQuery BuildSpanOrGroup(List<string> tokens, HebrewAnalyzer analyzer)
+        /// <summary>
+        /// Tokenises the query string into AND slots, each slot being a list of
+        /// OR-alternative <see cref="ParsedToken"/>s.
+        /// Returns null when the input is empty.
+        /// </summary>
+        private static List<List<ParsedToken>> ParseSlots(string queryText)
+        {
+            if (string.IsNullOrWhiteSpace(queryText))
+                return null;
+
+            queryText = queryText.Replace("|", " | ");
+
+            var slots        = new List<List<ParsedToken>>();
+            var pendingOr    = new List<ParsedToken>();
+            bool lastWasPipe = false;
+
+            foreach (var raw in queryText.Split(new[] { ' ', '\t', '\r', '\n' },
+                                                StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (IsPipe(raw))
+                {
+                    lastWasPipe = true;
+                    continue;
+                }
+
+                ParsedToken? pt = ParseToken(raw);
+                if (pt == null) continue;
+
+                if (!lastWasPipe && pendingOr.Count > 0)
+                {
+                    slots.Add(new List<ParsedToken>(pendingOr));
+                    pendingOr.Clear();
+                }
+
+                pendingOr.Add(pt.Value);
+                lastWasPipe = false;
+            }
+
+            if (pendingOr.Count > 0)
+                slots.Add(new List<ParsedToken>(pendingOr));
+
+            return slots.Count == 0 ? null : slots;
+        }
+
+        /// <summary>
+        /// Parses a single raw token into a <see cref="ParsedToken"/>.
+        /// Returns null when the token is empty after normalisation.
+        /// </summary>
+        private static ParsedToken? ParseToken(string raw)
+        {
+            // Detect '~' prefix (ketiv expansion) — must come before '%' detection
+            // because '~' is stripped by Normalise.
+            bool ketiv = raw.Length > 0 && raw[0] == '~';
+            if (ketiv) raw = raw.Substring(1);
+
+            // Detect '%' grammar markers before normalisation.
+            bool grammarPrefix = raw.Length > 0 && raw[0] == '%';
+            bool grammarSuffix = raw.Length > 0 && raw[raw.Length - 1] == '%';
+            if (grammarPrefix) raw = raw.Substring(1);
+            if (grammarSuffix && raw.Length > 0) raw = raw.Substring(0, raw.Length - 1);
+
+            string pattern = Normalise(raw);
+            if (pattern.Length == 0) return null;
+
+            bool isWildcard = pattern.IndexOf('*') >= 0 || pattern.IndexOf('?') >= 0;
+
+            // '*' overrides '%': grammar expansion is suppressed for star-wildcards.
+            if (pattern.IndexOf('*') >= 0)
+            {
+                grammarPrefix = false;
+                grammarSuffix = false;
+            }
+
+            return new ParsedToken
+            {
+                Pattern       = pattern,
+                GrammarPrefix = grammarPrefix,
+                GrammarSuffix = grammarSuffix,
+                Ketiv         = ketiv,
+                IsWildcard    = isWildcard,
+            };
+        }
+
+        // ── Expansion: token → set of string alternatives ─────────────────────
+
+        /// <summary>
+        /// Expands a single <see cref="ParsedToken"/> into the full set of string
+        /// alternatives (grammar forms + ketiv variants), ready to be turned into
+        /// Lucene queries.
+        /// </summary>
+        private static HashSet<string> ExpandToken(ParsedToken pt)
+        {
+            // Start with the base form.
+            var forms = new HashSet<string>(StringComparer.Ordinal) { pt.Pattern };
+
+            // Grammar expansion (prefix/suffix).
+            if (pt.GrammarPrefix || pt.GrammarSuffix)
+            {
+                var grammarForms = GrammarExpander.Expand(
+                    pt.Pattern, pt.GrammarPrefix, pt.GrammarSuffix);
+                foreach (var f in grammarForms)
+                    forms.Add(f);
+            }
+
+            // Ketiv חסר/מלא expansion — applied to every grammar form.
+            if (pt.Ketiv)
+            {
+                var toExpand = new List<string>(forms);
+                foreach (var f in toExpand)
+                {
+                    foreach (var v in KetivExpander.Expand(f))
+                        forms.Add(v);
+                }
+            }
+
+            return forms;
+        }
+
+        // ── Boolean OR group ──────────────────────────────────────────────────
+
+        private static Query BuildBoolOrGroup(List<ParsedToken> tokens, HebrewAnalyzer analyzer)
+        {
+            var alternatives = new List<Query>();
+
+            foreach (var pt in tokens)
+            {
+                if (pt.IsWildcard && !pt.GrammarPrefix && !pt.GrammarSuffix && !pt.Ketiv)
+                {
+                    // Pure wildcard — no expansion needed.
+                    Query q = BuildWildcardQuery(pt.Pattern);
+                    if (q != null) alternatives.Add(q);
+                }
+                else if (!pt.IsWildcard && !pt.GrammarPrefix && !pt.GrammarSuffix && !pt.Ketiv)
+                {
+                    // Plain literal — fast path.
+                    Query q = BuildLiteralQuery(pt.Pattern, analyzer);
+                    if (q != null) alternatives.Add(q);
+                }
+                else
+                {
+                    // Expanded token — each form becomes an OR alternative.
+                    var forms = ExpandToken(pt);
+                    foreach (var form in forms)
+                    {
+                        bool isWild = form.IndexOf('*') >= 0 || form.IndexOf('?') >= 0;
+                        Query q = isWild
+                            ? BuildWildcardQuery(form)
+                            : BuildLiteralQuery(form, analyzer);
+                        if (q != null) alternatives.Add(q);
+                    }
+                }
+            }
+
+            if (alternatives.Count == 0) return null;
+            if (alternatives.Count == 1) return alternatives[0];
+
+            var bq = new BooleanQuery();
+            foreach (var q in alternatives)
+                bq.Add(q, Occur.SHOULD);
+            return bq;
+        }
+
+        // ── Span OR group ─────────────────────────────────────────────────────
+
+        private static SpanQuery BuildSpanOrGroup(List<ParsedToken> tokens, HebrewAnalyzer analyzer)
         {
             var alternatives = new List<SpanQuery>();
-            foreach (var token in tokens)
+
+            foreach (var pt in tokens)
             {
-                bool isWildcard = token.IndexOf('*') >= 0 || token.IndexOf('?') >= 0;
-                SpanQuery q = isWildcard
-                    ? BuildSpanWildcardQuery(token)
-                    : BuildSpanLiteralQuery(token, analyzer);
-                if (q != null) alternatives.Add(q);
+                if (pt.IsWildcard && !pt.GrammarPrefix && !pt.GrammarSuffix && !pt.Ketiv)
+                {
+                    SpanQuery q = BuildSpanWildcardQuery(pt.Pattern);
+                    if (q != null) alternatives.Add(q);
+                }
+                else if (!pt.IsWildcard && !pt.GrammarPrefix && !pt.GrammarSuffix && !pt.Ketiv)
+                {
+                    SpanQuery q = BuildSpanLiteralQuery(pt.Pattern, analyzer);
+                    if (q != null) alternatives.Add(q);
+                }
+                else
+                {
+                    var forms = ExpandToken(pt);
+                    foreach (var form in forms)
+                    {
+                        bool isWild = form.IndexOf('*') >= 0 || form.IndexOf('?') >= 0;
+                        SpanQuery q = isWild
+                            ? BuildSpanWildcardQuery(form)
+                            : BuildSpanLiteralQuery(form, analyzer);
+                        if (q != null) alternatives.Add(q);
+                    }
+                }
             }
 
             if (alternatives.Count == 0) return null;
@@ -191,13 +306,77 @@ namespace LuceneLib.Search
             return new SpanOrQuery(alternatives.ToArray());
         }
 
-        // ── Span literal term ─────────────────────────────────────────────────
+        // ── Literal term (Boolean) ────────────────────────────────────────────
 
-        /// <summary>
-        /// Runs the token through HebrewAnalyzer and returns a <see cref="SpanTermQuery"/>.
-        /// Multi-token analyzer output (rare) is wrapped in a <see cref="SpanNearQuery"/>
-        /// with slop=0 inOrder=true so the phrase is treated as a single proximity unit.
-        /// </summary>
+        private static Query BuildLiteralQuery(string token, HebrewAnalyzer analyzer)
+        {
+            var terms = Analyze(token, analyzer);
+            if (terms.Count == 0) return null;
+            if (terms.Count == 1) return new TermQuery(new Term(LuceneIndexWriter.FieldText, terms[0]));
+
+            var bq = new BooleanQuery();
+            foreach (var t in terms)
+                bq.Add(new TermQuery(new Term(LuceneIndexWriter.FieldText, t)), Occur.MUST);
+            return bq;
+        }
+
+        // ── Wildcard term (Boolean) ───────────────────────────────────────────
+
+        private static Query BuildWildcardQuery(string token)
+        {
+            if (AnchorLength(token) < MinAnchorLength)
+                return null;
+
+            bool hasOptional = token.IndexOf('?') >= 0;
+            if (!hasOptional)
+                return BuildStarQuery(token);
+
+            int optCount = CountEffectiveOptionals(token);
+            if (optCount > MaxOptionalChars)
+                return null;
+
+            var subPatterns = new HashSet<string>(StringComparer.Ordinal);
+            ExpandOptionals(token, 0, new StringBuilder(token.Length), subPatterns);
+
+            var alternatives = new List<Query>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (var sub in subPatterns)
+            {
+                if (!seen.Add(sub)) continue;
+                if (AnchorLength(sub) < MinAnchorLength) continue;
+
+                Query q = sub.IndexOf('*') >= 0
+                    ? BuildStarQuery(sub)
+                    : BuildExactWildcardTerm(sub);
+                if (q != null) alternatives.Add(q);
+            }
+
+            if (alternatives.Count == 0) return null;
+            if (alternatives.Count == 1) return alternatives[0];
+
+            var bq = new BooleanQuery();
+            foreach (var q in alternatives)
+                bq.Add(q, Occur.SHOULD);
+            return bq;
+        }
+
+        private static Query BuildStarQuery(string pattern)
+        {
+            bool hasLeading  = pattern.StartsWith("*");
+            bool hasTrailing = pattern.EndsWith("*");
+
+            if (!hasLeading && hasTrailing)
+                return new PrefixQuery(new Term(LuceneIndexWriter.FieldText, pattern.TrimEnd('*')));
+
+            return new WildcardQuery(new Term(LuceneIndexWriter.FieldText, pattern));
+        }
+
+        private static Query BuildExactWildcardTerm(string term)
+            => new TermQuery(new Term(LuceneIndexWriter.FieldText, term));
+
+        // ── Literal term (Span) ───────────────────────────────────────────────
+
         private static SpanQuery BuildSpanLiteralQuery(string token, HebrewAnalyzer analyzer)
         {
             var terms = Analyze(token, analyzer);
@@ -205,26 +384,20 @@ namespace LuceneLib.Search
             if (terms.Count == 1)
                 return new SpanTermQuery(new Term(LuceneIndexWriter.FieldText, terms[0]));
 
-            // Multi-token: treat as an ordered phrase with no slop.
             var clauses = new SpanQuery[terms.Count];
             for (int i = 0; i < terms.Count; i++)
                 clauses[i] = new SpanTermQuery(new Term(LuceneIndexWriter.FieldText, terms[i]));
             return new SpanNearQuery(clauses, 0, true);
         }
 
-        // ── Span wildcard term ────────────────────────────────────────────────
+        // ── Wildcard term (Span) ──────────────────────────────────────────────
 
-        /// <summary>
-        /// Builds a <see cref="SpanMultiTermQueryWrapper{Q}"/> for wildcard/prefix tokens,
-        /// mirroring the same expansion logic as <see cref="BuildWildcardQuery"/>.
-        /// </summary>
         private static SpanQuery BuildSpanWildcardQuery(string token)
         {
             if (AnchorLength(token) < MinAnchorLength)
                 return null;
 
             bool hasOptional = token.IndexOf('?') >= 0;
-
             if (!hasOptional)
                 return BuildSpanStarQuery(token);
 
@@ -261,146 +434,14 @@ namespace LuceneLib.Search
             bool hasTrailing = pattern.EndsWith("*");
 
             if (!hasLeading && hasTrailing)
-            {
-                string prefix = pattern.TrimEnd('*');
                 return new SpanMultiTermQueryWrapper<PrefixQuery>(
-                    new PrefixQuery(new Term(LuceneIndexWriter.FieldText, prefix)));
-            }
+                    new PrefixQuery(new Term(LuceneIndexWriter.FieldText, pattern.TrimEnd('*'))));
 
             return new SpanMultiTermQueryWrapper<WildcardQuery>(
                 new WildcardQuery(new Term(LuceneIndexWriter.FieldText, pattern)));
         }
 
-        // ── OR group → single Query ───────────────────────────────────────────
-
-        private static Query BuildOrGroup(List<string> tokens, HebrewAnalyzer analyzer)
-        {
-            var alternatives = new List<Query>();
-            foreach (var token in tokens)
-            {
-                bool isWildcard = token.IndexOf('*') >= 0 || token.IndexOf('?') >= 0;
-                Query q = isWildcard
-                    ? BuildWildcardQuery(token)
-                    : BuildLiteralQuery(token, analyzer);
-                if (q != null) alternatives.Add(q);
-            }
-
-            if (alternatives.Count == 0) return null;
-            if (alternatives.Count == 1) return alternatives[0];
-
-            var bq = new BooleanQuery();
-            foreach (var q in alternatives)
-                bq.Add(q, Occur.SHOULD);
-            return bq;
-        }
-
-        // ── Literal term ──────────────────────────────────────────────────────
-
-        /// <summary>
-        /// Runs the token through HebrewAnalyzer (strips nikud etc.) and returns
-        /// a TermQuery, or a BooleanQuery if the analyzer produces multiple tokens.
-        /// </summary>
-        private static Query BuildLiteralQuery(string token, HebrewAnalyzer analyzer)
-        {
-            var terms = Analyze(token, analyzer);
-            if (terms.Count == 0) return null;
-            if (terms.Count == 1) return new TermQuery(new Term(LuceneIndexWriter.FieldText, terms[0]));
-
-            // Multi-token result — AND them.
-            var bq = new BooleanQuery();
-            foreach (var t in terms)
-                bq.Add(new TermQuery(new Term(LuceneIndexWriter.FieldText, t)), Occur.MUST);
-            return bq;
-        }
-
-        // ── Wildcard term ─────────────────────────────────────────────────────
-
-        /// <summary>
-        /// Builds a wildcard query for a token that contains '*' and/or '?'.
-        ///
-        /// '?' is FtsLib-style "optional preceding char" — not Lucene's "exactly one char".
-        /// We unroll all 2^N include/exclude combinations and OR them together.
-        /// Each resulting sub-pattern is then turned into a PrefixQuery or WildcardQuery.
-        /// </summary>
-        private static Query BuildWildcardQuery(string token)
-        {
-            // Reject if anchor is too short.
-            if (AnchorLength(token) < MinAnchorLength)
-                return null;
-
-            bool hasOptional = token.IndexOf('?') >= 0;
-
-            if (!hasOptional)
-                return BuildStarQuery(token);
-
-            // Count effective '?' operators.
-            int optCount = CountEffectiveOptionals(token);
-            if (optCount > MaxOptionalChars)
-                return null;
-
-            // Unroll all 2^N sub-patterns.
-            var subPatterns = new HashSet<string>(StringComparer.Ordinal);
-            ExpandOptionals(token, 0, new StringBuilder(token.Length), subPatterns);
-
-            var alternatives = new List<Query>();
-            var seen = new HashSet<string>(StringComparer.Ordinal);
-
-            foreach (var sub in subPatterns)
-            {
-                if (!seen.Add(sub)) continue;
-                if (AnchorLength(sub) < MinAnchorLength) continue;
-
-                Query q = sub.IndexOf('*') >= 0
-                    ? BuildStarQuery(sub)
-                    : BuildExactWildcardTerm(sub); // no '*', just a literal after '?' unrolling
-                if (q != null) alternatives.Add(q);
-            }
-
-            if (alternatives.Count == 0) return null;
-            if (alternatives.Count == 1) return alternatives[0];
-
-            var bq = new BooleanQuery();
-            foreach (var q in alternatives)
-                bq.Add(q, Occur.SHOULD);
-            return bq;
-        }
-
-        /// <summary>
-        /// Builds a PrefixQuery or WildcardQuery for a pattern that contains only '*'
-        /// (no '?'). Also enforces the prefix/suffix char caps.
-        /// </summary>
-        private static Query BuildStarQuery(string pattern)
-        {
-            bool hasLeading  = pattern.StartsWith("*");
-            bool hasTrailing = pattern.EndsWith("*");
-
-            // Pure prefix: "abc*" → PrefixQuery (Lucene optimizes this via the term dict)
-            if (!hasLeading && hasTrailing)
-            {
-                string prefix = pattern.TrimEnd('*');
-                // Enforce suffix cap: the trailing '*' may match at most MaxSuffixWildcardChars.
-                // We can't enforce this at query-build time without enumerating terms, so we
-                // use a MultiTermQuery rewrite that walks the FST and we post-filter in the
-                // collector. For now we rely on Lucene's PrefixQuery which is already bounded
-                // by the index — the cap is documented but not hard-enforced here (matching
-                // FtsLib's approach of filtering after the DB query).
-                return new PrefixQuery(new Term(LuceneIndexWriter.FieldText, prefix));
-            }
-
-            // Suffix or infix: translate '*' → Lucene wildcard '*' (same meaning here).
-            // Lucene WildcardQuery: '*' = zero or more chars, '?' = exactly one char.
-            // Our pattern uses '*' the same way, so no translation needed.
-            return new WildcardQuery(new Term(LuceneIndexWriter.FieldText, pattern));
-        }
-
-        /// <summary>
-        /// Builds a TermQuery for a sub-pattern that has no wildcards left after
-        /// '?' unrolling (i.e. it's a plain literal).
-        /// </summary>
-        private static Query BuildExactWildcardTerm(string term)
-            => new TermQuery(new Term(LuceneIndexWriter.FieldText, term));
-
-        // ── '?' unrolling (mirrors FtsLib's ExpandOptionals) ─────────────────
+        // ── '?' unrolling ─────────────────────────────────────────────────────
 
         private static void ExpandOptionals(
             string pattern, int pos, StringBuilder current, HashSet<string> results)
@@ -421,20 +462,16 @@ namespace LuceneLib.Search
                 return;
             }
 
-            // c == '?': is there a real preceding letter to make optional?
             bool hasTarget = current.Length > 0 && current[current.Length - 1] != '*';
 
             if (!hasTarget)
             {
-                // No-op '?' — skip it.
                 ExpandOptionals(pattern, pos + 1, current, results);
                 return;
             }
 
-            // Branch 1: keep the preceding char.
             ExpandOptionals(pattern, pos + 1, current, results);
 
-            // Branch 2: drop the preceding char.
             char saved = current[current.Length - 1];
             current.Length--;
             ExpandOptionals(pattern, pos + 1, current, results);
@@ -466,7 +503,7 @@ namespace LuceneLib.Search
 
         /// <summary>
         /// Strips nikud/cantillation, geresh/gershayim, lowercases ASCII.
-        /// Preserves '*' and '?' so wildcard detection works.
+        /// Preserves '*' and '?'. Drops '%' and '~' (already consumed by ParseToken).
         /// </summary>
         private static string Normalise(string token)
         {
@@ -479,7 +516,7 @@ namespace LuceneLib.Search
                 if (c >= '\u05D0' && c <= '\u05EA') { sb.Append(c); continue; } // Hebrew
                 if (c >= 'A' && c <= 'Z') { sb.Append((char)(c | 32)); continue; }
                 if (c >= 'a' && c <= 'z') { sb.Append(c); continue; }
-                // everything else dropped
+                // everything else (including '%', '~') dropped
             }
             return sb.ToString();
         }
@@ -492,10 +529,6 @@ namespace LuceneLib.Search
             return n;
         }
 
-        /// <summary>
-        /// Runs a plain (no-wildcard) token through HebrewAnalyzer and returns
-        /// the list of output terms.
-        /// </summary>
         private static List<string> Analyze(string token, HebrewAnalyzer analyzer)
         {
             var result = new List<string>();
