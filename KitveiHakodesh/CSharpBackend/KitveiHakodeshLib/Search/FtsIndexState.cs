@@ -1,4 +1,4 @@
-using LuceneLib.SeforimDb;
+using SearchEngine.SeforimDb;
 using Microsoft.Win32;
 using System;
 using System.IO;
