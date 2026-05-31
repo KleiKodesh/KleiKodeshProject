@@ -1,35 +1,39 @@
 namespace LuceneLib.Snippets
 {
     /// <summary>
-    /// The output of <see cref="SnippetBuilder.Build"/>.
-    /// Mirrors FtsLib.Snippets.SnippetResult exactly.
+    /// The output of snippet generation.
+    /// Mirrors FtsLib.SeforimDb.SnippetResult exactly — class, not struct,
+    /// so callers can use it as a reference type without boxing surprises.
     /// </summary>
-    public readonly struct SnippetResult
+    public sealed class SnippetResult
     {
         /// <summary>HTML snippet with matched terms wrapped in highlight tags.</summary>
-        public readonly string Html;
+        public string Html { get; }
 
         /// <summary>
         /// Raw character span of the tightest window covering all query terms.
         /// int.MaxValue = at least one term absent from the document.
         /// </summary>
-        public readonly int Score;
+        public int Score { get; }
 
         /// <summary>
         /// Number of tokens between the leftmost and rightmost matched tokens.
         /// 0 = adjacent. int.MaxValue = no match.
         /// </summary>
-        public readonly int WordDistance;
+        public int WordDistance { get; }
 
         /// <summary>True when at least one query term was found in the document.</summary>
-        public readonly bool IsMatch;
+        public bool IsMatch { get; }
 
         public SnippetResult(string html, int score, int wordDistance, bool isMatch)
         {
-            Html         = html;
+            Html         = html ?? string.Empty;
             Score        = score;
             WordDistance = wordDistance;
             IsMatch      = isMatch;
         }
+
+        public static readonly SnippetResult NoMatch =
+            new SnippetResult(string.Empty, int.MaxValue, int.MaxValue, false);
     }
 }

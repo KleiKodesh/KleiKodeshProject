@@ -90,6 +90,56 @@ namespace LuceneLib.SeforimDb
             }
         }
 
+        public string GetBookTitleByLineId(int id)
+        {
+            EnsureOpen();
+            using (var cmd = _connection.CreateCommand())
+            {
+                cmd.CommandText =
+                    "SELECT b.title FROM line l JOIN book b ON b.id = l.bookId WHERE l.id = @id";
+                cmd.Parameters.AddWithValue("@id", id);
+                var result = cmd.ExecuteScalar();
+                return result == null || result == DBNull.Value ? string.Empty : (string)result;
+            }
+        }
+
+        public long CountLinesUpTo(int upToId)
+        {
+            EnsureOpen();
+            using (var cmd = _connection.CreateCommand())
+            {
+                cmd.CommandText = "SELECT COUNT(*) FROM line WHERE id <= @id";
+                cmd.Parameters.AddWithValue("@id", upToId);
+                return (long)cmd.ExecuteScalar();
+            }
+        }
+
+        /// <summary>
+        /// Streams rows with id strictly greater than <paramref name="afterId"/>, ordered by id.
+        /// </summary>
+        public IEnumerable<(int Id, string Content)> ReadLinesFrom(
+            int afterId,
+            int limit = 0,
+            System.Threading.CancellationToken ct = default)
+        {
+            EnsureOpen();
+            using (var cmd = _connection.CreateCommand())
+            {
+                cmd.CommandText = limit > 0
+                    ? "SELECT id, content FROM line WHERE id > @after ORDER BY id LIMIT @lim"
+                    : "SELECT id, content FROM line WHERE id > @after ORDER BY id";
+                cmd.Parameters.AddWithValue("@after", afterId);
+                if (limit > 0) cmd.Parameters.AddWithValue("@lim", limit);
+
+                using (var r = cmd.ExecuteReader())
+                    while (r.Read())
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        yield return (r.GetInt32(0), r.IsDBNull(1) ? string.Empty : r.GetString(1));
+                    }
+            }
+        }
+
         // ── Lifecycle ─────────────────────────────────────────────────
 
         public void Dispose()

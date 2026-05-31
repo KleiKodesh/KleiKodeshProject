@@ -75,6 +75,57 @@ namespace LuceneLib.Indexing
             _writer.ForceMerge(1);
         }
 
+        /// <summary>
+        /// Adds a single row to the index without committing.
+        /// Used by <see cref="LuceneLib.SeforimDb.SeforimIndex.BuildIndex"/> for
+        /// row-by-row indexing with periodic commits.
+        /// </summary>
+        public void AddDocument(int id, string content)
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(LuceneIndexWriter));
+
+            var doc = new Document();
+            doc.Add(new Int32Field(FieldRowId, id, Field.Store.YES));
+
+            var fieldType = new FieldType
+            {
+                IsIndexed    = true,
+                IsStored     = false,
+                OmitNorms    = true,
+                IndexOptions = IndexOptions.DOCS_ONLY
+            };
+            fieldType.Freeze();
+            doc.Add(new Field(FieldText, content ?? string.Empty, fieldType));
+
+            _writer.AddDocument(doc);
+        }
+
+        /// <summary>
+        /// Commits all pending documents to disk, making them visible to readers.
+        /// </summary>
+        public void Commit()
+        {
+            if (_disposed) return;
+            _writer.Commit();
+        }
+
+        /// <summary>
+        /// Returns true when a committed Lucene index exists at <paramref name="indexPath"/>.
+        /// Lucene writes <c>segments_N</c> files after each commit — their presence
+        /// means the index is ready to open.
+        /// </summary>
+        public static bool IndexExists(string indexPath)
+        {
+            if (!System.IO.Directory.Exists(indexPath)) return false;
+            foreach (var f in System.IO.Directory.GetFiles(indexPath))
+            {
+                string name = System.IO.Path.GetFileName(f);
+                if (name.StartsWith("segments_") && name != "segments.gen")
+                    return true;
+            }
+            return false;
+        }
+
         public void Dispose()
         {
             if (_disposed) return;

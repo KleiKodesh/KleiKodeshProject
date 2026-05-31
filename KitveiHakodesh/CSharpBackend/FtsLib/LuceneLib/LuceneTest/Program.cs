@@ -72,12 +72,16 @@ namespace LuceneTest
                             if (args.Length < 3) { Console.WriteLine("diag snippet <query> [dbPath]"); return; }
                             SnippetTest.Run(indexDir, args[2], args.Length > 3 ? args[3] : null);
                             break;
+                        case "fuzzy":
+                            if (args.Length < 3) { Console.WriteLine("diag fuzzy <query> [dbPath]"); return; }
+                            FuzzyTest.Run(indexDir, args[2], args.Length > 3 ? args[3] : null);
+                            break;
                         case "subset":
                             if (args.Length < 4) { Console.WriteLine("diag subset <literalQuery> <wildcardQuery>"); return; }
                             SubsetTest.Run(indexDir, args[2], args[3]);
                             break;
                         default:
-                            Console.WriteLine("Unknown diag subcommand. Use: tokenize|query|terms|hits|verify|snippet|subset");
+                            Console.WriteLine("Unknown diag subcommand. Use: tokenize|query|terms|hits|verify|snippet|fuzzy|subset");
                             break;
                     }
                     break;

@@ -103,6 +103,8 @@
   <ItemGroup>
     <!-- SeforimDb: access to the Zayit SQLite database (copied from FtsLib, not referenced) -->
     <Compile Include="SeforimDb\ZayitDb.cs" />
+    <Compile Include="SeforimDb\SearchResult.cs" />
+    <Compile Include="SeforimDb\SeforimIndex.cs" />
     <!-- Indexing: write rows into a Lucene index -->
     <Compile Include="Indexing\LuceneIndexWriter.cs" />
     <!-- Search: query the index and return matching doc IDs -->

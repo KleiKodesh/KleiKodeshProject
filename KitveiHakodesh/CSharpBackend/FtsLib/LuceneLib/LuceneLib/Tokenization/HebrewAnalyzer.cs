@@ -30,19 +30,23 @@ namespace LuceneLib.Tokenization
 
     /// <summary>
     /// Tokenizer that implements FtsLib-compatible Hebrew text processing.
+    /// Single-pass, HTML-aware: tag content is skipped entirely (including
+    /// any letters inside attribute values), matching the behaviour of
+    /// <c>FtsLib.Tokenization.HtmlWordScanner</c>.
     /// </summary>
     internal sealed class HebrewTokenizer : Tokenizer
     {
         private readonly ICharTermAttribute _termAttr;
-        private readonly IOffsetAttribute _offsetAttr;
-        private readonly StringBuilder _buffer = new StringBuilder(64);
-        private int _offset;
+        private readonly IOffsetAttribute   _offsetAttr;
+        private readonly StringBuilder      _buffer = new StringBuilder(64);
+        private int  _offset;
         private bool _eof;
+        private bool _inTag;   // true while inside a <...> tag
 
         public HebrewTokenizer(TextReader input)
             : base(input)
         {
-            _termAttr = AddAttribute<ICharTermAttribute>();
+            _termAttr   = AddAttribute<ICharTermAttribute>();
             _offsetAttr = AddAttribute<IOffsetAttribute>();
         }
 
@@ -57,15 +61,50 @@ namespace LuceneLib.Tokenization
             int startOffset = _offset;
             int c;
 
-            // Skip non-letter characters
+            // ── Skip until we find the start of a word ────────────────
+            // Honour _inTag state carried over from the previous call so
+            // we never start a word mid-tag.
             while ((c = m_input.Read()) != -1)
             {
                 _offset++;
-                if (IsLetter((char)c))
+                char ch = (char)c;
+
+                // ── HTML tag handling ─────────────────────────────────
+                if (_inTag)
+                {
+                    if (ch == '>') _inTag = false;
+                    continue; // skip everything inside a tag
+                }
+                if (ch == '<')
+                {
+                    _inTag = true;
+                    continue;
+                }
+
+                // ── Maqaf — word separator ────────────────────────────
+                if (ch == '\u05BE') continue;
+
+                // ── Geresh / gershayim / ASCII quote ──────────────────
+                if (ch == '\u05F3' || ch == '\u05F4' || ch == '"') continue;
+
+                // ── Nikud + cantillation ───────────────────────────────
+                if (ch >= '\u0591' && ch <= '\u05C7'
+                    && ch != '\u05C0'
+                    && ch != '\u05C3'
+                    && ch != '\u05C6') continue;
+
+                if (ch > 127 && CharUnicodeInfo.GetUnicodeCategory(ch) == UnicodeCategory.NonSpacingMark)
+                    continue;
+
+                // ── Letter found — start of a new word ───────────────
+                if (IsLetter(ch))
                 {
                     startOffset = _offset - 1;
+                    if (ch >= 'A' && ch <= 'Z') ch = (char)(ch | 32);
+                    _buffer.Append(ch);
                     break;
                 }
+                // anything else (space, punctuation, &, digits…) — skip
             }
 
             if (c == -1)
@@ -74,61 +113,50 @@ namespace LuceneLib.Tokenization
                 return false;
             }
 
-            // Build word
-            while (c != -1)
+            // ── Accumulate the rest of the word ──────────────────────
+            while ((c = m_input.Read()) != -1)
             {
+                _offset++;
                 char ch = (char)c;
 
-                // Nikud + cantillation removal
-                if (ch >= '\u0591' && ch <= '\u05C7'
-                    && ch != '\u05C0'   // paseq
-                    && ch != '\u05C3'   // sof pasuq
-                    && ch != '\u05C6')  // nun hafukha
+                // A '<' ends the current word AND enters tag mode.
+                if (ch == '<')
                 {
-                    c = m_input.Read();
-                    if (c != -1) _offset++;
-                    continue;
-                }
-
-                // Non-spacing marks
-                if (ch > 127 && CharUnicodeInfo.GetUnicodeCategory(ch) == UnicodeCategory.NonSpacingMark)
-                {
-                    c = m_input.Read();
-                    if (c != -1) _offset++;
-                    continue;
-                }
-
-                // Geresh / gershayim / ASCII quote
-                if (ch == '\u05F3' || ch == '\u05F4' || ch == '"')
-                {
-                    c = m_input.Read();
-                    if (c != -1) _offset++;
-                    continue;
+                    _inTag = true;
+                    break;
                 }
 
                 // Maqaf — word separator
-                if (ch == '\u05BE')
-                    break;
+                if (ch == '\u05BE') break;
 
-                // Letter — add to buffer (lowercase ASCII)
+                // Geresh / gershayim / ASCII quote — strip silently (keep building)
+                if (ch == '\u05F3' || ch == '\u05F4' || ch == '"') continue;
+
+                // Nikud + cantillation — strip silently
+                if (ch >= '\u0591' && ch <= '\u05C7'
+                    && ch != '\u05C0'
+                    && ch != '\u05C3'
+                    && ch != '\u05C6') continue;
+
+                if (ch > 127 && CharUnicodeInfo.GetUnicodeCategory(ch) == UnicodeCategory.NonSpacingMark)
+                    continue;
+
                 if (IsLetter(ch))
                 {
-                    if (ch >= 'A' && ch <= 'Z')
-                        ch = (char)(ch | 32);
+                    if (ch >= 'A' && ch <= 'Z') ch = (char)(ch | 32);
                     _buffer.Append(ch);
-                    c = m_input.Read();
-                    if (c != -1) _offset++;
                 }
                 else
                 {
-                    // Non-letter — end of word
-                    break;
+                    break; // non-letter separator ends the word
                 }
             }
 
-            // Filter by length (2–29 chars, matching FtsLib)
+            if (c == -1) _eof = true;
+
+            // ── Length filter (2–29 chars, matching FtsLib) ───────────
             if (_buffer.Length < 2 || _buffer.Length >= 30)
-                return IncrementToken();
+                return IncrementToken(); // tail-recurse to find the next valid word
 
             _termAttr.SetEmpty().Append(_buffer);
             _offsetAttr.SetOffset(startOffset, _offset);
@@ -139,7 +167,8 @@ namespace LuceneLib.Tokenization
         {
             base.Reset();
             _offset = 0;
-            _eof = false;
+            _eof    = false;
+            _inTag  = false;
             _buffer.Clear();
         }
 

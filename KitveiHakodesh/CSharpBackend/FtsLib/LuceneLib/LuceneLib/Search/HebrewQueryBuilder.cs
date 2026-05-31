@@ -21,6 +21,9 @@ namespace LuceneLib.Search
     ///   *word       — suffix wildcard  → WildcardQuery
     ///   *word*      — infix  wildcard  → WildcardQuery
     ///   wor?d       — optional char (FtsLib-style): the char before '?' is optional
+    ///   word~       — fuzzy, edit distance 1  → FuzzyQuery(maxEdits=1)
+    ///   word~2      — fuzzy, edit distance 2  → FuzzyQuery(maxEdits=2)
+    ///   word~3      — fuzzy, edit distance 3  → FuzzyQuery(maxEdits=2) [Lucene cap]
     ///   a | b       — OR: both alternatives satisfy one AND slot
     ///   %word       — grammar prefix expansion (ו, ב, כ, ל, מ, ש, ה + stacked forms)
     ///   word%       — grammar suffix expansion (ים, ות, ין, ך, ו, ה, …)
@@ -28,30 +31,52 @@ namespace LuceneLib.Search
     ///   ~word       — כתיב חסר/מלא expansion (inserts/removes ו and י variants)
     ///
     /// Rules:
+    ///   - Fuzzy suffix '~' / '~N' is detected before the leading '~' (ketiv) marker,
+    ///     so "word~" is fuzzy and "~word" is ketiv — they are distinct operators.
+    ///   - Wildcard ('*' / '?') wins over fuzzy: if both appear the fuzzy suffix is dropped.
     ///   - '*' overrides '%': a token with '*' is a plain wildcard; '%' is ignored.
-    ///   - '~' and '%' are compatible: ~%word% applies both expansions.
+    ///   - '~' (ketiv) and '%' are compatible: ~%word% applies both expansions.
     ///   - Multiple space-separated tokens are AND-ed.
     ///   - '|'-separated tokens within one AND slot are OR-ed.
     ///
     /// Wildcard limits:
     ///   MinAnchorLength      = 2
     ///   MaxOptionalChars     = 4
+    ///
+    /// Fuzzy limits:
+    ///   MaxFuzzyDistance     = 2  (Lucene.Net FuzzyQuery hard cap; FtsLib distance 3
+    ///                              is silently clamped to 2)
+    ///   MinFuzzyTermLength   = 3  (single/two-char terms are not fuzzied)
     /// </summary>
     public static class HebrewQueryBuilder
     {
         // ── Limits ────────────────────────────────────────────────────────────
-        private const int MinAnchorLength   = 2;
-        private const int MaxOptionalChars  = 4;
+        private const int MinAnchorLength  = 2;
+        private const int MaxOptionalChars = 4;
+
+        /// <summary>
+        /// Lucene.Net <see cref="FuzzyQuery"/> hard cap on maxEdits (1 or 2).
+        /// FtsLib allows distance 3; we clamp it here and document the difference.
+        /// </summary>
+        public const int MaxFuzzyDistance = 2;
+
+        /// <summary>
+        /// Minimum term length for fuzzy matching. Single- and two-char terms
+        /// produce too many false positives and are treated as literals instead.
+        /// </summary>
+        public const int MinFuzzyTermLength = 3;
 
         // ── Parsed token ──────────────────────────────────────────────────────
 
         private struct ParsedToken
         {
-            public string Pattern;       // normalised, no '%' or '~'
+            public string Pattern;       // normalised, no '%', '~' prefix, or '~N' suffix
             public bool   GrammarPrefix; // leading '%'
             public bool   GrammarSuffix; // trailing '%'
-            public bool   Ketiv;         // leading '~'
+            public bool   Ketiv;         // leading '~' (כתיב expansion)
             public bool   IsWildcard;    // contains '*' or '?'
+            public bool   IsFuzzy;       // trailing '~' or '~N' suffix
+            public int    FuzzyDistance; // 1–2 (clamped from FtsLib's 1–3)
         }
 
         // ── Public entry points ───────────────────────────────────────────────
@@ -153,24 +178,60 @@ namespace LuceneLib.Search
         /// <summary>
         /// Parses a single raw token into a <see cref="ParsedToken"/>.
         /// Returns null when the token is empty after normalisation.
+        ///
+        /// Detection order (important — each step strips its marker before the next):
+        ///   1. Leading '~'  → ketiv expansion flag (consumed before normalisation)
+        ///   2. Leading '%'  → grammar prefix flag
+        ///   3. Trailing '%' → grammar suffix flag
+        ///   4. Trailing '~' or '~N' → fuzzy flag + distance (consumed before normalisation)
+        ///   5. Normalise remaining text
+        ///   6. Wildcard detection ('*' / '?') — wins over fuzzy if both present
         /// </summary>
         private static ParsedToken? ParseToken(string raw)
         {
-            // Detect '~' prefix (ketiv expansion) — must come before '%' detection
-            // because '~' is stripped by Normalise.
+            // Step 1: leading '~' → ketiv expansion.
+            // Must be checked before the fuzzy suffix so "~word" is ketiv, not fuzzy.
             bool ketiv = raw.Length > 0 && raw[0] == '~';
             if (ketiv) raw = raw.Substring(1);
 
-            // Detect '%' grammar markers before normalisation.
+            // Step 2 & 3: '%' grammar markers.
             bool grammarPrefix = raw.Length > 0 && raw[0] == '%';
             bool grammarSuffix = raw.Length > 0 && raw[raw.Length - 1] == '%';
             if (grammarPrefix) raw = raw.Substring(1);
             if (grammarSuffix && raw.Length > 0) raw = raw.Substring(0, raw.Length - 1);
 
+            // Step 4: trailing '~' or '~N' → fuzzy.
+            // Scan from the right: accept "~" or "~1" / "~2" / "~3".
+            bool isFuzzy    = false;
+            int  fuzzyDist  = 1;
+            int  tildePos   = raw.LastIndexOf('~');
+            if (tildePos >= 0)
+            {
+                string fuzzySuffix = raw.Substring(tildePos + 1); // "" or "1"/"2"/"3"
+                bool validSuffix   = fuzzySuffix.Length == 0
+                                  || (fuzzySuffix.Length == 1
+                                      && fuzzySuffix[0] >= '1'
+                                      && fuzzySuffix[0] <= '9');
+                if (validSuffix)
+                {
+                    isFuzzy   = true;
+                    fuzzyDist = fuzzySuffix.Length == 0 ? 1 : (fuzzySuffix[0] - '0');
+                    if (fuzzyDist > MaxFuzzyDistance) fuzzyDist = MaxFuzzyDistance;
+                    raw = raw.Substring(0, tildePos);
+                }
+                // else: '~' is noise — dropped by Normalise below
+            }
+
+            // Step 5: normalise.
             string pattern = Normalise(raw);
             if (pattern.Length == 0) return null;
 
+            // Step 6: wildcard detection. Wildcard wins over fuzzy.
             bool isWildcard = pattern.IndexOf('*') >= 0 || pattern.IndexOf('?') >= 0;
+            if (isWildcard) isFuzzy = false;
+
+            // Short terms are not fuzzied (too many false positives).
+            if (isFuzzy && pattern.Length < MinFuzzyTermLength) isFuzzy = false;
 
             // '*' overrides '%': grammar expansion is suppressed for star-wildcards.
             if (pattern.IndexOf('*') >= 0)
@@ -186,6 +247,8 @@ namespace LuceneLib.Search
                 GrammarSuffix = grammarSuffix,
                 Ketiv         = ketiv,
                 IsWildcard    = isWildcard,
+                IsFuzzy       = isFuzzy,
+                FuzzyDistance = fuzzyDist,
             };
         }
 
@@ -232,7 +295,27 @@ namespace LuceneLib.Search
 
             foreach (var pt in tokens)
             {
-                if (pt.IsWildcard && !pt.GrammarPrefix && !pt.GrammarSuffix && !pt.Ketiv)
+                if (pt.IsFuzzy)
+                {
+                    // Fuzzy term — grammar/ketiv expansion is applied first, then
+                    // each resulting form gets its own FuzzyQuery.
+                    bool needsExpansion = pt.GrammarPrefix || pt.GrammarSuffix || pt.Ketiv;
+                    if (needsExpansion)
+                    {
+                        var forms = ExpandToken(pt);
+                        foreach (var form in forms)
+                        {
+                            Query q = BuildFuzzyQuery(form, pt.FuzzyDistance);
+                            if (q != null) alternatives.Add(q);
+                        }
+                    }
+                    else
+                    {
+                        Query q = BuildFuzzyQuery(pt.Pattern, pt.FuzzyDistance);
+                        if (q != null) alternatives.Add(q);
+                    }
+                }
+                else if (pt.IsWildcard && !pt.GrammarPrefix && !pt.GrammarSuffix && !pt.Ketiv)
                 {
                     // Pure wildcard — no expansion needed.
                     Query q = BuildWildcardQuery(pt.Pattern);
@@ -276,7 +359,25 @@ namespace LuceneLib.Search
 
             foreach (var pt in tokens)
             {
-                if (pt.IsWildcard && !pt.GrammarPrefix && !pt.GrammarSuffix && !pt.Ketiv)
+                if (pt.IsFuzzy)
+                {
+                    bool needsExpansion = pt.GrammarPrefix || pt.GrammarSuffix || pt.Ketiv;
+                    if (needsExpansion)
+                    {
+                        var forms = ExpandToken(pt);
+                        foreach (var form in forms)
+                        {
+                            SpanQuery q = BuildSpanFuzzyQuery(form, pt.FuzzyDistance);
+                            if (q != null) alternatives.Add(q);
+                        }
+                    }
+                    else
+                    {
+                        SpanQuery q = BuildSpanFuzzyQuery(pt.Pattern, pt.FuzzyDistance);
+                        if (q != null) alternatives.Add(q);
+                    }
+                }
+                else if (pt.IsWildcard && !pt.GrammarPrefix && !pt.GrammarSuffix && !pt.Ketiv)
                 {
                     SpanQuery q = BuildSpanWildcardQuery(pt.Pattern);
                     if (q != null) alternatives.Add(q);
@@ -374,6 +475,39 @@ namespace LuceneLib.Search
 
         private static Query BuildExactWildcardTerm(string term)
             => new TermQuery(new Term(LuceneIndexWriter.FieldText, term));
+
+        // ── Fuzzy term (Boolean) ──────────────────────────────────────────────
+
+        /// <summary>
+        /// Builds a <see cref="FuzzyQuery"/> for <paramref name="token"/> with the
+        /// given edit distance (1 or 2 — Lucene.Net hard cap).
+        ///
+        /// Returns null when the token is shorter than <see cref="MinFuzzyTermLength"/>
+        /// (already guarded in <see cref="ParseToken"/>, but checked again for safety
+        /// when called from the grammar/ketiv expansion path).
+        /// </summary>
+        private static Query BuildFuzzyQuery(string token, int maxEdits)
+        {
+            if (token.Length < MinFuzzyTermLength) return null;
+            if (maxEdits > MaxFuzzyDistance) maxEdits = MaxFuzzyDistance;
+            if (maxEdits < 1)                maxEdits = 1;
+            return new FuzzyQuery(new Term(LuceneIndexWriter.FieldText, token), maxEdits);
+        }
+
+        // ── Fuzzy term (Span) ─────────────────────────────────────────────────
+
+        /// <summary>
+        /// Wraps a <see cref="FuzzyQuery"/> in a <see cref="SpanMultiTermQueryWrapper{T}"/>
+        /// so it can participate in proximity / ordered span queries.
+        /// </summary>
+        private static SpanQuery BuildSpanFuzzyQuery(string token, int maxEdits)
+        {
+            if (token.Length < MinFuzzyTermLength) return null;
+            if (maxEdits > MaxFuzzyDistance) maxEdits = MaxFuzzyDistance;
+            if (maxEdits < 1)                maxEdits = 1;
+            return new SpanMultiTermQueryWrapper<FuzzyQuery>(
+                new FuzzyQuery(new Term(LuceneIndexWriter.FieldText, token), maxEdits));
+        }
 
         // ── Literal term (Span) ───────────────────────────────────────────────
 

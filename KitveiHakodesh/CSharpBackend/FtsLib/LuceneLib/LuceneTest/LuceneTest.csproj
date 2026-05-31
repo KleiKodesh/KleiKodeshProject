@@ -100,6 +100,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="DiagnosticsTest.cs" />
+    <Compile Include="FuzzyTest.cs" />
     <Compile Include="HitsTest.cs" />
     <Compile Include="IndexingTest.cs" />
     <Compile Include="Program.cs" />
