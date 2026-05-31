@@ -105,6 +105,7 @@
     <Compile Include="Program.cs" />
     <Compile Include="QueryParseTest.cs" />
     <Compile Include="SnippetTest.cs" />
+    <Compile Include="SubsetTest.cs" />
     <Compile Include="TermsTest.cs" />
     <Compile Include="TokenizeTest.cs" />
     <Compile Include="VerifyTest.cs" />

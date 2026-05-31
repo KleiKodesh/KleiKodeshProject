@@ -1,5 +1,4 @@
 using System;
-using Lucene.Net.Analysis.Standard;
 using Lucene.Net.Documents;
 using Lucene.Net.Index;
 using Lucene.Net.Store;
@@ -27,10 +26,7 @@ namespace LuceneLib.Indexing
         public LuceneIndexWriter(string indexPath, bool deleteExistingIndex = true)
         {
             if (deleteExistingIndex && System.IO.Directory.Exists(indexPath))
-            {
-                Console.WriteLine($"[LuceneIndexWriter] Deleting existing index at {indexPath}");
                 System.IO.Directory.Delete(indexPath, recursive: true);
-            }
 
             _directory = FSDirectory.Open(indexPath);
             var config = new IndexWriterConfig(LuceneVersion.LUCENE_48,
@@ -50,8 +46,7 @@ namespace LuceneLib.Indexing
             Action<long, long> onProgress = null,
             System.Threading.CancellationToken ct = default)
         {
-            long count    = 0;
-            var  progress = new ProgressReporter(totalRows);
+            long count = 0;
 
             foreach (var (id, content) in db.ReadLines(ct: ct))
             {
@@ -72,21 +67,12 @@ namespace LuceneLib.Indexing
                 
                 _writer.AddDocument(doc);
                 count++;
-                progress.Tick(count);
                 onProgress?.Invoke(count, totalRows);
             }
 
-            progress.Complete(count);
             onProgress?.Invoke(count, totalRows);
-
-            Console.WriteLine($"[LuceneIndexWriter] Committing {count:N0} rows…");
             _writer.Commit();
-
-            Console.WriteLine($"[LuceneIndexWriter] Merging segments…");
             _writer.ForceMerge(1);
-
-            Console.WriteLine($"[LuceneIndexWriter] Done. {count:N0} rows in " +
-                              $"{ProgressReporter.FormatElapsed(progress.Elapsed)}");
         }
 
         public void Dispose()

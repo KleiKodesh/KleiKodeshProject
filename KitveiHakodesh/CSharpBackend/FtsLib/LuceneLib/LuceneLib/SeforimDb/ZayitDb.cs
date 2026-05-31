@@ -26,12 +26,7 @@ namespace LuceneLib.SeforimDb
             string resolved = ResolveDbPath(dbPath);
             _dbPath = resolved;
             if (!File.Exists(resolved))
-            {
-                Console.WriteLine($"[ZayitDb] Database not found: {resolved}");
                 return;
-            }
-
-            Console.WriteLine($"[ZayitDb] Opening: {resolved}");
             _connection = new SQLiteConnection($"Data Source={resolved};Version=3;Page Size=4096;");
             _connection.Open();
 

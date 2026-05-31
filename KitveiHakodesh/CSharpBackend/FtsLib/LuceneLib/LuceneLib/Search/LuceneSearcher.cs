@@ -4,6 +4,7 @@ using System.IO;
 using Lucene.Net.Index;
 using Lucene.Net.Search;
 using Lucene.Net.Search.Highlight;
+using Lucene.Net.Search.Spans;
 using Lucene.Net.Store;
 using LuceneLib.Indexing;
 using LuceneLib.Snippets;
@@ -53,47 +54,64 @@ namespace LuceneLib.Search
 
         /// <summary>
         /// Executes query and yields (rowId, snippet) pairs with highlighting.
-        /// Uses Lucene's built-in Highlighter with QueryScorer — handles all query types
-        /// including wildcards, OR groups, and multi-term AND queries.
-        /// Results are streamed in batches for responsive UI.
+        ///
+        /// When <paramref name="slop"/> is <see cref="int.MaxValue"/> (default) the search
+        /// behaves exactly as before — AND semantics, no proximity constraint.
+        ///
+        /// When <paramref name="slop"/> is set, a <see cref="SpanNearQuery"/> is built from
+        /// the same query text and passed to <see cref="QueryScorer"/> instead of the plain
+        /// <see cref="BooleanQuery"/>.  The <see cref="SpanNearQuery"/> runs against a
+        /// per-document <see cref="Lucene.Net.Index.Memory.MemoryIndex"/> inside
+        /// <see cref="Lucene.Net.Search.Highlight.WeightedSpanTermExtractor"/>, so positions
+        /// are always available even though the main index stores DOCS_ONLY.
+        /// Fragments where the terms are not within <paramref name="slop"/> tokens of each
+        /// other receive score 0 and are discarded by the highlighter automatically.
+        ///
+        /// <paramref name="inOrder"/> controls whether the terms must appear in the same
+        /// left-to-right order as typed (true) or in any order (false).
         /// </summary>
         public IEnumerable<(int RowId, SnippetResult Snippet)> SearchWithSnippets(
             string queryText,
             Func<int, string> textProvider,
-            string preTag = "<mark>",
-            string postTag = "</mark>",
-            int batchSize = 100,
-            int maxDistance = int.MaxValue)
+            string preTag      = "<mark>",
+            string postTag     = "</mark>",
+            int    batchSize   = 100,
+            int    slop        = int.MaxValue,
+            bool   inOrder     = false,
+            int    fragmentSize = 2000)
         {
-            // Build the query once — same object used for both search and highlighting.
-            Query query = HebrewQueryBuilder.Build(queryText, _analyzer);
-            if (query == null) yield break;
+            // BooleanQuery — used for the actual index search (DOCS_ONLY index).
+            Query boolQuery = HebrewQueryBuilder.Build(queryText, _analyzer);
+            if (boolQuery == null) yield break;
 
-            // Rewrite expands wildcards/prefix queries against the actual index terms.
-            // Must be done before passing to QueryScorer so all term variants are scored.
-            Query rewritten = query.Rewrite(_reader);
+            // Scorer query — either the plain BooleanQuery (no proximity) or a
+            // SpanNearQuery that enforces slop inside the highlighter's MemoryIndex.
+            Query scorerQuery;
+            if (slop == int.MaxValue)
+            {
+                scorerQuery = boolQuery;
+            }
+            else
+            {
+                SpanQuery spanQuery = HebrewQueryBuilder.BuildSpan(queryText, _analyzer, slop, inOrder);
+                scorerQuery = spanQuery ?? boolQuery; // fall back if single-term or parse failure
+            }
 
             var formatter   = new SimpleHTMLFormatter(preTag, postTag);
-            var scorer      = new QueryScorer(rewritten);
+            var scorer      = new QueryScorer(scorerQuery);
             var highlighter = new Highlighter(formatter, scorer);
-            highlighter.TextFragmenter = new SimpleSpanFragmenter(scorer, 2000);
-
-            // By default Lucene only analyzes the first ~50 KB of a document.
-            // For long rows this means terms near the end are never seen, so the
-            // highlighter picks a fragment from the analyzed portion even if a better
-            // one (containing all AND terms together) exists later in the text.
-            // int.MaxValue overflows Lucene's internal array sizing — 1 MB is enough.
+            highlighter.TextFragmenter      = new SimpleSpanFragmenter(scorer, fragmentSize);
             highlighter.MaxDocCharsToAnalyze = 1024 * 1024;
 
             var counter = new TotalHitCountCollector();
-            _searcher.Search(query, counter);
+            _searcher.Search(boolQuery, counter);
             if (counter.TotalHits == 0) yield break;
 
             int offset = 0;
             while (offset < counter.TotalHits)
             {
                 int fetchSize = Math.Min(batchSize, counter.TotalHits - offset);
-                TopDocs hits  = _searcher.Search(query, offset + fetchSize);
+                TopDocs hits  = _searcher.Search(boolQuery, offset + fetchSize);
 
                 for (int i = offset; i < hits.ScoreDocs.Length; i++)
                 {
@@ -107,16 +125,9 @@ namespace LuceneLib.Search
 
                     string plain = StripHtml(text);
                     string fragment;
-                    try
-                    {
-                        using (var ts = _analyzer.GetTokenStream(LuceneIndexWriter.FieldText, new StringReader(plain)))
-                            fragment = highlighter.GetBestFragment(ts, plain);
-                    }
-                    catch (Exception ex)
-                    {
-                        throw new InvalidOperationException(
-                            $"Highlighter failed on rowId={rowId}, plainText.Length={plain.Length}, query=[{rewritten}]: {ex.Message}", ex);
-                    }
+                    using (var ts = _analyzer.GetTokenStream(LuceneIndexWriter.FieldText,
+                                                             new StringReader(plain)))
+                        fragment = highlighter.GetBestFragment(ts, plain);
 
                     if (fragment == null) continue;
 

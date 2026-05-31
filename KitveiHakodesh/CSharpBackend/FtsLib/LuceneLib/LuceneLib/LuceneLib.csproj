@@ -113,7 +113,6 @@
     <!-- Snippets: result data class -->
     <Compile Include="Snippets\SnippetResult.cs" />
     <!-- Shared -->
-    <Compile Include="ProgressReporter.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

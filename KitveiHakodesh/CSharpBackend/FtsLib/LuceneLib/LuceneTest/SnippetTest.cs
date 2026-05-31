@@ -37,8 +37,7 @@ namespace LuceneTest
                     id => db.GetLineById(id),
                     preTag: "<mark>",
                     postTag: "</mark>",
-                    batchSize: 100,
-                    maxDistance: int.MaxValue))
+                    batchSize: 100))
                 {
                     luceneHits++;
                     results.Add((rowId, snippet));

@@ -53,6 +53,10 @@ namespace LuceneTest
                             if (args.Length < 3) { Console.WriteLine("diag query <text>"); return; }
                             QueryParseTest.Run(args[2]);
                             break;
+                        case "rewrite":
+                            if (args.Length < 3) { Console.WriteLine("diag rewrite <text>"); return; }
+                            QueryParseTest.RunRewrite(indexDir, args[2]);
+                            break;
                         case "terms":
                             TermsTest.Run(indexDir, args.Length > 2 ? args[2] : null);
                             break;
@@ -68,8 +72,12 @@ namespace LuceneTest
                             if (args.Length < 3) { Console.WriteLine("diag snippet <query> [dbPath]"); return; }
                             SnippetTest.Run(indexDir, args[2], args.Length > 3 ? args[3] : null);
                             break;
+                        case "subset":
+                            if (args.Length < 4) { Console.WriteLine("diag subset <literalQuery> <wildcardQuery>"); return; }
+                            SubsetTest.Run(indexDir, args[2], args[3]);
+                            break;
                         default:
-                            Console.WriteLine("Unknown diag subcommand. Use: tokenize|query|terms|hits|verify|snippet");
+                            Console.WriteLine("Unknown diag subcommand. Use: tokenize|query|terms|hits|verify|snippet|subset");
                             break;
                     }
                     break;

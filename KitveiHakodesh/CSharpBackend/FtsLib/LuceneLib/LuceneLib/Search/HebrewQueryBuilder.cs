@@ -5,6 +5,7 @@ using System.Text;
 using Lucene.Net.Analysis.TokenAttributes;
 using Lucene.Net.Index;
 using Lucene.Net.Search;
+using Lucene.Net.Search.Spans;
 using Lucene.Net.Util;
 using LuceneLib.Indexing;
 using LuceneLib.Tokenization;
@@ -96,6 +97,178 @@ namespace LuceneLib.Search
             foreach (var c in andClauses)
                 bq.Add(c, Occur.MUST);
             return bq;
+        }
+
+        // ── OR group → single Query ───────────────────────────────────────────
+
+        /// <summary>
+        /// Parses <paramref name="queryText"/> and returns a <see cref="SpanQuery"/> suitable
+        /// for proximity-aware highlighting via <see cref="Lucene.Net.Search.Highlight.QueryScorer"/>.
+        ///
+        /// Each AND slot becomes a <see cref="SpanTermQuery"/> or
+        /// <see cref="SpanMultiTermQueryWrapper{Q}"/> (for wildcards/prefix), and OR groups
+        /// become <see cref="SpanOrQuery"/>.  All slots are combined into a
+        /// <see cref="SpanNearQuery"/> with the given <paramref name="slop"/> and
+        /// <paramref name="inOrder"/> flag.
+        ///
+        /// Single-slot queries return the slot's <see cref="SpanQuery"/> directly
+        /// (no <see cref="SpanNearQuery"/> wrapper needed).
+        ///
+        /// Returns null when the query is empty / all tokens are invalid.
+        /// </summary>
+        /// <param name="slop">
+        /// Maximum number of intervening token positions allowed between consecutive
+        /// AND slots.  0 = adjacent, 1 = one word between them, etc.
+        /// </param>
+        /// <param name="inOrder">
+        /// When true the slots must appear in left-to-right query order in the text.
+        /// When false either order is accepted.
+        /// </param>
+        public static SpanQuery BuildSpan(string queryText, HebrewAnalyzer analyzer,
+                                          int slop, bool inOrder)
+        {
+            if (string.IsNullOrWhiteSpace(queryText))
+                return null;
+
+            queryText = queryText.Replace("|", " | ");
+
+            var spanClauses  = new List<SpanQuery>();
+            var pendingOr    = new List<string>();
+            bool lastWasPipe = false;
+
+            foreach (var raw in queryText.Split(new[] { ' ', '\t', '\r', '\n' },
+                                                StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (IsPipe(raw))
+                {
+                    lastWasPipe = true;
+                    continue;
+                }
+
+                string token = Normalise(raw);
+                if (token.Length == 0) continue;
+
+                if (!lastWasPipe && pendingOr.Count > 0)
+                {
+                    SpanQuery clause = BuildSpanOrGroup(pendingOr, analyzer);
+                    if (clause != null) spanClauses.Add(clause);
+                    pendingOr.Clear();
+                }
+
+                pendingOr.Add(token);
+                lastWasPipe = false;
+            }
+
+            if (pendingOr.Count > 0)
+            {
+                SpanQuery clause = BuildSpanOrGroup(pendingOr, analyzer);
+                if (clause != null) spanClauses.Add(clause);
+            }
+
+            if (spanClauses.Count == 0) return null;
+            if (spanClauses.Count == 1) return spanClauses[0];
+
+            return new SpanNearQuery(spanClauses.ToArray(), slop, inOrder);
+        }
+
+        // ── Span OR group → single SpanQuery ─────────────────────────────────
+
+        private static SpanQuery BuildSpanOrGroup(List<string> tokens, HebrewAnalyzer analyzer)
+        {
+            var alternatives = new List<SpanQuery>();
+            foreach (var token in tokens)
+            {
+                bool isWildcard = token.IndexOf('*') >= 0 || token.IndexOf('?') >= 0;
+                SpanQuery q = isWildcard
+                    ? BuildSpanWildcardQuery(token)
+                    : BuildSpanLiteralQuery(token, analyzer);
+                if (q != null) alternatives.Add(q);
+            }
+
+            if (alternatives.Count == 0) return null;
+            if (alternatives.Count == 1) return alternatives[0];
+
+            return new SpanOrQuery(alternatives.ToArray());
+        }
+
+        // ── Span literal term ─────────────────────────────────────────────────
+
+        /// <summary>
+        /// Runs the token through HebrewAnalyzer and returns a <see cref="SpanTermQuery"/>.
+        /// Multi-token analyzer output (rare) is wrapped in a <see cref="SpanNearQuery"/>
+        /// with slop=0 inOrder=true so the phrase is treated as a single proximity unit.
+        /// </summary>
+        private static SpanQuery BuildSpanLiteralQuery(string token, HebrewAnalyzer analyzer)
+        {
+            var terms = Analyze(token, analyzer);
+            if (terms.Count == 0) return null;
+            if (terms.Count == 1)
+                return new SpanTermQuery(new Term(LuceneIndexWriter.FieldText, terms[0]));
+
+            // Multi-token: treat as an ordered phrase with no slop.
+            var clauses = new SpanQuery[terms.Count];
+            for (int i = 0; i < terms.Count; i++)
+                clauses[i] = new SpanTermQuery(new Term(LuceneIndexWriter.FieldText, terms[i]));
+            return new SpanNearQuery(clauses, 0, true);
+        }
+
+        // ── Span wildcard term ────────────────────────────────────────────────
+
+        /// <summary>
+        /// Builds a <see cref="SpanMultiTermQueryWrapper{Q}"/> for wildcard/prefix tokens,
+        /// mirroring the same expansion logic as <see cref="BuildWildcardQuery"/>.
+        /// </summary>
+        private static SpanQuery BuildSpanWildcardQuery(string token)
+        {
+            if (AnchorLength(token) < MinAnchorLength)
+                return null;
+
+            bool hasOptional = token.IndexOf('?') >= 0;
+
+            if (!hasOptional)
+                return BuildSpanStarQuery(token);
+
+            int optCount = CountEffectiveOptionals(token);
+            if (optCount > MaxOptionalChars)
+                return null;
+
+            var subPatterns = new HashSet<string>(StringComparer.Ordinal);
+            ExpandOptionals(token, 0, new StringBuilder(token.Length), subPatterns);
+
+            var alternatives = new List<SpanQuery>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (var sub in subPatterns)
+            {
+                if (!seen.Add(sub)) continue;
+                if (AnchorLength(sub) < MinAnchorLength) continue;
+
+                SpanQuery q = sub.IndexOf('*') >= 0
+                    ? BuildSpanStarQuery(sub)
+                    : new SpanTermQuery(new Term(LuceneIndexWriter.FieldText, sub));
+                if (q != null) alternatives.Add(q);
+            }
+
+            if (alternatives.Count == 0) return null;
+            if (alternatives.Count == 1) return alternatives[0];
+
+            return new SpanOrQuery(alternatives.ToArray());
+        }
+
+        private static SpanQuery BuildSpanStarQuery(string pattern)
+        {
+            bool hasLeading  = pattern.StartsWith("*");
+            bool hasTrailing = pattern.EndsWith("*");
+
+            if (!hasLeading && hasTrailing)
+            {
+                string prefix = pattern.TrimEnd('*');
+                return new SpanMultiTermQueryWrapper<PrefixQuery>(
+                    new PrefixQuery(new Term(LuceneIndexWriter.FieldText, prefix)));
+            }
+
+            return new SpanMultiTermQueryWrapper<WildcardQuery>(
+                new WildcardQuery(new Term(LuceneIndexWriter.FieldText, pattern)));
         }
 
         // ── OR group → single Query ───────────────────────────────────────────
