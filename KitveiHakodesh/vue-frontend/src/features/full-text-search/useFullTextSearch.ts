@@ -203,6 +203,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   const executedQuery = ref('')
   const searchError = ref<SearchFailReason | null>(null)
   let currentSearchId: string | null = null
+  let resultsReadyResolve: (() => void) | null = null
 
   function _cleanup() {
     if (currentSearchId) {
@@ -226,7 +227,8 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
 
   // Start the C# search stream and wire up listeners.
   // skipCount: number of results already in cache — C# will skip that many before streaming.
-  async function _startStream(normalizedQuery: string, skipCount: number) {
+  // Returns a promise that resolves when the first batch of results arrives.
+  async function _startStream(normalizedQuery: string, skipCount: number): Promise<void> {
     ensureWebviewListener()
     const reply = await callBridgeAction<{ searchId: string; failReason: SearchFailReason | null }>(
       'FtsSearchStart',
@@ -245,9 +247,21 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     }
     currentSearchId = searchId
 
+    // Create a promise that resolves when the first batch arrives
+    let firstBatchReady = false
+    const resultsReady = new Promise<void>((resolve) => {
+      resultsReadyResolve = () => {
+        if (!firstBatchReady) {
+          firstBatchReady = true
+          resolve()
+        }
+      }
+    })
+
     _searchListeners.set(searchId, {
       onBatch: async (batch) => {
         if (currentSearchId !== searchId) return
+        resultsReadyResolve?.()
         await enrichTocPaths(batch)
         // Re-check after the async enrichment — currentSearchId may have changed
         // while enrichTocPaths was awaiting the SQL query.
@@ -288,6 +302,9 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         _cleanup()
       },
     })
+
+    // Wait for the first batch to arrive so results are ready before returning
+    await resultsReady
   }
 
   async function executeSearch(q: string) {

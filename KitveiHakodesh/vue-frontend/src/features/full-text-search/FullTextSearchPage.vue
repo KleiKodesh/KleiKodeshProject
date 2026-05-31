@@ -203,17 +203,16 @@ onMounted(async () => {
     zoom.value = saved.searchZoom
   }
 
-  // Restore search query and results from cache/session BEFORE setting scroll position.
-  // The virtualizer needs the items to be rendered before it can scroll to an index.
-  await restoreFromTab()
-
-  // Now that results are loaded, restore scroll position
   if (saved?.searchScrollIndex != null) {
     initialScrollIndex.value = saved.searchScrollIndex
     initialScrollOffset.value = saved.searchScrollOffset ?? 0
     lastScrollIndex = saved.searchScrollIndex
     lastScrollOffset = saved.searchScrollOffset ?? 0
   }
+
+  // Restore search query and results from cache/session. The scroll position
+  // is restored automatically by FullTextSearchResultsList's watcher when results arrive.
+  await restoreFromTab()
 
   searchBarRef.value?.focus()
 })
