@@ -16,48 +16,58 @@ namespace LuceneLib.Search
     /// <summary>
     /// Long-lived searcher over a Lucene index directory.
     ///
-    /// Owns a single <see cref="DirectoryReader"/> that is opened once and kept
-    /// alive for the lifetime of this object.  Call <see cref="Refresh"/> after
-    /// each index commit to make newly indexed documents visible to subsequent
-    /// searches — this is a near-zero-cost operation when nothing has changed.
+    /// Uses <see cref="SearcherManager"/> for safe concurrent access and
+    /// near-real-time refresh.  SearcherManager handles reference counting
+    /// internally: a searcher (and its underlying reader) is only closed after
+    /// every in-flight search that holds it has finished.
     ///
-    /// Thread safety: <see cref="Search"/> and <see cref="SearchWithSnippets"/> may
-    /// be called concurrently from multiple threads.  <see cref="Refresh"/> is also
-    /// safe to call from any thread (including the indexing thread) — it acquires a
-    /// brief write lock only when a new reader generation is actually available.
+    /// Result ordering
+    /// ---------------
+    /// Both <see cref="Search"/> and <see cref="SearchWithSnippets"/> sort results
+    /// by the <c>rowId</c> field ascending, matching the database row order.
+    /// This gives deterministic, consistent results regardless of segment layout
+    /// and matches the behaviour of FtsLib (which intersected posting lists in
+    /// doc-ID order).
+    ///
+    /// Thread safety: all public methods are safe to call concurrently.
     /// </summary>
     public sealed class LuceneSearcher : IDisposable
     {
-        private readonly FSDirectory    _directory;
-        private readonly HebrewAnalyzer _analyzer;
+        private readonly FSDirectory     _directory;   // null when using external manager
+        private readonly SearcherManager _manager;
+        private readonly HebrewAnalyzer  _analyzer;
 
-        // Reader + searcher pair — replaced atomically on Refresh().
-        // Reads are lock-free (volatile read of the reference); writes take _readerLock.
-        private volatile ReaderSearcherPair _current;
-        private readonly object             _readerLock = new object();
+        // Sort by rowId ascending — created once, shared across all searches.
+        // SortField.Type.INT32 matches the Int32Field used in LuceneIndexWriter.
+        private static readonly Sort RowIdSort =
+            new Sort(new SortField(LuceneIndexWriter.FieldRowId, SortFieldType.INT32));
+
         private bool _disposed;
-
-        // Bundles the reader and its derived searcher so they are always consistent.
-        private sealed class ReaderSearcherPair
-        {
-            public readonly DirectoryReader  Reader;
-            public readonly IndexSearcher    Searcher;
-            public ReaderSearcherPair(DirectoryReader reader)
-            {
-                Reader   = reader;
-                Searcher = new IndexSearcher(reader);
-            }
-        }
 
         /// <summary>
         /// Opens the index at <paramref name="indexPath"/> and prepares for searching.
+        /// Uses a disk-based <see cref="SearcherManager"/> — suitable for post-build
+        /// searches where the writer is closed.
         /// Throws if no committed index exists yet.
         /// </summary>
         public LuceneSearcher(string indexPath)
         {
             _directory = FSDirectory.Open(indexPath);
             _analyzer  = new HebrewAnalyzer();
-            _current   = new ReaderSearcherPair(DirectoryReader.Open(_directory));
+            _manager   = new SearcherManager(_directory, null);
+        }
+
+        /// <summary>
+        /// Wraps an externally-created <see cref="SearcherManager"/> — typically an
+        /// NRT manager obtained from <see cref="LuceneIndexWriter.GetNrtSearcherManager"/>.
+        /// The caller retains ownership of <paramref name="manager"/> and must dispose
+        /// it separately; this searcher does NOT dispose it.
+        /// </summary>
+        public LuceneSearcher(SearcherManager manager)
+        {
+            _manager  = manager ?? throw new ArgumentNullException(nameof(manager));
+            _analyzer = new HebrewAnalyzer();
+            // _directory is null — we don't own it
         }
 
         /// <summary>
@@ -67,68 +77,49 @@ namespace LuceneLib.Search
         public static bool IndexExists(string indexPath)
             => LuceneIndexWriter.IndexExists(indexPath);
 
-        // ── Refresh ───────────────────────────────────────────────────
-
-        /// <summary>
-        /// Checks whether new documents have been committed since the last open/refresh
-        /// and, if so, atomically swaps in a new <see cref="DirectoryReader"/>.
-        ///
-        /// Safe to call from the indexing thread after every <c>Commit()</c>.
-        /// Near-zero cost when the index has not changed.
-        /// </summary>
-        public void Refresh()
-        {
-            if (_disposed) return;
-
-            // DirectoryReader.OpenIfChanged returns null when nothing has changed —
-            // avoid taking the write lock in that common case.
-            var newReader = DirectoryReader.OpenIfChanged(_current.Reader);
-            if (newReader == null) return;
-
-            lock (_readerLock)
-            {
-                if (_disposed) { newReader.Dispose(); return; }
-
-                var old = _current;
-                _current = new ReaderSearcherPair(newReader);
-                // Close the old reader outside the lock to avoid blocking searchers.
-                old.Reader.Dispose();
-            }
-        }
-
         // ── Search ────────────────────────────────────────────────────
 
         /// <summary>
-        /// Executes the query and returns all matching row IDs.
-        /// Checks <paramref name="ct"/> between results — cancellation stops
-        /// iteration cleanly without throwing from inside Lucene internals.
+        /// Executes the query and returns all matching row IDs sorted by rowId ascending.
+        /// Acquires a searcher from the manager for the duration of the search,
+        /// then releases it so the manager can safely close old reader generations.
         /// </summary>
         public IEnumerable<int> Search(string queryText,
                                        CancellationToken ct = default)
         {
-            // Snapshot the current pair — safe even if Refresh() runs concurrently.
-            var pair = _current;
-
             Query query = HebrewQueryBuilder.Build(queryText, _analyzer);
             if (query == null) yield break;
 
-            var counter = new TotalHitCountCollector();
-            pair.Searcher.Search(query, counter);
-            if (counter.TotalHits == 0) yield break;
-
-            TopDocs hits = pair.Searcher.Search(query, counter.TotalHits);
-            foreach (ScoreDoc sd in hits.ScoreDocs)
+            IndexSearcher searcher = _manager.Acquire();
+            try
             {
-                ct.ThrowIfCancellationRequested();
-                var doc   = pair.Searcher.Doc(sd.Doc);
-                var field = doc.GetField(LuceneIndexWriter.FieldRowId);
-                if (field != null)
-                    yield return field.GetInt32Value().Value;
+                // Single sorted search — no double-query needed.
+                // doDocScores=false, doMaxScore=false: we don't use relevance scores,
+                // only the sort key, so skip the score computation entirely.
+                var counter = new TotalHitCountCollector();
+                searcher.Search(query, counter);
+                if (counter.TotalHits == 0) yield break;
+
+                TopFieldDocs hits = searcher.Search(query, counter.TotalHits, RowIdSort);
+
+                foreach (ScoreDoc sd in hits.ScoreDocs)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    var doc   = searcher.Doc(sd.Doc);
+                    var field = doc.GetField(LuceneIndexWriter.FieldRowId);
+                    if (field != null)
+                        yield return field.GetInt32Value().Value;
+                }
+            }
+            finally
+            {
+                _manager.Release(searcher);
             }
         }
 
         /// <summary>
-        /// Executes the query and yields (rowId, snippet) pairs with highlighting.
+        /// Executes the query and yields (rowId, snippet) pairs with highlighting,
+        /// sorted by rowId ascending.
         ///
         /// When <paramref name="slop"/> is <see cref="int.MaxValue"/> (default) the
         /// search uses plain AND semantics with no proximity constraint.
@@ -136,11 +127,14 @@ namespace LuceneLib.Search
         /// When <paramref name="slop"/> is set, a <see cref="SpanNearQuery"/> is built
         /// and passed to <see cref="QueryScorer"/> so the highlighter enforces proximity
         /// inside its per-document <see cref="Lucene.Net.Index.Memory.MemoryIndex"/>.
-        /// Fragments where terms are not within <paramref name="slop"/> tokens receive
-        /// score 0 and are discarded automatically.
         ///
-        /// <paramref name="inOrder"/> controls whether terms must appear left-to-right.
-        /// <paramref name="ct"/> is checked between results — a cancelled token stops
+        /// <paramref name="minMarks"/> — minimum number of &lt;mark&gt; tags the
+        /// returned fragment must contain.  When the highlighter's best window is too
+        /// narrow to include all query terms, the fragment will have fewer marks than
+        /// the query has AND-slots; passing the slot count here filters those bogus
+        /// partial-match snippets out.  0 (default) disables the check.
+        ///
+        /// <paramref name="ct"/> is checked between results — cancellation stops
         /// streaming immediately.
         /// </summary>
         public IEnumerable<(int RowId, SnippetResult Snippet)> SearchWithSnippets(
@@ -152,14 +146,12 @@ namespace LuceneLib.Search
             int               slop         = int.MaxValue,
             bool              inOrder      = false,
             int               fragmentSize = 2000,
+            int               minMarks     = 0,
             CancellationToken ct           = default)
         {
-            var pair = _current;
-
             Query boolQuery = HebrewQueryBuilder.Build(queryText, _analyzer);
             if (boolQuery == null) yield break;
 
-            // Scorer query: plain BooleanQuery (no proximity) or SpanNearQuery.
             Query scorerQuery;
             if (slop == int.MaxValue)
             {
@@ -180,23 +172,23 @@ namespace LuceneLib.Search
                 MaxDocCharsToAnalyze = 1024 * 1024,
             };
 
-            var counter = new TotalHitCountCollector();
-            pair.Searcher.Search(boolQuery, counter);
-            if (counter.TotalHits == 0) yield break;
-
-            int offset = 0;
-            while (offset < counter.TotalHits)
+            IndexSearcher searcher = _manager.Acquire();
+            try
             {
-                ct.ThrowIfCancellationRequested();
+                var counter = new TotalHitCountCollector();
+                searcher.Search(boolQuery, counter);
+                if (counter.TotalHits == 0) yield break;
 
-                int fetchSize = Math.Min(batchSize, counter.TotalHits - offset);
-                TopDocs hits  = pair.Searcher.Search(boolQuery, offset + fetchSize);
+                // Collect all hits sorted by rowId in one shot.
+                // Paging through TopDocs re-executes the query each time — instead
+                // we collect everything once and stream through the sorted array.
+                TopFieldDocs hits = searcher.Search(boolQuery, counter.TotalHits, RowIdSort);
 
-                for (int i = offset; i < hits.ScoreDocs.Length; i++)
+                foreach (ScoreDoc sd in hits.ScoreDocs)
                 {
                     ct.ThrowIfCancellationRequested();
 
-                    var doc   = pair.Searcher.Doc(hits.ScoreDocs[i].Doc);
+                    var doc   = searcher.Doc(sd.Doc);
                     var field = doc.GetField(LuceneIndexWriter.FieldRowId);
                     if (field == null) continue;
 
@@ -212,14 +204,40 @@ namespace LuceneLib.Search
 
                     if (fragment == null) continue;
 
+                    // If the caller requires a minimum number of highlighted terms,
+                    // count <mark> tags in the fragment and skip it when the window
+                    // was too narrow to include all query terms.  This filters out
+                    // bogus results where a short snippet only shows part of the match.
+                    if (minMarks > 0 && CountMarks(fragment, preTag) < minMarks)
+                        continue;
+
                     yield return (rowId, new SnippetResult(fragment, 1, 0, true));
                 }
-
-                offset += fetchSize;
+            }
+            finally
+            {
+                _manager.Release(searcher);
             }
         }
 
         // ── Helpers ───────────────────────────────────────────────────
+
+        /// <summary>
+        /// Counts the number of opening highlight tags in <paramref name="fragment"/>.
+        /// Used to verify that the highlighter's best window contains all query terms.
+        /// </summary>
+        private static int CountMarks(string fragment, string openTag)
+        {
+            if (string.IsNullOrEmpty(fragment)) return 0;
+            int count = 0;
+            int pos   = 0;
+            while ((pos = fragment.IndexOf(openTag, pos, StringComparison.OrdinalIgnoreCase)) >= 0)
+            {
+                count++;
+                pos += openTag.Length;
+            }
+            return count;
+        }
 
         private static string StripHtml(string html)
         {
@@ -241,11 +259,10 @@ namespace LuceneLib.Search
         {
             if (_disposed) return;
             _disposed = true;
-            lock (_readerLock)
-            {
-                _current?.Reader.Dispose();
-                _current = null;
-            }
+            // Only dispose the manager when we created it (disk-based constructor).
+            // When constructed from an external NRT manager, the caller owns it.
+            if (_directory != null)
+                _manager?.Dispose();
             _analyzer?.Dispose();
             _directory?.Dispose();
         }

@@ -1,4 +1,4 @@
-using FtsLib.SeforimDb;
+using LuceneLib.SeforimDb;
 using Microsoft.Win32;
 using System;
 using System.IO;
@@ -414,8 +414,16 @@ namespace KitveiHakodeshLib.Search
             try
             {
                 if (!Directory.Exists(FtsIndexPath)) return "index directory missing";
-                if (Directory.GetFiles(FtsIndexPath, "*.dat").Length == 0)
-                    return "no segment files found";
+                // Lucene commits write a segments_N file — its presence means the
+                // index has at least one committed generation and is ready to open.
+                bool hasSegments = false;
+                foreach (var f in Directory.GetFiles(FtsIndexPath))
+                {
+                    string name = Path.GetFileName(f);
+                    if (name.StartsWith("segments_") && name != "segments.gen")
+                    { hasSegments = true; break; }
+                }
+                if (!hasSegments) return "no committed Lucene segments found";
                 return null;
             }
             catch (Exception ex) { return "validation error: " + ex.Message; }

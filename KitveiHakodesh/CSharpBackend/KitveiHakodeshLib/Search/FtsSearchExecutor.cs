@@ -1,5 +1,4 @@
-using FtsLib.Indexing;
-using FtsLib.SeforimDb;
+using LuceneLib.SeforimDb;
 using KitveiHakodeshLib.Bridge;
 using System;
 using System.Collections.Concurrent;
@@ -109,15 +108,24 @@ namespace KitveiHakodeshLib.Search
                 // Doubling thresholds: flush when batch reaches each of these sizes.
                 // After the last threshold is flushed we switch to timer-only mode.
                 var doublingThresholds = new[] { 1, 2, 4, 8, 16 };
-                int doublingIndex = 0;          // index into doublingThresholds
+                int doublingIndex = 0;
                 bool useTimerOnly = false;
 
-                var     batch   = new List<object>(MemorySafetyCap);
-                int     skipped = 0;
-                var     timer   = new Stopwatch();
+                var  batch   = new List<object>(MemorySafetyCap);
+                int  skipped = 0;
+                var  timer   = new Stopwatch();
                 timer.Start();
 
-                foreach (var result in index.Search(query, cap: 0, expandKetiv: expandKetiv, ct: ct))
+                // Single-pass search: one Lucene query, one DB connection, batch title lookups.
+                // Replaces the old Search() + GenerateSnippet() loop which was O(N) Lucene
+                // queries — one per result — and O(2N) individual SQLite round-trips.
+                foreach (var (rowId, bookTitle, snippet) in index.SearchWithSnippets(
+                    query,
+                    maxWordDistance: maxWordDistance,
+                    requireOrdered:  requireOrdered,
+                    contextWords:    contextWords,
+                    expandKetiv:     expandKetiv,
+                    ct:              ct))
                 {
                     if (ct.IsCancellationRequested)
                     {
@@ -125,28 +133,17 @@ namespace KitveiHakodeshLib.Search
                         return;
                     }
 
-                    var snippet = index.GenerateSnippet(result, requireOrdered,
-                                                        contextWords: contextWords);
-                    if (!snippet.IsMatch) continue;
-                    if (snippet.WordDistance > maxWordDistance) continue;
                     if (skipped < skipCount) { skipped++; continue; }
-
-                    // Flatten MatchedGroups into a deduplicated list of concrete terms.
-                    var matchedTerms = new List<string>();
-                    foreach (var group in result.MatchedGroups)
-                        foreach (var term in group)
-                            if (!matchedTerms.Contains(term))
-                                matchedTerms.Add(term);
 
                     batch.Add(new
                     {
-                        lineId       = result.LineId,
+                        lineId       = rowId,
                         bookId       = 0,
-                        bookTitle    = result.BookTitle,
+                        bookTitle    = bookTitle,
                         tocText      = "",
                         score        = snippet.Score,
                         snippet      = snippet.Html,
-                        matchedTerms = matchedTerms.ToArray()
+                        matchedTerms = Array.Empty<string>()
                     });
                     totalResults++;
 
@@ -190,12 +187,6 @@ namespace KitveiHakodeshLib.Search
             {
                 Console.WriteLine($"[FtsSearchExecutor] Search {searchId} cancelled — query=\"{query}\" results so far={totalResults}");
                 PostSearch(new { type = "searchCancelled", searchId = searchId });
-            }
-            catch (IndexMergingException)
-            {
-                Console.WriteLine($"[FtsSearchExecutor] Search {searchId} rejected — index is merging");
-                PostSearch(new { type = "searchError", searchId = searchId,
-                                 failReason = "indexMerging" });
             }
             catch (Exception ex)
             {

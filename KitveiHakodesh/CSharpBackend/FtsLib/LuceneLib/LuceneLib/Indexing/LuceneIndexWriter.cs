@@ -1,6 +1,7 @@
 using System;
 using Lucene.Net.Documents;
 using Lucene.Net.Index;
+using Lucene.Net.Search;
 using Lucene.Net.Store;
 using Lucene.Net.Util;
 using LuceneLib.SeforimDb;
@@ -12,6 +13,16 @@ namespace LuceneLib.Indexing
     /// Builds a Lucene index from the Zayit database rows.
     /// Each row's integer id becomes the stored field "rowId";
     /// the row text is indexed under the field "text".
+    ///
+    /// Near-real-time search during build
+    /// ------------------------------------
+    /// Call <see cref="GetNrtSearcherManager"/> after the first
+    /// <see cref="AddDocument"/> call to obtain a <see cref="SearcherManager"/>
+    /// backed directly by this writer's in-memory buffer.  Calling
+    /// <see cref="SearcherManager.MaybeRefresh"/> on that manager makes all
+    /// documents added since the last refresh visible to new searches — without
+    /// requiring a commit to disk.  This gives sub-second search latency during
+    /// a build that commits only every 250 000 rows.
     /// </summary>
     public sealed class LuceneIndexWriter : IDisposable
     {
@@ -23,6 +34,21 @@ namespace LuceneLib.Indexing
         private readonly IndexWriter _writer;
         private bool _disposed;
 
+        // Reusable field type — frozen once, shared across all AddDocument calls.
+        private static readonly FieldType _textFieldType;
+
+        static LuceneIndexWriter()
+        {
+            _textFieldType = new FieldType
+            {
+                IsIndexed    = true,
+                IsStored     = false,
+                OmitNorms    = true,
+                IndexOptions = IndexOptions.DOCS_ONLY,
+            };
+            _textFieldType.Freeze();
+        }
+
         public LuceneIndexWriter(string indexPath, bool deleteExistingIndex = true)
         {
             if (deleteExistingIndex && System.IO.Directory.Exists(indexPath))
@@ -32,11 +58,33 @@ namespace LuceneLib.Indexing
             var config = new IndexWriterConfig(LuceneVersion.LUCENE_48,
                 new HebrewAnalyzer())
             {
-                // Bulk indexing tuning: 512 MB RAM buffer (default 16 MB)
-                RAMBufferSizeMB = 250.0,
+                // Bulk indexing tuning: 256 MB RAM buffer (default 16 MB).
+                // Kept moderate so the NRT reader doesn't have to flush huge segments.
+                RAMBufferSizeMB = 256.0,
             };
             _writer = new IndexWriter(_directory, config);
         }
+
+        // ── NRT ───────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns a <see cref="SearcherManager"/> that is backed directly by this
+        /// writer's in-memory buffer (near-real-time reader).
+        ///
+        /// Call <see cref="SearcherManager.MaybeRefresh"/> on the returned manager
+        /// to make newly added documents visible to the next search — no commit
+        /// required.  The manager must be disposed by the caller when the build ends.
+        ///
+        /// This method may be called at any point after construction.
+        /// </summary>
+        public SearcherManager GetNrtSearcherManager()
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(LuceneIndexWriter));
+            // SearcherManager(IndexWriter, ...) opens an NRT reader from the writer.
+            return new SearcherManager(_writer, applyAllDeletes: true, searcherFactory: null);
+        }
+
+        // ── Indexing ──────────────────────────────────────────────────
 
         /// <summary>
         /// Indexes all rows from <paramref name="db"/> in id order.
@@ -47,25 +95,9 @@ namespace LuceneLib.Indexing
             System.Threading.CancellationToken ct = default)
         {
             long count = 0;
-
             foreach (var (id, content) in db.ReadLines(ct: ct))
             {
-                var doc = new Document();
-                doc.Add(new Int32Field(FieldRowId, id, Field.Store.YES));
-                
-                // Text field: indexed only, no storage, no norms, docs-only posting
-                var fieldType = new FieldType
-                {
-                    IsIndexed = true,
-                    IsStored = false,
-                    OmitNorms = true,
-                    IndexOptions = IndexOptions.DOCS_ONLY
-                };
-                fieldType.Freeze();
-                var textField = new Field(FieldText, content ?? string.Empty, fieldType);
-                doc.Add(textField);
-                
-                _writer.AddDocument(doc);
+                AddDocument(id, content);
                 count++;
                 onProgress?.Invoke(count, totalRows);
             }
@@ -77,8 +109,6 @@ namespace LuceneLib.Indexing
 
         /// <summary>
         /// Adds a single row to the index without committing.
-        /// Used by <see cref="LuceneLib.SeforimDb.SeforimIndex.BuildIndex"/> for
-        /// row-by-row indexing with periodic commits.
         /// </summary>
         public void AddDocument(int id, string content)
         {
@@ -86,22 +116,14 @@ namespace LuceneLib.Indexing
 
             var doc = new Document();
             doc.Add(new Int32Field(FieldRowId, id, Field.Store.YES));
-
-            var fieldType = new FieldType
-            {
-                IsIndexed    = true,
-                IsStored     = false,
-                OmitNorms    = true,
-                IndexOptions = IndexOptions.DOCS_ONLY
-            };
-            fieldType.Freeze();
-            doc.Add(new Field(FieldText, content ?? string.Empty, fieldType));
-
+            doc.Add(new Field(FieldText, content ?? string.Empty, _textFieldType));
             _writer.AddDocument(doc);
         }
 
         /// <summary>
-        /// Commits all pending documents to disk, making them visible to readers.
+        /// Commits all pending documents to disk, making them durable and visible
+        /// to disk-based readers.  NRT readers see documents before commit via
+        /// <see cref="GetNrtSearcherManager"/>.
         /// </summary>
         public void Commit()
         {
@@ -110,21 +132,18 @@ namespace LuceneLib.Indexing
         }
 
         /// <summary>
-        /// Merges all segments into one, optimising the index for read performance.
-        /// Call once after a completed build — not during incremental indexing.
-        /// Blocks until the merge is complete.
+        /// Merges all segments into one for optimal read performance.
+        /// Call once after a completed build.  Blocks until the merge is complete.
         /// </summary>
         public void ForceMerge()
         {
             if (_disposed) return;
             _writer.ForceMerge(1);
-            _writer.Commit(); // commit the merge so readers see the single segment
+            _writer.Commit();
         }
 
         /// <summary>
         /// Returns true when a committed Lucene index exists at <paramref name="indexPath"/>.
-        /// Lucene writes <c>segments_N</c> files after each commit — their presence
-        /// means the index is ready to open.
         /// </summary>
         public static bool IndexExists(string indexPath)
         {

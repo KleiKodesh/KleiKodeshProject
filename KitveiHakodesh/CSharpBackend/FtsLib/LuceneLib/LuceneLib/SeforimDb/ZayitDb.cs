@@ -103,6 +103,67 @@ namespace LuceneLib.SeforimDb
             }
         }
 
+        /// <summary>
+        /// Fetches content for a batch of row IDs in a single query.
+        /// Returns a dictionary keyed by row ID; missing rows are absent from the result.
+        /// </summary>
+        public Dictionary<int, string> GetLinesByIds(IEnumerable<int> ids)
+        {
+            EnsureOpen();
+            var result = new Dictionary<int, string>();
+            var idList = new List<int>(ids);
+            if (idList.Count == 0) return result;
+
+            // Build parameterised IN clause: WHERE id IN (@p0, @p1, ...)
+            var paramNames = new string[idList.Count];
+            using (var cmd = _connection.CreateCommand())
+            {
+                for (int i = 0; i < idList.Count; i++)
+                {
+                    paramNames[i] = "@p" + i;
+                    cmd.Parameters.AddWithValue(paramNames[i], idList[i]);
+                }
+                cmd.CommandText =
+                    "SELECT id, content FROM line WHERE id IN (" +
+                    string.Join(",", paramNames) + ")";
+
+                using (var r = cmd.ExecuteReader())
+                    while (r.Read())
+                        result[r.GetInt32(0)] = r.IsDBNull(1) ? string.Empty : r.GetString(1);
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Fetches book titles for a batch of row IDs in a single query.
+        /// Returns a dictionary keyed by row ID; missing rows are absent from the result.
+        /// </summary>
+        public Dictionary<int, string> GetBookTitlesByLineIds(IEnumerable<int> ids)
+        {
+            EnsureOpen();
+            var result = new Dictionary<int, string>();
+            var idList = new List<int>(ids);
+            if (idList.Count == 0) return result;
+
+            var paramNames = new string[idList.Count];
+            using (var cmd = _connection.CreateCommand())
+            {
+                for (int i = 0; i < idList.Count; i++)
+                {
+                    paramNames[i] = "@p" + i;
+                    cmd.Parameters.AddWithValue(paramNames[i], idList[i]);
+                }
+                cmd.CommandText =
+                    "SELECT l.id, b.title FROM line l JOIN book b ON b.id = l.bookId " +
+                    "WHERE l.id IN (" + string.Join(",", paramNames) + ")";
+
+                using (var r = cmd.ExecuteReader())
+                    while (r.Read())
+                        result[r.GetInt32(0)] = r.IsDBNull(1) ? string.Empty : r.GetString(1);
+            }
+            return result;
+        }
+
         public long CountLinesUpTo(int upToId)
         {
             EnsureOpen();

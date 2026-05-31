@@ -101,10 +101,12 @@
   <ItemGroup>
     <Compile Include="DiagnosticsTest.cs" />
     <Compile Include="FuzzyTest.cs" />
+    <Compile Include="LiveSearchTest.cs" />
     <Compile Include="HitsTest.cs" />
     <Compile Include="IndexingTest.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="QueryParseTest.cs" />
+    <Compile Include="ResumeTest.cs" />
     <Compile Include="SnippetTest.cs" />
     <Compile Include="SubsetTest.cs" />
     <Compile Include="TermsTest.cs" />

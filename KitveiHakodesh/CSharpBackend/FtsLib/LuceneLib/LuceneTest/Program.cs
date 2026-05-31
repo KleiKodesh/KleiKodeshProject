@@ -23,6 +23,24 @@ namespace LuceneTest
 
             switch (args[0].ToLowerInvariant())
             {
+                case "test":
+                    if (args.Length < 2) { Console.WriteLine("test requires a subcommand: live | resume"); return; }
+                    switch (args[1].ToLowerInvariant())
+                    {
+                        case "live":
+                            int failures = LiveSearchTest.Run();
+                            System.Environment.Exit(failures > 0 ? 1 : 0);
+                            break;
+                        case "resume":
+                            int resumeFailures = ResumeTest.Run();
+                            System.Environment.Exit(resumeFailures > 0 ? 1 : 0);
+                            break;
+                        default:
+                            Console.WriteLine("Unknown test subcommand. Use: live | resume");
+                            break;
+                    }
+                    break;
+
                 case "build":
                     IndexingTest.RunBuild(
                         dbPath: args.Length > 1 && !args[1].StartsWith("--") ? args[1] : null,

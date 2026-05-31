@@ -1,4 +1,4 @@
-using FtsLib.SeforimDb;
+using LuceneLib.SeforimDb;
 using KitveiHakodeshLib.Bridge;
 using Microsoft.Web.WebView2.WinForms;
 using System;
@@ -184,8 +184,15 @@ namespace KitveiHakodeshLib.Search
                 bool staleSegmentsExist = false;
                 try
                 {
-                    staleSegmentsExist = Directory.Exists(FtsIndexState.FtsIndexPath) &&
-                                         Directory.GetFiles(FtsIndexState.FtsIndexPath, "seg_*.dat").Length > 0;
+                    if (Directory.Exists(FtsIndexState.FtsIndexPath))
+                    {
+                        foreach (var f in Directory.GetFiles(FtsIndexState.FtsIndexPath))
+                        {
+                            string name = System.IO.Path.GetFileName(f);
+                            if (name.StartsWith("segments_") && name != "segments.gen")
+                            { staleSegmentsExist = true; break; }
+                        }
+                    }
                 }
                 catch { }
 
