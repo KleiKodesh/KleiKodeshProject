@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.WinForms;
@@ -19,6 +20,9 @@ namespace LuceneDemo
         private int  _slop         = int.MaxValue;
         private bool _inOrder      = false;
         private int  _fragmentSize = 2000;
+
+        // Cancels the previous search when a new one starts.
+        private CancellationTokenSource _searchCts;
 
         public Form1()
         {
@@ -77,6 +81,12 @@ namespace LuceneDemo
 
         private void RunSearch(string query)
         {
+            // Cancel any previous search still streaming, then start a fresh token.
+            _searchCts?.Cancel();
+            _searchCts?.Dispose();
+            _searchCts = new CancellationTokenSource();
+            var ct = _searchCts.Token;
+
             try
             {
                 if (_searcher == null) _searcher = new LuceneSearcher(_indexPath);
@@ -90,24 +100,31 @@ namespace LuceneDemo
                 foreach (var (rowId, snippet) in _searcher.SearchWithSnippets(
                     query,
                     id => _db.GetLineById(id),
-                    preTag: "<mark>",
-                    postTag: "</mark>",
-                    batchSize: 50,
-                    slop: _slop,
-                    inOrder: _inOrder,
-                    fragmentSize: _fragmentSize))
+                    preTag:       "<mark>",
+                    postTag:      "</mark>",
+                    batchSize:    50,
+                    slop:         _slop,
+                    inOrder:      _inOrder,
+                    fragmentSize: _fragmentSize,
+                    ct:           ct))
                 {
                     count++;
-                    string html = snippet.Html ?? "";
+                    string html    = snippet.Html ?? "";
                     string escaped = EscapeJs(html);
                     Js($"addResult({rowId}, '{escaped}')");
                 }
 
-                Js($"setStatus('{count:N0} results')");
+                if (!ct.IsCancellationRequested)
+                    Js($"setStatus('{count:N0} results')");
+            }
+            catch (OperationCanceledException)
+            {
+                // Previous search was superseded — no status update needed.
             }
             catch (Exception ex)
             {
-                Js($"setStatus('Error: {EscapeJs(ex.ToString())}')");
+                if (!ct.IsCancellationRequested)
+                    Js($"setStatus('Error: {EscapeJs(ex.ToString())}')");
             }
         }
 
@@ -359,6 +376,8 @@ namespace LuceneDemo
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
+            _searchCts?.Cancel();
+            _searchCts?.Dispose();
             _searcher?.Dispose();
             _db?.Dispose();
             base.OnFormClosed(e);

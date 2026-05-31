@@ -110,6 +110,18 @@ namespace LuceneLib.Indexing
         }
 
         /// <summary>
+        /// Merges all segments into one, optimising the index for read performance.
+        /// Call once after a completed build — not during incremental indexing.
+        /// Blocks until the merge is complete.
+        /// </summary>
+        public void ForceMerge()
+        {
+            if (_disposed) return;
+            _writer.ForceMerge(1);
+            _writer.Commit(); // commit the merge so readers see the single segment
+        }
+
+        /// <summary>
         /// Returns true when a committed Lucene index exists at <paramref name="indexPath"/>.
         /// Lucene writes <c>segments_N</c> files after each commit — their presence
         /// means the index is ready to open.

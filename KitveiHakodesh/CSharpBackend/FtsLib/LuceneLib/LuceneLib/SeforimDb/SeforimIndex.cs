@@ -11,9 +11,27 @@ namespace LuceneLib.SeforimDb
     /// <summary>
     /// Public API for full-text search over the seforim database, backed by Lucene.NET.
     ///
-    /// Provides the exact same interface as FtsLib.SeforimDb.SeforimIndex so that
-    /// callers can switch implementations by changing only the using statement and
-    /// the constructor name.
+    /// Mirrors <c>FtsLib.SeforimDb.SeforimIndex</c> exactly — callers switch
+    /// implementations by changing only the using statement and constructor name.
+    ///
+    /// Lifecycle
+    /// ---------
+    /// <see cref="SeforimIndex"/> is a long-lived object.  It owns a single
+    /// <see cref="LuceneSearcher"/> that is opened once (lazily, on the first search
+    /// or after the first commit) and kept alive until <see cref="Dispose"/> is called.
+    /// This means:
+    ///   • Repeated searches pay no reader-open overhead.
+    ///   • Searches during a build see all rows committed so far — the searcher is
+    ///     refreshed after every periodic commit inside <see cref="BuildIndex"/>.
+    ///   • <see cref="BuildIndex"/> calls <see cref="LuceneIndexWriter.ForceMerge"/>
+    ///     at the end of a completed (non-cancelled) build so the index is left in
+    ///     optimal single-segment form for subsequent searches.
+    ///
+    /// Thread safety
+    /// -------------
+    /// <see cref="Search"/> and <see cref="GenerateSnippet"/> are safe to call from
+    /// any thread concurrently.  <see cref="BuildIndex"/> must not be called
+    /// concurrently with itself, but may run while searches are in progress.
     ///
     /// Query syntax (handled by <see cref="HebrewQueryBuilder"/>):
     ///   word        — literal AND term
@@ -30,12 +48,18 @@ namespace LuceneLib.SeforimDb
     ///
     /// Multiple tokens are AND-ed; '|'-separated tokens are OR-ed within one slot.
     /// </summary>
-    public sealed class SeforimIndex
+    public sealed class SeforimIndex : IDisposable
     {
         private readonly string _indexPath;
         private readonly string _dbPath;
 
-        // Progress file written after each flush so a build can be resumed.
+        // Long-lived searcher — null until the first commit exists.
+        // Guarded by _searcherLock for open/close; volatile for lock-free reads.
+        private volatile LuceneSearcher _searcher;
+        private readonly object         _searcherLock = new object();
+        private bool _disposed;
+
+        // Progress file written after each commit so a build can be resumed.
         private const string ProgressFileName = "build.progress";
 
         /// <summary>Default number of words of context shown on each side of the match.</summary>
@@ -56,6 +80,55 @@ namespace LuceneLib.SeforimDb
 
             if (!Directory.Exists(_indexPath))
                 Directory.CreateDirectory(_indexPath);
+
+            // Open the searcher eagerly if a committed index already exists,
+            // so the first search call pays no open cost.
+            if (LuceneIndexWriter.IndexExists(_indexPath))
+                EnsureSearcher();
+        }
+
+        // ── Searcher lifecycle ────────────────────────────────────────
+
+        /// <summary>
+        /// Returns the live searcher, opening it if this is the first call after a
+        /// commit made the index available.  Returns null when no committed index
+        /// exists yet (build has not started or no commit has been made).
+        /// </summary>
+        private LuceneSearcher EnsureSearcher()
+        {
+            // Fast path — already open.
+            var s = _searcher;
+            if (s != null) return s;
+
+            if (!LuceneIndexWriter.IndexExists(_indexPath)) return null;
+
+            lock (_searcherLock)
+            {
+                if (_disposed) return null;
+                if (_searcher != null) return _searcher;
+                _searcher = new LuceneSearcher(_indexPath);
+                return _searcher;
+            }
+        }
+
+        /// <summary>
+        /// Refreshes the live searcher so it sees documents committed since the last
+        /// open/refresh.  Opens the searcher for the first time if a committed index
+        /// now exists.  Safe to call from the indexing thread after every Commit().
+        /// </summary>
+        private void RefreshSearcher()
+        {
+            if (_disposed) return;
+
+            var s = _searcher;
+            if (s != null)
+            {
+                s.Refresh();
+                return;
+            }
+
+            // First commit just landed — open the searcher now.
+            EnsureSearcher();
         }
 
         // ── Build ─────────────────────────────────────────────────────
@@ -63,17 +136,23 @@ namespace LuceneLib.SeforimDb
         /// <summary>
         /// Builds (or resumes) the Lucene index from the seforim database.
         ///
-        /// If a <c>build.progress</c> file exists in the index directory, indexing
-        /// resumes from the last committed row ID. Otherwise a fresh build is started.
+        /// Resume: if a <c>build.progress</c> file exists, indexing continues from
+        /// the last committed row ID.  Otherwise a fresh build is started (existing
+        /// index directory is deleted).
         ///
-        /// Returns true when at least one row was processed; false when the database
-        /// was empty or the build was cancelled before any rows were indexed.
+        /// Live search: the shared <see cref="LuceneSearcher"/> is refreshed after
+        /// every periodic commit so searches running concurrently see the latest rows.
+        ///
+        /// Optimise: on a completed (non-cancelled) build, <c>ForceMerge(1)</c> is
+        /// called to collapse all segments into one for optimal search performance.
+        ///
+        /// Returns true when at least one row was processed.
         /// </summary>
         /// <param name="limit">Maximum rows to index. 0 = all rows.</param>
         /// <param name="onProgress">Called after each row with the running count.</param>
-        /// <param name="onFlush">Called after each Lucene commit (periodic checkpoint).</param>
+        /// <param name="onFlush">Called after each periodic commit.</param>
         /// <param name="totalLines">Total rows in the database (for progress display).</param>
-        /// <param name="resumeOffset">Unused — kept for API compatibility.</param>
+        /// <param name="resumeOffset">Kept for API compatibility — not used internally.</param>
         /// <param name="ct">Cancellation token.</param>
         public bool BuildIndex(
             int               limit        = 0,
@@ -89,14 +168,16 @@ namespace LuceneLib.SeforimDb
             else
                 Console.WriteLine("[SeforimIndex] Starting fresh build");
 
-            // A fresh build deletes the existing index; a resume appends to it.
+            // Fresh build: delete the existing index so we start clean.
+            // Resume: append to the existing segments.
             bool deleteExisting = resumeLineId == 0;
 
             long n                 = 0;
             bool anyRowsProcessed  = false;
+            bool cancelled         = false;
             int  lastWrittenLineId = resumeLineId;
 
-            // Commit every this many rows so the progress file stays current.
+            // Commit (and refresh the live searcher) every this many rows.
             const long CommitInterval = 250_000;
 
             using (var db     = new ZayitDb(_dbPath))
@@ -115,63 +196,75 @@ namespace LuceneLib.SeforimDb
                     ? db.ReadLinesFrom(resumeLineId, limit, ct)
                     : db.ReadLines(limit, ct);
 
-                foreach (var (id, content) in rows)
+                try
                 {
-                    ct.ThrowIfCancellationRequested();
-                    anyRowsProcessed  = true;
-                    lastWrittenLineId = id;
-                    n++;
-
-                    writer.AddDocument(id, content ?? string.Empty);
-                    onProgress?.Invoke(n);
-
-                    // Periodic commit — makes progress visible to readers and
-                    // updates the progress file so a crash loses at most CommitInterval rows.
-                    if (n % CommitInterval == 0)
+                    foreach (var (id, content) in rows)
                     {
-                        writer.Commit();
-                        WriteProgressFile(lastWrittenLineId, effectiveTotal, resumeOffset + n);
-                        Console.WriteLine($"[SeforimIndex] Committed at lineId={lastWrittenLineId} (n={n})");
-                        onFlush?.Invoke();
+                        ct.ThrowIfCancellationRequested();
+                        anyRowsProcessed  = true;
+                        lastWrittenLineId = id;
+                        n++;
+
+                        writer.AddDocument(id, content ?? string.Empty);
+                        onProgress?.Invoke(n);
+
+                        if (n % CommitInterval == 0)
+                        {
+                            writer.Commit();
+                            WriteProgressFile(lastWrittenLineId, effectiveTotal,
+                                              resumeOffset + n);
+                            Console.WriteLine(
+                                $"[SeforimIndex] Committed at lineId={lastWrittenLineId} (n={n})");
+
+                            // Make newly committed rows visible to concurrent searches.
+                            RefreshSearcher();
+                            onFlush?.Invoke();
+                        }
                     }
                 }
+                catch (OperationCanceledException)
+                {
+                    cancelled = true;
+                }
 
-                // Final commit — flushes everything remaining.
+                // Final commit — flushes everything written since the last interval commit.
                 writer.Commit();
+                RefreshSearcher();
+
+                // Optimise: merge all segments into one for fastest search performance.
+                // Skip on cancellation — the index is valid but not yet complete.
+                if (!cancelled && anyRowsProcessed)
+                {
+                    Console.WriteLine("[SeforimIndex] Merging segments…");
+                    writer.ForceMerge();
+                    RefreshSearcher(); // pick up the merged single segment
+                    Console.WriteLine("[SeforimIndex] Merge complete.");
+                }
             }
 
             if (anyRowsProcessed)
             {
                 WriteProgressFile(lastWrittenLineId, totalLines, resumeOffset + n);
-                Console.WriteLine($"[SeforimIndex] Build complete — final lineId={lastWrittenLineId}");
+                Console.WriteLine(
+                    $"[SeforimIndex] Build {(cancelled ? "interrupted" : "complete")} " +
+                    $"— final lineId={lastWrittenLineId}");
             }
             else
             {
                 Console.WriteLine("[SeforimIndex] No rows processed — progress file unchanged.");
             }
 
+            if (cancelled) throw new OperationCanceledException(ct);
             return anyRowsProcessed;
         }
 
         // ── Resume helpers ────────────────────────────────────────────
 
-        /// <summary>
-        /// Returns the last committed line ID from a previous interrupted build,
-        /// or 0 if no progress file exists.
-        /// </summary>
         public int GetResumeLineId() => ReadResumeLineId();
 
-        /// <summary>
-        /// Returns (lastFlushedLineId, totalLines, resumeOffset) from the progress file.
-        /// Any value is 0 if the file is absent or was written by an older build.
-        /// </summary>
         public void GetResumeState(out int lineId, out long totalLines, out long resumeOffset)
             => ReadProgressFile(out lineId, out totalLines, out resumeOffset);
 
-        /// <summary>
-        /// Deletes the build progress file.
-        /// Call this after a successful build to clear resume state.
-        /// </summary>
         public void DeleteBuildProgressFile()
         {
             try
@@ -184,14 +277,12 @@ namespace LuceneLib.SeforimDb
 
         // ── Database helpers ──────────────────────────────────────────
 
-        /// <summary>Returns the total number of lines in the database.</summary>
         public long CountLines()
         {
             using (var db = new ZayitDb(_dbPath))
                 return db.CountLines();
         }
 
-        /// <summary>Returns the number of lines with id &lt;= <paramref name="upToId"/>.</summary>
         public long CountLinesUpTo(int upToId)
         {
             using (var db = new ZayitDb(_dbPath))
@@ -202,15 +293,15 @@ namespace LuceneLib.SeforimDb
 
         /// <summary>
         /// Searches the index for lines matching the query and fetches their content
-        /// from the database. Results are yielded lazily.
+        /// from the database.  Results are yielded lazily.
+        ///
+        /// Uses the long-lived <see cref="LuceneSearcher"/> — no reader open/close
+        /// overhead per call.  Safe to call while <see cref="BuildIndex"/> is running.
+        ///
+        /// Cancelling <paramref name="ct"/> stops result streaming immediately and
+        /// throws <see cref="OperationCanceledException"/>.  The caller is responsible
+        /// for cancelling any previous search before starting a new one.
         /// </summary>
-        /// <param name="query">Query string (see class docs for syntax).</param>
-        /// <param name="cap">Maximum results to return. 0 = no cap.</param>
-        /// <param name="expandKetiv">
-        /// When true, adds כתיב חסר/מלא variants for every literal token.
-        /// Equivalent to prefixing every plain token with '~'.
-        /// </param>
-        /// <param name="ct">Cancellation token.</param>
         public IEnumerable<SearchResult> Search(
             string            query,
             int               cap         = 0,
@@ -219,19 +310,18 @@ namespace LuceneLib.SeforimDb
         {
             if (string.IsNullOrWhiteSpace(query)) yield break;
 
+            var searcher = EnsureSearcher();
+            if (searcher == null) yield break;
+
             string effectiveQuery = expandKetiv ? ApplyKetivPrefix(query) : query;
+            var matchedGroups     = BuildMatchedGroups(effectiveQuery);
 
-            // Build matched groups once — same for every result in this search.
-            // Each AND slot becomes one group; OR alternatives within a slot form the collection.
-            var matchedGroups = BuildMatchedGroups(effectiveQuery);
-
-            using (var searcher = new LuceneSearcher(_indexPath))
-            using (var db       = new ZayitDb(_dbPath))
+            using (var db = new ZayitDb(_dbPath))
             {
                 if (!db.IsOpen) yield break;
 
                 int yielded = 0;
-                foreach (int rowId in searcher.Search(effectiveQuery))
+                foreach (int rowId in searcher.Search(effectiveQuery, ct))
                 {
                     ct.ThrowIfCancellationRequested();
 
@@ -253,7 +343,7 @@ namespace LuceneLib.SeforimDb
 
         /// <summary>
         /// Searches the index and returns only matching line IDs — no database fetch.
-        /// Faster than <see cref="Search"/> when content is not needed.
+        /// Cancelling <paramref name="ct"/> stops iteration immediately.
         /// </summary>
         public IEnumerable<int> SearchIds(
             string            query,
@@ -262,15 +352,15 @@ namespace LuceneLib.SeforimDb
         {
             if (string.IsNullOrWhiteSpace(query)) yield break;
 
+            var searcher = EnsureSearcher();
+            if (searcher == null) yield break;
+
             string effectiveQuery = expandKetiv ? ApplyKetivPrefix(query) : query;
 
-            using (var searcher = new LuceneSearcher(_indexPath))
+            foreach (int rowId in searcher.Search(effectiveQuery, ct))
             {
-                foreach (int rowId in searcher.Search(effectiveQuery))
-                {
-                    ct.ThrowIfCancellationRequested();
-                    yield return rowId;
-                }
+                ct.ThrowIfCancellationRequested();
+                yield return rowId;
             }
         }
 
@@ -284,12 +374,15 @@ namespace LuceneLib.SeforimDb
         {
             if (string.IsNullOrWhiteSpace(query)) return SnippetResult.NoMatch;
 
+            var searcher = EnsureSearcher();
+            if (searcher == null) return SnippetResult.NoMatch;
+
             using (var db = new ZayitDb(_dbPath))
             {
                 if (!db.IsOpen) return SnippetResult.NoMatch;
                 string content = db.GetLineById(lineId);
                 if (content == null) return SnippetResult.NoMatch;
-                return GenerateSnippetFromContent(content, query);
+                return GenerateSnippetFromContent(searcher, content, query);
             }
         }
 
@@ -297,124 +390,91 @@ namespace LuceneLib.SeforimDb
         /// Generates a highlighted HTML snippet from an already-fetched
         /// <see cref="SearchResult"/>. No database round-trip.
         /// </summary>
-        /// <param name="result">The search result to highlight.</param>
-        /// <param name="requireOrdered">
-        /// When true, only snippets where query terms appear in left-to-right order
-        /// are considered a match. Passed as <c>inOrder</c> to the span highlighter.
-        /// </param>
-        /// <param name="contextWords">
-        /// Approximate number of words of context on each side of the match.
-        /// Mapped to Lucene's fragment size (contextWords * 8 chars per word).
-        /// </param>
         public SnippetResult GenerateSnippet(
             SearchResult result,
             bool         requireOrdered = false,
             int          contextWords   = DefaultContextWords)
         {
-            if (result == null)                    return SnippetResult.NoMatch;
-            if (result.MatchedGroups.Count == 0)   return SnippetResult.NoMatch;
+            if (result == null)                       return SnippetResult.NoMatch;
+            if (result.MatchedGroups.Count == 0)      return SnippetResult.NoMatch;
             if (string.IsNullOrEmpty(result.Content)) return SnippetResult.NoMatch;
 
-            // Reconstruct a query string from the matched groups so the highlighter
-            // can re-parse it. Each group becomes one AND slot; alternatives within
-            // a group are joined with ' | '.
+            var searcher = EnsureSearcher();
+            if (searcher == null) return SnippetResult.NoMatch;
+
             string reconstructedQuery = ReconstructQuery(result.MatchedGroups);
-            return GenerateSnippetFromContent(result.Content, reconstructedQuery,
+            return GenerateSnippetFromContent(
+                searcher, result.Content, reconstructedQuery,
                 requireOrdered, contextWords);
         }
 
         // ── Private helpers ───────────────────────────────────────────
 
-        private SnippetResult GenerateSnippetFromContent(
-            string content,
-            string query,
-            bool   requireOrdered = false,
-            int    contextWords   = DefaultContextWords)
+        private static SnippetResult GenerateSnippetFromContent(
+            LuceneSearcher    searcher,
+            string            content,
+            string            query,
+            bool              requireOrdered = false,
+            int               contextWords   = DefaultContextWords,
+            CancellationToken ct             = default)
         {
-            // Fragment size: contextWords words on each side of the match.
-            // Approximate 8 visible chars per Hebrew word.
             int fragmentSize = contextWords * 8 * 2;
+            int slop         = requireOrdered ? contextWords : int.MaxValue;
 
-            int slop = requireOrdered ? contextWords : int.MaxValue;
-
-            using (var searcher = new LuceneSearcher(_indexPath))
+            foreach (var (_, snippet) in searcher.SearchWithSnippets(
+                query,
+                _ => content,
+                fragmentSize: fragmentSize,
+                slop:         slop,
+                inOrder:      requireOrdered,
+                ct:           ct))
             {
-                foreach (var (_, snippet) in searcher.SearchWithSnippets(
-                    query,
-                    _ => content,
-                    fragmentSize: fragmentSize,
-                    slop: slop,
-                    inOrder: requireOrdered))
-                {
-                    // Compute WordDistance from the snippet HTML by counting the number
-                    // of tokens between the first and last <mark> tag.
-                    // This mirrors FtsLib's definition: tokens between leftmost and
-                    // rightmost matched tokens (0 = adjacent).
-                    int wordDistance = ComputeWordDistance(snippet.Html);
-                    int score        = snippet.Html.Length; // proxy for raw char span
-
-                    return new SnippetResult(snippet.Html, score, wordDistance, snippet.IsMatch);
-                }
+                int wordDistance = ComputeWordDistance(snippet.Html);
+                int score        = snippet.Html.Length;
+                return new SnippetResult(snippet.Html, score, wordDistance, snippet.IsMatch);
             }
 
             return SnippetResult.NoMatch;
         }
 
         /// <summary>
-        /// Counts the number of whitespace-separated tokens between the first
-        /// &lt;mark&gt; and the last &lt;/mark&gt; in the snippet HTML, minus the
-        /// number of matched terms (so adjacent terms give WordDistance = 0).
-        ///
-        /// This is a close approximation of FtsLib's WordDistance metric, which
-        /// counts tokens between the leftmost and rightmost matched tokens.
+        /// Counts tokens between the first &lt;mark&gt; and last &lt;/mark&gt;,
+        /// minus the number of matched terms — mirrors FtsLib's WordDistance metric.
         /// </summary>
         private static int ComputeWordDistance(string html)
         {
             if (string.IsNullOrEmpty(html)) return int.MaxValue;
 
-            int firstMark = html.IndexOf("<mark>", StringComparison.OrdinalIgnoreCase);
+            int firstMark = html.IndexOf("<mark>",  StringComparison.OrdinalIgnoreCase);
             int lastClose = html.LastIndexOf("</mark>", StringComparison.OrdinalIgnoreCase);
             if (firstMark < 0 || lastClose < 0) return int.MaxValue;
 
-            // Extract the substring from first <mark> to end of last </mark>
             int windowEnd = lastClose + "</mark>".Length;
             string window = html.Substring(firstMark, windowEnd - firstMark);
 
-            // Strip tags and count words in the window
             var sb = new System.Text.StringBuilder(window.Length);
             bool inTag = false;
             foreach (char c in window)
             {
-                if (c == '<') { inTag = true; continue; }
-                if (c == '>') { inTag = false; sb.Append(' '); continue; }
+                if      (c == '<') { inTag = true;  continue; }
+                if      (c == '>') { inTag = false; sb.Append(' '); continue; }
                 if (!inTag) sb.Append(c);
             }
 
-            // Count non-empty tokens
             int totalTokens = 0;
-            int markCount   = 0;
             foreach (var tok in sb.ToString().Split(
                 new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
-            {
                 totalTokens++;
-            }
 
-            // Count matched terms (number of <mark> tags)
+            int markCount = 0;
             int pos = 0;
             while ((pos = html.IndexOf("<mark>", pos, StringComparison.OrdinalIgnoreCase)) >= 0)
-            {
-                markCount++;
-                pos += 6;
-            }
+            { markCount++; pos += 6; }
 
-            int wordDistance = totalTokens - markCount;
-            return wordDistance < 0 ? 0 : wordDistance;
+            int dist = totalTokens - markCount;
+            return dist < 0 ? 0 : dist;
         }
 
-        /// <summary>
-        /// Reconstructs a query string from matched groups.
-        /// Each group is one AND slot; alternatives within a group are joined with ' | '.
-        /// </summary>
         private static string ReconstructQuery(
             IReadOnlyList<IReadOnlyCollection<string>> groups)
         {
@@ -424,31 +484,24 @@ namespace LuceneLib.SeforimDb
             return string.Join(" ", slots);
         }
 
-        /// <summary>
-        /// Builds a MatchedGroups list from a query string by parsing its tokens.
-        /// Each AND slot becomes one group; OR alternatives within a slot form the collection.
-        /// </summary>
-        private static IReadOnlyList<IReadOnlyCollection<string>> BuildMatchedGroups(string query)
+        private static IReadOnlyList<IReadOnlyCollection<string>> BuildMatchedGroups(
+            string query)
         {
             if (string.IsNullOrWhiteSpace(query))
                 return Array.Empty<IReadOnlyCollection<string>>();
 
-            // Reuse HebrewQueryBuilder's slot-parsing logic by splitting on whitespace
-            // and '|' ourselves — mirrors the same rules.
             query = query.Replace("|", " | ");
-            var slots        = new List<IReadOnlyCollection<string>>();
-            var pendingSlot  = new List<string>();
+            var slots       = new List<IReadOnlyCollection<string>>();
+            var pendingSlot = new List<string>();
             bool lastWasPipe = false;
 
-            foreach (var raw in query.Split(new[] { ' ', '\t', '\r', '\n' },
-                                            StringSplitOptions.RemoveEmptyEntries))
+            foreach (var raw in query.Split(
+                new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
             {
                 bool isPipe = true;
                 foreach (char c in raw) if (c != '|') { isPipe = false; break; }
-
                 if (isPipe) { lastWasPipe = true; continue; }
 
-                // Normalise: strip markers, nikud, etc. — same as HebrewQueryBuilder.Normalise
                 string normalised = NormaliseToken(raw);
                 if (normalised.Length == 0) continue;
 
@@ -468,26 +521,32 @@ namespace LuceneLib.SeforimDb
             return slots;
         }
 
-        /// <summary>
-        /// Strips query markers (~, %, *) and nikud from a token to get the bare
-        /// normalised form used for highlighting.
-        /// </summary>
         private static string NormaliseToken(string raw)
         {
-            // Strip leading ~ and %
             int start = 0;
             while (start < raw.Length && (raw[start] == '~' || raw[start] == '%'))
                 start++;
-            // Strip trailing %
             int end = raw.Length;
             while (end > start && raw[end - 1] == '%')
                 end--;
+
+            // Also strip trailing ~N fuzzy suffix
+            for (int i = end - 1; i >= start; i--)
+            {
+                if (raw[i] == '~')
+                {
+                    string suffix = raw.Substring(i + 1, end - i - 1);
+                    bool valid = suffix.Length == 0
+                              || (suffix.Length == 1 && suffix[0] >= '1' && suffix[0] <= '9');
+                    if (valid) { end = i; break; }
+                }
+            }
 
             var sb = new System.Text.StringBuilder(end - start);
             for (int i = start; i < end; i++)
             {
                 char c = raw[i];
-                if (c >= '\u0591' && c <= '\u05C7') continue; // nikud + cantillation
+                if (c >= '\u0591' && c <= '\u05C7') continue;
                 if (c == '\u05F3' || c == '\u05F4' || c == '"') continue;
                 if (c == '*' || c == '?') { sb.Append(c); continue; }
                 if (c >= '\u05D0' && c <= '\u05EA') { sb.Append(c); continue; }
@@ -497,26 +556,20 @@ namespace LuceneLib.SeforimDb
             return sb.ToString();
         }
 
-        /// <summary>
-        /// Prefixes every plain literal token in the query with '~' to trigger
-        /// כתיב חסר/מלא expansion. Wildcard and already-marked tokens are left alone.
-        /// </summary>
         private static string ApplyKetivPrefix(string query)
         {
             query = query.Replace("|", " | ");
-            var parts = query.Split(new[] { ' ', '\t', '\r', '\n' },
-                                    StringSplitOptions.RemoveEmptyEntries);
+            var parts = query.Split(
+                new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
             var sb = new System.Text.StringBuilder();
             foreach (var part in parts)
             {
                 if (sb.Length > 0) sb.Append(' ');
-                bool isPipe    = true;
+                bool isPipe   = true;
                 foreach (char c in part) if (c != '|') { isPipe = false; break; }
-                bool isMarked  = part.Length > 0 && (part[0] == '~' || part[0] == '%');
-                bool isWild    = part.IndexOf('*') >= 0 || part.IndexOf('?') >= 0;
-
-                if (!isPipe && !isMarked && !isWild)
-                    sb.Append('~');
+                bool isMarked = part.Length > 0 && (part[0] == '~' || part[0] == '%');
+                bool isWild   = part.IndexOf('*') >= 0 || part.IndexOf('?') >= 0;
+                if (!isPipe && !isMarked && !isWild) sb.Append('~');
                 sb.Append(part);
             }
             return sb.ToString();
@@ -530,7 +583,8 @@ namespace LuceneLib.SeforimDb
             return lineId;
         }
 
-        private void ReadProgressFile(out int lineId, out long totalLines, out long resumeOffset)
+        private void ReadProgressFile(
+            out int lineId, out long totalLines, out long resumeOffset)
         {
             lineId       = 0;
             totalLines   = 0;
@@ -553,11 +607,24 @@ namespace LuceneLib.SeforimDb
             {
                 File.WriteAllText(
                     Path.Combine(_indexPath, ProgressFileName),
-                    lineId.ToString() + "\n" +
-                    totalLines.ToString() + "\n" +
+                    lineId.ToString()       + "\n" +
+                    totalLines.ToString()   + "\n" +
                     resumeOffset.ToString());
             }
             catch { }
+        }
+
+        // ── IDisposable ───────────────────────────────────────────────
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            lock (_searcherLock)
+            {
+                _searcher?.Dispose();
+                _searcher = null;
+            }
         }
     }
 }
