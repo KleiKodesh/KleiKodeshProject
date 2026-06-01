@@ -29,6 +29,9 @@ export function useScopedKeys(
       event.preventDefault()
       selectAllInContainer()
     } else if (event.code === 'KeyF' && options?.onCtrlF) {
+      // Skip if a higher-priority capture-phase listener (e.g. AppTitleBar) already
+      // handled this shortcut — avoids calling openSearch() twice.
+      if (event.defaultPrevented) return
       event.preventDefault()
       options.onCtrlF()
     }

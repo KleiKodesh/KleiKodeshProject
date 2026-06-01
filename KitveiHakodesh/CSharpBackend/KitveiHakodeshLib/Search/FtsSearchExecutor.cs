@@ -68,10 +68,10 @@ namespace KitveiHakodeshLib.Search
             _searches[searchId] = cts;
             _bridge.Reply(id, new { searchId = searchId, failReason = (string)null });
 
-            Console.WriteLine($"[FtsSearchExecutor] Search {searchId} started — query=\"{query}\" skip={skipCount} maxDist={maxWordDist} ordered={reqOrdered} context={contextWords} ketiv={expandKetiv}");
+            Console.WriteLine($"[FtsSearchExecutor] Search {searchId} started — query=\"{query}\" excluded={excludedLineIds.Count} maxDist={maxWordDist} ordered={reqOrdered} context={contextWords} ketiv={expandKetiv}");
 
             Task searchTask = Task.Run(
-                () => RunSearch(searchId, query, skipCount, maxWordDist, reqOrdered, contextWords, expandKetiv, index, cts.Token));
+                () => RunSearch(searchId, query, excludedLineIds, maxWordDist, reqOrdered, contextWords, expandKetiv, index, cts.Token));
 
             // Observe the task so that any exception escaping RunSearch's own try/catch
             // is logged rather than silently swallowed by the thread pool.
@@ -93,7 +93,7 @@ namespace KitveiHakodeshLib.Search
 
         // ── Search execution ──────────────────────────────────────────────────────
 
-        private void RunSearch(string searchId, string query, int skipCount,
+        private void RunSearch(string searchId, string query, HashSet<int> excludedLineIds,
                                int maxWordDistance, bool requireOrdered, int contextWords,
                                bool expandKetiv,
                                SeforimIndex index, CancellationToken ct)
@@ -112,20 +112,14 @@ namespace KitveiHakodeshLib.Search
                 const int TimerIntervalMs = 250;
                 const int MemorySafetyCap = 200;
 
-                // Doubling thresholds: flush when batch reaches each of these sizes.
-                // After the last threshold is flushed we switch to timer-only mode.
                 var doublingThresholds = new[] { 1, 2, 4, 8, 16 };
                 int doublingIndex = 0;
                 bool useTimerOnly = false;
 
-                var  batch   = new List<object>(MemorySafetyCap);
-                int  skipped = 0;
-                var  timer   = new Stopwatch();
+                var  batch = new List<object>(MemorySafetyCap);
+                var  timer = new Stopwatch();
                 timer.Start();
 
-                // Single-pass search: one Lucene query, one DB connection, batch title lookups.
-                // Replaces the old Search() + GenerateSnippet() loop which was O(N) Lucene
-                // queries — one per result — and O(2N) individual SQLite round-trips.
                 foreach (var (rowId, bookTitle, snippet) in index.SearchWithSnippets(
                     query,
                     maxWordDistance: maxWordDistance,
@@ -140,7 +134,8 @@ namespace KitveiHakodeshLib.Search
                         return;
                     }
 
-                    if (skipped < skipCount) { skipped++; continue; }
+                    // Skip lines the frontend already has cached — no need to re-stream them.
+                    if (excludedLineIds.Contains(rowId)) continue;
 
                     batch.Add(new
                     {
@@ -187,7 +182,7 @@ namespace KitveiHakodeshLib.Search
                     PostSearch(new { type = "searchBatch", searchId = searchId,
                                      results = batch.ToArray() });
 
-                Console.WriteLine($"[FtsSearchExecutor] Search {searchId} complete — query=\"{query}\" results={totalResults} skipped={skipped}");
+                Console.WriteLine($"[FtsSearchExecutor] Search {searchId} complete — query=\"{query}\" results={totalResults} excluded={excludedLineIds.Count}");
                 PostSearch(new { type = "searchComplete", searchId = searchId });
             }
             catch (OperationCanceledException)

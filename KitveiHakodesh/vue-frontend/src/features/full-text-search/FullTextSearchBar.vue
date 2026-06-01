@@ -42,16 +42,15 @@ onMounted(async () => {
   recentQueries.value = await cacheStore.getRecentQueries()
 })
 
-// Only bind the datalist when the current input doesn't exactly match any recent
-// query and more than one option matches — once the user has typed or selected a
-// full query the dropdown is just noise.
+// Hide the datalist only when the search term part of the input exactly matches
+// one of the recent queries — at that point the dropdown is superfluous.
+// The @filter tokens are stripped before comparing so "@אברבנאל" doesn't prevent
+// the match from being detected.
 const datalistId = computed(() => {
-  const q = localQuery.value.trim().toLowerCase()
-  if (!q) return 'search-history'
-  const matches = recentQueries.value.filter((r) => r.toLowerCase().includes(q))
-  if (matches.length <= 1) return undefined
-  if (matches.some((r) => r.toLowerCase() === q)) return undefined
-  return 'search-history'
+  const term = localQuery.value.split('@')[0]!.trim().toLowerCase()
+  if (!term) return 'search-history'
+  const exactMatch = recentQueries.value.some((r) => r.toLowerCase() === term)
+  return exactMatch ? undefined : 'search-history'
 })
 
 watch(
@@ -193,6 +192,9 @@ defineExpose({ focus: () => inputRef.value?.focus(), filterBtnRef, advancedBtnRe
   font-size: 13px;
   color: var(--text-primary);
   direction: rtl;
+}
+.search-input::-webkit-calendar-picker-indicator {
+  display: none;
 }
 .search-input::placeholder {
   color: var(--text-secondary);

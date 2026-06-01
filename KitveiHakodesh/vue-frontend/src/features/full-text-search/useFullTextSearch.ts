@@ -226,21 +226,20 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   }
 
   // Start the C# search stream and wire up listeners.
-  // skipCount: number of results already in cache — C# will skip that many before streaming.
-  // backgroundRefresh: when true the stream appends to existing results rather than replacing
-  // them, and isSearching stays true only until the stream completes (results are already shown).
-  // Returns a promise that resolves when the first batch of results arrives (or immediately
-  // when backgroundRefresh is true, since results are already visible).
+  // excludedLineIds: lineIds already in the frontend cache — C# skips snippet
+  // generation for these, so only genuinely new results are streamed back.
+  // backgroundRefresh: when true the stream appends to existing results rather than
+  // replacing them, and isSearching stays true only until the stream completes.
   async function _startStream(
     normalizedQuery: string,
-    skipCount: number,
+    excludedLineIds: number[],
     backgroundRefresh = false,
   ): Promise<void> {
     ensureWebviewListener()
     const reply = await callBridgeAction<{ searchId: string; failReason: SearchFailReason | null }>(
       'FtsSearchStart',
       normalizedQuery,
-      skipCount,
+      excludedLineIds,
       settings.searchMaxWordDistance,
       settings.searchRequireOrdered,
       settings.searchContextMarginWords,
@@ -376,23 +375,25 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         // Was cached during indexing but index is now complete — refresh the full set
         results.value = []
         await cache.init(normalizedQuery, true)
-        await _startStream(queryToSend, 0, false)
+        await _startStream(queryToSend, [], false)
         return
       }
 
       if (cached.complete && !cached.indexingComplete && indexingNow) {
         // Cached during indexing and still indexing — show stale results, refresh silently
+        const excludedIds = cached.results.map((r) => r.lineId)
         await cache.init(normalizedQuery, false)
-        _startStream(queryToSend, 0, true).catch((err) => {
+        _startStream(queryToSend, excludedIds, true).catch((err) => {
           console.error('[useFullTextSearch] background refresh failed:', err)
           isSearching.value = false
         })
         return
       }
 
-      // Incomplete entry — resume the stream from where it left off
+      // Incomplete entry — resume the stream, skipping lines already cached
+      const excludedIds = cached.results.map((r) => r.lineId)
       await cache.init(normalizedQuery, !indexingNow)
-      await _startStream(queryToSend, cached.results.length, false)
+      await _startStream(queryToSend, excludedIds, false)
       return
     }
 
@@ -401,7 +402,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     isSearching.value = true
     try {
       await cache.init(normalizedQuery, !indexingNow)
-      await _startStream(queryToSend, 0, false)
+      await _startStream(queryToSend, [], false)
     } catch (err) {
       console.error('[useFullTextSearch] failed to start search:', err)
       isSearching.value = false
@@ -425,7 +426,8 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     // If the stream was interrupted, resume it in the background
     if (!cached.complete) {
       isSearching.value = true
-      _startStream(normalizedQuery, cached.results.length, false).catch((err) => {
+      const excludedIds = cached.results.map((r) => r.lineId)
+      _startStream(normalizedQuery, excludedIds, false).catch((err) => {
         console.error('[useFullTextSearch] failed to resume stream after tab restore:', err)
         isSearching.value = false
       })
