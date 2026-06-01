@@ -33,11 +33,18 @@ namespace KitveiHakodeshLib.Search
 
         internal void HandleSearchStart(JsonElement root, string id)
         {
-            string query        = root.TryGetProperty("0", out var q) ? q.GetString() : null;
-            int    skipCount    = root.TryGetProperty("1", out var s) ? s.GetInt32() : 0;
-            int    maxWordDist  = root.TryGetProperty("2", out var d) ? d.GetInt32() : 10;
-            bool   reqOrdered   = root.TryGetProperty("3", out var o) && o.GetBoolean();
-            int    contextWords = root.TryGetProperty("4", out var cw) ? cw.GetInt32() : SeforimIndex.DefaultContextWords;
+            string query           = root.TryGetProperty("0", out var q)  ? q.GetString()  : null;
+            // Parameter "1": array of lineIds already in the frontend cache.
+            // C# skips snippet generation for these IDs — the frontend already has their snippets.
+            var    excludedLineIds = new HashSet<int>();
+            if (root.TryGetProperty("1", out var excl) && excl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var el in excl.EnumerateArray())
+                    excludedLineIds.Add(el.GetInt32());
+            }
+            int    maxWordDist  = root.TryGetProperty("2", out var d)  ? d.GetInt32()   : 10;
+            bool   reqOrdered   = root.TryGetProperty("3", out var o)  && o.GetBoolean();
+            int    contextWords = root.TryGetProperty("4", out var cw) ? cw.GetInt32()  : SeforimIndex.DefaultContextWords;
             bool   expandKetiv  = root.TryGetProperty("5", out var ek) && ek.GetBoolean();
 
             bool         ready = _state.IsReady;
