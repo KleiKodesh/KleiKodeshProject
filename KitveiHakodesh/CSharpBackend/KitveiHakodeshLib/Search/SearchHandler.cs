@@ -139,14 +139,14 @@ namespace KitveiHakodeshLib.Search
                 }
 
                 string currentDbHash = FtsIndexState.ComputeDbHash(dbPath);
-                Console.WriteLine("[SearchHandler] Database hash check — current="
+                Console.WriteLine("[SearchHandler] Database fingerprint check — current="
                     + currentDbHash + " stamped=" + stampedDbHash);
 
                 if (!string.IsNullOrEmpty(currentDbHash) &&
                     !string.Equals(currentDbHash, stampedDbHash,
                                    StringComparison.OrdinalIgnoreCase))
                 {
-                    Console.WriteLine("[SearchHandler] Database changed (hash " + stampedDbHash
+                    Console.WriteLine("[SearchHandler] Database changed (fingerprint " + stampedDbHash
                         + " → " + currentDbHash + ") — rebuilding index automatically");
                     FtsIndexState.DeleteFtsIndex();
                     _bridge.PushEvent(new { @event = "ftsIndexInvalidated", reason = "database changed" });

@@ -10,13 +10,11 @@ import type { FullTextSearchResult, SearchFailReason } from './fullTextSearchTyp
 
 const props = defineProps<{
   results: FullTextSearchResult[]
-  totalResults: number
   searchQuery: string
   isSearching: boolean
   hasSearched: boolean
   searchError?: SearchFailReason | null
   dbNotFound?: boolean
-  isIndexingReady?: boolean
   initialScrollIndex?: number
   initialScrollOffset?: number
   zoom?: number
@@ -136,20 +134,8 @@ defineExpose({ captureScrollPos })
         {{ SEARCH_ERROR_MESSAGES[searchError] ?? SEARCH_ERROR_MESSAGES.searchFailed }}
       </span>
       <span v-else-if="hasSearched && !results.length" class="empty-msg">לא נמצאו תוצאות</span>
-      <span v-else-if="isIndexingReady === false" class="empty-msg">האינדקס בהכנה — אנא המתן</span>
     </div>
     <template v-else>
-      <div class="results-count">
-        <span v-if="isSearching" class="count-searching">
-          {{ results.length.toLocaleString() }} תוצאות עד כה...
-        </span>
-        <span v-else-if="results.length < totalResults">
-          {{ results.length.toLocaleString() }} מתוך {{ totalResults.toLocaleString() }} תוצאות
-        </span>
-        <span v-else>
-          {{ results.length.toLocaleString() }} תוצאות
-        </span>
-      </div>
       <div ref="scrollEl" class="scroller" tabindex="0" :style="{ fontSize: `${fontPx}px` }" @scroll="onScroll">
         <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
           <div
@@ -221,17 +207,6 @@ defineExpose({ captureScrollPos })
 }
 .error-msg {
   color: color-mix(in srgb, var(--text-primary) 70%, #e05252);
-}
-.results-count {
-  padding: 4px 14px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  border-bottom: 1px solid var(--border-color);
-  direction: rtl;
-  flex-shrink: 0;
-}
-.count-searching {
-  opacity: 0.7;
 }
 .scroller {
   flex: 1;

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted, computed } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import {
   IconSearch20Regular,
@@ -8,6 +8,7 @@ import {
   IconOptions20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import BottomSearchBar from '@/components/BottomSearchBar.vue'
+import { useSearchCacheStore } from '@/stores/searchCacheStore'
 
 const props = defineProps<{
   searchQuery: string
@@ -16,6 +17,9 @@ const props = defineProps<{
   atFilterCount: number
   isAdvancedOpen: boolean
   isAdvancedActive: boolean
+  resultCount?: number
+  totalResultCount?: number
+  hasSearched?: boolean
 }>()
 const emit = defineEmits<{
   search: [string]
@@ -30,6 +34,25 @@ const inputRef = ref<HTMLInputElement | null>(null)
 const filterBtnRef = ref<HTMLElement | null>(null)
 const advancedBtnRef = ref<HTMLElement | null>(null)
 const localQuery = ref(props.searchQuery)
+const recentQueries = ref<string[]>([])
+
+const cacheStore = useSearchCacheStore()
+
+onMounted(async () => {
+  recentQueries.value = await cacheStore.getRecentQueries()
+})
+
+// Only bind the datalist when the current input doesn't exactly match any recent
+// query and more than one option matches — once the user has typed or selected a
+// full query the dropdown is just noise.
+const datalistId = computed(() => {
+  const q = localQuery.value.trim().toLowerCase()
+  if (!q) return 'search-history'
+  const matches = recentQueries.value.filter((r) => r.toLowerCase().includes(q))
+  if (matches.length <= 1) return undefined
+  if (matches.some((r) => r.toLowerCase() === q)) return undefined
+  return 'search-history'
+})
 
 watch(
   () => props.searchQuery,
@@ -66,7 +89,11 @@ watch(localQuery, (v) => (v ? pauseTyping() : resumeTyping()))
 // ── Actions ───────────────────────────────────────────────────────────────────
 
 function handleSearch() {
-  if (localQuery.value.trim()) emit('search', localQuery.value)
+  if (localQuery.value.trim()) {
+    emit('search', localQuery.value)
+    // Refresh history so the query just submitted appears next time
+    cacheStore.getRecentQueries().then((q) => { recentQueries.value = q })
+  }
 }
 function handleClear() {
   localQuery.value = ''
@@ -104,13 +131,23 @@ defineExpose({ focus: () => inputRef.value?.focus(), filterBtnRef, advancedBtnRe
       v-model="localQuery"
       type="text"
       name="full-text-search"
+      :list="datalistId"
       class="search-input"
       :placeholder="placeholder"
       spellcheck="true"
       autocomplete="on"
       @keydown.enter="handleSearch"
       @keydown.esc="handleClear"
+      @change="handleSearch"
     />
+    <datalist id="search-history">
+      <option v-for="q in recentQueries" :key="q" :value="q" />
+    </datalist>
+    <span v-if="hasSearched && resultCount != null" class="result-count" :class="{ 'is-searching': isSearching }">
+      <template v-if="isSearching">{{ resultCount.toLocaleString('he-IL') }}</template>
+      <template v-else-if="resultCount < (totalResultCount ?? resultCount)">{{ resultCount.toLocaleString('he-IL') }}/{{ (totalResultCount ?? resultCount).toLocaleString('he-IL') }}</template>
+      <template v-else>{{ resultCount.toLocaleString('he-IL') }}</template>
+    </span>
     <template #right>
       <button
         class="bar-btn"
@@ -175,6 +212,17 @@ defineExpose({ focus: () => inputRef.value?.focus(), filterBtnRef, advancedBtnRe
 }
 .filter-active {
   color: var(--accent-color);
+}
+.result-count {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding-inline-end: 4px;
+  opacity: 0.6;
+}
+.result-count.is-searching {
+  opacity: 0.6;
 }
 .spinner-wrap {
   position: relative;

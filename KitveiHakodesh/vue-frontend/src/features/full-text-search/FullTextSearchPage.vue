@@ -60,7 +60,6 @@ const {
   cancelSearch,
   clearSearch,
   loadCachedResults,
-  clearCachedResults,
 } = useFullTextSearch(() => indexingState.value.isIndexing)
 
 const {
@@ -224,13 +223,6 @@ useEventListener(document, 'visibilitychange', () => {
   if (document.visibilityState === 'hidden') saveFilterState()
 })
 onBeforeUnmount(() => {
-  // If the tab no longer exists in the store, it was closed — clear its cache entry
-  // since the results are no longer needed for session restore or tab switching.
-  // If the tab still exists, the user just switched away — keep the cache for restore.
-  const tabStillExists = tabStore.tabs.some((t) => t.id === tabId)
-  if (!tabStillExists && executedQuery.value) {
-    clearCachedResults(executedQuery.value)
-  }
   saveFilterState()
   if (overlayHideTimer) clearTimeout(overlayHideTimer)
 })
@@ -241,13 +233,11 @@ onBeforeUnmount(() => {
     <FullTextSearchResultsList
       ref="resultsListRef"
       :results="filteredResults"
-      :total-results="results.length"
       :search-query="executedQuery"
       :is-searching="isSearching"
       :has-searched="hasSearched"
       :search-error="searchError"
       :db-not-found="indexingState.dbNotFound"
-      :is-indexing-ready="indexingState.isReady"
       :initial-scroll-index="initialScrollIndex"
       :initial-scroll-offset="initialScrollOffset"
       :zoom="zoom"
@@ -275,7 +265,6 @@ onBeforeUnmount(() => {
     />
 
     <FullTextSearchBar
-      v-if="indexingState.isReady"
       ref="searchBarRef"
       v-model:search-query="searchQuery"
       :is-searching="isSearching"
@@ -283,6 +272,9 @@ onBeforeUnmount(() => {
       :at-filter-count="atFilters.length"
       :is-advanced-open="isAdvancedOpen"
       :is-advanced-active="isAdvancedActive"
+      :result-count="filteredResults.length"
+      :total-result-count="results.length"
+      :has-searched="hasSearched"
       @search="onSearch"
       @cancel="cancelSearch"
       @toggle-filter="isFilterOpen = !isFilterOpen"

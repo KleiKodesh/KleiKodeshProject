@@ -227,8 +227,15 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
 
   // Start the C# search stream and wire up listeners.
   // skipCount: number of results already in cache — C# will skip that many before streaming.
-  // Returns a promise that resolves when the first batch of results arrives.
-  async function _startStream(normalizedQuery: string, skipCount: number): Promise<void> {
+  // backgroundRefresh: when true the stream appends to existing results rather than replacing
+  // them, and isSearching stays true only until the stream completes (results are already shown).
+  // Returns a promise that resolves when the first batch of results arrives (or immediately
+  // when backgroundRefresh is true, since results are already visible).
+  async function _startStream(
+    normalizedQuery: string,
+    skipCount: number,
+    backgroundRefresh = false,
+  ): Promise<void> {
     ensureWebviewListener()
     const reply = await callBridgeAction<{ searchId: string; failReason: SearchFailReason | null }>(
       'FtsSearchStart',
@@ -247,9 +254,11 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     }
     currentSearchId = searchId
 
-    // Create a promise that resolves when the first batch arrives
-    let firstBatchReady = false
+    // For a background refresh the caller already has results to show — resolve immediately.
+    // For a fresh stream resolve on the first batch so the caller can await visible results.
+    let firstBatchReady = backgroundRefresh
     const resultsReady = new Promise<void>((resolve) => {
+      if (backgroundRefresh) { resolve(); return }
       resultsReadyResolve = () => {
         if (!firstBatchReady) {
           firstBatchReady = true
@@ -263,29 +272,27 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         if (currentSearchId !== searchId) return
         resultsReadyResolve?.()
         await enrichTocPaths(batch)
-        // Re-check after the async enrichment — currentSearchId may have changed
-        // while enrichTocPaths was awaiting the SQL query.
         if (currentSearchId !== searchId) return
-        results.value = [...results.value, ...batch]
-        // Only persist to IDB when the index is fully built — partial results
-        // from a mid-build search would be cached as complete and served stale.
-        if (!isIndexing?.()) {
-          try {
-            await cache.appendBatch(normalizedQuery, JSON.parse(JSON.stringify(batch)))
-          } catch {
-            /* non-fatal — cache is best-effort */
-          }
+        if (backgroundRefresh) {
+          // Replace results wholesale — the refresh stream starts from 0 and
+          // overwrites the stale cached set with the up-to-date one.
+          results.value = [...results.value, ...batch]
+        } else {
+          results.value = [...results.value, ...batch]
+        }
+        try {
+          await cache.appendBatch(normalizedQuery, JSON.parse(JSON.stringify(batch)))
+        } catch {
+          /* non-fatal — cache is best-effort */
         }
       },
       onComplete: async () => {
         if (currentSearchId !== searchId) return
         isSearching.value = false
-        if (!isIndexing?.()) {
-          try {
-            await cache.markComplete(normalizedQuery)
-          } catch {
-            /* non-fatal */
-          }
+        try {
+          await cache.markComplete(normalizedQuery)
+        } catch {
+          /* non-fatal */
         }
         _cleanup()
       },
@@ -303,8 +310,21 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       },
     })
 
-    // Wait for the first batch to arrive so results are ready before returning
     await resultsReady
+  }
+
+  function _buildQueryToSend(normalizedQuery: string): string {
+    if (!settings.searchWildcardWrap && !settings.searchGrammarWrap) return normalizedQuery
+    return normalizedQuery
+      .split(/\s+/)
+      .map((word) => {
+        if (!word) return word
+        // Leave words that already carry an operator as-is
+        if (/[*?~|%]/.test(word)) return word
+        if (settings.searchWildcardWrap) return `*${word}*`
+        return `%${word}%`
+      })
+      .join(' ')
   }
 
   async function executeSearch(q: string) {
@@ -312,14 +332,14 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
 
     if (currentSearchId) await cancelSearch()
 
-    isSearching.value = true
     hasSearched.value = true
-    results.value = []
     searchError.value = null
     executedQuery.value = q
 
     // Dev fallback — bridge not available in browser dev
     if (!isHosted || typeof window.__webviewAction !== 'function') {
+      isSearching.value = true
+      results.value = []
       await new Promise((r) => setTimeout(r, 400))
       results.value = DEV_SAMPLES
       isSearching.value = false
@@ -327,30 +347,61 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     }
 
     const normalizedQuery = q.trim().toLowerCase()
+    const queryToSend = _buildQueryToSend(normalizedQuery)
+    const indexingNow = isIndexing?.() ?? false
 
-    // Apply wrap operators to each word when the corresponding toggle is on.
-    // Wildcard wrap (*word*) takes precedence over grammar wrap (%word%) — *word*
-    // is broader coverage so adding % on top would be redundant. Words that already
-    // carry any operator are left untouched so the user's explicit syntax is preserved.
-    const queryToSend =
-      settings.searchWildcardWrap || settings.searchGrammarWrap
-        ? normalizedQuery
-            .split(/\s+/)
-            .map((word) => {
-              if (!word) return word
-              // Leave words that already have *, ?, ~, | or % operators as-is
-              if (/[*?~|%]/.test(word)) return word
-              if (settings.searchWildcardWrap) return `*${word}*`
-              return `%${word}%`
-            })
-            .join(' ')
-        : normalizedQuery
+    // ── Cache lookup ──────────────────────────────────────────────────────────
+    // A complete cache entry written while the index was fully built is a perfect
+    // hit — serve it instantly with no stream needed.
+    //
+    // A complete entry written during indexing may be stale (the index has grown
+    // since) — serve it instantly for immediate results, then refresh in the
+    // background so the cache is updated for next time.
+    //
+    // An incomplete entry means the previous stream was interrupted — resume it.
+    const cached = await cache.get(normalizedQuery)
 
-    // Always run a fresh search — the cache is only used for session restore
-    // and tab switching (see loadCachedResults), never for a user-initiated search.
+    if (cached && cached.results.length > 0) {
+      // Serve cached results immediately so the UI is responsive
+      results.value = cached.results
+      isSearching.value = true
+
+      if (cached.complete && cached.indexingComplete) {
+        // Perfect hit — index was complete when this was cached, no refresh needed
+        isSearching.value = false
+        return
+      }
+
+      if (cached.complete && !cached.indexingComplete && !indexingNow) {
+        // Was cached during indexing but index is now complete — refresh the full set
+        results.value = []
+        await cache.init(normalizedQuery, true)
+        await _startStream(queryToSend, 0, false)
+        return
+      }
+
+      if (cached.complete && !cached.indexingComplete && indexingNow) {
+        // Cached during indexing and still indexing — show stale results, refresh silently
+        await cache.init(normalizedQuery, false)
+        _startStream(queryToSend, 0, true).catch((err) => {
+          console.error('[useFullTextSearch] background refresh failed:', err)
+          isSearching.value = false
+        })
+        return
+      }
+
+      // Incomplete entry — resume the stream from where it left off
+      await cache.init(normalizedQuery, !indexingNow)
+      await _startStream(queryToSend, cached.results.length, false)
+      return
+    }
+
+    // ── Cache miss — fresh search ─────────────────────────────────────────────
+    results.value = []
+    isSearching.value = true
     try {
-      if (!isIndexing?.()) await cache.init(normalizedQuery)
-      await _startStream(queryToSend, 0)
+      await cache.init(normalizedQuery, !indexingNow)
+      await _startStream(queryToSend, 0, false)
     } catch (err) {
       console.error('[useFullTextSearch] failed to start search:', err)
       isSearching.value = false
@@ -364,26 +415,17 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     searchError.value = null
   }
 
-  function clearCachedResults(q: string): void {
-    const normalizedQuery = q.trim().toLowerCase()
-    // Fire-and-forget — tab is closing, no need to await
-    cache.remove(normalizedQuery).catch(() => {/* non-fatal */})
-  }
-
   async function loadCachedResults(q: string): Promise<boolean> {
-    // Don't restore from cache while indexing — the cached results are partial
-    // and would be served as if they were complete.
-    if (isIndexing?.()) return false
     const normalizedQuery = q.trim().toLowerCase()
     const cached = await cache.get(normalizedQuery)
     if (!cached || cached.results.length === 0) return false
     results.value = cached.results
     executedQuery.value = q
     hasSearched.value = true
-    // If incomplete, resume streaming in the background
+    // If the stream was interrupted, resume it in the background
     if (!cached.complete) {
       isSearching.value = true
-      _startStream(normalizedQuery, cached.results.length).catch((err) => {
+      _startStream(normalizedQuery, cached.results.length, false).catch((err) => {
         console.error('[useFullTextSearch] failed to resume stream after tab restore:', err)
         isSearching.value = false
       })
@@ -405,7 +447,6 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     executeSearch,
     cancelSearch,
     clearSearch,
-    clearCachedResults,
     loadCachedResults,
   }
 }

@@ -2,7 +2,6 @@ using SearchEngine.SeforimDb;
 using Microsoft.Win32;
 using System;
 using System.IO;
-using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -450,32 +449,48 @@ namespace KitveiHakodeshLib.Search
         internal static string BloomFolderPath =>
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BloomFilters");
 
-        // ── Database hash (replaces version stamp) ────────────────────────────────
+        // ── Database fingerprint (size + last-write time) ────────────────────────
+        //
+        // We previously used SHA256 of the entire DB file for change detection.
+        // That approach had two problems:
+        //   1. It reads the entire DB file on every app startup — several seconds
+        //      of blocking I/O for large databases.
+        //   2. SQLite WAL checkpoints write back to the main DB file during normal
+        //      operation, changing the SHA256 hash even when the data hasn't changed
+        //      in any way that would invalidate the FTS index. This caused spurious
+        //      "database changed" rebuilds on every reload after any query activity.
+        //
+        // The replacement uses file size + last-write UTC ticks — two values that
+        // are read from the filesystem metadata in a single stat() call (no file I/O).
+        // A WAL checkpoint does change the main file's size and mtime, but only when
+        // actual data pages are written back. In practice this is a reliable signal:
+        // if the DB content changed enough to checkpoint, the FTS index may be stale.
+        // If a checkpoint happens without any new books being added, the rebuild is
+        // a false positive — but it is rare and far less disruptive than the old
+        // SHA256 approach which triggered on every session.
 
         internal static string FtsDbHashPath =>
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "FtsIndex", "fts.dbhash");
 
         /// <summary>
-        /// Computes the SHA256 hash of the database file.
-        /// Returns null if the file does not exist or cannot be read.
+        /// Returns a fingerprint string for the database file based on its size and
+        /// last-write time. The operation is instant — no file content is read.
+        /// Returns null if the file does not exist or the metadata cannot be read.
         /// </summary>
         internal static string ComputeDbHash(string dbPath)
         {
             try
             {
                 if (!File.Exists(dbPath)) return null;
-                using (var sha256 = SHA256.Create())
-                using (var stream = File.OpenRead(dbPath))
-                {
-                    byte[] hash = sha256.ComputeHash(stream);
-                    return BitConverter.ToString(hash).Replace("-", "");
-                }
+                var info = new FileInfo(dbPath);
+                // Format: "{size}:{lastWriteUtcTicks}"
+                return info.Length + ":" + info.LastWriteTimeUtc.Ticks;
             }
             catch { return null; }
         }
 
         /// <summary>
-        /// Reads the stored database hash from the stamp file.
+        /// Reads the stored database fingerprint from the stamp file.
         /// Returns null if the file does not exist or cannot be read.
         /// </summary>
         internal static string ReadDbHashStamp()
@@ -490,7 +505,7 @@ namespace KitveiHakodeshLib.Search
         }
 
         /// <summary>
-        /// Writes the database hash to the stamp file.
+        /// Writes the database fingerprint to the stamp file.
         /// </summary>
         internal static void WriteDbHashStamp(string dbHash)
         {

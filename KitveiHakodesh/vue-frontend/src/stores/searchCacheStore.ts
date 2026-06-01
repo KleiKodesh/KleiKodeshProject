@@ -2,9 +2,10 @@
  * Search result cache — persisted in app-search-cache IDB under `search:` prefix.
  * LRU-capped at 100 queries.
  *
- * Each entry stores accumulated results so far plus a `complete` flag.
- * Batches are written incrementally as they stream in — so a partial result set
- * is available immediately on resume even if the previous search was interrupted.
+ * Each entry stores the full result set, a `complete` flag (stream finished), and an
+ * `indexingComplete` flag (true when the entry was written after the FTS index was fully
+ * built). Entries written during indexing are served immediately for instant results but
+ * are always refreshed in the background — the index may have grown since they were cached.
  *
  * Results are NOT cached in memory — they can be large (hundreds of items with snippets).
  */
@@ -14,7 +15,14 @@ import type { FullTextSearchResult } from '@/features/full-text-search/fullTextS
 
 export interface SearchCacheEntry {
   results: FullTextSearchResult[]
+  /** True when the stream finished (not cancelled or interrupted). */
   complete: boolean
+  /**
+   * True when this entry was written while the FTS index was fully built.
+   * False means the entry was cached during indexing — results may be incomplete
+   * and must be refreshed the next time the user searches for this query.
+   */
+  indexingComplete: boolean
 }
 
 const PREFIX = 'search:'
@@ -53,9 +61,13 @@ export const useSearchCacheStore = defineStore('searchCache', () => {
   }
 
   /** Write the initial entry (or overwrite) when a new search starts. */
-  async function init(query: string): Promise<void> {
+  async function init(query: string, indexingComplete: boolean): Promise<void> {
     await evictIfNeeded(query)
-    await idbSet(cacheKey(query), { results: [], complete: false } satisfies SearchCacheEntry)
+    await idbSet(cacheKey(query), {
+      results: [],
+      complete: false,
+      indexingComplete,
+    } satisfies SearchCacheEntry)
     await touchLru(query)
   }
 
@@ -90,5 +102,11 @@ export const useSearchCacheStore = defineStore('searchCache', () => {
     ])
   }
 
-  return { get, init, appendBatch, markComplete, clear, remove }
+  /** Returns the most-recently-used queries, newest first. */
+  async function getRecentQueries(limit = 8): Promise<string[]> {
+    const lru = await getLru()
+    return lru.slice().reverse().slice(0, limit)
+  }
+
+  return { get, init, appendBatch, markComplete, clear, remove, getRecentQueries }
 })
