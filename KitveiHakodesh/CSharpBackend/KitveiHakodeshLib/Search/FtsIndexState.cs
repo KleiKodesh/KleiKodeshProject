@@ -187,11 +187,20 @@ namespace KitveiHakodeshLib.Search
 
         /// <summary>
         /// Sets the DB path and index object atomically. Called by the actor thread
-        /// during OnDbReady before any state transition.
+        /// during OnDbReady before any state transition. Disposes the previous index
+        /// instance so it releases any open file handles on the index directory.
         /// </summary>
         internal void SetDatabase(string dbPath, SeforimIndex index)
         {
-            lock (_lock) { _dbPath = dbPath; _index = index; }
+            SeforimIndex oldIndex;
+            lock (_lock)
+            {
+                oldIndex = _index;
+                _dbPath  = dbPath;
+                _index   = index;
+            }
+            // Dispose outside the lock — Dispose may do I/O and must not hold _lock.
+            oldIndex?.Dispose();
         }
 
         /// <summary>
@@ -459,7 +468,7 @@ namespace KitveiHakodeshLib.Search
                 using (var stream = File.OpenRead(dbPath))
                 {
                     byte[] hash = sha256.ComputeHash(stream);
-                    return Convert.ToHexString(hash);
+                    return BitConverter.ToString(hash).Replace("-", "");
                 }
             }
             catch { return null; }

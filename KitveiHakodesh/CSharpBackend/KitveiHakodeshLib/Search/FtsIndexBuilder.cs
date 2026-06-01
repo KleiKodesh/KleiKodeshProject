@@ -31,17 +31,6 @@ namespace KitveiHakodeshLib.Search
             if (!_state.TryStartBuilding(out cts))
                 return;
 
-            // Acquire the cross-process build lock before starting the build task.
-            // If another process holds it, TryStartBuilding already returned false
-            // (the actor thread in SearchHandler checks IsAnotherProcessBuilding first),
-            // so we should always be able to acquire here. Fail open if not.
-            if (!FtsIndexState.TryAcquireBuildLock())
-            {
-                Console.WriteLine("[FtsIndexBuilder] Could not acquire build lock — another process may be building");
-                _state.TryMarkIdle(cts);
-                return;
-            }
-
             SeforimIndex index = _state.GetIndex();
             Task task = Task.Run(() => RunBuild(cts, index));
             _state.SetIndexingTask(task);
@@ -49,6 +38,17 @@ namespace KitveiHakodeshLib.Search
 
         private void RunBuild(CancellationTokenSource cts, SeforimIndex index)
         {
+            // Acquire the cross-process build lock on this thread.
+            // Mutex is thread-affine in .NET — WaitOne and ReleaseMutex must be called
+            // from the same thread. Both happen here inside the Task.Run thread so the
+            // acquire/release pair is always on the same thread.
+            if (!FtsIndexState.TryAcquireBuildLock())
+            {
+                Console.WriteLine("[FtsIndexBuilder] Could not acquire build lock — another process may be building");
+                _state.TryMarkIdle(cts);
+                return;
+            }
+
             try
             {
                 RunBuildCore(cts, index);
@@ -81,13 +81,12 @@ namespace KitveiHakodeshLib.Search
             bool buildSucceeded    = false;
             int  flushCount        = 0;
 
-            // On resume, existing segments are already searchable — mark ready immediately
-            // rather than waiting for the first progress tick to detect the first segment.
-            bool partialReadyPushed = resumeOffset > 0 && FtsIndexState.ValidateFtsIndex() == null;
-            if (partialReadyPushed)
-            {
-                _state.MarkReadyDirect();
-            }
+            // The NRT searcher is installed at the start of BuildIndex (before the first
+            // line is processed), so the index is searchable from line 1 — no need to
+            // wait for the first disk flush. Mark ready immediately so the frontend
+            // shows the search bar as soon as the build begins.
+            bool partialReadyPushed = true;
+            _state.MarkReadyDirect();
 
             var  segmentMarkers = new System.Collections.Generic.List<double>();
             double lastPct      = resumeOffset > 0 && totalLines > 0
@@ -96,7 +95,6 @@ namespace KitveiHakodeshLib.Search
 
             // Push an initial progress event so the frontend shows the correct
             // starting percentage immediately — before the first 5000-line tick.
-            if (partialReadyPushed)
             {
                 double initialPct = totalLines > 0
                     ? Math.Min(99.9, resumeOffset * 100.0 / totalLines)
@@ -112,15 +110,7 @@ namespace KitveiHakodeshLib.Search
                     {
                         long  totalIndexed = resumeOffset + sessionCount;
                         lastPct = Math.Min(99.9, totalIndexed * 100.0 / totalLines);
-
-                        // As soon as the first segment is flushed the index is searchable.
-                        if (!partialReadyPushed && FtsIndexState.ValidateFtsIndex() == null)
-                        {
-                            partialReadyPushed = true;
-                            _state.MarkReadyDirect();
-                        }
-
-                        PushProgress(partialReadyPushed, true, lastPct, (int)totalIndexed, (int)totalLines, "", segmentMarkers);
+                        PushProgress(true, true, lastPct, (int)totalIndexed, (int)totalLines, "", segmentMarkers);
                     }
                 }, onFlush: () =>
                 {
@@ -129,12 +119,6 @@ namespace KitveiHakodeshLib.Search
                     // exact percentage when the flush actually finished.
                     flushCount++;
                     segmentMarkers.Add(Math.Round(lastPct, 1));
-
-                    if (!partialReadyPushed && FtsIndexState.ValidateFtsIndex() == null)
-                    {
-                        partialReadyPushed = true;
-                        _state.MarkReadyDirect();
-                    }
                 }, ct: cts.Token);
 
                 // Only treat as a successful completed build if lines were actually
@@ -152,13 +136,18 @@ namespace KitveiHakodeshLib.Search
 
             if (!buildSucceeded)
             {
-                // Cancelled or exception: mark idle, push not-ready.
+                // Cancelled or exception: mark idle.
                 // WAL-recovery-only (ranToCompletion=false but no exception) is handled
                 // above by leaving buildSucceeded=false so we fall through here and
                 // keep the partial-ready state that was set mid-build.
                 bool wasPartiallyReady = partialReadyPushed;
                 _state.TryMarkIdle(cts);
-                if (!wasPartiallyReady)
+                // Only push a "not indexing" event when the build stopped on its own
+                // (exception, WAL-only run). When cancelled via StopAll (cts.IsCancellationRequested),
+                // the caller (ResetAndReindex) already pushed ftsIndexInvalidated and will
+                // start a new build — pushing isIndexing=false here would kill the overlay
+                // prematurely before the new build's first progress event arrives.
+                if (!cts.IsCancellationRequested && !wasPartiallyReady)
                     PushProgress(false, false, 0, 0, 0, "", null);
                 // If partial segments exist, leave the UI showing partial progress —
                 // the next OnDbReady will resume from the progress file.

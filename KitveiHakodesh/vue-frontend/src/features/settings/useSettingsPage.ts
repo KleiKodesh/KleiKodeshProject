@@ -43,6 +43,10 @@ export function useSettings() {
   async function resetSearchIndexAction() {
     await searchCache.clear()
     await bridgeResetSearchIndex()
+    // Navigate to the search page so the indexing overlay is visible while the
+    // index rebuilds. The search page mounts useFullTextSearchIndexingStatus which
+    // polls GetFtsIndexingProgress and subscribes to ftsIndexProgress events.
+    tabStore.updateActiveTab({ route: '/search', title: 'חיפוש' })
   }
 
   function resetSettings() {

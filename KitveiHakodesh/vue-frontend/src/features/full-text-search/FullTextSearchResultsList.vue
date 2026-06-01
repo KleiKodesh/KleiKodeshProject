@@ -16,6 +16,7 @@ const props = defineProps<{
   hasSearched: boolean
   searchError?: SearchFailReason | null
   dbNotFound?: boolean
+  isIndexingReady?: boolean
   initialScrollIndex?: number
   initialScrollOffset?: number
   zoom?: number
@@ -135,6 +136,7 @@ defineExpose({ captureScrollPos })
         {{ SEARCH_ERROR_MESSAGES[searchError] ?? SEARCH_ERROR_MESSAGES.searchFailed }}
       </span>
       <span v-else-if="hasSearched && !results.length" class="empty-msg">לא נמצאו תוצאות</span>
+      <span v-else-if="isIndexingReady === false" class="empty-msg">האינדקס בהכנה — אנא המתן</span>
     </div>
     <template v-else>
       <div class="results-count">

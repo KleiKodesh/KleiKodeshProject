@@ -370,6 +370,9 @@ namespace KitveiHakodeshLib.Search
         public void HandleResetFtsIndex(string id)
         {
             _bridge.Reply(id, new { });
+            // Notify the frontend immediately so any live listener (e.g. the search page)
+            // knows a rebuild is starting before the actor thread picks it up.
+            _bridge.PushEvent(new { @event = "ftsIndexInvalidated", reason = "manual reset" });
             string dbPath = _indexState.GetDbPath();
             if (!string.IsNullOrEmpty(dbPath) && File.Exists(dbPath))
                 ResetAndReindex(dbPath);

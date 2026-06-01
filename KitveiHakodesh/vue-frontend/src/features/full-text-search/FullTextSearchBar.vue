@@ -16,7 +16,6 @@ const props = defineProps<{
   atFilterCount: number
   isAdvancedOpen: boolean
   isAdvancedActive: boolean
-  disabled?: boolean
 }>()
 const emit = defineEmits<{
   search: [string]
@@ -107,7 +106,6 @@ defineExpose({ focus: () => inputRef.value?.focus(), filterBtnRef, advancedBtnRe
       name="full-text-search"
       class="search-input"
       :placeholder="placeholder"
-      :disabled="disabled"
       spellcheck="true"
       autocomplete="on"
       @keydown.enter="handleSearch"
@@ -116,7 +114,7 @@ defineExpose({ focus: () => inputRef.value?.focus(), filterBtnRef, advancedBtnRe
     <template #right>
       <button
         class="bar-btn"
-        :disabled="disabled || (!isSearching && !localQuery.trim())"
+        :disabled="!isSearching && !localQuery.trim()"
         :title="isSearching ? 'ביטול חיפוש' : 'חיפוש'"
         @click="isSearching ? $emit('cancel') : handleSearch()"
       >

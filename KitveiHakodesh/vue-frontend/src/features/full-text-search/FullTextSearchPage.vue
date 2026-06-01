@@ -247,6 +247,7 @@ onBeforeUnmount(() => {
       :has-searched="hasSearched"
       :search-error="searchError"
       :db-not-found="indexingState.dbNotFound"
+      :is-indexing-ready="indexingState.isReady"
       :initial-scroll-index="initialScrollIndex"
       :initial-scroll-offset="initialScrollOffset"
       :zoom="zoom"
@@ -274,6 +275,7 @@ onBeforeUnmount(() => {
     />
 
     <FullTextSearchBar
+      v-if="indexingState.isReady"
       ref="searchBarRef"
       v-model:search-query="searchQuery"
       :is-searching="isSearching"
