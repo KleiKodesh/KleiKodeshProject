@@ -29,6 +29,7 @@ export type TabRoute =
   | '/hebrew-calendar'
   | '/dictionary'
   | '/midot'
+  | '/file-search'
 
 export interface Tab {
   id: string
@@ -94,6 +95,7 @@ export const useTabStore = defineStore('tabs', () => {
     '/hebrew-calendar',
     '/dictionary',
     '/midot',
+    '/file-search',
   ]
   const SINGLETON_TITLES: Record<string, string> = {
     '/settings': 'הגדרות',
@@ -103,6 +105,7 @@ export const useTabStore = defineStore('tabs', () => {
     '/hebrew-calendar': 'לוח שנה',
     '/dictionary': 'מילון',
     '/midot': 'מידות ושיעורים',
+    '/file-search': 'חיפוש קבצים',
   }
 
   // ── Tab list persistence ──────────────────────────────────────────────────

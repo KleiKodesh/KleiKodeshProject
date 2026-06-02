@@ -1,6 +1,15 @@
+<script setup lang="ts">
+defineProps<{
+  text?: string
+}>()
+</script>
+
 <template>
   <div class="spinner-wrap">
-    <div class="dots"><span /><span /><span /></div>
+    <div class="spinner-content">
+      <div class="dots"><span /><span /><span /></div>
+      <div v-if="text" class="spinner-text">{{ text }}</div>
+    </div>
   </div>
 </template>
 
@@ -11,6 +20,14 @@
   justify-content: center;
   height: 100%;
   width: 100%;
+}
+
+.spinner-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
 }
 
 .dots {
@@ -32,6 +49,14 @@
 }
 .dots span:nth-child(3) {
   animation-delay: 0.4s;
+}
+
+.spinner-text {
+  font-size: 14px;
+  color: var(--text-primary);
+  font-weight: normal;
+  white-space: nowrap;
+  text-align: center;
 }
 
 @keyframes bounce {

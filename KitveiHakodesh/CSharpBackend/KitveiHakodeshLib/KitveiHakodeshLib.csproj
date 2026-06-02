@@ -169,6 +169,7 @@
     <Compile Include="Settings\AppSettings.cs" />
     <Compile Include="Dictionary\DictionaryHandler.cs" />
     <Compile Include="Dictionary\WordThesaurusProvider.cs" />
+    <Compile Include="FileSystemSearch\FileSystemSearchHandler.cs" />
     <Compile Include="Helpers\FontsProvider.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
@@ -191,6 +192,10 @@
     <ProjectReference Include="..\SearchEngine\SearchEngine\SearchEngine.csproj">
       <Project>{B1C2D3E4-0001-0000-0000-000000000001}</Project>
       <Name>SearchEngine</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Everything-Csharp\EverythingLib\EverythingLib.csproj">
+      <Project>{CD2D8822-F24B-4AA3-B41B-9242DC90D894}</Project>
+      <Name>EverythingLib</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

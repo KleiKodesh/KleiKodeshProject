@@ -19,6 +19,7 @@ export function useAppNavigation() {
     'לוח שנה': '/hebrew-calendar',
     מילון: '/dictionary',
     'מידות ושיעורים': '/midot',
+    'חיפוש קבצים': '/file-search',
   }
 
   // ── Shared side-effect actions ────────────────────────────────────────────

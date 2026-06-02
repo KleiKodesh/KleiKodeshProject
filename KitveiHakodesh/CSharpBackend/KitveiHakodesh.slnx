@@ -2,4 +2,5 @@
   <Project Path="KitveiHakodeshLib/KitveiHakodeshLib.csproj" Id="A1B2C3D4-E5F6-7890-ABCD-EF1234567890" />
   <Project Path="SearchEngine/SearchEngine/SearchEngine.csproj" Id="B1C2D3E4-0001-0000-0000-000000000001" />
   <Project Path="KitveiHakodeshDemoApp/KitveiHakodeshDemoApp.csproj" Id="2b6e5acb-2062-4281-aacb-c46681fcfe42" />
+  <Project Path="Everything-Csharp/EverythingLib/EverythingLib.csproj" Id="CD2D8822-F24B-4AA3-B41B-9242DC90D894" />
 </Solution>

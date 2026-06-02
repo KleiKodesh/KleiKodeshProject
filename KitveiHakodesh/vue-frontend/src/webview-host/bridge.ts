@@ -169,6 +169,32 @@ export function hbSearch(query: string): Promise<{ books?: unknown[]; error?: st
 }
 
 /**
+ * Notify C# that the file search page has loaded.
+ * C# replies immediately with { isReady: bool }.
+ * If isReady=false, C# launches Everything in the background and pushes
+ * fileSystemIndexingStatus { isIndexing: false } when ready.
+ */
+export function fileSystemSearchPageLoad(): Promise<{ isReady: boolean }> {
+  return action('fileSystemSearchPageLoad')
+}
+
+/**
+ * Search the file system using the Everything index.
+ * Results are restricted to MS Word and document formats (FilterToDocumentTypes = true).
+ * Returns up to `max` results (default 200).
+ */
+export function fileSystemSearch(
+  query: string,
+  max = 200,
+): Promise<{
+  results?: Array<{ fileName: string; path: string }>
+  total?: number
+  error?: string
+}> {
+  return action('fileSystemSearch', { query, max })
+}
+
+/**
  * Trigger a HebrewBooks PDF download to the cache, then open it.
  */
 export function triggerHbDownload(

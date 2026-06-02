@@ -12,6 +12,7 @@ import {
   IconBookLetter24Filled,
   IconRuler24Filled,
 } from '@iconify-prerendered/vue-fluent'
+import IconEverythingSearch from '@/components/IconEverythingSearch.vue'
 import { IconSettings24, IconSearchSparkle24 } from '@iconify-prerendered/vue-fluent-color'
 import { isHosted, dbReady } from '@/webview-host/seforimDb'
 import { useAppNavigation } from '@/composables/useAppNavigation'
@@ -32,8 +33,9 @@ const tiles = computed(() => {
     dbMissing
       ? { label: 'בחר מסד ספרים', icon: IconDatabase24Filled, color: '#3478f6' }
       : { label: 'חיפוש', icon: IconSearchSparkle24 },
-    { label: 'פתח קובץ', icon: IconFolder24Filled, color: '#f0a500' },
     { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#D94F1E' },
+    { label: 'פתח קובץ', icon: IconFolder24Filled, color: '#f0a500' },
+    { label: 'חיפוש קבצים', icon: IconEverythingSearch },
     { label: 'מילון', icon: IconBookLetter24Filled, color: '#7b5ea7' },
     { label: 'לוח שנה', icon: IconCalendarRtl24Filled, color: '#2e7d32' },
     { label: 'מידות ושיעורים', icon: IconRuler24Filled, color: '#8b6914' },

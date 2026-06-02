@@ -2,6 +2,7 @@ using KitveiHakodeshLib.Bridge;
 using KitveiHakodeshLib.Db;
 using KitveiHakodeshLib.Diagnostics;
 using KitveiHakodeshLib.Dictionary;
+using KitveiHakodeshLib.FileSystemSearch;
 using KitveiHakodeshLib.Helpers;
 using KitveiHakodeshLib.HebrewBooks;
 using KitveiHakodeshLib.LocalFile;
@@ -103,6 +104,7 @@ namespace KitveiHakodeshLib
         private SearchHandler _search;
         private DictionaryHandler _dictionary;
         private HebrewBooksDb _hebrewBooksDb;
+        private FileSystemSearchHandler _fileSystemSearch;
         private string _dbInjectionScriptId;
 
         private SplashOverlay _splash;
@@ -267,7 +269,7 @@ namespace KitveiHakodeshLib
             // Disable DevTools in production — users cannot open the inspector via
             // F12 or right-click. This also prevents accidental exposure of internals.
             // Remove this line (or set to true) during development if needed.
-            //settings.AreDevToolsEnabled = false;
+            settings.AreDevToolsEnabled = false;
 
             // Disable browser-specific accelerator keys (Ctrl+F, Ctrl+P, Ctrl+R, F5,
             // F12, etc.). The app intercepts the keys it needs (Ctrl+F, Ctrl+W, etc.)
@@ -304,6 +306,7 @@ namespace KitveiHakodeshLib
             _dictionary = new DictionaryHandler(AppDir);
             _hebrewBooksDb = HebrewBooksDb.Instance;
             _hebrewBooksDb.Initialize();
+            _fileSystemSearch = new FileSystemSearchHandler(_bridge);
             _db.OnDbPathPicked = path => _search.ResetAndReindex(path);
 
             _webView.CoreWebView2.WebMessageReceived += OnMessageReceived;
@@ -409,6 +412,8 @@ namespace KitveiHakodeshLib
                         case "getWordSynonyms": HandleGetWordSynonyms(root, id); break;
                         case "getFonts": HandleGetFonts(id); break;
                         case "getDiagnostics": HandleGetDiagnostics(id); break;
+                        case "fileSystemSearchPageLoad": _fileSystemSearch.HandlePageLoad(id); break;
+                        case "fileSystemSearch": _fileSystemSearch.HandleSearch(root, id); break;
                         default: _bridge.Reply(id, new { error = "Unknown action: " + action }); break;
                     }
                 }
