@@ -226,19 +226,22 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   }
 
   // Start the C# search stream and wire up listeners.
+  // cacheKey: the plain normalized query used as the IDB cache key.
+  // queryToSend: the (possibly wildcard/grammar-wrapped) query string sent to C#.
   // excludedLineIds: lineIds already in the frontend cache — C# skips snippet
   // generation for these, so only genuinely new results are streamed back.
   // backgroundRefresh: when true the stream appends to existing results rather than
   // replacing them, and isSearching stays true only until the stream completes.
   async function _startStream(
-    normalizedQuery: string,
+    cacheKey: string,
+    queryToSend: string,
     excludedLineIds: number[],
     backgroundRefresh = false,
   ): Promise<void> {
     ensureWebviewListener()
     const reply = await callBridgeAction<{ searchId: string; failReason: SearchFailReason | null }>(
       'FtsSearchStart',
-      normalizedQuery,
+      queryToSend,
       excludedLineIds,
       settings.searchMaxWordDistance,
       settings.searchRequireOrdered,
@@ -280,7 +283,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
           results.value = [...results.value, ...batch]
         }
         try {
-          await cache.appendBatch(normalizedQuery, JSON.parse(JSON.stringify(batch)))
+          await cache.appendBatch(cacheKey, JSON.parse(JSON.stringify(batch)))
         } catch {
           /* non-fatal — cache is best-effort */
         }
@@ -289,7 +292,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         if (currentSearchId !== searchId) return
         isSearching.value = false
         try {
-          await cache.markComplete(normalizedQuery, !(isIndexing?.()))
+          await cache.markComplete(cacheKey, !(isIndexing?.()))
         } catch {
           /* non-fatal */
         }
@@ -375,7 +378,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         // Was cached during indexing but index is now complete — refresh the full set
         results.value = []
         await cache.init(normalizedQuery, true)
-        await _startStream(queryToSend, [], false)
+        await _startStream(normalizedQuery, queryToSend, [], false)
         return
       }
 
@@ -384,7 +387,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         // Do NOT wipe the cache — keep the existing entry and append only new items to it
         // so the full merged set is available next time.
         const excludedIds = cached.results.map((r) => r.lineId)
-        _startStream(queryToSend, excludedIds, true).catch((err) => {
+        _startStream(normalizedQuery, queryToSend, excludedIds, true).catch((err) => {
           console.error('[useFullTextSearch] background refresh failed:', err)
           isSearching.value = false
         })
@@ -394,7 +397,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       // Incomplete entry — resume the stream, skipping lines already cached.
       // Keep the existing cache entry and append only new items to it.
       const excludedIds = cached.results.map((r) => r.lineId)
-      await _startStream(queryToSend, excludedIds, false)
+      await _startStream(normalizedQuery, queryToSend, excludedIds, false)
       return
     }
 
@@ -403,7 +406,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     isSearching.value = true
     try {
       await cache.init(normalizedQuery, !indexingNow)
-      await _startStream(queryToSend, [], false)
+      await _startStream(normalizedQuery, queryToSend, [], false)
     } catch (err) {
       console.error('[useFullTextSearch] failed to start search:', err)
       isSearching.value = false
@@ -428,7 +431,8 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     if (!cached.complete) {
       isSearching.value = true
       const excludedIds = cached.results.map((r) => r.lineId)
-      _startStream(normalizedQuery, excludedIds, false).catch((err) => {
+      const queryToSend = _buildQueryToSend(normalizedQuery)
+      _startStream(normalizedQuery, queryToSend, excludedIds, false).catch((err) => {
         console.error('[useFullTextSearch] failed to resume stream after tab restore:', err)
         isSearching.value = false
       })

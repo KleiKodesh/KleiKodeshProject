@@ -103,6 +103,7 @@ namespace KitveiHakodeshLib
         private HebrewBooksCsvUpdater _hbCsvUpdater;
         private SearchHandler _search;
         private DictionaryHandler _dictionary;
+        private HebrewBooksDb _hebrewBooksDb;
         private string _dbInjectionScriptId;
 
         private SplashOverlay _splash;
@@ -303,6 +304,8 @@ namespace KitveiHakodeshLib
             _hbCsvUpdater = new HebrewBooksCsvUpdater();
             _search = new SearchHandler(_bridge, _webView);
             _dictionary = new DictionaryHandler(AppDir);
+            _hebrewBooksDb = HebrewBooksDb.Instance;
+            _hebrewBooksDb.Initialize();
             _db.OnDbPathPicked = path => _search.ResetAndReindex(path);
 
             _webView.CoreWebView2.WebMessageReceived += OnMessageReceived;
@@ -397,6 +400,8 @@ namespace KitveiHakodeshLib
                         case "restoreHbPdf": _hb.HandleRestoreHbPdf(root, id); break;
                         case "triggerHbDownload": _hb.HandleTriggerHbDownload(root, id); break;
                         case "triggerHbSaveAs": _hb.HandleTriggerHbSaveAs(root, id); break;
+                        case "hbSearch": HandleHebrewBooksSearch(root, id); break;
+                        case "hbGetAll": HandleHebrewBooksGetAll(root, id); break;
                         case "GetFtsIndexingProgress": _search.HandleGetProgress(id); break;
                         case "FtsSearchStart": _search.HandleSearchStart(root, id); break;
                         case "FtsSearchCancel": _search.HandleSearchCancel(root, id); break;
@@ -506,6 +511,45 @@ namespace KitveiHakodeshLib
         {
             var report = EnvironmentDiagnostics.Collect();
             _bridge.Reply(id, new { diagnostics = report });
+        }
+
+        private void HandleHebrewBooksSearch(JsonElement root, string id)
+        {
+            if (!_hebrewBooksDb.IsInitialized)
+            {
+                _bridge.Reply(id, new { error = "Hebrew Books database not available" });
+                return;
+            }
+
+            string query = root.TryGetProperty("query", out var q) ? q.GetString() : "";
+            try
+            {
+                var results = _hebrewBooksDb.Search(query);
+                _bridge.Reply(id, new { books = results });
+            }
+            catch (Exception ex)
+            {
+                _bridge.Reply(id, new { error = ex.Message });
+            }
+        }
+
+        private void HandleHebrewBooksGetAll(JsonElement root, string id)
+        {
+            if (!_hebrewBooksDb.IsInitialized)
+            {
+                _bridge.Reply(id, new { error = "Hebrew Books database not available" });
+                return;
+            }
+
+            try
+            {
+                var books = _hebrewBooksDb.GetAllBooks();
+                _bridge.Reply(id, new { books });
+            }
+            catch (Exception ex)
+            {
+                _bridge.Reply(id, new { error = ex.Message });
+            }
         }
 
         /// <summary>
