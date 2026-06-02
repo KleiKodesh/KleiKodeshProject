@@ -160,6 +160,7 @@
     <Compile Include="Db\DbHandler.cs" />
     <Compile Include="HebrewBooks\HebrewBooksHandler.cs" />
     <Compile Include="HebrewBooks\HebrewBooksCsvUpdater.cs" />
+    <Compile Include="HebrewBooks\HebrewBooksDb.cs" />
     <Compile Include="Pdf\LocalFileHandler.cs" />
     <Compile Include="Pdf\WordToPdfConverter.cs" />
     <Compile Include="Search\FtsIndexState.cs" />
@@ -181,6 +182,11 @@
       <Link>KitveiHakodesh.png</Link>
       <LogicalName>KitveiHakodesh.png</LogicalName>
     </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Resources\HebrewBooks.db">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\SearchEngine\SearchEngine\SearchEngine.csproj">

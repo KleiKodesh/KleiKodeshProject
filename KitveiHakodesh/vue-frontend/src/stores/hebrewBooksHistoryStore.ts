@@ -2,6 +2,10 @@
  * HebrewBooks download history store.
  * Owns the app-hb-history IDB database entirely — type, schema, open, read, write.
  * No other file may access this database.
+ *
+ * The full history (max 25 entries) is kept in memory after the first IDB read.
+ * All subsequent reads are synchronous from the in-memory cache.
+ * IDB is only touched on the initial load and on every write.
  */
 import { defineStore } from 'pinia'
 import type { HebrewBook } from '@/features/hebrewbooks/hebrewBooksCatalog'
@@ -36,7 +40,7 @@ function openDb(): Promise<IDBDatabase> {
   })
 }
 
-async function idbGetHistory(): Promise<HbHistoryEntry[]> {
+async function idbLoadAll(): Promise<HbHistoryEntry[]> {
   const db = await openDb()
   return new Promise((resolve, reject) => {
     const req = db.transaction('history', 'readonly').objectStore('history').getAll()
@@ -46,7 +50,7 @@ async function idbGetHistory(): Promise<HbHistoryEntry[]> {
   })
 }
 
-async function idbTrackAccess(entry: HbHistoryEntry): Promise<void> {
+async function idbPut(entry: HbHistoryEntry): Promise<void> {
   const db = await openDb()
   const tx = db.transaction('history', 'readwrite')
   const store = tx.objectStore('history')
@@ -76,16 +80,53 @@ export function dropHbHistoryDb(): Promise<void> {
   })
 }
 
+// ── In-memory cache ───────────────────────────────────────────────────────────
+// Sorted newest-first. null means not yet loaded from IDB.
+// Max 25 entries — safe to keep entirely in memory for the app lifetime.
+
+let _cache: HbHistoryEntry[] | null = null
+let _loadPromise: Promise<HbHistoryEntry[]> | null = null
+
+function ensureLoaded(): Promise<HbHistoryEntry[]> {
+  if (_cache !== null) return Promise.resolve(_cache)
+  if (_loadPromise) return _loadPromise
+  _loadPromise = idbLoadAll().then((entries) => {
+    _cache = entries
+    _loadPromise = null
+    return entries
+  })
+  return _loadPromise
+}
+
 // ── Store ─────────────────────────────────────────────────────────────────────
 
 export const useHebrewBooksHistoryStore = defineStore('hebrewBooksHistory', () => {
+  /**
+   * Returns the history sorted newest-first.
+   * Synchronous from memory after the first call; one IDB read on first call.
+   */
   function getHistory(): Promise<HebrewBook[]> {
-    return idbGetHistory() as Promise<HebrewBook[]>
+    return ensureLoaded() as Promise<HebrewBook[]>
   }
 
+  /**
+   * Record an access. Updates the in-memory cache immediately, then writes to IDB.
+   */
   function trackAccess(book: HebrewBook): Promise<void> {
     const entry: HbHistoryEntry = { ...book, lastAccessed: Date.now() }
-    return idbTrackAccess(entry)
+
+    // Update cache immediately so the next getHistory() call is already correct
+    if (_cache !== null) {
+      // Remove existing entry for this book (if any) then prepend the updated one
+      _cache = [entry, ..._cache.filter((e) => e.id !== book.id)]
+      // Trim to cap
+      if (_cache.length > HB_HISTORY_MAX) {
+        _cache = _cache.slice(0, HB_HISTORY_MAX)
+      }
+    }
+
+    // Fire-and-forget IDB write — the cache is already correct
+    return idbPut(entry)
   }
 
   return { getHistory, trackAccess }

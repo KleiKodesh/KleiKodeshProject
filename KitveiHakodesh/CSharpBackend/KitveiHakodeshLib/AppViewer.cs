@@ -268,7 +268,7 @@ namespace KitveiHakodeshLib
             // Disable DevTools in production — users cannot open the inspector via
             // F12 or right-click. This also prevents accidental exposure of internals.
             // Remove this line (or set to true) during development if needed.
-            settings.AreDevToolsEnabled = false;
+            //settings.AreDevToolsEnabled = false;
 
             // Disable browser-specific accelerator keys (Ctrl+F, Ctrl+P, Ctrl+R, F5,
             // F12, etc.). The app intercepts the keys it needs (Ctrl+F, Ctrl+W, etc.)
@@ -515,26 +515,34 @@ namespace KitveiHakodeshLib
 
         private void HandleHebrewBooksSearch(JsonElement root, string id)
         {
+            System.Diagnostics.Debug.WriteLine("[AppViewer] hbSearch received. IsInitialized=" + _hebrewBooksDb.IsInitialized);
+
             if (!_hebrewBooksDb.IsInitialized)
             {
                 _bridge.Reply(id, new { error = "Hebrew Books database not available" });
                 return;
             }
 
-            string query = root.TryGetProperty("query", out var q) ? q.GetString() : "";
+            string query = root.TryGetProperty("query", out var q) ? (q.GetString() ?? "") : "";
+            System.Diagnostics.Debug.WriteLine("[AppViewer] hbSearch query: '" + query + "'");
+
             try
             {
                 var results = _hebrewBooksDb.Search(query);
+                System.Diagnostics.Debug.WriteLine("[AppViewer] hbSearch returning " + results.Count + " results");
                 _bridge.Reply(id, new { books = results });
             }
             catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine("[AppViewer] hbSearch error: " + ex.Message);
                 _bridge.Reply(id, new { error = ex.Message });
             }
         }
 
         private void HandleHebrewBooksGetAll(JsonElement root, string id)
         {
+            System.Diagnostics.Debug.WriteLine("[AppViewer] hbGetAll received. IsInitialized=" + _hebrewBooksDb.IsInitialized);
+
             if (!_hebrewBooksDb.IsInitialized)
             {
                 _bridge.Reply(id, new { error = "Hebrew Books database not available" });
@@ -544,10 +552,12 @@ namespace KitveiHakodeshLib
             try
             {
                 var books = _hebrewBooksDb.GetAllBooks();
+                System.Diagnostics.Debug.WriteLine("[AppViewer] hbGetAll returning " + books.Count + " books");
                 _bridge.Reply(id, new { books });
             }
             catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine("[AppViewer] hbGetAll error: " + ex.Message);
                 _bridge.Reply(id, new { error = ex.Message });
             }
         }

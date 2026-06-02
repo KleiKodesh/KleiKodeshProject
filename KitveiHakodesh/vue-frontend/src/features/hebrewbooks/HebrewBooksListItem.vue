@@ -10,7 +10,7 @@ const emit = defineEmits<{
 }>()
 
 const tags = computed(() =>
-  (props.book._csvTags || '')
+  (props.book.categories || '')
     .split(';')
     .map((t: string) => t.trim())
     .filter(Boolean),

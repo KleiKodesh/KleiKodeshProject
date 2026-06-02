@@ -5,6 +5,7 @@ import { loadHbCatalog, searchHbCatalog, getHbPdfUrl, type HebrewBook } from './
 import { useLocalFileStore } from '@/stores/localFileStore'
 import { useTabStore } from '@/stores/tabStore'
 import { isHosted } from '@/webview-host/seforimDb'
+import { triggerHbDownload, triggerHbSaveAs } from '@/webview-host/bridge'
 
 export function useHebrewBooks() {
   const localFileStore = useLocalFileStore()
@@ -35,13 +36,14 @@ export function useHebrewBooks() {
     }
   }
 
-  const runSearch = useDebounceFn((term: string) => {
+  const runSearch = useDebounceFn(async (term: string) => {
     if (!term.trim()) {
       history.getHistory().then((h) => {
         books.value = h
       })
     } else {
-      books.value = searchHbCatalog(catalog.value, term)
+      const results = await searchHbCatalog(catalog.value, term)
+      books.value = results
     }
   }, 200)
 
@@ -74,21 +76,12 @@ export function useHebrewBooks() {
     trackAccess(book)
     const tabId = useTabStore().activeTabId
     localFileStore.startHbDownload(book.title, tabId)
-    window.__webviewAction?.('triggerHbDownload', {
-      bookId: book.id,
-      bookTitle: book.title,
-      url: getHbPdfUrl(book.id),
-      tabId,
-    })
+    triggerHbDownload(String(book.id), book.title, getHbPdfUrl(book.id), tabId).catch(() => {})
   }
 
   function downloadBook(book: HebrewBook) {
     if (!isHosted) return
-    window.__webviewAction?.('triggerHbSaveAs', {
-      bookId: book.id,
-      bookTitle: book.title,
-      url: getHbPdfUrl(book.id),
-    })
+    triggerHbSaveAs(String(book.id), book.title, getHbPdfUrl(book.id)).catch(() => {})
   }
 
   const displayedBooks = computed(() => {

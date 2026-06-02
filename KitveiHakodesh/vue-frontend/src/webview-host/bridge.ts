@@ -159,3 +159,42 @@ export async function toggleFullscreen(): Promise<void> {
   if (!isHosted) return
   await action('toggleFullscreen').catch(() => {})
 }
+
+/**
+ * Search the Hebrew Books catalog via the C# database backend.
+ * Returns books as plain objects — caller casts to HebrewBook[].
+ */
+export function hbSearch(query: string): Promise<{ books?: unknown[]; error?: string }> {
+  return action<{ books?: unknown[]; error?: string }>('hbSearch', { query })
+}
+
+/**
+ * Load the full Hebrew Books catalog from the C# database backend.
+ * Returns books as plain objects — caller casts to HebrewBook[].
+ */
+export function hbGetAll(): Promise<{ books?: unknown[]; error?: string }> {
+  return action<{ books?: unknown[]; error?: string }>('hbGetAll')
+}
+
+/**
+ * Trigger a HebrewBooks PDF download to the cache, then open it.
+ */
+export function triggerHbDownload(
+  bookId: string,
+  bookTitle: string,
+  url: string,
+  tabId: string,
+): Promise<{ ok?: boolean }> {
+  return action<{ ok?: boolean }>('triggerHbDownload', { bookId, bookTitle, url, tabId })
+}
+
+/**
+ * Trigger a HebrewBooks PDF Save As dialog.
+ */
+export function triggerHbSaveAs(
+  bookId: string,
+  bookTitle: string,
+  url: string,
+): Promise<{ ok?: boolean }> {
+  return action<{ ok?: boolean }>('triggerHbSaveAs', { bookId, bookTitle, url })
+}

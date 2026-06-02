@@ -3,14 +3,13 @@ using System.Collections.Generic;
 using System.Data.SQLite;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Text.Json.Serialization;
 using Dapper;
 
 namespace KitveiHakodeshLib.HebrewBooks
 {
     /// <summary>
-    /// Hebrew book database model for JSON serialization.
+    /// Hebrew book database model for JSON serialization back to the Vue frontend.
     /// </summary>
     public class HebrewBookInfo
     {
@@ -37,12 +36,44 @@ namespace KitveiHakodeshLib.HebrewBooks
     }
 
     /// <summary>
+    /// Internal Dapper row type — matches the hebrewBooks table columns exactly.
+    /// Named to match the SQLite column names so Dapper maps them without dynamic.
+    /// </summary>
+    internal class HbRow
+    {
+        public int id { get; set; }
+        public string title { get; set; }
+        public string author { get; set; }
+        public string placeOfPublication { get; set; }
+        public string year { get; set; }
+        public int? pageCount { get; set; }
+        public string categories { get; set; }
+
+        public HebrewBookInfo ToInfo()
+        {
+            return new HebrewBookInfo
+            {
+                Id = id,
+                Title = title ?? "",
+                Author = author ?? "",
+                PrintingPlace = placeOfPublication ?? "",
+                PrintingYear = year ?? "",
+                Pages = pageCount,
+                Categories = categories ?? "",
+            };
+        }
+    }
+
+    /// <summary>
     /// Provides search and retrieval operations on the Hebrew Books SQLite database.
-    /// Maintains a single shared connection for the lifetime of the app.
+    /// The database is deployed as a content file (Resources/HebrewBooks.db) and opened read-only.
+    /// A single shared connection is maintained for the lifetime of the app.
     /// </summary>
     public class HebrewBooksDb
     {
-        private static readonly Lazy<HebrewBooksDb> _instance = new Lazy<HebrewBooksDb>(() => new HebrewBooksDb());
+        private static readonly Lazy<HebrewBooksDb> _instance =
+            new Lazy<HebrewBooksDb>(() => new HebrewBooksDb());
+
         public static HebrewBooksDb Instance => _instance.Value;
 
         private readonly string _dbPath;
@@ -51,9 +82,12 @@ namespace KitveiHakodeshLib.HebrewBooks
 
         private HebrewBooksDb()
         {
-            // Database lives in the bin folder alongside the Vue dist
-            string binPath = AppDomain.CurrentDomain.BaseDirectory;
-            _dbPath = Path.Combine(binPath, "KitveiHakodesh", "HebrewBooks.db");
+            // BaseDirectory ends with a backslash, so use it directly.
+            _dbPath = Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory,
+                "Resources",
+                "HebrewBooks.db");
+            Log("DB path resolved to: " + _dbPath);
         }
 
         public void Initialize()
@@ -64,15 +98,31 @@ namespace KitveiHakodeshLib.HebrewBooks
             {
                 if (_initialized) return;
 
+                Log("Initializing — looking for DB at: " + _dbPath);
+                Log("File exists: " + File.Exists(_dbPath));
+
                 if (!File.Exists(_dbPath))
                 {
-                    Log($"Hebrew Books database not found at {_dbPath}");
+                    // List what IS in the Resources folder to help diagnose path problems
+                    string resourcesDir = Path.GetDirectoryName(_dbPath);
+                    if (Directory.Exists(resourcesDir))
+                    {
+                        Log("Resources folder exists. Contents: " + string.Join(", ", Directory.GetFiles(resourcesDir)));
+                    }
+                    else
+                    {
+                        Log("Resources folder does not exist: " + resourcesDir);
+                        // Show parent folder contents
+                        string parent = Path.GetDirectoryName(resourcesDir);
+                        if (Directory.Exists(parent))
+                            Log("Parent folder contents: " + string.Join(", ", Directory.GetFiles(parent)));
+                    }
                     return;
                 }
 
                 try
                 {
-                    var connectionString = new SQLiteConnectionStringBuilder
+                    string cs = new SQLiteConnectionStringBuilder
                     {
                         DataSource = _dbPath,
                         Version = 3,
@@ -80,245 +130,155 @@ namespace KitveiHakodeshLib.HebrewBooks
                         ReadOnly = true,
                     }.ConnectionString;
 
-                    _connection = new SQLiteConnection(connectionString);
+                    _connection = new SQLiteConnection(cs);
                     _connection.Open();
-                    Log($"Opened Hebrew Books database: {_dbPath}");
+                    Log("Opened Hebrew Books database: " + _dbPath);
+
+                    // Verify the table exists and log the row count
+                    using (var cmd = _connection.CreateCommand())
+                    {
+                        cmd.CommandText = "SELECT COUNT(*) FROM hebrewBooks";
+                        var count = cmd.ExecuteScalar();
+                        Log("hebrewBooks row count: " + count);
+                    }
+
                     _initialized = true;
                 }
                 catch (Exception ex)
                 {
-                    Log($"Failed to initialize Hebrew Books database: {ex.Message}");
+                    Log("Failed to initialize Hebrew Books database: " + ex.Message);
                 }
             }
         }
 
-        public bool IsInitialized => _initialized && _connection != null;
+        public bool IsInitialized
+        {
+            get { return _initialized && _connection != null; }
+        }
+
+        private const string SelectColumns = @"
+            SELECT id, title, author, placeOfPublication, year, pageCount, categories
+            FROM hebrewBooks";
 
         /// <summary>
-        /// Search the Hebrew Books database by query term.
-        /// Matches query words against title, author, and categories using normalized text.
+        /// Search for books whose title, author, or categories contain all of the query words.
+        /// Matching mirrors the in-memory logic used by the Vue CSV path:
+        ///   - text is normalised (diacritics stripped, lowercased)
+        ///   - every query word must appear as a whole-word match OR as a substring of a word
         /// Returns results sorted by title.
         /// </summary>
         public List<HebrewBookInfo> Search(string query)
         {
+            Log("Search called. IsInitialized=" + IsInitialized + " query='" + query + "'");
             if (!IsInitialized) return new List<HebrewBookInfo>();
-
             if (string.IsNullOrWhiteSpace(query)) return new List<HebrewBookInfo>();
 
-            // Parse query into words
-            var words = NormalizeText(query)
-                .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
-                .Where(w => w.Length > 0)
-                .ToList();
+            string[] words = NormalizeText(query)
+                .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
 
-            if (words.Count == 0) return new List<HebrewBookInfo>();
+            Log("Normalized words: [" + string.Join(", ", words) + "]");
+            if (words.Length == 0) return new List<HebrewBookInfo>();
 
             try
             {
-                // Build WHERE clause that matches all words
-                // Each word must be found in (normalized title + author + categories)
-                var results = new List<HebrewBookInfo>();
-
+                List<HbRow> rows;
                 lock (_connection)
                 {
-                    var sql = @"
-                        SELECT 
-                            id, 
-                            title, 
-                            author, 
-                            placeOfPublication, 
-                            printingYear, 
-                            pageCount, 
-                            categories
-                        FROM hebrewBooks
-                        ORDER BY title
-                    ";
-
-                    var books = _connection.Query<dynamic>(sql).ToList();
-
-                    foreach (var book in books)
-                    {
-                        string id = book.id?.ToString() ?? "";
-                        string title = book.title ?? "";
-                        string author = book.author ?? "";
-                        string categories = book.categories ?? "";
-
-                        // Normalize search text
-                        string searchText = $"{NormalizeText(title)} {NormalizeText(author)} {NormalizeText(categories)}";
-                        var searchWords = searchText.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-
-                        // Check if all query words are found in search text
-                        if (words.All(qw => searchWords.Any(sw => sw == qw || sw.Contains(qw))))
-                        {
-                            results.Add(new HebrewBookInfo
-                            {
-                                Id = int.TryParse(id, out int bookId) ? bookId : 0,
-                                Title = title,
-                                Author = author,
-                                PrintingPlace = book.placeOfPublication ?? "",
-                                PrintingYear = book.printingYear ?? "",
-                                Pages = book.pageCount != null ? Convert.ToInt32(book.pageCount) : (int?)null,
-                                Categories = categories,
-                            });
-                        }
-                    }
+                    rows = _connection.Query<HbRow>(SelectColumns + " ORDER BY title").ToList();
                 }
 
+                Log("Total rows fetched for search: " + rows.Count);
+
+                var results = new List<HebrewBookInfo>();
+                foreach (HbRow row in rows)
+                {
+                    string searchText = NormalizeText(row.title) + " "
+                                      + NormalizeText(row.author) + " "
+                                      + NormalizeText(row.categories);
+
+                    string[] searchWords = searchText
+                        .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+
+                    bool allMatch = true;
+                    foreach (string qw in words)
+                    {
+                        bool found = false;
+                        foreach (string sw in searchWords)
+                        {
+                            if (sw == qw || sw.Contains(qw)) { found = true; break; }
+                        }
+                        if (!found) { allMatch = false; break; }
+                    }
+
+                    if (allMatch)
+                        results.Add(row.ToInfo());
+                }
+
+                Log("Search results: " + results.Count);
                 return results;
             }
             catch (Exception ex)
             {
-                Log($"Error searching Hebrew Books: {ex.Message}");
+                Log("Error searching Hebrew Books: " + ex.Message);
                 return new List<HebrewBookInfo>();
             }
         }
 
         /// <summary>
-        /// Get all books in the database (used for initial full catalog load).
-        /// Returns all books sorted by title.
+        /// Return every book in the database, sorted by title.
+        /// Used for the initial catalog load in the hosted app.
         /// </summary>
         public List<HebrewBookInfo> GetAllBooks()
         {
+            Log("GetAllBooks called. IsInitialized=" + IsInitialized);
             if (!IsInitialized) return new List<HebrewBookInfo>();
 
             try
             {
-                var results = new List<HebrewBookInfo>();
-
+                List<HbRow> rows;
                 lock (_connection)
                 {
-                    var sql = @"
-                        SELECT 
-                            id, 
-                            title, 
-                            author, 
-                            placeOfPublication, 
-                            printingYear, 
-                            pageCount, 
-                            categories
-                        FROM hebrewBooks
-                        ORDER BY title
-                    ";
-
-                    var books = _connection.Query<dynamic>(sql).ToList();
-
-                    foreach (var book in books)
-                    {
-                        string id = book.id?.ToString() ?? "";
-                        results.Add(new HebrewBookInfo
-                        {
-                            Id = int.TryParse(id, out int bookId) ? bookId : 0,
-                            Title = book.title ?? "",
-                            Author = book.author ?? "",
-                            PrintingPlace = book.placeOfPublication ?? "",
-                            PrintingYear = book.printingYear ?? "",
-                            Pages = book.pageCount != null ? Convert.ToInt32(book.pageCount) : (int?)null,
-                            Categories = book.categories ?? "",
-                        });
-                    }
+                    rows = _connection.Query<HbRow>(SelectColumns + " ORDER BY title").ToList();
                 }
+
+                Log("GetAllBooks returned " + rows.Count + " rows");
+
+                var results = new List<HebrewBookInfo>(rows.Count);
+                foreach (HbRow row in rows)
+                    results.Add(row.ToInfo());
 
                 return results;
             }
             catch (Exception ex)
             {
-                Log($"Error fetching all Hebrew books: {ex.Message}");
+                Log("Error fetching all Hebrew books: " + ex.Message);
                 return new List<HebrewBookInfo>();
             }
         }
 
         /// <summary>
-        /// Get a single book by ID.
-        /// </summary>
-        public HebrewBookInfo GetBookById(int bookId)
-        {
-            if (!IsInitialized) return null;
-
-            try
-            {
-                lock (_connection)
-                {
-                    var sql = @"
-                        SELECT 
-                            id, 
-                            title, 
-                            author, 
-                            placeOfPublication, 
-                            printingYear, 
-                            pageCount, 
-                            categories
-                        FROM hebrewBooks
-                        WHERE id = @id
-                    ";
-
-                    var book = _connection.QueryFirstOrDefault<dynamic>(sql, new { id = bookId });
-
-                    if (book == null) return null;
-
-                    return new HebrewBookInfo
-                    {
-                        Id = bookId,
-                        Title = book.title ?? "",
-                        Author = book.author ?? "",
-                        PrintingPlace = book.placeOfPublication ?? "",
-                        PrintingYear = book.printingYear ?? "",
-                        Pages = book.pageCount != null ? Convert.ToInt32(book.pageCount) : (int?)null,
-                        Categories = book.categories ?? "",
-                    };
-                }
-            }
-            catch (Exception ex)
-            {
-                Log($"Error fetching book {bookId}: {ex.Message}");
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// Get the total count of books in the database.
-        /// </summary>
-        public int GetBookCount()
-        {
-            if (!IsInitialized) return 0;
-
-            try
-            {
-                lock (_connection)
-                {
-                    var sql = "SELECT COUNT(*) FROM hebrewBooks";
-                    return _connection.QueryFirstOrDefault<int>(sql);
-                }
-            }
-            catch (Exception ex)
-            {
-                Log($"Error getting book count: {ex.Message}");
-                return 0;
-            }
-        }
-
-        /// <summary>
-        /// Normalize Hebrew text for search matching.
-        /// Strips diacritics and converts to lowercase for comparison.
+        /// Normalise Hebrew text for search comparison.
+        /// Strips nikudot (vowel points) and lowercases — mirrors the Vue normalizeText util.
         /// </summary>
         private static string NormalizeText(string text)
         {
             if (string.IsNullOrEmpty(text)) return "";
 
-            // Lowercase
             text = text.ToLowerInvariant();
 
-            // Simple normalization: strip common Hebrew diacritics
-            // Removing vowels (Nikudot) for matching variants
-            char[] toRemove = new[] { '\u05B0', '\u05B1', '\u05B2', '\u05B3', '\u05B4', '\u05B5', '\u05B6', '\u05B7', '\u05B8', '\u05B9', '\u05BC', '\u05BD', '\u05BF', '\u05C1', '\u05C2' };
-            foreach (char c in toRemove)
+            // Strip Hebrew nikudot (U+05B0–U+05C2 range used for vowel points and cantillation)
+            var sb = new System.Text.StringBuilder(text.Length);
+            foreach (char c in text)
             {
-                text = text.Replace(c.ToString(), "");
+                if (c >= '\u05B0' && c <= '\u05C2') continue;
+                sb.Append(c);
             }
 
-            return text.Trim();
+            return sb.ToString().Trim();
         }
 
-        private static void Log(string msg) => System.Diagnostics.Debug.WriteLine("[HebrewBooksDb] " + msg);
+        private static void Log(string msg) =>
+            System.Diagnostics.Debug.WriteLine("[HebrewBooksDb] " + msg);
 
         public void Dispose()
         {
