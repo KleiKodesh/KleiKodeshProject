@@ -33,11 +33,13 @@ async function onOpenFile(item: FileSearchResult) {
   openingFile.value = true
 
   try {
-    // Determine route from extension: HTML opens in html-view, everything else in pdf-view.
-    // (Word files are converted to PDF by C# via the pickFile / restoreLocalFile path;
-    //  here we open the file directly by asking C# to register a virtual host for it.)
+    // Determine route from extension: HTML and plain-text files open in html-view (iframe),
+    // everything else in pdf-view. Word files are converted to PDF by C# via the
+    // pickFile / restoreLocalFile path; here we open the file directly by asking C# to
+    // register a virtual host for it.
     const extension = item.fileName.substring(item.fileName.lastIndexOf('.')).toLowerCase()
-    const route = extension === '.htm' || extension === '.html' ? '/html-view' : '/pdf-view'
+    const isHtmlLike = extension === '.htm' || extension === '.html' || extension === '.txt'
+    const route = isHtmlLike ? '/html-view' : '/pdf-view'
 
     const result = await (
       window as Window & {
@@ -51,8 +53,10 @@ async function onOpenFile(item: FileSearchResult) {
       // Fall back to native file picker so C# can handle Word conversion etc.
       const picked = await pickLocalFile()
       if (!picked) return
+      const pickedExt = picked.fileName.substring(picked.fileName.lastIndexOf('.')).toLowerCase()
+      const pickedIsHtmlLike = pickedExt === '.htm' || pickedExt === '.html' || pickedExt === '.txt'
       tabStore.updateActiveTab({
-        route: picked.fileName.toLowerCase().endsWith('.html') ? '/html-view' : '/pdf-view',
+        route: pickedIsHtmlLike ? '/html-view' : '/pdf-view',
         title: picked.fileName,
         localFileName: picked.fileName,
         localFilePath: picked.filePath,
@@ -107,6 +111,14 @@ async function onOpenFile(item: FileSearchResult) {
           :is-indexing="isIndexing"
           @open-file="onOpenFile"
         />
+
+        <!-- Opening overlay — shown immediately on click so the user knows something is happening -->
+        <div v-if="openingFile" class="opening-overlay">
+          <div class="opening-card">
+            <div class="opening-spinner" />
+            <span class="opening-label">פותח קובץ…</span>
+          </div>
+        </div>
 
         <!-- Truncation notice -->
         <div v-if="totalCount > results.length" class="truncation-notice">
@@ -186,10 +198,7 @@ async function onOpenFile(item: FileSearchResult) {
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
-.opening-banner {
-  background: #e3f2fd;
-  color: #1976d2;
-}
+
 .error-banner {
   color: #ff3b30;
   background: color-mix(in srgb, #ff3b30 8%, transparent);
@@ -232,6 +241,43 @@ async function onOpenFile(item: FileSearchResult) {
   color: var(--text-secondary);
   opacity: 0.25;
   font-weight: 500;
+}
+
+/* Opening overlay */
+.opening-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg-primary) 80%, transparent);
+  backdrop-filter: blur(2px);
+  z-index: 10;
+}
+.opening-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 28px 40px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+}
+.opening-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--text-secondary);
+  border-radius: 50%;
+  animation: opening-spin 0.7s linear infinite;
+}
+@keyframes opening-spin {
+  to { transform: rotate(360deg); }
+}
+.opening-label {
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 
 /* Truncation notice */

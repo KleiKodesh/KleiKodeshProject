@@ -1,14 +1,17 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows.Forms;
 using Word = Microsoft.Office.Interop.Word;
 
 namespace KitveiHakodeshLib.Pdf
 {
+    /// <summary>
+    /// Converts Word documents (.doc, .docx, .rtf) to PDF using the Microsoft Word
+    /// COM interop. HTML and plain-text files are served directly via the virtual host
+    /// and never pass through this converter.
+    /// </summary>
     public static class WordToPdfConverter
     {
         /// <summary>
@@ -31,44 +34,7 @@ namespace KitveiHakodeshLib.Pdf
         }
 
         public static Task<string> ConvertWordToPdfAsync(string sourcePath, string outputPath)
-            => Task.Run(() => { using (var conv = new WordConversion()) return conv.Convert(sourcePath, outputPath, isHtml: false, _hostCts.Token); }, _hostCts.Token);
-
-        public static Task<string> ConvertHtmlToPdfAsync(string sourcePath, string outputPath)
-            => Task.Run(() => { using (var conv = new WordConversion()) return conv.Convert(sourcePath, outputPath, isHtml: true, _hostCts.Token); }, _hostCts.Token);
-
-        public static bool TxtFileContainsHtml(string filePath)
-        {
-            try
-            {
-                var lines = new List<string>();
-                using (var reader = new StreamReader(filePath))
-                {
-                    string line; int count = 0;
-                    while ((line = reader.ReadLine()) != null && count++ < 20) lines.Add(line);
-                }
-                return System.Text.RegularExpressions.Regex.IsMatch(string.Join(" ", lines),
-                    @"<\s*(html|head|body|div|span|p|br|table|tr|td|th|ul|ol|li|a|h[1-6]|img|script|style)\b",
-                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            }
-            catch { return false; }
-        }
-
-        private static string WrapWithRtlHtmlDocument(string html)
-        {
-            if (System.Text.RegularExpressions.Regex.IsMatch(html, @"<\s*html", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
-                return System.Text.RegularExpressions.Regex.Replace(html, @"(<\s*html)(?![^>]*\bdir\s*=)([^>]*>)", "$1 dir=\"rtl\"$2", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            html = System.Text.RegularExpressions.Regex.Replace(html, @"<\s*br\s*/?>", "</p><p dir=\"rtl\">", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            return "<!DOCTYPE html>\n<html dir=\"rtl\" lang=\"he\">\n<head><meta charset=\"UTF-8\" />" +
-                   "<style>body{direction:rtl;font-family:Arial,sans-serif;text-align:justify}</style></head>" +
-                   "<body dir=\"rtl\">\n" + html + "\n</body></html>";
-        }
-
-        private static string WrapWithHtmlClipboardFormat(string html)
-        {
-            string body = "<html><body><!--StartFragment-->" + html + "<!--EndFragment--></body></html>";
-            string end = (97 + body.Length).ToString("D8");
-            return "Version:0.9\r\nStartHTML:00000097\r\nEndHTML:" + end + "\r\nStartFragment:00000097\r\nEndFragment:" + end + "\r\n" + body;
-        }
+            => Task.Run(() => { using (var conv = new WordConversion()) return conv.Convert(sourcePath, outputPath, _hostCts.Token); }, _hostCts.Token);
 
         private static void Log(string msg) => System.Diagnostics.Debug.WriteLine("[Word] " + msg);
 
@@ -83,7 +49,7 @@ namespace KitveiHakodeshLib.Pdf
             private bool _disposed;
             private bool _ownsApp;
 
-            public string Convert(string sourcePath, string outputPath, bool isHtml, CancellationToken ct = default)
+            public string Convert(string sourcePath, string outputPath, CancellationToken ct = default)
             {
                 var sw = System.Diagnostics.Stopwatch.StartNew();
 
@@ -98,31 +64,16 @@ namespace KitveiHakodeshLib.Pdf
 
                 ct.ThrowIfCancellationRequested();
 
-                if (isHtml)
-                {
-                    _app.Options.UpdateLinksAtOpen = false;
-                    string html = WrapWithRtlHtmlDocument(File.ReadAllText(sourcePath));
-                    var dataObject = new DataObject();
-                    dataObject.SetData(DataFormats.Html, WrapWithHtmlClipboardFormat(html));
-                    Clipboard.SetDataObject(dataObject, true);
-                    _doc = _app.Documents.Add(Visible: false);
-                    var sel = _app.Selection;
-                    sel.WholeStory(); sel.Delete(); sel.Paste();
-                    Log("Paste: " + sw.ElapsedMilliseconds + "ms");
-                }
-                else
-                {
-                    _app.Options.UpdateLinksAtOpen = false;
-                    _app.Options.CheckSpellingAsYouType = false;
-                    _app.Options.CheckGrammarAsYouType = false;
-                    _doc = _app.Documents.Open(sourcePath, ConfirmConversions: false,
-                        ReadOnly: true, AddToRecentFiles: false, Visible: false, NoEncodingDialog: true);
-                    Log("Open: " + sw.ElapsedMilliseconds + "ms");
-                    _doc.Fields.Unlink();
-                    Log("Fields.Unlink: " + sw.ElapsedMilliseconds + "ms");
-                    foreach (Word.Hyperlink hl in _doc.Hyperlinks) try { hl.Delete(); } catch { }
-                    Log("Links cleared: " + sw.ElapsedMilliseconds + "ms");
-                }
+                _app.Options.UpdateLinksAtOpen = false;
+                _app.Options.CheckSpellingAsYouType = false;
+                _app.Options.CheckGrammarAsYouType = false;
+                _doc = _app.Documents.Open(sourcePath, ConfirmConversions: false,
+                    ReadOnly: true, AddToRecentFiles: false, Visible: false, NoEncodingDialog: true);
+                Log("Open: " + sw.ElapsedMilliseconds + "ms");
+                _doc.Fields.Unlink();
+                Log("Fields.Unlink: " + sw.ElapsedMilliseconds + "ms");
+                foreach (Word.Hyperlink hl in _doc.Hyperlinks) try { hl.Delete(); } catch { }
+                Log("Links cleared: " + sw.ElapsedMilliseconds + "ms");
 
                 ct.ThrowIfCancellationRequested();
 

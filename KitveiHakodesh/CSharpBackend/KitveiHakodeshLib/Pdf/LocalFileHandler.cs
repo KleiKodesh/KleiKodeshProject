@@ -47,9 +47,11 @@ namespace KitveiHakodeshLib.LocalFile
                     string filePath = dlg.FileName;
                     string ext = Path.GetExtension(filePath).ToLowerInvariant();
 
-                    // Handle already-webview-hostable files (PDF and HTML) by registering
-                    // the parent folder as a virtual host and returning the URL immediately.
-                    if (ext == ".pdf" || ext == ".htm" || ext == ".html")
+                    // Handle already-webview-hostable files (PDF, HTML, and plain text) by
+                    // registering the parent folder as a virtual host and returning the URL
+                    // immediately. Plain text files are served as-is and rendered by the
+                    // browser inside the html-view iframe — no conversion needed.
+                    if (ext == ".pdf" || ext == ".htm" || ext == ".html" || ext == ".txt")
                     {
                         string url = RegisterFolder(filePath);
                         _bridge.PushEvent(new { @event = "localFileReady", url, fileName = Path.GetFileName(filePath), filePath });
@@ -113,7 +115,7 @@ namespace KitveiHakodeshLib.LocalFile
             if (!File.Exists(filePath)) { _bridge.Reply(id, new { error = "הקובץ לא נמצא" }); return; }
 
             string ext = Path.GetExtension(filePath).ToLowerInvariant();
-            if (ext == ".pdf" || ext == ".htm" || ext == ".html")
+            if (ext == ".pdf" || ext == ".htm" || ext == ".html" || ext == ".txt")
             {
                 _bridge.Reply(id, new { url = RegisterFolder(filePath) });
                 return;
@@ -160,7 +162,7 @@ namespace KitveiHakodeshLib.LocalFile
             string folder = Path.GetDirectoryName(filePath);
             if (!_hosts.TryGetValue(folder, out var m))
             {
-                string host = "KitveiHakodesh-localfile-" + (++_hostCounter);
+                string host = "kitvei-localfile-" + (++_hostCounter);
                 _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                     host, folder, CoreWebView2HostResourceAccessKind.Allow);
                 m = new FolderMapping { HostName = host, RefCount = 0 };
@@ -176,15 +178,7 @@ namespace KitveiHakodeshLib.LocalFile
             Directory.CreateDirectory(WordCacheDir);
             string dest = GetCachePath(sourceFilePath);
             if (File.Exists(dest)) return dest;
-
-            string ext = Path.GetExtension(sourceFilePath).ToLowerInvariant();
-            bool isHtml = ext == ".htm" || ext == ".html"
-                || (ext == ".txt" && WordToPdfConverter.TxtFileContainsHtml(sourceFilePath));
-
-            string result = isHtml
-                ? await WordToPdfConverter.ConvertHtmlToPdfAsync(sourceFilePath, dest)
-                : await WordToPdfConverter.ConvertWordToPdfAsync(sourceFilePath, dest);
-
+            string result = await WordToPdfConverter.ConvertWordToPdfAsync(sourceFilePath, dest);
             if (result == sourceFilePath) return null;
             EvictCache(WordCacheDir, 10);
             return dest;

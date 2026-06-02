@@ -22,11 +22,12 @@ export const useLocalFileStore = defineStore('localFile', () => {
     }
     if (msg.event === 'localFileReady') {
       const tabId = tabStore.activeTabId
-      // Choose the route based on the picked file type: HTML files open in the html-view
-      // view (iframe), PDFs open in the PDF viewer.
+      // Choose the route based on the picked file type: HTML and plain-text files open in
+      // html-view (iframe), PDFs open in the PDF viewer.
       const path = (msg.filePath as string) ?? ''
       const ext = path.substring(path.lastIndexOf('.')).toLowerCase()
-      const route = ext === '.htm' || ext === '.html' ? '/html-view' : '/pdf-view'
+      const isHtmlLike = ext === '.htm' || ext === '.html' || ext === '.txt'
+      const route = isHtmlLike ? '/html-view' : '/pdf-view'
       tabStore.updateActiveTab({
         route,
         title: msg.fileName as string,
@@ -223,7 +224,8 @@ export const useLocalFileStore = defineStore('localFile', () => {
       const res = await restoreLocalFile(tab.localFilePath)
       if (res) {
         const ext = tab.localFilePath.substring(tab.localFilePath.lastIndexOf('.')).toLowerCase()
-        const route = ext === '.htm' || ext === '.html' ? '/html-view' : '/pdf-view'
+        const isHtmlLike = ext === '.htm' || ext === '.html' || ext === '.txt'
+        const route = isHtmlLike ? '/html-view' : '/pdf-view'
         tabStore.updateTab(tabId, { localFileVirtualUrl: res.url, route })
       }
     }

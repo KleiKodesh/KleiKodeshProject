@@ -269,7 +269,7 @@ namespace KitveiHakodeshLib
             // Disable DevTools in production — users cannot open the inspector via
             // F12 or right-click. This also prevents accidental exposure of internals.
             // Remove this line (or set to true) during development if needed.
-            settings.AreDevToolsEnabled = false;
+            //settings.AreDevToolsEnabled = false;
 
             // Disable browser-specific accelerator keys (Ctrl+F, Ctrl+P, Ctrl+R, F5,
             // F12, etc.). The app intercepts the keys it needs (Ctrl+F, Ctrl+W, etc.)
@@ -296,6 +296,13 @@ namespace KitveiHakodeshLib
                 "window.__webviewShowPopOut=" + (ShowPopOutButton ? "true" : "false") + ";";
             _dbInjectionScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
                 JsBridge.Script + "\n" + dbScript);
+
+            // IframeScrollScript runs in every frame including local file iframes.
+            // It is registered separately because it must not share the same document-created
+            // slot as the bridge script — the bridge script references window.chrome.webview
+            // which is only available in the top frame.
+            await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                JsBridge.IframeScrollScript);
 
             _bridge = new WebBridge(_webView, this);
             _db = new DbHandler(_bridge, _webView, savedPath);

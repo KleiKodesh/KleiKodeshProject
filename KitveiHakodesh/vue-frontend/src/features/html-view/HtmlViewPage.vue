@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useLocalFileStore } from '@/stores/localFileStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useTabStore } from '@/stores/tabStore'
@@ -9,104 +9,182 @@ import type { ThemePreset } from '@/theme/themeTypes'
 const localFileStore = useLocalFileStore()
 const settingsStore = useSettingsStore()
 const tabStore = useTabStore()
+
 const src = computed(() => localFileStore.virtualUrl)
 const htmlMaskEnabled = computed(() => settingsStore.pdfPageFilters)
 
+const iframeRef = ref<HTMLIFrameElement | null>(null)
 const loaded = ref(false)
 const error = ref<string | null>(null)
 const loading = ref(false)
-let timeoutId: number | null = null
+let loadTimeoutId: number | null = null
 
-function clearTimer() {
-  if (timeoutId !== null) {
-    clearTimeout(timeoutId)
-    timeoutId = null
+const tabId = tabStore.activeTabId
+let scrollSaveTimer: number | null = null
+
+// ── Load handling ─────────────────────────────────────────────────────────────
+
+function clearLoadTimer() {
+  if (loadTimeoutId !== null) {
+    clearTimeout(loadTimeoutId)
+    loadTimeoutId = null
   }
 }
 
-watch(src, (v) => {
+watch(src, (url) => {
   loaded.value = false
   error.value = null
-  if (!v) {
+  if (!url) {
     loading.value = false
-    clearTimer()
+    clearLoadTimer()
     return
   }
   loading.value = true
-  // If iframe hasn't loaded in 6s, show an error and let user retry
-  clearTimer()
-  timeoutId = window.setTimeout(() => {
+  clearLoadTimer()
+  loadTimeoutId = window.setTimeout(() => {
     if (!loaded.value) {
       loading.value = false
-      error.value = 'לא נטען — נסה רענון' // Hebrew: failed to load — try refresh
+      error.value = 'לא נטען — נסה רענון'
     }
-  }, 6000)
+  }, 8000)
 })
-
-onBeforeUnmount(() => clearTimer())
 
 function onIframeLoad() {
   loaded.value = true
   loading.value = false
   error.value = null
-  clearTimer()
+  clearLoadTimer()
+  restoreScrollPosition()
 }
 
 async function retry() {
   error.value = null
   loading.value = true
-  const tabId = tabStore.activeTabId
   await localFileStore.restoreTab(tabId)
 }
 
-// Helper function to convert hex to RGB object
-function hexToRgbObj(hex: string): { r: number; g: number; b: number } {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
-  return result
-    ? {
-        r: parseInt(result[1]!, 16),
-        g: parseInt(result[2]!, 16),
-        b: parseInt(result[3]!, 16),
-      }
-    : { r: 0, g: 0, b: 0 }
+// ── Scroll persistence via postMessage ────────────────────────────────────────
+// The local file iframe is cross-origin (kitvei-localfile-N vs kitvei-vue-app)
+// so contentWindow.scrollY is inaccessible from Vue. Instead, a script injected
+// by C# via AddScriptToExecuteOnDocumentCreatedAsync (JsBridge.IframeScrollScript)
+// runs inside the iframe and posts { type: 'htmlViewScroll', scrollTop } messages
+// to window.top. This component listens for those and persists the position via
+// tabStore. On iframe load it posts a { type: 'htmlViewScrollTo' } command back
+// into the iframe to restore the saved position.
+
+function onWindowMessage(event: MessageEvent) {
+  if (!event.data || event.data.type !== 'htmlViewScroll') return
+  const scrollTop = event.data.scrollTop as number
+  if (scrollSaveTimer !== null) clearTimeout(scrollSaveTimer)
+  scrollSaveTimer = window.setTimeout(() => saveScrollPosition(scrollTop), 400)
 }
 
-// Simple filter: invert colors + apply theme tint when toggle is ON
+async function saveScrollPosition(scrollTop: number) {
+  scrollSaveTimer = null
+  const existing = (await tabStore.getTabViewState(tabId)) ?? {}
+  tabStore.setTabViewState(tabId, { ...existing, htmlViewScrollTop: scrollTop })
+}
+
+async function restoreScrollPosition() {
+  const state = await tabStore.getTabViewState(tabId)
+  if (!state?.htmlViewScrollTop) return
+  await nextTick()
+  iframeRef.value?.contentWindow?.postMessage(
+    { type: 'htmlViewScrollTo', scrollTop: state.htmlViewScrollTop },
+    '*',
+  )
+}
+
+onMounted(() => {
+  window.addEventListener('message', onWindowMessage)
+  if (src.value) {
+    loading.value = true
+    clearLoadTimer()
+    loadTimeoutId = window.setTimeout(() => {
+      if (!loaded.value) {
+        loading.value = false
+        error.value = 'לא נטען — נסה רענון'
+      }
+    }, 8000)
+  }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('message', onWindowMessage)
+  clearLoadTimer()
+  if (scrollSaveTimer !== null) {
+    clearTimeout(scrollSaveTimer)
+    scrollSaveTimer = null
+  }
+})
+
+// ── Theme filter ──────────────────────────────────────────────────────────────
+
 const htmlFilter = computed(() => {
   if (!htmlMaskEnabled.value) return 'none'
-  
   const preset = document.documentElement.getAttribute('data-theme-preset') as ThemePreset | null
   const theme = preset ? getTheme(preset) : null
   if (!theme) return 'invert(0.85) hue-rotate(180deg) sepia(0.2)'
-  
-  // Apply invert + light sepia for tint + hue-rotate for color balance
-  // Light sepia (0.2) gives the warm tint without making it monochrome
   return 'invert(0.85) hue-rotate(180deg) sepia(0.2) brightness(0.95) contrast(0.95)'
 })
 </script>
 
 <template>
-  <div class="html-view-page" style="height:100%; display:flex; flex-direction:column;" :style="{ filter: htmlFilter }">
-    <div v-if="!src" class="html-not-found" style="flex:1;display:flex;align-items:center;justify-content:center;">
-      <div>אין קובץ פתוח</div>
+  <div class="html-view-page" :style="{ filter: htmlFilter }">
+    <div v-if="!src" class="html-state-message">
+      <span>אין קובץ פתוח</span>
     </div>
-    <div v-else style="position:relative; flex:1;">
+    <div v-else style="position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column;">
       <iframe
+        ref="iframeRef"
         :src="src"
         class="html-frame"
-        style="width:100%; height:100%; border:0;"
         @load="onIframeLoad"
       />
-      <div v-if="htmlMaskEnabled" class="html-mask" />
-      <div v-if="loading" style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.6);">
-        <div>טוען...</div>
+      <div v-if="loading" class="html-overlay">
+        <span>טוען...</span>
       </div>
-      <div v-if="error" style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.9); flex-direction:column; gap:8px;">
-        <div>{{ error }}</div>
-        <div>
-          <button @click="retry">נסה שוב</button>
-        </div>
+      <div v-if="error" class="html-overlay html-overlay--error">
+        <span>{{ error }}</span>
+        <button @click="retry">נסה שוב</button>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+.html-view-page {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.html-frame {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+.html-state-message {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+.html-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-primary) 85%, transparent);
+}
+.html-overlay--error {
+  color: var(--text-primary);
+}
+</style>

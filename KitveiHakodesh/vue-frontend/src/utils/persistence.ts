@@ -78,6 +78,7 @@ export interface TabState {
   searchCheckedBookIds?: number[] // absent/null means "all checked" (default)
   searchAtFilters?: string[]      // @ tokens from the search input, e.g. ["בראשית", "בבלי"]
   searchZoom?: number             // per-tab zoom level for the search results page (50–200)
+  htmlViewScrollTop?: number      // scroll position (px) for /html-view tabs (HTML and TXT files)
 }
 
 export interface BookState {
