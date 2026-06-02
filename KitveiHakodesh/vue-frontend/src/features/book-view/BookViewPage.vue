@@ -42,6 +42,7 @@ const {
   activeTocEntryId, commentaryScrollIndex, commentaryScrollOffset,
   tocVisible, commentaryTreeVisible, sidePanelVisible, sidePanelToggleButtonEl,
   bookId, lines, prioritise, hasCommentaries, hasRelatedBooks, hasToc,
+  bookHasTeamim,
   groups, groupsForDisplay, filterGroups, staticFilterGroups, commentaryLoading,
   tocEntries, tocSearchTree, selectedAltTocSection, tocLoading, tocError,
   altTocLabelMap, pinnedCommentaryGroup,
@@ -98,6 +99,7 @@ watch(() => bookViewStore.toggleBottomPanelSignal, () => {
       :has-commentaries="hasCommentaries"
       :has-related-books="hasRelatedBooks"
       :book-id="bookId"
+      :book-has-teamim="bookHasTeamim"
       :filter-groups="staticFilterGroups"
       :related-books-loaded="staticFilterGroupsLoaded"
       :current-scroll-line-index="currentScrollLineIndex"
@@ -121,6 +123,7 @@ watch(() => bookViewStore.toggleBottomPanelSignal, () => {
         :has-commentaries="hasCommentaries"
         :has-related-books="hasRelatedBooks"
         :book-id="bookId"
+        :book-has-teamim="bookHasTeamim"
         :filter-groups="staticFilterGroups"
         :related-books-loaded="staticFilterGroupsLoaded"
         :current-scroll-line-index="currentScrollLineIndex"
@@ -258,6 +261,7 @@ watch(() => bookViewStore.toggleBottomPanelSignal, () => {
       :has-commentaries="hasCommentaries"
       :has-related-books="hasRelatedBooks"
       :book-id="bookId"
+      :book-has-teamim="bookHasTeamim"
       :filter-groups="staticFilterGroups"
       :related-books-loaded="staticFilterGroupsLoaded"
       :current-scroll-line-index="currentScrollLineIndex"

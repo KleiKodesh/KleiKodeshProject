@@ -167,6 +167,15 @@ export const useSettingsStore = defineStore('settings', () => {
     diacriticsState.value = (diacriticsState.value + 1) % 3
   }
 
+  /**
+   * Cycle diacritics for a book that has no cantillation marks (hasTeamim is falsy).
+   * State 1 (strip teamim only) is meaningless for such books, so the cycle skips it:
+   * 0 → 2 → 0  and  1 → 2 (state 1 is treated as "nothing stripped yet")
+   */
+  function cycleDiacriticsNoTeamim() {
+    diacriticsState.value = diacriticsState.value === 2 ? 0 : 2
+  }
+
   function togglePdfPageFilters() {
     pdfPageFilters.value = !pdfPageFilters.value
     document.documentElement.setAttribute('data-pdf-filters', pdfPageFilters.value ? 'true' : 'false')
@@ -221,7 +230,7 @@ export const useSettingsStore = defineStore('settings', () => {
     useSeparateCommentarySettings, appZoom, dictionaryZoom, newTabPage, pdfPageFilters, resumeLastRead,
     defaultAutoSyncCommentary, setupDone, midotDisclaimerAccepted, searchContextMarginWords,
     searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchWildcardWrap, searchGrammarWrap,
-    init, cycleDiacritics, togglePdfPageFilters, reset, completeSetup, acceptMidotDisclaimer,
+    init, cycleDiacritics, cycleDiacriticsNoTeamim, togglePdfPageFilters, reset, completeSetup, acceptMidotDisclaimer,
   }
 })
   function normalizeNewTabPage(value: LegacyNewTabPage | null): NewTabPage | null {

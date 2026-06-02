@@ -39,7 +39,7 @@ const recentQueries = ref<string[]>([])
 const cacheStore = useSearchCacheStore()
 
 onMounted(async () => {
-  recentQueries.value = await cacheStore.getRecentQueries()
+  recentQueries.value = await cacheStore.getRecentQueries(10)
 })
 
 // Hide the datalist only when the search term part of the input exactly matches
@@ -91,7 +91,7 @@ function handleSearch() {
   if (localQuery.value.trim()) {
     emit('search', localQuery.value)
     // Refresh history so the query just submitted appears next time
-    cacheStore.getRecentQueries().then((q) => { recentQueries.value = q })
+    cacheStore.getRecentQueries(10).then((q) => { recentQueries.value = q })
   }
 }
 function handleClear() {
@@ -193,9 +193,6 @@ defineExpose({ focus: () => inputRef.value?.focus(), filterBtnRef, advancedBtnRe
   color: var(--text-primary);
   direction: rtl;
 }
-.search-input::-webkit-calendar-picker-indicator {
-  display: none;
-}
 .search-input::placeholder {
   color: var(--text-secondary);
 }
@@ -249,5 +246,12 @@ defineExpose({ focus: () => inputRef.value?.focus(), filterBtnRef, advancedBtnRe
   to {
     transform: rotate(360deg);
   }
+}
+</style>
+
+<style>
+/* Must be unscoped — scoped styles cannot reach browser-internal pseudo-elements */
+input[name="full-text-search"]::-webkit-calendar-picker-indicator {
+  display: none;
 }
 </style>

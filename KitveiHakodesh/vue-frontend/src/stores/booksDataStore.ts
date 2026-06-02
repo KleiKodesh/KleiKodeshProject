@@ -58,6 +58,9 @@ export const useBooksDataStore = defineStore('booksData', () => {
 
         ROOT.value = { ...ROOT.value, children }
         allBooks.value = orderedBooks
+        // Build the id→book map immediately so consumers like book-view can read
+        // book metadata (e.g. hasTeamim) without waiting for ensureCommentaryMetadataLoaded.
+        allBooksMap.value = new Map(orderedBooks.map((book) => [book.id, book]))
         loaded.value = true
 
         // Build the search index asynchronously in the background — yields between

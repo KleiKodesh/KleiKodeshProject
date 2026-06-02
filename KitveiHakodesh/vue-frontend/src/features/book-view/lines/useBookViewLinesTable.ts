@@ -14,6 +14,7 @@ export function useLines(bookId: () => number | undefined) {
   const lines = ref<LineItem[]>([])
   const hasCommentaries = ref(false)
   const hasRelatedBooks = ref(false)
+  const hasTeamim = ref(false)
 
   let fetchQueue: number[] = []
   let fetching = false
@@ -77,6 +78,7 @@ export function useLines(bookId: () => number | undefined) {
 
     let book: {
       totalLines: number
+      hasTeamim: number
       hasTargumConnection: number
       hasReferenceConnection: number
       hasSourceConnection: number
@@ -92,6 +94,7 @@ export function useLines(bookId: () => number | undefined) {
     }
 
     const totalLines = book?.totalLines ?? 0
+    hasTeamim.value = !!(book?.hasTeamim)
     hasCommentaries.value = !!(
       book?.hasTargumConnection ||
       book?.hasReferenceConnection ||
@@ -128,5 +131,5 @@ export function useLines(bookId: () => number | undefined) {
     { immediate: true },
   )
 
-  return { lines, prioritise, hasCommentaries, hasRelatedBooks }
+  return { lines, prioritise, hasCommentaries, hasRelatedBooks, hasTeamim }
 }

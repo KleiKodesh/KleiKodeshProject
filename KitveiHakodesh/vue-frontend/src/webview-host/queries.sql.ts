@@ -14,7 +14,7 @@ export const SQL = {
 
   /** All books flat — attached to tree nodes by categoryId, with aggregated author names */
   GET_ALL_BOOKS: `
-    SELECT b.id, b.categoryId, b.title,
+    SELECT b.id, b.categoryId, b.title, b.hasTeamim,
            group_concat(a.name, ', ') AS authors
     FROM book b
     LEFT JOIN book_author ba ON ba.bookId = b.id
@@ -27,7 +27,7 @@ export const SQL = {
 
   /** Single book by id — totalLines for virtual scroll init + has* flags for toolbar */
   GET_BOOK_BY_ID: `
-    SELECT totalLines,
+    SELECT totalLines, hasTeamim,
            hasTargumConnection, hasReferenceConnection, hasSourceConnection,
            hasCommentaryConnection, hasOtherConnection
     FROM book

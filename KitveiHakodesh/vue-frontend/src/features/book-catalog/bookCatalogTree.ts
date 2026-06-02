@@ -2,6 +2,7 @@ export interface BookRow {
   id: number
   categoryId: number
   title: string
+  hasTeamim?: number | null // 1 if the book has cantillation marks, 0/null if not
   authors?: string | null
   treeOrder?: number
   parentPath?: string // category path without the book title — used for display in search results

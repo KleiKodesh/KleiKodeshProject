@@ -289,7 +289,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         if (currentSearchId !== searchId) return
         isSearching.value = false
         try {
-          await cache.markComplete(normalizedQuery)
+          await cache.markComplete(normalizedQuery, !(isIndexing?.()))
         } catch {
           /* non-fatal */
         }
@@ -380,9 +380,10 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       }
 
       if (cached.complete && !cached.indexingComplete && indexingNow) {
-        // Cached during indexing and still indexing — show stale results, refresh silently
+        // Cached during indexing and still indexing — show stale results, refresh silently.
+        // Do NOT wipe the cache — keep the existing entry and append only new items to it
+        // so the full merged set is available next time.
         const excludedIds = cached.results.map((r) => r.lineId)
-        await cache.init(normalizedQuery, false)
         _startStream(queryToSend, excludedIds, true).catch((err) => {
           console.error('[useFullTextSearch] background refresh failed:', err)
           isSearching.value = false
@@ -390,9 +391,9 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         return
       }
 
-      // Incomplete entry — resume the stream, skipping lines already cached
+      // Incomplete entry — resume the stream, skipping lines already cached.
+      // Keep the existing cache entry and append only new items to it.
       const excludedIds = cached.results.map((r) => r.lineId)
-      await cache.init(normalizedQuery, !indexingNow)
       await _startStream(queryToSend, excludedIds, false)
       return
     }

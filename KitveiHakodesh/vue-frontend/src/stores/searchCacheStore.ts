@@ -80,10 +80,11 @@ export const useSearchCacheStore = defineStore('searchCache', () => {
   }
 
   /** Mark the entry as complete. */
-  async function markComplete(query: string): Promise<void> {
+  async function markComplete(query: string, indexingComplete: boolean): Promise<void> {
     const entry = await idbGet<SearchCacheEntry>(cacheKey(query))
     if (!entry) return
     entry.complete = true
+    entry.indexingComplete = indexingComplete
     await idbSet(cacheKey(query), entry)
   }
 
@@ -103,7 +104,7 @@ export const useSearchCacheStore = defineStore('searchCache', () => {
   }
 
   /** Returns the most-recently-used queries, newest first. */
-  async function getRecentQueries(limit = 8): Promise<string[]> {
+  async function getRecentQueries(limit = 10): Promise<string[]> {
     const lru = await getLru()
     return lru.slice().reverse().slice(0, limit)
   }

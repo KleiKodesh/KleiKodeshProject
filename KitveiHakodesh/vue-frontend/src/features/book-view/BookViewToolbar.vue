@@ -19,7 +19,7 @@ import { ZOOM_CONFIG } from '@/composables/useZoom'
 import type { CommentaryGroup } from './commentary/useCommentary'
 import type { LineItem } from './lines/useBookViewLinesTable'
 
-defineProps<{
+const props = defineProps<{
   commentaryVisible: boolean
   searchVisible: boolean
   tocVisible: boolean
@@ -27,6 +27,7 @@ defineProps<{
   hasCommentaries: boolean
   hasRelatedBooks: boolean
   bookId: number | undefined
+  bookHasTeamim: boolean
   filterGroups: CommentaryGroup[]
   relatedBooksLoaded: boolean
   currentScrollLineIndex: number
@@ -41,9 +42,22 @@ const bookViewStore = useBookViewStore()
 const { zoom, toolbarPosition, autoSelectTopLine } = storeToRefs(bookViewStore)
 
 const diacriticsState = computed(() => settingsStore.diacriticsState)
-const diacriticsTitle = computed(
-  () => ['הסר טעמים', 'הסר גם ניקוד', 'שחזר טעמים וניקוד'][diacriticsState.value]!,
-)
+
+// When the book has no teamim the cycle is 0→2→0, so the title reflects only two stages.
+const diacriticsTitle = computed(() => {
+  if (!props.bookHasTeamim) {
+    return diacriticsState.value === 0 ? 'הסר ניקוד' : 'שחזר ניקוד'
+  }
+  return ['הסר טעמים', 'הסר גם ניקוד', 'שחזר טעמים וניקוד'][diacriticsState.value]!
+})
+
+function onDiacriticsClick() {
+  if (props.bookHasTeamim) {
+    settingsStore.cycleDiacritics()
+  } else {
+    settingsStore.cycleDiacriticsNoTeamim()
+  }
+}
 
 const tocBtnRef = ref<HTMLElement | null>(null)
 defineExpose({ tocBtnRef })
@@ -125,7 +139,7 @@ defineExpose({ tocBtnRef })
         { 'state-1': diacriticsState === 1, 'state-2': diacriticsState === 2 },
       ]"
       :title="diacriticsTitle"
-      @click="settingsStore.cycleDiacritics()"
+      @click="onDiacriticsClick()"
     >
       <svg
         v-if="diacriticsState === 0"

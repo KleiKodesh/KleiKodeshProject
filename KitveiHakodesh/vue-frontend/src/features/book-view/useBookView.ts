@@ -58,6 +58,7 @@ export function useBookView(
   const tabId = tabStore.activeTabId
   const bookId = tabStore.activeTab.bookId
   const bookTitle = tabStore.activeTab.title
+
   const openTocEntryId = tabStore.activeTab.openTocEntryId
   const openTocLineIndex = tabStore.activeTab.openTocLineIndex
   const searchHighlightLineIndex = tabStore.activeTab.searchHighlightLineIndex
@@ -112,7 +113,7 @@ export function useBookView(
 
   // Lines load immediately in parallel with TOC — scrollStateReady is always true,
   // BookViewLinesContent mounts immediately and its scroll watcher handles late IDB restore.
-  const { lines, prioritise, hasCommentaries, hasRelatedBooks } = useLines(() => bookId)
+  const { lines, prioritise, hasCommentaries, hasRelatedBooks, hasTeamim: bookHasTeamim } = useLines(() => bookId)
 
   const hasToc = computed(() => tocLoaded.value && tocEntries.value.length > 0)
 
@@ -463,6 +464,8 @@ export function useBookView(
     toolbarVisible: computed(() => bookViewStore.toolbarVisible),
     // tab data
     searchHighlightLineIndex, searchHighlightQuery, searchHighlightSnippet, searchHighlightTerms,
+    // book metadata
+    bookHasTeamim,
     // UI state
     commentaryVisible, searchVisible, sidePanelMode,
     selectedLineId, commentaryTreeState, searchMode,

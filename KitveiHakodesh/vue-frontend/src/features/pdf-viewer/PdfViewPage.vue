@@ -47,25 +47,33 @@ watch(ocr.isActive, (active) => {
 watch(
   () => tabStore.activeTab?.pdfViewerTitleBarVisible,
   (visible) => {
-    if (iframeRef.value?.contentWindow) {
-      const toolbarEl = iframeRef.value.contentWindow.document.querySelector('.toolbar')
-      if (toolbarEl) {
-        (toolbarEl as HTMLElement).style.display = visible !== false ? 'flex' : 'none'
-      }
-    }
+    setPdfToolbarVisible(visible !== false)
   },
 )
+
+function setPdfToolbarVisible(visible: boolean) {
+  if (!iframeRef.value?.contentWindow) return
+  const doc = iframeRef.value.contentWindow.document
+  const toolbarEl = doc.querySelector('.toolbar') as HTMLElement | null
+  const viewerContainerEl = doc.getElementById('viewerContainer') as HTMLElement | null
+
+  if (toolbarEl) {
+    toolbarEl.style.display = visible ? '' : 'none'
+  }
+
+  // #viewerContainer has inset: var(--toolbar-height) 0 0 in PDF.js CSS.
+  // When the toolbar is hidden that gap must collapse to 0; restore to '' to
+  // let PDF.js's own CSS take over when the toolbar is visible again.
+  if (viewerContainerEl) {
+    viewerContainerEl.style.insetBlockStart = visible ? '' : '0'
+  }
+}
 
 function onIframeLoad() {
   setTimeout(() => {
     syncPdfViewerTheme()
-    // Hide toolbar if setting is false
-    if (tabStore.activeTab?.pdfViewerTitleBarVisible === false && iframeRef.value?.contentWindow) {
-      const toolbarEl = iframeRef.value.contentWindow.document.querySelector('.toolbar')
-      if (toolbarEl) {
-        (toolbarEl as HTMLElement).style.display = 'none'
-      }
-    }
+    // Apply toolbar visibility based on current setting
+    setPdfToolbarVisible(tabStore.activeTab?.pdfViewerTitleBarVisible !== false)
   }, 100)
 }
 
