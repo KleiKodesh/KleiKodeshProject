@@ -63,18 +63,32 @@ export function usePinnedCommentary(
     }
   })
 
-  // When groups load for a new line, if the current pin is a default that has no
-  // links for this line, fall back to the next default that does — but only if
-  // there is no default at all in the new groups. If the pinned book is simply
-  // absent for this line, keep the pin and let groupsForDisplay show a placeholder.
+  // When groups load for a new line:
+  // - If the current pin is a default and that default IS present in the new groups,
+  //   refresh the pin with the real sectionLabel/subSectionLabel from the loaded group.
+  //   This fixes the case where the pin was set before groups had loaded (empty labels).
+  // - If the current pin is a default that has no links for this line, fall back to the
+  //   next default that does — but only when no default is present at all.
+  //   If the pinned book is absent for this line, keep the pin and let groupsForDisplay
+  //   show a placeholder.
   watch(groups, async (newGroups) => {
     if (!newGroups.length) return
     await ensureDefaultCommentatorsLoaded()
     if (!defaultCommentatorBookIds.length) return
     const currentPin = pinnedCommentaryGroup.value
     if (currentPin == null || !defaultCommentatorBookIds.includes(currentPin.bookId)) return
-    const anyDefaultPresent = defaultCommentatorBookIds.some((id) => newGroups.some((g) => g.bookId === id))
-    if (anyDefaultPresent) return
+    const pinnedGroupInNewGroups = newGroups.find((g) => g.bookId === currentPin.bookId)
+    if (pinnedGroupInNewGroups) {
+      // The pinned default is present — refresh labels in case they were empty when
+      // the pin was first set (before commentary groups had finished loading).
+      pinnedCommentaryGroup.value = {
+        bookId: currentPin.bookId,
+        sectionLabel: pinnedGroupInNewGroups.sectionLabel ?? '',
+        subSectionLabel: pinnedGroupInNewGroups.subSectionLabel ?? '',
+      }
+      return
+    }
+    // The pinned default is absent for this line — fall back to the first default that is present.
     const defaultId = defaultCommentatorBookIds[0]!
     const defaultGroup = newGroups.find((g) => g.bookId === defaultId)
     pinnedCommentaryGroup.value = defaultGroup

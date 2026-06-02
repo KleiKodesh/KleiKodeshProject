@@ -195,8 +195,13 @@ export function useCommentaryScroll(
         // Skip the initial load — the session restore watcher handles the first scroll
         // position. Only scroll to the pinned group on subsequent reloads (line navigation).
         if (isFirstLoad) { isFirstLoad = false; return }
+        if (!newGroups.length) return
+        // Wait for nextTick before reading pinnedGroup — other watchers on the same
+        // groups change (e.g. the PIN label-refresh watcher) must flush first so
+        // pinnedGroup() reflects the up-to-date sectionLabel/subSectionLabel.
+        await nextTick()
         const pinned = pinnedGroup()
-        if (!pinned || !newGroups.length) return
+        if (!pinned) return
         if (newGroups.some((g: any) => g.bookId === pinned.bookId)) {
           await nextTick()
           scrollToGroup(pinned.bookId, pinned.sectionLabel, pinned.subSectionLabel)

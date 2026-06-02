@@ -39,7 +39,7 @@ const barRef = ref<HTMLElement | null>(null)
 const navBtnRef = ref<HTMLElement | null>(null)
 
 const isPdfTab = computed(
-  () => activeTab.value?.route === '/pdf-view' || activeTab.value?.route === '/hebrewbooks' || activeTab.value?.route === '/html-view',
+  () => activeTab.value?.route === '/pdf-view' || activeTab.value?.route === '/html-view',
 )
 
 const barTitle = computed(() => {
@@ -125,7 +125,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
     e.preventDefault()
     if (bookViewStore.isBookViewActive) {
       bookViewStore.toggleToolbar()
-    } else if (tabStore.activeTab?.route === '/pdf-view' || tabStore.activeTab?.route === '/hebrewbooks') {
+    } else if (tabStore.activeTab?.route === '/pdf-view') {
       tabStore.togglePdfViewerTitleBar()
     }
   } else if (e.ctrlKey && e.key === 'j') {
@@ -176,7 +176,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
       </div>
       <ThemeToggle @click.stop />
       <button
-        v-if="bookViewStore.isBookViewActive || (activeTab?.route === '/pdf-view' || activeTab?.route === '/hebrewbooks')"
+        v-if="bookViewStore.isBookViewActive || activeTab?.route === '/pdf-view'"
         class="bar-btn"
         :title="toolbarTitle"
         @click.stop="bookViewStore.isBookViewActive ? bookViewStore.toggleToolbar() : tabStore.togglePdfViewerTitleBar()"
@@ -203,7 +203,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
 
     <div class="bar-end">
       <button
-        v-if="activeTab?.route === '/pdf-view' || activeTab?.route === '/hebrewbooks'"
+        v-if="activeTab?.route === '/pdf-view'"
         class="bar-btn"
         :class="{ active: pdfOcrStore.isActive }"
         title="בחירת טקסט באזור (OCR)"

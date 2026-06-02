@@ -58,7 +58,7 @@ function getFileIcon(fileName: string): FileIconInfo {
     case 'htm':
     case 'mht':
     case 'mhtml':
-      return { component: IconDocumentGlobe20Filled, color: '#e44d26' }
+      return { component: IconDocumentGlobe20Filled, color: '#0097fb' }
     case 'xml':
       return { component: IconCode20Filled, color: '#f0a500' }
     case 'txt':

@@ -256,25 +256,22 @@ function onKeydown(event: KeyboardEvent) {
 
 .cancel-btn {
   border: 1px solid var(--border-color);
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
+  background: var(--bg-toolbar);
+  color: var(--text-primary);
 }
 
 .cancel-btn:hover {
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
-  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 8%, var(--bg-toolbar));
 }
 
 .copy-btn {
   background: var(--accent-color);
   color: #fff;
-  color: var(--text-primary);
-  border: 1px solid var(--accent-color);
+  border: none;
 }
 
 .copy-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent-color) 110%, transparent);
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent-color) 40%, transparent);
+  background: color-mix(in srgb, var(--accent-color) 82%, #000);
 }
 
 .copy-btn:disabled {
@@ -284,7 +281,8 @@ function onKeydown(event: KeyboardEvent) {
 
 .copy-btn.copied {
   background: #10b981;
-  border-color: #10b981;
+  border: none;
+  color: #fff;
   animation: pulse 300ms ease-out;
 }
 
