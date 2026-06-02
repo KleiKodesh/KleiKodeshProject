@@ -352,6 +352,24 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     const queryToSend = _buildQueryToSend(normalizedQuery)
     const indexingNow = isIndexing?.() ?? false
 
+    // The cache key must encode every option that affects which results C# returns.
+    // Using only normalizedQuery would cause a cache hit when options change — e.g.
+    // searching "זימון" with wildcard wrap returns 3000 results and caches under
+    // "זימון", then searching "זימון" without wildcard wrap hits the same key and
+    // incorrectly serves the 3000-result set instead of running a fresh search.
+    //
+    // queryToSend already bakes in searchWildcardWrap / searchGrammarWrap (it is
+    // the actual string sent to C#, e.g. "*זימון*" vs "זימון").
+    // The remaining options that affect result set are appended as a suffix.
+    const cacheKey = [
+      queryToSend,
+      `d${settings.searchMaxWordDistance}`,
+      settings.searchRequireOrdered ? 'ord' : '',
+      settings.searchExpandKetiv ? 'ktv' : '',
+    ]
+      .filter(Boolean)
+      .join('|')
+
     // ── Cache lookup ──────────────────────────────────────────────────────────
     // A complete cache entry written while the index was fully built is a perfect
     // hit — serve it instantly with no stream needed.
@@ -361,7 +379,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     // background so the cache is updated for next time.
     //
     // An incomplete entry means the previous stream was interrupted — resume it.
-    const cached = await cache.get(normalizedQuery)
+    const cached = await cache.get(cacheKey)
 
     if (cached && cached.results.length > 0) {
       // Serve cached results immediately so the UI is responsive
@@ -377,8 +395,8 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       if (cached.complete && !cached.indexingComplete && !indexingNow) {
         // Was cached during indexing but index is now complete — refresh the full set
         results.value = []
-        await cache.init(normalizedQuery, true)
-        await _startStream(normalizedQuery, queryToSend, [], false)
+        await cache.init(cacheKey, true)
+        await _startStream(cacheKey, queryToSend, [], false)
         return
       }
 
@@ -387,7 +405,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         // Do NOT wipe the cache — keep the existing entry and append only new items to it
         // so the full merged set is available next time.
         const excludedIds = cached.results.map((r) => r.lineId)
-        _startStream(normalizedQuery, queryToSend, excludedIds, true).catch((err) => {
+        _startStream(cacheKey, queryToSend, excludedIds, true).catch((err) => {
           console.error('[useFullTextSearch] background refresh failed:', err)
           isSearching.value = false
         })
@@ -397,7 +415,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       // Incomplete entry — resume the stream, skipping lines already cached.
       // Keep the existing cache entry and append only new items to it.
       const excludedIds = cached.results.map((r) => r.lineId)
-      await _startStream(normalizedQuery, queryToSend, excludedIds, false)
+      await _startStream(cacheKey, queryToSend, excludedIds, false)
       return
     }
 
@@ -405,8 +423,8 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     results.value = []
     isSearching.value = true
     try {
-      await cache.init(normalizedQuery, !indexingNow)
-      await _startStream(normalizedQuery, queryToSend, [], false)
+      await cache.init(cacheKey, !indexingNow)
+      await _startStream(cacheKey, queryToSend, [], false)
     } catch (err) {
       console.error('[useFullTextSearch] failed to start search:', err)
       isSearching.value = false
@@ -422,7 +440,16 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
 
   async function loadCachedResults(q: string): Promise<boolean> {
     const normalizedQuery = q.trim().toLowerCase()
-    const cached = await cache.get(normalizedQuery)
+    const queryToSend = _buildQueryToSend(normalizedQuery)
+    const cacheKey = [
+      queryToSend,
+      `d${settings.searchMaxWordDistance}`,
+      settings.searchRequireOrdered ? 'ord' : '',
+      settings.searchExpandKetiv ? 'ktv' : '',
+    ]
+      .filter(Boolean)
+      .join('|')
+    const cached = await cache.get(cacheKey)
     if (!cached || cached.results.length === 0) return false
     results.value = cached.results
     executedQuery.value = q
@@ -431,8 +458,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     if (!cached.complete) {
       isSearching.value = true
       const excludedIds = cached.results.map((r) => r.lineId)
-      const queryToSend = _buildQueryToSend(normalizedQuery)
-      _startStream(normalizedQuery, queryToSend, excludedIds, false).catch((err) => {
+      _startStream(cacheKey, queryToSend, excludedIds, false).catch((err) => {
         console.error('[useFullTextSearch] failed to resume stream after tab restore:', err)
         isSearching.value = false
       })
