@@ -169,14 +169,6 @@ export function hbSearch(query: string): Promise<{ books?: unknown[]; error?: st
 }
 
 /**
- * Load the full Hebrew Books catalog from the C# database backend.
- * Returns books as plain objects — caller casts to HebrewBook[].
- */
-export function hbGetAll(): Promise<{ books?: unknown[]; error?: string }> {
-  return action<{ books?: unknown[]; error?: string }>('hbGetAll')
-}
-
-/**
  * Trigger a HebrewBooks PDF download to the cache, then open it.
  */
 export function triggerHbDownload(

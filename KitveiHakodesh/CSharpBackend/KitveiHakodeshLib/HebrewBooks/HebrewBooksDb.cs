@@ -87,7 +87,6 @@ namespace KitveiHakodeshLib.HebrewBooks
                 AppDomain.CurrentDomain.BaseDirectory,
                 "Resources",
                 "HebrewBooks.db");
-            Log("DB path resolved to: " + _dbPath);
         }
 
         public void Initialize()
@@ -98,27 +97,7 @@ namespace KitveiHakodeshLib.HebrewBooks
             {
                 if (_initialized) return;
 
-                Log("Initializing — looking for DB at: " + _dbPath);
-                Log("File exists: " + File.Exists(_dbPath));
-
-                if (!File.Exists(_dbPath))
-                {
-                    // List what IS in the Resources folder to help diagnose path problems
-                    string resourcesDir = Path.GetDirectoryName(_dbPath);
-                    if (Directory.Exists(resourcesDir))
-                    {
-                        Log("Resources folder exists. Contents: " + string.Join(", ", Directory.GetFiles(resourcesDir)));
-                    }
-                    else
-                    {
-                        Log("Resources folder does not exist: " + resourcesDir);
-                        // Show parent folder contents
-                        string parent = Path.GetDirectoryName(resourcesDir);
-                        if (Directory.Exists(parent))
-                            Log("Parent folder contents: " + string.Join(", ", Directory.GetFiles(parent)));
-                    }
-                    return;
-                }
+                if (!File.Exists(_dbPath)) return;
 
                 try
                 {
@@ -132,21 +111,11 @@ namespace KitveiHakodeshLib.HebrewBooks
 
                     _connection = new SQLiteConnection(cs);
                     _connection.Open();
-                    Log("Opened Hebrew Books database: " + _dbPath);
-
-                    // Verify the table exists and log the row count
-                    using (var cmd = _connection.CreateCommand())
-                    {
-                        cmd.CommandText = "SELECT COUNT(*) FROM hebrewBooks";
-                        var count = cmd.ExecuteScalar();
-                        Log("hebrewBooks row count: " + count);
-                    }
-
                     _initialized = true;
                 }
                 catch (Exception ex)
                 {
-                    Log("Failed to initialize Hebrew Books database: " + ex.Message);
+                    System.Diagnostics.Debug.WriteLine("[HebrewBooksDb] Failed to initialize: " + ex.Message);
                 }
             }
         }
@@ -160,88 +129,56 @@ namespace KitveiHakodeshLib.HebrewBooks
             SELECT id, title, author, placeOfPublication, year, pageCount, categories
             FROM hebrewBooks";
 
+        private const int SearchResultLimit = 200;
+
         /// <summary>
         /// Search for books whose title, author, or categories contain all of the query words.
-        /// Matching mirrors the in-memory logic used by the Vue CSV path:
-        ///   - text is normalised (diacritics stripped, lowercased)
-        ///   - every query word must appear as a whole-word match OR as a substring of a word
-        /// Returns results sorted by title.
+        /// Each word is pushed into SQLite as a LIKE clause against the concatenated search text,
+        /// so no rows are loaded into memory unless they match.
+        /// Returns up to <see cref="SearchResultLimit"/> results sorted by title.
         /// </summary>
         public List<HebrewBookInfo> Search(string query)
         {
-            Log("Search called. IsInitialized=" + IsInitialized + " query='" + query + "'");
             if (!IsInitialized) return new List<HebrewBookInfo>();
             if (string.IsNullOrWhiteSpace(query)) return new List<HebrewBookInfo>();
 
             string[] words = NormalizeText(query)
                 .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
 
-            Log("Normalized words: [" + string.Join(", ", words) + "]");
             if (words.Length == 0) return new List<HebrewBookInfo>();
 
             try
             {
+                // Build one AND clause per word using LIKE against a single concatenated
+                // search column so SQLite does the filtering, not C#.
+                // SQLite's LIKE is case-insensitive for ASCII but not for Hebrew — we
+                // store and search lowercased normalized text via a generated expression.
+                //
+                // The search expression normalizes on the fly:
+                //   lower(coalesce(title,'') || ' ' || coalesce(author,'') || ' ' || coalesce(categories,''))
+                // Each word becomes:  ... AND <expr> LIKE '%word%'
+                var whereParts = new List<string>(words.Length);
+                var parameters = new DynamicParameters();
+
+                string searchExpr = "lower(coalesce(title,'') || ' ' || coalesce(author,'') || ' ' || coalesce(categories,''))";
+
+                for (int i = 0; i < words.Length; i++)
+                {
+                    string paramName = "@w" + i;
+                    whereParts.Add(searchExpr + " LIKE " + paramName);
+                    parameters.Add(paramName, "%" + words[i] + "%");
+                }
+
+                string sql = SelectColumns
+                    + " WHERE " + string.Join(" AND ", whereParts)
+                    + " ORDER BY title"
+                    + " LIMIT " + SearchResultLimit;
+
                 List<HbRow> rows;
                 lock (_connection)
                 {
-                    rows = _connection.Query<HbRow>(SelectColumns + " ORDER BY title").ToList();
+                    rows = _connection.Query<HbRow>(sql, parameters).ToList();
                 }
-
-                Log("Total rows fetched for search: " + rows.Count);
-
-                var results = new List<HebrewBookInfo>();
-                foreach (HbRow row in rows)
-                {
-                    string searchText = NormalizeText(row.title) + " "
-                                      + NormalizeText(row.author) + " "
-                                      + NormalizeText(row.categories);
-
-                    string[] searchWords = searchText
-                        .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-
-                    bool allMatch = true;
-                    foreach (string qw in words)
-                    {
-                        bool found = false;
-                        foreach (string sw in searchWords)
-                        {
-                            if (sw == qw || sw.Contains(qw)) { found = true; break; }
-                        }
-                        if (!found) { allMatch = false; break; }
-                    }
-
-                    if (allMatch)
-                        results.Add(row.ToInfo());
-                }
-
-                Log("Search results: " + results.Count);
-                return results;
-            }
-            catch (Exception ex)
-            {
-                Log("Error searching Hebrew Books: " + ex.Message);
-                return new List<HebrewBookInfo>();
-            }
-        }
-
-        /// <summary>
-        /// Return every book in the database, sorted by title.
-        /// Used for the initial catalog load in the hosted app.
-        /// </summary>
-        public List<HebrewBookInfo> GetAllBooks()
-        {
-            Log("GetAllBooks called. IsInitialized=" + IsInitialized);
-            if (!IsInitialized) return new List<HebrewBookInfo>();
-
-            try
-            {
-                List<HbRow> rows;
-                lock (_connection)
-                {
-                    rows = _connection.Query<HbRow>(SelectColumns + " ORDER BY title").ToList();
-                }
-
-                Log("GetAllBooks returned " + rows.Count + " rows");
 
                 var results = new List<HebrewBookInfo>(rows.Count);
                 foreach (HbRow row in rows)
@@ -251,7 +188,7 @@ namespace KitveiHakodeshLib.HebrewBooks
             }
             catch (Exception ex)
             {
-                Log("Error fetching all Hebrew books: " + ex.Message);
+                System.Diagnostics.Debug.WriteLine("[HebrewBooksDb] Error searching: " + ex.Message);
                 return new List<HebrewBookInfo>();
             }
         }
@@ -266,7 +203,6 @@ namespace KitveiHakodeshLib.HebrewBooks
 
             text = text.ToLowerInvariant();
 
-            // Strip Hebrew nikudot (U+05B0–U+05C2 range used for vowel points and cantillation)
             var sb = new System.Text.StringBuilder(text.Length);
             foreach (char c in text)
             {
@@ -276,9 +212,6 @@ namespace KitveiHakodeshLib.HebrewBooks
 
             return sb.ToString().Trim();
         }
-
-        private static void Log(string msg) =>
-            System.Diagnostics.Debug.WriteLine("[HebrewBooksDb] " + msg);
 
         public void Dispose()
         {

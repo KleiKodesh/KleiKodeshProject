@@ -100,7 +100,6 @@ namespace KitveiHakodeshLib
         private DbHandler _db;
         private LocalFileHandler _localFile;
         private HebrewBooksHandler _hb;
-        private HebrewBooksCsvUpdater _hbCsvUpdater;
         private SearchHandler _search;
         private DictionaryHandler _dictionary;
         private HebrewBooksDb _hebrewBooksDb;
@@ -301,7 +300,6 @@ namespace KitveiHakodeshLib
 
             _localFile = new LocalFileHandler(_bridge, _webView);
             _hb = new HebrewBooksHandler(_bridge, _webView, this);
-            _hbCsvUpdater = new HebrewBooksCsvUpdater();
             _search = new SearchHandler(_bridge, _webView);
             _dictionary = new DictionaryHandler(AppDir);
             _hebrewBooksDb = HebrewBooksDb.Instance;
@@ -318,8 +316,6 @@ namespace KitveiHakodeshLib
             // hide the splash after 8 seconds so the user isn't stuck on a blank screen.
             _ = Task.Delay(8000).ContinueWith(_ => _HideSplash());
             _search.OnDbReady(savedPath);
-            if (dbReady)
-                _hbCsvUpdater.RunIfDue();
         }
 
         private void OnNavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
@@ -401,7 +397,6 @@ namespace KitveiHakodeshLib
                         case "triggerHbDownload": _hb.HandleTriggerHbDownload(root, id); break;
                         case "triggerHbSaveAs": _hb.HandleTriggerHbSaveAs(root, id); break;
                         case "hbSearch": HandleHebrewBooksSearch(root, id); break;
-                        case "hbGetAll": HandleHebrewBooksGetAll(root, id); break;
                         case "GetFtsIndexingProgress": _search.HandleGetProgress(id); break;
                         case "FtsSearchStart": _search.HandleSearchStart(root, id); break;
                         case "FtsSearchCancel": _search.HandleSearchCancel(root, id); break;
@@ -515,8 +510,6 @@ namespace KitveiHakodeshLib
 
         private void HandleHebrewBooksSearch(JsonElement root, string id)
         {
-            System.Diagnostics.Debug.WriteLine("[AppViewer] hbSearch received. IsInitialized=" + _hebrewBooksDb.IsInitialized);
-
             if (!_hebrewBooksDb.IsInitialized)
             {
                 _bridge.Reply(id, new { error = "Hebrew Books database not available" });
@@ -524,40 +517,14 @@ namespace KitveiHakodeshLib
             }
 
             string query = root.TryGetProperty("query", out var q) ? (q.GetString() ?? "") : "";
-            System.Diagnostics.Debug.WriteLine("[AppViewer] hbSearch query: '" + query + "'");
 
             try
             {
                 var results = _hebrewBooksDb.Search(query);
-                System.Diagnostics.Debug.WriteLine("[AppViewer] hbSearch returning " + results.Count + " results");
                 _bridge.Reply(id, new { books = results });
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine("[AppViewer] hbSearch error: " + ex.Message);
-                _bridge.Reply(id, new { error = ex.Message });
-            }
-        }
-
-        private void HandleHebrewBooksGetAll(JsonElement root, string id)
-        {
-            System.Diagnostics.Debug.WriteLine("[AppViewer] hbGetAll received. IsInitialized=" + _hebrewBooksDb.IsInitialized);
-
-            if (!_hebrewBooksDb.IsInitialized)
-            {
-                _bridge.Reply(id, new { error = "Hebrew Books database not available" });
-                return;
-            }
-
-            try
-            {
-                var books = _hebrewBooksDb.GetAllBooks();
-                System.Diagnostics.Debug.WriteLine("[AppViewer] hbGetAll returning " + books.Count + " books");
-                _bridge.Reply(id, new { books });
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine("[AppViewer] hbGetAll error: " + ex.Message);
                 _bridge.Reply(id, new { error = ex.Message });
             }
         }

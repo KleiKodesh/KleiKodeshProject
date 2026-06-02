@@ -11,6 +11,7 @@ import { initPdfThemeObserver } from './theme/themes'
 import { dbReady } from './webview-host/seforimDb'
 import { useBooksDataStore } from './stores/booksDataStore'
 import { useLocalFileStore } from './stores/localFileStore'
+import { useHebrewBooksHistoryStore } from './stores/hebrewBooksHistoryStore'
 import { idbCheckAndExecReset } from './utils/persistence'
 
 // Synchronous localStorage check — zero cost on normal boots.
@@ -53,3 +54,7 @@ app.mount('#app')
 
 initPdfThemeObserver()
 warmBooksDataInBackground()
+
+// Pre-warm the Hebrew Books history cache so the first navigation to the
+// Hebrew Books page renders history instantly from memory.
+void useHebrewBooksHistoryStore().getHistory()

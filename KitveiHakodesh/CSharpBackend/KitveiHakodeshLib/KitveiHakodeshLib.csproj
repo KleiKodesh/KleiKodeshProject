@@ -159,7 +159,6 @@
     <Compile Include="Db\DbAccess.cs" />
     <Compile Include="Db\DbHandler.cs" />
     <Compile Include="HebrewBooks\HebrewBooksHandler.cs" />
-    <Compile Include="HebrewBooks\HebrewBooksCsvUpdater.cs" />
     <Compile Include="HebrewBooks\HebrewBooksDb.cs" />
     <Compile Include="Pdf\LocalFileHandler.cs" />
     <Compile Include="Pdf\WordToPdfConverter.cs" />
