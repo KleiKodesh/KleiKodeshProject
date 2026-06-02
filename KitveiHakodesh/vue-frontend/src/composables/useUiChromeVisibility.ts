@@ -13,7 +13,7 @@ const titleBarVisible = ref(true)
 
 // Single window-level listener — registered once for the lifetime of the app.
 window.addEventListener('keydown', (e: KeyboardEvent) => {
-  if (e.altKey && e.key === 'f') {
+  if (e.altKey && e.code === 'KeyF') {
     e.preventDefault()
     titleBarVisible.value = !titleBarVisible.value
   }

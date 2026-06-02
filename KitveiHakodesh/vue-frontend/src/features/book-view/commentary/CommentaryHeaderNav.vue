@@ -94,7 +94,7 @@ function handleSelect() {
 }
 
 function handleKeydown(e: KeyboardEvent) {
-  if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+  if ((e.ctrlKey || e.metaKey) && e.code === 'KeyF') {
     e.preventDefault()
     e.stopPropagation()
     return

@@ -54,6 +54,7 @@ function onIframeLoad() {
   loading.value = false
   error.value = null
   clearLoadTimer()
+  sendThemeToIframe()
   restoreScrollPosition()
 }
 
@@ -97,6 +98,7 @@ async function restoreScrollPosition() {
 
 onMounted(() => {
   window.addEventListener('message', onWindowMessage)
+  startThemeObserver()
   if (src.value) {
     loading.value = true
     clearLoadTimer()
@@ -111,6 +113,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('message', onWindowMessage)
+  themeObserver?.disconnect()
   clearLoadTimer()
   if (scrollSaveTimer !== null) {
     clearTimeout(scrollSaveTimer)
@@ -118,7 +121,40 @@ onBeforeUnmount(() => {
   }
 })
 
-// ── Theme filter ──────────────────────────────────────────────────────────────
+// ── Theme sync ────────────────────────────────────────────────────────────────
+// Reads current theme colors from the app's root CSS custom properties and posts
+// them into the iframe via postMessage. The injected IframeScrollScript applies
+// them to the document body so txt (and html) files use the app's color scheme.
+
+function getThemeColors(): Record<string, string> {
+  const style = document.documentElement.style
+  return {
+    bgPrimary: style.getPropertyValue('--bg-primary-custom').trim(),
+    textPrimary: style.getPropertyValue('--text-primary-custom').trim(),
+    textSecondary: style.getPropertyValue('--text-secondary-custom').trim(),
+  }
+}
+
+function sendThemeToIframe() {
+  if (!iframeRef.value?.contentWindow) return
+  iframeRef.value.contentWindow.postMessage(
+    { type: 'htmlViewTheme', colors: getThemeColors() },
+    '*',
+  )
+}
+
+// Watch for theme changes (the data-theme-preset attribute changes on root when
+// the user switches theme) and push the new colors into the iframe.
+let themeObserver: MutationObserver | null = null
+
+function startThemeObserver() {
+  themeObserver?.disconnect()
+  themeObserver = new MutationObserver(sendThemeToIframe)
+  themeObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme-preset', 'style'],
+  })
+}
 
 const htmlFilter = computed(() => {
   if (!htmlMaskEnabled.value) return 'none'

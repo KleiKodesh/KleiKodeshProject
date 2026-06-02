@@ -63,6 +63,12 @@ When the panel has a dedicated toggle button, pass it as the `toggleButton` opti
 
 Every dropdown or panel must be rendered with `v-if`, not `v-show`. `v-if` ensures the component is fully unmounted when closed — child composables, watchers, and focus state are all torn down. `v-show` keeps the subtree alive and is only appropriate for tab-pane switching where preserving scroll position or expensive state across tab changes is intentional (e.g. the settings tab panes).
 
+## Keyboard Event Handling
+
+Always use `e.code` instead of `e.key` when handling keyboard shortcuts. `e.key` returns the character produced by the key — it changes based on the active input language (e.g. Hebrew keyboard returns `ב` instead of `b`), which breaks all shortcuts when the user types in Hebrew. `e.code` returns the physical key position and is always language-independent.
+
+The only legitimate use of `e.key` is when you specifically need the character the user typed — for example, filtering a list as the user types, or handling printable input in a text field. For every shortcut that combines a modifier key (Ctrl, Alt, Shift, Meta) with a letter or function key, always use `e.code`.
+
 ## VueUse
 
 - Prefer VueUse composables over hand-rolling equivalent logic — don't reinvent what's already there

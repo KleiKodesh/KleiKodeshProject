@@ -112,52 +112,52 @@ function goHome() {
 // Uses capture phase to intercept shortcuts before child elements (e.g. the book view scroller)
 // can consume them with preventDefault().
 useEventListener('keydown', (e: KeyboardEvent) => {
-  if (e.ctrlKey && e.key === 'w') {
+  if (e.ctrlKey && e.code === 'KeyW') {
     e.preventDefault()
     tabStore.closeTab(tabStore.activeTabId)
-  } else if (e.ctrlKey && e.key === 'x') {
+  } else if (e.ctrlKey && e.code === 'KeyX') {
     e.preventDefault()
     tabStore.closeAllTabs()
-  } else if (e.ctrlKey && e.key === 'Tab') {
+  } else if (e.ctrlKey && e.code === 'Tab') {
     e.preventDefault()
     dropdownOpen.value = !dropdownOpen.value
-  } else if (e.ctrlKey && e.key === 'b') {
+  } else if (e.ctrlKey && e.code === 'KeyB') {
     e.preventDefault()
     if (bookViewStore.isBookViewActive) {
       bookViewStore.toggleToolbar()
     } else if (tabStore.activeTab?.route === '/pdf-view') {
       tabStore.togglePdfViewerTitleBar()
     }
-  } else if (e.ctrlKey && e.key === 'j') {
+  } else if (e.ctrlKey && e.code === 'KeyJ') {
     e.preventDefault()
     if (bookViewStore.isBookViewActive) bookViewStore.toggleBottomPanel()
-  } else if (e.ctrlKey && e.shiftKey && e.key === 'F') {
+  } else if (e.ctrlKey && e.shiftKey && e.code === 'KeyF') {
     e.preventDefault()
     toggleFullscreen()
-  } else if (e.key === 'F11') {
+  } else if (e.code === 'F11') {
     e.preventDefault()
     toggleFullscreen()
-  } else if (e.ctrlKey && e.key === 'f') {
+  } else if (e.ctrlKey && e.code === 'KeyF') {
     e.preventDefault()
     if (bookViewStore.isBookViewActive) {
       // Open search bar in book view from anywhere (no focus required)
       bookViewStore.openSearch()
     }
-  } else if (e.ctrlKey && e.key === 'p') {
+  } else if (e.ctrlKey && e.code === 'KeyP') {
     e.preventDefault()
-  } else if (e.altKey && e.key === 'm') {
+  } else if (e.altKey && e.code === 'KeyM') {
     e.preventDefault()
     toggleNavDropdown()
-  } else if (e.altKey && e.key === 't') {
+  } else if (e.altKey && e.code === 'KeyT') {
     e.preventDefault()
     toggleTabDropdown()
-  } else if (e.altKey && e.key === 'n') {
+  } else if (e.altKey && e.code === 'KeyN') {
     e.preventDefault()
     openNewTab()
-  } else if (e.altKey && e.key === 'l') {
+  } else if (e.altKey && e.code === 'KeyL') {
     e.preventDefault()
     themeStore.toggleDarkMode()
-  } else if (e.altKey && e.key === 'Home') {
+  } else if (e.altKey && e.code === 'Home') {
     e.preventDefault()
     goHome()
   }

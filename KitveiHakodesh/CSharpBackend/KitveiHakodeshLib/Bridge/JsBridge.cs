@@ -83,9 +83,51 @@ namespace KitveiHakodeshLib.Bridge
 
     // Listen for scrollTo commands posted by HtmlViewPage.vue on iframe load.
     window.addEventListener('message', function (e) {
-        if (!e.data || e.data.type !== 'htmlViewScrollTo') return;
-        window.scrollTo({ top: e.data.scrollTop, behavior: 'instant' });
+        if (!e.data) return;
+        if (e.data.type === 'htmlViewScrollTo') {
+            window.scrollTo({ top: e.data.scrollTop, behavior: 'instant' });
+        }
+        if (e.data.type === 'htmlViewTheme') {
+            var c = e.data.colors;
+            if (!c) return;
+            document.documentElement.style.setProperty('--iframe-bg', c.bgPrimary || '');
+            document.documentElement.style.setProperty('--iframe-text', c.textPrimary || '');
+            document.documentElement.style.setProperty('--iframe-text-secondary', c.textSecondary || '');
+            // Apply directly to body so it works regardless of whether a <style> was injected
+            if (document.body) {
+                document.body.style.background = c.bgPrimary || '';
+                document.body.style.color = c.textPrimary || '';
+            }
+        }
     });
+
+    // Plain-text files are served as text/plain and rendered by the browser as a
+    // bare <pre> with no author styles. Strip any HTML tags from the content and
+    // inject RTL alignment so Hebrew text reads correctly right-to-left.
+    function applyTxtStyles() {
+        var ct = document.contentType || '';
+        if (ct !== 'text/plain') return;
+
+        // Strip HTML tags — replace every <...> sequence with nothing so that
+        // txt files that happen to contain markup are shown as plain text.
+        var pre = document.querySelector('pre');
+        if (pre) {
+            pre.textContent = pre.textContent.replace(/<[^>]*>/g, '');
+        }
+
+        var style = document.createElement('style');
+        style.textContent =
+            'body, pre { direction: rtl; text-align: right; unicode-bidi: plaintext; ' +
+            'font-family: ""Segoe UI"", system-ui, sans-serif; font-size: 14px; ' +
+            'line-height: 1.7; margin: 16px; white-space: pre-wrap; word-break: break-word; }';
+        document.head.appendChild(style);
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', applyTxtStyles);
+    } else {
+        applyTxtStyles();
+    }
 })();";
     }
 }
