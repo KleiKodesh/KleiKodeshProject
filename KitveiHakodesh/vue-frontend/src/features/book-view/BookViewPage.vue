@@ -77,7 +77,6 @@ watch(restoredCommentaryMode, (mode) => { if (mode) commentaryMode.value = mode 
 watch(restoredCommentaryFraction, (fraction) => { if (fraction != null) commentaryFraction.value = fraction }, { once: true })
 // Listen for Ctrl+F from AppTitleBar to open search
 watch(() => bookViewStore.openSearchSignal, () => {
-  searchVisible.value = true
   openContentSearch()
 })
 // Listen for Ctrl+J from AppTitleBar to toggle commentary panel

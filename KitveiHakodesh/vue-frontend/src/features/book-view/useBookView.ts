@@ -240,6 +240,10 @@ export function useBookView(
   }
 
   function openCommentarySearch() {
+    if (searchVisible.value && searchMode.value === 'commentary') {
+      searchVisible.value = false
+      return
+    }
     searchVisible.value = true
     searchMode.value = 'commentary'
     searchNavigationState.commentary = false

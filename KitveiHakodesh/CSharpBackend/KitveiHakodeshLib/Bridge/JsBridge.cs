@@ -61,6 +61,9 @@ namespace KitveiHakodeshLib.Bridge
         ///   - Posts throttled scroll position to window.top as { type: 'htmlViewScroll', scrollTop }
         ///   - Listens for { type: 'htmlViewScrollTo', scrollTop } commands from the parent
         ///     and calls window.scrollTo() to restore the saved position.
+        ///   - Forwards Ctrl+key and Ctrl+Shift+key keydown events to window.top as
+        ///     { type: 'iframeKeydown', code, ctrlKey, shiftKey, metaKey } so that app-level
+        ///     shortcuts (Ctrl+W, Ctrl+N, Ctrl+F, etc.) work when focus is inside the iframe.
         ///
         /// In the top frame (the Vue app) this script is a no-op — the early return fires
         /// immediately.
@@ -81,6 +84,30 @@ namespace KitveiHakodeshLib.Bridge
         scrollTimer = setTimeout(reportScroll, 200);
     }, { passive: true });
 
+    // Forward Ctrl+key shortcuts to the parent frame so app-level keyboard
+    // shortcuts (Ctrl+W, Ctrl+F, Ctrl+N, etc.) continue to work when focus
+    // is inside the iframe.  The parent reconstructs a synthetic KeyboardEvent
+    // and dispatches it on its own window.
+    // Use capture phase so this fires before any iframe-internal handlers
+    // (e.g. PDF.js) that may call preventDefault() on the same event.
+    window.addEventListener('keydown', function (e) {
+        if (!e.ctrlKey && !e.metaKey) return;
+        // Let the browser handle text-editing shortcuts inside the iframe itself
+        // (Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+Z, Ctrl+Y) — only forward navigation and
+        // app-level shortcuts.
+        var editing = ['KeyA','KeyC','KeyV','KeyX','KeyZ','KeyY'];
+        if (editing.indexOf(e.code) !== -1 && !e.shiftKey) return;
+        window.top.postMessage({
+            type: 'iframeKeydown',
+            code: e.code,
+            ctrlKey: e.ctrlKey,
+            shiftKey: e.shiftKey,
+            metaKey: e.metaKey,
+            altKey: e.altKey
+        }, '*');
+        e.preventDefault();
+    }, true);
+
     // Listen for scrollTo commands posted by HtmlViewPage.vue on iframe load.
     window.addEventListener('message', function (e) {
         if (!e.data) return;
@@ -98,6 +125,26 @@ namespace KitveiHakodeshLib.Bridge
                 document.body.style.background = c.bgPrimary || '';
                 document.body.style.color = c.textPrimary || '';
             }
+            // Inject scrollbar styling to match the app's thin scrollbar appearance.
+            // Uses the resolved color value sent from the parent (textSecondary).
+            var styleId = '__kitvei-scrollbar-style';
+            var existing = document.getElementById(styleId);
+            if (existing) existing.remove();
+            var scrollbarStyle = document.createElement('style');
+            scrollbarStyle.id = styleId;
+            var thumbColor = c.textSecondary
+                ? 'color-mix(in srgb, ' + c.textSecondary + ' 30%, transparent)'
+                : 'rgba(128,128,128,0.3)';
+            var thumbHoverColor = c.textSecondary
+                ? 'color-mix(in srgb, ' + c.textSecondary + ' 50%, transparent)'
+                : 'rgba(128,128,128,0.5)';
+            scrollbarStyle.textContent =
+                '* { scrollbar-color: ' + thumbColor + ' transparent; scrollbar-width: thin; }' +
+                '*::-webkit-scrollbar { width: 6px; height: 6px; }' +
+                '*::-webkit-scrollbar-track { background: transparent; }' +
+                '*::-webkit-scrollbar-thumb { background: ' + thumbColor + '; border-radius: 0; }' +
+                '*::-webkit-scrollbar-thumb:hover { background: ' + thumbHoverColor + '; }';
+            (document.head || document.documentElement).appendChild(scrollbarStyle);
         }
     });
 

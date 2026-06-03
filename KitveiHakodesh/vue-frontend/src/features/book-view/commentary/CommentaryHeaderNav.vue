@@ -95,8 +95,8 @@ function handleSelect() {
 
 function handleKeydown(e: KeyboardEvent) {
   if ((e.ctrlKey || e.metaKey) && e.code === 'KeyF') {
-    e.preventDefault()
-    e.stopPropagation()
+    // Let the event bubble up to the commentary scroller's useScopedKeys handler
+    // which will emit toggle-search correctly.
     return
   }
   if (e.key !== 'Enter') return

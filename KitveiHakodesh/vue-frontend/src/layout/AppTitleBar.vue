@@ -108,6 +108,25 @@ function goHome() {
   }
 }
 
+// Forward Ctrl+key shortcuts from child iframes (HTML/TXT viewer) back into the
+// top-level keydown pipeline.  When focus is inside an iframe, keyboard events
+// fire on the iframe's window and never reach the listeners below.  The injected
+// IframeScrollScript posts an 'iframeKeydown' message to window.top for every
+// Ctrl+key it sees; we reconstruct a synthetic KeyboardEvent here so all existing
+// shortcut handlers fire normally without any duplication.
+useEventListener('message', (e: MessageEvent) => {
+  if (!e.data || e.data.type !== 'iframeKeydown') return
+  window.dispatchEvent(new KeyboardEvent('keydown', {
+    code: e.data.code,
+    ctrlKey: e.data.ctrlKey,
+    shiftKey: e.data.shiftKey,
+    metaKey: e.data.metaKey,
+    altKey: e.data.altKey,
+    bubbles: true,
+    cancelable: true,
+  }))
+})
+
 // Keyboard event listener — always active, even when title bar is hidden.
 // Uses capture phase to intercept shortcuts before child elements (e.g. the book view scroller)
 // can consume them with preventDefault().
@@ -138,6 +157,10 @@ useEventListener('keydown', (e: KeyboardEvent) => {
     e.preventDefault()
     toggleFullscreen()
   } else if (e.ctrlKey && e.code === 'KeyF') {
+    // Only intercept Ctrl+F when the focused element has not claimed it via
+    // data-ctrlf-enabled — components like CommentaryView use that attribute
+    // to signal they own Ctrl+F for their own search toggle.
+    if (document.activeElement?.closest('[data-ctrlf-enabled]')) return
     e.preventDefault()
     if (bookViewStore.isBookViewActive) {
       // Open search bar in book view from anywhere (no focus required)
