@@ -46,7 +46,7 @@ const barTitle = computed(() => {
   const full = activeTab.value?.tocPath
     ? activeTab.value.title + ' · ' + activeTab.value.tocPath
     : activeTab.value?.title
-  return full ? full + '\n(לחץ להצגת רשימת הלשוניות - Alt+T)' : '(לחץ להצגת רשימת הלשוניות - Alt+T)'
+  return full ? full + '\n(לחץ להצגת רשימת הלשוניות - Ctrl+T)' : '(לחץ להצגת רשימת הלשוניות - Ctrl+T)'
 })
 
 const toolbarTitle = computed(() => {
@@ -145,19 +145,19 @@ useEventListener('keydown', (e: KeyboardEvent) => {
     }
   } else if (e.ctrlKey && e.code === 'KeyP') {
     e.preventDefault()
-  } else if (e.altKey && e.code === 'KeyM') {
+  } else if (e.ctrlKey && e.code === 'KeyM') {
     e.preventDefault()
     toggleNavDropdown()
-  } else if (e.altKey && e.code === 'KeyT') {
+  } else if (e.ctrlKey && e.code === 'KeyT') {
     e.preventDefault()
     toggleTabDropdown()
-  } else if (e.altKey && e.code === 'KeyN') {
+  } else if (e.ctrlKey && e.code === 'KeyN') {
     e.preventDefault()
     openNewTab()
-  } else if (e.altKey && e.code === 'KeyL') {
+  } else if (e.ctrlKey && e.code === 'KeyL') {
     e.preventDefault()
     themeStore.toggleDarkMode()
-  } else if (e.altKey && e.code === 'Home') {
+  } else if (e.ctrlKey && e.code === 'KeyG') {
     e.preventDefault()
     goHome()
   }
@@ -170,7 +170,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
     <header class="title-bar" @click="toggleTabDropdown">
     <div class="bar-start">
       <div class="nav-btn-wrap">
-        <button ref="navBtnRef" class="bar-btn" title="תפריט (Alt+M)" @click.stop="toggleNavDropdown">
+        <button ref="navBtnRef" class="bar-btn" title="תפריט (Ctrl+M)" @click.stop="toggleNavDropdown">
           <IconLineHorizontal320Regular />
         </button>
       </div>
@@ -211,8 +211,8 @@ useEventListener('keydown', (e: KeyboardEvent) => {
       >
         <IconCrop20Regular />
       </button>
-      <button class="bar-btn" title="בית (Alt+Home)" @click.stop="goHome"><IconHome20Regular /></button>
-      <button class="bar-btn" title="לשונית חדשה (Alt+N)" @click.stop="openNewTab">
+      <button class="bar-btn" title="בית (Ctrl+G)" @click.stop="goHome"><IconHome20Regular /></button>
+      <button class="bar-btn" title="לשונית חדשה (Ctrl+N)" @click.stop="openNewTab">
         <IconAdd20Regular />
       </button>
       <button

@@ -255,11 +255,11 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
           <div class="shortcuts-grid">
             <!-- Tab management -->
             <div class="shortcut-row">
-              <kbd>Alt</kbd><span class="kbd-plus">+</span><kbd>N</kbd>
+              <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>N</kbd>
               <span class="shortcut-desc">לשונית חדשה</span>
             </div>
             <div class="shortcut-row">
-              <kbd>Alt</kbd><span class="kbd-plus">+</span><kbd>T</kbd>
+              <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>T</kbd>
               <span class="shortcut-desc">פתח רשימת לשוניות</span>
             </div>
             <div class="shortcut-row">
@@ -272,15 +272,15 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
             </div>
             <!-- Navigation -->
             <div class="shortcut-row">
-              <kbd>Alt</kbd><span class="kbd-plus">+</span><kbd>Home</kbd>
+              <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>G</kbd>
               <span class="shortcut-desc">עבור לדף הבית</span>
             </div>
             <div class="shortcut-row">
-              <kbd>Alt</kbd><span class="kbd-plus">+</span><kbd>M</kbd>
+              <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>M</kbd>
               <span class="shortcut-desc">פתח תפריט ראשי</span>
             </div>
             <div class="shortcut-row">
-              <kbd>Alt</kbd><span class="kbd-plus">+</span><kbd>L</kbd>
+              <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>L</kbd>
               <span class="shortcut-desc">החלף ערכת נושא</span>
             </div>
             <!-- Book view controls -->
@@ -311,7 +311,7 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
             </div>
             <!-- Display modes -->
             <div class="shortcut-row">
-              <kbd>Alt</kbd><span class="kbd-plus">+</span><kbd>F</kbd>
+              <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Shift</kbd><span class="kbd-plus">+</span><kbd>L</kbd>
               <span class="shortcut-desc">הצג / הסתר סרגל האפליקציה</span>
             </div>
             <div class="shortcut-row">
