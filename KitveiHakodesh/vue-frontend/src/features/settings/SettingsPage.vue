@@ -311,7 +311,7 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
             </div>
             <!-- Display modes -->
             <div class="shortcut-row">
-              <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Shift</kbd><span class="kbd-plus">+</span><kbd>L</kbd>
+              <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>H</kbd>
               <span class="shortcut-desc">הצג / הסתר סרגל האפליקציה</span>
             </div>
             <div class="shortcut-row">
