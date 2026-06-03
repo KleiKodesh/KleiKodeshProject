@@ -120,7 +120,7 @@ namespace KitveiHakodeshLib.Search
                 var  timer = new Stopwatch();
                 timer.Start();
 
-                foreach (var (rowId, bookTitle, snippet) in index.SearchWithSnippets(
+                foreach (var (rowId, bookId, bookTitle, tocPath, snippet) in index.SearchWithSnippets(
                     query,
                     maxWordDistance: maxWordDistance,
                     requireOrdered:  requireOrdered,
@@ -134,15 +134,14 @@ namespace KitveiHakodeshLib.Search
                         return;
                     }
 
-                    // Skip lines the frontend already has cached — no need to re-stream them.
                     if (excludedLineIds.Contains(rowId)) continue;
 
                     batch.Add(new
                     {
                         lineId       = rowId,
-                        bookId       = 0,
+                        bookId       = bookId,
                         bookTitle    = bookTitle,
-                        tocText      = "",
+                        tocText      = tocPath,
                         score        = snippet.Score,
                         snippet      = snippet.Html,
                         matchedTerms = Array.Empty<string>()

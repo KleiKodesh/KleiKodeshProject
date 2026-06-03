@@ -12,7 +12,8 @@ namespace SearchEngine.Indexing
     /// <summary>
     /// Builds a Lucene index from the Zayit database rows.
     /// Each row's integer id becomes the stored field "rowId";
-    /// the row text is indexed under the field "text".
+    /// the row text is indexed under the field "text";
+    /// the row's bookId is stored as an int field "bookId".
     ///
     /// Near-real-time search during build
     /// ------------------------------------
@@ -27,8 +28,11 @@ namespace SearchEngine.Indexing
     public sealed class LuceneIndexWriter : IDisposable
     {
         // Field name constants — shared with LuceneSearcher.
-        public const string FieldRowId = "rowId";
-        public const string FieldText  = "text";
+        public const string FieldRowId    = "rowId";
+        public const string FieldText     = "text";
+        public const string FieldBookId   = "bookId";
+        public const string FieldBookTitle = "bookTitle";
+        public const string FieldTocPath  = "tocPath";
 
         private readonly FSDirectory _directory;
         private readonly IndexWriter _writer;
@@ -36,6 +40,15 @@ namespace SearchEngine.Indexing
 
         // Reusable field type — frozen once, shared across all AddDocument calls.
         private static readonly FieldType _textFieldType;
+
+        // Reusable field instances — mutated per AddDocument call to avoid per-row allocation.
+        // Not thread-safe; AddDocument must not be called concurrently (the writer isn't either).
+        private readonly Int32Field   _rowIdField;
+        private readonly StoredField  _bookIdField;
+        private readonly StoredField  _bookTitleField;
+        private readonly StoredField  _tocPathField;
+        private readonly Field        _textField;
+        private readonly Document     _reusableDoc;
 
         static LuceneIndexWriter()
         {
@@ -62,11 +75,24 @@ namespace SearchEngine.Indexing
             var config = new IndexWriterConfig(LuceneVersion.LUCENE_48,
                 new HebrewAnalyzer())
             {
-                // Bulk indexing tuning: 256 MB RAM buffer (default 16 MB).
-                // Kept moderate so the NRT reader doesn't have to flush huge segments.
                 RAMBufferSizeMB = 256.0,
             };
             _writer = new IndexWriter(_directory, config);
+
+            // Pre-allocate reusable field instances and the document that holds them.
+            // AddDocument mutates these in-place rather than allocating new objects per row.
+            _rowIdField     = new Int32Field(FieldRowId, 0, Field.Store.YES);
+            _bookIdField    = new StoredField(FieldBookId, 0);
+            _bookTitleField = new StoredField(FieldBookTitle, string.Empty);
+            _tocPathField   = new StoredField(FieldTocPath, string.Empty);
+            _textField      = new Field(FieldText, string.Empty, _textFieldType);
+
+            _reusableDoc = new Document();
+            _reusableDoc.Add(_rowIdField);
+            _reusableDoc.Add(_bookIdField);
+            _reusableDoc.Add(_bookTitleField);
+            _reusableDoc.Add(_tocPathField);
+            _reusableDoc.Add(_textField);
         }
 
         // ── NRT ───────────────────────────────────────────────────────
@@ -99,11 +125,16 @@ namespace SearchEngine.Indexing
             System.Threading.CancellationToken ct = default)
         {
             long count = 0;
-            foreach (var (id, content) in db.ReadLines(ct: ct))
+            foreach (var book in db.ReadAllBooks())
             {
-                AddDocument(id, content);
-                count++;
-                onProgress?.Invoke(count, totalRows);
+                var tocMap = db.BuildTocPathMap(book.BookId, book.BookTitle);
+                foreach (var (id, content) in db.ReadLinesForBook(book.BookId))
+                {
+                    tocMap.TryGetValue(id, out string tocPath);
+                    AddDocument(id, book.BookId, book.BookTitle, tocPath ?? string.Empty, content);
+                    count++;
+                    onProgress?.Invoke(count, totalRows);
+                }
             }
 
             onProgress?.Invoke(count, totalRows);
@@ -113,15 +144,20 @@ namespace SearchEngine.Indexing
 
         /// <summary>
         /// Adds a single row to the index without committing.
+        /// Reuses pre-allocated field instances — no per-row heap allocation.
+        /// rowId is indexed (for sort) and stored. bookId, bookTitle and tocPath are stored only.
         /// </summary>
-        public void AddDocument(int id, string content)
+        public void AddDocument(int id, int bookId, string bookTitle, string tocPath, string content)
         {
             if (_disposed) throw new ObjectDisposedException(nameof(LuceneIndexWriter));
 
-            var doc = new Document();
-            doc.Add(new Int32Field(FieldRowId, id, Field.Store.YES));
-            doc.Add(new Field(FieldText, content ?? string.Empty, _textFieldType));
-            _writer.AddDocument(doc);
+            _rowIdField.SetInt32Value(id);
+            _bookIdField.SetInt32Value(bookId);
+            _bookTitleField.SetStringValue(bookTitle ?? string.Empty);
+            _tocPathField.SetStringValue(tocPath ?? string.Empty);
+            _textField.SetStringValue(content ?? string.Empty);
+
+            _writer.AddDocument(_reusableDoc);
         }
 
         /// <summary>

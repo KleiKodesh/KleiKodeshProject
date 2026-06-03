@@ -142,7 +142,7 @@ The main book reader. Orchestrates a split pane (text above, commentary below), 
 
 ### full-text-search/
 
-Full-text search backed by FtsLib (LSM-style segment index with delta+varint compressed posting lists). Supports category/book filters and caches results in IDB.
+Full-text search backed by SearchEngineLib (Lucene-based indexing). Supports category/book filters and caches results in IDB.
 
 - `FullTextSearchPage.vue` — main page
 - `FullTextSearchBar.vue` — search input + filter toggle
@@ -155,10 +155,20 @@ Full-text search backed by FtsLib (LSM-style segment index with delta+varint com
 - `useFullTextSearchFilters.ts` — filter state (checked books/categories), result filtering, and result click handler
 - `fullTextSearchTypes.ts` — TypeScript types
 
-#### Query syntax (passed verbatim to FtsLib)
+#### Query syntax (Lucene-based)
 
-- Multiple words are AND-ed. `word*` is a wildcard (prefix, infix, or suffix). `word~` / `word~2` / `word~3` is fuzzy (edit distance 1–3). `a | b` is OR within one AND slot.
-- The frontend passes two additional parameters: `maxWordDistance` (default 10 — maximum token distance between matched terms in a line) and `requireOrdered` (default false — whether terms must appear in query order). These are applied inside FtsLib's snippet pipeline, not during index intersection.
+- Multiple words are AND-ed by default. `word*` is a prefix wildcard, `*word` is a suffix wildcard, `*word*` is an infix wildcard. `word?` marks an optional character.
+- Fuzzy matching: `word~1` / `word~2` for edit distance 1–2 (Levenshtein distance).
+- OR within a slot: `a | b` matches lines with either a or b.
+- Grammar expansion: `%word` for prefix expansion, `word%` for suffix expansion, `%word%` for both.
+- Spelling variants (ketiv/chaseir): `~word` to match Hebrew spelling variants.
+- Wrapping modes (frontend-side options):
+  - `searchWildcardWrap` — auto-wrap each term with `*term*` for infix search
+  - `searchGrammarWrap` — auto-wrap each term with `%term%` for grammar expansion
+- Parameters passed to the search engine:
+  - `searchMaxWordDistance` — maximum token distance between matched terms in a line (default 10)
+  - `searchRequireOrdered` — whether terms must appear in query order
+  - `searchExpandKetiv` — whether to expand ketiv/chaseir spelling variants
 
 ### settings/
 
@@ -244,8 +254,6 @@ Reusable UI primitives used across multiple features. No feature-specific logic 
 - `BottomSearchBar.vue`, `ContextMenu.vue`, `ConfirmDialog.vue`, `LoadingAnimation.vue`
 - `HintIcon.vue` — tooltip hint icon
 - `IconTreeRtl.vue` — `IconTextBulletListTree` pre-flipped for RTL layout
-
-## App Shell (`src/layout/`)
 
 ## Pinia Stores (`src/stores/`)
 
@@ -386,24 +394,22 @@ Key C# handlers:
 - `JsBridge.cs` — handles `__webviewAction` calls (file picker, PDF restore, virtual host management)
 - `WebBridge.cs` — WebView2 setup, message routing
 - `DbAccess.cs` / `DbHandler.cs` — SQLite access via Dapper
-- `SearchHandler.cs` — FTS index lifecycle orchestrator (actor-thread pattern); delegates to `FtsIndexBuilder`, `FtsIndexState`, and `FtsSearchExecutor` in `KitveiHakodeshLib/Search/`
+- `SearchHandler.cs` — Lucene index lifecycle orchestrator; delegates to search engine components in `KitveiHakodeshLib/Search/`
 - `HebrewBooksHandler.cs` — HebrewBooks download via WebView2 browser engine
 - `LocalFileHandler.cs` — local file virtual host management
 - `ZimHandler.cs` — ZIM virtual host management (Kiwix reader)
 - `WordToPdfConverter.cs` — Word-to-PDF conversion
 
-### FTS Search Pipeline
+### Full-Text Search Pipeline
 
-The full-text search pipeline spans three layers: FtsLib (the index engine), KitveiHakodeshLib (the C# orchestration layer), and the Vue frontend.
+The full-text search pipeline spans three layers: SearchEngineLib (the Lucene-based index engine), KitveiHakodeshLib (the C# orchestration layer), and the Vue frontend.
 
-**FtsLib** (`CSharpBackend/FtsLib/`) is a standalone library with its own git repo. It exposes a single public entry point: `SeforimIndex` in `FtsLib/Seforim/`. The `Core/` folder contains the index engine internals — `IndexWriter`, `IndexReader`, `SegmentMerger`, `QueryParser`, `SearchExecutor`, `SnippetBuilder`, `Tokenizer`, `FuzzyExpander`, `WildcardExpander`, and the posting-list iterators. The `Misc/` folder contains `ZayitDb.cs`, which owns all SQL for reading lines from the seforim database during indexing and search result hydration. `SeforimIndex` is the only class the rest of the app ever touches.
+**SearchEngineLib** contains the Lucene-based indexing and search implementation. The search engine handles index building, querying, and result retrieval using Lucene's inverted index structure.
 
-**KitveiHakodeshLib/Search/** contains four classes that orchestrate the lifecycle:
+**KitveiHakodeshLib/Search/** contains the orchestration classes:
 
-- `FtsIndexState` — owns all mutable state (current state machine position, `SeforimIndex` instance, DB path, running tasks). All field mutations go through its named transition methods. State machine: Idle → Building → Ready → Merging → Ready.
-- `FtsIndexBuilder` — starts and runs the build (`Task.Run`) and background merge. Pushes `ftsIndexProgress` events to the frontend every 5000 lines. Marks the index partially ready as soon as the first segment is flushed so search is available before the build completes.
-- `FtsSearchExecutor` — runs each search on a `Task.Run` thread, streams results back to the frontend in batches via `WebBridge.PushEvent` (which calls `PostWebMessageAsString` → `chrome.webview` message events). Batch size starts at 1 and doubles up to 16, then switches to a 150ms timer flush. Applies `maxWordDistance` and `requireOrdered` filters inside the snippet loop.
-- `SearchHandler` — thin orchestrator. Serializes all lifecycle operations (OnDbReady, ResetAndReindex, HandleDeleteIndex) through a `BlockingCollection<Action>` actor thread so they never race. Delegates search start/cancel to `FtsSearchExecutor`.
+- `SearchHandler` — thin orchestrator. Manages the lifecycle of the search index (building, querying, resetting). Receives search requests from the frontend via bridge actions, delegates to the search engine, and streams results back to the frontend in batches via `WebBridge.PushEvent` (which calls `PostWebMessageAsString` → `chrome.webview` message events). Batch size starts at 1 and doubles up to 16, then switches to a 150ms timer flush.
+- Search execution streams results to the frontend in batches, enriches each batch with TOC paths via a SQL query, and applies filtering inside the snippet loop.
 
 **Vue frontend** (`src/features/full-text-search/`):
 

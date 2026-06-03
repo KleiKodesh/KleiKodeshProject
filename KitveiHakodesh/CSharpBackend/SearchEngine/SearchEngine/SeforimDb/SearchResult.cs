@@ -10,8 +10,14 @@ namespace SearchEngine.SeforimDb
         /// <summary>The line ID in the seforim database.</summary>
         public int LineId { get; }
 
+        /// <summary>The book ID that this line belongs to.</summary>
+        public int BookId { get; }
+
         /// <summary>Title of the book this line belongs to.</summary>
         public string BookTitle { get; }
+
+        /// <summary>TOC path for this line (e.g. "פרק א › סעיף א"), from the Lucene index.</summary>
+        public string TocPath { get; }
 
         /// <summary>Raw HTML content of the line as stored in the database.</summary>
         public string Content { get; }
@@ -30,13 +36,15 @@ namespace SearchEngine.SeforimDb
         /// </summary>
         public int OriginalGroupCount { get; }
 
-        public SearchResult(int lineId, string bookTitle, string content,
+        public SearchResult(int lineId, int bookId, string bookTitle, string tocPath, string content,
             System.Collections.Generic.IReadOnlyList<
                 System.Collections.Generic.IReadOnlyCollection<string>> matchedGroups = null,
             int originalGroupCount = 0)
         {
             LineId             = lineId;
+            BookId             = bookId;
             BookTitle          = bookTitle ?? string.Empty;
+            TocPath            = tocPath   ?? string.Empty;
             Content            = content   ?? string.Empty;
             MatchedGroups      = matchedGroups ??
                 System.Array.Empty<System.Collections.Generic.IReadOnlyCollection<string>>();

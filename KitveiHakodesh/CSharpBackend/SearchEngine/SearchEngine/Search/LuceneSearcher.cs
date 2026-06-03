@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using System.Threading;
 using Lucene.Net.Index;
 using Lucene.Net.Search;
@@ -38,9 +39,20 @@ namespace SearchEngine.Search
         private readonly HebrewAnalyzer  _analyzer;
 
         // Sort by rowId ascending — created once, shared across all searches.
-        // SortField.Type.INT32 matches the Int32Field used in LuceneIndexWriter.
         private static readonly Sort RowIdSort =
             new Sort(new SortField(LuceneIndexWriter.FieldRowId, SortFieldType.INT32));
+
+        // Reusable StringBuilder for StripHtml — avoids allocation per snippet.
+        // Only used on the hot path inside SearchWithSnippets which runs on one thread.
+        [System.ThreadStatic]
+        private static StringBuilder _stripHtmlBuffer;
+
+        // Field slot indices in the stored document — must match the order fields are
+        // added in LuceneIndexWriter: rowId(0), bookId(1), bookTitle(2), tocPath(3).
+        private const int SlotRowId    = 0;
+        private const int SlotBookId   = 1;
+        private const int SlotBookTitle = 2;
+        private const int SlotTocPath  = 3;
 
         private bool _disposed;
 
@@ -80,11 +92,11 @@ namespace SearchEngine.Search
         // ── Search ────────────────────────────────────────────────────
 
         /// <summary>
-        /// Executes the query and returns all matching row IDs sorted by rowId ascending.
-        /// Acquires a searcher from the manager for the duration of the search,
-        /// then releases it so the manager can safely close old reader generations.
+        /// Executes the query and returns all matching (rowId, bookId, bookTitle, tocPath) tuples
+        /// sorted by rowId ascending. All fields are read from stored Lucene fields —
+        /// no database round-trip.
         /// </summary>
-        public IEnumerable<int> Search(string queryText,
+        public IEnumerable<(int RowId, int BookId, string BookTitle, string TocPath)> Search(string queryText,
                                        CancellationToken ct = default)
         {
             Query query = HebrewQueryBuilder.Build(queryText, _analyzer);
@@ -93,9 +105,6 @@ namespace SearchEngine.Search
             IndexSearcher searcher = _manager.Acquire();
             try
             {
-                // Single sorted search — no double-query needed.
-                // doDocScores=false, doMaxScore=false: we don't use relevance scores,
-                // only the sort key, so skip the score computation entirely.
                 var counter = new TotalHitCountCollector();
                 searcher.Search(query, counter);
                 if (counter.TotalHits == 0) yield break;
@@ -105,10 +114,16 @@ namespace SearchEngine.Search
                 foreach (ScoreDoc sd in hits.ScoreDocs)
                 {
                     ct.ThrowIfCancellationRequested();
-                    var doc   = searcher.Doc(sd.Doc);
-                    var field = doc.GetField(LuceneIndexWriter.FieldRowId);
-                    if (field != null)
-                        yield return field.GetInt32Value().Value;
+                    var doc    = searcher.Doc(sd.Doc);
+                    var fields = doc.Fields;
+                    if (fields.Count <= SlotTocPath) continue;
+
+                    int    rowId    = fields[SlotRowId].GetInt32Value().GetValueOrDefault();
+                    int    bookId   = fields[SlotBookId].GetInt32Value().GetValueOrDefault();
+                    string bookTitle = fields[SlotBookTitle].GetStringValue() ?? string.Empty;
+                    string tocPath   = fields[SlotTocPath].GetStringValue()  ?? string.Empty;
+
+                    yield return (rowId, bookId, bookTitle, tocPath);
                 }
             }
             finally
@@ -118,7 +133,7 @@ namespace SearchEngine.Search
         }
 
         /// <summary>
-        /// Executes the query and yields (rowId, snippet) pairs with highlighting,
+        /// Executes the query and yields (rowId, bookId, snippet) tuples with highlighting,
         /// sorted by rowId ascending.
         ///
         /// When <paramref name="slop"/> is <see cref="int.MaxValue"/> (default) the
@@ -137,7 +152,7 @@ namespace SearchEngine.Search
         /// <paramref name="ct"/> is checked between results — cancellation stops
         /// streaming immediately.
         /// </summary>
-        public IEnumerable<(int RowId, SnippetResult Snippet)> SearchWithSnippets(
+        public IEnumerable<(int RowId, int BookId, string BookTitle, string TocPath, SnippetResult Snippet)> SearchWithSnippets(
             string            queryText,
             Func<int, string> textProvider,
             string            preTag       = "<mark>",
@@ -188,12 +203,16 @@ namespace SearchEngine.Search
                 {
                     ct.ThrowIfCancellationRequested();
 
-                    var doc   = searcher.Doc(sd.Doc);
-                    var field = doc.GetField(LuceneIndexWriter.FieldRowId);
-                    if (field == null) continue;
+                    var doc    = searcher.Doc(sd.Doc);
+                    var fields = doc.Fields;
+                    if (fields.Count <= SlotTocPath) continue;
 
-                    int    rowId = field.GetInt32Value().Value;
-                    string text  = textProvider(rowId);
+                    int    rowId     = fields[SlotRowId].GetInt32Value().GetValueOrDefault();
+                    int    bookId    = fields[SlotBookId].GetInt32Value().GetValueOrDefault();
+                    string bookTitle = fields[SlotBookTitle].GetStringValue() ?? string.Empty;
+                    string tocPath   = fields[SlotTocPath].GetStringValue()  ?? string.Empty;
+
+                    string text = textProvider(rowId);
                     if (text == null) continue;
 
                     string plain = StripHtml(text);
@@ -204,14 +223,10 @@ namespace SearchEngine.Search
 
                     if (fragment == null) continue;
 
-                    // If the caller requires a minimum number of highlighted terms,
-                    // count <mark> tags in the fragment and skip it when the window
-                    // was too narrow to include all query terms.  This filters out
-                    // bogus results where a short snippet only shows part of the match.
                     if (minMarks > 0 && CountMarks(fragment, preTag) < minMarks)
                         continue;
 
-                    yield return (rowId, new SnippetResult(fragment, 1, 0, true));
+                    yield return (rowId, bookId, bookTitle, tocPath, new SnippetResult(fragment, 1, 0, true));
                 }
             }
             finally
@@ -242,7 +257,9 @@ namespace SearchEngine.Search
         private static string StripHtml(string html)
         {
             if (string.IsNullOrEmpty(html)) return string.Empty;
-            var sb = new System.Text.StringBuilder(html.Length);
+            var sb = _stripHtmlBuffer ?? (_stripHtmlBuffer = new StringBuilder(256));
+            sb.Clear();
+            sb.EnsureCapacity(html.Length);
             bool inTag = false;
             foreach (char c in html)
             {
