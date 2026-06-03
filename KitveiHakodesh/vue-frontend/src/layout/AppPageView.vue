@@ -24,7 +24,7 @@ const pages: Record<string, unknown> = {
   ),
   '/dictionary': defineAsyncComponent(() => import('@/features/dictionary/DictionaryPage.vue')),
   '/midot': defineAsyncComponent(() => import('@/features/halachic-units/HalachicUnitsPage.vue')),
-  '/file-search': defineAsyncComponent(() => import('@/features/file-search/FileSearchPage.vue')),
+  '/file-search': defineAsyncComponent(() => import('@/features/local-file-search/LocalFileSearchPage.vue')),
 }
 </script>
 

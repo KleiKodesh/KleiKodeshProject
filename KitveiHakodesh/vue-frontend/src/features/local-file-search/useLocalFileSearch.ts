@@ -1,5 +1,5 @@
 /**
- * File-system search composable.
+ * Local file search composable.
  *
  * Flow:
  * 1. On mount, ask C# "is Everything ready?" via fileSystemSearchPageLoad().
@@ -13,26 +13,47 @@
  * 3. If the user typed before ready, the isIndexing watcher retries automatically.
  */
 
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { refDebounced } from '@vueuse/core'
 import { fileSystemSearch, fileSystemSearchPageLoad } from '@/webview-host/bridge'
 import { isHosted, onWebviewEvent } from '@/webview-host/seforimDb'
 
-export interface FileSearchResult {
+export interface LocalFileSearchResult {
   fileName: string
   path: string
   fullPath: string
 }
 
-const DEBOUNCE_MS = 300
+const DEBOUNCE_MS = 200
 const MAX_RESULTS = 5000
+const LOADING_ANIMATION_DELAY_MS = 200
 
-export function useFileSearch(searchQuery: ReturnType<typeof ref<string>>) {
-  const results = ref<FileSearchResult[]>([])
+export function useLocalFileSearch(searchQuery: ReturnType<typeof ref<string>>) {
+  const results = ref<LocalFileSearchResult[]>([])
   const searching = ref(false)
+  const showLoadingAnimation = ref(false)
   const isIndexing = ref(true) // true = not ready yet; false = ready to search
   const totalCount = ref(0)
   const errorMessage = ref<string | null>(null)
+
+  let loadingAnimationTimer: ReturnType<typeof setTimeout> | null = null
+
+  function startLoadingAnimationTimer() {
+    cancelLoadingAnimationTimer()
+    loadingAnimationTimer = setTimeout(() => {
+      showLoadingAnimation.value = true
+    }, LOADING_ANIMATION_DELAY_MS)
+  }
+
+  function cancelLoadingAnimationTimer() {
+    if (loadingAnimationTimer !== null) {
+      clearTimeout(loadingAnimationTimer)
+      loadingAnimationTimer = null
+    }
+    showLoadingAnimation.value = false
+  }
+
+  onUnmounted(() => cancelLoadingAnimationTimer())
 
   onMounted(() => {
     if (!isHosted) {
@@ -85,6 +106,7 @@ export function useFileSearch(searchQuery: ReturnType<typeof ref<string>>) {
     }
 
     searching.value = true
+    startLoadingAnimationTimer()
 
     try {
       const response = await fileSystemSearch(trimmed, MAX_RESULTS)
@@ -110,7 +132,10 @@ export function useFileSearch(searchQuery: ReturnType<typeof ref<string>>) {
       results.value = []
       totalCount.value = 0
     } finally {
-      if (thisGeneration === generation) searching.value = false
+      if (thisGeneration === generation) {
+        searching.value = false
+        cancelLoadingAnimationTimer()
+      }
     }
   }
 
@@ -123,5 +148,5 @@ export function useFileSearch(searchQuery: ReturnType<typeof ref<string>>) {
     }
   })
 
-  return { results, searching, isIndexing, totalCount, errorMessage }
+  return { results, searching, showLoadingAnimation, isIndexing, totalCount, errorMessage }
 }

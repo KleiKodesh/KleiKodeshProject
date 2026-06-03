@@ -9,15 +9,15 @@ import {
   IconCode20Filled,
 } from '@iconify-prerendered/vue-fluent'
 import { useVirtualListKeys } from '@/composables/useVirtualListKeyNav'
-import type { FileSearchResult } from './useFileSearch'
+import type { LocalFileSearchResult } from './useLocalFileSearch'
 
 const props = defineProps<{
-  items: FileSearchResult[]
+  items: LocalFileSearchResult[]
   searching: boolean
   isIndexing: boolean
 }>()
 
-const emit = defineEmits<{ openFile: [FileSearchResult] }>()
+const emit = defineEmits<{ openFile: [LocalFileSearchResult] }>()
 
 const scrollElement = ref<HTMLElement | null>(null)
 
@@ -38,7 +38,7 @@ const { focusedIndex, containerFocused } = useVirtualListKeys(
   (index) => onSelect(props.items[index]!),
 )
 
-function onSelect(item: FileSearchResult) {
+function onSelect(item: LocalFileSearchResult) {
   emit('openFile', item)
 }
 

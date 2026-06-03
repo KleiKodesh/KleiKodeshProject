@@ -3,20 +3,20 @@ import { ref, onMounted, nextTick } from 'vue'
 import { IconSearch20Regular, IconWarning20Regular } from '@iconify-prerendered/vue-fluent'
 import BottomSearchBar from '@/components/BottomSearchBar.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
-import FileSearchResultsList from './FileSearchResultsList.vue'
-import { useFileSearch } from './useFileSearch'
+import LocalFileSearchResultsList from './LocalFileSearchResultsList.vue'
+import { useLocalFileSearch } from './useLocalFileSearch'
 import { useTabStore } from '@/stores/tabStore'
 import { pickLocalFile } from '@/webview-host/bridge'
 import { isHosted } from '@/webview-host/seforimDb'
-import type { FileSearchResult } from './useFileSearch'
+import type { LocalFileSearchResult } from './useLocalFileSearch'
 
 const tabStore = useTabStore()
 
 const searchQuery = ref('')
-const { results, searching, isIndexing, totalCount, errorMessage } = useFileSearch(searchQuery)
+const { results, searching, showLoadingAnimation, isIndexing, totalCount, errorMessage } = useLocalFileSearch(searchQuery)
 
 const searchInputElement = ref<HTMLInputElement | null>(null)
-const resultsListElement = ref<InstanceType<typeof FileSearchResultsList> | null>(null)
+const resultsListElement = ref<InstanceType<typeof LocalFileSearchResultsList> | null>(null)
 const openingFile = ref(false)
 
 onMounted(() => {
@@ -27,7 +27,7 @@ function focusResults() {
   resultsListElement.value?.focusContainer()
 }
 
-async function onOpenFile(item: FileSearchResult) {
+async function onOpenFile(item: LocalFileSearchResult) {
   if (!isHosted) return
 
   openingFile.value = true
@@ -81,8 +81,8 @@ async function onOpenFile(item: FileSearchResult) {
 </script>
 
 <template>
-  <div class="file-search-page">
-    <div class="file-search-content">
+  <div class="local-file-search-page">
+    <div class="local-file-search-content">
       <!-- Everything index loading -->
       <div v-if="isIndexing" class="indexing-state">
         <LoadingAnimation text="האינדקס בטעינה" />
@@ -96,14 +96,19 @@ async function onOpenFile(item: FileSearchResult) {
 
       <!-- Results or empty state (only render when NOT indexing) -->
       <div v-else-if="!isIndexing" class="results-container">
-        <!-- Empty state when no results and no query -->
-        <div v-if="!results.length && !searching" class="empty-state">
+        <!-- Loading while any search is in flight for more than 200ms -->
+        <div v-if="showLoadingAnimation" class="searching-state">
+          <LoadingAnimation text="מחפש..." />
+        </div>
+
+        <!-- Empty state when idle with no results -->
+        <div v-else-if="!results.length" class="empty-state">
           <IconSearch20Regular class="empty-icon" />
           <span class="empty-msg">{{ searchQuery.trim() ? 'לא נמצאו תוצאות' : 'חפש קבצים...' }}</span>
         </div>
 
         <!-- Results list -->
-        <FileSearchResultsList
+        <LocalFileSearchResultsList
           v-else
           ref="resultsListElement"
           :items="results"
@@ -148,13 +153,13 @@ async function onOpenFile(item: FileSearchResult) {
 </template>
 
 <style scoped>
-.file-search-page {
+.local-file-search-page {
   display: flex;
   flex-direction: column;
   height: 100%;
   background: var(--bg-primary);
 }
-.file-search-content {
+.local-file-search-content {
   flex: 1;
   overflow: hidden;
   position: relative;
@@ -212,8 +217,9 @@ async function onOpenFile(item: FileSearchResult) {
   color: inherit;
 }
 
-/* Indexing state */
-.indexing-state {
+/* Indexing / searching state */
+.indexing-state,
+.searching-state {
   display: flex;
   flex-direction: column;
   align-items: center;
