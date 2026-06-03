@@ -573,6 +573,8 @@ namespace KitveiHakodeshLib
                 // Release all PDF virtual host mappings so WebView2 does not hold
                 // folder handles after the process exits.
                 _localFile?.DisposeAllHosts();
+
+                _fileSystemSearch?.Dispose();
             }
             base.Dispose(disposing);
         }

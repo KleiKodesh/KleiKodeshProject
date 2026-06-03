@@ -1,4 +1,3 @@
-using EverythingLib;
 using KitveiHakodeshLib.Bridge;
 using System;
 using System.Text.Json;
@@ -8,7 +7,7 @@ using System.Threading.Tasks;
 namespace KitveiHakodeshLib.FileSystemSearch
 {
     /// <summary>
-    /// Bridge between the Vue frontend and EverythingLib.
+    /// Bridge between the Vue frontend and EverythingSearchClient via EverythingSearchAdapter.
     ///
     /// Three actions:
     ///
@@ -21,18 +20,18 @@ namespace KitveiHakodeshLib.FileSystemSearch
     ///     Run the search, reply with results.
     ///     Vue only sends this when it already knows isReady = true.
     /// </summary>
-    public class FileSystemSearchHandler
+    public class FileSystemSearchHandler : IDisposable
     {
         private const int DefaultMaxResults = 200;
 
         private readonly WebBridge _bridge;
-        private readonly SearchExecutor _executor;
+        private readonly EverythingSearchAdapter _adapter;
         private CancellationTokenSource _currentSearch;
 
         public FileSystemSearchHandler(WebBridge bridge)
         {
-            _bridge   = bridge;
-            _executor = new SearchExecutor { FilterToDocumentTypes = true };
+            _bridge  = bridge;
+            _adapter = new EverythingSearchAdapter { FilterToDocumentTypes = true };
         }
 
         // ── Page load: check ready ────────────────────────────────────────────
@@ -45,7 +44,7 @@ namespace KitveiHakodeshLib.FileSystemSearch
         /// </summary>
         public void HandlePageLoad(string id)
         {
-            bool isReady = _executor.IsReady();
+            bool isReady = _adapter.IsReady();
             _bridge.Reply(id, new { isReady });
 
             if (!isReady)
@@ -58,7 +57,7 @@ namespace KitveiHakodeshLib.FileSystemSearch
             {
                 try
                 {
-                    _executor.EnsureReady(CancellationToken.None);
+                    _adapter.EnsureReady(CancellationToken.None);
                     _bridge.PushEvent(new { @event = "fileSystemIndexingStatus", isIndexing = false });
                 }
                 catch (Exception)
@@ -93,7 +92,7 @@ namespace KitveiHakodeshLib.FileSystemSearch
             {
                 try
                 {
-                    var results = _executor.Search(query, max, cts.Token);
+                    var results = _adapter.Search(query, max, cts.Token);
 
                     if (cts.Token.IsCancellationRequested) return;
 
@@ -113,6 +112,12 @@ namespace KitveiHakodeshLib.FileSystemSearch
                     _bridge.Reply(id, new { error = ex.Message });
                 }
             }, CancellationToken.None);
+        }
+        public void Dispose()
+        {
+            var cts = Interlocked.Exchange(ref _currentSearch, null);
+            cts?.Cancel();
+            cts?.Dispose();
         }
     }
 }
