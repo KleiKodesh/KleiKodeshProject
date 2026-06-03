@@ -19,6 +19,12 @@ namespace SearchEngine.Search
     /// </summary>
     internal static class GrammarExpander
     {
+        /// <summary>
+        /// Hard cap on total candidates returned when both prefix and suffix expansion
+        /// are active. Matches <c>BooleanQuery.MaxClauseCount</c> (1200) so the
+        /// combinatorial expansion never triggers <c>TooManyClauses</c>.
+        /// </summary>
+        private const int MaxCombinedTerms = 1200;
         // ── Prefix table ──────────────────────────────────────────────
         // All valid stacked Hebrew grammatical prefixes, ordered longest-first.
         private static readonly string[] Prefixes =
@@ -129,9 +135,21 @@ namespace SearchEngine.Search
                     candidates.Add(word + suffix);
 
             if (expandPrefixes && expandSuffixes)
-                foreach (var prefix in Prefixes)
-                    foreach (var suffix in Suffixes)
-                        candidates.Add(prefix + word + suffix);
+            {
+                int budget = MaxCombinedTerms - candidates.Count;
+                if (budget > 0)
+                {
+                    foreach (var prefix in Prefixes)
+                    {
+                        foreach (var suffix in Suffixes)
+                        {
+                            candidates.Add(prefix + word + suffix);
+                            if (--budget <= 0) goto done;
+                        }
+                    }
+                    done:;
+                }
+            }
 
             return candidates;
         }

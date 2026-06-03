@@ -47,6 +47,10 @@ namespace SearchEngine.Indexing
                 IndexOptions = IndexOptions.DOCS_ONLY,
             };
             _textFieldType.Freeze();
+
+            // %word% expansion generates up to 1296 terms (35×35 + 35 + 35 + 1).
+            // Raise the cap to 1200 — GrammarExpander trims its output to match.
+            BooleanQuery.MaxClauseCount = 1200;
         }
 
         public LuceneIndexWriter(string indexPath, bool deleteExistingIndex = true)
