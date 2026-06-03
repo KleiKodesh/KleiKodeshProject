@@ -75,7 +75,9 @@ const {
   toggleBook,
   toggleCategory,
   checkAll,
+  checkAllFiltered,
   uncheckAll,
+  uncheckAllFiltered,
   handleSearch,
   handleClearSearch,
   handleResultClick,
@@ -295,6 +297,8 @@ onBeforeUnmount(() => {
       @toggle-category="toggleCategory"
       @check-all="checkAll"
       @uncheck-all="uncheckAll"
+      @check-all-filtered="checkAllFiltered"
+      @uncheck-all-filtered="uncheckAllFiltered"
       @close="isFilterOpen = false"
       @update:at-filters="setAtFilters"
     />

@@ -21,6 +21,8 @@ const emit = defineEmits<{
   toggleCategory: [CategoryNode, boolean]
   checkAll: []
   uncheckAll: []
+  checkAllFiltered: [Set<number>]
+  uncheckAllFiltered: [Set<number>]
   close: []
   'update:atFilters': [string[]]
 }>()
@@ -59,14 +61,24 @@ watch([inputText, () => props.atFilters.length], ([text, count]) => {
 })
 
 const total = computed(() => booksStore.allBooks.length)
-const isAllChecked = computed(() => total.value > 0 && props.checkedBookIds.size === total.value)
-const isIndet = computed(
-  () => props.checkedBookIds.size > 0 && props.checkedBookIds.size < total.value,
-)
 
 // Show book list when there are committed tokens OR the current input is long enough
 const activeQuery = computed(() => inputText.value.trim())
 const isSearching = computed(() => props.atFilters.length > 0 || activeQuery.value.length >= 2)
+
+const isAllChecked = computed(() => {
+  if (isSearching.value) {
+    return filteredBooks.value.length > 0 && filteredBooks.value.every((b) => props.checkedBookIds.has(b.id))
+  }
+  return total.value > 0 && props.checkedBookIds.size === total.value
+})
+const isIndet = computed(() => {
+  if (isSearching.value) {
+    const checked = filteredBooks.value.filter((b) => props.checkedBookIds.has(b.id)).length
+    return checked > 0 && checked < filteredBooks.value.length
+  }
+  return props.checkedBookIds.size > 0 && props.checkedBookIds.size < total.value
+})
 
 // Union of all committed tokens + current input text (if long enough)
 function computeFilteredBooks(tokens: string[], currentInput: string): BookRow[] {
@@ -117,6 +129,15 @@ function removeToken(index: number) {
   nextTick(() => searchInputRef.value?.focus())
 }
 
+function onHeaderCheckClick() {
+  if (isSearching.value) {
+    const ids = new Set(filteredBooks.value.map((b) => b.id))
+    isAllChecked.value ? emit('uncheckAllFiltered', ids) : emit('checkAllFiltered', ids)
+  } else {
+    isAllChecked.value ? emit('uncheckAll') : emit('checkAll')
+  }
+}
+
 function onInputKeydown(e: KeyboardEvent) {
   if (e.key === 'Enter' || e.key === '@') {
     e.preventDefault()
@@ -151,7 +172,7 @@ function onInputKeydown(e: KeyboardEvent) {
       <div
         class="header-check"
         :class="{ checked: isAllChecked, indet: isIndet }"
-        @click="isAllChecked ? emit('uncheckAll') : emit('checkAll')"
+        @click="onHeaderCheckClick"
       >
         <span class="check-col">
           <span class="check-mark">✓</span>
