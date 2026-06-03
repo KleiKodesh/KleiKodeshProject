@@ -146,8 +146,8 @@ export const useSearchCacheStore = defineStore('searchCache', () => {
     const seen = new Set<string>()
     const unique: string[] = []
     for (let i = displayLru.length - 1; i >= 0 && unique.length < limit; i--) {
-      const q = displayLru[i]
-      if (!seen.has(q)) {
+      const q = displayLru[i] ?? ''
+      if (q && !seen.has(q)) {
         seen.add(q)
         unique.push(q)
       }
