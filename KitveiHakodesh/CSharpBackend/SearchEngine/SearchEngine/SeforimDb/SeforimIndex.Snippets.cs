@@ -75,14 +75,14 @@ namespace SearchEngine.SeforimDb
             int fragmentSize = contextWords * 8 * 2;
             int slop         = requireOrdered ? contextWords : int.MaxValue;
 
-            foreach (var (_, _, _, _, snippet) in searcher.SearchWithSnippets(
+            foreach (var (_, _, _, _, fragment) in searcher.SearchWithSnippets(
                 query,
                 _ => content,
                 fragmentSize: fragmentSize,
                 slop:         slop,
                 inOrder:      requireOrdered))
             {
-                return ComputeWordDistanceFromHtml(snippet.Html);
+                return ComputeWordDistanceFromHtml(fragment);
             }
 
             return int.MaxValue;
@@ -102,7 +102,7 @@ namespace SearchEngine.SeforimDb
             int fragmentSize = contextWords * 8 * 2;
             int slop         = requireOrdered ? contextWords : int.MaxValue;
 
-            foreach (var (_, _, _, _, snippet) in searcher.SearchWithSnippets(
+            foreach (var (_, _, _, _, fragment) in searcher.SearchWithSnippets(
                 query,
                 _ => content,
                 fragmentSize: fragmentSize,
@@ -111,9 +111,9 @@ namespace SearchEngine.SeforimDb
                 minMarks:     minMarks,
                 ct:           ct))
             {
-                int wordDistance = ComputeWordDistance(snippet.Html);
-                int score        = snippet.Html.Length;
-                return new SnippetResult(snippet.Html, score, wordDistance, snippet.IsMatch);
+                int wordDistance = ComputeWordDistance(fragment);
+                int score        = fragment.Length;
+                return new SnippetResult(fragment, score, wordDistance, true);
             }
 
             return SnippetResult.NoMatch;
@@ -129,6 +129,8 @@ namespace SearchEngine.SeforimDb
             return ComputeWordDistanceFromHtml(html);
         }
 
+        private static readonly char[] _whitespaceChars = { ' ', '\t', '\r', '\n' };
+
         /// <summary>
         /// Counts tokens between the first &lt;mark&gt; and last &lt;/mark&gt;,
         /// minus the number of matched terms — mirrors FtsLib's WordDistance metric.
@@ -142,21 +144,22 @@ namespace SearchEngine.SeforimDb
             if (firstMark < 0 || lastClose < 0) return int.MaxValue;
 
             int windowEnd = lastClose + "</mark>".Length;
-            string window = html.Substring(firstMark, windowEnd - firstMark);
 
-            var sb = new System.Text.StringBuilder(window.Length);
-            bool inTag = false;
-            foreach (char c in window)
-            {
-                if      (c == '<') { inTag = true;  continue; }
-                if      (c == '>') { inTag = false; sb.Append(' '); continue; }
-                if (!inTag) sb.Append(c);
-            }
-
+            // Count tokens in the window without allocating a Substring.
+            // Walk the window char-by-char: skip HTML tags, count whitespace-delimited runs.
             int totalTokens = 0;
-            foreach (var tok in sb.ToString().Split(
-                new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
-                totalTokens++;
+            bool inTag      = false;
+            bool inToken    = false;
+            for (int i = firstMark; i < windowEnd; i++)
+            {
+                char c = html[i];
+                if (c == '<')      { inTag = true;  inToken = false; continue; }
+                if (c == '>')      { inTag = false; continue; }
+                if (inTag)         continue;
+                bool isSpace = c == ' ' || c == '\t' || c == '\r' || c == '\n';
+                if (isSpace)       { inToken = false; continue; }
+                if (!inToken)      { inToken = true; totalTokens++; }
+            }
 
             int markCount = 0;
             int pos = 0;

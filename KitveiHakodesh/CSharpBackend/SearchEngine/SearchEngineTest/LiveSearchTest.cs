@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -12,7 +12,7 @@ namespace SearchEngineTest
 {
     /// <summary>
     /// Self-contained tests for NRT (near-real-time) live search during indexing.
-    /// No real seforim database required — each test builds its own tiny temp index.
+    /// No real seforim database required ג€” each test builds its own tiny temp index.
     ///
     /// Run with:
     ///   LuceneTest test live
@@ -21,7 +21,7 @@ namespace SearchEngineTest
     /// </summary>
     internal static class LiveSearchTest
     {
-        // ── Entry point ───────────────────────────────────────────────
+        // ג”€ג”€ Entry point ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
         public static int Run()
         {
@@ -67,7 +67,7 @@ namespace SearchEngineTest
             return failed;
         }
 
-        // ── Helpers ───────────────────────────────────────────────────
+        // ג”€ג”€ Helpers ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
         private static string WithTempIndex(Func<string, string> body)
         {
@@ -81,10 +81,10 @@ namespace SearchEngineTest
         private static string Fail(string msg) => msg;
         private static string Pass()            => null;
 
-        // ── Test 1: NRT makes docs visible without a commit ───────────
+        // ג”€ג”€ Test 1: NRT makes docs visible without a commit ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
         /// <summary>
-        /// Add docs to a writer, call MaybeRefresh() on the NRT manager — docs
+        /// Add docs to a writer, call MaybeRefresh() on the NRT manager ג€” docs
         /// must be visible to a search WITHOUT any Commit() call.
         /// This is the core NRT guarantee.
         /// </summary>
@@ -96,17 +96,17 @@ namespace SearchEngineTest
                 using (var nrtManager = writer.GetNrtSearcherManager())
                 using (var searcher   = new LuceneSearcher(nrtManager))
                 {
-                    // Add docs — no commit yet
-                    writer.AddDocument(1, "שלום עולם");
-                    writer.AddDocument(2, "ברוך הבא");
+                    // Add docs ג€” no commit yet
+                    writer.AddDocument(1, "׳©׳׳•׳ ׳¢׳•׳׳");
+                    writer.AddDocument(2, "׳‘׳¨׳•׳ ׳”׳‘׳");
 
-                    // Before refresh — NRT reader was opened before AddDocument calls
-                    var before = searcher.Search("שלום").ToList();
-                    // (may or may not see them depending on internal flush — that's fine)
+                    // Before refresh ג€” NRT reader was opened before AddDocument calls
+                    var before = searcher.SearchRowIds("׳©׳׳•׳").ToList();
+                    // (may or may not see them depending on internal flush ג€” that's fine)
 
-                    // After NRT refresh — must see them
+                    // After NRT refresh ג€” must see them
                     nrtManager.MaybeRefresh();
-                    var after = searcher.Search("שלום").ToList();
+                    var after = searcher.SearchRowIds("׳©׳׳•׳").ToList();
 
                     if (!after.Contains(1))
                         return Fail($"rowId=1 not visible after NRT refresh (no commit). " +
@@ -115,7 +115,7 @@ namespace SearchEngineTest
                     // Verify no commit was needed
                     if (LuceneIndexWriter.IndexExists(dir))
                     {
-                        // A segments file exists — that means the writer auto-flushed.
+                        // A segments file exists ג€” that means the writer auto-flushed.
                         // That's acceptable; what matters is we didn't call Commit() ourselves.
                         // The test still passes.
                     }
@@ -124,7 +124,7 @@ namespace SearchEngineTest
             });
         }
 
-        // ── Test 2: NRT refresh interval — docs visible every N rows ──
+        // ג”€ג”€ Test 2: NRT refresh interval ג€” docs visible every N rows ג”€ג”€
 
         /// <summary>
         /// Add 3 batches of docs, calling MaybeRefresh() after each batch.
@@ -145,16 +145,16 @@ namespace SearchEngineTest
                     {
                         int baseId = batch * 10 + 1;
                         for (int i = 0; i < 10; i++)
-                            writer.AddDocument(baseId + i, $"בדיקה מספר {baseId + i}");
+                            writer.AddDocument(baseId + i, $"׳‘׳“׳™׳§׳” ׳׳¡׳₪׳¨ {baseId + i}");
 
                         nrtManager.MaybeRefresh();
-                        counts.Add(searcher.Search("בדיקה").Count());
+                        counts.Add(searcher.SearchRowIds("׳‘׳“׳™׳§׳”").Count());
                     }
 
                     // Counts must be non-decreasing
                     for (int i = 1; i < counts.Count; i++)
                         if (counts[i] < counts[i - 1])
-                            return Fail($"Count decreased: {counts[i-1]} → {counts[i]}. " +
+                            return Fail($"Count decreased: {counts[i-1]} ג†’ {counts[i]}. " +
                                         $"Progression: [{string.Join(", ", counts)}]");
 
                     // Final count must be 30
@@ -166,7 +166,7 @@ namespace SearchEngineTest
             });
         }
 
-        // ── Test 3: In-flight search not disrupted by NRT refresh ─────
+        // ג”€ג”€ Test 3: In-flight search not disrupted by NRT refresh ג”€ג”€ג”€ג”€ג”€
 
         /// <summary>
         /// Start iterating search results. Mid-iteration, add more docs and call
@@ -183,7 +183,7 @@ namespace SearchEngineTest
                 {
                     // Seed 20 docs
                     for (int i = 1; i <= 20; i++)
-                        writer.AddDocument(i, $"מילה{i} בדיקה");
+                        writer.AddDocument(i, $"׳׳™׳׳”{i} ׳‘׳“׳™׳§׳”");
                     nrtManager.MaybeRefresh();
 
                     var results = new List<int>();
@@ -192,7 +192,7 @@ namespace SearchEngineTest
 
                     try
                     {
-                        foreach (int id in searcher.Search("בדיקה"))
+                        foreach (int id in searcher.SearchRowIds("׳‘׳“׳™׳§׳”"))
                         {
                             results.Add(id);
                             count++;
@@ -200,7 +200,7 @@ namespace SearchEngineTest
                             {
                                 // Add new docs and refresh mid-search
                                 for (int i = 100; i < 110; i++)
-                                    writer.AddDocument(i, "בדיקה נוספת");
+                                    writer.AddDocument(i, "׳‘׳“׳™׳§׳” ׳ ׳•׳¡׳₪׳×");
                                 nrtManager.MaybeRefresh();
                             }
                         }
@@ -210,7 +210,7 @@ namespace SearchEngineTest
                     if (error != null)
                         return Fail($"Exception during in-flight search: {error}");
 
-                    // The search snapshot was taken before the new docs — must see exactly 20
+                    // The search snapshot was taken before the new docs ג€” must see exactly 20
                     if (results.Count != 20)
                         return Fail($"Expected 20 results from snapshot, got {results.Count}. " +
                                     $"IDs: [{string.Join(",", results.OrderBy(x=>x))}]");
@@ -219,7 +219,7 @@ namespace SearchEngineTest
             });
         }
 
-        // ── Test 4: Concurrent NRT refresh and search ─────────────────
+        // ג”€ג”€ Test 4: Concurrent NRT refresh and search ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
         /// <summary>
         /// 4 search threads + 1 writer/refresh thread running for 2 seconds.
@@ -233,7 +233,7 @@ namespace SearchEngineTest
                 using (var nrtManager = writer.GetNrtSearcherManager())
                 using (var searcher   = new LuceneSearcher(nrtManager))
                 {
-                    writer.AddDocument(1, "ירושלים עיר הקודש");
+                    writer.AddDocument(1, "׳™׳¨׳•׳©׳׳™׳ ׳¢׳™׳¨ ׳”׳§׳•׳“׳©");
                     nrtManager.MaybeRefresh();
 
                     var errors = new System.Collections.Concurrent.ConcurrentBag<string>();
@@ -245,7 +245,7 @@ namespace SearchEngineTest
                         {
                             try
                             {
-                                var ids = searcher.Search("ירושלים").ToList();
+                                var ids = searcher.SearchRowIds("׳™׳¨׳•׳©׳׳™׳").ToList();
                                 if (ids.Count > 0 && !ids.Contains(1))
                                     errors.Add($"rowId=1 missing: [{string.Join(",", ids)}]");
                             }
@@ -261,7 +261,7 @@ namespace SearchEngineTest
                         {
                             try
                             {
-                                writer.AddDocument(nextId++, "ירושלים חדש");
+                                writer.AddDocument(nextId++, "׳™׳¨׳•׳©׳׳™׳ ׳—׳“׳©");
                                 nrtManager.MaybeRefresh();
                                 Thread.Sleep(30);
                             }
@@ -279,7 +279,7 @@ namespace SearchEngineTest
             });
         }
 
-        // ── Test 5: Search after multiple NRT refreshes sees all docs ─
+        // ג”€ג”€ Test 5: Search after multiple NRT refreshes sees all docs ג”€
 
         /// <summary>
         /// The core "search all segments" test.
@@ -298,11 +298,11 @@ namespace SearchEngineTest
                     {
                         int baseId = batch * 20 + 1;
                         for (int i = 0; i < 20; i++)
-                            writer.AddDocument(baseId + i, $"ספר פרק {baseId + i}");
+                            writer.AddDocument(baseId + i, $"׳¡׳₪׳¨ ׳₪׳¨׳§ {baseId + i}");
                         nrtManager.MaybeRefresh();
                     }
 
-                    var ids = new HashSet<int>(searcher.Search("ספר"));
+                    var ids = new HashSet<int>(searcher.SearchRowIds("׳¡׳₪׳¨"));
 
                     // All 100 docs must be visible
                     var missing = Enumerable.Range(1, 100).Where(id => !ids.Contains(id)).ToList();
@@ -315,7 +315,7 @@ namespace SearchEngineTest
             });
         }
 
-        // ── Test 6: Cancellation stops search cleanly ─────────────────
+        // ג”€ג”€ Test 6: Cancellation stops search cleanly ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
         private static string T_CancellationStopsSearch()
         {
@@ -326,7 +326,7 @@ namespace SearchEngineTest
                 using (var searcher   = new LuceneSearcher(nrtManager))
                 {
                     for (int i = 1; i <= 500; i++)
-                        writer.AddDocument(i, $"חיפוש מספר {i}");
+                        writer.AddDocument(i, $"׳—׳™׳₪׳•׳© ׳׳¡׳₪׳¨ {i}");
                     nrtManager.MaybeRefresh();
 
                     var cts     = new CancellationTokenSource();
@@ -335,7 +335,7 @@ namespace SearchEngineTest
 
                     try
                     {
-                        foreach (int id in searcher.Search("חיפוש", cts.Token))
+                        foreach (int id in searcher.SearchRowIds("׳—׳™׳₪׳•׳©", cts.Token))
                         {
                             results.Add(id);
                             if (results.Count == 10) cts.Cancel();
@@ -352,13 +352,13 @@ namespace SearchEngineTest
             });
         }
 
-        // ── Test 7: No index → safe null, no exception ────────────────
+        // ג”€ג”€ Test 7: No index ג†’ safe null, no exception ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
         private static string T_NoIndexReturnsSafeNull()
         {
             return WithTempIndex(dir =>
             {
-                // Empty directory — no index
+                // Empty directory ג€” no index
                 bool exists = LuceneIndexWriter.IndexExists(dir);
                 if (exists)
                     return Fail("IndexExists returned true on empty directory");
@@ -366,7 +366,7 @@ namespace SearchEngineTest
             });
         }
 
-        // ── Test 8: NRT MaybeRefresh is a no-op when nothing changed ──
+        // ג”€ג”€ Test 8: NRT MaybeRefresh is a no-op when nothing changed ג”€ג”€
 
         private static string T_NrtRefreshNoOpWhenNothingChanged()
         {
@@ -375,7 +375,7 @@ namespace SearchEngineTest
                 using (var writer     = new LuceneIndexWriter(dir, deleteExistingIndex: true))
                 using (var nrtManager = writer.GetNrtSearcherManager())
                 {
-                    writer.AddDocument(1, "שלום");
+                    writer.AddDocument(1, "׳©׳׳•׳");
                     nrtManager.MaybeRefresh();
 
                     var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -390,7 +390,7 @@ namespace SearchEngineTest
             });
         }
 
-        // ── Test 9: Simulated build with interleaved live searches ────
+        // ג”€ג”€ Test 9: Simulated build with interleaved live searches ג”€ג”€ג”€ג”€
 
         /// <summary>
         /// Build thread: indexes 5 batches of 100 docs, NRT-refreshing every batch.
@@ -405,7 +405,7 @@ namespace SearchEngineTest
             {
                 const int BatchCount   = 5;
                 const int DocsPerBatch = 100;
-                const string Term      = "ספר";
+                const string Term      = "׳¡׳₪׳¨";
 
                 using (var writer     = new LuceneIndexWriter(dir, deleteExistingIndex: true))
                 using (var nrtManager = writer.GetNrtSearcherManager())
@@ -425,7 +425,7 @@ namespace SearchEngineTest
                             {
                                 int baseId = b * DocsPerBatch + 1;
                                 for (int i = 0; i < DocsPerBatch; i++)
-                                    writer.AddDocument(baseId + i, $"{Term} פרק {baseId + i}");
+                                    writer.AddDocument(baseId + i, $"{Term} ׳₪׳¨׳§ {baseId + i}");
                                 nrtManager.MaybeRefresh();
                                 Thread.Sleep(20);
                             }
@@ -441,12 +441,12 @@ namespace SearchEngineTest
                         {
                             while (!buildDone.IsSet)
                             {
-                                int count = searcher.Search(Term).Count();
+                                int count = searcher.SearchRowIds(Term).Count();
                                 lock (resultCounts) resultCounts.Add(count);
                                 Thread.Sleep(40);
                             }
                             // Final search after build
-                            int final = searcher.Search(Term).Count();
+                            int final = searcher.SearchRowIds(Term).Count();
                             lock (resultCounts) resultCounts.Add(final);
                         }
                         catch (Exception ex) { searchErrors.Add(ex.Message); }
@@ -476,14 +476,14 @@ namespace SearchEngineTest
                     // Assertion 2: monotonically non-decreasing
                     for (int i = 1; i < snapshot.Count; i++)
                         if (snapshot[i] < snapshot[i - 1])
-                            return Fail($"Count decreased: {snapshot[i-1]} → {snapshot[i]} " +
+                            return Fail($"Count decreased: {snapshot[i-1]} ג†’ {snapshot[i]} " +
                                         $"at index {i}. Progression: [{string.Join(", ", snapshot)}]");
                 }
                 return Pass();
             });
         }
 
-        // ── Test 10: Results are sorted by rowId ascending ────────────
+        // ג”€ג”€ Test 10: Results are sorted by rowId ascending ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
         /// <summary>
         /// Index docs with non-sequential IDs inserted in reverse order across
@@ -502,14 +502,14 @@ namespace SearchEngineTest
                     // Insert in reverse order across two flushes so docs land in
                     // different segments with scrambled internal Lucene doc order.
                     for (int i = 50; i >= 26; i--)
-                        writer.AddDocument(i, "מילה בדיקה");
+                        writer.AddDocument(i, "׳׳™׳׳” ׳‘׳“׳™׳§׳”");
                     nrtManager.MaybeRefresh();
 
                     for (int i = 25; i >= 1; i--)
-                        writer.AddDocument(i, "מילה בדיקה");
+                        writer.AddDocument(i, "׳׳™׳׳” ׳‘׳“׳™׳§׳”");
                     nrtManager.MaybeRefresh();
 
-                    var ids = searcher.Search("מילה").ToList();
+                    var ids = searcher.SearchRowIds("׳׳™׳׳”").ToList();
 
                     if (ids.Count != 50)
                         return Fail($"Expected 50 results, got {ids.Count}");
@@ -517,7 +517,7 @@ namespace SearchEngineTest
                     // Verify strictly ascending order
                     for (int i = 1; i < ids.Count; i++)
                         if (ids[i] <= ids[i - 1])
-                            return Fail($"Not sorted at index {i}: {ids[i-1]} → {ids[i]}. " +
+                            return Fail($"Not sorted at index {i}: {ids[i-1]} ג†’ {ids[i]}. " +
                                         $"Full order: [{string.Join(",", ids)}]");
 
                     if (ids[0] != 1)
@@ -530,3 +530,4 @@ namespace SearchEngineTest
         }
     }
 }
+

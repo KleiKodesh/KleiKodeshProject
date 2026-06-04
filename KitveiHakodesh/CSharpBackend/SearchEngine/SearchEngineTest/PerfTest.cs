@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -31,32 +31,32 @@ namespace SearchEngineTest
 
             if (!LuceneSearcher.IndexExists(indexDir))
             {
-                Console.WriteLine("Index not found — run 'LuceneTest build' first.");
+                Console.WriteLine("Index not found ג€” run 'LuceneTest build' first.");
                 return;
             }
 
-            // ── Queries to benchmark ──────────────────────────────────
+            // ג”€ג”€ Queries to benchmark ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
             // Each entry: (label, query, expectedMinHits)
             // expectedMinHits = 0 means "just measure, don't assert a floor"
             var queries = new[]
             {
                 // The slow query reported in KitveiHakodesh
-                ("כי *יצחק  (wildcard suffix)",   "כי *יצחק",   0),
+                ("׳›׳™ *׳™׳¦׳—׳§  (wildcard suffix)",   "׳›׳™ *׳™׳¦׳—׳§",   0),
 
                 // Variants to isolate where the cost is
-                ("כי יצחק   (two literals)",       "כי יצחק",    0),
-                ("*יצחק     (wildcard alone)",      "*יצחק",      0),
-                ("יצחק      (literal alone)",       "יצחק",       0),
-                ("כי        (literal alone)",       "כי",         0),
+                ("׳›׳™ ׳™׳¦׳—׳§   (two literals)",       "׳›׳™ ׳™׳¦׳—׳§",    0),
+                ("*׳™׳¦׳—׳§     (wildcard alone)",      "*׳™׳¦׳—׳§",      0),
+                ("׳™׳¦׳—׳§      (literal alone)",       "׳™׳¦׳—׳§",       0),
+                ("׳›׳™        (literal alone)",       "׳›׳™",         0),
 
                 // A known-fast query for baseline
-                ("אברהם     (baseline literal)",    "אברהם",      0),
+                ("׳׳‘׳¨׳”׳     (baseline literal)",    "׳׳‘׳¨׳”׳",      0),
             };
 
             using (var searcher = new LuceneSearcher(indexDir))
             {
                 // Warm up the JIT and OS file cache with one throwaway search
-                searcher.Search("שלום").Count();
+                searcher.SearchRowIds("׳©׳׳•׳").Count();
                 Console.WriteLine("(warm-up done)");
                 Console.WriteLine();
 
@@ -65,7 +65,7 @@ namespace SearchEngineTest
             }
         }
 
-        // ── Single query benchmark ────────────────────────────────────
+        // ג”€ג”€ Single query benchmark ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
         private static void RunQuery(LuceneSearcher searcher,
                                      string label, string query, int minHits)
@@ -73,7 +73,7 @@ namespace SearchEngineTest
             Console.WriteLine($"Query : {label}");
             Console.WriteLine($"        \"{query}\"");
 
-            // Run 3 times and report each — first run may be slower due to
+            // Run 3 times and report each ג€” first run may be slower due to
             // term dictionary / posting list cache warming.
             const int Runs = 3;
             var times = new long[Runs];
@@ -82,7 +82,7 @@ namespace SearchEngineTest
             for (int r = 0; r < Runs; r++)
             {
                 var sw = Stopwatch.StartNew();
-                hits = searcher.Search(query).Count();
+                hits = searcher.SearchRowIds(query).Count();
                 sw.Stop();
                 times[r] = sw.ElapsedMilliseconds;
             }
@@ -107,3 +107,4 @@ namespace SearchEngineTest
         }
     }
 }
+

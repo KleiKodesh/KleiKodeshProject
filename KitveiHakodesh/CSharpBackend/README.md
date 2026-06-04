@@ -7,10 +7,10 @@ Contains the .NET libraries that back the KitveiHakodesh Vue app.
 | Folder                                                   | Purpose                                                             |
 | -------------------------------------------------------- | ------------------------------------------------------------------- |
 | [`KitveiHakodeshLib`](KitveiHakodeshLib/README.md)                     | WebView2 host, message bridge, DB/PDF/search handlers               |
-| [`BloomSearchEngineLib`](BloomSearchEngineLib/README.md) | Bloom filter full-text search engine for seforim                    |
+| [`SearchEngine`](SearchEngine/README.md)                 | Lucene-based full-text search engine for seforim                    |
 | `KitveiHakodeshDemoApp`                                         | Standalone WinForms demo app for testing KitveiHakodeshLib outside of Word |
-| `WordToPdfConverter`                                     | Converts Word documents to PDF using the Word COM object            |
+| `EverythingSearchClient`                                 | Client library for the Everything desktop search tool               |
 
 ## Solution
 
-`KitveiHakodesh.slnx` — builds all four projects. SDK-style projects (`KitveiHakodeshLib`, `BloomSearchEngineLib`) can also be built with `dotnet build`.
+`KitveiHakodesh.slnx` — builds KitveiHakodeshLib, SearchEngine, KitveiHakodeshDemoApp, and EverythingSearchClient. SearchEngine has its own solution file (`SearchEngine/SearchEngine.sln`) and can be built independently.

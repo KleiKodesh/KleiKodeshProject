@@ -16,6 +16,6 @@ Initialization order matters: `workspaceStore` must init before `tabStore`. See 
 
 **localFileStore** — Local file and Word file state. Manages conversion, HebrewBooks download state, and PDF/HTML tab session restore. Listens to C# push events. Any code opening or closing a local file tab should go through this store.
 
-**searchCacheStore** — LRU cache for Bloom filter search results, capped at 100 entries. Do not cache search results anywhere else.
+**searchCacheStore** — LRU cache for full-text search results, capped at 100 entries. Do not cache search results anywhere else.
 
 **hebrewBooksHistoryStore** — owns the `app-hb-history` IDB database. Tracks which HebrewBooks PDFs the user has downloaded, LRU-capped at 25 entries. All history reads and writes go through here — do not import from `persistence.ts` for this database anywhere else.

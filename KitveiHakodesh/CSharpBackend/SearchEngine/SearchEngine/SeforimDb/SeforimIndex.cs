@@ -60,6 +60,11 @@ namespace SearchEngine.SeforimDb
         private readonly string _indexPath;
         private readonly string _dbPath;
 
+        // Detected once at construction time by inspecting field metadata.
+        // true  → index stores bookId/bookTitle/tocPath; read them from Lucene.
+        // false → minimal index; fetch bookId/bookTitle from the DB at search time.
+        private readonly bool _metadataStored;
+
         // Long-lived searcher — null until the first commit exists.
         // Guarded by _searcherLock for open/close; volatile for lock-free reads.
         private volatile LuceneSearcher _searcher;
@@ -84,6 +89,12 @@ namespace SearchEngine.SeforimDb
 
             if (!Directory.Exists(_indexPath))
                 Directory.CreateDirectory(_indexPath);
+
+            // Detect index mode by inspecting stored field metadata — no documents read.
+            // Must happen before EnsureSearcher so _metadataStored is set for all searches.
+            _metadataStored = LuceneIndexWriter.DetectMetadataStored(_indexPath);
+            Console.WriteLine("[SeforimIndex] Index mode: " +
+                (_metadataStored ? "full (metadata stored in index)" : "minimal (metadata fetched from DB)"));
 
             // Open the searcher eagerly if a committed index already exists,
             // so the first search call pays no open cost.
@@ -206,8 +217,12 @@ namespace SearchEngine.SeforimDb
 
                     try
                     {
+                        long linesRemaining = limit > 0 ? limit : long.MaxValue;
+
                         foreach (var (bookId, bookTitle) in db.ReadAllBooks())
                         {
+                            if (linesRemaining <= 0) break;
+
                             // Build the lineId→tocPath map for this book in one pass.
                             var tocMap = db.BuildTocPathMap(bookId, bookTitle);
                             string lastTocPath = string.Empty;
@@ -227,6 +242,7 @@ namespace SearchEngine.SeforimDb
                                 anyRowsProcessed  = true;
                                 lastWrittenLineId = id;
                                 n++;
+                                linesRemaining--;
 
                                 writer.AddDocument(id, bookId, bookTitle,
                                                    lastTocPath, content ?? string.Empty);
@@ -244,6 +260,8 @@ namespace SearchEngine.SeforimDb
                                         $"[SeforimIndex] Committed at lineId={lastWrittenLineId} (n={n})");
                                     onFlush?.Invoke();
                                 }
+
+                                if (linesRemaining <= 0) break;
                             }
                         }
                     }
@@ -358,35 +376,104 @@ namespace SearchEngine.SeforimDb
             var searcher = EnsureSearcher();
             if (searcher == null) yield break;
 
-            string effectiveQuery  = expandKetiv ? ApplyKetivPrefix(query) : query;
-            int    fragmentSize    = contextWords * 8 * 2;
-            int    slop            = requireOrdered ? contextWords : int.MaxValue;
-            // Build matched groups once — Count used as minMarks, list discarded.
-            int    minMarks        = BuildMatchedGroups(effectiveQuery).Count;
+            string effectiveQuery = expandKetiv ? ApplyKetivPrefix(query) : query;
+            int    fragmentSize   = contextWords * 8 * 2;
+            int    slop           = requireOrdered ? contextWords : int.MaxValue;
+            int    minMarks       = BuildMatchedGroups(effectiveQuery).Count;
 
-            using (var db = new ZayitDb(_dbPath))
+            if (_metadataStored)
             {
-                if (!db.IsOpen) yield break;
-
-                string TextProvider(int rowId) => db.GetLineById(rowId);
-
-                foreach (var (rowId, bookId, bookTitle, tocPath, snippet) in searcher.SearchWithSnippets(
-                    effectiveQuery,
-                    TextProvider,
-                    fragmentSize: fragmentSize,
-                    slop:         slop,
-                    inOrder:      requireOrdered,
-                    minMarks:     minMarks,
-                    ct:           ct))
+                // Full index path — bookId/bookTitle/tocPath come from stored Lucene fields.
+                using (var db = new ZayitDb(_dbPath))
                 {
-                    ct.ThrowIfCancellationRequested();
-                    if (!snippet.IsMatch) continue;
+                    if (!db.IsOpen) yield break;
 
-                    int wordDistance = ComputeWordDistance(snippet.Html);
-                    if (wordDistance > maxWordDistance) continue;
+                    string TextProvider(int rowId) => db.GetLineById(rowId);
 
-                    yield return (rowId, bookId, bookTitle, tocPath,
-                                  new SnippetResult(snippet.Html, snippet.Html.Length, wordDistance, true));
+                    foreach (var (rowId, bookId, bookTitle, tocPath, fragment) in searcher.SearchWithSnippets(
+                        effectiveQuery,
+                        TextProvider,
+                        fragmentSize: fragmentSize,
+                        slop:         slop,
+                        inOrder:      requireOrdered,
+                        minMarks:     minMarks,
+                        ct:           ct))
+                    {
+                        ct.ThrowIfCancellationRequested();
+
+                        int wordDistance = ComputeWordDistance(fragment);
+                        if (wordDistance > maxWordDistance) continue;
+
+                        yield return (rowId, bookId, bookTitle, tocPath,
+                                      new SnippetResult(fragment, fragment.Length, wordDistance, true));
+                    }
+                }
+            }
+            else
+            {
+                // Minimal index path — only rowIds come from Lucene.
+                // Flow:
+                //   1. Collect all matching rowIds from Lucene (no stored metadata).
+                //   2. Batch-fetch bookIds from the DB for all rowId hits at once.
+                //   3. Run snippet generation per row (requires DB content read per row).
+                //   4. After each snippet result, enrich with bookTitle from the batch map.
+                //   tocPath is yielded as empty string — the frontend fetches it
+                //   from SQL as part of its batch-enrichment step.
+
+                using (var db = new ZayitDb(_dbPath))
+                {
+                    if (!db.IsOpen) yield break;
+
+                    // Step 1 — collect all matching rowIds in one Lucene pass.
+                    // We need them all up front to batch the bookId SQL query.
+                    var rowIds = new List<int>();
+                    foreach (var rowId in searcher.SearchRowIds(effectiveQuery, ct))
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        rowIds.Add(rowId);
+                    }
+
+                    if (rowIds.Count == 0) yield break;
+
+                    // Step 2 — fetch bookId for every matched line in one query.
+                    Dictionary<int, int> bookIdByLineId = db.GetBookIdsByLineIds(rowIds);
+
+                    // Collect the unique bookIds so we can fetch titles in one query.
+                    var uniqueBookIds = new List<int>(bookIdByLineId.Count);
+                    var seen = new HashSet<int>();
+                    foreach (var bookId in bookIdByLineId.Values)
+                        if (seen.Add(bookId)) uniqueBookIds.Add(bookId);
+
+                    // Step 3 — fetch bookTitle for every unique bookId in one query.
+                    Dictionary<int, string> bookTitleByBookId =
+                        db.GetBookTitlesByBookIds(uniqueBookIds);
+
+                    // Step 4 — run snippet generation, enriching each hit with metadata.
+                    // Snippet generation opens a virtual document for each rowId and requires
+                    // the raw line content — fetched per-row inside SearchWithSnippets via
+                    // the textProvider delegate.
+                    string TextProvider(int rowId) => db.GetLineById(rowId);
+
+                    foreach (var (rowId, _, __, ___, fragment) in searcher.SearchWithSnippets(
+                        effectiveQuery,
+                        TextProvider,
+                        fragmentSize: fragmentSize,
+                        slop:         slop,
+                        inOrder:      requireOrdered,
+                        minMarks:     minMarks,
+                        ct:           ct))
+                    {
+                        ct.ThrowIfCancellationRequested();
+
+                        int wordDistance = ComputeWordDistance(fragment);
+                        if (wordDistance > maxWordDistance) continue;
+
+                        bookIdByLineId.TryGetValue(rowId, out int bookId);
+                        bookTitleByBookId.TryGetValue(bookId, out string bookTitle);
+
+                        yield return (rowId, bookId, bookTitle ?? string.Empty, string.Empty,
+                                      new SnippetResult(fragment, fragment.Length, wordDistance, true));
+                    }
                 }
             }
         }

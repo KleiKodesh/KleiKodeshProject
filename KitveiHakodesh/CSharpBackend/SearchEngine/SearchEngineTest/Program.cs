@@ -1,50 +1,53 @@
-using System;
+﻿using System;
 using System.Linq;
 
 namespace SearchEngineTest
 {
     /// <summary>
-    /// Entry point. Usage:
-    ///   LuceneTest build              — index all rows from the default db path
-    ///   LuceneTest build &lt;dbPath&gt;     — index from a specific db file
-    ///   LuceneTest search &lt;query&gt;     — search the index
+    /// Entry point.
+    ///
+    /// Usage:
+    ///   LuceneTest build [dbPath] [--keep]   — index from the DB
+    ///   LuceneTest search &lt;query&gt;            — search the real index
+    ///   LuceneTest check &lt;lineId&gt;            — look up a line by id
+    ///   LuceneTest test smoke                — fast smoke tests (under 3s)
+    ///
+    ///   LuceneTest diag tokenize &lt;text&gt;
+    ///   LuceneTest diag query    &lt;text&gt;
+    ///   LuceneTest diag rewrite  &lt;text&gt;
+    ///   LuceneTest diag hits     &lt;query&gt;
+    ///   LuceneTest diag verify   &lt;query&gt; [dbPath]
+    ///   LuceneTest diag snippet  &lt;query&gt; [dbPath]
+    ///   LuceneTest diag fuzzy    &lt;query&gt; [dbPath]
+    ///   LuceneTest diag terms
+    ///   LuceneTest diag subset   &lt;literalQuery&gt; &lt;wildcardQuery&gt;
     /// </summary>
     internal static class Program
     {
         static void Main(string[] args)
         {
-            if (args.Length == 0)
-            {
-                PrintUsage();
-                return;
-            }
+            if (args.Length == 0) { PrintUsage(); return; }
 
-            bool deleteExistingIndex = !args.Any(a => a.Equals("--keep", StringComparison.OrdinalIgnoreCase));
+            bool keepIndex = args.Any(a => a.Equals("--keep", StringComparison.OrdinalIgnoreCase));
+
+            string indexDir = System.IO.Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory, "lucene_index");
 
             switch (args[0].ToLowerInvariant())
             {
                 case "test":
-                    if (args.Length < 2) { Console.WriteLine("test requires a subcommand: live | resume"); return; }
-                    switch (args[1].ToLowerInvariant())
+                    if (args.Length < 2 || !args[1].Equals("smoke", StringComparison.OrdinalIgnoreCase))
                     {
-                        case "live":
-                            int failures = LiveSearchTest.Run();
-                            System.Environment.Exit(failures > 0 ? 1 : 0);
-                            break;
-                        case "resume":
-                            int resumeFailures = ResumeTest.Run();
-                            System.Environment.Exit(resumeFailures > 0 ? 1 : 0);
-                            break;
-                        default:
-                            Console.WriteLine("Unknown test subcommand. Use: live | resume");
-                            break;
+                        Console.WriteLine("Usage: LuceneTest test smoke");
+                        return;
                     }
+                    System.Environment.Exit(SmokeTest.Run() > 0 ? 1 : 0);
                     break;
 
                 case "build":
                     IndexingTest.RunBuild(
                         dbPath: args.Length > 1 && !args[1].StartsWith("--") ? args[1] : null,
-                        deleteExistingIndex: deleteExistingIndex);
+                        deleteExistingIndex: !keepIndex);
                     break;
 
                 case "search":
@@ -59,8 +62,7 @@ namespace SearchEngineTest
                     break;
 
                 case "diag":
-                    if (args.Length < 2) { Console.WriteLine("diag requires a subcommand: tokenize|query|terms|hits|verify|snippet"); return; }
-                    string indexDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "lucene_index");
+                    if (args.Length < 2) { Console.WriteLine("diag requires a subcommand."); PrintUsage(); return; }
                     switch (args[1].ToLowerInvariant())
                     {
                         case "tokenize":
@@ -99,7 +101,8 @@ namespace SearchEngineTest
                             SubsetTest.Run(indexDir, args[2], args[3]);
                             break;
                         default:
-                            Console.WriteLine("Unknown diag subcommand. Use: tokenize|query|terms|hits|verify|snippet|fuzzy|subset");
+                            Console.WriteLine($"Unknown diag subcommand: {args[1]}");
+                            PrintUsage();
                             break;
                     }
                     break;
@@ -114,11 +117,10 @@ namespace SearchEngineTest
         {
             Console.WriteLine("Usage:");
             Console.WriteLine("  LuceneTest build [dbPath] [--keep]");
-            Console.WriteLine("  LuceneTest search <query> [dbPath]");
-            Console.WriteLine("  LuceneTest check <lineId> [dbPath]");
-            Console.WriteLine();
-            Console.WriteLine("Flags:");
-            Console.WriteLine("  --keep    Don't delete existing index before building");
+            Console.WriteLine("  LuceneTest search <query>");
+            Console.WriteLine("  LuceneTest check <lineId>");
+            Console.WriteLine("  LuceneTest test smoke");
+            Console.WriteLine("  LuceneTest diag tokenize|query|rewrite|hits|verify|snippet|fuzzy|terms|subset ...");
         }
     }
 }

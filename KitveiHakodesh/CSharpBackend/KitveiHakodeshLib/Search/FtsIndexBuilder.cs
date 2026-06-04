@@ -85,8 +85,9 @@ namespace KitveiHakodeshLib.Search
             // line is processed), so the index is searchable from line 1 — no need to
             // wait for the first disk flush. Mark ready immediately so the frontend
             // shows the search bar as soon as the build begins.
-            bool partialReadyPushed = true;
+            bool partialReadyPushed = false;
             _state.MarkReadyDirect();
+            partialReadyPushed = true;
 
             var  segmentMarkers = new System.Collections.Generic.List<double>();
             double lastPct      = resumeOffset > 0 && totalLines > 0

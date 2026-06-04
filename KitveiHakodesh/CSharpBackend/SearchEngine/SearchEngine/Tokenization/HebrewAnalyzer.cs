@@ -52,115 +52,88 @@ namespace SearchEngine.Tokenization
 
         public override bool IncrementToken()
         {
-            ClearAttributes();
-
-            if (_eof)
-                return false;
-
-            _buffer.Clear();
-            int startOffset = _offset;
-            int c;
-
-            // ── Skip until we find the start of a word ────────────────
-            // Honour _inTag state carried over from the previous call so
-            // we never start a word mid-tag.
-            while ((c = m_input.Read()) != -1)
+            while (true)
             {
-                _offset++;
-                char ch = (char)c;
+                ClearAttributes();
 
-                // ── HTML tag handling ─────────────────────────────────
-                if (_inTag)
+                if (_eof)
+                    return false;
+
+                _buffer.Clear();
+                int startOffset = _offset;
+                int c;
+
+                // ── Skip until we find the start of a word ────────────────
+                while ((c = m_input.Read()) != -1)
                 {
-                    if (ch == '>') _inTag = false;
-                    continue; // skip everything inside a tag
+                    _offset++;
+                    char ch = (char)c;
+
+                    if (_inTag)
+                    {
+                        if (ch == '>') _inTag = false;
+                        continue;
+                    }
+                    if (ch == '<') { _inTag = true; continue; }
+                    if (ch == '\u05BE') continue; // maqaf
+                    if (ch == '\u05F3' || ch == '\u05F4' || ch == '"') continue;
+                    if (ch >= '\u0591' && ch <= '\u05C7'
+                        && ch != '\u05C0' && ch != '\u05C3' && ch != '\u05C6') continue;
+                    if (ch > 127 && CharUnicodeInfo.GetUnicodeCategory(ch) == UnicodeCategory.NonSpacingMark)
+                        continue;
+
+                    if (IsLetter(ch))
+                    {
+                        startOffset = _offset - 1;
+                        if (ch >= 'A' && ch <= 'Z') ch = (char)(ch | 32);
+                        _buffer.Append(ch);
+                        break;
+                    }
                 }
-                if (ch == '<')
+
+                if (c == -1)
                 {
-                    _inTag = true;
-                    continue;
+                    _eof = true;
+                    return false;
                 }
 
-                // ── Maqaf — word separator ────────────────────────────
-                if (ch == '\u05BE') continue;
-
-                // ── Geresh / gershayim / ASCII quote ──────────────────
-                if (ch == '\u05F3' || ch == '\u05F4' || ch == '"') continue;
-
-                // ── Nikud + cantillation ───────────────────────────────
-                if (ch >= '\u0591' && ch <= '\u05C7'
-                    && ch != '\u05C0'
-                    && ch != '\u05C3'
-                    && ch != '\u05C6') continue;
-
-                if (ch > 127 && CharUnicodeInfo.GetUnicodeCategory(ch) == UnicodeCategory.NonSpacingMark)
-                    continue;
-
-                // ── Letter found — start of a new word ───────────────
-                if (IsLetter(ch))
+                // ── Accumulate the rest of the word ──────────────────────
+                while ((c = m_input.Read()) != -1)
                 {
-                    startOffset = _offset - 1;
-                    if (ch >= 'A' && ch <= 'Z') ch = (char)(ch | 32);
-                    _buffer.Append(ch);
-                    break;
+                    _offset++;
+                    char ch = (char)c;
+
+                    if (ch == '<') { _inTag = true; break; }
+                    if (ch == '\u05BE') break;
+                    if (ch == '\u05F3' || ch == '\u05F4' || ch == '"') continue;
+                    if (ch >= '\u0591' && ch <= '\u05C7'
+                        && ch != '\u05C0' && ch != '\u05C3' && ch != '\u05C6') continue;
+                    if (ch > 127 && CharUnicodeInfo.GetUnicodeCategory(ch) == UnicodeCategory.NonSpacingMark)
+                        continue;
+
+                    if (IsLetter(ch))
+                    {
+                        if (ch >= 'A' && ch <= 'Z') ch = (char)(ch | 32);
+                        _buffer.Append(ch);
+                    }
+                    else
+                    {
+                        break;
+                    }
                 }
-                // anything else (space, punctuation, &, digits…) — skip
+
+                if (c == -1) _eof = true;
+
+                // ── Length filter (2–29 chars, matching FtsLib) ───────────
+                // Loop rather than recurse to avoid stack overflow on long runs of
+                // single-character tokens.
+                if (_buffer.Length < 2 || _buffer.Length >= 30)
+                    continue; // restart the outer loop to find the next word
+
+                _termAttr.SetEmpty().Append(_buffer);
+                _offsetAttr.SetOffset(startOffset, _offset);
+                return true;
             }
-
-            if (c == -1)
-            {
-                _eof = true;
-                return false;
-            }
-
-            // ── Accumulate the rest of the word ──────────────────────
-            while ((c = m_input.Read()) != -1)
-            {
-                _offset++;
-                char ch = (char)c;
-
-                // A '<' ends the current word AND enters tag mode.
-                if (ch == '<')
-                {
-                    _inTag = true;
-                    break;
-                }
-
-                // Maqaf — word separator
-                if (ch == '\u05BE') break;
-
-                // Geresh / gershayim / ASCII quote — strip silently (keep building)
-                if (ch == '\u05F3' || ch == '\u05F4' || ch == '"') continue;
-
-                // Nikud + cantillation — strip silently
-                if (ch >= '\u0591' && ch <= '\u05C7'
-                    && ch != '\u05C0'
-                    && ch != '\u05C3'
-                    && ch != '\u05C6') continue;
-
-                if (ch > 127 && CharUnicodeInfo.GetUnicodeCategory(ch) == UnicodeCategory.NonSpacingMark)
-                    continue;
-
-                if (IsLetter(ch))
-                {
-                    if (ch >= 'A' && ch <= 'Z') ch = (char)(ch | 32);
-                    _buffer.Append(ch);
-                }
-                else
-                {
-                    break; // non-letter separator ends the word
-                }
-            }
-
-            if (c == -1) _eof = true;
-
-            // ── Length filter (2–29 chars, matching FtsLib) ───────────
-            if (_buffer.Length < 2 || _buffer.Length >= 30)
-                return IncrementToken(); // tail-recurse to find the next valid word
-
-            _termAttr.SetEmpty().Append(_buffer);
-            _offsetAttr.SetOffset(startOffset, _offset);
-            return true;
         }
 
         public override void Reset()

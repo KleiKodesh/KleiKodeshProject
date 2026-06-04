@@ -21,6 +21,10 @@ namespace SearchEngine.Search
         private const int MinAnchorLength  = 2;
         private const int MaxOptionalChars = 4;
 
+        // Thread-static StringBuilder reused across all Normalise calls on a thread.
+        [System.ThreadStatic]
+        private static StringBuilder _normaliseBuffer;
+
         // ── Literal term (Boolean) ────────────────────────────────────
 
         private static Query BuildLiteralQuery(string token, HebrewAnalyzer analyzer)
@@ -214,10 +218,13 @@ namespace SearchEngine.Search
         /// <summary>
         /// Strips nikud/cantillation, geresh/gershayim, lowercases ASCII.
         /// Preserves '*' and '?'. Drops '%' and '~' (already consumed by ParseToken).
+        /// Reuses a thread-static StringBuilder to avoid per-token allocation.
         /// </summary>
         private static string Normalise(string token)
         {
-            var sb = new StringBuilder(token.Length);
+            var sb = _normaliseBuffer ?? (_normaliseBuffer = new StringBuilder(64));
+            sb.Clear();
+            sb.EnsureCapacity(token.Length);
             foreach (char c in token)
             {
                 if (c >= '\u0591' && c <= '\u05C7') continue; // nikud + cantillation
@@ -238,9 +245,14 @@ namespace SearchEngine.Search
             return n;
         }
 
+        // Thread-static reusable List for Analyze — avoids allocating a new list per token.
+        [System.ThreadStatic]
+        private static List<string> _analyzeResultBuffer;
+
         private static List<string> Analyze(string token, HebrewAnalyzer analyzer)
         {
-            var result = new List<string>();
+            var result = _analyzeResultBuffer ?? (_analyzeResultBuffer = new List<string>(4));
+            result.Clear();
             using (var ts = analyzer.GetTokenStream(LuceneIndexWriter.FieldText,
                                                     new StringReader(token)))
             {

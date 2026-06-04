@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using SearchEngine.Indexing;
 using SearchEngine.Search;
@@ -27,7 +27,7 @@ namespace SearchEngineTest
             {
                 if (!db.IsOpen)
                 {
-                    Console.WriteLine("Database not found — aborting.");
+                    Console.WriteLine("Database not found ג€” aborting.");
                     return;
                 }
 
@@ -49,7 +49,7 @@ namespace SearchEngineTest
 
             if (!Directory.Exists(IndexDir))
             {
-                Console.WriteLine("Index not found — run build first.");
+                Console.WriteLine("Index not found ג€” run build first.");
                 return;
             }
 
@@ -58,7 +58,7 @@ namespace SearchEngineTest
                 var sw = System.Diagnostics.Stopwatch.StartNew();
                 int count = 0;
 
-                foreach (int id in searcher.Search(query))
+                foreach (int id in searcher.SearchRowIds(query))
                 {
                     count++;
                     Console.WriteLine($"  [{count}] docId={id}");
@@ -90,3 +90,4 @@ namespace SearchEngineTest
         }
     }
 }
+

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Lucene.Net.Index;
 using Lucene.Net.Search;
 using Lucene.Net.Store;
@@ -16,7 +16,7 @@ namespace SearchEngineTest
 
             if (!System.IO.Directory.Exists(indexDir))
             {
-                Console.WriteLine("Index not found — run build first.");
+                Console.WriteLine("Index not found ג€” run build first.");
                 return;
             }
 
@@ -51,3 +51,5 @@ namespace SearchEngineTest
         }
     }
 }
+
+

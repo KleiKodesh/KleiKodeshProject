@@ -8,7 +8,7 @@ The project is split into a Vue 3 frontend and a C# backend.
 
 **`vue-frontend/`** — all UI, state, and rendering. A standard Vite + Vue 3 + TypeScript project. This is where almost all feature work happens.
 
-**`CSharpBackend/`** — hosts the frontend in a WebView2 control and provides native capabilities the web app cannot do on its own: opening SQLite databases from disk, native file pickers, PDF virtual hosts, and the Bloom filter full-text search index. It also owns the build pipeline — after every C# build it compiles the Vue app and copies the output into the deployment folder.
+**`CSharpBackend/`** — hosts the frontend in a WebView2 control and provides native capabilities the web app cannot do on its own: opening SQLite databases from disk, native file pickers, PDF virtual hosts, and the Lucene-based full-text search index. It also owns the build pipeline — after every C# build it compiles the Vue app and copies the output into the deployment folder.
 
 In production the two parts are inseparable. In development the Vue app runs standalone against a local dev server that mocks the database interface over HTTP, so you rarely need to touch the C# side for frontend work.
 
@@ -113,8 +113,8 @@ In dev mode, SQL calls go to the Vite middleware instead. Everything else (file 
 | Project                | Role                                                                      |
 | ---------------------- | ------------------------------------------------------------------------- |
 | `KitveiHakodeshLib`           | WebView2 host, message bridge, SQLite access, PDF handling, file I/O      |
-| `BloomSearchEngineLib` | Bloom filter index builder and searcher for full-text search              |
+| `SearchEngine`         | Lucene-based full-text search index builder and searcher                  |
 | `KitveiHakodeshDemoApp`       | Standalone WinForms harness for running the Vue app outside of production |
-| `DictWordChecker`      | CLI utility for validating dictionary database entries                    |
+| `EverythingSearchClient`| Client library for the Everything desktop search tool                     |
 
 See `CSharpBackend/README.md` for C# setup and build instructions.

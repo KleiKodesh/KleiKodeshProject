@@ -142,7 +142,7 @@ The main book reader. Orchestrates a split pane (text above, commentary below), 
 
 ### full-text-search/
 
-Full-text search backed by SearchEngineLib (Lucene-based indexing). Supports category/book filters and caches results in IDB.
+Full-text search backed by SearchEngineLib with Lucene-based inverted indexing. Supports category/book filters and caches results in IDB.
 
 - `FullTextSearchPage.vue` — main page
 - `FullTextSearchBar.vue` — search input + filter toggle
@@ -404,7 +404,7 @@ Key C# handlers:
 
 The full-text search pipeline spans three layers: SearchEngineLib (the Lucene-based index engine), KitveiHakodeshLib (the C# orchestration layer), and the Vue frontend.
 
-**SearchEngineLib** contains the Lucene-based indexing and search implementation. The search engine handles index building, querying, and result retrieval using Lucene's inverted index structure.
+**SearchEngineLib** contains the Lucene-based full-text search implementation backed by Lucene's inverted index. The search engine handles index building, querying, and result retrieval with support for prefix/suffix/infix wildcards, fuzzy matching (Levenshtein distance), and Hebrew-specific features like spelling variant expansion.
 
 **KitveiHakodeshLib/Search/** contains the orchestration classes:
 

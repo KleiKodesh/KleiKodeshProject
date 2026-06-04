@@ -3,37 +3,33 @@
     "tasks": [
         {
             "label": "build",
+            "command": "msbuild",
+            "type": "process",
+            "args": [
+                "${workspaceFolder}/CSharpBackend/KitveiHakodesh.slnx",
+                "/p:Configuration=Release"
+            ],
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "build SearchEngine",
             "command": "dotnet",
             "type": "process",
             "args": [
                 "build",
-                "${workspaceFolder}/CSharpBackend/FtsLib/FstLib/FstLib.sln",
-                "/property:GenerateFullPaths=true",
-                "/consoleloggerparameters:NoSummary;ForceNoAlign"
+                "${workspaceFolder}/CSharpBackend/SearchEngine/SearchEngine.sln"
             ],
             "problemMatcher": "$msCompile"
         },
         {
-            "label": "publish",
-            "command": "dotnet",
-            "type": "process",
-            "args": [
-                "publish",
-                "${workspaceFolder}/CSharpBackend/FtsLib/FstLib/FstLib.sln",
-                "/property:GenerateFullPaths=true",
-                "/consoleloggerparameters:NoSummary;ForceNoAlign"
-            ],
-            "problemMatcher": "$msCompile"
-        },
-        {
-            "label": "watch",
+            "label": "watch SearchEngine",
             "command": "dotnet",
             "type": "process",
             "args": [
                 "watch",
                 "run",
                 "--project",
-                "${workspaceFolder}/CSharpBackend/FtsLib/FstLib/FstLib.sln"
+                "${workspaceFolder}/CSharpBackend/SearchEngine/SearchEngine.sln"
             ],
             "problemMatcher": "$msCompile"
         }

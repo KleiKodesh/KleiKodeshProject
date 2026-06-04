@@ -249,7 +249,7 @@ namespace KitveiHakodeshLib
             settings.IsSwipeNavigationEnabled = false;
 
             // No autofill or password saving — the app has no login forms.
-            settings.IsGeneralAutofillEnabled = false;
+            //settings.IsGeneralAutofillEnabled = false;
             settings.IsPasswordAutosaveEnabled = false;
 
             // No status bar — the hover-URL tooltip at the bottom left is irrelevant
@@ -279,7 +279,7 @@ namespace KitveiHakodeshLib
             // Show a blank page on navigation failure instead of the browser's styled
             // error page. The app is a local reader — navigation errors are internal
             // bugs, not user-facing web errors, so the browser error page is noise.
-            settings.IsBuiltInErrorPageEnabled = false;
+            //settings.IsBuiltInErrorPageEnabled = false;
 
             _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                 "KitveiHakodesh-vue-app", AppDir, CoreWebView2HostResourceAccessKind.Allow);

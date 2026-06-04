@@ -62,6 +62,69 @@ namespace SearchEngine.SeforimDb
             }
         }
 
+        // ── Batch metadata fetch (minimal-index search path) ─────────
+
+        /// <summary>
+        /// Returns a map of lineId → bookId for the given line IDs in one query.
+        /// Used by the minimal-index search path to enrich snippet results with
+        /// book identity before fetching book titles.
+        /// </summary>
+        public Dictionary<int, int> GetBookIdsByLineIds(IList<int> lineIds)
+        {
+            EnsureOpen();
+            var result = new Dictionary<int, int>(lineIds.Count);
+            if (lineIds.Count == 0) return result;
+
+            using (var cmd = _connection.CreateCommand())
+            {
+                cmd.CommandText =
+                    "SELECT id, bookId FROM line WHERE id IN (" +
+                    BuildIntegerList(lineIds) + ")";
+                using (var r = cmd.ExecuteReader())
+                    while (r.Read())
+                        result[r.GetInt32(0)] = r.GetInt32(1);
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Returns a map of bookId → bookTitle for the given book IDs in one query.
+        /// Used by the minimal-index search path after <see cref="GetBookIdsByLineIds"/>
+        /// to resolve titles for a batch of results.
+        /// </summary>
+        public Dictionary<int, string> GetBookTitlesByBookIds(IList<int> bookIds)
+        {
+            EnsureOpen();
+            var result = new Dictionary<int, string>(bookIds.Count);
+            if (bookIds.Count == 0) return result;
+
+            using (var cmd = _connection.CreateCommand())
+            {
+                cmd.CommandText =
+                    "SELECT id, title FROM book WHERE id IN (" +
+                    BuildIntegerList(bookIds) + ")";
+                using (var r = cmd.ExecuteReader())
+                    while (r.Read())
+                        result[r.GetInt32(0)] = r.IsDBNull(1) ? string.Empty : r.GetString(1);
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Builds a comma-separated list of integers for an IN clause.
+        /// Only safe for integer values — never use with string input.
+        /// </summary>
+        private static string BuildIntegerList(IList<int> ids)
+        {
+            var sb = new StringBuilder(ids.Count * 6);
+            for (int i = 0; i < ids.Count; i++)
+            {
+                if (i > 0) sb.Append(',');
+                sb.Append(ids[i]);
+            }
+            return sb.ToString();
+        }
+
         // ── Single-line fetch (search-time content for snippets) ──────
 
         /// <summary>

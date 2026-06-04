@@ -23,6 +23,20 @@ namespace KitveiHakodeshLib.Search
             = new ConcurrentDictionary<string, CancellationTokenSource>();
         private int _nextSearchId = 1;
 
+        // Serialisation-friendly struct — avoids allocating an anonymous object per result.
+        // Fields are lowercase to match the JSON property names expected by the frontend.
+        // Must use properties (not fields) — System.Text.Json ignores public fields by default.
+        private struct SearchResultPayload
+        {
+            public int    lineId       { get; set; }
+            public int    bookId       { get; set; }
+            public string bookTitle    { get; set; }
+            public string tocText      { get; set; }
+            public int    score        { get; set; }
+            public string snippet      { get; set; }
+            public string[] matchedTerms { get; set; }
+        }
+
         internal FtsSearchExecutor(FtsIndexState state, WebBridge bridge)
         {
             _state  = state;
@@ -58,7 +72,7 @@ namespace KitveiHakodeshLib.Search
 
             if (!ready || index == null)
             {
-                string reason = !ready ? "indexNotReady" : "indexNotReady";
+                string reason = !ready ? "indexNotReady" : "searchFailed";
                 _bridge.Reply(id, new { searchId = (string)null, failReason = reason });
                 return;
             }
@@ -116,7 +130,7 @@ namespace KitveiHakodeshLib.Search
                 int doublingIndex = 0;
                 bool useTimerOnly = false;
 
-                var  batch = new List<object>(MemorySafetyCap);
+                var  batch = new List<SearchResultPayload>(MemorySafetyCap);
                 var  timer = new Stopwatch();
                 timer.Start();
 
@@ -136,7 +150,7 @@ namespace KitveiHakodeshLib.Search
 
                     if (excludedLineIds.Contains(rowId)) continue;
 
-                    batch.Add(new
+                    batch.Add(new SearchResultPayload
                     {
                         lineId       = rowId,
                         bookId       = bookId,

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using Lucene.Net.Analysis.TokenAttributes;
 using SearchEngine.Tokenization;
@@ -25,3 +25,4 @@ namespace SearchEngineTest
         }
     }
 }
+

@@ -9,7 +9,6 @@ using Lucene.Net.Search.Highlight;
 using Lucene.Net.Search.Spans;
 using Lucene.Net.Store;
 using SearchEngine.Indexing;
-using SearchEngine.Snippets;
 using SearchEngine.Tokenization;
 
 namespace SearchEngine.Search
@@ -47,12 +46,15 @@ namespace SearchEngine.Search
         [System.ThreadStatic]
         private static StringBuilder _stripHtmlBuffer;
 
-        // Field slot indices in the stored document — must match the order fields are
-        // added in LuceneIndexWriter: rowId(0), bookId(1), bookTitle(2), tocPath(3).
-        private const int SlotRowId    = 0;
-        private const int SlotBookId   = 1;
+        // Field slot indices in the stored document — these match the order fields are
+        // added in LuceneIndexWriter when storeMetadata=true:
+        //   rowId(0), bookId(1), bookTitle(2), tocPath(3)
+        // When storeMetadata=false (minimal index) only rowId(0) is stored.
+        // All metadata reads below check fields.Count before accessing a slot.
+        private const int SlotRowId     = 0;
+        private const int SlotBookId    = 1;
         private const int SlotBookTitle = 2;
-        private const int SlotTocPath  = 3;
+        private const int SlotTocPath   = 3;
 
         private bool _disposed;
 
@@ -97,8 +99,7 @@ namespace SearchEngine.Search
         /// no database round-trip.
         /// </summary>
         public IEnumerable<(int RowId, int BookId, string BookTitle, string TocPath)> Search(string queryText,
-                                       CancellationToken ct = default)
-        {
+                                       CancellationToken ct = default)        {
             Query query = HebrewQueryBuilder.Build(queryText, _analyzer);
             if (query == null) yield break;
 
@@ -116,12 +117,12 @@ namespace SearchEngine.Search
                     ct.ThrowIfCancellationRequested();
                     var doc    = searcher.Doc(sd.Doc);
                     var fields = doc.Fields;
-                    if (fields.Count <= SlotTocPath) continue;
+                    if (fields.Count == 0) continue;
 
-                    int    rowId    = fields[SlotRowId].GetInt32Value().GetValueOrDefault();
-                    int    bookId   = fields[SlotBookId].GetInt32Value().GetValueOrDefault();
-                    string bookTitle = fields[SlotBookTitle].GetStringValue() ?? string.Empty;
-                    string tocPath   = fields[SlotTocPath].GetStringValue()  ?? string.Empty;
+                    int    rowId     = fields[SlotRowId].GetInt32Value().GetValueOrDefault();
+                    int    bookId    = fields.Count > SlotBookId    ? fields[SlotBookId].GetInt32Value().GetValueOrDefault()    : 0;
+                    string bookTitle = fields.Count > SlotBookTitle ? fields[SlotBookTitle].GetStringValue() ?? string.Empty   : string.Empty;
+                    string tocPath   = fields.Count > SlotTocPath   ? fields[SlotTocPath].GetStringValue()  ?? string.Empty   : string.Empty;
 
                     yield return (rowId, bookId, bookTitle, tocPath);
                 }
@@ -130,6 +131,16 @@ namespace SearchEngine.Search
             {
                 _manager.Release(searcher);
             }
+        }
+
+        /// <summary>
+        /// Convenience overload — returns only row IDs, discarding bookId/bookTitle/tocPath.
+        /// Used by tests and tooling that don't need the stored metadata fields.
+        /// </summary>
+        public IEnumerable<int> SearchRowIds(string queryText, CancellationToken ct = default)
+        {
+            foreach (var (rowId, _, __, ___) in Search(queryText, ct))
+                yield return rowId;
         }
 
         /// <summary>
@@ -152,12 +163,11 @@ namespace SearchEngine.Search
         /// <paramref name="ct"/> is checked between results — cancellation stops
         /// streaming immediately.
         /// </summary>
-        public IEnumerable<(int RowId, int BookId, string BookTitle, string TocPath, SnippetResult Snippet)> SearchWithSnippets(
+        public IEnumerable<(int RowId, int BookId, string BookTitle, string TocPath, string Fragment)> SearchWithSnippets(
             string            queryText,
             Func<int, string> textProvider,
             string            preTag       = "<mark>",
             string            postTag      = "</mark>",
-            int               batchSize    = 100,
             int               slop         = int.MaxValue,
             bool              inOrder      = false,
             int               fragmentSize = 2000,
@@ -205,12 +215,12 @@ namespace SearchEngine.Search
 
                     var doc    = searcher.Doc(sd.Doc);
                     var fields = doc.Fields;
-                    if (fields.Count <= SlotTocPath) continue;
+                    if (fields.Count == 0) continue;
 
                     int    rowId     = fields[SlotRowId].GetInt32Value().GetValueOrDefault();
-                    int    bookId    = fields[SlotBookId].GetInt32Value().GetValueOrDefault();
-                    string bookTitle = fields[SlotBookTitle].GetStringValue() ?? string.Empty;
-                    string tocPath   = fields[SlotTocPath].GetStringValue()  ?? string.Empty;
+                    int    bookId    = fields.Count > SlotBookId    ? fields[SlotBookId].GetInt32Value().GetValueOrDefault()    : 0;
+                    string bookTitle = fields.Count > SlotBookTitle ? fields[SlotBookTitle].GetStringValue() ?? string.Empty   : string.Empty;
+                    string tocPath   = fields.Count > SlotTocPath   ? fields[SlotTocPath].GetStringValue()  ?? string.Empty   : string.Empty;
 
                     string text = textProvider(rowId);
                     if (text == null) continue;
@@ -226,7 +236,7 @@ namespace SearchEngine.Search
                     if (minMarks > 0 && CountMarks(fragment, preTag) < minMarks)
                         continue;
 
-                    yield return (rowId, bookId, bookTitle, tocPath, new SnippetResult(fragment, 1, 0, true));
+                    yield return (rowId, bookId, bookTitle, tocPath, fragment);
                 }
             }
             finally

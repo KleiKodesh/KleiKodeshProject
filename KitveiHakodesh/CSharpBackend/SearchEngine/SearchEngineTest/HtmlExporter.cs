@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -24,7 +24,7 @@ namespace SearchEngineTest
             var indexDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "lucene_index");
             if (!Directory.Exists(indexDir))
             {
-                Console.WriteLine("Index not found — run build first.");
+                Console.WriteLine("Index not found ג€” run build first.");
                 return;
             }
 
@@ -91,7 +91,7 @@ namespace SearchEngineTest
             sb.AppendLine("<body>");
             sb.AppendLine("  <div class='container'>");
             sb.AppendLine("    <header>");
-            sb.AppendLine($"      <h1>🔍 Lucene Search Results</h1>");
+            sb.AppendLine($"      <h1>נ” Lucene Search Results</h1>");
             sb.AppendLine($"      <div class='query'>Query: <strong>{EscapeHtml(query)}</strong></div>");
             sb.AppendLine($"      <div class='stats'>{results.Count} results found in {elapsed.TotalSeconds:F2}s</div>");
             sb.AppendLine("    </header>");
@@ -135,3 +135,4 @@ namespace SearchEngineTest
         }
     }
 }
+

@@ -16,11 +16,11 @@ Full-text search using Category and book filters, virtual-scrolled results, inde
 
 **FullTextSearchFilterBookList.vue** — flat list of books shown inside the filter panel when the user types a book-name query. Same row styling as the tree nodes.
 
-**FullTextSearchIndexingOverlay.vue** — full-screen overlay shown while the Bloom index is being built.
+**FullTextSearchIndexingOverlay.vue** — full-screen overlay shown while the Lucene index is being built.
 
 ## Composables
 
-**useFullTextSearch.ts** — executes Bloom filter searches via the C# backend. Supports incremental caching: each batch is written to `searchCacheStore` as it arrives. On re-search or tab restore, cached partial results are shown immediately and the C# stream resumes from the last cached offset (`skipCount`). All search execution goes through here.
+**useFullTextSearch.ts** — executes full-text searches via the C# backend. Supports incremental caching: each batch is written to `searchCacheStore` as it arrives. On re-search or tab restore, cached partial results are shown immediately and the C# stream resumes from the last cached offset (`skipCount`). All search execution goes through here.
 
 **useFullTextSearchIndexingStatus.ts** — polls the C# backend for indexing progress. Use this to drive the overlay and any other indexing-dependent UI.
 
@@ -30,4 +30,4 @@ Full-text search using Category and book filters, virtual-scrolled results, inde
 
 ## Cache
 
-`searchCacheStore` (in `src/stores/`) persists search results in the `app-search-cache` IDB database. Each entry stores `{ results, complete }`. Batches are appended incrementally so partial results survive tab switches and app restarts. LRU-capped at 100 queries. The C# `BloomSearchStart` action accepts an optional `skipCount` parameter to resume streaming from a given offset.
+`searchCacheStore` (in `src/stores/`) persists search results in the `app-search-cache` IDB database. Each entry stores `{ results, complete }`. Batches are appended incrementally so partial results survive tab switches and app restarts. LRU-capped at 100 queries. The C# `FtsSearchStart` action accepts an optional `skipCount` parameter to resume streaming from a given offset.

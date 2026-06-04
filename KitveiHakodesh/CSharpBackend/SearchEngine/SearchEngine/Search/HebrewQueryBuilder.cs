@@ -121,7 +121,9 @@ namespace SearchEngine.Search
             if (string.IsNullOrWhiteSpace(queryText))
                 return null;
 
-            queryText = queryText.Replace("|", " | ");
+            // Only allocate the replaced string when '|' actually appears.
+            if (queryText.IndexOf('|') >= 0)
+                queryText = queryText.Replace("|", " | ");
 
             var slots        = new List<List<ParsedToken>>();
             var pendingOr    = new List<ParsedToken>();

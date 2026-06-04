@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using Lucene.Net.Analysis.TokenAttributes;
 using Lucene.Net.Index;
@@ -18,12 +18,12 @@ namespace SearchEngineTest
     ///   LuceneTest diag fuzzy &lt;query&gt; [dbPath]
     ///
     /// What it checks:
-    ///   1. Query parse — prints the Lucene query object so you can confirm
+    ///   1. Query parse ג€” prints the Lucene query object so you can confirm
     ///      FuzzyQuery nodes appear with the right maxEdits.
-    ///   2. Hit count — total matching documents in the index.
-    ///   3. Sample results — first N row IDs with their content from the DB,
+    ///   2. Hit count ג€” total matching documents in the index.
+    ///   3. Sample results ג€” first N row IDs with their content from the DB,
     ///      so you can visually verify the fuzzy neighbours are sensible.
-    ///   4. Edit-distance spot-check — for each unique term matched by the
+    ///   4. Edit-distance spot-check ג€” for each unique term matched by the
     ///      FuzzyQuery, prints the Levenshtein distance from the query term
     ///      so you can confirm the distance cap is respected.
     /// </summary>
@@ -36,25 +36,25 @@ namespace SearchEngineTest
 
             if (!System.IO.Directory.Exists(indexDir))
             {
-                Console.WriteLine("Index not found — run build first.");
+                Console.WriteLine("Index not found ג€” run build first.");
                 return;
             }
 
-            // ── 1. Parse ──────────────────────────────────────────────
+            // ג”€ג”€ 1. Parse ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
             Query query;
             using (var analyzer = new HebrewAnalyzer())
                 query = HebrewQueryBuilder.Build(queryText, analyzer);
 
             if (query == null)
             {
-                Console.WriteLine("  (empty / invalid query — nothing to search)");
+                Console.WriteLine("  (empty / invalid query ג€” nothing to search)");
                 return;
             }
             Console.WriteLine($"  Parsed query type : {query.GetType().Name}");
             Console.WriteLine($"  Parsed query      : {query}");
             Console.WriteLine();
 
-            // ── 2. Hit count + sample results ─────────────────────────
+            // ג”€ג”€ 2. Hit count + sample results ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
             using (var dir      = FSDirectory.Open(indexDir))
             using (var reader   = DirectoryReader.Open(dir))
             using (var db       = new ZayitDb(dbPath))
@@ -89,14 +89,14 @@ namespace SearchEngineTest
 
                     // Truncate long lines for readability
                     string display = content.Length > 120
-                        ? content.Substring(0, 120) + "…"
+                        ? content.Substring(0, 120) + "ג€¦"
                         : content;
 
                     Console.WriteLine($"  [{i + 1}] rowId={rowId}");
                     Console.WriteLine($"       {display}");
                 }
 
-                // ── 3. Edit-distance spot-check ───────────────────────
+                // ג”€ג”€ 3. Edit-distance spot-check ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
                 // Extract the base query term(s) from the raw query text so we can
                 // compute distances. We strip the '~N' suffix and normalise.
                 var baseTerms = ExtractBaseTerms(queryText);
@@ -123,7 +123,7 @@ namespace SearchEngineTest
             }
         }
 
-        // ── Helpers ───────────────────────────────────────────────────
+        // ג”€ג”€ Helpers ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
         /// <summary>
         /// Extracts the normalised base term(s) from a fuzzy query string by
@@ -216,3 +216,5 @@ namespace SearchEngineTest
         }
     }
 }
+
+

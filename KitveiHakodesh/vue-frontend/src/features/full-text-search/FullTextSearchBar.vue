@@ -251,7 +251,8 @@ defineExpose({ focus: () => inputRef.value?.focus(), filterBtnRef, advancedBtnRe
 
 <style>
 /* Must be unscoped — scoped styles cannot reach browser-internal pseudo-elements */
+/* !important required — Chrome 91+ re-introduced the arrow and ignores the rule without it */
 input[name="full-text-search"]::-webkit-calendar-picker-indicator {
-  display: none;
+  display: none !important;
 }
 </style>

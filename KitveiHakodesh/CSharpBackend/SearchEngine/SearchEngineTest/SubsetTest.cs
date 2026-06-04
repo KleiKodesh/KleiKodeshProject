@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using Lucene.Net.Index;
 using Lucene.Net.Search;
@@ -14,11 +14,11 @@ namespace SearchEngineTest
     /// by a corresponding wildcard query.
     ///
     /// Usage:
-    ///   LuceneTest diag subset "כי ביצחק" "כי *יצחק"
+    ///   LuceneTest diag subset "׳›׳™ ׳‘׳™׳¦׳—׳§" "׳›׳™ *׳™׳¦׳—׳§"
     ///
-    /// The test passes when literalResults ⊆ wildcardResults.
+    /// The test passes when literalResults ג† wildcardResults.
     /// It also reports rows in wildcardResults that are NOT in literalResults
-    /// (expected — the wildcard matches more forms).
+    /// (expected ג€” the wildcard matches more forms).
     /// </summary>
     internal static class SubsetTest
     {
@@ -31,7 +31,7 @@ namespace SearchEngineTest
 
             if (!System.IO.Directory.Exists(indexDir))
             {
-                Console.WriteLine("Index not found — run build first.");
+                Console.WriteLine("Index not found ג€” run build first.");
                 return;
             }
 
@@ -50,7 +50,7 @@ namespace SearchEngineTest
                 Console.WriteLine($"  Wildcard hits : {wildcardIds.Count:N0}");
                 Console.WriteLine();
 
-                // Check literal ⊆ wildcard
+                // Check literal ג† wildcard
                 var missing = new List<int>();
                 foreach (int id in literalIds)
                     if (!wildcardIds.Contains(id))
@@ -58,19 +58,19 @@ namespace SearchEngineTest
 
                 if (missing.Count == 0)
                 {
-                    Console.WriteLine("  PASS — every literal result is contained in the wildcard results.");
+                    Console.WriteLine("  PASS ג€” every literal result is contained in the wildcard results.");
                 }
                 else
                 {
-                    Console.WriteLine($"  FAIL — {missing.Count:N0} literal row(s) are MISSING from the wildcard results:");
+                    Console.WriteLine($"  FAIL ג€” {missing.Count:N0} literal row(s) are MISSING from the wildcard results:");
                     int show = Math.Min(missing.Count, 20);
                     for (int i = 0; i < show; i++)
                         Console.WriteLine($"    rowId={missing[i]}");
                     if (missing.Count > show)
-                        Console.WriteLine($"    … and {missing.Count - show} more.");
+                        Console.WriteLine($"    ג€¦ and {missing.Count - show} more.");
                 }
 
-                // Extra info: wildcard-only rows (expected — wider match)
+                // Extra info: wildcard-only rows (expected ג€” wider match)
                 int wildcardOnly = 0;
                 foreach (int id in wildcardIds)
                     if (!literalIds.Contains(id))
@@ -81,7 +81,7 @@ namespace SearchEngineTest
             }
         }
 
-        // ── helpers ──────────────────────────────────────────────────────────
+        // ג”€ג”€ helpers ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
         private static HashSet<int> CollectIds(IndexSearcher searcher, string queryText)
         {
@@ -95,7 +95,7 @@ namespace SearchEngineTest
                 return null;
             }
 
-            Console.WriteLine($"  Parsed [{queryText}] → {q}");
+            Console.WriteLine($"  Parsed [{queryText}] ג†’ {q}");
 
             var counter = new TotalHitCountCollector();
             searcher.Search(q, counter);
@@ -116,3 +116,5 @@ namespace SearchEngineTest
         }
     }
 }
+
+

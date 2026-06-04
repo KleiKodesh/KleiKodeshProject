@@ -79,7 +79,9 @@ namespace SearchEngine.SeforimDb
             if (string.IsNullOrWhiteSpace(query))
                 return Array.Empty<IReadOnlyCollection<string>>();
 
-            query = query.Replace("|", " | ");
+            if (query.IndexOf('|') >= 0)
+                query = query.Replace("|", " | ");
+
             var slots        = new List<IReadOnlyCollection<string>>();
             var pendingSlot  = new List<string>();
             bool lastWasPipe = false;
@@ -97,7 +99,7 @@ namespace SearchEngine.SeforimDb
                 if (!lastWasPipe && pendingSlot.Count > 0)
                 {
                     slots.Add(pendingSlot.ToArray());
-                    pendingSlot = new List<string>();
+                    pendingSlot.Clear(); // reuse the list rather than allocating a new one
                 }
 
                 pendingSlot.Add(normalised);
@@ -173,10 +175,11 @@ namespace SearchEngine.SeforimDb
         /// </summary>
         private static string ApplyKetivPrefix(string query)
         {
-            query = query.Replace("|", " | ");
+            if (query.IndexOf('|') >= 0)
+                query = query.Replace("|", " | ");
             var parts = query.Split(
                 new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-            var sb = new System.Text.StringBuilder();
+            var sb = new System.Text.StringBuilder(query.Length + parts.Length * 2);
             foreach (var part in parts)
             {
                 if (sb.Length > 0) sb.Append(' ');
