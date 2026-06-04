@@ -504,6 +504,12 @@ namespace KitveiHakodeshLib
             else
             {
                 // Enter fullscreen
+                // If window is already maximized, we must restore to Normal first,
+                // otherwise setting Maximized again does nothing and chrome doesn't get removed.
+                if (hostForm.WindowState == FormWindowState.Maximized)
+                {
+                    hostForm.WindowState = FormWindowState.Normal;
+                }
                 hostForm.FormBorderStyle = FormBorderStyle.None;
                 hostForm.WindowState = FormWindowState.Maximized;
             }
