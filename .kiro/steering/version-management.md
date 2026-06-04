@@ -1,3 +1,8 @@
+---
+inclusion: fileMatch
+fileMatchPattern: "Build/**"
+---
+
 # Version Management
 
 ## Single Source of Truth

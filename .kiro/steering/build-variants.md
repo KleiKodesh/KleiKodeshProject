@@ -1,3 +1,8 @@
+---
+inclusion: fileMatch
+fileMatchPattern: "Build/**"
+---
+
 # Build Variants — Three-Installer Pipeline
 
 ## The Three Variants

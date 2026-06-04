@@ -1,3 +1,8 @@
+---
+inclusion: fileMatch
+fileMatchPattern: "**/*.xaml,**/*ViewModel*.cs,**/*viewmodel*.cs,**/*Viewmodel*.cs"
+---
+
 # WPF Coding Conventions
 
 ## C# Naming

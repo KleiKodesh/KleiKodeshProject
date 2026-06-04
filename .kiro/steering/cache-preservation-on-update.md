@@ -1,3 +1,8 @@
+---
+inclusion: fileMatch
+fileMatchPattern: "Build/**"
+---
+
 # Cache Preservation During Installer Updates
 
 ## Problem

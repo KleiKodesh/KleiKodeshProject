@@ -27,7 +27,7 @@
 | [`KleiKodeshVsto/WebSitesLib`](KleiKodeshVsto/WebSitesLib/README.md)                                 | WPF Class Library     | דפדפן אתרים תורניים עם WebView2                       |
 | [`KleiKodeshVsto/Kiwix`](KleiKodeshVsto/Kiwix/KIWIX_CHANGES.md)                                     | WinForms + JS         | קורא קבצי ZIM (Kiwix) — WebView2 עם kiwix-js מותאם   |
 | [`WpfLib`](WpfLib/README.md)                                                                         | WPF Class Library     | כלי WPF משותפים — ViewModelBase, converters, controls |
-| [`UpdateCheckerLib`](UpdateCheckerLib/UpdateChecker.cs)                                              | .NET Library          | בדיקת עדכונים מ-GitHub והורדתם                        |
+| [`UpdateCheckerLib`](UpdateCheckerLib/README.md)                                                      | .NET Library          | בדיקת עדכונים מ-GitHub והורדתם                        |
 | [`KitveiHakodesh`](KitveiHakodesh/README.md)                                                                       | Vue 3 + TypeScript    | ספרייה לצפייה במאגר הספרים של זית / אוצריא            |
 | [`KitveiHakodesh/CSharpBackend/KitveiHakodeshLib`](KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/README.md)                     | .NET Library          | WebView2 host לממשק KitveiHakodesh                           |
 | [`KitveiHakodesh/CSharpBackend/FtsLib`](KitveiHakodesh/CSharpBackend/FtsLib/README.md) | .NET Library          | מנוע חיפוש Bloom filter                               |
@@ -60,13 +60,101 @@ Build/Installer  ──installs──▶  KleiKodeshVsto (Word add-in)
 
 ## בנייה
 
+### דרישות קדם
+
+- **Visual Studio 2022 Community** (עם Office Developer Tools ו-VSTO SDK)
+- **.NET Framework 4.7.2+** SDK
+- **NSIS 3.08+** (for building installers)
+- **PowerShell 5+**
+- **Node.js 18+** (for KitveiHakodesh Vue frontend)
+
 ### בנייה לגרסת הפצה (מתקין)
 
 השתמש בתפריט הבנייה האינטראקטיבי:
 
-```
+```powershell
 Build\build-menu.bat
 ```
+
+או בעקיפין:
+
+```powershell
+cd Build\scripts
+.\build-installer.ps1
+```
+
+זה יבנה **שלוש גרסאות מתקינות**:
+- `KleiKodeshSetup-vX.Y.Z-x64.exe` — 64-bit
+- `KleiKodeshSetup-vX.Y.Z-x86.exe` — 32-bit  
+- `KleiKodeshSetup-vX.Y.Z.exe` — AnyCPU (auto-detect)
+
+### בנייה לפיתוח
+
+```powershell
+# אם אתה משנה את תוסף ה-VSTO בלבד
+msbuild KleiKodeshProject.slnx /p:Configuration=Debug /p:Platform=x64
+
+# אם אתה משנה את ממשק KitveiHakodesh (Vue)
+cd KitveiHakodesh
+npm install
+npm run dev
+```
+
+### גרסאות בנייה
+
+הבנייה מייצרת שלוש גרסאות מ-run בודד — ראה `.kiro/steering/build-variants.md`:
+
+| Platform | Output |
+|----------|--------|
+| x64 | `KleiKodeshVsto/bin/Release-x64/` |
+| x86 | `KleiKodeshVsto/bin/Release-x86/` |
+| AnyCPU | `KleiKodeshVsto/bin/Release/` |
+
+כל פרויקט בשרשרת התלויות חייב להגדיר את שלוש ההגדרות הללו.
+
+## גרסאונות וניהול
+
+- **מקור אמת**: `Build/Installer/Helpers/AddinInstaller.cs` → `const string Version = "vX.Y.Z"`
+- **ירשומת חלונות**: `HKCU\SOFTWARE\KleiKodesh\Version`
+- **GitHub Releases**: תגים בתבנית `vX.Y.Z`
+
+ראה `.kiro/steering/version-management.md` לפרטים מלאים.
+
+## קידוד ודרכים עבודה
+
+- **קודים WPF**: ראה `.kiro/steering/wpf/wpf-best-practices.md` (MVVM, custom controls, binding, performance)
+- **קידוד בכלל**: ראה `.kiro/steering/screaming-architecture.md` (ארכיטקטורה, שמות קבצים, ארגון קבוצות)
+- **קידוד תוסף VSTO**: ראה [`KleiKodeshVsto/README.md`](KleiKodeshVsto/README.md)
+- **קידוד Vue**: ראה [`KitveiHakodesh/README.md`](KitveiHakodesh/README.md)
+- **קידוד Backend**: ראה [`KitveiHakodesh/CSharpBackend/README.md`](KitveiHakodesh/CSharpBackend/README.md)
+
+## זקנות חשמליות
+
+ברוב הקבצים יש תוכן עברי. **עולם UTF-8 ללא BOM** — לעולם אל תשתמש ב-PowerShell `Get-Content`/`Set-Content` להעתקת קבצים (מקלל טקסט).
+
+ראה `.kiro/steering/file-encoding.md` לפרטים מלאים.
+
+## מבנה מערכת הקבצים
+
+```
+KleiKodeshProject/
+├── Build/                   — מתקין WPF + wrapper NSIS
+├── KleiKodeshVsto/          — **הפרויקט הראשי של התוסף**
+│   ├── DocDesign/           — עיצוב תורני
+│   ├── RegexInWord/         — חיפוש regex
+│   ├── WebSitesLib/         — דפדפן אתרים
+│   ├── Kiwix/               — קורא ZIM
+│   ├── Helpers/             — עוזרים משותפים
+│   └── Ribbon/              — סרט כלים וורד
+├── WpfLib/                  — כלי WPF משותפים
+├── UpdateCheckerLib/        — בדיקת עדכונים
+├── KitveiHakodesh/          — ספרייה לצפייה בספרים
+│   └── CSharpBackend/       — backend C# (WebView2 host, חיפוש)
+├── kleikodesh.github.io/    — אתר ציבורי
+└── hebrew-typing-tutor/     — פרויקט נוסף (מטוטור הקלדה)
+```
+
+ראה [`project-overview.md`](.kiro/steering/project-overview.md) לתיאור מלא של כל פרויקט.
 
 
 

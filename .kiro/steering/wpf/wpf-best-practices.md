@@ -1,3 +1,8 @@
+---
+inclusion: fileMatch
+fileMatchPattern: "**/*.xaml,**/*ViewModel*.cs,**/*viewmodel*.cs,**/*Viewmodel*.cs"
+---
+
 # WPF Best Practices — Index
 
 This guide has been split into focused topics for clarity. Each file covers a specific aspect of WPF development.

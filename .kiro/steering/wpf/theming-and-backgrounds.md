@@ -1,5 +1,6 @@
 ---
-inclusion: auto
+inclusion: fileMatch
+fileMatchPattern: "**/*.xaml,**/*ViewModel*.cs,**/*viewmodel*.cs,**/*Viewmodel*.cs"
 description: Theme-aware background and foreground management in ElementHost WPF controls. Covers when to use Transparent vs binding, popup background patterns, opacity overlays, and the two-step pattern for custom controls with popups.
 ---
 
