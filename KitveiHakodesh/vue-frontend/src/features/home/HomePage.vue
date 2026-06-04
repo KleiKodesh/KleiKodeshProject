@@ -104,6 +104,8 @@ async function onTap(label: string) {
   flex-direction: column;
   height: 100%;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
   outline: none;
 }
 
