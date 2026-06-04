@@ -1,156 +1,117 @@
-# Build — WPF Installer & NSIS Wrapper
+# Build — Installer Build System
 
-The build system for creating the KleiKodesh WPF installer and NSIS wrapper.
+Three-installer pipeline: builds WPF installer + NSIS wrapper for x64, x86, and AnyCPU variants in a single run.
 
-## What It Does
+## Quick Start
 
-Builds three installer variants (x64, x86, AnyCPU) and wraps each in an NSIS installer that checks OS prerequisites before installation.
+```powershell
+Build\build-menu.bat
+```
+
+Launches interactive menu with options to build, clean, test, or manage GitHub releases.
 
 ## Folder Structure
 
 ```
 Build/
-├── Installer/                  — WPF installer project (.NET Framework)
+├── Installer/              — WPF installer project
 │   ├── Helpers/
-│   │   ├── AddinInstaller.cs   — Core install logic: extract VSTO zip, register add-in, save version
-│   │   ├── AdminHelper.cs      — UAC elevation ("Run as administrator" button)
-│   │   └── ProgramFilesHelper.cs — Find %LocalAppData%, check disk space
+│   │   ├── AddinInstaller.cs    — Extract VSTO zip, register add-in, version management
+│   │   ├── AdminHelper.cs       — UAC elevation & re-launch
+│   │   └── WordHelper.cs        — Detect/close Word before install
 │   ├── Pages/
-│   │   ├── LandingPage.xaml    — Welcome screen
-│   │   ├── AdvancedPage.xaml   — Website whitelist editor
-│   │   ├── InstallPage.xaml    — Install progress + final screen
-│   │   ├── RepairPage.xaml     — Repair/cleanup with elevation option
-│   │   └── (other pages)
+│   │   ├── LandingPage.xaml     — Welcome screen
+│   │   ├── SettingsPage.xaml    — Ribbon settings
+│   │   ├── AdvancedPage.xaml    — Website whitelist editor
+│   │   ├── InstallPage.xaml     — Progress + finish
+│   │   └── RepairPage.xaml      — Repair/cleanup
 │   ├── Dialogs/
-│   │   └── WhitelistEditorDialog.xaml — Edit website list before install
-│   ├── Resources/
-│   │   ├── BrushResources.xaml — Theme colors (mid-gray opacity overlays for dark mode)
-│   │   ├── Brushes.xaml        — Renamed to BrushResources.xaml
-│   │   └── (other themes)
-│   ├── KleiKodeshVstoInstallerWpf.csproj — WPF installer project
-│   ├── App.xaml, Main.xaml     — WPF app entry points
-│   └── README.md               — Installer-specific docs
-├── nsis/                        — NSIS wrapper script
-│   ├── KleiKodeshWrapper.nsi    — Main NSIS script
-│   ├── MUI_HEBREW.nsh          — Hebrew localization for NSIS
-│   └── (resource files)
-├── scripts/
-│   ├── build-installer.ps1     — Main build script (calls build helpers)
-│   ├── build-helpers.ps1       — Helper functions (Get-CurrentVersion, Get-OutputPath, etc.)
-│   └── deploy-gh-pages.ps1     — (future) GitHub Pages deployment
-├── releases/                    — Output folder for final `.exe` files (created during build)
+│   │   └── WhitelistEditorDialog.xaml — Edit website list
+│   └── README.md               — Detailed installer docs
+├── nsis/                   — NSIS wrapper
+│   ├── KleiKodeshWrapper.nsi    — Prereq checks, wraps WPF installer
+│   └── MUI_HEBREW.nsh          — Hebrew localization
+├── scripts/                — Build orchestration
+│   ├── build-installer.ps1     — Main orchestrator (no interactivity)
+│   ├── build-menu.ps1          — Interactive menu (prompts user)
+│   ├── build-helpers.ps1       — Shared functions & constants
+│   └── UpdateVersion.ps1       — Version bumper
+├── releases/               — Output folder
 │   ├── KleiKodeshSetup-vX.Y.Z-x64.exe
 │   ├── KleiKodeshSetup-vX.Y.Z-x86.exe
-│   ├── KleiKodeshSetup-vX.Y.Z.exe       — AnyCPU variant
-│   └── (checksums, release notes)
-├── build-menu.bat              — Batch wrapper for easy access to build scripts
-├── RELEASE_NOTES.txt           — Template for release notes
-└── README.md                   — This file
+│   └── KleiKodeshSetup-vX.Y.Z.exe     (AnyCPU)
+├── build-menu.bat         — Entry point (launches PowerShell menu)
+└── RELEASE_NOTES.txt      — Template for release notes
 ```
 
-## Build Process
+## Build Flow
 
 ```
-build-installer.ps1
-  ↓
-Calls UpdateVersion.ps1
-  → Updates version in AddinInstaller.cs and .csproj files
-  ↓
-Builds KleiKodeshVsto.sln for all three platforms (x64, x86, AnyCPU)
-  → MSBuild with Release config, outputs to bin\Release-x64\, bin\Release-x86\, bin\Release\
-  ↓
-For each platform, creates VSTO zip (manifest + assemblies)
-  ↓
-For each platform, calls NSIS with command-line defines
-  → Packages VSTO zip + WPF installer + prereq checks
-  → Outputs KleiKodeshSetup-vX.Y.Z-{x64,x86,}.exe to releases/
-  ↓
-Generates checksums (SHA256)
+build-menu.bat  ──┐
+                  ├─→ build-menu.ps1 (prompts user: version, notes source, confirm)
+                  │
+                  └─→ build-installer.ps1 -VersionIncrement patch -ReleaseNotesSource commits
+                      ├─ UpdateVersion.ps1 (bumps AddinInstaller.cs + csproj)
+                      ├─ dotnet build WPF installer -p:InstallerVariant=x64 -p:VstoPlatform=x64
+                      │  └─ Pre-build target: MSBuild KleiKodeshVsto (x64), zip → KleiKodesh.zip → embed as resource
+                      │  └─ #if INSTALLER_VARIANT_X64 const baked in
+                      ├─ makensis /DPRODUCT_VERSION=vX.Y.Z /DWPF_EXE_PATH=...
+                      │  └─ KleiKodeshSetup-vX.Y.Z-x64.exe
+                      ├─ (repeat for x86, AnyCPU)
+                      └─ gh release create + upload 3 EXEs
 ```
 
-## Key Files
+## Three Installer Variants
 
-### AddinInstaller.cs
+Single build run produces three installers:
 
-The single source of truth for app version:
+| Variant | Platform | VSTO Build | Output |
+|---------|----------|-----------|--------|
+| x64 | `Release\|x64` | `bin\Release-x64\` | `KleiKodeshSetup-vX.Y.Z-x64.exe` |
+| x86 | `Release\|x86` | `bin\Release-x86\` | `KleiKodeshSetup-vX.Y.Z-x86.exe` |
+| AnyCPU | `Release\|AnyCPU` | `bin\Release\` | `KleiKodeshSetup-vX.Y.Z.exe` |
+
+Each variant embeds the correct VSTO binary for its platform via the pre-build target. See `.kiro/steering/build-variants.md` for configuring new projects in the dependency chain.
+
+## Version Management
+
+**Single source of truth:** `Build/Installer/Helpers/AddinInstaller.cs`
 
 ```csharp
 public const string Version = "v3.4.0";
 ```
 
-Every build run updates this value via `UpdateVersion.ps1`.
+`UpdateVersion.ps1` syncs this to the csproj `<Version>` tag during every build. Do not edit version anywhere else — see `.kiro/steering/version-management.md` for full details, registry keys, and update checker flow.
 
-### Installation Flow
+## Installation Flow
 
-1. **NSIS wrapper** (`KleiKodeshWrapper.nsi`) checks:
-   - Windows 10 or later
-   - .NET Framework 4.7.2+
-   - VSTO runtime installed
-   
-2. If prerequisites fail → user sees error, installer exits
+1. **NSIS wrapper** checks prerequisites (Windows 10+, .NET 4.7.2+, VSTO runtime)
+2. **WPF installer** extracts embedded VSTO zip to `%LocalAppData%\KleiKodesh\`
+3. Registers add-in with Word + adds to VSTO trusted locations
+4. Saves version to registry: `HKCU\SOFTWARE\KleiKodesh\Version`
+5. **On update:** Caches preserved (website whitelist, Word→PDF conversions, Bloom filter index) — see `.kiro/steering/cache-preservation-on-update.md`
 
-3. If OK → launches WPF installer with `--silent` or user UI based on context
-
-4. **WPF installer** (`InstallPage.xaml`):
-   - Extracts embedded VSTO zip to `%LocalAppData%\KleiKodesh\`
-   - Registers add-in with Word via `AddinInstaller.RegisterAddInAsync()`
-   - Saves version to registry: `HKCU\SOFTWARE\KleiKodesh\Version = "v3.4.0"`
-   - Adds folder to VSTO trusted locations
-
-5. **On update**: Cache folders (`KitveiHakodesh/cache/`, `BloomFilters/`) are **preserved** — see `.kiro/steering/cache-preservation-on-update.md`
-
-## Version Management
-
-See `.kiro/steering/version-management.md` for:
-- Single source of truth (AddinInstaller.cs)
-- What files get updated during a release build
-- Registry keys written by the installer
-- Update checker flow (GitHub releases)
-
-## Build Variants
-
-The build produces **three installer files** from a single code run:
-
-| Variant | Platform | VSTO Output | Installer File |
-|---------|----------|-------------|-----------------|
-| x64 | `Release\|x64` | `bin\Release-x64\` | `KleiKodeshSetup-vX.Y.Z-x64.exe` |
-| x86 | `Release\|x86` | `bin\Release-x86\` | `KleiKodeshSetup-vX.Y.Z-x86.exe` |
-| AnyCPU | `Release\|AnyCPU` | `bin\Release\` | `KleiKodeshSetup-vX.Y.Z.exe` |
-
-For details on configuring new projects for the three-variant pipeline, see `.kiro/steering/build-variants.md`.
-
-## Manual Build
-
-```powershell
-cd Build/scripts
-& .\build-installer.ps1
-```
-
-Outputs three `.exe` files to `Build/releases/`.
-
-## Automation
-
-`build-menu.bat` provides a GUI menu (Windows batch file) for quick access to common build tasks.
+CLI args (`--silent`, `--repair`, `--wait-for-pid <PID>`) handled in `App.xaml.cs` for auto-update and elevation workflows.
 
 ## Website Whitelist
 
-The installer includes an **AdvancedPage** that lets users customize the website list before installation.
+Installer includes an **AdvancedPage** for customizing the website list before installation.
 
-**Single source of truth**: `KleiKodeshVsto/WebSitesLib/WebSitesLib/WebSitesWhitelist.json`
+**Source:** `KleiKodeshVsto/WebSitesLib/WebSitesLib/WebSitesWhitelist.json`
 
-Default list is embedded in the installer zip. User edits are written back to disk on install. See `Build/Installer/README.md` for full details.
+Default list embedded in installer zip. User customizations written back to `%LocalAppData%\KleiKodesh\WebSitesWhitelist.json` on install. See `Build/Installer/README.md` for extraction rules.
 
 ## Elevation & UAC
 
-- **WPF installer**: `asInvoker` in manifest — never forces UAC
-- **NSIS wrapper**: `RequestExecutionLevel user` — never forces UAC
-- **Repair page**: Shows blue info banner with "Run as administrator" button when not elevated; clicking it re-launches the installer with `runas` verb
+- **WPF installer manifest:** `asInvoker` — never forces UAC
+- **NSIS wrapper:** `RequestExecutionLevel user` — never forces UAC
+- **Repair page:** Shows blue "Run as administrator" button when not elevated; clicking re-launches with `runas` verb
 
-For full UAC / elevation details, see `.kiro/steering/version-management.md` ("UAC / Elevation Policy" section).
+Full details in `.kiro/steering/version-management.md` ("UAC / Elevation Policy" section).
 
 ## Dependencies
 
-- NSIS 3.08+ (for `KleiKodeshWrapper.nsi`)
-- Visual Studio 2022 Community (for MSBuild, VSTO SDK)
-- PowerShell 5+ (for build scripts)
-- .NET Framework 4.7.2+ SDK (for targeting the installer)
+- **NSIS 3.08+** (for `KleiKodeshWrapper.nsi`)
+- **Visual Studio 2022 Community** (MSBuild, VSTO SDK)
+- **PowerShell 5+**
+- **.NET Framework 4.7.2+ SDK**
