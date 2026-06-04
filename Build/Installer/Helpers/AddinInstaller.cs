@@ -43,10 +43,43 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         public static string AddinRegistryPath     => $@"Software\Microsoft\Office\Word\Addins\{AppName}";
         public static string AddinDataRegistryPath => $@"Software\Microsoft\Office\Word\AddinsData\{AppName}";
 
+        /// <summary>
+        /// Whether this build was compiled with the DELETE_FTS_INDEX flag.
+        /// When true, ExtractAsync deletes the FTS index directory before extraction,
+        /// forcing a full reindex on the user's machine.
+        /// Baked in at build time via -p:DeleteFtsIndex=true (DefineConstants in the csproj).
+        /// </summary>
+#if DELETE_FTS_INDEX
+        public const bool DeleteFtsIndexOnInstall = true;
+#else
+        public const bool DeleteFtsIndexOnInstall = false;
+#endif
+
         // ── Extract ──────────────────────────────────────────────────────────────
 
         public static async Task ExtractAsync(IProgress<double> progress)
         {
+            // Delete the FTS index before extracting so the app rebuilds it fresh.
+            // Only done when the installer was built with -p:DeleteFtsIndex=true.
+            if (DeleteFtsIndexOnInstall)
+            {
+                try
+                {
+                    string ftsPath = Path.Combine(InstallPath, "FtsIndex");
+                    if (Directory.Exists(ftsPath))
+                    {
+                        Directory.Delete(ftsPath, recursive: true);
+                        Console.WriteLine("[AddinInstaller] Deleted FTS index directory (forced reindex)");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Non-fatal — if deletion fails, the app will still run;
+                    // the existing index will be used until it detects a mismatch.
+                    Console.WriteLine("[AddinInstaller] Failed to delete FTS index: " + ex.Message);
+                }
+            }
+
             var assembly = Assembly.GetExecutingAssembly();
             using (var stream = assembly.GetManifestResourceStream(ZipResourceName))
             {

@@ -55,6 +55,17 @@ function Read-NotesSource {
     return @("commits","file","both")[$c - 1]
 }
 
+function Read-DeleteFtsIndex {
+    Write-Host ""
+    Write-Host "Delete FTS search index on install?" -ForegroundColor Yellow
+    Write-Host "  (Forces a full reindex on every user's machine after install)"
+    Write-Host "  1. No  — preserve existing index  (default)"
+    Write-Host "  2. Yes — delete index, trigger reindex"
+    Write-Host ""
+    $c = Read-Choice "Choice (1-2)" @("1","2")
+    return $c -eq "2"
+}
+
 function Confirm-Action([string]$summary) {
     Write-Host $summary
     Write-Host ""
@@ -102,20 +113,28 @@ while ($true) {
             Show-Header "Full Release Build + GitHub Release"
             $verArgs  = Read-VersionArgs
             $notes    = Read-NotesSource
+            $deleteFts = Read-DeleteFtsIndex
             $summary  = if ($verArgs.ManualVersion) { "  Version : $($verArgs.ManualVersion) (manual)" } else { "  Version : increment $($verArgs.VersionIncrement)" }
             $summary += "`n  Notes   : $notes`n  Release : yes"
+            $summary += "`n  FTS idx : $(if ($deleteFts) { 'DELETE (force reindex)' } else { 'preserve' })"
             if (Confirm-Action $summary) {
-                Invoke-Installer ($verArgs + @{ ReleaseNotesSource = $notes })
+                $params = $verArgs + @{ ReleaseNotesSource = $notes }
+                if ($deleteFts) { $params += @{ DeleteFtsIndex = $true } }
+                Invoke-Installer $params
             }
         }
 
         "2" {
             Show-Header "Release Build Only - No GitHub Release"
             $verArgs  = Read-VersionArgs
+            $deleteFts = Read-DeleteFtsIndex
             $summary  = if ($verArgs.ManualVersion) { "  Version : $($verArgs.ManualVersion) (manual)" } else { "  Version : increment $($verArgs.VersionIncrement)" }
             $summary += "`n  Release : skipped"
+            $summary += "`n  FTS idx : $(if ($deleteFts) { 'DELETE (force reindex)' } else { 'preserve' })"
             if (Confirm-Action $summary) {
-                Invoke-Installer ($verArgs + @{ NoRelease = $true })
+                $params = $verArgs + @{ NoRelease = $true }
+                if ($deleteFts) { $params += @{ DeleteFtsIndex = $true } }
+                Invoke-Installer $params
             }
         }
 
