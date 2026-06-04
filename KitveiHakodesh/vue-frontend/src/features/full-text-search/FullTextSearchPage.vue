@@ -217,7 +217,7 @@ onMounted(async () => {
   // is restored automatically by FullTextSearchResultsList's watcher when results arrive.
   await restoreFromTab()
 
-  searchBarRef.value?.focus()
+  searchBarRef.value?.focusAndShowHistory()
 })
 
 // Save filter state whenever the page goes hidden or is unmounted.

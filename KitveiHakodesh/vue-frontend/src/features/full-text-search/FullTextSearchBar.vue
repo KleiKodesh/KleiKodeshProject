@@ -57,7 +57,12 @@ watch(
   () => props.searchQuery,
   (v) => { localQuery.value = v },
 )
-watch(localQuery, (v) => emit('update:searchQuery', v))
+watch(localQuery, (v) => {
+  emit('update:searchQuery', v)
+  if (!v && recentQueries.value.length) {
+    try { inputRef.value?.showPicker() } catch { /* unsupported — silently ignore */ }
+  }
+})
 
 // ── Animated placeholder ──────────────────────────────────────────────────────
 
@@ -99,8 +104,25 @@ function handleClear() {
   emit('clear')
   inputRef.value?.focus()
 }
+function handleFocus() {
+  if (!localQuery.value && recentQueries.value.length) {
+    try { inputRef.value?.showPicker() } catch { /* unsupported — silently ignore */ }
+  }
+}
 
-defineExpose({ focus: () => inputRef.value?.focus(), filterBtnRef, advancedBtnRef })
+function focusAndShowHistory() {
+  inputRef.value?.focus()
+  if (!localQuery.value && recentQueries.value.length) {
+    // showPicker() requires a user gesture and will throw when called synchronously
+    // from a programmatic .focus(). A short setTimeout gives the browser time to
+    // settle focus and treats the call as part of the page-load trusted context.
+    setTimeout(() => {
+      try { inputRef.value?.showPicker() } catch { /* unsupported — silently ignore */ }
+    }, 50)
+  }
+}
+
+defineExpose({ focus: () => inputRef.value?.focus(), focusAndShowHistory, filterBtnRef, advancedBtnRef })
 </script>
 
 <template>
@@ -135,6 +157,7 @@ defineExpose({ focus: () => inputRef.value?.focus(), filterBtnRef, advancedBtnRe
       :placeholder="placeholder"
       spellcheck="true"
       autocomplete="on"
+      @focus="handleFocus"
       @keydown.enter="handleSearch"
       @keydown.esc="handleClear"
       @change="handleSearch"
