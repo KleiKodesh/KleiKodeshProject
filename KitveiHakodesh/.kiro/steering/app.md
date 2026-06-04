@@ -175,6 +175,28 @@ Every component that uses `useVirtualizer` from `@tanstack/vue-virtual` must wir
 - Ctrl+End scrolls to the last item then sets `scrollTop = scrollHeight`
 - The composable uses `useEventListener` from VueUse and cleans up automatically
 
+## Virtual Scroller — Programmatic Scroll to a Specific DOM Element Within an Item
+
+When you need to scroll not just to a virtualizer item but to a specific DOM element *within* that item (e.g. a `<mark>` inside a rendered line), there are two distinct cases with different solutions. The canonical implementation is in `scrollToIndexWithRetry.ts` and `BookViewLinesContent.vue`.
+
+### Item already in the measurements cache (already rendered)
+
+Never call `virtualizer.scrollToIndex()` when the item is already measured. That call is asynchronous — it runs in a later frame and will overwrite any `scrollTop` you set, snapping the scroll position back to where the virtualizer wants it.
+
+Instead: set `scrollTop` directly to place the item at the correct position, then use a `MutationObserver` on the scroller element to detect when the target DOM element actually appears or gets its final CSS class, and adjust `scrollTop` from `getBoundingClientRect()` at that point. Two `requestAnimationFrame` calls before starting the observer covers the fast path (DOM already ready); the observer handles the slow path where a render cache invalidation means the item HTML hasn't been repainted yet.
+
+Always set a timeout (500ms is safe) to disconnect the observer in case the element never appears.
+
+### Item not yet in the measurements cache (outside rendered range)
+
+Call `virtualizer.scrollToIndex({ align: 'start' })` to bring the item into the rendered range, then retry in subsequent `requestAnimationFrame` calls until the item appears in `measurementsCache`. Once it does, switch to the direct `scrollTop` strategy above — do not keep calling `scrollToIndex` after the item is measured or it will fight your `scrollTop` assignments.
+
+### Key rules
+
+- `virtualizer.scrollToIndex()` and direct `scrollTop` assignment are mutually exclusive — never mix them for the same scroll operation.
+- `getBoundingClientRect()` returns stale values until after the browser has painted. Always read it inside a `requestAnimationFrame` (or the MutationObserver callback, which fires after the DOM mutation but before the next paint — one rAF after the callback gives accurate layout values).
+- A render cache keyed on reactive props (like `currentMatchOccurrence`) means the item's HTML is re-rendered asynchronously after the prop changes. `nextTick` alone is not enough — the virtualizer has its own render cycle on top of Vue's. The MutationObserver approach is the only reliable way to detect when the repainted DOM is actually ready.
+
 ## Database
 
 - All SQLite access goes through `src/webview-host/db.ts` — never call fetch against the DB from a component or composable

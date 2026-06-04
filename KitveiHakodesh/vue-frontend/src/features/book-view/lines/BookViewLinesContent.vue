@@ -345,12 +345,111 @@ function scrollToLineId(lineId: number, fallbackLineIndex?: number) {
 
 function scrollToLineIndex(lineIndex: number) {
   if (!scrollerEl.value) return
+
+  const reserved = props.searchBarVisible ? 44 : 0
+  const virt = virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>
+  const m = virt.measurementsCache.find((c) => c.index === lineIndex)
+
+  if (m) {
+    // Line is already measured by the virtualizer. Scroll to the line top first,
+    // then wait for Vue to render the new currentMatchOccurrence (which invalidates
+    // the render cache and re-renders the line HTML). Use MutationObserver to detect
+    // when the <mark class="current"> actually appears in the DOM, then adjust.
+    setProgrammaticScroll()
+
+    // Step 1: scroll to line top immediately so the line is visible.
+    const targetScrollTop = m.start - reserved - 8
+    if (Math.abs(scrollerEl.value.scrollTop - targetScrollTop) > 2) {
+      scrollerEl.value.scrollTop = targetScrollTop
+    }
+
+    // Step 2: wait for the current mark to appear/move in the DOM, then fine-adjust.
+    const scroller = scrollerEl.value
+    let settled = false
+
+    function adjustToMark() {
+      if (settled || !scroller) return
+      const mark = scroller.querySelector('mark.search-match.current') as HTMLElement | null
+      if (!mark) return false
+      const markRect = mark.getBoundingClientRect()
+      const scrollerRect = scroller.getBoundingClientRect()
+      const relativeTop = markRect.top - scrollerRect.top
+      const relativeBottom = markRect.bottom - scrollerRect.top
+      const alreadyVisible = relativeTop >= reserved + 4 && relativeBottom <= scrollerRect.height - 4
+      if (!alreadyVisible) {
+        scroller.scrollTop += relativeTop - reserved - 8
+      }
+      return true
+    }
+
+    // Try immediately after two rAFs (covers same-line occurrence changes where
+    // the mark is already in the DOM and just needs its class updated).
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (adjustToMark()) { settled = true; return }
+
+      // Mark not found yet — the render cache was just invalidated and Vue hasn't
+      // re-rendered the line HTML yet. Watch for DOM mutations on the scroller.
+      const observer = new MutationObserver(() => {
+        if (adjustToMark()) {
+          settled = true
+          observer.disconnect()
+        }
+      })
+      observer.observe(scroller, { childList: true, subtree: true, characterData: false, attributes: true, attributeFilter: ['class'] })
+      // Safety timeout — disconnect after 500ms regardless.
+      setTimeout(() => {
+        if (!settled) {
+          observer.disconnect()
+        }
+      }, 500)
+    }))
+    return
+  }
+
+  // Line not yet rendered — use scrollToIndexWithRetry to bring it into range,
+  // then scroll to the mark once it's in the DOM.
   setProgrammaticScroll()
   scrollToIndexWithRetry(
-    virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
+    virt,
     scrollerEl.value,
     lineIndex,
-    props.searchBarVisible ? 44 : 0,
+    reserved,
+    5,
+    () => {
+      // After scrollToIndexWithRetry positions the line, wait for the mark using
+      // the same MutationObserver approach.
+      const scroller = scrollerEl.value
+      if (!scroller) return
+      let settled = false
+
+      function adjustToMark() {
+        if (!scroller) return false
+        const mark = scroller.querySelector('mark.search-match.current') as HTMLElement | null
+        if (!mark) return false
+        const markRect = mark.getBoundingClientRect()
+        const scrollerRect = scroller.getBoundingClientRect()
+        const relativeTop = markRect.top - scrollerRect.top
+        const relativeBottom = markRect.bottom - scrollerRect.top
+        const alreadyVisible = relativeTop >= reserved + 4 && relativeBottom <= scrollerRect.height - 4
+        if (!alreadyVisible) {
+          scroller.scrollTop += relativeTop - reserved - 8
+        }
+        return true
+      }
+
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (adjustToMark()) { settled = true; return }
+        const observer = new MutationObserver(() => {
+          if (adjustToMark()) { settled = true; observer.disconnect() }
+        })
+        observer.observe(scroller, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] })
+        setTimeout(() => {
+          if (!settled) {
+            observer.disconnect()
+          }
+        }, 500)
+      }))
+    },
   )
 }
 

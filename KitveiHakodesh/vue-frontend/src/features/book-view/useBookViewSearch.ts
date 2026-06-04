@@ -38,9 +38,6 @@ export function useBookViewSearch(
         idx++
       }
     }
-    console.log(
-      `[BookViewSearch] matches recomputed: query="${debouncedQuery.value.trim()}" rawQuery="${query.value.trim()}" linesLoaded=${debouncedLines.value.length} matchCount=${results.length}`,
-    )
     return results
   })
 
@@ -51,16 +48,11 @@ export function useBookViewSearch(
     (newMatches) => {
       if (!newMatches.length) {
         currentMatchIdx.value = 0
-        console.log(`[BookViewSearch] matches watcher: no matches, reset to 0`)
         return
       }
       const cur = currentLineIndex()
       const nearestIdx = newMatches.findIndex((m) => m.lineIndex >= cur)
-      const chosen = nearestIdx === -1 ? 0 : nearestIdx
-      console.log(
-        `[BookViewSearch] matches watcher: ${newMatches.length} matches, currentLine=${cur}, nearestIdx=${nearestIdx}, chosen=${chosen} (lineIndex=${newMatches[chosen]?.lineIndex})`,
-      )
-      currentMatchIdx.value = chosen
+      currentMatchIdx.value = nearestIdx === -1 ? 0 : nearestIdx
     },
     { flush: 'sync' },
   )
@@ -72,32 +64,18 @@ export function useBookViewSearch(
 
   function gotoNearestMatch() {
     const newMatches = matches.value
-    const cur = currentLineIndex()
-    console.log(
-      `[BookViewSearch] gotoNearestMatch: matchCount=${newMatches.length} currentLine=${cur} debouncedQuery="${debouncedQuery.value.trim()}" rawQuery="${query.value.trim()}" linesLoaded=${debouncedLines.value.length}`,
-    )
     if (!newMatches.length) return
+    const cur = currentLineIndex()
     const nearestIdx = newMatches.findIndex((m) => m.lineIndex >= cur)
-    const chosen = nearestIdx === -1 ? 0 : nearestIdx
-    console.log(
-      `[BookViewSearch] gotoNearestMatch: nearestIdx=${nearestIdx}, chosen=${chosen}, target lineIndex=${newMatches[chosen]?.lineIndex}`,
-    )
-    currentMatchIdx.value = chosen
+    currentMatchIdx.value = nearestIdx === -1 ? 0 : nearestIdx
   }
 
   function next() {
-    if (matchCount.value) {
-      const before = currentMatchIdx.value
-      currentMatchIdx.value = (currentMatchIdx.value + 1) % matchCount.value
-      console.log(`[BookViewSearch] next: ${before} → ${currentMatchIdx.value} (lineIndex=${matches.value[currentMatchIdx.value]?.lineIndex})`)
-    }
+    if (matchCount.value) currentMatchIdx.value = (currentMatchIdx.value + 1) % matchCount.value
   }
   function prev() {
-    if (matchCount.value) {
-      const before = currentMatchIdx.value
+    if (matchCount.value)
       currentMatchIdx.value = (currentMatchIdx.value - 1 + matchCount.value) % matchCount.value
-      console.log(`[BookViewSearch] prev: ${before} → ${currentMatchIdx.value} (lineIndex=${matches.value[currentMatchIdx.value]?.lineIndex})`)
-    }
   }
   function clear() {
     query.value = ''

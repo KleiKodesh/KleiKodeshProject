@@ -219,15 +219,11 @@ export function useBookView(
 
   function scrollContentMatch() {
     if (searchMode.value === 'content') {
-      const lineIndex = contentSearch.currentMatchLineIndex.value
-      console.log(`[BookView] scrollContentMatch: mode=content lineIndex=${lineIndex} matchCount=${contentSearch.matchCount.value} matchIdx=${contentSearch.currentMatchIdx.value}`)
-      if (lineIndex === -1) return
-      linesContentRef()?.scrollToLineIndex(lineIndex)
+      if (contentSearch.currentMatchLineIndex.value === -1) return
+      linesContentRef()?.scrollToLineIndex(contentSearch.currentMatchLineIndex.value)
     } else {
-      const flatIndex = commentarySearch.currentMatchFlatIndex.value
-      console.log(`[BookView] scrollContentMatch: mode=commentary flatIndex=${flatIndex}`)
-      if (flatIndex === -1) return
-      commentaryViewRef()?.scrollToFlatIndex(flatIndex)
+      if (commentarySearch.currentMatchFlatIndex.value === -1) return
+      commentaryViewRef()?.scrollToFlatIndex(commentarySearch.currentMatchFlatIndex.value)
     }
   }
 
@@ -266,24 +262,16 @@ export function useBookView(
   }
 
   function onQueryChange(q: string) {
-    console.log(`[BookView] onQueryChange: "${q}" mode=${searchMode.value}`)
     activeSearch.value.query.value = q
     searchNavigationState[searchMode.value] = false
   }
 
   function onSearchNext() {
     const search = activeSearch.value
-    const alreadyNavigated = searchNavigationState[searchMode.value]
-    console.log(
-      `[BookView] onSearchNext: mode=${searchMode.value} matchCount=${search.matchCount.value} alreadyNavigated=${alreadyNavigated} currentMatchIdx=${search.currentMatchIdx.value} currentLine=${currentFullLineIndex.value}`,
-    )
     if (search.matchCount.value === 0) return
-    if (!alreadyNavigated) {
+    if (!searchNavigationState[searchMode.value]) {
       searchNavigationState[searchMode.value] = true
       search.gotoNearestMatch?.()
-      console.log(
-        `[BookView] onSearchNext: after gotoNearestMatch → matchIdx=${search.currentMatchIdx.value} lineIndex=${contentSearch.currentMatchLineIndex.value}`,
-      )
       scrollContentMatch()
       return
     }
@@ -293,12 +281,8 @@ export function useBookView(
 
   function onSearchPrev() {
     const search = activeSearch.value
-    const alreadyNavigated = searchNavigationState[searchMode.value]
-    console.log(
-      `[BookView] onSearchPrev: mode=${searchMode.value} matchCount=${search.matchCount.value} alreadyNavigated=${alreadyNavigated} currentMatchIdx=${search.currentMatchIdx.value}`,
-    )
     if (search.matchCount.value === 0) return
-    if (!alreadyNavigated) {
+    if (!searchNavigationState[searchMode.value]) {
       searchNavigationState[searchMode.value] = true
       search.gotoNearestMatch?.()
       scrollContentMatch()

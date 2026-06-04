@@ -1,47 +1,55 @@
 import type { Virtualizer } from '@tanstack/vue-virtual'
 
 /**
- * Scrolls a virtualizer to a target index. If the item is already fully visible
- * (accounting for topReserved), does nothing. Otherwise scrolls it to the top
- * with a topReserved gap so it isn't hidden behind a fixed overlay.
- * Retries if the item hasn't rendered yet.
+ * Scrolls a virtualizer to a target index so the item appears just below any
+ * fixed overlay (topReserved px from the top of the viewport).
+ *
+ * Strategy:
+ *   - If the item is already in the virtualizer's measurements cache, set
+ *     scrollTop directly — do NOT call scrollToIndex, which would fight us.
+ *   - If the item is not yet measured (far outside the rendered range), call
+ *     scrollToIndex to bring it into range, then retry once it's measured.
+ *
+ * onScrolled: optional callback invoked after the scroll is applied (or confirmed
+ * already correct), so callers can do follow-up work (e.g. scrolling a <mark>
+ * into view within a tall line).
  */
 export function scrollToIndexWithRetry(
   virtualizer: Virtualizer<Element, Element>,
   scrollerEl: HTMLElement,
   index: number,
   topReserved = 0,
-  maxRetries = 3,
+  maxRetries = 5,
+  onScrolled?: () => void,
 ): void {
   let attempts = 0
+  const gap = topReserved + 8
 
   function attempt() {
     requestAnimationFrame(() => {
       const m = virtualizer.measurementsCache.find((c) => c.index === index)
+
       if (!m) {
+        // Item not yet rendered — ask the virtualizer to scroll it into range,
+        // then retry. Do NOT set scrollTop here; let the virtualizer do its job.
         virtualizer.scrollToIndex(index, { align: 'start' })
         if (++attempts < maxRetries) attempt()
         return
       }
 
-      const viewTop = scrollerEl.scrollTop
-      const viewBottom = viewTop + scrollerEl.clientHeight
-      const effectiveTop = viewTop + topReserved
-      const isVisible = m.start >= effectiveTop && m.end <= viewBottom
+      // Item is measured — set scrollTop directly. Do NOT call scrollToIndex
+      // here; it runs asynchronously and would overwrite our scrollTop value.
+      const targetScrollTop = m.start - gap
+      const currentScrollTop = scrollerEl.scrollTop
+      const alreadyCorrect = Math.abs(currentScrollTop - targetScrollTop) <= 2
 
-      if (isVisible) return
-
-      if (!isVisible && ++attempts < maxRetries) {
-        // Scroll so the item sits just below the reserved zone
-        scrollerEl.scrollTop = m.start - topReserved - 8
-        attempt()
-      } else {
-        scrollerEl.scrollTop = m.start - topReserved - 8
+      if (!alreadyCorrect) {
+        scrollerEl.scrollTop = targetScrollTop
       }
+
+      onScrolled?.()
     })
   }
 
-  // Kick off with an initial scrollToIndex to get the item rendered
-  virtualizer.scrollToIndex(index, { align: 'start' })
   attempt()
 }
