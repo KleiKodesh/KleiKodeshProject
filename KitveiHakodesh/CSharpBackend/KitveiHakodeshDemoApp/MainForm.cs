@@ -14,7 +14,7 @@ namespace KitveiHakodeshDemoApp
         public MainForm()
         {
             Text = "כתבי הקודש";
-            ClientSize = new System.Drawing.Size(600, 750);
+            ClientSize = new System.Drawing.Size(1000, 750);
             StartPosition = FormStartPosition.CenterScreen;
             AutoScaleMode = AutoScaleMode.Font;
             Icon = CreateWindowIcon();

@@ -13,12 +13,14 @@ The **main application** is the **WPF installer** (`Build/Installer`). It instal
 - `KleiKodeshVsto` — VSTO Word add-in (installed by the WPF installer)
 - `KleiKodeshVsto/DocDesign` — WPF library for Torah document formatting (columns, paragraphs, spacing)
 - `KleiKodeshVsto/RegexInWord/RegexFindLib` — WPF library for regex find & replace in Word
-- `WebSitesLib` — WPF library for curated website browser task pane
+- `KleiKodeshVsto/WebSitesLib` — WPF library for curated website browser task pane
 - `UpdateCheckerLib` — Library for checking and downloading updates from GitHub
 - `WpfLib` — Shared WPF utilities and helpers
 - `KitveiHakodesh` (Vue/TypeScript) — frontend for the KitveiHakodesh seforim viewer
 - `KitveiHakodesh/CSharpBackend/KitveiHakodeshLib` — C# backend for the KitveiHakodesh WebView2 app
 - `KitveiHakodesh/CSharpBackend/BloomSearchEngineLib` — Bloom filter search engine
+- `hebrew-typing-tutor` — Browser-based Hebrew touch-typing tutor (separate project, Vue/TypeScript)
+- `kleikodesh-website` — Public marketing website, hosted at kleikodesh.github.io (static HTML/CSS/JS)
 
 ## Website Whitelist (Installer)
 
@@ -80,9 +82,10 @@ Each project folder contains a `README.md` describing its purpose, folder struct
 | [`KleiKodeshVsto/README.md`](../../KleiKodeshVsto/README.md)                                                         | VSTO add-in: ribbon, task panes, helpers                           |
 | [`KleiKodeshVsto/DocDesign/README.md`](../../KleiKodeshVsto/DocDesign/README.md)                                                                   | Torah formatting library: Columns, Paragraphs, Spacing             |
 | [`KleiKodeshVsto/RegexInWord/RegexFindLib/README.md`](../../KleiKodeshVsto/RegexInWord/RegexFindLib/README.md)                                         | Regex find & replace library for Word                              |
-| [`WebSitesLib/README.md`](../../WebSitesLib/README.md)                                                               | Curated website browser task pane                                  |
+| [`KleiKodeshVsto/WebSitesLib/README.md`](../../KleiKodeshVsto/WebSitesLib/README.md)                                                               | Curated website browser task pane                                  |
 | [`KitveiHakodesh/README.md`](../../KitveiHakodesh/README.md)                                                                       | Vue 3 frontend: components, stores, host bridge, build             |
 | [`KitveiHakodesh/CSharpBackend/README.md`](../../KitveiHakodesh/CSharpBackend/README.md)                                           | C# backend projects overview                                       |
 | [`KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/README.md`](../../KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/README.md)                     | WebView2 host, message bridge, all handlers                        |
 | [`KitveiHakodesh/CSharpBackend/BloomSearchEngineLib/README.md`](../../KitveiHakodesh/CSharpBackend/BloomSearchEngineLib/README.md) | Bloom filter search engine: indexing, searching, version detection |
-| [`kleikodesh.github.io/README.md`](../../kleikodesh.github.io/README.md)                                             | Public website (GitHub Pages)                                      |
+| [`hebrew-typing-tutor/README.md`](../../hebrew-typing-tutor/README.md)                                               | Browser-based Hebrew touch-typing tutor: exercises, progress       |
+| [`kleikodesh-website/README.md`](../../kleikodesh-website/README.md)                                                 | Public website (GitHub Pages): homepage, downloads, features       |
