@@ -246,6 +246,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
               SQL.GET_TOC_PATHS_FOR_LINES(lineIds.length),
               lineIds,
             )
+
             const tocByLineId = new Map(rows.map((row) => [row.lineId, row.tocPath]))
             for (const result of missingToc) {
               result.tocText = tocByLineId.get(result.lineId) ?? ''

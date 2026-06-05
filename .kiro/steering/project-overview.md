@@ -18,7 +18,7 @@ The **main application** is the **WPF installer** (`Build/Installer`). It instal
 - `WpfLib` — Shared WPF utilities and helpers
 - `KitveiHakodesh` (Vue/TypeScript) — frontend for the KitveiHakodesh seforim viewer
 - `KitveiHakodesh/CSharpBackend/KitveiHakodeshLib` — C# backend for the KitveiHakodesh WebView2 app
-- `KitveiHakodesh/CSharpBackend/BloomSearchEngineLib` — Bloom filter search engine
+- `KitveiHakodesh/CSharpBackend/SearchEngineLib` — Lucene-based search engine
 - `hebrew-typing-tutor` — Browser-based Hebrew touch-typing tutor (separate project, Vue/TypeScript)
 - `kleikodesh-website` — Public marketing website, hosted at kleikodesh.github.io (static HTML/CSS/JS)
 
@@ -38,17 +38,17 @@ The installer lets users customize the website list before installation via `Adv
 
 See `Build/Installer/README.md` for full details.
 
-## Bloom Filter Index & Version Detection
+## Lucene Search Index & Version Detection
 
-The Bloom filter index (`BloomFilters/lines.dat`) is built from the Zayit seforim database.
-After each successful index build, the current app version is written to `BloomFilters/lines.ver`.
-On startup (`SearchHandler.OnDbReady`), if the installed app version (from registry) differs from the stamped version, the user is prompted (via `bloomIndexVersionMismatch` push event → Vue confirm dialog) whether to rebuild the index.
+The Lucene search index is built from the Zayit seforim database.
+After each successful index build, the current app version is written to the index metadata.
+On startup (`SearchHandler.OnDbReady`), if the installed app version (from registry) differs from the stamped version, the user is prompted (via `searchIndexVersionMismatch` push event → Vue confirm dialog) whether to rebuild the index.
 
 ## Build
 
 - **MSBuild** (for VSTO and WPF projects requiring VS tools): `C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe`
 - **Full solution build**: `& "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe" KleiKodeshProject.slnx /m /nologo /verbosity:minimal`
-- **dotnet build** works for SDK-style projects only (`Build/Installer`, `KitveiHakodeshLib`, `BloomSearchEngineLib`). Old-style WPF/VSTO projects (`KleiKodeshVsto`, `WpfLib`) require MSBuild from VS.
+- **dotnet build** works for SDK-style projects only (`Build/Installer`, `KitveiHakodeshLib`, `SearchEngineLib`). Old-style WPF/VSTO projects (`KleiKodeshVsto`, `WpfLib`) require MSBuild from VS.
 
 ## NuGet Quirk — Native Interop DLLs Don't Propagate Transitively
 
@@ -86,6 +86,6 @@ Each project folder contains a `README.md` describing its purpose, folder struct
 | [`KitveiHakodesh/README.md`](../../KitveiHakodesh/README.md)                                                                       | Vue 3 frontend: components, stores, host bridge, build             |
 | [`KitveiHakodesh/CSharpBackend/README.md`](../../KitveiHakodesh/CSharpBackend/README.md)                                           | C# backend projects overview                                       |
 | [`KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/README.md`](../../KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/README.md)                     | WebView2 host, message bridge, all handlers                        |
-| [`KitveiHakodesh/CSharpBackend/BloomSearchEngineLib/README.md`](../../KitveiHakodesh/CSharpBackend/BloomSearchEngineLib/README.md) | Bloom filter search engine: indexing, searching, version detection |
+| [`KitveiHakodesh/CSharpBackend/SearchEngineLib/README.md`](../../KitveiHakodesh/CSharpBackend/SearchEngineLib/README.md) | Lucene search engine: indexing, searching, version detection |
 | [`hebrew-typing-tutor/README.md`](../../hebrew-typing-tutor/README.md)                                               | Browser-based Hebrew touch-typing tutor: exercises, progress       |
 | [`kleikodesh-website/README.md`](../../kleikodesh-website/README.md)                                                 | Public website (GitHub Pages): homepage, downloads, features       |
