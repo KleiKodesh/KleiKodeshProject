@@ -6,12 +6,12 @@
  * results C# returns (e.g. "זימון|d10|ord|ktv|ww"). The display-LRU stores only the
  * plain normalized query strings so the datalist shows clean text, not encoded keys.
  *
- * Each entry stores the full result set, a `complete` flag (stream finished), and an
- * `indexingComplete` flag (true when the entry was written after the FTS index was fully
- * built). Entries written during indexing are served immediately for instant results but
- * are always refreshed in the background — the index may have grown since they were cached.
+ * Each entry stores results as individual chunk keys rather than one monolithic blob.
+ * This avoids the read-modify-write amplification of growing a single array on every batch.
  *
- * Results are NOT cached in memory — they can be large (hundreds of items with snippets).
+ * Layout per cache key K:
+ *   `search:meta:K`      — SearchCacheMeta   (small, always read)
+ *   `search:chunk:K:0`   —  memory — they can be large (hundreds of items with snippets).
  */
 import { defineStore } from 'pinia'
 import { idbGet, idbSet, idbDelete } from '@/utils/persistence'

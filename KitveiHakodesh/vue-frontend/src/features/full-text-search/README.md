@@ -1,33 +1,52 @@
 # full-text-search
 
-Full-text search using Category and book filters, virtual-scrolled results, indexing progress bar.
+Full-text search using category and book filters, virtual-scrolled results, indexing progress bar. Backed by FtsLib (custom inverted index engine) on the C# side.
 
 ## Components
 
-**FullTextSearchPage.vue** — orchestrates search bar, filter panel, results list, and indexing overlay. Manages per-tab zoom via `useZoomHandler` — zoom is stored in `TabState.searchZoom` (IDB, per-tab) and passed as a prop to `FullTextSearchResultsList`.
+**FullTextSearchPage.vue** — orchestrates search bar, filter panel, results list, advanced panel, and indexing overlay. Manages per-tab zoom via `useZoomHandler` — zoom is stored in `TabState.searchZoom` (IDB, per-tab) and passed as a prop to `FullTextSearchResultsList`.
 
-**FullTextSearchBar.vue** — search input with filter toggle button.
+**FullTextSearchBar.vue** — search input with filter toggle, advanced toggle, cancel button, and animated placeholder. Shows a live result count badge while streaming.
 
-**FullTextSearchResultsList.vue** — virtual-scrolled results list. Accepts `results` (filtered), `totalResults` (unfiltered count), and `zoom` (optional number, 50–200). Applies zoom as a font-size scaling on the scroller element. Shows live count during streaming.
+**FullTextSearchResultsList.vue** — virtual-scrolled results list. Accepts `results` (filtered), `zoom` (optional 50–200), and `initialScrollIndex`/`initialScrollOffset` for session restore. Font size scales with zoom and the global font size setting.
 
-**FullTextSearchFilterPanel.vue** — slide-in filter panel. Contains the category/book tree and a book-name search input at the bottom. The book-name query is owned by `useFullTextSearchFilters` (via `v-model:filter-book-query`) so it persists when the panel closes. When a query is typed the tree is replaced by a flat matching-book list (`FullTextSearchFilterBookList`).
+**FullTextSearchFilterPanel.vue** — slide-in filter panel anchored to the right edge. Contains the full category/book tree and a token-based search input at the bottom. Typing a book name filters to a flat matching list (`FullTextSearchFilterBookList`). Typing `@` or pressing Enter commits the current text as a filter token; multiple tokens are unioned.
 
-**FullTextSearchFilterNode.vue** — single node in the filter tree (category or book row with checkbox).
+**FullTextSearchFilterNode.vue** — single category node in the filter tree with expand/collapse and checkbox.
 
-**FullTextSearchFilterBookList.vue** — flat list of books shown inside the filter panel when the user types a book-name query. Same row styling as the tree nodes.
+**FullTextSearchFilterBookList.vue** — flat list of books shown inside the filter panel when the user has committed tokens or is typing a book-name query.
 
-**FullTextSearchIndexingOverlay.vue** — full-screen overlay shown while the Lucene index is being built.
+**FullTextSearchAdvancedPanel.vue** — two-tab panel (options + syntax reference) for advanced search settings. All settings are stored in `settingsStore` and persisted to localStorage. Changing any setting triggers a re-search automatically.
+
+**FullTextSearchIndexingOverlay.vue** — banner overlay shown while the FTS index is being built. Displays a progress bar with segment flush markers. Stays visible for 1.5s after indexing completes so the user sees the final state.
 
 ## Composables
 
-**useFullTextSearch.ts** — executes full-text searches via the C# backend. Supports incremental caching: each batch is written to `searchCacheStore` as it arrives. On re-search or tab restore, cached partial results are shown immediately and the C# stream resumes from the last cached offset (`skipCount`). All search execution goes through here.
+**useFullTextSearch.ts** — executes full-text searches via the C# streaming backend. `FtsSearchStart` returns a `searchId`; results arrive as `searchBatch` events via `chrome.webview`. Each batch is written to `searchCacheStore` incrementally. On re-search or tab restore, cached results are shown immediately and the C# stream resumes from the cached offset by passing `excludedLineIds` (already-cached line IDs) so C# skips snippet generation for those lines.
 
-**useFullTextSearchIndexingStatus.ts** — polls the C# backend for indexing progress. Use this to drive the overlay and any other indexing-dependent UI.
+**useFullTextSearchIndexingStatus.ts** — polls `GetFtsIndexingProgress` on mount, then subscribes to `ftsIndexProgress` and `ftsIndexInvalidated` push events. Drives the indexing overlay and the `isIndexing` flag passed to `useFullTextSearch`.
 
-**useFullTextSearchFilters.ts** — owns all filter state: `checkedBookIds`, `filterBookQuery`, `isFilterOpen`. The effective filter is the intersection of checked books and books whose title matches `filterBookQuery` — both must pass for a result to be shown. Modify filter behavior here, not in the components.
-
-**fullTextSearchTypes.ts** — TypeScript types for the search feature.
+**useFullTextSearchFilters.ts** — owns all filter state: `checkedBookIds`, `atFilters` (committed `@` tokens), `filteredResults`, `resultCounts`. The effective filter is the intersection of checked books and the union of books matching all `@` tokens. Re-applies the filter on every streaming batch without re-querying C#.
 
 ## Cache
 
-`searchCacheStore` (in `src/stores/`) persists search results in the `app-search-cache` IDB database. Each entry stores `{ results, complete }`. Batches are appended incrementally so partial results survive tab switches and app restarts. LRU-capped at 100 queries. The C# `FtsSearchStart` action accepts an optional `skipCount` parameter to resume streaming from a given offset.
+`searchCacheStore` (in `src/stores/`) persists search results in the `app-search-cache` IDB database. Each entry stores `{ results, complete, indexingComplete }`. Batches are appended incrementally so partial results survive tab switches and app restarts. LRU-capped at 100 queries. Entries written during indexing (`indexingComplete: false`) are refreshed in the background the next time the same query is run after the index finishes building.
+
+## Query Syntax
+
+See the syntax tab in `FullTextSearchAdvancedPanel.vue`. The canonical reference is the `SeforimIndex` doc comment in `CSharpBackend/SearchEngine/Ftslib/SeforimDb/SeforimIndex.cs`.
+
+## Bridge Actions
+
+| Action | Direction | Description |
+| --- | --- | --- |
+| `FtsSearchStart` | Vue → C# | Start a search; params: query, excludedLineIds[], maxWordDist, requireOrdered, contextWords, expandKetiv. Returns `{ searchId, failReason }` |
+| `FtsSearchCancel` | Vue → C# | Cancel an in-flight search by searchId |
+| `GetFtsIndexingProgress` | Vue → C# | Poll current indexing state on mount |
+| `ResetFtsIndex` | Vue → C# | Delete index and rebuild from scratch |
+| `searchBatch` | C# → Vue | Batch of results (type, searchId, results[]) |
+| `searchComplete` | C# → Vue | Stream finished |
+| `searchCancelled` | C# → Vue | Stream cancelled |
+| `searchError` | C# → Vue | Stream error |
+| `ftsIndexProgress` | C# → Vue | Indexing progress tick |
+| `ftsIndexInvalidated` | C# → Vue | Index corrupt or DB changed; rebuild started automatically |
