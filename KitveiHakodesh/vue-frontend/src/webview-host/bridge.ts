@@ -189,6 +189,7 @@ export function fileSystemSearch(
 ): Promise<{
   results?: Array<{ fileName: string; path: string }>
   total?: number
+  notInstalled?: boolean
   error?: string
 }> {
   return action('fileSystemSearch', { query, max })

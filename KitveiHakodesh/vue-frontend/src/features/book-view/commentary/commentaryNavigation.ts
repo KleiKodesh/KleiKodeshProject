@@ -50,20 +50,20 @@ export async function findNextTocCommentarySection(
   const idx = allEntries.indexOf(currentTocEntry)
   const candidates = allEntries
     .slice(idx + 1)
-    .filter((e) => e.level === currentTocEntry.level && e.lineIndex != null)
+    .filter((e): e is TocEntry & { lineIndex: number } => e.level === currentTocEntry.level && e.lineIndex != null)
   if (!candidates.length) return null
 
   // Build flat (sectionStart, sectionEnd) pairs for all candidates in one batch query.
   // Bind order: interleaved pairs first, then mainBookId + commentaryBookId at the end
   // (matching the correlated subquery param order in the SQL).
-  const rangePairs = candidates.flatMap((entry) => [entry.lineIndex!, getSectionEnd(entry, allEntries)])
+  const rangePairs = candidates.flatMap((entry) => [entry.lineIndex, getSectionEnd(entry, allEntries)])
   const rows = await query<{ sectionStart: number }>(
     SQL.GET_NEXT_TOC_SECTION_WITH_COMMENTARY(candidates.length),
     [...rangePairs, mainBookId, commentaryBookId],
   )
   if (!rows.length) return null
 
-  const matchingStart = rows[0].sectionStart
+  const matchingStart = rows[0]!.sectionStart
   return candidates.find((e) => e.lineIndex === matchingStart) ?? null
 }
 
@@ -76,18 +76,18 @@ export async function findPrevTocCommentarySection(
   const idx = allEntries.indexOf(currentTocEntry)
   const candidates = allEntries
     .slice(0, idx)
-    .filter((e) => e.level === currentTocEntry.level && e.lineIndex != null)
+    .filter((e): e is TocEntry & { lineIndex: number } => e.level === currentTocEntry.level && e.lineIndex != null)
     .reverse()
   if (!candidates.length) return null
 
   // Same batch approach as findNextTocCommentarySection — single query for all candidates.
-  const rangePairs = candidates.flatMap((entry) => [entry.lineIndex!, getSectionEnd(entry, allEntries)])
+  const rangePairs = candidates.flatMap((entry) => [entry.lineIndex, getSectionEnd(entry, allEntries)])
   const rows = await query<{ sectionStart: number }>(
     SQL.GET_PREV_TOC_SECTION_WITH_COMMENTARY(candidates.length),
     [...rangePairs, mainBookId, commentaryBookId],
   )
   if (!rows.length) return null
 
-  const matchingStart = rows[0].sectionStart
+  const matchingStart = rows[0]!.sectionStart
   return candidates.find((e) => e.lineIndex === matchingStart) ?? null
 }

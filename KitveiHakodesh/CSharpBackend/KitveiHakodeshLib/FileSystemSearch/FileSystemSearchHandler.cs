@@ -1,3 +1,4 @@
+using DocumentLocator.Client;
 using KitveiHakodeshLib.Bridge;
 using System;
 using System.Text.Json;
@@ -7,72 +8,130 @@ using System.Threading.Tasks;
 namespace KitveiHakodeshLib.FileSystemSearch
 {
     /// <summary>
-    /// Bridge between the Vue frontend and EverythingSearchClient via EverythingSearchAdapter.
+    /// Bridge between the Vue frontend and DocumentLocatorAdapter.
     ///
-    /// Three actions:
+    /// Push events sent to Vue:
+    ///   fileSystemIndexingStatus { isIndexing: bool, message?: string }
+    ///     — pushed during index build with progress messages, and once with
+    ///       isIndexing=false when the index becomes ready.
     ///
-    ///   fileSystemSearchPageLoad — Vue asks: is Everything ready?
-    ///     Reply immediately with { isReady: bool }.
-    ///     If not ready, start EnsureReady on a background thread and push
-    ///     fileSystemIndexingStatus = false when it completes.
+    /// Actions:
+    ///   fileSystemSearchPageLoad
+    ///     — Vue sends on page load (only after user has consented to install).
+    ///       Replies immediately with { isReady: bool }.
+    ///       All blocking work (StopIfStale, IsReady, EnsureInstalled, EnsureReady)
+    ///       runs on a background thread — never on the WebMessageReceived thread.
     ///
-    ///   fileSystemSearch — Vue sends a query.
-    ///     Run the search, reply with results.
-    ///     Vue only sends this when it already knows isReady = true.
+    ///   fileSystemSearch
+    ///     — Vue sends a query. C# passes the limit straight through to the
+    ///       DocumentLocator pipe so Lucene caps the result set server-side.
+    ///       Replies with { results, total, error? }.
     /// </summary>
     public class FileSystemSearchHandler : IDisposable
     {
-        private const int DefaultMaxResults = 200;
+        // Must match MAX_RESULTS in useLocalFileSearch.ts
+        private const int DefaultMaxResults = 5000;
 
         private readonly WebBridge _bridge;
-        private readonly EverythingSearchAdapter _adapter;
+        private readonly DocumentLocatorAdapter _adapter;
         private CancellationTokenSource _currentSearch;
+        private CancellationTokenSource _ensureReadyCts;
 
         public FileSystemSearchHandler(WebBridge bridge)
         {
             _bridge  = bridge;
-            _adapter = new EverythingSearchAdapter { FilterToDocumentTypes = true };
+            _adapter = new DocumentLocatorAdapter();
         }
 
-        // ── Page load: check ready ────────────────────────────────────────────
+        // ── Page load: check ready ────────────────────────────────────────────────
 
         /// <summary>
-        /// Vue sends this on page load to find out if Everything is ready.
-        /// Replies immediately with { isReady: bool }.
-        /// If not ready, kicks off EnsureReady on a background thread and
-        /// pushes fileSystemIndexingStatus { isIndexing: false } to Vue when done.
+        /// Vue sends this on page load to find out if the index is ready.
+        /// This is only called after the user has consented to install the service.
+        ///
+        /// Replies immediately with { isReady: false } and moves ALL blocking work
+        /// (StopIfStale, IsInstalled, IsReady, EnsureInstalled, EnsureReady) to a
+        /// background thread so the WebMessageReceived handler returns immediately.
         /// </summary>
         public void HandlePageLoad(string id)
         {
-            bool isReady = _adapter.IsReady();
-            _bridge.Reply(id, new { isReady });
+            // Cancel any previous ensure-ready loop (e.g. user navigated away and back).
+            var previous = Interlocked.Exchange(ref _ensureReadyCts, new CancellationTokenSource());
+            previous?.Cancel();
+            previous?.Dispose();
 
-            if (!isReady)
-                StartEnsureReady();
+            var cts = _ensureReadyCts;
+
+            // Reply immediately — everything else is background work.
+            // We always say isReady=false here and let the background thread push
+            // fileSystemIndexingStatus { isIndexing: false } when actually ready.
+            // This avoids the complexity of racing a synchronous IsReady check
+            // against the WebMessageReceived thread constraint.
+            _bridge.Reply(id, new { isReady = false });
+
+            Task.Run(() => RunEnsureReadyLoop(cts.Token), cts.Token);
         }
 
-        private void StartEnsureReady()
+        private void RunEnsureReadyLoop(CancellationToken ct)
         {
-            Task.Run(() =>
+            try
             {
-                try
+                // Stop a stale running service binary so the fresh exe is picked up.
+                ServiceBridge.StopIfStale();
+
+                // Install the service (UAC prompt once) if it isn't registered yet.
+                if (!ServiceBridge.IsInstalled())
                 {
-                    _adapter.EnsureReady(CancellationToken.None);
-                    _bridge.PushEvent(new { @event = "fileSystemIndexingStatus", isIndexing = false });
+                    PushIndexingStatus(isIndexing: true, message: "מתקין את שירות האינדקס…");
+                    bool installed = ServiceBridge.EnsureInstalled();
+                    if (!installed)
+                    {
+                        // User cancelled the UAC prompt.
+                        PushIndexingStatus(isIndexing: true, message: "ההתקנה בוטלה על ידי המשתמש.");
+                        return;
+                    }
                 }
-                catch (Exception)
-                {
-                    // Everything failed to start — leave Vue showing the spinner.
-                    // Nothing more we can do without user action.
-                }
-            });
+
+                // Mirror WaitForIndexAsync from the demo — polls GetStatusAsync in a loop,
+                // forwarding progress messages to Vue via push events.
+                _adapter.WaitUntilReadyAsync(ct, message =>
+                    PushIndexingStatus(isIndexing: true, message: message))
+                    .GetAwaiter().GetResult();
+
+                // Index is ready.
+                PushIndexingStatus(isIndexing: false, message: null);
+            }
+            catch (OperationCanceledException) { /* page closed or superseded — fine */ }
+            catch (AggregateException ae) when (Unwrap(ae) is OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                PushIndexingStatus(isIndexing: true, message: "שגיאה: " + Unwrap(ex).Message);
+            }
         }
 
-        // ── Search ────────────────────────────────────────────────────────────
+        private static Exception Unwrap(Exception ex)
+        {
+            while (ex is AggregateException ae && ae.InnerException != null)
+                ex = ae.InnerException;
+            return ex;
+        }
+
+        private void PushIndexingStatus(bool isIndexing, string message)
+        {
+            if (message != null)
+                _bridge.PushEvent(new { @event = "fileSystemIndexingStatus", isIndexing, message });
+            else
+                _bridge.PushEvent(new { @event = "fileSystemIndexingStatus", isIndexing });
+        }
+
+        // ── Search ────────────────────────────────────────────────────────────────
 
         /// <summary>
         /// Vue sends this when it has a query to run.
-        /// Vue only sends searches when isReady = true, so no readiness check needed here.
+        /// The limit is passed straight through to the service so Lucene caps the
+        /// result set server-side (faster than fetching everything and truncating here).
+        /// Replies with { results, total, error? }.
+        /// total reflects the full match count from the index, even when results are capped.
         /// </summary>
         public void HandleSearch(JsonElement root, string id)
         {
@@ -88,20 +147,20 @@ namespace KitveiHakodeshLib.FileSystemSearch
 
             var cts = _currentSearch;
 
-            Task.Run(() =>
+            Task.Run(async () =>
             {
                 try
                 {
-                    var results = _adapter.Search(query, max, cts.Token);
+                    var (results, total) = await _adapter.SearchAsync(query, max, cts.Token)
+                        .ConfigureAwait(false);
 
                     if (cts.Token.IsCancellationRequested) return;
 
-                    // Project to anonymous objects with camelCase keys to match Vue expectations.
                     var reply = new System.Collections.Generic.List<object>(results.Count);
                     foreach (var r in results)
                         reply.Add(new { fileName = r.FileName, path = r.Path });
 
-                    _bridge.Reply(id, new { results = reply, total = reply.Count });
+                    _bridge.Reply(id, new { results = reply, total });
                 }
                 catch (OperationCanceledException)
                 {
@@ -109,15 +168,27 @@ namespace KitveiHakodeshLib.FileSystemSearch
                 }
                 catch (Exception ex)
                 {
+                    // If the service is no longer installed (user uninstalled it while
+                    // the app was running), tell Vue so it can re-show the install prompt.
+                    if (!ServiceBridge.IsInstalled())
+                    {
+                        _bridge.Reply(id, new { notInstalled = true });
+                        return;
+                    }
                     _bridge.Reply(id, new { error = ex.Message });
                 }
-            }, CancellationToken.None);
+            });
         }
+
         public void Dispose()
         {
-            var cts = Interlocked.Exchange(ref _currentSearch, null);
-            cts?.Cancel();
-            cts?.Dispose();
+            var ensureCts = Interlocked.Exchange(ref _ensureReadyCts, null);
+            ensureCts?.Cancel();
+            ensureCts?.Dispose();
+
+            var searchCts = Interlocked.Exchange(ref _currentSearch, null);
+            searchCts?.Cancel();
+            searchCts?.Dispose();
         }
     }
 }

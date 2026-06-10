@@ -50,7 +50,7 @@ export function useBookViewSearch(
 
       const end = Math.min(linePosition + SCAN_CHUNK_SIZE, allLines.length)
       for (let i = linePosition; i < end; i++) {
-        const line = allLines[i]
+        const line = allLines[i]!
         if (line.content === null) continue
         const stripped = removeDiacriticsForSearch(line.content.replace(/<[^>]*>/g, ''))
         let characterIndex = 0

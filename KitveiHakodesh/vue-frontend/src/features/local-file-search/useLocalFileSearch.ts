@@ -2,21 +2,34 @@
  * Local file search composable.
  *
  * Flow:
- * 1. On mount, ask C# "is Everything ready?" via fileSystemSearchPageLoad().
- *    C# replies immediately with { isReady: bool }.
- *    If isReady=true  → clear spinner, search works immediately.
- *    If isReady=false → keep spinner; C# is launching Everything in the background
- *                       and will push fileSystemIndexingStatus { isIndexing: false }
- *                       when ready. The watcher on isIndexing then auto-runs any
- *                       pending query.
- * 2. Search only fires when isIndexing=false.
- * 3. If the user typed before ready, the isIndexing watcher retries automatically.
+ * 1. On mount, check if the user has consented to installing the DocumentLocator service.
+ *    - Not yet consented → installConsentPending = true. No bridge call is made.
+ *    - Already consented → proceed to step 2.
+ *
+ * 2. Call fileSystemSearchPageLoad(). C# always replies { isReady: false } immediately
+ *    and does all blocking work (StopIfStale, install, index wait) on a background thread.
+ *    C# pushes fileSystemIndexingStatus events while the index builds:
+ *      { event: 'fileSystemIndexingStatus', isIndexing: true,  message: 'Crawling C:…' }
+ *      { event: 'fileSystemIndexingStatus', isIndexing: false }  ← index ready
+ *
+ * 3. The indexingMessage ref tracks the latest progress string from C# so the UI can
+ *    show it inside the spinner. Cleared when isIndexing becomes false.
+ *
+ * 4. Search only fires when isIndexing = false and installConsentPending = false.
+ *    If the user typed before the index was ready the isIndexing watcher retries.
+ *
+ * 5. Consent is stored in localStorage via KEYS.SETTINGS_DOCUMENT_LOCATOR_INSTALL_CONSENTED.
+ *    "No" clears the key so the prompt reappears on the next page visit.
+ *
+ * 6. The webview event listener is registered once and never re-registered, guarded
+ *    by _eventListenerRegistered so multiple startPageLoad calls are safe.
  */
 
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { refDebounced } from '@vueuse/core'
 import { fileSystemSearch, fileSystemSearchPageLoad } from '@/webview-host/bridge'
 import { isHosted, onWebviewEvent } from '@/webview-host/seforimDb'
+import { lsGet, lsSet, lsDelete, KEYS } from '@/utils/persistence'
 
 export interface LocalFileSearchResult {
   fileName: string
@@ -32,11 +45,14 @@ export function useLocalFileSearch(searchQuery: ReturnType<typeof ref<string>>) 
   const results = ref<LocalFileSearchResult[]>([])
   const searching = ref(false)
   const showLoadingAnimation = ref(false)
-  const isIndexing = ref(true) // true = not ready yet; false = ready to search
+  const isIndexing = ref(true)
+  const indexingMessage = ref<string | null>(null) // progress text from C# during index build
   const totalCount = ref(0)
   const errorMessage = ref<string | null>(null)
+  const installConsentPending = ref(false)
 
   let loadingAnimationTimer: ReturnType<typeof setTimeout> | null = null
+  let _eventListenerRegistered = false
 
   function startLoadingAnimationTimer() {
     cancelLoadingAnimationTimer()
@@ -55,36 +71,74 @@ export function useLocalFileSearch(searchQuery: ReturnType<typeof ref<string>>) 
 
   onUnmounted(() => cancelLoadingAnimationTimer())
 
+  function registerEventListener() {
+    if (_eventListenerRegistered) return
+    _eventListenerRegistered = true
+
+    onWebviewEvent((event: any) => {
+      if (event.event !== 'fileSystemIndexingStatus') return
+
+      if (event.isIndexing === false) {
+        // Index is ready — clear the spinner and any progress message.
+        indexingMessage.value = null
+        isIndexing.value = false
+      } else {
+        // Still building — update the progress message if provided.
+        if (typeof event.message === 'string') {
+          indexingMessage.value = event.message
+        }
+        isIndexing.value = true
+      }
+    })
+  }
+
+  function startPageLoad() {
+    registerEventListener()
+
+    fileSystemSearchPageLoad()
+      .then(() => {
+        // C# always replies { isReady: false } and does the real work on a background thread.
+        // The isIndexing state is driven entirely by fileSystemIndexingStatus push events.
+        // Nothing to do here — keep isIndexing=true and wait for the push.
+      })
+      .catch(() => {
+        // Bridge unavailable (dev mode without host) — unblock search.
+        isIndexing.value = false
+      })
+  }
+
+  /** User clicked "כן, התקן" — save consent and kick off the page-load handshake. */
+  function onInstallConsentGranted() {
+    lsSet(KEYS.SETTINGS_DOCUMENT_LOCATOR_INSTALL_CONSENTED, true)
+    installConsentPending.value = false
+    isIndexing.value = true
+    startPageLoad()
+  }
+
+  /** User clicked "לא" — clear any stored consent so the prompt reappears next visit. */
+  function onInstallConsentDeclined() {
+    installConsentPending.value = false
+    lsDelete(KEYS.SETTINGS_DOCUMENT_LOCATOR_INSTALL_CONSENTED)
+    errorMessage.value = 'שירות האינדקס אינו מותקן. פתח את הדף שוב כדי להתקינו.'
+    isIndexing.value = false
+  }
+
   onMounted(() => {
     if (!isHosted) {
       isIndexing.value = false
       return
     }
 
-    // Register the listener FIRST — before calling pageLoad — so we cannot
-    // miss a push that arrives before the pageLoad promise resolves.
-    onWebviewEvent((event: any) => {
-      if (event.event === 'fileSystemIndexingStatus') {
-        isIndexing.value = event.isIndexing
-      }
-    })
-
-    // Ask C# if Everything is ready right now.
-    // C# replies immediately with { isReady: bool }.
-    fileSystemSearchPageLoad()
-      .then((response) => {
-        if (response.isReady) {
-          isIndexing.value = false
-        }
-        // If not ready: stay true. C# will push fileSystemIndexingStatus when done.
-      })
-      .catch(() => {
-        isIndexing.value = false // bridge unavailable — let search try anyway
-      })
+    const alreadyConsented = lsGet<boolean>(KEYS.SETTINGS_DOCUMENT_LOCATOR_INSTALL_CONSENTED)
+    if (alreadyConsented) {
+      startPageLoad()
+    } else {
+      installConsentPending.value = true
+      isIndexing.value = false
+    }
   })
 
   const debouncedQuery = refDebounced(searchQuery, DEBOUNCE_MS)
-
   let generation = 0
 
   async function runSearch(rawQuery: string) {
@@ -99,8 +153,7 @@ export function useLocalFileSearch(searchQuery: ReturnType<typeof ref<string>>) 
       return
     }
 
-    // Not ready yet — wait for isIndexing watcher to retry.
-    if (isIndexing.value) {
+    if (isIndexing.value || installConsentPending.value) {
       searching.value = false
       return
     }
@@ -110,8 +163,18 @@ export function useLocalFileSearch(searchQuery: ReturnType<typeof ref<string>>) 
 
     try {
       const response = await fileSystemSearch(trimmed, MAX_RESULTS)
-
       if (thisGeneration !== generation) return
+
+      if (response.notInstalled) {
+        // Service was uninstalled while the app was running — clear consent and
+        // re-show the install prompt so the user can reinstall.
+        lsDelete(KEYS.SETTINGS_DOCUMENT_LOCATOR_INSTALL_CONSENTED)
+        isIndexing.value = false
+        installConsentPending.value = true
+        results.value = []
+        totalCount.value = 0
+        return
+      }
 
       if (response.error) {
         errorMessage.value = response.error
@@ -141,12 +204,22 @@ export function useLocalFileSearch(searchQuery: ReturnType<typeof ref<string>>) 
 
   watch(debouncedQuery, (rawQuery) => runSearch(rawQuery ?? ''), { immediate: true })
 
-  // When isIndexing clears, re-run any query that was blocked.
   watch(isIndexing, (nowIndexing) => {
     if (!nowIndexing && (debouncedQuery.value ?? '').trim()) {
       runSearch(debouncedQuery.value ?? '')
     }
   })
 
-  return { results, searching, showLoadingAnimation, isIndexing, totalCount, errorMessage }
+  return {
+    results,
+    searching,
+    showLoadingAnimation,
+    isIndexing,
+    indexingMessage,
+    totalCount,
+    errorMessage,
+    installConsentPending,
+    onInstallConsentGranted,
+    onInstallConsentDeclined,
+  }
 }

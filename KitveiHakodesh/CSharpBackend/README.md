@@ -9,8 +9,8 @@ Contains the .NET libraries that back the KitveiHakodesh Vue app.
 | [`KitveiHakodeshLib`](KitveiHakodeshLib/README.md)                     | WebView2 host, message bridge, DB/PDF/search handlers               |
 | [`SearchEngine`](SearchEngine/README.md)                 | Lucene-based full-text search engine for seforim                    |
 | `KitveiHakodeshDemoApp`                                         | Standalone WinForms demo app for testing KitveiHakodeshLib outside of Word |
-| `EverythingSearchClient`                                 | Client library for the Everything desktop search tool               |
+| [`DocumentLocator`](DocumentLocator/README.md)           | NTFS MFT file index service + named-pipe client for local file search |
 
 ## Solution
 
-`KitveiHakodesh.slnx` — builds KitveiHakodeshLib, SearchEngine, KitveiHakodeshDemoApp, and EverythingSearchClient. SearchEngine has its own solution file (`SearchEngine/SearchEngine.sln`) and can be built independently.
+`KitveiHakodesh.slnx` — builds KitveiHakodeshLib, SearchEngine, KitveiHakodeshDemoApp, DocumentLocator.Client, DocumentLocator.Service, and the core DocumentLocator library. SearchEngine has its own solution file (`SearchEngine/SearchEngine.sln`) and can be built independently.

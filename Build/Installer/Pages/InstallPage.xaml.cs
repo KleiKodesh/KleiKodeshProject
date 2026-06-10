@@ -48,6 +48,12 @@ namespace KleiKodeshVstoInstallerWpf
                 if (!System.IO.Directory.Exists(AddinInstaller.InstallPath))
                     System.IO.Directory.CreateDirectory(AddinInstaller.InstallPath);
 
+                // Send pipe shutdown to DocumentLocator service immediately so the
+                // 1 500 ms exit window runs in the background while we extract other
+                // files. AddinInstaller will wait for the remainder of that window
+                // (if any) before it tries to overwrite DocumentLocator.Service.exe.
+                _ = DocumentLocatorHelper.SendShutdownAsync();
+
                 _status.Report("מחלץ קבצים...");
                 await AddinInstaller.ExtractAsync(_progress);
 

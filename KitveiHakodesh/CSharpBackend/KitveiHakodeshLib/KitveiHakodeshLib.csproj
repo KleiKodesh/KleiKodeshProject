@@ -169,7 +169,7 @@
     <Compile Include="Settings\AppSettings.cs" />
     <Compile Include="Dictionary\DictionaryHandler.cs" />
     <Compile Include="Dictionary\WordThesaurusProvider.cs" />
-    <Compile Include="FileSystemSearch\EverythingSearchAdapter.cs" />
+    <Compile Include="FileSystemSearch\DocumentLocatorAdapter.cs" />
     <Compile Include="FileSystemSearch\FileSystemSearchHandler.cs" />
     <Compile Include="Helpers\FontsProvider.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
@@ -177,9 +177,6 @@
   <ItemGroup>
     <None Include="app.config" />
     <None Include="packages.config" />
-    <Content Include="Resources\Everything-Setup.zip">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="..\..\..\KleiKodeshVsto\Resources\KitveiHakodesh.png">
@@ -197,9 +194,9 @@
       <Project>{B1C2D3E4-0001-0000-0000-000000000001}</Project>
       <Name>SearchEngine</Name>
     </ProjectReference>
-    <ProjectReference Include="..\EverythingSearchClient\EverythingSearchClient\EverythingSearchClient.csproj">
-      <Project>{A2B3C4D5-E6F7-8901-ABCD-EF2345678901}</Project>
-      <Name>EverythingSearchClient</Name>
+    <ProjectReference Include="..\DocumentLocator\DocumentLocator.Client\DocumentLocator.Client.csproj">
+      <Project>{E7B8C9D0-E1F2-43AB-B5C6-D7E8F9A0B1C2}</Project>
+      <Name>DocumentLocator.Client</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

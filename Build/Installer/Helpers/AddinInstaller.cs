@@ -1,4 +1,5 @@
 using KleiKodesh.Helpers;
+using KleiKodeshVstoInstallerWpf.Helpers;
 using Microsoft.Win32;
 using System;
 using System.IO;
@@ -114,9 +115,30 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
 
                         Directory.CreateDirectory(Path.GetDirectoryName(fullPath));
 
-                        using (var entryStream = entry.Open())
-                        using (var fileStream = File.Create(fullPath))
-                            await entryStream.CopyToAsync(fileStream);
+                        // DocumentLocator.Service.exe may be locked by the running Windows
+                        // service. DocumentLocatorHelper.SendShutdownAsync() was fired at the
+                        // start of installation; TryCopyServiceExeAsync() waits for the
+                        // remainder of the 1 500 ms exit window, then retries up to 3 times.
+                        // On permanent failure the existing file is left in place (silent skip).
+                        if (DocumentLocatorHelper.IsServiceExe(entry.FullName))
+                        {
+                            // Read the entry into a MemoryStream first so we can seek back
+                            // on retries (ZipArchiveEntry streams are forward-only).
+                            using (var entryStream = entry.Open())
+                            {
+                                var buffer = new System.IO.MemoryStream();
+                                await entryStream.CopyToAsync(buffer).ConfigureAwait(false);
+                                buffer.Seek(0, SeekOrigin.Begin);
+                                await DocumentLocatorHelper.TryCopyServiceExeAsync(buffer, fullPath)
+                                    .ConfigureAwait(false);
+                            }
+                        }
+                        else
+                        {
+                            using (var entryStream = entry.Open())
+                            using (var fileStream = File.Create(fullPath))
+                                await entryStream.CopyToAsync(fileStream);
+                        }
 
                         current++;
                         progress?.Report((double)current / total * 100);

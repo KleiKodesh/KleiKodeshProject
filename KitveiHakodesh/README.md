@@ -115,6 +115,6 @@ In dev mode, SQL calls go to the Vite middleware instead. Everything else (file 
 | `KitveiHakodeshLib`           | WebView2 host, message bridge, SQLite access, PDF handling, file I/O      |
 | `SearchEngine`         | Lucene-based full-text search index builder and searcher                  |
 | `KitveiHakodeshDemoApp`       | Standalone WinForms harness for running the Vue app outside of production |
-| `EverythingSearchClient`| Client library for the Everything desktop search tool                     |
+| `DocumentLocator`      | NTFS MFT file index Windows service + named-pipe client for local file search |
 
 See `CSharpBackend/README.md` for C# setup and build instructions.
