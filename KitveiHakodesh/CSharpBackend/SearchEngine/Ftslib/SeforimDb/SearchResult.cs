@@ -12,6 +12,12 @@ namespace FtsLib.SeforimDb
         /// <summary>Title of the book this line belongs to.</summary>
         public string BookTitle { get; }
 
+        /// <summary>
+        /// The numeric ID of the book this line belongs to.
+        /// Populated by <see cref="SearchPipeline"/> via the DB join.
+        /// </summary>
+        public int BookId { get; }
+
         /// <summary>Raw HTML content of the line as stored in the database.</summary>
         public string Content { get; }
 
@@ -32,11 +38,13 @@ namespace FtsLib.SeforimDb
         public int OriginalGroupCount { get; }
 
         public SearchResult(int lineId, string bookTitle, string content,
+            int bookId = 0,
             System.Collections.Generic.IReadOnlyList<
                 System.Collections.Generic.IReadOnlyCollection<string>> matchedGroups = null,
             int originalGroupCount = 0)
         {
             LineId             = lineId;
+            BookId             = bookId;
             BookTitle          = bookTitle ?? string.Empty;
             Content            = content   ?? string.Empty;
             MatchedGroups      = matchedGroups ??

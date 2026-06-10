@@ -172,9 +172,9 @@ namespace FtsLib.SeforimDb
         /// of 200, yielding results as each batch completes.
         /// IDs are assumed to arrive in ascending order (as produced by the index
         /// intersection) — no ORDER BY needed.
-        /// Book title is resolved via JOIN.
+        /// Book id and title are resolved via JOIN.
         /// </summary>
-        public IEnumerable<(int Id, string Content, string BookTitle)>
+        public IEnumerable<(int Id, string Content, int BookId, string BookTitle)>
             FetchSearchResultsStreaming(IEnumerable<int> ids)
         {
             EnsureOpen();
@@ -210,13 +210,13 @@ namespace FtsLib.SeforimDb
             }
         }
 
-        private static IEnumerable<(int Id, string Content, string BookTitle)> FetchChunk(
+        private static IEnumerable<(int Id, string Content, int BookId, string BookTitle)> FetchChunk(
             SQLiteCommand cmd,
             string[]      paramNames,
             List<int>     ids)
         {
             var sb = new System.Text.StringBuilder(
-                "SELECT l.id, l.content, b.title" +
+                "SELECT l.id, l.content, l.bookId, b.title" +
                 " FROM line l LEFT JOIN book b ON b.id = l.bookId" +
                 " WHERE l.id IN (");
             for (int i = 0; i < ids.Count; i++)
@@ -233,7 +233,8 @@ namespace FtsLib.SeforimDb
                     yield return (
                         r.GetInt32(0),
                         r.IsDBNull(1) ? string.Empty : r.GetString(1),
-                        r.IsDBNull(2) ? string.Empty : r.GetString(2));
+                        r.IsDBNull(2) ? 0 : r.GetInt32(2),
+                        r.IsDBNull(3) ? string.Empty : r.GetString(3));
         }
 
         /// <summary>

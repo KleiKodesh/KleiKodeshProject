@@ -1,4 +1,4 @@
-using SearchEngine.SeforimDb;
+using FtsLib.SeforimDb;
 using KitveiHakodeshLib.Bridge;
 using Microsoft.Web.WebView2.WinForms;
 using System;

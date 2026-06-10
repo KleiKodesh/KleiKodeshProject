@@ -79,10 +79,10 @@ namespace FtsLib.SeforimDb
                 int yielded = 0;
                 using (var db = new ZayitDb(dbPath))
                 {
-                    foreach (var (lineId, content, bookTitle) in db.FetchSearchResultsStreaming(reader.Search(groups, ct)))
+                    foreach (var (lineId, content, bookId, bookTitle) in db.FetchSearchResultsStreaming(reader.Search(groups, ct)))
                     {
                         ct.ThrowIfCancellationRequested();
-                        yield return new SearchResult(lineId, bookTitle, content, matchedGroups, originalGroupCount);
+                        yield return new SearchResult(lineId, bookTitle, content, bookId, matchedGroups, originalGroupCount);
                         yielded++;
                         if (cap > 0 && yielded >= cap) yield break;
                     }

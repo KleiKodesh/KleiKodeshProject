@@ -1,4 +1,4 @@
-using SearchEngine.SeforimDb;
+using FtsLib.SeforimDb;
 using Microsoft.Win32;
 using System;
 using System.IO;
@@ -186,8 +186,7 @@ namespace KitveiHakodeshLib.Search
 
         /// <summary>
         /// Sets the DB path and index object atomically. Called by the actor thread
-        /// during OnDbReady before any state transition. Disposes the previous index
-        /// instance so it releases any open file handles on the index directory.
+        /// during OnDbReady before any state transition.
         /// </summary>
         internal void SetDatabase(string dbPath, SeforimIndex index)
         {
@@ -198,8 +197,8 @@ namespace KitveiHakodeshLib.Search
                 _dbPath  = dbPath;
                 _index   = index;
             }
-            // Dispose outside the lock — Dispose may do I/O and must not hold _lock.
-            oldIndex?.Dispose();
+            // No Dispose needed — FtsLib's SeforimIndex holds no unmanaged resources.
+            _ = oldIndex;
         }
 
         /// <summary>
@@ -423,16 +422,11 @@ namespace KitveiHakodeshLib.Search
             try
             {
                 if (!Directory.Exists(FtsIndexPath)) return "index directory missing";
-                // Lucene commits write a segments_N file — its presence means the
-                // index has at least one committed generation and is ready to open.
-                bool hasSegments = false;
-                foreach (var f in Directory.GetFiles(FtsIndexPath))
-                {
-                    string name = Path.GetFileName(f);
-                    if (name.StartsWith("segments_") && name != "segments.gen")
-                    { hasSegments = true; break; }
-                }
-                if (!hasSegments) return "no committed Lucene segments found";
+                // FtsLib segments are named seg_L_ID.dat / seg_L_ID.db.
+                // An index is ready when at least one segment pair exists and the
+                // build progress file is absent (progress file means build interrupted).
+                bool hasSegments = Directory.GetFiles(FtsIndexPath, "seg_*.dat").Length > 0;
+                if (!hasSegments) return "no segment files found";
                 return null;
             }
             catch (Exception ex) { return "validation error: " + ex.Message; }

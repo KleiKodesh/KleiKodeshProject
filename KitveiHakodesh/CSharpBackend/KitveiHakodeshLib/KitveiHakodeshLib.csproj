@@ -55,40 +55,7 @@
     <Reference Include="Dapper, Version=2.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\Dapper.2.1.72\lib\net461\Dapper.dll</HintPath>
     </Reference>
-    <Reference Include="J2N, Version=2.0.0.0, Culture=neutral, PublicKeyToken=f39447d697a969af, processorArchitecture=MSIL">
-      <HintPath>..\SearchEngine\packages\J2N.2.1.0\lib\net462\J2N.dll</HintPath>
-    </Reference>
-    <Reference Include="Lucene.Net, Version=4.0.0.0, Culture=neutral, PublicKeyToken=85089178b9ac3181, processorArchitecture=MSIL">
-      <HintPath>..\SearchEngine\packages\Lucene.Net.4.8.0-beta00017\lib\net462\Lucene.Net.dll</HintPath>
-    </Reference>
-    <Reference Include="Lucene.Net.Analysis.Common, Version=4.0.0.0, Culture=neutral, PublicKeyToken=85089178b9ac3181, processorArchitecture=MSIL">
-      <HintPath>..\SearchEngine\packages\Lucene.Net.Analysis.Common.4.8.0-beta00017\lib\net462\Lucene.Net.Analysis.Common.dll</HintPath>
-    </Reference>
-    <Reference Include="Lucene.Net.Highlighter, Version=4.0.0.0, Culture=neutral, PublicKeyToken=85089178b9ac3181, processorArchitecture=MSIL">
-      <HintPath>..\SearchEngine\packages\Lucene.Net.Highlighter.4.8.0-beta00017\lib\net462\Lucene.Net.Highlighter.dll</HintPath>
-    </Reference>
-    <Reference Include="Lucene.Net.Memory, Version=4.0.0.0, Culture=neutral, PublicKeyToken=85089178b9ac3181, processorArchitecture=MSIL">
-      <HintPath>..\SearchEngine\packages\Lucene.Net.Memory.4.8.0-beta00017\lib\net462\Lucene.Net.Memory.dll</HintPath>
-    </Reference>
-    <Reference Include="Lucene.Net.Queries, Version=4.0.0.0, Culture=neutral, PublicKeyToken=85089178b9ac3181, processorArchitecture=MSIL">
-      <HintPath>..\SearchEngine\packages\Lucene.Net.Queries.4.8.0-beta00017\lib\net462\Lucene.Net.Queries.dll</HintPath>
-    </Reference>
-    <Reference Include="Lucene.Net.QueryParser, Version=4.0.0.0, Culture=neutral, PublicKeyToken=85089178b9ac3181, processorArchitecture=MSIL">
-      <HintPath>..\SearchEngine\packages\Lucene.Net.QueryParser.4.8.0-beta00017\lib\net462\Lucene.Net.QueryParser.dll</HintPath>
-    </Reference>
-    <Reference Include="Lucene.Net.Sandbox, Version=4.0.0.0, Culture=neutral, PublicKeyToken=85089178b9ac3181, processorArchitecture=MSIL">
-      <HintPath>..\SearchEngine\packages\Lucene.Net.Sandbox.4.8.0-beta00017\lib\net462\Lucene.Net.Sandbox.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.Extensions.Configuration.Abstractions, Version=8.0.0.0, Culture=neutral, PublicKeyToken=adb9793829ddae60, processorArchitecture=MSIL">
-      <HintPath>..\SearchEngine\packages\Microsoft.Extensions.Configuration.Abstractions.8.0.0\lib\net462\Microsoft.Extensions.Configuration.Abstractions.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.Extensions.Primitives, Version=8.0.0.0, Culture=neutral, PublicKeyToken=adb9793829ddae60, processorArchitecture=MSIL">
-      <HintPath>..\SearchEngine\packages\Microsoft.Extensions.Primitives.8.0.0\lib\net462\Microsoft.Extensions.Primitives.dll</HintPath>
-    </Reference>
-    <Reference Include="System.Runtime.InteropServices.RuntimeInformation, Version=4.0.1.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-      <HintPath>..\SearchEngine\packages\System.Runtime.InteropServices.RuntimeInformation.4.3.0\lib\net45\System.Runtime.InteropServices.RuntimeInformation.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
+
     <Reference Include="HtmlAgilityPack, Version=1.12.4.0, Culture=neutral, PublicKeyToken=bd319b19eaf3b43a, processorArchitecture=MSIL">
       <HintPath>..\packages\HtmlAgilityPack.1.12.4\lib\Net45\HtmlAgilityPack.dll</HintPath>
     </Reference>
@@ -190,9 +157,9 @@
     </Content>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\SearchEngine\SearchEngine\SearchEngine.csproj">
-      <Project>{B1C2D3E4-0001-0000-0000-000000000001}</Project>
-      <Name>SearchEngine</Name>
+    <ProjectReference Include="..\SearchEngine\Ftslib\FtsLib.csproj">
+      <Project>{76F9DAA9-374F-40F9-8511-3239FB6E846E}</Project>
+      <Name>FtsLib</Name>
     </ProjectReference>
     <ProjectReference Include="..\DocumentLocator\DocumentLocator.Client\DocumentLocator.Client.csproj">
       <Project>{E7B8C9D0-E1F2-43AB-B5C6-D7E8F9A0B1C2}</Project>

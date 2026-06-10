@@ -1,4 +1,4 @@
-using SearchEngine.SeforimDb;
+using FtsLib.SeforimDb;
 using KitveiHakodeshLib.Bridge;
 using System;
 using System.Collections.Concurrent;
@@ -134,13 +134,10 @@ namespace KitveiHakodeshLib.Search
                 var  timer = new Stopwatch();
                 timer.Start();
 
-                foreach (var (rowId, bookId, bookTitle, tocPath, snippet) in index.SearchWithSnippets(
+                foreach (var result in index.Search(
                     query,
-                    maxWordDistance: maxWordDistance,
-                    requireOrdered:  requireOrdered,
-                    contextWords:    contextWords,
-                    expandKetiv:     expandKetiv,
-                    ct:              ct))
+                    expandKetiv: expandKetiv,
+                    ct:          ct))
                 {
                     if (ct.IsCancellationRequested)
                     {
@@ -148,17 +145,31 @@ namespace KitveiHakodeshLib.Search
                         return;
                     }
 
-                    if (excludedLineIds.Contains(rowId)) continue;
+                    if (excludedLineIds.Contains(result.LineId)) continue;
+
+                    var snippet = index.GenerateSnippet(result, requireOrdered, contextWords);
+
+                    // Filter index false positives: if all query terms were not actually
+                    // present in the line content, skip this result.
+                    if (!snippet.IsMatch) continue;
+
+                    if (snippet.WordDistance > maxWordDistance) continue;
+
+                    // Flatten matched groups into a single de-duplicated term list.
+                    var termSet = new HashSet<string>(System.StringComparer.Ordinal);
+                    foreach (var group in result.MatchedGroups)
+                        foreach (var term in group)
+                            termSet.Add(term);
 
                     batch.Add(new SearchResultPayload
                     {
-                        lineId       = rowId,
-                        bookId       = bookId,
-                        bookTitle    = bookTitle,
-                        tocText      = tocPath,
+                        lineId       = result.LineId,
+                        bookId       = result.BookId,
+                        bookTitle    = result.BookTitle,
+                        tocText      = string.Empty, // frontend enriches via GET_TOC_PATHS_FOR_LINES
                         score        = snippet.Score,
                         snippet      = snippet.Html,
-                        matchedTerms = Array.Empty<string>()
+                        matchedTerms = new List<string>(termSet).ToArray()
                     });
                     totalResults++;
 
