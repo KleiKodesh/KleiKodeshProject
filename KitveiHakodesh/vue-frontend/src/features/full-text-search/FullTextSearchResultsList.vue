@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { IconSearchSparkle24Regular } from '@iconify-prerendered/vue-fluent'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { useEventListener } from '@vueuse/core'
+import { useDebounceFn } from '@vueuse/core'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 import type { FullTextSearchResult, SearchFailReason } from './fullTextSearchTypes'
@@ -15,14 +15,19 @@ const props = defineProps<{
   hasSearched: boolean
   searchError?: SearchFailReason | null
   dbNotFound?: boolean
-  initialScrollIndex?: number
-  initialScrollOffset?: number
   zoom?: number
+  fetchSnippetsForWindow: (lineIds: number[]) => Promise<Map<number, {
+    snippet: string
+    score: number
+    matchedTerms: string[]
+    tocText: string
+    isWeakMatch: boolean
+    bookTitle: string
+  }>>
 }>()
 
 const emit = defineEmits<{
   resultClick: [FullTextSearchResult]
-  saveScroll: [{ scrollIndex: number; scrollOffset: number }]
 }>()
 
 const SEARCH_ERROR_MESSAGES: Record<string, string> = {
@@ -30,6 +35,7 @@ const SEARCH_ERROR_MESSAGES: Record<string, string> = {
   indexMerging:  'האינדקס מבצע מיזוג — נסה שוב בעוד כמה רגעים',
   searchFailed:  'אירעה שגיאה בחיפוש',
 }
+
 const settingsStore = useSettingsStore()
 const scrollEl = ref<HTMLElement | null>(null)
 
@@ -37,23 +43,83 @@ const fontPx = computed(() => {
   const zoomFactor = (props.zoom ?? 100) / 100
   return zoomFactor * (settingsStore.fontSize / 100) * 15
 })
-let programmaticScrolling = false
+
+// ── Snippet cache — in-memory only ────────────────────────────────────────────
+const snippetCache = new Map<number, { snippet: string; score: number; matchedTerms: string[]; tocText: string; isWeakMatch: boolean; bookTitle: string }>()
+const snippetVersion = ref(0)
+
+watch(() => props.results, () => {
+  snippetCache.clear()
+  snippetVersion.value++
+})
+
+// ── Virtualizer ───────────────────────────────────────────────────────────────
 
 const virtualizer = useVirtualizer(
   computed(() => ({
     count: props.results.length,
     getScrollElement: () => scrollEl.value,
     estimateSize: () => 80,
-    overscan: 8,
+    overscan: 5,
     getItemKey: (index) => props.results[index]?.lineId ?? index,
     measureElement: (el) => el.getBoundingClientRect().height,
   })),
 )
 
+// ── Viewport-driven snippet fetching ─────────────────────────────────────────
+
+const FETCH_OVERSCAN = 10
+
+async function fetchVisibleSnippets() {
+  const items = virtualizer.value.getVirtualItems()
+  if (!items.length) return
+
+  const firstIndex = Math.max(0, items[0]!.index - FETCH_OVERSCAN)
+  const lastIndex  = Math.min(props.results.length - 1, items[items.length - 1]!.index + FETCH_OVERSCAN)
+
+  const missingIds: number[] = []
+  for (let i = firstIndex; i <= lastIndex; i++) {
+    const lineId = props.results[i]?.lineId
+    if (lineId != null && !snippetCache.has(lineId)) missingIds.push(lineId)
+  }
+
+  if (!missingIds.length) return
+
+  for (const lineId of missingIds) snippetCache.set(lineId, null as any)
+
+  try {
+    const fetched = await props.fetchSnippetsForWindow(missingIds)
+    for (const [lineId, data] of fetched) snippetCache.set(lineId, data)
+    snippetVersion.value++
+  } catch {
+    for (const lineId of missingIds) {
+      if ((snippetCache.get(lineId) as any) === null) snippetCache.delete(lineId)
+    }
+  }
+}
+
+const fetchVisibleSnippetsDebounced = useDebounceFn(fetchVisibleSnippets, 150)
+
+function onScroll() {
+  fetchVisibleSnippetsDebounced()
+}
+
+watch(
+  () => props.results.length,
+  (len) => { if (len) nextTick(fetchVisibleSnippets) },
+  { flush: 'post' }
+)
+
 function renderSnippet(snippet: string): string {
-  if (!snippet) return snippet
+  if (!snippet) return ''
   return settingsStore.censorDivineNames ? censorDivineNames(snippet) : snippet
 }
+
+useVirtualScrollerKeys(
+  scrollEl,
+  () => virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
+  () => props.results.length,
+)
 
 function captureScrollPos() {
   const first = virtualizer.value.getVirtualItems()[0]
@@ -64,69 +130,11 @@ function captureScrollPos() {
   }
 }
 
-function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
-  // Two-rAF pattern: scrollToIndex triggers TanStack's internal correction.
-  // Wait one rAF for it to settle, then set scrollTop directly — TanStack is idle by then.
-  programmaticScrolling = true
-  virtualizer.value.scrollToIndex(scrollIndex, { align: 'start' })
-  requestAnimationFrame(() => {
-    const item = virtualizer.value.measurementsCache.find((m) => m.index === scrollIndex)
-    if (item && scrollEl.value) scrollEl.value.scrollTop = item.start + scrollOffset
-    requestAnimationFrame(() => {
-      programmaticScrolling = false
-    })
-  })
-}
-
-{
-  // Restore scroll once results are populated — don't gate on isSearching because
-  // loadCachedResults can set isSearching=true while simultaneously populating results
-  // (partial cache + resume stream). We restore as soon as we have results to scroll into.
-  const stopWatch = watch(
-    () => props.results.length,
-    (len) => {
-      if (!len) return
-      if (props.initialScrollIndex == null) {
-        stopWatch()
-        return
-      }
-      stopWatch()
-      nextTick(() => restoreScrollPos(props.initialScrollIndex!, props.initialScrollOffset ?? 0))
-    },
-    { flush: 'post', immediate: true },
-  )
-}
-
-function savePos() {
-  if (programmaticScrolling) return
-  const pos = captureScrollPos()
-  if (!pos) return
-  emit('saveScroll', pos)
-}
-
-useEventListener(document, 'visibilitychange', () => {
-  if (document.visibilityState === 'hidden') savePos()
-})
-useEventListener(window, 'beforeunload', savePos)
-onBeforeUnmount(() => {
-  programmaticScrolling = false
-  savePos()
-})
-
-useVirtualScrollerKeys(
-  scrollEl,
-  () =>
-    virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
-  () => props.results.length,
-)
-
-function onScroll() {}
-
 defineExpose({ captureScrollPos })
 </script>
 
 <template>
-  <div class="results-wrap">
+  <div class="results-wrap" :data-version="snippetVersion">
     <div v-if="dbNotFound || !hasSearched || (!results.length && !isSearching)" class="empty-state">
       <IconSearchSparkle24Regular class="empty-icon" />
       <span v-if="dbNotFound" class="empty-msg error-msg">מסד הנתונים לא נמצא — בחר קובץ מסד נתונים בהגדרות</span>
@@ -136,7 +144,13 @@ defineExpose({ captureScrollPos })
       <span v-else-if="hasSearched && !results.length" class="empty-msg">לא נמצאו תוצאות</span>
     </div>
     <template v-else>
-      <div ref="scrollEl" class="scroller" tabindex="0" :style="{ fontSize: `${fontPx}px` }" @scroll="onScroll">
+      <div
+        ref="scrollEl"
+        class="scroller"
+        tabindex="0"
+        :style="{ fontSize: `${fontPx}px` }"
+        @scroll="onScroll"
+      >
         <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
           <div
             v-for="vRow in virtualizer.getVirtualItems()"
@@ -151,27 +165,46 @@ defineExpose({ captureScrollPos })
               transform: `translateY(${vRow.start}px)`,
             }"
           >
-            <div class="result-item">
-              <div
-                class="result-header"
-                :title="
-                  results[vRow.index]!.tocText
-                    ? results[vRow.index]!.bookTitle +
-                      ' › ' +
-                      results[vRow.index]!.tocText +
-                      '\nלחץ לניווט למיקום'
-                    : results[vRow.index]!.bookTitle + '\nלחץ לניווט למיקום'
-                "
-                @click="emit('resultClick', results[vRow.index]!)"
-              >
-                <span class="book-title">{{ results[vRow.index]!.bookTitle }}</span>
-                <span v-if="results[vRow.index]!.tocText" class="sep">›</span>
-                <span v-if="results[vRow.index]!.tocText" class="toc-text">{{
-                  results[vRow.index]!.tocText
-                }}</span>
-              </div>
-              <!-- eslint-disable-next-line vue/no-v-html -->
-              <div class="snippet" v-html="renderSnippet(results[vRow.index]!.snippet)" />
+            <div
+              v-if="!snippetCache.has(results[vRow.index]!.lineId) || (snippetCache.get(results[vRow.index]!.lineId)?.snippet && !snippetCache.get(results[vRow.index]!.lineId)?.isWeakMatch)"
+              class="result-item"
+            >
+              <!-- While snippet not yet loaded: show shimmer for header + body -->
+              <template v-if="!snippetCache.has(results[vRow.index]!.lineId)">
+                <div class="placeholder-header">
+                  <div class="placeholder-line" style="width: 45%" />
+                  <div class="placeholder-line" style="width: 30%" />
+                </div>
+                <div class="snippet-placeholder">
+                  <div class="placeholder-line" style="width: 92%" />
+                  <div class="placeholder-line" style="width: 60%" />
+                </div>
+              </template>
+
+              <!-- Snippet loaded -->
+              <template v-else-if="snippetCache.get(results[vRow.index]!.lineId)?.snippet && !snippetCache.get(results[vRow.index]!.lineId)?.isWeakMatch">
+                <div
+                  class="result-header"
+                  :title="snippetCache.get(results[vRow.index]!.lineId)!.bookTitle + '\nלחץ לניווט למיקום'"
+                  @click="emit('resultClick', {
+                    ...results[vRow.index]!,
+                    bookTitle: snippetCache.get(results[vRow.index]!.lineId)?.bookTitle ?? '',
+                    tocText: snippetCache.get(results[vRow.index]!.lineId)?.tocText ?? '',
+                    snippet: snippetCache.get(results[vRow.index]!.lineId)?.snippet ?? '',
+                    matchedTerms: snippetCache.get(results[vRow.index]!.lineId)?.matchedTerms ?? [],
+                  })"
+                >
+                  <span class="book-title">{{ snippetCache.get(results[vRow.index]!.lineId)!.bookTitle }}</span>
+                  <template v-if="snippetCache.get(results[vRow.index]!.lineId)?.tocText">
+                    <span class="sep">›</span>
+                    <span class="toc-text">{{ snippetCache.get(results[vRow.index]!.lineId)!.tocText }}</span>
+                  </template>
+                </div>
+                <div
+                  class="snippet"
+                  v-html="renderSnippet(snippetCache.get(results[vRow.index]!.lineId)!.snippet)"
+                />
+              </template>
             </div>
           </div>
         </div>
@@ -213,10 +246,18 @@ defineExpose({ captureScrollPos })
   overflow-y: auto;
   overflow-x: hidden;
   outline: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
 }
 .result-item {
   padding: 8px 14px;
   border-bottom: 1px solid var(--border-color);
+}
+.placeholder-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 .result-header {
   display: flex;
@@ -231,10 +272,10 @@ defineExpose({ captureScrollPos })
   user-select: text;
   color: var(--accent-color);
   transition: color 120ms;
+  cursor: pointer;
 }
 .result-header:hover {
   color: color-mix(in srgb, var(--accent-color) 60%, white);
-  cursor: pointer;
 }
 .book-title {
   color: inherit;
@@ -270,15 +311,30 @@ defineExpose({ captureScrollPos })
   text-align: justify;
   user-select: text;
 }
-.snippet :deep(.match) {
-  color: var(--accent-color);
-  font-weight: 600;
-  user-select: text;
-}
+.snippet :deep(.match),
 .snippet :deep(mark) {
   background: transparent;
   color: var(--accent-color);
   font-weight: 600;
   user-select: text;
+}
+.weak-snippet {
+  opacity: 0.6;
+}
+.snippet-placeholder {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-block: 2px;
+}
+.placeholder-line {
+  height: 10px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text-secondary) 12%, transparent);
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+@keyframes shimmer {
+  0%, 100% { opacity: 0.5; }
+  50%       { opacity: 1;   }
 }
 </style>

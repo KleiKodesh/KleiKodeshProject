@@ -19,18 +19,17 @@ const tabStore = useTabStore()
 const booksStore = useBooksDataStore()
 const settings = useSettingsStore()
 
-// Capture tabId at mount time — stable for this component's lifetime (/search is keyed by tabId)
+// /search is keyed by tabId — stable for this component's lifetime
 const tabId = tabStore.activeTabId
 
 const zoom = ref<number>(ZOOM_CONFIG.DEFAULT)
 const isSearchActive = computed(() => tabStore.activeTab?.route === '/search')
 useZoomHandler({ zoom, enabled: isSearchActive })
 
+// ── Indexing status ───────────────────────────────────────────────────────────
+
 const { state: indexingState } = useFullTextSearchIndexingStatus()
 
-// Keep the overlay visible for a short window after indexing completes so the
-// "finalizing" message is readable. C# sends isIndexing=false at 100% in one shot —
-// without this delay the overlay would disappear before the user sees the message.
 const showIndexingOverlay = ref(false)
 let overlayHideTimer: ReturnType<typeof setTimeout> | null = null
 watch(
@@ -40,12 +39,13 @@ watch(
       if (overlayHideTimer) { clearTimeout(overlayHideTimer); overlayHideTimer = null }
       showIndexingOverlay.value = true
     } else if (showIndexingOverlay.value) {
-      // Was showing — keep it up briefly so the user sees the final state
       overlayHideTimer = setTimeout(() => { showIndexingOverlay.value = false }, 1500)
     }
   },
   { deep: true },
 )
+
+// ── Search ────────────────────────────────────────────────────────────────────
 
 const {
   results,
@@ -59,8 +59,8 @@ const {
   executeSearch,
   cancelSearch,
   clearSearch,
-  loadCachedResults,
-} = useFullTextSearch(() => indexingState.value.isIndexing)
+  fetchSnippetsForWindow,
+} = useFullTextSearch()
 
 const {
   searchQuery,
@@ -88,86 +88,61 @@ const {
   clearSearch,
 )
 
+// ── UI state ──────────────────────────────────────────────────────────────────
+
 const searchBarRef = ref<InstanceType<typeof FullTextSearchBar> | null>(null)
 const filterPanelRef = ref<HTMLElement | null>(null)
-const resultsListRef = ref<InstanceType<typeof FullTextSearchResultsList> | null>(null)
-const initialScrollIndex = ref<number | undefined>()
-const initialScrollOffset = ref<number | undefined>()
 const isAdvancedOpen = ref(false)
-// Scroll position owned here — updated by SearchResultsList via saveScroll emit
-let lastScrollIndex: number | undefined
-let lastScrollOffset: number | undefined
 
 const isAdvancedActive = computed(
-  () => maxWordDistance.value !== 10 || requireOrdered.value
-     || !expandKetiv.value
-     || settings.searchWildcardWrap
-     || settings.searchGrammarWrap
-     || settings.searchContextMarginWords !== 30,
+  () =>
+    maxWordDistance.value !== 10 ||
+    requireOrdered.value ||
+    !expandKetiv.value ||
+    settings.searchWildcardWrap ||
+    settings.searchGrammarWrap ||
+    settings.searchContextMarginWords !== 30,
 )
 
-useDropdownClose(
-  filterPanelRef,
-  () => {
-    if (isFilterOpen.value) isFilterOpen.value = false
-  },
-  { toggleButton: computed(() => searchBarRef.value?.filterBtnRef ?? null) },
-)
+useDropdownClose(filterPanelRef, () => { if (isFilterOpen.value) isFilterOpen.value = false }, {
+  toggleButton: computed(() => searchBarRef.value?.filterBtnRef ?? null),
+})
 
-// Re-run the search whenever any advanced setting changes — the current results
-// were generated with the old setting values and are now stale.
+// Re-run search when any advanced setting that affects results changes.
+// (contextMarginWords only affects snippets — those are re-fetched on next viewport scroll,
+//  so no re-search needed for that one.)
 watch(
-  [
-    maxWordDistance,
-    requireOrdered,
-    expandKetiv,
-    () => settings.searchContextMarginWords,
-    () => settings.searchWildcardWrap,
-    () => settings.searchGrammarWrap,
-  ],
+  [maxWordDistance, requireOrdered, expandKetiv,
+   () => settings.searchWildcardWrap, () => settings.searchGrammarWrap],
   () => {
-    if (hasSearched.value && executedQuery.value) {
-      handleSearch(executedQuery.value)
-    }
+    if (hasSearched.value && executedQuery.value) handleSearch(executedQuery.value)
   },
 )
+
+// ── Event handlers ────────────────────────────────────────────────────────────
 
 function onSearch(q: string) {
   const { term, atFilters: tokens } = parseSearchQuery(q)
   setAtFilters(tokens)
-  // Store the full raw query in the tab (for display/restore) but search only the term part
   tabStore.updateActiveTab({ searchQuery: q, title: `חיפוש: ${term || q}` })
   if (term) handleSearch(term)
 }
+
 function onClearSearch() {
   tabStore.updateActiveTab({ searchQuery: undefined, title: 'חיפוש' })
   handleClearSearch()
 }
 
-function onSaveScroll(pos: { scrollIndex: number; scrollOffset: number }) {
-  lastScrollIndex = pos.scrollIndex
-  lastScrollOffset = pos.scrollOffset
-}
+// ── Filter state persistence (lightweight — just checked books + zoom) ────────
 
 async function saveFilterState() {
-  // Capture scroll position directly from the list — don't rely on the saveScroll emit
-  // having already fired. onBeforeUnmount order is parent-first, child-second, so the
-  // emit-based lastScrollIndex would still be undefined when the parent unmounts.
-  const captured = resultsListRef.value?.captureScrollPos()
-  if (captured) {
-    lastScrollIndex = captured.scrollIndex
-    lastScrollOffset = captured.scrollOffset
-  }
   const allCount = booksStore.allBooks.length
   const isAllChecked = allCount > 0 && checkedBookIds.value.size === allCount
-  const state = {
+  tabStore.setTabViewState(tabId, {
     searchCheckedBookIds: isAllChecked ? undefined : [...checkedBookIds.value],
     searchAtFilters: atFilters.value.length ? [...atFilters.value] : undefined,
-    searchScrollIndex: lastScrollIndex,
-    searchScrollOffset: lastScrollOffset,
     searchZoom: zoom.value !== ZOOM_CONFIG.DEFAULT ? zoom.value : undefined,
-  }
-  tabStore.setTabViewState(tabId, state)
+  })
 }
 
 async function restoreFromTab() {
@@ -177,9 +152,10 @@ async function restoreFromTab() {
   const { term, atFilters: tokens } = parseSearchQuery(savedQuery)
   setAtFilters(tokens)
   tabStore.updateActiveTab({ title: `חיפוש: ${term || savedQuery}` })
-  const fromCache = await loadCachedResults(term || savedQuery)
-  if (!fromCache) await handleSearch(term || savedQuery)
+  await handleSearch(term || savedQuery)
 }
+
+// ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 onMounted(async () => {
   await booksStore.ensureLoaded()
@@ -188,41 +164,19 @@ onMounted(async () => {
 
   if (saved?.searchCheckedBookIds != null) {
     const validIds = new Set(booksStore.allBooks.map((b) => b.id))
-    const restored = new Set(saved.searchCheckedBookIds.filter((id) => validIds.has(id)))
-    setCheckedBookIds(restored)
+    setCheckedBookIds(new Set(saved.searchCheckedBookIds.filter((id) => validIds.has(id))))
   } else {
     initCheckedBooks()
   }
 
-  if (saved?.searchAtFilters?.length) {
-    setAtFilters(saved.searchAtFilters)
-  }
+  if (saved?.searchAtFilters?.length) setAtFilters(saved.searchAtFilters)
+  if (saved?.searchZoom != null) zoom.value = saved.searchZoom
 
-  // Restore zoom BEFORE restoring scroll — zoom affects item height estimates in the
-  // virtualizer, so if zoom is applied after results populate the scroll lands in the wrong place.
-  if (saved?.searchZoom != null) {
-    zoom.value = saved.searchZoom
-  }
-
-  if (saved?.searchScrollIndex != null) {
-    initialScrollIndex.value = saved.searchScrollIndex
-    initialScrollOffset.value = saved.searchScrollOffset ?? 0
-    // Do NOT seed lastScrollIndex/lastScrollOffset from the saved state.
-    // Those track the current session's live position (via onSaveScroll / captureScrollPos).
-    // Seeding them here means onBeforeUnmount would fall back to the stale restored value
-    // and overwrite whatever visibilitychange correctly saved for the current session.
-  }
-
-  // Restore search query and results from cache/session. The scroll position
-  // is restored automatically by FullTextSearchResultsList's watcher when results arrive.
   await restoreFromTab()
 
   searchBarRef.value?.focusAndShowHistory()
 })
 
-// Save filter state whenever the page goes hidden or is unmounted.
-// /search is keyed by tabId so unmount = this tab's search instance is gone (tab switched or closed).
-// Tab close triggers closeTab() which deletes the IDB key anyway, but saving first is harmless.
 useEventListener(document, 'visibilitychange', () => {
   if (document.visibilityState === 'hidden') saveFilterState()
 })
@@ -235,18 +189,15 @@ onBeforeUnmount(() => {
 <template>
   <div class="search-page">
     <FullTextSearchResultsList
-      ref="resultsListRef"
       :results="filteredResults"
       :search-query="executedQuery"
       :is-searching="isSearching"
       :has-searched="hasSearched"
       :search-error="searchError"
       :db-not-found="indexingState.dbNotFound"
-      :initial-scroll-index="initialScrollIndex"
-      :initial-scroll-offset="initialScrollOffset"
       :zoom="zoom"
+      :fetch-snippets-for-window="fetchSnippetsForWindow"
       @result-click="handleResultClick"
-      @save-scroll="onSaveScroll"
     />
 
     <FullTextSearchIndexingOverlay v-if="showIndexingOverlay" :state="indexingState" />

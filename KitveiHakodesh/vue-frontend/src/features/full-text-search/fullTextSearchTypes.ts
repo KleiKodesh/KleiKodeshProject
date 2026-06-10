@@ -9,6 +9,9 @@ export interface FullTextSearchResult {
    *  Used by the book view to highlight the actual matched words (e.g. the fuzzy expansion ביצחק
    *  when the query was יצחק~) rather than the raw query string. */
   matchedTerms: string[]
+  /** True when the result matched the query terms but the words were too far apart (exceeded
+   *  maxWordDistance). Still shown but grayed out to indicate a weak/loose match. */
+  isWeakMatch?: boolean
 }
 
 /**

@@ -73,8 +73,6 @@ export function lsClearSettingsOnly(): void {
 // ── Shared types ──────────────────────────────────────────────────────────────
 
 export interface TabState {
-  searchScrollIndex?: number
-  searchScrollOffset?: number
   searchCheckedBookIds?: number[] // absent/null means "all checked" (default)
   searchAtFilters?: string[]      // @ tokens from the search input, e.g. ["בראשית", "בבלי"]
   searchZoom?: number             // per-tab zoom level for the search results page (50–200)

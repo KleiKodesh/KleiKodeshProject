@@ -3,7 +3,4 @@
   <Project Path="SearchEngine/Ftslib/FtsLib.csproj" Id="76F9DAA9-374F-40F9-8511-3239FB6E846E" />
   <Project Path="KitveiHakodeshDemoApp/KitveiHakodeshDemoApp.csproj" Id="2b6e5acb-2062-4281-aacb-c46681fcfe42" />
   <Project Path="DocumentLocator/DocumentLocator.Client/DocumentLocator.Client.csproj" Id="E7B8C9D0-E1F2-43AB-B5C6-D7E8F9A0B1C2" />
-  <Project Path="DocumentLocator/DocumentLocator.Demo/DocumentLocator.Demo.csproj" Id="f6a7b8c9-d0e1-42fc-a4b5-c6d7e8f9a0b1" />
-  <Project Path="DocumentLocator/DocumentLocator.Service/DocumentLocator.Service.csproj" Id="D4E5F6A7-B8C9-40DA-E2F3-A4B5C6D7E8F9" />
-  <Project Path="DocumentLocator/DocumentLocator/DocumentLocator.csproj" Id="a1b2c3d4-e5f6-47a8-b9c0-d1e2f3a4b5c6" />
 </Solution>

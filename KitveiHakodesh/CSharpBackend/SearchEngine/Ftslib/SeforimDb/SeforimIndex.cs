@@ -158,10 +158,28 @@ namespace FtsLib.SeforimDb
 
         // ── Snippets ──────────────────────────────────────────────────
 
-        public SnippetResult GenerateSnippet(int lineId, string query)
+        public SnippetResult GenerateSnippet(int lineId, string query, int contextWords = DefaultContextWords)
         {
             var terms = SearchPipeline.ExtractTerms(query);
-            return SnippetPipeline.GenerateFromDb(lineId, terms, _dbPath);
+            return SnippetPipeline.GenerateFromDb(lineId, terms, _dbPath, contextWords);
+        }
+
+        public IReadOnlyList<string> ExtractQueryTerms(string query)
+            => SearchPipeline.ExtractTerms(query);
+
+        /// <summary>
+        /// Fetches { lineId, bookId, bookTitle } for a list of line IDs.
+        /// No content or snippet work — used by the ID-only search phase.
+        /// </summary>
+        public IEnumerable<(int LineId, int BookId, string BookTitle)> FetchLineMetadata(IEnumerable<int> lineIds)
+        {
+            var idList = lineIds as System.Collections.Generic.List<int>
+                         ?? new System.Collections.Generic.List<int>(lineIds);
+            using (var db = new ZayitDb(_dbPath))
+            {
+                foreach (var (id, _, bookId, bookTitle) in db.FetchSearchResultsStreaming(idList))
+                    yield return (id, bookId, bookTitle);
+            }
         }
 
         public SnippetResult GenerateSnippet(SearchResult result, bool requireOrdered = false,

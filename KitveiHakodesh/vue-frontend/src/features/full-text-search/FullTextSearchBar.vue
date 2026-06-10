@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, computed } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import {
   IconSearch20Regular,
@@ -8,7 +8,20 @@ import {
   IconOptions20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import BottomSearchBar from '@/components/BottomSearchBar.vue'
-import { useSearchCacheStore } from '@/stores/searchCacheStore'
+
+// Module-level recent queries — survive tab switches within a session, cleared on reload.
+// Max 20 entries, newest first, deduped.
+const _recentQueries: string[] = []
+const MAX_RECENT = 20
+
+function recordQuery(q: string) {
+  const normalized = q.trim()
+  if (!normalized) return
+  const index = _recentQueries.indexOf(normalized)
+  if (index !== -1) _recentQueries.splice(index, 1)
+  _recentQueries.unshift(normalized)
+  if (_recentQueries.length > MAX_RECENT) _recentQueries.length = MAX_RECENT
+}
 
 const props = defineProps<{
   searchQuery: string
@@ -34,13 +47,7 @@ const inputRef = ref<HTMLInputElement | null>(null)
 const filterBtnRef = ref<HTMLElement | null>(null)
 const advancedBtnRef = ref<HTMLElement | null>(null)
 const localQuery = ref(props.searchQuery)
-const recentQueries = ref<string[]>([])
-
-const cacheStore = useSearchCacheStore()
-
-onMounted(async () => {
-  recentQueries.value = await cacheStore.getRecentQueries(10)
-})
+const recentQueries = ref<string[]>([..._recentQueries])
 
 // Hide the datalist only when the search term part of the input exactly matches
 // one of the recent queries — at that point the dropdown is superfluous.
@@ -95,8 +102,8 @@ watch(localQuery, (v) => (v ? pauseTyping() : resumeTyping()))
 function handleSearch() {
   if (localQuery.value.trim()) {
     emit('search', localQuery.value)
-    // Refresh history so the query just submitted appears next time
-    cacheStore.getRecentQueries(10).then((q) => { recentQueries.value = q })
+    recordQuery(localQuery.value.split('@')[0]!.trim())
+    recentQueries.value = [..._recentQueries]
   }
 }
 function handleClear() {

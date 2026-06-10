@@ -433,9 +433,12 @@ namespace KitveiHakodeshLib.Search
         // ── Search ────────────────────────────────────────────────────────────────
 
         public void HandleSearchStart(JsonElement root, string id)
-            => _searcher.HandleSearchStart(root, id);
+            => _searcher.HandleSearchIds(root, id);
 
         public void HandleSearchCancel(JsonElement root, string id)
             => _searcher.HandleSearchCancel(root, id);
+
+        public void HandleGetSnippets(JsonElement root, string id)
+            => _searcher.HandleGetSnippets(root, id);
     }
 }

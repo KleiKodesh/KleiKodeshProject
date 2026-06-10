@@ -410,6 +410,7 @@ namespace KitveiHakodeshLib
                         case "GetFtsIndexingProgress": _search.HandleGetProgress(id); break;
                         case "FtsSearchStart": _search.HandleSearchStart(root, id); break;
                         case "FtsSearchCancel": _search.HandleSearchCancel(root, id); break;
+                        case "FtsGetSnippets": _search.HandleGetSnippets(root, id); break;
                         case "DeleteFtsIndex":
                             _search.HandleDeleteIndex(id);
                             break;

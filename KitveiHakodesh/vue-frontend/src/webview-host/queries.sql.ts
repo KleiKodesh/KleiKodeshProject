@@ -123,6 +123,40 @@ export const SQL = {
     GROUP BY lineId
   `,
 
+  /**
+   * Same as GET_TOC_PATHS_FOR_LINES but also returns the book title.
+   * Used by full-text search phase 2 to avoid a separate book lookup.
+   */
+  GET_TOC_PATHS_AND_TITLES_FOR_LINES: (count: number) => `
+    WITH RECURSIVE ancestors(lineId, bookId, entryId, parentId, text, depth) AS (
+      SELECT lt.lineId, te.bookId, te.id, te.parentId, tt.text, 0
+      FROM line_toc lt
+      JOIN tocEntry te ON te.id = lt.tocEntryId
+      JOIN tocText tt ON tt.id = te.textId
+      WHERE lt.lineId IN (${Array(count).fill('?').join(', ')})
+      UNION ALL
+      SELECT a.lineId, a.bookId, te.id, te.parentId, tt.text, a.depth + 1
+      FROM ancestors a
+      JOIN tocEntry te ON te.id = a.parentId
+      JOIN tocText tt ON tt.id = te.textId
+    ),
+    ordered AS (
+      SELECT a.lineId, a.bookId, a.text, a.depth,
+             MAX(a.depth) OVER (PARTITION BY a.lineId) AS maxDepth,
+             b.title AS bookTitle
+      FROM ancestors a
+      JOIN book b ON b.id = a.bookId
+    )
+    SELECT lineId, MAX(bookTitle) AS bookTitle, group_concat(text, ' ') AS tocPath
+    FROM (
+      SELECT lineId, bookTitle, text
+      FROM ordered
+      WHERE NOT (depth = maxDepth AND text = bookTitle)
+      ORDER BY lineId, depth DESC
+    )
+    GROUP BY lineId
+  `,
+
   // ── Lines ────────────────────────────────────────────────────────────────────
 
   /** All lines for a book */
