@@ -337,8 +337,8 @@ export function useBookView(
   }
 
   const { onNavigateSection } = useCommentaryNavigation(
-    bookId, selectedLineId, commentaryLineId, commentaryVisible, commentaryLoading,
-    () => lines.value, () => tocEntries.value, linesContentRef, commentaryViewRef,
+    bookId, selectedLineId, commentaryLineId, commentaryVisible,
+    () => lines.value, () => tocEntries.value, linesContentRef,
   )
 
   const { pinnedCommentaryGroup, restorePin } = usePinnedCommentary(

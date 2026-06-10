@@ -52,6 +52,8 @@ export function useCommentaryScroll(
   }
 
   function scrollToGroup(bookId: number, sectionLabel?: string, subSectionLabel?: string) {
+    const el = scrollerEl()
+    if (!el) return
     const idx = flatItems().findIndex(
       (item) =>
         item.type === 'header' &&
@@ -60,12 +62,14 @@ export function useCommentaryScroll(
         (subSectionLabel == null || item.subSectionLabel === subSectionLabel),
     )
     if (idx === -1) return
-    virtualizer().scrollToIndex(idx, { align: 'start' })
-    // scrollToIndex is synchronous for already-measured items — read scrollTop immediately
-    scrollTop.value = scrollerEl()?.scrollTop ?? 0
-    // also update after paint in case the browser deferred the scroll
-    requestAnimationFrame(() => {
-      scrollTop.value = scrollerEl()?.scrollTop ?? 0
+    // Use scrollToIndexWithRetry so the scroll lands correctly even when the
+    // target header hasn't been measured by the virtualizer yet (e.g. immediately
+    // after a commentary reload triggered by section navigation). Plain
+    // virtualizer().scrollToIndex() is asynchronous and races with the render
+    // cycle — scrollToIndexWithRetry keeps retrying until the item is measured
+    // and then sets scrollTop directly.
+    scrollToIndexWithRetry(virtualizer() as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>, el, idx, 0, 5, () => {
+      scrollTop.value = el.scrollTop
     })
   }
 

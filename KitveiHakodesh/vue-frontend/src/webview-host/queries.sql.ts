@@ -232,6 +232,49 @@ export const SQL = {
   `,
 
   /**
+   * Given a batch of TOC section ranges (sectionStart, sectionEnd pairs) find the
+   * one with the smallest sectionStart that contains at least one link to commentaryBookId.
+   * Used by next-section TOC navigation to replace the serial HAS_COMMENTARY_IN_RANGE loop.
+   * Bind order: mainBookId, commentaryBookId, then interleaved (sectionStart, sectionEnd) pairs.
+   */
+  GET_NEXT_TOC_SECTION_WITH_COMMENTARY: (count: number) => `
+    SELECT ranges.sectionStart
+    FROM (VALUES ${Array(count).fill('(?, ?)').join(', ')}) AS ranges(sectionStart, sectionEnd)
+    WHERE EXISTS (
+      SELECT 1
+      FROM line ln
+      JOIN link lk ON lk.sourceLineId = ln.id
+      WHERE ln.bookId = ?
+        AND lk.targetBookId = ?
+        AND ln.lineIndex >= ranges.sectionStart
+        AND ln.lineIndex < ranges.sectionEnd
+    )
+    ORDER BY ranges.sectionStart ASC
+    LIMIT 1
+  `,
+
+  /**
+   * Same as GET_NEXT_TOC_SECTION_WITH_COMMENTARY but returns the candidate with the
+   * largest sectionStart — used for prev-section TOC navigation.
+   * Bind order: mainBookId, commentaryBookId, then interleaved (sectionStart, sectionEnd) pairs.
+   */
+  GET_PREV_TOC_SECTION_WITH_COMMENTARY: (count: number) => `
+    SELECT ranges.sectionStart
+    FROM (VALUES ${Array(count).fill('(?, ?)').join(', ')}) AS ranges(sectionStart, sectionEnd)
+    WHERE EXISTS (
+      SELECT 1
+      FROM line ln
+      JOIN link lk ON lk.sourceLineId = ln.id
+      WHERE ln.bookId = ?
+        AND lk.targetBookId = ?
+        AND ln.lineIndex >= ranges.sectionStart
+        AND ln.lineIndex < ranges.sectionEnd
+    )
+    ORDER BY ranges.sectionStart DESC
+    LIMIT 1
+  `,
+
+  /**
    * Given a source line id and a target book id, return the target line id and
    * its lineIndex — used to resolve the opening position when a direct link
    * already exists on the current top line.

@@ -6,10 +6,11 @@
  *     TOC entry at the same level that has commentary for the given book.
  *   - Normal mode: navigates to the next/prev line that has commentary for the book.
  *
- * After navigating, waits for commentary to finish loading then scrolls the
- * commentary view to the target book's group.
+ * After navigating, the main text scrolls to the target line via scrollToLineId.
+ * The commentary panel scrolls to the target book's group via setupGroupReloadScroll
+ * in useCommentaryScroll — the same path that fires when a user clicks a line.
+ * No manual watch(commentaryLoading) is needed here.
  */
-import { watch, nextTick } from 'vue'
 import {
   findNextCommentarySection,
   findPrevCommentarySection,
@@ -21,45 +22,30 @@ import type { LineItem } from '../lines/useBookViewLinesTable'
 import type { TocEntry } from '../toc/useBookViewToc'
 
 interface LinesContentRef { scrollToLineId: (lineId: number, lineIndex?: number) => void }
-interface CommentaryViewRef { scrollToGroup: (bookId: number) => void }
 
 export function useCommentaryNavigation(
   bookId: number | undefined,
   selectedLineId: Ref<number | null>,
   commentaryLineId: Ref<number | null>,
   commentaryVisible: Ref<boolean>,
-  commentaryLoading: Ref<boolean>,
   lines: () => LineItem[],
   tocEntries: () => TocEntry[],
   linesContentRef: () => LinesContentRef | null,
-  commentaryViewRef: () => CommentaryViewRef | null,
 ) {
-  let pendingNavStop: (() => void) | null = null
-
   async function onNavigateSection(direction: 'next' | 'prev', commentaryBookId: number) {
     if (selectedLineId.value == null || bookId == null) return
-    if (pendingNavStop) {
-      pendingNavStop()
-      pendingNavStop = null
-    }
 
     function afterNavigate(targetLineId: number) {
       selectedLineId.value = targetLineId
       commentaryLineId.value = targetLineId
       commentaryVisible.value = true
+      // scrollToLineId uses scrollToIndexWithRetry internally — handles lines that
+      // haven't been measured yet without fighting the virtualizer.
       linesContentRef()?.scrollToLineId(targetLineId)
-      const stop = watch(
-        commentaryLoading,
-        (loading) => {
-          if (loading) return
-          if (commentaryLineId.value !== targetLineId) return
-          pendingNavStop = null
-          stop()
-          nextTick(() => commentaryViewRef()?.scrollToGroup(commentaryBookId))
-        },
-        { flush: 'sync' },
-      )
-      pendingNavStop = stop
+      // Commentary scroll is handled by setupGroupReloadScroll in useCommentaryScroll,
+      // which watches groups with flush:'post' and calls scrollToGroup (now backed by
+      // scrollToIndexWithRetry) once the reload settles. This is the same path that
+      // fires when a user clicks a line — no manual watch(commentaryLoading) needed.
     }
 
     // TOC mode: navigate to next/prev toc entry at same level that has commentary

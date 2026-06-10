@@ -10,8 +10,7 @@ namespace KitveiHakodeshLib.Dictionary
     /// during ThisAddIn_Startup. When null (e.g. standalone / dev), all calls
     /// return empty results so the feature degrades gracefully.
     ///
-    /// This class is intentionally self-contained so it can be deleted in one shot
-    /// if the feature is no longer needed.
+    /// This class is intentionally self-contained 
     /// </summary>
     public static class WordThesaurusProvider
     {
