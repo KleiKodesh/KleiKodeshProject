@@ -45,6 +45,10 @@ export function useCommentaryScroll(
     }
   })
 
+  // Set to true while restoreCommentaryScrollPos is running — suppresses
+  // setupGroupReloadScroll so it doesn't overwrite the in-flight restore scroll.
+  let isRestoringScrollPos = false
+
   function onScroll(emitScroll: (scrollIndex: number, scrollOffset: number) => void) {
     scrollTop.value = scrollerEl()?.scrollTop ?? 0
     const pos = captureScrollPos()
@@ -97,7 +101,10 @@ export function useCommentaryScroll(
         for (const m of cache) {
           const item = flatItems()[m.index]
           if (item?.type !== 'header') continue
-          if (m.end <= finalScrollTop + NAV_HEIGHT + 5) visibleHeader = item
+          // Use start-based check: the header is "at the top" if its start is at or
+          // just below scrollTop (within NAV_HEIGHT). This is more reliable than
+          // the end-based stickyHeader check when the header is exactly at the top.
+          if (m.start <= finalScrollTop + NAV_HEIGHT + 5) visibleHeader = item
           else break
         }
         if (!visibleHeader) visibleHeader = flatItems().find((i: any) => i.type === 'header') ?? null
@@ -274,6 +281,7 @@ export function useCommentaryScroll(
   }
 
   function restoreCommentaryScrollPos(scrollIndex: number, scrollOffset: number): Promise<void> {
+    isRestoringScrollPos = true
     return new Promise<void>((resolve) => {
       let attempts = 0
       const MAX_ATTEMPTS = 20
@@ -346,7 +354,7 @@ export function useCommentaryScroll(
       }
 
       startRestore()
-    })
+    }).finally(() => { isRestoringScrollPos = false })
   }
 
   const topVisibleFlatIndex = computed(() => {
@@ -377,6 +385,10 @@ export function useCommentaryScroll(
         // the right flatIndex but wrong scrollTop. Wait for loading=false.
         if (isLoading()) {
           console.log(`[CommentaryScroll] setupGroupReloadScroll still loading, skipping groups=${newGroups.length} t=${Date.now() % 100000}`)
+          return
+        }
+        if (isRestoringScrollPos) {
+          console.log(`[CommentaryScroll] setupGroupReloadScroll restore in progress, skipping groups=${newGroups.length} t=${Date.now() % 100000}`)
           return
         }
         const generation = ++scrollGeneration

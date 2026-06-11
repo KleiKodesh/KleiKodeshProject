@@ -273,20 +273,14 @@ export const SQL = {
    * Given a batch of TOC section ranges (sectionStart, sectionEnd pairs) find the
    * one with the smallest sectionStart that contains at least one link to commentaryBookId.
    * Used by next-section TOC navigation to replace the serial HAS_COMMENTARY_IN_RANGE loop.
-   * Bind order: mainBookId, commentaryBookId, then interleaved (sectionStart, sectionEnd) pairs.
+   * Bind order: interleaved (sectionStart, sectionEnd) pairs, then mainBookId, commentaryBookId.
    */
   GET_NEXT_TOC_SECTION_WITH_COMMENTARY: (count: number) => `
+    WITH ranges(sectionStart, sectionEnd) AS (VALUES ${Array(count).fill('(?, ?)').join(', ')})
     SELECT ranges.sectionStart
-    FROM (VALUES ${Array(count).fill('(?, ?)').join(', ')}) AS ranges(sectionStart, sectionEnd)
-    WHERE EXISTS (
-      SELECT 1
-      FROM line ln
-      JOIN link lk ON lk.sourceLineId = ln.id
-      WHERE ln.bookId = ?
-        AND lk.targetBookId = ?
-        AND ln.lineIndex >= ranges.sectionStart
-        AND ln.lineIndex < ranges.sectionEnd
-    )
+    FROM ranges
+    JOIN line ln ON ln.bookId = ? AND ln.lineIndex >= ranges.sectionStart AND ln.lineIndex < ranges.sectionEnd
+    JOIN link lk ON lk.sourceLineId = ln.id AND lk.targetBookId = ?
     ORDER BY ranges.sectionStart ASC
     LIMIT 1
   `,
@@ -294,20 +288,14 @@ export const SQL = {
   /**
    * Same as GET_NEXT_TOC_SECTION_WITH_COMMENTARY but returns the candidate with the
    * largest sectionStart — used for prev-section TOC navigation.
-   * Bind order: mainBookId, commentaryBookId, then interleaved (sectionStart, sectionEnd) pairs.
+   * Bind order: interleaved (sectionStart, sectionEnd) pairs, then mainBookId, commentaryBookId.
    */
   GET_PREV_TOC_SECTION_WITH_COMMENTARY: (count: number) => `
+    WITH ranges(sectionStart, sectionEnd) AS (VALUES ${Array(count).fill('(?, ?)').join(', ')})
     SELECT ranges.sectionStart
-    FROM (VALUES ${Array(count).fill('(?, ?)').join(', ')}) AS ranges(sectionStart, sectionEnd)
-    WHERE EXISTS (
-      SELECT 1
-      FROM line ln
-      JOIN link lk ON lk.sourceLineId = ln.id
-      WHERE ln.bookId = ?
-        AND lk.targetBookId = ?
-        AND ln.lineIndex >= ranges.sectionStart
-        AND ln.lineIndex < ranges.sectionEnd
-    )
+    FROM ranges
+    JOIN line ln ON ln.bookId = ? AND ln.lineIndex >= ranges.sectionStart AND ln.lineIndex < ranges.sectionEnd
+    JOIN link lk ON lk.sourceLineId = ln.id AND lk.targetBookId = ?
     ORDER BY ranges.sectionStart DESC
     LIMIT 1
   `,
