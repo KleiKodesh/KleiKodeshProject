@@ -34,31 +34,21 @@ export function scrollToIndexWithRetry(
 
   function attempt() {
     requestAnimationFrame(() => {
-      if (isCancelled?.()) {
-        console.log('[scrollToIndexWithRetry] cancelled at attempt=' + attempts)
-        return
-      }
+      if (isCancelled?.()) return
       const idx = resolveIndex()
       const m = idx >= 0 ? virtualizer.measurementsCache.find((c) => c.index === idx) : undefined
-      const size = m ? m.end - m.start : 0
-      console.log('[scrollToIndexWithRetry] attempt=' + attempts + ' idx=' + idx + ' measured=' + !!m + ' size=' + size + ' cacheSize=' + virtualizer.measurementsCache.length + (m ? ' start=' + m.start : ''))
 
       if (idx < 0 || !m) {
         if (idx >= 0) virtualizer.scrollToIndex(idx, { align: 'start' })
         if (++attempts < maxRetries) attempt()
-        else console.warn('[scrollToIndexWithRetry] gave up after ' + maxRetries + ' attempts idx=' + idx)
         return
       }
 
       const targetScrollTop = Math.max(0, m.start - gap)
       scrollerEl.scrollTop = targetScrollTop
-      console.log('[scrollToIndexWithRetry] set scrollTop=' + targetScrollTop + ' for idx=' + idx + ' start=' + m.start)
 
       requestAnimationFrame(() => {
-        if (isCancelled?.()) {
-          console.log('[scrollToIndexWithRetry] cancelled in verify rAF')
-          return
-        }
+        if (isCancelled?.()) return
 
         const freshIdx = resolveIndex()
         const freshM = freshIdx >= 0
@@ -67,18 +57,10 @@ export function scrollToIndexWithRetry(
         const freshTarget = freshM ? Math.max(0, freshM.start - gap) : targetScrollTop
         const actual = scrollerEl.scrollTop
 
-        console.log('[scrollToIndexWithRetry] verify: actual=' + actual + ' freshTarget=' + freshTarget + ' freshIdx=' + freshIdx + ' freshStart=' + (freshM?.start ?? 'n/a') + ' cacheSize=' + virtualizer.measurementsCache.length)
-
         if (Math.abs(actual - freshTarget) > 2) {
-          if (++attempts < maxRetries) {
-            console.log('[scrollToIndexWithRetry] mismatch, retry ' + attempts + '/' + maxRetries)
-            attempt()
-          } else {
-            console.warn('[scrollToIndexWithRetry] gave up after ' + maxRetries + ' total attempts')
-            onScrolled?.()
-          }
+          if (++attempts < maxRetries) attempt()
+          else onScrolled?.()
         } else {
-          console.log('[scrollToIndexWithRetry] confirmed at ' + actual)
           onScrolled?.()
         }
       })

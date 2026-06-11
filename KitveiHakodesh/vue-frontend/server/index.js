@@ -48,9 +48,6 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ rows }))
     } catch (err) {
-      console.error('SQL ERROR:', err.message)
-      console.error('SQL:', JSON.parse(body).sql?.slice(0, 300))
-      console.error('PARAMS:', JSON.stringify(JSON.parse(body).params?.slice(0, 10)))
       res.writeHead(500, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: err.message }))
     }

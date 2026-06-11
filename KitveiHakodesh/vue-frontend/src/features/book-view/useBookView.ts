@@ -354,7 +354,6 @@ export function useBookView(
   )
 
   function onNavigateSection(direction: 'next' | 'prev', commentaryBookId: number) {
-    console.log('[BookView] onNavigateSection direction=' + direction + ' commentaryBookId=' + commentaryBookId)
     const group = groups.value.find((g) => g.bookId === commentaryBookId)
     setPendingPin(group
       ? { bookId: commentaryBookId, sectionLabel: group.sectionLabel ?? '', subSectionLabel: group.subSectionLabel ?? '' }
@@ -442,7 +441,6 @@ export function useBookView(
           
           if (!ready) return
           stopLoading?.()
-          console.log(`[BookView] restore: groups ready, calling restoreCommentaryScrollPos si=${si} so=${so} t=${Date.now() % 100000}`)
           const viewRef = commentaryViewRef()
           if (viewRef) {
             

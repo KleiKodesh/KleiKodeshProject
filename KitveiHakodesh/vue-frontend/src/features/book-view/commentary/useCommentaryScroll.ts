@@ -63,8 +63,6 @@ export function useCommentaryScroll(
     const el = scrollerEl()
     if (!el) return
     const token = ++scrollToGroupToken
-    console.log(`[CommentaryScroll] scrollToGroup token=${token} bookId=${bookId} section="${sectionLabel}" t=${Date.now() % 100000}`)
-    console.trace('[CommentaryScroll] scrollToGroup caller')
 
     // Resolve the flat index fresh on each attempt — flatItems can change between
     // the time scrollToGroup is called and the rAF fires (new groups load completes,
@@ -83,47 +81,9 @@ export function useCommentaryScroll(
       virtualizer() as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
       el, resolveIndex, -8, 5,
       () => {
-        const finalScrollTop = el.scrollTop
-        scrollTop.value = finalScrollTop
-        const cache = (virtualizer() as any).measurementsCache
-        // Log all headers in the cache around the target position for diagnosis
-        const allHeaders = flatItems()
-          .map((item: any, i: number) => ({ item, i }))
-          .filter(({ item }: any) => item.type === 'header')
-          .map(({ item, i }: any) => {
-            const m = cache.find((c: any) => c.index === i)
-            return `[${i}]bookId=${item.bookId} start=${m?.start ?? '?'} end=${m?.end ?? '?'}`
-          })
-          .join(' | ')
-        console.log(`[CommentaryScroll] onScrolled token=${token} flatItems=${flatItems().length} scrollTop=${finalScrollTop} t=${Date.now() % 100000}`)
-        console.log(`[CommentaryScroll] headers in flatItems: ${allHeaders}`)
-        let visibleHeader: any = null
-        for (const m of cache) {
-          const item = flatItems()[m.index]
-          if (item?.type !== 'header') continue
-          // Use start-based check: the header is "at the top" if its start is at or
-          // just below scrollTop (within NAV_HEIGHT). This is more reliable than
-          // the end-based stickyHeader check when the header is exactly at the top.
-          if (m.start <= finalScrollTop + NAV_HEIGHT + 5) visibleHeader = item
-          else break
-        }
-        if (!visibleHeader) visibleHeader = flatItems().find((i: any) => i.type === 'header') ?? null
-        const visibleBookId = visibleHeader?.bookId ?? null
-        const match = visibleBookId === bookId
-        console.log(`[CommentaryScroll] scrollToGroup token=${token} DONE finalScrollTop=${finalScrollTop} target=bookId=${bookId} visible=bookId=${visibleBookId} match=${match} t=${Date.now() % 100000}`)
-        if (!match) {
-          console.warn(`[CommentaryScroll] *** MISMATCH *** target=${bookId} visible=${visibleBookId} scrollTop=${finalScrollTop}`)
-          // Log the item at the resolved index at callback time
-          const freshIdx = resolveIndex()
-          const freshItem = flatItems()[freshIdx]
-          console.warn(`[CommentaryScroll] resolveIndex at callback=${freshIdx} item=${freshItem ? `bookId=${freshItem.bookId}` : 'null'} flatItems.length=${flatItems().length}`)
-        }
+        scrollTop.value = el.scrollTop
       },
-      () => {
-        const cancelled = token !== scrollToGroupToken
-        if (cancelled) console.log(`[CommentaryScroll] scrollToGroup token=${token} CANCELLED (current=${scrollToGroupToken}) bookId=${bookId}`)
-        return cancelled
-      },
+      () => token !== scrollToGroupToken,
     )
   }
 
@@ -284,7 +244,6 @@ export function useCommentaryScroll(
     isRestoringScrollPos = true
     // Cancel any in-flight or queued scrollToGroup call — restore takes priority.
     scrollToGroupToken++
-    console.log(`[CommentaryScroll] restoreCommentaryScrollPos START scrollIndex=${scrollIndex} scrollOffset=${scrollOffset} t=${Date.now() % 100000}`)
     return new Promise<void>((resolve) => {
       let attempts = 0
       const MAX_ATTEMPTS = 20
@@ -361,10 +320,7 @@ export function useCommentaryScroll(
       // Bump the token to cancel any scrollToGroup that started concurrently with
       // restore and is now in its rAF chain — restore takes priority.
       scrollToGroupToken++
-      requestAnimationFrame(() => {
-        isRestoringScrollPos = false
-        console.log(`[CommentaryScroll] restoreCommentaryScrollPos DONE scrollTop=${scrollerEl()?.scrollTop ?? 'n/a'} t=${Date.now() % 100000}`)
-      })
+      requestAnimationFrame(() => { isRestoringScrollPos = false })
     })
   }
 
@@ -394,44 +350,20 @@ export function useCommentaryScroll(
         // section range, causing groups to update twice. The first update has a
         // measurement cache from the previous groups list, so the resolver finds
         // the right flatIndex but wrong scrollTop. Wait for loading=false.
-        if (isLoading()) {
-          console.log(`[CommentaryScroll] setupGroupReloadScroll still loading, skipping groups=${newGroups.length} t=${Date.now() % 100000}`)
-          return
-        }
-        if (isRestoringScrollPos) {
-          console.log(`[CommentaryScroll] setupGroupReloadScroll restore in progress, skipping groups=${newGroups.length} t=${Date.now() % 100000}`)
-          return
-        }        const generation = ++scrollGeneration
+        if (isLoading()) return
+        if (isRestoringScrollPos) return
+        const generation = ++scrollGeneration
         await nextTick()
-        if (generation !== scrollGeneration) {
-          console.log(`[CommentaryScroll] setupGroupReloadScroll gen=${generation} superseded after tick1, skipping t=${Date.now() % 100000}`)
-          return
-        }
+        if (generation !== scrollGeneration) return
         const pinned = pinnedGroup()
-        console.log(`[CommentaryScroll] setupGroupReloadScroll gen=${generation} groups=${newGroups.length} pinned=${pinned ? `bookId=${pinned.bookId} section="${pinned.sectionLabel}"` : 'null'} t=${Date.now() % 100000}`)
         if (!pinned) return
         const found = newGroups.some((g: any) => g.bookId === pinned.bookId)
-        console.log(`[CommentaryScroll] pinned bookId=${pinned.bookId} found=${found}`)
         if (found) {
           await nextTick()
-          if (generation !== scrollGeneration) {
-            console.log(`[CommentaryScroll] setupGroupReloadScroll gen=${generation} superseded after tick2, skipping t=${Date.now() % 100000}`)
-            return
-          }
-          // Wait one rAF after the second nextTick — the virtualizer needs at least
-          // one render cycle after flatItems updates to populate measurementsCache
-          // with positions for the new list. Without this, the cache still holds
-          // positions from the previous groups list and we scroll to the wrong item.
+          if (generation !== scrollGeneration) return
           await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-          if (generation !== scrollGeneration) {
-            console.log(`[CommentaryScroll] setupGroupReloadScroll gen=${generation} superseded after rAF, skipping t=${Date.now() % 100000}`)
-            return
-          }
-          console.log(`[CommentaryScroll] → calling scrollToGroup bookId=${pinned.bookId} t=${Date.now() % 100000}`)
-          if (isRestoringScrollPos) {
-            console.log(`[CommentaryScroll] setupGroupReloadScroll restore still in progress at call point, aborting t=${Date.now() % 100000}`)
-            return
-          }
+          if (generation !== scrollGeneration) return
+          if (isRestoringScrollPos) return
           scrollToGroup(pinned.bookId, pinned.sectionLabel, pinned.subSectionLabel)
         }
       },
