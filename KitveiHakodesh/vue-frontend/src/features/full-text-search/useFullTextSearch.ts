@@ -1,19 +1,19 @@
 /**
  * Full-text search composable — wraps C# streaming search (FtsLib backend).
  *
- * C# sends search stream events via PostWebMessageAsString → chrome.webview message events.
- * C# sends indexing progress via ExecuteScriptAsync → window.__onWebviewEvent.
+ * C# sends search stream events (searchBatch, searchComplete, etc.) via
+ * PostWebMessageAsJson → JsBridge → window.__onWebviewEvent → onWebviewEvent().
+ * C# sends indexing progress the same way via the ftsIndexProgress event.
  *
  * Falls back to sample data in dev when the C# host is not present.
  */
 import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
-import { isHosted, query } from '@/webview-host/seforimDb'
+import { isHosted, query, onWebviewEvent } from '@/webview-host/seforimDb'
 import { SQL } from '@/webview-host/queries.sql'
 import { callBridgeAction } from '@/webview-host/bridge'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { expandKetivHaser } from '@/utils/hebrewKetivExpander'
 import type { FullTextSearchResult, SearchFailReason } from './fullTextSearchTypes'
 
 const DEV_SAMPLES: FullTextSearchResult[] = [
@@ -92,7 +92,7 @@ const DEV_SAMPLES: FullTextSearchResult[] = [
 ]
 
 // ── chrome.webview message listener (search stream events from C#) ────────────
-// C# sends search events via PostWebMessageAsString → chrome.webview message events.
+// C# sends search events via window.__onWebviewEvent (routed through JsBridge).
 // We maintain a single shared listener and route by searchId.
 
 type SearchListeners = {
@@ -104,55 +104,42 @@ type SearchListeners = {
 
 // Tracks in-flight onBatch promises so onComplete waits for all enrichment to finish
 const _pendingBatches = new Map<string, Promise<void>>()
-
 const _searchListeners = new Map<string, SearchListeners>()
-let _webviewListenerSetup = false
 
-function ensureWebviewListener() {
-  if (_webviewListenerSetup || !isHosted) return
-  _webviewListenerSetup = true
-  const wv = (window as any).chrome?.webview
-  if (!wv) return
-  wv.addEventListener('message', (event: MessageEvent) => {
-    try {
-      const msg = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
-      if (!msg?.type || !msg?.searchId) return
-      const listener = _searchListeners.get(msg.searchId)
-      if (!listener) return
-      switch (msg.type) {
-        case 'searchBatch': {
-          // Chain onto any in-flight batch promise so enrichment is always sequential
-          const prev = _pendingBatches.get(msg.searchId) ?? Promise.resolve()
-          const next = prev.then(() => listener.onBatch(msg.results ?? []))
-          _pendingBatches.set(msg.searchId, next)
-          break
-        }
-        case 'searchComplete':
-          // Wait for all in-flight batches to finish enrichment before completing
-          ;(_pendingBatches.get(msg.searchId) ?? Promise.resolve())
-            .then(() => {
-              _pendingBatches.delete(msg.searchId)
-              _searchListeners.delete(msg.searchId)
-              return listener.onComplete()
-            })
-            .catch((err) => console.error('[useFullTextSearch] onComplete failed:', err))
-          break
-        case 'searchCancelled':
-          _pendingBatches.delete(msg.searchId)
-          listener.onCancelled()
-          _searchListeners.delete(msg.searchId)
-          break
-        case 'searchError':
-          _pendingBatches.delete(msg.searchId)
-          listener.onError(msg.failReason ?? 'searchFailed')
-          _searchListeners.delete(msg.searchId)
-          break
-      }
-    } catch {
-      /* ignore malformed messages */
+// Single module-level listener registered once — routes all search stream events
+onWebviewEvent((msg) => {
+  const searchId = msg.searchId as string | undefined
+  if (!msg.type || !searchId) return
+  const listener = _searchListeners.get(searchId)
+  if (!listener) return
+  switch (msg.type) {
+    case 'searchBatch': {
+      const prev = _pendingBatches.get(searchId) ?? Promise.resolve()
+      const next = prev.then(() => listener.onBatch((msg.results as FullTextSearchResult[]) ?? []))
+      _pendingBatches.set(searchId, next)
+      break
     }
-  })
-}
+    case 'searchComplete':
+      ;(_pendingBatches.get(searchId) ?? Promise.resolve())
+        .then(() => {
+          _pendingBatches.delete(searchId)
+          _searchListeners.delete(searchId)
+          return listener.onComplete()
+        })
+        .catch((err) => console.error('[useFullTextSearch] onComplete failed:', err))
+      break
+    case 'searchCancelled':
+      _pendingBatches.delete(searchId)
+      listener.onCancelled()
+      _searchListeners.delete(searchId)
+      break
+    case 'searchError':
+      _pendingBatches.delete(searchId)
+      listener.onError((msg.failReason as SearchFailReason) ?? 'searchFailed')
+      _searchListeners.delete(searchId)
+      break
+  }
+})
 
 async function enrichTocPaths(batch: FullTextSearchResult[]): Promise<void> {
   const lineIds = [...new Set(batch.map((r) => r.lineId))]
@@ -196,13 +183,25 @@ async function enrichTocPaths(batch: FullTextSearchResult[]): Promise<void> {
 export function useFullTextSearch(isIndexing?: () => boolean) {
   const cache = useSearchCacheStore()
   const settings = useSettingsStore()
-  const { searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv } = storeToRefs(settings)
-  const results = ref<FullTextSearchResult[]>([])
+  const { searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchGrammarWrap } = storeToRefs(settings)
+
+  function _buildQueryToSend(normalizedQuery: string): string {
+    if (!settings.searchGrammarWrap) return normalizedQuery
+    return normalizedQuery
+      .split(/\s+/)
+      .map((word) => {
+        if (!word) return word
+        if (/[*~|%]/.test(word)) return word  // already has special syntax
+        return `%${word}%`
+      })
+      .join(' ')
+  }  const results = ref<FullTextSearchResult[]>([])
   const isSearching = ref(false)
   const hasSearched = ref(false)
   const executedQuery = ref('')
   const searchError = ref<SearchFailReason | null>(null)
   let currentSearchId: string | null = null
+  let resultsReadyResolve: (() => void) | null = null
 
   function _cleanup() {
     if (currentSearchId) {
@@ -227,7 +226,6 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   // Start the C# search stream and wire up listeners.
   // skipCount: number of results already in cache — C# will skip that many before streaming.
   async function _startStream(normalizedQuery: string, skipCount: number) {
-    ensureWebviewListener()
     const reply = await callBridgeAction<{ searchId: string; failReason: SearchFailReason | null }>(
       'FtsSearchStart',
       normalizedQuery,
@@ -245,9 +243,21 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     }
     currentSearchId = searchId
 
+    // Create a promise that resolves when the first batch arrives
+    let firstBatchReady = false
+    const resultsReady = new Promise<void>((resolve) => {
+      resultsReadyResolve = () => {
+        if (!firstBatchReady) {
+          firstBatchReady = true
+          resolve()
+        }
+      }
+    })
+
     _searchListeners.set(searchId, {
       onBatch: async (batch) => {
         if (currentSearchId !== searchId) return
+        resultsReadyResolve?.()
         await enrichTocPaths(batch)
         // Re-check after the async enrichment — currentSearchId may have changed
         // while enrichTocPaths was awaiting the SQL query.
@@ -268,7 +278,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         isSearching.value = false
         if (!isIndexing?.()) {
           try {
-            await cache.markComplete(normalizedQuery)
+            await cache.markComplete(normalizedQuery, false)
           } catch {
             /* non-fatal */
           }
@@ -288,6 +298,9 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         _cleanup()
       },
     })
+
+    // Wait for the first batch to arrive so results are ready before returning
+    await resultsReady
   }
 
   async function executeSearch(q: string) {
@@ -314,8 +327,8 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     // Always run a fresh search — the cache is only used for session restore
     // and tab switching (see loadCachedResults), never for a user-initiated search.
     try {
-      if (!isIndexing?.()) await cache.init(normalizedQuery)
-      await _startStream(normalizedQuery, 0)
+      if (!isIndexing?.()) await cache.init(normalizedQuery, normalizedQuery, false)
+      await _startStream(_buildQueryToSend(normalizedQuery), 0)
     } catch (err) {
       console.error('[useFullTextSearch] failed to start search:', err)
       isSearching.value = false
@@ -340,7 +353,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     // and would be served as if they were complete.
     if (isIndexing?.()) return false
     const normalizedQuery = q.trim().toLowerCase()
-    const cached = await cache.get(normalizedQuery)
+    const cached = await cache.get(normalizedQuery, normalizedQuery)
     if (!cached || cached.results.length === 0) return false
     results.value = cached.results
     executedQuery.value = q
@@ -365,6 +378,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     maxWordDistance: searchMaxWordDistance,
     requireOrdered: searchRequireOrdered,
     expandKetiv: searchExpandKetiv,
+    grammarWrap: searchGrammarWrap,
     executeSearch,
     cancelSearch,
     clearSearch,

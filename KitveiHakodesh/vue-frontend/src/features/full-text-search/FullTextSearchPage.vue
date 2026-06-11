@@ -56,6 +56,7 @@ const {
   maxWordDistance,
   requireOrdered,
   expandKetiv,
+  grammarWrap,
   executeSearch,
   cancelSearch,
   clearSearch,
@@ -100,6 +101,7 @@ let lastScrollOffset: number | undefined
 const isAdvancedActive = computed(
   () => maxWordDistance.value !== 10 || requireOrdered.value
      || !expandKetiv.value
+     || grammarWrap.value
      || settings.searchContextMarginWords !== 30,
 )
 
@@ -118,6 +120,7 @@ watch(
     maxWordDistance,
     requireOrdered,
     expandKetiv,
+    grammarWrap,
     () => settings.searchContextMarginWords,
   ],
   () => {
@@ -140,15 +143,14 @@ function onClearSearch() {
 }
 
 function onSaveScroll(pos: { scrollIndex: number; scrollOffset: number }) {
+  console.log('[SR:Page] onSaveScroll received', pos)
   lastScrollIndex = pos.scrollIndex
   lastScrollOffset = pos.scrollOffset
 }
 
 async function saveFilterState() {
-  // Capture scroll position directly from the list — don't rely on the saveScroll emit
-  // having already fired. onBeforeUnmount order is parent-first, child-second, so the
-  // emit-based lastScrollIndex would still be undefined when the parent unmounts.
   const captured = resultsListRef.value?.captureScrollPos()
+  console.log('[SR:Page] saveFilterState captured', captured, 'lastScroll index/offset', lastScrollIndex, lastScrollOffset)
   if (captured) {
     lastScrollIndex = captured.scrollIndex
     lastScrollOffset = captured.scrollOffset
@@ -162,6 +164,7 @@ async function saveFilterState() {
     searchScrollOffset: lastScrollOffset,
     searchZoom: zoom.value !== ZOOM_CONFIG.DEFAULT ? zoom.value : undefined,
   }
+  console.log('[SR:Page] saving to IDB', state)
   tabStore.setTabViewState(tabId, state)
 }
 
@@ -200,12 +203,17 @@ onMounted(async () => {
   }
 
   if (saved?.searchScrollIndex != null) {
+    console.log('[SR:Page] onMounted restoring index', saved.searchScrollIndex, 'rawScrollTop', saved.searchScrollOffset)
     initialScrollIndex.value = saved.searchScrollIndex
     initialScrollOffset.value = saved.searchScrollOffset ?? 0
     lastScrollIndex = saved.searchScrollIndex
     lastScrollOffset = saved.searchScrollOffset ?? 0
+  } else {
+    console.log('[SR:Page] onMounted — no saved scroll')
   }
 
+  // Restore search query and results from cache/session. The scroll position
+  // is restored automatically by FullTextSearchResultsList's watcher when results arrive.
   await restoreFromTab()
   searchBarRef.value?.focus()
 })
@@ -255,10 +263,12 @@ onBeforeUnmount(() => {
       :require-ordered="requireOrdered"
       :context-words="settings.searchContextMarginWords"
       :expand-ketiv="expandKetiv"
+      :grammar-wrap="grammarWrap"
       @update:max-word-distance="maxWordDistance = $event"
       @update:require-ordered="requireOrdered = $event"
       @update:context-words="settings.searchContextMarginWords = $event"
       @update:expand-ketiv="expandKetiv = $event"
+      @update:grammar-wrap="grammarWrap = $event"
       @close="isAdvancedOpen = false"
     />
 
@@ -266,6 +276,8 @@ onBeforeUnmount(() => {
       ref="searchBarRef"
       v-model:search-query="searchQuery"
       :is-searching="isSearching"
+      :result-count="filteredResults.length"
+      :total-result-count="results.length"
       :filter-count="checkedBookIds.size"
       :at-filter-count="atFilters.length"
       :is-advanced-open="isAdvancedOpen"

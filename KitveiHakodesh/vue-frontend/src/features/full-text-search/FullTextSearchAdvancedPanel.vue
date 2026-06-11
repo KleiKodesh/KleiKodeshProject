@@ -7,6 +7,7 @@ const props = defineProps<{
   requireOrdered: boolean
   contextWords: number
   expandKetiv: boolean
+  grammarWrap: boolean
 }>()
 
 const emit = defineEmits<{
@@ -14,6 +15,7 @@ const emit = defineEmits<{
   'update:requireOrdered': [boolean]
   'update:contextWords': [number]
   'update:expandKetiv': [boolean]
+  'update:grammarWrap': [boolean]
   close: []
 }>()
 
@@ -99,6 +101,15 @@ function onContextWordsInput(event: Event) {
           max="9999"
           @input="onContextWordsInput"
         />
+      </div>
+
+      <!-- Grammar wrap -->
+      <div class="option-row">
+        <span class="option-label">תחיליות וסופיות דקדוקיות</span>
+        <div class="toggle-group">
+          <button class="toggle-btn" :class="{ active: !props.grammarWrap }" @click="emit('update:grammarWrap', false)">לא</button>
+          <button class="toggle-btn" :class="{ active: props.grammarWrap }" @click="emit('update:grammarWrap', true)">כן</button>
+        </div>
       </div>
 
       <!-- כתיב expansion -->

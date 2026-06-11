@@ -125,7 +125,9 @@
     <Compile Include="Db\DbAccess.cs" />
     <Compile Include="Db\DbHandler.cs" />
     <Compile Include="HebrewBooks\HebrewBooksHandler.cs" />
-    <Compile Include="HebrewBooks\HebrewBooksCsvUpdater.cs" />
+    <Compile Include="HebrewBooks\HebrewBooksDb.cs" />
+    <Compile Include="FileSystemSearch\DocumentLocatorAdapter.cs" />
+    <Compile Include="FileSystemSearch\FileSystemSearchHandler.cs" />
     <Compile Include="Pdf\LocalFileHandler.cs" />
     <Compile Include="Pdf\WordToPdfConverter.cs" />
     <Compile Include="Search\FtsIndexState.cs" />
@@ -149,9 +151,12 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\FtsLib\Ftslib-Csharp\FtsLib\FtsLib.csproj">
+    <ProjectReference Include="..\Ftslib-Csharp\FtsLib\FtsLib.csproj">
       <Project>{76f9daa9-374f-40f9-8511-3239fb6e846e}</Project>
       <Name>FtsLib</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\DocumentLocator\DocumentLocator.Client\DocumentLocator.Client.csproj">
+      <Name>DocumentLocator.Client</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

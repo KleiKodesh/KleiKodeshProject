@@ -3,7 +3,7 @@ import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { IconSearchSparkle24Regular } from '@iconify-prerendered/vue-fluent'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { useEventListener } from '@vueuse/core'
+import { useEventListener, useDebounceFn } from '@vueuse/core'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 import type { FullTextSearchResult, SearchFailReason } from './fullTextSearchTypes'
@@ -57,8 +57,9 @@ function renderSnippet(snippet: string): string {
 }
 
 function captureScrollPos() {
+  if (!scrollEl.value) return null
   const first = virtualizer.value.getVirtualItems()[0]
-  if (!first || !scrollEl.value) return null
+  if (!first) return null
   return {
     scrollIndex: first.index,
     scrollOffset: Math.max(0, scrollEl.value.scrollTop - first.start),
@@ -66,31 +67,46 @@ function captureScrollPos() {
 }
 
 function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
-  // Two-rAF pattern: scrollToIndex triggers TanStack's internal correction.
-  // Wait one rAF for it to settle, then set scrollTop directly — TanStack is idle by then.
+  console.log('[SR:restore] START index', scrollIndex, 'offset', scrollOffset, 'totalSize', virtualizer.value.getTotalSize())
   programmaticScrolling = true
+
+  // Step 1: scroll to bring the item into the rendered window
   virtualizer.value.scrollToIndex(scrollIndex, { align: 'start' })
-  requestAnimationFrame(() => {
-    const item = virtualizer.value.measurementsCache.find((m) => m.index === scrollIndex)
-    if (item && scrollEl.value) scrollEl.value.scrollTop = item.start + scrollOffset
-    requestAnimationFrame(() => {
+
+  // Step 2: once item is measured, set scrollTop = item.start + offset
+  let attempts = 0
+  function applyOffset() {
+    const m = virtualizer.value.measurementsCache.find((c) => c.index === scrollIndex)
+    console.log(`[SR:restore] attempt ${attempts}: item.start=${m?.start} totalSize=${virtualizer.value.getTotalSize()} scrollTop=${scrollEl.value?.scrollTop}`)
+    if (m && scrollEl.value) {
+      const target = m.start + scrollOffset
+      scrollEl.value.scrollTop = target
+      console.log('[SR:restore] SET scrollTop =', target, '(item.start', m.start, '+ offset', scrollOffset, ')')
+      setTimeout(() => {
+        console.log('[SR:restore] DONE final scrollTop =', scrollEl.value?.scrollTop)
+        programmaticScrolling = false
+      }, 300)
+    } else if (++attempts < 20) {
+      setTimeout(applyOffset, 50)
+    } else {
+      console.warn('[SR:restore] gave up')
       programmaticScrolling = false
-    })
-  })
+    }
+  }
+  requestAnimationFrame(applyOffset)
 }
 
 {
-  // Restore scroll once results are populated — don't gate on isSearching because
-  // loadCachedResults can set isSearching=true while simultaneously populating results
-  // (partial cache + resume stream). We restore as soon as we have results to scroll into.
+  let restored = false
   const stopWatch = watch(
     () => props.results.length,
     (len) => {
+      if (restored) { stopWatch(); return }
       if (!len) return
-      if (props.initialScrollIndex == null) {
-        stopWatch()
-        return
-      }
+      if (props.initialScrollIndex == null) { console.log('[SR:watch] no initialScrollIndex, skipping'); stopWatch(); return }
+      if (len <= props.initialScrollIndex) { console.log('[SR:watch] waiting, len', len, '<=', props.initialScrollIndex); return }
+      console.log('[SR:watch] READY len', len, 'index', props.initialScrollIndex, 'rawScrollTop', props.initialScrollOffset)
+      restored = true
       stopWatch()
       nextTick(() => restoreScrollPos(props.initialScrollIndex!, props.initialScrollOffset ?? 0))
     },
@@ -99,9 +115,10 @@ function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
 }
 
 function savePos() {
-  if (programmaticScrolling) return
+  if (programmaticScrolling) { console.log('[SR:savePos] suppressed (programmatic)'); return }
   const pos = captureScrollPos()
-  if (!pos) return
+  if (!pos) { console.log('[SR:savePos] no pos'); return }
+  console.log('[SR:savePos] emitting', pos)
   emit('saveScroll', pos)
 }
 
@@ -121,7 +138,11 @@ useVirtualScrollerKeys(
   () => props.results.length,
 )
 
-function onScroll() {}
+const savePosDebouncedOnScroll = useDebounceFn(savePos, 200)
+
+function onScroll() {
+  if (!programmaticScrolling) savePosDebouncedOnScroll()
+}
 
 defineExpose({ captureScrollPos })
 </script>
@@ -137,17 +158,6 @@ defineExpose({ captureScrollPos })
       <span v-else-if="hasSearched && !results.length" class="empty-msg">לא נמצאו תוצאות</span>
     </div>
     <template v-else>
-      <div class="results-count">
-        <span v-if="isSearching" class="count-searching">
-          {{ results.length.toLocaleString() }} תוצאות עד כה...
-        </span>
-        <span v-else-if="results.length < totalResults">
-          {{ results.length.toLocaleString() }} מתוך {{ totalResults.toLocaleString() }} תוצאות
-        </span>
-        <span v-else>
-          {{ results.length.toLocaleString() }} תוצאות
-        </span>
-      </div>
       <div ref="scrollEl" class="scroller" tabindex="0" :style="{ fontSize: `${fontPx}px` }" @scroll="onScroll">
         <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
           <div
@@ -220,17 +230,6 @@ defineExpose({ captureScrollPos })
 .error-msg {
   color: color-mix(in srgb, var(--text-primary) 70%, #e05252);
 }
-.results-count {
-  padding: 4px 14px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  border-bottom: 1px solid var(--border-color);
-  direction: rtl;
-  flex-shrink: 0;
-}
-.count-searching {
-  opacity: 0.7;
-}
 .scroller {
   flex: 1;
   overflow-y: auto;
@@ -292,6 +291,10 @@ defineExpose({ captureScrollPos })
   direction: rtl;
   text-align: justify;
   user-select: text;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .snippet :deep(.match) {
   color: var(--accent-color);

@@ -25,7 +25,7 @@ namespace KitveiHakodeshLib.Bridge
         const msg = e.data;
 
         // Push events have no pending id — dispatch to the event handler
-        if (msg.event) {
+        if (msg.event || msg.type) {
             if (typeof window.__onWebviewEvent === 'function') window.__onWebviewEvent(msg);
             return;
         }

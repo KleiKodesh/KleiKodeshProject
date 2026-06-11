@@ -27,9 +27,9 @@ const DEFAULTS = {
   resumeLastRead: false,
   defaultAutoSyncCommentary: false,
   // Number of characters of context shown before and after the matched terms in a search snippet.
-  searchContextMarginWords: 200,
+  searchContextMarginWords: 30,
   // Advanced full-text search settings
-  searchMaxWordDistance: 50,
+  searchMaxWordDistance: 10,
   searchRequireOrdered: false,
   searchExpandKetiv: true,
   searchWildcardWrap: false,

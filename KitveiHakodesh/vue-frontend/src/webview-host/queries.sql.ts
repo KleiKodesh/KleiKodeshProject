@@ -157,6 +157,10 @@ export const SQL = {
     GROUP BY lineId
   `,
 
+  /** Fetch bookId for a batch of lineIds directly from the line table (fallback when line_toc has no entry). */
+  GET_BOOK_IDS_FOR_LINES: (count: number) =>
+    `SELECT id AS lineId, bookId FROM line WHERE id IN (${Array(count).fill('?').join(', ')})`,
+
   // ── Lines ────────────────────────────────────────────────────────────────────
 
   /** All lines for a book */

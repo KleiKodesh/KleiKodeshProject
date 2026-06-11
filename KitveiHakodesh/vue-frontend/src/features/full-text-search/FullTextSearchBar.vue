@@ -12,6 +12,8 @@ import BottomSearchBar from '@/components/BottomSearchBar.vue'
 const props = defineProps<{
   searchQuery: string
   isSearching: boolean
+  resultCount: number
+  totalResultCount: number
   filterCount: number
   atFilterCount: number
   isAdvancedOpen: boolean
@@ -113,6 +115,13 @@ defineExpose({ focus: () => inputRef.value?.focus(), filterBtnRef, advancedBtnRe
       @keydown.enter="handleSearch"
       @keydown.esc="handleClear"
     />
+    <span v-if="resultCount > 0 || (isSearching && resultCount > 0)" class="result-count-badge">
+      {{ resultCount.toLocaleString() }}
+      <template v-if="!isSearching && resultCount < totalResultCount">
+        / {{ totalResultCount.toLocaleString() }}
+      </template>
+      <template v-else-if="isSearching">...</template>
+    </span>
     <template #right>
       <button
         class="bar-btn"
@@ -177,6 +186,14 @@ defineExpose({ focus: () => inputRef.value?.focus(), filterBtnRef, advancedBtnRe
 }
 .filter-active {
   color: var(--accent-color);
+}
+.result-count-badge {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding: 0 4px;
+  direction: ltr;
 }
 .spinner-wrap {
   position: relative;
