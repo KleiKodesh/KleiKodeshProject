@@ -195,6 +195,19 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         return `%${word}%`
       })
       .join(' ')
+  }
+
+  function _buildCacheKey(normalizedQuery: string): string {
+    const queryToSend = _buildQueryToSend(normalizedQuery)
+    return [
+      queryToSend,
+      `d${settings.searchMaxWordDistance}`,
+      settings.searchRequireOrdered ? 'ord' : '',
+      settings.searchExpandKetiv ? 'ktv' : '',
+      `ctx${settings.searchContextMarginWords}`,
+    ]
+      .filter(Boolean)
+      .join('|')
   }  const results = ref<FullTextSearchResult[]>([])
   const isSearching = ref(false)
   const hasSearched = ref(false)
@@ -225,7 +238,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
 
   // Start the C# search stream and wire up listeners.
   // skipCount: number of results already in cache — C# will skip that many before streaming.
-  async function _startStream(normalizedQuery: string, skipCount: number) {
+  async function _startStream(normalizedQuery: string, skipCount: number, cacheKey?: string) {
     const reply = await callBridgeAction<{ searchId: string; failReason: SearchFailReason | null }>(
       'FtsSearchStart',
       normalizedQuery,
@@ -267,7 +280,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         // from a mid-build search would be cached as complete and served stale.
         if (!isIndexing?.()) {
           try {
-            await cache.appendBatch(normalizedQuery, JSON.parse(JSON.stringify(batch)))
+            await cache.appendBatch(cacheKey ?? normalizedQuery, JSON.parse(JSON.stringify(batch)))
           } catch {
             /* non-fatal — cache is best-effort */
           }
@@ -278,7 +291,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         isSearching.value = false
         if (!isIndexing?.()) {
           try {
-            await cache.markComplete(normalizedQuery, false)
+            await cache.markComplete(cacheKey ?? normalizedQuery, false)
           } catch {
             /* non-fatal */
           }
@@ -327,8 +340,9 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     // Always run a fresh search — the cache is only used for session restore
     // and tab switching (see loadCachedResults), never for a user-initiated search.
     try {
-      if (!isIndexing?.()) await cache.init(normalizedQuery, normalizedQuery, false)
-      await _startStream(_buildQueryToSend(normalizedQuery), 0)
+      const cacheKey = _buildCacheKey(normalizedQuery)
+      if (!isIndexing?.()) await cache.init(cacheKey, q, false)
+      await _startStream(_buildQueryToSend(normalizedQuery), 0, cacheKey)
     } catch (err) {
       console.error('[useFullTextSearch] failed to start search:', err)
       isSearching.value = false
@@ -344,24 +358,21 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
 
   function clearCachedResults(q: string): void {
     const normalizedQuery = q.trim().toLowerCase()
-    // Fire-and-forget — tab is closing, no need to await
-    cache.remove(normalizedQuery).catch(() => {/* non-fatal */})
+    cache.remove(_buildCacheKey(normalizedQuery)).catch(() => {/* non-fatal */})
   }
 
   async function loadCachedResults(q: string): Promise<boolean> {
-    // Don't restore from cache while indexing — the cached results are partial
-    // and would be served as if they were complete.
     if (isIndexing?.()) return false
     const normalizedQuery = q.trim().toLowerCase()
-    const cached = await cache.get(normalizedQuery, normalizedQuery)
+    const cacheKey = _buildCacheKey(normalizedQuery)
+    const cached = await cache.get(cacheKey, q)
     if (!cached || cached.results.length === 0) return false
     results.value = cached.results
     executedQuery.value = q
     hasSearched.value = true
-    // If incomplete, resume streaming in the background
     if (!cached.complete) {
       isSearching.value = true
-      _startStream(normalizedQuery, cached.results.length).catch((err) => {
+      _startStream(_buildQueryToSend(normalizedQuery), cached.results.length, cacheKey).catch((err) => {
         console.error('[useFullTextSearch] failed to resume stream after tab restore:', err)
         isSearching.value = false
       })

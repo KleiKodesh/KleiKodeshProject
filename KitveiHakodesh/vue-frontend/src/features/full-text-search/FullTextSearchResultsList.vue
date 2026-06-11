@@ -67,29 +67,17 @@ function captureScrollPos() {
 }
 
 function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
-  console.log('[SR:restore] START index', scrollIndex, 'offset', scrollOffset, 'totalSize', virtualizer.value.getTotalSize())
   programmaticScrolling = true
-
-  // Step 1: scroll to bring the item into the rendered window
   virtualizer.value.scrollToIndex(scrollIndex, { align: 'start' })
-
-  // Step 2: once item is measured, set scrollTop = item.start + offset
   let attempts = 0
   function applyOffset() {
     const m = virtualizer.value.measurementsCache.find((c) => c.index === scrollIndex)
-    console.log(`[SR:restore] attempt ${attempts}: item.start=${m?.start} totalSize=${virtualizer.value.getTotalSize()} scrollTop=${scrollEl.value?.scrollTop}`)
     if (m && scrollEl.value) {
-      const target = m.start + scrollOffset
-      scrollEl.value.scrollTop = target
-      console.log('[SR:restore] SET scrollTop =', target, '(item.start', m.start, '+ offset', scrollOffset, ')')
-      setTimeout(() => {
-        console.log('[SR:restore] DONE final scrollTop =', scrollEl.value?.scrollTop)
-        programmaticScrolling = false
-      }, 300)
+      scrollEl.value.scrollTop = m.start + scrollOffset
+      setTimeout(() => { programmaticScrolling = false }, 300)
     } else if (++attempts < 20) {
       setTimeout(applyOffset, 50)
     } else {
-      console.warn('[SR:restore] gave up')
       programmaticScrolling = false
     }
   }
@@ -103,9 +91,8 @@ function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
     (len) => {
       if (restored) { stopWatch(); return }
       if (!len) return
-      if (props.initialScrollIndex == null) { console.log('[SR:watch] no initialScrollIndex, skipping'); stopWatch(); return }
-      if (len <= props.initialScrollIndex) { console.log('[SR:watch] waiting, len', len, '<=', props.initialScrollIndex); return }
-      console.log('[SR:watch] READY len', len, 'index', props.initialScrollIndex, 'rawScrollTop', props.initialScrollOffset)
+      if (props.initialScrollIndex == null) { stopWatch(); return }
+      if (len <= props.initialScrollIndex) return
       restored = true
       stopWatch()
       nextTick(() => restoreScrollPos(props.initialScrollIndex!, props.initialScrollOffset ?? 0))
@@ -115,10 +102,9 @@ function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
 }
 
 function savePos() {
-  if (programmaticScrolling) { console.log('[SR:savePos] suppressed (programmatic)'); return }
+  if (programmaticScrolling) return
   const pos = captureScrollPos()
-  if (!pos) { console.log('[SR:savePos] no pos'); return }
-  console.log('[SR:savePos] emitting', pos)
+  if (!pos) return
   emit('saveScroll', pos)
 }
 

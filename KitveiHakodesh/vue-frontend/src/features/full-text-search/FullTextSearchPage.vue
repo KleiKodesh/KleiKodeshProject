@@ -143,14 +143,12 @@ function onClearSearch() {
 }
 
 function onSaveScroll(pos: { scrollIndex: number; scrollOffset: number }) {
-  console.log('[SR:Page] onSaveScroll received', pos)
   lastScrollIndex = pos.scrollIndex
   lastScrollOffset = pos.scrollOffset
 }
 
 async function saveFilterState() {
   const captured = resultsListRef.value?.captureScrollPos()
-  console.log('[SR:Page] saveFilterState captured', captured, 'lastScroll index/offset', lastScrollIndex, lastScrollOffset)
   if (captured) {
     lastScrollIndex = captured.scrollIndex
     lastScrollOffset = captured.scrollOffset
@@ -164,7 +162,6 @@ async function saveFilterState() {
     searchScrollOffset: lastScrollOffset,
     searchZoom: zoom.value !== ZOOM_CONFIG.DEFAULT ? zoom.value : undefined,
   }
-  console.log('[SR:Page] saving to IDB', state)
   tabStore.setTabViewState(tabId, state)
 }
 
@@ -203,13 +200,10 @@ onMounted(async () => {
   }
 
   if (saved?.searchScrollIndex != null) {
-    console.log('[SR:Page] onMounted restoring index', saved.searchScrollIndex, 'rawScrollTop', saved.searchScrollOffset)
     initialScrollIndex.value = saved.searchScrollIndex
     initialScrollOffset.value = saved.searchScrollOffset ?? 0
     lastScrollIndex = saved.searchScrollIndex
     lastScrollOffset = saved.searchScrollOffset ?? 0
-  } else {
-    console.log('[SR:Page] onMounted — no saved scroll')
   }
 
   // Restore search query and results from cache/session. The scroll position
