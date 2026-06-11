@@ -86,12 +86,21 @@ function openActiveBook() {
 }
 
 function handleSelect() {
+  // Only navigate if the user actually typed something — spurious 'change' events
+  // fire when the datalist re-renders (e.g. during virtualizer scroll). Those events
+  // have no preceding 'input' event so userHasTyped stays false.
+  if (!userHasTyped) return
+  userHasTyped = false
   const val = normalize(inputRef.value?.value ?? '')
   const match = props.groups.find(
     (g) => normalize(groupLabel(g)) === val || normalize(g.bookTitle) === val,
   )
   if (match) navigateToGroup(match)
 }
+
+// Set to true only when the user types — guards handleSelect against spurious
+// 'change' events fired by datalist re-renders during virtualizer scrolls.
+let userHasTyped = false
 
 function handleKeydown(e: KeyboardEvent) {
   if ((e.ctrlKey || e.metaKey) && e.code === 'KeyF') {
@@ -130,6 +139,7 @@ function handleKeydown(e: KeyboardEvent) {
         class="search-input"
         :list="`commentary-list-${componentId}`"
         :placeholder="activeFullLabel || 'חפש מפרש...'"
+        @input="userHasTyped = true"
         @change="handleSelect"
         @keydown="handleKeydown"
       />

@@ -22,6 +22,8 @@ export function useBookViewScrollSync(
   checkTocScrollProgress: (lineIndex: number) => boolean,
   getActiveTocEntry: (lineIndex: number) => TocEntry | null,
   getTocPath: (entry: TocEntry) => string,
+  setPendingPin: (group: { bookId: number; sectionLabel: string; subSectionLabel: string } | null) => void,
+  getActivePinnedGroup: () => { bookId: number; sectionLabel: string; subSectionLabel: string } | null,
 ) {
   const tabStore = useTabStore()
   const bookViewStore = useBookViewStore()
@@ -47,8 +49,13 @@ export function useBookViewScrollSync(
     const line = lines().find((l) => l.lineIndex === currentFullLineIndex.value)
     if (line && line.content !== null) {
       selectedLineId.value = line.id
+      // Capture the active pinned group synchronously now — groups are still loaded
+      // and activePinnedGroup is valid. By the time the timer fires and sets
+      // commentaryLineId (triggering a load + groups clear), this value is gone.
+      const capturedPin = getActivePinnedGroup()
       if (autoSelectCommentaryTimer) clearTimeout(autoSelectCommentaryTimer)
       autoSelectCommentaryTimer = setTimeout(() => {
+        setPendingPin(capturedPin)
         commentaryLineId.value = line.id
       }, 120)
     }

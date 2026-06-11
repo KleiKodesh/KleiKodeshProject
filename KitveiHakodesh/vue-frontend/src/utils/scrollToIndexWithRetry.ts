@@ -21,33 +21,53 @@ export function scrollToIndexWithRetry(
   topReserved = 0,
   maxRetries = 5,
   onScrolled?: () => void,
+  isCancelled?: () => boolean,
 ): void {
   let attempts = 0
   const gap = topReserved + 8
 
   function attempt() {
     requestAnimationFrame(() => {
+      if (isCancelled?.()) {
+        console.log(`[scrollToIndexWithRetry] cancelled at attempt=${attempts} index=${index}`)
+        return
+      }
       const m = virtualizer.measurementsCache.find((c) => c.index === index)
+      console.log(`[scrollToIndexWithRetry] attempt=${attempts} index=${index} measured=${!!m} cacheSize=${virtualizer.measurementsCache.length}`, m ? `start=${m.start}` : '')
 
       if (!m) {
-        // Item not yet rendered — ask the virtualizer to scroll it into range,
-        // then retry. Do NOT set scrollTop here; let the virtualizer do its job.
         virtualizer.scrollToIndex(index, { align: 'start' })
         if (++attempts < maxRetries) attempt()
+        else console.warn(`[scrollToIndexWithRetry] gave up after ${maxRetries} attempts for index=${index}`)
         return
       }
 
-      // Item is measured — set scrollTop directly. Do NOT call scrollToIndex
-      // here; it runs asynchronously and would overwrite our scrollTop value.
       const targetScrollTop = m.start - gap
       const currentScrollTop = scrollerEl.scrollTop
       const alreadyCorrect = Math.abs(currentScrollTop - targetScrollTop) <= 2
+      console.log(`[scrollToIndexWithRetry] SETTLING index=${index} targetScrollTop=${targetScrollTop} currentScrollTop=${currentScrollTop} alreadyCorrect=${alreadyCorrect}`)
 
       if (!alreadyCorrect) {
+        // Set scrollTop directly — do NOT use virtualizer.scrollToOffset here,
+        // which queues an async scroll and creates races with other in-flight scrolls.
         scrollerEl.scrollTop = targetScrollTop
       }
 
-      onScrolled?.()
+      // Verify the scroll stuck in the next frame.
+      requestAnimationFrame(() => {
+        if (isCancelled?.()) {
+          console.log(`[scrollToIndexWithRetry] cancelled in drift-check rAF index=${index}`)
+          return
+        }
+        const actual = scrollerEl.scrollTop
+        if (Math.abs(actual - targetScrollTop) > 2) {
+          console.log(`[scrollToIndexWithRetry] scroll drifted: actual=${actual}, re-applying targetScrollTop=${targetScrollTop}`)
+          scrollerEl.scrollTop = targetScrollTop
+        } else {
+          console.log(`[scrollToIndexWithRetry] scroll confirmed at ${actual}`)
+        }
+        onScrolled?.()
+      })
     })
   }
 

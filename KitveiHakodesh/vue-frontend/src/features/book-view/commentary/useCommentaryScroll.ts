@@ -51,6 +51,10 @@ export function useCommentaryScroll(
     if (pos) emitScroll(pos.scrollIndex, pos.scrollOffset)
   }
 
+  // Cancellation token for in-flight scrollToGroup calls. Each new call
+  // increments this so any previous rAF callbacks know to bail out.
+  let scrollToGroupToken = 0
+
   function scrollToGroup(bookId: number, sectionLabel?: string, subSectionLabel?: string) {
     const el = scrollerEl()
     if (!el) return
@@ -61,16 +65,16 @@ export function useCommentaryScroll(
         (sectionLabel == null || item.sectionLabel === sectionLabel) &&
         (subSectionLabel == null || item.subSectionLabel === subSectionLabel),
     )
+    console.log('[CommentaryScroll] scrollToGroup bookId=' + bookId + ' section="' + sectionLabel + '" → flatIndex=' + idx + ' (flatItems.length=' + flatItems().length + ')')
+    console.trace('[CommentaryScroll] scrollToGroup caller')
     if (idx === -1) return
-    // Use scrollToIndexWithRetry so the scroll lands correctly even when the
-    // target header hasn't been measured by the virtualizer yet (e.g. immediately
-    // after a commentary reload triggered by section navigation). Plain
-    // virtualizer().scrollToIndex() is asynchronous and races with the render
-    // cycle — scrollToIndexWithRetry keeps retrying until the item is measured
-    // and then sets scrollTop directly.
-    scrollToIndexWithRetry(virtualizer() as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>, el, idx, 0, 5, () => {
-      scrollTop.value = el.scrollTop
-    })
+    const token = ++scrollToGroupToken
+    scrollToIndexWithRetry(
+      virtualizer() as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
+      el, idx, 0, 5,
+      () => { scrollTop.value = el.scrollTop },
+      () => token !== scrollToGroupToken,
+    )
   }
 
   function scrollToFlatIndex(flatIndex: number) {
@@ -316,21 +320,32 @@ export function useCommentaryScroll(
     pinnedGroup: () => any,
   ) {
     let isFirstLoad = true
+    let scrollGeneration = 0
     watch(
       groups,
       async (newGroups) => {
-        // Skip the initial load — the session restore watcher handles the first scroll
-        // position. Only scroll to the pinned group on subsequent reloads (line navigation).
         if (isFirstLoad) { isFirstLoad = false; return }
         if (!newGroups.length) return
-        // Wait for nextTick before reading pinnedGroup — other watchers on the same
-        // groups change (e.g. the PIN label-refresh watcher) must flush first so
-        // pinnedGroup() reflects the up-to-date sectionLabel/subSectionLabel.
+        const generation = ++scrollGeneration
         await nextTick()
+        // If another groups change arrived while we were awaiting, bail — that
+        // newer invocation will handle the scroll.
+        if (generation !== scrollGeneration) {
+          console.log('[CommentaryScroll] setupGroupReloadScroll generation=' + generation + ' superseded, skipping')
+          return
+        }
         const pinned = pinnedGroup()
+        console.log('[CommentaryScroll] setupGroupReloadScroll fired, groups=' + newGroups.length + ', pinned:', pinned ? `bookId=${pinned.bookId} section="${pinned.sectionLabel}"` : 'null')
         if (!pinned) return
-        if (newGroups.some((g: any) => g.bookId === pinned.bookId)) {
+        const found = newGroups.some((g: any) => g.bookId === pinned.bookId)
+        console.log('[CommentaryScroll] pinned bookId=' + pinned.bookId + ' found in new groups:', found)
+        if (found) {
           await nextTick()
+          if (generation !== scrollGeneration) {
+            console.log('[CommentaryScroll] setupGroupReloadScroll generation=' + generation + ' superseded after second tick, skipping')
+            return
+          }
+          console.log('[CommentaryScroll] → scrolling to bookId=' + pinned.bookId)
           scrollToGroup(pinned.bookId, pinned.sectionLabel, pinned.subSectionLabel)
         }
       },

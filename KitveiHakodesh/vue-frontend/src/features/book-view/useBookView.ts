@@ -170,6 +170,13 @@ export function useBookView(
 
   const { beginTocScroll, checkTocScrollProgress } = useBookViewTocScrollTracking()
 
+  const { pinnedCommentaryGroup, restorePin, pinExplicitly, setPendingPin } = usePinnedCommentary(
+    bookId, () => commentaryLineId.value, () => groups.value,
+  )
+
+  // Keep the display ref in sync so useCommentary can inject the placeholder
+  watch(pinnedCommentaryGroup, (g) => { pinnedCommentaryGroupForDisplay.value = g }, { immediate: true })
+
   const { currentScrollLineIndex, currentFullLineIndex, onLinesScrolled } = useBookViewScrollSync(
     () => lines.value,
     activeTocEntryId,
@@ -178,6 +185,8 @@ export function useBookView(
     checkTocScrollProgress,
     getActiveTocEntry,
     getTocPath,
+    setPendingPin,
+    () => commentaryViewRef()?.activePinnedGroup ?? null,
   )
 
   function onTocSelect(entry: TocEntry) {
@@ -327,6 +336,9 @@ export function useBookView(
   }
 
   function onLineSelected(lineId: number) {
+    // Capture synchronously before any reactive state changes — activePinnedGroup
+    // is still valid here (groups haven't been cleared yet).
+    setPendingPin(commentaryViewRef()?.activePinnedGroup ?? null)
     selectedLineId.value = lineId
     commentaryLineId.value = lineId
   }
@@ -336,17 +348,19 @@ export function useBookView(
     commentaryScrollOffset.value = so
   }
 
-  const { onNavigateSection } = useCommentaryNavigation(
+  const { onNavigateSection: navigateSection } = useCommentaryNavigation(
     bookId, selectedLineId, commentaryLineId, commentaryVisible,
     () => lines.value, () => tocEntries.value, linesContentRef,
   )
 
-  const { pinnedCommentaryGroup, restorePin } = usePinnedCommentary(
-    bookId, () => commentaryLineId.value, () => groups.value, commentaryViewRef,
-  )
-
-  // Keep the display ref in sync so useCommentary can inject the placeholder
-  watch(pinnedCommentaryGroup, (g) => { pinnedCommentaryGroupForDisplay.value = g }, { immediate: true })
+  function onNavigateSection(direction: 'next' | 'prev', commentaryBookId: number) {
+    console.log('[BookView] onNavigateSection direction=' + direction + ' commentaryBookId=' + commentaryBookId)
+    const group = groups.value.find((g) => g.bookId === commentaryBookId)
+    setPendingPin(group
+      ? { bookId: commentaryBookId, sectionLabel: group.sectionLabel ?? '', subSectionLabel: group.subSectionLabel ?? '' }
+      : { bookId: commentaryBookId, sectionLabel: '', subSectionLabel: '' })
+    return navigateSection(direction, commentaryBookId)
+  }
 
   // ── Session restore ───────────────────────────────────────────────────────
 
