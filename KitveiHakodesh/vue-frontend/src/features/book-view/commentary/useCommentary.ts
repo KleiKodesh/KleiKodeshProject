@@ -419,6 +419,42 @@ export function useCommentary(
       if (!rows.length) return
 
       groups.value = await buildCommentaryGroupsFromCombined(rows, booksDataStore.allBooksMap)
+
+      // If the pinned book is absent from this line's results, inject a placeholder
+      // directly into groups.value now — before the watchers fire — so that
+      // setupGroupReloadScroll can find it at the correct position immediately.
+      // This avoids the race where groupsForDisplay (a lazy computed) hasn't run yet
+      // when the scroll attempt fires.
+      const pinned = pinnedBookId()
+      if (pinned != null && !groups.value.some((g) => g.bookId === pinned)) {
+        const staticOrder = staticFilterGroups.value
+        const pinnedRank = staticOrder.findIndex((g) => g.bookId === pinned)
+        const staticGroup = pinnedRank !== -1 ? staticOrder[pinnedRank] : undefined
+        const book = booksDataStore.allBooksMap.get(pinned)
+        const bookTitle = book?.title ?? String(pinned)
+        const placeholder: CommentaryGroup = {
+          bookId: pinned,
+          bookTitle,
+          path: staticGroup?.path ?? bookTitle,
+          connectionTypes: staticGroup?.connectionTypes ?? [],
+          lines: [{ lineId: -1, lineIndex: -1, content: NO_TEXT_PLACEHOLDER_CONTENT }],
+          category: staticGroup?.category ?? '',
+          sectionLabel: staticGroup?.sectionLabel,
+          subSectionLabel: staticGroup?.subSectionLabel,
+        }
+        if (pinnedRank === -1 || !staticOrder.length) {
+          groups.value = [placeholder, ...groups.value]
+        } else {
+          const insertBefore = groups.value.findIndex((g) => {
+            const rank = staticOrder.findIndex((s) => s.bookId === g.bookId)
+            return rank !== -1 && rank > pinnedRank
+          })
+          const updated = [...groups.value]
+          if (insertBefore === -1) updated.push(placeholder)
+          else updated.splice(insertBefore, 0, placeholder)
+          groups.value = updated
+        }
+      }
     } finally {
       // If this was a single-line fallback load and the section range is now available,
       // the watch(selectedLineIds) safety-net will fire a second load() immediately after

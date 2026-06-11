@@ -1,23 +1,25 @@
 import type { Virtualizer } from '@tanstack/vue-virtual'
 
 /**
- * Scrolls a virtualizer to a target index so the item appears just below any
- * fixed overlay (topReserved px from the top of the viewport).
+ * Scrolls a virtualizer to a target index so the item appears at the top of the
+ * scroller (offset by topReserved px).
  *
- * Strategy:
- *   - If the item is already in the virtualizer's measurements cache, set
- *     scrollTop directly — do NOT call scrollToIndex, which would fight us.
- *   - If the item is not yet measured (far outside the rendered range), call
- *     scrollToIndex to bring it into range, then retry once it's measured.
+ * index: either a static number or a resolver function called fresh on each
+ *   attempt. Use a resolver when flatItems can change between the call and the
+ *   rAF (e.g. a new groups load completes mid-flight).
  *
- * onScrolled: optional callback invoked after the scroll is applied (or confirmed
- * already correct), so callers can do follow-up work (e.g. scrolling a <mark>
- * into view within a tall line).
+ * After setting scrollTop, waits one rAF then re-resolves the index and
+ * re-reads the measurement. If the measurement changed (item was estimated,
+ * now DOM-measured with a different size), re-applies with the fresh target
+ * and retries up to maxRetries total attempts.
+ *
+ * onScrolled: optional callback invoked once the scroll is confirmed stable.
+ * isCancelled: optional function checked before each rAF.
  */
 export function scrollToIndexWithRetry(
   virtualizer: Virtualizer<Element, Element>,
   scrollerEl: HTMLElement,
-  index: number,
+  index: number | (() => number),
   topReserved = 0,
   maxRetries = 5,
   onScrolled?: () => void,
@@ -26,47 +28,59 @@ export function scrollToIndexWithRetry(
   let attempts = 0
   const gap = topReserved + 8
 
+  function resolveIndex(): number {
+    return typeof index === 'function' ? index() : index
+  }
+
   function attempt() {
     requestAnimationFrame(() => {
       if (isCancelled?.()) {
-        console.log(`[scrollToIndexWithRetry] cancelled at attempt=${attempts} index=${index}`)
+        console.log('[scrollToIndexWithRetry] cancelled at attempt=' + attempts)
         return
       }
-      const m = virtualizer.measurementsCache.find((c) => c.index === index)
-      console.log(`[scrollToIndexWithRetry] attempt=${attempts} index=${index} measured=${!!m} cacheSize=${virtualizer.measurementsCache.length}`, m ? `start=${m.start}` : '')
+      const idx = resolveIndex()
+      const m = idx >= 0 ? virtualizer.measurementsCache.find((c) => c.index === idx) : undefined
+      const size = m ? m.end - m.start : 0
+      console.log('[scrollToIndexWithRetry] attempt=' + attempts + ' idx=' + idx + ' measured=' + !!m + ' size=' + size + ' cacheSize=' + virtualizer.measurementsCache.length + (m ? ' start=' + m.start : ''))
 
-      if (!m) {
-        virtualizer.scrollToIndex(index, { align: 'start' })
+      if (idx < 0 || !m) {
+        if (idx >= 0) virtualizer.scrollToIndex(idx, { align: 'start' })
         if (++attempts < maxRetries) attempt()
-        else console.warn(`[scrollToIndexWithRetry] gave up after ${maxRetries} attempts for index=${index}`)
+        else console.warn('[scrollToIndexWithRetry] gave up after ' + maxRetries + ' attempts idx=' + idx)
         return
       }
 
-      const targetScrollTop = m.start - gap
-      const currentScrollTop = scrollerEl.scrollTop
-      const alreadyCorrect = Math.abs(currentScrollTop - targetScrollTop) <= 2
-      console.log(`[scrollToIndexWithRetry] SETTLING index=${index} targetScrollTop=${targetScrollTop} currentScrollTop=${currentScrollTop} alreadyCorrect=${alreadyCorrect}`)
+      const targetScrollTop = Math.max(0, m.start - gap)
+      scrollerEl.scrollTop = targetScrollTop
+      console.log('[scrollToIndexWithRetry] set scrollTop=' + targetScrollTop + ' for idx=' + idx + ' start=' + m.start)
 
-      if (!alreadyCorrect) {
-        // Set scrollTop directly — do NOT use virtualizer.scrollToOffset here,
-        // which queues an async scroll and creates races with other in-flight scrolls.
-        scrollerEl.scrollTop = targetScrollTop
-      }
-
-      // Verify the scroll stuck in the next frame.
       requestAnimationFrame(() => {
         if (isCancelled?.()) {
-          console.log(`[scrollToIndexWithRetry] cancelled in drift-check rAF index=${index}`)
+          console.log('[scrollToIndexWithRetry] cancelled in verify rAF')
           return
         }
+
+        const freshIdx = resolveIndex()
+        const freshM = freshIdx >= 0
+          ? virtualizer.measurementsCache.find((c) => c.index === freshIdx)
+          : undefined
+        const freshTarget = freshM ? Math.max(0, freshM.start - gap) : targetScrollTop
         const actual = scrollerEl.scrollTop
-        if (Math.abs(actual - targetScrollTop) > 2) {
-          console.log(`[scrollToIndexWithRetry] scroll drifted: actual=${actual}, re-applying targetScrollTop=${targetScrollTop}`)
-          scrollerEl.scrollTop = targetScrollTop
+
+        console.log('[scrollToIndexWithRetry] verify: actual=' + actual + ' freshTarget=' + freshTarget + ' freshIdx=' + freshIdx + ' freshStart=' + (freshM?.start ?? 'n/a') + ' cacheSize=' + virtualizer.measurementsCache.length)
+
+        if (Math.abs(actual - freshTarget) > 2) {
+          if (++attempts < maxRetries) {
+            console.log('[scrollToIndexWithRetry] mismatch, retry ' + attempts + '/' + maxRetries)
+            attempt()
+          } else {
+            console.warn('[scrollToIndexWithRetry] gave up after ' + maxRetries + ' total attempts')
+            onScrolled?.()
+          }
         } else {
-          console.log(`[scrollToIndexWithRetry] scroll confirmed at ${actual}`)
+          console.log('[scrollToIndexWithRetry] confirmed at ' + actual)
+          onScrolled?.()
         }
-        onScrolled?.()
       })
     })
   }

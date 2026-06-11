@@ -41,7 +41,7 @@ export function usePinnedCommentary(
   // selectedLineId/commentaryLineId — captures which book the user was looking at.
   function setPendingPin(group: PinnedCommentaryGroup | null) {
     pendingPin = group
-    console.log('[PinnedCommentary] setPendingPin:', group ? `bookId=${group.bookId} section="${group.sectionLabel}"` : 'null')
+    console.log(`[PinnedCommentary] setPendingPin: ${group ? `bookId=${group.bookId} section="${group.sectionLabel}"` : 'null'} t=${Date.now() % 100000}`)
   }
 
   watch(commentaryLineId, async () => {
@@ -51,16 +51,16 @@ export function usePinnedCommentary(
     }
     const captured = pendingPin
     pendingPin = null
-    console.log('[PinnedCommentary] commentaryLineId changed → lineId=' + commentaryLineId() + ', captured:', captured ? `bookId=${captured.bookId}` : 'null')
+    console.log(`[PinnedCommentary] commentaryLineId → lineId=${commentaryLineId()} captured=${captured ? `bookId=${captured.bookId}` : 'null'} t=${Date.now() % 100000}`)
     await ensureDefaultCommentatorsLoaded()
-    console.log('[PinnedCommentary] defaultCommentatorBookIds:', defaultCommentatorBookIds)
+    console.log('[PinnedCommentary] defaults:', defaultCommentatorBookIds)
     if (captured) {
-      console.log('[PinnedCommentary] → pinning captured group bookId=' + captured.bookId)
+      console.log('[PinnedCommentary] → pin captured bookId=' + captured.bookId)
       pinnedCommentaryGroup.value = captured
     } else if (defaultCommentatorBookIds.length > 0) {
       const defaultId = defaultCommentatorBookIds[0]!
       const defaultGroup = groups().find((g) => g.bookId === defaultId)
-      console.log('[PinnedCommentary] → falling back to default bookId=' + defaultId + ', found in groups:', !!defaultGroup)
+      console.log('[PinnedCommentary] → fallback default bookId=' + defaultId + ' found=' + !!defaultGroup)
       pinnedCommentaryGroup.value = defaultGroup
         ? { bookId: defaultId, sectionLabel: defaultGroup.sectionLabel ?? '', subSectionLabel: defaultGroup.subSectionLabel ?? '' }
         : { bookId: defaultId, sectionLabel: '', subSectionLabel: '' }
@@ -77,7 +77,7 @@ export function usePinnedCommentary(
     await ensureDefaultCommentatorsLoaded()
     if (!defaultCommentatorBookIds.length) return
     const currentPin = pinnedCommentaryGroup.value
-    console.log('[PinnedCommentary] groups watcher fired, newGroups count=' + newGroups.length + ', currentPin:', currentPin ? `bookId=${currentPin.bookId}` : 'null')
+    console.log(`[PinnedCommentary] groups watcher count=${newGroups.length} currentPin=${currentPin ? `bookId=${currentPin.bookId}` : 'null'} t=${Date.now() % 100000}`)
     if (currentPin == null || !defaultCommentatorBookIds.includes(currentPin.bookId)) {
       console.log('[PinnedCommentary] groups watcher → skipping (pin is null or non-default bookId=' + currentPin?.bookId + ')')
       return

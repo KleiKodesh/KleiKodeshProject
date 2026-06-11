@@ -125,6 +125,7 @@ const {
 setupGroupReloadScroll(
   () => props.groups,
   () => props.pinnedGroup,
+  () => props.loading,
 )
 
 useVirtualScrollerKeys(
