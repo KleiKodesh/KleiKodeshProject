@@ -442,6 +442,7 @@ export function useBookView(
           
           if (!ready) return
           stopLoading?.()
+          console.log(`[BookView] restore: groups ready, calling restoreCommentaryScrollPos si=${si} so=${so} t=${Date.now() % 100000}`)
           const viewRef = commentaryViewRef()
           if (viewRef) {
             

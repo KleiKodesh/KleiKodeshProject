@@ -282,6 +282,9 @@ export function useCommentaryScroll(
 
   function restoreCommentaryScrollPos(scrollIndex: number, scrollOffset: number): Promise<void> {
     isRestoringScrollPos = true
+    // Cancel any in-flight or queued scrollToGroup call — restore takes priority.
+    scrollToGroupToken++
+    console.log(`[CommentaryScroll] restoreCommentaryScrollPos START scrollIndex=${scrollIndex} scrollOffset=${scrollOffset} t=${Date.now() % 100000}`)
     return new Promise<void>((resolve) => {
       let attempts = 0
       const MAX_ATTEMPTS = 20
@@ -354,7 +357,15 @@ export function useCommentaryScroll(
       }
 
       startRestore()
-    }).finally(() => { isRestoringScrollPos = false })
+    }).finally(() => {
+      // Bump the token to cancel any scrollToGroup that started concurrently with
+      // restore and is now in its rAF chain — restore takes priority.
+      scrollToGroupToken++
+      requestAnimationFrame(() => {
+        isRestoringScrollPos = false
+        console.log(`[CommentaryScroll] restoreCommentaryScrollPos DONE scrollTop=${scrollerEl()?.scrollTop ?? 'n/a'} t=${Date.now() % 100000}`)
+      })
+    })
   }
 
   const topVisibleFlatIndex = computed(() => {
@@ -390,8 +401,7 @@ export function useCommentaryScroll(
         if (isRestoringScrollPos) {
           console.log(`[CommentaryScroll] setupGroupReloadScroll restore in progress, skipping groups=${newGroups.length} t=${Date.now() % 100000}`)
           return
-        }
-        const generation = ++scrollGeneration
+        }        const generation = ++scrollGeneration
         await nextTick()
         if (generation !== scrollGeneration) {
           console.log(`[CommentaryScroll] setupGroupReloadScroll gen=${generation} superseded after tick1, skipping t=${Date.now() % 100000}`)
@@ -418,6 +428,10 @@ export function useCommentaryScroll(
             return
           }
           console.log(`[CommentaryScroll] → calling scrollToGroup bookId=${pinned.bookId} t=${Date.now() % 100000}`)
+          if (isRestoringScrollPos) {
+            console.log(`[CommentaryScroll] setupGroupReloadScroll restore still in progress at call point, aborting t=${Date.now() % 100000}`)
+            return
+          }
           scrollToGroup(pinned.bookId, pinned.sectionLabel, pinned.subSectionLabel)
         }
       },
