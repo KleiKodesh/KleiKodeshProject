@@ -1,4 +1,4 @@
-using FtsLib.SeforimDb;
+using SearchEngine.SeforimDb;
 using Microsoft.Win32;
 using System;
 using System.IO;
@@ -422,10 +422,15 @@ namespace KitveiHakodeshLib.Search
             try
             {
                 if (!Directory.Exists(FtsIndexPath)) return "index directory missing";
-                // FtsLib segments are named seg_L_ID.dat / seg_L_ID.db.
-                // An index is ready when at least one segment pair exists and the
-                // build progress file is absent (progress file means build interrupted).
-                bool hasSegments = Directory.GetFiles(FtsIndexPath, "seg_*.dat").Length > 0;
+                // Lucene index is valid when at least one committed segments file exists
+                // and there is no interrupted build (progress file present means resumable).
+                bool hasSegments = false;
+                foreach (var f in Directory.GetFiles(FtsIndexPath))
+                {
+                    string name = Path.GetFileName(f);
+                    if (name.StartsWith("segments_") && name != "segments.gen")
+                    { hasSegments = true; break; }
+                }
                 if (!hasSegments) return "no segment files found";
                 return null;
             }

@@ -157,7 +157,7 @@ Full-text search backed by SearchEngineLib with Lucene-based inverted indexing. 
 
 #### Query syntax (Lucene-based)
 
-- Multiple words are AND-ed by default. `word*` is a prefix wildcard, `*word` is a suffix wildcard, `*word*` is an infix wildcard. `word?` marks an optional character.
+- Multiple words are AND-ed by default. `word*` is a prefix wildcard, `*word` is a suffix wildcard, `*word*` is an infix wildcard.
 - Fuzzy matching: `word~1` / `word~2` for edit distance 1–2 (Levenshtein distance).
 - OR within a slot: `a | b` matches lines with either a or b.
 - Grammar expansion: `%word` for prefix expansion, `word%` for suffix expansion, `%word%` for both.

@@ -132,8 +132,10 @@
     <Compile Include="Search\LuceneSearcher.cs" />
     <!-- Tokenization: Hebrew-aware text processing matching FtsLib -->
     <Compile Include="Tokenization\HebrewAnalyzer.cs" />
-    <!-- Snippets: result data class -->
+    <Compile Include="Tokenization\NikudSkipIterator.cs" />
+    <!-- Snippets: result data class and generator -->
     <Compile Include="Snippets\SnippetResult.cs" />
+    <Compile Include="Snippets\SnippetGenerator.cs" />
     <!-- Shared -->
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

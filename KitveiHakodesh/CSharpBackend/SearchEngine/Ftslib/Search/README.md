@@ -46,7 +46,7 @@ Query String
 
 | File | Class | Purpose |
 |---|---|---|
-| `HebrewWildcardExpander.cs` | `HebrewWildcardExpander` | Expand `*`, `?` patterns |
+| `HebrewWildcardExpander.cs` | `HebrewWildcardExpander` | Expand `*` patterns |
 | `FuzzyExpander.cs` | `FuzzyExpander` | Levenshtein expansion |
 | `KetivExpander.cs` | `KetivExpander` | Hebrew ketiv/qere variants |
 | `Levenshtein.cs` | — | Distance calculation |
@@ -73,7 +73,6 @@ Query String
 | `word*` | All terms with prefix `word` |
 | `*word` | All terms with suffix `word` |
 | `w*rd` | All terms matching pattern |
-| `wor?d` | `word` or `wod` (optional char) |
 | `word~` | Edit distance 1 variants |
 | `word~2` | Edit distance 2 variants |
 | `word~3` | Edit distance 3 variants |
@@ -97,7 +96,6 @@ Skip-list accelerated AND intersection. Efficiently finds documents containing a
 Hebrew-aware wildcard expansion handling:
 - RTL text direction
 - Hebrew character ranges
-- Optional character patterns (`?`)
 
 ### FuzzyExpander
 

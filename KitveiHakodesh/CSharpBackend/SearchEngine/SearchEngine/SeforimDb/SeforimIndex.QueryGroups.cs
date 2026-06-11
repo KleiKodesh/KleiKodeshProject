@@ -173,7 +173,7 @@ namespace SearchEngine.SeforimDb
         /// Prepends '~' to every non-pipe, non-already-marked, non-wildcard token
         /// in the query so the search engine applies ketiv חסר/מלא expansion.
         /// </summary>
-        private static string ApplyKetivPrefix(string query)
+        public static string ApplyKetivExpansion(string query)
         {
             if (query.IndexOf('|') >= 0)
                 query = query.Replace("|", " | ");

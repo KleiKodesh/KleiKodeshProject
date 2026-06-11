@@ -51,7 +51,6 @@ IEnumerable<int> ids = index.SearchIds(query);
 |---|---|
 | `word` | Literal AND term |
 | `word*` | Wildcard — prefix, infix, or suffix |
-| `wor?d` | Optional char — the character before `?` is optional; matches both `word` and `wrd` |
 | `word~` | Fuzzy — edit distance 1 (default) |
 | `word~2` | Fuzzy — edit distance 2 |
 | `word~3` | Fuzzy — edit distance 3 (maximum) |
@@ -65,8 +64,6 @@ Multiple tokens are AND-ed. `|`-separated tokens are OR-ed within one AND slot. 
 - Each alternative in an OR group can independently be a literal, wildcard, or fuzzy term: `word* | word~` expands both and merges the results.
 - A leading or trailing `|`, or `||`, is silently ignored (the missing side is treated as absent).
 - Parentheses have no special meaning — grouping is determined solely by `|` placement.
-
-`?` edge cases: a `?` at the start of a token, or immediately after `*` or another `?`, is silently dropped (no preceding letter to make optional). Up to 4 `?` operators per token are supported (2⁴ = 16 variants); patterns with more are rejected.
 
 ---
 

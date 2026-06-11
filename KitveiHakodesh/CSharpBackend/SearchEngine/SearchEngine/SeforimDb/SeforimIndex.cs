@@ -328,7 +328,7 @@ namespace SearchEngine.SeforimDb
             var searcher = EnsureSearcher();
             if (searcher == null) yield break;
 
-            string effectiveQuery = expandKetiv ? ApplyKetivPrefix(query) : query;
+            string effectiveQuery = expandKetiv ? ApplyKetivExpansion(query) : query;
             var matchedGroups     = BuildMatchedGroups(effectiveQuery);
 
             int yielded = 0;
@@ -354,7 +354,7 @@ namespace SearchEngine.SeforimDb
             var searcher = EnsureSearcher();
             if (searcher == null) yield break;
 
-            string effectiveQuery = expandKetiv ? ApplyKetivPrefix(query) : query;
+            string effectiveQuery = expandKetiv ? ApplyKetivExpansion(query) : query;
 
             foreach (var (rowId, _, __, ___) in searcher.Search(effectiveQuery, ct))
             {
@@ -376,7 +376,7 @@ namespace SearchEngine.SeforimDb
             var searcher = EnsureSearcher();
             if (searcher == null) yield break;
 
-            string effectiveQuery = expandKetiv ? ApplyKetivPrefix(query) : query;
+            string effectiveQuery = expandKetiv ? ApplyKetivExpansion(query) : query;
             int    fragmentSize   = contextWords * 8 * 2;
             int    slop           = requireOrdered ? contextWords : int.MaxValue;
             int    minMarks       = BuildMatchedGroups(effectiveQuery).Count;
@@ -476,6 +476,45 @@ namespace SearchEngine.SeforimDb
                     }
                 }
             }
+        }
+
+        // ── Helpers used by SearchWithSnippets (test harness) ─────────
+
+        /// <summary>
+        /// Counts tokens between the first &lt;mark&gt; and last &lt;/mark&gt; in a
+        /// Lucene highlighter fragment, minus the number of marked terms.
+        /// Used only by <see cref="SearchWithSnippets"/> which is the test-harness path.
+        /// </summary>
+        private static int ComputeWordDistance(string html)
+        {
+            if (string.IsNullOrEmpty(html)) return int.MaxValue;
+
+            int firstMark = html.IndexOf("<mark>",   StringComparison.OrdinalIgnoreCase);
+            int lastClose = html.LastIndexOf("</mark>", StringComparison.OrdinalIgnoreCase);
+            if (firstMark < 0 || lastClose < 0) return int.MaxValue;
+
+            int windowEnd = lastClose + "</mark>".Length;
+            int totalTokens = 0;
+            bool inTag  = false;
+            bool inToken = false;
+            for (int i = firstMark; i < windowEnd; i++)
+            {
+                char c = html[i];
+                if (c == '<')      { inTag = true;  inToken = false; continue; }
+                if (c == '>')      { inTag = false; continue; }
+                if (inTag)         continue;
+                bool isSpace = c == ' ' || c == '\t' || c == '\r' || c == '\n';
+                if (isSpace)       { inToken = false; continue; }
+                if (!inToken)      { inToken = true; totalTokens++; }
+            }
+
+            int markCount = 0;
+            int pos = 0;
+            while ((pos = html.IndexOf("<mark>", pos, StringComparison.OrdinalIgnoreCase)) >= 0)
+            { markCount++; pos += 6; }
+
+            int dist = totalTokens - markCount;
+            return dist < 0 ? 0 : dist;
         }
 
         // ── IDisposable ───────────────────────────────────────────────

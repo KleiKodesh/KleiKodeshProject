@@ -11,17 +11,13 @@ namespace FtsLib.Search
     ///
     /// Supported wildcards:
     ///   '*'  — matches zero or more characters (prefix / suffix / infix)
-    ///   '?'  — makes the immediately preceding character optional
-    ///          e.g. שלו?ם → {שלום, שלם}  (with or without ו)
-    ///          A '?' with no preceding letter (at position 0, or after another '?'
-    ///          or after '*') is silently dropped.
     ///
     /// Pattern rules for '*':
     ///   שלו*   → prefix  → LIKE 'שלו%'
     ///   *לום   → suffix  → LIKE '%לום'
     ///   *לו*   → infix   → LIKE '%לו%'
     ///
-    /// Expansion limits (both enforced before/after the DB query):
+    /// Expansion limits (enforced before/after the DB query):
     ///
     ///   MinAnchorLength (2): the non-wildcard anchor must be at least 2 chars.
     ///   Patterns like "*ל" or "מ*" are rejected immediately — they would expand
@@ -36,9 +32,6 @@ namespace FtsLib.Search
     ///     *abc* (infix wildcard)  — leading capped at 3, trailing at 4 (7 total)
     ///   Research basis: Hebrew stacked prefixes max at 3 (וּמִבְּ); pronominal suffixes
     ///   max at 4 (יהֶם, יכֶם).  Anything longer is a compound run-on, not an affix.
-    ///
-    ///   MaxOptionalChars (4): a pattern may contain at most this many '?' operators.
-    ///   Patterns with more are rejected to cap the 2^N combinatorial expansion.
     /// </summary>
     internal static class HebrewWildcardExpander
     {
@@ -61,60 +54,16 @@ namespace FtsLib.Search
         /// </summary>
         public const int MaxSuffixWildcardChars = 4;
 
-        /// <summary>
-        /// Maximum number of '?' operators allowed in a single pattern.
-        /// Caps the 2^N combinatorial expansion at 2^4 = 16 variants.
-        /// </summary>
-        public const int MaxOptionalChars = 4;
-
         // ── Public entry point ────────────────────────────────────────
 
         /// <summary>
-        /// Expands a pattern that may contain '*', '?', or both.
+        /// Expands a pattern that may contain '*' wildcards.
         ///
-        /// '?' patterns are first unrolled into up to 2^N concrete sub-patterns
-        /// (each with/without the optional char), then each sub-pattern is either
-        /// looked up as a literal or expanded via the '*' LIKE query.
-        ///
-        /// Returns an empty list when the anchor is too short, the '?' count
-        /// exceeds <see cref="MaxOptionalChars"/>, or nothing survives the filter.
+        /// Returns an empty list when the anchor is too short or nothing survives the filter.
         /// </summary>
         public static List<string> Expand(string pattern, IReadOnlyList<SegmentHandle> segments)
         {
-            bool hasOptional = pattern.IndexOf('?') >= 0;
-            bool hasStar     = pattern.IndexOf('*') >= 0;
-
-            if (!hasOptional)
-                return ExpandStar(pattern, segments);   // fast path — original behaviour
-
-            // Count '?' operators (after normalising away no-op ones).
-            // We count positions where '?' has a real preceding letter.
-            int optCount = CountEffectiveOptionals(pattern);
-            if (optCount > MaxOptionalChars)
-                return new List<string>();
-
-            // Generate all sub-patterns by including/excluding each optional char.
-            var subPatterns = new HashSet<string>(StringComparer.Ordinal);
-            ExpandOptionals(pattern, 0, new System.Text.StringBuilder(pattern.Length), subPatterns);
-
-            // Collect results across all sub-patterns, deduplicating.
-            var seen    = new HashSet<string>(StringComparer.Ordinal);
-            var results = new List<string>();
-
-            foreach (var sub in subPatterns)
-            {
-                List<string> expanded;
-                if (sub.IndexOf('*') >= 0)
-                    expanded = ExpandStar(sub, segments);
-                else
-                    expanded = LookupLiteral(sub, segments);
-
-                foreach (var term in expanded)
-                    if (seen.Add(term))
-                        results.Add(term);
-            }
-
-            return results;
+            return ExpandStar(pattern, segments);
         }
 
         // ── '*'-only expansion (original logic) ───────────────────────
@@ -189,114 +138,11 @@ namespace FtsLib.Search
             return results;
         }
 
-        // ── '?' expansion helpers ─────────────────────────────────────
-
-        /// <summary>
-        /// Recursively generates all sub-patterns by including or excluding each
-        /// optional character (the char immediately before a '?').
-        ///
-        /// A '?' is a no-op (silently dropped) when:
-        ///   - it appears at position 0 (nothing before it), or
-        ///   - the character immediately before it is another '?' or a '*'
-        ///     (wildcards cannot themselves be made optional).
-        /// </summary>
-        private static void ExpandOptionals(
-            string                      pattern,
-            int                         pos,
-            System.Text.StringBuilder   current,
-            HashSet<string>             results)
-        {
-            if (pos == pattern.Length)
-            {
-                results.Add(current.ToString());
-                return;
-            }
-
-            char c = pattern[pos];
-
-            if (c != '?')
-            {
-                current.Append(c);
-                ExpandOptionals(pattern, pos + 1, current, results);
-                current.Length--;
-                return;
-            }
-
-            // c == '?'
-            // Determine whether the preceding character in `current` is a real letter
-            // (not a wildcard) that can be made optional.
-            bool hasOptionalTarget =
-                current.Length > 0 &&
-                current[current.Length - 1] != '*';
-            // (A preceding '?' was already consumed as a letter or dropped, so the
-            //  last char in `current` at this point is always a real letter or '*'.)
-
-            if (!hasOptionalTarget)
-            {
-                // No-op '?' — just skip it and continue.
-                ExpandOptionals(pattern, pos + 1, current, results);
-                return;
-            }
-
-            // Branch 1: include the optional char (do nothing — it's already in `current`).
-            ExpandOptionals(pattern, pos + 1, current, results);
-
-            // Branch 2: exclude the optional char (remove the last char from `current`).
-            char saved = current[current.Length - 1];
-            current.Length--;
-            ExpandOptionals(pattern, pos + 1, current, results);
-            current.Append(saved); // restore for the caller
-        }
-
-        /// <summary>
-        /// Counts the number of '?' operators that have a real (non-wildcard)
-        /// preceding character — i.e. the ones that will actually produce two branches.
-        /// </summary>
-        private static int CountEffectiveOptionals(string pattern)
-        {
-            int count = 0;
-            for (int i = 0; i < pattern.Length; i++)
-            {
-                if (pattern[i] != '?') continue;
-                if (i == 0) continue;                    // no preceding char
-                char prev = pattern[i - 1];
-                if (prev == '*' || prev == '?') continue; // wildcard before '?' is a no-op
-                count++;
-            }
-            return count;
-        }
-
-        // ── Literal lookup ────────────────────────────────────────────
-
-        /// <summary>
-        /// Looks up an exact term across all segments.
-        /// Returns a single-element list if found, empty list otherwise.
-        /// </summary>
-        private static List<string> LookupLiteral(string term, IReadOnlyList<SegmentHandle> segments)
-        {
-            if (AnchorLength(term) < MinAnchorLength)
-                return new List<string>();
-
-            foreach (var seg in segments)
-            {
-                using (var cmd = seg.Conn.CreateCommand())
-                {
-                    cmd.CommandText = "SELECT 1 FROM term_index WHERE term = @t LIMIT 1";
-                    cmd.Parameters.Add("@t", System.Data.DbType.String).Value = term;
-                    var scalar = cmd.ExecuteScalar();
-                    if (scalar != null)
-                        return new List<string> { term };
-                }
-            }
-            return new List<string>();
-        }
-
         // ── Pattern translation ───────────────────────────────────────
 
         /// <summary>
         /// Converts a user wildcard pattern (using '*') to a SQLite LIKE pattern
         /// (using '%'). Literal '%' and '_' in the input are escaped with '\'.
-        /// '?' characters must have been removed before calling this method.
         /// </summary>
         internal static string ToLikePattern(string pattern)
         {
@@ -315,23 +161,22 @@ namespace FtsLib.Search
         }
 
         /// <summary>
-        /// Returns the pattern with all '*' and '?' characters removed — used as the
+        /// Returns the pattern with all '*' characters removed — used as the
         /// fallback literal when expansion yields no results.
         /// </summary>
         public static string StripWildcard(string pattern)
-            => pattern.Replace("*", string.Empty).Replace("?", string.Empty);
+            => pattern.Replace("*", string.Empty);
 
         // ── Helpers ──────────────────────────────────────────────────
 
         /// <summary>
-        /// Returns the number of non-wildcard ('*' or '?') characters in
-        /// <paramref name="pattern"/>.
+        /// Returns the number of non-wildcard ('*') characters in <paramref name="pattern"/>.
         /// </summary>
         internal static int AnchorLength(string pattern)
         {
             int n = 0;
             foreach (char c in pattern)
-                if (c != '*' && c != '?') n++;
+                if (c != '*') n++;
             return n;
         }
     }

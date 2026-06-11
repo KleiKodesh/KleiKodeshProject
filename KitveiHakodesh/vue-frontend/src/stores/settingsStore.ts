@@ -26,11 +26,10 @@ const DEFAULTS = {
   pdfPageFilters: false,
   resumeLastRead: false,
   defaultAutoSyncCommentary: false,
-  // Number of words of context shown before and after the matched terms in a search snippet.
-  // Converted to visible chars (× CHARS_PER_WORD) before being sent to the C# snippet builder.
-  searchContextMarginWords: 30,
+  // Number of characters of context shown before and after the matched terms in a search snippet.
+  searchContextMarginWords: 200,
   // Advanced full-text search settings
-  searchMaxWordDistance: 10,
+  searchMaxWordDistance: 50,
   searchRequireOrdered: false,
   searchExpandKetiv: true,
   searchWildcardWrap: false,

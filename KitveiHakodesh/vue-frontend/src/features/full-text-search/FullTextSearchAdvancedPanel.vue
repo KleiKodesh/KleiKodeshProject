@@ -130,7 +130,7 @@ function onContextWordsInput(event: Event) {
 
       <!-- Word distance -->
       <div class="option-row">
-        <label class="option-label" for="word-distance-input">מרחק מקסימלי בין מילים</label>
+        <label class="option-label" for="word-distance-input">מרחק תווים מקסימלי בין מילים</label>
         <input
           id="word-distance-input"
           type="number"
@@ -144,7 +144,7 @@ function onContextWordsInput(event: Event) {
 
       <!-- Context words -->
       <div class="option-row">
-        <label class="option-label" for="context-words-input">הקשר לפני ואחרי (מילים)</label>
+        <label class="option-label" for="context-words-input">הקשר לפני ואחרי (תווים)</label>
         <input
           id="context-words-input"
           type="number"
@@ -162,10 +162,6 @@ function onContextWordsInput(event: Event) {
         <div class="syntax-row">
           <div class="intent">תחיליות וסופיות</div>
           <div class="usage"><span class="example">ישר*</span> <span class="example">*לום</span></div>
-        </div>
-        <div class="syntax-row">
-          <div class="intent">תו אופציונלי (כתיב חסר/מלא)</div>
-          <div class="usage"><span class="example">שלו?ם</span></div>
         </div>
         <div class="syntax-row">
           <div class="intent">דומה עם שגיאה (מרחק 1)</div>

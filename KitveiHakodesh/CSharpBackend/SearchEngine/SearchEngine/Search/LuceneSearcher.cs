@@ -194,7 +194,7 @@ namespace SearchEngine.Search
             var highlighter = new Highlighter(formatter, scorer)
             {
                 TextFragmenter       = new SimpleSpanFragmenter(scorer, fragmentSize),
-                MaxDocCharsToAnalyze = 1024 * 1024,
+                MaxDocCharsToAnalyze = 8192,
             };
 
             IndexSearcher searcher = _manager.Acquire();

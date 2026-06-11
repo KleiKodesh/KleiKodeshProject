@@ -19,7 +19,6 @@ export interface FullTextSearchResult {
  * or as a failReason on the FtsSearchStart reply.
  *
  * indexNotReady  — index has not been built yet or is still building
- * indexMerging   — a segment merge is in progress; retry in a moment
  * searchFailed   — unexpected error during search execution
  */
-export type SearchFailReason = 'indexNotReady' | 'indexMerging' | 'searchFailed'
+export type SearchFailReason = 'indexNotReady' | 'searchFailed'

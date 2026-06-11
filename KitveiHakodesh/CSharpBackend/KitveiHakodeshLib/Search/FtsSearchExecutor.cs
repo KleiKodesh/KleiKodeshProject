@@ -1,5 +1,4 @@
-using FtsLib.Indexing;
-using FtsLib.SeforimDb;
+using SearchEngine.SeforimDb;
 using KitveiHakodeshLib.Bridge;
 using System;
 using System.Collections.Concurrent;
@@ -115,10 +114,6 @@ namespace KitveiHakodeshLib.Search
             {
                 PostSearch(new { @event = "search", type = "idsCancelled", searchId });
             }
-            catch (IndexMergingException)
-            {
-                PostSearch(new { @event = "search", type = "idsError", searchId, failReason = "indexMerging" });
-            }
             catch (Exception ex)
             {
                 Console.WriteLine("[FtsSearchExecutor] SearchIds error: " + ex);
@@ -138,12 +133,12 @@ namespace KitveiHakodeshLib.Search
         /// False positives are skipped; word-distance violations are included but flagged as isWeakMatch.
         ///
         /// Parameters (positional):
-        ///   0: lineIds         (int[])
-        ///   1: query           (string)
-        ///   2: maxWordDistance (int, default 10)
-        ///   3: requireOrdered  (bool, default false)
-        ///   4: contextWords    (int, default DefaultContextWords)
-        ///   5: expandKetiv     (bool, default false)
+        ///   0: lineIds           (int[])
+        ///   1: query             (string)
+        ///   2: maxCharDistance   (int, default 50)
+        ///   3: requireOrdered    (bool, default false)
+        ///   4: contextChars      (int, default 200)
+        ///   5: expandKetiv       (bool, default false)
         /// </summary>
         internal void HandleGetSnippets(JsonElement root, string id)
         {
@@ -152,14 +147,17 @@ namespace KitveiHakodeshLib.Search
                 foreach (var el in lids.EnumerateArray())
                     lineIds.Add(el.GetInt32());
 
-            string query       = root.TryGetProperty("1", out var q)  ? q.GetString()  : null;
-            int    maxWordDist = root.TryGetProperty("2", out var d)   ? d.GetInt32()   : 10;
-            bool   reqOrdered  = root.TryGetProperty("3", out var o)   && o.GetBoolean();
-            int    ctxWords    = root.TryGetProperty("4", out var cw)  ? cw.GetInt32()  : SeforimIndex.DefaultContextWords;
-            bool   expandKetiv = root.TryGetProperty("5", out var ek)  && ek.GetBoolean();
+            string query           = root.TryGetProperty("1", out var q)  ? q.GetString()  : null;
+            int    maxCharDistance = root.TryGetProperty("2", out var d)   ? d.GetInt32()   : 50;
+            bool   reqOrdered      = root.TryGetProperty("3", out var o)   && o.GetBoolean();
+            int    contextChars    = root.TryGetProperty("4", out var cw)  ? cw.GetInt32()  : 200;
+            bool   expandKetiv     = root.TryGetProperty("5", out var ek)  && ek.GetBoolean();
+
+            Console.WriteLine($"[GetSnippets] lineIds={lineIds.Count} query=\"{query}\" maxCharDist={maxCharDistance} contextChars={contextChars} expandKetiv={expandKetiv}");
 
             if (lineIds.Count == 0 || string.IsNullOrWhiteSpace(query))
             {
+                Console.WriteLine("[GetSnippets] Early exit: empty lineIds or query");
                 _bridge.Reply(id, new { snippets = new SnippetPayload[0] });
                 return;
             }
@@ -167,23 +165,29 @@ namespace KitveiHakodeshLib.Search
             SeforimIndex index = _state.GetIndex();
             if (index == null)
             {
+                Console.WriteLine("[GetSnippets] Early exit: index is null");
                 _bridge.Reply(id, new { snippets = new SnippetPayload[0] });
                 return;
             }
+
+            string effectiveQuery = expandKetiv ? SeforimIndex.ApplyKetivExpansion(query) : query;
+            var    terms          = index.ExtractQueryTerms(effectiveQuery);
+            var    termArray      = new string[terms.Count];
+            for (int i = 0; i < terms.Count; i++) termArray[i] = terms[i];
+
+            Console.WriteLine($"[GetSnippets] effectiveQuery=\"{effectiveQuery}\" stems=[{string.Join(", ", termArray)}]");
 
             var snippets = new List<SnippetPayload>(lineIds.Count);
 
             foreach (int lineId in lineIds)
             {
-                var result = index.GenerateSnippet(lineId, query, ctxWords);
+                var result = index.GenerateSnippet(lineId, effectiveQuery, maxCharDistance, contextChars);
+
+                Console.WriteLine($"[GetSnippets] lineId={lineId} isMatch={result.IsMatch} score={result.Score} htmlLen={result.Html?.Length ?? 0}");
 
                 if (!result.IsMatch) continue;
 
-                bool isWeak = result.WordDistance > maxWordDist;
-
-                var terms = index.ExtractQueryTerms(query);
-                var termArray = new string[terms.Count];
-                for (int i = 0; i < terms.Count; i++) termArray[i] = terms[i];
+                bool isWeak = result.Score > maxCharDistance;
 
                 snippets.Add(new SnippetPayload
                 {
@@ -195,6 +199,7 @@ namespace KitveiHakodeshLib.Search
                 });
             }
 
+            Console.WriteLine($"[GetSnippets] Replying with {snippets.Count}/{lineIds.Count} snippets");
             _bridge.Reply(id, new { snippets = snippets.ToArray() });
         }
 

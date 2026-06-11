@@ -161,6 +161,10 @@
       <Project>{76F9DAA9-374F-40F9-8511-3239FB6E846E}</Project>
       <Name>FtsLib</Name>
     </ProjectReference>
+    <ProjectReference Include="..\SearchEngine\SearchEngine\SearchEngine.csproj">
+      <Project>{B1C2D3E4-0001-0000-0000-000000000001}</Project>
+      <Name>SearchEngine</Name>
+    </ProjectReference>
     <ProjectReference Include="..\DocumentLocator\DocumentLocator.Client\DocumentLocator.Client.csproj">
       <Project>{E7B8C9D0-E1F2-43AB-B5C6-D7E8F9A0B1C2}</Project>
       <Name>DocumentLocator.Client</Name>

@@ -64,7 +64,7 @@ Push events:
 ## Query Syntax
 
 - Multiple words are AND-ed by default: `word1 word2` matches lines with both
-- Wildcards: `word*` (prefix), `*word` (suffix), `*word*` (infix), `word?` (optional character)
+- Wildcards: `word*` (prefix), `*word` (suffix), `*word*` (infix)
 - Fuzzy: `word~1` or `word~2` for edit distance matching
 - OR: `word1 | word2` matches either
 - Expansion: `%word` (prefix expansion), `word%` (suffix), `%word%` (both)

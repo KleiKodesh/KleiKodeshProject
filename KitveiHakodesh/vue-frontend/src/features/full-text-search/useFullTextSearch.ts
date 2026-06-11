@@ -70,7 +70,7 @@ export function useFullTextSearch() {
       .split(/\s+/)
       .map((word) => {
         if (!word) return word
-        if (/[*?~|%]/.test(word)) return word
+        if (/[*~|%]/.test(word)) return word
         if (settings.searchWildcardWrap) return `*${word}*`
         return `%${word}%`
       })
@@ -146,11 +146,6 @@ export function useFullTextSearch() {
 
       if (msg.type === 'idsError') {
         _cleanup()
-        // indexMerging is transient — retry once after a short delay
-        if (msg.failReason === 'indexMerging') {
-          setTimeout(() => executeSearch(rawQuery), 1500)
-          return
-        }
         searchError.value = (msg.failReason as SearchFailReason) ?? 'searchFailed'
         isSearching.value = false
         return
@@ -179,19 +174,31 @@ export function useFullTextSearch() {
 
     type SnippetRow = { lineId: number; score: number; snippet: string; matchedTerms: string[]; isWeakMatch: boolean }
 
-    const [snippetReply, tocRows] = await Promise.all([
-      isHosted && typeof window.__webviewAction === 'function'
-        ? callBridgeAction<{ snippets: SnippetRow[] }>(
-            'FtsGetSnippets',
-            lineIds,
-            queryToSend,
-            settings.searchMaxWordDistance,
-            settings.searchRequireOrdered,
-            settings.searchContextMarginWords,
-            settings.searchExpandKetiv,
-          ).catch(() => ({ snippets: [] as SnippetRow[] }))
-        : Promise.resolve({ snippets: [] as SnippetRow[] }),
+    async function fetchSnippets(): Promise<{ snippets: SnippetRow[] }> {
+      if (!isHosted || typeof window.__webviewAction !== 'function') {
+        return { snippets: [] }
+      }
+      try {
+        const reply = await callBridgeAction<{ snippets: SnippetRow[] }>(
+          'FtsGetSnippets',
+          lineIds,
+          queryToSend,
+          settings.searchMaxWordDistance,
+          settings.searchRequireOrdered,
+          settings.searchContextMarginWords,
+          settings.searchExpandKetiv,
+        )
+        console.log('[FtsGetSnippets] sent', lineIds.length, 'lineIds query=', queryToSend, '→ got', reply?.snippets?.length ?? 0, 'snippets')
+        if (reply?.snippets?.length) console.log('[FtsGetSnippets] first snippet:', reply.snippets[0])
+        return reply
+      } catch (error) {
+        console.error('[FtsGetSnippets] error:', error)
+        return { snippets: [] }
+      }
+    }
 
+    const [snippetReply, tocRows] = await Promise.all([
+      fetchSnippets(),
       query<{ lineId: number; tocPath: string; bookTitle: string }>(
         SQL.GET_TOC_PATHS_AND_TITLES_FOR_LINES(lineIds.length),
         lineIds,

@@ -60,7 +60,7 @@ const virtualizer = useVirtualizer(
     count: props.results.length,
     getScrollElement: () => scrollEl.value,
     estimateSize: () => 80,
-    overscan: 5,
+    overscan: 20,
     getItemKey: (index) => props.results[index]?.lineId ?? index,
     measureElement: (el) => el.getBoundingClientRect().height,
   })),
@@ -68,7 +68,7 @@ const virtualizer = useVirtualizer(
 
 // ── Viewport-driven snippet fetching ─────────────────────────────────────────
 
-const FETCH_OVERSCAN = 10
+const FETCH_OVERSCAN = 20
 
 async function fetchVisibleSnippets() {
   const items = virtualizer.value.getVirtualItems()
@@ -82,6 +82,8 @@ async function fetchVisibleSnippets() {
     const lineId = props.results[i]?.lineId
     if (lineId != null && !snippetCache.has(lineId)) missingIds.push(lineId)
   }
+
+  console.log(`[fetchVisibleSnippets] visible=${items.length} window=[${firstIndex}–${lastIndex}] missing=${missingIds.length}`)
 
   if (!missingIds.length) return
 
@@ -166,7 +168,7 @@ defineExpose({ captureScrollPos })
             }"
           >
             <div
-              v-if="!snippetCache.has(results[vRow.index]!.lineId) || (snippetCache.get(results[vRow.index]!.lineId)?.snippet && !snippetCache.get(results[vRow.index]!.lineId)?.isWeakMatch)"
+              v-if="!snippetCache.has(results[vRow.index]!.lineId) || snippetCache.get(results[vRow.index]!.lineId)?.snippet"
               class="result-item"
             >
               <!-- While snippet not yet loaded: show shimmer for header + body -->
@@ -182,7 +184,7 @@ defineExpose({ captureScrollPos })
               </template>
 
               <!-- Snippet loaded -->
-              <template v-else-if="snippetCache.get(results[vRow.index]!.lineId)?.snippet && !snippetCache.get(results[vRow.index]!.lineId)?.isWeakMatch">
+              <template v-else-if="snippetCache.get(results[vRow.index]!.lineId)?.snippet">
                 <div
                   class="result-header"
                   :title="snippetCache.get(results[vRow.index]!.lineId)!.bookTitle + '\nלחץ לניווט למיקום'"

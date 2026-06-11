@@ -1,4 +1,4 @@
-using FtsLib.SeforimDb;
+using SearchEngine.SeforimDb;
 using KitveiHakodeshLib.Bridge;
 using System;
 using System.IO;
