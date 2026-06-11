@@ -1,15 +1,21 @@
-import { computed, ref, watch } from 'vue'
+import { computed, watch } from 'vue'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { storeToRefs } from 'pinia'
 import { applyDiacriticsFilter, removeDiacriticsForSearch } from '@/utils/hebrewTextProcessing'
 import { censorDivineNames } from '@/utils/censorDivineNames'
+import { applyUserHighlights } from '../lines/useBookViewLineRenderer'
+import type { Highlight } from '../lines/useBookViewHighlights'
 
 /**
  * Manages content rendering for commentary lines: diacritics filtering, divine name censoring,
- * search highlighting, and render caching to avoid re-running expensive DOM operations.
+ * user highlights, search highlighting, and render caching to avoid re-running expensive DOM
+ * operations on every render cycle for unchanged commentary lines.
  */
-export function useCommentaryRender(groups: () => any[]) {
+export function useCommentaryRender(
+  groups: () => any[],
+  getHighlightsForLine?: (lineId: number) => Highlight[],
+) {
   const settingsStore = useSettingsStore()
   const { zoom } = storeToRefs(useBookViewStore())
 
@@ -30,8 +36,15 @@ export function useCommentaryRender(groups: () => any[]) {
     searchQuery: string | undefined,
     currentMatchFlatIndex: number | undefined,
     currentMatchOccurrence: number | undefined,
+    lineId: number | undefined,
   ): string {
-    return `${diacriticsState.value}|${settingsStore.censorDivineNames}|${searchQuery ?? ''}|${currentMatchFlatIndex ?? -1}|${currentMatchOccurrence ?? 0}`
+    const highlightsSig =
+      lineId != null && getHighlightsForLine
+        ? (getHighlightsForLine(lineId) ?? [])
+            .map((h) => `${h.id}:${h.startOffset}:${h.endOffset}:${h.colorArgb}`)
+            .join(',')
+        : ''
+    return `${diacriticsState.value}|${settingsStore.censorDivineNames}|${searchQuery ?? ''}|${currentMatchFlatIndex ?? -1}|${currentMatchOccurrence ?? 0}|${highlightsSig}`
   }
 
   function highlightMatches(
@@ -98,11 +111,12 @@ export function useCommentaryRender(groups: () => any[]) {
   function renderContent(
     content: string,
     flatIndex: number,
+    lineId: number | undefined,
     searchQuery: string | undefined,
     currentMatchFlatIndex: number | undefined,
     currentMatchOccurrence: number | undefined,
   ): string {
-    const key = getRenderCacheKey(searchQuery, currentMatchFlatIndex, currentMatchOccurrence)
+    const key = getRenderCacheKey(searchQuery, currentMatchFlatIndex, currentMatchOccurrence, lineId)
     if (key !== renderCacheKey) {
       renderCache.clear()
       renderCacheKey = key
@@ -113,6 +127,13 @@ export function useCommentaryRender(groups: () => any[]) {
     let result =
       diacriticsState.value === 0 ? content : applyDiacriticsFilter(content, diacriticsState.value)
     if (settingsStore.censorDivineNames) result = censorDivineNames(result)
+
+    // Apply user highlights before search marks so search marks render on top
+    if (lineId != null && getHighlightsForLine) {
+      const lineHighlights = getHighlightsForLine(lineId)
+      if (lineHighlights.length) result = applyUserHighlights(result, lineHighlights)
+    }
+
     if (searchQuery?.trim())
       result = highlightMatches(
         result,

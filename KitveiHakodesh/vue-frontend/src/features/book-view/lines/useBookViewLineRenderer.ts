@@ -156,6 +156,8 @@ function highlightFromSnippet(
 }
 
 // ── User highlight injection ──────────────────────────────────────────────────
+// NOTE: applyUserHighlights is also used by useCommentaryRender.ts — keep it
+// exported so both renderers can share the same implementation.
 
 /**
  * Injects <mark class="user-highlight"> spans into the HTML content for each
@@ -173,7 +175,7 @@ function highlightFromSnippet(
  * boundaries never split entities (e.g., &thinsp;). If a highlight's start/end
  * falls in the middle of an entity, the entire entity stays outside the mark tag.
  */
-function applyUserHighlights(content: string, highlights: Highlight[]): string {
+export function applyUserHighlights(content: string, highlights: Highlight[]): string {
   if (!highlights.length) return content
 
   // Build a list of open/close events sorted by stripped character position
@@ -288,7 +290,6 @@ export function useBookViewLineRenderer(
     // Apply user highlights first (underneath search marks)
     const lineHighlights = p.getHighlightsForLine?.(lineId) ?? []
     if (lineHighlights.length) {
-      console.log('[renderer] applying highlights to line', lineId, ':', lineHighlights)
       content = applyUserHighlights(content, lineHighlights)
     }
 

@@ -180,8 +180,6 @@ export function useBookViewHighlights(bookId: number) {
   ): Promise<void> {
     if (startOffset >= endOffset) return
 
-    console.log('[highlight] apply:', { lineId, startOffset, endOffset, colorArgb })
-
     try {
       const existing = [...(highlightsByLine.value.get(lineId) ?? [])]
       const overlapping = existing.filter(
@@ -228,7 +226,6 @@ export function useBookViewHighlights(bookId: number) {
 
       // Insert the final merged highlight
       await _insertHighlight(lineId, mergedStart, mergedEnd, colorArgb)
-      console.log('[highlight] applied:', { lineId, mergedStart, mergedEnd, colorArgb, total: highlightsByLine.value.get(lineId)?.length })
     } catch (err) {
       console.error('[highlight] error:', err)
       throw err

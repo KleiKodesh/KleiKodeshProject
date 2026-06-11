@@ -15,6 +15,7 @@ import { useCommentaryRender } from './useCommentaryRender'
 import { useCommentaryScroll } from './useCommentaryScroll'
 import { useCommentaryTocPaths } from './useCommentaryTocPaths'
 import { useCommentaryCopy } from './useCommentaryCopy'
+import { useCommentaryHighlights } from './useCommentaryHighlights'
 
 const props = defineProps<{
   selectedLineId: number | null
@@ -36,8 +37,19 @@ const emit = defineEmits<{
   scroll: [scrollIndex: number, scrollOffset: number]
 }>()
 
+// Load highlights per commentary book — groups contain lines from many different books,
+// each with their own bookId. useCommentaryHighlights loads lazily per commentary bookId
+// and routes writes back to the correct book, so highlights are shared with the book
+// viewer when you open that commentary book directly.
+const { getHighlightsForLine, applyHighlight, clearHighlight } = useCommentaryHighlights(
+  () => props.groups,
+)
+
 // Composables for rendering, scrolling, and TOC paths
-const { commentaryFontPx, renderContent } = useCommentaryRender(() => props.groups)
+const { commentaryFontPx, renderContent } = useCommentaryRender(
+  () => props.groups,
+  getHighlightsForLine,
+)
 const { commentaryTocPaths } = useCommentaryTocPaths(() => props.groups)
 
 type FlatItem =
@@ -149,6 +161,10 @@ const { contextMenuItems } = useCommentaryCopy(
   },
   (bookId) => commentaryTocPaths.value.get(bookId),
   selectAllInContainer,
+  scrollerEl,
+  (lineId, startOffset, endOffset, colorArgb) =>
+    applyHighlight(lineId, startOffset, endOffset, colorArgb),
+  (lineId, startOffset, endOffset) => clearHighlight(lineId, startOffset, endOffset),
 )
 
 function onScroll() {
@@ -257,7 +273,8 @@ function firstLineIndexForHeader(
                 v-else
                 class="line"
                 :class="{ 'line-no-text': asLine(flatItems[vItem.index])!.lineId === -1 }"
-                v-html="renderContent(asLine(flatItems[vItem.index])!.content, vItem.index, props.searchQuery, props.currentMatchFlatIndex, props.currentMatchOccurrence)"
+                :data-line-id="asLine(flatItems[vItem.index])!.lineId"
+                v-html="renderContent(asLine(flatItems[vItem.index])!.content, vItem.index, asLine(flatItems[vItem.index])!.lineId, props.searchQuery, props.currentMatchFlatIndex, props.currentMatchOccurrence)"
               />
             </div>
           </div>
@@ -334,5 +351,8 @@ function firstLineIndexForHeader(
 .line :deep(mark.search-match.current) {
   background: rgba(255, 165, 0, 0.9);
   color: #000;
+}
+.line :deep(mark.user-highlight) {
+  border-radius: 2px;
 }
 </style>
