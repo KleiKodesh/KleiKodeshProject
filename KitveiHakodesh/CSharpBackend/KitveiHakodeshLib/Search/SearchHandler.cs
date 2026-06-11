@@ -1,4 +1,4 @@
-using SearchEngine.SeforimDb;
+using FtsLib.SeforimDb;
 using KitveiHakodeshLib.Bridge;
 using Microsoft.Web.WebView2.WinForms;
 using System;
@@ -124,13 +124,13 @@ namespace KitveiHakodeshLib.Search
             _indexState.SetDatabase(dbPath,
                 new SeforimIndex(FtsIndexState.FtsIndexPath, dbPath));
 
-            string stampedDbHash = FtsIndexState.ReadDbHashStamp();
-            if (stampedDbHash != null)
+            string stampedVersion = FtsIndexState.ReadVersionStamp();
+            if (stampedVersion != null)
             {
                 string validationError = FtsIndexState.ValidateFtsIndex();
                 if (validationError != null)
                 {
-                    Console.WriteLine("[SearchHandler] fts.dbhash present but index invalid ("
+                    Console.WriteLine("[SearchHandler] fts.ver present but index invalid ("
                         + validationError + ") — deleting and rebuilding");
                     FtsIndexState.DeleteFtsIndex();
                     _bridge.PushEvent(new { @event = "ftsIndexInvalidated", reason = validationError });
@@ -138,18 +138,18 @@ namespace KitveiHakodeshLib.Search
                     return;
                 }
 
-                string currentDbHash = FtsIndexState.ComputeDbHash(dbPath);
-                Console.WriteLine("[SearchHandler] Database fingerprint check — current="
-                    + currentDbHash + " stamped=" + stampedDbHash);
+                string installedVersion = FtsIndexState.GetInstalledAppVersion();
+                Console.WriteLine("[SearchHandler] Version check — installed="
+                    + installedVersion + " stamped=" + stampedVersion);
 
-                if (!string.IsNullOrEmpty(currentDbHash) &&
-                    !string.Equals(currentDbHash, stampedDbHash,
+                if (!string.IsNullOrEmpty(installedVersion) &&
+                    !string.Equals(installedVersion, stampedVersion,
                                    StringComparison.OrdinalIgnoreCase))
                 {
-                    Console.WriteLine("[SearchHandler] Database changed (fingerprint " + stampedDbHash
-                        + " → " + currentDbHash + ") — rebuilding index automatically");
+                    Console.WriteLine("[SearchHandler] DB changed (app version " + stampedVersion
+                        + " → " + installedVersion + ") — rebuilding index automatically");
                     FtsIndexState.DeleteFtsIndex();
-                    _bridge.PushEvent(new { @event = "ftsIndexInvalidated", reason = "database changed" });
+                    _bridge.PushEvent(new { @event = "ftsIndexInvalidated", reason = "db updated" });
                     StartBuildOrWatch(dbPath);
                     return;
                 }
@@ -184,15 +184,8 @@ namespace KitveiHakodeshLib.Search
                 bool staleSegmentsExist = false;
                 try
                 {
-                    if (Directory.Exists(FtsIndexState.FtsIndexPath))
-                    {
-                        foreach (var f in Directory.GetFiles(FtsIndexState.FtsIndexPath))
-                        {
-                            string name = System.IO.Path.GetFileName(f);
-                            if (name.StartsWith("segments_") && name != "segments.gen")
-                            { staleSegmentsExist = true; break; }
-                        }
-                    }
+                    staleSegmentsExist = Directory.Exists(FtsIndexState.FtsIndexPath) &&
+                                         Directory.GetFiles(FtsIndexState.FtsIndexPath, "seg_*.dat").Length > 0;
                 }
                 catch { }
 
@@ -370,9 +363,6 @@ namespace KitveiHakodeshLib.Search
         public void HandleResetFtsIndex(string id)
         {
             _bridge.Reply(id, new { });
-            // Notify the frontend immediately so any live listener (e.g. the search page)
-            // knows a rebuild is starting before the actor thread picks it up.
-            _bridge.PushEvent(new { @event = "ftsIndexInvalidated", reason = "manual reset" });
             string dbPath = _indexState.GetDbPath();
             if (!string.IsNullOrEmpty(dbPath) && File.Exists(dbPath))
                 ResetAndReindex(dbPath);
@@ -433,12 +423,9 @@ namespace KitveiHakodeshLib.Search
         // ── Search ────────────────────────────────────────────────────────────────
 
         public void HandleSearchStart(JsonElement root, string id)
-            => _searcher.HandleSearchIds(root, id);
+            => _searcher.HandleSearchStart(root, id);
 
         public void HandleSearchCancel(JsonElement root, string id)
             => _searcher.HandleSearchCancel(root, id);
-
-        public void HandleGetSnippets(JsonElement root, string id)
-            => _searcher.HandleGetSnippets(root, id);
     }
 }

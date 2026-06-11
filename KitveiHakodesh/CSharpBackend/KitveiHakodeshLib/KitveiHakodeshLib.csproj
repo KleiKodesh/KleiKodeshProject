@@ -55,7 +55,6 @@
     <Reference Include="Dapper, Version=2.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\Dapper.2.1.72\lib\net461\Dapper.dll</HintPath>
     </Reference>
-
     <Reference Include="HtmlAgilityPack, Version=1.12.4.0, Culture=neutral, PublicKeyToken=bd319b19eaf3b43a, processorArchitecture=MSIL">
       <HintPath>..\packages\HtmlAgilityPack.1.12.4\lib\Net45\HtmlAgilityPack.dll</HintPath>
     </Reference>
@@ -126,7 +125,7 @@
     <Compile Include="Db\DbAccess.cs" />
     <Compile Include="Db\DbHandler.cs" />
     <Compile Include="HebrewBooks\HebrewBooksHandler.cs" />
-    <Compile Include="HebrewBooks\HebrewBooksDb.cs" />
+    <Compile Include="HebrewBooks\HebrewBooksCsvUpdater.cs" />
     <Compile Include="Pdf\LocalFileHandler.cs" />
     <Compile Include="Pdf\WordToPdfConverter.cs" />
     <Compile Include="Search\FtsIndexState.cs" />
@@ -136,8 +135,6 @@
     <Compile Include="Settings\AppSettings.cs" />
     <Compile Include="Dictionary\DictionaryHandler.cs" />
     <Compile Include="Dictionary\WordThesaurusProvider.cs" />
-    <Compile Include="FileSystemSearch\DocumentLocatorAdapter.cs" />
-    <Compile Include="FileSystemSearch\FileSystemSearchHandler.cs" />
     <Compile Include="Helpers\FontsProvider.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
@@ -152,22 +149,9 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Resources\HebrewBooks.db">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\SearchEngine\Ftslib\FtsLib.csproj">
-      <Project>{76F9DAA9-374F-40F9-8511-3239FB6E846E}</Project>
+    <ProjectReference Include="..\FtsLib\Ftslib-Csharp\FtsLib\FtsLib.csproj">
+      <Project>{76f9daa9-374f-40f9-8511-3239fb6e846e}</Project>
       <Name>FtsLib</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\SearchEngine\SearchEngine\SearchEngine.csproj">
-      <Project>{B1C2D3E4-0001-0000-0000-000000000001}</Project>
-      <Name>SearchEngine</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\DocumentLocator\DocumentLocator.Client\DocumentLocator.Client.csproj">
-      <Project>{E7B8C9D0-E1F2-43AB-B5C6-D7E8F9A0B1C2}</Project>
-      <Name>DocumentLocator.Client</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

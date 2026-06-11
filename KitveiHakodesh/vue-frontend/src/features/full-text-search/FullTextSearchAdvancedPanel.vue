@@ -7,8 +7,6 @@ const props = defineProps<{
   requireOrdered: boolean
   contextWords: number
   expandKetiv: boolean
-  wildcardWrap: boolean
-  grammarWrap: boolean
 }>()
 
 const emit = defineEmits<{
@@ -16,8 +14,6 @@ const emit = defineEmits<{
   'update:requireOrdered': [boolean]
   'update:contextWords': [number]
   'update:expandKetiv': [boolean]
-  'update:wildcardWrap': [boolean]
-  'update:grammarWrap': [boolean]
   close: []
 }>()
 
@@ -60,55 +56,18 @@ function onContextWordsInput(event: Event) {
     </div>
 
     <div v-if="activeTab === 'options'" class="panel-body">
-      <!-- Grammar wrap -->
+      <!-- Word distance -->
       <div class="option-row">
-        <span class="option-label">תחיליות וסופיות דקדוקיות</span>
-        <div class="toggle-group">
-          <button
-            class="toggle-btn"
-            :class="{ active: !props.grammarWrap }"
-            @click="emit('update:grammarWrap', false)"
-          >לא</button>
-          <button
-            class="toggle-btn"
-            :class="{ active: props.grammarWrap }"
-            @click="emit('update:grammarWrap', true)"
-          >כן</button>
-        </div>
-      </div>
-
-      <!-- Wildcard wrap -->
-      <div class="option-row">
-        <span class="option-label">תחיליות וסופיות</span>
-        <div class="toggle-group">
-          <button
-            class="toggle-btn"
-            :class="{ active: !props.wildcardWrap }"
-            @click="emit('update:wildcardWrap', false)"
-          >לא</button>
-          <button
-            class="toggle-btn"
-            :class="{ active: props.wildcardWrap }"
-            @click="emit('update:wildcardWrap', true)"
-          >כן</button>
-        </div>
-      </div>
-
-      <!-- כתיב expansion -->
-      <div class="option-row">
-        <span class="option-label">הרחב כתיב חסר/מלא</span>
-        <div class="toggle-group">
-          <button
-            class="toggle-btn"
-            :class="{ active: !props.expandKetiv }"
-            @click="emit('update:expandKetiv', false)"
-          >לא</button>
-          <button
-            class="toggle-btn"
-            :class="{ active: props.expandKetiv }"
-            @click="emit('update:expandKetiv', true)"
-          >כן</button>
-        </div>
+        <label class="option-label" for="word-distance-input">מרחק מקסימלי בין מילים</label>
+        <input
+          id="word-distance-input"
+          type="number"
+          class="distance-input"
+          :value="props.maxWordDistance"
+          min="0"
+          max="9999"
+          @input="onDistanceInput"
+        />
       </div>
 
       <!-- Order mode -->
@@ -128,23 +87,9 @@ function onContextWordsInput(event: Event) {
         </div>
       </div>
 
-      <!-- Word distance -->
-      <div class="option-row">
-        <label class="option-label" for="word-distance-input">מרחק תווים מקסימלי בין מילים</label>
-        <input
-          id="word-distance-input"
-          type="number"
-          class="distance-input"
-          :value="props.maxWordDistance"
-          min="0"
-          max="9999"
-          @input="onDistanceInput"
-        />
-      </div>
-
       <!-- Context words -->
       <div class="option-row">
-        <label class="option-label" for="context-words-input">הקשר לפני ואחרי (תווים)</label>
+        <label class="option-label" for="context-words-input">הקשר לפני ואחרי (מילים)</label>
         <input
           id="context-words-input"
           type="number"
@@ -155,6 +100,23 @@ function onContextWordsInput(event: Event) {
           @input="onContextWordsInput"
         />
       </div>
+
+      <!-- כתיב expansion -->
+      <div class="option-row">
+        <span class="option-label">הרחב כתיב חסר/מלא</span>
+        <div class="toggle-group">
+          <button
+            class="toggle-btn"
+            :class="{ active: !props.expandKetiv }"
+            @click="emit('update:expandKetiv', false)"
+          >לא</button>
+          <button
+            class="toggle-btn"
+            :class="{ active: props.expandKetiv }"
+            @click="emit('update:expandKetiv', true)"
+          >כן</button>
+        </div>
+      </div>
     </div>
 
     <div v-else-if="activeTab === 'syntax'" class="syntax-help">
@@ -162,6 +124,10 @@ function onContextWordsInput(event: Event) {
         <div class="syntax-row">
           <div class="intent">תחיליות וסופיות</div>
           <div class="usage"><span class="example">ישר*</span> <span class="example">*לום</span></div>
+        </div>
+        <div class="syntax-row">
+          <div class="intent">תו אופציונלי (כתיב חסר/מלא)</div>
+          <div class="usage"><span class="example">שלו?ם</span></div>
         </div>
         <div class="syntax-row">
           <div class="intent">דומה עם שגיאה (מרחק 1)</div>

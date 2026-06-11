@@ -154,18 +154,8 @@ export function useFullTextSearchFilters(
   function checkAll() {
     checkedBookIds.value = new Set(booksStore.allBooks.map((b) => b.id))
   }
-  function checkAllFiltered(ids: Set<number>) {
-    const s = new Set(checkedBookIds.value)
-    for (const id of ids) s.add(id)
-    checkedBookIds.value = s
-  }
   function uncheckAll() {
     checkedBookIds.value = new Set()
-  }
-  function uncheckAllFiltered(ids: Set<number>) {
-    const s = new Set(checkedBookIds.value)
-    for (const id of ids) s.delete(id)
-    checkedBookIds.value = s
   }
 
   async function handleSearch(q: string) {
@@ -222,9 +212,7 @@ export function useFullTextSearchFilters(
     toggleBook,
     toggleCategory,
     checkAll,
-    checkAllFiltered,
     uncheckAll,
-    uncheckAllFiltered,
     handleSearch,
     handleClearSearch,
     handleResultClick,

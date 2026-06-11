@@ -1,59 +1,215 @@
 /**
- * Full-text search composable — two-phase approach:
+ * Full-text search composable — wraps C# streaming search (FtsLib backend).
  *
- * Phase 1 — FtsSearchStart: C# runs index-only pass and returns all matching
- *   { lineId, bookId, bookTitle } immediately via an idsComplete push event.
- *   No snippet work, very fast. Frontend gets the full result list and renders
- *   placeholder rows instantly.
+ * C# sends search stream events via PostWebMessageAsString → chrome.webview message events.
+ * C# sends indexing progress via ExecuteScriptAsync → window.__onWebviewEvent.
  *
- * Phase 2 — FtsGetSnippets: Vue calls this synchronous RPC with the lineIds
- *   currently visible in the virtualizer viewport. C# generates snippets for
- *   exactly those lines and returns them. Called on scroll as new rows come
- *   into view.
- *
- * No persistence — the search is fast enough to re-run on demand.
+ * Falls back to sample data in dev when the C# host is not present.
  */
 import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
-import { isHosted, query, onWebviewEvent } from '@/webview-host/seforimDb'
-import { callBridgeAction } from '@/webview-host/bridge'
-import { useSettingsStore } from '@/stores/settingsStore'
+import { isHosted, query } from '@/webview-host/seforimDb'
 import { SQL } from '@/webview-host/queries.sql'
+import { callBridgeAction } from '@/webview-host/bridge'
+import { useSearchCacheStore } from '@/stores/searchCacheStore'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { expandKetivHaser } from '@/utils/hebrewKetivExpander'
 import type { FullTextSearchResult, SearchFailReason } from './fullTextSearchTypes'
 
-// ── Dev sample data ───────────────────────────────────────────────────────────
-
 const DEV_SAMPLES: FullTextSearchResult[] = [
-  { lineId: 1, bookId: 1, bookTitle: 'בראשית', tocText: 'פרק א', score: 0, snippet: 'בראשית ברא אלקים את <mark>השמים</mark> ואת הארץ', matchedTerms: ['השמים'] },
-  { lineId: 2, bookId: 1, bookTitle: 'בראשית', tocText: 'פרק א', score: 0, snippet: 'והארץ היתה תהו ובהו וחשך על פני תהום', matchedTerms: [] },
-  { lineId: 3, bookId: 2, bookTitle: 'שמות', tocText: 'פרק א', score: 0, snippet: 'ואלה שמות בני ישראל הבאים מצרימה', matchedTerms: [] },
-  { lineId: 4, bookId: 3, bookTitle: 'ויקרא', tocText: 'פרק א', score: 0, snippet: 'ויקרא אל משה וידבר אליו מאהל מועד', matchedTerms: [] },
-  { lineId: 5, bookId: 1, bookTitle: 'בראשית', tocText: 'פרק ב', score: 0, snippet: 'ויכלו השמים והארץ וכל צבאם', matchedTerms: [] },
-  { lineId: 6, bookId: 4, bookTitle: 'משנה תורה להרמב"ם', tocText: 'הלכות יסודי התורה › פרק ראשון', score: 0, snippet: 'יסוד היסודות ועמוד החכמות לידע שיש שם מצוי ראשון', matchedTerms: [] },
+  {
+    lineId: 1,
+    bookId: 1,
+    bookTitle: 'בראשית',
+    tocText: 'פרק א',
+    score: 0,
+    snippet: 'בראשית ברא אלקים את השמים ואת הארץ',
+    matchedTerms: [],
+  },
+  {
+    lineId: 2,
+    bookId: 1,
+    bookTitle: 'בראשית',
+    tocText: 'פרק א',
+    score: 0,
+    snippet: 'והארץ היתה תהו ובהו וחשך על פני תהום',
+    matchedTerms: [],
+  },
+  {
+    lineId: 3,
+    bookId: 2,
+    bookTitle: 'שמות',
+    tocText: 'פרק א',
+    score: 0,
+    snippet: 'ואלה שמות בני ישראל הבאים מצרימה',
+    matchedTerms: [],
+  },
+  {
+    lineId: 4,
+    bookId: 3,
+    bookTitle: 'ויקרא',
+    tocText: 'פרק א',
+    score: 0,
+    snippet: 'ויקרא אל משה וידבר אליו מאהל מועד',
+    matchedTerms: [],
+  },
+  {
+    lineId: 5,
+    bookId: 1,
+    bookTitle: 'בראשית',
+    tocText: 'פרק ב',
+    score: 0,
+    snippet: 'ויכלו השמים והארץ וכל צבאם',
+    matchedTerms: [],
+  },
+  {
+    lineId: 6,
+    bookId: 4,
+    bookTitle: 'משנה תורה להרמב"ם - ספר המדע',
+    tocText: 'הלכות יסודי התורה › פרק ראשון › הלכה א',
+    score: 0,
+    snippet: 'יסוד היסודות ועמוד החכמות לידע שיש שם מצוי ראשון',
+    matchedTerms: [],
+  },
+  {
+    lineId: 7,
+    bookId: 5,
+    bookTitle: 'שולחן ערוך עם כל הנושאי כלים - אורח חיים',
+    tocText: 'סימן א › סעיף א',
+    score: 0,
+    snippet: 'יתגבר כארי לעמוד בבוקר לעבודת בוראו שיהא הוא מעורר השחר',
+    matchedTerms: [],
+  },
+  {
+    lineId: 8,
+    bookId: 6,
+    bookTitle: 'תלמוד בבלי - מסכת ברכות',
+    tocText: 'פרק ראשון - מאימתי › דף ב עמוד א',
+    score: 0,
+    snippet: 'מאימתי קורין את שמע בערבין משעה שהכהנים נכנסים לאכול בתרומתן',
+    matchedTerms: [],
+  },
 ]
 
-export function useFullTextSearch() {
-  const settings = useSettingsStore()
-  const {
-    searchMaxWordDistance,
-    searchRequireOrdered,
-    searchExpandKetiv,
-    searchWildcardWrap,
-    searchGrammarWrap,
-  } = storeToRefs(settings)
+// ── chrome.webview message listener (search stream events from C#) ────────────
+// C# sends search events via PostWebMessageAsString → chrome.webview message events.
+// We maintain a single shared listener and route by searchId.
 
+type SearchListeners = {
+  onBatch: (results: FullTextSearchResult[]) => Promise<void>
+  onComplete: () => Promise<void>
+  onCancelled: () => void
+  onError: (reason: SearchFailReason) => void
+}
+
+// Tracks in-flight onBatch promises so onComplete waits for all enrichment to finish
+const _pendingBatches = new Map<string, Promise<void>>()
+
+const _searchListeners = new Map<string, SearchListeners>()
+let _webviewListenerSetup = false
+
+function ensureWebviewListener() {
+  if (_webviewListenerSetup || !isHosted) return
+  _webviewListenerSetup = true
+  const wv = (window as any).chrome?.webview
+  if (!wv) return
+  wv.addEventListener('message', (event: MessageEvent) => {
+    try {
+      const msg = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
+      if (!msg?.type || !msg?.searchId) return
+      const listener = _searchListeners.get(msg.searchId)
+      if (!listener) return
+      switch (msg.type) {
+        case 'searchBatch': {
+          // Chain onto any in-flight batch promise so enrichment is always sequential
+          const prev = _pendingBatches.get(msg.searchId) ?? Promise.resolve()
+          const next = prev.then(() => listener.onBatch(msg.results ?? []))
+          _pendingBatches.set(msg.searchId, next)
+          break
+        }
+        case 'searchComplete':
+          // Wait for all in-flight batches to finish enrichment before completing
+          ;(_pendingBatches.get(msg.searchId) ?? Promise.resolve())
+            .then(() => {
+              _pendingBatches.delete(msg.searchId)
+              _searchListeners.delete(msg.searchId)
+              return listener.onComplete()
+            })
+            .catch((err) => console.error('[useFullTextSearch] onComplete failed:', err))
+          break
+        case 'searchCancelled':
+          _pendingBatches.delete(msg.searchId)
+          listener.onCancelled()
+          _searchListeners.delete(msg.searchId)
+          break
+        case 'searchError':
+          _pendingBatches.delete(msg.searchId)
+          listener.onError(msg.failReason ?? 'searchFailed')
+          _searchListeners.delete(msg.searchId)
+          break
+      }
+    } catch {
+      /* ignore malformed messages */
+    }
+  })
+}
+
+async function enrichTocPaths(batch: FullTextSearchResult[]): Promise<void> {
+  const lineIds = [...new Set(batch.map((r) => r.lineId))]
+  if (!lineIds.length) return
+  try {
+    const rows = await query<{ lineId: number; bookId: number; tocPath: string }>(
+      SQL.GET_TOC_PATHS_FOR_LINES(lineIds.length),
+      lineIds,
+    )
+    const dataMap = new Map(rows.map((r) => [r.lineId, { bookId: r.bookId, tocPath: r.tocPath }]))
+    for (const r of batch) {
+      const data = dataMap.get(r.lineId)
+      if (data) {
+        r.bookId = data.bookId
+        r.tocText = data.tocPath
+      }
+    }
+
+    // Fallback for lines with no line_toc entry (e.g. custom books with negative IDs).
+    // The TOC path query joins through line_toc → tocEntry and returns nothing for
+    // such lines, leaving bookId as 0. Fetch bookId directly from the line table.
+    const unenrichedIds = batch.filter((r) => r.bookId === 0).map((r) => r.lineId)
+    if (unenrichedIds.length > 0) {
+      const fallbackRows = await query<{ lineId: number; bookId: number }>(
+        SQL.GET_BOOK_IDS_FOR_LINES(unenrichedIds.length),
+        unenrichedIds,
+      )
+      const fallbackMap = new Map(fallbackRows.map((r) => [r.lineId, r.bookId]))
+      for (const r of batch) {
+        if (r.bookId === 0) {
+          const bookId = fallbackMap.get(r.lineId)
+          if (bookId != null) r.bookId = bookId
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[useFullTextSearch] enrichTocPaths failed:', err)
+  }
+}
+
+export function useFullTextSearch(isIndexing?: () => boolean) {
+  const cache = useSearchCacheStore()
+  const settings = useSettingsStore()
+  const { searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv } = storeToRefs(settings)
   const results = ref<FullTextSearchResult[]>([])
   const isSearching = ref(false)
   const hasSearched = ref(false)
   const executedQuery = ref('')
   const searchError = ref<SearchFailReason | null>(null)
-
   let currentSearchId: string | null = null
-  let unregisterEvent: (() => void) | null = null
 
   function _cleanup() {
-    if (unregisterEvent) { unregisterEvent(); unregisterEvent = null }
-    currentSearchId = null
+    if (currentSearchId) {
+      _searchListeners.delete(currentSearchId)
+      _pendingBatches.delete(currentSearchId)
+      currentSearchId = null
+    }
   }
 
   async function cancelSearch() {
@@ -61,56 +217,26 @@ export function useFullTextSearch() {
     const id = currentSearchId
     _cleanup()
     isSearching.value = false
-    try { await callBridgeAction('FtsSearchCancel', id) } catch { /* ignore */ }
-  }
-
-  function _buildQueryToSend(normalizedQuery: string): string {
-    if (!settings.searchWildcardWrap && !settings.searchGrammarWrap) return normalizedQuery
-    return normalizedQuery
-      .split(/\s+/)
-      .map((word) => {
-        if (!word) return word
-        if (/[*~|%]/.test(word)) return word
-        if (settings.searchWildcardWrap) return `*${word}*`
-        return `%${word}%`
-      })
-      .join(' ')
-  }
-
-  async function executeSearch(rawQuery: string) {
-    if (!rawQuery.trim()) return
-    if (currentSearchId) await cancelSearch()
-
-    hasSearched.value = true
-    searchError.value = null
-    executedQuery.value = rawQuery
-
-    if (!isHosted || typeof window.__webviewAction !== 'function') {
-      isSearching.value = true
-      results.value = []
-      await new Promise((resolve) => setTimeout(resolve, 400))
-      results.value = DEV_SAMPLES
-      isSearching.value = false
-      return
-    }
-
-    const queryToSend = _buildQueryToSend(rawQuery.trim().toLowerCase())
-    isSearching.value = true
-    results.value = []
-
-    let reply: { searchId: string; failReason: SearchFailReason | null } | null = null
     try {
-      reply = await callBridgeAction<{ searchId: string; failReason: SearchFailReason | null }>(
-        'FtsSearchStart',
-        queryToSend,
-        settings.searchExpandKetiv,
-      )
+      await callBridgeAction('FtsSearchCancel', id)
     } catch {
-      searchError.value = 'searchFailed'
-      isSearching.value = false
-      return
+      /* ignore */
     }
+  }
 
+  // Start the C# search stream and wire up listeners.
+  // skipCount: number of results already in cache — C# will skip that many before streaming.
+  async function _startStream(normalizedQuery: string, skipCount: number) {
+    ensureWebviewListener()
+    const reply = await callBridgeAction<{ searchId: string; failReason: SearchFailReason | null }>(
+      'FtsSearchStart',
+      normalizedQuery,
+      skipCount,
+      settings.searchMaxWordDistance,
+      settings.searchRequireOrdered,
+      settings.searchContextMarginWords,
+      settings.searchExpandKetiv,
+    )
     const searchId = reply?.searchId
     if (!searchId) {
       searchError.value = reply?.failReason ?? 'indexNotReady'
@@ -119,121 +245,81 @@ export function useFullTextSearch() {
     }
     currentSearchId = searchId
 
-    unregisterEvent = onWebviewEvent((msg) => {
-      if (msg.searchId !== searchId) return
-
-      if (msg.type === 'idsComplete') {
-        const lineIds = ((msg as any).lineIds as number[]) ?? []
-        _cleanup()
+    _searchListeners.set(searchId, {
+      onBatch: async (batch) => {
+        if (currentSearchId !== searchId) return
+        await enrichTocPaths(batch)
+        // Re-check after the async enrichment — currentSearchId may have changed
+        // while enrichTocPaths was awaiting the SQL query.
+        if (currentSearchId !== searchId) return
+        results.value = [...results.value, ...batch]
+        // Only persist to IDB when the index is fully built — partial results
+        // from a mid-build search would be cached as complete and served stale.
+        if (!isIndexing?.()) {
+          try {
+            await cache.appendBatch(normalizedQuery, JSON.parse(JSON.stringify(batch)))
+          } catch {
+            /* non-fatal — cache is best-effort */
+          }
+        }
+      },
+      onComplete: async () => {
+        if (currentSearchId !== searchId) return
         isSearching.value = false
-        results.value = lineIds.map((lineId) => ({
-          lineId,
-          bookId: 0,
-          bookTitle: '',
-          tocText: '',
-          score: 0,
-          snippet: '',
-          matchedTerms: [],
-        }))
-        return
-      }
-
-      if (msg.type === 'idsCancelled') {
+        if (!isIndexing?.()) {
+          try {
+            await cache.markComplete(normalizedQuery)
+          } catch {
+            /* non-fatal */
+          }
+        }
         _cleanup()
+      },
+      onCancelled: () => {
+        if (currentSearchId !== searchId) return
         isSearching.value = false
-        return
-      }
-
-      if (msg.type === 'idsError') {
         _cleanup()
-        searchError.value = (msg.failReason as SearchFailReason) ?? 'searchFailed'
+      },
+      onError: (reason) => {
+        console.error('[useFullTextSearch] search error:', reason)
+        if (currentSearchId !== searchId) return
+        searchError.value = reason
         isSearching.value = false
-        return
-      }
+        _cleanup()
+      },
     })
   }
 
-  type SnippetWindowEntry = {
-    snippet: string
-    score: number
-    matchedTerms: string[]
-    tocText: string
-    isWeakMatch: boolean
-    bookTitle: string
-  }
+  async function executeSearch(q: string) {
+    if (!q.trim()) return
 
-  /**
-   * Fetches snippets for a window of lineIds (the visible viewport).
-   * Called by the results list as rows scroll into view.
-   * Returns a map of lineId → { snippet, score, matchedTerms, tocText, isWeakMatch, bookTitle }.
-   */
-  async function fetchSnippetsForWindow(lineIds: number[]): Promise<Map<number, SnippetWindowEntry>> {
-    if (!lineIds.length) return new Map()
+    if (currentSearchId) await cancelSearch()
 
-    const queryToSend = _buildQueryToSend(executedQuery.value.trim().toLowerCase())
+    isSearching.value = true
+    hasSearched.value = true
+    results.value = []
+    searchError.value = null
+    executedQuery.value = q
 
-    type SnippetRow = { lineId: number; score: number; snippet: string; matchedTerms: string[]; isWeakMatch: boolean }
-
-    async function fetchSnippets(): Promise<{ snippets: SnippetRow[] }> {
-      if (!isHosted || typeof window.__webviewAction !== 'function') {
-        return { snippets: [] }
-      }
-      try {
-        const reply = await callBridgeAction<{ snippets: SnippetRow[] }>(
-          'FtsGetSnippets',
-          lineIds,
-          queryToSend,
-          settings.searchMaxWordDistance,
-          settings.searchRequireOrdered,
-          settings.searchContextMarginWords,
-          settings.searchExpandKetiv,
-        )
-        console.log('[FtsGetSnippets] sent', lineIds.length, 'lineIds query=', queryToSend, '→ got', reply?.snippets?.length ?? 0, 'snippets')
-        if (reply?.snippets?.length) console.log('[FtsGetSnippets] first snippet:', reply.snippets[0])
-        return reply
-      } catch (error) {
-        console.error('[FtsGetSnippets] error:', error)
-        return { snippets: [] }
-      }
+    // Dev fallback — bridge not available in browser dev
+    if (!isHosted || typeof window.__webviewAction !== 'function') {
+      await new Promise((r) => setTimeout(r, 400))
+      results.value = DEV_SAMPLES
+      isSearching.value = false
+      return
     }
 
-    const [snippetReply, tocRows] = await Promise.all([
-      fetchSnippets(),
-      query<{ lineId: number; tocPath: string; bookTitle: string }>(
-        SQL.GET_TOC_PATHS_AND_TITLES_FOR_LINES(lineIds.length),
-        lineIds,
-      ).catch(() => [] as Array<{ lineId: number; tocPath: string; bookTitle: string }>),
-    ])
+    const normalizedQuery = q.trim().toLowerCase()
 
-    const resultMap = new Map<number, SnippetWindowEntry>()
-    const tocByLineId = new Map(tocRows.map((r) => [r.lineId, r.tocPath]))
-    const bookTitleByLineId = new Map(tocRows.map((r) => [r.lineId, r.bookTitle]))
-
-    for (const s of snippetReply.snippets) {
-      resultMap.set(s.lineId, {
-        snippet: s.snippet,
-        score: s.score,
-        matchedTerms: s.matchedTerms,
-        tocText: tocByLineId.get(s.lineId) ?? '',
-        isWeakMatch: s.isWeakMatch,
-        bookTitle: bookTitleByLineId.get(s.lineId) ?? '',
-      })
+    // Always run a fresh search — the cache is only used for session restore
+    // and tab switching (see loadCachedResults), never for a user-initiated search.
+    try {
+      if (!isIndexing?.()) await cache.init(normalizedQuery)
+      await _startStream(normalizedQuery, 0)
+    } catch (err) {
+      console.error('[useFullTextSearch] failed to start search:', err)
+      isSearching.value = false
     }
-
-    for (const lineId of lineIds) {
-      if (!resultMap.has(lineId)) {
-        resultMap.set(lineId, {
-          snippet: '',
-          score: 0,
-          matchedTerms: [],
-          tocText: tocByLineId.get(lineId) ?? '',
-          isWeakMatch: false,
-          bookTitle: bookTitleByLineId.get(lineId) ?? '',
-        })
-      }
-    }
-
-    return resultMap
   }
 
   function clearSearch() {
@@ -241,6 +327,33 @@ export function useFullTextSearch() {
     hasSearched.value = false
     executedQuery.value = ''
     searchError.value = null
+  }
+
+  function clearCachedResults(q: string): void {
+    const normalizedQuery = q.trim().toLowerCase()
+    // Fire-and-forget — tab is closing, no need to await
+    cache.remove(normalizedQuery).catch(() => {/* non-fatal */})
+  }
+
+  async function loadCachedResults(q: string): Promise<boolean> {
+    // Don't restore from cache while indexing — the cached results are partial
+    // and would be served as if they were complete.
+    if (isIndexing?.()) return false
+    const normalizedQuery = q.trim().toLowerCase()
+    const cached = await cache.get(normalizedQuery)
+    if (!cached || cached.results.length === 0) return false
+    results.value = cached.results
+    executedQuery.value = q
+    hasSearched.value = true
+    // If incomplete, resume streaming in the background
+    if (!cached.complete) {
+      isSearching.value = true
+      _startStream(normalizedQuery, cached.results.length).catch((err) => {
+        console.error('[useFullTextSearch] failed to resume stream after tab restore:', err)
+        isSearching.value = false
+      })
+    }
+    return true
   }
 
   return {
@@ -252,11 +365,10 @@ export function useFullTextSearch() {
     maxWordDistance: searchMaxWordDistance,
     requireOrdered: searchRequireOrdered,
     expandKetiv: searchExpandKetiv,
-    wildcardWrap: searchWildcardWrap,
-    grammarWrap: searchGrammarWrap,
     executeSearch,
     cancelSearch,
     clearSearch,
-    fetchSnippetsForWindow,
+    clearCachedResults,
+    loadCachedResults,
   }
 }

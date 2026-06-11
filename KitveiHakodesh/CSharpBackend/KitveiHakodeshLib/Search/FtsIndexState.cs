@@ -1,4 +1,4 @@
-using SearchEngine.SeforimDb;
+using FtsLib.SeforimDb;
 using Microsoft.Win32;
 using System;
 using System.IO;
@@ -190,15 +190,7 @@ namespace KitveiHakodeshLib.Search
         /// </summary>
         internal void SetDatabase(string dbPath, SeforimIndex index)
         {
-            SeforimIndex oldIndex;
-            lock (_lock)
-            {
-                oldIndex = _index;
-                _dbPath  = dbPath;
-                _index   = index;
-            }
-            // No Dispose needed — FtsLib's SeforimIndex holds no unmanaged resources.
-            _ = oldIndex;
+            lock (_lock) { _dbPath = dbPath; _index = index; }
         }
 
         /// <summary>
@@ -422,16 +414,8 @@ namespace KitveiHakodeshLib.Search
             try
             {
                 if (!Directory.Exists(FtsIndexPath)) return "index directory missing";
-                // Lucene index is valid when at least one committed segments file exists
-                // and there is no interrupted build (progress file present means resumable).
-                bool hasSegments = false;
-                foreach (var f in Directory.GetFiles(FtsIndexPath))
-                {
-                    string name = Path.GetFileName(f);
-                    if (name.StartsWith("segments_") && name != "segments.gen")
-                    { hasSegments = true; break; }
-                }
-                if (!hasSegments) return "no segment files found";
+                if (Directory.GetFiles(FtsIndexPath, "*.dat").Length == 0)
+                    return "no segment files found";
                 return null;
             }
             catch (Exception ex) { return "validation error: " + ex.Message; }
@@ -448,70 +432,35 @@ namespace KitveiHakodeshLib.Search
         internal static string BloomFolderPath =>
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BloomFilters");
 
-        // ── Database fingerprint (size + last-write time) ────────────────────────
-        //
-        // We previously used SHA256 of the entire DB file for change detection.
-        // That approach had two problems:
-        //   1. It reads the entire DB file on every app startup — several seconds
-        //      of blocking I/O for large databases.
-        //   2. SQLite WAL checkpoints write back to the main DB file during normal
-        //      operation, changing the SHA256 hash even when the data hasn't changed
-        //      in any way that would invalidate the FTS index. This caused spurious
-        //      "database changed" rebuilds on every reload after any query activity.
-        //
-        // The replacement uses file size + last-write UTC ticks — two values that
-        // are read from the filesystem metadata in a single stat() call (no file I/O).
-        // A WAL checkpoint does change the main file's size and mtime, but only when
-        // actual data pages are written back. In practice this is a reliable signal:
-        // if the DB content changed enough to checkpoint, the FTS index may be stale.
-        // If a checkpoint happens without any new books being added, the rebuild is
-        // a false positive — but it is rare and far less disruptive than the old
-        // SHA256 approach which triggered on every session.
+        // ── Version stamp ─────────────────────────────────────────────────────────
 
-        internal static string FtsDbHashPath =>
-            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "FtsIndex", "fts.dbhash");
-
-        /// <summary>
-        /// Returns a fingerprint string for the database file based on its size and
-        /// last-write time. The operation is instant — no file content is read.
-        /// Returns null if the file does not exist or the metadata cannot be read.
-        /// </summary>
-        internal static string ComputeDbHash(string dbPath)
+        internal static string GetInstalledAppVersion()
         {
             try
             {
-                if (!File.Exists(dbPath)) return null;
-                var info = new FileInfo(dbPath);
-                // Format: "{size}:{lastWriteUtcTicks}"
-                return info.Length + ":" + info.LastWriteTimeUtc.Ticks;
+                using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"SOFTWARE\KleiKodesh"))
+                    return key?.GetValue("Version")?.ToString();
             }
             catch { return null; }
         }
 
-        /// <summary>
-        /// Reads the stored database fingerprint from the stamp file.
-        /// Returns null if the file does not exist or cannot be read.
-        /// </summary>
-        internal static string ReadDbHashStamp()
+        internal static string ReadVersionStamp()
         {
             try
             {
-                return File.Exists(FtsDbHashPath)
-                    ? File.ReadAllText(FtsDbHashPath).Trim()
+                return File.Exists(FtsVersionStampPath)
+                    ? File.ReadAllText(FtsVersionStampPath).Trim()
                     : null;
             }
             catch { return null; }
         }
 
-        /// <summary>
-        /// Writes the database fingerprint to the stamp file.
-        /// </summary>
-        internal static void WriteDbHashStamp(string dbHash)
+        internal static void WriteVersionStamp(string version)
         {
             try
             {
                 Directory.CreateDirectory(FtsIndexPath);
-                File.WriteAllText(FtsDbHashPath, dbHash ?? "");
+                File.WriteAllText(FtsVersionStampPath, version ?? "");
             }
             catch { }
         }

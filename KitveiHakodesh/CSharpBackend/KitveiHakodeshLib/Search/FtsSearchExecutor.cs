@@ -1,8 +1,10 @@
-using SearchEngine.SeforimDb;
+using FtsLib.Indexing;
+using FtsLib.SeforimDb;
 using KitveiHakodeshLib.Bridge;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -10,13 +12,8 @@ using System.Threading.Tasks;
 namespace KitveiHakodeshLib.Search
 {
     /// <summary>
-    /// Executes full-text searches against the FTS index.
-    ///
-    /// Two-phase approach:
-    ///   1. FtsSearchIds  — streams line IDs + bookId + bookTitle immediately (no snippet work).
-    ///                      Frontend receives the full result set fast and renders placeholders.
-    ///   2. FtsGetSnippets — generates snippets on demand for a given list of lineIds.
-    ///                       Called by the frontend for the visible viewport window as the user scrolls.
+    /// Executes full-text searches against the FTS index and streams results
+    /// back to the frontend in batches via the WebBridge.
     /// </summary>
     internal sealed class FtsSearchExecutor
     {
@@ -27,41 +24,22 @@ namespace KitveiHakodeshLib.Search
             = new ConcurrentDictionary<string, CancellationTokenSource>();
         private int _nextSearchId = 1;
 
-        // ── ID-only result row (phase 1) ──────────────────────────────────────────
-        // Phase 1 sends only lineIds — no DB touch, no bookTitle.
-        // bookTitle and tocText arrive in phase 2 with the snippets.
-
-        // ── Snippet result row (phase 2) ──────────────────────────────────────────
-        private struct SnippetPayload
-        {
-            public int      lineId       { get; set; }
-            public int      score        { get; set; }
-            public string   snippet      { get; set; }
-            public string[] matchedTerms { get; set; }
-            public bool     isWeakMatch  { get; set; }
-        }
-
         internal FtsSearchExecutor(FtsIndexState state, WebBridge bridge)
         {
             _state  = state;
             _bridge = bridge;
         }
 
-        // ── Phase 1: ID stream ────────────────────────────────────────────────────
+        // ── Action handlers ───────────────────────────────────────────────────────
 
-        /// <summary>
-        /// Returns all matching lineIds (with bookId + bookTitle) to the frontend.
-        /// No snippet generation — fast index-only pass + minimal DB join.
-        /// Replies immediately with a searchId, then pushes idsComplete push event.
-        ///
-        /// Parameters (positional):
-        ///   0: query (string)
-        ///   1: expandKetiv (bool)
-        /// </summary>
-        internal void HandleSearchIds(JsonElement root, string id)
+        internal void HandleSearchStart(JsonElement root, string id)
         {
-            string query       = root.TryGetProperty("0", out var q)  ? q.GetString()  : null;
-            bool   expandKetiv = root.TryGetProperty("1", out var ek) && ek.GetBoolean();
+            string query        = root.TryGetProperty("0", out var q) ? q.GetString() : null;
+            int    skipCount    = root.TryGetProperty("1", out var s) ? s.GetInt32() : 0;
+            int    maxWordDist  = root.TryGetProperty("2", out var d) ? d.GetInt32() : 10;
+            bool   reqOrdered   = root.TryGetProperty("3", out var o) && o.GetBoolean();
+            int    contextWords = root.TryGetProperty("4", out var cw) ? cw.GetInt32() : SeforimIndex.DefaultContextWords;
+            bool   expandKetiv  = root.TryGetProperty("5", out var ek) && ek.GetBoolean();
 
             bool         ready = _state.IsReady;
             SeforimIndex index = _state.GetIndex();
@@ -74,7 +52,7 @@ namespace KitveiHakodeshLib.Search
 
             if (!ready || index == null)
             {
-                string reason = !ready ? "indexNotReady" : "searchFailed";
+                string reason = !ready ? "indexNotReady" : "indexNotReady";
                 _bridge.Reply(id, new { searchId = (string)null, failReason = reason });
                 return;
             }
@@ -84,126 +62,17 @@ namespace KitveiHakodeshLib.Search
             _searches[searchId] = cts;
             _bridge.Reply(id, new { searchId = searchId, failReason = (string)null });
 
-            Task task = Task.Run(() => RunSearchIds(searchId, query, expandKetiv, index, cts.Token));
-            task.ContinueWith(
-                t => Console.WriteLine("[FtsSearchExecutor] Unhandled exception in SearchIds: " + t.Exception),
+            Console.WriteLine($"[FtsSearchExecutor] Search {searchId} started — query=\"{query}\" skip={skipCount} maxDist={maxWordDist} ordered={reqOrdered} context={contextWords} ketiv={expandKetiv}");
+
+            Task searchTask = Task.Run(
+                () => RunSearch(searchId, query, skipCount, maxWordDist, reqOrdered, contextWords, expandKetiv, index, cts.Token));
+
+            // Observe the task so that any exception escaping RunSearch's own try/catch
+            // is logged rather than silently swallowed by the thread pool.
+            searchTask.ContinueWith(
+                t => Console.WriteLine("[FtsSearchExecutor] Unhandled search exception: " + t.Exception),
                 TaskContinuationOptions.OnlyOnFaulted);
         }
-
-        private void RunSearchIds(string searchId, string query, bool expandKetiv,
-                                  SeforimIndex index, CancellationToken ct)
-        {
-            try
-            {
-                var ids = new List<int>(512);
-                foreach (int lineId in index.SearchIds(query, expandKetiv, ct))
-                {
-                    if (ct.IsCancellationRequested)
-                    {
-                        PostSearch(new { @event = "search", type = "idsCancelled", searchId });
-                        return;
-                    }
-                    ids.Add(lineId);
-                }
-
-                // NOTE: @event = "search" is required so the JS bridge routes this as a push
-                // event (not an RPC reply) — the bridge checks msg.event to decide routing.
-                PostSearch(new { @event = "search", type = "idsComplete", searchId, lineIds = ids.ToArray() });
-            }
-            catch (OperationCanceledException)
-            {
-                PostSearch(new { @event = "search", type = "idsCancelled", searchId });
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("[FtsSearchExecutor] SearchIds error: " + ex);
-                PostSearch(new { @event = "search", type = "idsError", searchId, failReason = "searchFailed", error = ex.Message });
-            }
-            finally
-            {
-                if (_searches.TryRemove(searchId, out var cts)) cts.Dispose();
-            }
-        }
-
-        // ── Phase 2: on-demand snippets ───────────────────────────────────────────
-
-        /// <summary>
-        /// Generates snippets for a specific list of lineIds (the visible viewport).
-        /// Synchronous RPC — replies directly with the snippet array.
-        /// False positives are skipped; word-distance violations are included but flagged as isWeakMatch.
-        ///
-        /// Parameters (positional):
-        ///   0: lineIds           (int[])
-        ///   1: query             (string)
-        ///   2: maxCharDistance   (int, default 50)
-        ///   3: requireOrdered    (bool, default false)
-        ///   4: contextChars      (int, default 200)
-        ///   5: expandKetiv       (bool, default false)
-        /// </summary>
-        internal void HandleGetSnippets(JsonElement root, string id)
-        {
-            var lineIds = new List<int>();
-            if (root.TryGetProperty("0", out var lids) && lids.ValueKind == JsonValueKind.Array)
-                foreach (var el in lids.EnumerateArray())
-                    lineIds.Add(el.GetInt32());
-
-            string query           = root.TryGetProperty("1", out var q)  ? q.GetString()  : null;
-            int    maxCharDistance = root.TryGetProperty("2", out var d)   ? d.GetInt32()   : 50;
-            bool   reqOrdered      = root.TryGetProperty("3", out var o)   && o.GetBoolean();
-            int    contextChars    = root.TryGetProperty("4", out var cw)  ? cw.GetInt32()  : 200;
-            bool   expandKetiv     = root.TryGetProperty("5", out var ek)  && ek.GetBoolean();
-
-            Console.WriteLine($"[GetSnippets] lineIds={lineIds.Count} query=\"{query}\" maxCharDist={maxCharDistance} contextChars={contextChars} expandKetiv={expandKetiv}");
-
-            if (lineIds.Count == 0 || string.IsNullOrWhiteSpace(query))
-            {
-                Console.WriteLine("[GetSnippets] Early exit: empty lineIds or query");
-                _bridge.Reply(id, new { snippets = new SnippetPayload[0] });
-                return;
-            }
-
-            SeforimIndex index = _state.GetIndex();
-            if (index == null)
-            {
-                Console.WriteLine("[GetSnippets] Early exit: index is null");
-                _bridge.Reply(id, new { snippets = new SnippetPayload[0] });
-                return;
-            }
-
-            string effectiveQuery = expandKetiv ? SeforimIndex.ApplyKetivExpansion(query) : query;
-            var    terms          = index.ExtractQueryTerms(effectiveQuery);
-            var    termArray      = new string[terms.Count];
-            for (int i = 0; i < terms.Count; i++) termArray[i] = terms[i];
-
-            Console.WriteLine($"[GetSnippets] effectiveQuery=\"{effectiveQuery}\" stems=[{string.Join(", ", termArray)}]");
-
-            var snippets = new List<SnippetPayload>(lineIds.Count);
-
-            foreach (int lineId in lineIds)
-            {
-                var result = index.GenerateSnippet(lineId, effectiveQuery, maxCharDistance, contextChars);
-
-                Console.WriteLine($"[GetSnippets] lineId={lineId} isMatch={result.IsMatch} score={result.Score} htmlLen={result.Html?.Length ?? 0}");
-
-                if (!result.IsMatch) continue;
-
-                bool isWeak = result.Score > maxCharDistance;
-
-                snippets.Add(new SnippetPayload
-                {
-                    lineId       = lineId,
-                    score        = result.Score,
-                    snippet      = result.Html,
-                    matchedTerms = termArray,
-                    isWeakMatch  = isWeak,
-                });
-            }
-
-            Console.WriteLine($"[GetSnippets] Replying with {snippets.Count}/{lineIds.Count} snippets");
-            _bridge.Reply(id, new { snippets = snippets.ToArray() });
-        }
-
-        // ── Cancel ────────────────────────────────────────────────────────────────
 
         internal void HandleSearchCancel(JsonElement root, string id)
         {
@@ -214,6 +83,130 @@ namespace KitveiHakodeshLib.Search
                 cts.Dispose();
             }
             _bridge.Reply(id, new { });
+        }
+
+        // ── Search execution ──────────────────────────────────────────────────────
+
+        private void RunSearch(string searchId, string query, int skipCount,
+                               int maxWordDistance, bool requireOrdered, int contextWords,
+                               bool expandKetiv,
+                               SeforimIndex index, CancellationToken ct)
+        {
+            int totalResults = 0;
+            try
+            {
+                // Batching strategy:
+                //   Phase 1 — doubling: flush at 1, 2, 4, 8, 16 results.
+                //              Gives the user instant first-result feedback and
+                //              progressively larger batches as results accumulate.
+                //   Phase 2 — timer: once the doubling sequence is exhausted (after
+                //              the 16-result flush), switch to flushing every 250ms
+                //              regardless of batch size. A memory safety cap of 200
+                //              forces a flush even if the timer hasn't fired yet.
+                const int TimerIntervalMs = 250;
+                const int MemorySafetyCap = 200;
+
+                // Doubling thresholds: flush when batch reaches each of these sizes.
+                // After the last threshold is flushed we switch to timer-only mode.
+                var doublingThresholds = new[] { 1, 2, 4, 8, 16 };
+                int doublingIndex = 0;          // index into doublingThresholds
+                bool useTimerOnly = false;
+
+                var     batch   = new List<object>(MemorySafetyCap);
+                int     skipped = 0;
+                var     timer   = new Stopwatch();
+                timer.Start();
+
+                foreach (var result in index.Search(query, cap: 0, expandKetiv: expandKetiv, ct: ct))
+                {
+                    if (ct.IsCancellationRequested)
+                    {
+                        PostSearch(new { type = "searchCancelled", searchId = searchId });
+                        return;
+                    }
+
+                    var snippet = index.GenerateSnippet(result, requireOrdered,
+                                                        contextWords: contextWords);
+                    if (!snippet.IsMatch) continue;
+                    if (snippet.WordDistance > maxWordDistance) continue;
+                    if (skipped < skipCount) { skipped++; continue; }
+
+                    // Flatten MatchedGroups into a deduplicated list of concrete terms.
+                    var matchedTerms = new List<string>();
+                    foreach (var group in result.MatchedGroups)
+                        foreach (var term in group)
+                            if (!matchedTerms.Contains(term))
+                                matchedTerms.Add(term);
+
+                    batch.Add(new
+                    {
+                        lineId       = result.LineId,
+                        bookId       = 0,
+                        bookTitle    = result.BookTitle,
+                        tocText      = "",
+                        score        = snippet.Score,
+                        snippet      = snippet.Html,
+                        matchedTerms = matchedTerms.ToArray()
+                    });
+                    totalResults++;
+
+                    bool shouldFlush;
+                    if (useTimerOnly)
+                    {
+                        shouldFlush = timer.ElapsedMilliseconds >= TimerIntervalMs
+                                   || batch.Count >= MemorySafetyCap;
+                    }
+                    else
+                    {
+                        int threshold = doublingThresholds[doublingIndex];
+                        shouldFlush = batch.Count >= threshold
+                                   || batch.Count >= MemorySafetyCap;
+                    }
+
+                    if (shouldFlush)
+                    {
+                        PostSearch(new { type = "searchBatch", searchId = searchId,
+                                         results = batch.ToArray() });
+                        batch.Clear();
+                        timer.Restart();
+
+                        if (!useTimerOnly)
+                        {
+                            doublingIndex++;
+                            if (doublingIndex >= doublingThresholds.Length)
+                                useTimerOnly = true;
+                        }
+                    }
+                }
+
+                if (batch.Count > 0)
+                    PostSearch(new { type = "searchBatch", searchId = searchId,
+                                     results = batch.ToArray() });
+
+                Console.WriteLine($"[FtsSearchExecutor] Search {searchId} complete — query=\"{query}\" results={totalResults} skipped={skipped}");
+                PostSearch(new { type = "searchComplete", searchId = searchId });
+            }
+            catch (OperationCanceledException)
+            {
+                Console.WriteLine($"[FtsSearchExecutor] Search {searchId} cancelled — query=\"{query}\" results so far={totalResults}");
+                PostSearch(new { type = "searchCancelled", searchId = searchId });
+            }
+            catch (IndexMergingException)
+            {
+                Console.WriteLine($"[FtsSearchExecutor] Search {searchId} rejected — index is merging");
+                PostSearch(new { type = "searchError", searchId = searchId,
+                                 failReason = "indexMerging" });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[FtsSearchExecutor] Search error: " + ex);
+                PostSearch(new { type = "searchError", searchId = searchId,
+                                 failReason = "searchFailed", error = ex.Message });
+            }
+            finally
+            {
+                if (_searches.TryRemove(searchId, out var cts)) cts.Dispose();
+            }
         }
 
         private void PostSearch(object payload) => _bridge.PushEvent(payload);
