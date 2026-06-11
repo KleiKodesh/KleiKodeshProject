@@ -51,6 +51,8 @@ namespace KitveiHakodeshLib.Bridge
     window.__webviewSetDbPath      = function (path)         { return post({ action: 'setDbPath', path: path }); };
     window.__webviewPickDbPath     = function ()             { window.chrome.webview.postMessage({ id: '0', action: 'pickDbPath' }); };
     window.__webviewAction         = function (action, args) { return post(Object.assign({ action: action }, args || {})); };
+    window.__webviewUserSettingsQuery   = function (sql, params) { return post({ action: 'userSettingsQuery',   sql: sql, params: params || [] }).then(function (m) { return { rows: m.rows }; }); };
+    window.__webviewUserSettingsExecute = function (sql, params) { return post({ action: 'userSettingsExecute', sql: sql, params: params || [] }).then(function (m) { return { lastInsertId: m.lastInsertId }; }); };
 })();";
 
         /// <summary>

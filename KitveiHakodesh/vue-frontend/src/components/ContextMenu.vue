@@ -2,10 +2,23 @@
 import { ref, computed, nextTick } from 'vue'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 
-export interface ContextMenuItem {
+export interface ContextMenuTextItem {
+  type?: 'text'
   label: string
   action: () => void
 }
+
+export interface ContextMenuSeparatorItem {
+  type: 'separator'
+}
+
+export interface ContextMenuComponentItem {
+  type: 'component'
+  component: import('vue').Component
+  props?: Record<string, unknown>
+}
+
+export type ContextMenuItem = ContextMenuTextItem | ContextMenuSeparatorItem | ContextMenuComponentItem
 
 const props = defineProps<{ items: ContextMenuItem[] }>()
 
@@ -36,7 +49,7 @@ function hide() {
   visible.value = false
 }
 
-function runItem(item: ContextMenuItem) {
+function runItem(item: ContextMenuTextItem) {
   item.action()
   hide()
 }
@@ -47,9 +60,18 @@ defineExpose({ show, hide })
 <template>
   <Teleport to="body">
     <div v-if="visible" ref="menuRef" class="context-menu" :style="menuStyle" @click.stop>
-      <div v-for="item in items" :key="item.label" class="context-menu-item" @click="runItem(item)">
-        {{ item.label }}
-      </div>
+      <template v-for="(item, index) in items" :key="index">
+        <div v-if="item.type === 'separator'" class="context-menu-separator" />
+        <component
+          :is="item.component"
+          v-else-if="item.type === 'component'"
+          v-bind="item.props ?? {}"
+          @close="hide"
+        />
+        <div v-else class="context-menu-item" @click="runItem(item as ContextMenuTextItem)">
+          {{ (item as ContextMenuTextItem).label }}
+        </div>
+      </template>
     </div>
   </Teleport>
 </template>
@@ -66,15 +88,16 @@ defineExpose({ show, hide })
   min-width: 160px;
   direction: rtl;
 }
+.context-menu-separator {
+  height: 1px;
+  background: var(--border-color);
+  margin-block: 2px;
+}
 .context-menu-item {
   padding: 8px 16px;
   cursor: pointer;
   font-size: 13px;
   text-align: right;
-  border-bottom: 1px solid var(--border-color);
-}
-.context-menu-item:last-child {
-  border-bottom: none;
 }
 .context-menu-item:hover {
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);

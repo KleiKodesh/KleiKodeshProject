@@ -8,6 +8,7 @@ using KitveiHakodeshLib.HebrewBooks;
 using KitveiHakodeshLib.LocalFile;
 using KitveiHakodeshLib.Search;
 using KitveiHakodeshLib.Settings;
+using KitveiHakodeshLib.UserSettings;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using System;
@@ -105,6 +106,7 @@ namespace KitveiHakodeshLib
         private DictionaryHandler _dictionary;
         private HebrewBooksDb _hebrewBooksDb;
         private FileSystemSearchHandler _fileSystemSearch;
+        private UserSettingsDbHandler _userSettings;
         private string _dbInjectionScriptId;
 
         private SplashOverlay _splash;
@@ -314,7 +316,12 @@ namespace KitveiHakodeshLib
             _hebrewBooksDb = HebrewBooksDb.Instance;
             _hebrewBooksDb.Initialize();
             _fileSystemSearch = new FileSystemSearchHandler(_bridge);
-            _db.OnDbPathPicked = path => _search.ResetAndReindex(path);
+            _userSettings = new UserSettingsDbHandler(_bridge, this, savedPath);
+            _db.OnDbPathPicked = path =>
+            {
+                _search.ResetAndReindex(path);
+                _userSettings.UpdateSeforimDbPath(path);
+            };
 
             _webView.CoreWebView2.WebMessageReceived += OnMessageReceived;
             _webView.CoreWebView2.DownloadStarting += OnDownloadStarting;
@@ -355,7 +362,15 @@ namespace KitveiHakodeshLib
 
             // Re-init the DB handler; keep the existing search handler and its index state
             _db = new DbHandler(_bridge, _webView, savedPath);
-            _db.OnDbPathPicked = path => _search.ResetAndReindex(path);
+            _db.OnDbPathPicked = path =>
+            {
+                _search.ResetAndReindex(path);
+                _userSettings.UpdateSeforimDbPath(path);
+            };
+
+            // Re-init user settings DB for the (possibly changed) seforim DB path
+            _userSettings?.Dispose();
+            _userSettings = new UserSettingsDbHandler(_bridge, this, savedPath);
 
             // Always call OnDbReady — if the file doesn't exist it pushes ftsDbNotFound
             // to the frontend; if it does exist it starts or resumes indexing.
@@ -421,6 +436,8 @@ namespace KitveiHakodeshLib
                         case "getDiagnostics": HandleGetDiagnostics(id); break;
                         case "fileSystemSearchPageLoad": _fileSystemSearch.HandlePageLoad(id); break;
                         case "fileSystemSearch": _fileSystemSearch.HandleSearch(root, id); break;
+                        case "userSettingsQuery": await _userSettings.HandleQuery(root, id); break;
+                        case "userSettingsExecute": await _userSettings.HandleExecute(root, id); break;
                         default: _bridge.Reply(id, new { error = "Unknown action: " + action }); break;
                     }
                 }
@@ -581,6 +598,7 @@ namespace KitveiHakodeshLib
                 _localFile?.DisposeAllHosts();
 
                 _fileSystemSearch?.Dispose();
+                _userSettings?.Dispose();
             }
             base.Dispose(disposing);
         }

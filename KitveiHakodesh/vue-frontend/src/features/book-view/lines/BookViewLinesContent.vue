@@ -16,6 +16,7 @@ import { scrollToIndexWithRetry } from '@/utils/scrollToIndexWithRetry'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 import { useBookViewLineRenderer } from './useBookViewLineRenderer'
 import { useBookViewLineCopyMenu } from './useBookViewLineCopyMenu'
+import { useBookViewHighlights } from './useBookViewHighlights'
 
 const emit = defineEmits<{ scrolled: [number, number]; lineSelected: [number]; 'ctrl-f': [] }>()
 const props = defineProps<{
@@ -69,6 +70,154 @@ const zoom = computed({
 const diacriticsState = computed(() => settingsStore.diacriticsState)
 const fontPx = computed(() => (zoom.value / 100) * (settingsStore.fontSize / 100) * 15)
 
+// ── User highlights ───────────────────────────────────────────────────────────
+
+const { getHighlightsForLine, applyHighlight, clearHighlight } = useBookViewHighlights(bookId)
+
+// ── Selection → line offsets ──────────────────────────────────────────────────
+
+interface SelectionOnLine {
+  lineId: number
+  lineIndex: number
+  startOffset: number
+  endOffset: number
+}
+
+/**
+ * Multi-line selection support for highlights.
+ * A selection spanning multiple lines is treated as a series of separate
+ * highlights — one per line, each with its own start/end offsets.
+ */
+interface MultiLineSelection {
+  lines: SelectionOnLine[]
+}
+
+function extractSelectionOnLine(): MultiLineSelection | null {
+  const sel = window.getSelection()
+  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
+    console.log('[select] no selection')
+    return null
+  }
+  const range = sel.getRangeAt(0)
+  console.log('[select] range:', { start: range.startContainer, end: range.endContainer })
+
+  // Find the .line element(s) touched by this selection
+  if (!scrollerEl.value) {
+    console.log('[select] no scroller')
+    return null
+  }
+  const lineEls = Array.from(scrollerEl.value.querySelectorAll('.line'))
+  console.log('[select] found', lineEls.length, 'line elements')
+  const intersected = lineEls.filter((el) => range.intersectsNode(el))
+  console.log('[select] intersected:', intersected.length, 'lines')
+
+  if (intersected.length === 0) {
+    console.log('[select] no lines intersected')
+    return null
+  }
+
+  const selectionLines: SelectionOnLine[] = []
+
+  for (let i = 0; i < intersected.length; i++) {
+    const lineEl = intersected[i] as HTMLElement
+    const vItemEl = lineEl.closest('[data-index]') as HTMLElement | null
+    if (!vItemEl) {
+      console.log('[select] no vItemEl for line', i)
+      continue
+    }
+    const vIndex = parseInt(vItemEl.dataset['index'] ?? '', 10)
+    const lineItem = props.lines[vIndex]
+    if (!lineItem || lineItem.content == null) {
+      console.log('[select] no lineItem or empty content for line', i)
+      continue
+    }
+
+    // Measure character offsets within the stripped (no-diacritic) text
+    // by walking the text nodes of the line element
+    const strippedText = (lineEl.textContent ?? '').replace(/[\u0591-\u05C7]/g, '')
+    console.log('[select] line', i, 'strippedText:', strippedText, 'length:', strippedText.length)
+
+    function countStrippedOffset(node: Node, offsetInNode: number): number {
+      // Walk all text nodes in the line element in order; sum stripped chars until we reach target
+      const walker = document.createTreeWalker(lineEl, NodeFilter.SHOW_TEXT)
+      let stripped = 0
+      let current: Text | null
+      while ((current = walker.nextNode() as Text | null)) {
+        if (current === node) {
+          // Count stripped chars up to offsetInNode within this node
+          const slice = current.textContent?.slice(0, offsetInNode) ?? ''
+          stripped += slice.replace(/[\u0591-\u05C7]/g, '').length
+          return stripped
+        }
+        stripped += (current.textContent ?? '').replace(/[\u0591-\u05C7]/g, '').length
+      }
+      return stripped
+    }
+
+    // Determine if this is the first, last, or middle line of the selection
+    const isFirstLine = i === 0
+    const isLastLine = i === intersected.length - 1
+
+    let startOffset = 0
+    let endOffset = strippedText.length
+
+    // For the first line: start from the selection's start
+    if (isFirstLine) {
+      startOffset = countStrippedOffset(range.startContainer, range.startOffset)
+    }
+
+    // For the last line: end at the selection's end
+    if (isLastLine) {
+      endOffset = countStrippedOffset(range.endContainer, range.endOffset)
+    }
+
+    console.log('[select] line', i, 'offsets:', { startOffset, endOffset })
+
+    if (startOffset < endOffset) {
+      selectionLines.push({
+        lineId: lineItem.id,
+        lineIndex: lineItem.lineIndex,
+        startOffset,
+        endOffset: Math.min(endOffset, strippedText.length),
+      })
+    }
+  }
+
+  if (selectionLines.length === 0) {
+    console.log('[select] no valid selections')
+    return null
+  }
+
+  return { lines: selectionLines }
+}
+
+// ── Highlight actions (called from context menu) ──────────────────────────────
+
+function onHighlight(colorArgb: number) {
+  const selection = extractSelectionOnLine()
+  console.log('[book-view] onHighlight called:', { selection, colorArgb })
+  if (!selection) return
+  // Apply highlight to each line separately
+  for (const line of selection.lines) {
+    applyHighlight(line.lineId, line.startOffset, line.endOffset, colorArgb)
+  }
+  window.getSelection()?.removeAllRanges()
+}
+
+function onClearHighlight() {
+  const selection = extractSelectionOnLine()
+  if (!selection) return
+  // Clear highlights from each line separately
+  for (const line of selection.lines) {
+    clearHighlight(line.lineId, line.startOffset, line.endOffset)
+  }
+  window.getSelection()?.removeAllRanges()
+}
+
+function onAddNote() {
+  // Note functionality will be wired in a future step
+}
+
 // ── Line rendering ────────────────────────────────────────────────────────────
 
 const { lineContent } = useBookViewLineRenderer(settingsStore, diacriticsState, () => ({
@@ -79,6 +228,7 @@ const { lineContent } = useBookViewLineRenderer(settingsStore, diacriticsState, 
   searchHighlightQuery: props.searchHighlightQuery,
   searchHighlightSnippet: props.searchHighlightSnippet,
   searchHighlightTerms: props.searchHighlightTerms,
+  getHighlightsForLine,
 }))
 
 // ── Scroller setup ────────────────────────────────────────────────────────────
@@ -112,6 +262,9 @@ const contextMenuItems = useBookViewLineCopyMenu({
   tabStore,
   getActiveTocEntry: props.getActiveTocEntry,
   getTocPath: props.getTocPath,
+  onHighlight,
+  onClearHighlight,
+  onAddNote,
 })
 
 // ── Virtualizer ───────────────────────────────────────────────────────────────
@@ -496,7 +649,7 @@ defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller })
             class="line"
             :class="{ selected: props.commentaryVisible && selectedLineId === lines[vItem.index]?.id }"
             :data-alt-toc="props.altTocLabelMap?.get(vItem.index)"
-            v-html="lineContent(lines[vItem.index]!.content!, vItem.index)"
+            v-html="lineContent(lines[vItem.index]!.content!, vItem.index, lines[vItem.index]!.id)"
             @click="onLineClick(vItem.index)"
           />
           <div v-else class="line placeholder" />
@@ -569,5 +722,8 @@ defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller })
 .line :deep(mark.search-match.current) {
   background: rgba(255, 165, 0, 0.9);
   color: #000;
+}
+.line :deep(mark.user-highlight) {
+  border-radius: 2px;
 }
 </style>

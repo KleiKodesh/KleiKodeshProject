@@ -9,15 +9,18 @@ import path from 'node:path'
 function devSqlitePlugin(): Plugin {
   let db: InstanceType<typeof Database>
   let dictDb: InstanceType<typeof Database>
+  let userSettingsDb: InstanceType<typeof Database> | null = null
 
   return {
     name: 'dev-sqlite',
     apply: 'serve',
+    enforce: 'pre',
 
     configureServer(server) {
       const env = loadEnv('development', process.cwd(), '')
       const dbPath = process.env.DB_PATH ?? env.DB_PATH ?? './data.db'
       const dictDbPath = path.resolve('./public/dictionary/KitveiHakodesh_dictionary.db')
+
       try {
         db = new Database(path.resolve(dbPath))
         console.log(`[dev-sqlite] opened ${dbPath}`)
@@ -30,30 +33,84 @@ function devSqlitePlugin(): Plugin {
       } catch (err) {
         console.error(`[dev-sqlite] failed to open KitveiHakodesh_dictionary.db:`, err)
       }
+      try {
+        const userSettingsDbPath = path.join(path.dirname(path.resolve(dbPath)), 'Settings', 'user_settings.db')
+        userSettingsDb = new Database(userSettingsDbPath)
+        userSettingsDb.exec(`
+          CREATE TABLE IF NOT EXISTS user_highlights (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bookId INTEGER NOT NULL, lineId INTEGER NOT NULL,
+            startOffset INTEGER NOT NULL, endOffset INTEGER NOT NULL,
+            colorArgb INTEGER NOT NULL, createdAt INTEGER NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS idx_user_highlights_book_line ON user_highlights (bookId, lineId);
+          CREATE TABLE IF NOT EXISTS user_notes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bookId INTEGER NOT NULL, lineId INTEGER NOT NULL,
+            startOffset INTEGER NOT NULL, endOffset INTEGER NOT NULL,
+            note TEXT NOT NULL, quote TEXT NOT NULL,
+            createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS idx_user_notes_book_line ON user_notes (bookId, lineId);
+        `)
+        console.log(`[dev-sqlite] opened user_settings.db at ${userSettingsDbPath}`)
+      } catch (err) {
+        console.warn(`[dev-sqlite] could not open user_settings.db:`, (err as Error).message)
+      }
 
-      server.middlewares.use((req, res, next) => {
-        // Prevent browser caching of PDF.js files during dev
+      // Middleware handler function
+      const middleware = (req: any, res: any, next: any) => {
         if (req.url?.startsWith('/pdfjs/')) {
           res.setHeader('Cache-Control', 'no-store')
         }
 
-        const isQuery     = req.url === '/query'      && req.method === 'POST'
-        const isDictQuery = req.url === '/query-dict' && req.method === 'POST'
-        if (!isQuery && !isDictQuery) { next(); return }
+        const isQuery             = req.url === '/query'                  && req.method === 'POST'
+        const isDictQuery         = req.url === '/query-dict'             && req.method === 'POST'
+        const isUserSettingsQuery = req.url === '/query-user-settings'    && req.method === 'POST'
+        const isUserSettingsExec  = req.url === '/execute-user-settings'  && req.method === 'POST'
 
-        const target = isDictQuery ? dictDb : db
-        if (!target) {
-          res.writeHead(503, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ error: 'Database not available' }))
+        if (!isQuery && !isDictQuery && !isUserSettingsQuery && !isUserSettingsExec) {
+          next()
           return
         }
 
+        console.log(`[dev-sqlite] handling ${req.url}`)
+
         let body = ''
-        req.on('data', (chunk) => (body += chunk))
+        req.on('data', (chunk: string) => (body += chunk))
+        req.on('error', () => {
+          console.error('[dev-sqlite] request error')
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: 'Request error' }))
+        })
         req.on('end', () => {
           try {
             const { sql, params = [] } = JSON.parse(body)
+            console.log(`[dev-sqlite] executing: ${sql.substring(0, 50)}...`)
+
+            if (isUserSettingsExec) {
+              if (!userSettingsDb) {
+                console.error('[dev-sqlite] user settings DB not available')
+                res.writeHead(503, { 'Content-Type': 'application/json' })
+                res.end(JSON.stringify({ error: 'User settings DB not available' }))
+                return
+              }
+              const result = userSettingsDb.prepare(sql).run(...params)
+              console.log(`[dev-sqlite] insert result: ${result.lastInsertRowid}`)
+              res.writeHead(200, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ lastInsertId: result.lastInsertRowid }))
+              return
+            }
+
+            const target = isDictQuery ? dictDb : isUserSettingsQuery ? userSettingsDb : db
+            if (!target) {
+              console.error('[dev-sqlite] target DB not available')
+              res.writeHead(503, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ error: 'Database not available' }))
+              return
+            }
             const rows = target.prepare(sql).all(...params)
+            console.log(`[dev-sqlite] query returned ${rows.length} rows`)
             res.writeHead(200, { 'Content-Type': 'application/json' })
             res.end(JSON.stringify({ rows }))
           } catch (err: unknown) {
@@ -62,7 +119,9 @@ function devSqlitePlugin(): Plugin {
             res.end(JSON.stringify({ error: (err as Error).message }))
           }
         })
-      })
+      }
+
+      server.middlewares.use(middleware)
     },
   }
 }

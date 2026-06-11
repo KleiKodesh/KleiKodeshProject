@@ -3,6 +3,7 @@ import type { ContextMenuItem } from '@/components/ContextMenu.vue'
 import type { LineItem } from './useBookViewLinesTable'
 import type { TocEntry } from '../toc/useBookViewToc'
 import type { useTabStore } from '@/stores/tabStore'
+import BookViewAnnotationMenuRow from './BookViewAnnotationMenuRow.vue'
 
 type TabStore = ReturnType<typeof useTabStore>
 
@@ -15,6 +16,9 @@ interface CopyMenuOptions {
   tabStore: TabStore
   getActiveTocEntry?: (lineIndex: number) => TocEntry | null
   getTocPath?: (entry: TocEntry) => string
+  onHighlight?: (colorArgb: number) => void
+  onClearHighlight?: () => void
+  onAddNote?: () => void
 }
 
 // ── Shared DOM copy helper ────────────────────────────────────────────────────
@@ -127,11 +131,23 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): ContextMenuIt
     execCopyHtml(html)
   }
 
+  const annotationRow: ContextMenuItem = {
+    type: 'component',
+    component: BookViewAnnotationMenuRow,
+    props: {
+      onHighlight: options.onHighlight ?? (() => {}),
+      onClearHighlight: options.onClearHighlight ?? (() => {}),
+      onAddNote: options.onAddNote ?? (() => {}),
+    },
+  }
+
   return [
     { label: 'העתק', action: () => document.execCommand('copy') },
     { label: 'העתק כבלוק', action: copyAsBlock },
     { label: 'העתק עם מקור בסוף', action: () => copyWithSource(true) },
     { label: 'העתק עם מקור בהתחלה', action: () => copyWithSource(false) },
     { label: 'בחר הכל', action: selectAllInContainer },
+    { type: 'separator' },
+    annotationRow,
   ]
 }

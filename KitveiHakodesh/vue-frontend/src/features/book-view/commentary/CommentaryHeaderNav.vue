@@ -90,7 +90,7 @@ function handleSelect() {
   // fire when the datalist re-renders (e.g. during virtualizer scroll). Those events
   // have no preceding 'input' event so userHasTyped stays false.
   if (!userHasTyped) return
-  userHasTyped = false
+  userHasTyped.value = false
   const val = normalize(inputRef.value?.value ?? '')
   const match = props.groups.find(
     (g) => normalize(groupLabel(g)) === val || normalize(g.bookTitle) === val,
@@ -100,7 +100,7 @@ function handleSelect() {
 
 // Set to true only when the user types — guards handleSelect against spurious
 // 'change' events fired by datalist re-renders during virtualizer scrolls.
-let userHasTyped = false
+const userHasTyped = ref(false)
 
 function handleKeydown(e: KeyboardEvent) {
   if ((e.ctrlKey || e.metaKey) && e.code === 'KeyF') {
