@@ -109,6 +109,11 @@ namespace KitveiHakodeshLib
         private UserSettingsDbHandler _userSettings;
         private string _dbInjectionScriptId;
 
+        // Reference count for active AppViewer instances — used to know when the
+        // last instance is disposed so the shared user settings DB can be closed.
+        private static int _instanceCount;
+        private bool _instanceCounted;
+
         private SplashOverlay _splash;
 
         /// <summary>
@@ -130,6 +135,8 @@ namespace KitveiHakodeshLib
             VisibleChanged += OnVisibleChanged;
             Controls.Add(_webView);
             _InitSplash();
+            System.Threading.Interlocked.Increment(ref _instanceCount);
+            _instanceCounted = true;
             _ = InitAsync();
         }
 
@@ -599,6 +606,15 @@ namespace KitveiHakodeshLib
 
                 _fileSystemSearch?.Dispose();
                 _userSettings?.Dispose();
+
+                // Decrement the shared instance count. When the last AppViewer is
+                // disposed, close the shared user settings DB connection.
+                if (_instanceCounted)
+                {
+                    _instanceCounted = false;
+                    if (System.Threading.Interlocked.Decrement(ref _instanceCount) <= 0)
+                        UserSettingsDbAccess.DisposeShared();
+                }
             }
             base.Dispose(disposing);
         }

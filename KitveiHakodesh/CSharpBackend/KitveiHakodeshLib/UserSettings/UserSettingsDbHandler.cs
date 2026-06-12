@@ -8,47 +8,54 @@ using System.Windows.Forms;
 namespace KitveiHakodeshLib.UserSettings
 {
     /// <summary>
-    /// Handles all bridge actions for user annotations (highlights and notes).
+    /// Per-AppViewer routing layer for user annotation bridge actions.
     ///
     /// Bridge actions handled:
     ///   userSettingsQuery        — SELECT against user_settings.db
     ///   userSettingsExecute      — INSERT / UPDATE / DELETE against user_settings.db
     ///
-    /// The underlying database is re-opened whenever the seforim DB path changes
-    /// via UpdateSeforimDbPath(). The database file is derived automatically:
-    ///   {seforimDbFolder}/Settings/user_settings.db
+    /// The actual SQLite connection lives in UserSettingsDbAccess.Current — a
+    /// process-wide singleton shared by all AppViewer instances. This handler does
+    /// NOT own the connection and must never dispose it.
     ///
-    /// DB path change flow (called from DbHandler when the user picks a new path):
-    ///   1. Derive old and new user settings paths.
-    ///   2. If the new path already has a user_settings.db, ask the user whether to
-    ///      copy their existing data over (merge) or keep the existing one.
-    ///   3. If the old path had a user_settings.db and the user agrees, copy the file.
-    ///   4. Open (or create) the user_settings.db at the new location.
-    ///   5. Inform the frontend via a push event.
+    /// DB path change flow (called from AppViewer when the user picks a new DB path):
+    ///   1. Derive the old and new user settings paths.
+    ///   2. If the old path had annotation data, show a dialog asking the user whether
+    ///      to carry the data over to the new location.
+    ///   3. If the user agrees, copy the file.
+    ///   4. Call UserSettingsDbAccess.Open() with the new seforim DB path — this
+    ///      replaces the shared connection process-wide so all AppViewer instances
+    ///      immediately start using the new database.
+    ///   5. Push a "userSettingsDbReady" event to the frontend.
+    ///
+    /// Only the first AppViewer to open (or the one that triggers a path change)
+    /// drives the dialog; all others share the resulting connection transparently.
     /// </summary>
     public class UserSettingsDbHandler
     {
         private readonly WebBridge _bridge;
         private readonly Control _owner;
-        private UserSettingsDbAccess _db;
 
         public UserSettingsDbHandler(WebBridge bridge, Control owner, string seforimDbPath)
         {
             _bridge = bridge;
             _owner = owner;
-            if (!string.IsNullOrEmpty(seforimDbPath) && File.Exists(seforimDbPath))
-                _db = new UserSettingsDbAccess(seforimDbPath);
+
+            // Open (or re-use) the shared singleton connection.
+            // If another AppViewer already opened it at the same path this is a no-op.
+            UserSettingsDbAccess.Open(seforimDbPath);
         }
 
         // ── Bridge action handlers ────────────────────────────────────────────────
 
         public async Task HandleQuery(JsonElement root, string id)
         {
-            if (_db == null) { _bridge.Reply(id, new { error = "User settings database not loaded" }); return; }
+            var db = UserSettingsDbAccess.Current;
+            if (db == null) { _bridge.Reply(id, new { error = "User settings database not loaded" }); return; }
             string sql = root.GetProperty("sql").GetString();
             try
             {
-                var rows = await Task.Run(() => _db.Query(sql, _ParseParams(root)));
+                var rows = await Task.Run(() => db.Query(sql, _ParseParams(root)));
                 _bridge.Reply(id, new { rows });
             }
             catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
@@ -56,11 +63,12 @@ namespace KitveiHakodeshLib.UserSettings
 
         public async Task HandleExecute(JsonElement root, string id)
         {
-            if (_db == null) { _bridge.Reply(id, new { error = "User settings database not loaded" }); return; }
+            var db = UserSettingsDbAccess.Current;
+            if (db == null) { _bridge.Reply(id, new { error = "User settings database not loaded" }); return; }
             string sql = root.GetProperty("sql").GetString();
             try
             {
-                long lastInsertId = await Task.Run(() => _db.Execute(sql, _ParseParams(root)));
+                long lastInsertId = await Task.Run(() => db.Execute(sql, _ParseParams(root)));
                 _bridge.Reply(id, new { lastInsertId });
             }
             catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
@@ -71,9 +79,10 @@ namespace KitveiHakodeshLib.UserSettings
         /// <summary>
         /// Called when the user changes the seforim DB path.
         /// Shows a confirmation dialog if there is existing annotation data,
-        /// optionally copies the data to the new location, then re-opens the DB.
-        /// Must be called from the UI thread (or via BeginInvoke) because it may
-        /// show a MessageBox.
+        /// optionally copies the data to the new location, then re-points the shared
+        /// connection to the new database. Safe to call from any AppViewer instance —
+        /// all instances share the connection so they all pick up the change.
+        /// Must be dispatched via BeginInvoke because it may show a MessageBox.
         /// </summary>
         public void UpdateSeforimDbPath(string newSeforimDbPath)
         {
@@ -85,7 +94,7 @@ namespace KitveiHakodeshLib.UserSettings
 
         private void _HandleDbPathChange(string newSeforimDbPath)
         {
-            string oldUserSettingsPath = _db?.Path;
+            string oldUserSettingsPath = UserSettingsDbAccess.Current?.Path;
             string newUserSettingsPath = UserSettingsDbAccess.DeriveUserSettingsDbPath(newSeforimDbPath);
 
             // Nothing to do if the path has not actually changed.
@@ -116,18 +125,14 @@ namespace KitveiHakodeshLib.UserSettings
                     MessageBoxOptions.RightAlign | MessageBoxOptions.RtlReading);
 
                 if (result == DialogResult.Yes)
-                {
                     _CopyUserSettingsDb(oldUserSettingsPath, newUserSettingsPath);
-                }
             }
 
-            // Close the old connection before opening the new one.
-            _db?.Dispose();
-            _db = null;
-
+            // Re-open the shared connection at the new path. This closes the old
+            // connection and opens a new one, visible to all AppViewer instances.
             try
             {
-                _db = new UserSettingsDbAccess(newSeforimDbPath);
+                UserSettingsDbAccess.Open(newSeforimDbPath);
                 _bridge.PushEvent(new { @event = "userSettingsDbReady", path = newUserSettingsPath });
             }
             catch (Exception ex)
@@ -181,10 +186,13 @@ namespace KitveiHakodeshLib.UserSettings
             return result;
         }
 
+        /// <summary>
+        /// Per-instance dispose — does NOT touch the shared connection.
+        /// The shared connection lives until process teardown via UserSettingsDbAccess.DisposeShared().
+        /// </summary>
         public void Dispose()
         {
-            _db?.Dispose();
-            _db = null;
+            // Nothing to dispose per-instance — the connection is shared.
         }
     }
 }

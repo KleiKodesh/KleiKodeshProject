@@ -17,6 +17,8 @@ import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 import { useBookViewLineRenderer } from './useBookViewLineRenderer'
 import { useBookViewLineCopyMenu } from './useBookViewLineCopyMenu'
 import { useBookViewHighlights } from './useBookViewHighlights'
+import { useBookViewNotes } from './useBookViewNotes'
+import BookViewNoteBubble from './BookViewNoteBubble.vue'
 
 const emit = defineEmits<{ scrolled: [number, number]; lineSelected: [number]; 'ctrl-f': [] }>()
 const props = defineProps<{
@@ -74,6 +76,24 @@ const fontPx = computed(() => (zoom.value / 100) * (settingsStore.fontSize / 100
 
 const { getHighlightsForLine, applyHighlight, clearHighlight } = useBookViewHighlights(bookId)
 
+// ── User notes ────────────────────────────────────────────────────────────────
+
+const { notesByLine, getNotesForLine, createNote, updateNote, deleteNote } = useBookViewNotes(bookId)
+
+// Active note bubble state
+const activeBubbleNote = ref<import('./useBookViewNotes').Note | null>(null)
+const activeBubbleAnchorRect = ref<DOMRect | null>(null)
+
+function openNoteBubble(note: import('./useBookViewNotes').Note, markerEl: HTMLElement) {
+  activeBubbleNote.value = note
+  activeBubbleAnchorRect.value = markerEl.getBoundingClientRect()
+}
+
+function closeNoteBubble() {
+  activeBubbleNote.value = null
+  activeBubbleAnchorRect.value = null
+}
+
 // ── Selection → line offsets ──────────────────────────────────────────────────
 
 interface SelectionOnLine {
@@ -94,57 +114,31 @@ interface MultiLineSelection {
 
 function extractSelectionOnLine(): MultiLineSelection | null {
   const sel = window.getSelection()
-  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
-    console.log('[select] no selection')
-    return null
-  }
+  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null
   const range = sel.getRangeAt(0)
-  console.log('[select] range:', { start: range.startContainer, end: range.endContainer })
-
-  // Find the .line element(s) touched by this selection
-  if (!scrollerEl.value) {
-    console.log('[select] no scroller')
-    return null
-  }
+  if (!scrollerEl.value) return null
   const lineEls = Array.from(scrollerEl.value.querySelectorAll('.line'))
-  console.log('[select] found', lineEls.length, 'line elements')
   const intersected = lineEls.filter((el) => range.intersectsNode(el))
-  console.log('[select] intersected:', intersected.length, 'lines')
-
-  if (intersected.length === 0) {
-    console.log('[select] no lines intersected')
-    return null
-  }
+  if (intersected.length === 0) return null
 
   const selectionLines: SelectionOnLine[] = []
 
   for (let i = 0; i < intersected.length; i++) {
     const lineEl = intersected[i] as HTMLElement
     const vItemEl = lineEl.closest('[data-index]') as HTMLElement | null
-    if (!vItemEl) {
-      console.log('[select] no vItemEl for line', i)
-      continue
-    }
+    if (!vItemEl) continue
     const vIndex = parseInt(vItemEl.dataset['index'] ?? '', 10)
     const lineItem = props.lines[vIndex]
-    if (!lineItem || lineItem.content == null) {
-      console.log('[select] no lineItem or empty content for line', i)
-      continue
-    }
+    if (!lineItem || lineItem.content == null) continue
 
-    // Measure character offsets within the stripped (no-diacritic) text
-    // by walking the text nodes of the line element
     const strippedText = (lineEl.textContent ?? '').replace(/[\u0591-\u05C7]/g, '')
-    console.log('[select] line', i, 'strippedText:', strippedText, 'length:', strippedText.length)
 
     function countStrippedOffset(node: Node, offsetInNode: number): number {
-      // Walk all text nodes in the line element in order; sum stripped chars until we reach target
       const walker = document.createTreeWalker(lineEl, NodeFilter.SHOW_TEXT)
       let stripped = 0
       let current: Text | null
       while ((current = walker.nextNode() as Text | null)) {
         if (current === node) {
-          // Count stripped chars up to offsetInNode within this node
           const slice = current.textContent?.slice(0, offsetInNode) ?? ''
           stripped += slice.replace(/[\u0591-\u05C7]/g, '').length
           return stripped
@@ -154,24 +148,14 @@ function extractSelectionOnLine(): MultiLineSelection | null {
       return stripped
     }
 
-    // Determine if this is the first, last, or middle line of the selection
     const isFirstLine = i === 0
     const isLastLine = i === intersected.length - 1
 
     let startOffset = 0
     let endOffset = strippedText.length
 
-    // For the first line: start from the selection's start
-    if (isFirstLine) {
-      startOffset = countStrippedOffset(range.startContainer, range.startOffset)
-    }
-
-    // For the last line: end at the selection's end
-    if (isLastLine) {
-      endOffset = countStrippedOffset(range.endContainer, range.endOffset)
-    }
-
-    console.log('[select] line', i, 'offsets:', { startOffset, endOffset })
+    if (isFirstLine) startOffset = countStrippedOffset(range.startContainer, range.startOffset)
+    if (isLastLine) endOffset = countStrippedOffset(range.endContainer, range.endOffset)
 
     if (startOffset < endOffset) {
       selectionLines.push({
@@ -183,11 +167,7 @@ function extractSelectionOnLine(): MultiLineSelection | null {
     }
   }
 
-  if (selectionLines.length === 0) {
-    console.log('[select] no valid selections')
-    return null
-  }
-
+  if (selectionLines.length === 0) return null
   return { lines: selectionLines }
 }
 
@@ -195,9 +175,7 @@ function extractSelectionOnLine(): MultiLineSelection | null {
 
 function onHighlight(colorArgb: number) {
   const selection = extractSelectionOnLine()
-  console.log('[book-view] onHighlight called:', { selection, colorArgb })
   if (!selection) return
-  // Apply highlight to each line separately
   for (const line of selection.lines) {
     applyHighlight(line.lineId, line.startOffset, line.endOffset, colorArgb)
   }
@@ -215,7 +193,37 @@ function onClearHighlight() {
 }
 
 function onAddNote() {
-  // Note functionality will be wired in a future step
+  const selection = extractSelectionOnLine()
+  if (!selection || selection.lines.length === 0) return
+  const firstLine = selection.lines[0]!
+  // Capture quoted text before clearing the selection
+  const rawQuote = window.getSelection()?.toString() ?? ''
+  const quote = rawQuote.replace(/[\u0591-\u05C7]/g, '').trim()
+  window.getSelection()?.removeAllRanges()
+  void createNote(firstLine.lineId, firstLine.startOffset, firstLine.endOffset, quote).then(
+    (note) => {
+      // After the renderer re-runs, find the new marker and open the bubble
+      nextTick(() => {
+        const marker = scrollerEl.value?.querySelector(
+          `[data-note-id="${note.id}"]`,
+        ) as HTMLElement | null
+        if (marker) openNoteBubble(note, marker)
+      })
+    },
+  )
+}
+
+function onMarkerClick(event: MouseEvent) {
+  const marker = (event.target as HTMLElement).closest('[data-note-id]') as HTMLElement | null
+  if (!marker) return
+  const noteId = parseInt(marker.dataset['noteId'] ?? '', 10)
+  if (isNaN(noteId)) return
+  event.stopPropagation()
+  // Walk notesByLine to find the note by id
+  for (const notes of notesByLine.value.values()) {
+    const found = notes.find((n) => n.id === noteId)
+    if (found) { openNoteBubble(found, marker); return }
+  }
 }
 
 // ── Line rendering ────────────────────────────────────────────────────────────
@@ -229,6 +237,7 @@ const { lineContent } = useBookViewLineRenderer(settingsStore, diacriticsState, 
   searchHighlightSnippet: props.searchHighlightSnippet,
   searchHighlightTerms: props.searchHighlightTerms,
   getHighlightsForLine,
+  getNotesForLine,
 }))
 
 // ── Scroller setup ────────────────────────────────────────────────────────────
@@ -621,6 +630,15 @@ defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller })
 <template>
   <div class="lines-content">
     <ContextMenu ref="contextMenuRef" :items="contextMenuItems" />
+    <BookViewNoteBubble
+      v-if="activeBubbleNote && activeBubbleAnchorRect"
+      :note="activeBubbleNote"
+      :anchor-rect="activeBubbleAnchorRect"
+      :update-note="updateNote"
+      :delete-note="deleteNote"
+      @close="closeNoteBubble"
+      @deleted="closeNoteBubble"
+    />
     <div
       ref="scrollerEl"
       class="scroller"
@@ -628,6 +646,7 @@ defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller })
       data-ctrlf-enabled
       :style="{ fontSize: `${fontPx}px` }"
       @scroll="onScroll"
+      @click="onMarkerClick"
       @contextmenu="contextMenuRef?.show($event)"
     >
       <div :style="{ height: `${totalSize}px`, position: 'relative' }">
@@ -725,5 +744,24 @@ defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller })
 }
 .line :deep(mark.user-highlight) {
   border-radius: 2px;
+}
+.line :deep(.user-note-underline) {
+  text-decoration: underline dotted var(--accent-color);
+  text-underline-offset: 3px;
+}
+.line :deep(.user-note-marker) {
+  font-size: 0.72em;
+  vertical-align: super;
+  line-height: 1;
+  color: var(--accent-color);
+  cursor: pointer;
+  user-select: none;
+  font-style: normal;
+  font-weight: normal;
+  letter-spacing: 0;
+  transition: color 100ms;
+}
+.line :deep(.user-note-marker:hover) {
+  color: color-mix(in srgb, var(--accent-color) 70%, var(--text-primary));
 }
 </style>

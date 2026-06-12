@@ -14,6 +14,7 @@ export function useCommentaryCopy(
   scrollerEl: Ref<HTMLElement | null>,
   onHighlight: (lineId: number, startOffset: number, endOffset: number, colorArgb: number) => void,
   onClearHighlight: (lineId: number, startOffset: number, endOffset: number) => void,
+  onAddNote: (lineId: number, startOffset: number, endOffset: number, quote: string) => void,
 ) {
   const contextMenuRef = ref<any>(null)
 
@@ -138,6 +139,17 @@ export function useCommentaryCopy(
     window.getSelection()?.removeAllRanges()
   }
 
+  function addNoteFromSelection(): void {
+    const lines = extractSelectionOnCommentaryLines()
+    if (!lines.length) return
+    const firstLine = lines[0]!
+    // Capture quoted text before clearing the selection
+    const rawQuote = window.getSelection()?.toString() ?? ''
+    const quote = rawQuote.replace(/[\u0591-\u05C7]/g, '').trim()
+    window.getSelection()?.removeAllRanges()
+    onAddNote(firstLine.lineId, firstLine.startOffset, firstLine.endOffset, quote)
+  }
+
   // ── Copy actions ────────────────────────────────────────────────────────────
 
   function copyAsBlock(): void {
@@ -183,7 +195,7 @@ export function useCommentaryCopy(
     props: {
       onHighlight: applyHighlightFromSelection,
       onClearHighlight: clearHighlightFromSelection,
-      onAddNote: () => {},
+      onAddNote: addNoteFromSelection,
     },
   }
 

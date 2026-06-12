@@ -4,6 +4,7 @@ import { censorDivineNames } from '@/utils/censorDivineNames'
 import { argbToCssColor, highlightColorToThemeColor } from '../lines/bookViewAnnotationColors'
 import type { useSettingsStore } from '@/stores/settingsStore'
 import type { Highlight } from '../lines/useBookViewHighlights'
+import type { Note } from '../lines/useBookViewNotes'
 
 type SettingsStore = ReturnType<typeof useSettingsStore>
 
@@ -16,6 +17,7 @@ interface LineRenderProps {
   searchHighlightSnippet?: string
   searchHighlightTerms?: string[]
   getHighlightsForLine?: (lineId: number) => Highlight[]
+  getNotesForLine?: (lineId: number) => Note[]
 }
 
 // ── Highlight helpers ─────────────────────────────────────────────────────────
@@ -254,6 +256,101 @@ export function applyUserHighlights(content: string, highlights: Highlight[]): s
   return out.join('')
 }
 
+// ── User note marker injection ────────────────────────────────────────────────
+// NOTE: also used by useCommentaryRender.ts — keep exported.
+
+/**
+ * Injects a dotted-underline span over the noted text range plus a superscript
+ * footnote reference marker at the endOffset position.
+ *
+ * The marker is a `<sup>` with class `user-note-marker` and two data attributes:
+ *   data-note-id   — the note id (used by the click handler to open the bubble)
+ *   title          — the note text (shown as a native tooltip on hover)
+ *
+ * Marker label: [n] where n is the 1-based index of the note among all notes on
+ * the line, ordered by startOffset — identical to Wikipedia footnote style.
+ *
+ * The underline span wraps the range [startOffset, endOffset] using the same
+ * HTML-aware, diacritic-aware walk as applyUserHighlights.
+ * The <sup> is inserted immediately after the closing underline span.
+ */
+export function applyUserNoteMarkers(content: string, notes: Note[]): string {
+  if (!notes.length) return content
+
+  interface NoteEvent {
+    pos: number
+    type: 'open' | 'close'
+    noteId: number
+    noteText: string
+    label: string   // [1], [2], …
+  }
+
+  const events: NoteEvent[] = []
+  // notes are already sorted by startOffset (maintained by _addToMap)
+  notes.forEach((n) => {
+    if (n.startOffset >= n.endOffset) return
+    const label = `[*]`
+    events.push({ pos: n.startOffset, type: 'open',  noteId: n.id, noteText: n.note, label })
+    events.push({ pos: n.endOffset,   type: 'close', noteId: n.id, noteText: n.note, label })
+  })
+  // Opens before closes at same position
+  events.sort((a, b) => a.pos - b.pos || (a.type === 'open' ? -1 : 1))
+
+  if (!events.length) return content
+
+  const out: string[] = []
+  let strippedPos = 0
+  let inTag = false
+  let inEntity = false
+  let eventIndex = 0
+  const openNoteIds: number[] = []
+
+  for (let i = 0; i < content.length; i++) {
+    const ch = content[i]!
+
+    if (ch === '<') { inTag = true; out.push(ch); continue }
+    if (ch === '>') { inTag = false; out.push(ch); continue }
+    if (inTag) { out.push(ch); continue }
+
+    if (ch === '&') { inEntity = true; out.push(ch); continue }
+    if (inEntity && ch === ';') { inEntity = false; out.push(ch); continue }
+    if (inEntity) { out.push(ch); continue }
+
+    const isDiacritic = /[\u0591-\u05C7]/.test(ch)
+
+    if (!isDiacritic) {
+      while (eventIndex < events.length && events[eventIndex]!.pos === strippedPos) {
+        const event = events[eventIndex]!
+        if (event.type === 'open') {
+          out.push(`<span class="user-note-underline">`)
+          openNoteIds.push(event.noteId)
+        } else {
+          if (openNoteIds.length) {
+            out.push(`</span>`)
+            openNoteIds.pop()
+          }
+          const escapedText = event.noteText
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+          out.push(
+            `<sup class="user-note-marker" data-note-id="${event.noteId}" title="${escapedText}">${event.label}</sup>`,
+          )
+        }
+        eventIndex++
+      }
+    }
+
+    out.push(ch)
+    if (!isDiacritic) strippedPos++
+  }
+
+  for (let i = openNoteIds.length - 1; i >= 0; i--) out.push('</span>')
+
+  return out.join('')
+}
+
 // ── Composable ────────────────────────────────────────────────────────────────
 
 export function useBookViewLineRenderer(
@@ -271,7 +368,9 @@ export function useBookViewLineRenderer(
     const p = getProps()
     const lineHighlights = p.getHighlightsForLine?.(lineId) ?? []
     const highlightsSig = lineHighlights.map((h) => `${h.id}:${h.startOffset}:${h.endOffset}:${h.colorArgb}`).join(',')
-    return `${diacriticsState.value}|${settings.censorDivineNames}|${p.searchQuery ?? ''}|${p.currentMatchLineIndex ?? -1}|${p.currentMatchOccurrence ?? 0}|${p.searchHighlightLineIndex ?? -1}|${p.searchHighlightQuery ?? ''}|${p.searchHighlightSnippet ?? ''}|${p.searchHighlightTerms?.join(',') ?? ''}|${highlightsSig}`
+    const lineNotes = p.getNotesForLine?.(lineId) ?? []
+    const notesSig = lineNotes.map((n) => `${n.id}:${n.startOffset}:${n.endOffset}:${n.updatedAt}`).join(',')
+    return `${diacriticsState.value}|${settings.censorDivineNames}|${p.searchQuery ?? ''}|${p.currentMatchLineIndex ?? -1}|${p.currentMatchOccurrence ?? 0}|${p.searchHighlightLineIndex ?? -1}|${p.searchHighlightQuery ?? ''}|${p.searchHighlightSnippet ?? ''}|${p.searchHighlightTerms?.join(',') ?? ''}|${highlightsSig}|${notesSig}`
   }
 
   function lineContent(raw: string, lineIndex: number, lineId: number): string {
@@ -287,10 +386,16 @@ export function useBookViewLineRenderer(
     let content = diacriticsState.value === 0 ? raw : applyDiacriticsFilter(raw, diacriticsState.value)
     if (settings.censorDivineNames) content = censorDivineNames(content)
 
-    // Apply user highlights first (underneath search marks)
+    // Apply user highlights first (underneath search marks and note markers)
     const lineHighlights = p.getHighlightsForLine?.(lineId) ?? []
     if (lineHighlights.length) {
       content = applyUserHighlights(content, lineHighlights)
+    }
+
+    // Apply note markers on top of highlights, underneath search marks
+    const lineNotes = p.getNotesForLine?.(lineId) ?? []
+    if (lineNotes.length) {
+      content = applyUserNoteMarkers(content, lineNotes)
     }
 
     if (p.searchQuery?.trim())

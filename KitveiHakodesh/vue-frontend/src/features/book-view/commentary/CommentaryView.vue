@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useScopedKeys } from '@/composables/useTextSelectionKeys'
 import { useScopedCopy } from '@/composables/useLineCopy'
 import { useVirtualizer } from '@tanstack/vue-virtual'
@@ -16,6 +16,8 @@ import { useCommentaryScroll } from './useCommentaryScroll'
 import { useCommentaryTocPaths } from './useCommentaryTocPaths'
 import { useCommentaryCopy } from './useCommentaryCopy'
 import { useCommentaryHighlights } from './useCommentaryHighlights'
+import { useCommentaryNotes } from './useCommentaryNotes'
+import BookViewNoteBubble from '../lines/BookViewNoteBubble.vue'
 
 const props = defineProps<{
   selectedLineId: number | null
@@ -45,10 +47,30 @@ const { getHighlightsForLine, applyHighlight, clearHighlight } = useCommentaryHi
   () => props.groups,
 )
 
+// Notes — same multi-book pattern as highlights
+const { getNotesForLine, createNote, updateNote, deleteNote } = useCommentaryNotes(
+  () => props.groups,
+)
+
+// Active note bubble
+const activeBubbleNote = ref<import('../lines/useBookViewNotes').Note | null>(null)
+const activeBubbleAnchorRect = ref<DOMRect | null>(null)
+
+function openNoteBubble(note: import('../lines/useBookViewNotes').Note, markerEl: HTMLElement) {
+  activeBubbleNote.value = note
+  activeBubbleAnchorRect.value = markerEl.getBoundingClientRect()
+}
+
+function closeNoteBubble() {
+  activeBubbleNote.value = null
+  activeBubbleAnchorRect.value = null
+}
+
 // Composables for rendering, scrolling, and TOC paths
 const { commentaryFontPx, renderContent } = useCommentaryRender(
   () => props.groups,
   getHighlightsForLine,
+  getNotesForLine,
 )
 const { commentaryTocPaths } = useCommentaryTocPaths(() => props.groups)
 
@@ -165,12 +187,34 @@ const { contextMenuItems } = useCommentaryCopy(
   (lineId, startOffset, endOffset, colorArgb) =>
     applyHighlight(lineId, startOffset, endOffset, colorArgb),
   (lineId, startOffset, endOffset) => clearHighlight(lineId, startOffset, endOffset),
+  (lineId, startOffset, endOffset, quote) =>
+    createNote(lineId, startOffset, endOffset, quote).then((note) => {
+      nextTick(() => {
+        const marker = scrollerEl.value?.querySelector(
+          `[data-note-id="${note.id}"]`,
+        ) as HTMLElement | null
+        if (marker) openNoteBubble(note, marker)
+      })
+    }),
 )
 
 function onScroll() {
   handleScroll((scrollIndex, scrollOffset) => {
     emit('scroll', scrollIndex, scrollOffset)
   })
+}
+
+function onMarkerClick(event: MouseEvent) {
+  const marker = (event.target as HTMLElement).closest('[data-note-id]') as HTMLElement | null
+  if (!marker) return
+  const noteId = parseInt(marker.dataset['noteId'] ?? '', 10)
+  if (isNaN(noteId)) return
+  event.stopPropagation()
+  const notes = getNotesForLine(
+    parseInt((marker.closest('[data-line-id]') as HTMLElement | null)?.dataset['lineId'] ?? '', 10),
+  )
+  const found = notes.find((n) => n.id === noteId)
+  if (found) openNoteBubble(found, marker)
 }
 
 const activeBookId = computed(() => activePinnedGroup.value?.bookId ?? null)
@@ -213,6 +257,15 @@ function firstLineIndexForHeader(
 <template>
   <div class="commentary-view">
     <ContextMenu ref="contextMenuRef" :items="contextMenuItems" />
+    <BookViewNoteBubble
+      v-if="activeBubbleNote && activeBubbleAnchorRect"
+      :note="activeBubbleNote"
+      :anchor-rect="activeBubbleAnchorRect"
+      :update-note="updateNote"
+      :delete-note="deleteNote"
+      @close="closeNoteBubble"
+      @deleted="closeNoteBubble"
+    />
     <div class="body">
       <div class="content-col" :style="{ fontSize: `${commentaryFontPx}px` }">
         <CommentaryHeaderNav
@@ -242,6 +295,7 @@ function firstLineIndexForHeader(
           tabindex="0"
           data-ctrlf-enabled
           @scroll="onScroll"
+          @click="onMarkerClick"
           @contextmenu="contextMenuRef?.show($event)"
         >
           <div :style="{ height: `${totalSize}px`, position: 'relative' }">
@@ -354,5 +408,24 @@ function firstLineIndexForHeader(
 }
 .line :deep(mark.user-highlight) {
   border-radius: 2px;
+}
+.line :deep(.user-note-underline) {
+  text-decoration: underline dotted var(--accent-color);
+  text-underline-offset: 3px;
+}
+.line :deep(.user-note-marker) {
+  font-size: 0.72em;
+  vertical-align: super;
+  line-height: 1;
+  color: var(--accent-color);
+  cursor: pointer;
+  user-select: none;
+  font-style: normal;
+  font-weight: normal;
+  letter-spacing: 0;
+  transition: color 100ms;
+}
+.line :deep(.user-note-marker:hover) {
+  color: color-mix(in srgb, var(--accent-color) 70%, var(--text-primary));
 }
 </style>

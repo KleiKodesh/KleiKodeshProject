@@ -9,17 +9,90 @@ using System.Text.RegularExpressions;
 namespace KitveiHakodeshLib.UserSettings
 {
     /// <summary>
-    /// Read/write access to the user settings database (user_settings.db).
+    /// Process-wide singleton access point for user_settings.db.
     ///
-    /// The database lives in a "Settings" sub-folder next to the seforim database:
-    ///   {seforimDbFolder}/Settings/user_settings.db
+    /// Cross-process safety (Zayit, other app instances):
+    ///   The database is opened in WAL (Write-Ahead Log) mode. WAL allows multiple
+    ///   readers and one writer to operate concurrently without blocking each other,
+    ///   even across separate OS processes. This means Zayit or another instance of
+    ///   this app can read or write the database at the same time as us.
     ///
-    /// On first access the database and its schema are created automatically.
-    /// Unlike DbAccess (read-only), this connection is read/write.
+    ///   To avoid holding a file lock between operations, NO persistent connection is
+    ///   kept open. Each Query() and Execute() call opens a fresh connection, executes,
+    ///   and closes immediately. SQLite with WAL is fast enough that open/close overhead
+    ///   is negligible for annotation read/write workloads.
+    ///
+    /// In-process safety (multiple AppViewer instances):
+    ///   All AppViewer instances share this singleton so they never race each other.
+    ///   The _lock serializes concurrent calls arriving on Task.Run thread-pool threads.
+    ///   Because the connection is closed after every operation, LastInsertRowId is
+    ///   read within the same open/close scope as the INSERT — it is always correct.
+    ///
+    /// Lifecycle:
+    ///   - Open(seforimDbPath) sets up the singleton for a given DB path.
+    ///   - The first Open call creates the schema and enables WAL mode.
+    ///   - Subsequent Open calls from additional AppViewer instances at the same path
+    ///     are no-ops.
+    ///   - When the user switches the seforim DB path, Open() re-points the singleton.
+    ///   - DisposeShared() clears the singleton at process teardown (no connection to
+    ///     close since we never keep one open).
     /// </summary>
-    public class UserSettingsDbAccess : IDisposable
+    public class UserSettingsDbAccess
     {
-        private SQLiteConnection _conn;
+        // ── Shared singleton ──────────────────────────────────────────────────────
+
+        private static readonly object _lock = new object();
+        private static UserSettingsDbAccess _shared;
+
+        /// <summary>
+        /// Opens (or re-uses) the process-wide access point for the given seforim DB path.
+        /// Thread-safe. Idempotent when called repeatedly with the same path.
+        /// </summary>
+        public static UserSettingsDbAccess Open(string seforimDbPath)
+        {
+            if (string.IsNullOrEmpty(seforimDbPath) || !File.Exists(seforimDbPath))
+                return null;
+
+            string desiredPath = DeriveUserSettingsDbPath(seforimDbPath);
+
+            lock (_lock)
+            {
+                if (_shared != null &&
+                    string.Equals(_shared.Path, desiredPath, StringComparison.OrdinalIgnoreCase))
+                    return _shared;
+
+                // Path changed or first call — replace the singleton.
+                _shared = null;
+                var instance = new UserSettingsDbAccess(desiredPath);
+                instance._EnsureSchemaExists();
+                _shared = instance;
+                return _shared;
+            }
+        }
+
+        /// <summary>
+        /// Returns the currently active shared instance, or null if not yet opened.
+        /// </summary>
+        public static UserSettingsDbAccess Current
+        {
+            get { lock (_lock) { return _shared; } }
+        }
+
+        /// <summary>
+        /// Clears the singleton at process teardown. Safe to call multiple times.
+        /// No connection needs closing since connections are never held open.
+        /// </summary>
+        public static void DisposeShared()
+        {
+            lock (_lock)
+            {
+                _shared = null;
+            }
+        }
+
+        // ── Instance ──────────────────────────────────────────────────────────────
+
+        public string Path { get; private set; }
 
         /// <summary>
         /// Derives the user settings database path from the seforim database path.
@@ -31,12 +104,30 @@ namespace KitveiHakodeshLib.UserSettings
             return System.IO.Path.Combine(folder, "Settings", "user_settings.db");
         }
 
-        public string Path { get; private set; }
+        // Connection string with WAL and no persistent lock:
+        //   Journal Mode=WAL  — enables Write-Ahead Logging so other processes can
+        //                        read and write concurrently without blocking us
+        //   Cache Size=0      — no shared page cache; each connection is fully
+        //                        independent (safe for short-lived connections)
+        //   Pooling=False     — disable connection pooling so every SQLiteConnection
+        //                        object is a real open/close cycle and never re-used
+        //                        from a pool that might hold a stale lock
+        private readonly string _connectionString;
 
-        public UserSettingsDbAccess(string seforimDbPath)
+        private UserSettingsDbAccess(string userSettingsDbPath)
         {
-            Path = DeriveUserSettingsDbPath(seforimDbPath);
-            _EnsureSchemaExists();
+            Path = userSettingsDbPath;
+            _connectionString =
+                "Data Source=" + userSettingsDbPath + ";" +
+                "Version=3;" +
+                "Pooling=False;";
+        }
+
+        private SQLiteConnection _OpenConnection()
+        {
+            var conn = new SQLiteConnection(_connectionString);
+            conn.Open();
+            return conn;
         }
 
         private void _EnsureSchemaExists()
@@ -45,42 +136,47 @@ namespace KitveiHakodeshLib.UserSettings
             if (!Directory.Exists(dir))
                 Directory.CreateDirectory(dir);
 
-            string connectionString = "Data Source=" + this.Path + ";Version=3;";
-            _conn = new SQLiteConnection(connectionString);
-            _conn.Open();
+            // Open once to create the schema and set WAL mode, then close immediately.
+            // WAL mode is a persistent DB property — it survives connection close and
+            // stays active for all future connections from any process.
+            using (var conn = _OpenConnection())
+            {
+                conn.Execute("PRAGMA journal_mode=WAL;");
+                conn.Execute(@"
+                    CREATE TABLE IF NOT EXISTS user_highlights (
+                        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                        bookId      INTEGER NOT NULL,
+                        lineId      INTEGER NOT NULL,
+                        startOffset INTEGER NOT NULL,
+                        endOffset   INTEGER NOT NULL,
+                        colorArgb   INTEGER NOT NULL,
+                        createdAt   INTEGER NOT NULL
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_user_highlights_book_line
+                        ON user_highlights (bookId, lineId);
 
-            _conn.Execute(@"
-                CREATE TABLE IF NOT EXISTS user_highlights (
-                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                    bookId      INTEGER NOT NULL,
-                    lineId      INTEGER NOT NULL,
-                    startOffset INTEGER NOT NULL,
-                    endOffset   INTEGER NOT NULL,
-                    colorArgb   INTEGER NOT NULL,
-                    createdAt   INTEGER NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS idx_user_highlights_book_line
-                    ON user_highlights (bookId, lineId);
-
-                CREATE TABLE IF NOT EXISTS user_notes (
-                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                    bookId      INTEGER NOT NULL,
-                    lineId      INTEGER NOT NULL,
-                    startOffset INTEGER NOT NULL,
-                    endOffset   INTEGER NOT NULL,
-                    note        TEXT    NOT NULL,
-                    quote       TEXT    NOT NULL,
-                    createdAt   INTEGER NOT NULL,
-                    updatedAt   INTEGER NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS idx_user_notes_book_line
-                    ON user_notes (bookId, lineId);
-            ");
+                    CREATE TABLE IF NOT EXISTS user_notes (
+                        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                        bookId      INTEGER NOT NULL,
+                        lineId      INTEGER NOT NULL,
+                        startOffset INTEGER NOT NULL,
+                        endOffset   INTEGER NOT NULL,
+                        note        TEXT    NOT NULL,
+                        quote       TEXT    NOT NULL,
+                        createdAt   INTEGER NOT NULL,
+                        updatedAt   INTEGER NOT NULL
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_user_notes_book_line
+                        ON user_notes (bookId, lineId);
+                ");
+            }
         }
 
         /// <summary>
         /// Executes a SELECT query and returns rows as a list of dictionaries.
         /// Positional ? parameters are converted to named @p0, @p1, ... for Dapper.
+        /// Opens a connection, executes, closes — no lock held between calls.
+        /// Thread-safe via _lock.
         /// </summary>
         public IEnumerable<IDictionary<string, object>> Query(string sql, object[] parameters)
         {
@@ -91,14 +187,23 @@ namespace KitveiHakodeshLib.UserSettings
             for (int i = 0; i < parameters.Length; i++)
                 dp.Add("@p" + i, parameters[i]);
 
-            return _conn.Query(namedSql, dp)
-                        .Cast<IDictionary<string, object>>()
-                        .ToList();
+            lock (_lock)
+            {
+                using (var conn = _OpenConnection())
+                {
+                    return conn.Query(namedSql, dp)
+                               .Cast<IDictionary<string, object>>()
+                               .ToList();
+                }
+            }
         }
 
         /// <summary>
         /// Executes an INSERT, UPDATE, or DELETE statement.
-        /// Returns the last inserted row id for INSERT, or rows affected for others.
+        /// Returns the last inserted row id for INSERT.
+        /// Opens a connection, executes, reads LastInsertRowId, closes — all within
+        /// the same lock scope so the id is always consistent.
+        /// Thread-safe via _lock.
         /// </summary>
         public long Execute(string sql, object[] parameters)
         {
@@ -109,15 +214,14 @@ namespace KitveiHakodeshLib.UserSettings
             for (int i = 0; i < parameters.Length; i++)
                 dp.Add("@p" + i, parameters[i]);
 
-            _conn.Execute(namedSql, dp);
-            return _conn.LastInsertRowId;
-        }
-
-        public void Dispose()
-        {
-            _conn?.Close();
-            _conn?.Dispose();
-            _conn = null;
+            lock (_lock)
+            {
+                using (var conn = _OpenConnection())
+                {
+                    conn.Execute(namedSql, dp);
+                    return conn.LastInsertRowId;
+                }
+            }
         }
     }
 }

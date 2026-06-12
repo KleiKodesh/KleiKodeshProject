@@ -4,8 +4,9 @@ import { useBookViewStore } from '@/stores/bookViewStore'
 import { storeToRefs } from 'pinia'
 import { applyDiacriticsFilter, removeDiacriticsForSearch } from '@/utils/hebrewTextProcessing'
 import { censorDivineNames } from '@/utils/censorDivineNames'
-import { applyUserHighlights } from '../lines/useBookViewLineRenderer'
+import { applyUserHighlights, applyUserNoteMarkers } from '../lines/useBookViewLineRenderer'
 import type { Highlight } from '../lines/useBookViewHighlights'
+import type { Note } from '../lines/useBookViewNotes'
 
 /**
  * Manages content rendering for commentary lines: diacritics filtering, divine name censoring,
@@ -15,6 +16,7 @@ import type { Highlight } from '../lines/useBookViewHighlights'
 export function useCommentaryRender(
   groups: () => any[],
   getHighlightsForLine?: (lineId: number) => Highlight[],
+  getNotesForLine?: (lineId: number) => Note[],
 ) {
   const settingsStore = useSettingsStore()
   const { zoom } = storeToRefs(useBookViewStore())
@@ -44,7 +46,13 @@ export function useCommentaryRender(
             .map((h) => `${h.id}:${h.startOffset}:${h.endOffset}:${h.colorArgb}`)
             .join(',')
         : ''
-    return `${diacriticsState.value}|${settingsStore.censorDivineNames}|${searchQuery ?? ''}|${currentMatchFlatIndex ?? -1}|${currentMatchOccurrence ?? 0}|${highlightsSig}`
+    const notesSig =
+      lineId != null && getNotesForLine
+        ? (getNotesForLine(lineId) ?? [])
+            .map((n) => `${n.id}:${n.startOffset}:${n.endOffset}:${n.updatedAt}`)
+            .join(',')
+        : ''
+    return `${diacriticsState.value}|${settingsStore.censorDivineNames}|${searchQuery ?? ''}|${currentMatchFlatIndex ?? -1}|${currentMatchOccurrence ?? 0}|${highlightsSig}|${notesSig}`
   }
 
   function highlightMatches(
@@ -132,6 +140,12 @@ export function useCommentaryRender(
     if (lineId != null && getHighlightsForLine) {
       const lineHighlights = getHighlightsForLine(lineId)
       if (lineHighlights.length) result = applyUserHighlights(result, lineHighlights)
+    }
+
+    // Apply note markers on top of highlights, underneath search marks
+    if (lineId != null && getNotesForLine) {
+      const lineNotes = getNotesForLine(lineId)
+      if (lineNotes.length) result = applyUserNoteMarkers(result, lineNotes)
     }
 
     if (searchQuery?.trim())
