@@ -37,6 +37,13 @@ export const USER_SETTINGS_SQL = {
     ORDER BY lineId, startOffset
   `,
 
+  GET_NOTES_FOR_LINES: (count: number) => `
+    SELECT id, bookId, lineId, startOffset, endOffset, note, quote, createdAt, updatedAt
+    FROM user_notes
+    WHERE bookId = ? AND lineId IN (${Array(count).fill('?').join(',')})
+    ORDER BY lineId, startOffset
+  `,
+
   INSERT_NOTE: `
     INSERT INTO user_notes (bookId, lineId, startOffset, endOffset, note, quote, createdAt, updatedAt)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)

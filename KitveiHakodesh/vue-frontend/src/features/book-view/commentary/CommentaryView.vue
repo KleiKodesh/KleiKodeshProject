@@ -39,20 +39,14 @@ const emit = defineEmits<{
   scroll: [scrollIndex: number, scrollOffset: number]
 }>()
 
-// Load highlights per commentary book — groups contain lines from many different books,
-// each with their own bookId. useCommentaryHighlights loads lazily per commentary bookId
-// and routes writes back to the correct book, so highlights are shared with the book
-// viewer when you open that commentary book directly.
+// ── Highlights ────────────────────────────────────────────────────────────────
+
 const { getHighlightsForLine, applyHighlight, clearHighlight } = useCommentaryHighlights(
   () => props.groups,
 )
 
-// Notes — same multi-book pattern as highlights
-const { getNotesForLine, createNote, updateNote, deleteNote } = useCommentaryNotes(
-  () => props.groups,
-)
+// ── Note bubble state — declared early so downstream functions can reference it
 
-// Active note bubble
 const activeBubbleNote = ref<import('../lines/useBookViewNotes').Note | null>(null)
 const activeBubbleAnchorRect = ref<DOMRect | null>(null)
 
@@ -66,13 +60,7 @@ function closeNoteBubble() {
   activeBubbleAnchorRect.value = null
 }
 
-// Composables for rendering, scrolling, and TOC paths
-const { commentaryFontPx, renderContent } = useCommentaryRender(
-  () => props.groups,
-  getHighlightsForLine,
-  getNotesForLine,
-)
-const { commentaryTocPaths } = useCommentaryTocPaths(() => props.groups)
+// ── Flat item list ────────────────────────────────────────────────────────────
 
 type FlatItem =
   | {
@@ -116,6 +104,8 @@ const flatItems = computed<FlatItem[]>(() => {
   return items
 })
 
+// ── Virtualizer ───────────────────────────────────────────────────────────────
+
 const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, {
   onCtrlF: () => emit('toggle-search'),
 })
@@ -138,6 +128,31 @@ const virtualizer = useVirtualizer(
 
 const virtualItems = computed(() => virtualizer.value.getVirtualItems())
 const totalSize = computed(() => virtualizer.value.getTotalSize())
+
+// ── Notes — lazy, viewport-driven (must come after virtualItems) ──────────────
+
+const { getNotesForLine, createNote, updateNote, deleteNote } = useCommentaryNotes(
+  () => props.groups,
+  () =>
+    virtualItems.value
+      .map((v) => flatItems.value[v.index])
+      .filter((item): item is { type: 'line'; content: string; lineId: number } =>
+        item?.type === 'line',
+      )
+      .map((item) => item.lineId)
+      .filter((id) => id > 0),
+)
+
+// ── Rendering ─────────────────────────────────────────────────────────────────
+
+const { commentaryFontPx, renderContent } = useCommentaryRender(
+  () => props.groups,
+  getHighlightsForLine,
+  getNotesForLine,
+)
+const { commentaryTocPaths } = useCommentaryTocPaths(() => props.groups)
+
+// ── Scroll ────────────────────────────────────────────────────────────────────
 
 const {
   activeHeader,
@@ -168,6 +183,8 @@ useVirtualScrollerKeys(
     virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
   () => flatItems.value.length,
 )
+
+// ── Context menu ──────────────────────────────────────────────────────────────
 
 const { contextMenuItems } = useCommentaryCopy(
   () => {
@@ -210,10 +227,11 @@ function onMarkerClick(event: MouseEvent) {
   const noteId = parseInt(marker.dataset['noteId'] ?? '', 10)
   if (isNaN(noteId)) return
   event.stopPropagation()
-  const notes = getNotesForLine(
-    parseInt((marker.closest('[data-line-id]') as HTMLElement | null)?.dataset['lineId'] ?? '', 10),
+  const lineId = parseInt(
+    (marker.closest('[data-line-id]') as HTMLElement | null)?.dataset['lineId'] ?? '',
+    10,
   )
-  const found = notes.find((n) => n.id === noteId)
+  const found = getNotesForLine(lineId).find((n) => n.id === noteId)
   if (found) openNoteBubble(found, marker)
 }
 
@@ -408,10 +426,6 @@ function firstLineIndexForHeader(
 }
 .line :deep(mark.user-highlight) {
   border-radius: 2px;
-}
-.line :deep(.user-note-underline) {
-  text-decoration: underline dotted var(--accent-color);
-  text-underline-offset: 3px;
 }
 .line :deep(.user-note-marker) {
   font-size: 0.72em;

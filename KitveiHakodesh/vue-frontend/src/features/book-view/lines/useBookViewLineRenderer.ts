@@ -279,10 +279,9 @@ export function applyUserNoteMarkers(content: string, notes: Note[]): string {
 
   interface NoteEvent {
     pos: number
-    type: 'open' | 'close'
     noteId: number
     noteText: string
-    label: string   // [1], [2], …
+    label: string
   }
 
   const events: NoteEvent[] = []
@@ -290,11 +289,11 @@ export function applyUserNoteMarkers(content: string, notes: Note[]): string {
   notes.forEach((n) => {
     if (n.startOffset >= n.endOffset) return
     const label = `[*]`
-    events.push({ pos: n.startOffset, type: 'open',  noteId: n.id, noteText: n.note, label })
-    events.push({ pos: n.endOffset,   type: 'close', noteId: n.id, noteText: n.note, label })
+    // Only a close event is needed — no open span, just the marker at endOffset
+    events.push({ pos: n.endOffset, type: 'close', noteId: n.id, noteText: n.note, label })
   })
   // Opens before closes at same position
-  events.sort((a, b) => a.pos - b.pos || (a.type === 'open' ? -1 : 1))
+  events.sort((a, b) => a.pos - b.pos)
 
   if (!events.length) return content
 
@@ -303,7 +302,6 @@ export function applyUserNoteMarkers(content: string, notes: Note[]): string {
   let inTag = false
   let inEntity = false
   let eventIndex = 0
-  const openNoteIds: number[] = []
 
   for (let i = 0; i < content.length; i++) {
     const ch = content[i]!
@@ -321,23 +319,14 @@ export function applyUserNoteMarkers(content: string, notes: Note[]): string {
     if (!isDiacritic) {
       while (eventIndex < events.length && events[eventIndex]!.pos === strippedPos) {
         const event = events[eventIndex]!
-        if (event.type === 'open') {
-          out.push(`<span class="user-note-underline">`)
-          openNoteIds.push(event.noteId)
-        } else {
-          if (openNoteIds.length) {
-            out.push(`</span>`)
-            openNoteIds.pop()
-          }
-          const escapedText = event.noteText
-            .replace(/&/g, '&amp;')
-            .replace(/"/g, '&quot;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-          out.push(
-            `<sup class="user-note-marker" data-note-id="${event.noteId}" title="${escapedText}">${event.label}</sup>`,
-          )
-        }
+        const escapedText = event.noteText
+          .replace(/&/g, '&amp;')
+          .replace(/"/g, '&quot;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+        out.push(
+          `<sup class="user-note-marker" data-note-id="${event.noteId}" title="${escapedText}">${event.label}</sup>`,
+        )
         eventIndex++
       }
     }
@@ -345,8 +334,6 @@ export function applyUserNoteMarkers(content: string, notes: Note[]): string {
     out.push(ch)
     if (!isDiacritic) strippedPos++
   }
-
-  for (let i = openNoteIds.length - 1; i >= 0; i--) out.push('</span>')
 
   return out.join('')
 }

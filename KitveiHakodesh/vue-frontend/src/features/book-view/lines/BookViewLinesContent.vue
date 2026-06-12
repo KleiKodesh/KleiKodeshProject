@@ -50,6 +50,7 @@ const props = defineProps<{
   getActiveTocEntry?: (lineIndex: number) => TocEntry | null
   getTocPath?: (entry: TocEntry) => string
   pinnedCommentaryGroup?: PinnedCommentaryGroup | null
+  selectedSectionLineIds?: number[] | null
 }>()
 
 const tabStore = useTabStore()
@@ -76,11 +77,7 @@ const fontPx = computed(() => (zoom.value / 100) * (settingsStore.fontSize / 100
 
 const { getHighlightsForLine, applyHighlight, clearHighlight } = useBookViewHighlights(bookId)
 
-// ── User notes ────────────────────────────────────────────────────────────────
-
-const { notesByLine, getNotesForLine, createNote, updateNote, deleteNote } = useBookViewNotes(bookId)
-
-// Active note bubble state
+// Active note bubble state — declared early so onAddNote/onMarkerClick can reference it
 const activeBubbleNote = ref<import('./useBookViewNotes').Note | null>(null)
 const activeBubbleAnchorRect = ref<DOMRect | null>(null)
 
@@ -289,6 +286,13 @@ const virtualizer = useVirtualizer(
 
 const virtualItems = computed(() => virtualizer.value.getVirtualItems())
 const totalSize = computed(() => virtualizer.value.getTotalSize())
+
+// ── User notes — lazy, viewport-driven ───────────────────────────────────────
+
+const { notesByLine, getNotesForLine, createNote, updateNote, deleteNote } = useBookViewNotes(
+  bookId,
+  () => virtualItems.value.map((v) => props.lines[v.index]?.id ?? 0).filter((id) => id > 0),
+)
 
 // ── Scroll capture ────────────────────────────────────────────────────────────
 
@@ -620,6 +624,18 @@ function onLineClick(index: number) {
   if (props.commentaryVisible && line) emit('lineSelected', line.id)
 }
 
+const selectedSectionLineIdSet = computed(() =>
+  props.selectedSectionLineIds ? new Set(props.selectedSectionLineIds) : null,
+)
+
+function isInActiveSection(lineIndex: number): boolean {
+  const set = selectedSectionLineIdSet.value
+  if (!set) return false
+  const line = props.lines[lineIndex]
+  if (!line) return false
+  return set.has(line.id)
+}
+
 function focusScroller() {
   scrollerEl.value?.focus({ preventScroll: true })
 }
@@ -666,7 +682,10 @@ defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller })
           <div
             v-if="lines[vItem.index]?.content != null"
             class="line"
-            :class="{ selected: props.commentaryVisible && selectedLineId === lines[vItem.index]?.id }"
+            :class="{
+              selected: props.commentaryVisible && selectedLineId === lines[vItem.index]?.id,
+              'toc-section': props.commentaryVisible && isInActiveSection(vItem.index),
+            }"
             :data-alt-toc="props.altTocLabelMap?.get(vItem.index)"
             v-html="lineContent(lines[vItem.index]!.content!, vItem.index, lines[vItem.index]!.id)"
             @click="onLineClick(vItem.index)"
@@ -714,6 +733,9 @@ defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller })
   opacity: 0;
   transition: opacity 150ms ease;
 }
+.line.toc-section::after {
+  opacity: 0.2;
+}
 .line.selected::after {
   opacity: 1;
 }
@@ -744,10 +766,6 @@ defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller })
 }
 .line :deep(mark.user-highlight) {
   border-radius: 2px;
-}
-.line :deep(.user-note-underline) {
-  text-decoration: underline dotted var(--accent-color);
-  text-underline-offset: 3px;
 }
 .line :deep(.user-note-marker) {
   font-size: 0.72em;

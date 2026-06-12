@@ -1,17 +1,21 @@
 /**
  * Manages user notes for the currently open book.
  *
- * Mirrors the structure of useBookViewHighlights exactly, but for user_notes.
+ * Loading strategy — lazy, viewport-driven, non-blocking:
+ *   Rather than fetching all notes for the whole book on mount, notes are loaded
+ *   only for the lineIds currently visible in the scroller. The caller provides a
+ *   `getVisibleLineIds` callback. Whenever the visible set changes, a 100ms debounce
+ *   fires a background DB query for any lineIds not yet fetched. This keeps the initial
+ *   render instant and avoids loading notes for thousands of lines the user never sees.
  *
- * A note stores:
- *   - lineId, startOffset, endOffset — the text range that was selected
- *   - quote — snapshot of the selected text at creation time
- *   - note  — the user's annotation text (editable after creation)
+ *   Loaded lineIds are tracked in `loadedLineIds`. A lineId is only queried once.
+ *   If the DB is unavailable the fetch is silently skipped (the lineId stays unloaded
+ *   and will be retried on the next visible-set change).
  *
- * The in-memory store is a Map<lineId, Note[]> for O(1) lookup during rendering.
- * Multiple notes per line are allowed and stored sorted by startOffset.
+ * Mutations (create / update / delete) are immediate — they always write to the DB
+ * and update the in-memory map synchronously from the caller's perspective.
  */
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { queryUserSettings, executeUserSettings } from '@/webview-host/userSettingsDb'
 import { USER_SETTINGS_SQL } from '@/webview-host/userSettingsDb.sql'
 
@@ -29,14 +33,29 @@ export interface Note {
 
 type NotesByLine = Map<number, Note[]>
 
-export function useBookViewNotes(bookId: number) {
+export function useBookViewNotes(bookId: number, getVisibleLineIds: () => number[]) {
   const notesByLine = ref<NotesByLine>(new Map())
-  const isLoaded = ref(false)
+  // lineIds for which we have already issued a DB query (success or pending)
+  const loadedLineIds = new Set<number>()
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
-  // ── Load ──────────────────────────────────────────────────────────────────
+  // ── Lazy load ─────────────────────────────────────────────────────────────
 
-  async function loadNotes() {
-    isLoaded.value = false
+  function scheduleLoad(lineIds: number[]) {
+    const pending = lineIds.filter((id) => id > 0 && !loadedLineIds.has(id))
+    if (!pending.length) return
+
+    if (debounceTimer !== null) clearTimeout(debounceTimer)
+    debounceTimer = setTimeout(() => {
+      debounceTimer = null
+      // Mark all as loaded before the async call so concurrent scroll events
+      // don't issue duplicate queries for the same lines
+      for (const id of pending) loadedLineIds.add(id)
+      void _loadForLines(pending)
+    }, 100)
+  }
+
+  async function _loadForLines(lineIds: number[]): Promise<void> {
     try {
       const rows = await queryUserSettings<{
         id: number
@@ -48,11 +67,10 @@ export function useBookViewNotes(bookId: number) {
         quote: string
         createdAt: number
         updatedAt: number
-      }>(USER_SETTINGS_SQL.GET_NOTES_FOR_BOOK, [bookId])
+      }>(USER_SETTINGS_SQL.GET_NOTES_FOR_LINES(lineIds.length), [bookId, ...lineIds])
 
-      const map: NotesByLine = new Map()
       for (const row of rows) {
-        const note: Note = {
+        _addToMap({
           id: row.id,
           bookId: row.bookId,
           lineId: row.lineId,
@@ -62,20 +80,20 @@ export function useBookViewNotes(bookId: number) {
           quote: row.quote,
           createdAt: Number(row.createdAt),
           updatedAt: Number(row.updatedAt),
-        }
-        const existing = map.get(note.lineId) ?? []
-        existing.push(note)
-        map.set(note.lineId, existing)
+        })
       }
-      notesByLine.value = map
     } catch {
-      // DB not ready — silently skip
-    } finally {
-      isLoaded.value = true
+      // DB not ready — un-mark the lines so they are retried on next scroll
+      for (const id of lineIds) loadedLineIds.delete(id)
     }
   }
 
-  loadNotes()
+  // Watch visible lineIds and schedule a load whenever the set changes
+  watch(
+    getVisibleLineIds,
+    (ids) => scheduleLoad(ids),
+    { immediate: true },
+  )
 
   // ── Per-line lookup ────────────────────────────────────────────────────────
 
@@ -121,7 +139,7 @@ export function useBookViewNotes(bookId: number) {
       lineId,
       startOffset,
       endOffset,
-      '',   // note text starts empty — user types in the bubble
+      '',
       quote,
       now,
       now,
@@ -137,6 +155,8 @@ export function useBookViewNotes(bookId: number) {
       createdAt: now,
       updatedAt: now,
     }
+    // Mark the line as loaded so the lazy loader doesn't overwrite the new note
+    loadedLineIds.add(lineId)
     _addToMap(note)
     return note
   }
@@ -155,11 +175,9 @@ export function useBookViewNotes(bookId: number) {
 
   return {
     notesByLine,
-    isLoaded,
     getNotesForLine,
     createNote,
     updateNote,
     deleteNote,
-    reloadNotes: loadNotes,
   }
 }

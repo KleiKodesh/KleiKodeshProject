@@ -45,7 +45,7 @@ const {
   bookHasTeamim,
   groups, groupsForDisplay, filterGroups, staticFilterGroups, commentaryLoading,
   tocEntries, tocSearchTree, selectedAltTocSection, tocLoading, tocError,
-  altTocLabelMap, pinnedCommentaryGroup,
+  altTocLabelMap, pinnedCommentaryGroup, selectedSectionLineIds,
   currentScrollLineIndex,
   scrollStateReady, idbResolved, initialLineIndex, initialScrollTop, initialScrollOffset,
   restoredCommentaryMode, restoredCommentaryFraction,
@@ -174,6 +174,7 @@ watch(() => bookViewStore.toggleBottomPanelSignal, () => {
               :get-active-toc-entry="getActiveTocEntry"
               :get-toc-path="getTocPath"
               :pinned-commentary-group="pinnedCommentaryGroup"
+              :selected-section-line-ids="selectedSectionLineIds"
               @scrolled="onLinesScrolled"
               @line-selected="onLineSelected"
               @ctrl-f="openContentSearch"

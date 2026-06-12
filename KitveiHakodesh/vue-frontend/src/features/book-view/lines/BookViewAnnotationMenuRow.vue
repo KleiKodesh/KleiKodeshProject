@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { IconEdit24Regular, IconEraser24Regular } from '@iconify-prerendered/vue-fluent'
 import { HIGHLIGHT_COLORS_LIST } from './bookViewAnnotationColors'
+import AlertDialog from '@/components/AlertDialog.vue'
 
 const props = defineProps<{
   onHighlight: (colorArgb: number) => void
@@ -10,17 +12,27 @@ const props = defineProps<{
 
 const emit = defineEmits<{ close: [] }>()
 
+const showNoSelectionAlert = ref(false)
+
+function hasSelection(): boolean {
+  const sel = window.getSelection()
+  return !!sel && !sel.isCollapsed && (sel.toString().trim().length > 0)
+}
+
 function onColorClick(colorArgb: number) {
+  if (!hasSelection()) { showNoSelectionAlert.value = true; return }
   props.onHighlight(colorArgb)
   emit('close')
 }
 
 function onClear() {
+  if (!hasSelection()) { showNoSelectionAlert.value = true; return }
   props.onClearHighlight()
   emit('close')
 }
 
 function onNote() {
+  if (!hasSelection()) { showNoSelectionAlert.value = true; return }
   props.onAddNote()
   emit('close')
 }
@@ -36,6 +48,11 @@ function argbToCss(signedArgb: number): string {
 
 <template>
   <div class="annotation-menu-row">
+    <AlertDialog
+      v-if="showNoSelectionAlert"
+      message="יש לסמן טקסט תחילה"
+      @close="showNoSelectionAlert = false"
+    />
     <div class="note-row" @click="onNote">
       <IconEdit24Regular class="note-icon" />
       <span class="note-label">הוסף הערה</span>

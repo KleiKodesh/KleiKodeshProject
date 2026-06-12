@@ -493,7 +493,7 @@ export function useBookView(
     lines, prioritise, hasCommentaries, hasRelatedBooks, hasToc,
     groups, groupsForDisplay, filterGroups, staticFilterGroups, commentaryLoading,
     tocEntries, tocSearchTree, altTocSections, selectedAltTocSection, tocLoading, tocError,
-    altTocLabelMap, pinnedCommentaryGroup,
+    altTocLabelMap, pinnedCommentaryGroup, selectedSectionLineIds,
     // scroll / search state
     currentScrollLineIndex,
     scrollStateReady, idbResolved, initialLineIndex, initialScrollTop, initialScrollOffset,
