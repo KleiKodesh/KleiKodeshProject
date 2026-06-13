@@ -1,5 +1,5 @@
 import { computed } from 'vue'
-import { applyDiacriticsFilter, removeDiacriticsForSearch } from '@/utils/hebrewTextProcessing'
+import { applyDiacriticsFilter, removeDiacriticsForSearch, stripHtmlForSearch } from '@/utils/hebrewTextProcessing'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { argbToCssColor, highlightColorToThemeColor } from '../lines/bookViewAnnotationColors'
 import type { useSettingsStore } from '@/stores/settingsStore'
@@ -25,12 +25,12 @@ interface LineRenderProps {
 function highlightMatches(
   content: string,
   query: string,
-  isCurrentLine: boolean,
-  currentOccurrence: number,
 ): string {
   const q = removeDiacriticsForSearch(query.trim())
   if (!q) return content
-  const stripped = removeDiacriticsForSearch(content.replace(/<[^>]*>/g, ''))
+
+  const stripped = stripHtmlForSearch(content)
+
   const matchStarts = new Set<number>()
   let idx = 0
   while ((idx = stripped.indexOf(q, idx)) !== -1) {
@@ -41,20 +41,46 @@ function highlightMatches(
 
   const out: string[] = []
   let strippedPos = 0,
-    inTag = false,
+    inTag2 = false,
     inMatch = false,
-    matchStrippedCount = 0,
-    matchOccurrence = 0
-  for (let i = 0; i < content.length; i++) {
+    matchStrippedCount = 0
+  let i = 0
+  while (i < content.length) {
     const ch = content[i]!
-    if (ch === '<') { inTag = true; out.push(ch); continue }
-    if (ch === '>') { inTag = false; out.push(ch); continue }
-    if (inTag) { out.push(ch); continue }
+    if (ch === '<') { inTag2 = true; out.push(ch); i++; continue }
+    if (ch === '>') { inTag2 = false; out.push(ch); i++; continue }
+    if (inTag2) { out.push(ch); i++; continue }
+
+    // Mirror the entity lookahead from stripHtmlForSearch.
+    if (ch === '&') {
+      let entityEnd = -1
+      for (let j = i + 1; j < content.length && j <= i + 12; j++) {
+        const c = content[j]!
+        if (c === ';') { entityEnd = j; break }
+        if (c === ' ' || c === '\t' || c === '\n' || c === '<') break
+      }
+      if (entityEnd !== -1) {
+        // Real entity — emit it atomically, never open/close a mark inside it.
+        if (!inMatch && matchStarts.has(strippedPos)) {
+          out.push('<mark class="search-match">')
+          inMatch = true
+          matchStrippedCount = 0
+        }
+        for (let j = i; j <= entityEnd; j++) out.push(content[j]!)
+        i = entityEnd + 1
+        if (inMatch && ++matchStrippedCount === q.length) {
+          out.push('</mark>')
+          inMatch = false
+        }
+        strippedPos++
+        continue
+      }
+      // Bare & — treat as regular character.
+    }
+
     const isDiacritic = /[\u0591-\u05C7]/.test(ch)
     if (!isDiacritic && matchStarts.has(strippedPos) && !inMatch) {
-      out.push(
-        `<mark class="search-match${isCurrentLine && matchOccurrence === currentOccurrence ? ' current' : ''}">`,
-      )
+      out.push('<mark class="search-match">')
       inMatch = true
       matchStrippedCount = 0
     }
@@ -63,10 +89,10 @@ function highlightMatches(
       if (inMatch && ++matchStrippedCount === q.length) {
         out.push('</mark>')
         inMatch = false
-        matchOccurrence++
       }
       strippedPos++
     }
+    i++
   }
   return out.join('')
 }
@@ -101,7 +127,8 @@ function highlightFromSnippet(
   const terms = extractSnippetTerms(snippet)
   if (!terms.length) return content
 
-  const strippedContent = removeDiacriticsForSearch(content.replace(/<[^>]*>/g, ''))
+  // Build stripped text entity-aware (same logic as highlightMatches).
+  const strippedContent = stripHtmlForSearch(content)
 
   // Collect all match start positions for all terms
   const matchRanges: Array<{ start: number; len: number }> = []
@@ -126,15 +153,41 @@ function highlightFromSnippet(
     }
   }
 
-  // Walk the content HTML, inserting <mark> tags at the right stripped-text positions
+  // Walk the content HTML, inserting <mark> tags at the right stripped-text positions.
+  // Entities are treated as single atomic characters — never split by a mark boundary.
   const out: string[] = []
   let strippedPos = 0, inTag = false, inMatch = false, matchEndPos = 0, rangeIdx = 0
-
-  for (let i = 0; i < content.length; i++) {
+  let i = 0
+  while (i < content.length) {
     const ch = content[i]!
-    if (ch === '<') { inTag = true; out.push(ch); continue }
-    if (ch === '>') { inTag = false; out.push(ch); continue }
-    if (inTag) { out.push(ch); continue }
+    if (ch === '<') { inTag = true; out.push(ch); i++; continue }
+    if (ch === '>') { inTag = false; out.push(ch); i++; continue }
+    if (inTag) { out.push(ch); i++; continue }
+
+    if (ch === '&') {
+      let entityEnd = -1
+      for (let j = i + 1; j < content.length && j <= i + 12; j++) {
+        const c = content[j]!
+        if (c === ';') { entityEnd = j; break }
+        if (c === ' ' || c === '\t' || c === '\n' || c === '<') break
+      }
+      if (entityEnd !== -1) {
+        if (!inMatch) {
+          while (rangeIdx < merged.length && merged[rangeIdx]!.start < strippedPos) rangeIdx++
+          if (rangeIdx < merged.length && merged[rangeIdx]!.start === strippedPos) {
+            out.push('<mark class="search-match">')
+            matchEndPos = merged[rangeIdx]!.end
+            inMatch = true
+            rangeIdx++
+          }
+        }
+        for (let j = i; j <= entityEnd; j++) out.push(content[j]!)
+        i = entityEnd + 1
+        strippedPos++
+        if (inMatch && strippedPos >= matchEndPos) { out.push('</mark>'); inMatch = false }
+        continue
+      }
+    }
 
     const isDiacritic = /[\u0591-\u05C7]/.test(ch)
 
@@ -151,6 +204,7 @@ function highlightFromSnippet(
 
     out.push(ch)
     if (!isDiacritic) strippedPos++
+    i++
   }
 
   if (inMatch) out.push('</mark>')
@@ -290,7 +344,7 @@ export function applyUserNoteMarkers(content: string, notes: Note[]): string {
     if (n.startOffset >= n.endOffset) return
     const label = `[*]`
     // Only a close event is needed — no open span, just the marker at endOffset
-    events.push({ pos: n.endOffset, type: 'close', noteId: n.id, noteText: n.note, label })
+    events.push({ pos: n.endOffset, noteId: n.id, noteText: n.note, label })
   })
   // Opens before closes at same position
   events.sort((a, b) => a.pos - b.pos)
@@ -345,9 +399,12 @@ export function useBookViewLineRenderer(
   diacriticsState: import('vue').ComputedRef<number>,
   getProps: () => LineRenderProps,
 ) {
-  // Cache rendered HTML per line — avoids re-running applyDiacriticsFilter (DOM TreeWalker)
+  // Cache rendered HTML per line — avoids re-running applyDiacriticsFilter
   // and censorDivineNames (6 regexes) on every render cycle for unchanged lines.
   // The cache is invalidated as a whole whenever any rendering input changes.
+  // currentMatchOccurrence is intentionally NOT part of the cache key — the
+  // .current class is applied via setCurrentMark() as a DOM class toggle so that
+  // navigating between occurrences on the same line never causes a full re-render.
   const renderCache = new Map<number, string>()
   let renderCacheKey = ''
 
@@ -357,7 +414,7 @@ export function useBookViewLineRenderer(
     const highlightsSig = lineHighlights.map((h) => `${h.id}:${h.startOffset}:${h.endOffset}:${h.colorArgb}`).join(',')
     const lineNotes = p.getNotesForLine?.(lineId) ?? []
     const notesSig = lineNotes.map((n) => `${n.id}:${n.startOffset}:${n.endOffset}:${n.updatedAt}`).join(',')
-    return `${diacriticsState.value}|${settings.censorDivineNames}|${p.searchQuery ?? ''}|${p.currentMatchLineIndex ?? -1}|${p.currentMatchOccurrence ?? 0}|${p.searchHighlightLineIndex ?? -1}|${p.searchHighlightQuery ?? ''}|${p.searchHighlightSnippet ?? ''}|${p.searchHighlightTerms?.join(',') ?? ''}|${highlightsSig}|${notesSig}`
+    return `${diacriticsState.value}|${settings.censorDivineNames}|${p.searchQuery ?? ''}|${p.searchHighlightLineIndex ?? -1}|${p.searchHighlightQuery ?? ''}|${p.searchHighlightSnippet ?? ''}|${p.searchHighlightTerms?.join(',') ?? ''}|${highlightsSig}|${notesSig}`
   }
 
   function lineContent(raw: string, lineIndex: number, lineId: number): string {
@@ -386,17 +443,12 @@ export function useBookViewLineRenderer(
     }
 
     if (p.searchQuery?.trim())
-      content = highlightMatches(
-        content,
-        p.searchQuery,
-        lineIndex === p.currentMatchLineIndex,
-        p.currentMatchOccurrence ?? 0,
-      )
+      content = highlightMatches(content, p.searchQuery)
     if (lineIndex === p.searchHighlightLineIndex) {
       if (p.searchHighlightSnippet) {
         content = highlightFromSnippet(content, p.searchHighlightSnippet)
       } else if (p.searchHighlightQuery?.trim()) {
-        content = highlightMatches(content, p.searchHighlightQuery, false, -1)
+        content = highlightMatches(content, p.searchHighlightQuery)
       }
     }
 
@@ -405,4 +457,30 @@ export function useBookViewLineRenderer(
   }
 
   return { lineContent }
+}
+
+/**
+ * Move the `.current` class to the nth `<mark class="search-match">` inside
+ * the rendered line at `lineIndex` within `container`. Scopes the query to
+ * the virtualizer row element with `data-index` so `occurrence` is per-line,
+ * matching `occurrenceInLine` from the search scan.
+ *
+ * Pass `lineIndex = -1` to clear all `.current` marks across the container.
+ *
+ * @param container  The scroller element
+ * @param lineIndex  The virtualizer data-index of the target line, or -1 to clear all
+ * @param occurrence 0-based per-line occurrence index
+ */
+export function setCurrentMark(container: HTMLElement, lineIndex: number, occurrence: number): void {
+  // Clear any existing .current marks across the whole scroller first.
+  container.querySelectorAll<HTMLElement>('mark.search-match.current').forEach((mark) => {
+    mark.classList.remove('current')
+  })
+  if (lineIndex === -1) return
+
+  const row = container.querySelector<HTMLElement>(`[data-index="${lineIndex}"]`)
+  if (!row) return
+
+  const marks = row.querySelectorAll<HTMLElement>('mark.search-match')
+  marks[occurrence]?.classList.add('current')
 }

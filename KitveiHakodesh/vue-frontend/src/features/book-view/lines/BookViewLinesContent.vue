@@ -14,7 +14,7 @@ import { useScopedKeys } from '@/composables/useTextSelectionKeys'
 import { useScopedCopy } from '@/composables/useLineCopy'
 import { scrollToIndexWithRetry } from '@/utils/scrollToIndexWithRetry'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
-import { useBookViewLineRenderer } from './useBookViewLineRenderer'
+import { useBookViewLineRenderer, setCurrentMark } from './useBookViewLineRenderer'
 import { useBookViewLineCopyMenu } from './useBookViewLineCopyMenu'
 import { useBookViewHighlights } from './useBookViewHighlights'
 import { useBookViewNotes } from './useBookViewNotes'
@@ -227,8 +227,6 @@ function onMarkerClick(event: MouseEvent) {
 
 const { lineContent } = useBookViewLineRenderer(settingsStore, diacriticsState, () => ({
   searchQuery: props.searchQuery,
-  currentMatchLineIndex: props.currentMatchLineIndex,
-  currentMatchOccurrence: props.currentMatchOccurrence,
   searchHighlightLineIndex: props.searchHighlightLineIndex,
   searchHighlightQuery: props.searchHighlightQuery,
   searchHighlightSnippet: props.searchHighlightSnippet,
@@ -236,6 +234,23 @@ const { lineContent } = useBookViewLineRenderer(settingsStore, diacriticsState, 
   getHighlightsForLine,
   getNotesForLine,
 }))
+
+// Apply .current class via DOM toggle — no re-render needed when only the
+// active occurrence changes within an already-rendered line.
+// NOTE: occurrence is applied inside scrollToLineIndex which owns the full
+// scroll+mark flow. This watch handles the edge case where the occurrence
+// changes without a line change (same line, different occurrence) and
+// scrollToLineIndex has already positioned the scroller.
+watch(
+  () => [props.currentMatchLineIndex, props.currentMatchOccurrence] as const,
+  ([lineIndex, occurrence]) => {
+    if (!scrollerEl.value) return
+    nextTick(() => {
+      if (!scrollerEl.value) return
+      setCurrentMark(scrollerEl.value, lineIndex ?? -1, occurrence ?? 0)
+    })
+  },
+)
 
 // ── Scroller setup ────────────────────────────────────────────────────────────
 
@@ -509,71 +524,53 @@ function scrollToLineId(lineId: number, fallbackLineIndex?: number) {
   virtualizer.value.scrollToIndex(lineIndex, { align: 'start' })
 }
 
-function scrollToLineIndex(lineIndex: number) {
+function scrollToLineIndex(lineIndex: number, occurrence = 0) {
   if (!scrollerEl.value) return
 
   const reserved = props.searchBarVisible ? 44 : 0
   const virt = virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>
   const m = virt.measurementsCache.find((c) => c.index === lineIndex)
 
+  // Apply the .current class synchronously — the marks are already in the DOM
+  // from the cached render; no re-render needed so no MutationObserver required.
+  // Scoped to the target line's data-index row so occurrence is per-line.
+  function applyCurrentMark() {
+    if (scrollerEl.value) setCurrentMark(scrollerEl.value, lineIndex, occurrence)
+  }
+
+  function adjustToMark(scroller: HTMLElement): boolean {
+    const mark = scroller.querySelector('mark.search-match.current') as HTMLElement | null
+    if (!mark) return false
+    const markRect = mark.getBoundingClientRect()
+    const scrollerRect = scroller.getBoundingClientRect()
+    const relativeTop = markRect.top - scrollerRect.top
+    const relativeBottom = markRect.bottom - scrollerRect.top
+    const alreadyVisible = relativeTop >= reserved + 4 && relativeBottom <= scrollerRect.height - 4
+    if (!alreadyVisible) {
+      scroller.scrollTop += relativeTop - reserved - 8
+    }
+    return true
+  }
+
   if (m) {
-    // Line is already measured by the virtualizer. Scroll to the line top first,
-    // then wait for Vue to render the new currentMatchOccurrence (which invalidates
-    // the render cache and re-renders the line HTML). Use MutationObserver to detect
-    // when the <mark class="current"> actually appears in the DOM, then adjust.
     setProgrammaticScroll()
 
-    // Step 1: scroll to line top immediately so the line is visible.
+    // Scroll to line top so the line is visible.
     const targetScrollTop = m.start - reserved - 8
     if (Math.abs(scrollerEl.value.scrollTop - targetScrollTop) > 2) {
       scrollerEl.value.scrollTop = targetScrollTop
     }
 
-    // Step 2: wait for the current mark to appear/move in the DOM, then fine-adjust.
+    // Apply .current mark then fine-adjust scroll position to center it.
     const scroller = scrollerEl.value
-    let settled = false
-
-    function adjustToMark() {
-      if (settled || !scroller) return
-      const mark = scroller.querySelector('mark.search-match.current') as HTMLElement | null
-      if (!mark) return false
-      const markRect = mark.getBoundingClientRect()
-      const scrollerRect = scroller.getBoundingClientRect()
-      const relativeTop = markRect.top - scrollerRect.top
-      const relativeBottom = markRect.bottom - scrollerRect.top
-      const alreadyVisible = relativeTop >= reserved + 4 && relativeBottom <= scrollerRect.height - 4
-      if (!alreadyVisible) {
-        scroller.scrollTop += relativeTop - reserved - 8
-      }
-      return true
-    }
-
-    // Try immediately after two rAFs (covers same-line occurrence changes where
-    // the mark is already in the DOM and just needs its class updated).
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      if (adjustToMark()) { settled = true; return }
-
-      // Mark not found yet — the render cache was just invalidated and Vue hasn't
-      // re-rendered the line HTML yet. Watch for DOM mutations on the scroller.
-      const observer = new MutationObserver(() => {
-        if (adjustToMark()) {
-          settled = true
-          observer.disconnect()
-        }
-      })
-      observer.observe(scroller, { childList: true, subtree: true, characterData: false, attributes: true, attributeFilter: ['class'] })
-      // Safety timeout — disconnect after 500ms regardless.
-      setTimeout(() => {
-        if (!settled) {
-          observer.disconnect()
-        }
-      }, 500)
-    }))
+    requestAnimationFrame(() => {
+      applyCurrentMark()
+      requestAnimationFrame(() => adjustToMark(scroller))
+    })
     return
   }
 
-  // Line not yet rendered — use scrollToIndexWithRetry to bring it into range,
-  // then scroll to the mark once it's in the DOM.
+  // Line not yet rendered — bring it into range first, then apply mark and adjust.
   setProgrammaticScroll()
   scrollToIndexWithRetry(
     virt,
@@ -582,39 +579,10 @@ function scrollToLineIndex(lineIndex: number) {
     reserved,
     5,
     () => {
-      // After scrollToIndexWithRetry positions the line, wait for the mark using
-      // the same MutationObserver approach.
       const scroller = scrollerEl.value
       if (!scroller) return
-      let settled = false
-
-      function adjustToMark() {
-        if (!scroller) return false
-        const mark = scroller.querySelector('mark.search-match.current') as HTMLElement | null
-        if (!mark) return false
-        const markRect = mark.getBoundingClientRect()
-        const scrollerRect = scroller.getBoundingClientRect()
-        const relativeTop = markRect.top - scrollerRect.top
-        const relativeBottom = markRect.bottom - scrollerRect.top
-        const alreadyVisible = relativeTop >= reserved + 4 && relativeBottom <= scrollerRect.height - 4
-        if (!alreadyVisible) {
-          scroller.scrollTop += relativeTop - reserved - 8
-        }
-        return true
-      }
-
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        if (adjustToMark()) { settled = true; return }
-        const observer = new MutationObserver(() => {
-          if (adjustToMark()) { settled = true; observer.disconnect() }
-        })
-        observer.observe(scroller, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] })
-        setTimeout(() => {
-          if (!settled) {
-            observer.disconnect()
-          }
-        }, 500)
-      }))
+      applyCurrentMark()
+      requestAnimationFrame(() => requestAnimationFrame(() => adjustToMark(scroller)))
     },
   )
 }

@@ -1,5 +1,6 @@
 import { computed, ref, watch, nextTick } from 'vue'
 import { scrollToIndexWithRetry } from '@/utils/scrollToIndexWithRetry'
+import { setCurrentMark } from '../lines/useBookViewLineRenderer'
 import type { Virtualizer } from '@tanstack/vue-virtual'
 
 const NAV_HEIGHT = 32
@@ -87,132 +88,51 @@ export function useCommentaryScroll(
     )
   }
 
-  function scrollToFlatIndex(flatIndex: number) {
+  function scrollToFlatIndex(flatIndex: number, occurrence = 0) {
     const el = scrollerEl()
     if (!el) return
 
     const reserved = NAV_HEIGHT
     const virt = virtualizer() as any
 
-    // Check if the item is already in the measurements cache
+    function applyCurrentMark() {
+      if (el) setCurrentMark(el, flatIndex, occurrence)
+    }
+
+    function adjustToMark(scroller: HTMLElement): boolean {
+      const mark = scroller.querySelector('mark.search-match.current') as HTMLElement | null
+      if (!mark) return false
+      const markRect = mark.getBoundingClientRect()
+      const scrollerRect = scroller.getBoundingClientRect()
+      const relativeTop = markRect.top - scrollerRect.top
+      const relativeBottom = markRect.bottom - scrollerRect.top
+      const alreadyVisible =
+        relativeTop >= reserved + 4 && relativeBottom <= scrollerRect.height - 4
+      if (!alreadyVisible) {
+        scroller.scrollTop += relativeTop - reserved - 8
+      }
+      return true
+    }
+
     const m = virt.measurementsCache.find((c: any) => c.index === flatIndex)
 
     if (m) {
-      // Line is already measured by the virtualizer. Scroll to the line top first,
-      // then wait for Vue to render the new currentMatchOccurrence (which invalidates
-      // the render cache and re-renders the line HTML). Use MutationObserver to detect
-      // when the <mark class="current"> actually appears in the DOM, then adjust.
-
-      // Step 1: scroll to line top immediately so the line is visible.
       const targetScrollTop = m.start - reserved - 8
       if (Math.abs(el.scrollTop - targetScrollTop) > 2) {
         el.scrollTop = targetScrollTop
       }
-
-      // Step 2: wait for the current mark to appear/move in the DOM, then fine-adjust.
-      let settled = false
-
-      function adjustToMark() {
-        if (settled || !el) return
-        const mark = el.querySelector('mark.search-match.current') as HTMLElement | null
-        if (!mark) return false
-        const markRect = mark.getBoundingClientRect()
-        const scrollerRect = el.getBoundingClientRect()
-        const relativeTop = markRect.top - scrollerRect.top
-        const relativeBottom = markRect.bottom - scrollerRect.top
-        const alreadyVisible =
-          relativeTop >= reserved + 4 && relativeBottom <= scrollerRect.height - 4
-        if (!alreadyVisible) {
-          el.scrollTop += relativeTop - reserved - 8
-        }
-        return true
-      }
-
-      // Try immediately after two rAFs (covers same-line occurrence changes where
-      // the mark is already in the DOM and just needs its class updated).
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => {
-          if (adjustToMark()) {
-            settled = true
-            return
-          }
-
-          // Mark not found yet — the render cache was just invalidated and Vue hasn't
-          // re-rendered the line HTML yet. Watch for DOM mutations on the scroller.
-          const observer = new MutationObserver(() => {
-            if (adjustToMark()) {
-              settled = true
-              observer.disconnect()
-            }
-          })
-          observer.observe(el, {
-            childList: true,
-            subtree: true,
-            characterData: false,
-            attributes: true,
-            attributeFilter: ['class'],
-          })
-          // Safety timeout — disconnect after 500ms regardless.
-          setTimeout(() => {
-            if (!settled) {
-              observer.disconnect()
-            }
-          }, 500)
-        }),
-      )
+      requestAnimationFrame(() => {
+        applyCurrentMark()
+        requestAnimationFrame(() => adjustToMark(el))
+      })
       return
     }
 
-    // Line not yet rendered — use scrollToIndexWithRetry to bring it into range,
-    // then scroll to the mark once it's in the DOM.
     scrollToIndexWithRetry(virt, el, flatIndex, reserved, 5, () => {
-      // After scrollToIndexWithRetry positions the line, wait for the mark using
-      // the same MutationObserver approach.
       const scroller = scrollerEl()
       if (!scroller) return
-      let settled = false
-
-      function adjustToMark() {
-        if (!scroller) return false
-        const mark = scroller.querySelector('mark.search-match.current') as HTMLElement | null
-        if (!mark) return false
-        const markRect = mark.getBoundingClientRect()
-        const scrollerRect = scroller.getBoundingClientRect()
-        const relativeTop = markRect.top - scrollerRect.top
-        const relativeBottom = markRect.bottom - scrollerRect.top
-        const alreadyVisible =
-          relativeTop >= reserved + 4 && relativeBottom <= scrollerRect.height - 4
-        if (!alreadyVisible) {
-          scroller.scrollTop += relativeTop - reserved - 8
-        }
-        return true
-      }
-
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => {
-          if (adjustToMark()) {
-            settled = true
-            return
-          }
-          const observer = new MutationObserver(() => {
-            if (adjustToMark()) {
-              settled = true
-              observer.disconnect()
-            }
-          })
-          observer.observe(scroller, {
-            childList: true,
-            subtree: true,
-            attributes: true,
-            attributeFilter: ['class'],
-          })
-          setTimeout(() => {
-            if (!settled) {
-              observer.disconnect()
-            }
-          }, 500)
-        }),
-      )
+      applyCurrentMark()
+      requestAnimationFrame(() => requestAnimationFrame(() => adjustToMark(scroller)))
     })
   }
 

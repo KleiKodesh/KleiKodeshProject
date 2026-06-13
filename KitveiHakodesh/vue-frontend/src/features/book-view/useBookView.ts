@@ -26,7 +26,7 @@ export type { SearchMode } from './bookViewTypes'
 type ToolbarInstance = { tocBtnRef: HTMLElement | null }
 type LinesContentInstance = {
   scrollToLineId: (lineId: number, lineIndex?: number) => void
-  scrollToLineIndex: (lineIndex: number) => void
+  scrollToLineIndex: (lineIndex: number, occurrence?: number) => void
   focusScroller: () => void
 }
 type SearchBarInstance = { focus: () => void }
@@ -36,7 +36,7 @@ type CommentaryViewInstance = {
   activePinnedGroup: { bookId: number; sectionLabel: string; subSectionLabel: string } | null
   getFilterButtonEl?: () => HTMLElement | null
   scrollToGroup: (bookId: number) => void
-  scrollToFlatIndex: (index: number) => void
+  scrollToFlatIndex: (index: number, occurrence?: number) => void
   captureScrollPos?: () => { scrollIndex: number; scrollOffset: number } | null
   restoreCommentaryScrollPos: (index: number, offset: number) => Promise<void>
 }
@@ -229,10 +229,16 @@ export function useBookView(
   function scrollContentMatch() {
     if (searchMode.value === 'content') {
       if (contentSearch.currentMatchLineIndex.value === -1) return
-      linesContentRef()?.scrollToLineIndex(contentSearch.currentMatchLineIndex.value)
+      linesContentRef()?.scrollToLineIndex(
+        contentSearch.currentMatchLineIndex.value,
+        contentSearch.currentMatchOccurrence.value,
+      )
     } else {
       if (commentarySearch.currentMatchFlatIndex.value === -1) return
-      commentaryViewRef()?.scrollToFlatIndex(commentarySearch.currentMatchFlatIndex.value)
+      commentaryViewRef()?.scrollToFlatIndex(
+        commentarySearch.currentMatchFlatIndex.value,
+        commentarySearch.currentMatchOccurrence.value,
+      )
     }
   }
 
@@ -385,6 +391,8 @@ export function useBookView(
   onMounted(async () => {
     // Clear groups before session restore so loading animation shows immediately
     groups.value = []
+    // Warm up commentary metadata in the background so the first toggle is instant.
+    void ensureStaticFilterGroupsLoaded()
     const result = await restoreSession()
     if (result?.commentaryMode) restoredCommentaryMode.value = result.commentaryMode
     if (result?.commentaryFraction != null) restoredCommentaryFraction.value = result.commentaryFraction
@@ -396,9 +404,19 @@ export function useBookView(
 
   // ── Watchers ──────────────────────────────────────────────────────────────
 
-  watch(() => bookViewStore.toggleBottomPanelSignal, () => { commentaryVisible.value = !commentaryVisible.value })
+  // flush: 'post' — runs after Vue has flushed the DOM so the commentary panel is
+  // painted before any reactive side-effects (metadata load, commentaryLineId set,
+  // scroll restore) begin. Without this the default 'pre' flush meant everything
+  // ran before the SplitPane bottom slot appeared, causing a visible hang.
   watch(commentaryVisible, (visible) => {
     if (!visible && sidePanelMode.value === 'commentary-tree') closeSidePanel()
+    // Clear the in-session scroll position when the user manually closes the panel so
+    // the scroll-restore branch below does not fire on the next manual reopen.
+    // Scroll restore is only meaningful across page reloads (IDB session restore path).
+    if (!visible) {
+      commentaryScrollIndex.value = null
+      commentaryScrollOffset.value = null
+    }
     // Pre-load static filter groups as soon as commentary is visible so the
     // placeholder insertion in groupsForDisplay has the correct order data.
     if (visible) void ensureStaticFilterGroupsLoaded()
@@ -464,10 +482,10 @@ export function useBookView(
             )
           }
         },
-        { flush: 'sync', immediate: true },
+        { flush: 'post', immediate: true },
       )
     }
-  })
+  }, { flush: 'post' })
   watch(hasCommentaries, (has) => {
     if (!has) { commentaryVisible.value = false; if (sidePanelMode.value === 'commentary-tree') closeSidePanel() }
   })

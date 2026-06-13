@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useScopedKeys } from '@/composables/useTextSelectionKeys'
 import { useScopedCopy } from '@/composables/useLineCopy'
 import { useVirtualizer } from '@tanstack/vue-virtual'
@@ -145,10 +145,23 @@ const { getNotesForLine, createNote, updateNote, deleteNote } = useCommentaryNot
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
 
-const { commentaryFontPx, renderContent } = useCommentaryRender(
+const { commentaryFontPx, renderContent, setCurrentMark } = useCommentaryRender(
   () => props.groups,
   getHighlightsForLine,
   getNotesForLine,
+)
+
+// Apply .current class via DOM toggle — no re-render needed when only the
+// active occurrence changes within an already-rendered commentary line.
+watch(
+  () => [props.currentMatchFlatIndex, props.currentMatchOccurrence] as const,
+  ([flatIndex, occurrence]) => {
+    if (!scrollerEl.value) return
+    nextTick(() => {
+      if (!scrollerEl.value) return
+      setCurrentMark(scrollerEl.value, flatIndex ?? -1, occurrence ?? 0)
+    })
+  },
 )
 const { commentaryTocPaths } = useCommentaryTocPaths(() => props.groups)
 
@@ -346,7 +359,7 @@ function firstLineIndexForHeader(
                 class="line"
                 :class="{ 'line-no-text': asLine(flatItems[vItem.index])!.lineId === -1 }"
                 :data-line-id="asLine(flatItems[vItem.index])!.lineId"
-                v-html="renderContent(asLine(flatItems[vItem.index])!.content, vItem.index, asLine(flatItems[vItem.index])!.lineId, props.searchQuery, props.currentMatchFlatIndex, props.currentMatchOccurrence)"
+                v-html="renderContent(asLine(flatItems[vItem.index])!.content, vItem.index, asLine(flatItems[vItem.index])!.lineId, props.searchQuery)"
               />
             </div>
           </div>

@@ -2,9 +2,9 @@ import { computed, watch } from 'vue'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { storeToRefs } from 'pinia'
-import { applyDiacriticsFilter, removeDiacriticsForSearch } from '@/utils/hebrewTextProcessing'
+import { applyDiacriticsFilter, removeDiacriticsForSearch, stripHtmlForSearch } from '@/utils/hebrewTextProcessing'
 import { censorDivineNames } from '@/utils/censorDivineNames'
-import { applyUserHighlights, applyUserNoteMarkers } from '../lines/useBookViewLineRenderer'
+import { applyUserHighlights, applyUserNoteMarkers, setCurrentMark } from '../lines/useBookViewLineRenderer'
 import type { Highlight } from '../lines/useBookViewHighlights'
 import type { Note } from '../lines/useBookViewNotes'
 
@@ -29,15 +29,13 @@ export function useCommentaryRender(
     return (zoom.value / 100) * (effectiveFontSize / 100) * 15
   })
 
-  // Cache rendered HTML per flat index — avoids re-running applyDiacriticsFilter (DOM TreeWalker)
+  // Cache rendered HTML per flat index — avoids re-running applyDiacriticsFilter
   // and censorDivineNames (6 regexes) on every render cycle for unchanged commentary lines.
   const renderCache = new Map<number, string>()
   let renderCacheKey = ''
 
   function getRenderCacheKey(
     searchQuery: string | undefined,
-    currentMatchFlatIndex: number | undefined,
-    currentMatchOccurrence: number | undefined,
     lineId: number | undefined,
   ): string {
     const highlightsSig =
@@ -52,18 +50,17 @@ export function useCommentaryRender(
             .map((n) => `${n.id}:${n.startOffset}:${n.endOffset}:${n.updatedAt}`)
             .join(',')
         : ''
-    return `${diacriticsState.value}|${settingsStore.censorDivineNames}|${searchQuery ?? ''}|${currentMatchFlatIndex ?? -1}|${currentMatchOccurrence ?? 0}|${highlightsSig}|${notesSig}`
+    return `${diacriticsState.value}|${settingsStore.censorDivineNames}|${searchQuery ?? ''}|${highlightsSig}|${notesSig}`
   }
 
   function highlightMatches(
     content: string,
     query: string,
-    isCurrent: boolean,
-    currentOccurrence: number,
   ): string {
     const q = removeDiacriticsForSearch(query.trim())
     if (!q) return content
-    const stripped = removeDiacriticsForSearch(content.replace(/<[^>]*>/g, ''))
+
+    const stripped = stripHtmlForSearch(content)
     if (!stripped.includes(q)) return content
 
     const matchStarts = new Set<number>()
@@ -75,31 +72,43 @@ export function useCommentaryRender(
 
     const out: string[] = []
     let strippedPos = 0,
-      inTag = false,
+      inTag2 = false,
       inMatch = false,
-      matchCount = 0,
-      matchOccurrence = 0
-    for (let i = 0; i < content.length; i++) {
+      matchCount = 0
+    let i = 0
+    while (i < content.length) {
       const ch = content[i]!
-      if (ch === '<') {
-        inTag = true
-        out.push(ch)
-        continue
+      if (ch === '<') { inTag2 = true; out.push(ch); i++; continue }
+      if (ch === '>') { inTag2 = false; out.push(ch); i++; continue }
+      if (inTag2) { out.push(ch); i++; continue }
+
+      if (ch === '&') {
+        let entityEnd = -1
+        for (let j = i + 1; j < content.length && j <= i + 12; j++) {
+          const c = content[j]!
+          if (c === ';') { entityEnd = j; break }
+          if (c === ' ' || c === '\t' || c === '\n' || c === '<') break
+        }
+        if (entityEnd !== -1) {
+          if (!inMatch && matchStarts.has(strippedPos)) {
+            out.push('<mark class="search-match">')
+            inMatch = true
+            matchCount = 0
+          }
+          for (let j = i; j <= entityEnd; j++) out.push(content[j]!)
+          i = entityEnd + 1
+          if (inMatch && ++matchCount === q.length) {
+            out.push('</mark>')
+            inMatch = false
+          }
+          strippedPos++
+          continue
+        }
       }
-      if (ch === '>') {
-        inTag = false
-        out.push(ch)
-        continue
-      }
-      if (inTag) {
-        out.push(ch)
-        continue
-      }
+
       const isDiacritic = /[\u0591-\u05C7]/.test(ch)
       if (!isDiacritic && matchStarts.has(strippedPos) && !inMatch) {
-        out.push(
-          `<mark class="search-match${isCurrent && matchOccurrence === currentOccurrence ? ' current' : ''}">`,
-        )
+        out.push('<mark class="search-match">')
         inMatch = true
         matchCount = 0
       }
@@ -108,10 +117,10 @@ export function useCommentaryRender(
         if (inMatch && ++matchCount === q.length) {
           out.push('</mark>')
           inMatch = false
-          matchOccurrence++
         }
         strippedPos++
       }
+      i++
     }
     return out.join('')
   }
@@ -121,10 +130,8 @@ export function useCommentaryRender(
     flatIndex: number,
     lineId: number | undefined,
     searchQuery: string | undefined,
-    currentMatchFlatIndex: number | undefined,
-    currentMatchOccurrence: number | undefined,
   ): string {
-    const key = getRenderCacheKey(searchQuery, currentMatchFlatIndex, currentMatchOccurrence, lineId)
+    const key = getRenderCacheKey(searchQuery, lineId)
     if (key !== renderCacheKey) {
       renderCache.clear()
       renderCacheKey = key
@@ -148,13 +155,7 @@ export function useCommentaryRender(
       if (lineNotes.length) result = applyUserNoteMarkers(result, lineNotes)
     }
 
-    if (searchQuery?.trim())
-      result = highlightMatches(
-        result,
-        searchQuery,
-        flatIndex === currentMatchFlatIndex,
-        currentMatchOccurrence ?? 0,
-      )
+    if (searchQuery?.trim()) result = highlightMatches(result, searchQuery)
 
     renderCache.set(flatIndex, result)
     return result
@@ -174,5 +175,6 @@ export function useCommentaryRender(
     diacriticsState,
     commentaryFontPx,
     renderContent,
+    setCurrentMark,
   }
 }

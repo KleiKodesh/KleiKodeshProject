@@ -1,6 +1,6 @@
 import { ref, computed, watch } from 'vue'
 import { refDebounced } from '@vueuse/core'
-import { removeDiacriticsForSearch } from '@/utils/hebrewTextProcessing'
+import { removeDiacriticsForSearch, stripHtmlForSearch } from '@/utils/hebrewTextProcessing'
 import type { CommentaryGroup } from './useCommentary'
 
 export interface CommentaryMatch {
@@ -25,7 +25,7 @@ export function useCommentarySearch(
     for (const g of groups()) {
       flatIndex++ // header
       for (const line of g.lines) {
-        const stripped = removeDiacriticsForSearch(line.content.replace(/<[^>]*>/g, ''))
+        const stripped = stripHtmlForSearch(line.content)
         let idx = 0,
           occ = 0
         while ((idx = stripped.indexOf(q, idx)) !== -1) {

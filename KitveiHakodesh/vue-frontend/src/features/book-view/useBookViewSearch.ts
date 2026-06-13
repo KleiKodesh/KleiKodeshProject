@@ -1,6 +1,6 @@
 import { ref, computed, watch } from 'vue'
 import { refDebounced } from '@vueuse/core'
-import { removeDiacriticsForSearch } from '@/utils/hebrewTextProcessing'
+import { removeDiacriticsForSearch, stripHtmlForSearch } from '@/utils/hebrewTextProcessing'
 import type { LineItem } from './lines/useBookViewLinesTable'
 
 export interface BookViewMatch {
@@ -52,7 +52,7 @@ export function useBookViewSearch(
       for (let i = linePosition; i < end; i++) {
         const line = allLines[i]!
         if (line.content === null) continue
-        const stripped = removeDiacriticsForSearch(line.content.replace(/<[^>]*>/g, ''))
+        const stripped = stripHtmlForSearch(line.content)
         let characterIndex = 0
         let occurrenceInLine = 0
         while ((characterIndex = stripped.indexOf(normalizedQuery, characterIndex)) !== -1) {

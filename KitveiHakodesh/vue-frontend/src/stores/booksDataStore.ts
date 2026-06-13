@@ -90,7 +90,7 @@ export const useBooksDataStore = defineStore('booksData', () => {
     if (commentaryMetaLoaded) return
     if (commentaryMetaPromise) return commentaryMetaPromise
 
-    commentaryMetaPromise = Promise.resolve().then(() => {
+    commentaryMetaPromise = new Promise<void>((resolve) => setTimeout(resolve, 0)).then(() => {
       const map = new Map<number, CategoryNode>()
       const flattenNodes = (nodes: CategoryNode[]) => {
         for (const node of nodes) {
