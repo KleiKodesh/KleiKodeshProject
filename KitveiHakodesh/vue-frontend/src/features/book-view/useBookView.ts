@@ -16,6 +16,10 @@ import { useCommentarySearch } from './commentary/useCommentarySearch'
 import { useBookViewTocScrollTracking } from './toc/useBookViewTocScrollTracking'
 import { usePinnedCommentary } from './useBookViewPinnedCommentary'
 import { useCommentaryNavigation } from './commentary/useCommentaryNavigation'
+import { useCommentaryHighlights } from './commentary/useCommentaryHighlights'
+import { useCommentaryNotes } from './commentary/useCommentaryNotes'
+import { useCommentaryRender } from './commentary/useCommentaryRender'
+import { useCommentaryTocPaths } from './commentary/useCommentaryTocPaths'
 import { useBookViewScrollSync } from './useBookViewScrollSync'
 import { useBookViewSessionRestore } from './useBookViewSessionRestore'
 import type { TocEntry } from './toc/useBookViewToc'
@@ -208,6 +212,23 @@ export function useBookView(
       }
     }
   }
+
+  // ── Commentary annotation & rendering composables (hoisted above CommentaryView lifecycle) ──
+  // These are driven by groups/settings — not by the component being mounted.
+  // Hoisting them here means they survive the v-if toggle on CommentaryView and
+  // don't re-initialize (with their immediate/sync watchers) on every open.
+
+  const { getHighlightsForLine, applyHighlight, clearHighlight } = useCommentaryHighlights(
+    () => groupsForDisplay.value,
+  )
+  const { getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote } =
+    useCommentaryNotes(() => groupsForDisplay.value)
+  const { commentaryFontPx, renderContent, setCurrentMark } = useCommentaryRender(
+    () => groupsForDisplay.value,
+    getHighlightsForLine,
+    getNotesForLine,
+  )
+  const { commentaryTocPaths } = useCommentaryTocPaths(() => groupsForDisplay.value)
 
   // ── Search ────────────────────────────────────────────────────────────────
 
@@ -416,75 +437,76 @@ export function useBookView(
     if (!visible) {
       commentaryScrollIndex.value = null
       commentaryScrollOffset.value = null
+      return
     }
-    // Pre-load static filter groups as soon as commentary is visible so the
-    // placeholder insertion in groupsForDisplay has the correct order data.
-    if (visible) void ensureStaticFilterGroupsLoaded()
-    // Sync commentaryLineId from selectedLineId when the commentary panel first opens
-    // after session restore (commentaryVisible=true but commentaryLineId still null).
-    // Wait until the first chunk has real content so the commentary query doesn't
-    // compete with line chunk fetches.
-    if (visible && selectedLineId.value != null && commentaryLineId.value == null) {
-      let stop: (() => void) | undefined
-      stop = watch(
-        () => lines.value.some((l) => l.content !== null),
-        (hasContent) => {
-          if (!hasContent) return
-          stop?.()
-          if (commentaryVisible.value && selectedLineId.value != null && commentaryLineId.value == null)
-            commentaryLineId.value = selectedLineId.value
-        },
-        { immediate: true },
-      )
-    }
-    // Restore commentary scroll position when the panel is toggled back on.
-    // CommentaryView is fully unmounted when commentaryVisible is false (v-if in SplitPane),
-    // so the one-time restore() at mount is not enough — we must re-apply the saved
-    // position every time the panel reopens.
-    if (visible && commentaryScrollIndex.value != null && commentaryScrollOffset.value != null) {
-      const si = commentaryScrollIndex.value
-      const so = commentaryScrollOffset.value
-      const restoreKey = `${si}:${so}`
-      if (restoreKey === lastRestoredCommentaryKey) {
-        return
+    // Defer all open-side effects so the browser can paint the commentary panel
+    // before any reactive work starts. flush:'post' yields to after Vue's DOM flush
+    // but is still a microtask — it blocks paint. setTimeout yields to after paint.
+    setTimeout(() => {
+      if (!commentaryVisible.value) return
+      // Pre-load static filter groups as soon as commentary is visible so the
+      // placeholder insertion in groupsForDisplay has the correct order data.
+      void ensureStaticFilterGroupsLoaded()
+      // Sync commentaryLineId from selectedLineId when the commentary panel first opens
+      // after session restore (commentaryVisible=true but commentaryLineId still null).
+      // Wait until the first chunk has real content so the commentary query doesn't
+      // compete with line chunk fetches.
+      if (selectedLineId.value != null && commentaryLineId.value == null) {
+        let stop: (() => void) | undefined
+        stop = watch(
+          () => lines.value.some((l) => l.content !== null),
+          (hasContent) => {
+            if (!hasContent) return
+            stop?.()
+            if (commentaryVisible.value && selectedLineId.value != null && commentaryLineId.value == null)
+              commentaryLineId.value = selectedLineId.value
+          },
+          { immediate: true },
+        )
       }
-      
-      let stopLoading: (() => void) | undefined
-      let stopViewRef: (() => void) | undefined
-      const cancelRestore = () => { stopLoading?.(); stopViewRef?.() }
-      const stopVisibleGuard = watch(commentaryVisible, (v) => { if (!v) { cancelRestore(); lastRestoredCommentaryKey = null; stopVisibleGuard() } })
-      stopLoading = watch(
-        () => !commentaryLoading.value && groups.value.length > 0,
-        (ready) => {
-          
-          if (!ready) return
-          stopLoading?.()
-          const viewRef = commentaryViewRef()
-          if (viewRef) {
-            
-            nextTick(async () => {
-              await viewRef.restoreCommentaryScrollPos(si, so)
-              lastRestoredCommentaryKey = restoreKey
-            })
-          } else {
-            
-            stopViewRef = watch(
-              () => commentaryViewRef(),
-              (newRef) => {
-                if (!newRef) return
-                
-                stopViewRef?.()
-                nextTick(async () => {
-                  await newRef.restoreCommentaryScrollPos(si, so)
-                  lastRestoredCommentaryKey = restoreKey
-                })
-              },
-            )
-          }
-        },
-        { flush: 'post', immediate: true },
-      )
-    }
+      // Restore commentary scroll position when the panel is toggled back on.
+      // CommentaryView is fully unmounted when commentaryVisible is false (v-if in SplitPane),
+      // so the one-time restore() at mount is not enough — we must re-apply the saved
+      // position every time the panel reopens.
+      if (commentaryScrollIndex.value != null && commentaryScrollOffset.value != null) {
+        const si = commentaryScrollIndex.value
+        const so = commentaryScrollOffset.value
+        const restoreKey = `${si}:${so}`
+        if (restoreKey === lastRestoredCommentaryKey) return
+
+        let stopLoading: (() => void) | undefined
+        let stopViewRef: (() => void) | undefined
+        const cancelRestore = () => { stopLoading?.(); stopViewRef?.() }
+        const stopVisibleGuard = watch(commentaryVisible, (v) => { if (!v) { cancelRestore(); lastRestoredCommentaryKey = null; stopVisibleGuard() } })
+        stopLoading = watch(
+          () => !commentaryLoading.value && groups.value.length > 0,
+          (ready) => {
+            if (!ready) return
+            stopLoading?.()
+            const viewRef = commentaryViewRef()
+            if (viewRef) {
+              nextTick(async () => {
+                await viewRef.restoreCommentaryScrollPos(si, so)
+                lastRestoredCommentaryKey = restoreKey
+              })
+            } else {
+              stopViewRef = watch(
+                () => commentaryViewRef(),
+                (newRef) => {
+                  if (!newRef) return
+                  stopViewRef?.()
+                  nextTick(async () => {
+                    await newRef.restoreCommentaryScrollPos(si, so)
+                    lastRestoredCommentaryKey = restoreKey
+                  })
+                },
+              )
+            }
+          },
+          { flush: 'post', immediate: true },
+        )
+      }
+    }, 0)
   }, { flush: 'post' })
   watch(hasCommentaries, (has) => {
     if (!has) { commentaryVisible.value = false; if (sidePanelMode.value === 'commentary-tree') closeSidePanel() }
@@ -512,6 +534,10 @@ export function useBookView(
     groups, groupsForDisplay, filterGroups, staticFilterGroups, commentaryLoading,
     tocEntries, tocSearchTree, altTocSections, selectedAltTocSection, tocLoading, tocError,
     altTocLabelMap, pinnedCommentaryGroup, selectedSectionLineIds,
+    // commentary annotation & render (hoisted — survive v-if toggle)
+    getHighlightsForLine, applyHighlight, clearHighlight,
+    getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote,
+    commentaryFontPx, renderContent, setCurrentMark, commentaryTocPaths,
     // scroll / search state
     currentScrollLineIndex,
     scrollStateReady, idbResolved, initialLineIndex, initialScrollTop, initialScrollOffset,

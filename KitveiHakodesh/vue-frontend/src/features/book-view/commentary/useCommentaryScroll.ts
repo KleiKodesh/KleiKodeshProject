@@ -17,24 +17,28 @@ export function useCommentaryScroll(
 ) {
   const scrollTop = ref(0)
 
-  const stickyHeader = computed(() => {
-    let active: any = null
+  // Single scan over measurementsCache per scroll tick — computes both the sticky
+  // header and the top visible flat index in one pass instead of two.
+  const _scrollState = computed(() => {
+    const st = scrollTop.value
+    let activeHeader: any = null
+    let topIndex = 0
     for (const m of virtualizer().measurementsCache) {
       const item = flatItems()[m.index]
-      if (item?.type !== 'header') continue
-      // Switch only when the header's bottom edge has scrolled past the nav
-      if (m.end <= scrollTop.value + NAV_HEIGHT + 5) active = item
-      else break
+      if (item?.type === 'header' && m.end <= st + NAV_HEIGHT + 5) activeHeader = item
+      if (m.end > st + NAV_HEIGHT && topIndex === 0) topIndex = m.index
     }
-    return active
+    return { activeHeader, topIndex }
   })
 
   const activeHeader = computed(
     () =>
-      stickyHeader.value ??
+      _scrollState.value.activeHeader ??
       (flatItems().find((i) => i.type === 'header') as any) ??
       null,
   )
+
+  const topVisibleFlatIndex = computed(() => _scrollState.value.topIndex)
 
   const activePinnedGroup = computed<any>(() => {
     const header = activeHeader.value
@@ -140,17 +144,14 @@ export function useCommentaryScroll(
     const el = scrollerEl()
     if (!el) return null
 
-    const items = virtualizer().getVirtualItems()
-    if (!items.length) return null
-
     const scrollTopValue = el.scrollTop
     const measured = virtualizer().measurementsCache
+    if (!measured.length) return null
 
-    let first = measured.find((item) => item.start <= scrollTopValue && scrollTopValue < item.end)
-
-    if (!first) {
-      first = items.find((item) => item.start <= scrollTopValue && scrollTopValue < item.end) ?? items[0]
-    }
+    // Find the item whose range contains scrollTop, or fall back to the first item.
+    const first =
+      measured.find((item) => item.start <= scrollTopValue && scrollTopValue < item.end) ??
+      measured[0]
 
     if (!first) return null
 
@@ -171,7 +172,6 @@ export function useCommentaryScroll(
       function startRestore() {
         const el = scrollerEl()
         const itemsLength = flatItems().length
-        
 
         if (!el || itemsLength === 0) {
           if (attempts < MAX_ATTEMPTS) {
@@ -179,26 +179,23 @@ export function useCommentaryScroll(
             nextTick(() => requestAnimationFrame(startRestore))
             return
           }
-          
           resolve()
           return
         }
 
         // Scroll to the target index — this is synchronous for already-measured items
         virtualizer().scrollToIndex(scrollIndex, { align: 'start' })
-        
 
         function tryApplyScroll() {
           const el2 = scrollerEl()
           const item = virtualizer().measurementsCache.find((m) => m.index === scrollIndex)
-          
+
           if (!el2) {
             if (attempts < MAX_ATTEMPTS) {
               attempts++
               nextTick(() => requestAnimationFrame(tryApplyScroll))
               return
             }
-            
             resolve()
             return
           }
@@ -209,15 +206,13 @@ export function useCommentaryScroll(
             const maxScrollTop = Math.max(0, el2.scrollHeight - el2.clientHeight)
             const desiredScrollTop = Math.min(targetScrollTop, maxScrollTop)
             el2.scrollTop = desiredScrollTop
-            
+
             requestAnimationFrame(() => {
               if (Math.abs(el2.scrollTop - desiredScrollTop) > 1 && attempts < MAX_ATTEMPTS) {
                 attempts++
-                
                 nextTick(() => requestAnimationFrame(tryApplyScroll))
                 return
               }
-              
               resolve()
             })
           } else if (attempts < MAX_ATTEMPTS) {
@@ -226,7 +221,6 @@ export function useCommentaryScroll(
             nextTick(() => requestAnimationFrame(tryApplyScroll))
           } else {
             // Give up after max attempts
-            
             resolve()
           }
         }
@@ -243,14 +237,6 @@ export function useCommentaryScroll(
       requestAnimationFrame(() => { isRestoringScrollPos = false })
     })
   }
-
-  const topVisibleFlatIndex = computed(() => {
-    const st = scrollTop.value + NAV_HEIGHT
-    for (const m of virtualizer().measurementsCache) {
-      if (m.end > st) return m.index
-    }
-    return 0
-  })
 
   // When groups reload, scroll back to the pinned group (captured in parent before selectedLineId changes)
   function setupGroupReloadScroll(

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, defineAsyncComponent } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
@@ -15,8 +15,10 @@ import {
   IconCrop20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import ThemeToggle from '@/theme/ThemeToggle.vue'
-import AppTitleBarTabDropdown from './AppTitleBarTabDropdown.vue'
-import AppTitleBarNavDropdown from './AppTitleBarNavDropdown.vue'
+// Both dropdowns are v-if — lazy-load them so their imports (including fluent-color icons)
+// don't add to the cold-start parse cost. They load on first open, which is imperceptible.
+const AppTitleBarTabDropdown = defineAsyncComponent(() => import('./AppTitleBarTabDropdown.vue'))
+const AppTitleBarNavDropdown = defineAsyncComponent(() => import('./AppTitleBarNavDropdown.vue'))
 import { useTabStore } from '@/stores/tabStore'
 import type { TabRoute } from '@/stores/tabStore'
 import { useBookViewStore } from '@/stores/bookViewStore'

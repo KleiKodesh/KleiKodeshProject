@@ -76,7 +76,7 @@ export function useLines(bookId: () => number | undefined) {
     fetchQueue = []
     fetching = false
 
-    let book: {
+    type BookRow = {
       totalLines: number
       hasTeamim: number
       hasTargumConnection: number
@@ -84,14 +84,17 @@ export function useLines(bookId: () => number | undefined) {
       hasSourceConnection: number
       hasCommentaryConnection: number
       hasOtherConnection: number
-    } | undefined
-
-    try {
-      const rows = await query<typeof book & {}>(SQL.GET_BOOK_BY_ID, [id])
-      book = rows[0]
-    } catch {
-      // DB error reading book metadata — proceed with zero totalLines
     }
+
+    // Fire both queries simultaneously — the first chunk does not need to wait
+    // for book metadata, and metadata does not need to wait for lines.
+    // This removes one full round-trip from the LCP path.
+    const metadataPromise = query<BookRow>(SQL.GET_BOOK_BY_ID, [id]).then((rows) => rows[0]).catch(() => undefined)
+    fetchQueue.push(0)
+    processQueue()
+
+    const book = await metadataPromise
+    if (currentBookId !== id) return // book changed while metadata was in-flight
 
     const totalLines = book?.totalLines ?? 0
     hasTeamim.value = !!(book?.hasTeamim)
@@ -108,19 +111,21 @@ export function useLines(bookId: () => number | undefined) {
       book?.hasCommentaryConnection
     )
 
-    // Pre-allocate all slots with placeholders so the virtualizer has the correct count
-    // and scroll height from the start. Content fills in as chunks arrive.
-    // If totalLines is 0 (missing or stale book row), we still queue one chunk so that
-    // any lines that do exist in the DB are discovered and the array grows to fit them.
-    lines.value = Array.from({ length: totalLines }, (_, i) => ({
-      id: -(i + 1),
-      lineIndex: i,
-      content: null,
-    }))
+    // Extend the placeholder array to the full totalLines length so the virtualizer
+    // has the correct scroll height. Slots already filled by the first chunk are kept.
+    if (totalLines > lines.value.length) {
+      const extra = Array.from({ length: totalLines - lines.value.length }, (_, i) => ({
+        id: -(lines.value.length + i + 1),
+        lineIndex: lines.value.length + i,
+        content: null,
+      }))
+      lines.value = [...lines.value, ...extra]
+    }
 
+    // Queue remaining chunks. Chunk 0 is already running (or done).
     const chunkCount = totalLines > 0 ? Math.ceil(totalLines / CHUNK_SIZE) : 1
-    for (let i = 0; i < chunkCount; i++) fetchQueue.push(i * CHUNK_SIZE)
-    processQueue()
+    for (let i = 1; i < chunkCount; i++) fetchQueue.push(i * CHUNK_SIZE)
+    if (!fetching) processQueue()
   }
 
   watch(

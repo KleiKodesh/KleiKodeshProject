@@ -2,18 +2,12 @@
  * Manages user notes for all commentary books visible in the commentary panel.
  *
  * Loading strategy — lazy, viewport-driven, non-blocking:
- *   Notes are loaded only for the lineIds currently visible in the commentary
- *   scroller. The caller provides a `getVisibleLineIds` callback. A 100ms debounce
- *   batches rapid scroll events into a single DB query per commentary book.
+ *   The caller provides visible lineIds via scheduleNotesLoad (called from the
+ *   component's virtualizer watcher). A 100ms debounce batches rapid scroll
+ *   events into a single DB query per commentary book.
  *
- *   lineIds are grouped by their commentary bookId (via lineIdToBookId) and queried
- *   per-book using GET_NOTES_FOR_LINES. This keeps writes consistent — a note on a
- *   Rashi line is stored with Rashi's bookId, not the parent book's id, so it appears
- *   correctly when Rashi is opened directly in the book viewer.
- *
- *   lineIdToBookId is populated from getGroups() eagerly (as soon as groups are
- *   known) so that even before the note query fires, createNote() knows which bookId
- *   to use for a newly selected line.
+ *   lineIdToBookId is populated from getGroups() eagerly so createNote() knows
+ *   which bookId to use before the async load completes.
  */
 import { ref, watch } from 'vue'
 import { queryUserSettings, executeUserSettings } from '@/webview-host/userSettingsDb'
@@ -23,10 +17,7 @@ import type { CommentaryGroup } from './useCommentary'
 
 type NotesByLine = Map<number, Note[]>
 
-export function useCommentaryNotes(
-  getGroups: () => CommentaryGroup[],
-  getVisibleLineIds: () => number[],
-) {
+export function useCommentaryNotes(getGroups: () => CommentaryGroup[]) {
   const notesByLine = ref<NotesByLine>(new Map())
   const loadedLineIds = new Set<number>()
   const lineIdToBookId = new Map<number, number>()
@@ -107,12 +98,11 @@ export function useCommentaryNotes(
     }
   }
 
-  // Watch visible lineIds and schedule a load whenever the set changes
-  watch(
-    getVisibleLineIds,
-    (ids) => scheduleLoad(ids),
-    { immediate: true },
-  )
+  // Watch visible lineIds and schedule a load whenever the set changes.
+  // Called by the component's virtualizer watcher — not driven from here.
+  function scheduleNotesLoad(lineIds: number[]) {
+    scheduleLoad(lineIds)
+  }
 
   // ── Per-line lookup ────────────────────────────────────────────────────────
 
@@ -196,6 +186,7 @@ export function useCommentaryNotes(
 
   return {
     getNotesForLine,
+    scheduleNotesLoad,
     createNote,
     updateNote,
     deleteNote,

@@ -63,6 +63,9 @@ const {
   groups, groupsForDisplay, filterGroups, staticFilterGroups, commentaryLoading,
   tocEntries, tocSearchTree, selectedAltTocSection, tocLoading, tocError,
   altTocLabelMap, pinnedCommentaryGroup, selectedSectionLineIds,
+  getHighlightsForLine, applyHighlight, clearHighlight,
+  getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote,
+  commentaryFontPx, renderContent, setCurrentMark, commentaryTocPaths,
   currentScrollLineIndex,
   scrollStateReady, idbResolved, initialLineIndex, initialScrollTop, initialScrollOffset,
   restoredCommentaryMode, restoredCommentaryFraction,
@@ -169,6 +172,18 @@ watch(() => bookViewStore.toggleBottomPanelSignal, () => {
               :visibility-list="commentaryTreeState.visibilityList"
               :pinned-group="pinnedCommentaryGroup"
               :filter-visible="commentaryTreeVisible"
+              :get-highlights-for-line="getHighlightsForLine"
+              :apply-highlight="applyHighlight"
+              :clear-highlight="clearHighlight"
+              :get-notes-for-line="getNotesForLine"
+              :schedule-notes-load="scheduleNotesLoad"
+              :create-note="createNote"
+              :update-note="updateNote"
+              :delete-note="deleteNote"
+              :commentary-font-px="commentaryFontPx"
+              :render-content="renderContent"
+              :set-current-mark="setCurrentMark"
+              :commentary-toc-paths="commentaryTocPaths"
               :search-query="searchMode === 'commentary' ? commentarySearch.query.value : ''"
               :current-match-flat-index="searchMode === 'commentary' ? commentarySearch.currentMatchFlatIndex.value : undefined"
               :current-match-occurrence="searchMode === 'commentary' ? commentarySearch.currentMatchOccurrence.value : undefined"
@@ -264,6 +279,18 @@ watch(() => bookViewStore.toggleBottomPanelSignal, () => {
               :visibility-list="commentaryTreeState.visibilityList"
               :pinned-group="pinnedCommentaryGroup"
               :filter-visible="commentaryTreeVisible"
+              :get-highlights-for-line="getHighlightsForLine"
+              :apply-highlight="applyHighlight"
+              :clear-highlight="clearHighlight"
+              :get-notes-for-line="getNotesForLine"
+              :schedule-notes-load="scheduleNotesLoad"
+              :create-note="createNote"
+              :update-note="updateNote"
+              :delete-note="deleteNote"
+              :commentary-font-px="commentaryFontPx"
+              :render-content="renderContent"
+              :set-current-mark="setCurrentMark"
+              :commentary-toc-paths="commentaryTocPaths"
               :search-query="searchMode === 'commentary' ? commentarySearch.query.value : ''"
               :current-match-flat-index="searchMode === 'commentary' ? commentarySearch.currentMatchFlatIndex.value : undefined"
               :current-match-occurrence="searchMode === 'commentary' ? commentarySearch.currentMatchOccurrence.value : undefined"

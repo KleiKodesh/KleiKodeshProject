@@ -2,12 +2,9 @@ import { ref, onUnmounted } from 'vue'
 import { createWorker, type Worker } from 'tesseract.js'
 import { PDF_OCR_INJECTED_SCRIPT } from './pdfOcrInjectedScript'
 
-export type OcrScript = 'hebrew' | 'rashi' | 'mixed'
+import type { OcrScript, OcrSelectionResult } from './pdfViewerTypes'
 
-export interface OcrSelectionResult {
-  text: string
-  isOcr: boolean
-}
+export type { OcrScript, OcrSelectionResult }
 
 const LANG_FILES: Record<OcrScript, string> = {
   hebrew: 'heb',

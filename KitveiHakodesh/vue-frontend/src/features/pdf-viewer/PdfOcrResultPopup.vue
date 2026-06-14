@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { IconDismiss20Regular, IconCopy20Regular, IconCheckmark20Regular, IconHourglassOneQuarter20Regular } from '@iconify-prerendered/vue-fluent'
-import type { OcrSelectionResult, OcrScript } from './usePdfOcrSelection'
+import type { OcrSelectionResult, OcrScript } from './pdfViewerTypes'
 
 const props = defineProps<{
   result: OcrSelectionResult

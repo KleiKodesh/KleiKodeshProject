@@ -1,10 +1,16 @@
 <script setup lang="ts">
 import AppTitleBar from '@/layout/AppTitleBar.vue'
 import AppPageView from '@/layout/AppPageView.vue'
-import SetupWizard from '@/features/settings/SetupWizard.vue'
+import { defineAsyncComponent } from 'vue'
 import { resetting } from '@/features/settings/appResetState'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { storeToRefs } from 'pinia'
+
+// Loaded lazily — only needed when setupDone is false (first launch).
+// Most sessions never render this, so there's no reason to pay the parse cost at boot.
+const SetupWizard = defineAsyncComponent(
+  () => import('@/features/settings/SetupWizard.vue'),
+)
 
 const settingsStore = useSettingsStore()
 const { setupDone } = storeToRefs(settingsStore)

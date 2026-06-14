@@ -11,12 +11,10 @@ import type { CommentaryGroup } from './useCommentary'
 import type { CommentaryVisibilityItem, PinnedCommentaryGroup } from '../bookViewTypes'
 import { isCommentaryItemVisible } from '../bookViewTypes'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
-import { useCommentaryRender } from './useCommentaryRender'
 import { useCommentaryScroll } from './useCommentaryScroll'
-import { useCommentaryTocPaths } from './useCommentaryTocPaths'
 import { useCommentaryCopy } from './useCommentaryCopy'
-import { useCommentaryHighlights } from './useCommentaryHighlights'
-import { useCommentaryNotes } from './useCommentaryNotes'
+import type { Highlight } from '../lines/useBookViewHighlights'
+import type { Note } from '../lines/useBookViewNotes'
 import BookViewNoteBubble from '../lines/BookViewNoteBubble.vue'
 
 const props = defineProps<{
@@ -24,6 +22,19 @@ const props = defineProps<{
   groups: CommentaryGroup[]
   loading: boolean
   visibilityList: CommentaryVisibilityItem[]
+  // Hoisted annotation & render state — initialized in useBookView, survive v-if toggle
+  getHighlightsForLine: (lineId: number) => Highlight[]
+  applyHighlight: (lineId: number, startOffset: number, endOffset: number, colorArgb: number) => void
+  clearHighlight: (lineId: number, startOffset: number, endOffset: number) => void
+  getNotesForLine: (lineId: number) => Note[]
+  scheduleNotesLoad: (lineIds: number[]) => void
+  createNote: (lineId: number, startOffset: number, endOffset: number, quote: string) => Promise<Note>
+  updateNote: (note: Note, newText: string) => Promise<void>
+  deleteNote: (note: Note) => Promise<void>
+  commentaryFontPx: number
+  renderContent: (content: string, flatIndex: number, lineId: number | undefined, searchQuery: string | undefined) => string
+  setCurrentMark: (scroller: HTMLElement, flatIndex: number, occurrence: number) => void
+  commentaryTocPaths: Map<number, string>
   searchQuery?: string
   currentMatchFlatIndex?: number
   currentMatchOccurrence?: number
@@ -39,18 +50,12 @@ const emit = defineEmits<{
   scroll: [scrollIndex: number, scrollOffset: number]
 }>()
 
-// ── Highlights ────────────────────────────────────────────────────────────────
+// ── Note bubble state ─────────────────────────────────────────────────────────
 
-const { getHighlightsForLine, applyHighlight, clearHighlight } = useCommentaryHighlights(
-  () => props.groups,
-)
-
-// ── Note bubble state — declared early so downstream functions can reference it
-
-const activeBubbleNote = ref<import('../lines/useBookViewNotes').Note | null>(null)
+const activeBubbleNote = ref<Note | null>(null)
 const activeBubbleAnchorRect = ref<DOMRect | null>(null)
 
-function openNoteBubble(note: import('../lines/useBookViewNotes').Note, markerEl: HTMLElement) {
+function openNoteBubble(note: Note, markerEl: HTMLElement) {
   activeBubbleNote.value = note
   activeBubbleAnchorRect.value = markerEl.getBoundingClientRect()
 }
@@ -70,6 +75,8 @@ type FlatItem =
       connectionTypes: string[]
       sectionLabel?: string
       subSectionLabel?: string
+      firstLineIndex?: number
+      tocPath?: string
     }
   | { type: 'line'; content: string; lineId: number }
 
@@ -89,6 +96,7 @@ const visibleGroups = computed(() => {
 })
 
 const flatItems = computed<FlatItem[]>(() => {
+  const tocPaths = props.commentaryTocPaths
   const items: FlatItem[] = []
   for (const g of visibleGroups.value) {
     items.push({
@@ -98,6 +106,8 @@ const flatItems = computed<FlatItem[]>(() => {
       connectionTypes: g.connectionTypes,
       sectionLabel: g.sectionLabel,
       subSectionLabel: g.subSectionLabel,
+      firstLineIndex: g.lines[0]?.lineIndex,
+      tocPath: tocPaths.get(g.bookId),
     })
     for (const l of g.lines) items.push({ type: 'line', content: l.content, lineId: l.lineId })
   }
@@ -129,27 +139,26 @@ const virtualizer = useVirtualizer(
 const virtualItems = computed(() => virtualizer.value.getVirtualItems())
 const totalSize = computed(() => virtualizer.value.getTotalSize())
 
-// ── Notes — lazy, viewport-driven (must come after virtualItems) ──────────────
+// ── Notes — viewport-driven lazy load trigger ─────────────────────────────────
+// The notes data layer lives in useBookView (hoisted). We only trigger loading
+// for lines that enter the viewport.
 
-const { getNotesForLine, createNote, updateNote, deleteNote } = useCommentaryNotes(
-  () => props.groups,
-  () =>
-    virtualItems.value
+watch(
+  virtualItems,
+  (items) => {
+    const lineIds = items
       .map((v) => flatItems.value[v.index])
       .filter((item): item is { type: 'line'; content: string; lineId: number } =>
         item?.type === 'line',
       )
       .map((item) => item.lineId)
-      .filter((id) => id > 0),
+      .filter((id) => id > 0)
+    props.scheduleNotesLoad(lineIds)
+  },
+  { immediate: true },
 )
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
-
-const { commentaryFontPx, renderContent, setCurrentMark } = useCommentaryRender(
-  () => props.groups,
-  getHighlightsForLine,
-  getNotesForLine,
-)
 
 // Apply .current class via DOM toggle — no re-render needed when only the
 // active occurrence changes within an already-rendered commentary line.
@@ -159,11 +168,10 @@ watch(
     if (!scrollerEl.value) return
     nextTick(() => {
       if (!scrollerEl.value) return
-      setCurrentMark(scrollerEl.value, flatIndex ?? -1, occurrence ?? 0)
+      props.setCurrentMark(scrollerEl.value, flatIndex ?? -1, occurrence ?? 0)
     })
   },
 )
-const { commentaryTocPaths } = useCommentaryTocPaths(() => props.groups)
 
 // ── Scroll ────────────────────────────────────────────────────────────────────
 
@@ -211,14 +219,14 @@ const { contextMenuItems } = useCommentaryCopy(
         ) ?? null
       : null
   },
-  (bookId) => commentaryTocPaths.value.get(bookId),
+  (bookId) => props.commentaryTocPaths.get(bookId),
   selectAllInContainer,
   scrollerEl,
   (lineId, startOffset, endOffset, colorArgb) =>
-    applyHighlight(lineId, startOffset, endOffset, colorArgb),
-  (lineId, startOffset, endOffset) => clearHighlight(lineId, startOffset, endOffset),
+    props.applyHighlight(lineId, startOffset, endOffset, colorArgb),
+  (lineId, startOffset, endOffset) => props.clearHighlight(lineId, startOffset, endOffset),
   (lineId, startOffset, endOffset, quote) =>
-    createNote(lineId, startOffset, endOffset, quote).then((note) => {
+    props.createNote(lineId, startOffset, endOffset, quote).then((note) => {
       nextTick(() => {
         const marker = scrollerEl.value?.querySelector(
           `[data-note-id="${note.id}"]`,
@@ -244,7 +252,7 @@ function onMarkerClick(event: MouseEvent) {
     (marker.closest('[data-line-id]') as HTMLElement | null)?.dataset['lineId'] ?? '',
     10,
   )
-  const found = getNotesForLine(lineId).find((n) => n.id === noteId)
+  const found = props.getNotesForLine(lineId).find((n) => n.id === noteId)
   if (found) openNoteBubble(found, marker)
 }
 
@@ -261,28 +269,9 @@ defineExpose({
   getFilterButtonEl: () => headerNavRef.value?.filterBtnRef ?? null,
 })
 
-function asHeader(item: FlatItem | undefined) {
-  return item?.type === 'header' ? item : null
-}
-function asLine(item: FlatItem | undefined) {
-  return item?.type === 'line' ? item : null
-}
-function ownTocPathForHeader(bookId: number): string | undefined {
-  return commentaryTocPaths.value.get(bookId)
-}
-
-function firstLineIndexForHeader(
-  bookId: number,
-  sectionLabel: string,
-  subSectionLabel: string,
-): number | undefined {
-  return visibleGroups.value.find(
-    (g) =>
-      g.bookId === bookId &&
-      (g.sectionLabel ?? '') === sectionLabel &&
-      (g.subSectionLabel ?? '') === subSectionLabel,
-  )?.lines[0]?.lineIndex
-}
+const activeTocPath = computed(() =>
+  activePinnedGroup.value ? props.commentaryTocPaths.get(activePinnedGroup.value.bookId) : undefined,
+)
 </script>
 
 <template>
@@ -292,8 +281,8 @@ function firstLineIndexForHeader(
       v-if="activeBubbleNote && activeBubbleAnchorRect"
       :note="activeBubbleNote"
       :anchor-rect="activeBubbleAnchorRect"
-      :update-note="updateNote"
-      :delete-note="deleteNote"
+      :update-note="props.updateNote"
+      :delete-note="props.deleteNote"
       @close="closeNoteBubble"
       @deleted="closeNoteBubble"
     />
@@ -306,7 +295,7 @@ function firstLineIndexForHeader(
           :scroll-to-group="scrollToGroup"
           :active-pinned-group="activePinnedGroup"
           :filter-visible="props.filterVisible"
-          :active-toc-path="activePinnedGroup ? (commentaryTocPaths.get(activePinnedGroup.bookId) ?? undefined) : undefined"
+          :active-toc-path="activeTocPath"
           @navigate-section="(d, id) => emit('navigate-section', d, id)"
           @toggle-filter="emit('toggle-filter-panel')"
           @toggle-search="emit('toggle-search')"
@@ -345,21 +334,21 @@ function firstLineIndexForHeader(
             >
               <CommentaryHeader
                 v-if="flatItems[vItem.index]?.type === 'header'"
-                :book-id="asHeader(flatItems[vItem.index])!.bookId"
-                :book-title="asHeader(flatItems[vItem.index])!.bookTitle"
-                :first-line-index="firstLineIndexForHeader(asHeader(flatItems[vItem.index])!.bookId, asHeader(flatItems[vItem.index])!.sectionLabel ?? '', asHeader(flatItems[vItem.index])!.subSectionLabel ?? '')"
-                :section-label="asHeader(flatItems[vItem.index])!.sectionLabel"
-                :sub-section-label="asHeader(flatItems[vItem.index])!.subSectionLabel"
-                :own-toc-path="ownTocPathForHeader(asHeader(flatItems[vItem.index])!.bookId)"
+                :book-id="(flatItems[vItem.index] as any).bookId"
+                :book-title="(flatItems[vItem.index] as any).bookTitle"
+                :first-line-index="(flatItems[vItem.index] as any).firstLineIndex"
+                :section-label="(flatItems[vItem.index] as any).sectionLabel"
+                :sub-section-label="(flatItems[vItem.index] as any).subSectionLabel"
+                :own-toc-path="(flatItems[vItem.index] as any).tocPath"
                 @navigate-section="(d, id) => emit('navigate-section', d, id)"
                 @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)"
               />
               <div
                 v-else
                 class="line"
-                :class="{ 'line-no-text': asLine(flatItems[vItem.index])!.lineId === -1 }"
-                :data-line-id="asLine(flatItems[vItem.index])!.lineId"
-                v-html="renderContent(asLine(flatItems[vItem.index])!.content, vItem.index, asLine(flatItems[vItem.index])!.lineId, props.searchQuery)"
+                :class="{ 'line-no-text': (flatItems[vItem.index] as any).lineId === -1 }"
+                :data-line-id="(flatItems[vItem.index] as any).lineId"
+                v-html="renderContent((flatItems[vItem.index] as any).content, vItem.index, (flatItems[vItem.index] as any).lineId, props.searchQuery)"
               />
             </div>
           </div>

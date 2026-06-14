@@ -72,20 +72,13 @@ export function useCommentaryHighlights(getGroups: () => CommentaryGroup[]) {
     getGroups,
     (groups) => {
       for (const group of groups) {
-        if (group.bookId > 0 && !loadedBookIds.has(group.bookId)) {
-          // Register all lineIds for this group before the async load so
-          // applyHighlight calls that arrive before the load finishes still
-          // know which bookId owns each line
-          for (const line of group.lines) {
-            if (line.lineId > 0) lineIdToBookId.set(line.lineId, group.bookId)
-          }
-          void loadHighlightsForBook(group.bookId)
-        }
-      }
-      // Keep lineIdToBookId up to date for lines already registered
-      for (const group of groups) {
+        // Register lineIds for this group so applyHighlight knows the bookId even
+        // before the async load completes, then kick off the load if not yet done.
         for (const line of group.lines) {
           if (line.lineId > 0) lineIdToBookId.set(line.lineId, group.bookId)
+        }
+        if (group.bookId > 0 && !loadedBookIds.has(group.bookId)) {
+          void loadHighlightsForBook(group.bookId)
         }
       }
     },

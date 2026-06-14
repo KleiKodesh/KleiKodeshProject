@@ -4,7 +4,7 @@ import { useBookViewStore } from '@/stores/bookViewStore'
 import { storeToRefs } from 'pinia'
 import { applyDiacriticsFilter, removeDiacriticsForSearch, stripHtmlForSearch } from '@/utils/hebrewTextProcessing'
 import { censorDivineNames } from '@/utils/censorDivineNames'
-import { applyUserHighlights, applyUserNoteMarkers, setCurrentMark } from '../lines/useBookViewLineRenderer'
+import { applyUserHighlights, applyUserNoteMarkers, setCurrentMark, isDiacriticChar } from '../lines/useBookViewLineRenderer'
 import type { Highlight } from '../lines/useBookViewHighlights'
 import type { Note } from '../lines/useBookViewNotes'
 
@@ -29,28 +29,29 @@ export function useCommentaryRender(
     return (zoom.value / 100) * (effectiveFontSize / 100) * 15
   })
 
-  // Cache rendered HTML per flat index — avoids re-running applyDiacriticsFilter
-  // and censorDivineNames (6 regexes) on every render cycle for unchanged commentary lines.
+  // Two-tier cache — same pattern as useBookViewLineRenderer:
+  //   globalCacheKey  — diacritics, censor, searchQuery; wipes all on change.
+  //   perLineAnnotationKey — highlights+notes per lineId; evicts only that entry.
   const renderCache = new Map<number, string>()
-  let renderCacheKey = ''
+  const perLineAnnotationKey = new Map<number, string>()
+  let globalCacheKey = ''
 
-  function getRenderCacheKey(
-    searchQuery: string | undefined,
-    lineId: number | undefined,
-  ): string {
-    const highlightsSig =
-      lineId != null && getHighlightsForLine
-        ? (getHighlightsForLine(lineId) ?? [])
-            .map((h) => `${h.id}:${h.startOffset}:${h.endOffset}:${h.colorArgb}`)
-            .join(',')
-        : ''
-    const notesSig =
-      lineId != null && getNotesForLine
-        ? (getNotesForLine(lineId) ?? [])
-            .map((n) => `${n.id}:${n.startOffset}:${n.endOffset}:${n.updatedAt}`)
-            .join(',')
-        : ''
-    return `${diacriticsState.value}|${settingsStore.censorDivineNames}|${searchQuery ?? ''}|${highlightsSig}|${notesSig}`
+  function getGlobalKey(searchQuery: string | undefined): string {
+    return `${diacriticsState.value}|${settingsStore.censorDivineNames}|${searchQuery ?? ''}`
+  }
+
+  function getAnnotationKey(lineId: number): string {
+    const highlightsSig = getHighlightsForLine
+      ? (getHighlightsForLine(lineId) ?? [])
+          .map((h) => `${h.id}:${h.startOffset}:${h.endOffset}:${h.colorArgb}`)
+          .join(',')
+      : ''
+    const notesSig = getNotesForLine
+      ? (getNotesForLine(lineId) ?? [])
+          .map((n) => `${n.id}:${n.startOffset}:${n.endOffset}:${n.updatedAt}`)
+          .join(',')
+      : ''
+    return `${highlightsSig}|${notesSig}`
   }
 
   function highlightMatches(
@@ -106,7 +107,7 @@ export function useCommentaryRender(
         }
       }
 
-      const isDiacritic = /[\u0591-\u05C7]/.test(ch)
+      const isDiacritic = isDiacriticChar(ch)
       if (!isDiacritic && matchStarts.has(strippedPos) && !inMatch) {
         out.push('<mark class="search-match">')
         inMatch = true
@@ -131,11 +132,21 @@ export function useCommentaryRender(
     lineId: number | undefined,
     searchQuery: string | undefined,
   ): string {
-    const key = getRenderCacheKey(searchQuery, lineId)
-    if (key !== renderCacheKey) {
+    const globalKey = getGlobalKey(searchQuery)
+    if (globalKey !== globalCacheKey) {
       renderCache.clear()
-      renderCacheKey = key
+      perLineAnnotationKey.clear()
+      globalCacheKey = globalKey
     }
+
+    if (lineId != null) {
+      const annotationKey = getAnnotationKey(lineId)
+      if (perLineAnnotationKey.get(lineId) !== annotationKey) {
+        renderCache.delete(flatIndex)
+        perLineAnnotationKey.set(lineId, annotationKey)
+      }
+    }
+
     const cached = renderCache.get(flatIndex)
     if (cached !== undefined) return cached
 
@@ -166,7 +177,8 @@ export function useCommentaryRender(
     groups,
     () => {
       renderCache.clear()
-      renderCacheKey = ''
+      perLineAnnotationKey.clear()
+      globalCacheKey = ''
     },
     { flush: 'sync' },
   )

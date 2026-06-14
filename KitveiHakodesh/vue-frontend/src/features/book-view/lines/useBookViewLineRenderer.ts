@@ -20,7 +20,11 @@ interface LineRenderProps {
   getNotesForLine?: (lineId: number) => Note[]
 }
 
-// ── Highlight helpers ─────────────────────────────────────────────────────────
+// Precompiled diacritic range check — faster than /[\u0591-\u05C7]/.test(ch) in tight loops.
+export function isDiacriticChar(ch: string): boolean {
+  const code = ch.charCodeAt(0)
+  return code >= 0x0591 && code <= 0x05C7
+}
 
 function highlightMatches(
   content: string,
@@ -78,7 +82,7 @@ function highlightMatches(
       // Bare & — treat as regular character.
     }
 
-    const isDiacritic = /[\u0591-\u05C7]/.test(ch)
+    const isDiacritic = isDiacriticChar(ch)
     if (!isDiacritic && matchStarts.has(strippedPos) && !inMatch) {
       out.push('<mark class="search-match">')
       inMatch = true
@@ -189,7 +193,7 @@ function highlightFromSnippet(
       }
     }
 
-    const isDiacritic = /[\u0591-\u05C7]/.test(ch)
+    const isDiacritic = isDiacriticChar(ch)
 
     if (!isDiacritic) {
       if (inMatch && strippedPos >= matchEndPos) { out.push('</mark>'); inMatch = false }
@@ -234,63 +238,72 @@ function highlightFromSnippet(
 export function applyUserHighlights(content: string, highlights: Highlight[]): string {
   if (!highlights.length) return content
 
-  // Build a list of open/close events sorted by stripped character position
   interface MarkEvent {
     pos: number
     type: 'open' | 'close'
     color: string
-    // For ordering: closes before opens at same position
     order: number
   }
 
   const events: MarkEvent[] = []
   for (const h of highlights) {
     if (h.startOffset >= h.endOffset) continue
-    // Translate Material Design color to theme-adjusted color for display
     const themeColor = highlightColorToThemeColor(h.colorArgb)
     events.push({ pos: h.startOffset, type: 'open', color: themeColor, order: 1 })
     events.push({ pos: h.endOffset, type: 'close', color: themeColor, order: 0 })
   }
   events.sort((a, b) => a.pos - b.pos || a.order - b.order)
-
   if (!events.length) return content
 
   const out: string[] = []
-  let strippedPos = 0
-  let inTag = false
-  let inEntity = false
-  let eventIndex = 0
-  const openStack: string[] = [] // track open colors for nesting
+  let strippedPos = 0, inTag = false, eventIndex = 0
+  const openStack: string[] = []
+  let i = 0
 
-  for (let i = 0; i < content.length; i++) {
+  while (i < content.length) {
     const ch = content[i]!
+    if (ch === '<') { inTag = true; out.push(ch); i++; continue }
+    if (ch === '>') { inTag = false; out.push(ch); i++; continue }
+    if (inTag) { out.push(ch); i++; continue }
 
-    if (ch === '<') { inTag = true; out.push(ch); continue }
-    if (ch === '>') { inTag = false; out.push(ch); continue }
-    if (inTag) { out.push(ch); continue }
+    if (ch === '&') {
+      let entityEnd = -1
+      for (let j = i + 1; j < content.length && j <= i + 12; j++) {
+        const c = content[j]!
+        if (c === ';') { entityEnd = j; break }
+        if (c === ' ' || c === '\t' || c === '\n' || c === '<') break
+      }
+      if (entityEnd !== -1) {
+        // Flush events at this position before emitting the entity atomically.
+        while (eventIndex < events.length && events[eventIndex]!.pos === strippedPos) {
+          const event = events[eventIndex]!
+          if (event.type === 'close') {
+            out.push('</mark>')
+            openStack.pop()
+            if (openStack.length) out.push(`<mark class="user-highlight" style="background:${openStack[openStack.length - 1]}">`)
+          } else {
+            if (openStack.length) out.push('</mark>')
+            out.push(`<mark class="user-highlight" style="background:${event.color}">`)
+            openStack.push(event.color)
+          }
+          eventIndex++
+        }
+        for (let j = i; j <= entityEnd; j++) out.push(content[j]!)
+        i = entityEnd + 1
+        strippedPos++
+        continue
+      }
+    }
 
-    // Detect start of HTML entity (& followed by semicolon to mark end)
-    if (ch === '&') { inEntity = true; out.push(ch); continue }
-    // Detect end of HTML entity
-    if (inEntity && ch === ';') { inEntity = false; out.push(ch); continue }
-    // Skip counting for characters inside entities
-    if (inEntity) { out.push(ch); continue }
-
-    const isDiacritic = /[\u0591-\u05C7]/.test(ch)
-
+    const isDiacritic = isDiacriticChar(ch)
     if (!isDiacritic) {
-      // Flush all events at this position
       while (eventIndex < events.length && events[eventIndex]!.pos === strippedPos) {
         const event = events[eventIndex]!
         if (event.type === 'close') {
           out.push('</mark>')
           openStack.pop()
-          // Re-open any remaining open marks (handles overlapping highlights)
-          if (openStack.length) {
-            out.push(`<mark class="user-highlight" style="background:${openStack[openStack.length - 1]}">`)
-          }
+          if (openStack.length) out.push(`<mark class="user-highlight" style="background:${openStack[openStack.length - 1]}">`)
         } else {
-          // Close current open mark before opening new one (prevent nesting)
           if (openStack.length) out.push('</mark>')
           out.push(`<mark class="user-highlight" style="background:${event.color}">`)
           openStack.push(event.color)
@@ -301,12 +314,11 @@ export function applyUserHighlights(content: string, highlights: Highlight[]): s
 
     out.push(ch)
     if (!isDiacritic) strippedPos++
+    i++
   }
 
-  // Close any marks that extend to/past end of string
   while (eventIndex < events.length && events[eventIndex]!.type === 'close') eventIndex++
-  for (let i = openStack.length - 1; i >= 0; i--) out.push('</mark>')
-
+  for (let k = openStack.length - 1; k >= 0; k--) out.push('</mark>')
   return out.join('')
 }
 
@@ -314,19 +326,8 @@ export function applyUserHighlights(content: string, highlights: Highlight[]): s
 // NOTE: also used by useCommentaryRender.ts — keep exported.
 
 /**
- * Injects a dotted-underline span over the noted text range plus a superscript
- * footnote reference marker at the endOffset position.
- *
- * The marker is a `<sup>` with class `user-note-marker` and two data attributes:
- *   data-note-id   — the note id (used by the click handler to open the bubble)
- *   title          — the note text (shown as a native tooltip on hover)
- *
- * Marker label: [n] where n is the 1-based index of the note among all notes on
- * the line, ordered by startOffset — identical to Wikipedia footnote style.
- *
- * The underline span wraps the range [startOffset, endOffset] using the same
- * HTML-aware, diacritic-aware walk as applyUserHighlights.
- * The <sup> is inserted immediately after the closing underline span.
+ * Injects a superscript footnote marker at the endOffset position of each note.
+ * Uses the same HTML-aware, diacritic-aware, entity-aware walk as applyUserHighlights.
  */
 export function applyUserNoteMarkers(content: string, notes: Note[]): string {
   if (!notes.length) return content
@@ -339,37 +340,39 @@ export function applyUserNoteMarkers(content: string, notes: Note[]): string {
   }
 
   const events: NoteEvent[] = []
-  // notes are already sorted by startOffset (maintained by _addToMap)
-  notes.forEach((n) => {
-    if (n.startOffset >= n.endOffset) return
-    const label = `[*]`
-    // Only a close event is needed — no open span, just the marker at endOffset
-    events.push({ pos: n.endOffset, noteId: n.id, noteText: n.note, label })
-  })
-  // Opens before closes at same position
+  for (const n of notes) {
+    if (n.startOffset >= n.endOffset) continue
+    events.push({ pos: n.endOffset, noteId: n.id, noteText: n.note, label: '[*]' })
+  }
   events.sort((a, b) => a.pos - b.pos)
-
   if (!events.length) return content
 
   const out: string[] = []
-  let strippedPos = 0
-  let inTag = false
-  let inEntity = false
-  let eventIndex = 0
+  let strippedPos = 0, inTag = false, eventIndex = 0
+  let i = 0
 
-  for (let i = 0; i < content.length; i++) {
+  while (i < content.length) {
     const ch = content[i]!
+    if (ch === '<') { inTag = true; out.push(ch); i++; continue }
+    if (ch === '>') { inTag = false; out.push(ch); i++; continue }
+    if (inTag) { out.push(ch); i++; continue }
 
-    if (ch === '<') { inTag = true; out.push(ch); continue }
-    if (ch === '>') { inTag = false; out.push(ch); continue }
-    if (inTag) { out.push(ch); continue }
+    if (ch === '&') {
+      let entityEnd = -1
+      for (let j = i + 1; j < content.length && j <= i + 12; j++) {
+        const c = content[j]!
+        if (c === ';') { entityEnd = j; break }
+        if (c === ' ' || c === '\t' || c === '\n' || c === '<') break
+      }
+      if (entityEnd !== -1) {
+        for (let j = i; j <= entityEnd; j++) out.push(content[j]!)
+        i = entityEnd + 1
+        strippedPos++
+        continue
+      }
+    }
 
-    if (ch === '&') { inEntity = true; out.push(ch); continue }
-    if (inEntity && ch === ';') { inEntity = false; out.push(ch); continue }
-    if (inEntity) { out.push(ch); continue }
-
-    const isDiacritic = /[\u0591-\u05C7]/.test(ch)
-
+    const isDiacritic = isDiacriticChar(ch)
     if (!isDiacritic) {
       while (eventIndex < events.length && events[eventIndex]!.pos === strippedPos) {
         const event = events[eventIndex]!
@@ -378,15 +381,14 @@ export function applyUserNoteMarkers(content: string, notes: Note[]): string {
           .replace(/"/g, '&quot;')
           .replace(/</g, '&lt;')
           .replace(/>/g, '&gt;')
-        out.push(
-          `<sup class="user-note-marker" data-note-id="${event.noteId}" title="${escapedText}">${event.label}</sup>`,
-        )
+        out.push(`<sup class="user-note-marker" data-note-id="${event.noteId}" title="${escapedText}">${event.label}</sup>`)
         eventIndex++
       }
     }
 
     out.push(ch)
     if (!isDiacritic) strippedPos++
+    i++
   }
 
   return out.join('')
@@ -399,30 +401,46 @@ export function useBookViewLineRenderer(
   diacriticsState: import('vue').ComputedRef<number>,
   getProps: () => LineRenderProps,
 ) {
-  // Cache rendered HTML per line — avoids re-running applyDiacriticsFilter
-  // and censorDivineNames (6 regexes) on every render cycle for unchanged lines.
-  // The cache is invalidated as a whole whenever any rendering input changes.
-  // currentMatchOccurrence is intentionally NOT part of the cache key — the
-  // .current class is applied via setCurrentMark() as a DOM class toggle so that
-  // navigating between occurrences on the same line never causes a full re-render.
+  // Two-tier cache:
+  //   globalCacheKey — covers inputs that affect ALL lines (diacritics, censor, search).
+  //                    When this changes the whole cache is wiped.
+  //   perLineSuffix  — per-line Map<lineId, string> storing the highlights+notes
+  //                    signature last used to render that line. When only one line's
+  //                    annotations change, only that entry is evicted rather than
+  //                    clearing every rendered line.
+  // currentMatchOccurrence is intentionally excluded — handled by setCurrentMark().
   const renderCache = new Map<number, string>()
-  let renderCacheKey = ''
+  const perLineAnnotationKey = new Map<number, string>()
+  let globalCacheKey = ''
 
-  function getCacheKey(lineId: number): string {
+  function getGlobalKey(): string {
+    const p = getProps()
+    return `${diacriticsState.value}|${settings.censorDivineNames}|${p.searchQuery ?? ''}|${p.searchHighlightLineIndex ?? -1}|${p.searchHighlightQuery ?? ''}|${p.searchHighlightSnippet ?? ''}|${p.searchHighlightTerms?.join(',') ?? ''}`
+  }
+
+  function getAnnotationKey(lineId: number): string {
     const p = getProps()
     const lineHighlights = p.getHighlightsForLine?.(lineId) ?? []
     const highlightsSig = lineHighlights.map((h) => `${h.id}:${h.startOffset}:${h.endOffset}:${h.colorArgb}`).join(',')
     const lineNotes = p.getNotesForLine?.(lineId) ?? []
     const notesSig = lineNotes.map((n) => `${n.id}:${n.startOffset}:${n.endOffset}:${n.updatedAt}`).join(',')
-    return `${diacriticsState.value}|${settings.censorDivineNames}|${p.searchQuery ?? ''}|${p.searchHighlightLineIndex ?? -1}|${p.searchHighlightQuery ?? ''}|${p.searchHighlightSnippet ?? ''}|${p.searchHighlightTerms?.join(',') ?? ''}|${highlightsSig}|${notesSig}`
+    return `${highlightsSig}|${notesSig}`
   }
 
   function lineContent(raw: string, lineIndex: number, lineId: number): string {
-    const key = getCacheKey(lineId)
-    if (key !== renderCacheKey) {
+    const globalKey = getGlobalKey()
+    if (globalKey !== globalCacheKey) {
       renderCache.clear()
-      renderCacheKey = key
+      perLineAnnotationKey.clear()
+      globalCacheKey = globalKey
     }
+
+    const annotationKey = getAnnotationKey(lineId)
+    if (perLineAnnotationKey.get(lineId) !== annotationKey) {
+      renderCache.delete(lineIndex)
+      perLineAnnotationKey.set(lineId, annotationKey)
+    }
+
     const cached = renderCache.get(lineIndex)
     if (cached !== undefined) return cached
 
