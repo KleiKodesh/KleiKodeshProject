@@ -72,6 +72,20 @@ function onContextWordsInput(event: Event) {
         />
       </div>
 
+ <!-- Context words -->
+      <div class="option-row">
+        <label class="option-label" for="context-words-input">הקשר לפני ואחרי (מילים)</label>
+        <input
+          id="context-words-input"
+          type="number"
+          class="distance-input"
+          :value="props.contextWords"
+          min="0"
+          max="9999"
+          @input="onContextWordsInput"
+        />
+      </div>
+
       <!-- Order mode -->
       <div class="option-row">
         <span class="option-label">סדר מילים לפי שאילתא</span>
@@ -87,21 +101,7 @@ function onContextWordsInput(event: Event) {
             @click="emit('update:requireOrdered', true)"
           >כן</button>
         </div>
-      </div>
-
-      <!-- Context words -->
-      <div class="option-row">
-        <label class="option-label" for="context-words-input">הקשר לפני ואחרי (מילים)</label>
-        <input
-          id="context-words-input"
-          type="number"
-          class="distance-input"
-          :value="props.contextWords"
-          min="0"
-          max="9999"
-          @input="onContextWordsInput"
-        />
-      </div>
+      </div>    
 
       <!-- Grammar wrap -->
       <div class="option-row">

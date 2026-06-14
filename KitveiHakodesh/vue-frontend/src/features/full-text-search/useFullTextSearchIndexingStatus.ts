@@ -1,6 +1,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { isHosted, onWebviewEvent } from '@/webview-host/seforimDb'
 import { callBridgeAction } from '@/webview-host/bridge'
+import { useSearchCacheStore } from '@/stores/searchCacheStore'
 
 export interface IndexingState {
   isReady: boolean
@@ -28,6 +29,7 @@ const IDLE: IndexingState = {
 
 export function useFullTextSearchIndexingStatus() {
   const state = ref<IndexingState>({ ...IDLE })
+  const cache = useSearchCacheStore()
   let unregister: (() => void) | null = null
   let devTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -100,8 +102,11 @@ export function useFullTextSearchIndexingStatus() {
         return
       }
       if (msg.event === 'ftsIndexInvalidated') {
-        // Old or corrupt index detected — rebuild started automatically, nothing to confirm.
+        // Old or corrupt index detected — rebuild started automatically.
+        // All cached search results are from the old index and must be purged,
+        // otherwise stale or corrupt results would be served on the next search.
         console.warn('[useFullTextSearchIndexingStatus] FTS index invalidated:', msg.reason)
+        cache.clear().catch(() => {/* non-fatal */})
         state.value = { ...IDLE, isIndexing: true, totalChunks: 0, eta: '', segmentCount: 0, latestSegmentPct: null }
         return
       }

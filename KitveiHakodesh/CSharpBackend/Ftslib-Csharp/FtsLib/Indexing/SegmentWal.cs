@@ -16,12 +16,12 @@ namespace FtsLib.Indexing
     ///   1. Write merged target to .tmp, then rename to final name.
     ///   2. Delete source segments.
     ///   3. Log END_MERGE.
-    ///   4. Update live state.
+    ///   4. Update live state in memory.
     ///
     /// Recovery rules:
     ///   - BEGIN_MERGE present, sources exist → target is partial; delete target, redo merge.
-    ///   - BEGIN_MERGE present, sources gone, target exists → merge completed but END_MERGE
-    ///     was not written; register target as live and write END_MERGE to close the WAL.
+    ///   - BEGIN_MERGE present, sources gone, target exists → sources deleted but END_MERGE not
+    ///     written; target is complete — register it as live and write END_MERGE to close the WAL.
     ///   - BEGIN_MERGE present, sources gone, target missing → unrecoverable; wipe and rebuild.
     ///   - No BEGIN_MERGE (or matched END_MERGE) → nothing to recover.
     /// </summary>

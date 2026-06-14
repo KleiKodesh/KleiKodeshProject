@@ -308,6 +308,13 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         if (currentSearchId !== searchId) return
         searchError.value = reason
         isSearching.value = false
+        // Delete the partial cache entry so it is never served as a resumable
+        // result on the next session. The stream didn't complete, so whatever
+        // was written by appendBatch is an incomplete and potentially corrupt
+        // snapshot (e.g. index was merging mid-stream).
+        if (cacheKey) {
+          cache.remove(cacheKey).catch(() => {/* non-fatal */})
+        }
         _cleanup()
       },
     })

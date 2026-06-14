@@ -66,13 +66,25 @@ namespace FtsLib.Indexing
             File.Move(tmpDat, outDat);
             File.Move(tmpDb,  outDb);
 
-            // Register the target segment as live BEFORE deleting sources.
-            _store.Wal.EndMerge(level, newSegId);
-            _store.Live.PromoteSegment(level, segIds, nextLevel, newSegId);
-
-            // Delete the source segments. Search is blocked for the duration of this
-            // merge (SegmentStore holds the write lock on _searchMergeLock), so no
-            // reader can have these files open — plain File.Delete is safe.
+            // Delete source segments BEFORE writing END_MERGE.
+            //
+            // Crash-safety ordering:
+            //   1. target files renamed to final path  (target exists, sources exist)
+            //   2. source files deleted                (target exists, sources gone)
+            //   3. END_MERGE written to WAL            (no pending merge on next boot)
+            //   4. live state updated in memory
+            //
+            // If the process crashes between steps 2 and 3, recovery sees a pending
+            // BEGIN_MERGE with target present but sources gone → Case B in SegmentStore:
+            // registers the complete target and writes END_MERGE. Correct.
+            //
+            // If the process crashes between steps 3 and 4, recovery sees no pending
+            // merge (END_MERGE was written), RebuildFromDisk finds only the target
+            // on disk (sources already deleted). Correct — no duplicate data.
+            //
+            // Search is blocked for the entire duration of this merge (SegmentStore
+            // holds the write lock on _searchMergeLock), so no reader can have the
+            // source files open — plain File.Delete is safe.
             foreach (int sid in segIds)
             {
                 DeleteIfExists(_store.Live.SegDatPath(level, sid));
@@ -80,6 +92,9 @@ namespace FtsLib.Indexing
                 DeleteIfExists(_store.Live.SegDbPath(level, sid) + "-shm");
                 DeleteIfExists(_store.Live.SegDbPath(level, sid) + "-wal");
             }
+
+            _store.Wal.EndMerge(level, newSegId);
+            _store.Live.PromoteSegment(level, segIds, nextLevel, newSegId);
 
             Console.WriteLine($"[Merger] Done → L{nextLevel} seg {newSegId} ({entries.Count:N0} terms)");
         }

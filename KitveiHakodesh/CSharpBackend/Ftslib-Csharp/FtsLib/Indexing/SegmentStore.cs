@@ -212,16 +212,17 @@ namespace FtsLib.Indexing
             string targetDb  = Live.SegDbPath(op.Level + 1, op.Target);
 
             // Determine how far the merge got before the crash.
-            // New deletion order: END_MERGE is logged and PromoteSegment() is called
-            // BEFORE sources are deleted. So a PendingMerge entry in the WAL means
-            // BEGIN_MERGE was written but END_MERGE was not yet written — the merge
-            // was interrupted before it completed.
+            // Deletion order: sources are deleted BEFORE END_MERGE is written.
+            // So a PendingMerge entry in the WAL means BEGIN_MERGE was written
+            // but END_MERGE was not yet written — the merge was interrupted before
+            // it fully committed.
             //
             // Possible crash states:
-            //   A) Target exists, sources exist  → crash during write; delete target, re-run merge
-            //   B) Target exists, sources gone   → crash after sources deleted but before END_MERGE
-            //                                      (shouldn't happen with new order, but handle it)
-            //                                      → target is complete; register it, clear WAL
+            //   A) Target exists, sources exist  → crash during write or before sources
+            //                                      were deleted; delete target, re-run merge
+            //   B) Target exists, sources gone   → crash after sources deleted but before
+            //                                      END_MERGE was written; target is complete
+            //                                      — register it and clear WAL
             //   C) Target missing, sources exist → crash before File.Move; re-run merge
             //   D) Target missing, sources gone  → unrecoverable; wipe and rebuild
             bool targetExists  = File.Exists(targetDat) && File.Exists(targetDb);
