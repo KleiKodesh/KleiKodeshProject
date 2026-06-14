@@ -69,7 +69,7 @@ defineExpose({ tocBtnRef })
       ref="tocBtnRef"
       :class="{ active: tocVisible }"
       :disabled="!hasToc"
-      title="תוכן עניינים"
+      title="תוכן עניינים (Ctrl+K)"
       @click="$emit('toggleToc')"
     >
       <IconTreeRtl />

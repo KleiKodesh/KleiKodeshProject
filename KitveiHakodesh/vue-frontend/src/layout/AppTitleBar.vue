@@ -26,12 +26,14 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { usePdfOcrStore } from '@/stores/pdfOcrStore'
 import { useThemeStore } from '@/theme/themeStore'
 import { toggleFullscreen } from '@/webview-host/bridge'
+import { useAppNavigation } from '@/composables/useAppNavigation'
 
 const bookViewStore = useBookViewStore()
 const settingsStore = useSettingsStore()
 const tabStore = useTabStore()
 const pdfOcrStore = usePdfOcrStore()
 const themeStore = useThemeStore()
+const { navigateInNewTab } = useAppNavigation()
 const { titleBarVisible } = useUiChromeVisibility()
 
 const activeTab = computed(() => tabStore.activeTab)
@@ -152,6 +154,9 @@ useEventListener('keydown', (e: KeyboardEvent) => {
   } else if (e.ctrlKey && e.code === 'KeyJ') {
     e.preventDefault()
     if (bookViewStore.isBookViewActive) bookViewStore.toggleBottomPanel()
+  } else if (e.ctrlKey && e.code === 'KeyK') {
+    e.preventDefault()
+    if (bookViewStore.isBookViewActive) bookViewStore.toggleTocPanel()
   } else if (e.ctrlKey && e.shiftKey && e.code === 'KeyF') {
     e.preventDefault()
     toggleFullscreen()
@@ -185,6 +190,39 @@ useEventListener('keydown', (e: KeyboardEvent) => {
   } else if (e.ctrlKey && e.code === 'KeyG') {
     e.preventDefault()
     goHome()
+  } else if (e.code === 'F1') {
+    e.preventDefault()
+    navigateInNewTab('הגדרות')
+  } else if (e.ctrlKey && e.code === 'Digit1') {
+    e.preventDefault()
+    navigateInNewTab('ספרים')
+  } else if (e.ctrlKey && e.code === 'Digit2') {
+    e.preventDefault()
+    navigateInNewTab('חיפוש')
+  } else if (e.ctrlKey && e.code === 'Digit3') {
+    e.preventDefault()
+    navigateInNewTab('היברו-בוקס')
+  } else if (e.ctrlKey && e.code === 'Digit4') {
+    e.preventDefault()
+    navigateInNewTab('פתח קובץ')
+  } else if (e.ctrlKey && e.code === 'Digit5') {
+    e.preventDefault()
+    navigateInNewTab('חיפוש קבצים')
+  } else if (e.ctrlKey && e.code === 'Digit6') {
+    e.preventDefault()
+    navigateInNewTab('מילון')
+  } else if (e.ctrlKey && e.code === 'Digit7') {
+    e.preventDefault()
+    navigateInNewTab('לוח שנה')
+  } else if (e.ctrlKey && e.code === 'Digit8') {
+    e.preventDefault()
+    navigateInNewTab('מידות ושיעורים')
+  } else if (e.ctrlKey && e.code === 'Digit9') {
+    e.preventDefault()
+    navigateInNewTab('סביבות עבודה')
+  } else if (e.code === 'F1') {
+    e.preventDefault()
+    navigateInNewTab('הגדרות')
   }
 }, { capture: true })
 </script>

@@ -18,6 +18,7 @@ export const useBookViewStore = defineStore('bookView', () => {
   const toolbarPosition = ref<ToolbarPosition>('top')
   const toggleBottomPanelSignal = ref(0)
   const openSearchSignal = ref(0)
+  const toggleTocPanelSignal = ref(0)
   const autoSelectTopLine = ref(false)
 
   function toggleBottomPanel() {
@@ -26,6 +27,10 @@ export const useBookViewStore = defineStore('bookView', () => {
 
   function openSearch() {
     openSearchSignal.value++
+  }
+
+  function toggleTocPanel() {
+    toggleTocPanelSignal.value++
   }
 
   const isBookViewActive = computed(() => tabStore.activeTab.route === '/book-view')
@@ -118,6 +123,8 @@ export const useBookViewStore = defineStore('bookView', () => {
     toggleBottomPanel,
     openSearchSignal,
     openSearch,
+    toggleTocPanelSignal,
+    toggleTocPanel,
     isBookViewActive,
     zoom,
     getZoom,

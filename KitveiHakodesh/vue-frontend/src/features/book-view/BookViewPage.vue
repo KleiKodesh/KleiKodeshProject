@@ -112,6 +112,10 @@ watch(() => bookViewStore.openSearchSignal, () => {
 watch(() => bookViewStore.toggleBottomPanelSignal, () => {
   cycleCommentaryMode()
 })
+// Listen for Ctrl+K from AppTitleBar to toggle TOC panel
+watch(() => bookViewStore.toggleTocPanelSignal, () => {
+  toggleTocPanel()
+})
 </script>
 
 <template>

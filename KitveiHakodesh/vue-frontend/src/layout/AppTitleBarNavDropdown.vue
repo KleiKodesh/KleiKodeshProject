@@ -30,16 +30,16 @@ useDropdownClose(menuRef, () => emit('close'), {
 })
 
 const tiles = [
-  { label: 'ספרים', icon: IconLibrary24Filled, color: '#B5451B' },
-  { label: 'חיפוש', icon: IconSearchSparkle24, color: undefined },
-  { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#D94F1E' },
-  { label: 'פתח קובץ', icon: IconFolder24Filled, color: '#f0a500' },
-  { label: 'חיפוש קבצים', icon: IconEverythingSearch, color: undefined },
-  { label: 'מילון', icon: IconBookLetter24Filled, color: '#7b5ea7' },
-  { label: 'לוח שנה', icon: IconCalendarRtl24Filled, color: '#2e7d32' },
-  { label: 'מידות ושיעורים', icon: IconRuler24Filled, color: '#8b6914' },
-  { label: 'הגדרות', icon: IconSettings24, color: undefined },
-  { label: 'סביבות עבודה', icon: IconApps24Filled, color: '#6b7fc4' },
+  { label: 'ספרים', icon: IconLibrary24Filled, color: '#B5451B', shortcut: 'Ctrl+1' },
+  { label: 'חיפוש', icon: IconSearchSparkle24, color: undefined, shortcut: 'Ctrl+2' },
+  { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#D94F1E', shortcut: 'Ctrl+3' },
+  { label: 'פתח קובץ', icon: IconFolder24Filled, color: '#f0a500', shortcut: 'Ctrl+4' },
+  { label: 'חיפוש קבצים', icon: IconEverythingSearch, color: undefined, shortcut: 'Ctrl+5' },
+  { label: 'מילון', icon: IconBookLetter24Filled, color: '#7b5ea7', shortcut: 'Ctrl+6' },
+  { label: 'לוח שנה', icon: IconCalendarRtl24Filled, color: '#2e7d32', shortcut: 'Ctrl+7' },
+  { label: 'מידות ושיעורים', icon: IconRuler24Filled, color: '#8b6914', shortcut: 'Ctrl+8' },
+  { label: 'סביבות עבודה', icon: IconApps24Filled, color: '#6b7fc4', shortcut: 'Ctrl+9' },
+  { label: 'הגדרות', icon: IconSettings24, color: undefined, shortcut: 'F1' },
 ]
 
 async function onTap(label: string) {
@@ -55,11 +55,19 @@ function onPopOut() {
 
 <template>
   <div ref="menuRef" class="nav-dropdown" @click.stop>
-    <button v-for="tile in tiles" :key="tile.label" class="nav-row" @click="onTap(tile.label)">
+    <button
+      v-for="(tile, index) in tiles"
+      :key="tile.label"
+      class="nav-row"
+      :class="{ 'nav-row-separator': index === tiles.length - 1 }"
+      :title="`${tile.label} (${tile.shortcut})`"
+      @click="onTap(tile.label)"
+    >
       <span class="nav-icon">
         <component :is="tile.icon" :style="tile.color ? { color: tile.color } : {}" />
       </span>
       <span class="nav-label">{{ tile.label }}</span>
+      <span class="nav-shortcut">{{ tile.shortcut }}</span>
     </button>
     <button
       v-if="showPopOutButton"
@@ -129,5 +137,21 @@ function onPopOut() {
   font-size: 13px;
   color: var(--text-primary);
   white-space: nowrap;
+  flex: 1;
+}
+
+.nav-shortcut {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  direction: ltr;
+  margin-inline-start: auto;
+}
+
+.nav-row-separator {
+  border-top: 1px solid var(--border-color);
+  margin-top: 3px;
+  padding-top: 3px;
+  height: 39px;
 }
 </style>

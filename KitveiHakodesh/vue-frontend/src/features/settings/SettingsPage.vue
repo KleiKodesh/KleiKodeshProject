@@ -283,6 +283,47 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
               <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>L</kbd>
               <span class="shortcut-desc">החלף ערכת נושא</span>
             </div>
+            <!-- Quick navigation -->
+            <div class="shortcut-row">
+              <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>1</kbd>
+              <span class="shortcut-desc">ספרים</span>
+            </div>
+            <div class="shortcut-row">
+              <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>2</kbd>
+              <span class="shortcut-desc">חיפוש</span>
+            </div>
+            <div class="shortcut-row">
+              <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>3</kbd>
+              <span class="shortcut-desc">היברו-בוקס</span>
+            </div>
+            <div class="shortcut-row">
+              <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>4</kbd>
+              <span class="shortcut-desc">פתח קובץ</span>
+            </div>
+            <div class="shortcut-row">
+              <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>5</kbd>
+              <span class="shortcut-desc">חיפוש קבצים</span>
+            </div>
+            <div class="shortcut-row">
+              <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>6</kbd>
+              <span class="shortcut-desc">מילון</span>
+            </div>
+            <div class="shortcut-row">
+              <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>7</kbd>
+              <span class="shortcut-desc">לוח שנה</span>
+            </div>
+            <div class="shortcut-row">
+              <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>8</kbd>
+              <span class="shortcut-desc">מידות ושיעורים</span>
+            </div>
+            <div class="shortcut-row">
+              <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>9</kbd>
+              <span class="shortcut-desc">סביבות עבודה</span>
+            </div>
+            <div class="shortcut-row">
+              <kbd>F1</kbd>
+              <span class="shortcut-desc">הגדרות</span>
+            </div>
             <!-- Book view controls -->
             <div class="shortcut-row">
               <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>B</kbd>
@@ -291,6 +332,10 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
             <div class="shortcut-row">
               <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>J</kbd>
               <span class="shortcut-desc">הצג / הסתר מפרשים (בתצוגת ספר)</span>
+            </div>
+            <div class="shortcut-row">
+              <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>K</kbd>
+              <span class="shortcut-desc">הצג / הסתר תוכן עניינים (בתצוגת ספר)</span>
             </div>
             <div class="shortcut-row">
               <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>F</kbd>
