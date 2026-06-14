@@ -100,6 +100,16 @@ namespace FtsLib.Search
         public List<string> ExpandWildcard(string pattern)
             => HebrewWildcardExpander.Expand(pattern, _segments);
 
+        // ── Grammar expansion ─────────────────────────────────────────
+
+        /// <summary>
+        /// Expands a word with Hebrew grammatical prefixes and/or suffixes,
+        /// verifying each candidate against the segment term_index.
+        /// Returns an empty list when nothing matches.
+        /// </summary>
+        public List<string> ExpandGrammar(string word, bool expandPrefixes, bool expandSuffixes)
+            => GrammarExpander.Expand(word, expandPrefixes, expandSuffixes, _segments);
+
         // ── Fuzzy expansion ───────────────────────────────────────────
 
         /// <summary>

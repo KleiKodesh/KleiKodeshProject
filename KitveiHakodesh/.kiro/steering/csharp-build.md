@@ -17,11 +17,11 @@ The `packages/` folders are gitignored and must be restored on every fresh clone
 Restore commands (run from the workspace root):
 
 ```
-.\nuget.exe restore "CSharpBackend\SearchEngine\SearchEngine.sln" -PackagesDirectory "CSharpBackend\SearchEngine\packages"
+.\nuget.exe restore "CSharpBackend\Ftslib-Csharp\FtsLib.slnx" -PackagesDirectory "CSharpBackend\Ftslib-Csharp\packages"
 .\nuget.exe restore "CSharpBackend\KitveiHakodesh.slnx"
 ```
 
-The first restore (`SearchEngine.sln`) covers the Lucene-based search engine; the second restore (`KitveiHakodesh.slnx`) covers `KitveiHakodeshLib`, `KitveiHakodeshDemoApp`, `SearchEngine`, `DocumentLocator.Client`, `DocumentLocator.Service`, and the core `DocumentLocator` library — their packages folder is `CSharpBackend\packages\` (the default, no `-PackagesDirectory` override needed).
+The first restore (`FtsLib.slnx`) covers the FtsLib custom search engine; the second restore (`KitveiHakodesh.slnx`) covers `KitveiHakodeshLib`, `KitveiHakodeshDemoApp`, `FtsLib`, `DocumentLocator.Client`, `DocumentLocator.Service`, and the core `DocumentLocator` library — their packages folder is `CSharpBackend\packages\` (the default, no `-PackagesDirectory` override needed).
 
 ## Building
 

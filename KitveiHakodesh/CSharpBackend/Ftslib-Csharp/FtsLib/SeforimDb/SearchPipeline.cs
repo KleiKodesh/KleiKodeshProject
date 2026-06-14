@@ -167,7 +167,7 @@ namespace FtsLib.SeforimDb
             hardMiss = false;
 
             // Fast path: single literal alternative (the common case).
-            if (group.IsSingle && !group.IsWildcard && !group.IsFuzzy)
+            if (group.IsSingle && !group.IsWildcard && !group.IsFuzzy && !group.IsGrammar)
             {
                 var result = new List<string> { group.Pattern };
                 // כתיב expansion: add spelling variants as additional OR alternatives.
@@ -201,6 +201,13 @@ namespace FtsLib.SeforimDb
                 else if (alt.IsWildcard)
                 {
                     expanded = reader.ExpandWildcard(alt.Pattern);
+                    if (expanded.Count == 0) continue;
+                }
+                else if (alt.IsGrammar)
+                {
+                    expanded = reader.ExpandGrammar(alt.Pattern,
+                                                    alt.GrammarExpandPrefixes,
+                                                    alt.GrammarExpandSuffixes);
                     if (expanded.Count == 0) continue;
                 }
                 else

@@ -142,7 +142,7 @@ The main book reader. Orchestrates a split pane (text above, commentary below), 
 
 ### full-text-search/
 
-Full-text search backed by SearchEngineLib with Lucene-based inverted indexing. Supports category/book filters and caches results in IDB.
+Full-text search backed by FtsLib with a custom LSM-style segment index. Supports category/book filters and caches results in IDB.
 
 - `FullTextSearchPage.vue` — main page
 - `FullTextSearchBar.vue` — search input + filter toggle
@@ -155,12 +155,12 @@ Full-text search backed by SearchEngineLib with Lucene-based inverted indexing. 
 - `useFullTextSearchFilters.ts` — filter state (checked books/categories), result filtering, and result click handler
 - `fullTextSearchTypes.ts` — TypeScript types
 
-#### Query syntax (Lucene-based)
+#### Query syntax (FtsLib)
 
 - Multiple words are AND-ed by default. `word*` is a prefix wildcard, `*word` is a suffix wildcard, `*word*` is an infix wildcard.
 - Fuzzy matching: `word~1` / `word~2` for edit distance 1–2 (Levenshtein distance).
 - OR within a slot: `a | b` matches lines with either a or b.
-- Grammar expansion: `%word` for prefix expansion, `word%` for suffix expansion, `%word%` for both.
+- Grammar expansion: `%word` for prefix expansion (all grammatical prefixes prepended), `word%` for suffix expansion (all grammatical suffixes appended), `%word%` for both. Handled natively in FtsLib by `GrammarExpander` — candidates are verified against the index so only forms that actually exist are matched.
 - Spelling variants (ketiv/chaseir): `~word` to match Hebrew spelling variants.
 - Wrapping modes (frontend-side options):
   - `searchWildcardWrap` — auto-wrap each term with `*term*` for infix search
@@ -394,7 +394,7 @@ Key C# handlers:
 - `JsBridge.cs` — handles `__webviewAction` calls (file picker, PDF restore, virtual host management)
 - `WebBridge.cs` — WebView2 setup, message routing
 - `DbAccess.cs` / `DbHandler.cs` — SQLite access via Dapper
-- `SearchHandler.cs` — Lucene index lifecycle orchestrator; delegates to search engine components in `KitveiHakodeshLib/Search/`
+- `SearchHandler.cs` — FtsLib index lifecycle orchestrator; delegates to search engine components in `KitveiHakodeshLib/Search/`
 - `HebrewBooksHandler.cs` — HebrewBooks download via WebView2 browser engine
 - `LocalFileHandler.cs` — local file virtual host management
 - `ZimHandler.cs` — ZIM virtual host management (Kiwix reader)
@@ -402,9 +402,9 @@ Key C# handlers:
 
 ### Full-Text Search Pipeline
 
-The full-text search pipeline spans three layers: SearchEngineLib (the Lucene-based index engine), KitveiHakodeshLib (the C# orchestration layer), and the Vue frontend.
+The full-text search pipeline spans three layers: FtsLib (the custom index engine), KitveiHakodeshLib (the C# orchestration layer), and the Vue frontend.
 
-**SearchEngineLib** contains the Lucene-based full-text search implementation backed by Lucene's inverted index. The search engine handles index building, querying, and result retrieval with support for prefix/suffix/infix wildcards, fuzzy matching (Levenshtein distance), and Hebrew-specific features like spelling variant expansion.
+**FtsLib** (`CSharpBackend/Ftslib-Csharp/`) is a custom LSM-style segment index built specifically for Hebrew/Aramaic seforim. It uses delta+varint compressed posting lists and skip-list accelerated intersection. The search engine handles index building, querying, and result retrieval with support for prefix/suffix/infix wildcards, fuzzy matching (Levenshtein distance), and Hebrew-specific features like spelling variant expansion. Public API entry point is `SeforimIndex` in `FtsLib/SeforimDb/`.
 
 **KitveiHakodeshLib/Search/** contains the orchestration classes:
 

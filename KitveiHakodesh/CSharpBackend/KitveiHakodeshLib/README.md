@@ -1,6 +1,6 @@
 # KitveiHakodeshLib — C# Backend for the KitveiHakodesh Vue App
 
-A .NET class library that hosts the KitveiHakodesh Vue app inside a WebView2 control and bridges it to native Windows APIs (file system, SQLite, PDF handling, HebrewBooks downloads, Lucene full-text search).
+A .NET class library that hosts the KitveiHakodesh Vue app inside a WebView2 control and bridges it to native Windows APIs (file system, SQLite, PDF handling, HebrewBooks downloads, FtsLib full-text search).
 
 ## How It Integrates with the VSTO Add-in
 
@@ -19,7 +19,7 @@ KitveiHakodeshLib/
 │   ├── DbHandler.cs          — Handles 'sql' and 'pickDbPath' messages; runs queries
 │   └── DbAccess.cs           — SQLite wrapper using Dapper
 ├── Search/
-│   └── SearchHandler.cs      — Lucene indexing & search; index lifecycle management
+│   └── SearchHandler.cs      — FtsLib indexing & search; index lifecycle management
 ├── Pdf/
 │   └── LocalFileHandler.cs   — File picker for local files; virtual host mapping; Word→PDF conversion
 ├── HebrewBooks/
@@ -69,4 +69,4 @@ Push events (e.g. `ftsIndexProgress`, `ftsIndexInvalidated`) use `WebBridge.Push
 3. Injects `JsBridge.Script` so the page has `window.__webviewAction` available before any JS runs.
 4. Navigates to `https://KitveiHakodesh-vue-app/index.html`.
 5. On `DOMContentLoaded`, `DbHandler` checks for a previously selected DB path and fires `dbReady` if found.
-6. `SearchHandler.OnDbReady()` triggers Lucene index build if no valid index exists.
+6. `SearchHandler.OnDbReady()` triggers FtsLib index build if no valid index exists.

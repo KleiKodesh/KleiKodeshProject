@@ -103,7 +103,7 @@ namespace KitveiHakodeshLib.Search
                 //              the 16-result flush), switch to flushing every 250ms
                 //              regardless of batch size. A memory safety cap of 200
                 //              forces a flush even if the timer hasn't fired yet.
-                const int TimerIntervalMs = 250;
+                const int TimerIntervalMs = 300;
                 const int MemorySafetyCap = 200;
 
                 // Doubling thresholds: flush when batch reaches each of these sizes.

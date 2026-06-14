@@ -7,7 +7,7 @@
  *
  * Falls back to sample data in dev when the C# host is not present.
  */
-import { ref } from 'vue'
+import { ref, shallowRef } from 'vue'
 import { storeToRefs } from 'pinia'
 import { isHosted, query, onWebviewEvent } from '@/webview-host/seforimDb'
 import { SQL } from '@/webview-host/queries.sql'
@@ -208,7 +208,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     ]
       .filter(Boolean)
       .join('|')
-  }  const results = ref<FullTextSearchResult[]>([])
+  }  const results = shallowRef<FullTextSearchResult[]>([])
   const isSearching = ref(false)
   const hasSearched = ref(false)
   const executedQuery = ref('')
@@ -216,7 +216,70 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   let currentSearchId: string | null = null
   let resultsReadyResolve: (() => void) | null = null
 
+  // Accumulation buffer — batches are held here and flushed to `results` at most
+  // every FLUSH_INTERVAL_MS. This prevents Vue from re-rendering on every C#
+  // batch when the result set is large.
+  const FLUSH_INTERVAL_MS = 150
+  let _pendingBuffer: FullTextSearchResult[] = []
+  let _flushTimer: ReturnType<typeof setTimeout> | null = null
+
+  // Safety timeout — if the C# search stream goes silent (no complete/error/cancel
+  // event arrives within this window), we assume the search thread crashed or the
+  // bridge dropped the message and reset to a recoverable state automatically.
+  const SEARCH_TIMEOUT_MS = 60_000
+  let _searchTimeoutTimer: ReturnType<typeof setTimeout> | null = null
+
+  function _scheduleFlush() {
+    if (_flushTimer !== null) return
+    _flushTimer = setTimeout(() => {
+      _flushTimer = null
+      if (_pendingBuffer.length === 0) return
+      const flushed = _pendingBuffer
+      _pendingBuffer = []
+      results.value = [...results.value, ...flushed]
+    }, FLUSH_INTERVAL_MS)
+  }
+
+  function _flushNow() {
+    if (_flushTimer !== null) {
+      clearTimeout(_flushTimer)
+      _flushTimer = null
+    }
+    if (_pendingBuffer.length > 0) {
+      const flushed = _pendingBuffer
+      _pendingBuffer = []
+      results.value = [...results.value, ...flushed]
+    }
+  }
+
+  function _startSearchTimeout(searchId: string) {
+    _clearSearchTimeout()
+    _searchTimeoutTimer = setTimeout(() => {
+      _searchTimeoutTimer = null
+      // Only reset if this specific search is still in-flight
+      if (currentSearchId !== searchId) return
+      console.warn('[useFullTextSearch] Search timed out — resetting state for recovery')
+      _flushNow()
+      isSearching.value = false
+      searchError.value = 'searchFailed'
+      _cleanup()
+    }, SEARCH_TIMEOUT_MS)
+  }
+
+  function _clearSearchTimeout() {
+    if (_searchTimeoutTimer !== null) {
+      clearTimeout(_searchTimeoutTimer)
+      _searchTimeoutTimer = null
+    }
+  }
+
   function _cleanup() {
+    _clearSearchTimeout()
+    if (_flushTimer !== null) {
+      clearTimeout(_flushTimer)
+      _flushTimer = null
+    }
+    _pendingBuffer = []
     if (currentSearchId) {
       _searchListeners.delete(currentSearchId)
       _pendingBatches.delete(currentSearchId)
@@ -255,6 +318,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       return
     }
     currentSearchId = searchId
+    _startSearchTimeout(searchId)
 
     // Create a promise that resolves when the first batch arrives
     let firstBatchReady = false
@@ -271,11 +335,13 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       onBatch: async (batch) => {
         if (currentSearchId !== searchId) return
         resultsReadyResolve?.()
+        _startSearchTimeout(searchId) // reset the watchdog on every batch
         await enrichTocPaths(batch)
         // Re-check after the async enrichment — currentSearchId may have changed
         // while enrichTocPaths was awaiting the SQL query.
         if (currentSearchId !== searchId) return
-        results.value = [...results.value, ...batch]
+        _pendingBuffer.push(...batch)
+        _scheduleFlush()
         // Only persist to IDB when the index is fully built — partial results
         // from a mid-build search would be cached as complete and served stale.
         if (!isIndexing?.()) {
@@ -288,6 +354,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       },
       onComplete: async () => {
         if (currentSearchId !== searchId) return
+        _flushNow()
         isSearching.value = false
         if (!isIndexing?.()) {
           try {
@@ -306,6 +373,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       onError: (reason) => {
         console.error('[useFullTextSearch] search error:', reason)
         if (currentSearchId !== searchId) return
+        _flushNow()
         searchError.value = reason
         isSearching.value = false
         // Delete the partial cache entry so it is never served as a resumable
@@ -323,7 +391,11 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     await resultsReady
   }
 
-  async function executeSearch(q: string) {
+  // How many times to auto-retry on indexMerging before giving up
+  const MERGE_RETRY_DELAY_MS = 1500
+  const MERGE_RETRY_MAX = 4
+
+  async function executeSearch(q: string, _mergeRetryCount = 0) {
     if (!q.trim()) return
 
     if (currentSearchId) await cancelSearch()
@@ -353,6 +425,21 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     } catch (err) {
       console.error('[useFullTextSearch] failed to start search:', err)
       isSearching.value = false
+    }
+
+    // Auto-retry on indexMerging — the merge is transient and typically resolves
+    // within a few seconds. Retry up to MERGE_RETRY_MAX times with a short delay.
+    if (searchError.value === 'indexMerging' && _mergeRetryCount < MERGE_RETRY_MAX) {
+      console.warn(
+        `[useFullTextSearch] indexMerging — retrying in ${MERGE_RETRY_DELAY_MS}ms (attempt ${_mergeRetryCount + 1}/${MERGE_RETRY_MAX})`,
+      )
+      searchError.value = null
+      isSearching.value = true
+      await new Promise((resolve) => setTimeout(resolve, MERGE_RETRY_DELAY_MS))
+      // Check the query hasn't changed while we were waiting
+      if (executedQuery.value === q) {
+        await executeSearch(q, _mergeRetryCount + 1)
+      }
     }
   }
 

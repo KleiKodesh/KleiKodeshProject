@@ -110,6 +110,17 @@ namespace FtsLib.Search
         /// </summary>
         private static SubPattern? ParseToken(string raw)
         {
+            // ── Strip grammar expansion markers (%) ───────────────────
+            // '%' at the start means expand prefixes; '%' at the end means expand
+            // suffixes. These are stripped before normalisation so Normalise never
+            // sees them (it would drop them anyway, but being explicit is cleaner).
+            // '*' overrides '%': if the token also contains '*', it is treated as a
+            // plain wildcard and the grammar flags are ignored.
+            bool grammarPrefix = raw.StartsWith("%");
+            bool grammarSuffix = raw.EndsWith("%");
+            if (grammarPrefix || grammarSuffix)
+                raw = raw.Trim('%');
+
             // Split off a trailing fuzzy suffix (~  or ~N) before normalising,
             // because '~' and digits would otherwise be dropped by Normalise.
             string tokenText = raw;
@@ -143,7 +154,13 @@ namespace FtsLib.Search
             // The wildcard wins: the fuzzy suffix is silently stripped.
             if (isFuzzy && isWildcard) isFuzzy = false;
 
-            return new SubPattern(normalised, isWildcard, isFuzzy, fuzzyDist);
+            // '*' overrides '%': if the token is a wildcard the grammar flags are ignored.
+            if (isWildcard)
+                grammarPrefix = grammarSuffix = false;
+
+            return new SubPattern(normalised, isWildcard, isFuzzy, fuzzyDist,
+                                  grammarExpandPrefixes: grammarPrefix,
+                                  grammarExpandSuffixes: grammarSuffix);
         }
 
         // ── Normalisation ─────────────────────────────────────────────
@@ -239,6 +256,9 @@ namespace FtsLib.Search
 
         /// <summary>Fuzzy distance of the first alternative.</summary>
         public int FuzzyDistance => Alternatives[0].FuzzyDistance;
+
+        /// <summary>True when the first alternative is a grammar-expansion term.</summary>
+        public bool IsGrammar => Alternatives[0].IsGrammar;
     }
 
     /// <summary>
@@ -250,6 +270,7 @@ namespace FtsLib.Search
         /// The normalised token text.
         /// For wildcards this still contains '*' characters.
         /// For fuzzy terms the '~' suffix has been removed.
+        /// For grammar terms the '%' markers have been removed.
         /// </summary>
         public readonly string Pattern;
 
@@ -265,13 +286,25 @@ namespace FtsLib.Search
         /// </summary>
         public readonly int FuzzyDistance;
 
+        /// <summary>True when this token has a leading '%' — expand grammatical prefixes.</summary>
+        public readonly bool GrammarExpandPrefixes;
+
+        /// <summary>True when this token has a trailing '%' — expand grammatical suffixes.</summary>
+        public readonly bool GrammarExpandSuffixes;
+
+        /// <summary>True when this is a grammar-expansion token (at least one % marker).</summary>
+        public bool IsGrammar => GrammarExpandPrefixes || GrammarExpandSuffixes;
+
         public SubPattern(string pattern, bool isWildcard,
-                          bool isFuzzy = false, int fuzzyDistance = 1)
+                          bool isFuzzy = false, int fuzzyDistance = 1,
+                          bool grammarExpandPrefixes = false, bool grammarExpandSuffixes = false)
         {
-            Pattern       = pattern;
-            IsWildcard    = isWildcard;
-            IsFuzzy       = isFuzzy;
-            FuzzyDistance = fuzzyDistance;
+            Pattern                = pattern;
+            IsWildcard             = isWildcard;
+            IsFuzzy                = isFuzzy;
+            FuzzyDistance          = fuzzyDistance;
+            GrammarExpandPrefixes  = grammarExpandPrefixes;
+            GrammarExpandSuffixes  = grammarExpandSuffixes;
         }
     }
 }
