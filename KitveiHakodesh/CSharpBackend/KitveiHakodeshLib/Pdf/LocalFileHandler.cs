@@ -37,8 +37,21 @@ namespace KitveiHakodeshLib.LocalFile
         /// <summary>
         /// Opens a file directly by path — used when the app is launched via the Windows
         /// "Open With" context menu or via a command-line argument.
-        /// Mirrors HandlePickFile but skips the dialog; pushes the same events the Vue
-        /// frontend expects so the file opens as a new tab automatically.
+        ///
+        /// Pushes exactly the same events as HandlePickFile so the Vue localFileStore
+        /// handles this identically to a user-initiated file pick:
+        ///
+        ///   PDF / HTML / TXT  →  localFileReady { url, fileName, filePath }
+        ///                         Vue: updateActiveTab with correct route + all persisted fields
+        ///
+        ///   Word / RTF        →  localFileConversionStarted { fileName, filePath }
+        ///                         Vue: shows converting placeholder in /pdf-view
+        ///                       localFileConversionReady { url, fileName, filePath }  (fast path via FileSystemWatcher)
+        ///                         Vue: finishLocalFileConversion → sets localFilePath to original
+        ///                              source path (not cache path) so session restore works
+        ///
+        /// No extra events are pushed — the final state is reached via the same event
+        /// sequence that HandlePickFile produces.
         /// </summary>
         public async Task OpenFileFromPathAsync(string filePath)
         {
@@ -52,18 +65,38 @@ namespace KitveiHakodeshLib.LocalFile
 
             if (ext == ".pdf" || ext == ".htm" || ext == ".html" || ext == ".txt")
             {
+                // Directly hostable — register the folder as a virtual host and fire
+                // localFileReady. Vue routes to /pdf-view or /html-view based on extension,
+                // and sets localFilePath for session restore.
                 string url = RegisterFolder(filePath);
-                _bridge.PushEvent(new { @event = "localFileReady", url, fileName = Path.GetFileName(filePath), filePath });
+                _bridge.PushEvent(new
+                {
+                    @event = "localFileReady",
+                    url,
+                    fileName = Path.GetFileName(filePath),
+                    filePath
+                });
             }
             else
             {
+                // Word / RTF — needs conversion.
+                // Push localFileConversionStarted so Vue immediately navigates the active tab
+                // to /pdf-view with the converting placeholder (same as HandlePickFile).
                 string displayName = Path.GetFileNameWithoutExtension(filePath) + ".pdf";
-                string destPath = GetCachePath(filePath);
+                string destPath    = GetCachePath(filePath);
                 string destFileName = Path.GetFileName(destPath);
+
                 _bridge.PushEvent(new { @event = "localFileConversionStarted", fileName = displayName, filePath });
 
+                // Watch for the output PDF to appear — fires as soon as ExportAsFixedFormat
+                // writes the file, before Word has finished closing. This lets the tab update
+                // immediately without waiting for app.Quit() to return.
+                // localFileConversionReady is the terminal event for Word files: Vue calls
+                // finishLocalFileConversion which sets localFilePath to the *original* source
+                // path so session restore can reconvert if the cache is evicted.
                 Directory.CreateDirectory(WordCacheDir);
                 FileSystemWatcher watcher = null;
+                bool watcherFired = false;
                 if (!File.Exists(destPath))
                 {
                     watcher = new FileSystemWatcher(WordCacheDir, destFileName)
@@ -72,12 +105,11 @@ namespace KitveiHakodeshLib.LocalFile
                         EnableRaisingEvents = true,
                     };
                     FileSystemEventHandler onReady = null;
-                    bool fired = false;
                     onReady = (s, e) =>
                     {
                         if (!IsFileReady(e.FullPath)) return;
-                        if (fired) return;
-                        fired = true;
+                        if (watcherFired) return;
+                        watcherFired = true;
                         watcher.EnableRaisingEvents = false;
                         watcher.Dispose();
                         string url2 = "http://KitveiHakodesh-vue-app/cache/word/" + destFileName;
@@ -97,12 +129,24 @@ namespace KitveiHakodeshLib.LocalFile
 
                 if (cached == null)
                 {
-                    _bridge.PushEvent(new { @event = "localFileError", message = "לא ניתן להמיר את הקובץ: " + Path.GetFileName(filePath) });
+                    // Conversion failed — tab is still showing the converting placeholder.
+                    // Push localFileError so Vue's localFileStore resets it to home.
+                    _bridge.PushEvent(new { @event = "localFileError", message = "לא ניתן להמיר את הקובץ. ודא ש-Microsoft Word מותקן.", filePath });
                     return;
                 }
 
-                string url = "http://KitveiHakodesh-vue-app/cache/word/" + Path.GetFileName(cached);
-                _bridge.PushEvent(new { @event = "localFileReady", url, fileName = displayName, filePath });
+                // Push localFileConversionReady if it hasn't been pushed yet:
+                //   — watcher == null  → file was already cached; watcher was never set up
+                //   — !watcherFired    → watcher was set up but the callback lost the race
+                //                        with ConvertToPdfAsync returning (very rare)
+                // HandlePickFile has the same fallback via _bridge.Reply on the RPC path;
+                // the Vue hosted frontend ignores that reply but arrives at the same state
+                // because finishLocalFileConversion is idempotent (bails if !localFileConverting).
+                if (!watcherFired)
+                {
+                    string url = "http://KitveiHakodesh-vue-app/cache/word/" + Path.GetFileName(cached);
+                    _bridge.PushEvent(new { @event = "localFileConversionReady", url, fileName = displayName, filePath });
+                }
             }
         }
 

@@ -55,9 +55,18 @@ export const useLocalFileStore = defineStore('localFile', () => {
       }
     }
     if (msg.event === 'localFileError') {
-      // A file opened via the Windows context menu could not be found or converted.
-      // The active tab is still on the home page — nothing to undo, just surface a toast.
-      // We use a native alert because this arrives outside any component context.
+      // Conversion failed while a Word file was being opened via "Open With".
+      // If the active tab is still showing the converting placeholder, reset it to home.
+      const filePath = msg.filePath as string | undefined
+      const convertingTabId = filePath
+        ? Array.from(_converting).find((tid) => {
+            const tab = tabStore.tabs.find((x) => x.id === tid)
+            return tab?.localFilePath === filePath
+          })
+        : undefined
+      if (convertingTabId) {
+        finishLocalFileConversion(convertingTabId, null)
+      }
       window.alert(msg.message as string)
     }
     if (msg.event === 'hbPdfReady') {
