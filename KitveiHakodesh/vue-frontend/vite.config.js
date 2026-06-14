@@ -113,7 +113,22 @@ export default defineConfig({
     resolve: {
         alias: {
             '@': fileURLToPath(new URL('./src', import.meta.url)),
+            // Chromium 138+ (WebView2 1.0.3912 = Chromium 147) ships Temporal natively.
+            // @hebcal/core imports temporal-polyfill/global which adds ~118KB to the bundle.
+            // Stub it out — the native Temporal object is already available.
+            'temporal-polyfill/global': fileURLToPath(new URL('./src/stubs/temporal-polyfill-stub.ts', import.meta.url)),
         },
+    },
+    optimizeDeps: {
+        // Exclude large packages that tree-shake well from dep pre-bundling.
+        // Including them in the pre-bundle means the browser downloads and parses the
+        // entire package on cold start. Excluding lets Vite serve only the symbols
+        // actually imported, as individual transformed modules.
+        exclude: [
+            '@iconify-prerendered/vue-fluent',
+            '@iconify-prerendered/vue-fluent-color',
+            'tesseract.js',
+        ],
     },
     build: {
         assetsInlineLimit: Number.MAX_SAFE_INTEGER,

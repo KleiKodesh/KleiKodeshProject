@@ -1,5 +1,5 @@
 import { ref, onUnmounted } from 'vue'
-import { createWorker, type Worker } from 'tesseract.js'
+import type { Worker } from 'tesseract.js'
 import { PDF_OCR_INJECTED_SCRIPT } from './pdfOcrInjectedScript'
 
 import type { OcrScript, OcrSelectionResult } from './pdfViewerTypes'
@@ -24,8 +24,12 @@ export function usePdfOcrSelection(getIframe: () => HTMLIFrameElement | null) {
 
   // ── Tesseract workers ──────────────────────────────────────────────────────
 
+  // Tesseract is imported dynamically on first use so it does not add to the
+  // initial JS parse cost — it's only needed when the user opens a PDF tab and
+  // activates OCR mode.
   async function initWorker(targetScript: OcrScript) {
     if (workers[targetScript]) return
+    const { createWorker } = await import('tesseract.js')
     workers[targetScript] = await createWorker(LANG_FILES[targetScript], 1, {
       langPath: '/tesseract/',
       gzip: false,
@@ -33,8 +37,6 @@ export function usePdfOcrSelection(getIframe: () => HTMLIFrameElement | null) {
     })
     workerReady[targetScript] = true
   }
-
-  initWorker('hebrew').catch(() => {})
 
   onUnmounted(() => {
     for (const worker of Object.values(workers)) worker?.terminate()

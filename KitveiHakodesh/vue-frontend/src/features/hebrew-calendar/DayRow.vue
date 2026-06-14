@@ -40,9 +40,7 @@ const LEARNING_ROWS: Array<{ key: keyof DailyLearning; label: string }> = [
   { key: 'perekYomi', label: 'פרק יומי' },
   { key: 'rambam1', label: 'רמב״ם יומי (פרק)' },
   { key: 'rambam3', label: 'רמב״ם יומי (ג׳ פרקים)' },
-  { key: 'seferHaMitzvot', label: 'ספר המצוות' },
   { key: 'kitzurShulchanAruch', label: 'קיצור שולחן ערוך' },
-  { key: 'arukhHaShulchan', label: 'ערוך השולחן יומי' },
   { key: 'chofetzChaim', label: 'חפץ חיים' },
   { key: 'psalms', label: 'תהילים יומי' },
 ]

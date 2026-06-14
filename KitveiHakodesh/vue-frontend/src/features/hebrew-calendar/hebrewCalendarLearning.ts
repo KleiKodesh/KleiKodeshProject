@@ -22,11 +22,8 @@ import {
   chofetzChaim,
   PsalmsEvent,
   dailyPsalms,
-  SeferHaMitzvotEvent,
   PerekYomiEvent,
   perekYomi,
-  ArukhHaShulchanYomiEvent,
-  arukhHaShulchanYomi,
   DirshuAmudYomiEvent,
 } from '@hebcal/learning'
 
@@ -153,9 +150,7 @@ export interface DailyLearning {
   kitzurShulchanAruch: string | null
   chofetzChaim: string | null
   psalms: string | null
-  seferHaMitzvot: string | null
   perekYomi: string | null
-  arukhHaShulchan: string | null
   dirshuAmudYomi: string | null
 }
 
@@ -169,9 +164,7 @@ export function getDailyLearning(hd: HDate): DailyLearning {
   let kitzurShulchanAruchVal: string | null = null
   let chofetzChaimVal: string | null = null
   let psalms: string | null = null
-  let seferHaMitzvotVal: string | null = null
   let perekYomiVal: string | null = null
-  let arukhHaShulchan: string | null = null
   let dirshuAmudYomi: string | null = null
 
   try {
@@ -205,12 +198,8 @@ export function getDailyLearning(hd: HDate): DailyLearning {
   try {
     psalms = numsToGem(new PsalmsEvent(hd, dailyPsalms(hd)).render('he'))
   } catch {}
-  // SeferHaMitzvot has no Hebrew translation — omitted intentionally
   try {
     perekYomiVal = clean(new PerekYomiEvent(hd, perekYomi(hd)).render('he'))
-  } catch {}
-  try {
-    arukhHaShulchan = clean(new ArukhHaShulchanYomiEvent(hd, arukhHaShulchanYomi(hd)).render('he'))
   } catch {}
   try {
     dirshuAmudYomi = clean(new DirshuAmudYomiEvent(hd).renderBrief('he'))
@@ -226,9 +215,7 @@ export function getDailyLearning(hd: HDate): DailyLearning {
     kitzurShulchanAruch: kitzurShulchanAruchVal,
     chofetzChaim: chofetzChaimVal,
     psalms,
-    seferHaMitzvot: seferHaMitzvotVal,
     perekYomi: perekYomiVal,
-    arukhHaShulchan,
     dirshuAmudYomi,
   }
 }

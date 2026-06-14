@@ -36,10 +36,7 @@ function nearestCity(lat: number, lng: number): City {
   let bestDist = Infinity
   for (const c of CITIES) {
     const d = (c.lat - lat) ** 2 + (c.lng - lng) ** 2
-    if (d < bestDist) {
-      bestDist = d
-      best = c
-    }
+    if (d < bestDist) { bestDist = d; best = c }
   }
   return best
 }
@@ -73,19 +70,9 @@ export function calcDayZmanim(city: City, date: Date) {
     }
   } catch {
     return {
-      alot: null,
-      misheyakir: null,
-      sunrise: null,
-      sofShmaGra: null,
-      sofShmaMga: null,
-      sofTfillaGra: null,
-      sofTfillaMga: null,
-      chatzot: null,
-      minchaGedola: null,
-      minchaKetana: null,
-      plag: null,
-      sunset: null,
-      tzeit: null,
+      alot: null, misheyakir: null, sunrise: null, sofShmaGra: null, sofShmaMga: null,
+      sofTfillaGra: null, sofTfillaMga: null, chatzot: null, minchaGedola: null,
+      minchaKetana: null, plag: null, sunset: null, tzeit: null,
     }
   }
 }
@@ -119,9 +106,7 @@ export function useZmanim() {
         status.value = 'geo'
         lsSet(KEYS.SETTINGS_ZMANIM_CITY, geoCity.value.name)
       },
-      () => {
-        status.value = 'fallback'
-      },
+      () => { status.value = 'fallback' },
       { timeout: 8000, maximumAge: 3_600_000 },
     )
   }

@@ -126,6 +126,10 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
+      // Chromium 138+ (WebView2 1.0.3912 = Chromium 147) ships Temporal natively.
+      // @hebcal/core imports temporal-polyfill/global which adds ~118KB to the bundle.
+      // Stub it out — the native Temporal object is already available.
+      'temporal-polyfill/global': fileURLToPath(new URL('./src/stubs/temporal-polyfill-stub.ts', import.meta.url)),
     },
   },
   optimizeDeps: {

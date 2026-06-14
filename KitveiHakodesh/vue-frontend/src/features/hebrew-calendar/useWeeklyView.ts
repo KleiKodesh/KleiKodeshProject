@@ -12,41 +12,14 @@ import type { City, CalendarDay, CalendarWeek } from './calendarTypes'
 const DAY_NAMES_HE = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת']
 
 const MONTH_NAMES: Record<number, string> = {
-  1: 'ניסן',
-  2: 'אייר',
-  3: 'סיון',
-  4: 'תמוז',
-  5: 'אב',
-  6: 'אלול',
-  7: 'תשרי',
-  8: 'חשון',
-  9: 'כסלו',
-  10: 'טבת',
-  11: 'שבט',
-  12: 'אדר',
-  13: 'אדר ב׳',
+  1: 'ניסן', 2: 'אייר', 3: 'סיון', 4: 'תמוז', 5: 'אב', 6: 'אלול',
+  7: 'תשרי', 8: 'חשון', 9: 'כסלו', 10: 'טבת', 11: 'שבט', 12: 'אדר', 13: 'אדר ב׳',
 }
 
-const HOLIDAY_FLAGS =
-  flags.CHAG |
-  flags.MINOR_FAST |
-  flags.MAJOR_FAST |
-  flags.ROSH_CHODESH |
-  flags.SPECIAL_SHABBAT |
-  flags.MODERN_HOLIDAY |
-  flags.CHOL_HAMOED |
-  flags.MINOR_HOLIDAY
-
 const LOOKUP: Record<string, string> = {
-  ירושלים: 'Jerusalem',
-  'תל אביב': 'Tel Aviv',
-  חיפה: 'Haifa',
-  'באר שבע': 'Beer Sheva',
-  אילת: 'Eilat',
-  טבריה: 'Tiberias',
-  'ניו יורק': 'New York',
-  לונדון: 'London',
-  מונטריאול: 'Montreal',
+  ירושלים: 'Jerusalem', 'תל אביב': 'Tel Aviv', חיפה: 'Haifa',
+  'באר שבע': 'Beer Sheva', אילת: 'Eilat', טבריה: 'Tiberias',
+  'ניו יורק': 'New York', לונדון: 'London', מונטריאול: 'Montreal',
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -156,7 +129,7 @@ function buildWeek(sunday: Date, city: City, today0: Date): CalendarWeek {
         } else {
           holidays.push(strip(e.render('he')))
         }
-      } else if (f & HOLIDAY_FLAGS) {
+      } else if (f & (flags.CHAG | flags.MINOR_FAST | flags.MAJOR_FAST | flags.ROSH_CHODESH | flags.SPECIAL_SHABBAT | flags.MODERN_HOLIDAY | flags.CHOL_HAMOED | flags.MINOR_HOLIDAY)) {
         holidays.push(strip(e.render('he')))
       }
     }
@@ -186,23 +159,18 @@ function buildWeek(sunday: Date, city: City, today0: Date): CalendarWeek {
     })
   }
 
-  // Labels
   const hdSun = new HDate(sunday)
   const hdSat = new HDate(saturday)
   const sunYear = hdSun.renderGematriya().split(' ').pop() ?? ''
   const satYear = hdSat.renderGematriya().split(' ').pop() ?? ''
 
   const hebrewLabel = rangeLabel(
-    MONTH_NAMES[hdSun.getMonth()] ?? '',
-    sunYear,
-    MONTH_NAMES[hdSat.getMonth()] ?? '',
-    satYear,
+    MONTH_NAMES[hdSun.getMonth()] ?? '', sunYear,
+    MONTH_NAMES[hdSat.getMonth()] ?? '', satYear,
   )
   const gregLabel = rangeLabel(
-    sunday.toLocaleDateString('he-IL', { month: 'long' }),
-    String(sunday.getFullYear()),
-    saturday.toLocaleDateString('he-IL', { month: 'long' }),
-    String(saturday.getFullYear()),
+    sunday.toLocaleDateString('he-IL', { month: 'long' }), String(sunday.getFullYear()),
+    saturday.toLocaleDateString('he-IL', { month: 'long' }), String(saturday.getFullYear()),
   )
 
   return { hebrewLabel, gregLabel, days }
@@ -226,24 +194,14 @@ export function useWeeklyView(city: { value: City }) {
 
   watch(
     () => city.value,
-    () => {
-      offset.value = 0
-    },
+    () => { offset.value = 0 },
   )
 
   return {
     week,
-    prev: () => {
-      offset.value--
-    },
-    next: () => {
-      offset.value++
-    },
-    goToday: () => {
-      offset.value = 0
-    },
-    reset: () => {
-      offset.value = 0
-    },
+    prev: () => { offset.value-- },
+    next: () => { offset.value++ },
+    goToday: () => { offset.value = 0 },
+    reset: () => { offset.value = 0 },
   }
 }

@@ -28,33 +28,31 @@ useBookViewStore().init()
 useThemeStore().init()
 useTabStore().init()
 
-// Restore any persisted local file tabs — must run after tabStore.init()
-const localFileStore = useLocalFileStore()
-const tabStore = useTabStore()
-await Promise.all([
-  ...tabStore.tabs
-    .filter((t) => t.route === '/pdf-view' || t.route === '/html-view')
-    .map((t) => localFileStore.restoreTab(t.id)),
-])
+app.mount('#app')
+
+initPdfThemeObserver()
 
 function warmBooksDataInBackground() {
   if (!dbReady.value) return
-
   // Delay briefly so the initial render and any active book-view line fetches
   // settle first, then kick off the catalog load in the background.
-  // Plain setTimeout — no requestIdleCallback — so it fires predictably after
-  // the delay rather than waiting indefinitely for an idle window that may
-  // never come while the book view is streaming line chunks.
   window.setTimeout(() => {
     void useBooksDataStore().ensureLoaded()
   }, 500)
 }
-
-app.mount('#app')
-
-initPdfThemeObserver()
 warmBooksDataInBackground()
 
 // Pre-warm the Hebrew Books history cache so the first navigation to the
 // Hebrew Books page renders history instantly from memory.
 void useHebrewBooksHistoryStore().getHistory()
+
+// Restore persisted local file tabs after mount so the UI paints immediately.
+// PDF/HTML tabs render their loading placeholder right away; the virtual URL
+// is filled in asynchronously once the C# bridge confirms the file is ready.
+const localFileStore = useLocalFileStore()
+const tabStore = useTabStore()
+void Promise.all(
+  tabStore.tabs
+    .filter((t) => t.route === '/pdf-view' || t.route === '/html-view')
+    .map((t) => localFileStore.restoreTab(t.id)),
+)

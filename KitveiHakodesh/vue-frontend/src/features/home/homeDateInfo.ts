@@ -3,8 +3,6 @@ import { ref } from 'vue'
 export interface HomeDateInfo {
   hebrewDate: string
   dafYomi: string | null
-  mishnaYomi: string | null
-  nachYomi: string | null
 }
 
 const MONTH_NAMES: Record<number, string> = {
@@ -16,14 +14,11 @@ function stripGeresh(s: string): string {
   return s.replace(/[\u05F3\u05F4]/g, '')
 }
 
-export const dateInfo = ref<HomeDateInfo>({ hebrewDate: '', dafYomi: null, mishnaYomi: null, nachYomi: null })
+export const dateInfo = ref<HomeDateInfo>({ hebrewDate: '', dafYomi: null })
 
-/** Call once from onMounted — defers hebcal/learning parse until after first render. */
+/** Call once from onMounted — defers hebcal/hdate parse until after first render. */
 export async function loadDateInfo(): Promise<void> {
-  const [{ HDate }, { getDailyLearning }] = await Promise.all([
-    import('@hebcal/hdate'),
-    import('../hebrew-calendar/hebrewCalendarLearning'),
-  ])
+  const { HDate } = await import('@hebcal/hdate')
 
   const today = new Date()
   const hd = new HDate(today)
@@ -32,6 +27,14 @@ export async function loadDateInfo(): Promise<void> {
   const year = parts[parts.length - 1] ?? ''
   const monthName = MONTH_NAMES[hd.getMonth()] ?? ''
 
-  const { dafYomi, mishnaYomi, nachYomi } = getDailyLearning(hd)
-  dateInfo.value = { hebrewDate: `${day} ${monthName} ${year}`, dafYomi, mishnaYomi, nachYomi }
+  // DafYomi is the only schedule shown on the home page bar.
+  // The full learning suite (mishna, nach, rambam, etc.) loads only when the
+  // calendar page is opened, avoiding the @hebcal/learning parse cost at boot.
+  const { DafYomi } = await import('@hebcal/learning')
+  let dafYomi: string | null = null
+  try {
+    dafYomi = new DafYomi(hd).render('he').replace(/[\u05F3\u05F4]/g, '')
+  } catch {}
+
+  dateInfo.value = { hebrewDate: `${day} ${monthName} ${year}`, dafYomi }
 }
