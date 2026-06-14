@@ -158,6 +158,7 @@
       <Name>FtsLib</Name>
     </ProjectReference>
     <ProjectReference Include="..\DocumentLocator\DocumentLocator.Client\DocumentLocator.Client.csproj">
+      <Project>{E7B8C9D0-E1F2-43AB-B5C6-D7E8F9A0B1C2}</Project>
       <Name>DocumentLocator.Client</Name>
     </ProjectReference>
   </ItemGroup>

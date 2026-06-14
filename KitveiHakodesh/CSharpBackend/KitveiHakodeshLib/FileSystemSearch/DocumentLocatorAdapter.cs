@@ -25,7 +25,7 @@ namespace KitveiHakodeshLib.FileSystemSearch
         {
             try
             {
-                var task = ServiceBridge.PollStatusAsync(CancellationToken.None);
+                var task = ServiceBridge.GetStatusAsync(CancellationToken.None);
                 if (!task.Wait(2000)) return false;
                 var status = task.Result;
                 return status != null && status.State == "ready";
