@@ -120,7 +120,6 @@ defineExpose({ focus: () => inputRef.value?.focus(), filterBtnRef, advancedBtnRe
       <template v-if="!isSearching && resultCount < totalResultCount">
         / {{ totalResultCount.toLocaleString() }}
       </template>
-      <template v-else-if="isSearching">...</template>
     </span>
     <template #right>
       <button

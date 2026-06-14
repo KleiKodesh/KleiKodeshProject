@@ -11,7 +11,7 @@ namespace KitveiHakodeshDemoApp
         private readonly AppViewer _viewer;
         private Form _popoutWindow;
 
-        public MainForm()
+        public MainForm(string initialFilePath = null)
         {
             Text = "כתבי הקודש";
             ClientSize = new System.Drawing.Size(1000, 750);
@@ -25,8 +25,21 @@ namespace KitveiHakodeshDemoApp
             _viewer.TogglePopOut = Toggle;
             Controls.Add(_viewer);
 
+            // Queue the file to open as soon as the WebView2 bridge is ready.
+            if (!string.IsNullOrEmpty(initialFilePath))
+                _viewer.OpenFileFromPath(initialFilePath);
+
             Load        += MainForm_Load;
             FormClosing += MainForm_FormClosing;
+        }
+
+        /// <summary>
+        /// Opens a file in the viewer. Called from the pipe listener when a second instance
+        /// forwards a file path to this running instance.
+        /// </summary>
+        public void OpenFile(string filePath)
+        {
+            _viewer.OpenFileFromPath(filePath);
         }
 
         private void MainForm_Load(object sender, EventArgs e)

@@ -340,6 +340,15 @@ namespace KitveiHakodeshLib
             // hide the splash after 8 seconds so the user isn't stuck on a blank screen.
             _ = Task.Delay(8000).ContinueWith(_ => _HideSplash());
             _search.OnDbReady(savedPath);
+
+            // If OpenFileFromPath was called before the bridge was ready, dispatch it now.
+            // We delay briefly to let the Vue app finish mounting before receiving the event.
+            if (_pendingFilePath != null)
+            {
+                string path = _pendingFilePath;
+                _pendingFilePath = null;
+                _ = Task.Delay(1500).ContinueWith(__ => _localFile.OpenFileFromPathAsync(path));
+            }
         }
 
         private void OnNavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
@@ -568,6 +577,26 @@ namespace KitveiHakodeshLib
             catch (Exception ex)
             {
                 _bridge.Reply(id, new { error = ex.Message });
+            }
+        }
+
+        private string _pendingFilePath;
+
+        /// <summary>
+        /// Opens a file by path, as if the user had picked it via the file picker.
+        /// Safe to call immediately after construction — if the WebView2 bridge is not
+        /// yet initialised the path is queued and opened as soon as init completes.
+        /// </summary>
+        public void OpenFileFromPath(string filePath)
+        {
+            if (_localFile == null)
+            {
+                // Bridge not ready yet — queue it and open once InitAsyncCore finishes.
+                _pendingFilePath = filePath;
+            }
+            else
+            {
+                _ = _localFile.OpenFileFromPathAsync(filePath);
             }
         }
 

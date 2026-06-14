@@ -34,6 +34,78 @@ namespace KitveiHakodeshLib.LocalFile
             _webView = webView;
         }
 
+        /// <summary>
+        /// Opens a file directly by path — used when the app is launched via the Windows
+        /// "Open With" context menu or via a command-line argument.
+        /// Mirrors HandlePickFile but skips the dialog; pushes the same events the Vue
+        /// frontend expects so the file opens as a new tab automatically.
+        /// </summary>
+        public async Task OpenFileFromPathAsync(string filePath)
+        {
+            if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+            {
+                _bridge.PushEvent(new { @event = "localFileError", message = "הקובץ לא נמצא: " + filePath });
+                return;
+            }
+
+            string ext = Path.GetExtension(filePath).ToLowerInvariant();
+
+            if (ext == ".pdf" || ext == ".htm" || ext == ".html" || ext == ".txt")
+            {
+                string url = RegisterFolder(filePath);
+                _bridge.PushEvent(new { @event = "localFileReady", url, fileName = Path.GetFileName(filePath), filePath });
+            }
+            else
+            {
+                string displayName = Path.GetFileNameWithoutExtension(filePath) + ".pdf";
+                string destPath = GetCachePath(filePath);
+                string destFileName = Path.GetFileName(destPath);
+                _bridge.PushEvent(new { @event = "localFileConversionStarted", fileName = displayName, filePath });
+
+                Directory.CreateDirectory(WordCacheDir);
+                FileSystemWatcher watcher = null;
+                if (!File.Exists(destPath))
+                {
+                    watcher = new FileSystemWatcher(WordCacheDir, destFileName)
+                    {
+                        NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
+                        EnableRaisingEvents = true,
+                    };
+                    FileSystemEventHandler onReady = null;
+                    bool fired = false;
+                    onReady = (s, e) =>
+                    {
+                        if (!IsFileReady(e.FullPath)) return;
+                        if (fired) return;
+                        fired = true;
+                        watcher.EnableRaisingEvents = false;
+                        watcher.Dispose();
+                        string url2 = "http://KitveiHakodesh-vue-app/cache/word/" + destFileName;
+                        _bridge.PushEvent(new { @event = "localFileConversionReady", url = url2, fileName = displayName, filePath });
+                    };
+                    watcher.Created += onReady;
+                    watcher.Changed += onReady;
+                }
+
+                string cached = await ConvertToPdfAsync(filePath);
+
+                if (watcher != null)
+                {
+                    watcher.EnableRaisingEvents = false;
+                    watcher.Dispose();
+                }
+
+                if (cached == null)
+                {
+                    _bridge.PushEvent(new { @event = "localFileError", message = "לא ניתן להמיר את הקובץ: " + Path.GetFileName(filePath) });
+                    return;
+                }
+
+                string url = "http://KitveiHakodesh-vue-app/cache/word/" + Path.GetFileName(cached);
+                _bridge.PushEvent(new { @event = "localFileReady", url, fileName = displayName, filePath });
+            }
+        }
+
         public void HandlePickFile(string id, Control owner)
         {
             owner.BeginInvoke(new Action(async () =>

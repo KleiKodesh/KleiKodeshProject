@@ -135,6 +135,7 @@
     <Compile Include="Search\FtsSearchExecutor.cs" />
     <Compile Include="Search\SearchHandler.cs" />
     <Compile Include="Settings\AppSettings.cs" />
+    <Compile Include="Settings\ShellRegistration.cs" />
     <Compile Include="UserSettings\UserSettingsDbAccess.cs" />
     <Compile Include="UserSettings\UserSettingsDbHandler.cs" />
     <Compile Include="Dictionary\DictionaryHandler.cs" />

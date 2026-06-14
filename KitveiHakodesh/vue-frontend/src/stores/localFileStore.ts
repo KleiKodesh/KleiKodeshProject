@@ -54,6 +54,12 @@ export const useLocalFileStore = defineStore('localFile', () => {
         })
       }
     }
+    if (msg.event === 'localFileError') {
+      // A file opened via the Windows context menu could not be found or converted.
+      // The active tab is still on the home page — nothing to undo, just surface a toast.
+      // We use a native alert because this arrives outside any component context.
+      window.alert(msg.message as string)
+    }
     if (msg.event === 'hbPdfReady') {
       finishHbDownload(
         msg.tabId as string,
