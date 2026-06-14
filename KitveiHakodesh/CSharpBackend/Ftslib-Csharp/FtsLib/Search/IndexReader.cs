@@ -197,19 +197,13 @@ namespace FtsLib.Search
             int skipBytes  = chunk.SkipCount * 3 * sizeof(int); // 12 bytes per entry
             int totalBytes = skipBytes + chunk.Length;
 
-            var buf = new byte[totalBytes];
-            chunk.Seg.DataStream.Seek(chunk.SkipCount > 0 ? chunk.SkipOffset : chunk.Offset,
-                                      SeekOrigin.Begin);
+            var  buf      = new byte[totalBytes];
+            long readFrom = chunk.SkipCount > 0 ? chunk.SkipOffset : chunk.Offset;
 
-            // FileStream.Read may return fewer bytes than requested — read in a loop
-            // to guarantee the full buffer is populated before decoding.
-            int read = 0;
-            while (read < totalBytes)
-            {
-                int n = chunk.Seg.DataStream.Read(buf, read, totalBytes - read);
-                if (n == 0) break; // end of stream — should never happen on a valid segment
-                read += n;
-            }
+            // MemoryMappedViewAccessor.ReadArray reads directly from the OS page
+            // cache — no kernel seek+read round-trip.  It always fills the buffer
+            // for a well-formed segment (returns totalBytes).
+            chunk.Seg.ReadBytes(readFrom, buf, 0, totalBytes);
 
             // Deserialise skip table from the front of the buffer.
             int[] skip    = null;

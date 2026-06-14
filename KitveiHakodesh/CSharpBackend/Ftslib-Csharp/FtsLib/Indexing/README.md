@@ -30,7 +30,7 @@ Database Lines
 | `SegmentReader.cs` | `SegmentReader` | Read posting lists |
 | `SegmentMerger.cs` | `SegmentMerger` | Merge segments |
 | `SegmentLiveState.cs` | `SegmentLiveState` | Segment metadata |
-| `SegmentHandle.cs` | `SegmentHandle` | Reference-counted access |
+| `SegmentHandle.cs` | `SegmentHandle` | Memory-mapped read access to .dat files |
 | `SegmentWal.cs` | `SegmentWal` | Write-ahead log |
 | `RamIndex.cs` | `RamIndex` | In-memory buffer |
 | `RamIndexEntry.cs` | `RamIndexEntry` | RAM index entry |
@@ -43,7 +43,7 @@ Database Lines
 
 ## Key Concepts
 
-**Segment:** Immutable index file containing term→postings mapping. Once written, never modified.
+**Segment:** Immutable index file pair. The `.dat` posting file is memory-mapped (`MemoryMappedFile`) for search — random-access reads land in the OS page cache with no `FileStream` seek/read overhead. The `.db` SQLite term-index is opened read-only via ADO.NET. The `.dat` file must be unmapped (handle disposed) before it can be deleted on Windows — the `SearchLease` / `ReaderWriterLockSlim` protocol enforces this: `IndexReader` disposes all `SegmentHandle`s before releasing its lease, and the merger only calls `File.Delete` after acquiring the exclusive write lock.
 
 **Posting List:** Sorted list of document IDs for a term, encoded as:
 - Delta encoding (differences between consecutive IDs)
