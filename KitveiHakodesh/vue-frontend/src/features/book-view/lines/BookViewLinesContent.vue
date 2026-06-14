@@ -9,7 +9,7 @@ import type { LineItem } from './useBookViewLinesTable'
 import type { TocEntry } from '../toc/useBookViewToc'
 import type { CommentaryTreeState, CommentaryVisibilityItem, PinnedCommentaryGroup } from '../bookViewTypes'
 import ContextMenu from '@/components/ContextMenu.vue'
-import { useEventListener } from '@vueuse/core'
+import { useEventListener, onLongPress } from '@vueuse/core'
 import { useScopedKeys } from '@/composables/useTextSelectionKeys'
 import { useScopedCopy } from '@/composables/useLineCopy'
 import { scrollToIndexWithRetry } from '@/utils/scrollToIndexWithRetry'
@@ -287,6 +287,8 @@ const contextMenuItems = useBookViewLineCopyMenu({
   onClearHighlight,
   onAddNote,
 })
+
+onLongPress(scrollerEl, (event) => contextMenuRef.value?.showAtPosition(event.clientX, event.clientY))
 
 // ── Virtualizer ───────────────────────────────────────────────────────────────
 

@@ -32,9 +32,9 @@ This file records the diagnostic logging that was used to trace and fix the pinn
 
 **Fix:** Added `nextTick + rAF` delay before calling `scrollToGroup` to give the virtualizer one full render cycle to populate `measurementsCache` with real DOM measurements.
 
-**Root cause C — stale index across multiple group changes:** `resolveIndex()` returned a flat index correct at call time, but `measurementsCache` still held measurements from a previous groups list where the same index was a different item.
+**Root cause C — stale estimated positions after scroll:** Even after the virtualizer reports a scroll as successful (diff=0 in the verify rAF), it continues re-measuring items in subsequent frames as they render for the first time. When estimated sizes differ significantly from real DOM sizes, `m.start` shifts by thousands of pixels. The verify rAF in `scrollToIndexWithRetry` fires too early — before this re-measurement completes — so it reports success at the wrong position.
 
-**Fix:** Changed `scrollToIndexWithRetry` to accept `index: number | (() => number)`. Passing a resolver function re-evaluates the index on each rAF attempt. Also added verify rAF that re-resolves and re-reads `freshTarget` to detect and retry when the position drifted.
+**Fix:** `scrollToGroup` runs `waitForStableAndVerify` for 8 frames after `scrollToIndexWithRetry` reports success. On each frame it re-reads `m.start` for the target header and re-applies `scrollTop` if drift exceeds 4px. Since `topReserved=-8` makes `gap=0`, the expected position is simply `m.start`.
 
 ### 5. Multiple concurrent scrollToGroup calls fighting each other
 
@@ -51,6 +51,14 @@ This file records the diagnostic logging that was used to trace and fix the pinn
 **Root cause:** `restoreCommentaryScrollPos` is async (rAF retries). `setupGroupReloadScroll` started its `nextTick + rAF` chain concurrently. Even though `isRestoringScrollPos` was true during the setup phase, by the time `scrollToGroup` actually fired, restore had already completed and `isRestoringScrollPos` was false.
 
 **Fix:** In `restoreCommentaryScrollPos`.finally(), bump `scrollToGroupToken` before clearing `isRestoringScrollPos`. Any `scrollToGroup` call that started before restore completed has a stale token and gets cancelled by `isCancelled()`.
+
+### 7. Panel close/reopen loses scroll position
+
+**Root cause:** The `commentaryVisible` watcher in `useBookView.ts` explicitly cleared `commentaryScrollIndex` and `commentaryScrollOffset` to `null` when the panel closed, under the mistaken assumption that scroll restore was only needed across page reloads. Since `CommentaryView` is v-if'd, every close/reopen is a full remount — the scroll position must be re-applied on every reopen, not just on initial session restore.
+
+Additionally, `lastRestoredCommentaryKey` was not reset on close. Even if the scroll values were present, the dedup guard would have blocked the restore since the key matched the previous restore.
+
+**Fix:** On panel close, keep `commentaryScrollIndex`/`commentaryScrollOffset` as-is (they continue to be updated by `onCommentaryScroll` while the panel is open). Reset `lastRestoredCommentaryKey` to `null` on close so the restore always runs on reopen against a freshly mounted `CommentaryView`.
 
 ---
 

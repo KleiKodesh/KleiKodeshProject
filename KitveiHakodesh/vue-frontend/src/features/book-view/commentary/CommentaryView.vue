@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
+import { onLongPress } from '@vueuse/core'
 import { useScopedKeys } from '@/composables/useTextSelectionKeys'
 import { useScopedCopy } from '@/composables/useLineCopy'
 import { useVirtualizer } from '@tanstack/vue-virtual'
@@ -126,6 +127,8 @@ useScopedCopy(
 )
 
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
+
+onLongPress(scrollerEl, (event) => contextMenuRef.value?.showAtPosition(event.clientX, event.clientY))
 
 const virtualizer = useVirtualizer(
   computed(() => ({

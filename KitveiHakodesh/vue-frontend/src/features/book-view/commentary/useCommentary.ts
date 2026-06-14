@@ -391,13 +391,9 @@ export function useCommentary(
 
   async function load(lineId: number) {
     loadedForLineId = lineId
-    // Capture selectedLineIds synchronously before any await — by the time the
-    // async steps below complete, tocEntries/lines may have loaded and changed it.
     const multiIds = selectedLineIds()
     const isMulti = multiIds != null && multiIds.length > 0
     loadUsedSectionRange = isMulti
-    // Clear groups BEFORE setting loading=true so the loading state shows immediately
-    // without displaying stale groups from the previous line first.
     groups.value = []
     loading.value = true
     try {
@@ -420,11 +416,6 @@ export function useCommentary(
 
       groups.value = await buildCommentaryGroupsFromCombined(rows, booksDataStore.allBooksMap)
 
-      // If the pinned book is absent from this line's results, inject a placeholder
-      // directly into groups.value now — before the watchers fire — so that
-      // setupGroupReloadScroll can find it at the correct position immediately.
-      // This avoids the race where groupsForDisplay (a lazy computed) hasn't run yet
-      // when the scroll attempt fires.
       const pinned = pinnedBookId()
       if (pinned != null && !groups.value.some((g) => g.bookId === pinned)) {
         const staticOrder = staticFilterGroups.value
@@ -456,10 +447,6 @@ export function useCommentary(
         }
       }
     } finally {
-      // If this was a single-line fallback load and the section range is now available,
-      // the watch(selectedLineIds) safety-net will fire a second load() immediately after
-      // this finally block. Keep loading=true so the scroll restore watcher doesn't fire
-      // between the two loads and attempt to restore scroll against an empty/partial result.
       const refetchImminent = !loadUsedSectionRange && selectedLineIds() != null && selectedLineIds()!.length > 0
       if (!refetchImminent) loading.value = false
     }
@@ -485,14 +472,7 @@ export function useCommentary(
         groups.value = []
         return
       }
-      // If selectedLineIds is null right now, yield one tick to give the computed
-      // (which depends on tocEntries + lines) a chance to resolve before we decide
-      // whether to use the single-line or section-range query.
-      // On an interactive tap with the TOC already loaded, selectedLineIds is
-      // non-null synchronously and we skip the yield entirely.
       if (selectedLineIds() == null) await nextTick()
-      // After the tick, check that this load is still current (the line may have
-      // changed again while we were yielding).
       if (selectedLineId() !== id) return
       void load(id)
     },

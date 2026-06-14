@@ -77,6 +77,7 @@ const {
   onQueryChange, onSearchNext, onSearchPrev, onModeChange,
   toggleTocPanel, toggleCommentaryTreePanel, closeSidePanel,
   ensureStaticFilterGroupsLoaded, staticFilterGroupsLoaded,
+  onCommentaryPanelMounted,
   getActiveTocEntry, getTocPath,
 } = useBookView(
   () => toolbarRef.value,
@@ -91,6 +92,14 @@ watch(commentaryMode, (mode) => { commentaryVisible.value = mode !== 'off' })
 watch(commentaryVisible, (v) => { if (!v) commentaryMode.value = 'off' })
 // Snap back to bottom layout when screen becomes too narrow for side-by-side.
 watch(isWideScreen, (wide) => { if (!wide && commentaryMode.value === 'side') commentaryMode.value = 'bottom' })
+// When switching between bottom and side layout, CommentaryView remounts — run the
+// same open-side effects (commentaryLineId init, scroll-to-pinned) as a fresh open.
+watch(commentaryMode, (mode, previous) => {
+  if (mode !== 'off' && previous !== 'off' && mode !== previous) {
+    // Use setTimeout to let the new CommentaryView mount before touching its state.
+    setTimeout(() => onCommentaryPanelMounted(), 0)
+  }
+})
 // Restore commentaryMode from IDB once session restore resolves.
 watch(restoredCommentaryMode, (mode) => { if (mode) commentaryMode.value = mode }, { once: true })
 // Restore commentaryFraction from IDB once session restore resolves.
@@ -164,6 +173,7 @@ watch(() => bookViewStore.toggleBottomPanelSignal, () => {
         >
           <div class="side-commentary" :style="{ width: `${commentaryFraction * 100}%` }">
             <CommentaryView
+              v-if="commentaryVisible"
               :key="bookId"
               ref="commentaryViewRef"
               :selected-line-id="selectedLineId"

@@ -34,8 +34,12 @@ useDropdownClose(menuRef, () => {
 
 async function show(event: MouseEvent) {
   event.preventDefault()
-  x.value = event.clientX
-  y.value = event.clientY
+  await showAtPosition(event.clientX, event.clientY)
+}
+
+async function showAtPosition(clientX: number, clientY: number) {
+  x.value = clientX
+  y.value = clientY
   visible.value = true
   await nextTick()
   if (menuRef.value) {
@@ -54,7 +58,7 @@ function runItem(item: ContextMenuTextItem) {
   hide()
 }
 
-defineExpose({ show, hide })
+defineExpose({ show, showAtPosition, hide })
 </script>
 
 <template>

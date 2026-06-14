@@ -425,88 +425,98 @@ export function useBookView(
 
   // ── Watchers ──────────────────────────────────────────────────────────────
 
+  // Runs all open-side effects when the commentary panel becomes active —
+  // either by toggling visible, or by switching layout mode (bottom ↔ side).
+  // In both cases CommentaryView is freshly mounted and needs commentaryLineId
+  // initialised and scroll position restored.
+  function onCommentaryPanelMounted() {
+    if (!commentaryVisible.value) return
+    void ensureStaticFilterGroupsLoaded()
+    // Sync commentaryLineId from selectedLineId when the commentary panel first opens
+    // after session restore (commentaryVisible=true but commentaryLineId still null).
+    if (selectedLineId.value != null && commentaryLineId.value == null) {
+      let stop: (() => void) | undefined
+      stop = watch(
+        () => lines.value.some((l) => l.content !== null),
+        (hasContent) => {
+          if (!hasContent) return
+          stop?.()
+          if (commentaryVisible.value && selectedLineId.value != null && commentaryLineId.value == null)
+            commentaryLineId.value = selectedLineId.value
+        },
+        { immediate: true },
+      )
+    }
+    // Scroll to pinned group when groups are already loaded (mode switch with live data)
+    // or restore the saved scroll position.
+    if (commentaryScrollIndex.value != null && commentaryScrollOffset.value != null) {
+      const si = commentaryScrollIndex.value
+      const so = commentaryScrollOffset.value
+      const restoreKey = `${si}:${so}`
+      if (restoreKey === lastRestoredCommentaryKey) {
+        // No position to restore — but still scroll to pinned group if groups are loaded
+        if (groups.value.length > 0 && pinnedCommentaryGroup.value) {
+          nextTick(() => {
+            const pinned = pinnedCommentaryGroup.value
+            if (pinned) commentaryViewRef()?.scrollToGroup(pinned.bookId)
+          })
+        }
+        return
+      }
+
+      let stopLoading: (() => void) | undefined
+      let stopViewRef: (() => void) | undefined
+      const cancelRestore = () => { stopLoading?.(); stopViewRef?.() }
+      const stopVisibleGuard = watch(commentaryVisible, (v) => {
+        if (!v) { cancelRestore(); lastRestoredCommentaryKey = null; stopVisibleGuard() }
+      })
+      stopLoading = watch(
+        () => !commentaryLoading.value && groups.value.length > 0,
+        (ready) => {
+          if (!ready) return
+          stopLoading?.()
+          const viewRef = commentaryViewRef()
+          if (viewRef) {
+            nextTick(async () => {
+              await viewRef.restoreCommentaryScrollPos(si, so)
+              lastRestoredCommentaryKey = restoreKey
+            })
+          } else {
+            stopViewRef = watch(
+              () => commentaryViewRef(),
+              (newRef) => {
+                if (!newRef) return
+                stopViewRef?.()
+                nextTick(async () => {
+                  await newRef.restoreCommentaryScrollPos(si, so)
+                  lastRestoredCommentaryKey = restoreKey
+                })
+              },
+            )
+          }
+        },
+        { flush: 'post', immediate: true },
+      )
+    } else if (groups.value.length > 0 && pinnedCommentaryGroup.value) {
+      // No saved scroll position — scroll to pinned group (e.g. mode switch)
+      nextTick(() => {
+        const pinned = pinnedCommentaryGroup.value
+        if (pinned) commentaryViewRef()?.scrollToGroup(pinned.bookId)
+      })
+    }
+  }
+
   // flush: 'post' — runs after Vue has flushed the DOM so the commentary panel is
   // painted before any reactive side-effects (metadata load, commentaryLineId set,
   // scroll restore) begin. Without this the default 'pre' flush meant everything
   // ran before the SplitPane bottom slot appeared, causing a visible hang.
   watch(commentaryVisible, (visible) => {
     if (!visible && sidePanelMode.value === 'commentary-tree') closeSidePanel()
-    // Clear the in-session scroll position when the user manually closes the panel so
-    // the scroll-restore branch below does not fire on the next manual reopen.
-    // Scroll restore is only meaningful across page reloads (IDB session restore path).
     if (!visible) {
-      commentaryScrollIndex.value = null
-      commentaryScrollOffset.value = null
+      lastRestoredCommentaryKey = null
       return
     }
-    // Defer all open-side effects so the browser can paint the commentary panel
-    // before any reactive work starts. flush:'post' yields to after Vue's DOM flush
-    // but is still a microtask — it blocks paint. setTimeout yields to after paint.
-    setTimeout(() => {
-      if (!commentaryVisible.value) return
-      // Pre-load static filter groups as soon as commentary is visible so the
-      // placeholder insertion in groupsForDisplay has the correct order data.
-      void ensureStaticFilterGroupsLoaded()
-      // Sync commentaryLineId from selectedLineId when the commentary panel first opens
-      // after session restore (commentaryVisible=true but commentaryLineId still null).
-      // Wait until the first chunk has real content so the commentary query doesn't
-      // compete with line chunk fetches.
-      if (selectedLineId.value != null && commentaryLineId.value == null) {
-        let stop: (() => void) | undefined
-        stop = watch(
-          () => lines.value.some((l) => l.content !== null),
-          (hasContent) => {
-            if (!hasContent) return
-            stop?.()
-            if (commentaryVisible.value && selectedLineId.value != null && commentaryLineId.value == null)
-              commentaryLineId.value = selectedLineId.value
-          },
-          { immediate: true },
-        )
-      }
-      // Restore commentary scroll position when the panel is toggled back on.
-      // CommentaryView is fully unmounted when commentaryVisible is false (v-if in SplitPane),
-      // so the one-time restore() at mount is not enough — we must re-apply the saved
-      // position every time the panel reopens.
-      if (commentaryScrollIndex.value != null && commentaryScrollOffset.value != null) {
-        const si = commentaryScrollIndex.value
-        const so = commentaryScrollOffset.value
-        const restoreKey = `${si}:${so}`
-        if (restoreKey === lastRestoredCommentaryKey) return
-
-        let stopLoading: (() => void) | undefined
-        let stopViewRef: (() => void) | undefined
-        const cancelRestore = () => { stopLoading?.(); stopViewRef?.() }
-        const stopVisibleGuard = watch(commentaryVisible, (v) => { if (!v) { cancelRestore(); lastRestoredCommentaryKey = null; stopVisibleGuard() } })
-        stopLoading = watch(
-          () => !commentaryLoading.value && groups.value.length > 0,
-          (ready) => {
-            if (!ready) return
-            stopLoading?.()
-            const viewRef = commentaryViewRef()
-            if (viewRef) {
-              nextTick(async () => {
-                await viewRef.restoreCommentaryScrollPos(si, so)
-                lastRestoredCommentaryKey = restoreKey
-              })
-            } else {
-              stopViewRef = watch(
-                () => commentaryViewRef(),
-                (newRef) => {
-                  if (!newRef) return
-                  stopViewRef?.()
-                  nextTick(async () => {
-                    await newRef.restoreCommentaryScrollPos(si, so)
-                    lastRestoredCommentaryKey = restoreKey
-                  })
-                },
-              )
-            }
-          },
-          { flush: 'post', immediate: true },
-        )
-      }
-    }, 0)
+    setTimeout(() => onCommentaryPanelMounted(), 0)
   }, { flush: 'post' })
   watch(hasCommentaries, (has) => {
     if (!has) { commentaryVisible.value = false; if (sidePanelMode.value === 'commentary-tree') closeSidePanel() }
@@ -551,6 +561,7 @@ export function useBookView(
     onQueryChange, onSearchNext, onSearchPrev, onModeChange,
     toggleTocPanel, toggleCommentaryTreePanel, closeSidePanel,
     ensureStaticFilterGroupsLoaded, staticFilterGroupsLoaded,
+    onCommentaryPanelMounted,
     // toc lookup for copy-with-source
     getActiveTocEntry, getTocPath,
   }

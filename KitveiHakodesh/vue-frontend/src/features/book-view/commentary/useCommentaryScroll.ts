@@ -17,28 +17,24 @@ export function useCommentaryScroll(
 ) {
   const scrollTop = ref(0)
 
-  // Single scan over measurementsCache per scroll tick — computes both the sticky
-  // header and the top visible flat index in one pass instead of two.
-  const _scrollState = computed(() => {
-    const st = scrollTop.value
-    let activeHeader: any = null
-    let topIndex = 0
+  const stickyHeader = computed(() => {
+    let active: any = null
     for (const m of virtualizer().measurementsCache) {
       const item = flatItems()[m.index]
-      if (item?.type === 'header' && m.end <= st + NAV_HEIGHT + 5) activeHeader = item
-      if (m.end > st + NAV_HEIGHT && topIndex === 0) topIndex = m.index
+      if (item?.type !== 'header') continue
+      // Switch only when the header's bottom edge has scrolled past the nav
+      if (m.end <= scrollTop.value + NAV_HEIGHT + 5) active = item
+      else break
     }
-    return { activeHeader, topIndex }
+    return active
   })
 
   const activeHeader = computed(
     () =>
-      _scrollState.value.activeHeader ??
+      stickyHeader.value ??
       (flatItems().find((i) => i.type === 'header') as any) ??
       null,
   )
-
-  const topVisibleFlatIndex = computed(() => _scrollState.value.topIndex)
 
   const activePinnedGroup = computed<any>(() => {
     const header = activeHeader.value
@@ -69,9 +65,6 @@ export function useCommentaryScroll(
     if (!el) return
     const token = ++scrollToGroupToken
 
-    // Resolve the flat index fresh on each attempt — flatItems can change between
-    // the time scrollToGroup is called and the rAF fires (new groups load completes,
-    // item positions shift). A stale index scrolls to the wrong item.
     function resolveIndex(): number {
       return flatItems().findIndex(
         (item) =>
@@ -82,11 +75,41 @@ export function useCommentaryScroll(
       )
     }
 
+    // After scrollToIndexWithRetry reports success, the virtualizer may still be
+    // re-measuring items (estimated → real DOM sizes), causing the scroll position
+    // to drift significantly. Poll until the target position stabilises across two
+    // consecutive frames with no drift, or give up after maxAttempts.
+    // topReserved is -8 so gap = 0, meaning targetScrollTop = m.start exactly.
+    function waitForStableAndVerify(attempt: number, lastExpected: number) {
+      const currentEl = scrollerEl()
+      if (token !== scrollToGroupToken || !currentEl) return
+      const idx = resolveIndex()
+      const m = idx >= 0 ? virtualizer().measurementsCache.find((c: any) => c.index === idx) : undefined
+      if (!m) return
+      const expectedScrollTop = Math.max(0, m.start)
+      const actual = currentEl.scrollTop
+      if (attempt === 0) {
+        const headerEl = currentEl.querySelector(`[data-index="${idx}"]`) as HTMLElement | null
+        const scrollerRect = currentEl.getBoundingClientRect()
+        const headerRect = headerEl?.getBoundingClientRect()
+        console.log(`[stabilise] attempt=0 m.start=${m.start} actual=${actual} expected=${expectedScrollTop} scrollerTop=${scrollerRect.top} headerTop=${headerRect?.top ?? 'n/a'} headerRelative=${headerRect ? headerRect.top - scrollerRect.top : 'n/a'}`)
+      }
+      if (Math.abs(actual - expectedScrollTop) > 4) {
+        currentEl.scrollTop = expectedScrollTop
+        scrollTop.value = expectedScrollTop
+      }
+      const stillSettling = Math.abs(expectedScrollTop - lastExpected) > 2
+      if (attempt < 20 || stillSettling) {
+        requestAnimationFrame(() => waitForStableAndVerify(attempt + 1, expectedScrollTop))
+      }
+    }
+
     scrollToIndexWithRetry(
       virtualizer() as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
       el, resolveIndex, -8, 5,
       () => {
         scrollTop.value = el.scrollTop
+        requestAnimationFrame(() => waitForStableAndVerify(0, el.scrollTop))
       },
       () => token !== scrollToGroupToken,
     )
@@ -99,44 +122,127 @@ export function useCommentaryScroll(
     const reserved = NAV_HEIGHT
     const virt = virtualizer() as any
 
-    function applyCurrentMark() {
-      if (el) setCurrentMark(el, flatIndex, occurrence)
-    }
-
-    function adjustToMark(scroller: HTMLElement): boolean {
-      const mark = scroller.querySelector('mark.search-match.current') as HTMLElement | null
-      if (!mark) return false
-      const markRect = mark.getBoundingClientRect()
-      const scrollerRect = scroller.getBoundingClientRect()
-      const relativeTop = markRect.top - scrollerRect.top
-      const relativeBottom = markRect.bottom - scrollerRect.top
-      const alreadyVisible =
-        relativeTop >= reserved + 4 && relativeBottom <= scrollerRect.height - 4
-      if (!alreadyVisible) {
-        scroller.scrollTop += relativeTop - reserved - 8
-      }
-      return true
-    }
-
+    // Check if the item is already in the measurements cache
     const m = virt.measurementsCache.find((c: any) => c.index === flatIndex)
 
     if (m) {
+      // Line is already measured by the virtualizer. Scroll to the line top first,
+      // then wait for Vue to render the new currentMatchOccurrence (which invalidates
+      // the render cache and re-renders the line HTML). Use MutationObserver to detect
+      // when the <mark class="current"> actually appears in the DOM, then adjust.
+
+      // Step 1: scroll to line top immediately so the line is visible.
       const targetScrollTop = m.start - reserved - 8
       if (Math.abs(el.scrollTop - targetScrollTop) > 2) {
         el.scrollTop = targetScrollTop
       }
-      requestAnimationFrame(() => {
-        applyCurrentMark()
-        requestAnimationFrame(() => adjustToMark(el))
-      })
+      setCurrentMark(el, flatIndex, occurrence)
+
+      // Step 2: wait for the current mark to appear/move in the DOM, then fine-adjust.
+      let settled = false
+
+      function adjustToMark() {
+        if (settled || !el) return
+        const mark = el.querySelector('mark.search-match.current') as HTMLElement | null
+        if (!mark) return false
+        const markRect = mark.getBoundingClientRect()
+        const scrollerRect = el.getBoundingClientRect()
+        const relativeTop = markRect.top - scrollerRect.top
+        const relativeBottom = markRect.bottom - scrollerRect.top
+        const alreadyVisible =
+          relativeTop >= reserved + 4 && relativeBottom <= scrollerRect.height - 4
+        if (!alreadyVisible) {
+          el.scrollTop += relativeTop - reserved - 8
+        }
+        return true
+      }
+
+      // Try immediately after two rAFs (covers same-line occurrence changes where
+      // the mark is already in the DOM and just needs its class updated).
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          if (adjustToMark()) {
+            settled = true
+            return
+          }
+
+          // Mark not found yet — the render cache was just invalidated and Vue hasn't
+          // re-rendered the line HTML yet. Watch for DOM mutations on the scroller.
+          const observer = new MutationObserver(() => {
+            if (adjustToMark()) {
+              settled = true
+              observer.disconnect()
+            }
+          })
+          observer.observe(el, {
+            childList: true,
+            subtree: true,
+            characterData: false,
+            attributes: true,
+            attributeFilter: ['class'],
+          })
+          // Safety timeout — disconnect after 500ms regardless.
+          setTimeout(() => {
+            if (!settled) {
+              observer.disconnect()
+            }
+          }, 500)
+        }),
+      )
       return
     }
 
+    // Line not yet rendered — use scrollToIndexWithRetry to bring it into range,
+    // then scroll to the mark once it's in the DOM.
     scrollToIndexWithRetry(virt, el, flatIndex, reserved, 5, () => {
+      // After scrollToIndexWithRetry positions the line, wait for the mark using
+      // the same MutationObserver approach.
       const scroller = scrollerEl()
       if (!scroller) return
-      applyCurrentMark()
-      requestAnimationFrame(() => requestAnimationFrame(() => adjustToMark(scroller)))
+      setCurrentMark(scroller, flatIndex, occurrence)
+      let settled = false
+
+      function adjustToMark() {
+        if (!scroller) return false
+        const mark = scroller.querySelector('mark.search-match.current') as HTMLElement | null
+        if (!mark) return false
+        const markRect = mark.getBoundingClientRect()
+        const scrollerRect = scroller.getBoundingClientRect()
+        const relativeTop = markRect.top - scrollerRect.top
+        const relativeBottom = markRect.bottom - scrollerRect.top
+        const alreadyVisible =
+          relativeTop >= reserved + 4 && relativeBottom <= scrollerRect.height - 4
+        if (!alreadyVisible) {
+          scroller.scrollTop += relativeTop - reserved - 8
+        }
+        return true
+      }
+
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          if (adjustToMark()) {
+            settled = true
+            return
+          }
+          const observer = new MutationObserver(() => {
+            if (adjustToMark()) {
+              settled = true
+              observer.disconnect()
+            }
+          })
+          observer.observe(scroller, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['class'],
+          })
+          setTimeout(() => {
+            if (!settled) {
+              observer.disconnect()
+            }
+          }, 500)
+        }),
+      )
     })
   }
 
@@ -144,14 +250,17 @@ export function useCommentaryScroll(
     const el = scrollerEl()
     if (!el) return null
 
+    const items = virtualizer().getVirtualItems()
+    if (!items.length) return null
+
     const scrollTopValue = el.scrollTop
     const measured = virtualizer().measurementsCache
-    if (!measured.length) return null
 
-    // Find the item whose range contains scrollTop, or fall back to the first item.
-    const first =
-      measured.find((item) => item.start <= scrollTopValue && scrollTopValue < item.end) ??
-      measured[0]
+    let first = measured.find((item) => item.start <= scrollTopValue && scrollTopValue < item.end)
+
+    if (!first) {
+      first = items.find((item) => item.start <= scrollTopValue && scrollTopValue < item.end) ?? items[0]
+    }
 
     if (!first) return null
 
@@ -179,6 +288,7 @@ export function useCommentaryScroll(
             nextTick(() => requestAnimationFrame(startRestore))
             return
           }
+
           resolve()
           return
         }
@@ -196,6 +306,7 @@ export function useCommentaryScroll(
               nextTick(() => requestAnimationFrame(tryApplyScroll))
               return
             }
+
             resolve()
             return
           }
@@ -210,9 +321,11 @@ export function useCommentaryScroll(
             requestAnimationFrame(() => {
               if (Math.abs(el2.scrollTop - desiredScrollTop) > 1 && attempts < MAX_ATTEMPTS) {
                 attempts++
+
                 nextTick(() => requestAnimationFrame(tryApplyScroll))
                 return
               }
+
               resolve()
             })
           } else if (attempts < MAX_ATTEMPTS) {
@@ -237,6 +350,14 @@ export function useCommentaryScroll(
       requestAnimationFrame(() => { isRestoringScrollPos = false })
     })
   }
+
+  const topVisibleFlatIndex = computed(() => {
+    const st = scrollTop.value + NAV_HEIGHT
+    for (const m of virtualizer().measurementsCache) {
+      if (m.end > st) return m.index
+    }
+    return 0
+  })
 
   // When groups reload, scroll back to the pinned group (captured in parent before selectedLineId changes)
   function setupGroupReloadScroll(
