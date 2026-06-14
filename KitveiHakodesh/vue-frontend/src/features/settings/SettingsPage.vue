@@ -263,6 +263,14 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
               <span class="shortcut-desc">פתח רשימת לשוניות</span>
             </div>
             <div class="shortcut-row">
+              <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Tab</kbd>
+              <span class="shortcut-desc">לשונית הבאה</span>
+            </div>
+            <div class="shortcut-row">
+              <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Shift</kbd><span class="kbd-plus">+</span><kbd>Tab</kbd>
+              <span class="shortcut-desc">לשונית הקודמת</span>
+            </div>
+            <div class="shortcut-row">
               <kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>W</kbd>
               <span class="shortcut-desc">סגור לשונית</span>
             </div>

@@ -141,9 +141,18 @@ useEventListener('keydown', (e: KeyboardEvent) => {
   } else if (e.ctrlKey && e.code === 'KeyX') {
     e.preventDefault()
     tabStore.closeAllTabs()
-  } else if (e.ctrlKey && e.code === 'Tab') {
+  } else if (e.ctrlKey && !e.shiftKey && e.code === 'Tab') {
     e.preventDefault()
-    dropdownOpen.value = !dropdownOpen.value
+    const tabs = tabStore.tabs
+    const currentIndex = tabs.findIndex((t) => t.id === tabStore.activeTabId)
+    const nextIndex = (currentIndex + 1) % tabs.length
+    tabStore.switchTab(tabs[nextIndex]!.id)
+  } else if (e.ctrlKey && e.shiftKey && e.code === 'Tab') {
+    e.preventDefault()
+    const tabs = tabStore.tabs
+    const currentIndex = tabs.findIndex((t) => t.id === tabStore.activeTabId)
+    const previousIndex = (currentIndex - 1 + tabs.length) % tabs.length
+    tabStore.switchTab(tabs[previousIndex]!.id)
   } else if (e.ctrlKey && e.code === 'KeyB') {
     e.preventDefault()
     if (bookViewStore.isBookViewActive) {
