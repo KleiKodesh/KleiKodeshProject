@@ -82,6 +82,15 @@
           ContinueOnError="true"
           IgnoreExitCode="true" />
 
+    <!--
+      Ensure pdfjs/build/ is present in the output. Vite copies public/ to dist/,
+      but if the dist is stale (built before pdfjs/build/ was added to public/),
+      the subfolder will be missing. Sync directly from public/ as a fallback.
+    -->
+    <Exec Command="robocopy &quot;$(VueProjectDir)public\pdfjs\build&quot; &quot;$(VueFrontendOut)\pdfjs\build&quot; /E /IS /IT /XO /NFL /NDL /NJH /NJS /NC /NS /NP"
+          ContinueOnError="true"
+          IgnoreExitCode="true" />
+
     <Error Text="ERROR: index.html not found in frontend output!"
            Condition="!Exists('$(VueFrontendOut)\index.html')" />
     <Error Text="ERROR: PDF.js not found in frontend output!"
