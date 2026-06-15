@@ -12,7 +12,7 @@ Virtual-scrolled main text display for the book view. Handles line rendering, se
 
 **useBookViewLineRenderer.ts** - line content rendering with diacritics filtering, divine name censoring, and search highlighting. Caches rendered HTML per line to avoid re-running expensive transformations on every render cycle.
 
-**useBookViewLineCopyMenu.ts** - context menu for copying selected lines with optional source attribution. Handles both partial selections and select-all.
+**useBookViewLineCopyMenu.ts** - context menu for copying selected lines with optional source attribution. Provides three copy modes: block copy (selected HTML as-is), copy with source appended inline as "(Book Title, TOC Path)", and copy with source prepended as an `<h2>` block. The source is built from `getActiveTocEntry()` and `getTocPath()` for the selection's first line, falling back to `tabStore.activeTab.tocPath` for the live scroll position.
 
 ## Imports
 

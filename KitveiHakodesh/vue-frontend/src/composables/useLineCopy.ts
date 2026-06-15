@@ -28,14 +28,19 @@ function selectedHtml(): string {
   return container.innerHTML
 }
 
+function stripNoteMarkers(html: string): string {
+  return html.replace(/<sup[^>]*class="user-note-marker"[^>]*>.*?<\/sup>/gs, '')
+}
+
 export function useScopedCopy(
   scrollerEl: Ref<HTMLElement | null>,
   getLines: () => string[],
   isSelectAll: Ref<boolean>,
 ) {
   useEventListener(scrollerEl, 'copy', (event: ClipboardEvent) => {
-    const innerHtml = isSelectAll.value ? linesToHtml(getLines()) : selectedHtml()
-    if (!innerHtml.trim()) return
+    const raw = isSelectAll.value ? linesToHtml(getLines()) : selectedHtml()
+    if (!raw.trim()) return
+    const innerHtml = stripNoteMarkers(raw)
 
     const htmlContent = wrapRtlHtml(innerHtml)
     const plainText = htmlToPlainText(innerHtml)
@@ -46,8 +51,9 @@ export function useScopedCopy(
   })
 
   useEventListener(scrollerEl, 'dragstart', (event: DragEvent) => {
-    const innerHtml = isSelectAll.value ? linesToHtml(getLines()) : selectedHtml()
-    if (!innerHtml.trim()) return
+    const raw = isSelectAll.value ? linesToHtml(getLines()) : selectedHtml()
+    if (!raw.trim()) return
+    const innerHtml = stripNoteMarkers(raw)
 
     const htmlContent = wrapRtlHtml(innerHtml)
     const plainText = htmlToPlainText(innerHtml)

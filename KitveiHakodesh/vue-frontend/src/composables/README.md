@@ -18,6 +18,6 @@ Only create a file here if the composable is used by two or more features. Singl
 
 **useVirtualListKeyNav.ts** — arrow-key and `Ctrl+Home`/`Ctrl+End` for `@tanstack/vue-virtual` lists. Use this instead of `useVirtualScrollerKeys` when the list also needs arrow-key item navigation.
 
-**useLineCopy.ts** — intercepts the browser `copy` event on a scroller. Writes lines as block elements in `text/html` and strips HTML for `text/plain` so copied text has no inline line breaks.
+**useLineCopy.ts** — intercepts the browser `copy` and `dragstart` events on a scroller element via `useScopedCopy()`. When the user has selected all (`isSelectAll` ref is true), copies every line as an HTML div wrapped in an RTL container; otherwise copies the user's text selection. Writes `text/html` and `text/plain` (HTML-stripped) so copied text has no inline line breaks.
 
 **useDropdownClose.ts** — drop-in replacement for `onClickOutside` that also closes the dropdown when the browser window loses focus (e.g. clicking into a WebView iframe). Also solves the toggle-button race condition: pass `toggleButton` with the ref of the button that opens/closes the dropdown, and the composable will suppress the close handler when that button is clicked — preventing the sequence where `pointerdown` closes the dropdown and the subsequent `click` on the button reopens it. Returns `{ justClosed }` which the toggle handler can check as a fallback when the toggle button is in the same file. Use this on every dropdown instead of `onClickOutside` directly.

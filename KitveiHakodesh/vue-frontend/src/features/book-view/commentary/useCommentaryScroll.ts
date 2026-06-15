@@ -88,12 +88,6 @@ export function useCommentaryScroll(
       if (!m) return
       const expectedScrollTop = Math.max(0, m.start)
       const actual = currentEl.scrollTop
-      if (attempt === 0) {
-        const headerEl = currentEl.querySelector(`[data-index="${idx}"]`) as HTMLElement | null
-        const scrollerRect = currentEl.getBoundingClientRect()
-        const headerRect = headerEl?.getBoundingClientRect()
-        console.log(`[stabilise] attempt=0 m.start=${m.start} actual=${actual} expected=${expectedScrollTop} scrollerTop=${scrollerRect.top} headerTop=${headerRect?.top ?? 'n/a'} headerRelative=${headerRect ? headerRect.top - scrollerRect.top : 'n/a'}`)
-      }
       if (Math.abs(actual - expectedScrollTop) > 4) {
         currentEl.scrollTop = expectedScrollTop
         scrollTop.value = expectedScrollTop

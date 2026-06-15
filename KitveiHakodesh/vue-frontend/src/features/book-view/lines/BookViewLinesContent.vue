@@ -271,25 +271,6 @@ useVirtualScrollerKeys(
   () => props.lines.length,
 )
 
-// ── Context menu ──────────────────────────────────────────────────────────────
-
-const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
-const contextMenuItems = useBookViewLineCopyMenu({
-  scrollerEl,
-  lines: () => props.lines,
-  isSelectAll,
-  selectAllInContainer,
-  bookTitle,
-  tabStore,
-  getActiveTocEntry: props.getActiveTocEntry,
-  getTocPath: props.getTocPath,
-  onHighlight,
-  onClearHighlight,
-  onAddNote,
-})
-
-onLongPress(scrollerEl, (event) => contextMenuRef.value?.showAtPosition(event.clientX, event.clientY))
-
 // ── Virtualizer ───────────────────────────────────────────────────────────────
 
 const virtualizer = useVirtualizer(
@@ -310,6 +291,27 @@ const { notesByLine, getNotesForLine, createNote, updateNote, deleteNote } = use
   bookId,
   () => virtualItems.value.map((v) => props.lines[v.index]?.id ?? 0).filter((id) => id > 0),
 )
+
+// ── Context menu ──────────────────────────────────────────────────────────────
+
+const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
+const contextMenuItems = useBookViewLineCopyMenu({
+  scrollerEl,
+  lines: () => props.lines,
+  isSelectAll,
+  selectAllInContainer,
+  bookTitle,
+  tabStore,
+  getActiveTocEntry: props.getActiveTocEntry,
+  getTocPath: props.getTocPath,
+  getNotesForLine,
+  getRenderedLineContent: lineContent,
+  onHighlight,
+  onClearHighlight,
+  onAddNote,
+})
+
+onLongPress(scrollerEl, (event) => contextMenuRef.value?.showAtPosition(event.clientX, event.clientY))
 
 // ── Scroll capture ────────────────────────────────────────────────────────────
 
@@ -743,7 +745,6 @@ defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller })
   line-height: 1;
   color: var(--accent-color);
   cursor: pointer;
-  user-select: none;
   font-style: normal;
   font-weight: normal;
   letter-spacing: 0;

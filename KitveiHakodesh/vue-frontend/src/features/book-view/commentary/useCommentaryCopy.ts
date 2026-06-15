@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import type { Ref } from 'vue'
 import type { ContextMenuItem } from '@/components/ContextMenu.vue'
+import type { Note } from '../lines/useBookViewNotes'
 import BookViewAnnotationMenuRow from '../lines/BookViewAnnotationMenuRow.vue'
 
 /**
@@ -15,6 +16,7 @@ export function useCommentaryCopy(
   onHighlight: (lineId: number, startOffset: number, endOffset: number, colorArgb: number) => void,
   onClearHighlight: (lineId: number, startOffset: number, endOffset: number) => void,
   onAddNote: (lineId: number, startOffset: number, endOffset: number, quote: string) => void,
+  getNotesForLine?: (lineId: number) => Note[],
 ) {
   const contextMenuRef = ref<any>(null)
 
@@ -150,6 +152,55 @@ export function useCommentaryCopy(
     onAddNote(firstLine.lineId, firstLine.startOffset, firstLine.endOffset, quote)
   }
 
+  // ── Note marker helpers ─────────────────────────────────────────────────────
+
+  function stripNoteMarkers(html: string): string {
+    return html.replace(/<sup[^>]*class="user-note-marker"[^>]*>.*?<\/sup>/gs, '')
+  }
+
+  interface EndnoteEntry {
+    number: number
+    noteText: string
+  }
+
+  function extractEndnotes(html: string): { html: string; endnotes: EndnoteEntry[] } {
+    const endnotes: EndnoteEntry[] = []
+    let counter = 0
+
+    const replaced = html.replace(
+      /<sup[^>]*class="user-note-marker"[^>]*data-note-id="(\d+)"[^>]*>.*?<\/sup>/gs,
+      (_match: string, noteIdStr: string) => {
+        const noteId = parseInt(noteIdStr, 10)
+        if (!getNotesForLine) return ''
+        // Scan all line elements in the scroller to find which lineId owns this note
+        const scroller = scrollerEl.value
+        if (!scroller) return ''
+        const markerEl = scroller.querySelector(`[data-note-id="${noteId}"]`) as HTMLElement | null
+        const lineEl = markerEl?.closest('[data-line-id]') as HTMLElement | null
+        const lineId = lineEl ? parseInt(lineEl.dataset['lineId'] ?? '', 10) : NaN
+        if (isNaN(lineId)) return ''
+        const foundNote = getNotesForLine(lineId).find((n) => n.id === noteId)
+        if (!foundNote) return ''
+        counter++
+        endnotes.push({ number: counter, noteText: foundNote.note })
+        return `<sup><a href="#note-${counter}" id="ref-${counter}" style="color:var(--accent-color,#0078d4);text-decoration:none">${counter}</a></sup>`
+      },
+    )
+
+    return { html: replaced, endnotes }
+  }
+
+  function buildEndnotesHtml(endnotes: EndnoteEntry[]): string {
+    if (!endnotes.length) return ''
+    const items = endnotes
+      .map(
+        (e) =>
+          `<li id="note-${e.number}"><a href="#ref-${e.number}" style="color:var(--accent-color,#0078d4);text-decoration:none">${e.number}.</a> ${e.noteText}</li>`,
+      )
+      .join('\n')
+    return `<ol dir="rtl" style="padding-inline-start:1.5em">\n${items}\n</ol>`
+  }
+
   // ── Copy actions ────────────────────────────────────────────────────────────
 
   function copyAsBlock(): void {
@@ -161,7 +212,7 @@ export function useCommentaryCopy(
     tmp.appendChild(fragment)
     const joined = tmp.innerHTML
     if (!joined.trim()) return
-    execCopyHtml(joined)
+    execCopyHtml(stripNoteMarkers(joined))
   }
 
   function copyWithSource(sourceAtEnd: boolean): void {
@@ -179,12 +230,34 @@ export function useCommentaryCopy(
 
     const tocPath = getTocPath(activeGroup.bookId)
     const source = buildCommentarySource(activeGroup.bookTitle, tocPath)
+    const cleanHtml = stripNoteMarkers(joined)
 
     const html = sourceAtEnd
-      ? `${joined} (${source})`
-      : `<h2 dir="rtl">${source}</h2>${joined}`
+      ? `${cleanHtml} (${source})`
+      : `<h2 dir="rtl">${source}</h2>${cleanHtml}`
 
     execCopyHtml(html)
+  }
+
+  function copyWithNotes(): void {
+    const sel = window.getSelection()
+    if (!sel || sel.rangeCount === 0) return
+    const range = sel.getRangeAt(0)
+    const fragment = range.cloneContents()
+    const tmp = document.createElement('div')
+    tmp.appendChild(fragment)
+    const joined = tmp.innerHTML
+    if (!joined.trim()) return
+
+    const activeGroup = getActiveGroup()
+    if (!activeGroup) return
+
+    const tocPath = getTocPath(activeGroup.bookId)
+    const source = buildCommentarySource(activeGroup.bookTitle, tocPath)
+    const { html: textHtml, endnotes } = extractEndnotes(joined)
+
+    const withSource = `<h2 dir="rtl">${source}</h2>${textHtml}`
+    execCopyHtml(withSource + buildEndnotesHtml(endnotes))
   }
 
   // ── Context menu items ──────────────────────────────────────────────────────
@@ -203,6 +276,7 @@ export function useCommentaryCopy(
     { label: 'העתק', action: () => document.execCommand('copy') },
     { label: 'העתק כבלוק', action: copyAsBlock },
     { label: 'העתק עם מקור בסוף', action: () => copyWithSource(true) },
+    { label: 'העתק עם הערות', action: copyWithNotes },
     { label: 'בחר הכל', action: selectAllInContainer },
     { type: 'separator' },
     annotationRow,

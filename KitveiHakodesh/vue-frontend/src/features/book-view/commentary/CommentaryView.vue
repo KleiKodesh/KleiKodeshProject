@@ -237,6 +237,7 @@ const { contextMenuItems } = useCommentaryCopy(
         if (marker) openNoteBubble(note, marker)
       })
     }),
+  props.getNotesForLine,
 )
 
 function onScroll() {
@@ -438,7 +439,6 @@ const activeTocPath = computed(() =>
   line-height: 1;
   color: var(--accent-color);
   cursor: pointer;
-  user-select: none;
   font-style: normal;
   font-weight: normal;
   letter-spacing: 0;

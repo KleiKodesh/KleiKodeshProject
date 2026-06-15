@@ -24,7 +24,7 @@ Commentary display, filtering, and navigation for the book view. All commentary-
 
 **useCommentaryTocPaths.ts** - fetches and caches TOC paths for commentary groups asynchronously. Keyed by bookId — resolved after groups load, never blocks rendering.
 
-**useCommentaryCopy.ts** - manages copy operations for commentary content: block copy, copy with source, and context menu items.
+**useCommentaryCopy.ts** - mirrors the book view copy logic for multi-line commentary selections. Provides the same three copy modes (block, source at end, source at start). Selection extraction uses `[data-line-id]` attributes on `.line` elements and counts stripped (diacritic-removed) character offsets, matching the same offset model used by the highlight storage layer.
 
 **useCommentaryNavigation.ts** - next/prev section navigation for the commentary panel.
 
