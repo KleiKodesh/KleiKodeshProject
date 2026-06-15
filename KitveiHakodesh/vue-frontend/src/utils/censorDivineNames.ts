@@ -37,14 +37,14 @@ export function censorDivineNames(text: string): string {
       replacement: (_m: string, a: string, l: string, h: string, y: string, m: string) =>
         a + l + h.replace('ה', 'ד') + y + m,
     },
-    // אלוהים → אלודים (not followed by אחרים)
+    // אלוהים → א-לוהים (not followed by אחרים)
     {
       regex: new RegExp(
         `(א${D})(ל${D})(ו${D})(ה${D})(י${D})(ם${D})(?!\\s*א${D}ח${D}ר${D}י${D}ם)${HWB}`,
         'g',
       ),
       replacement: (_m: string, a: string, l: string, v: string, h: string, y: string, m: string) =>
-        a + l + v + h.replace('ה', 'ד') + y + m,
+        a + '-' + l + v + h + y + m,
     },
     // אלהי → אלדי
     {
@@ -52,11 +52,11 @@ export function censorDivineNames(text: string): string {
       replacement: (_m: string, a: string, l: string, h: string, y: string) =>
         a + l + h.replace('ה', 'ד') + y,
     },
-    // אלוה → אלוד
+    // אלוה → א-לוה
     {
       regex: new RegExp(`(א${D})(ל${D})(ו${D})(ה${D})${HWB}`, 'g'),
       replacement: (_m: string, a: string, l: string, v: string, h: string) =>
-        a + l + v + h.replace('ה', 'ד'),
+        a + '-' + l + v + h,
     },
     // אל with tsere (צרה) → א-ל
     // Tsere is \u05B5. Only censor when אל stands as its own word — meaning the character
