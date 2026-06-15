@@ -86,18 +86,21 @@ namespace KitveiHakodeshLib.Bridge
         scrollTimer = setTimeout(reportScroll, 200);
     }, { passive: true });
 
-    // Forward Ctrl+key shortcuts to the parent frame so app-level keyboard
-    // shortcuts (Ctrl+W, Ctrl+F, Ctrl+N, etc.) continue to work when focus
+    // Forward keyboard shortcuts to the parent frame so app-level shortcuts
+    // (Ctrl+W, Ctrl+F, Ctrl+N, F1, F11, etc.) continue to work when focus
     // is inside the iframe.  The parent reconstructs a synthetic KeyboardEvent
     // and dispatches it on its own window.
     // Use capture phase so this fires before any iframe-internal handlers
     // (e.g. PDF.js) that may call preventDefault() on the same event.
+    var FUNCTION_KEYS = ['F1','F2','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12'];
     window.addEventListener('keydown', function (e) {
-        if (!e.ctrlKey && !e.metaKey) return;
+        var isFunctionKey = FUNCTION_KEYS.indexOf(e.code) !== -1;
+        if (!e.ctrlKey && !e.metaKey && !isFunctionKey) return;
         // Let the browser handle text-editing shortcuts inside the iframe itself
         // (Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+Z, Ctrl+Y) — only forward navigation and
-        // app-level shortcuts.
-        var editing = ['KeyA','KeyC','KeyV','KeyX','KeyZ','KeyY'];
+        // app-level shortcuts.  Ctrl+X is NOT excluded here because in the app it
+        // means ""close all tabs"", not cut.
+        var editing = ['KeyA','KeyC','KeyV','KeyZ','KeyY'];
         if (editing.indexOf(e.code) !== -1 && !e.shiftKey) return;
         window.top.postMessage({
             type: 'iframeKeydown',
