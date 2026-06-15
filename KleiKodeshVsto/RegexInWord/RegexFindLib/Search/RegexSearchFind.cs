@@ -17,7 +17,9 @@ namespace RegexFindLib.Search
         public void SelectResultByIndex(int index)
         {
             if (Results == null || index < 0 || index >= Results.Length) return;
-            Selection.SetRange(Results[index].Start, Results[index].End);
+            var result = Results[index];
+            Selection.SetRange(result.Start, result.End);
+            try { App.ActiveWindow.ScrollIntoView(Selection.Range); } catch { }
         }
 
         // ── Internal result collection ────────────────────────────────────────
@@ -154,6 +156,7 @@ namespace RegexFindLib.Search
             var currentPos = SelectionStart;
             var next = Results.FirstOrDefault(r => r.Start > currentPos) ?? Results.First();
             Selection.SetRange(next.Start, next.End);
+            try { App.ActiveWindow.ScrollIntoView(Selection.Range); } catch { }
         }
 
         public void SelectPreviousResult()
@@ -162,6 +165,7 @@ namespace RegexFindLib.Search
             var currentPos = SelectionStart;
             var prev = Results.LastOrDefault(r => r.Start < currentPos) ?? Results.Last();
             Selection.SetRange(prev.Start, prev.End);
+            try { App.ActiveWindow.ScrollIntoView(Selection.Range); } catch { }
         }
     }
 }

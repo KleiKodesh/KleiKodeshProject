@@ -99,7 +99,9 @@ namespace RegexFindLib.Search
         public void SelectResultByIndex(int index)
         {
             if (Results == null || index < 0 || index >= Results.Length) return;
-            Selection.SetRange(Results[index].Start, Results[index].End);
+            var result = Results[index];
+            Selection.SetRange(result.Start, result.End);
+            try { App.ActiveWindow.ScrollIntoView(Selection.Range); } catch { }
         }
 
         // ── Find ──────────────────────────────────────────────────────────────
@@ -127,6 +129,7 @@ namespace RegexFindLib.Search
             }
 
             Selection.SetRange(target.Start, target.End);
+            try { App.ActiveWindow.ScrollIntoView(Selection.Range); } catch { }
         }
 
         // ── Replace ───────────────────────────────────────────────────────────
