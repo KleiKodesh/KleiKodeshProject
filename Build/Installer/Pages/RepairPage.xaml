@@ -139,6 +139,7 @@
             <RowDefinition Height="3"/>
             <RowDefinition Height="auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="auto"/>  <!-- progress/log/summary — always visible -->
             <RowDefinition Height="auto"/>
         </Grid.RowDefinitions>
 
@@ -271,7 +272,15 @@
             </Border>
 
             <!-- Progress (shown during repair) -->
-            <StackPanel x:Name="ProgressPanel" Visibility="Collapsed" Margin="0,0,0,8">
+            <!-- LogPanel and SummaryText moved outside ScrollViewer — see Grid.Row="3" below -->
+
+        </StackPanel>
+        </ScrollViewer>
+
+        <!-- Progress / log / summary — always visible, never scrolled away -->
+        <StackPanel Grid.Row="3" Margin="28,0,28,8">
+
+            <StackPanel x:Name="ProgressPanel" Visibility="Collapsed" Margin="0,8,0,0">
                 <TextBlock x:Name="StepText"
                            FontSize="12"
                            FontWeight="SemiBold"
@@ -283,16 +292,15 @@
                              Minimum="0" Maximum="100" Value="0"/>
             </StackPanel>
 
-            <!-- Log -->
             <Border x:Name="LogPanel"
                     Visibility="Collapsed"
                     BorderBrush="#E5E5E5"
                     BorderThickness="1"
                     CornerRadius="4"
                     Background="#F8F8F8"
-                    Margin="0,0,0,8">
+                    Margin="0,8,0,0">
                 <ScrollViewer x:Name="LogScroller"
-                              Height="100"
+                              Height="90"
                               VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled"
                               Padding="10,8">
@@ -308,19 +316,18 @@
                 </ScrollViewer>
             </Border>
 
-            <!-- Summary -->
             <TextBlock x:Name="SummaryText"
                        Visibility="Collapsed"
                        FontSize="12"
                        FontWeight="SemiBold"
                        Foreground="#1F1F1F"
                        TextWrapping="Wrap"
-                       HorizontalAlignment="Center"/>
+                       HorizontalAlignment="Center"
+                       Margin="0,8,0,0"/>
         </StackPanel>
-        </ScrollViewer>
 
         <!-- Footer -->
-        <Border Grid.Row="3"
+        <Border Grid.Row="4"
                 Background="#F0F0F0"
                 BorderBrush="#E5E5E5"
                 BorderThickness="0,1,0,0">
