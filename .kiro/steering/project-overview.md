@@ -18,7 +18,11 @@ The **main application** is the **WPF installer** (`Build/Installer`). It instal
 - `WpfLib` — Shared WPF utilities and helpers
 - `KitveiHakodesh` (Vue/TypeScript) — frontend for the KitveiHakodesh seforim viewer
 - `KitveiHakodesh/CSharpBackend/KitveiHakodeshLib` — C# backend for the KitveiHakodesh WebView2 app
-- `KitveiHakodesh/CSharpBackend/SearchEngineLib` — Lucene-based search engine
+- `KitveiHakodesh/CSharpBackend/Ftslib-Csharp` — Ftslib-based search engine
+- `KitveiHakodesh/CSharpBackend/DocumentLocator` — NTFS MFT-based document indexing service for fast local file search
+- `KitveiHakodesh/CSharpBackend/KitveiHakodeshDemoApp` — Standalone WinForms demo app for testing KitveiHakodeshLib
+- `KleiKodeshVsto/Kiwix` — WinForms + WebView2 ZIM file reader (offline wiki browser)
+- `KleiKodeshVsto/Nakdan` — Hebrew diacritical mark helper (OOXML parsing, Dicta API integration)
 - `hebrew-typing-tutor` — Browser-based Hebrew touch-typing tutor (separate project, Vue/TypeScript)
 - `kleikodesh-website` — Public marketing website, hosted at kleikodesh.github.io (static HTML/CSS/JS)
 
@@ -38,9 +42,9 @@ The installer lets users customize the website list before installation via `Adv
 
 See `Build/Installer/README.md` for full details.
 
-## Lucene Search Index & Version Detection
+## Ftslib Search Index & Version Detection
 
-The Lucene search index is built from the Zayit seforim database.
+The Ftslib search index is built from the Zayit seforim database.
 After each successful index build, the current app version is written to the index metadata.
 On startup (`SearchHandler.OnDbReady`), if the installed app version (from registry) differs from the stamped version, the user is prompted (via `searchIndexVersionMismatch` push event → Vue confirm dialog) whether to rebuild the index.
 
@@ -48,7 +52,7 @@ On startup (`SearchHandler.OnDbReady`), if the installed app version (from regis
 
 - **MSBuild** (for VSTO and WPF projects requiring VS tools): `C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe`
 - **Full solution build**: `& "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe" KleiKodeshProject.slnx /m /nologo /verbosity:minimal`
-- **dotnet build** works for SDK-style projects only (`Build/Installer`, `KitveiHakodeshLib`, `SearchEngineLib`). Old-style WPF/VSTO projects (`KleiKodeshVsto`, `WpfLib`) require MSBuild from VS.
+- **dotnet build** works for SDK-style projects only (`Build/Installer`, `KitveiHakodeshLib`, `Ftslib-Csharp`). Old-style WPF/VSTO projects (`KleiKodeshVsto`, `WpfLib`) require MSBuild from VS.
 
 ## NuGet Quirk — Native Interop DLLs Don't Propagate Transitively
 
@@ -78,14 +82,20 @@ Each project folder contains a `README.md` describing its purpose, folder struct
 | README                                                                                                               | Covers                                                             |
 | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | [`README.md`](../../README.md)                                                                                       | Root overview, architecture diagram, build instructions            |
+| [`Build/README.md`](../../Build/README.md)                                                                                                         | Build infrastructure: layouts, pre-build targets, variants        |
 | [`Build/Installer/README.md`](../../Build/Installer/README.md)                                                       | WPF installer: extraction, registry keys, version management       |
 | [`KleiKodeshVsto/README.md`](../../KleiKodeshVsto/README.md)                                                         | VSTO add-in: ribbon, task panes, helpers                           |
 | [`KleiKodeshVsto/DocDesign/README.md`](../../KleiKodeshVsto/DocDesign/README.md)                                                                   | Torah formatting library: Columns, Paragraphs, Spacing             |
 | [`KleiKodeshVsto/RegexInWord/RegexFindLib/README.md`](../../KleiKodeshVsto/RegexInWord/RegexFindLib/README.md)                                         | Regex find & replace library for Word                              |
 | [`KleiKodeshVsto/WebSitesLib/README.md`](../../KleiKodeshVsto/WebSitesLib/README.md)                                                               | Curated website browser task pane                                  |
+| [`KleiKodeshVsto/Kiwix/README.md`](../../KleiKodeshVsto/Kiwix/README.md)                                                                           | ZIM file reader: WebView2 host, kiwix-js integration               |
+| [`KleiKodeshVsto/Nakdan/README.md`](../../KleiKodeshVsto/Nakdan/README.md)                                                                         | Hebrew diacritical marks: Dicta API, OOXML parsing                 |
+| [`WpfLib/README.md`](../../WpfLib/README.md)                                                                                                       | Shared WPF utilities: ViewModelBase, converters, custom controls   |
+| [`UpdateCheckerLib/README.md`](../../UpdateCheckerLib/README.md)                                                                                   | Update checking: GitHub releases, version detection, downloads    |
 | [`KitveiHakodesh/README.md`](../../KitveiHakodesh/README.md)                                                                       | Vue 3 frontend: components, stores, host bridge, build             |
 | [`KitveiHakodesh/CSharpBackend/README.md`](../../KitveiHakodesh/CSharpBackend/README.md)                                           | C# backend projects overview                                       |
 | [`KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/README.md`](../../KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/README.md)                     | WebView2 host, message bridge, all handlers                        |
-| [`KitveiHakodesh/CSharpBackend/SearchEngineLib/README.md`](../../KitveiHakodesh/CSharpBackend/SearchEngineLib/README.md) | Lucene search engine: indexing, searching, version detection |
+| [`KitveiHakodesh/CSharpBackend/Ftslib-Csharp/README.md`](../../KitveiHakodesh/CSharpBackend/Ftslib-Csharp/README.md) | Ftslib search engine: indexing, searching, version detection |
+| [`KitveiHakodesh/CSharpBackend/DocumentLocator/README.md`](../../KitveiHakodesh/CSharpBackend/DocumentLocator/README.md) | NTFS MFT indexing: Windows service, named-pipe client for file search |
 | [`hebrew-typing-tutor/README.md`](../../hebrew-typing-tutor/README.md)                                               | Browser-based Hebrew touch-typing tutor: exercises, progress       |
 | [`kleikodesh-website/README.md`](../../kleikodesh-website/README.md)                                                 | Public website (GitHub Pages): homepage, downloads, features       |

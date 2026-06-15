@@ -69,6 +69,11 @@ namespace KleiKodeshVstoInstallerWpf
                 _status.Report("שומר גרסה...");
                 AddinInstaller.SaveVersion();
 
+                // Trigger a background reindex of the file-system search service
+                // so it reflects any new files from this install. Fire-and-forget —
+                // the service acks immediately and rebuilds without blocking us.
+                _ = DocumentLocatorHelper.EnsureServiceRunningAndReindexAsync();
+
                 _status.Report("ההתקנה הושלמה!");
                 await Task.Delay(300);
                 if (_showSettingsAfter)

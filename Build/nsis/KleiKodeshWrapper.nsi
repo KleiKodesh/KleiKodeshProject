@@ -83,7 +83,7 @@ UninstallIcon "..\Installer\KleiKodesh_Main.ico"
 Name "מתקין ${PRODUCT_NAME}"
 OutFile "${OUTPUT_DIR}\KleiKodeshSetup-${PRODUCT_VERSION}${OUTPUT_SUFFIX}.exe"
 InstallDir "$LOCALAPPDATA\KleiKodesh"
-RequestExecutionLevel user
+RequestExecutionLevel admin
 SilentInstall silent
 AutoCloseWindow true
 
@@ -338,6 +338,21 @@ FunctionEnd
 Section Uninstall
   ; Check if Word is running after user confirms uninstall
   Call un.HandleWordRunning
+
+  ; ── DocumentLocator Windows Service ──────────────────────────────────────────
+  ; Must happen before file removal — the service exe must be on disk for
+  ; sc.exe to stop and delete it. Running as admin (RequestExecutionLevel admin)
+  ; so SCM access is available.
+  DetailPrint "עוצר ומסיר שירות DocumentLocator..."
+  nsExec::ExecToStack 'sc stop DocumentLocatorSvc'
+  Pop $0
+  Pop $1
+  ; Give the service up to 5 seconds to reach STOPPED state
+  Sleep 3000
+  nsExec::ExecToStack 'sc delete DocumentLocatorSvc'
+  Pop $0
+  Pop $1
+  ; $0 == 0 = deleted, 1060 = service did not exist — both are fine
 
   ; Show progress with hardcoded Hebrew messages
   DetailPrint "מתחיל הסרת כלי קודש..."

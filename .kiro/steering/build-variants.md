@@ -87,6 +87,6 @@ Each should output to a distinct `bin\Release*\` folder.
 
 ## Standalone Dev Tools — Exempt
 
-Projects that are **not** in the `KleiKodeshVsto` dependency chain (demo apps, test harnesses) only need `Debug|AnyCPU` and `Release|AnyCPU`. Examples: `FtsLibDemo`, `FtsLibTest`, `DocDesignDemo`, `RegexFindDemo`, `KiwixDemoApp`, `WebSitesDemo`.
+Projects that are **not** in the `KleiKodeshVsto` dependency chain (demo apps, test harnesses) only need `Debug|AnyCPU` and `Release|AnyCPU`. Examples: `Ftslib-Csharp`'s `FtsLibDemo`, `FtsLibTest`, `DocDesignDemo`, `RegexFindDemo`, `KiwixDemoApp`, `WebSitesDemo`.
 
 Note: `KitveiHakodeshDemoApp` **is** in the chain (it references `KitveiHakodeshLib` and is built as part of the VSTO output) so it requires all three variants.

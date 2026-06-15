@@ -1,45 +1,71 @@
 using System;
 using System.IO;
 using System.IO.Pipes;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Win32;
 
 namespace KleiKodeshVstoInstallerWpf.Helpers
 {
     /// <summary>
     /// Handles graceful shutdown of the DocumentLocator Windows service before
-    /// the installer overwrites its exe.
+    /// the installer overwrites its exe, and triggers a reindex after install.
     ///
     /// The service grants any authenticated user READ+WRITE pipe access, so no
-    /// elevation is required to send the shutdown message.
+    /// elevation is required to send the shutdown or reindex message.
     ///
-    /// Flow:
+    /// Shutdown flow (start of install):
     ///   1. SendShutdownAsync() — sends {"type":"shutdown"} over the named pipe.
     ///      The service acks and then stops itself via ServiceBase.Stop().
     ///   2. After 1 500 ms the process has exited and the file lock is released.
     ///
-    /// The caller fires this at the very start of installation and does NOT await
-    /// it — extraction proceeds in parallel so the overall install is not slowed.
-    /// When AddinInstaller reaches DocumentLocator.Service.exe it calls
-    /// TryCopyServiceExeAsync() which checks whether the 1 500 ms have elapsed
-    /// and, if not, waits for the remainder before retrying the copy up to three
-    /// times.
+    /// Reindex flow (end of install):
+    ///   1. EnsureServiceRunningAndReindexAsync() — starts the service via SCM
+    ///      if it is not running, waits for the pipe to become available, then
+    ///      sends {"type":"reindex"}. The service acks and rebuilds in the
+    ///      background; the installer does not wait for the rebuild to finish.
     /// </summary>
     public static class DocumentLocatorHelper
     {
-        private const string PipeName        = "DocumentLocator";
-        private const string ServiceExeName  = "DocumentLocator.Service.exe";
-        private const int    ShutdownWaitMs  = 1_500;
+        private const string PipeName         = "DocumentLocator";
+        private const string ServiceExeName   = "DocumentLocator.Service.exe";
+        private const string SvcName          = "DocumentLocatorSvc";
+        private const int    ShutdownWaitMs   = 1_500;
         private const int    ConnectTimeoutMs = 2_000;
-        private const int    RetryDelayMs    = 700;
-        private const int    MaxRetries      = 3;
+        private const int    RetryDelayMs     = 700;
+        private const int    MaxRetries       = 3;
+        private const int    StartupPollMs    = 300;
+        private const int    StartupTimeoutMs = 15_000;
 
         private static readonly string ShutdownRequest = "{\"type\":\"shutdown\"}";
+        private static readonly string ReindexRequest  = "{\"type\":\"reindex\"}";
 
         // Timestamp of when SendShutdownAsync() was called, so callers can measure
         // elapsed time and avoid waiting longer than necessary.
         private static DateTime _shutdownRequestedAt = DateTime.MinValue;
+
+        // ── Win32 SCM ─────────────────────────────────────────────────────────────
+
+        [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        private static extern IntPtr OpenSCManager(
+            string lpMachineName, string lpDatabaseName, uint dwDesiredAccess);
+
+        [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        private static extern IntPtr OpenService(
+            IntPtr hSCManager, string lpServiceName, uint dwDesiredAccess);
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        private static extern bool StartService(
+            IntPtr hService, uint dwNumServiceArgs, IntPtr lpServiceArgVectors);
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        private static extern bool CloseServiceHandle(IntPtr hSCObject);
+
+        private const uint SC_MANAGER_CONNECT         = 0x0001;
+        private const uint SERVICE_START              = 0x0010;
+        private const int  ERROR_SERVICE_ALREADY_RUNNING = 1056;
 
         // ── Public API ────────────────────────────────────────────────────────────
 
@@ -77,6 +103,55 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             catch
             {
                 // Non-critical — if anything goes wrong we still proceed with extraction.
+            }
+        }
+
+        /// <summary>
+        /// If the DocumentLocator service is installed, starts it (if stopped) and
+        /// sends a reindex command so the file-system index is rebuilt against the
+        /// freshly installed binaries.
+        ///
+        /// The service acks immediately and rebuilds in the background — this method
+        /// returns as soon as the ack is received (or on any error). It is safe to
+        /// call fire-and-forget from the installer.
+        ///
+        /// No-ops immediately and silently if the service is not installed
+        /// (e.g. first-run before the VSTO add-in has ever registered it).
+        /// </summary>
+        public static async Task EnsureServiceRunningAndReindexAsync()
+        {
+            try
+            {
+                // Check installation before doing anything else — avoids the
+                // 15-second pipe-wait on machines where the service doesn't exist yet.
+                bool installed = await Task.Run(() => IsServiceInstalled())
+                    .ConfigureAwait(false);
+                if (!installed) return;
+
+                await Task.Run(() => StartServiceIfStopped()).ConfigureAwait(false);
+
+                // Wait for the pipe to become ready after start.
+                await WaitForPipeAsync().ConfigureAwait(false);
+
+                // Send reindex — fire-and-forget from the service's perspective.
+                await Task.Run(() =>
+                {
+                    try
+                    {
+                        using (var pipe = new NamedPipeClientStream(
+                            ".", PipeName, PipeDirection.InOut))
+                        {
+                            pipe.Connect(ConnectTimeoutMs);
+                            WriteFrame(pipe, ReindexRequest);
+                            ReadFrame(pipe); // wait for ack (returns immediately)
+                        }
+                    }
+                    catch { /* non-critical */ }
+                }).ConfigureAwait(false);
+            }
+            catch
+            {
+                // Non-critical — reindex failure does not affect the install result.
             }
         }
 
@@ -142,6 +217,69 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         }
 
         // ── Private helpers ───────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns true if the DocumentLocator service is registered in the SCM.
+        /// Reads HKLM — no elevation required.
+        /// </summary>
+        private static bool IsServiceInstalled()
+        {
+            using (var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
+                @"SYSTEM\CurrentControlSet\Services\DocumentLocatorSvc"))
+                return key != null;
+        }
+
+        /// <summary>
+        /// Opens the SCM and issues StartService. Ignores ERROR_SERVICE_ALREADY_RUNNING.
+        /// Returns silently if the service is not installed.
+        /// </summary>
+        private static void StartServiceIfStopped()
+        {
+            IntPtr scm = OpenSCManager(null, null, SC_MANAGER_CONNECT);
+            if (scm == IntPtr.Zero) return; // SCM unavailable — skip
+
+            try
+            {
+                IntPtr svc = OpenService(scm, SvcName, SERVICE_START);
+                if (svc == IntPtr.Zero) return; // service not installed — skip
+
+                try
+                {
+                    bool started = StartService(svc, 0, IntPtr.Zero);
+                    if (!started)
+                    {
+                        int err = Marshal.GetLastWin32Error();
+                        if (err != ERROR_SERVICE_ALREADY_RUNNING)
+                            return; // unexpected error — fall through, pipe wait will handle it
+                    }
+                }
+                finally { CloseServiceHandle(svc); }
+            }
+            finally { CloseServiceHandle(scm); }
+        }
+
+        /// <summary>
+        /// Polls until the DocumentLocator pipe is accepting connections or the
+        /// timeout elapses. Does not throw on timeout — callers handle gracefully.
+        /// </summary>
+        private static async Task WaitForPipeAsync()
+        {
+            int elapsed = 0;
+            while (elapsed < StartupTimeoutMs)
+            {
+                await Task.Delay(StartupPollMs).ConfigureAwait(false);
+                elapsed += StartupPollMs;
+                try
+                {
+                    using (var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.InOut))
+                    {
+                        pipe.Connect(300);
+                        return; // pipe is up
+                    }
+                }
+                catch { /* not ready yet */ }
+            }
+        }
 
         /// <summary>
         /// Waits until at least <see cref="ShutdownWaitMs"/> ms have elapsed since

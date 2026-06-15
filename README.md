@@ -25,13 +25,15 @@
 | [`KleiKodeshVsto/DocDesign`](KleiKodeshVsto/DocDesign/README.md)                                     | WPF Class Library     | כלים לעיצוב מסמכים תורניים בוורד                      |
 | [`KleiKodeshVsto/RegexInWord/RegexFindLib`](KleiKodeshVsto/RegexInWord/RegexFindLib/README.md)       | WPF Class Library     | חיפוש והחלפה עם ביטויים רגולריים — ממשק WPF מקורי    |
 | [`KleiKodeshVsto/WebSitesLib`](KleiKodeshVsto/WebSitesLib/README.md)                                 | WPF Class Library     | דפדפן אתרים תורניים עם WebView2                       |
-| [`KleiKodeshVsto/Kiwix`](KleiKodeshVsto/Kiwix/KIWIX_CHANGES.md)                                     | WinForms + JS         | קורא קבצי ZIM (Kiwix) — WebView2 עם kiwix-js מותאם   |
+| [`KleiKodeshVsto/Kiwix`](KleiKodeshVsto/Kiwix/README.md)                                           | WinForms + WebView2   | קורא קבצי ZIM (Kiwix) — WebView2 עם kiwix-js מותאם   |
+| [`KleiKodeshVsto/Nakdan`](KleiKodeshVsto/Nakdan/README.md)                                         | .NET Library          | עוזר סימוני קודש — OOXML, Dicta API integration       |
 | [`WpfLib`](WpfLib/README.md)                                                                         | WPF Class Library     | כלי WPF משותפים — ViewModelBase, converters, controls |
 | [`UpdateCheckerLib`](UpdateCheckerLib/README.md)                                                      | .NET Library          | בדיקת עדכונים מ-GitHub והורדתם                        |
 | [`KitveiHakodesh`](KitveiHakodesh/README.md)                                                                       | Vue 3 + TypeScript    | ספרייה לצפייה במאגר הספרים של זית / אוצריא            |
 | [`KitveiHakodesh/CSharpBackend/KitveiHakodeshLib`](KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/README.md)                     | .NET Library          | WebView2 host לממשק KitveiHakodesh                           |
-| [`KitveiHakodesh/CSharpBackend/FtsLib`](KitveiHakodesh/CSharpBackend/FtsLib/README.md) | .NET Library          | מנוע חיפוש Bloom filter                               |
-| [`kleikodesh.github.io`](kleikodesh.github.io/README.md)                                             | Static HTML/CSS/JS    | אתר הפרויקט הציבורי ודף ההורדה                        |
+| [`KitveiHakodesh/CSharpBackend/Ftslib-Csharp`](KitveiHakodesh/CSharpBackend/Ftslib-Csharp/README.md) | .NET Library          | מנוע חיפוש Bloom filter                               |
+| [`KitveiHakodesh/CSharpBackend/DocumentLocator`](KitveiHakodesh/CSharpBackend/DocumentLocator/README.md) | Windows Service + .NET | שירות אינדוקס קבצים NTFS עבור חיפוש מהיר                     |
+| [`kleikodesh-website`](kleikodesh-website/README.md)                                             | Static HTML/CSS/JS    | אתר הפרויקט הציבורי ודף ההורדה                        |
 
 ## ארכיטקטורה
 
@@ -150,7 +152,7 @@ KleiKodeshProject/
 ├── UpdateCheckerLib/        — בדיקת עדכונים
 ├── KitveiHakodesh/          — ספרייה לצפייה בספרים
 │   └── CSharpBackend/       — backend C# (WebView2 host, חיפוש)
-├── kleikodesh.github.io/    — אתר ציבורי
+├── kleikodesh-website/      — אתר ציבורי
 └── hebrew-typing-tutor/     — פרויקט נוסף (מטוטור הקלדה)
 ```
 

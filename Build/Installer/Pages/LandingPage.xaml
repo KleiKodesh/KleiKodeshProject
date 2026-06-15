@@ -84,7 +84,7 @@
             <StackPanel HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         Margin="28,40,28,24"
-                        Width="300">
+                        Width="380">
 
                 <!-- Logo -->
                 <Image Source="/KleiKodesh_Main.ico"

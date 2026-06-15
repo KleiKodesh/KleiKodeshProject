@@ -77,8 +77,7 @@ This ensures the search index stays in sync with the app version without forcing
 ## Related Files
 
 - `Build/Installer/Helpers/AddinInstaller.cs` — extraction logic
-- `Build/Installer/README.md` — extraction rules table
 - `KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/AppViewer.cs` — WebView2 user data folder
-- `KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/Pdf/PdfHandler.cs` — Word cache
+- `KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/Pdf/LocalFileHandler.cs` — Word cache
 - `KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/HebrewBooks/HebrewBooksHandler.cs` — HebrewBooks cache
-- `KitveiHakodesh/CSharpBackend/BloomSearchEngineLib/Search/SearchHandler.cs` — index version detection
+- `KitveiHakodesh/CSharpBackend/Ftslib-Csharp/Search/SearchHandler.cs` — index version detection

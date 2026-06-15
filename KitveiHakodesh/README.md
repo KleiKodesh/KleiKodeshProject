@@ -113,7 +113,7 @@ In dev mode, SQL calls go to the Vite middleware instead. Everything else (file 
 | Project                | Role                                                                      |
 | ---------------------- | ------------------------------------------------------------------------- |
 | `KitveiHakodeshLib`           | WebView2 host, message bridge, SQLite access, PDF handling, file I/O      |
-| `FtsLib`               | Custom LSM-style full-text search index builder and searcher for Hebrew/Aramaic seforim |
+| `Ftslib-Csharp`        | Custom LSM-style full-text search index builder and searcher for Hebrew/Aramaic seforim |
 | `KitveiHakodeshDemoApp`       | Standalone WinForms harness for running the Vue app outside of production |
 | `DocumentLocator`      | NTFS MFT file index Windows service + named-pipe client for local file search |
 
