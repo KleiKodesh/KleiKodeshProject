@@ -160,6 +160,52 @@ function extractSelection(
 
 // ── Composable ────────────────────────────────────────────────────────────────
 
+/**
+ * Builds the full RTL HTML for exporting a book to Word.
+ * Renders all lines (using the provided renderer), injects numbered endnotes,
+ * and wraps everything in a proper HTML document shell.
+ */
+export function buildBookExportHtml(
+  lines: LineItem[],
+  bookTitle: string,
+  renderLine: (raw: string, lineIndex: number, lineId: number) => string,
+  getNotesForLine: (lineId: number) => Note[],
+): string {
+  // Build a noteId → note lookup by scanning all lines
+  function resolveNote(noteId: number): { noteText: string; quote: string } | undefined {
+    for (const lineItem of lines) {
+      const found = getNotesForLine(lineItem.id).find((n) => n.id === noteId)
+      if (found) return { noteText: found.note, quote: found.quote }
+    }
+    return undefined
+  }
+
+  const renderedLines = lines
+    .filter((l) => l.content != null)
+    .map((l) => `<div class="book-line">${renderLine(l.content!, l.lineIndex, l.id)}</div>`)
+    .join('\n')
+
+  const { html: bodyHtml, endnotes } = extractEndnotes(renderedLines, resolveNote)
+
+  const endnotesHtml = buildEndnotesHtml(endnotes)
+
+  return (
+    `<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="utf-8">` +
+    `<title>${bookTitle}</title>` +
+    `<style>body{direction:rtl;font-family:"David","Times New Roman",serif;font-size:14pt;line-height:1.8}` +
+    `.book-line{margin-bottom:4pt}` +
+    `a{color:#0078d4}` +
+    `sup{font-size:0.7em}` +
+    `ol{margin-top:12pt}` +
+    `li{margin-bottom:4pt}` +
+    `</style></head><body>` +
+    `<h1>${bookTitle}</h1>` +
+    bodyHtml +
+    endnotesHtml +
+    `</body></html>`
+  )
+}
+
 export function useBookViewLineCopyMenu(options: CopyMenuOptions): ContextMenuItem[] {
   const { scrollerEl, lines, isSelectAll, selectAllInContainer, bookTitle, tabStore } = options
 

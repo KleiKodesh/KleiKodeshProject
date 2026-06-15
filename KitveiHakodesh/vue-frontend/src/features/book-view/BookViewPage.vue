@@ -3,6 +3,8 @@ import { ref, computed, watch } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
 import { useBookView } from './useBookView'
 import { useBookViewStore } from '@/stores/bookViewStore'
+import { isHosted } from '@/webview-host/seforimDb'
+import { exportToWord as bridgeExportToWord } from '@/webview-host/bridge'
 import BookViewToolbar from './BookViewToolbar.vue'
 import SplitPane from '@/components/SplitPane.vue'
 import BookViewLinesContent from './lines/BookViewLinesContent.vue'
@@ -79,12 +81,19 @@ const {
   ensureStaticFilterGroupsLoaded, staticFilterGroupsLoaded,
   onCommentaryPanelMounted,
   getActiveTocEntry, getTocPath,
+  buildExportHtml,
 } = useBookView(
   () => toolbarRef.value,
   () => linesContentRef.value,
   () => searchBarRef.value,
   () => commentaryViewRef.value,
 )
+
+async function onExportToWord() {
+  if (!isHosted) return
+  const html = buildExportHtml()
+  await bridgeExportToWord(html).catch(() => {})
+}
 
 // Keep commentaryMode and useBookView's commentaryVisible in sync.
 // commentaryMode is the source of truth for the UI; commentaryVisible drives internal logic.
@@ -140,7 +149,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, () => {
       :commentary-mode="commentaryMode"
       @cycle-commentary-mode="cycleCommentaryMode"
       @toggle-search="searchVisible = !searchVisible"
-      @toggle-toc="toggleTocPanel"
+      @toggle-toc="toggleTocPanel"`n      @export-to-word="onExportToWord"
     />
     <!-- Middle row: right toolbar + content + left toolbar (RTL: first child = physical right) -->
     <div class="body-row">
@@ -165,7 +174,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, () => {
         :commentary-mode="commentaryMode"
         @cycle-commentary-mode="cycleCommentaryMode"
         @toggle-search="searchVisible = !searchVisible"
-        @toggle-toc="toggleTocPanel"
+        @toggle-toc="toggleTocPanel"`n      @export-to-word="onExportToWord"
     />
       <div class="content-area">
         <div
@@ -377,7 +386,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, () => {
       :commentary-mode="commentaryMode"
       @cycle-commentary-mode="cycleCommentaryMode"
       @toggle-search="searchVisible = !searchVisible"
-      @toggle-toc="toggleTocPanel"
+      @toggle-toc="toggleTocPanel"`n      @export-to-word="onExportToWord"
     />
   </div>
 </template>

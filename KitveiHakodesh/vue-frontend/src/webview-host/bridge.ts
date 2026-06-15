@@ -196,6 +196,15 @@ export function fileSystemSearch(
 }
 
 /**
+ * Export book content as HTML to a new Word document.
+ * C# opens Word (or reuses a running instance), creates a blank document,
+ * and inserts the provided HTML as the document content.
+ */
+export function exportToWord(html: string): Promise<{ ok?: boolean; error?: string }> {
+  return action<{ ok?: boolean; error?: string }>('exportToWord', { html })
+}
+
+/**
  * Trigger a HebrewBooks PDF download to the cache, then open it.
  */
 export function triggerHbDownload(

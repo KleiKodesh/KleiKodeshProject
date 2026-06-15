@@ -141,6 +141,7 @@
     <Compile Include="Dictionary\DictionaryHandler.cs" />
     <Compile Include="Dictionary\WordThesaurusProvider.cs" />
     <Compile Include="Helpers\FontsProvider.cs" />
+    <Compile Include="WordExporter.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

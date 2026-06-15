@@ -22,6 +22,9 @@ import { useCommentaryRender } from './commentary/useCommentaryRender'
 import { useCommentaryTocPaths } from './commentary/useCommentaryTocPaths'
 import { useBookViewScrollSync } from './useBookViewScrollSync'
 import { useBookViewSessionRestore } from './useBookViewSessionRestore'
+import { useBookViewLineRenderer } from './lines/useBookViewLineRenderer'
+import { buildBookExportHtml } from './lines/useBookViewLineCopyMenu'
+import { useSettingsStore } from '@/stores/settingsStore'
 import type { TocEntry } from './toc/useBookViewToc'
 import type { SearchMode, SidePanelMode, CommentaryTreeState } from './bookViewTypes'
 export type { SearchMode } from './bookViewTypes'
@@ -53,6 +56,7 @@ export function useBookView(
 ) {
   const bookViewStore = useBookViewStore()
   const tabStore = useTabStore()
+  const settingsStore = useSettingsStore()
   const { zoom, isBookViewActive, toolbarPosition } = storeToRefs(bookViewStore)
 
   useZoomHandler({ zoom, enabled: isBookViewActive })
@@ -229,6 +233,30 @@ export function useBookView(
     getNotesForLine,
   )
   const { commentaryTocPaths } = useCommentaryTocPaths(() => groupsForDisplay.value)
+
+  // ── Book line renderer (for export) ──────────────────────────────────────
+  // A dedicated renderer instance used only for export — keeps caching separate
+  // from the virtual scroller renderer in BookViewLinesContent.
+
+  const diacriticsStateForExport = computed(() => settingsStore.diacriticsState)
+  const { lineContent: renderLineForExport } = useBookViewLineRenderer(
+    settingsStore,
+    diacriticsStateForExport,
+    () => ({
+      getHighlightsForLine: undefined,
+      getNotesForLine: (lineId: number) =>
+        getNotesForLine(lineId), // reuse hoisted notes map
+    }),
+  )
+
+  function buildExportHtml(): string {
+    return buildBookExportHtml(
+      lines.value,
+      bookTitle ?? '',
+      renderLineForExport,
+      getNotesForLine,
+    )
+  }
 
   // ── Search ────────────────────────────────────────────────────────────────
 
@@ -548,6 +576,8 @@ export function useBookView(
     getHighlightsForLine, applyHighlight, clearHighlight,
     getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote,
     commentaryFontPx, renderContent, setCurrentMark, commentaryTocPaths,
+    // export
+    buildExportHtml,
     // scroll / search state
     currentScrollLineIndex,
     scrollStateReady, idbResolved, initialLineIndex, initialScrollTop, initialScrollOffset,

@@ -35,7 +35,7 @@ const props = defineProps<{
   onRelatedBooksOpen?: () => void
   commentaryMode?: 'off' | 'bottom' | 'side'
 }>()
-defineEmits<{ cycleCommentaryMode: []; toggleSearch: []; toggleToc: [] }>()
+defineEmits<{ cycleCommentaryMode: []; toggleSearch: []; toggleToc: []; exportToWord: [] }>()
 
 const settingsStore = useSettingsStore()
 const bookViewStore = useBookViewStore()
@@ -189,6 +189,12 @@ defineExpose({ tocBtnRef })
             d="M198 903c-37-40-48-66-48-112 0-56 15-90 62-138 39-40 40-41 19-52-28-15-68-87-76-137-3-22-1-70 5-106 13-71 4-108-25-108-8 0-15-7-15-15 0-12 19-15 113-15 134 0 157 10 157 68 0 42-12 62-82 141-51 59-61 99-34 136 13 18 24 9 180-139 134-128 167-164 172-192 8-45 27-43 63 6 59 81 49 150-34 242-49 54-57 90-33 154 9 27 17 33 50 37 22 3 42 7 44 10 3 3 5 32 5 66 1 94-27 126-118 137-26 3-61 15-76 26-39 27-50 14-55-69-5-80 13-122 64-149 24-13 32-23 28-34-4-8-9-25-11-37-3-13-9-23-13-23-8 0-232 208-267 249-12 14-25 38-28 53-8 35-15 35-47 1z"
           />
         </g>
+      </svg>
+    </button>
+    <button title="ייצא ל-Word" @click="$emit('exportToWord')">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 28 28">
+        <path fill="none" d="M0 0h28v28H0z" />
+        <path fill="currentColor" d="M11.75 13A2.25 2.25 0 0 1 14 15.25v8.5A2.25 2.25 0 0 1 11.75 26h-8.5A2.25 2.25 0 0 1 1 23.75v-8.5A2.25 2.25 0 0 1 3.25 13zm2.816-11a2.4 2.4 0 0 1 1.698.703l6.93 6.93A2.75 2.75 0 0 1 24 11.579V23.6a2.4 2.4 0 0 1-2.4 2.4h-7.508a3.24 3.24 0 0 0 .82-1.5H21.6a.9.9 0 0 0 .9-.9V12H16a2 2 0 0 1-2-2V3.5H6.4a.9.9 0 0 0-.9.9V12H4V4.4A2.4 2.4 0 0 1 6.4 2zm-4.181 13.751l-.935 4.95l-.996-4.95H6.502l-.952 4.95l-.958-4.95H3l1.553 7.499h1.949l.998-4.5l.954 4.5l1.93-.001L12 15.75zM15.5 10a.5.5 0 0 0 .5.5h5.94L15.5 4.06z" />
       </svg>
     </button>
   </div>

@@ -454,6 +454,7 @@ namespace KitveiHakodeshLib
                         case "fileSystemSearch": _fileSystemSearch.HandleSearch(root, id); break;
                         case "userSettingsQuery": await _userSettings.HandleQuery(root, id); break;
                         case "userSettingsExecute": await _userSettings.HandleExecute(root, id); break;
+                        case "exportToWord": HandleExportToWord(root, id); break;
                         default: _bridge.Reply(id, new { error = "Unknown action: " + action }); break;
                     }
                 }
@@ -557,6 +558,15 @@ namespace KitveiHakodeshLib
         {
             var report = EnvironmentDiagnostics.Collect();
             _bridge.Reply(id, new { diagnostics = report });
+        }
+
+        private void HandleExportToWord(JsonElement root, string id)
+        {
+            _bridge.Reply(id, new { ok = true });
+
+            string html = root.TryGetProperty("html", out var h) ? h.GetString() ?? "" : "";
+
+            _ = WordExporter.ExportAsync(html);
         }
 
         private void HandleHebrewBooksSearch(JsonElement root, string id)

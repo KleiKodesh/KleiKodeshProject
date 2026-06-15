@@ -134,6 +134,7 @@
     <Compile Include="Search\RoaringBitmapIterator.cs" />
     <Compile Include="Search\UnionIterator.cs" />
     <Compile Include="Search\VarInt.cs" />
+    <Compile Include="Search\GrammarExpander.cs" />
     <Compile Include="Search\HebrewWildcardExpander.cs" />
     <Compile Include="Search\KetivExpander.cs" />
     <!-- Tokenization: HTML-aware word extraction and normalization -->
