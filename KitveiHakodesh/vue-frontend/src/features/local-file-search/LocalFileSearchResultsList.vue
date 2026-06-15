@@ -6,7 +6,6 @@ import {
   IconDocumentPdf20Filled,
   IconDocumentText20Filled,
   IconDocumentGlobe20Filled,
-  IconCode20Filled,
 } from '@iconify-prerendered/vue-fluent'
 import { useVirtualListKeys } from '@/composables/useVirtualListKeyNav'
 import type { LocalFileSearchResult } from './useLocalFileSearch'
@@ -59,8 +58,6 @@ function getFileIcon(fileName: string): FileIconInfo {
     case 'mht':
     case 'mhtml':
       return { component: IconDocumentGlobe20Filled, color: '#0097fb' }
-    case 'xml':
-      return { component: IconCode20Filled, color: '#f0a500' }
     case 'txt':
       return { component: IconDocumentText20Filled, color: '#9e9e9e' }
     default:

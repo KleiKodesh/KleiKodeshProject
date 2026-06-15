@@ -21,10 +21,6 @@ namespace KitveiHakodeshDemoApp
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
-            // Register shell "Open With" entries on every launch — idempotent, fast.
-            try { ShellRegistration.Register(Application.ExecutablePath); }
-            catch { /* non-fatal: registry write failed; app still works */ }
-
             string filePath = GetFilePathArgument();
 
             bool createdNew;

@@ -184,6 +184,20 @@
                                Margin="0,4,0,0"
                                TextWrapping="Wrap"/>
 
+                    <CheckBox x:Name="ShellRegisterCheckBox"
+                              Content="הוסף לתפריט 'פתיחה עם' של Windows"
+                              FontSize="12"
+                              Foreground="#1F1F1F"
+                              Margin="0,10,0,0"
+                              Checked="ShellRegisterCheckBox_Changed"
+                              Unchecked="ShellRegisterCheckBox_Changed"/>
+                    <TextBlock Text="מאפשר לפתוח קבצי PDF, Word ועוד ישירות בכתבי הקודש מסייר הקבצים"
+                               FontSize="11"
+                               Foreground="#5A5A5A"
+                               Opacity="0.7"
+                               Margin="16,2,0,0"
+                               TextWrapping="Wrap"/>
+
                 </StackPanel>
                 <!-- /KitveiHakodeshSection -->
 

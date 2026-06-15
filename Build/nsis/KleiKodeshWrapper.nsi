@@ -357,6 +357,25 @@ Section Uninstall
   ; Show progress with hardcoded Hebrew messages
   DetailPrint "מתחיל הסרת כלי קודש..."
 
+  ; ── Shell "Open With" / context-menu registry cleanup ────────────────────────
+  ; Mirrors exactly what ShellRegistration.Register() writes under HKCU\Software\Classes.
+  DetailPrint "מנקה רישומי מעטפת (פתיחה עם)..."
+
+  ; ProgId key: HKCU\Software\Classes\KitveiHakodesh.Document.1
+  DeleteRegKey HKCU "Software\Classes\KitveiHakodesh.Document.1"
+
+  ; Applications entry: HKCU\Software\Classes\Applications\כתבי הקודש.exe
+  DeleteRegKey HKCU "Software\Classes\Applications\כתבי הקודש.exe"
+
+  ; OpenWithProgids value for each supported extension
+  DeleteRegValue HKCU "Software\Classes\.pdf\OpenWithProgids"  "KitveiHakodesh.Document.1"
+  DeleteRegValue HKCU "Software\Classes\.doc\OpenWithProgids"  "KitveiHakodesh.Document.1"
+  DeleteRegValue HKCU "Software\Classes\.docx\OpenWithProgids" "KitveiHakodesh.Document.1"
+  DeleteRegValue HKCU "Software\Classes\.rtf\OpenWithProgids"  "KitveiHakodesh.Document.1"
+  DeleteRegValue HKCU "Software\Classes\.txt\OpenWithProgids"  "KitveiHakodesh.Document.1"
+  DeleteRegValue HKCU "Software\Classes\.htm\OpenWithProgids"  "KitveiHakodesh.Document.1"
+  DeleteRegValue HKCU "Software\Classes\.html\OpenWithProgids" "KitveiHakodesh.Document.1"
+
   ; ── File system ──────────────────────────────────────────────────────────────
   DetailPrint "מסיר קבצי התוכנה..."
   ; Current install location (v1.0.24+)

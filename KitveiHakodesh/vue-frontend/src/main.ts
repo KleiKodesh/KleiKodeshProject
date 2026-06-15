@@ -8,7 +8,7 @@ import { useBookViewStore } from './stores/bookViewStore'
 import { useSettingsStore } from './stores/settingsStore'
 import { useThemeStore } from './theme/themeStore'
 import { initPdfThemeObserver } from './theme/themes'
-import { dbReady } from './webview-host/seforimDb'
+import { dbReady, isHosted } from './webview-host/seforimDb'
 import { useBooksDataStore } from './stores/booksDataStore'
 import { useLocalFileStore } from './stores/localFileStore'
 import { useHebrewBooksHistoryStore } from './stores/hebrewBooksHistoryStore'
@@ -56,3 +56,10 @@ void Promise.all(
     .filter((t) => t.route === '/pdf-view' || t.route === '/html-view')
     .map((t) => localFileStore.restoreTab(t.id)),
 )
+
+// Signal C# that the Vue app has fully mounted and all event listeners are registered.
+// C# uses this to dispatch any pending file path from an "Open With" launch — this
+// replaces the unreliable fixed 1500ms delay that would drop the event on slow machines.
+if (isHosted) {
+  window.chrome?.webview.postMessage({ id: '0', action: 'appReady' })
+}

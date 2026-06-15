@@ -340,15 +340,6 @@ namespace KitveiHakodeshLib
             // hide the splash after 8 seconds so the user isn't stuck on a blank screen.
             _ = Task.Delay(8000).ContinueWith(_ => _HideSplash());
             _search.OnDbReady(savedPath);
-
-            // If OpenFileFromPath was called before the bridge was ready, dispatch it now.
-            // We delay briefly to let the Vue app finish mounting before receiving the event.
-            if (_pendingFilePath != null)
-            {
-                string path = _pendingFilePath;
-                _pendingFilePath = null;
-                _ = Task.Delay(1500).ContinueWith(__ => _localFile.OpenFileFromPathAsync(path));
-            }
         }
 
         private void OnNavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
@@ -434,6 +425,7 @@ namespace KitveiHakodeshLib
                         case "pickFile": _localFile.HandlePickFile(id, this); break;
                         case "restoreLocalFile": await _localFile.HandleRestoreLocalFile(root, id); break;
                         case "disposeLocalFileHost": _localFile.HandleDisposeLocalFileHost(root, id); break;
+                        case "appReady": HandleAppReady(id); break;
                         case "restoreHbPdf": _hb.HandleRestoreHbPdf(root, id); break;
                         case "triggerHbDownload": _hb.HandleTriggerHbDownload(root, id); break;
                         case "triggerHbSaveAs": _hb.HandleTriggerHbSaveAs(root, id); break;
@@ -554,6 +546,18 @@ namespace KitveiHakodeshLib
             _bridge.Reply(id, new { fonts = FontsProvider.GetHebrewFonts() });
         }
 
+        private void HandleAppReady(string id)
+        {
+            _bridge.Reply(id, new { });
+            _appReady = true;
+            if (_pendingFilePath != null)
+            {
+                string path = _pendingFilePath;
+                _pendingFilePath = null;
+                _ = _localFile.OpenFileFromPathAsync(path);
+            }
+        }
+
         private void HandleGetDiagnostics(string id)
         {
             var report = EnvironmentDiagnostics.Collect();
@@ -590,18 +594,23 @@ namespace KitveiHakodeshLib
             }
         }
 
+        // A file path queued before the Vue app has finished mounting.
+        // Dispatched when Vue sends the 'appReady' message, guaranteeing that all
+        // event listeners (localFileStore) are live before the push event fires.
         private string _pendingFilePath;
+        // True once Vue has sent 'appReady' — prevents re-queueing after first mount.
+        private bool _appReady;
 
         /// <summary>
         /// Opens a file by path, as if the user had picked it via the file picker.
-        /// Safe to call immediately after construction — if the WebView2 bridge is not
-        /// yet initialised the path is queued and opened as soon as init completes.
+        /// Safe to call immediately after construction — if the Vue app is not yet
+        /// ready the path is queued and opened as soon as 'appReady' is received.
         /// </summary>
         public void OpenFileFromPath(string filePath)
         {
-            if (_localFile == null)
+            if (!_appReady)
             {
-                // Bridge not ready yet — queue it and open once InitAsyncCore finishes.
+                // Vue event listeners not live yet — queue until appReady fires.
                 _pendingFilePath = filePath;
             }
             else

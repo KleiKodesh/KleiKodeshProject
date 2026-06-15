@@ -134,6 +134,14 @@
       <Project>{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}</Project>
       <Name>KitveiHakodeshLib</Name>
     </ProjectReference>
+    <ProjectReference Include="..\Ftslib-Csharp\FtsLib\FtsLib.csproj">
+      <Project>{76f9daa9-374f-40f9-8511-3239fb6e846e}</Project>
+      <Name>FtsLib</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\DocumentLocator\DocumentLocator.Client\DocumentLocator.Client.csproj">
+      <Project>{E7B8C9D0-E1F2-43AB-B5C6-D7E8F9A0B1C2}</Project>
+      <Name>DocumentLocator.Client</Name>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="FormSettings.cs" />

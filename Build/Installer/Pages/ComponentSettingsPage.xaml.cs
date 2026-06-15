@@ -46,6 +46,7 @@ namespace KleiKodeshVstoInstallerWpf
 
             ApplyVisibility();
             LoadDbPath();
+            LoadShellPreference();
         }
 
         private void ApplyVisibility()
@@ -172,6 +173,21 @@ namespace KleiKodeshVstoInstallerWpf
         {
             if (_pendingDbPath != null)
                 Interaction.SaveSetting("KitveiHakodesh", "Database", "Path", _pendingDbPath);
+        }
+
+        private void LoadShellPreference()
+        {
+            // Suppress the Changed handler while we set the initial value.
+            ShellRegisterCheckBox.Checked   -= ShellRegisterCheckBox_Changed;
+            ShellRegisterCheckBox.Unchecked -= ShellRegisterCheckBox_Changed;
+            ShellRegisterCheckBox.IsChecked  = ShellRegistrationHelper.LoadPreference();
+            ShellRegisterCheckBox.Checked   += ShellRegisterCheckBox_Changed;
+            ShellRegisterCheckBox.Unchecked += ShellRegisterCheckBox_Changed;
+        }
+
+        private void ShellRegisterCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            ShellRegistrationHelper.Apply(ShellRegisterCheckBox.IsChecked == true);
         }
 
         // ── Whitelist helpers ─────────────────────────────────────────────────────
