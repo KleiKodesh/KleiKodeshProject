@@ -167,12 +167,21 @@ namespace FtsLib.Search
         /// <summary>
         /// Generates all candidate forms without hitting the DB.
         /// Always includes the bare word itself.
+        ///
+        /// When appending suffixes, the word's final letter is normalised from its
+        /// sofit (final) form to its regular form before concatenation, because a
+        /// suffix always continues the word — e.g. זקן + ה = זקנה (not זקןה).
+        /// The sofit-to-regular mapping: ך→כ  ם→מ  ן→נ  ף→פ  ץ→צ
         /// </summary>
         internal static HashSet<string> BuildCandidates(string word,
                                                          bool   expandPrefixes,
                                                          bool   expandSuffixes)
         {
             var candidates = new HashSet<string>(StringComparer.Ordinal) { word };
+
+            // Stem used when appending suffixes — final letter converted to its
+            // non-sofit form so the suffix attaches correctly.
+            string stem = expandSuffixes ? NormaliseFinalLetter(word) : word;
 
             if (expandPrefixes && !expandSuffixes)
             {
@@ -184,7 +193,7 @@ namespace FtsLib.Search
             {
                 // word% — suffix forms only
                 foreach (var suffix in Suffixes)
-                    candidates.Add(word + suffix);
+                    candidates.Add(stem + suffix);
             }
             else if (expandPrefixes && expandSuffixes)
             {
@@ -192,13 +201,43 @@ namespace FtsLib.Search
                 foreach (var prefix in Prefixes)
                     candidates.Add(prefix + word);
                 foreach (var suffix in Suffixes)
-                    candidates.Add(word + suffix);
+                    candidates.Add(stem + suffix);
                 foreach (var prefix in Prefixes)
                     foreach (var suffix in Suffixes)
-                        candidates.Add(prefix + word + suffix);
+                        candidates.Add(prefix + stem + suffix);
             }
 
             return candidates;
+        }
+
+        // ── Final-letter normalisation ────────────────────────────────
+
+        /// <summary>
+        /// If the last character of <paramref name="word"/> is a Hebrew sofit
+        /// (final) letter, replaces it with the corresponding regular form.
+        /// Returns the word unchanged if the last character is not a sofit.
+        ///
+        ///   ך (U+05DA) → כ (U+05DB)
+        ///   ם (U+05DD) → מ (U+05DE)
+        ///   ן (U+05DF) → נ (U+05E0)
+        ///   ף (U+05E3) → פ (U+05E4)
+        ///   ץ (U+05E5) → צ (U+05E6)
+        /// </summary>
+        private static string NormaliseFinalLetter(string word)
+        {
+            if (string.IsNullOrEmpty(word)) return word;
+            char last = word[word.Length - 1];
+            char replacement;
+            switch (last)
+            {
+                case '\u05DA': replacement = '\u05DB'; break; // ך → כ
+                case '\u05DD': replacement = '\u05DE'; break; // ם → מ
+                case '\u05DF': replacement = '\u05E0'; break; // ן → נ
+                case '\u05E3': replacement = '\u05E4'; break; // ף → פ
+                case '\u05E5': replacement = '\u05E6'; break; // ץ → צ
+                default: return word;
+            }
+            return word.Substring(0, word.Length - 1) + replacement;
         }
 
         // ── Index verification ────────────────────────────────────────
