@@ -24,6 +24,13 @@ export function censorDivineNames(text: string): string {
       replacement: (_m: string, y: string, h1: string, v: string, h2: string) =>
         y + h1.replace('ה', 'ד') + v + h2.replace('ה', 'ד'),
     },
+    // יָהּ → י-הּ
+    // Matches י with kamatz (\u05B8) followed by ה with any diacritics/teamim, as a standalone word.
+    // Must come after the יהוה rule so it never fires mid-match on the four-letter name.
+    {
+      regex: new RegExp(`(י[\\u0591-\\u05C7]*\\u05B8[\\u0591-\\u05C7]*)(ה${D})${HWB}`, 'g'),
+      replacement: (_m: string, y: string, h: string) => y + '-' + h,
+    },
     // אדני → אדנ-י
     // Only censor when the נ carries a kamatz (\u05B8), which identifies the divine name אֲדֹנָי.
     // Any other vowel on the נ (chirik, patach, etc.) is a regular word — skip.
@@ -31,11 +38,11 @@ export function censorDivineNames(text: string): string {
       regex: new RegExp(`(א${D})(ד${D})(נ[\\u0591-\\u05C7]*\\u05B8[\\u0591-\\u05C7]*)(י${D})${HWB}`, 'g'),
       replacement: '$1$2$3-$4',
     },
-    // אלהים → אלדים (not followed by אחרים)
+    // אלהים → א-להים (not followed by אחרים)
     {
       regex: new RegExp(`(א${D})(ל${D})(ה${D})(י${D})(ם${D})(?!\\s*א${D}ח${D}ר${D}י${D}ם)${HWB}`, 'g'),
       replacement: (_m: string, a: string, l: string, h: string, y: string, m: string) =>
-        a + l + h.replace('ה', 'ד') + y + m,
+        a + '-' + l + h + y + m,
     },
     // אלוהים → א-לוהים (not followed by אחרים)
     {
@@ -46,11 +53,11 @@ export function censorDivineNames(text: string): string {
       replacement: (_m: string, a: string, l: string, v: string, h: string, y: string, m: string) =>
         a + '-' + l + v + h + y + m,
     },
-    // אלהי → אלדי
+    // אלהי → א-להי
     {
       regex: new RegExp(`(א${D})(ל${D})(ה${D})(י${D})${HWB}`, 'g'),
       replacement: (_m: string, a: string, l: string, h: string, y: string) =>
-        a + l + h.replace('ה', 'ד') + y,
+        a + '-' + l + h + y,
     },
     // אלוה → א-לוה
     {

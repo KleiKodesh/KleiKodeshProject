@@ -52,14 +52,7 @@ namespace FtsLibTest
 
                             // Read and decode the posting data
                             var buf = new byte[length];
-                            int totalRead = 0;
-                            seg.DataStream.Seek(offset, SeekOrigin.Begin);
-                            while (totalRead < length)
-                            {
-                                int n = seg.DataStream.Read(buf, totalRead, length - totalRead);
-                                if (n == 0) break;
-                                totalRead += n;
-                            }
+                            int totalRead = seg.ReadBytes(offset, buf, 0, length);
                             Console.WriteLine($"  Bytes ({totalRead}/{length}): {BytesToHex(buf)}");
 
                             // Decode via PostingIterator
