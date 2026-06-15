@@ -161,7 +161,7 @@ async function enrichTocPaths(batch: FullTextSearchResult[]): Promise<void> {
     // Fallback for lines with no line_toc entry (e.g. custom books with negative IDs).
     // The TOC path query joins through line_toc → tocEntry and returns nothing for
     // such lines, leaving bookId as 0. Fetch bookId directly from the line table.
-    const unenrichedIds = batch.filter((r) => r.bookId === 0).map((r) => r.lineId)
+    const unenrichedIds = batch.filter((r) => !r.bookId).map((r) => r.lineId)
     if (unenrichedIds.length > 0) {
       const fallbackRows = await query<{ lineId: number; bookId: number }>(
         SQL.GET_BOOK_IDS_FOR_LINES(unenrichedIds.length),

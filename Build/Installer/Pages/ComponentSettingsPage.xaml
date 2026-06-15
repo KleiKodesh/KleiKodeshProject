@@ -108,7 +108,7 @@
                 <!-- ── KitveiHakodesh DB section ─────────────────────────────── -->
                 <StackPanel x:Name="KitveiHakodeshSection">
 
-                    <TextBlock Text="מסד נתונים לכתבי הקודש"
+                    <TextBlock Text="כתבי הקודש"
                                FontSize="11"
                                Foreground="#5A5A5A"
                                Margin="0,0,0,6"/>
@@ -184,34 +184,19 @@
                                Margin="0,4,0,0"
                                TextWrapping="Wrap"/>
 
-                    <CheckBox x:Name="ShellRegisterCheckBox"
-                              Content="הוסף לתפריט 'פתיחה עם' של Windows"
-                              FontSize="12"
-                              Foreground="#1F1F1F"
-                              Margin="0,10,0,0"
-                              Checked="ShellRegisterCheckBox_Changed"
-                              Unchecked="ShellRegisterCheckBox_Changed"/>
-                    <TextBlock Text="מאפשר לפתוח קבצי PDF, Word ועוד ישירות בכתבי הקודש מסייר הקבצים"
-                               FontSize="11"
-                               Foreground="#5A5A5A"
-                               Opacity="0.7"
-                               Margin="16,2,0,0"
-                               TextWrapping="Wrap"/>
-
                 </StackPanel>
                 <!-- /KitveiHakodeshSection -->
 
-                <!-- Divider between sections — only shown when both visible -->
-                <Border x:Name="SectionDivider"
-                        Height="1" Background="#E5E5E5" Margin="0,12,0,12"/>
+                <!-- Hidden spacer — keeps SectionDivider name for code-behind -->
+                <Border x:Name="SectionDivider" Height="0"/>
 
                 <!-- ── Websites section ───────────────────────────────── -->
                 <StackPanel x:Name="WebsitesSection">
 
-                    <TextBlock Text="אתרי אינטרנט ב-דרך האתרים"
+                    <TextBlock Text="דרך האתרים"
                                FontSize="11"
                                Foreground="#5A5A5A"
-                               Margin="0,0,0,6"/>
+                               Margin="0,12,0,6"/>
 
                     <Button x:Name="EditWhitelistButton"
                             Height="32"
@@ -281,6 +266,26 @@
 
                 </StackPanel>
                 <!-- /WebsitesSection -->
+
+                <!-- ── Shell integration section — always last ────────────────── -->
+                <TextBlock Text="סייר הקבצים"
+                           FontSize="11"
+                           Foreground="#5A5A5A"
+                           Margin="0,12,0,6"/>
+
+                <CheckBox x:Name="ShellRegisterCheckBox"
+                          Content="הוסף לתפריט 'פתיחה עם' של חלונות"
+                          FontSize="13"
+                          Foreground="#1F1F1F"
+                          Margin="0,0,0,6"
+                          Checked="ShellRegisterCheckBox_Changed"
+                          Unchecked="ShellRegisterCheckBox_Changed"/>
+                <TextBlock Text="מאפשר לפתוח קבצי PDF, Word ועוד ישירות בכתבי הקודש מסייר הקבצים"
+                           FontSize="11"
+                           Foreground="#5A5A5A"
+                           Opacity="0.7"
+                           Margin="20,0,0,0"
+                           TextWrapping="Wrap"/>
 
             </StackPanel>
         </ScrollViewer>

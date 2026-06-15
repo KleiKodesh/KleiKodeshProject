@@ -113,9 +113,9 @@ export const SQL = {
       FROM ancestors a
       JOIN book b ON b.id = a.bookId
     )
-    SELECT lineId, group_concat(text, ' ') AS tocPath
+    SELECT lineId, MAX(bookId) AS bookId, group_concat(text, ' ') AS tocPath
     FROM (
-      SELECT lineId, text
+      SELECT lineId, bookId, text
       FROM ordered
       WHERE NOT (depth = maxDepth AND text = bookTitle)
       ORDER BY lineId, depth DESC
@@ -147,9 +147,9 @@ export const SQL = {
       FROM ancestors a
       JOIN book b ON b.id = a.bookId
     )
-    SELECT lineId, MAX(bookTitle) AS bookTitle, group_concat(text, ' ') AS tocPath
+    SELECT lineId, MAX(bookId) AS bookId, MAX(bookTitle) AS bookTitle, group_concat(text, ' ') AS tocPath
     FROM (
-      SELECT lineId, bookTitle, text
+      SELECT lineId, bookId, bookTitle, text
       FROM ordered
       WHERE NOT (depth = maxDepth AND text = bookTitle)
       ORDER BY lineId, depth DESC
