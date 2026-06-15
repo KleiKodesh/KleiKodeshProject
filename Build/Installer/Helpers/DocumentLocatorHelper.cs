@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
@@ -104,6 +105,64 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             {
                 // Non-critical — if anything goes wrong we still proceed with extraction.
             }
+        }
+
+        /// <summary>
+        /// Ensures the DocumentLocator Windows Service is registered in the SCM with
+        /// an ImagePath pointing to the freshly extracted exe in the install folder.
+        ///
+        /// Called by the installer after extraction, while the installer is still a
+        /// visible foreground process that can properly surface a UAC prompt.
+        /// This avoids having the VSTO (running inside Word) attempt the elevation,
+        /// which often fails silently because Word runs under a restricted desktop.
+        ///
+        /// Flow:
+        ///   - If not installed at all → run --install elevated (UAC prompt once).
+        ///   - If installed but ImagePath points elsewhere (e.g. stale dev registration)
+        ///     → run --install elevated which uninstalls-then-reinstalls automatically.
+        ///   - If already installed and current → no-op.
+        ///
+        /// Returns true if the service is registered and current after the call.
+        /// Returns false if the user declined the UAC prompt.
+        /// </summary>
+        public static async Task<bool> EnsureServiceInstalledAsync()
+        {
+            string serviceExe = Path.Combine(AddinInstaller.InstallPath, ServiceExeName);
+            if (!File.Exists(serviceExe)) return false; // exe not deployed yet — skip
+
+            if (IsServiceInstalledAndCurrent(serviceExe)) return true;
+
+            // Launch --install elevated.  The service exe handles the case where it is
+            // already registered at a different path by uninstalling first.
+            var psi = new ProcessStartInfo
+            {
+                FileName        = serviceExe,
+                Arguments       = "--install",
+                Verb            = "runas",
+                UseShellExecute = true,
+                WindowStyle     = ProcessWindowStyle.Hidden,
+            };
+
+            try
+            {
+                using (var proc = Process.Start(psi))
+                    proc?.WaitForExit(30_000);
+            }
+            catch (System.ComponentModel.Win32Exception ex)
+                when (ex.NativeErrorCode == 1223) // ERROR_CANCELLED — user clicked No
+            {
+                return false;
+            }
+
+            // Poll until SCM reflects the registration (up to 10 s).
+            var deadline = DateTime.UtcNow.AddSeconds(10);
+            while (DateTime.UtcNow < deadline)
+            {
+                if (IsServiceInstalledAndCurrent(serviceExe)) return true;
+                await Task.Delay(300).ConfigureAwait(false);
+            }
+
+            return IsServiceInstalled(); // last-chance check
         }
 
         /// <summary>
@@ -227,6 +286,23 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             using (var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
                 @"SYSTEM\CurrentControlSet\Services\DocumentLocatorSvc"))
                 return key != null;
+        }
+
+        /// <summary>
+        /// Returns true when the service is registered AND its ImagePath matches
+        /// <paramref name="expectedExe"/>. A stale registration (e.g. from a dev
+        /// build at a different path) returns false so we reinstall.
+        /// </summary>
+        private static bool IsServiceInstalledAndCurrent(string expectedExe)
+        {
+            using (var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
+                @"SYSTEM\CurrentControlSet\Services\DocumentLocatorSvc"))
+            {
+                if (key == null) return false;
+                string imagePath = (key.GetValue("ImagePath") as string ?? "").Trim('"');
+                return string.Equals(imagePath, expectedExe, StringComparison.OrdinalIgnoreCase)
+                    && File.Exists(imagePath);
+            }
         }
 
         /// <summary>

@@ -69,6 +69,12 @@ namespace KleiKodeshVstoInstallerWpf
                 _status.Report("שומר גרסה...");
                 AddinInstaller.SaveVersion();
 
+                // Register (or re-register) the DocumentLocator Windows Service while
+                // we are still a foreground process that can surface a UAC prompt.
+                // The VSTO runs inside Word and cannot reliably elevate.
+                _status.Report("מתקין שירות אינדקס...");
+                await DocumentLocatorHelper.EnsureServiceInstalledAsync();
+
                 // Trigger a background reindex of the file-system search service
                 // so it reflects any new files from this install. Fire-and-forget —
                 // the service acks immediately and rebuilds without blocking us.

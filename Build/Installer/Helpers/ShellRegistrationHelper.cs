@@ -10,12 +10,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
     /// Registers / unregisters כתבי הקודש as an "Open With" shell handler for its
     /// supported file types. All writes go to HKCU\Software\Classes — no elevation needed.
     ///
-    /// Registry layout (mirrors ShellRegistration.cs in KitveiHakodeshLib):
-    ///
-    ///   HKCU\Software\Classes\KitveiHakodesh.Document.1
-    ///     (Default)  = "כתבי הקודש"
-    ///     shell\open\command
-    ///       (Default) = "\"<exe>\" \"%1\""
+    /// Registry layout:
     ///
     ///   HKCU\Software\Classes\Applications\כתבי הקודש.exe
     ///     FriendlyAppName = "כתבי הקודש"
@@ -23,9 +18,11 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
     ///     shell\open\command
     ///       (Default) = "\"<exe>\" \"%1\""
     ///
-    ///   For each supported extension:
-    ///   HKCU\Software\Classes\.<ext>\OpenWithProgids
-    ///     KitveiHakodesh.Document.1  (REG_BINARY, empty)
+    /// We intentionally do NOT register a ProgId or write to .<ext>\OpenWithProgids.
+    /// Adding a ProgId with a shell\open\command caused Windows to elect it as the
+    /// default handler for .docx and other extensions on some systems.
+    /// The Applications\ entry is sufficient to appear in the "Open with" context menu
+    /// without touching any default associations.
     ///
     /// The preference (checked/unchecked) is persisted via SettingsManager so that
     /// re-running the installer restores the user's previous choice.
@@ -51,7 +48,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         /// checkbox starts checked, matching the previous auto-register behaviour).
         /// </summary>
         public static bool LoadPreference() =>
-            SettingsManager.GetBool(SettingSection, SettingKey, defaultValue: true);
+            SettingsManager.GetBool(SettingSection, SettingKey, defaultValue: false);
 
         /// <summary>
         /// Persists the user's choice and applies it immediately (register or unregister).
@@ -78,9 +75,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
 
                 using (var classesRoot = OpenClassesRoot(writable: true))
                 {
-                    RegisterProgId(classesRoot, command);
                     RegisterApplicationsEntry(classesRoot, command);
-                    RegisterExtensions(classesRoot);
                 }
 
                 NotifyShell();
@@ -95,9 +90,8 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                 using (var classesRoot = OpenClassesRoot(writable: true))
                 {
                     if (classesRoot == null) return;
-                    TryDelete(classesRoot, ProgId);
+                    TryDelete(classesRoot, ProgId);  // clean up old installs that had the ProgId
                     TryDelete(classesRoot, @"Applications\" + ExeName);
-                    RemoveFromExtensions(classesRoot);
                 }
 
                 NotifyShell();
