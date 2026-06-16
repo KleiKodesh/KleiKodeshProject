@@ -18,24 +18,34 @@ export const useLocalFileStore = defineStore('localFile', () => {
   // Listen for C# push events
   onWebviewEvent((msg: any) => {
     if (msg.event === 'localFileConversionStarted') {
-      startLocalFileConversion(msg.fileName as string, msg.filePath as string)
+      startLocalFileConversion(
+        msg.fileName as string,
+        msg.filePath as string,
+        !!(msg.openInNewTab as boolean),
+      )
     }
     if (msg.event === 'localFileReady') {
-      const tabId = tabStore.activeTabId
       // Choose the route based on the picked file type: HTML and plain-text files open in
       // html-view (iframe), PDFs open in the PDF viewer.
       const path = (msg.filePath as string) ?? ''
-      const ext = path.substring(path.lastIndexOf('.')).toLowerCase()
-      const isHtmlLike = ext === '.htm' || ext === '.html' || ext === '.txt'
+      const extension = path.substring(path.lastIndexOf('.')).toLowerCase()
+      const isHtmlLike = extension === '.htm' || extension === '.html' || extension === '.txt'
       const route = isHtmlLike ? '/html-view' : '/pdf-view'
-      tabStore.updateActiveTab({
+      const tabFields = {
         route,
         title: msg.fileName as string,
         localFileName: msg.fileName as string,
         localFilePath: msg.filePath as string,
         localFileVirtualUrl: msg.url as string,
         localFileConverting: false,
-      })
+      }
+      let tabId: string
+      if (msg.openInNewTab) {
+        tabId = tabStore.openTab(tabFields).id
+      } else {
+        tabId = tabStore.activeTabId
+        tabStore.updateActiveTab(tabFields)
+      }
       // Ensure the tab is tracked so finishLocalFileConversion no-ops if called again
       _converting.delete(tabId)
     }
@@ -99,18 +109,24 @@ export const useLocalFileStore = defineStore('localFile', () => {
   )
 
   /** Navigate the active tab to /pdf-view immediately, showing the converting placeholder. */
-  function startLocalFileConversion(fileName: string, filePath: string) {
-    const tabId = tabStore.activeTabId
-    _converting.add(tabId)
-    tabStore.updateActiveTab({
+  function startLocalFileConversion(fileName: string, filePath: string, openInNewTab = false) {
+    const tabFields = {
       route: '/pdf-view',
       title: fileName,
       localFileName: fileName,
       localFilePath: filePath,
       localFileConverting: true,
-      localFileLoadingType: 'converting',
+      localFileLoadingType: 'converting' as const,
       localFileVirtualUrl: undefined,
-    })
+    }
+    let tabId: string
+    if (openInNewTab) {
+      tabId = tabStore.openTab(tabFields).id
+    } else {
+      tabId = tabStore.activeTabId
+      tabStore.updateActiveTab(tabFields)
+    }
+    _converting.add(tabId)
   }
 
   /** Called when conversion finishes — ignored if the tab was cancelled/closed/navigated away. */

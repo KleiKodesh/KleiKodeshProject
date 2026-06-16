@@ -68,25 +68,29 @@ namespace KitveiHakodeshLib.LocalFile
                 // Directly hostable — register the folder as a virtual host and fire
                 // localFileReady. Vue routes to /pdf-view or /html-view based on extension,
                 // and sets localFilePath for session restore.
+                // openInNewTab: true tells the Vue store to open in a new tab rather than
+                // replacing the current active tab (this path is only taken from OpenFileFromPathAsync,
+                // i.e. "Open With" / command-line — not from the in-app file picker).
                 string url = RegisterFolder(filePath);
                 _bridge.PushEvent(new
                 {
                     @event = "localFileReady",
                     url,
                     fileName = Path.GetFileName(filePath),
-                    filePath
+                    filePath,
+                    openInNewTab = true,
                 });
             }
             else
             {
                 // Word / RTF — needs conversion.
-                // Push localFileConversionStarted so Vue immediately navigates the active tab
-                // to /pdf-view with the converting placeholder (same as HandlePickFile).
+                // Push localFileConversionStarted so Vue opens a new tab with the converting
+                // placeholder (openInNewTab: true, same reason as above).
                 string displayName = Path.GetFileNameWithoutExtension(filePath) + ".pdf";
                 string destPath    = GetCachePath(filePath);
                 string destFileName = Path.GetFileName(destPath);
 
-                _bridge.PushEvent(new { @event = "localFileConversionStarted", fileName = displayName, filePath });
+                _bridge.PushEvent(new { @event = "localFileConversionStarted", fileName = displayName, filePath, openInNewTab = true });
 
                 // Watch for the output PDF to appear — fires as soon as ExportAsFixedFormat
                 // writes the file, before Word has finished closing. This lets the tab update
