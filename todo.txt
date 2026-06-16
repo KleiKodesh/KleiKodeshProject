@@ -1,16 +1,5 @@
-add otional word to searc options
-deletion handling and update handling
-was remembering last location turned off in the pdf files?
-
-when closing commentary pane loses scroll pos and diesnt restore it like when switching tabs
-switching lines doesnt maintain same conmmentry
-show the toc also in the stickey header at the top
-
-taamey fonts
-searchbar show 0/1
-
-default background slightly offwhit nt bright white?
-
-lines move when opening the commentary pane due to rsize adjustment logicvg,e go neur cnpraho
-
-does updating the app trigger a reindex?
+taamey fonts?
+if doesn't have nikkud dont show the toggle
+וְרַבִּים כָּאֵ-לֶּה?
+full screen bug
+atb drop down should show over the searbar

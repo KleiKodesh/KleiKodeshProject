@@ -10,7 +10,7 @@ namespace KleiKodesh.Helpers
 {
     public static class TaskPaneManager
     {
-        private static bool _updateCheckDone = SettingsManager.GetBool("UpdateChecker", "TurnOffUpdates", false);
+        private static bool _updateCheckDone = false;
 
         public static CustomTaskPane Show(
             UserControl userControl,
@@ -138,7 +138,8 @@ namespace KleiKodesh.Helpers
             try
             {
                 // Check for updates on first taskpane open with Hebrew prompt
-                if (!_updateCheckDone)
+                bool turnedOff = SettingsManager.GetBool("UpdateChecker", "TurnOffUpdates", false);
+                if (!_updateCheckDone && !turnedOff)
                 {
                     _updateCheckDone = true;
 

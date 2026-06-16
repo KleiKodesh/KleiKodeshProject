@@ -71,6 +71,39 @@ $failures = @()
 Write-Host "`nKleiKodesh Solution - Rebuild All Projects" -ForegroundColor Cyan
 Write-Host "Total projects: $totalProjects | Configurations: $($configurations -join ', ')" -ForegroundColor Yellow
 
+# Clean all bin and obj folders before building
+Write-Host "`nCleaning bin/obj folders..." -ForegroundColor Yellow
+$cleaned = 0
+Get-ChildItem -Path "." -Recurse -Directory -Include "bin","obj" |
+    Where-Object { $_.FullName -notmatch '\\(node_modules|\.git|packages)\\' } |
+    Sort-Object { $_.FullName.Length } -Descending |
+    ForEach-Object {
+        if (Test-Path $_.FullName) {
+            Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
+            $cleaned++
+        }
+    }
+Write-Host "  Removed $cleaned folders" -ForegroundColor Gray
+
+# SDK-style projects that need dotnet restore (project.assets.json lives in obj)
+$sdkProjects = @(
+    "Build/scripts/SvgToPng/SvgToPng.csproj",
+    "Build/Installer/KleiKodeshVstoInstallerWpf.csproj"
+)
+
+Write-Host "`nRestoring SDK-style projects..." -ForegroundColor Yellow
+foreach ($sdkProject in $sdkProjects) {
+    $projectName = Split-Path -Leaf $sdkProject
+    Write-Host "  $projectName... " -NoNewline -ForegroundColor Gray
+    $restoreOutput = & dotnet restore $sdkProject 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "OK" -ForegroundColor Green
+    } else {
+        Write-Host "FAIL" -ForegroundColor Red
+        $restoreOutput | ForEach-Object { Write-Host "    $_" -ForegroundColor Red }
+    }
+}
+
 $startTime = Get-Date
 
 foreach ($config in $configurations) {
@@ -86,15 +119,31 @@ foreach ($config in $configurations) {
         
         Write-Host "  [$projectNum/$totalProjects] $projectName... " -NoNewline -ForegroundColor Gray
         
-        & $msbuild $project /m /nologo /verbosity:minimal /p:Configuration=$config 2>&1 | Out-Null
+        $output = & $msbuild $project /m /nologo /verbosity:minimal /p:Configuration=$config 2>&1
         
         if ($LASTEXITCODE -eq 0) {
             Write-Host "OK" -ForegroundColor Green
+            # Show any warnings even on success
+            $warnings = $output | Where-Object { $_ -match ": warning " }
+            if ($warnings) {
+                $warnings | ForEach-Object { Write-Host "    $_" -ForegroundColor Yellow }
+            }
             $successCount++
             $configSuccessCount++
         }
         else {
             Write-Host "FAIL" -ForegroundColor Red
+            $errors = $output | Where-Object { $_ -match ": error " }
+            $warnings = $output | Where-Object { $_ -match ": warning " }
+            if ($warnings) {
+                $warnings | ForEach-Object { Write-Host "    $_" -ForegroundColor Yellow }
+            }
+            if ($errors) {
+                $errors | ForEach-Object { Write-Host "    $_" -ForegroundColor Red }
+            } else {
+                # Fallback: show all output if no specific errors found
+                $output | ForEach-Object { Write-Host "    $_" -ForegroundColor Red }
+            }
             $failureCount++
             $failures += "$project ($config)"
         }

@@ -19,7 +19,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
     {
         public const string AppName         = "KleiKodesh";
         public const string AppDisplayName  = "כלי קודש";
-        public const string Version         = "v8.0.5";
+        public const string Version         = "v8.0.6";
         public const string InstallFolderName = "KleiKodesh";
         public const string ZipResourceName = "KleiKodesh.zip";
         public const string VstoFileName    = "KleiKodesh.vsto";
@@ -62,6 +62,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         {
             // Delete the FTS index before extracting so the app rebuilds it fresh.
             // Only done when the installer was built with -p:DeleteFtsIndex=true.
+#pragma warning disable CS0162 // Unreachable code — intentional compile-time constant
             if (DeleteFtsIndexOnInstall)
             {
                 try
@@ -80,6 +81,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                     Console.WriteLine("[AddinInstaller] Failed to delete FTS index: " + ex.Message);
                 }
             }
+#pragma warning restore CS0162
 
             var assembly = Assembly.GetExecutingAssembly();
             using (var stream = assembly.GetManifestResourceStream(ZipResourceName))
