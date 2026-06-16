@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, watch } from 'vue'
 import { useTabStore } from './tabStore'
+import type { TabRoute } from './tabStore'
 import { disposeLocalFileHost, restoreLocalFile, restoreHbPdf } from '@/webview-host/bridge'
 import { onWebviewEvent } from '@/webview-host/seforimDb'
 
@@ -30,7 +31,7 @@ export const useLocalFileStore = defineStore('localFile', () => {
       const path = (msg.filePath as string) ?? ''
       const extension = path.substring(path.lastIndexOf('.')).toLowerCase()
       const isHtmlLike = extension === '.htm' || extension === '.html' || extension === '.txt'
-      const route = isHtmlLike ? '/html-view' : '/pdf-view'
+      const route: TabRoute = isHtmlLike ? '/html-view' : '/pdf-view'
       const tabFields = {
         route,
         title: msg.fileName as string,
@@ -110,8 +111,9 @@ export const useLocalFileStore = defineStore('localFile', () => {
 
   /** Navigate the active tab to /pdf-view immediately, showing the converting placeholder. */
   function startLocalFileConversion(fileName: string, filePath: string, openInNewTab = false) {
+    const route: TabRoute = '/pdf-view'
     const tabFields = {
-      route: '/pdf-view',
+      route,
       title: fileName,
       localFileName: fileName,
       localFilePath: filePath,

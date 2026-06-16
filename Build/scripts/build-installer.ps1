@@ -50,6 +50,11 @@ if (Test-Path $vueStamp) {
     Write-Host "Deleted Vue build stamp" -ForegroundColor Gray
 }
 
+# Delete .tsbuildinfo cache so vue-tsc --build does a clean type-check (prevents
+# stale cache from replaying old errors after source fixes)
+Get-ChildItem -Path (Join-Path $ProjectRoot "KitveiHakodesh\vue-frontend") -Filter "*.tsbuildinfo" -Recurse -ErrorAction SilentlyContinue |
+    ForEach-Object { Remove-Item $_.FullName -Force; Write-Host "Deleted $($_.Name)" -ForegroundColor Gray }
+
 # ── 1. Wipe VSTO Release folders (ensures clean VSTO output for all variants) ─
 foreach ($folder in @("bin\Release", "bin\Release-x64", "bin\Release-x86")) {
     $path = Join-Path $ProjectRoot "KleiKodeshVsto\$folder"
