@@ -99,7 +99,7 @@ type SearchListeners = {
   onBatch: (results: FullTextSearchResult[]) => Promise<void>
   onComplete: () => Promise<void>
   onCancelled: () => void
-  onError: (reason: SearchFailReason) => void
+  onError: (reason: SearchFailReason, detail?: string) => void
 }
 
 // Tracks in-flight onBatch promises so onComplete waits for all enrichment to finish
@@ -135,7 +135,10 @@ onWebviewEvent((msg) => {
       break
     case 'searchError':
       _pendingBatches.delete(searchId)
-      listener.onError((msg.failReason as SearchFailReason) ?? 'searchFailed')
+      listener.onError(
+        (msg.failReason as SearchFailReason) ?? 'searchFailed',
+        (msg.errorMessage as string | undefined) ?? (msg.error as string | undefined),
+      )
       _searchListeners.delete(searchId)
       break
   }
@@ -346,7 +349,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         // from a mid-build search would be cached as complete and served stale.
         if (!isIndexing?.()) {
           try {
-            await cache.appendBatch(cacheKey ?? normalizedQuery, JSON.parse(JSON.stringify(batch)))
+            await cache.appendBatch(cacheKey ?? normalizedQuery, batch)
           } catch {
             /* non-fatal — cache is best-effort */
           }
@@ -370,8 +373,8 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         isSearching.value = false
         _cleanup()
       },
-      onError: (reason) => {
-        console.error('[useFullTextSearch] search error:', reason)
+      onError: (reason, detail) => {
+        console.error('[useFullTextSearch] search error:', reason, ...(detail ? [detail] : []))
         if (currentSearchId !== searchId) return
         _flushNow()
         searchError.value = reason

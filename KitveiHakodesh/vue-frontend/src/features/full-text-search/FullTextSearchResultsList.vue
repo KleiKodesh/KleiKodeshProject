@@ -3,7 +3,7 @@ import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { IconSearchSparkle24Regular } from '@iconify-prerendered/vue-fluent'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { useEventListener, useDebounceFn } from '@vueuse/core'
+import { useEventListener } from '@vueuse/core'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 import type { FullTextSearchResult, SearchFailReason } from './fullTextSearchTypes'
@@ -67,16 +67,21 @@ function captureScrollPos() {
 }
 
 function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
+  // Two-rAF pattern: scrollToIndex triggers TanStack's internal correction.
+  // Wait one rAF for it to settle, then set scrollTop directly — TanStack is idle by then.
+  // If the item isn't in measurementsCache yet (e.g. filtered set still building),
+  // retry up to 10 times at 100ms intervals before giving up.
   programmaticScrolling = true
   virtualizer.value.scrollToIndex(scrollIndex, { align: 'start' })
   let attempts = 0
   function applyOffset() {
-    const m = virtualizer.value.measurementsCache.find((c) => c.index === scrollIndex)
-    if (m && scrollEl.value) {
-      scrollEl.value.scrollTop = m.start + scrollOffset
-      setTimeout(() => { programmaticScrolling = false }, 300)
-    } else if (++attempts < 20) {
-      setTimeout(applyOffset, 50)
+    const item = virtualizer.value.measurementsCache.find((m) => m.index === scrollIndex)
+    if (item && scrollEl.value) {
+      scrollEl.value.scrollTop = item.start + scrollOffset
+      requestAnimationFrame(() => { programmaticScrolling = false })
+    } else if (++attempts < 10) {
+      virtualizer.value.scrollToIndex(scrollIndex, { align: 'start' })
+      setTimeout(() => requestAnimationFrame(applyOffset), 100)
     } else {
       programmaticScrolling = false
     }
@@ -85,15 +90,17 @@ function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
 }
 
 {
-  let restored = false
+  // Restore scroll once results are populated — don't gate on isSearching because
+  // loadCachedResults can set isSearching=true while simultaneously populating results
+  // (partial cache + resume stream). We restore as soon as we have results to scroll into.
   const stopWatch = watch(
     () => props.results.length,
     (len) => {
-      if (restored) { stopWatch(); return }
       if (!len) return
-      if (props.initialScrollIndex == null) { stopWatch(); return }
-      if (len <= props.initialScrollIndex) return
-      restored = true
+      if (props.initialScrollIndex == null) {
+        stopWatch()
+        return
+      }
       stopWatch()
       nextTick(() => restoreScrollPos(props.initialScrollIndex!, props.initialScrollOffset ?? 0))
     },
@@ -124,11 +131,7 @@ useVirtualScrollerKeys(
   () => props.results.length,
 )
 
-const savePosDebouncedOnScroll = useDebounceFn(savePos, 200)
-
-function onScroll() {
-  if (!programmaticScrolling) savePosDebouncedOnScroll()
-}
+function onScroll() {}
 
 defineExpose({ captureScrollPos })
 </script>

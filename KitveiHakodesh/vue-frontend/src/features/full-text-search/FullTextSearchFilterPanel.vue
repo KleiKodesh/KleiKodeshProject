@@ -20,6 +20,7 @@ const emit = defineEmits<{
   toggleBook: [number]
   toggleCategory: [CategoryNode, boolean]
   checkAll: []
+  checkVisible: [number[]]
   uncheckAll: []
   close: []
   'update:atFilters': [string[]]
@@ -33,6 +34,16 @@ const inputText = ref('')
 const filteredBooks = ref<BookRow[]>([])
 
 onMounted(() => nextTick(() => searchInputRef.value?.focus()))
+
+function onSelectAllClick() {
+  if (isAllChecked.value) {
+    emit('uncheckAll')
+  } else if (isSearching.value) {
+    emit('checkVisible', filteredBooks.value.map((b) => b.id))
+  } else {
+    emit('checkAll')
+  }
+}
 
 // ── Animated placeholder ──────────────────────────────────────────────────────
 
@@ -151,7 +162,7 @@ function onInputKeydown(e: KeyboardEvent) {
       <div
         class="header-check"
         :class="{ checked: isAllChecked, indet: isIndet }"
-        @click="isAllChecked ? emit('uncheckAll') : emit('checkAll')"
+        @click="onSelectAllClick"
       >
         <span class="check-col">
           <span class="check-mark">✓</span>

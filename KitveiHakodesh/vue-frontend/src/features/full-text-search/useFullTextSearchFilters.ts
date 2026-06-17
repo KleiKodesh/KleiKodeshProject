@@ -157,6 +157,11 @@ export function useFullTextSearchFilters(
   function uncheckAll() {
     checkedBookIds.value = new Set()
   }
+  function checkVisible(ids: number[]) {
+    const next = new Set(checkedBookIds.value)
+    for (const id of ids) next.add(id)
+    checkedBookIds.value = next
+  }
 
   async function handleSearch(q: string) {
     tabStore.updateActiveTab({ title: `חיפוש: ${q}` })
@@ -213,6 +218,7 @@ export function useFullTextSearchFilters(
     toggleCategory,
     checkAll,
     uncheckAll,
+    checkVisible,
     handleSearch,
     handleClearSearch,
     handleResultClick,

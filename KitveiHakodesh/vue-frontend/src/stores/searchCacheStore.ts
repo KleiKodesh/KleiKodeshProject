@@ -101,7 +101,11 @@ export const useSearchCacheStore = defineStore('searchCache', () => {
     const entry = await idbGet<SearchCacheEntry>(cacheKey(key))
     if (!entry) return
     entry.results.push(...batch)
-    await idbSet(cacheKey(key), entry)
+    // IDB's structured clone algorithm rejects arrays/objects created in the
+    // WebView2 host realm (via PostWebMessageAsString → JSON.parse in the host
+    // context). JSON round-trip re-creates every object in the current realm,
+    // producing plain clonable values that IDB accepts.
+    await idbSet(cacheKey(key), JSON.parse(JSON.stringify(entry)))
   }
 
   /** Mark the entry as complete. */
@@ -110,7 +114,7 @@ export const useSearchCacheStore = defineStore('searchCache', () => {
     if (!entry) return
     entry.complete = true
     entry.indexingComplete = indexingComplete
-    await idbSet(cacheKey(key), entry)
+    await idbSet(cacheKey(key), JSON.parse(JSON.stringify(entry)))
   }
 
   async function clear(): Promise<void> {

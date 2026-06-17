@@ -29,9 +29,28 @@ const copyButtonLabel = computed(() => {
 })
 
 async function copyText() {
-  await navigator.clipboard.writeText(editableText.value)
-  copied.value = true
-  setTimeout(() => { copied.value = false }, 1200)
+  const text = editableText.value
+  let success = false
+
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text)
+      success = true
+    } catch {
+      // Clipboard API blocked (e.g. WebView2 focus on iframe) — fall through to execCommand
+    }
+  }
+
+  if (!success && textRef.value) {
+    textRef.value.focus()
+    textRef.value.select()
+    success = document.execCommand('copy')
+  }
+
+  if (success) {
+    copied.value = true
+    setTimeout(() => { copied.value = false }, 1200)
+  }
 }
 
 function onOverlayClick(event: MouseEvent) {

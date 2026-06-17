@@ -207,3 +207,9 @@ Never use PowerShell to read and write files that contain Hebrew or any other no
 The only safe way to modify files that contain Hebrew is to use the dedicated file-editing tools (`fsWrite`, `strReplace`, `fsAppend`). These tools handle encoding correctly and must always be preferred over any PowerShell file I/O for this project.
 
 If a shell command is genuinely needed to inspect file content (not modify it), use `Get-Content -Encoding UTF8` and treat the output as read-only reference only — never pipe it back into a write operation.
+
+## Scroll Position Save Triggers
+
+In virtual scroller components, scroll position must only be saved on `visibilitychange` (when `document.visibilityState === 'hidden'`), `beforeunload`, and `onBeforeUnmount`. Never save on the `scroll` event — not even debounced. A debounced scroll save races with the programmatic restore: the restore sets `scrollTop`, the debounce timer fires shortly after and overwrites it with the position from before the restore. The `onScroll` handler must be a no-op or omitted entirely.
+
+This applies to `FullTextSearchResultsList.vue` and any future virtual scroller component that persists scroll position.

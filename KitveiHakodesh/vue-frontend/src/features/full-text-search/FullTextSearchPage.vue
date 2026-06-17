@@ -78,6 +78,7 @@ const {
   toggleCategory,
   checkAll,
   uncheckAll,
+  checkVisible,
   handleSearch,
   handleClearSearch,
   handleResultClick,
@@ -157,7 +158,7 @@ async function saveFilterState() {
   const isAllChecked = allCount > 0 && checkedBookIds.value.size === allCount
   const state = {
     searchCheckedBookIds: isAllChecked ? undefined : [...checkedBookIds.value],
-    searchAtFilters: atFilters.value.length ? atFilters.value : undefined,
+    searchAtFilters: atFilters.value.length ? [...atFilters.value] : undefined,
     searchScrollIndex: lastScrollIndex,
     searchScrollOffset: lastScrollOffset,
     searchZoom: zoom.value !== ZOOM_CONFIG.DEFAULT ? zoom.value : undefined,
@@ -202,8 +203,10 @@ onMounted(async () => {
   if (saved?.searchScrollIndex != null) {
     initialScrollIndex.value = saved.searchScrollIndex
     initialScrollOffset.value = saved.searchScrollOffset ?? 0
-    lastScrollIndex = saved.searchScrollIndex
-    lastScrollOffset = saved.searchScrollOffset ?? 0
+    // Do NOT seed lastScrollIndex/lastScrollOffset from the saved state.
+    // Those track the current session's live position (via onSaveScroll / captureScrollPos).
+    // Seeding them here means onBeforeUnmount would fall back to the stale restored value
+    // and overwrite whatever visibilitychange correctly saved for the current session.
   }
 
   // Restore search query and results from cache/session. The scroll position
@@ -294,6 +297,7 @@ onBeforeUnmount(() => {
       @toggle-category="toggleCategory"
       @check-all="checkAll"
       @uncheck-all="uncheckAll"
+      @check-visible="checkVisible"
       @close="isFilterOpen = false"
       @update:at-filters="setAtFilters"
     />
