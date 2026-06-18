@@ -7,7 +7,14 @@ import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } 
 import { storeToRefs } from 'pinia'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useTabStore } from '@/stores/tabStore'
-import { useZoomHandler } from '@/composables/useZoom'
+import { useEventListener } from '@vueuse/core'
+import {
+  ZOOM_CONFIG,
+  calculateZoom,
+  zoomIn as zoomInUtil,
+  zoomOut as zoomOutUtil,
+  resetZoom as resetZoomUtil,
+} from '@/composables/useZoom'
 import { useToc } from './toc/useBookViewToc'
 import { useLines } from './lines/useBookViewLinesTable'
 import { useCommentary } from './commentary/useCommentary'
@@ -59,7 +66,61 @@ export function useBookView(
   const settingsStore = useSettingsStore()
   const { zoom, isBookViewActive, toolbarPosition } = storeToRefs(bookViewStore)
 
-  useZoomHandler({ zoom, enabled: isBookViewActive })
+  // ── Keyboard zoom interceptor ─────────────────────────────────────────────
+  // Ctrl+±/0 on the keyboard must be intercepted at the window level to prevent
+  // the browser from applying its own page zoom. We route to the correct panel
+  // based on which scroller contains the currently focused element.
+  // Trackpad (wheel) and pinch are handled per-scroller inside each component.
+  useEventListener(window, 'keydown', (event: KeyboardEvent) => {
+    if (!isBookViewActive.value) return
+    const ctrl = event.ctrlKey || event.metaKey
+    if (!ctrl) return
+    const isZoomIn = event.code === 'Equal' || event.code === 'NumpadAdd'
+    const isZoomOut = event.code === 'Minus' || event.code === 'NumpadSubtract'
+    const isReset = event.code === 'Digit0' || event.code === 'Numpad0'
+    if (!isZoomIn && !isZoomOut && !isReset) return
+
+    event.preventDefault()
+
+    const focused = document.activeElement
+    const linesEl = linesContentRef()
+    const commentaryEl = commentaryViewRef()
+
+    // Determine which scroller contains focus. We check by walking up from the
+    // focused element and seeing if it lives inside the lines or commentary DOM.
+    // Fall back to zooming both if focus is elsewhere (e.g. toolbar button).
+    const linesRoot = (linesEl as unknown as { $el?: HTMLElement } | null)?.$el
+    const commentaryRoot = (commentaryEl as unknown as { $el?: HTMLElement } | null)?.$el
+
+    const focusInLines = linesRoot != null && focused != null && linesRoot.contains(focused)
+    const focusInCommentary = commentaryRoot != null && focused != null && commentaryRoot.contains(focused)
+
+    const tab = tabStore.activeTab
+    if (tab.route !== '/book-view' || tab.bookId == null) return
+    const tabId = tab.id
+    const bookId = tab.bookId
+
+    function applyToLines() {
+      const current = bookViewStore.getLinesZoom(tabId, bookId)
+      bookViewStore.setLinesZoom(tabId, bookId,
+        isZoomIn ? zoomInUtil(current) : isZoomOut ? zoomOutUtil(current) : resetZoomUtil())
+    }
+    function applyToCommentary() {
+      const current = bookViewStore.getCommentaryZoom(tabId, bookId)
+      bookViewStore.setCommentaryZoom(tabId, bookId,
+        isZoomIn ? zoomInUtil(current) : isZoomOut ? zoomOutUtil(current) : resetZoomUtil())
+    }
+
+    if (focusInLines) {
+      applyToLines()
+    } else if (focusInCommentary) {
+      applyToCommentary()
+    } else {
+      // Focus is on toolbar or elsewhere — zoom both panels together
+      applyToLines()
+      applyToCommentary()
+    }
+  })
 
   // ── Tab state captured at mount (stable for component lifetime) ───────────
 

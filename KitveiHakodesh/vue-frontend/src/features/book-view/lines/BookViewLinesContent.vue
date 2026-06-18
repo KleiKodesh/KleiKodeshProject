@@ -14,6 +14,7 @@ import { useScopedKeys } from '@/composables/useTextSelectionKeys'
 import { useScopedCopy } from '@/composables/useLineCopy'
 import { scrollToIndexWithRetry } from '@/utils/scrollToIndexWithRetry'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
+import { useZoomHandler } from '@/composables/useZoom'
 import { useBookViewLineRenderer, setCurrentMark } from './useBookViewLineRenderer'
 import { useBookViewLineCopyMenu } from './useBookViewLineCopyMenu'
 import { useBookViewHighlights } from './useBookViewHighlights'
@@ -61,13 +62,13 @@ const tabId = tabStore.activeTabId
 const bookId = tabStore.activeTab.bookId!
 const bookTitle = tabStore.activeTab.title
 
-// Read zoom directly by tabId+bookId — NOT via bookViewStore.zoom computed which is
+// Read lines zoom directly by tabId+bookId — NOT via bookViewStore.zoom computed which is
 // gated on activeTab. If this tab is not active when savePos fires (e.g. user switched
 // tabs before closing), the activeTab-based computed returns DEFAULT and overwrites the
 // real zoom in IDB.
 const zoom = computed({
-  get: () => bookViewStore.getZoom(tabId, bookId),
-  set: (v: number) => bookViewStore.setZoom(tabId, bookId, v),
+  get: () => bookViewStore.getLinesZoom(tabId, bookId),
+  set: (v: number) => bookViewStore.setLinesZoom(tabId, bookId, v),
 })
 
 const diacriticsState = computed(() => settingsStore.diacriticsState)
@@ -255,6 +256,11 @@ watch(
 // ── Scroller setup ────────────────────────────────────────────────────────────
 
 const scrollerEl = ref<HTMLElement | null>(null)
+
+// Zoom handler scoped to this scroller — Ctrl+scroll and pinch affect only the
+// lines panel. Keyboard Ctrl+±/0 fires on whichever element has focus, so it
+// also stays scoped to the lines panel when the scroller is focused.
+useZoomHandler({ zoom, target: scrollerEl, keyboard: false })
 
 const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, {
   onCtrlF: () => emit('ctrl-f'),
@@ -449,6 +455,7 @@ function savePos() {
       commentaryScrollOffset: props.commentaryScrollOffset,
       commentaryFilterState: filterState,
       zoom: zoom.value,
+      commentaryZoom: bookViewStore.getCommentaryZoom(tabId, bookId),
       commentaryVisible: props.commentaryVisible,
       commentaryMode: props.commentaryMode,
       commentaryFraction: props.commentaryFraction,

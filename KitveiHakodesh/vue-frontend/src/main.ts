@@ -61,5 +61,5 @@ void Promise.all(
 // C# uses this to dispatch any pending file path from an "Open With" launch — this
 // replaces the unreliable fixed 1500ms delay that would drop the event on slow machines.
 if (isHosted) {
-  window.chrome?.webview.postMessage({ id: '0', action: 'appReady' })
+  window.chrome?.webview?.postMessage({ id: '0', action: 'appReady' })
 }

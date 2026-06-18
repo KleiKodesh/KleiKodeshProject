@@ -39,7 +39,7 @@ defineEmits<{ cycleCommentaryMode: []; toggleSearch: []; toggleToc: []; exportTo
 
 const settingsStore = useSettingsStore()
 const bookViewStore = useBookViewStore()
-const { zoom, toolbarPosition, autoSelectTopLine } = storeToRefs(bookViewStore)
+const { zoom, commentaryZoom, toolbarPosition, autoSelectTopLine } = storeToRefs(bookViewStore)
 
 const diacriticsState = computed(() => settingsStore.diacriticsState)
 
@@ -117,15 +117,15 @@ defineExpose({ tocBtnRef })
     <div class="separator" />
 
     <button
-      :title="`הקטן (Ctrl-)\nזום: ${zoom}%\nאיפוס: Ctrl+0`"
-      :disabled="zoom <= ZOOM_CONFIG.MIN"
+      :title="`הקטן (Ctrl-)\nטקסט: ${zoom}% | פירוש: ${commentaryZoom}%\nאיפוס: Ctrl+0`"
+      :disabled="zoom <= ZOOM_CONFIG.MIN && commentaryZoom <= ZOOM_CONFIG.MIN"
       @click="bookViewStore.zoomOut()"
     >
       <IconZoomOut20Regular />
     </button>
     <button
-      :title="`הגדל (Ctrl+)\nזום: ${zoom}%\nאיפוס: Ctrl+0`"
-      :disabled="zoom >= ZOOM_CONFIG.MAX"
+      :title="`הגדל (Ctrl+)\nטקסט: ${zoom}% | פירוש: ${commentaryZoom}%\nאיפוס: Ctrl+0`"
+      :disabled="zoom >= ZOOM_CONFIG.MAX && commentaryZoom >= ZOOM_CONFIG.MAX"
       @click="bookViewStore.zoomIn()"
     >
       <IconZoomIn20Regular />

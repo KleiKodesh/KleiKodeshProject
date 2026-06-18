@@ -35,19 +35,39 @@ export const useBookViewStore = defineStore('bookView', () => {
 
   const isBookViewActive = computed(() => tabStore.activeTab.route === '/book-view')
 
-  // Per-tab+book zoom map: key = `${tabId}:${bookId}`
-  const zoomMap = ref<Map<string, number>>(new Map())
+  // Per-tab+book zoom maps — one for lines text, one for commentary text.
+  // Keys: `${tabId}:${bookId}`
+  const linesZoomMap = ref<Map<string, number>>(new Map())
+  const commentaryZoomMap = ref<Map<string, number>>(new Map())
 
   function zoomKey(tabId: string, bookId: number) {
     return `${tabId}:${bookId}`
   }
 
+  function getLinesZoom(tabId: string, bookId: number): number {
+    return linesZoomMap.value.get(zoomKey(tabId, bookId)) ?? ZOOM_CONFIG.DEFAULT
+  }
+
+  function setLinesZoom(tabId: string, bookId: number, value: number) {
+    linesZoomMap.value.set(zoomKey(tabId, bookId), value)
+  }
+
+  function getCommentaryZoom(tabId: string, bookId: number): number {
+    return commentaryZoomMap.value.get(zoomKey(tabId, bookId)) ?? ZOOM_CONFIG.DEFAULT
+  }
+
+  function setCommentaryZoom(tabId: string, bookId: number, value: number) {
+    commentaryZoomMap.value.set(zoomKey(tabId, bookId), value)
+  }
+
+  // Keep old getZoom/setZoom as aliases for lines zoom so callers that haven't
+  // been migrated yet continue to work.
   function getZoom(tabId: string, bookId: number): number {
-    return zoomMap.value.get(zoomKey(tabId, bookId)) ?? ZOOM_CONFIG.DEFAULT
+    return getLinesZoom(tabId, bookId)
   }
 
   function setZoom(tabId: string, bookId: number, value: number) {
-    zoomMap.value.set(zoomKey(tabId, bookId), value)
+    setLinesZoom(tabId, bookId, value)
   }
 
   // Prune zoom entries for tabs that no longer exist
@@ -55,23 +75,42 @@ export const useBookViewStore = defineStore('bookView', () => {
     () => tabStore.tabs.map((t) => t.id),
     (currentIds) => {
       const idSet = new Set(currentIds)
-      for (const key of zoomMap.value.keys()) {
+      for (const key of linesZoomMap.value.keys()) {
         const tabId = key.split(':')[0]!
-        if (!idSet.has(tabId)) zoomMap.value.delete(key)
+        if (!idSet.has(tabId)) linesZoomMap.value.delete(key)
+      }
+      for (const key of commentaryZoomMap.value.keys()) {
+        const tabId = key.split(':')[0]!
+        if (!idSet.has(tabId)) commentaryZoomMap.value.delete(key)
       }
     },
   )
 
+  // Active-tab computed for lines zoom — used by the toolbar display and keyboard handler.
   const zoom = computed({
     get() {
       const tab = tabStore.activeTab
       if (tab.route !== '/book-view' || tab.bookId == null) return ZOOM_CONFIG.DEFAULT
-      return getZoom(tab.id, tab.bookId)
+      return getLinesZoom(tab.id, tab.bookId)
     },
     set(value: number) {
       const tab = tabStore.activeTab
       if (tab.route !== '/book-view' || tab.bookId == null) return
-      setZoom(tab.id, tab.bookId, value)
+      setLinesZoom(tab.id, tab.bookId, value)
+    },
+  })
+
+  // Active-tab computed for commentary zoom — used by the toolbar display.
+  const commentaryZoom = computed({
+    get() {
+      const tab = tabStore.activeTab
+      if (tab.route !== '/book-view' || tab.bookId == null) return ZOOM_CONFIG.DEFAULT
+      return getCommentaryZoom(tab.id, tab.bookId)
+    },
+    set(value: number) {
+      const tab = tabStore.activeTab
+      if (tab.route !== '/book-view' || tab.bookId == null) return
+      setCommentaryZoom(tab.id, tab.bookId, value)
     },
   })
 
@@ -108,12 +147,15 @@ export const useBookViewStore = defineStore('bookView', () => {
 
   function zoomIn() {
     zoom.value = zoomInUtil(zoom.value)
+    commentaryZoom.value = zoomInUtil(commentaryZoom.value)
   }
   function zoomOut() {
     zoom.value = zoomOutUtil(zoom.value)
+    commentaryZoom.value = zoomOutUtil(commentaryZoom.value)
   }
   function resetZoom() {
     zoom.value = resetZoomUtil()
+    commentaryZoom.value = resetZoomUtil()
   }
 
   return {
@@ -127,8 +169,13 @@ export const useBookViewStore = defineStore('bookView', () => {
     toggleTocPanel,
     isBookViewActive,
     zoom,
+    commentaryZoom,
     getZoom,
     setZoom,
+    getLinesZoom,
+    setLinesZoom,
+    getCommentaryZoom,
+    setCommentaryZoom,
     autoSelectTopLine,
     toggleAutoSelectTopLine,
     setAutoSelectTopLine,

@@ -74,7 +74,8 @@ export function useBookViewSessionRestore(
     const si = bookSaved?.commentaryScrollIndex ?? (useLastRead ? lastRead?.commentaryScrollIndex : undefined)
     const so = bookSaved?.commentaryScrollOffset ?? (useLastRead ? lastRead?.commentaryScrollOffset : undefined)
 
-    if (bookSaved?.zoom != null) bookViewStore.setZoom(tabId, bookId!, bookSaved.zoom)
+    if (bookSaved?.zoom != null) bookViewStore.setLinesZoom(tabId, bookId!, bookSaved.zoom)
+    if (bookSaved?.commentaryZoom != null) bookViewStore.setCommentaryZoom(tabId, bookId!, bookSaved.commentaryZoom)
     if (bookSaved?.autoSelectTopLine != null) {
       bookViewStore.autoSelectTopLine = bookSaved.autoSelectTopLine
     }

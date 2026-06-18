@@ -28,12 +28,14 @@ export function resetZoom(): number {
 
 export interface ZoomHandlerOptions {
   zoom: Ref<number>
-  target?: Ref<HTMLElement | undefined> | HTMLElement | Window
+  target?: Ref<HTMLElement | undefined | null> | HTMLElement | Window
   enabled?: Ref<boolean> | boolean
+  /** Set to false to skip attaching the keyboard (Ctrl+±/0) handler. Defaults to true. */
+  keyboard?: boolean
 }
 
 export function useZoomHandler(options: ZoomHandlerOptions) {
-  const { zoom, target = window, enabled = true } = options
+  const { zoom, target = window, enabled = true, keyboard = true } = options
 
   let initialDistance = 0
   let initialZoom = 0
@@ -49,7 +51,7 @@ export function useZoomHandler(options: ZoomHandlerOptions) {
   }
 
   useEventListener(target, 'keydown', (event: KeyboardEvent) => {
-    if (!isEnabled()) return
+    if (!keyboard || !isEnabled()) return
     const ctrl = event.ctrlKey || event.metaKey
     if (ctrl && (event.code === 'Equal' || event.code === 'NumpadAdd')) {
       event.preventDefault()

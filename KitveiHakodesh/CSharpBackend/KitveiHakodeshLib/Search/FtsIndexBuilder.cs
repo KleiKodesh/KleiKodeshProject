@@ -174,7 +174,11 @@ namespace KitveiHakodeshLib.Search
             }
 
             string version = FtsIndexState.GetInstalledAppVersion();
-            if (!string.IsNullOrEmpty(version)) FtsIndexState.WriteVersionStamp(version);
+            // Write a version stamp so the next boot recognises the index as complete.
+            // If no registry version is available (running from build output without the
+            // installer), write a sentinel value so the index is not mistakenly wiped and
+            // rebuilt from scratch on every restart.
+            FtsIndexState.WriteVersionStamp(!string.IsNullOrEmpty(version) ? version : "unversioned");
             index.DeleteBuildProgressFile();
 
             if (!_state.TryMarkReady(cts))

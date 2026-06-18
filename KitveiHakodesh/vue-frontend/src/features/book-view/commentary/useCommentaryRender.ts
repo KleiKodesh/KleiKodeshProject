@@ -19,14 +19,15 @@ export function useCommentaryRender(
   getNotesForLine?: (lineId: number) => Note[],
 ) {
   const settingsStore = useSettingsStore()
-  const { zoom } = storeToRefs(useBookViewStore())
+  const bookViewStore = useBookViewStore()
+  const { commentaryZoom } = storeToRefs(bookViewStore)
 
   const diacriticsState = computed(() => settingsStore.diacriticsState)
   const commentaryFontPx = computed(() => {
     const effectiveFontSize = settingsStore.useSeparateCommentarySettings
       ? settingsStore.commentaryFontSize
       : settingsStore.fontSize
-    return (zoom.value / 100) * (effectiveFontSize / 100) * 15
+    return (commentaryZoom.value / 100) * (effectiveFontSize / 100) * 15
   })
 
   // Two-tier cache — same pattern as useBookViewLineRenderer:
