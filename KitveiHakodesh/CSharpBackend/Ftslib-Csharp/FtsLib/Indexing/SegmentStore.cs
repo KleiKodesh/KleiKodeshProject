@@ -47,7 +47,15 @@ namespace FtsLib.Indexing
         // Excludes searches from observing a partially-merged live set.
         // Write lock: held for the entire duration of any merge (MergeIfNeeded).
         // Read lock: held while snapshotting live segment paths for a search.
-        private readonly ReaderWriterLockSlim _searchMergeLock = new ReaderWriterLockSlim();
+        //
+        // SupportsRecursion is required because Task continuations in the flush
+        // pipeline can be inlined onto a thread pool thread that already holds a
+        // read lock from a concurrent search.  With the default NoRecursion policy
+        // TryEnterReadLock throws LockRecursionException in that case.  Recursion
+        // support is safe here because the read lock is always paired with a
+        // matching ExitReadLock in a finally block or via SearchLease.Dispose().
+        private readonly ReaderWriterLockSlim _searchMergeLock =
+            new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion);
 
         // ── Flush pipeline ────────────────────────────────────────────
         // _flushSlot: depth-1 semaphore — back-pressure gate between indexing and I/O.

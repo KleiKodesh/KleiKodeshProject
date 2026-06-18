@@ -38,14 +38,19 @@ namespace FtsLib.Indexing
     /// buffered <see cref="FileStream"/>, avoiding kernel transitions and copy overhead
     /// on every seek+read pair.
     ///
-    /// Disposal order matters on Windows: the <see cref="MemoryMappedViewAccessor"/>
-    /// and <see cref="MemoryMappedFile"/> must both be disposed before
-    /// <see cref="File.Delete"/> is called on the .dat file.  The existing
-    /// <see cref="SearchLease"/> / <see cref="System.Threading.ReaderWriterLockSlim"/>
-    /// protocol already guarantees this: <see cref="Search.IndexReader.Dispose"/>
-    /// disposes all SegmentHandles (unmapping the file) before it releases the lease,
-    /// and the merger only calls <see cref="File.Delete"/> after it has acquired the
-    /// exclusive write lock — which it cannot acquire until the last lease is released.
+    /// The underlying FileStream is opened with <c>FileShare.Read | FileShare.Delete</c>
+    /// so that another process (or the segment merger in this process) can call
+    /// <see cref="File.Delete"/> on the .dat file while this mapping is still alive.
+    /// On Windows, <c>FILE_SHARE_DELETE</c> unlinks the file from the directory entry
+    /// but the memory-mapped content remains accessible through the existing handle
+    /// until all handles are closed and the mapping is released.  Without this flag
+    /// a concurrent delete attempt throws "The process cannot access the file because
+    /// it is being used by another process".
+    ///
+    /// Disposal order still matters: <see cref="Search.IndexReader.Dispose"/> disposes
+    /// all SegmentHandles (unmapping the .dat file) before it releases the
+    /// <see cref="SearchLease"/>.  This ensures that the file handle is fully closed
+    /// before the merger's write lock is released and any subsequent file cleanup runs.
     /// </summary>
     internal sealed class SegmentHandle : IDisposable
     {
@@ -62,15 +67,49 @@ namespace FtsLib.Indexing
         {
             DatPath = datPath;
 
-            // Map the entire .dat file read-only.  MemoryMappedFileAccess.Read
-            // opens the underlying file with FileAccess.Read + FileShare.Read,
-            // matching the previous FileStream flags.
-            _mmapFile = MemoryMappedFile.CreateFromFile(
+            // Map the entire .dat file read-only.
+            //
+            // FileShare.ReadWrite | FileShare.Delete is required for two reasons:
+            //
+            //   1. FileShare.Delete — allows another process (or the merger in this
+            //      process) to call File.Delete on the .dat file while this mapping
+            //      is still open.  On Windows, File.Delete with FILE_SHARE_DELETE
+            //      marks the file for deletion but keeps it accessible via the existing
+            //      handle until all handles are closed.  Without FileShare.Delete, any
+            //      File.Delete attempt on an open memory-mapped file throws
+            //      "The process cannot access the file because it is being used by
+            //      another process" — the exact error observed during concurrent
+            //      searches and merges, especially when a second app instance has the
+            //      same segment files open.
+            //
+            //   2. FileShare.Read — allows concurrent readers (other SegmentHandles
+            //      opened by other searches) to map the same file simultaneously.
+            //
+            // The MemoryMappedFile.CreateFromFile overload that accepts a FileStream
+            // is used here so we can specify the exact FileShare flags.  The
+            // MemoryMappedFileAccess.Read access mode ensures the mapping itself is
+            // read-only regardless of the underlying FileStream access flags.
+            var fileStream = new FileStream(
                 datPath,
                 FileMode.Open,
-                mapName: null,          // anonymous — no named mapping needed
-                capacity: 0,            // 0 = use the file's current size
-                access: MemoryMappedFileAccess.Read);
+                FileAccess.Read,
+                FileShare.Read | FileShare.Delete);
+
+            try
+            {
+                _mmapFile = MemoryMappedFile.CreateFromFile(
+                    fileStream,
+                    mapName: null,
+                    capacity: 0,
+                    access: MemoryMappedFileAccess.Read,
+                    inheritability: System.IO.HandleInheritability.None,
+                    leaveOpen: false);   // MemoryMappedFile owns and closes the stream
+            }
+            catch
+            {
+                fileStream.Dispose();
+                throw;
+            }
 
             _mmapView = _mmapFile.CreateViewAccessor(
                 offset: 0,
