@@ -13,3 +13,15 @@ takes time till service starts
 fetch surrounding lines for context for very short lines - willr equire paying more attention during navigating to result?
 large pdf load time when jump scrolling
 export to word funny name
+
+- and : not being normalized by remove nikuud
+אמר רבא: אשה לא תעמוד על גבי כלי חרס ותטבול. סבר רב כהנא למימר: טעמא מאי. משום גזירת מרחצאות, הא על גבי סילתא — שפיר דמי.אמר ליה רב חנן מנהרדעא: התם טעמא מאי — משום דבעית, סילתא נמי בעיתא.
+which means that rmpve nikkud needs to be avalible in al the books
+need to enabe dual acces to the same dlls by the vsto and the program
+אין מקור לבית יוסף אל הטור
+צריך לבדוק אם זה גם נשבר במקומות אחרים
+
+
+רא"ש מקוואות סימן ט
+הלכך אסור להטביל בשותת ובמים הנמשכין ממנו.
+צ"ל בשוקת

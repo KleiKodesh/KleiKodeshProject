@@ -146,6 +146,8 @@ namespace FtsLib.Indexing
 
         public void Recover()
         {
+            FtsLog.Write("SegmentStore.Recover", "starting recovery in " + _dir);
+
             // Step 1: Scan all segment files (including .tmp) AND the WAL to find
             // the highest segment ID ever allocated, so _nextSegId is set correctly
             // even if a .tmp file or a WAL-mentioned segment is about to be deleted.
@@ -197,6 +199,8 @@ namespace FtsLib.Indexing
             // Step 3: Rebuild live state from disk, passing the max segment ID
             // so _nextSegId starts at maxSegId + 1.
             Live.RebuildFromDisk(maxSegId);
+            FtsLog.Write("SegmentStore.Recover",
+                $"live state rebuilt — maxSegId={maxSegId}");
 
             // Step 4: Validate all segment files — if any are corrupt, wipe the index.
             try
@@ -211,10 +215,16 @@ namespace FtsLib.Indexing
             }
 
             // Step 5: Check for interrupted merge and redo it if needed.
-            if (walRecovery.PendingMerge == null) return;
+            if (walRecovery.PendingMerge == null)
+            {
+                FtsLog.Write("SegmentStore.Recover", "no pending merge in WAL — recovery complete");
+                return;
+            }
 
             var op = walRecovery.PendingMerge;
             Console.WriteLine($"[Recovery] Interrupted merge: L{op.Level} → target {op.Target}");
+            FtsLog.Write("SegmentStore.Recover",
+                $"INTERRUPTED MERGE found in WAL: L{op.Level}→L{op.Level+1} sources=[{string.Join(",",op.Sources)}] target={op.Target}");
 
             string targetDat = Live.SegDatPath(op.Level + 1, op.Target);
             string targetDb  = Live.SegDbPath(op.Level + 1, op.Target);
@@ -249,10 +259,13 @@ namespace FtsLib.Indexing
             {
                 // Case B: sources already deleted, target is complete — register it.
                 Console.WriteLine($"[Recovery] Merge was complete (sources gone, target exists) — registering target and clearing WAL");
+                FtsLog.Write("SegmentStore.Recover",
+                    $"Case B: sources gone, target seg_{op.Level+1}_{op.Target} exists — registering as live");
                 Live.AddToLive(op.Level + 1, op.Target);
                 Wal.Open();
                 Wal.EndMerge(op.Level, op.Target);
                 Wal.Close();
+                FtsLog.Write("SegmentStore.Recover", "Case B recovery complete");
                 return;
             }
 
@@ -272,18 +285,27 @@ namespace FtsLib.Indexing
             {
                 // Neither target nor sources exist — the index is unrecoverable.
                 Console.WriteLine("[Recovery] Neither merge target nor source segments exist — wiping index for rebuild");
+                FtsLog.Write("SegmentStore.Recover",
+                    "Case D: BOTH target and sources missing — wiping directory and throwing CorruptIndexException");
                 WipeIndexDirectory();
                 throw new CorruptIndexException("Merge source segments missing and target incomplete — index wiped for rebuild.", null);
             }
 
+            FtsLog.Write("SegmentStore.Recover",
+                $"Case A/C: re-running merge from sources — targetExists={targetExists} sourcesExist={sourcesExist}");
+
             Wal.Open();
             try
             {
+                FtsLog.Write("SegmentStore.Recover", "re-running merge for recovery...");
                 _merger.MergeLevel(op.Level, targetSegId: op.Target);
+                FtsLog.Write("SegmentStore.Recover", "recovery merge complete");
             }
             catch (InvalidDataException ex)
             {
                 Console.WriteLine("[Recovery] Corrupt segment detected during merge — wiping index for rebuild: " + ex.Message);
+                FtsLog.Write("SegmentStore.Recover",
+                    "corrupt segment during recovery merge — wiping: " + ex.Message);
                 Wal.Close();
                 WipeIndexDirectory();
                 throw new CorruptIndexException("Corrupt segment detected during merge — index wiped for rebuild.", ex);
@@ -328,11 +350,18 @@ namespace FtsLib.Indexing
 
         private void WipeIndexDirectory()
         {
+            FtsLog.Write("SegmentStore.WipeIndexDirectory", "wiping all files in " + _dir);
             IsWiped = true;
             foreach (var file in Directory.GetFiles(_dir))
             {
-                try { File.Delete(file); } catch { /* best-effort */ }
+                try { File.Delete(file); }
+                catch (Exception ex)
+                {
+                    FtsLog.Write("SegmentStore.WipeIndexDirectory",
+                        $"could not delete {Path.GetFileName(file)}: {ex.Message}");
+                }
             }
+            FtsLog.Write("SegmentStore.WipeIndexDirectory", "wipe complete");
         }
 
         // ── Flush ─────────────────────────────────────────────────────
@@ -365,6 +394,9 @@ namespace FtsLib.Indexing
             foreach (var kvp in ramIndex) terms.Add(kvp.Key);
             terms.Sort(StringComparer.Ordinal);
 
+            FtsLog.Write("SegmentStore.Flush",
+                $"scheduling seg_0_{segId} for lineId={lineId} ({ramIndex.Count:N0} terms)");
+
             lock (_pipelineLock)
             {
                 _pipelineTask = _pipelineTask.ContinueWith(_ =>
@@ -374,9 +406,13 @@ namespace FtsLib.Indexing
                     // still running on this thread.
                     try
                     {
+                        FtsLog.Write("SegmentStore.Flush.BgTask",
+                            $"writing seg_0_{segId} to disk...");
                         SegmentWriter.WriteSegment(ramIndex, terms, datPath, dbPath);
                         Live.AddToLive(0, segId);
                         LastFlushedLineId = lineId;
+                        FtsLog.Write("SegmentStore.Flush.BgTask",
+                            $"seg_0_{segId} written — LastFlushedLineId={lineId}");
 
                         Wal.Open();
                         try
@@ -395,6 +431,8 @@ namespace FtsLib.Indexing
                         {
                             Wal.Close();
                         }
+                        FtsLog.Write("SegmentStore.Flush.BgTask",
+                            $"flush+merge cycle done for seg_0_{segId}");
                     }
                     finally
                     {

@@ -69,11 +69,17 @@ namespace FtsLib.SeforimDb
         {
             try
             {
-                File.WriteAllText(
-                    Path.Combine(indexPath, ProgressFileName),
+                string path = Path.Combine(indexPath, ProgressFileName);
+                File.WriteAllText(path,
                     lineId.ToString() + "\n" + totalLines.ToString() + "\n" + resumeOffset.ToString());
+                FtsLib.Indexing.FtsLog.Write("IndexingPipeline.WriteProgressFile",
+                    $"wrote lineId={lineId} totalLines={totalLines} resumeOffset={resumeOffset} path={path}");
             }
-            catch { /* best-effort — a missed write means slightly more re-work on resume */ }
+            catch (Exception ex)
+            {
+                FtsLib.Indexing.FtsLog.Write("IndexingPipeline.WriteProgressFile",
+                    "FAILED: " + ex.Message);
+            }
         }
 
         /// <summary>
@@ -86,7 +92,11 @@ namespace FtsLib.SeforimDb
             try
             {
                 string path = Path.Combine(indexPath, ProgressFileName);
-                if (File.Exists(path)) File.Delete(path);
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                    FtsLib.Indexing.FtsLog.Write("IndexingPipeline.DeleteProgressFile", "deleted " + path);
+                }
             }
             catch { }
         }
@@ -126,11 +136,39 @@ namespace FtsLib.SeforimDb
             Action             onFlush    = null,
             CancellationToken  ct         = default)
         {
+            FtsLib.Indexing.FtsLog.Separator("IndexingPipeline.Build START");
+            FtsLib.Indexing.FtsLog.Write("IndexingPipeline.Build",
+                $"indexPath={indexPath} dbPath={dbPath} limit={limit} totalLines={totalLines} resumeOffset={resumeOffset}");
+
+            // Log current index directory state at entry
+            try
+            {
+                if (System.IO.Directory.Exists(indexPath))
+                {
+                    var allFiles = System.IO.Directory.GetFiles(indexPath);
+                    FtsLib.Indexing.FtsLog.Write("IndexingPipeline.Build",
+                        $"index dir has {allFiles.Length} file(s): " +
+                        string.Join(", ", System.Array.ConvertAll(allFiles, System.IO.Path.GetFileName)));
+                }
+                else
+                {
+                    FtsLib.Indexing.FtsLog.Write("IndexingPipeline.Build", "index directory does not exist yet");
+                }
+            }
+            catch { }
+
             ReadProgressFile(indexPath, out int resumeLineId, out long cachedTotalLines, out _);
+            FtsLib.Indexing.FtsLog.Write("IndexingPipeline.Build",
+                $"progress file read: resumeLineId={resumeLineId} cachedTotalLines={cachedTotalLines}");
+
             if (resumeLineId != 0)
             {
-                // Log what's on disk so we can verify the segments actually cover
-                // the lines the progress file claims they do.
+                // Verify that at least one segment file exists on disk before trusting the
+                // resume point. If segments are missing (e.g. wiped by a concurrent
+                // ExecuteOnDbReady while the previous build task was still running and
+                // writing to build.progress after the wipe), resuming from the stale line
+                // ID would silently skip lines 1..resumeLineId and leave them unindexed.
+                // Detect this and start fresh instead.
                 int segCount = 0;
                 try
                 {
@@ -138,10 +176,27 @@ namespace FtsLib.SeforimDb
                         segCount = System.IO.Directory.GetFiles(indexPath, "seg_*.dat").Length;
                 }
                 catch { }
-                Console.WriteLine($"[IndexingPipeline] Resuming from line id {resumeLineId} — {segCount} segment file(s) on disk");
+
+                if (segCount == 0)
+                {
+                    FtsLib.Indexing.FtsLog.Write("IndexingPipeline.Build",
+                        $"STALE PROGRESS FILE: resumeLineId={resumeLineId} but segCount=0 — resetting to fresh build");
+                    Console.WriteLine($"[IndexingPipeline] build.progress says resume from {resumeLineId} but no segments on disk — starting fresh (stale progress file)");
+                    try { File.Delete(Path.Combine(indexPath, ProgressFileName)); } catch { }
+                    resumeLineId = 0;
+                }
+                else
+                {
+                    FtsLib.Indexing.FtsLog.Write("IndexingPipeline.Build",
+                        $"RESUMING from lineId={resumeLineId}, segCount={segCount}");
+                    Console.WriteLine($"[IndexingPipeline] Resuming from line id {resumeLineId} — {segCount} segment file(s) on disk");
+                }
             }
             else
+            {
+                FtsLib.Indexing.FtsLog.Write("IndexingPipeline.Build", "no progress file — starting fresh build");
                 Console.WriteLine("[IndexingPipeline] Starting fresh build");
+            }
 
             var  tokenizer          = new Tokenizer();
             long n                  = 0;
@@ -165,6 +220,8 @@ namespace FtsLib.SeforimDb
             {
                 // A segment file is corrupt and recovery failed. Wipe the entire
                 // index directory and start a fresh build from scratch.
+                FtsLib.Indexing.FtsLog.Write("IndexingPipeline.Build",
+                    "CorruptIndexException during writer init — wiping for clean rebuild: " + ex.Message);
                 Console.WriteLine("[IndexingPipeline] " + ex.Message);
                 Console.WriteLine("[IndexingPipeline] Wiping index directory for clean rebuild...");
                 try
@@ -177,10 +234,14 @@ namespace FtsLib.SeforimDb
                 }
                 catch (Exception wipeEx)
                 {
+                    FtsLib.Indexing.FtsLog.Write("IndexingPipeline.Build",
+                        "FAILED to wipe index directory: " + wipeEx.Message);
                     Console.WriteLine("[IndexingPipeline] Failed to wipe index directory: " + wipeEx.Message);
                     throw;
                 }
                 Console.WriteLine("[IndexingPipeline] Starting fresh build from scratch...");
+                FtsLib.Indexing.FtsLog.Write("IndexingPipeline.Build",
+                    "index directory wiped — starting fresh build");
                 resumeLineId = 0;
                 // Store is now inconsistent (index wiped) — don't reuse it.
                 writer = new IndexWriter(indexPath);
@@ -232,10 +293,11 @@ namespace FtsLib.SeforimDb
                     {
                         WriteProgressFile(indexPath, flushed, effectiveTotalLines, effectiveResumeOffset + n);
                         Console.WriteLine($"[IndexingPipeline] Progress file updated: lineId={flushed} (written={lastWrittenLineId}, n={n})");
+                        FtsLib.Indexing.FtsLog.Write("IndexingPipeline.Build",
+                            $"flush detected: flushed={flushed} written={lastWrittenLineId} n={n}");
                         lastProgressLineId = flushed;
                         onFlush?.Invoke();
-                    }
-                }
+                    }                }
 
                 // Dispose() (called by the using block) flushes the remaining RAM index
                 // and waits for all background flush tasks to complete. By the time we
@@ -249,11 +311,30 @@ namespace FtsLib.SeforimDb
             {
                 WriteProgressFile(indexPath, lastWrittenLineId, effectiveTotalLines, effectiveResumeOffset + n);
                 Console.WriteLine($"[IndexingPipeline] Build complete — final progress lineId={lastWrittenLineId}");
+                FtsLib.Indexing.FtsLog.Write("IndexingPipeline.Build",
+                    $"BUILD COMPLETE — final progress lineId={lastWrittenLineId} n={n}");
             }
             else
             {
                 Console.WriteLine($"[IndexingPipeline] No lines processed (WAL recovery only or empty DB) — progress file unchanged at {resumeLineId}");
+                FtsLib.Indexing.FtsLog.Write("IndexingPipeline.Build",
+                    $"no lines processed (WAL recovery only or empty DB) — progress unchanged at resumeLineId={resumeLineId}");
             }
+
+            // Log final index directory state
+            try
+            {
+                if (System.IO.Directory.Exists(indexPath))
+                {
+                    var allFiles = System.IO.Directory.GetFiles(indexPath);
+                    FtsLib.Indexing.FtsLog.Write("IndexingPipeline.Build",
+                        $"index dir at BUILD END ({allFiles.Length} files): " +
+                        string.Join(", ", System.Array.ConvertAll(allFiles, System.IO.Path.GetFileName)));
+                }
+            }
+            catch { }
+
+            FtsLib.Indexing.FtsLog.Separator("IndexingPipeline.Build END");
 
             // Return true only when lines were actually processed — this distinguishes
             // a real completed build from a no-op (WAL recovery only, or empty DB).

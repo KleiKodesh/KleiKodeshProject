@@ -51,20 +51,26 @@ namespace FtsLib.Indexing
             string tmpDb  = outDb  + ".tmp";
 
             Console.WriteLine($"[Merger] L{level}→L{nextLevel} seg {newSegId}: {segIds.Count} segs");
+            FtsLog.Write("SegmentMerger",
+                $"START L{level}→L{nextLevel} target=seg_{nextLevel}_{newSegId} sources=[{string.Join(",", segIds)}]");
 
             _store.Wal.BeginMerge(level, segIds.ToArray(), newSegId);
+            FtsLog.Write("SegmentMerger", "WAL BEGIN_MERGE written");
 
             DeleteIfExists(tmpDat);
             DeleteIfExists(tmpDb);
 
             var readers = OpenReaders(level, segIds);
+            FtsLog.Write("SegmentMerger", $"merging dat → {System.IO.Path.GetFileName(tmpDat)}");
             var entries = WriteMergedDat(level, nextLevel, readers, tmpDat);
             CloseReaders(readers);
 
             SegmentWriter.WriteMetaDb(tmpDb, entries);
+            FtsLog.Write("SegmentMerger", $"tmp files written ({entries.Count:N0} terms) — renaming to final");
 
             File.Move(tmpDat, outDat);
             File.Move(tmpDb,  outDb);
+            FtsLog.Write("SegmentMerger", "target files renamed to final paths");
 
             // Delete source segments BEFORE writing END_MERGE.
             //
@@ -85,6 +91,8 @@ namespace FtsLib.Indexing
             // Search is blocked for the entire duration of this merge (SegmentStore
             // holds the write lock on _searchMergeLock), so no reader can have the
             // source files open — plain File.Delete is safe.
+            FtsLog.Write("SegmentMerger",
+                $"deleting {segIds.Count} source segment(s): [{string.Join(",", segIds)}]");
             foreach (int sid in segIds)
             {
                 DeleteIfExists(_store.Live.SegDatPath(level, sid));
@@ -92,11 +100,16 @@ namespace FtsLib.Indexing
                 DeleteIfExists(_store.Live.SegDbPath(level, sid) + "-shm");
                 DeleteIfExists(_store.Live.SegDbPath(level, sid) + "-wal");
             }
+            FtsLog.Write("SegmentMerger", "source segments deleted");
 
             _store.Wal.EndMerge(level, newSegId);
+            FtsLog.Write("SegmentMerger", "WAL END_MERGE written");
+
             _store.Live.PromoteSegment(level, segIds, nextLevel, newSegId);
 
             Console.WriteLine($"[Merger] Done → L{nextLevel} seg {newSegId} ({entries.Count:N0} terms)");
+            FtsLog.Write("SegmentMerger",
+                $"DONE L{level}→L{nextLevel} seg_{nextLevel}_{newSegId} ({entries.Count:N0} terms)");
         }
 
         // ── Merge write ──────────────────────────────────────────────

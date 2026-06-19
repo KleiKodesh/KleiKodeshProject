@@ -285,7 +285,20 @@ namespace KitveiHakodeshLib.Search
 
             cts?.Cancel();
 
-            if (indexingTask != null) { try { indexingTask.Wait(15000); } catch { } }
+            // Wait WITHOUT a timeout for the build task to stop.
+            //
+            // BuildIndex() blocks on the calling thread until IndexWriter.Dispose()
+            // has called WaitForMerge() and the entire flush+merge pipeline has drained.
+            // That means when the task returns, no background work is touching the
+            // index directory — safe to wipe or modify it immediately after.
+            //
+            // The previous 60-second timeout was the root cause of the corruption bug:
+            // if a merge took longer than 60s, StopAll returned while the pipeline was
+            // still writing, and a subsequent DeleteFtsIndex() would race with those
+            // writes. Orphan files or a stale build.progress in the recreated directory
+            // caused the next build to resume from the wrong line ID, permanently
+            // skipping lines 1..N.
+            if (indexingTask != null) { try { indexingTask.Wait(); } catch { } }
 
             lock (_lock)
             {

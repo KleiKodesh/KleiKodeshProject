@@ -103,6 +103,7 @@
   <ItemGroup>
     <!-- Indexing: building and maintaining the on-disk index -->
     <Compile Include="Indexing\CorruptIndexException.cs" />
+    <Compile Include="Indexing\FtsLog.cs" />
     <Compile Include="Indexing\IndexMergingException.cs" />
     <Compile Include="Indexing\IndexWriteLock.cs" />
     <Compile Include="Indexing\DeleteSet.cs" />

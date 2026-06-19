@@ -133,6 +133,10 @@ namespace FtsLibTest
                     ProbeSearch.Run(args);
                     return;
 
+                case "interrupttest":
+                    InterruptTest.Run(args);
+                    return;
+
                 case "fstsize":
                     FstSizeDiag.Run(args);
                     return;
@@ -193,6 +197,8 @@ namespace FtsLibTest
             Console.WriteLine("  FtsLibTest.exe runall [tier]          � build + search, combined report");
             Console.WriteLine("  FtsLibTest.exe query  [tier] \"query\"  — ad-hoc query with snippets");
             Console.WriteLine("  FtsLibTest.exe fstsize [tier]         — estimate FST term-dict size vs current SQLite .db");
+            Console.WriteLine("  FtsLibTest.exe probe <indexDir>        — silent correctness probe against any index dir");
+            Console.WriteLine("  FtsLibTest.exe interrupttest [n] [k]   — interrupt+recover stress test (n cycles, kill after k flushes)");
             Console.WriteLine("  FtsLibTest.exe parsertest              � QueryParser unit tests (no index needed)");
             Console.WriteLine("  FtsLibTest.exe orderedtest             � ordered-search unit tests (no index needed)");
             Console.WriteLine("  FtsLibTest.exe worddist                — word-distance unit tests (no index needed)");

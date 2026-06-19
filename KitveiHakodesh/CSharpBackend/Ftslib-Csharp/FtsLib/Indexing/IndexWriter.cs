@@ -201,12 +201,17 @@ namespace FtsLib.Indexing
             _disposed = true;
             try
             {
+                FtsLog.Write("IndexWriter.Dispose", "flushing remaining RAM index and draining pipeline...");
                 FlushRam();
                 // Drain the entire background pipeline (flush write + any triggered
                 // LSM merge) before exiting.
                 _store?.WaitForMerge();
+                FtsLog.Write("IndexWriter.Dispose", "pipeline drained — all segments on disk");
             }
-            catch { /* swallow so Dispose never throws */ }
+            catch (Exception ex)
+            {
+                FtsLog.Write("IndexWriter.Dispose", "exception during drain: " + ex.Message);
+            }
             Console.WriteLine("[IndexWriter] Done.");
         }
 

@@ -31,10 +31,6 @@ namespace KitveiHakodeshLib.Search
             if (!_state.TryStartBuilding(out cts))
                 return;
 
-            // Acquire the cross-process build lock before starting the build task.
-            // If another process holds it, TryStartBuilding already returned false
-            // (the actor thread in SearchHandler checks IsAnotherProcessBuilding first),
-            // so we should always be able to acquire here. Fail open if not.
             if (!FtsIndexState.TryAcquireBuildLock())
             {
                 Console.WriteLine("[FtsIndexBuilder] Could not acquire build lock — another process may be building");

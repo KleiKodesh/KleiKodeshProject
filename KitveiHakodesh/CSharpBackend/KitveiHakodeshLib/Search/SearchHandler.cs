@@ -114,6 +114,8 @@ namespace KitveiHakodeshLib.Search
                                      StringComparison.OrdinalIgnoreCase);
 
             // Stop any in-flight work before touching shared state.
+            // StopAll waits up to 60s so a background merge has time to finish before
+            // we touch the index directory.
             _indexState.StopAll();
 
             // If the DB path changed the existing index belongs to a different database.
@@ -164,19 +166,38 @@ namespace KitveiHakodeshLib.Search
             // a previous install. Decide whether to resume or wipe based on the
             // progress file.
             //
-            // Resume is only safe when a progress file exists: it records the exact
-            // line ID up to which segments are consistent, so BuildIndex can call
-            // ReadLinesFrom and append without duplicating anything.
+            // Resume is only safe when a progress file exists AND segments covering
+            // lines 1..resumeLineId exist on disk. IndexingPipeline.Build() also guards
+            // this, but checking here avoids creating a SeforimIndex over a half-wiped
+            // directory and gives a cleaner log message.
             //
             // If there is no progress file but segments already exist on disk, we
             // cannot know whether those segments are complete, partial, or from a
-            // different database version. Appending would duplicate every line that
-            // was already indexed. Wipe and rebuild from scratch.
+            // different database version. Wipe and rebuild from scratch.
             _indexState.GetIndex().GetResumeState(out int resumeLineId, out _, out _);
             if (resumeLineId > 0)
             {
-                Console.WriteLine("[SearchHandler] Interrupted build detected — resuming from line id "
-                    + resumeLineId);
+                // Double-check that segments actually exist. build.progress could have
+                // been written by a dying task after the directory was wiped.
+                bool segmentsExist = false;
+                try
+                {
+                    segmentsExist = Directory.Exists(FtsIndexState.FtsIndexPath) &&
+                                    Directory.GetFiles(FtsIndexState.FtsIndexPath, "seg_*.dat").Length > 0;
+                }
+                catch { }
+
+                if (segmentsExist)
+                {
+                    Console.WriteLine("[SearchHandler] Interrupted build detected — resuming from line id "
+                        + resumeLineId);
+                }
+                else
+                {
+                    Console.WriteLine("[SearchHandler] build.progress says resume from " + resumeLineId
+                        + " but no segments on disk — starting fresh (stale progress file)");
+                    _indexState.GetIndex().DeleteBuildProgressFile();
+                }
             }
             else
             {

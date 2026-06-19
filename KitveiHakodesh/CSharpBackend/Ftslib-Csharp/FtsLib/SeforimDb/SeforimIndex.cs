@@ -70,17 +70,25 @@ namespace FtsLib.SeforimDb
                 System.IO.Directory.GetFiles(_indexPath, "seg_*.dat").Length > 0 ||
                 System.IO.File.Exists(System.IO.Path.Combine(_indexPath, "wal.log"));
 
-            if (!needsRecovery) return;
+            if (!needsRecovery)
+            {
+                FtsLib.Indexing.FtsLog.Write("SeforimIndex.EnsureStore", "no segments and no WAL — skipping recovery");
+                return;
+            }
 
             Console.WriteLine("[SeforimIndex] Segments found — running crash recovery...");
+            FtsLib.Indexing.FtsLog.Write("SeforimIndex.EnsureStore", "segments or WAL found — running recovery");
             try
             {
                 _store.Recover();
                 Console.WriteLine("[SeforimIndex] Recovery complete.");
+                FtsLib.Indexing.FtsLog.Write("SeforimIndex.EnsureStore", "recovery complete");
             }
-            catch (CorruptIndexException)
+            catch (CorruptIndexException ex)
             {
                 // Recovery wiped the directory — start with a clean store.
+                FtsLib.Indexing.FtsLog.Write("SeforimIndex.EnsureStore",
+                    "CorruptIndexException during recovery — directory wiped, starting clean: " + ex.Message);
                 _store = new SegmentStore(_indexPath);
             }
         }
@@ -134,10 +142,20 @@ namespace FtsLib.SeforimDb
                                long resumeOffset = 0,
                                CancellationToken ct = default)
         {
+            FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex",
+                $"acquiring IndexWriteLock for {_indexPath}");
             using (new IndexWriteLock(_indexPath))
             {
+                FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex", "IndexWriteLock acquired");
                 bool result = IndexingPipeline.Build(_indexPath, _dbPath, _store, limit, totalLines, resumeOffset, onProgress, onFlush, ct);
-                if (_store.IsWiped) ResetStore();
+                if (_store.IsWiped)
+                {
+                    FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex",
+                        "store was wiped during build — resetting store");
+                    ResetStore();
+                }
+                FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex",
+                    $"IndexWriteLock releasing — result={result}");
                 return result;
             }
         }
