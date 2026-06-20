@@ -16,7 +16,8 @@ param(
 
     [switch]$NoRelease,                 # skip GitHub release
     [switch]$NoClean,                   # skip solution clean step
-    [switch]$DeleteFtsIndex             # delete FTS index on install (forces reindex on user machines)
+    [switch]$DeleteFtsIndex,            # delete FTS index on install (forces reindex on user machines)
+    [switch]$ForceCleanInstall          # wipe + reinstall on launch (התקן behaves like תיקון)
 )
 
 . "$PSScriptRoot\build-helpers.ps1"
@@ -41,6 +42,7 @@ else                { Write-Host "Version      : increment $VersionIncrement"   
 Write-Host "Notes source : $ReleaseNotesSource" -ForegroundColor Gray
 Write-Host "GitHub rel.  : $(if ($NoRelease) { 'skip' } else { 'yes' })" -ForegroundColor Gray
 Write-Host "FTS index    : $(if ($DeleteFtsIndex) { 'DELETE on install (force reindex)' } else { 'preserve' })" -ForegroundColor Gray
+Write-Host "Clean install: $(if ($ForceCleanInstall) { 'yes (wipe + reinstall)' } else { 'no' })" -ForegroundColor Gray
 Write-Host ""
 
 # ── 0. Delete Vue build stamp (forces fresh Vue rebuild every release build) ──
@@ -123,6 +125,7 @@ function Build-Variant {
         -p:VstoConfiguration=Release -p:VstoPlatform=$Platform `
         -p:InstallerVariant=$Platform `
         -p:DeleteFtsIndex=$(if ($DeleteFtsIndex) { 'true' } else { 'false' }) `
+        -p:ForceCleanInstall=$(if ($ForceCleanInstall) { 'true' } else { 'false' }) `
         -p:OutputPath=$outputPath `
         --verbosity normal
     if ($LASTEXITCODE -ne 0) {

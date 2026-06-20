@@ -66,6 +66,18 @@ function Read-DeleteFtsIndex {
     return $c -eq "2"
 }
 
+function Read-ForceCleanInstall {
+    Write-Host ""
+    Write-Host "Force clean install?" -ForegroundColor Yellow
+    Write-Host "  (Installer will wipe all existing files + registry before installing"
+    Write-Host "   The 'התקן' button will behave exactly like 'תיקון')"
+    Write-Host "  1. No  — normal install  (default)"
+    Write-Host "  2. Yes — clean install (wipe + reinstall)"
+    Write-Host ""
+    $c = Read-Choice "Choice (1-2)" @("1","2")
+    return $c -eq "2"
+}
+
 function Confirm-Action([string]$summary) {
     Write-Host $summary
     Write-Host ""
@@ -111,29 +123,35 @@ while ($true) {
 
         "1" {
             Show-Header "Full Release Build + GitHub Release"
-            $verArgs  = Read-VersionArgs
-            $notes    = Read-NotesSource
-            $deleteFts = Read-DeleteFtsIndex
+            $verArgs    = Read-VersionArgs
+            $notes      = Read-NotesSource
+            $forceClean = Read-ForceCleanInstall
+            $deleteFts  = if ($forceClean) { $false } else { Read-DeleteFtsIndex }
             $summary  = if ($verArgs.ManualVersion) { "  Version : $($verArgs.ManualVersion) (manual)" } else { "  Version : increment $($verArgs.VersionIncrement)" }
             $summary += "`n  Notes   : $notes`n  Release : yes"
-            $summary += "`n  FTS idx : $(if ($deleteFts) { 'DELETE (force reindex)' } else { 'preserve' })"
+            $summary += "`n  Clean   : $(if ($forceClean) { 'yes (wipe + reinstall)' } else { 'no' })"
+            $summary += "`n  FTS idx : $(if ($forceClean) { 'n/a (wiped by clean install)' } elseif ($deleteFts) { 'DELETE (force reindex)' } else { 'preserve' })"
             if (Confirm-Action $summary) {
                 $params = $verArgs + @{ ReleaseNotesSource = $notes }
-                if ($deleteFts) { $params += @{ DeleteFtsIndex = $true } }
+                if ($deleteFts)   { $params += @{ DeleteFtsIndex    = $true } }
+                if ($forceClean)  { $params += @{ ForceCleanInstall = $true } }
                 Invoke-Installer $params
             }
         }
 
         "2" {
             Show-Header "Release Build Only - No GitHub Release"
-            $verArgs  = Read-VersionArgs
-            $deleteFts = Read-DeleteFtsIndex
+            $verArgs    = Read-VersionArgs
+            $forceClean = Read-ForceCleanInstall
+            $deleteFts  = if ($forceClean) { $false } else { Read-DeleteFtsIndex }
             $summary  = if ($verArgs.ManualVersion) { "  Version : $($verArgs.ManualVersion) (manual)" } else { "  Version : increment $($verArgs.VersionIncrement)" }
             $summary += "`n  Release : skipped"
-            $summary += "`n  FTS idx : $(if ($deleteFts) { 'DELETE (force reindex)' } else { 'preserve' })"
+            $summary += "`n  Clean   : $(if ($forceClean) { 'yes (wipe + reinstall)' } else { 'no' })"
+            $summary += "`n  FTS idx : $(if ($forceClean) { 'n/a (wiped by clean install)' } elseif ($deleteFts) { 'DELETE (force reindex)' } else { 'preserve' })"
             if (Confirm-Action $summary) {
                 $params = $verArgs + @{ NoRelease = $true }
-                if ($deleteFts) { $params += @{ DeleteFtsIndex = $true } }
+                if ($deleteFts)  { $params += @{ DeleteFtsIndex    = $true } }
+                if ($forceClean) { $params += @{ ForceCleanInstall = $true } }
                 Invoke-Installer $params
             }
         }
@@ -143,8 +161,13 @@ while ($true) {
             $cur = Get-CurrentVersion
             Write-Host "Current version: $cur (will not be changed)" -ForegroundColor Cyan
             Write-Host ""
-            if (Confirm-Action "  Build without version change, skip GitHub release.") {
-                Invoke-Installer @{ ManualVersion = $cur; NoRelease = $true; NoClean = $true }
+            $forceClean = Read-ForceCleanInstall
+            $summary = "  Build without version change, skip GitHub release."
+            $summary += "`n  Clean   : $(if ($forceClean) { 'yes (wipe + reinstall)' } else { 'no' })"
+            if (Confirm-Action $summary) {
+                $params = @{ ManualVersion = $cur; NoRelease = $true; NoClean = $true }
+                if ($forceClean) { $params += @{ ForceCleanInstall = $true } }
+                Invoke-Installer $params
             }
         }
 

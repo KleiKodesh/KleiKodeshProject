@@ -29,6 +29,13 @@
     <DefineConstants>$(DefineConstants);DELETE_FTS_INDEX</DefineConstants>
   </PropertyGroup>
 
+  <!-- ForceCleanInstall — set by build script via -p:ForceCleanInstall=true.
+       When set, the installer runs a full repair/cleanup on launch before installing,
+       so the "התקן" button behaves like "תיקון" (wipe + fresh install). -->
+  <PropertyGroup Condition="'$(ForceCleanInstall)' == 'true'">
+    <DefineConstants>$(DefineConstants);FORCE_CLEAN_INSTALL</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.IO.Compression.FileSystem" />

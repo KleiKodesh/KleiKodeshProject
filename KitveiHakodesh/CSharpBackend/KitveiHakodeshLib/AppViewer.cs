@@ -126,18 +126,13 @@ namespace KitveiHakodeshLib
         /// </summary>
         public bool ShowPopOutButton { get; set; } = false;
 
-        /// <summary>
-        /// Subfolder name under <c>KitveiHakodesh\</c> used as the WebView2 user-data folder.
-        /// Defaults to <c>"webcache"</c>, which is shared across all AppViewer instances
-        /// that leave this property unset (e.g. multiple VSTO task panes in one Word session).
-        /// Set a distinct value (e.g. <c>"webcache-standalone"</c>) to give a host its own
-        /// isolated localStorage, IndexedDB and cookies.
-        /// Must be set before the WebView2 finishes initialising.
-        /// </summary>
-        public string WebCacheFolder { get; set; } = "webcache";
+        // Subfolder name under KitveiHakodesh\ used as the WebView2 user-data folder.
+        // Stored as a readonly field so it is captured before InitAsync runs.
+        private readonly string _webCacheFolder;
 
-        public AppViewer()
+        public AppViewer(string webCacheFolder = "webcache")
         {
+            _webCacheFolder = webCacheFolder;
             RightToLeft = RightToLeft.No;
             AutoScaleMode = AutoScaleMode.None;
             BackColorChanged += (_, __) => _SyncSplashBackColor();
@@ -250,7 +245,7 @@ namespace KitveiHakodeshLib
 
         private async Task InitAsyncCore()
         {
-            string udf = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KitveiHakodesh", WebCacheFolder);
+            string udf = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KitveiHakodesh", _webCacheFolder);
             var env = await GetSharedEnv(udf);
 
             await _webView.EnsureCoreWebView2Async(env);
@@ -373,10 +368,7 @@ namespace KitveiHakodeshLib
             string dbScript =
                 "window.__webviewDbPath=\"" + escapedPath + "\";" +
                 "window.__webviewDbReady=" + (dbReady ? "true" : "false") + ";" +
-                "window.__webviewShowPopOut=" + (ShowPopOutButton ? "true" : "false") + ";" +
-                (DefaultWorkspaceId != null
-                    ? "window.__webviewDefaultWorkspaceId=\"" + DefaultWorkspaceId + "\";"
-                    : "");
+                "window.__webviewShowPopOut=" + (ShowPopOutButton ? "true" : "false") + ";";
             _dbInjectionScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
                 JsBridge.Script + "\n" + dbScript);
 

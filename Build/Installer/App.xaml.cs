@@ -37,7 +37,14 @@ namespace KleiKodeshVstoInstallerWpf
             base.OnStartup(e);
 
             bool silentMode  = false;
+            // When built with -p:ForceCleanInstall=true, the installer always launches
+            // in repair mode — wipes existing files/registry then installs fresh.
+            // The "התקן" button on LandingPage therefore behaves exactly like "תיקון".
+#if FORCE_CLEAN_INSTALL
+            bool repairMode  = true;
+#else
             bool repairMode  = false;
+#endif
             int  waitForPid  = 0;
 
             foreach (string arg in e.Args)
