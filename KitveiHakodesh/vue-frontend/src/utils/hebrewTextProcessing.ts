@@ -3,6 +3,7 @@
  * State 0: full diacritics (nikkud + cantillation)
  * State 1: remove cantillation only (U+0591–U+05AF, U+05C0)
  * State 2: remove nikkud as well (U+05B0–U+05BD, U+05C1, U+05C2, U+05C4, U+05C5, U+05C7)
+ *          and the em dash U+2014 (—)
  *          and replace modern punctuation uncommon in older Hebrew texts:
  *          ! → .   ? → .   ; → ,
  *
@@ -31,7 +32,7 @@ export function applyDiacriticsFilter(html: string, state: number): string {
     if (tag) return tag
     if (state >= 1) text = text.replace(/[\u0591-\u05AF\u05C0]/g, '')
     if (state >= 2) {
-      text = text.replace(/[\u05B0-\u05BD\u05C1\u05C2\u05C4\u05C5\u05C7]/g, '')
+      text = text.replace(/[\u05B0-\u05BD\u05C1\u05C2\u05C4\u05C5\u05C7\u2014]/g, '')
       text = text.replace(/[!?]/g, '.')
       // Replace standalone semicolons (punctuation) but not ones that are part of
       // HTML entities like &thinsp; or &nbsp; — those have the form &word; or &#N;
