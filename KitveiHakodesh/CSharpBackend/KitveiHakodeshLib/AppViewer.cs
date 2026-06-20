@@ -127,6 +127,16 @@ namespace KitveiHakodeshLib
         /// </summary>
         public bool ShowPopOutButton { get; set; } = false;
 
+        /// <summary>
+        /// The workspace ID that the Vue app will use when it has no existing workspace
+        /// data in localStorage (i.e. first launch for this host).
+        /// Each host (VSTO task pane, demo app, etc.) should set a distinct value so
+        /// their workspaces are isolated from one another.
+        /// Defaults to <c>null</c>, which lets the Vue app fall back to its own "default" ID.
+        /// Must be set before the WebView2 finishes initialising.
+        /// </summary>
+        public string DefaultWorkspaceId { get; set; } = null;
+
         public AppViewer()
         {
             RightToLeft = RightToLeft.No;
@@ -299,10 +309,16 @@ namespace KitveiHakodeshLib
 
             // Merge both scripts into one AddScriptToExecuteOnDocumentCreatedAsync call —
             // each call is a browser-process round-trip, so one call is faster than two.
+            string wsIdSnippet = DefaultWorkspaceId != null
+                ? "window.__webviewDefaultWorkspaceId=\"" + DefaultWorkspaceId + "\";"
+                : "";
+            System.Diagnostics.Debug.WriteLine(
+                $"[AppViewer] InitAsyncCore — DefaultWorkspaceId={DefaultWorkspaceId ?? "(null)"}, ShowPopOutButton={ShowPopOutButton}");
             string dbScript =
                 "window.__webviewDbPath=\"" + escapedPath + "\";" +
                 "window.__webviewDbReady=" + (dbReady ? "true" : "false") + ";" +
-                "window.__webviewShowPopOut=" + (ShowPopOutButton ? "true" : "false") + ";";
+                "window.__webviewShowPopOut=" + (ShowPopOutButton ? "true" : "false") + ";" +
+                wsIdSnippet;
             _dbInjectionScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
                 JsBridge.Script + "\n" + dbScript);
 
@@ -363,7 +379,10 @@ namespace KitveiHakodeshLib
             string dbScript =
                 "window.__webviewDbPath=\"" + escapedPath + "\";" +
                 "window.__webviewDbReady=" + (dbReady ? "true" : "false") + ";" +
-                "window.__webviewShowPopOut=" + (ShowPopOutButton ? "true" : "false") + ";";
+                "window.__webviewShowPopOut=" + (ShowPopOutButton ? "true" : "false") + ";" +
+                (DefaultWorkspaceId != null
+                    ? "window.__webviewDefaultWorkspaceId=\"" + DefaultWorkspaceId + "\";"
+                    : "");
             _dbInjectionScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
                 JsBridge.Script + "\n" + dbScript);
 

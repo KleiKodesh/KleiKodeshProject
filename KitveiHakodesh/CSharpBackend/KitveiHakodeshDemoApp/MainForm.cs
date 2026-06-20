@@ -21,7 +21,7 @@ namespace KitveiHakodeshDemoApp
             RightToLeftLayout = true;
             RightToLeft = RightToLeft.Yes;
 
-            _viewer = new AppViewer { Dock = DockStyle.Fill };
+            _viewer = new AppViewer { Dock = DockStyle.Fill, DefaultWorkspaceId = "demo-app" };
             _viewer.TogglePopOut = Toggle;
             Controls.Add(_viewer);
 

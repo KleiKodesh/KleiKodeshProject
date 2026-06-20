@@ -55,7 +55,7 @@ namespace KleiKodesh.Ribbon
                 switch (id)
                 {
                     case "KitveiHakodesh":
-                        TaskPaneManager.Show(new KitveiHakodeshLib.AppViewer { ShowPopOutButton = true }, "כתבי הקודש", 610, popOutBehavior: true);
+                        TaskPaneManager.Show(new KitveiHakodeshLib.AppViewer { ShowPopOutButton = true, DefaultWorkspaceId = "word-taskpane" }, "כתבי הקודש", 610, popOutBehavior: true);
                         break;
                     case "Kiwix":
                         TaskPaneManager.Show(new KiwixLib.KiwixWebview(), "קיוויקס", 610, popOutBehavior: true);

@@ -20,8 +20,10 @@ which means that rmpve nikkud needs to be avalible in al the books
 need to enabe dual acces to the same dlls by the vsto and the program
 אין מקור לבית יוסף אל הטור
 צריך לבדוק אם זה גם נשבר במקומות אחרים
+te height of the commetry panel is not persisted
 
 
 רא"ש מקוואות סימן ט
 הלכך אסור להטביל בשותת ובמים הנמשכין ממנו.
 צ"ל בשוקת
+

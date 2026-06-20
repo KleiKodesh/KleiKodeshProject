@@ -8,6 +8,13 @@ export type { Workspace } from '@/utils/persistence'
 const DEFAULT_WS_ID = 'default'
 const DEFAULT_WS_NAME = 'ברירת מחדל'
 
+/** Workspace ID injected by the C# host for host-specific default workspaces. */
+function getHostDefaultWsId(): string {
+  const injected = window.__webviewDefaultWorkspaceId
+  console.log('[workspaceStore] __webviewDefaultWorkspaceId =', injected ?? '(not set)')
+  return injected ?? DEFAULT_WS_ID
+}
+
 function makeId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
 }
@@ -21,13 +28,17 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   // Synchronous — workspaces list is in localStorage
   function init() {
     const saved = lsGet<WorkspaceList>(KEYS.SETTINGS_WORKSPACES)
+    console.log('[workspaceStore] init — saved:', saved ? JSON.stringify(saved) : '(none)')
     if (saved && saved.workspaces.length > 0) {
       workspaces.value = saved.workspaces
       activeId.value = saved.activeId
+      console.log('[workspaceStore] restored from localStorage, activeId =', saved.activeId)
     } else {
-      const def: Workspace = { id: DEFAULT_WS_ID, name: DEFAULT_WS_NAME, createdAt: Date.now() }
+      const hostId = getHostDefaultWsId()
+      console.log('[workspaceStore] no saved workspaces — creating default, id =', hostId)
+      const def: Workspace = { id: hostId, name: DEFAULT_WS_NAME, createdAt: Date.now() }
       workspaces.value = [def]
-      activeId.value = DEFAULT_WS_ID
+      activeId.value = hostId
       persist()
     }
   }

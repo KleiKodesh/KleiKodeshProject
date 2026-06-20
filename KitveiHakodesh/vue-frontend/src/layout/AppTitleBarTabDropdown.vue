@@ -64,7 +64,7 @@ nextTick(() => containerRef.value?.focus())
   right: 0;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
-  z-index: 100;
+  z-index: 10000;
   max-height: 50vh;
   overflow-y: auto;
 }
