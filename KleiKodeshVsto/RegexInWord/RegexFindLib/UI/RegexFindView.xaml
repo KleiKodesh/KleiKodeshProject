@@ -227,9 +227,18 @@
                              FlowDirection="RightToLeft"
                              Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              local:PlaceholderBehavior.Placeholder="חיפוש..."
-                             ToolTip="חיפוש"
                              GotFocus="FindBox_GotFocus"
-                             KeyDown="FindBox_KeyDown"/>
+                             KeyDown="FindBox_KeyDown">
+                        <TextBox.ToolTip>
+                            <ToolTip>
+                                <StackPanel>
+                                    <TextBlock Text="חיפוש" FontWeight="Bold" Margin="0,0,0,4"/>
+                                    <TextBlock Text="Enter — תוצאה הבאה"/>
+                                    <TextBlock Text="Shift+Enter — תוצאה הקודמת"/>
+                                </StackPanel>
+                            </ToolTip>
+                        </TextBox.ToolTip>
+                    </TextBox>
                 </DockPanel>
             </Border>
 
