@@ -93,7 +93,14 @@ namespace RegexFindLib.UI
             if (e.Key == Key.Return)
             {
                 e.Handled = true;
-                Vm?.SearchCommand.Execute(null);
+                if (Vm == null) return;
+
+                // If we already have results for the current search text, just advance.
+                // Otherwise run a fresh search.
+                if (Vm.Results.Count > 0)
+                    Vm.AdvanceToNextResult();
+                else
+                    Vm.SearchCommand.Execute(null);
             }
             else if (e.Key == Key.Escape)
             {
@@ -151,6 +158,14 @@ namespace RegexFindLib.UI
                 ReplaceBox.Focus();
                 ReplaceBox.CaretIndex = ReplaceBox.Text?.Length ?? 0;
             }
+        }
+
+        // ── Results list ──────────────────────────────────────────────────────
+
+        void ResultsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (sender is ListBox lb && lb.SelectedItem != null)
+                lb.ScrollIntoView(lb.SelectedItem);
         }
 
         // ── Results keyboard navigation ───────────────────────────────────────

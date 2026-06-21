@@ -497,6 +497,7 @@
                              VirtualizingPanel.IsVirtualizing="True"
                              VirtualizingPanel.VirtualizationMode="Recycling"
                              KeyDown="ResultsList_KeyDown"
+                             SelectionChanged="ResultsList_SelectionChanged"
                              Visibility="{Binding NoResults,
                                  Converter={StaticResource InvBoolToVis}}">
                         <ListBox.ItemTemplate>

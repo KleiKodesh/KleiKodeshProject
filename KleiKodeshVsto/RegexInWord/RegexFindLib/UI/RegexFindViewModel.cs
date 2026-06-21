@@ -56,7 +56,16 @@ namespace RegexFindLib.UI
         public string SearchText
         {
             get => _searchText;
-            set => SetProperty(ref _searchText, value);
+            set
+            {
+                if (SetProperty(ref _searchText, value))
+                {
+                    // Clear stale results so the next Enter runs a fresh search
+                    Results.Clear();
+                    NoResults = false;
+                    _selectedResultIndex = -1;
+                }
+            }
         }
 
         string _replaceText = "";

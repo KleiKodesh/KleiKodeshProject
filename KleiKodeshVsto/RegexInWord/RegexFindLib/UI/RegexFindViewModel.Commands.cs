@@ -42,6 +42,17 @@ namespace RegexFindLib.UI
             catch (Exception ex) { StatusText = ex.Message; }
         }
 
+        /// <summary>
+        /// Advances to the next result in the list (wraps around).
+        /// Called when Enter is pressed in the search box while results are already showing.
+        /// </summary>
+        public void AdvanceToNextResult()
+        {
+            if (Results.Count == 0) return;
+            int next = (_selectedResultIndex + 1) % Results.Count;
+            SelectedResultIndex = next;
+        }
+
         void ExecuteReplace()
         {
             try
@@ -72,6 +83,7 @@ namespace RegexFindLib.UI
         void RefreshResults()
         {
             Results.Clear();
+            _selectedResultIndex = -1;
             ShowRegexPalette = false;
 
             if (_search.Results == null || _search.Results.Length == 0)
@@ -86,6 +98,12 @@ namespace RegexFindLib.UI
                 Results.Add(new SnippetModel(r.ContextBefore, r.MatchText, r.ContextAfter));
 
             StatusText = $"נמצאו {_search.Results.Length} תוצאות";
+
+            // Sync the list selection to whichever result Word has already highlighted.
+            // SelectResultByIndex is NOT called here because the search engine already
+            // positioned the cursor; we only update the UI selection indicator.
+            _selectedResultIndex = 0;
+            OnPropertyChanged(nameof(SelectedResultIndex));
         }
 
         void CopyFormatting(FormattingOptions target)
