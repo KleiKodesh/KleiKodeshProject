@@ -81,6 +81,7 @@
   </ItemGroup>
   <ItemGroup>
     <!-- Helpers -->
+    <Compile Include="Helpers\FileLogger.cs" />
     <Compile Include="Helpers\Vsto.cs" />
     <Compile Include="Helpers\WordService.cs" />
     <Compile Include="Helpers\WdActionManager.cs" />

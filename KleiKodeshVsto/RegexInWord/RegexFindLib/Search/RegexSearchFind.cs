@@ -29,9 +29,36 @@ namespace RegexFindLib.Search
             Range searchRange = GetSearchRange(find);
             int startPos = searchRange.Start;
 
+            // When Track Changes is active with deleted runs present, Range.Text normally
+            // omits the deleted characters but Range.Start/End still count them as positions.
+            // Setting ShowAll = true on the range forces Range.Text to include deleted text,
+            // so string offsets align exactly with document positions — no mapping needed.
+            // We only do this when a gap is detected, to avoid the overhead in normal cases.
             string rangeText = searchRange.Text;
             if (string.IsNullOrEmpty(rangeText))
                 return new SearchResult[0];
+
+            int span = searchRange.End - startPos;
+            if (span != rangeText.Length)
+            {
+                // Gap detected — deleted tracked-change runs are shifting positions.
+                // Re-read with ShowAll=true so deleted text is included in the string.
+                bool showAllWasSet = false;
+                try
+                {
+                    if (!searchRange.ShowAll)
+                    {
+                        searchRange.ShowAll = true;
+                        showAllWasSet = true;
+                    }
+                    rangeText = searchRange.Text ?? rangeText;
+                }
+                finally
+                {
+                    if (showAllWasSet)
+                        try { searchRange.ShowAll = false; } catch { }
+                }
+            }
 
             var matches = Regex.Matches(rangeText, find.Text, RegexOptions.Multiline)
                                .Cast<Match>().ToArray();
@@ -39,9 +66,6 @@ namespace RegexFindLib.Search
             var list = new List<SearchResult>();
             foreach (var match in matches)
             {
-                // Build match range within the same story as searchRange.
-                // Document.Range() always uses the main story — use Duplicate + SetRange instead
-                // so footnote/endnote story ranges are preserved correctly.
                 Range matchRange = searchRange.Duplicate;
                 matchRange.SetRange(
                     startPos + match.Index,
@@ -66,14 +90,6 @@ namespace RegexFindLib.Search
                 actionRange = Selection.Range.Duplicate;
             }
 
-            // Only trim the range when a direction was explicitly chosen.
-            // SearchModeIndex 0 = "הכל" — use the full story range as-is.
-            // Forward=true + Scope=All with a directional intent trims from cursor forward.
-            // Forward=false trims from cursor backward.
-            // We distinguish "הכל" from "כלפי מטה" via the Slop==0 && !explicitly directional
-            // check — but the cleanest way is to carry the intent explicitly.
-            // The ViewModel sets Forward=true for both "הכל" (0) and "כלפי מטה" (1),
-            // so we use the IsDirectional flag on the request.
             if (find.IsDirectional)
             {
                 if (find.Forward)
