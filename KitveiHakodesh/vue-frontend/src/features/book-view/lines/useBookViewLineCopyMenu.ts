@@ -5,7 +5,7 @@ import type { TocEntry } from '../toc/useBookViewToc'
 import type { Note } from './useBookViewNotes'
 import type { useTabStore } from '@/stores/tabStore'
 import BookViewAnnotationMenuRow from './BookViewAnnotationMenuRow.vue'
-import { cleanTextForExport } from '@/utils/hebrewCleanTextExport'
+import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { useSettingsStore } from '@/stores/settingsStore'
 
 type TabStore = ReturnType<typeof useTabStore>
@@ -213,7 +213,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): ContextMenuIt
   const settingsStore = useSettingsStore()
 
   function maybeClean(html: string): string {
-    return settingsStore.copyCleanText ? cleanTextForExport(html) : html
+    return settingsStore.copyCleanText ? cleanHebrewText(html) : html
   }
 
   function buildSource(firstLineIndex: number | null, includeComma: boolean = true): string {

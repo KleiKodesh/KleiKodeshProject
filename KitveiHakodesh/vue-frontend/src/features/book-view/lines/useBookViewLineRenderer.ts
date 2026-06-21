@@ -1,6 +1,6 @@
 import { computed } from 'vue'
 import { applyDiacriticsFilter, removeDiacriticsForSearch, stripHtmlForSearch } from '@/utils/hebrewTextProcessing'
-import { cleanTextForExport } from '@/utils/hebrewCleanTextExport'
+import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { argbToCssColor, highlightColorToThemeColor } from '../lines/bookViewAnnotationColors'
 import type { useSettingsStore } from '@/stores/settingsStore'
@@ -446,7 +446,7 @@ export function useBookViewLineRenderer(
     if (cached !== undefined) return cached
 
     const p = getProps()
-    let content = diacriticsState.value === 0 ? raw : diacriticsState.value === 2 ? cleanTextForExport(raw) : applyDiacriticsFilter(raw, diacriticsState.value)
+    let content = diacriticsState.value === 0 ? raw : diacriticsState.value === 2 ? cleanHebrewText(raw) : applyDiacriticsFilter(raw, diacriticsState.value)
     if (settings.censorDivineNames) content = censorDivineNames(content)
 
     // Apply user highlights first (underneath search marks and note markers)

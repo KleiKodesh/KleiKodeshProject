@@ -3,7 +3,7 @@ import type { Ref } from 'vue'
 import type { ContextMenuItem } from '@/components/ContextMenu.vue'
 import type { Note } from '../lines/useBookViewNotes'
 import BookViewAnnotationMenuRow from '../lines/BookViewAnnotationMenuRow.vue'
-import { cleanTextForExport } from '@/utils/hebrewCleanTextExport'
+import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { useSettingsStore } from '@/stores/settingsStore'
 
 /**
@@ -24,7 +24,7 @@ export function useCommentaryCopy(
   const settingsStore = useSettingsStore()
 
   function maybeClean(html: string): string {
-    return settingsStore.copyCleanText ? cleanTextForExport(html) : html
+    return settingsStore.copyCleanText ? cleanHebrewText(html) : html
   }
 
   // ── Source builder ──────────────────────────────────────────────────────────

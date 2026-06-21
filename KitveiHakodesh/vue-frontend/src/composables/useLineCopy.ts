@@ -1,6 +1,6 @@
 import { useEventListener } from '@vueuse/core'
 import type { Ref } from 'vue'
-import { cleanTextForExport } from '@/utils/hebrewCleanTextExport'
+import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { useSettingsStore } from '@/stores/settingsStore'
 
 function wrapRtlHtml(innerHtml: string): string {
@@ -45,7 +45,7 @@ export function useScopedCopy(
     const raw = isSelectAll.value ? linesToHtml(getLines()) : selectedHtml()
     if (!raw.trim()) return
     let innerHtml = stripNoteMarkers(raw)
-    if (settingsStore.copyCleanText) innerHtml = cleanTextForExport(innerHtml)
+    if (settingsStore.copyCleanText) innerHtml = cleanHebrewText(innerHtml)
 
     const htmlContent = wrapRtlHtml(innerHtml)
     const plainText = htmlToPlainText(innerHtml)
@@ -59,7 +59,7 @@ export function useScopedCopy(
     const raw = isSelectAll.value ? linesToHtml(getLines()) : selectedHtml()
     if (!raw.trim()) return
     let innerHtml = stripNoteMarkers(raw)
-    if (settingsStore.copyCleanText) innerHtml = cleanTextForExport(innerHtml)
+    if (settingsStore.copyCleanText) innerHtml = cleanHebrewText(innerHtml)
 
     const htmlContent = wrapRtlHtml(innerHtml)
     const plainText = htmlToPlainText(innerHtml)

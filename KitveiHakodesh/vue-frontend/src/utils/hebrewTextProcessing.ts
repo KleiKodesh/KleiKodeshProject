@@ -38,7 +38,7 @@ export function applyDiacriticsFilter(html: string, state: number): string {
  * normalize punctuation from an HTML string. Tag attributes are preserved.
  *
  * This is the canonical nikkud-stripping logic shared by the book-view renderer
- * (state 2 of applyDiacriticsFilter) and cleanTextForExport. Any change to what
+ * (via cleanHebrewText in hebrewTextCleaning.ts). Any change to what
  * "remove nikkud" strips must be made here and nowhere else.
  *
  * Transformations applied to text nodes only (tags are passed through unchanged):

@@ -40,17 +40,25 @@ for (const ch of ['<', '>', ':', '"', '&', '.', ' ', '\u05F4']) {
 }
 
 /**
- * Behaviorally identical to the original character-by-character implementation.
+ * Clean Hebrew book text for display and copy.
  *
- * Builds on the batched-slice approach: untouched runs are still flushed as
- * single `slice()` pushes rather than per-character pushes. Detection of
- * "is this character special" now uses a charCode lookup table (one typed-
- * array read) instead of a chain of string-equality comparisons, which
- * profiling showed was the remaining cost once GC pressure from per-char
- * pushes was eliminated. Tag interiors are skipped to their closing '>' via
- * `indexOf`, since nothing inside a tag needs per-character inspection.
+ * Applied by both the book-view renderer (הסר ניקוד state) and the copy
+ * action (העתק טקסט נקי). Both paths must produce identical output — this
+ * is the single source of truth for all Hebrew text cleaning.
+ *
+ * Operates directly on the HTML string without DOM parsing — safe to call
+ * on every render cycle. Tags are passed through unchanged; only text nodes
+ * are transformed.
+ *
+ * Transformations (on top of stripNikkudFromHtml):
+ *   - Colons kept only when at end-of-line (followed by a tag or end of string);
+ *     mid-sentence colons (vowel-pointing artifacts) are dropped
+ *   - Stray double-quotes ("  ״) not between two words are dropped
+ *   - Multiple consecutive spaces collapsed to one
+ *   - A space inserted after a period when the immediately following character
+ *     is a Hebrew letter and the period does not follow a single-letter word
  */
-export function cleanTextForExport(html: string): string {
+export function cleanHebrewText(html: string): string {
   const source = stripNikkudFromHtml(html)
   const length = source.length
   const output: string[] = []

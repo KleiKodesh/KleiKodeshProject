@@ -2,7 +2,6 @@ taamey fonts?
 if doesn't have nikkud dont show the toggle
 וְרַבִּים כָּאֵ-לֶּה?
 full screen bug
-atb drop down should show over the searbar
 seprate zoom for commentaries
 add settings to reset document locator index
 add optional index drives with index saved on teh drive
@@ -12,15 +11,8 @@ open with changes window size
 takes time till service starts
 fetch surrounding lines for context for very short lines - willr equire paying more attention during navigating to result?
 large pdf load time when jump scrolling
-export to word funny name
-
-- and : not being normalized by remove nikuud
-אמר רבא: אשה לא תעמוד על גבי כלי חרס ותטבול. סבר רב כהנא למימר: טעמא מאי. משום גזירת מרחצאות, הא על גבי סילתא — שפיר דמי.אמר ליה רב חנן מנהרדעא: התם טעמא מאי — משום דבעית, סילתא נמי בעיתא.
-which means that rmpve nikkud needs to be avalible in al the books
-need to enabe dual acces to the same dlls by the vsto and the program
 אין מקור לבית יוסף אל הטור
 צריך לבדוק אם זה גם נשבר במקומות אחרים
-te height of the commetry panel is not persisted
 
 
 רא"ש מקוואות סימן ט
