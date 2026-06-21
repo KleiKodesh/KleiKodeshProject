@@ -17,7 +17,8 @@ param(
     [switch]$NoRelease,                 # skip GitHub release
     [switch]$NoClean,                   # skip solution clean step
     [switch]$DeleteFtsIndex,            # delete FTS index on install (forces reindex on user machines)
-    [switch]$ForceCleanInstall          # wipe + reinstall on launch (התקן behaves like תיקון)
+    [switch]$ForceCleanInstall,         # wipe + reinstall on launch (התקן behaves like תיקון)
+    [switch]$AnyCpuOnly                 # build only the AnyCPU variant (skip x64 and x86)
 )
 
 . "$PSScriptRoot\build-helpers.ps1"
@@ -43,6 +44,7 @@ Write-Host "Notes source : $ReleaseNotesSource" -ForegroundColor Gray
 Write-Host "GitHub rel.  : $(if ($NoRelease) { 'skip' } else { 'yes' })" -ForegroundColor Gray
 Write-Host "FTS index    : $(if ($DeleteFtsIndex) { 'DELETE on install (force reindex)' } else { 'preserve' })" -ForegroundColor Gray
 Write-Host "Clean install: $(if ($ForceCleanInstall) { 'yes (wipe + reinstall)' } else { 'no' })" -ForegroundColor Gray
+Write-Host "Platforms    : $(if ($AnyCpuOnly) { 'AnyCPU only' } else { 'x64, x86, AnyCPU' })" -ForegroundColor Gray
 Write-Host ""
 
 # ── 0. Delete Vue build stamp (forces fresh Vue rebuild every release build) ──
@@ -159,17 +161,25 @@ function Build-Variant {
     $script:LastBuiltInstaller = $outFile
 }
 
-Build-Variant -Platform "x64"    -Suffix "-x64"
-$installerX64 = $script:LastBuiltInstaller
+if (-not $AnyCpuOnly) {
+    Build-Variant -Platform "x64"    -Suffix "-x64"
+    $installerX64 = $script:LastBuiltInstaller
 
-Build-Variant -Platform "x86"    -Suffix "-x86"
-$installerX86 = $script:LastBuiltInstaller
-
+    Build-Variant -Platform "x86"    -Suffix "-x86"
+    $installerX86 = $script:LastBuiltInstaller
+} else {
+    $installerX64 = $null
+    $installerX86 = $null
+}
 Build-Variant -Platform "AnyCPU" -Suffix ""
 $installerAny = $script:LastBuiltInstaller
 
 Write-Host ""
-Write-Host "All three variants built successfully." -ForegroundColor Green
+if ($AnyCpuOnly) {
+    Write-Host "AnyCPU variant built successfully." -ForegroundColor Green
+} else {
+    Write-Host "All three variants built successfully." -ForegroundColor Green
+}
 
 # ── 5. GitHub release ─────────────────────────────────────────────────────────
 if ($NoRelease) { Write-Host "GitHub release skipped." -ForegroundColor Yellow; exit 0 }
@@ -211,7 +221,7 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-foreach ($asset in @($installerX64, $installerX86, $installerAny)) {
+foreach ($asset in @($installerX64, $installerX86, $installerAny) | Where-Object { $_ }) {
     Write-Host "Uploading $(Split-Path -Leaf $asset)..." -ForegroundColor Yellow
     gh release upload $version $asset --repo KleiKodesh/KleiKodeshProject --clobber
     if ($LASTEXITCODE -ne 0) {

@@ -115,9 +115,10 @@ while ($true) {
     Write-Host "  5. View Build Info"
     Write-Host "  6. Open Build Folder"
     Write-Host "  7. Clear All GitHub Releases"
+    Write-Host "  8. AnyCPU Only Build   (skip x64 and x86)"
     Write-Host "  0. Exit"
     Write-Host ""
-    $choice = Read-Choice "Choice (0-7)" @("0","1","2","3","4","5","6","7")
+    $choice = Read-Choice "Choice (0-8)" @("0","1","2","3","4","5","6","7","8")
 
     switch ($choice) {
 
@@ -228,6 +229,28 @@ while ($true) {
             }
             Write-Host ""
             Read-Host "Press Enter to return"
+        }
+
+        "8" {
+            Show-Header "AnyCPU Only Build"
+            Write-Host "Builds only the AnyCPU variant (no x64 or x86 installers)." -ForegroundColor Yellow
+            Write-Host ""
+            $verArgs    = Read-VersionArgs
+            $noRelease  = Read-Choice "Create GitHub release? (Y/N)" @("Y","y","N","n")
+            $forceClean = Read-ForceCleanInstall
+            $deleteFts  = if ($forceClean) { $false } else { Read-DeleteFtsIndex }
+            $summary  = if ($verArgs.ManualVersion) { "  Version   : $($verArgs.ManualVersion) (manual)" } else { "  Version   : increment $($verArgs.VersionIncrement)" }
+            $summary += "`n  Platforms : AnyCPU only (no x64/x86)"
+            $summary += "`n  Release   : $(if ($noRelease -match '^[Nn]') { 'skipped' } else { 'yes' })"
+            $summary += "`n  Clean     : $(if ($forceClean) { 'yes (wipe + reinstall)' } else { 'no' })"
+            $summary += "`n  FTS idx   : $(if ($forceClean) { 'n/a (wiped by clean install)' } elseif ($deleteFts) { 'DELETE (force reindex)' } else { 'preserve' })"
+            if (Confirm-Action $summary) {
+                $params = $verArgs + @{ AnyCpuOnly = $true }
+                if ($noRelease -match '^[Nn]') { $params += @{ NoRelease = $true } }
+                if ($deleteFts)   { $params += @{ DeleteFtsIndex    = $true } }
+                if ($forceClean)  { $params += @{ ForceCleanInstall = $true } }
+                Invoke-Installer $params
+            }
         }
 
         "0" { exit 0 }

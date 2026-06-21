@@ -1,5 +1,6 @@
 ﻿using Microsoft.Win32;
 using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
@@ -97,8 +98,12 @@ namespace UpdateCheckerLib
             }
             catch (Exception ex)
             {
+                var details = ex is Win32Exception w32
+                    ? $"{ex.Message}\n(Win32 error code: {w32.NativeErrorCode})"
+                    : $"{ex.GetType().Name}: {ex.Message}";
+
                 MessageBox.Show(
-                    $"שגיאה בהפעלת המתקין:\n{ex.Message}",
+                    $"שגיאה בהפעלת המתקין:\n{details}\n\nניתן להפעיל את הקובץ ידנית:\n{pathToLaunch}",
                     "שגיאה - כלי קודש",
                     MessageBoxButtons.OK, MessageBoxIcon.Error,
                     MessageBoxDefaultButton.Button1,
@@ -112,7 +117,6 @@ namespace UpdateCheckerLib
         // The NSIS wrapper has RequestExecutionLevel=user so no UAC prompt appears.
         private static void LaunchInstaller(string installerPath)
         {
-
             var psi = new ProcessStartInfo
             {
                 FileName         = installerPath,
@@ -121,9 +125,29 @@ namespace UpdateCheckerLib
                 WorkingDirectory = Path.GetDirectoryName(installerPath)
             };
 
-            var p = Process.Start(psi);
-            if (p == null)
-                throw new InvalidOperationException("Failed to start installer process");
+            try
+            {
+                Process.Start(psi);
+                // Process.Start with UseShellExecute=true may return null on success — that's fine.
+            }
+            catch (Win32Exception win32ex) when (win32ex.NativeErrorCode == 0)
+            {
+                // NativeErrorCode 0 = ERROR_SUCCESS: Windows threw despite a successful launch.
+                // Treat this as success and do nothing.
+            }
+            catch
+            {
+                // Fallback: retry without "runas". The NSIS installer has RequestExecutionLevel=user
+                // so it doesn't need elevation — "runas" is only used to escape Word's process tree.
+                // If the retry also throws, let the exception propagate to the caller.
+                var fallback = new ProcessStartInfo
+                {
+                    FileName         = installerPath,
+                    UseShellExecute  = true,
+                    WorkingDirectory = Path.GetDirectoryName(installerPath)
+                };
+                Process.Start(fallback);
+            }
         }
 
         private static async Task DownloadFileAsync(

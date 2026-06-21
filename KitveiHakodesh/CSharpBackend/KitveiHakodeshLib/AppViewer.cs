@@ -132,6 +132,12 @@ namespace KitveiHakodeshLib
 
         public AppViewer(string webCacheFolder = "webcache")
         {
+            // Pre-load SQLite.Interop.dll from the install directory's x64\ or x86\ subfolder
+            // before any SQLiteConnection is opened. This prevents the VSTO shadow-copy issue
+            // where the native DLL cannot be found in the temp shadow-copy directory, causing
+            // SQLite to fall back to a wrong-bitness copy on the PATH.
+            SqliteNativeLoader.EnsureLoaded(AppDomain.CurrentDomain.BaseDirectory);
+
             _webCacheFolder = webCacheFolder;
             RightToLeft = RightToLeft.No;
             AutoScaleMode = AutoScaleMode.None;
