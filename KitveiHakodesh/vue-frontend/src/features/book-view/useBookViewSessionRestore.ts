@@ -43,6 +43,7 @@ export function useBookViewSessionRestore(
   let _restoredSo: number | null | undefined
   let _restoredCommentaryMode: 'off' | 'bottom' | 'side' | undefined
   let _restoredCommentaryFraction: number | undefined
+  let _restoredStackedCommentaryFraction: number | undefined
   let _restoredPinnedCommentaryGroup: import('./bookViewTypes').PinnedCommentaryGroup | null | undefined
 
   const _idbPromise: Promise<void> = bookId == null
@@ -56,6 +57,7 @@ export function useBookViewSessionRestore(
         _restoredSo = result.so
         _restoredCommentaryMode = result.commentaryMode
         _restoredCommentaryFraction = result.commentaryFraction
+        _restoredStackedCommentaryFraction = result.stackedCommentaryFraction
         _restoredPinnedCommentaryGroup = result.pinnedCommentaryGroup
       })
 
@@ -121,6 +123,10 @@ export function useBookViewSessionRestore(
       bookSaved?.commentaryFraction ??
       (settingsStore.resumeLastRead ? lastRead?.commentaryFraction : undefined)
 
+    const stackedCommentaryFraction: number | undefined =
+      bookSaved?.stackedCommentaryFraction ??
+      (settingsStore.resumeLastRead ? lastRead?.stackedCommentaryFraction : undefined)
+
     const pinnedCommentaryGroup: import('./bookViewTypes').PinnedCommentaryGroup | null | undefined =
       bookSaved?.pinnedCommentaryGroup ??
       (settingsStore.resumeLastRead ? lastRead?.pinnedCommentaryGroup : undefined) ??
@@ -131,12 +137,13 @@ export function useBookViewSessionRestore(
           ? { bookId: lastRead.pinnedCommentaryBookId, sectionLabel: '', subSectionLabel: '' }
           : undefined)
 
-    return { si, so, commentaryMode, commentaryFraction, pinnedCommentaryGroup }
+    return { si, so, commentaryMode, commentaryFraction, stackedCommentaryFraction, pinnedCommentaryGroup }
   }
 
   async function restore(): Promise<{
     commentaryMode?: 'off' | 'bottom' | 'side'
     commentaryFraction?: number
+    stackedCommentaryFraction?: number
     pinnedCommentaryGroup?: import('./bookViewTypes').PinnedCommentaryGroup | null
   }> {
     if (bookId == null) return {}
@@ -188,6 +195,7 @@ export function useBookViewSessionRestore(
     return {
       commentaryMode: _restoredCommentaryMode,
       commentaryFraction: _restoredCommentaryFraction,
+      stackedCommentaryFraction: _restoredStackedCommentaryFraction,
       pinnedCommentaryGroup: _restoredPinnedCommentaryGroup,
     }
   }

@@ -1,13 +1,23 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 
 // Generic vertical split pane with draggable divider.
 // When bottomVisible is false, top fills 100%.
-defineProps<{ bottomVisible?: boolean }>()
+// modelValue controls the top-pane fraction (0.1–0.9); defaults to 0.5.
+const props = defineProps<{ bottomVisible?: boolean; modelValue?: number }>()
+const emit = defineEmits<{ 'update:modelValue': [value: number] }>()
 
 const container = ref<HTMLElement | null>(null)
-const topFraction = ref(0.5)
+const topFraction = ref(props.modelValue ?? 0.5)
 const isDragging = ref(false)
+
+// Keep topFraction in sync when the parent changes modelValue externally (e.g. session restore)
+watch(
+  () => props.modelValue,
+  (value) => {
+    if (value != null && !isDragging.value) topFraction.value = value
+  },
+)
 
 function onDividerPointerDown(e: PointerEvent) {
   isDragging.value = true
@@ -17,7 +27,9 @@ function onDividerPointerDown(e: PointerEvent) {
 function onPointerMove(e: PointerEvent) {
   if (!isDragging.value || !container.value) return
   const rect = container.value.getBoundingClientRect()
-  topFraction.value = Math.min(0.9, Math.max(0.1, (e.clientY - rect.top) / rect.height))
+  const newFraction = Math.min(0.9, Math.max(0.1, (e.clientY - rect.top) / rect.height))
+  topFraction.value = newFraction
+  emit('update:modelValue', newFraction)
 }
 
 function onPointerUp() {

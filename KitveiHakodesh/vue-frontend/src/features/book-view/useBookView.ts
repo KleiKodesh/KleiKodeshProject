@@ -151,6 +151,7 @@ export function useBookView(
   const searchVisible = ref(false)
   const restoredCommentaryMode = ref<'off' | 'bottom' | 'side' | undefined>(undefined)
   const restoredCommentaryFraction = ref<number | undefined>(undefined)
+  const restoredStackedCommentaryFraction = ref<number | undefined>(undefined)
   const sidePanelMode = ref<SidePanelMode | null>(null)
   const selectedLineId = ref<number | null>(null)
   const commentaryLineId = ref<number | null>(null)
@@ -506,6 +507,7 @@ export function useBookView(
     const result = await restoreSession()
     if (result?.commentaryMode) restoredCommentaryMode.value = result.commentaryMode
     if (result?.commentaryFraction != null) restoredCommentaryFraction.value = result.commentaryFraction
+    if (result?.stackedCommentaryFraction != null) restoredStackedCommentaryFraction.value = result.stackedCommentaryFraction
     if (result?.pinnedCommentaryGroup != null) {
       restorePin(result.pinnedCommentaryGroup)
     }
@@ -642,7 +644,7 @@ export function useBookView(
     // scroll / search state
     currentScrollLineIndex,
     scrollStateReady, idbResolved, initialLineIndex, initialScrollTop, initialScrollOffset,
-    restoredCommentaryMode, restoredCommentaryFraction,
+    restoredCommentaryMode, restoredCommentaryFraction, restoredStackedCommentaryFraction,
     activeMatchCount, activeMatchIdx, contentSearch, commentarySearch,
     // handlers
     onLinesScrolled, onTocSelect, onAltTocSelect,

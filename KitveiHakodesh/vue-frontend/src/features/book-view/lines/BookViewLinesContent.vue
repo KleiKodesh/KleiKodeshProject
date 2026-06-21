@@ -30,6 +30,7 @@ const props = defineProps<{
   commentaryVisible?: boolean
   commentaryMode?: 'off' | 'bottom' | 'side'
   commentaryFraction?: number
+  stackedCommentaryFraction?: number
   commentaryScrollIndex?: number | null
   commentaryScrollOffset?: number | null
   hiddenCommentaryBookIds?: Set<string>
@@ -459,6 +460,7 @@ function savePos() {
       commentaryVisible: props.commentaryVisible,
       commentaryMode: props.commentaryMode,
       commentaryFraction: props.commentaryFraction,
+      stackedCommentaryFraction: props.stackedCommentaryFraction,
       autoSelectTopLine: autoSelectTopLine.value,
       pinnedCommentaryGroup: pinnedGroup,
     })
@@ -470,6 +472,7 @@ function savePos() {
       commentaryFilterState: filterState,
       commentaryMode: props.commentaryMode,
       commentaryFraction: props.commentaryFraction,
+      stackedCommentaryFraction: props.stackedCommentaryFraction,
       pinnedCommentaryGroup: pinnedGroup,
     })
   }

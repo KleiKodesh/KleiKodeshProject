@@ -5,6 +5,7 @@ import type { TocEntry } from '../toc/useBookViewToc'
 import type { Note } from './useBookViewNotes'
 import type { useTabStore } from '@/stores/tabStore'
 import BookViewAnnotationMenuRow from './BookViewAnnotationMenuRow.vue'
+import { cleanTextForExport } from '@/utils/hebrewCleanTextExport'
 
 type TabStore = ReturnType<typeof useTabStore>
 
@@ -29,6 +30,13 @@ interface CopyMenuOptions {
 /** Strips all user-note-marker superscripts from an HTML string. */
 function stripNoteMarkers(html: string): string {
   return html.replace(/<sup[^>]*class="user-note-marker"[^>]*>.*?<\/sup>/gs, '')
+}
+
+/** Strips nikkud, teamim, and punctuation — mirrors the toolbar diacritics state 2 filter.
+ * Also strips standalone colons (not immediately preceding an HTML tag),
+ * and double-quotes that appear at the start or end of a word (boundary position). */
+function stripCleanText(html: string): string {
+  return cleanTextForExport(html)
 }
 
 interface EndnoteEntry {
@@ -226,6 +234,12 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): ContextMenuIt
     execCopyHtml(stripNoteMarkers(result.joined))
   }
 
+  function copyWithoutPunctuation(): void {
+    const result = extractSelection(scrollerEl.value, lines(), isSelectAll.value)
+    if (!result) return
+    execCopyHtml(stripCleanText(stripNoteMarkers(result.joined)))
+  }
+
   function copyWithSource(sourceAtEnd: boolean): void {
     const result = extractSelection(scrollerEl.value, lines(), isSelectAll.value)
     if (!result) return
@@ -297,6 +311,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): ContextMenuIt
   return [
     { label: 'העתק', action: () => document.execCommand('copy') },
     { label: 'העתק כבלוק', action: copyAsBlock },
+    { label: 'העתק טקסט נקי', action: copyWithoutPunctuation },
     { label: 'העתק עם מקור בסוף', action: () => copyWithSource(true) },
     { label: 'העתק עם מקור בהתחלה', action: () => copyWithSource(false) },
     { label: 'העתק עם הערות', action: () => copyWithNotes(false) },

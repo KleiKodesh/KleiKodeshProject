@@ -25,6 +25,7 @@ const commentaryMode = ref<CommentaryMode>('off')
 const sideBySide = computed(() => commentaryMode.value === 'side')
 const isWideScreen = useMediaQuery('(min-width: 650px)')
 const commentaryFraction = ref(0.4)
+const stackedCommentaryFraction = ref(0.5)
 
 // Side-by-side divider drag state (inlined from BookViewSplitPane)
 const splitContainer = ref<HTMLElement | null>(null)
@@ -70,7 +71,7 @@ const {
   commentaryFontPx, renderContent, setCurrentMark, commentaryTocPaths,
   currentScrollLineIndex,
   scrollStateReady, idbResolved, initialLineIndex, initialScrollTop, initialScrollOffset,
-  restoredCommentaryMode, restoredCommentaryFraction,
+  restoredCommentaryMode, restoredCommentaryFraction, restoredStackedCommentaryFraction,
   activeMatchCount, activeMatchIdx, contentSearch, commentarySearch,
   onLinesScrolled, onTocSelect, onAltTocSelect,
   onLineSelected, onNavigateSection, onCommentaryScroll,
@@ -113,6 +114,8 @@ watch(commentaryMode, (mode, previous) => {
 watch(restoredCommentaryMode, (mode) => { if (mode) commentaryMode.value = mode }, { once: true })
 // Restore commentaryFraction from IDB once session restore resolves.
 watch(restoredCommentaryFraction, (fraction) => { if (fraction != null) commentaryFraction.value = fraction }, { once: true })
+// Restore stackedCommentaryFraction from IDB once session restore resolves.
+watch(restoredStackedCommentaryFraction, (fraction) => { if (fraction != null) stackedCommentaryFraction.value = fraction }, { once: true })
 // Listen for Ctrl+F from AppTitleBar to open search
 watch(() => bookViewStore.openSearchSignal, () => {
   openContentSearch()
@@ -255,7 +258,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, () => {
             />
           </div>
         </div>
-        <SplitPane v-else :bottom-visible="commentaryVisible">
+        <SplitPane v-else v-model="stackedCommentaryFraction" :bottom-visible="commentaryVisible">
           <template #top>
             <BookViewLinesContent
               v-if="scrollStateReady"
@@ -267,6 +270,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, () => {
               :commentary-visible="commentaryVisible"
               :commentary-mode="commentaryMode"
               :commentary-fraction="commentaryFraction"
+              :stacked-commentary-fraction="stackedCommentaryFraction"
               :initial-line-index="initialLineIndex"
               :initial-scroll-index="initialScrollTop"
               :initial-scroll-offset="initialScrollOffset"
