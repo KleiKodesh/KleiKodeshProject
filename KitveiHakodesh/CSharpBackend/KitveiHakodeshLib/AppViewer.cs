@@ -449,6 +449,7 @@ namespace KitveiHakodeshLib
                         case "getDiagnostics": HandleGetDiagnostics(id); break;
                         case "fileSystemSearchPageLoad": _fileSystemSearch.HandlePageLoad(id); break;
                         case "fileSystemSearch": _fileSystemSearch.HandleSearch(root, id); break;
+                        case "ResetDocumentLocatorIndex": _fileSystemSearch.HandleReindex(id); break;
                         case "userSettingsQuery": await _userSettings.HandleQuery(root, id); break;
                         case "userSettingsExecute": await _userSettings.HandleExecute(root, id); break;
                         case "exportToWord": HandleExportToWord(root, id); break;

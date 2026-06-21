@@ -85,7 +85,19 @@ namespace KitveiHakodeshLib.FileSystemSearch
             ct.ThrowIfCancellationRequested();
         }
 
-        // ── 3. SearchAsync ────────────────────────────────────────────────────────
+        // ── 3. ReindexAsync ───────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Sends a reindex request to the DocumentLocator service, asking it to
+        /// wipe its Lucene index and perform a full MFT rebuild from scratch.
+        /// Starts the service if not already running.
+        /// </summary>
+        public async Task ReindexAsync(CancellationToken ct)
+        {
+            await ServiceBridge.ReindexAsync(ct).ConfigureAwait(false);
+        }
+
+        // ── 4. SearchAsync ────────────────────────────────────────────────────────
 
         /// <summary>
         /// Executes a search and returns (results, total).

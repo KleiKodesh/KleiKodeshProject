@@ -3,7 +3,7 @@ import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useTabStore } from '@/stores/tabStore'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
-import { resetHostApp, resetSearchIndex as bridgeResetSearchIndex } from '@/webview-host/bridge'
+import { resetHostApp, resetSearchIndex as bridgeResetSearchIndex, resetDocumentLocatorIndex as bridgeResetDocumentLocatorIndex } from '@/webview-host/bridge'
 
 export function useSettings() {
   const settings = useSettingsStore()
@@ -49,6 +49,10 @@ export function useSettings() {
     tabStore.updateActiveTab({ route: '/search', title: 'חיפוש' })
   }
 
+  async function resetDocumentLocatorIndexAction() {
+    await bridgeResetDocumentLocatorIndex()
+  }
+
   function resetSettings() {
     settings.reset()
   }
@@ -69,6 +73,7 @@ export function useSettings() {
     resumeLastRead,
     resetSettings,
     resetSearchIndex: resetSearchIndexAction,
+    resetDocumentLocatorIndex: resetDocumentLocatorIndexAction,
     resetAll,
   }
 }

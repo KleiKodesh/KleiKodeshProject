@@ -126,6 +126,15 @@ export async function resetHostApp(): Promise<void> {
 }
 
 /**
+ * Trigger a full DocumentLocator index rebuild on the C# side.
+ * The service wipes its Lucene index and re-crawls the NTFS MFT from scratch.
+ * Progress is pushed via fileSystemIndexingStatus events while the rebuild runs.
+ */
+export async function resetDocumentLocatorIndex(): Promise<void> {
+  await action('ResetDocumentLocatorIndex').catch(() => {})
+}
+
+/**
  * Reset the FTS search index on the C# side.
  */
 export async function resetSearchIndex(): Promise<void> {

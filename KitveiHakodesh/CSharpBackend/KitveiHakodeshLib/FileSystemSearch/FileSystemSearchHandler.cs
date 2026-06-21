@@ -124,6 +124,45 @@ namespace KitveiHakodeshLib.FileSystemSearch
                 _bridge.PushEvent(new { @event = "fileSystemIndexingStatus", isIndexing });
         }
 
+        // ── Reindex ───────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Vue sends this when the user requests a full DocumentLocator index rebuild.
+        /// Replies immediately with {} and runs the reindex + wait-until-ready loop
+        /// on a background thread, forwarding progress via fileSystemIndexingStatus
+        /// push events — the same events the search page already listens to.
+        /// </summary>
+        public void HandleReindex(string id)
+        {
+            // Cancel any previous ensure-ready loop so it doesn't race.
+            var previous = Interlocked.Exchange(ref _ensureReadyCts, new CancellationTokenSource());
+            previous?.Cancel();
+            previous?.Dispose();
+
+            var cts = _ensureReadyCts;
+
+            _bridge.Reply(id, new { });
+
+            Task.Run(async () =>
+            {
+                try
+                {
+                    PushIndexingStatus(isIndexing: true, message: "שולח בקשת בנייה מחדש…");
+                    await _adapter.ReindexAsync(cts.Token).ConfigureAwait(false);
+                    await _adapter.WaitUntilReadyAsync(cts.Token, message =>
+                        PushIndexingStatus(isIndexing: true, message: message))
+                        .ConfigureAwait(false);
+                    PushIndexingStatus(isIndexing: false, message: null);
+                }
+                catch (OperationCanceledException) { }
+                catch (AggregateException ae) when (Unwrap(ae) is OperationCanceledException) { }
+                catch (Exception ex)
+                {
+                    PushIndexingStatus(isIndexing: true, message: "שגיאה: " + Unwrap(ex).Message);
+                }
+            }, cts.Token);
+        }
+
         // ── Search ────────────────────────────────────────────────────────────────
 
         /// <summary>

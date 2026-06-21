@@ -1,25 +1,54 @@
 import { applyDiacriticsFilter } from './hebrewTextProcessing'
 
-const HEBREW_LETTER = /[\u05D0-\u05EA]/
-const WHITESPACE = /[\t\n\r ]/
+const CODE_HEBREW_START = 0x05D0
+const CODE_HEBREW_END = 0x05EA
+const CODE_TAB = 0x09
+const CODE_LF = 0x0A
+const CODE_CR = 0x0D
+const CODE_SPACE = 0x20
+
+function isHebrewLetter(ch: string | undefined): boolean {
+  if (ch === undefined) return false
+  const code = ch.charCodeAt(0)
+  return code >= CODE_HEBREW_START && code <= CODE_HEBREW_END
+}
+
+function isWhitespace(ch: string | undefined): boolean {
+  if (ch === undefined) return false
+  const code = ch.charCodeAt(0)
+  return code === CODE_SPACE || code === CODE_TAB || code === CODE_LF || code === CODE_CR
+}
+
+// Shared by both quote-boundary checks except for the '>' / '<' asymmetry.
+function isCommonQuoteBoundary(ch: string | undefined): boolean {
+  if (ch === undefined) return false
+  return ch === ',' || ch === '.' || ch === '"' || ch === '\u05F4' || isWhitespace(ch)
+}
+
+// charCode -> 1 lookup table for characters that trigger special handling:
+// tag delimiters, colon, both quote forms, the entity-quote opener '&',
+// period, and space. A single typed-array read replaces the chain of
+// string-equality checks a naive per-character loop would otherwise need,
+// and — unlike a regex .exec() per match — costs no per-character-class
+// allocation, which matters because real text breaks (the common case,
+// average ~3-4 chars in practice) are too short for jump-scanning to pay
+// for engine call + match-object overhead.
+const MAX_SPECIAL_CODE = 0x05F4
+const SPECIAL_TABLE = new Uint8Array(MAX_SPECIAL_CODE + 1)
+for (const ch of ['<', '>', ':', '"', '&', '.', ' ', '\u05F4']) {
+  SPECIAL_TABLE[ch.charCodeAt(0)] = 1
+}
 
 /**
- * Produces a clean plain-text export of an HTML string.
+ * Behaviorally identical to the original character-by-character implementation.
  *
- * Rules applied on top of applyDiacriticsFilter state 2
- * (which already strips nikkud, teamim, em dash, and normalises ! ? ;):
- *
- *  - Colons stripped unless immediately preceding an HTML tag
- *  - Double-quotes (literal '"' U+0022, Hebrew ״ U+05F4, and HTML entity &quot;)
- *    stripped when at a word boundary (start or end of word); mid-word kept
- *    so that gershayim like ר"ל and abbreviations like רמב״ם are preserved
- *  - A space is inserted after '.' when it is followed directly by a Hebrew
- *    letter, unless it is preceded by a single Hebrew letter (e.g. ב. א.)
- *    which signals a structural label, not a sentence boundary
- *  - Multiple consecutive spaces collapsed to one
- *
- * All rules are applied in a single character-by-character pass over the
- * string returned by applyDiacriticsFilter, skipping tag content entirely.
+ * Builds on the batched-slice approach: untouched runs are still flushed as
+ * single `slice()` pushes rather than per-character pushes. Detection of
+ * "is this character special" now uses a charCode lookup table (one typed-
+ * array read) instead of a chain of string-equality comparisons, which
+ * profiling showed was the remaining cost once GC pressure from per-char
+ * pushes was eliminated. Tag interiors are skipped to their closing '>' via
+ * `indexOf`, since nothing inside a tag needs per-character inspection.
  */
 export function cleanTextForExport(html: string): string {
   const source = applyDiacriticsFilter(html, 2)
@@ -27,121 +56,164 @@ export function cleanTextForExport(html: string): string {
   const output: string[] = []
 
   let insideTag = false
+  let lastOutputChar: string | null = null
+  let pos = 0
+  let runStart = 0
 
-  for (let index = 0; index < length; index++) {
-    const character = source[index]!
+  const pushSlice = (start: number, end: number): void => {
+    if (end > start) {
+      output.push(source.slice(start, end))
+      lastOutputChar = source[end - 1]
+    }
+  }
 
-    // ── Tag tracking — never process content inside < … > ────────────────────
+  while (pos < length) {
+    if (insideTag) {
+      const gt = source.indexOf('>', pos)
+      if (gt === -1) {
+        // Malformed/truncated tag: consume to end of string; final
+        // pushSlice(runStart, length) after the loop flushes it verbatim.
+        pos = length
+        break
+      }
+      insideTag = false
+      pos = gt + 1
+      // Tag interior needs no transformation — leave runStart untouched so
+      // it stays folded into whatever run is already open.
+      continue
+    }
+
+    const code = source.charCodeAt(pos)
+    if (code > MAX_SPECIAL_CODE || SPECIAL_TABLE[code] === 0) {
+      pos++
+      continue
+    }
+
+    const specialIndex = pos
+    pushSlice(runStart, specialIndex)
+    const character = source[specialIndex]!
+
+    // ── Tag open / stray tag close ────────────────────────────────────────
     if (character === '<') {
       insideTag = true
-      output.push(character)
+      output.push('<')
+      lastOutputChar = '<'
+      pos = specialIndex + 1
+      runStart = pos
       continue
     }
     if (character === '>') {
-      insideTag = false
-      output.push(character)
-      continue
-    }
-    if (insideTag) {
-      output.push(character)
+      // insideTag is already false here (stray '>' outside a tag) — verbatim.
+      output.push('>')
+      lastOutputChar = '>'
+      pos = specialIndex + 1
+      runStart = pos
       continue
     }
 
-    // ── Colon ─────────────────────────────────────────────────────────────────
-    // Strip ':' unless the next non-whitespace character opens an HTML tag.
+    // ── Colon ─────────────────────────────────────────────────────────────
     if (character === ':') {
-      let lookahead = index + 1
+      let lookahead = specialIndex + 1
       while (lookahead < length && source[lookahead] === ' ') lookahead++
       if (lookahead < length && source[lookahead] === '<') {
-        output.push(character)
+        output.push(':')
+        lastOutputChar = ':'
       }
-      // Otherwise drop — no continue needed, fall through handled by not pushing
+      pos = specialIndex + 1
+      runStart = pos
       continue
     }
 
-    // ── Double-quote ──────────────────────────────────────────────────────────
-    // Strip ASCII '"' (U+0022) and Hebrew gershayim ״ (U+05F4) at word boundaries,
-    // including when the ASCII form is encoded as the HTML entity &quot;.
-    // A quote is at a boundary when preceded OR followed by whitespace / tag edge /
-    // start or end of string. Mid-word quotes (non-space on both sides) are kept
-    // so that gershayim like ר"ל and abbreviations like רמב״ם survive.
-    const isLiteralQuote = character === '"' || character === '\u05F4'
-    const isEntityQuote = !isLiteralQuote &&
-      source.startsWith('&quot;', index)
+    // ── Entity-quote opener / ordinary '&' ──────────────────────────────────
+    if (character === '&') {
+      if (source.startsWith('&quot;', specialIndex)) {
+        const quoteEnd = specialIndex + 6
+        const previousCharacter = specialIndex > 0 ? source[specialIndex - 1] : undefined
+        const nextCharacter = quoteEnd < length ? source[quoteEnd] : undefined
 
-    if (isLiteralQuote || isEntityQuote) {
-      const quoteEnd = isEntityQuote ? index + 6 : index + 1
+        const precededByBoundary =
+          previousCharacter === undefined ||
+          previousCharacter === '>' ||
+          isCommonQuoteBoundary(previousCharacter)
+        const followedByBoundary =
+          nextCharacter === undefined ||
+          nextCharacter === '<' ||
+          isCommonQuoteBoundary(nextCharacter)
 
-      const previousCharacter = index > 0 ? source[index - 1]! : null
-      const nextCharacter = quoteEnd < length ? source[quoteEnd]! : null
-
-      const precededByBoundary =
-        previousCharacter === null ||
-        WHITESPACE.test(previousCharacter) ||
-        previousCharacter === '>' ||
-        previousCharacter === ',' ||
-        previousCharacter === '.' ||
-        previousCharacter === '"' ||
-        previousCharacter === '\u05F4'
-
-      const followedByBoundary =
-        nextCharacter === null ||
-        WHITESPACE.test(nextCharacter) ||
-        nextCharacter === '<' ||
-        nextCharacter === ',' ||
-        nextCharacter === '.' ||
-        nextCharacter === '"' ||
-        nextCharacter === '\u05F4'
-
-      if (precededByBoundary || followedByBoundary) {
-        if (isEntityQuote) index += 5 // skip remaining 5 chars of &quot; (loop adds 1)
+        if (!(precededByBoundary || followedByBoundary)) {
+          output.push('"')
+          lastOutputChar = '"'
+        }
+        pos = quoteEnd
+        runStart = pos
         continue
       }
-      if (isEntityQuote) {
-        output.push('"')
-        index += 5
-      } else {
-        output.push(character)
-      }
+      // Not an &quot; entity — ordinary character, kept verbatim.
+      output.push('&')
+      lastOutputChar = '&'
+      pos = specialIndex + 1
+      runStart = pos
       continue
     }
 
-    // ── Period — insert trailing space when needed ────────────────────────────
-    // After stripping nikkud, sentences that ended with a period can be directly
-    // concatenated with the next word (e.g. "אליעזר.וחכמים"). Insert a space
-    // after '.' when the next character is a Hebrew letter, UNLESS the period
-    // follows a single Hebrew letter (structural label like "ב." or "א.").
-    if (character === '.') {
-      output.push(character)
+    // ── Literal double-quote ─────────────────────────────────────────────
+    if (character === '"' || character === '\u05F4') {
+      const quoteEnd = specialIndex + 1
+      const previousCharacter = specialIndex > 0 ? source[specialIndex - 1] : undefined
+      const nextCharacter = quoteEnd < length ? source[quoteEnd] : undefined
 
-      const nextCharacter = index < length - 1 ? source[index + 1]! : null
-      if (nextCharacter !== null && HEBREW_LETTER.test(nextCharacter)) {
-        // Check whether the period follows a single Hebrew letter label
-        const previousCharacter = index > 0 ? source[index - 1]! : null
-        const twoBack = index > 1 ? source[index - 2]! : null
+      const precededByBoundary =
+        previousCharacter === undefined ||
+        previousCharacter === '>' ||
+        isCommonQuoteBoundary(previousCharacter)
+      const followedByBoundary =
+        nextCharacter === undefined ||
+        nextCharacter === '<' ||
+        isCommonQuoteBoundary(nextCharacter)
+
+      if (!(precededByBoundary || followedByBoundary)) {
+        output.push(character)
+        lastOutputChar = character
+      }
+      pos = quoteEnd
+      runStart = pos
+      continue
+    }
+
+    // ── Period — insert trailing space when needed ──────────────────────────
+    if (character === '.') {
+      output.push('.')
+      lastOutputChar = '.'
+
+      const nextCharacter = specialIndex < length - 1 ? source[specialIndex + 1] : undefined
+      if (isHebrewLetter(nextCharacter)) {
+        const previousCharacter = specialIndex > 0 ? source[specialIndex - 1] : undefined
+        const twoBack = specialIndex > 1 ? source[specialIndex - 2] : undefined
         const precedingIsSingleLetter =
-          previousCharacter !== null &&
-          HEBREW_LETTER.test(previousCharacter) &&
-          (twoBack === null || WHITESPACE.test(twoBack) || twoBack === '>')
+          isHebrewLetter(previousCharacter) &&
+          (twoBack === undefined || isWhitespace(twoBack) || twoBack === '>')
 
         if (!precedingIsSingleLetter) {
           output.push(' ')
+          lastOutputChar = ' '
         }
       }
+      pos = specialIndex + 1
+      runStart = pos
       continue
     }
 
-    // ── Collapse multiple spaces ───────────────────────────────────────────────
-    // The em-dash stripped by state 2 can leave two adjacent spaces. Suppress
-    // any space when the previous output character is already a space.
-    if (character === ' ') {
-      const lastOutput = output.length > 0 ? output[output.length - 1] : null
-      if (lastOutput !== ' ') output.push(character)
-      continue
+    // ── Collapse multiple spaces ─────────────────────────────────────────────
+    // character === ' ' (the only remaining case the table lookup can match)
+    if (lastOutputChar !== ' ') {
+      output.push(' ')
+      lastOutputChar = ' '
     }
-
-    output.push(character)
+    pos = specialIndex + 1
+    runStart = pos
   }
+
+  pushSlice(runStart, length)
 
   return output.join('')
 }

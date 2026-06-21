@@ -13,7 +13,7 @@ import { resetting } from '@/features/settings/appResetState'
 import { isHosted, onDbReady } from '@/webview-host/seforimDb'
 import { useZmanim, CITIES } from '@/features/hebrew-calendar/useZmanim'
 
-const { resetSettings, resetSearchIndex, resetAll } = useSettings()
+const { resetSettings, resetSearchIndex, resetAll, resetDocumentLocatorIndex } = useSettings()
 
 const dbPath = ref(window.__webviewDbPath ?? '')
 const editingPath = ref(false)
@@ -87,6 +87,14 @@ function confirmResetSearchIndex() {
     label: 'איפוס אינדקס החיפוש',
     desc: 'פעולה זו תמחק את אינדקס החיפוש ומטמון תוצאות החיפוש ותבנה את האינדקס מחדש. שאר נתוני האפליקציה לא יושפעו.',
     action: resetSearchIndex,
+  })
+}
+
+function confirmResetDocumentLocatorIndex() {
+  confirmAction({
+    label: 'בניית מחדש של אינדקס מאתר המסמכים',
+    desc: 'פעולה זו תמחק את אינדקס קבצי המסמכים ותבנה אותו מחדש מאפס. תהליך הבנייה עשוי להימשך מספר דקות.',
+    action: resetDocumentLocatorIndex,
   })
 }
 
@@ -225,6 +233,14 @@ function pickCity(name: string) {
     <button class="reset-all-btn" @click="confirmResetSearchIndex">איפוס אינדקס החיפוש</button>
 
     <p class="reset-desc" data-search-ignore>
+      מוחק את אינדקס קבצי המסמכים של שירות מאתר המסמכים ובונה אותו מחדש מאפס. תהליך הבנייה עשוי
+      להימשך מספר דקות.
+    </p>
+    <button class="reset-all-btn" @click="confirmResetDocumentLocatorIndex">
+      בנייה מחדש של אינדקס מאתר המסמכים
+    </button>
+
+    <p class="reset-desc" data-search-ignore>
       מוחק את כל נתוני האפליקציה — הגדרות, היסטוריית קריאה, מיקומי גלילה, טאבים פתוחים, ואינדקס
       החיפוש. לא ניתן לבטל פעולה זו.
     </p>
@@ -248,9 +264,11 @@ function pickCity(name: string) {
   margin: 0 0 8px;
 }
 .reset-all-btn {
-  width: 140px;
+  width: fit-content;
+  min-width: 140px;
   align-self: flex-start;
   height: 32px;
+  padding: 0 12px;
   font-size: 13px;
   color: #e53e3e;
   border: 1px solid color-mix(in srgb, #e53e3e 40%, transparent);
