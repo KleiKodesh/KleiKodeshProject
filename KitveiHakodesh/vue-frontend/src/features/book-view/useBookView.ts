@@ -641,6 +641,7 @@ export function useBookView(
     commentaryFontPx, renderContent, setCurrentMark, commentaryTocPaths,
     // export
     buildExportHtml,
+    bookTitle,
     // scroll / search state
     currentScrollLineIndex,
     scrollStateReady, idbResolved, initialLineIndex, initialScrollTop, initialScrollOffset,

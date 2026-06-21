@@ -83,6 +83,7 @@ const {
   onCommentaryPanelMounted,
   getActiveTocEntry, getTocPath,
   buildExportHtml,
+  bookTitle,
 } = useBookView(
   () => toolbarRef.value,
   () => linesContentRef.value,
@@ -93,7 +94,7 @@ const {
 async function onExportToWord() {
   if (!isHosted) return
   const html = buildExportHtml()
-  await bridgeExportToWord(html).catch(() => {})
+  await bridgeExportToWord(html, bookTitle ?? '').catch(() => {})
 }
 
 // Keep commentaryMode and useBookView's commentaryVisible in sync.

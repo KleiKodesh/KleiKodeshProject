@@ -1,4 +1,4 @@
-import { applyDiacriticsFilter } from './hebrewTextProcessing'
+import { stripNikkudFromHtml } from './hebrewTextProcessing'
 
 const CODE_HEBREW_START = 0x05D0
 const CODE_HEBREW_END = 0x05EA
@@ -51,7 +51,7 @@ for (const ch of ['<', '>', ':', '"', '&', '.', ' ', '\u05F4']) {
  * `indexOf`, since nothing inside a tag needs per-character inspection.
  */
 export function cleanTextForExport(html: string): string {
-  const source = applyDiacriticsFilter(html, 2)
+  const source = stripNikkudFromHtml(html)
   const length = source.length
   const output: string[] = []
 
@@ -115,7 +115,9 @@ export function cleanTextForExport(html: string): string {
     if (character === ':') {
       let lookahead = specialIndex + 1
       while (lookahead < length && source[lookahead] === ' ') lookahead++
-      if (lookahead < length && source[lookahead] === '<') {
+      // Keep the colon when it is followed by a tag (end-of-sentence before markup)
+      // or when it is at the very end of the string (last character of the line).
+      if (lookahead >= length || source[lookahead] === '<') {
         output.push(':')
         lastOutputChar = ':'
       }

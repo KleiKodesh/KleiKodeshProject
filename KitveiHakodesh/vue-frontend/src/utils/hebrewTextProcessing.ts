@@ -2,10 +2,7 @@
  * Hebrew text processing utilities.
  * State 0: full diacritics (nikkud + cantillation)
  * State 1: remove cantillation only (U+0591–U+05AF, U+05C0)
- * State 2: remove nikkud as well (U+05B0–U+05BD, U+05C1, U+05C2, U+05C4, U+05C5, U+05C7)
- *          and the em dash U+2014 (—)
- *          and replace modern punctuation uncommon in older Hebrew texts:
- *          ! → .   ? → .   ; → ,
+ * State 2: remove nikkud — delegates to stripNikkudFromHtml
  *
  * Operates directly on the HTML string with regex — no DOM parsing — so it is
  * safe to call on every render cycle without layout/GC cost.
@@ -27,17 +24,38 @@ export function applyDiacriticsFilter(html: string, state: number): string {
     return match
   })
 
-  // Process only text segments: split on tags, apply regex only to non-tag parts.
+  if (state >= 2) return stripNikkudFromHtml(decoded)
+
+  // state === 1: remove cantillation only
   return decoded.replace(/(<[^>]*>)|([^<]+)/g, (_, tag: string, text: string) => {
     if (tag) return tag
-    if (state >= 1) text = text.replace(/[\u0591-\u05AF\u05C0]/g, '')
-    if (state >= 2) {
-      text = text.replace(/[\u05B0-\u05BD\u05C1\u05C2\u05C4\u05C5\u05C7\u2014]/g, '')
-      text = text.replace(/[!?]/g, '.')
-      // Replace standalone semicolons (punctuation) but not ones that are part of
-      // HTML entities like &thinsp; or &nbsp; — those have the form &word; or &#N;
-      text = text.replace(/(?<!&[^;\s]{0,10});/g, ',')
-    }
+    return text.replace(/[\u0591-\u05AF\u05C0]/g, '')
+  })
+}
+
+/**
+ * Strip cantillation marks, nikkud, em dash (with trailing space), and
+ * normalize punctuation from an HTML string. Tag attributes are preserved.
+ *
+ * This is the canonical nikkud-stripping logic shared by the book-view renderer
+ * (state 2 of applyDiacriticsFilter) and cleanTextForExport. Any change to what
+ * "remove nikkud" strips must be made here and nowhere else.
+ *
+ * Transformations applied to text nodes only (tags are passed through unchanged):
+ *   - Cantillation marks U+0591–U+05AF, U+05C0 removed
+ *   - Nikkud U+05B0–U+05BD, U+05C1, U+05C2, U+05C4, U+05C5, U+05C7 removed
+ *   - Em dash U+2014 (—) and its trailing space (if present) removed
+ *   - ! → .   ? → .   ; → , (modern punctuation uncommon in older Hebrew texts)
+ */
+export function stripNikkudFromHtml(html: string): string {
+  return html.replace(/(<[^>]*>)|([^<]+)/g, (_, tag: string, text: string) => {
+    if (tag) return tag
+    text = text.replace(/[\u0591-\u05AF\u05C0]/g, '')
+    text = text.replace(/\u2014 ?/g, '')
+    text = text.replace(/[\u05B0-\u05BD\u05C1\u05C2\u05C4\u05C5\u05C7]/g, '')
+    text = text.replace(/[!?]/g, '.')
+    // Replace standalone semicolons but not ones inside HTML entities like &nbsp;
+    text = text.replace(/(?<!&[^;\s]{0,10});/g, ',')
     return text
   })
 }

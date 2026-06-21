@@ -18,20 +18,19 @@ namespace KitveiHakodeshLib
     /// </summary>
     public static class WordExporter
     {
-        public static Task ExportAsync(string html)
+        public static Task ExportAsync(string html, string title = "")
         {
-            return Task.Run(() => ExportCore(html));
+            return Task.Run(() => ExportCore(html, title));
         }
 
-        private static void ExportCore(string html)
+        private static void ExportCore(string html, string title)
         {
             Word.Application app = null;
             Word.Document doc = null;
             bool ownsApp = false;
 
-            string tempFile = Path.Combine(
-                Path.GetTempPath(),
-                "kitvei_export_" + Guid.NewGuid().ToString("N") + ".html");
+            string safeName = BuildSafeFileName(title);
+            string tempFile = Path.Combine(Path.GetTempPath(), safeName + ".html");
 
             try
             {
@@ -69,6 +68,31 @@ namespace KitveiHakodeshLib
                 if (doc != null) Marshal.ReleaseComObject(doc);
                 if (app != null && !ownsApp) Marshal.ReleaseComObject(app);
             }
+        }
+
+        private static string BuildSafeFileName(string title)
+        {
+            if (string.IsNullOrWhiteSpace(title))
+                return "kitvei_export_" + Guid.NewGuid().ToString("N");
+
+            // Strip characters that are invalid in file names
+            char[] invalid = Path.GetInvalidFileNameChars();
+            var safe = new System.Text.StringBuilder();
+            foreach (char c in title.Trim())
+            {
+                if (Array.IndexOf(invalid, c) < 0)
+                    safe.Append(c);
+            }
+
+            string result = safe.ToString().Trim();
+            if (result.Length == 0)
+                return "kitvei_export_" + Guid.NewGuid().ToString("N");
+
+            // Cap length to avoid hitting MAX_PATH with the temp folder prefix
+            if (result.Length > 80)
+                result = result.Substring(0, 80).TrimEnd();
+
+            return result;
         }
 
         private static Word.Application AcquireWordApplication(out bool ownsApp)

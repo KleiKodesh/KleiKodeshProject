@@ -209,8 +209,8 @@ export function fileSystemSearch(
  * C# opens Word (or reuses a running instance), creates a blank document,
  * and inserts the provided HTML as the document content.
  */
-export function exportToWord(html: string): Promise<{ ok?: boolean; error?: string }> {
-  return action<{ ok?: boolean; error?: string }>('exportToWord', { html })
+export function exportToWord(html: string, title: string = ''): Promise<{ ok?: boolean; error?: string }> {
+  return action<{ ok?: boolean; error?: string }>('exportToWord', { html, title })
 }
 
 /**

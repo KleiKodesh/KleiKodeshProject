@@ -3,6 +3,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { storeToRefs } from 'pinia'
 import { applyDiacriticsFilter, removeDiacriticsForSearch, stripHtmlForSearch } from '@/utils/hebrewTextProcessing'
+import { cleanTextForExport } from '@/utils/hebrewCleanTextExport'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { applyUserHighlights, applyUserNoteMarkers, setCurrentMark, isDiacriticChar } from '../lines/useBookViewLineRenderer'
 import type { Highlight } from '../lines/useBookViewHighlights'
@@ -152,7 +153,7 @@ export function useCommentaryRender(
     if (cached !== undefined) return cached
 
     let result =
-      diacriticsState.value === 0 ? content : applyDiacriticsFilter(content, diacriticsState.value)
+      diacriticsState.value === 0 ? content : diacriticsState.value === 2 ? cleanTextForExport(content) : applyDiacriticsFilter(content, diacriticsState.value)
     if (settingsStore.censorDivineNames) result = censorDivineNames(result)
 
     // Apply user highlights before search marks so search marks render on top

@@ -575,8 +575,9 @@ namespace KitveiHakodeshLib
             _bridge.Reply(id, new { ok = true });
 
             string html = root.TryGetProperty("html", out var h) ? h.GetString() ?? "" : "";
+            string title = root.TryGetProperty("title", out var t) ? t.GetString() ?? "" : "";
 
-            _ = WordExporter.ExportAsync(html);
+            _ = WordExporter.ExportAsync(html, title);
         }
 
         private void HandleHebrewBooksSearch(JsonElement root, string id)
