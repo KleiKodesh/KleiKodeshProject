@@ -69,6 +69,9 @@ namespace KleiKodeshVstoInstallerWpf
                 _status.Report("שומר גרסה...");
                 AddinInstaller.SaveVersion();
 
+                _status.Report("יוצר קיצור דרך...");
+                AddinInstaller.CreateKitveiHakodeshShortcut();
+
                 // Register (or re-register) the DocumentLocator Windows Service while
                 // we are still a foreground process that can surface a UAC prompt.
                 // The VSTO runs inside Word and cannot reliably elevate.

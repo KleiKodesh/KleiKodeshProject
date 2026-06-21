@@ -301,5 +301,68 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             catch { }
         }
 
+        // ── Start Menu Shortcut ───────────────────────────────────────────────────
+
+        /// <summary>
+        /// Creates (or overwrites) a Start Menu shortcut for כתבי הקודש.exe.
+        /// Placed in %AppData%\Microsoft\Windows\Start Menu\Programs\כלי קודש\כתבי הקודש.lnk
+        /// Safe to call on every install/update — always overwrites to keep the
+        /// target path and icon up to date.
+        /// </summary>
+        public static void CreateKitveiHakodeshShortcut()
+        {
+            try
+            {
+                string exeName  = "כתבי הקודש.exe";
+                string exePath  = Path.Combine(InstallPath, exeName);
+
+                // Place the shortcut under a KleiKodesh subfolder in Programs so
+                // it groups neatly alongside any future shortcuts.
+                string programsFolder = Environment.GetFolderPath(Environment.SpecialFolder.Programs);
+                string shortcutFolder = Path.Combine(programsFolder, AppDisplayName);
+                Directory.CreateDirectory(shortcutFolder);
+
+                string shortcutPath = Path.Combine(shortcutFolder, "כתבי הקודש.lnk");
+
+                // Use WScript.Shell COM object — available on every Windows machine,
+                // no extra reference or NuGet package required.
+                Type   shellType = Type.GetTypeFromProgID("WScript.Shell");
+                object shell     = Activator.CreateInstance(shellType);
+
+                object shortcut  = shellType.InvokeMember(
+                    "CreateShortcut",
+                    System.Reflection.BindingFlags.InvokeMethod,
+                    null, shell,
+                    new object[] { shortcutPath });
+
+                Type scType = shortcut.GetType();
+
+                // Target exe
+                scType.InvokeMember("TargetPath",
+                    System.Reflection.BindingFlags.SetProperty,
+                    null, shortcut, new object[] { exePath });
+
+                // Working directory = install folder
+                scType.InvokeMember("WorkingDirectory",
+                    System.Reflection.BindingFlags.SetProperty,
+                    null, shortcut, new object[] { InstallPath });
+
+                // Description shown on hover
+                scType.InvokeMember("Description",
+                    System.Reflection.BindingFlags.SetProperty,
+                    null, shortcut, new object[] { "כתבי הקודש — מאגר ספרי קודש" });
+
+                // Icon: use the exe itself (index 0)
+                scType.InvokeMember("IconLocation",
+                    System.Reflection.BindingFlags.SetProperty,
+                    null, shortcut, new object[] { exePath + ",0" });
+
+                scType.InvokeMember("Save",
+                    System.Reflection.BindingFlags.InvokeMethod,
+                    null, shortcut, null);
+            }
+            catch { }
+        }
+
     }
 }
