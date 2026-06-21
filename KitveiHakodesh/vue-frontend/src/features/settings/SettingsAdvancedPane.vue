@@ -92,8 +92,8 @@ function confirmResetSearchIndex() {
 
 function confirmResetDocumentLocatorIndex() {
   confirmAction({
-    label: 'בניית מחדש של אינדקס מאתר המסמכים',
-    desc: 'פעולה זו תמחק את אינדקס קבצי המסמכים ותבנה אותו מחדש מאפס. תהליך הבנייה עשוי להימשך מספר דקות.',
+    label: 'בנייה מחדש של אינדקס חיפוש קבצים',
+    desc: 'פעולה זו תמחק את אינדקס חיפוש הקבצים ותבנה אותו מחדש מאפס. תהליך הבנייה עשוי להימשך מספר דקות.',
     action: resetDocumentLocatorIndex,
   })
 }
@@ -233,11 +233,10 @@ function pickCity(name: string) {
     <button class="reset-all-btn" @click="confirmResetSearchIndex">איפוס אינדקס החיפוש</button>
 
     <p class="reset-desc" data-search-ignore>
-      מוחק את אינדקס קבצי המסמכים של שירות מאתר המסמכים ובונה אותו מחדש מאפס. תהליך הבנייה עשוי
-      להימשך מספר דקות.
+      מוחק את אינדקס חיפוש הקבצים ובונה אותו מחדש מאפס. תהליך הבנייה עשוי להימשך מספר דקות.
     </p>
     <button class="reset-all-btn" @click="confirmResetDocumentLocatorIndex">
-      בנייה מחדש של אינדקס מאתר המסמכים
+      בנייה מחדש של אינדקס חיפוש קבצים
     </button>
 
     <p class="reset-desc" data-search-ignore>

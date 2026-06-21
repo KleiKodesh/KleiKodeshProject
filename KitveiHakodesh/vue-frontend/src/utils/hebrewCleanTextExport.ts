@@ -63,7 +63,7 @@ export function cleanTextForExport(html: string): string {
   const pushSlice = (start: number, end: number): void => {
     if (end > start) {
       output.push(source.slice(start, end))
-      lastOutputChar = source[end - 1]
+      lastOutputChar = source[end - 1] ?? null
     }
   }
 

@@ -51,6 +51,9 @@ export function useSettings() {
 
   async function resetDocumentLocatorIndexAction() {
     await bridgeResetDocumentLocatorIndex()
+    // Navigate to the file search page so the indexing overlay is visible while
+    // the index rebuilds — the same pattern used by resetSearchIndexAction.
+    tabStore.updateActiveTab({ route: '/file-search', title: 'חיפוש קבצים' })
   }
 
   function resetSettings() {

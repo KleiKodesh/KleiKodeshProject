@@ -36,6 +36,8 @@ namespace KitveiHakodeshLib.FileSystemSearch
         private readonly DocumentLocatorAdapter _adapter;
         private CancellationTokenSource _currentSearch;
         private CancellationTokenSource _ensureReadyCts;
+        private CancellationTokenSource _reindexCts;
+        private volatile bool _reindexInProgress;
 
         public FileSystemSearchHandler(WebBridge bridge)
         {
@@ -55,6 +57,15 @@ namespace KitveiHakodeshLib.FileSystemSearch
         /// </summary>
         public void HandlePageLoad(string id)
         {
+            // If a reindex is already running, its WaitUntilReadyAsync loop is already
+            // pushing fileSystemIndexingStatus events — there is nothing else to start.
+            // Just reply and let the in-flight reindex drive the UI.
+            if (_reindexInProgress)
+            {
+                _bridge.Reply(id, new { isReady = false });
+                return;
+            }
+
             // Cancel any previous ensure-ready loop (e.g. user navigated away and back).
             var previous = Interlocked.Exchange(ref _ensureReadyCts, new CancellationTokenSource());
             previous?.Cancel();
@@ -134,12 +145,19 @@ namespace KitveiHakodeshLib.FileSystemSearch
         /// </summary>
         public void HandleReindex(string id)
         {
-            // Cancel any previous ensure-ready loop so it doesn't race.
-            var previous = Interlocked.Exchange(ref _ensureReadyCts, new CancellationTokenSource());
+            // Cancel any previous reindex in progress.
+            var previous = Interlocked.Exchange(ref _reindexCts, new CancellationTokenSource());
             previous?.Cancel();
             previous?.Dispose();
 
-            var cts = _ensureReadyCts;
+            // Also cancel the ensure-ready loop — no point waiting for ready when we
+            // are about to wipe and rebuild from scratch.
+            var prevEnsure = Interlocked.Exchange(ref _ensureReadyCts, null);
+            prevEnsure?.Cancel();
+            prevEnsure?.Dispose();
+
+            var cts = _reindexCts;
+            _reindexInProgress = true;
 
             _bridge.Reply(id, new { });
 
@@ -159,6 +177,10 @@ namespace KitveiHakodeshLib.FileSystemSearch
                 catch (Exception ex)
                 {
                     PushIndexingStatus(isIndexing: true, message: "שגיאה: " + Unwrap(ex).Message);
+                }
+                finally
+                {
+                    _reindexInProgress = false;
                 }
             }, cts.Token);
         }
@@ -221,6 +243,10 @@ namespace KitveiHakodeshLib.FileSystemSearch
 
         public void Dispose()
         {
+            var reindexCts = Interlocked.Exchange(ref _reindexCts, null);
+            reindexCts?.Cancel();
+            reindexCts?.Dispose();
+
             var ensureCts = Interlocked.Exchange(ref _ensureReadyCts, null);
             ensureCts?.Cancel();
             ensureCts?.Dispose();
