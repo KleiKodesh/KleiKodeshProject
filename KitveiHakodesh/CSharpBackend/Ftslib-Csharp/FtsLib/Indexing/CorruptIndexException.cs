@@ -6,7 +6,7 @@ namespace FtsLib.Indexing
     /// Thrown when a segment file is corrupt and cannot be recovered.
     /// The caller should delete the entire index directory and trigger a clean rebuild.
     /// </summary>
-    internal sealed class CorruptIndexException : Exception
+    public sealed class CorruptIndexException : Exception
     {
         public CorruptIndexException(string message, Exception innerException)
             : base(message, innerException)

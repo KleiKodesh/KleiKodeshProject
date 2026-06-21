@@ -82,6 +82,7 @@ namespace FtsLibDemo.Services
 
             seforimIndex.BuildIndex(
                 limit: 0,
+                forceMergeOnComplete: true,
                 onProgress: n =>
                 {
                     ct.ThrowIfCancellationRequested();

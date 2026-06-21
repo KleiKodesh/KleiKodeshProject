@@ -54,6 +54,9 @@ namespace FtsLib.Indexing
             // Clean up any leftover .tmp files from a previous crash.
             if (File.Exists(tmpDat)) File.Delete(tmpDat);
             if (File.Exists(tmpDb))  File.Delete(tmpDb);
+            // Also clean up any SQLite WAL sidecar .tmp files.
+            if (File.Exists(tmpDb + "-shm")) File.Delete(tmpDb + "-shm");
+            if (File.Exists(tmpDb + "-wal")) File.Delete(tmpDb + "-wal");
 
             try
             {
@@ -158,7 +161,19 @@ namespace FtsLib.Indexing
                     tx.Commit();
                 }
                 Exec(conn, "CREATE UNIQUE INDEX idx_term ON term_index(term);ANALYZE;");
+
+                // Checkpoint the WAL and switch back to DELETE journal mode so no
+                // -shm / -wal sidecar files are left next to the .db file.
+                // This is critical for crash-safety: stale .db-wal files left from a
+                // previous session can corrupt reads if the WAL is partially applied.
+                Exec(conn, "PRAGMA wal_checkpoint(TRUNCATE);PRAGMA journal_mode=DELETE;");
             }
+
+            // Belt-and-suspenders: delete any SQLite WAL sidecar files that may have
+            // been left even after the checkpoint above (e.g. on Windows when another
+            // handle is transiently open).
+            try { if (File.Exists(path + "-shm")) File.Delete(path + "-shm"); } catch { }
+            try { if (File.Exists(path + "-wal")) File.Delete(path + "-wal"); } catch { }
         }
 
         private static void Exec(SQLiteConnection conn, string sql)

@@ -137,6 +137,14 @@ namespace FtsLibTest
                     InterruptTest.Run(args);
                     return;
 
+                case "mergetest":
+                    MergeTest.Run(args);
+                    return;
+
+                case "crashmergetest":
+                    CrashMergeTest.Run(args);
+                    return;
+
                 case "fstsize":
                     FstSizeDiag.Run(args);
                     return;
@@ -199,6 +207,7 @@ namespace FtsLibTest
             Console.WriteLine("  FtsLibTest.exe fstsize [tier]         — estimate FST term-dict size vs current SQLite .db");
             Console.WriteLine("  FtsLibTest.exe probe <indexDir>        — silent correctness probe against any index dir");
             Console.WriteLine("  FtsLibTest.exe interrupttest [n] [k]   — interrupt+recover stress test (n cycles, kill after k flushes)");
+            Console.WriteLine("  FtsLibTest.exe mergetest [tier] [--rebuild]  — build full index, search, backup, force-merge, search again");
             Console.WriteLine("  FtsLibTest.exe parsertest              � QueryParser unit tests (no index needed)");
             Console.WriteLine("  FtsLibTest.exe orderedtest             � ordered-search unit tests (no index needed)");
             Console.WriteLine("  FtsLibTest.exe worddist                — word-distance unit tests (no index needed)");

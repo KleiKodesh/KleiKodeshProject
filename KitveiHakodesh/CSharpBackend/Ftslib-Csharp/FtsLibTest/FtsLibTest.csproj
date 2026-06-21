@@ -59,6 +59,8 @@
     <Compile Include="BuildIndex\BuildTest.cs" />
     <Compile Include="BuildIndex\BuildFreshTest.cs" />
     <Compile Include="BuildIndex\InterruptTest.cs" />
+    <Compile Include="BuildIndex\MergeTest.cs" />
+    <Compile Include="BuildIndex\CrashMergeTest.cs" />
     <!-- SearchIndex -->
     <Compile Include="SearchIndex\ProbeSearch.cs" />
     <Compile Include="SearchIndex\SearchTest.cs" />

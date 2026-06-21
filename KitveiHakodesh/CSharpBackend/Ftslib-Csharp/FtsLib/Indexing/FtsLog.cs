@@ -47,7 +47,15 @@ namespace FtsLib.Indexing
         public static void Separator(string label = null)
         {
             string bar = "═══════════════════════════════════════════════════════════════";
-            Write(string.IsNullOrEmpty(label) ? bar : "══ " + label + " " + bar.Substring(label.Length + 4));
+            if (string.IsNullOrEmpty(label))
+            {
+                Write(bar);
+            }
+            else
+            {
+                int tail = bar.Length - (label.Length + 4);
+                Write("══ " + label + " " + (tail > 0 ? bar.Substring(0, tail) : "══"));
+            }
         }
 
         /// <summary>Delete the log file so the next run starts with a clean slate.</summary>

@@ -24,9 +24,21 @@ namespace FtsLib.Indexing
 
         public void MergeIfNeeded(int level)
         {
-            if (_store.Live.LiveSegCount(level) < SegmentStore.Fanout) return;
+            int count = _store.Live.LiveSegCount(level);
+            FtsLog.Write("SegmentMerger",
+                $"MergeIfNeeded(L{level}): {count} segment(s), fanout={SegmentStore.Fanout}");
+            if (count < SegmentStore.Fanout)
+            {
+                FtsLog.Write("SegmentMerger",
+                    $"MergeIfNeeded(L{level}): below fanout — no merge needed");
+                return;
+            }
+            FtsLog.Write("SegmentMerger",
+                $"MergeIfNeeded(L{level}): threshold reached — merging L{level}→L{level+1}");
             _store.Live.EnsureLevel(level + 1);
             MergeLevel(level);
+            FtsLog.Write("SegmentMerger",
+                $"MergeIfNeeded(L{level}): cascade check → MergeIfNeeded(L{level+1})");
             MergeIfNeeded(level + 1);
         }
 
@@ -40,7 +52,12 @@ namespace FtsLib.Indexing
         public void MergeLevel(int level, int? targetSegId)
         {
             var segIds = _store.Live.GetLiveSegIds(level);
-            if (segIds.Count < 2) return;
+            if (segIds.Count < 2)
+            {
+                FtsLog.Write("SegmentMerger",
+                    $"MergeLevel(L{level}) skipped — only {segIds.Count} segment(s) at this level");
+                return;
+            }
 
             int    newSegId  = targetSegId ?? _store.Live.NextSegId();
             int    nextLevel = level + 1;
@@ -52,64 +69,160 @@ namespace FtsLib.Indexing
 
             Console.WriteLine($"[Merger] L{level}→L{nextLevel} seg {newSegId}: {segIds.Count} segs");
             FtsLog.Write("SegmentMerger",
-                $"START L{level}→L{nextLevel} target=seg_{nextLevel}_{newSegId} sources=[{string.Join(",", segIds)}]");
+                $"START L{level}→L{nextLevel} target=seg_{nextLevel}_{newSegId} " +
+                $"sources=[{string.Join(",", segIds)}] totalSegsBefore={_store.Live.TotalLiveSegs()}");
+
+            // Log source segment sizes for diagnostics
+            foreach (int sid in segIds)
+            {
+                string srcDat = _store.Live.SegDatPath(level, sid);
+                string srcDb  = _store.Live.SegDbPath(level, sid);
+                long   datSz  = File.Exists(srcDat) ? new System.IO.FileInfo(srcDat).Length : -1;
+                long   dbSz   = File.Exists(srcDb)  ? new System.IO.FileInfo(srcDb).Length  : -1;
+                FtsLog.Write("SegmentMerger",
+                    $"  source seg_{level}_{sid}: .dat={datSz:N0}B  .db={dbSz:N0}B  exists={File.Exists(srcDat)}/{File.Exists(srcDb)}");
+            }
 
             _store.Wal.BeginMerge(level, segIds.ToArray(), newSegId);
-            FtsLog.Write("SegmentMerger", "WAL BEGIN_MERGE written");
+            FtsLog.Write("SegmentMerger", "WAL BEGIN_MERGE written — crash point A: if we crash now, target does not exist yet");
 
+            // Clean up any leftover .tmp files from a previous crash
+            bool tmpDatExisted = File.Exists(tmpDat);
+            bool tmpDbExisted  = File.Exists(tmpDb);
+            if (tmpDatExisted || tmpDbExisted)
+                FtsLog.Write("SegmentMerger",
+                    $"WARNING: leftover .tmp files from previous crash — tmpDat={tmpDatExisted} tmpDb={tmpDbExisted} — deleting");
             DeleteIfExists(tmpDat);
             DeleteIfExists(tmpDb);
 
-            var readers = OpenReaders(level, segIds);
-            FtsLog.Write("SegmentMerger", $"merging dat → {System.IO.Path.GetFileName(tmpDat)}");
-            var entries = WriteMergedDat(level, nextLevel, readers, tmpDat);
-            CloseReaders(readers);
+            SegmentReader[] readers = null;
+            List<(string term, long skipOffset, int skipCount, long offset, int length, int count)> entries = null;
 
-            SegmentWriter.WriteMetaDb(tmpDb, entries);
-            FtsLog.Write("SegmentMerger", $"tmp files written ({entries.Count:N0} terms) — renaming to final");
+            try
+            {
+                readers = OpenReaders(level, segIds);
+                FtsLog.Write("SegmentMerger",
+                    $"opened {readers.Length} readers — beginning k-way merge → {System.IO.Path.GetFileName(tmpDat)}");
 
-            File.Move(tmpDat, outDat);
-            File.Move(tmpDb,  outDb);
-            FtsLog.Write("SegmentMerger", "target files renamed to final paths");
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                entries = WriteMergedDat(level, nextLevel, readers, tmpDat);
+                sw.Stop();
+                FtsLog.Write("SegmentMerger",
+                    $"WriteMergedDat complete: {entries.Count:N0} terms in {sw.ElapsedMilliseconds}ms " +
+                    $"tmpDat size={( File.Exists(tmpDat) ? new System.IO.FileInfo(tmpDat).Length.ToString("N0") + "B" : "MISSING")}");
+            }
+            catch (Exception ex)
+            {
+                FtsLog.Write("SegmentMerger",
+                    $"EXCEPTION during WriteMergedDat: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
+                throw;
+            }
+            finally
+            {
+                if (readers != null) CloseReaders(readers);
+            }
 
-            // Delete source segments BEFORE writing END_MERGE.
-            //
-            // Crash-safety ordering:
-            //   1. target files renamed to final path  (target exists, sources exist)
-            //   2. source files deleted                (target exists, sources gone)
-            //   3. END_MERGE written to WAL            (no pending merge on next boot)
-            //   4. live state updated in memory
-            //
-            // If the process crashes between steps 2 and 3, recovery sees a pending
-            // BEGIN_MERGE with target present but sources gone → Case B in SegmentStore:
-            // registers the complete target and writes END_MERGE. Correct.
-            //
-            // If the process crashes between steps 3 and 4, recovery sees no pending
-            // merge (END_MERGE was written), RebuildFromDisk finds only the target
-            // on disk (sources already deleted). Correct — no duplicate data.
-            //
-            // Search is blocked for the entire duration of this merge (SegmentStore
-            // holds the write lock on _searchMergeLock), so no reader can have the
-            // source files open — plain File.Delete is safe.
+            try
+            {
+                FtsLog.Write("SegmentMerger",
+                    $"writing meta DB → {System.IO.Path.GetFileName(tmpDb)}");
+                SegmentWriter.WriteMetaDb(tmpDb, entries);
+                long dbSzTmp = File.Exists(tmpDb) ? new System.IO.FileInfo(tmpDb).Length : -1;
+                FtsLog.Write("SegmentMerger",
+                    $"WriteMetaDb complete: tmpDb size={dbSzTmp:N0}B");
+
+                // WriteMetaDb checkpoints and removes SQLite WAL sidecars internally,
+                // but delete any stragglers explicitly as belt-and-suspenders.
+                DeleteIfExists(tmpDb + "-shm");
+                DeleteIfExists(tmpDb + "-wal");
+            }
+            catch (Exception ex)
+            {
+                FtsLog.Write("SegmentMerger",
+                    $"EXCEPTION during WriteMetaDb: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
+                throw;
+            }
+
+            // ── Crash-safe commit sequence ────────────────────────────────────────────
+            // Step 1: rename .tmp files to final names
             FtsLog.Write("SegmentMerger",
-                $"deleting {segIds.Count} source segment(s): [{string.Join(",", segIds)}]");
+                "COMMIT step 1: renaming .tmp → final  (crash point B: if we crash here, target may be partial)");
+            try
+            {
+                File.Move(tmpDat, outDat);
+                FtsLog.Write("SegmentMerger", $"  renamed tmpDat → {System.IO.Path.GetFileName(outDat)}  size={new System.IO.FileInfo(outDat).Length:N0}B");
+                File.Move(tmpDb, outDb);
+                FtsLog.Write("SegmentMerger", $"  renamed tmpDb  → {System.IO.Path.GetFileName(outDb)}  size={new System.IO.FileInfo(outDb).Length:N0}B");
+            }
+            catch (Exception ex)
+            {
+                FtsLog.Write("SegmentMerger",
+                    $"EXCEPTION during File.Move (tmp→final): {ex.GetType().Name}: {ex.Message}");
+                throw;
+            }
+            FtsLog.Write("SegmentMerger",
+                "COMMIT step 1 complete: target files renamed to final paths");
+
+            // Step 2: delete source segments
+            // If we crash between step 1 and step 3 (before END_MERGE), recovery
+            // sees BEGIN_MERGE with sources gone + target exists → Case B: correct.
+            FtsLog.Write("SegmentMerger",
+                $"COMMIT step 2: deleting {segIds.Count} source segment(s) — crash point C: if crash here, Case B recovery will handle it");
             foreach (int sid in segIds)
             {
-                DeleteIfExists(_store.Live.SegDatPath(level, sid));
-                DeleteIfExists(_store.Live.SegDbPath(level, sid));
-                DeleteIfExists(_store.Live.SegDbPath(level, sid) + "-shm");
-                DeleteIfExists(_store.Live.SegDbPath(level, sid) + "-wal");
+                string srcDat = _store.Live.SegDatPath(level, sid);
+                string srcDb  = _store.Live.SegDbPath(level, sid);
+                bool datExists = File.Exists(srcDat);
+                bool dbExists  = File.Exists(srcDb);
+                FtsLog.Write("SegmentMerger",
+                    $"  deleting seg_{level}_{sid}: dat={datExists} db={dbExists}");
+                try
+                {
+                    DeleteIfExists(srcDat);
+                    DeleteIfExists(srcDb);
+                    DeleteIfExists(srcDb + "-shm");
+                    DeleteIfExists(srcDb + "-wal");
+                    FtsLog.Write("SegmentMerger", $"  seg_{level}_{sid} deleted OK");
+                }
+                catch (Exception ex)
+                {
+                    FtsLog.Write("SegmentMerger",
+                        $"  EXCEPTION deleting seg_{level}_{sid}: {ex.GetType().Name}: {ex.Message}");
+                    throw;
+                }
             }
-            FtsLog.Write("SegmentMerger", "source segments deleted");
+            FtsLog.Write("SegmentMerger", "COMMIT step 2 complete: all source segments deleted");
 
+            // Step 3: write END_MERGE to WAL
+            FtsLog.Write("SegmentMerger",
+                "COMMIT step 3: writing WAL END_MERGE — crash point D: if crash here, RebuildFromDisk finds only target (correct)");
             _store.Wal.EndMerge(level, newSegId);
             FtsLog.Write("SegmentMerger", "WAL END_MERGE written");
 
+            // Step 4: update live state in memory
             _store.Live.PromoteSegment(level, segIds, nextLevel, newSegId);
 
-            Console.WriteLine($"[Merger] Done → L{nextLevel} seg {newSegId} ({entries.Count:N0} terms)");
+            // Log final state
+            int totalSegs = _store.Live.TotalLiveSegs();
+            Console.WriteLine($"[Merger] Done → L{nextLevel} seg {newSegId} ({entries.Count:N0} terms)  totalLiveSegs={totalSegs}");
             FtsLog.Write("SegmentMerger",
-                $"DONE L{level}→L{nextLevel} seg_{nextLevel}_{newSegId} ({entries.Count:N0} terms)");
+                $"DONE L{level}→L{nextLevel} seg_{nextLevel}_{newSegId} ({entries.Count:N0} terms)  totalLiveSegs={totalSegs}");
+
+            // Log current directory state after merge
+            LogDirState("after MergeLevel L" + level + "→L" + nextLevel);
+        }
+
+        private void LogDirState(string label)
+        {
+            try
+            {
+                string dir = _store.Dir;
+                var files = Directory.GetFiles(dir, "seg_*.*");
+                FtsLog.Write("SegmentMerger.DirState[" + label + "]",
+                    $"{files.Length} seg file(s): " +
+                    string.Join(", ", System.Array.ConvertAll(files, System.IO.Path.GetFileName)));
+            }
+            catch { }
         }
 
         // ── Merge write ──────────────────────────────────────────────

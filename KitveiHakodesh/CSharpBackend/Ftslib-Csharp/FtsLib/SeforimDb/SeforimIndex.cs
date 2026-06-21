@@ -140,6 +140,7 @@ namespace FtsLib.SeforimDb
                                Action onFlush = null,
                                long totalLines = 0,
                                long resumeOffset = 0,
+                               bool forceMergeOnComplete = false,
                                CancellationToken ct = default)
         {
             FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex",
@@ -154,9 +155,66 @@ namespace FtsLib.SeforimDb
                         "store was wiped during build — resetting store");
                     ResetStore();
                 }
+
+                if (result && forceMergeOnComplete)
+                {
+                    FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex",
+                        "forceMergeOnComplete=true — starting force merge");
+                    Console.WriteLine("[SeforimIndex] Build complete — starting force merge...");
+                    _store.MergeAllUnderWriteLock();
+                    if (_store.IsWiped)
+                    {
+                        FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex",
+                            "store wiped during force merge — resetting store");
+                        ResetStore();
+                    }
+                    FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex",
+                        "force merge complete");
+                    Console.WriteLine("[SeforimIndex] Force merge complete.");
+                }
+
                 FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex",
                     $"IndexWriteLock releasing — result={result}");
                 return result;
+            }
+        }
+
+        // ── Merge / Optimize ──────────────────────────────────────────
+
+        /// <summary>
+        /// Forces a full merge of all segments at every level into a single segment
+        /// per level, reducing the total number of segment files for faster search.
+        ///
+        /// This is an expensive operation — it rewrites every segment file. Call it
+        /// after a full build is complete to produce a single-segment index.
+        ///
+        /// Acquires the write lock so no concurrent search can run during the merge.
+        /// </summary>
+        public void ForceMerge()
+        {
+            if (_store == null)
+                throw new InvalidOperationException("No index is open.");
+
+            FtsLib.Indexing.FtsLog.Write("SeforimIndex.ForceMerge",
+                $"ForceMerge requested for {_indexPath}");
+
+            using (new IndexWriteLock(_indexPath))
+            {
+                FtsLib.Indexing.FtsLog.Write("SeforimIndex.ForceMerge", "IndexWriteLock acquired");
+
+                // MergeAllUnderWriteLock drains the flush pipeline internally
+                // before acquiring the write lock — no flush or search can race.
+                _store.MergeAllUnderWriteLock();
+
+                if (_store.IsWiped)
+                {
+                    FtsLib.Indexing.FtsLog.Write("SeforimIndex.ForceMerge",
+                        "store was wiped during merge — resetting store");
+                    ResetStore();
+                }
+
+                FtsLib.Indexing.FtsLog.Write("SeforimIndex.ForceMerge",
+                    "ForceMerge complete — IndexWriteLock releasing");
             }
         }
 

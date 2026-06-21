@@ -9,21 +9,19 @@ namespace FtsLib.Indexing
     /// Write-ahead log for crash recovery during segment merges.
     ///
     /// Log format (one operation per line):
-    ///   BEGIN_MERGE level=N sources=id1,id2,... target=id
-    ///   END_MERGE   level=N target=id
+    ///   BEGIN_FORCE_MERGE                          — force merge session started
+    ///   BEGIN_MERGE level=N sources=id1,... target=id  — one level merge started
+    ///   END_MERGE   level=N target=id              — one level merge committed
+    ///   END_FORCE_MERGE                            — all levels converged
     ///
-    /// Deletion order (crash-safe):
-    ///   1. Write merged target to .tmp, then rename to final name.
-    ///   2. Delete source segments.
-    ///   3. Log END_MERGE.
-    ///   4. Update live state in memory.
+    /// Recovery rules for a pending BEGIN_MERGE (no matching END_MERGE):
+    ///   - sources exist → target is partial; delete target, redo merge.
+    ///   - sources gone, target exists → complete; register target, write END_MERGE.
+    ///   - sources gone, target missing → unrecoverable; wipe and rebuild.
     ///
-    /// Recovery rules:
-    ///   - BEGIN_MERGE present, sources exist → target is partial; delete target, redo merge.
-    ///   - BEGIN_MERGE present, sources gone, target exists → sources deleted but END_MERGE not
-    ///     written; target is complete — register it as live and write END_MERGE to close the WAL.
-    ///   - BEGIN_MERGE present, sources gone, target missing → unrecoverable; wipe and rebuild.
-    ///   - No BEGIN_MERGE (or matched END_MERGE) → nothing to recover.
+    /// Recovery for BEGIN_FORCE_MERGE without END_FORCE_MERGE:
+    ///   The force merge was interrupted. After handling any pending BEGIN_MERGE,
+    ///   continue merging up the LSM tree until all levels have ≤1 segment.
     /// </summary>
     internal sealed class SegmentWal
     {
@@ -62,6 +60,9 @@ namespace FtsLib.Indexing
 
         // ── Write ─────────────────────────────────────────────────────
 
+        public void BeginForceMerge()  => _writer.WriteLine("BEGIN_FORCE_MERGE");
+        public void EndForceMerge()    => _writer.WriteLine("END_FORCE_MERGE");
+
         public void BeginMerge(int level, int[] sources, int target) =>
             _writer.WriteLine($"BEGIN_MERGE level={level} sources={string.Join(",", sources)} target={target}");
 
@@ -97,12 +98,28 @@ namespace FtsLib.Indexing
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;
 
-                if (line.StartsWith("BEGIN_MERGE "))
+                if (line.StartsWith("BEGIN_FORCE_MERGE"))
                 {
-                    var parts   = ParseKV(line.Substring("BEGIN_MERGE ".Length));
-                    int level   = int.Parse(parts["level"]);
-                    int target  = int.Parse(parts["target"]);
-                    var sources = Array.ConvertAll(parts["sources"].Split(','), int.Parse);
+                    state.PendingForceMerge = true;
+                }
+                else if (line.StartsWith("END_FORCE_MERGE"))
+                {
+                    state.PendingForceMerge = false;
+                }
+                else if (line.StartsWith("BEGIN_MERGE "))
+                {
+                    var parts = ParseKV(line.Substring("BEGIN_MERGE ".Length));
+                    string levelStr   = GetKV(parts, "level");
+                    string targetStr  = GetKV(parts, "target");
+                    string sourcesStr = GetKV(parts, "sources");
+                    // Skip malformed/truncated lines — treat as if this entry doesn't exist
+                    if (levelStr == null || targetStr == null || sourcesStr == null) continue;
+                    int level;
+                    int target;
+                    if (!int.TryParse(levelStr, out level) || !int.TryParse(targetStr, out target)) continue;
+                    int[] sources;
+                    try { sources = Array.ConvertAll(sourcesStr.Split(','), int.Parse); }
+                    catch { continue; }
                     state.PendingMerge = new MergeOp(level, sources, target);
                 }
                 else if (line.StartsWith("END_MERGE "))
@@ -125,6 +142,13 @@ namespace FtsLib.Indexing
             }
             return result;
         }
+
+        // Safe getter — returns null if key absent (handles truncated WAL lines)
+        private static string GetKV(Dictionary<string, string> d, string key)
+        {
+            string v;
+            return d.TryGetValue(key, out v) ? v : null;
+        }
     }
 
     // ── Recovery state ────────────────────────────────────────────────
@@ -132,6 +156,8 @@ namespace FtsLib.Indexing
     internal sealed class RecoveryState
     {
         public MergeOp PendingMerge;
+        /// <summary>True when BEGIN_FORCE_MERGE was written but END_FORCE_MERGE was not.</summary>
+        public bool PendingForceMerge;
     }
 
     internal sealed class MergeOp

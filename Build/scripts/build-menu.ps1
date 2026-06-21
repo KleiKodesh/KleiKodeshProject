@@ -66,6 +66,16 @@ function Read-DeleteFtsIndex {
     return $c -eq "2"
 }
 
+function Read-AnyCpuOnly {
+    Write-Host ""
+    Write-Host "Build platforms?" -ForegroundColor Yellow
+    Write-Host "  1. All  — x64, x86, and AnyCPU  (default)"
+    Write-Host "  2. AnyCPU only  (skip x64 and x86)"
+    Write-Host ""
+    $c = Read-Choice "Choice (1-2)" @("1","2")
+    return $c -eq "2"
+}
+
 function Read-ForceCleanInstall {
     Write-Host ""
     Write-Host "Force clean install?" -ForegroundColor Yellow
@@ -115,10 +125,9 @@ while ($true) {
     Write-Host "  5. View Build Info"
     Write-Host "  6. Open Build Folder"
     Write-Host "  7. Clear All GitHub Releases"
-    Write-Host "  8. AnyCPU Only Build   (skip x64 and x86)"
     Write-Host "  0. Exit"
     Write-Host ""
-    $choice = Read-Choice "Choice (0-8)" @("0","1","2","3","4","5","6","7","8")
+    $choice = Read-Choice "Choice (0-7)" @("0","1","2","3","4","5","6","7")
 
     switch ($choice) {
 
@@ -126,14 +135,17 @@ while ($true) {
             Show-Header "Full Release Build + GitHub Release"
             $verArgs    = Read-VersionArgs
             $notes      = Read-NotesSource
+            $anyCpuOnly = Read-AnyCpuOnly
             $forceClean = Read-ForceCleanInstall
             $deleteFts  = if ($forceClean) { $false } else { Read-DeleteFtsIndex }
             $summary  = if ($verArgs.ManualVersion) { "  Version : $($verArgs.ManualVersion) (manual)" } else { "  Version : increment $($verArgs.VersionIncrement)" }
             $summary += "`n  Notes   : $notes`n  Release : yes"
+            $summary += "`n  Platforms: $(if ($anyCpuOnly) { 'AnyCPU only' } else { 'x64, x86, AnyCPU' })"
             $summary += "`n  Clean   : $(if ($forceClean) { 'yes (wipe + reinstall)' } else { 'no' })"
             $summary += "`n  FTS idx : $(if ($forceClean) { 'n/a (wiped by clean install)' } elseif ($deleteFts) { 'DELETE (force reindex)' } else { 'preserve' })"
             if (Confirm-Action $summary) {
                 $params = $verArgs + @{ ReleaseNotesSource = $notes }
+                if ($anyCpuOnly)  { $params += @{ AnyCpuOnly       = $true } }
                 if ($deleteFts)   { $params += @{ DeleteFtsIndex    = $true } }
                 if ($forceClean)  { $params += @{ ForceCleanInstall = $true } }
                 Invoke-Installer $params
@@ -143,16 +155,19 @@ while ($true) {
         "2" {
             Show-Header "Release Build Only - No GitHub Release"
             $verArgs    = Read-VersionArgs
+            $anyCpuOnly = Read-AnyCpuOnly
             $forceClean = Read-ForceCleanInstall
             $deleteFts  = if ($forceClean) { $false } else { Read-DeleteFtsIndex }
             $summary  = if ($verArgs.ManualVersion) { "  Version : $($verArgs.ManualVersion) (manual)" } else { "  Version : increment $($verArgs.VersionIncrement)" }
             $summary += "`n  Release : skipped"
+            $summary += "`n  Platforms: $(if ($anyCpuOnly) { 'AnyCPU only' } else { 'x64, x86, AnyCPU' })"
             $summary += "`n  Clean   : $(if ($forceClean) { 'yes (wipe + reinstall)' } else { 'no' })"
             $summary += "`n  FTS idx : $(if ($forceClean) { 'n/a (wiped by clean install)' } elseif ($deleteFts) { 'DELETE (force reindex)' } else { 'preserve' })"
             if (Confirm-Action $summary) {
                 $params = $verArgs + @{ NoRelease = $true }
-                if ($deleteFts)  { $params += @{ DeleteFtsIndex    = $true } }
-                if ($forceClean) { $params += @{ ForceCleanInstall = $true } }
+                if ($anyCpuOnly)  { $params += @{ AnyCpuOnly       = $true } }
+                if ($deleteFts)   { $params += @{ DeleteFtsIndex    = $true } }
+                if ($forceClean)  { $params += @{ ForceCleanInstall = $true } }
                 Invoke-Installer $params
             }
         }
@@ -162,12 +177,15 @@ while ($true) {
             $cur = Get-CurrentVersion
             Write-Host "Current version: $cur (will not be changed)" -ForegroundColor Cyan
             Write-Host ""
+            $anyCpuOnly = Read-AnyCpuOnly
             $forceClean = Read-ForceCleanInstall
             $summary = "  Build without version change, skip GitHub release."
+            $summary += "`n  Platforms: $(if ($anyCpuOnly) { 'AnyCPU only' } else { 'x64, x86, AnyCPU' })"
             $summary += "`n  Clean   : $(if ($forceClean) { 'yes (wipe + reinstall)' } else { 'no' })"
             if (Confirm-Action $summary) {
                 $params = @{ ManualVersion = $cur; NoRelease = $true; NoClean = $true }
-                if ($forceClean) { $params += @{ ForceCleanInstall = $true } }
+                if ($anyCpuOnly)  { $params += @{ AnyCpuOnly       = $true } }
+                if ($forceClean)  { $params += @{ ForceCleanInstall = $true } }
                 Invoke-Installer $params
             }
         }
@@ -229,28 +247,6 @@ while ($true) {
             }
             Write-Host ""
             Read-Host "Press Enter to return"
-        }
-
-        "8" {
-            Show-Header "AnyCPU Only Build"
-            Write-Host "Builds only the AnyCPU variant (no x64 or x86 installers)." -ForegroundColor Yellow
-            Write-Host ""
-            $verArgs    = Read-VersionArgs
-            $noRelease  = Read-Choice "Create GitHub release? (Y/N)" @("Y","y","N","n")
-            $forceClean = Read-ForceCleanInstall
-            $deleteFts  = if ($forceClean) { $false } else { Read-DeleteFtsIndex }
-            $summary  = if ($verArgs.ManualVersion) { "  Version   : $($verArgs.ManualVersion) (manual)" } else { "  Version   : increment $($verArgs.VersionIncrement)" }
-            $summary += "`n  Platforms : AnyCPU only (no x64/x86)"
-            $summary += "`n  Release   : $(if ($noRelease -match '^[Nn]') { 'skipped' } else { 'yes' })"
-            $summary += "`n  Clean     : $(if ($forceClean) { 'yes (wipe + reinstall)' } else { 'no' })"
-            $summary += "`n  FTS idx   : $(if ($forceClean) { 'n/a (wiped by clean install)' } elseif ($deleteFts) { 'DELETE (force reindex)' } else { 'preserve' })"
-            if (Confirm-Action $summary) {
-                $params = $verArgs + @{ AnyCpuOnly = $true }
-                if ($noRelease -match '^[Nn]') { $params += @{ NoRelease = $true } }
-                if ($deleteFts)   { $params += @{ DeleteFtsIndex    = $true } }
-                if ($forceClean)  { $params += @{ ForceCleanInstall = $true } }
-                Invoke-Installer $params
-            }
         }
 
         "0" { exit 0 }

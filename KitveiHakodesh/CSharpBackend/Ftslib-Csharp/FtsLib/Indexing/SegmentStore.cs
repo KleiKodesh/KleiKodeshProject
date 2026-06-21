@@ -41,8 +41,12 @@ namespace FtsLib.Indexing
         internal readonly SegmentWal       Wal;
 
         private readonly SegmentMerger        _merger;
+        private readonly ForceMerger          _forceMerger;
         private DeleteSet                     _deleteSet;
         private readonly string               _dir;
+        internal string Dir                          => _dir;
+        internal ReaderWriterLockSlim SearchMergeLock => _searchMergeLock;
+        internal SegmentMerger        Merger          => _merger;
 
         // Excludes searches from observing a partially-merged live set.
         // Write lock: held for the entire duration of any merge (MergeIfNeeded).
@@ -75,10 +79,11 @@ namespace FtsLib.Indexing
         internal SegmentStore(string dir)
         {
             if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-            Live    = new SegmentLiveState(dir);
-            Wal     = new SegmentWal(dir);
-            _merger = new SegmentMerger(this);
-            _dir    = dir;
+            Live         = new SegmentLiveState(dir);
+            Wal          = new SegmentWal(dir);
+            _merger      = new SegmentMerger(this);
+            _forceMerger = new ForceMerger(this);
+            _dir         = dir;
         }
 
         // ── Delete set (used during Purge) ────────────────────────────
@@ -203,9 +208,14 @@ namespace FtsLib.Indexing
                 $"live state rebuilt — maxSegId={maxSegId}");
 
             // Step 4: Validate all segment files — if any are corrupt, wipe the index.
+            // Exception: if a segment is the target of the pending merge in the WAL,
+            // it may be partially written — skip it here and let the merge recovery
+            // in Step 5 delete and re-run it.
+            int pendingTarget = walRecovery.PendingMerge != null ? walRecovery.PendingMerge.Target : -1;
+            int pendingTargetLevel = walRecovery.PendingMerge != null ? walRecovery.PendingMerge.Level + 1 : -1;
             try
             {
-                ValidateAllSegments();
+                ValidateAllSegments(pendingTarget, pendingTargetLevel);
             }
             catch (InvalidDataException ex)
             {
@@ -217,7 +227,18 @@ namespace FtsLib.Indexing
             // Step 5: Check for interrupted merge and redo it if needed.
             if (walRecovery.PendingMerge == null)
             {
-                FtsLog.Write("SegmentStore.Recover", "no pending merge in WAL — recovery complete");
+                // No pending level merge — but the WAL file may still exist (e.g. truncated/garbage).
+                // Clear it so the next startup doesn't re-enter recovery unnecessarily.
+                // If a force merge was interrupted between level merges, resume it now.
+                if (walRecovery.PendingForceMerge)
+                {
+                    FtsLog.Write("SegmentStore.Recover",
+                        "PendingForceMerge with no pending level merge — resuming from between-pass kill point");
+                    _forceMerger.ResumeForceMerge();
+                    return;
+                }
+                Wal.Clear();
+                FtsLog.Write("SegmentStore.Recover", "no pending merge in WAL — WAL cleared, recovery complete");
                 return;
             }
 
@@ -262,10 +283,20 @@ namespace FtsLib.Indexing
                 FtsLog.Write("SegmentStore.Recover",
                     $"Case B: sources gone, target seg_{op.Level+1}_{op.Target} exists — registering as live");
                 Live.AddToLive(op.Level + 1, op.Target);
+                // Write END_MERGE so the WAL is well-formed, then clear it entirely
+                // so the next startup does not re-enter recovery unnecessarily.
                 Wal.Open();
                 Wal.EndMerge(op.Level, op.Target);
-                Wal.Close();
-                FtsLog.Write("SegmentStore.Recover", "Case B recovery complete");
+                Wal.Clear();
+                FtsLog.Write("SegmentStore.Recover", "Case B recovery complete — WAL cleared");
+
+                // If this was part of an interrupted force merge, resume remaining levels.
+                if (walRecovery.PendingForceMerge)
+                {
+                    FtsLog.Write("SegmentStore.Recover",
+                        "Case B + PendingForceMerge — resuming remaining levels");
+                    _forceMerger.ResumeForceMerge();
+                }
                 return;
             }
 
@@ -312,34 +343,55 @@ namespace FtsLib.Indexing
             }
             finally
             {
-                Wal.Close();
+                // MergeLevel writes END_MERGE into the WAL. Now clear the whole file
+                // so the next startup finds no pending merge and skips recovery.
+                Wal.Clear();
+                FtsLog.Write("SegmentStore.Recover", "Case A/C recovery merge complete — WAL cleared");
+            }
+
+            // If this was an interrupted force merge, resume merging the remaining levels.
+            if (walRecovery.PendingForceMerge)
+            {
+                FtsLog.Write("SegmentStore.Recover",
+                    "Case A/C + PendingForceMerge — resuming remaining levels");
+                _forceMerger.ResumeForceMerge();
             }
         }
 
         /// <summary>
         /// Validates all live segment files by attempting to read their headers.
-        /// Throws InvalidDataException if any segment is corrupt.
+        /// Skips the pending merge target (if any) — it may be partial and will
+        /// be handled by merge recovery in the next step.
+        /// Throws InvalidDataException if any other segment is corrupt.
         /// </summary>
-        private void ValidateAllSegments()
+        private void ValidateAllSegments(int skipSegId = -1, int skipLevel = -1)
         {
             var paths = Live.GetLiveSegmentPaths();
             foreach (var (dat, db) in paths)
             {
+                // Skip the pending merge target — may be partially written;
+                // merge recovery (Step 5) will delete and re-run it.
+                var nameParts = Path.GetFileNameWithoutExtension(dat).Split('_');
+                if (nameParts.Length == 3 &&
+                    int.TryParse(nameParts[1], out int fileLevel) &&
+                    int.TryParse(nameParts[2], out int fileSegId) &&
+                    fileSegId == skipSegId && fileLevel == skipLevel)
+                {
+                    FtsLog.Write("SegmentStore.ValidateAllSegments",
+                        $"skipping pending merge target seg_{fileLevel}_{fileSegId} — recovery handles it");
+                    Live.RemoveFromLive(fileLevel, fileSegId);
+                    continue;
+                }
+
                 if (!File.Exists(dat))
                     throw new InvalidDataException($"Segment .dat file missing: {dat}");
                 if (!File.Exists(db))
                     throw new InvalidDataException($"Segment .db file missing: {db}");
 
-                // Validate the .dat file by reading the first record header.
-                // If the file is truncated or corrupt, this will throw.
                 try
                 {
                     using (var reader = new SegmentReader(dat))
-                    {
-                        // Just try to read the first record — if it succeeds, the file
-                        // is at least minimally valid. A full scan would be too slow.
                         reader.MoveNext();
-                    }
                 }
                 catch (Exception ex)
                 {
@@ -417,7 +469,11 @@ namespace FtsLib.Indexing
                         Wal.Open();
                         try
                         {
+                            FtsLog.Write("SegmentStore.Flush.BgTask",
+                                $"acquiring write lock for MergeIfNeeded after seg_0_{segId} — L0 has {Live.LiveSegCount(0)} seg(s)");
                             _searchMergeLock.EnterWriteLock();
+                            FtsLog.Write("SegmentStore.Flush.BgTask",
+                                $"write lock acquired — running MergeIfNeeded(0)");
                             try
                             {
                                 _merger.MergeIfNeeded(0);
@@ -425,6 +481,8 @@ namespace FtsLib.Indexing
                             finally
                             {
                                 _searchMergeLock.ExitWriteLock();
+                                FtsLog.Write("SegmentStore.Flush.BgTask",
+                                    $"write lock released after MergeIfNeeded");
                             }
                         }
                         finally
@@ -432,7 +490,7 @@ namespace FtsLib.Indexing
                             Wal.Close();
                         }
                         FtsLog.Write("SegmentStore.Flush.BgTask",
-                            $"flush+merge cycle done for seg_0_{segId}");
+                            $"flush+merge cycle done for seg_0_{segId} — totalLiveSegs={Live.TotalLiveSegs()}");
                     }
                     finally
                     {
@@ -447,9 +505,15 @@ namespace FtsLib.Indexing
 
         /// <summary>
         /// Waits for all pending flush writes and any triggered LSM merges to finish.
-        /// Must be called before <see cref="Commit"/> or before disposing the store.
+        /// Must be called before force merge or before disposing the store.
         /// </summary>
-        public void WaitForMerge()
+        /// <param name="clearWal">
+        /// When true (default), clears the WAL file after draining so the next startup
+        /// does not treat a finished index as needing recovery.
+        /// Pass false when called internally before a force merge — the force merge
+        /// will manage the WAL itself.
+        /// </param>
+        public void WaitForMerge(bool clearWal = true)
         {
             Task task;
             lock (_pipelineLock) { task = _pipelineTask; }
@@ -457,47 +521,50 @@ namespace FtsLib.Indexing
             catch (AggregateException ae)
             {
                 Console.WriteLine("[SegmentStore] Pipeline exception (non-fatal): " + ae.InnerException?.Message);
+                // Do not clear the WAL if the pipeline faulted — we may need it for recovery.
+                return;
+            }
+
+            if (clearWal)
+            {
+                // All flushes and merges completed cleanly. Delete the WAL so the next
+                // startup does not treat a finished index as needing recovery.
+                Wal.Clear();
+                FtsLog.Write("SegmentStore.WaitForMerge", "pipeline drained cleanly — WAL cleared");
+            }
+            else
+            {
+                FtsLog.Write("SegmentStore.WaitForMerge", "pipeline drained cleanly — WAL preserved (force merge will manage it)");
             }
         }
 
         // ── Helpers ───────────────────────────────────────────────────
 
         /// <summary>
-        /// Runs a merge pass across every level that has more than one segment,
-        /// holding the write lock so no search can observe the intermediate state.
-        /// Used by Purge to physically remove deleted doc IDs from all segments.
+        /// Incrementally merges all levels of the LSM tree bottom-up until every
+        /// level has at most one segment. Holds the write lock throughout so all
+        /// flushes and searches block for the full duration.
+        ///
+        /// Drains the background flush/merge pipeline first so no in-flight
+        /// segment write or automatic LSM merge can race with the force merge.
+        /// See <see cref="ForceMerger"/> for the full protocol.
         /// </summary>
         internal void MergeAllUnderWriteLock()
         {
+            // Drain any in-flight background flush+merge tasks before opening
+            // the WAL or acquiring the write lock. This guarantees that every
+            // segment produced by the build pipeline is on disk and the automatic
+            // LSM merges have all completed before the force merge starts.
+            // clearWal:false — ForceMerger manages the WAL itself.
+            WaitForMerge(clearWal: false);
+
             Wal.Open();
-            try
-            {
-                _searchMergeLock.EnterWriteLock();
-                try
-                {
-                    bool progress;
-                    do
-                    {
-                        progress = false;
-                        foreach (var level in Live.GetLevelsWithMultiple())
-                        {
-                            Live.EnsureLevel(level + 1);
-                            _merger.MergeLevel(level);
-                            progress = true;
-                            break; // restart after each merge — level counts change
-                        }
-                    } while (progress);
-                }
-                finally
-                {
-                    _searchMergeLock.ExitWriteLock();
-                }
-            }
-            finally
-            {
-                Wal.Clear();
-            }
+            try   { _forceMerger.Run(); }
+            finally { /* Wal.Clear() is done inside ForceMerger.Run */ }
         }
+
+        /// <summary>Exposed for ForceMerger.ResumeForceMerge to call during recovery.</summary>
+        internal void WipeIndexDirectoryInternal() => WipeIndexDirectory();
 
         private static void DeleteIfExists(string path)
         {
