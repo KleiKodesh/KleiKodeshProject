@@ -12,13 +12,24 @@ export interface ContextMenuSeparatorItem {
   type: 'separator'
 }
 
+export interface ContextMenuCheckboxItem {
+  type: 'checkbox'
+  label: string
+  checked: boolean
+  onChange: (checked: boolean) => void
+}
+
 export interface ContextMenuComponentItem {
   type: 'component'
   component: import('vue').Component
   props?: Record<string, unknown>
 }
 
-export type ContextMenuItem = ContextMenuTextItem | ContextMenuSeparatorItem | ContextMenuComponentItem
+export type ContextMenuItem =
+  | ContextMenuTextItem
+  | ContextMenuSeparatorItem
+  | ContextMenuCheckboxItem
+  | ContextMenuComponentItem
 
 const props = defineProps<{ items: ContextMenuItem[] }>()
 
@@ -58,6 +69,11 @@ function runItem(item: ContextMenuTextItem) {
   hide()
 }
 
+function toggleCheckbox(item: ContextMenuCheckboxItem) {
+  item.onChange(!item.checked)
+  // Intentionally does NOT close the menu — checkbox is a persistent toggle
+}
+
 defineExpose({ show, showAtPosition, hide })
 </script>
 
@@ -72,6 +88,14 @@ defineExpose({ show, showAtPosition, hide })
           v-bind="item.props ?? {}"
           @close="hide"
         />
+        <div
+          v-else-if="item.type === 'checkbox'"
+          class="context-menu-item context-menu-checkbox"
+          @click="toggleCheckbox(item as ContextMenuCheckboxItem)"
+        >
+          <span class="checkbox-mark">{{ (item as ContextMenuCheckboxItem).checked ? '✓' : '' }}</span>
+          <span>{{ (item as ContextMenuCheckboxItem).label }}</span>
+        </div>
         <div v-else class="context-menu-item" @click="runItem(item as ContextMenuTextItem)">
           {{ (item as ContextMenuTextItem).label }}
         </div>
@@ -108,5 +132,18 @@ defineExpose({ show, showAtPosition, hide })
 }
 .context-menu-item:active {
   background: color-mix(in srgb, var(--text-primary) 13%, transparent);
+}
+.context-menu-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.checkbox-mark {
+  display: inline-block;
+  width: 14px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--accent-color);
+  flex-shrink: 0;
 }
 </style>

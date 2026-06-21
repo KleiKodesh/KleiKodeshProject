@@ -1,7 +1,7 @@
 import { useEventListener } from '@vueuse/core'
-import { ref } from 'vue'
 import type { Ref } from 'vue'
 import { cleanTextForExport } from '@/utils/hebrewCleanTextExport'
+import { useSettingsStore } from '@/stores/settingsStore'
 
 function wrapRtlHtml(innerHtml: string): string {
   return `<!DOCTYPE html><html><head><meta charset="utf-8">
@@ -38,13 +38,14 @@ export function useScopedCopy(
   scrollerEl: Ref<HTMLElement | null>,
   getLines: () => string[],
   isSelectAll: Ref<boolean>,
-  applyCleanText: Ref<boolean> = ref(false),
 ) {
+  const settingsStore = useSettingsStore()
+
   useEventListener(scrollerEl, 'copy', (event: ClipboardEvent) => {
     const raw = isSelectAll.value ? linesToHtml(getLines()) : selectedHtml()
     if (!raw.trim()) return
     let innerHtml = stripNoteMarkers(raw)
-    if (applyCleanText.value) innerHtml = cleanTextForExport(innerHtml)
+    if (settingsStore.copyCleanText) innerHtml = cleanTextForExport(innerHtml)
 
     const htmlContent = wrapRtlHtml(innerHtml)
     const plainText = htmlToPlainText(innerHtml)
@@ -58,7 +59,7 @@ export function useScopedCopy(
     const raw = isSelectAll.value ? linesToHtml(getLines()) : selectedHtml()
     if (!raw.trim()) return
     let innerHtml = stripNoteMarkers(raw)
-    if (applyCleanText.value) innerHtml = cleanTextForExport(innerHtml)
+    if (settingsStore.copyCleanText) innerHtml = cleanTextForExport(innerHtml)
 
     const htmlContent = wrapRtlHtml(innerHtml)
     const plainText = htmlToPlainText(innerHtml)

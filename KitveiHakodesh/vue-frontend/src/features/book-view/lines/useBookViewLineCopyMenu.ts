@@ -6,6 +6,7 @@ import type { Note } from './useBookViewNotes'
 import type { useTabStore } from '@/stores/tabStore'
 import BookViewAnnotationMenuRow from './BookViewAnnotationMenuRow.vue'
 import { cleanTextForExport } from '@/utils/hebrewCleanTextExport'
+import { useSettingsStore } from '@/stores/settingsStore'
 
 type TabStore = ReturnType<typeof useTabStore>
 
@@ -30,13 +31,6 @@ interface CopyMenuOptions {
 /** Strips all user-note-marker superscripts from an HTML string. */
 function stripNoteMarkers(html: string): string {
   return html.replace(/<sup[^>]*class="user-note-marker"[^>]*>.*?<\/sup>/gs, '')
-}
-
-/** Strips nikkud, teamim, and punctuation — mirrors the toolbar diacritics state 2 filter.
- * Also strips standalone colons (not immediately preceding an HTML tag),
- * and double-quotes that appear at the start or end of a word (boundary position). */
-function stripCleanText(html: string): string {
-  return cleanTextForExport(html)
 }
 
 interface EndnoteEntry {
@@ -216,6 +210,11 @@ export function buildBookExportHtml(
 
 export function useBookViewLineCopyMenu(options: CopyMenuOptions): ContextMenuItem[] {
   const { scrollerEl, lines, isSelectAll, selectAllInContainer, bookTitle, tabStore } = options
+  const settingsStore = useSettingsStore()
+
+  function maybeClean(html: string): string {
+    return settingsStore.copyCleanText ? cleanTextForExport(html) : html
+  }
 
   function buildSource(firstLineIndex: number | null, includeComma: boolean = true): string {
     const separator = includeComma ? ', ' : ' '
@@ -231,13 +230,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): ContextMenuIt
   function copyAsBlock(): void {
     const result = extractSelection(scrollerEl.value, lines(), isSelectAll.value)
     if (!result) return
-    execCopyHtml(stripNoteMarkers(result.joined))
-  }
-
-  function copyWithoutPunctuation(): void {
-    const result = extractSelection(scrollerEl.value, lines(), isSelectAll.value)
-    if (!result) return
-    execCopyHtml(stripCleanText(stripNoteMarkers(result.joined)))
+    execCopyHtml(maybeClean(stripNoteMarkers(result.joined)))
   }
 
   function copyWithSource(sourceAtEnd: boolean): void {
@@ -245,7 +238,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): ContextMenuIt
     if (!result) return
     const { joined, firstLineIndex } = result
     const source = buildSource(firstLineIndex, sourceAtEnd)
-    const cleanHtml = stripNoteMarkers(joined)
+    const cleanHtml = maybeClean(stripNoteMarkers(joined))
 
     const html = sourceAtEnd
       ? `${cleanHtml} (${source})`
@@ -292,9 +285,10 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): ContextMenuIt
     }
 
     const { html: textHtml, endnotes } = extractEndnotes(joined, resolveNote)
+    const processedText = maybeClean(textHtml)
     const withSource = sourceAtEnd
-      ? `${textHtml} (${source})`
-      : `<h2 dir="rtl">${source}</h2>${textHtml}`
+      ? `${processedText} (${source})`
+      : `<h2 dir="rtl">${source}</h2>${processedText}`
     execCopyHtml(withSource + buildEndnotesHtml(endnotes))
   }
 
@@ -311,11 +305,17 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): ContextMenuIt
   return [
     { label: 'העתק', action: () => document.execCommand('copy') },
     { label: 'העתק כבלוק', action: copyAsBlock },
-    { label: 'העתק טקסט נקי', action: copyWithoutPunctuation },
     { label: 'העתק עם מקור בסוף', action: () => copyWithSource(true) },
     { label: 'העתק עם מקור בהתחלה', action: () => copyWithSource(false) },
     { label: 'העתק עם הערות', action: () => copyWithNotes(false) },
     { label: 'בחר הכל', action: selectAllInContainer },
+    { type: 'separator' },
+    {
+      type: 'checkbox',
+      label: 'העתק טקסט נקי',
+      get checked() { return settingsStore.copyCleanText },
+      onChange: (value: boolean) => { settingsStore.copyCleanText = value },
+    },
     { type: 'separator' },
     annotationRow,
   ]

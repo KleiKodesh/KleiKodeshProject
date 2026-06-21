@@ -34,6 +34,7 @@ const DEFAULTS = {
   searchExpandKetiv: true,
   searchWildcardWrap: false,
   searchGrammarWrap: false,
+  copyCleanText: false,
 }
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -62,6 +63,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const searchExpandKetiv = ref(DEFAULTS.searchExpandKetiv)
   const searchWildcardWrap = ref(DEFAULTS.searchWildcardWrap)
   const searchGrammarWrap = ref(DEFAULTS.searchGrammarWrap)
+  const copyCleanText = ref(DEFAULTS.copyCleanText)
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -131,6 +133,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_SEARCH_EXPAND_KETIV, searchExpandKetiv)
     loadSetting(KEYS.SETTINGS_SEARCH_WILDCARD_WRAP, searchWildcardWrap)
     loadSetting(KEYS.SETTINGS_SEARCH_GRAMMAR_WRAP, searchGrammarWrap)
+    loadSetting(KEYS.SETTINGS_COPY_CLEAN_TEXT, copyCleanText)
     applyCSSVariables()
   }
 
@@ -159,6 +162,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(searchExpandKetiv, KEYS.SETTINGS_SEARCH_EXPAND_KETIV)
   persistSetting(searchWildcardWrap, KEYS.SETTINGS_SEARCH_WILDCARD_WRAP)
   persistSetting(searchGrammarWrap, KEYS.SETTINGS_SEARCH_GRAMMAR_WRAP)
+  persistSetting(copyCleanText, KEYS.SETTINGS_COPY_CLEAN_TEXT)
 
   // ── Actions ───────────────────────────────────────────────────────────────
 
@@ -219,6 +223,7 @@ export const useSettingsStore = defineStore('settings', () => {
     searchExpandKetiv.value = DEFAULTS.searchExpandKetiv
     searchWildcardWrap.value = DEFAULTS.searchWildcardWrap
     searchGrammarWrap.value = DEFAULTS.searchGrammarWrap
+    copyCleanText.value = DEFAULTS.copyCleanText
     lsClearSettingsOnly()
     applyCSSVariables()
   }
@@ -229,6 +234,7 @@ export const useSettingsStore = defineStore('settings', () => {
     useSeparateCommentarySettings, appZoom, dictionaryZoom, newTabPage, pdfPageFilters, resumeLastRead,
     defaultAutoSyncCommentary, setupDone, midotDisclaimerAccepted, searchContextMarginWords,
     searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchWildcardWrap, searchGrammarWrap,
+    copyCleanText,
     init, cycleDiacritics, cycleDiacriticsNoTeamim, togglePdfPageFilters, reset, completeSetup, acceptMidotDisclaimer,
   }
 })
