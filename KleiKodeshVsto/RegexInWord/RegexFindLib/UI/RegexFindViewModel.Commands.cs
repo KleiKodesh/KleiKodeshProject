@@ -53,6 +53,17 @@ namespace RegexFindLib.UI
             SelectedResultIndex = next;
         }
 
+        /// <summary>
+        /// Goes back to the previous result in the list (wraps around).
+        /// Called when Shift+Enter is pressed in the search box.
+        /// </summary>
+        public void AdvanceToPreviousResult()
+        {
+            if (Results.Count == 0) return;
+            int prev = _selectedResultIndex <= 0 ? Results.Count - 1 : _selectedResultIndex - 1;
+            SelectedResultIndex = prev;
+        }
+
         void ExecuteReplace()
         {
             try
