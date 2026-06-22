@@ -158,6 +158,58 @@ KleiKodeshProject/
 
 ראה [`project-overview.md`](.kiro/steering/project-overview.md) לתיאור מלא של כל פרויקט.
 
+## AI Agent Navigation Guide
+
+This section helps AI agents find the right file for a given change without searching.
+
+### Common Changes — VSTO Add-in
+
+| Goal | Start Here |
+|------|------------|
+| Add a ribbon button | `KleiKodeshVsto/Ribbon/KeliKodeshRibbon.xml` (button XML) + `KleiKodeshVsto/Ribbon/KeliKodeshRibbon.cs` (click handler) + `KleiKodeshVsto/Ribbon/RibbonSettingsControl.cs` (visibility toggle) |
+| Change task pane behavior | `KleiKodeshVsto/Helpers/TaskpaneManager.cs` — creates/reuses panes |
+| Change startup/shutdown logic | `KleiKodeshVsto/ThisAddIn.cs` — entry point |
+| Change a tool's UI | The tool's own library: `DocDesignLib/`, `RegexFindLib/`, `WebSitesLib/`, `KiwixLib/` |
+| Change shared WPF styles | `WpfLib/Themes/OfficePalette.xaml` — merged palette for all task panes |
+| Change version number | `Build/Installer/Helpers/AddinInstaller.cs` — `const string Version = "vX.Y.Z"` |
+| Change auto-update logic | `UpdateCheckerLib/UpdateChecker.cs` — GitHub release check + download |
+| Change installer pages | `Build/Installer/Pages/` — LandingPage, SettingsPage, InstallPage, etc. |
+
+### Common Changes — KitveiHakodesh (Vue Frontend)
+
+| Goal | Start Here |
+|------|------------|
+| Add a new page/feature | Create folder in `KitveiHakodesh/vue-frontend/src/features/`, add `*Page.vue`, register in `layout/AppPageView.vue`, add nav entry in `features/home/HomePage.vue` and `layout/AppTitleBarNavDropdown.vue` |
+| Add a new SQL query | Add to `KitveiHakodesh/vue-frontend/src/webview-host/queries.sql.ts` (never inline SQL) |
+| Add a new setting | Add key to `utils/persistence.ts` `KEYS`, add reactive ref + watcher in `stores/settingsStore.ts` |
+| Add a new store | Create in `KitveiHakodesh/vue-frontend/src/stores/` following Pinia pattern |
+| Change a feature's UI | Edit that feature's folder under `features/` |
+| Change data fetching | `webview-host/db.ts` — routes queries to C# host or Vite dev middleware |
+| Change C#/JS bridge | `webview-host/bridge.ts` + `CSharpBackend/KitveiHakodeshLib/Bridge/JsBridge.cs` |
+| Change theme system | `theme/themeStore.ts`, `theme/themes.json`, `theme/theme.css` |
+| Change PDF viewer | `features/pdf-viewer/` |
+| Change search | `features/full-text-search/` (frontend), `CSharpBackend/Ftslib-Csharp/FtsLib/` (backend) |
+
+### Common Changes — Build System
+
+| Goal | Start Here |
+|------|------------|
+| Change build pipeline | `Build/scripts/build-installer.ps1` — orchestrator |
+| Change installer logic | `Build/Installer/Helpers/AddinInstaller.cs` — extract, register, version |
+| Change NSIS wrapper | `Build/nsis/KleiKodeshWrapper.nsi` — prerequisite checks, uninstall |
+| Change release process | `Build/scripts/build-helpers.ps1` — `New-GitHubRelease` function |
+| Add new platform variant | See `.kiro/steering/build-variants.md` — must define output paths in every `.csproj` in the chain |
+
+### Key Entry Points
+
+- **VSTO add-in entry**: `KleiKodeshVsto/ThisAddIn.cs` — startup/shutdown
+- **Ribbon entry**: `KleiKodeshVsto/Ribbon/KeliKodeshRibbon.cs` — button click dispatch
+- **Vue app entry**: `KitveiHakodesh/vue-frontend/src/main.ts` — app bootstrap
+- **Vue app root**: `KitveiHakodesh/vue-frontend/src/App.vue` — root component
+- **C# backend entry**: `KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/AppViewer.cs` — WebView2 host
+- **WPF installer entry**: `Build/Installer/App.xaml.cs` — CLI arg handling + startup
+- **NSIS wrapper entry**: `Build/nsis/KleiKodeshWrapper.nsi` — installer wrapper
+
 
 
 

@@ -1,23 +1,31 @@
-# Converters
+# Converters — WPF Value Converters
 
-WPF value converters for data binding transformations.
+Value converters for WPF data binding, used across all task pane libraries.
 
-## Converters
+## Files
 
-- `MultiplyConverter` — Multiplies numeric values by a specified factor
-- `HeightToCornerRadiusConverter` — Converts height values to corner radius
-- `StringToBoolConverter` — Converts string to boolean
-- `ReverseBoolConverter` — Inverts boolean values
-- `ListToStringConverter` — Converts lists to delimited strings
-- `FlowDirectionConverter` — Handles RTL/LTR flow direction
-- `BoolToFlowDirectionConverter` — Maps boolean to FlowDirection
-- `ArrayToStringConverter` — Converts arrays to strings
+**`FlowDirectionConverter.cs`** — Converts string `"RTL"`/`"LTR"` to `FlowDirection` enum. Used for dynamic RTL switching in Hebrew UI.
 
-**Usage in XAML:**
+**`BoolToFlowDirectionConverter.cs`** — Converts `bool` → `FlowDirection` (true = RTL, false = LTR). Used for binding RTL settings to layout.
+
+**`ReverseBoolConverter.cs`** — Inverts a boolean value. Used for visibility toggles and inverse bindings.
+
+**`StringToBoolConverter.cs`** — Non-empty string → true, null/empty → false. Used for showing/hiding elements based on text content.
+
+**`ListToStringConverter.cs`** — `IEnumerable` → delimited string. Optional `Separator` parameter. Used for displaying list selections.
+
+**`ArrayToStringConverter.cs`** — `object[]` → delimited string. Similar to ListToString but for arrays.
+
+**`ToggleCheckBoxConverters.cs`** — Multi-value converter for three-state `CheckBox` toggles. Handles the indeterminate state logic for format toggles in RegexFindLib.
+
+## Usage
+
 ```xml
 <Window.Resources>
-  <local:StringToBoolConverter x:Key="StringToBool" />
+    <local:ReverseBoolConverter x:Key="ReverseBool" />
+    <local:FlowDirectionConverter x:Key="FlowDir" />
 </Window.Resources>
 
-<CheckBox IsChecked="{Binding Value, Converter={StaticResource StringToBool}}" />
+<CheckBox IsChecked="{Binding IsHidden, Converter={StaticResource ReverseBool}}" />
+<FlowDocument FlowDirection="{Binding Lang, Converter={StaticResource FlowDir}}" />
 ```

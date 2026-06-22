@@ -1,24 +1,39 @@
-# NSIS Installer
+# NSIS Installer Wrapper
 
-NSIS (Nullsoft Scriptable Install System) configuration for the KleiKodesh installer.
+NSIS (Nullsoft Scriptable Install System) wrapper that surrounds the WPF installer with prerequisite checks, Windows Installed Apps registration, and uninstall support.
 
 ## Files
 
-- `KleiKodeshWrapper.nsi` — Main NSIS script that wraps the WPF installer
-- `InstallerHeader.bmp` — Header image for installer welcome page
-- `SideBanner.bmp` — Side banner for installer pages
+**`KleiKodeshWrapper.nsi`** — Main NSIS compilation script. Flow:
+1. Checks prerequisites: Windows 10+, .NET Framework 4.7.2+, VSTO runtime
+2. Checks for running Word instances (prompts to close)
+3. Launches the WPF installer (`KleiKodeshVstoInstallerWpf.exe`) with appropriate CLI args
+4. Writes `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\KleiKodesh` entries
+5. Creates Start Menu shortcut for uninstall
 
-## How It Works
+## How the Wrapper Works
 
-1. NSIS runs prerequisite checks (Windows version, .NET Framework, Office version)
-2. Launches the WPF installer (`KleiKodeshVstoInstallerWpf.exe`)
-3. Waits for completion and handles any errors
-4. Updates Windows "Installed Apps" registry entries
-5. Creates uninstall support
+The NSIS script is parameterized with:
+- `PRODUCT_VERSION` — Version string (e.g. "v3.6.1") passed by `build-installer.ps1`
+- `WPF_EXE_PATH` — Path to the built WPF installer exe
+
+The wrapper never extracts files itself — the WPF installer handles all file operations. The NSIS layer exists solely for:
+- Windows "Installed Apps" list entry
+- Add/Remove Programs support
+- Prerequisite checking before launching the WPF installer
+- Uninstall registry cleanup
 
 ## Output
 
-Produces three .exe files for distribution:
-- `KleiKodeshSetup-vX.Y.Z-x64.exe` — 64-bit only
-- `KleiKodeshSetup-vX.Y.Z-x86.exe` — 32-bit only
-- `KleiKodeshSetup-vX.Y.Z.exe` — Auto-detect (AnyCPU)
+Build produces three installer executables:
+| File | Platform | Target |
+|------|----------|--------|
+| `KleiKodeshSetup-vX.Y.Z-x64.exe` | x64 | 64-bit Office |
+| `KleiKodeshSetup-vX.Y.Z-x86.exe` | x86 | 32-bit Office |
+| `KleiKodeshSetup-vX.Y.Z.exe` | AnyCPU | Auto-detect at runtime |
+
+Each is a self-extracting NSIS archive containing the WPF installer + prerequisites check.
+
+## Build
+
+The NSIS script is compiled during `build-installer.ps1` execution. Requires NSIS 3.08+ with the Hebrew language module (`MUI_HEBREW.nsh`).
