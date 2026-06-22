@@ -15125,10 +15125,26 @@ class PDFViewer {
     state.scrollDown = pageNumber >= state.previousPageNumber;
     state.previousPageNumber = pageNumber;
   }
+  // PATCH: track the last known scrollTop to detect large jumps.
+  #lastScrollTop = 0;
   _scrollUpdate() {
     if (this.pagesCount === 0) {
       return;
     }
+    // PATCH: when the user drags the scrollbar to a distant page, the scroll
+    // position jumps by more than one viewport height in a single rAF tick.
+    // In that case, cancel all in-progress renders immediately so the new
+    // target page gets the full CPU budget rather than competing with renders
+    // for pages that are no longer visible. Without this, a page that was
+    // mid-render (RUNNING or PAUSED) keeps its renderTask alive and its
+    // microtasks interleave with the new page's first tiles, causing a
+    // noticeable blank-then-render delay on large jumps.
+    const currentScrollTop = this.container.scrollTop;
+    const jumpThreshold = this.container.clientHeight;
+    if (Math.abs(currentScrollTop - this.#lastScrollTop) > jumpThreshold) {
+      this._cancelRendering();
+    }
+    this.#lastScrollTop = currentScrollTop;
     if (this.#scrollTimeoutId) {
       clearTimeout(this.#scrollTimeoutId);
     }
@@ -20438,6 +20454,15 @@ function webViewerLoad() {
     // value is picked up as initialBookmark by PDF.js and takes priority over
     // the stored scroll/zoom position from ViewHistory, breaking session restore.
     disableAutoFetch: true,
+
+    // Disable streaming mode for range requests. When disableStream is false
+    // (default), the PDF worker fetches page data using chunked streaming over
+    // the virtual host. For local files served via WebView2 virtual hosts, each
+    // streaming chunk adds unnecessary round-trip overhead. Setting this to true
+    // forces the worker to use direct single-range reads instead, which is faster
+    // for local files where the full content is available without network latency.
+    // Must be used together with disableAutoFetch: true.
+    disableStream: true,
   });
 
   const event = new CustomEvent("webviewerloaded", {

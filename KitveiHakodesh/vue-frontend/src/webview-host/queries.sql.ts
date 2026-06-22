@@ -195,18 +195,101 @@ export const SQL = {
     WHERE l.sourceLineId IN (${Array(count).fill('?').join(',')})
   `,
 
+  /**
+   * Reverse source lookup (single line): find lines in source books that link TO the
+   * given target line via a commentary-type connection. Used instead of the unreliable
+   * SOURCE connection type — the source text is discovered by reversing the commentary link.
+   * Returns sourceBookId, sourceLineId, lineIndex and content of the source line.
+   * The connectionTypeId placeholders must cover all DB names that canonicalize to COMMENTARY.
+   */
+  GET_SOURCE_DATA_BY_REVERSE_COMMENTARY_LOOKUP: (commentaryTypeCount: number) => `
+    SELECT l.sourceBookId, l.sourceLineId, ln.lineIndex, ln.content
+    FROM link l
+    JOIN line ln ON ln.id = l.sourceLineId
+    WHERE l.targetLineId = ?
+      AND l.connectionTypeId IN (${Array(commentaryTypeCount).fill('?').join(',')})
+  `,
+
+  /**
+   * Reverse source lookup (range): same as above but for a set of target line IDs.
+   * Bind order: targetLineId1, targetLineId2, ..., commentaryTypeId1, commentaryTypeId2, ...
+   */
+  GET_SOURCE_DATA_BY_REVERSE_COMMENTARY_LOOKUP_RANGE: (commentaryTypeCount: number, targetLineCount: number) => `
+    SELECT l.sourceBookId, l.sourceLineId, ln.lineIndex, ln.content
+    FROM link l
+    JOIN line ln ON ln.id = l.sourceLineId
+    WHERE l.targetLineId IN (${Array(targetLineCount).fill('?').join(',')})
+      AND l.connectionTypeId IN (${Array(commentaryTypeCount).fill('?').join(',')})
+  `,
+
+  /**
+   * Reverse source book lookup: find distinct source books that link to any line in the
+   * given base book via a commentary-type connection. Used to populate the SOURCE section
+   * of the static commentary filter panel.
+   * Bind order: targetBookId, commentaryTypeId1, commentaryTypeId2, ...
+   */
+  GET_SOURCE_BOOKS_BY_REVERSE_COMMENTARY_LOOKUP: (commentaryTypeCount: number) => `
+    SELECT DISTINCT l.sourceBookId
+    FROM link l
+    WHERE l.targetBookId = ?
+      AND l.connectionTypeId IN (${Array(commentaryTypeCount).fill('?').join(',')})
+  `,
+
+  /**
+   * Reverse targum lookup (single line): find lines in targum books that link TO the
+   * given target line via a TARGUM-type connection. Mirrors the reverse source lookup —
+   * the targum text is discovered by reversing the TARGUM link rather than relying on
+   * the forward TARGUM connection type.
+   * Bind order: targetLineId, targumTypeId1, targumTypeId2, ...
+   */
+  GET_TARGUM_DATA_BY_REVERSE_TARGUM_LOOKUP: (targumTypeCount: number) => `
+    SELECT l.sourceBookId, l.sourceLineId, ln.lineIndex, ln.content
+    FROM link l
+    JOIN line ln ON ln.id = l.sourceLineId
+    WHERE l.targetLineId = ?
+      AND l.connectionTypeId IN (${Array(targumTypeCount).fill('?').join(',')})
+  `,
+
+  /**
+   * Reverse targum lookup (range): same as above but for a set of target line IDs.
+   * Bind order: targetLineId1, targetLineId2, ..., targumTypeId1, targumTypeId2, ...
+   */
+  GET_TARGUM_DATA_BY_REVERSE_TARGUM_LOOKUP_RANGE: (targumTypeCount: number, targetLineCount: number) => `
+    SELECT l.sourceBookId, l.sourceLineId, ln.lineIndex, ln.content
+    FROM link l
+    JOIN line ln ON ln.id = l.sourceLineId
+    WHERE l.targetLineId IN (${Array(targetLineCount).fill('?').join(',')})
+      AND l.connectionTypeId IN (${Array(targumTypeCount).fill('?').join(',')})
+  `,
+
+  /**
+   * Reverse targum book lookup: find distinct targum books that link to any line in the
+   * given base book via a TARGUM-type connection. Used to populate the תרגומים section
+   * of the static commentary filter panel.
+   * Bind order: targetBookId, targumTypeId1, targumTypeId2, ...
+   */
+  GET_TARGUM_BOOKS_BY_REVERSE_TARGUM_LOOKUP: (targumTypeCount: number) => `
+    SELECT DISTINCT l.sourceBookId
+    FROM link l
+    WHERE l.targetBookId = ?
+      AND l.connectionTypeId IN (${Array(targumTypeCount).fill('?').join(',')})
+  `,
+
   /** All available connection type IDs and names */
   GET_ALL_CONNECTION_TYPES: `
     SELECT id, name
     FROM connection_type
   `,
 
-  /** Distinct static filter books for one source book using link.sourceBookId */
-  GET_STATIC_COMMENTARY_FILTER_BOOKS_FOR_SOURCE_BOOK: `
+  /** Distinct static filter books for one source book using link.sourceBookId.
+   *  The count parameter controls how many connection type ID placeholders are generated —
+   *  the caller passes all IDs that map to SOURCE, TARGUM, or COMMENTARY (including any
+   *  new DB-side aliases like SUPER_COMMENTARY, PARSHANUT, MIDRASH). */
+  GET_STATIC_COMMENTARY_FILTER_BOOKS_FOR_SOURCE_BOOK: (count: number) => `
     SELECT DISTINCT l.targetBookId, l.connectionTypeId
     FROM link l
     WHERE l.sourceBookId = ?
-      AND l.connectionTypeId IN (?, ?, ?)
+      AND l.connectionTypeId IN (${Array(count).fill('?').join(',')})
   `,
 
   /** Next line in main book (by lineIndex) that has a link to a given commentary book */

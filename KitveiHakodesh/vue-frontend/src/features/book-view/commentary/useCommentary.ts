@@ -60,6 +60,34 @@ export const STATIC_FILTER_CONNECTION_TYPES = new Set<StaticFilterConnectionType
   STATIC_FILTER_CONNECTION_TYPE_LIST,
 )
 
+/**
+ * Maps raw connection type names from the DB to the canonical CommentaryConnectionType
+ * used for grouping and display. New connection types added to the DB are mapped here
+ * so older DB versions that lack them continue to work — the mapping is only applied
+ * when the name is actually returned by the DB.
+ *
+ * COMMENTARY equivalents: SUPER_COMMENTARY, PARSHANUT, MIDRASH
+ * REFERENCE (ציונים) equivalents: MESORAH_HASHAS, EIN_MISHPAT, MISHNAH_IN_TALMUD
+ * All other unknown names fall back to OTHER (קשרים).
+ */
+const DB_CONNECTION_TYPE_TO_CANONICAL: Record<string, CommentaryConnectionType> = {
+  SOURCE: 'SOURCE',
+  TARGUM: 'TARGUM',
+  COMMENTARY: 'COMMENTARY',
+  SUPER_COMMENTARY: 'COMMENTARY',
+  PARSHANUT: 'COMMENTARY',
+  MIDRASH: 'COMMENTARY',
+  REFERENCE: 'REFERENCE',
+  MESORAH_HASHAS: 'REFERENCE',
+  EIN_MISHPAT: 'REFERENCE',
+  MISHNAH_IN_TALMUD: 'REFERENCE',
+  OTHER: 'OTHER',
+}
+
+function normalizeConnectionTypeName(dbName: string): CommentaryConnectionType {
+  return DB_CONNECTION_TYPE_TO_CANONICAL[dbName] ?? 'OTHER'
+}
+
 const CONNECTION_TYPE_SECTION_LABELS: Record<CommentaryConnectionType, string> = {
   SOURCE: '\u05DE\u05E7\u05D5\u05E8',
   TARGUM: '\u05EA\u05E8\u05D2\u05D5\u05DE\u05D9\u05DD',
@@ -189,6 +217,43 @@ function isStaticFilterConnectionType(type: string): type is StaticFilterConnect
   return STATIC_FILTER_CONNECTION_TYPES.has(type as StaticFilterConnectionType)
 }
 
+/**
+ * Returns all canonical connection type names that map to the given canonical type.
+ * Used when building SQL IN clauses that must match DB rows for a logical group
+ * (e.g. all DB names that are treated as COMMENTARY).
+ */
+function getDbNamesForCanonicalType(canonical: CommentaryConnectionType): string[] {
+  return Object.entries(DB_CONNECTION_TYPE_TO_CANONICAL)
+    .filter(([, mapped]) => mapped === canonical)
+    .map(([dbName]) => dbName)
+}
+
+/**
+ * Returns the IDs of all connection types in the DB that canonicalize to COMMENTARY.
+ * These are the types used for the reverse source lookup — the source text is found
+ * by reversing a commentary-type link rather than trusting the unreliable SOURCE type.
+ * Returns an empty array when the connection type table hasn't been loaded yet (caller
+ * must call ensureConnectionTypeNamesLoaded first).
+ */
+function getCommentaryConnectionTypeIds(): number[] {
+  return getDbNamesForCanonicalType('COMMENTARY')
+    .map((name) => getConnectionTypeId(name))
+    .filter((id): id is number => id != null)
+}
+
+/**
+ * Returns the IDs of all connection types in the DB that canonicalize to TARGUM.
+ * Used for the reverse targum lookup — the targum source is found by reversing a
+ * TARGUM-type link rather than trusting the forward TARGUM connection type.
+ * Returns an empty array when the connection type table hasn't been loaded yet (caller
+ * must call ensureConnectionTypeNamesLoaded first).
+ */
+function getTargumConnectionTypeIds(): number[] {
+  return getDbNamesForCanonicalType('TARGUM')
+    .map((name) => getConnectionTypeId(name))
+    .filter((id): id is number => id != null)
+}
+
 type ByBookConnectionKey = string // `${bookId}::${connectionTypeName}`
 type ByBookConnectionMap = Map<ByBookConnectionKey, { bookId: number; lineIds: Set<number>; connectionType: string }>
 
@@ -266,6 +331,8 @@ async function buildCommentaryGroupsFromCombined(
     lineIndex: number
     content: string
   }>,
+  sourceEntries: CommentaryBookEntry[],
+  targumEntries: CommentaryBookEntry[],
   allBooksMap: Map<number, BookRow>,
 ): Promise<CommentaryGroup[]> {
   await ensureConnectionTypeNamesLoaded()
@@ -273,10 +340,14 @@ async function buildCommentaryGroupsFromCombined(
   const lineData = new Map<number, { lineIndex: number; content: string }>()
 
   for (const row of rows) {
-    const connectionTypeName = getConnectionTypeName(row.connectionTypeId)
-    const key: ByBookConnectionKey = `${row.targetBookId}::${connectionTypeName}`
+    const rawConnectionTypeName = getConnectionTypeName(row.connectionTypeId)
+    const canonicalConnectionTypeName = normalizeConnectionTypeName(rawConnectionTypeName)
+    // SOURCE and TARGUM are retrieved via reverse queries — skip any forward rows for
+    // these types so that unreliable forward-direction links in the DB are ignored.
+    if (canonicalConnectionTypeName === 'SOURCE' || canonicalConnectionTypeName === 'TARGUM') continue
+    const key: ByBookConnectionKey = `${row.targetBookId}::${canonicalConnectionTypeName}`
     if (!byBookConnection.has(key))
-      byBookConnection.set(key, { bookId: row.targetBookId, lineIds: new Set(), connectionType: connectionTypeName })
+      byBookConnection.set(key, { bookId: row.targetBookId, lineIds: new Set(), connectionType: canonicalConnectionTypeName })
     byBookConnection.get(key)!.lineIds.add(row.targetLineId)
     lineData.set(row.targetLineId, { lineIndex: row.lineIndex, content: row.content })
   }
@@ -289,7 +360,7 @@ async function buildCommentaryGroupsFromCombined(
     allConnectionTypesByBook.get(bookId)!.add(connectionType)
   }
 
-  const entries: CommentaryBookEntry[] = [...byBookConnection.values()].map(({ bookId, lineIds, connectionType }) => {
+  const forwardEntries: CommentaryBookEntry[] = [...byBookConnection.values()].map(({ bookId, lineIds, connectionType }) => {
     const book = allBooksMap.get(bookId)
     const connectionTypes = [...(allConnectionTypesByBook.get(bookId) ?? new Set())]
 
@@ -310,7 +381,132 @@ async function buildCommentaryGroupsFromCombined(
     }
   })
 
-  return buildCommentaryGroupsFromEntries(entries)
+  return buildCommentaryGroupsFromEntries([...sourceEntries, ...targumEntries, ...forwardEntries])
+}
+
+/**
+ * Fetches the source text entries for a set of line IDs using a reverse commentary lookup.
+ * Instead of querying links where connectionType = SOURCE (unreliable), this queries links
+ * where targetLineId is one of the given lines and connectionType is a COMMENTARY-type,
+ * then returns the SOURCE book lines those commentary links point back to.
+ *
+ * Returns CommentaryBookEntry objects with primaryConnectionType = 'SOURCE', ready to be
+ * merged with the forward commentary entries before building the display groups.
+ */
+async function fetchSourceEntriesViaReverseQuery(
+  lineIds: number[],
+  allBooksMap: Map<number, BookRow>,
+): Promise<CommentaryBookEntry[]> {
+  const commentaryTypeIds = getCommentaryConnectionTypeIds()
+  if (!commentaryTypeIds.length) return []
+
+  const isMulti = lineIds.length > 1
+  const sql = isMulti
+    ? SQL.GET_SOURCE_DATA_BY_REVERSE_COMMENTARY_LOOKUP_RANGE(commentaryTypeIds.length, lineIds.length)
+    : SQL.GET_SOURCE_DATA_BY_REVERSE_COMMENTARY_LOOKUP(commentaryTypeIds.length)
+  const params = isMulti
+    ? [...lineIds, ...commentaryTypeIds]
+    : [lineIds[0]!, ...commentaryTypeIds]
+
+  const rows = await query<{
+    sourceBookId: number
+    sourceLineId: number
+    lineIndex: number
+    content: string
+  }>(sql, params)
+
+  if (!rows.length) return []
+
+  // Group lines by source book — each book becomes one SOURCE entry.
+  const byBook = new Map<number, { lineIds: Set<number> }>()
+  const lineData = new Map<number, { lineIndex: number; content: string }>()
+
+  for (const row of rows) {
+    if (!byBook.has(row.sourceBookId)) byBook.set(row.sourceBookId, { lineIds: new Set() })
+    byBook.get(row.sourceBookId)!.lineIds.add(row.sourceLineId)
+    lineData.set(row.sourceLineId, { lineIndex: row.lineIndex, content: row.content })
+  }
+
+  return [...byBook.entries()].map(([bookId, { lineIds }]) => {
+    const book = allBooksMap.get(bookId)
+    return {
+      bookId,
+      bookTitle: book?.title ?? String(bookId),
+      connectionTypes: ['SOURCE'],
+      lines: [...lineIds]
+        .map((id) => ({
+          lineId: id,
+          lineIndex: lineData.get(id)?.lineIndex ?? 0,
+          content: lineData.get(id)?.content ?? '',
+        }))
+        .sort((a, b) => a.lineIndex - b.lineIndex),
+      category: resolveCategory(book),
+      treeOrder: book?.treeOrder ?? 999999,
+      primaryConnectionType: 'SOURCE',
+    }
+  })
+}
+
+/**
+ * Fetches the targum entries for a set of line IDs using a reverse TARGUM lookup.
+ * Mirrors fetchSourceEntriesViaReverseQuery — instead of using the forward TARGUM
+ * connection type (which may be unreliable), this finds lines in targum books that
+ * have a TARGUM-type link pointing at the given lines and returns those lines.
+ *
+ * Returns CommentaryBookEntry objects with primaryConnectionType = 'TARGUM', ready to be
+ * merged with the source and forward commentary entries before building the display groups.
+ */
+async function fetchTargumEntriesViaReverseQuery(
+  lineIds: number[],
+  allBooksMap: Map<number, BookRow>,
+): Promise<CommentaryBookEntry[]> {
+  const targumTypeIds = getTargumConnectionTypeIds()
+  if (!targumTypeIds.length) return []
+
+  const isMulti = lineIds.length > 1
+  const sql = isMulti
+    ? SQL.GET_TARGUM_DATA_BY_REVERSE_TARGUM_LOOKUP_RANGE(targumTypeIds.length, lineIds.length)
+    : SQL.GET_TARGUM_DATA_BY_REVERSE_TARGUM_LOOKUP(targumTypeIds.length)
+  const params = isMulti
+    ? [...lineIds, ...targumTypeIds]
+    : [lineIds[0]!, ...targumTypeIds]
+
+  const rows = await query<{
+    sourceBookId: number
+    sourceLineId: number
+    lineIndex: number
+    content: string
+  }>(sql, params)
+
+  if (!rows.length) return []
+
+  const byBook = new Map<number, { lineIds: Set<number> }>()
+  const lineData = new Map<number, { lineIndex: number; content: string }>()
+
+  for (const row of rows) {
+    if (!byBook.has(row.sourceBookId)) byBook.set(row.sourceBookId, { lineIds: new Set() })
+    byBook.get(row.sourceBookId)!.lineIds.add(row.sourceLineId)
+    lineData.set(row.sourceLineId, { lineIndex: row.lineIndex, content: row.content })
+  }
+
+  return [...byBook.entries()].map(([bookId, { lineIds }]) => {
+    const book = allBooksMap.get(bookId)
+    return {
+      bookId,
+      bookTitle: book?.title ?? String(bookId),
+      connectionTypes: ['TARGUM'],
+      lines: [...lineIds]
+        .map((id) => ({
+          lineId: id,
+          lineIndex: lineData.get(id)?.lineIndex ?? 0,
+          content: lineData.get(id)?.content ?? '',
+        }))
+        .sort((a, b) => a.lineIndex - b.lineIndex),
+      category: resolveCategory(book),
+      treeOrder: book?.treeOrder ?? 999999,
+      primaryConnectionType: 'TARGUM',
+    }
+  })
 }
 
 async function buildStaticCommentaryFilterGroups(
@@ -321,24 +517,55 @@ async function buildStaticCommentaryFilterGroups(
   const cached = instanceCache.get(sourceBookId)
   if (cached) return cached
   await ensureConnectionTypeNamesLoaded()
-  const connectionTypeIds = STATIC_FILTER_CONNECTION_TYPE_LIST.map((name) =>
-    getConnectionTypeId(name),
-  )
-  if (connectionTypeIds.some((id) => id == null)) return []
 
-  const rows = await query<{ targetBookId: number; connectionTypeId: number }>(
-    SQL.GET_STATIC_COMMENTARY_FILTER_BOOKS_FOR_SOURCE_BOOK,
-    [sourceBookId, ...connectionTypeIds],
+  // Forward lookup: COMMENTARY only (SOURCE and TARGUM are unreliable in the forward
+  // direction — both are discovered via reverse lookups instead).
+  const forwardCanonicalTypes: StaticFilterConnectionType[] = ['COMMENTARY']
+  const forwardDbNames = forwardCanonicalTypes.flatMap((canonical) =>
+    getDbNamesForCanonicalType(canonical),
   )
-  if (!rows.length) return []
+  const forwardConnectionTypeIds = forwardDbNames
+    .map((name) => getConnectionTypeId(name))
+    .filter((id): id is number => id != null)
 
+  // Reverse lookups: find source books and targum books that link to this base book.
+  const commentaryTypeIds = getCommentaryConnectionTypeIds()
+  const targumTypeIds = getTargumConnectionTypeIds()
+
+  // Run all three queries in parallel — none depends on another's result.
+  const [forwardRows, reverseSourceRows, reverseTargumRows] = await Promise.all([
+    forwardConnectionTypeIds.length
+      ? query<{ targetBookId: number; connectionTypeId: number }>(
+          SQL.GET_STATIC_COMMENTARY_FILTER_BOOKS_FOR_SOURCE_BOOK(forwardConnectionTypeIds.length),
+          [sourceBookId, ...forwardConnectionTypeIds],
+        )
+      : Promise.resolve([]),
+    commentaryTypeIds.length
+      ? query<{ sourceBookId: number }>(
+          SQL.GET_SOURCE_BOOKS_BY_REVERSE_COMMENTARY_LOOKUP(commentaryTypeIds.length),
+          [sourceBookId, ...commentaryTypeIds],
+        )
+      : Promise.resolve([]),
+    targumTypeIds.length
+      ? query<{ sourceBookId: number }>(
+          SQL.GET_TARGUM_BOOKS_BY_REVERSE_TARGUM_LOOKUP(targumTypeIds.length),
+          [sourceBookId, ...targumTypeIds],
+        )
+      : Promise.resolve([]),
+  ])
+
+  if (!forwardRows.length && !reverseSourceRows.length && !reverseTargumRows.length) return []
+
+  // Build entries from the forward rows (COMMENTARY only).
   const byBook = new Map<number, Set<string>>()
-  for (const row of rows) {
+  for (const row of forwardRows) {
     if (!byBook.has(row.targetBookId)) byBook.set(row.targetBookId, new Set())
-    byBook.get(row.targetBookId)!.add(getConnectionTypeName(row.connectionTypeId))
+    const rawName = getConnectionTypeName(row.connectionTypeId)
+    const canonicalName = normalizeConnectionTypeName(rawName)
+    byBook.get(row.targetBookId)!.add(canonicalName)
   }
 
-  const entries: CommentaryBookEntry[] = [...byBook.entries()].map(([bookId, typesSet]) => {
+  const commentaryEntries: CommentaryBookEntry[] = [...byBook.entries()].map(([bookId, typesSet]) => {
     const book = allBooksMap.get(bookId)
     const connectionTypes = [...typesSet]
     return {
@@ -352,7 +579,35 @@ async function buildStaticCommentaryFilterGroups(
     }
   })
 
-  const result = buildCommentaryGroupsFromEntries(entries)
+  // SOURCE entries from the reverse commentary lookup.
+  const sourceEntries: CommentaryBookEntry[] = reverseSourceRows.map(({ sourceBookId: bookId }) => {
+    const book = allBooksMap.get(bookId)
+    return {
+      bookId,
+      bookTitle: book?.title ?? String(bookId),
+      connectionTypes: ['SOURCE'],
+      lines: [],
+      category: resolveCategory(book),
+      treeOrder: book?.treeOrder ?? 999999,
+      primaryConnectionType: 'SOURCE',
+    }
+  })
+
+  // TARGUM entries from the reverse targum lookup.
+  const targumEntries: CommentaryBookEntry[] = reverseTargumRows.map(({ sourceBookId: bookId }) => {
+    const book = allBooksMap.get(bookId)
+    return {
+      bookId,
+      bookTitle: book?.title ?? String(bookId),
+      connectionTypes: ['TARGUM'],
+      lines: [],
+      category: resolveCategory(book),
+      treeOrder: book?.treeOrder ?? 999999,
+      primaryConnectionType: 'TARGUM',
+    }
+  })
+
+  const result = buildCommentaryGroupsFromEntries([...sourceEntries, ...targumEntries, ...commentaryEntries])
   instanceCache.set(sourceBookId, result)
   return result
 }
@@ -399,22 +654,33 @@ export function useCommentary(
     try {
       await booksDataStore.ensureLoaded()
       await booksDataStore.ensureCommentaryMetadataLoaded()
+      // Must be loaded before the parallel queries below so getCommentaryConnectionTypeIds()
+      // in fetchSourceEntriesViaReverseQuery has the ID map available.
+      await ensureConnectionTypeNamesLoaded()
 
       const sql = isMulti
         ? SQL.GET_COMMENTARY_DATA_FOR_SOURCE_LINE_RANGE(multiIds.length)
         : SQL.GET_COMMENTARY_DATA_FOR_SOURCE_LINE
       const params = isMulti ? multiIds : [lineId]
 
-      const rows = await query<{
-        targetBookId: number
-        targetLineId: number
-        connectionTypeId: number
-        lineIndex: number
-        content: string
-      }>(sql, params)
-      if (!rows.length) return
+      // Run the forward commentary query and the reverse lookups in parallel.
+      // The reverse lookups find source and targum text by reversing the respective
+      // link types instead of relying on unreliable forward-direction SOURCE/TARGUM links.
+      const lineIdsForReverse = isMulti ? multiIds : [lineId]
+      const [rows, sourceEntries, targumEntries] = await Promise.all([
+        query<{
+          targetBookId: number
+          targetLineId: number
+          connectionTypeId: number
+          lineIndex: number
+          content: string
+        }>(sql, params),
+        fetchSourceEntriesViaReverseQuery(lineIdsForReverse, booksDataStore.allBooksMap),
+        fetchTargumEntriesViaReverseQuery(lineIdsForReverse, booksDataStore.allBooksMap),
+      ])
+      if (!rows.length && !sourceEntries.length && !targumEntries.length) return
 
-      groups.value = await buildCommentaryGroupsFromCombined(rows, booksDataStore.allBooksMap)
+      groups.value = await buildCommentaryGroupsFromCombined(rows, sourceEntries, targumEntries, booksDataStore.allBooksMap)
 
       const pinned = pinnedBookId()
       if (pinned != null && !groups.value.some((g) => g.bookId === pinned)) {

@@ -106,6 +106,63 @@ PDF.js uses `enableOptimizedPartialRendering` to render pages in tiles. `minDura
 
 ---
 
+### 0b. Cancel in-progress renders on large scroll jumps
+
+This is the most impactful patch for the "slow scrollbar jump" complaint.
+
+**Root cause:** when the user drags the scrollbar far (page 10 → page 350), PDF.js sets the new page as highest priority but does **not cancel** the previously-rendering pages. Those pages hold live `renderTask` objects that continue executing on the microtask queue — their `onContinue` callbacks fire every tile, check `isHighestPriority`, pause themselves, then re-fire. This microtask churn competes with the new target page's first tiles, causing a blank-then-render delay that scales with how many pages were mid-render when the jump happened.
+
+**The fix:** detect a large scroll jump in `_scrollUpdate` (jump distance > one viewport height in a single rAF tick, which only happens on scrollbar drag, not smooth scrolling), and call `_cancelRendering()` immediately before starting the new render cycle. This hard-cancels all in-progress `renderTask` objects so the new target page gets the full microtask queue and renders its first tiles as fast as possible.
+
+Search for the `_scrollUpdate` method in the `PDFViewer` class:
+```js
+  _scrollUpdate() {
+    if (this.pagesCount === 0) {
+      return;
+    }
+    if (this.#scrollTimeoutId) {
+      clearTimeout(this.#scrollTimeoutId);
+    }
+    this.#scrollTimeoutId = setTimeout(() => {
+      this.#scrollTimeoutId = null;
+      this.update();
+    }, 100);
+    this.update();
+  }
+```
+
+Replace with (also add `#lastScrollTop = 0;` as a class field immediately before `_scrollUpdate`):
+```js
+  // PATCH: track the last known scrollTop to detect large jumps.
+  #lastScrollTop = 0;
+  _scrollUpdate() {
+    if (this.pagesCount === 0) {
+      return;
+    }
+    // PATCH: when the user drags the scrollbar to a distant page, the scroll
+    // position jumps by more than one viewport height in a single rAF tick.
+    // In that case, cancel all in-progress renders immediately so the new
+    // target page gets the full CPU budget rather than competing with renders
+    // for pages that are no longer visible.
+    const currentScrollTop = this.container.scrollTop;
+    const jumpThreshold = this.container.clientHeight;
+    if (Math.abs(currentScrollTop - this.#lastScrollTop) > jumpThreshold) {
+      this._cancelRendering();
+    }
+    this.#lastScrollTop = currentScrollTop;
+    if (this.#scrollTimeoutId) {
+      clearTimeout(this.#scrollTimeoutId);
+    }
+    this.#scrollTimeoutId = setTimeout(() => {
+      this.#scrollTimeoutId = null;
+      this.update();
+    }, 100);
+    this.update();
+  }
+```
+
+---
+
 ### 0a. Page cache size (memory)
 
 Search for: `const DEFAULT_CACHE_SIZE = 10;`
@@ -153,6 +210,7 @@ AppOptions.setAll({
   enableAutoLinking: false,     // no URL scanning in text layer
   maxCanvasPixels: 4096 * 4096, // cap canvas at ~16M px, not 33M
   disableAutoFetch: true,       // don't fetch the whole PDF upfront; MUST be set here, not in the URL hash
+  disableStream: true,          // use direct range reads instead of chunked streaming; faster for local files via WebView2 virtual hosts
 });
 ```
 
