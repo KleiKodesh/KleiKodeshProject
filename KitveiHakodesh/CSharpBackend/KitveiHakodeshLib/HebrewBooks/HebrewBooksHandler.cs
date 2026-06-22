@@ -2,6 +2,7 @@ using KitveiHakodeshLib.Bridge;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using System.Windows.Forms;
@@ -23,6 +24,11 @@ namespace KitveiHakodeshLib.HebrewBooks
 
         private HbDownloadInfo? _pendingDownload;
         private HbSaveAsInfo? _pendingSaveAs;
+        // Virtual host names registered for local-folder books, keyed by folder path.
+        // Re-used across opens so the same folder is never mapped twice.
+        private readonly Dictionary<string, string> _localBookHosts =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private int _localBookHostCounter;
 
         private struct HbDownloadInfo { public string BookId; public string BookTitle; public string TabId; }
         private struct HbSaveAsInfo { public string BookId; public string BookTitle; }
@@ -56,6 +62,17 @@ namespace KitveiHakodeshLib.HebrewBooks
             string bookTitle = root.GetProperty("bookTitle").GetString();
             string url       = root.GetProperty("url").GetString();
             string tabId     = root.GetProperty("tabId").GetString();
+            string localFolder = root.TryGetProperty("localFolder", out var lf) ? (lf.GetString() ?? "") : "";
+
+            // Check the user's local offline collection first — fastest path, no download needed.
+            string localPath = GetLocalFolderPath(localFolder, bookId);
+            if (localPath != null)
+            {
+                Log("Local folder hit: " + localPath);
+                string localUrl = RegisterLocalBookHost(localPath, bookId);
+                _bridge.PushEvent(new { @event = "hbPdfReady", url = localUrl, bookId, bookTitle, tabId });
+                return;
+            }
 
             string cached = GetCachePath(bookId, bookTitle);
             if (File.Exists(cached)) { _bridge.PushEvent(new { @event = "hbPdfReady", url = CacheUrl(cached), bookId, bookTitle, tabId }); return; }
@@ -139,6 +156,43 @@ namespace KitveiHakodeshLib.HebrewBooks
                     }));
                 }
             };
+        }
+
+        /// <summary>
+        /// Returns the full path to {bookId}.pdf inside the configured local folder if it
+        /// exists and is accessible, otherwise null. Swallows I/O errors (e.g. disconnected
+        /// flash drive) and returns null so the caller falls back to the download path.
+        /// </summary>
+        private static string GetLocalFolderPath(string localFolder, string bookId)
+        {
+            if (string.IsNullOrWhiteSpace(localFolder)) return null;
+            try
+            {
+                string candidate = Path.Combine(localFolder, bookId + ".pdf");
+                return File.Exists(candidate) ? candidate : null;
+            }
+            catch (Exception)
+            {
+                // Drive disconnected, path invalid, permission denied — fall back to download.
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Registers a virtual host for the folder containing the local book file (if not
+        /// already registered) and returns the http URL for the specific PDF.
+        /// </summary>
+        private string RegisterLocalBookHost(string filePath, string bookId)
+        {
+            string folder = Path.GetDirectoryName(filePath);
+            if (!_localBookHosts.TryGetValue(folder, out string hostName))
+            {
+                hostName = "kitvei-hb-local-" + (++_localBookHostCounter);
+                _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                    hostName, folder, CoreWebView2HostResourceAccessKind.Allow);
+                _localBookHosts[folder] = hostName;
+            }
+            return "http://" + hostName + "/" + bookId + ".pdf";
         }
 
         private static void Log(string msg) => System.Diagnostics.Debug.WriteLine("[HbHandler] " + msg);

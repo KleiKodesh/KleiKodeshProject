@@ -215,14 +215,17 @@ export function exportToWord(html: string, title: string = ''): Promise<{ ok?: b
 
 /**
  * Trigger a HebrewBooks PDF download to the cache, then open it.
+ * If localFolder is provided, C# will first check for {localFolder}\{bookId}.pdf
+ * before falling back to the download flow.
  */
 export function triggerHbDownload(
   bookId: string,
   bookTitle: string,
   url: string,
   tabId: string,
+  localFolder?: string,
 ): Promise<{ ok?: boolean }> {
-  return action<{ ok?: boolean }>('triggerHbDownload', { bookId, bookTitle, url, tabId })
+  return action<{ ok?: boolean }>('triggerHbDownload', { bookId, bookTitle, url, tabId, localFolder: localFolder || '' })
 }
 
 /**
@@ -234,4 +237,16 @@ export function triggerHbSaveAs(
   url: string,
 ): Promise<{ ok?: boolean }> {
   return action<{ ok?: boolean }>('triggerHbSaveAs', { bookId, bookTitle, url })
+}
+
+/**
+ * Open a native folder picker dialog.
+ * Returns the selected folder path, or null if the user cancels.
+ * Only available in hosted mode; returns null in dev mode.
+ */
+export async function pickFolder(): Promise<string | null> {
+  if (typeof window.__webviewAction !== 'function') return null
+  const result = await action<{ folderPath?: string; cancelled?: boolean; error?: string }>('pickFolder')
+  if (result.cancelled || result.error || !result.folderPath) return null
+  return result.folderPath
 }

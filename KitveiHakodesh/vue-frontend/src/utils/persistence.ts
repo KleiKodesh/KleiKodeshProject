@@ -245,6 +245,7 @@ export const KEYS = {
   SETTINGS_SEARCH_WILDCARD_WRAP: 'search.wildcardWrap',
   SETTINGS_SEARCH_GRAMMAR_WRAP: 'search.grammarWrap',
   SETTINGS_COPY_CLEAN_TEXT: 'copyCleanText',
+  SETTINGS_HB_LOCAL_FOLDER: 'hebrewBooks.localFolder',
   // tab list is also localStorage (small JSON, needed synchronously at boot)
   tabsList: (wsId: string) => `tabs:${wsId}`,
 

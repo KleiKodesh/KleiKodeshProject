@@ -4,11 +4,13 @@ import { useHebrewBooksHistoryStore } from '@/stores/hebrewBooksHistoryStore'
 import { searchHbCatalog, getHbPdfUrl, type HebrewBook } from './hebrewBooksCatalog'
 import { useLocalFileStore } from '@/stores/localFileStore'
 import { useTabStore } from '@/stores/tabStore'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { triggerHbDownload, triggerHbSaveAs } from '@/webview-host/bridge'
 
 export function useHebrewBooks() {
   const localFileStore = useLocalFileStore()
   const history = useHebrewBooksHistoryStore()
+  const settings = useSettingsStore()
 
   const books = ref<HebrewBook[]>([])
   const isLoading = ref(false)
@@ -49,7 +51,13 @@ export function useHebrewBooks() {
     trackAccess(book)
     const tabId = useTabStore().activeTabId
     localFileStore.startHbDownload(book.title, tabId)
-    triggerHbDownload(String(book.id), book.title, getHbPdfUrl(book.id), tabId).catch(() => {})
+    triggerHbDownload(
+      String(book.id),
+      book.title,
+      getHbPdfUrl(book.id),
+      tabId,
+      settings.hebrewBooksLocalFolder || undefined,
+    ).catch(() => {})
   }
 
   function downloadBook(book: HebrewBook) {

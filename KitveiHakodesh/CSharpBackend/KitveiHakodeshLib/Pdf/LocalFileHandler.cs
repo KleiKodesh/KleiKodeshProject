@@ -154,6 +154,29 @@ namespace KitveiHakodeshLib.LocalFile
             }
         }
 
+        /// <summary>
+        /// Opens a native folder picker dialog and replies with the selected folder path.
+        /// Replies { cancelled: true } if the user cancels.
+        /// Must be called from within a BeginInvoke because it shows a dialog.
+        /// </summary>
+        public void HandlePickFolder(string id, Control owner)
+        {
+            owner.BeginInvoke(new Action(() =>
+            {
+                using (var dlg = new FolderBrowserDialog())
+                {
+                    dlg.Description = "בחר תיקיית ספרים מקומית";
+                    dlg.ShowNewFolderButton = false;
+                    if (dlg.ShowDialog() != DialogResult.OK)
+                    {
+                        _bridge.Reply(id, new { cancelled = true });
+                        return;
+                    }
+                    _bridge.Reply(id, new { folderPath = dlg.SelectedPath });
+                }
+            }));
+        }
+
         public void HandlePickFile(string id, Control owner)
         {
             owner.BeginInvoke(new Action(async () =>

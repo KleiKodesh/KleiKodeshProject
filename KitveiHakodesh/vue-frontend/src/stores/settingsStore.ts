@@ -35,6 +35,7 @@ const DEFAULTS = {
   searchWildcardWrap: false,
   searchGrammarWrap: false,
   copyCleanText: false,
+  hebrewBooksLocalFolder: '',
 }
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -64,6 +65,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const searchWildcardWrap = ref(DEFAULTS.searchWildcardWrap)
   const searchGrammarWrap = ref(DEFAULTS.searchGrammarWrap)
   const copyCleanText = ref(DEFAULTS.copyCleanText)
+  const hebrewBooksLocalFolder = ref(DEFAULTS.hebrewBooksLocalFolder)
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -134,6 +136,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_SEARCH_WILDCARD_WRAP, searchWildcardWrap)
     loadSetting(KEYS.SETTINGS_SEARCH_GRAMMAR_WRAP, searchGrammarWrap)
     loadSetting(KEYS.SETTINGS_COPY_CLEAN_TEXT, copyCleanText)
+    loadSetting(KEYS.SETTINGS_HB_LOCAL_FOLDER, hebrewBooksLocalFolder)
     applyCSSVariables()
   }
 
@@ -163,6 +166,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(searchWildcardWrap, KEYS.SETTINGS_SEARCH_WILDCARD_WRAP)
   persistSetting(searchGrammarWrap, KEYS.SETTINGS_SEARCH_GRAMMAR_WRAP)
   persistSetting(copyCleanText, KEYS.SETTINGS_COPY_CLEAN_TEXT)
+  persistSetting(hebrewBooksLocalFolder, KEYS.SETTINGS_HB_LOCAL_FOLDER)
 
   // ── Actions ───────────────────────────────────────────────────────────────
 
@@ -224,6 +228,7 @@ export const useSettingsStore = defineStore('settings', () => {
     searchWildcardWrap.value = DEFAULTS.searchWildcardWrap
     searchGrammarWrap.value = DEFAULTS.searchGrammarWrap
     copyCleanText.value = DEFAULTS.copyCleanText
+    hebrewBooksLocalFolder.value = DEFAULTS.hebrewBooksLocalFolder
     lsClearSettingsOnly()
     applyCSSVariables()
   }
@@ -235,6 +240,7 @@ export const useSettingsStore = defineStore('settings', () => {
     defaultAutoSyncCommentary, setupDone, midotDisclaimerAccepted, searchContextMarginWords,
     searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchWildcardWrap, searchGrammarWrap,
     copyCleanText,
+    hebrewBooksLocalFolder,
     init, cycleDiacritics, cycleDiacriticsNoTeamim, togglePdfPageFilters, reset, completeSetup, acceptMidotDisclaimer,
   }
 })

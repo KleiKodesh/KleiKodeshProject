@@ -150,6 +150,11 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="Resources\HebrewBooks.db">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+  <ItemGroup>
     <EmbeddedResource Include="..\..\..\KleiKodeshVsto\Resources\KitveiHakodesh.png">
       <Link>KitveiHakodesh.png</Link>
       <LogicalName>KitveiHakodesh.png</LogicalName>

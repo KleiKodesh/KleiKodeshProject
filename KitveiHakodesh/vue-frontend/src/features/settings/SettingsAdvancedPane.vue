@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, nextTick, onMounted } from 'vue'
+import { storeToRefs } from 'pinia'
 import {
   IconFolderOpen20Regular,
   IconChevronDown20Regular,
   IconChevronUp20Regular,
+  IconDismiss20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useSettings } from './useSettingsPage'
@@ -12,6 +14,8 @@ import SettingRow from './SettingRow.vue'
 import { resetting } from '@/features/settings/appResetState'
 import { isHosted, onDbReady } from '@/webview-host/seforimDb'
 import { useZmanim, CITIES } from '@/features/hebrew-calendar/useZmanim'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { pickFolder } from '@/webview-host/bridge'
 
 const { resetSettings, resetSearchIndex, resetAll, resetDocumentLocatorIndex } = useSettings()
 
@@ -38,6 +42,22 @@ async function commitPath() {
     dbPath.value = window.__webviewDbPath ?? ''
   }
 }
+
+// ── Hebrew Books local folder ─────────────────────────────────────────────────
+
+const settings = useSettingsStore()
+const { hebrewBooksLocalFolder } = storeToRefs(settings)
+
+async function pickHebrewBooksFolder() {
+  const result = await pickFolder()
+  if (result) hebrewBooksLocalFolder.value = result
+}
+
+function clearHebrewBooksFolder() {
+  hebrewBooksLocalFolder.value = ''
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 type ConfirmAction = { label: string; desc: string; action: () => Promise<void> | void }
 const pendingConfirm = ref<ConfirmAction | null>(null)
@@ -179,6 +199,38 @@ function pickCity(name: string) {
         </div>
       </Teleport>
     </SettingRow>
+  </div>
+
+  <!-- ── היברו בוקס ── -->
+  <div data-section="section-hebrewbooks" data-section-label="היברו בוקס">
+    <div id="section-hebrewbooks" class="section-label">היברו בוקס</div>
+
+    <SettingRow
+      label="תיקיית ספרים מקומית"
+      hint="אם ברשותך אוסף מקומי של ספרים מהיברו בוקס, ציין את נתיב התיקייה. הספרים יטענו מהתיקייה במקום להוריד מהאינטרנט. אם ספר אינו נמצא בתיקייה, תתבצע הורדה רגילה."
+    >
+      <div class="db-path-field" :class="{ 'has-value': !!hebrewBooksLocalFolder }">
+        <button class="folder-btn" :disabled="!isHosted" @click="pickHebrewBooksFolder" title="בחר תיקייה">
+          <IconFolderOpen20Regular />
+        </button>
+        <span
+          class="db-path-text"
+          :class="{ placeholder: !hebrewBooksLocalFolder }"
+          dir="ltr"
+        >
+          {{ hebrewBooksLocalFolder || 'לא נבחרה תיקייה' }}
+        </span>
+        <button
+          v-if="hebrewBooksLocalFolder"
+          class="clear-btn"
+          title="נקה נתיב"
+          @click="clearHebrewBooksFolder"
+        >
+          <IconDismiss20Regular />
+        </button>
+      </div>
+    </SettingRow>
+    <p v-if="!isHosted" class="hint-text">זמין רק בתוך האפליקציה המארחת</p>
   </div>
 
   <!-- ── מסד נתונים ── -->
@@ -356,6 +408,35 @@ function pickCity(name: string) {
 .folder-btn:hover {
   color: var(--text-primary);
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+.folder-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.clear-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-inline-start: 1px solid var(--border-color);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-secondary);
+}
+.clear-btn:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+
+.hint-text {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin: -4px 0 10px;
 }
 
 .select-box {

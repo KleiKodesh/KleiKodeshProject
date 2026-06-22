@@ -434,6 +434,7 @@ namespace KitveiHakodeshLib
                         case "resetSettings": _db.HandleResetSettings(id); break;
                         case "reload": _bridge.Reply(id, new { }); await HandleReload(); break;
                         case "pickFile": _localFile.HandlePickFile(id, this); break;
+                        case "pickFolder": _localFile.HandlePickFolder(id, this); break;
                         case "restoreLocalFile": await _localFile.HandleRestoreLocalFile(root, id); break;
                         case "disposeLocalFileHost": _localFile.HandleDisposeLocalFileHost(root, id); break;
                         case "appReady": HandleAppReady(id); break;
