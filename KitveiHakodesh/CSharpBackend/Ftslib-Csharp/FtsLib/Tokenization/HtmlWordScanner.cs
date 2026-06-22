@@ -106,6 +106,13 @@ namespace FtsLib.Tokenization
                     _buffer.Append(c);
                     _visibleCount++;
                 }
+                else if (IsIntraWordQuote(c) && _buffer.Length > 0)
+                {
+                    // Hebrew geresh/gershayim and ASCII quotes appearing inside a word
+                    // (e.g. רשב"א, רש"י) are transparent connectors — skip without
+                    // flushing so the word is indexed as a single token.
+                    _visibleCount++;
+                }
                 else
                 {
                     Flush(i);
@@ -157,5 +164,18 @@ namespace FtsLib.Tokenization
             => (c >= 'a' && c <= 'z')
             || (c >= 'A' && c <= 'Z')
             || (c >= '\u05D0' && c <= '\u05EA');
+
+        /// <summary>
+        /// Returns true for quote characters that may appear inside a Hebrew word
+        /// (e.g. רשב"א, רש"י) and should be treated as transparent connectors
+        /// rather than word separators.
+        ///   U+0022 — ASCII quotation mark   "
+        ///   U+05F4 — Hebrew gershayim       ״
+        ///   U+0027 — ASCII apostrophe       '
+        ///   U+05F3 — Hebrew geresh          ׳
+        /// </summary>
+        private static bool IsIntraWordQuote(char c)
+            => c == '\u0022' || c == '\u05F4'
+            || c == '\u0027' || c == '\u05F3';
     }
 }

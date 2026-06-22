@@ -168,6 +168,9 @@ namespace FtsLib.Search
         /// <summary>
         /// Strips nikud/cantillation, lowercases ASCII, drops non-letter non-'*' chars.
         /// Preserves '*' and '?' so the caller can detect wildcard position.
+        /// Hebrew geresh/gershayim and ASCII quote characters that appear inside a
+        /// word (buffer non-empty) are treated as transparent connectors and skipped,
+        /// matching the behaviour of the indexer's HtmlWordScanner.
         /// </summary>
         private static string Normalise(string token)
         {
@@ -186,6 +189,12 @@ namespace FtsLib.Search
                 // ASCII letters — lowercase
                 if (c >= 'A' && c <= 'Z') { sb.Append((char)(c | 32)); continue; }
                 if (c >= 'a' && c <= 'z') { sb.Append(c); continue; }
+
+                // Quote characters inside a word (e.g. רשב"א, רש"י) are transparent
+                // connectors — skip without breaking the accumulated token.
+                // U+0022 ASCII "  U+05F4 Hebrew gershayim  U+0027 ASCII '  U+05F3 Hebrew geresh
+                if ((c == '\u0022' || c == '\u05F4' || c == '\u0027' || c == '\u05F3')
+                    && sb.Length > 0) continue;
 
                 // Everything else (digits, punctuation, etc.) is dropped
             }
