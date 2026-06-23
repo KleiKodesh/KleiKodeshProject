@@ -400,7 +400,7 @@ Current caches and their caps:
 | `app-lastread`      | Per-book last-read positions (LRU-capped at 1000)                |
 | `app-search-cache`  | FTS search result cache (LRU-capped at 100 queries)              |
 
-All scalar settings (fonts, zoom, theme, toolbar state, workspaces, calendar prefs, etc.) live in localStorage via `lsGet`/`lsSet` — synchronous, zero async cost. IDB is only used for data that is too large or structured for localStorage (custom themes, tab/book state, last-read positions, search cache).
+All scalar settings (fonts, zoom, theme, toolbar state, workspaces, calendar prefs, etc.) live in localStorage via `lsGet`/`lsSet` — synchronous, zero async cost. IDB is only used for data that is too large or structured for localStorage (tab/book state, last-read positions, search cache).
 
 All persistence access must go through `src/utils/persistence.ts` exclusively — no component, composable, or store may call `localStorage` or any IDB API directly. This is a hard rule with no exceptions.
 
@@ -425,7 +425,7 @@ localStorage keys are prefixed with `kitvei-hakodesh.` automatically by `lsGet`/
 - `tabStore` — tab lifecycle, navigation, tab/book state, lastread, booksView setting, and `resetAll()`
 - `bookViewStore` — toolbar/searchBarPos; reads from localStorage at init (synchronous)
 - `settingsStore` — all app settings in localStorage; `init()` is synchronous
-- `themeStore` — theme preset + reading background in localStorage; custom themes in IDB via `themes.ts`
+- `themeStore` — theme preset + reading background in localStorage
 - `workspaceStore` — workspace list in localStorage; `init()` is synchronous
 
 ### lastread LRU cap

@@ -17,9 +17,10 @@ race conditions:
 - theme toggle
 - side panel
 - the unisnatll and תיקון are affecting the toolbars in egnral
-
+create excluded folders dilgue for the document locator
 
 maybe the pdf file memory leak is due to the fact that it defines whole folders as server?
+
 רא"ש מקוואות סימן ט
 הלכך אסור להטביל בשותת ובמים הנמשכין ממנו.
 צ"ל בשוקת

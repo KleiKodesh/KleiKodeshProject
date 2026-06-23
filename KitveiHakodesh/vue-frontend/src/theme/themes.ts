@@ -8,7 +8,6 @@ export const THEME_PRESETS: Record<ThemePreset, Theme> = themesData as Record<Th
 
 export const getTheme = (preset: ThemePreset): Theme | undefined => THEME_PRESETS[preset]
 export const getAllThemes = (): Record<ThemePreset, Theme> => ({ ...THEME_PRESETS })
-export const isCustomTheme = (_preset: ThemePreset): boolean => false
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -156,7 +155,7 @@ export function syncPdfViewerTheme(): void {
         doc.documentElement.classList.toggle('dark', isDark)
 
         if (preset) {
-          const family = isCustomTheme(preset as ThemePreset) ? 'custom' : preset.split('-')[0]
+          const family = preset.split('-')[0]
           if (family) doc.documentElement.setAttribute('data-theme-family', family)
           const filter = theme?.pdfFilter ?? (theme ? calcPdfFilter(theme) : null)
           if (filter) doc.documentElement.style.setProperty('--pdf-filter-custom', filter)
