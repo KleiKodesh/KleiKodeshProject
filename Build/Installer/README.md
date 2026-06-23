@@ -19,12 +19,12 @@ InstallPage   ○●○  Extraction + registration + version stamp
     ↓
 SettingsPage  ○○●  Ribbon components + default button
     ↓ הבא
-    ├─ KitveiHakodesh OR WebSites checked → AdvancedPage  ○○○
+    ├─ KitveiHakodesh OR WebSites checked → ComponentSettingsPage  ○○○
     │     KitveiHakodesh DB picker  (hidden if KitveiHakodesh unchecked)
     │     Websites list      (hidden if WebSites unchecked)
     │       └─ "ערוך רשימת אתרים" → WhitelistEditorDialog (modal)
     │     ↓ סיום
-    └─ both unchecked → skip AdvancedPage
+    └─ both unchecked → skip ComponentSettingsPage
     ↓
 Exit
 ```
@@ -42,16 +42,29 @@ Build/Installer/
 ├── KleiKodesh.zip                — Embedded VSTO package (built by pre-build target)
 ├── UpdateVersion.ps1             — Bumps Version constant + csproj <Version>
 ├── Helpers/
-│   ├── AddinInstaller.cs         — Extract, register, whitelist, version; holds Version const
-│   ├── SettingsManager.cs        — Registry-backed settings (ribbon visibility etc.)
-│   ├── TaskpaneManager.cs        — (shared with VSTO) taskpane lifecycle
-│   └── WordHelper.cs             — Detect / close Word before install
+│   ├── AddinInstaller.cs              — Extract, register, whitelist, version; holds Version const
+│   ├── AdminHelper.cs                 — UAC elevation & re-launch
+│   ├── DocumentLocatorHelper.cs       — Service shutdown/restart for file-locking
+│   ├── FullSystemCleaner.cs           — Full uninstall cleanup
+│   ├── KitveiHakodeshHelper.cs        — KitveiHakodesh DB path handling
+│   ├── SettingsManager.cs             — Registry-backed settings (ribbon visibility etc.)
+│   ├── ShellRegistrationHelper.cs     — Shell integration / file associations
+│   └── WordHelper.cs                  — Detect / close Word before install
 ├── Pages/
 │   ├── LandingPage.xaml(.cs)     — Step 1: welcome
 │   ├── SettingsPage.xaml(.cs)    — Step 2: ribbon settings
-│   ├── AdvancedPage.xaml(.cs)    — Step 3: KitveiHakodesh DB + website whitelist (conditional)
+│   ├── ComponentSettingsPage.xaml(.cs) — Step 3: KitveiHakodesh DB + website whitelist (conditional)
 │   ├── InstallPage.xaml(.cs)     — Extraction + registration progress
 │   └── RepairPage.xaml(.cs)      — Repair / uninstall flow
+├── Models/
+│   └── WhitelistEntry.cs             — Whitelist data model
+├── Resources/
+│   └── InstallerStyles.xaml          — XAML styles
+├── app.manifest                      — Application manifest (asInvoker)
+├── AssemblyInfo.cs                   — Assembly metadata
+├── InstallProgressWindow.xaml.cs     — Code-behind for install progress
+├── KleiKodeshVstoInstallerWpf.csproj — Project file (three-variant output paths)
+├── KleiKodesh_Main.ico               — Installer icon
 └── Dialogs/
     └── WhitelistEditorDialog.xaml(.cs)  — Modal editor for the website list
 ```
@@ -88,7 +101,7 @@ It is embedded into the installer exe as a resource (linked path in csproj, not 
 5. The VSTO add-in loads the file and shows every entry in it directly.
 
 ### Do not
-- Add `System.Text.Json` or `System.Web.Extensions` to this project — the embedded-DLL resolver cannot find them at the point the whitelist page loads. The parser/serializer in `AdvancedPage.xaml.cs` is intentionally hand-rolled.
+- Add `System.Text.Json` or `System.Web.Extensions` to this project — the embedded-DLL resolver cannot find them at the point the whitelist page loads. The parser/serializer in `ComponentSettingsPage.xaml.cs` is intentionally hand-rolled.
 - Call `ApplyPendingWhitelist()` before `ExtractAsync` — the install folder may not exist yet.
 
 ## Version Management
@@ -96,7 +109,7 @@ It is embedded into the installer exe as a resource (linked path in csproj, not 
 The version constant lives in `Helpers/AddinInstaller.cs`:
 
 ```csharp
-public const string Version = "v3.6.1";
+public const string Version = "v8.2.1";
 ```
 
 `UpdateVersion.ps1` (called by `Build/build-installer.ps1`) syncs this value to the csproj `<Version>` tag. Do not edit the version anywhere else — see `version-management.md` steering file.

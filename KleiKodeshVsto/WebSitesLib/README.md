@@ -11,6 +11,18 @@ The main library containing:
 - `MyWebView` — WebView2 wrapper component
 - `WebAddressModel` — Model for website entries
 - `WebSitesWhitelist.json` — Default list of curated websites
+- `WebSitesDictionary.xaml` — Resource dictionary with styles
+
+All source files live under the `UI/` subdirectory.
+
+**Theme files** (`UI/Themes/`):
+| File | Contents |
+|------|----------|
+| `Icons.xaml` | Icon geometry resources |
+| `Brushes.xaml` | Color tokens |
+| `ButtonStyles.xaml` | Button styles |
+| `AddressBarStyles.xaml` | Address bar styling |
+| `MiscStyles.xaml` | Miscellaneous styles |
 
 ### WebSitesDemo
 Standalone WPF demo application that hosts the WebSitesView control. Use this to test and develop the library independently of the VSTO add-in.
@@ -26,7 +38,6 @@ The library is referenced by `KleiKodeshVsto.csproj` and displayed as a task pan
 
 **Ribbon integration:**
 ```csharp
-// In KeliKodeshRibbon.cs
 case "WebSites":
     WpfTaskPane.Show(new WebSitesLib.WebSitesView(), "דרך האתרים", 510);
     break;
@@ -55,19 +66,32 @@ See `Build/Installer/README.md` for full details.
 
 ```
 WebSitesLib/
-├── WebSitesLib/              # Main library
-│   ├── BrowserTabControl.cs
-│   ├── MyWebView.cs
-│   ├── WebAddressModel.cs
-│   ├── WebSitesView.xaml
-│   ├── WebSitesView.xaml.cs
+├── WebSitesLib.sln
+├── WebSitesLib/                  # Main library
+│   ├── WebSitesLib.csproj
+│   ├── packages.config
 │   ├── WebSitesWhitelist.json
-│   └── Dictionary1.xaml      # Resource dictionary
-├── WebSitesDemo/             # Demo application
-│   ├── App.xaml
-│   ├── MainWindow.xaml
+│   ├── UI/
+│   │   ├── BrowserTabControl.cs
+│   │   ├── MyWebView.cs
+│   │   ├── WebAddressModel.cs
+│   │   ├── WebSitesView.xaml
+│   │   ├── WebSitesView.xaml.cs
+│   │   ├── WebSitesDictionary.xaml
+│   │   └── Themes/
+│   │       ├── Icons.xaml
+│   │       ├── Brushes.xaml
+│   │       ├── ButtonStyles.xaml
+│   │       ├── AddressBarStyles.xaml
+│   │       └── MiscStyles.xaml
 │   └── Properties/
-└── WebSitesLib.sln
+├── WebSitesDemo/                 # Demo application
+│   ├── WebSitesDemo.csproj
+│   ├── App.xaml / App.xaml.cs
+│   ├── MainWindow.xaml / .cs
+│   └── Properties/
+├── packages/
+└── README.md
 ```
 
 ## History

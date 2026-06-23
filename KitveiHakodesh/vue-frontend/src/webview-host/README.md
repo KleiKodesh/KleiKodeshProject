@@ -6,6 +6,14 @@ Database access and C# host bridge. Everything that communicates outside the Vue
 
 **dictionaryDb.ts** — dictionary database access layer. Import `queryDict<T>` for the Aramaic dictionary (KitveiHakodesh_dictionary.db). Never import from seforimDb — the separate file makes it impossible to accidentally query the wrong database.
 
+**dictionaryDb.sql.ts** — all SQL strings for the dictionary database. No inline SQL anywhere else in the dictionary query layer.
+
+**dictionarySeforimDb.ts** — seforim DB queries for the dictionary feature (מצודת ציון, מלבי"ם באור המילות, מחברת מנחם, ספר הערוך). Book IDs are looked up at runtime by title pattern and cached.
+
+**userSettingsDb.ts** — access layer for the user settings database (user_settings.db). Mirrors the seforimDb pattern with `queryUserSettings` and `executeUserSettings`.
+
+**userSettingsDb.sql.ts** — all SQL strings for the user settings database (user_highlights, user_notes tables). No inline SQL anywhere else.
+
 **bridge.ts** — C# host actions for file operations: `pickFile()`, `restoreLocalFile`, `restoreHbPdf`, `disposeLocalFileHost`. All have dev-mode fallbacks. Import from here for any native file system interaction.
 
 **queries.sql.ts** — all raw SQL strings in the app. Every new SQL query must be added here as a named constant. No inline SQL anywhere else in the codebase.

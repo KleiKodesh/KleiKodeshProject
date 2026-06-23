@@ -32,11 +32,17 @@ Commentary display, filtering, and navigation for the book view. All commentary-
 
 **useCommentaryTreeSearch.ts** - search logic for the commentary filter tree. Matches query words across the full path using `SegmentSearchTree`.
 
+**useCommentaryHighlights.ts** - manages user highlights for all commentary books visible in the commentary panel. Loads highlights lazily per commentary bookId as groups become visible. Supports apply/clear with overlap rules, persisted to `user_settings.db`.
+
+**useCommentaryNotes.ts** - manages user notes for all commentary books visible in the commentary panel. Lazy viewport-driven loading by commentary bookId, with create/update/delete mutations.
+
 ## Utilities
 
 **commentaryNavigation.ts** - commentary section navigation helpers (next/prev section, TOC-aware).
 
 **commentaryTreeTypes.ts** - TypeScript types for the commentary filter tree.
+
+**DEBUG_NOTES.md** - debug investigation notes for the pinned commentary scroll bugs. Kept for future reference if similar issues resurface.
 
 ## Imports from parent book-view
 

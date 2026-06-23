@@ -48,7 +48,11 @@ function cycleCommentaryMode() {
   if (commentaryMode.value === 'off') {
     commentaryMode.value = 'bottom'
   } else if (commentaryMode.value === 'bottom') {
-    commentaryMode.value = isWideScreen.value ? 'side' : 'off'
+    // Always try to advance to 'side' — the snap-back watcher below will
+    // immediately correct it to 'bottom' if the screen is too narrow.
+    // This avoids a race where isWideScreen hasn't evaluated yet (e.g. on
+    // WebView2 first paint) and the cycle skips 'side' entirely.
+    commentaryMode.value = 'side'
   } else {
     commentaryMode.value = 'off'
   }
@@ -103,6 +107,11 @@ watch(commentaryMode, (mode) => { commentaryVisible.value = mode !== 'off' })
 watch(commentaryVisible, (v) => { if (!v) commentaryMode.value = 'off' })
 // Snap back to bottom layout when screen becomes too narrow for side-by-side.
 watch(isWideScreen, (wide) => { if (!wide && commentaryMode.value === 'side') commentaryMode.value = 'bottom' })
+// When commentaryMode is set to 'side' but the screen is narrow, correct immediately.
+// This covers the race where isWideScreen hasn't evaluated yet during cycleCommentaryMode,
+// causing the cycle to silently skip 'side' — now we always advance to 'side' and let
+// this watcher immediately snap back to 'off' on narrow screens instead.
+watch(commentaryMode, (mode) => { if (mode === 'side' && !isWideScreen.value) commentaryMode.value = 'off' })
 // When switching between bottom and side layout, CommentaryView remounts — run the
 // same open-side effects (commentaryLineId init, scroll-to-pinned) as a fresh open.
 watch(commentaryMode, (mode, previous) => {

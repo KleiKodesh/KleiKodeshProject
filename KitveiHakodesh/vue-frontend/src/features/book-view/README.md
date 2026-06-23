@@ -8,11 +8,11 @@ Main book reader. Split pane with text above and commentary below, shared side p
 
 **BookViewToolbar.vue** - zoom, search, TOC toggle, and bottom panel toggle. Add new toolbar actions here.
 
-**BookViewSplitPane.vue** - thin wrapper around `SplitPane` for the text/commentary split. Do not add logic here.
-
 **BookViewSidePanel.vue** - shared side-panel shell for book-view tools such as TOC and commentary filters.
 
 **BookViewSearchBar.vue** - inline search bar. Query input, mode selection, and match navigation.
+
+**BookViewRelatedBooksDropdown.vue** - "ספרים קרובים" dropdown in the toolbar. Shows books linked to the current book (SOURCE / TARGUM / COMMENTARY / LINKED) and navigates on click.
 
 ## Lines Subfolder
 
@@ -49,13 +49,25 @@ import { useCommentary } from './commentary/useCommentary'
 
 ## Composables
 
+**useBookView.ts** - central composable for the book view page. Owns data loading, state, event handlers, watchers, and exposes everything `BookViewPage.vue` needs.
+
 **useBookViewSearch.ts** - in-book content search, line-based.
 
-**useBookViewHighlights.ts** - user-applied text highlights for the active book. Loads on mount, manages highlight state, handles apply/clear operations via context menu. Highlights persist in `user_settings.db` table `user_highlights`.
+**useBookViewScrollSync.ts** - syncs the active TOC entry and auto-selects commentary as the user scrolls. Updates `activeTocEntryId` and triggers commentary load on scroll.
 
-**useBookViewNotes.ts** - user-written footnote annotations tied to text ranges. Lazy-loaded viewport-driven: only notes for visible lineIds are fetched. Manages note creation/editing/deletion via context menu. Notes persist in `user_settings.db` table `user_notes`.
+**useBookViewSessionRestore.ts** - restores per-book view state from IDB on mount: scroll position, selected line, commentary scroll, zoom, and divider fraction.
+
+**useBookViewPinnedCommentary.ts** - manages the pinned commentary group for the split-pane bottom panel. Tracks which commentary group is visible and handles pin transitions on line navigation.
+
+**useBookViewHighlights.ts** - lives in `lines/`. See `lines/README.md`.
+
+**useBookViewNotes.ts** - lives in `lines/`. See `lines/README.md`.
 
 ## Data Structures
+
+### bookViewTypes.ts
+
+Shared types for the book-view feature: `SearchMode`, `SidePanelMode`, and `CommentaryEntryVisibility`.
 
 ### Highlights
 
@@ -112,5 +124,3 @@ interface Note {
 **Mutations:** Create/update/delete are fire-and-forget DB writes with immediate in-memory map updates. Map is keyed by lineId, storing `Note[]` sorted by `startOffset`.
 
 Storage: `user_settings.db` table `user_notes`. All access via `userSettingsDb.ts` (web-host layer).
-
-

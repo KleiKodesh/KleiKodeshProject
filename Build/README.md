@@ -16,26 +16,33 @@ Launches interactive menu with options to build, clean, test, or manage GitHub r
 Build/
 ├── Installer/              — WPF installer project
 │   ├── Helpers/
-│   │   ├── AddinInstaller.cs    — Extract VSTO zip, register add-in, version management
-│   │   ├── AdminHelper.cs       — UAC elevation & re-launch
-│   │   └── WordHelper.cs        — Detect/close Word before install
+│   │   ├── AddinInstaller.cs           — Extract VSTO zip, register add-in, version management
+│   │   ├── AdminHelper.cs              — UAC elevation & re-launch
+│   │   ├── DocumentLocatorHelper.cs    — Service shutdown/restart for file-locking
+│   │   ├── FullSystemCleaner.cs        — Full uninstall cleanup
+│   │   ├── KitveiHakodeshHelper.cs     — KitveiHakodesh DB path handling
+│   │   ├── SettingsManager.cs          — Registry-backed settings
+│   │   ├── ShellRegistrationHelper.cs  — Shell integration / file associations
+│   │   └── WordHelper.cs               — Detect/close Word before install
 │   ├── Pages/
 │   │   ├── LandingPage.xaml     — Welcome screen
 │   │   ├── SettingsPage.xaml    — Ribbon settings
-│   │   ├── AdvancedPage.xaml    — Website whitelist editor
+│   │   ├── ComponentSettingsPage.xaml — Website whitelist editor
 │   │   ├── InstallPage.xaml     — Progress + finish
 │   │   └── RepairPage.xaml      — Repair/cleanup
 │   ├── Dialogs/
 │   │   └── WhitelistEditorDialog.xaml — Edit website list
+│   ├── Models/
+│   │   └── WhitelistEntry.cs          — Whitelist data model
+│   ├── Resources/
+│   │   └── InstallerStyles.xaml       — XAML styles
 │   └── README.md               — Detailed installer docs
 ├── nsis/                   — NSIS wrapper
-│   ├── KleiKodeshWrapper.nsi    — Prereq checks, wraps WPF installer
-│   └── MUI_HEBREW.nsh          — Hebrew localization
+│   └── KleiKodeshWrapper.nsi    — Prereq checks, wraps WPF installer
 ├── scripts/                — Build orchestration
 │   ├── build-installer.ps1     — Main orchestrator (no interactivity)
 │   ├── build-menu.ps1          — Interactive menu (prompts user)
-│   ├── build-helpers.ps1       — Shared functions & constants
-│   └── UpdateVersion.ps1       — Version bumper
+│   └── build-helpers.ps1       — Shared functions & constants
 ├── releases/               — Output folder
 │   ├── KleiKodeshSetup-vX.Y.Z-x64.exe
 │   ├── KleiKodeshSetup-vX.Y.Z-x86.exe
@@ -78,7 +85,7 @@ Each variant embeds the correct VSTO binary for its platform via the pre-build t
 **Single source of truth:** `Build/Installer/Helpers/AddinInstaller.cs`
 
 ```csharp
-public const string Version = "v3.4.0";
+public const string Version = "v8.2.1";
 ```
 
 `UpdateVersion.ps1` syncs this to the csproj `<Version>` tag during every build. Do not edit version anywhere else — see `.kiro/steering/version-management.md` for full details, registry keys, and update checker flow.
@@ -95,7 +102,7 @@ CLI args (`--silent`, `--repair`, `--wait-for-pid <PID>`) handled in `App.xaml.c
 
 ## Website Whitelist
 
-Installer includes an **AdvancedPage** for customizing the website list before installation.
+Installer includes a **ComponentSettingsPage** for customizing the website list before installation.
 
 **Source:** `KleiKodeshVsto/WebSitesLib/WebSitesLib/WebSitesWhitelist.json`
 

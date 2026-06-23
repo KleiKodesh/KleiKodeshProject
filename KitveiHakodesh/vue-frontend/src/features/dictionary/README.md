@@ -13,6 +13,10 @@ Dictionary page. Singleton route `/dictionary`. Queries two databases: `public/d
 
 Source labels for מצודת ציון and מלבי"ם are Ctrl+clickable — opens the source book in a new tab at the matched line. מחברת מנחם entries are also Ctrl+clickable for the same reason.
 
+`dictionaryCache.ts` — LRU-disk-cached dictionary lookups (100 headwords). Stores full `WordPageData` per headword in `app-dict-cache` IDB. Repeated lookups of the same word skip all DB queries.
+
+`dictionaryTypes.ts` — TypeScript types for the dictionary feature: `WordPageData` interface with headword, senses, radak, metzudat, malbim, menchem, aruch, links, synonyms, variants, and suggestion arrays.
+
 ## Data flow
 
 `DictionaryPage.vue` calls `combinedLookup(term)` which runs all three tiered sources in parallel through a shared progression: exact → prefix → contains. All three exact queries fire together; if any source returns results at a tier, the lower tiers are skipped entirely. The result carries `dictRows`, `metzudatRows`, `malbimRows`, and `isExact`.

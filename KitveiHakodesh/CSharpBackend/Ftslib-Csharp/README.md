@@ -10,7 +10,7 @@ This folder exists in two git repos simultaneously:
 When you change files in this folder, push to both repos separately:
 
 1. From the workspace root — commits to KleiKodeshProject
-2. From inside this folder (`CSharpBackend/FtsLib`) — commits to the FtsLib repo
+2. From inside this folder (`CSharpBackend/Ftslib-Csharp`) — commits to the FtsLib repo
 
 Both repos share the same local files. There is no automatic sync between them.
 
@@ -112,18 +112,6 @@ long total = index.CountLines();
 ```
 
 Total lines in the DB. Useful for progress percentage during build.
-
----
-
-## Project structure
-
-```
-FtsLib/
-  Core/           ← index engine (internal)
-  Seforim/        ← public API facade + result types
-  Misc/           ← SQLite DB access (ZayitDb)
-FtsLibDemo/       ← WPF demo application
-```
 
 ---
 

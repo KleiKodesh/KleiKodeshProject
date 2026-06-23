@@ -49,7 +49,14 @@ Query String
 | `HebrewWildcardExpander.cs` | `HebrewWildcardExpander` | Expand `*`, `?` patterns |
 | `FuzzyExpander.cs` | `FuzzyExpander` | Levenshtein expansion |
 | `KetivExpander.cs` | `KetivExpander` | Hebrew ketiv/qere variants |
+| `GrammarExpander.cs` | `GrammarExpander` | Hebrew grammatical prefix/suffix expansion |
 | `Levenshtein.cs` | — | Distance calculation |
+
+### Matching
+
+| File | Class | Purpose |
+|---|---|---|
+| `PostingMatcher.cs` | `PostingMatcher` | Reusable AND/OR merge algorithms over posting iterators |
 
 ### Bitmap
 

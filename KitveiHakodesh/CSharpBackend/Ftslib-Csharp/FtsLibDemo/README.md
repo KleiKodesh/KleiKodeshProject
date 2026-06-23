@@ -22,8 +22,11 @@ FtsLibDemo/
 ├── Services/            ← Business logic
 ├── MainWindow.xaml      ← Main UI (XAML)
 ├── MainWindow.xaml.cs   ← Code-behind
-├── Converters.cs        ← Value converters
+├── SearchHelpWindow.xaml  ← Syntax help window (XAML)
+├── SearchHelpWindow.xaml.cs ← Code-behind
 ├── App.xaml             ← App resources
+├── App.xaml.cs          ← App startup code
+├── Converters.cs        ← Value converters
 └── [project files]
 ```
 

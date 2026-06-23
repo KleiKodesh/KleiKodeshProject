@@ -4,7 +4,13 @@ Book catalog browser. List, tiles, and full collapsible tree views with two-tier
 
 **BookCatalogPage.vue** - main page, orchestrates the title bar, search bar, and view switching between list, tiles, and tree via a `<component :is>` map.
 
-**BookCatalogTreeView.vue** - collapsible category tree showing the full catalog hierarchy.
+**BookCatalogView.Tree.vue** - collapsible category tree showing the full catalog hierarchy. Uses `TreeView.vue` with `TreeNodeItem` data from `bookCatalogTree.ts`.
+
+**BookCatalogView.List.vue** - flat list view of the catalog with folder and book rows.
+
+**BookCatalogView.Tiles.vue** - tile/grid view of the catalog.
+
+**BookCatalogTitleBar.vue** - title bar with view mode toggle (list/tiles/tree), breadcrumb, and column count slider for tiles.
 
 **BookCatalogSearch.vue** - renders book matches and TOC entry matches.
 
@@ -28,3 +34,7 @@ The top-level `runTocHeuristics` function runs all four stages in sequence and a
 **bookCatalogSearchNormalizer.ts** - all Hebrew-specific text normalization: abbreviation expansion, spelling variant rules, חסר/מלא decomposition, and ה-prefix stripping. Apply symmetrically to both indexed tokens and query words — never add normalization rules anywhere else.
 
 **bookCatalogSearchMatcher.ts** - score constants (EXACT, PREFIX, NONE) and the per-token scoring function. Import score constants from here whenever comparing tiers.
+
+**bookCatalogTocSearchCache.ts** - LRU disk cache for TOC search results (25 entries). Caches the output of Phase 2 so repeated queries skip DB round-trips entirely.
+
+**SEARCH.md** — detailed design document for the book catalog search architecture.

@@ -110,12 +110,12 @@ Returns the total number of lines in the database. Useful for computing build pr
 ## Folder layout
 
 ```
-Seforim/
-  SeforimIndex.cs     ← public facade
-  SearchResult.cs     ← public result type
-  SnippetResult.cs    ← public snippet result type
-  Internal/
-    IndexingPipeline.cs   ← build logic
-    SearchPipeline.cs     ← query parsing + search execution
-    SnippetPipeline.cs    ← snippet generation
+SeforimDb/
+  SeforimIndex.cs         ← public facade
+  SearchResult.cs         ← public result type
+  SnippetResult.cs        ← public snippet result type
+  IndexingPipeline.cs     ← build logic
+  SearchPipeline.cs       ← query parsing + search execution
+  SnippetPipeline.cs      ← snippet generation
+  ZayitDb.cs              ← SQLite DB access
 ```

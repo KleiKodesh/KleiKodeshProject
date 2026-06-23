@@ -22,6 +22,16 @@ App settings UI and first-launch setup wizard.
 
 **SetupWizard.vue** — full-screen onboarding overlay shown when `settingsStore.setupDone` is false. Steps: welcome, database setup (hosted only), theme, general, book display. Completion sets `setupDone = true` in IDB and the wizard never shows again.
 
+**SetupWizardStepBookDisplay.vue** — setup wizard step for book display settings: font, font size, and commentary font selection.
+
+**SetupWizardStepDb.vue** — setup wizard step for database setup (hosted only). Provides a file picker to select the seforim DB file and shows progress/status.
+
+**SetupWizardStepGeneral.vue** — setup wizard step for general settings: language, search defaults, and navigation preferences.
+
+**SetupWizardStepTheme.vue** — setup wizard step for theme selection: light, dark, or auto with color swatch previews.
+
+**useSettingsPage.ts** — composable for the settings page. Watches settings changes and triggers side effects: search index rebuild, document locator rebuild, and full app reset.
+
 **useSettingsSearch.ts** — DOM-walker search composable. Accepts a ref to the scroll container, watches `searchQuery`, and after each render tick walks every `[data-section]` element, reads all its text nodes, and toggles `data-section-hidden` on sections that don't match. Also exposes `getSectionNavEntries()` which reads `data-section` and `data-section-label` attributes to build the nav dropdown list.
 
 **appResetState.ts** — single exported `resetting` ref used to block UI during a reset/reload.
