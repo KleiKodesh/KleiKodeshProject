@@ -335,6 +335,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, () => {
           ref="searchBarRef"
           :visible="searchVisible"
           :toolbar-visible="toolbarVisible"
+          :toolbar-position="toolbarPosition"
           :match-count="activeMatchCount"
           :current-match="activeMatchIdx"
           :commentary-visible="commentaryVisible"

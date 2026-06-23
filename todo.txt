@@ -17,6 +17,11 @@ race conditions:
 - theme toggle
 - side panel
 - the unisnatll and תיקון are affecting the toolbars in egnral
+rvert changes in the pdf js
+exiting full screen hardcoded to exit mazimized mode even if thats the way it was before
+keyboard navigation when tablist is opened by cntrl + t
+when mzimized opening a new file causes it not to be maximized and also lose full screen
+searchbar in bookview is place with gap from top even when tollbar is on teh side
 
 
 
