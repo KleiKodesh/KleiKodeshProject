@@ -125,6 +125,9 @@ namespace KitveiHakodeshDemoApp
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool IsIconic(IntPtr hWnd);
+
         private const int SW_RESTORE = 9;
 
         private static void BringExistingInstanceToForeground()
@@ -136,7 +139,10 @@ namespace KitveiHakodeshDemoApp
             {
                 if (process.Id == System.Diagnostics.Process.GetCurrentProcess().Id) continue;
                 if (process.MainWindowHandle == IntPtr.Zero) continue;
-                ShowWindow(process.MainWindowHandle, SW_RESTORE);
+                // Only restore if the window is minimized — SW_RESTORE on a maximized window
+                // would incorrectly un-maximize it back to normal size.
+                if (IsIconic(process.MainWindowHandle))
+                    ShowWindow(process.MainWindowHandle, SW_RESTORE);
                 SetForegroundWindow(process.MainWindowHandle);
                 break;
             }
