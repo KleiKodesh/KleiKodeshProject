@@ -26,9 +26,14 @@ namespace KleiKodesh
             // inside a 32-bit Word process where AppDomain.BaseDirectory might differ.
             //
             // See: UnsafeNativeMethods.GetBaseDirectory() in System.Data.SQLite source.
-            string installDir = AppDomain.CurrentDomain.BaseDirectory;
-            System.Environment.SetEnvironmentVariable(
-                "PreLoadSQLite_BaseDirectory", installDir);
+            try
+            {
+                string installDir = AppDomain.CurrentDomain.BaseDirectory;
+                if (!string.IsNullOrEmpty(installDir))
+                    System.Environment.SetEnvironmentVariable(
+                        "PreLoadSQLite_BaseDirectory", installDir);
+            }
+            catch { /* non-fatal — SQLite will fall back to AppDomain.BaseDirectory */ }
 
             WordToPdfConverter.HostApplication = this.Application;
             WordThesaurusProvider.HostApplication = this.Application;

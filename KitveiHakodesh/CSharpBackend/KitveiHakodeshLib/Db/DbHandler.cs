@@ -24,7 +24,13 @@ namespace KitveiHakodeshLib.Db
         {
             _bridge = bridge;
             if (File.Exists(savedPath))
-                _db = new DbAccess(savedPath);
+            {
+                try { _db = new DbAccess(savedPath); }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine("[DbHandler] Failed to open DB: " + ex.Message);
+                }
+            }
         }
 
         public bool IsReady => _db != null;
@@ -54,7 +60,16 @@ namespace KitveiHakodeshLib.Db
             if (!File.Exists(path)) { _bridge.Reply(id, new { error = "קובץ לא נמצא" }); return; }
             AppSettings.SaveDbPath(path);
             if (_db != null) _db.Dispose();
-            _db = new DbAccess(path);
+            try
+            {
+                _db = new DbAccess(path);
+            }
+            catch (Exception ex)
+            {
+                _db = null;
+                _bridge.Reply(id, new { error = ex.Message });
+                return;
+            }
             _bridge.Reply(id, new { path });
             OnDbPathPicked?.Invoke(path);
         }
@@ -71,7 +86,16 @@ namespace KitveiHakodeshLib.Db
                     if (dlg.ShowDialog() != DialogResult.OK) return;
                     AppSettings.SaveDbPath(dlg.FileName);
                     if (_db != null) _db.Dispose();
-                    _db = new DbAccess(dlg.FileName);
+                    try
+                    {
+                        _db = new DbAccess(dlg.FileName);
+                    }
+                    catch (Exception ex)
+                    {
+                        _db = null;
+                        _bridge.PushEvent(new { @event = "dbOpenError", error = ex.Message });
+                        return;
+                    }
                     string escaped = dlg.FileName.Replace("\\", "\\\\");
                     _bridge.PushEvent(new { @event = "dbPathPicked", path = dlg.FileName });
                     OnDbPathPicked?.Invoke(dlg.FileName);

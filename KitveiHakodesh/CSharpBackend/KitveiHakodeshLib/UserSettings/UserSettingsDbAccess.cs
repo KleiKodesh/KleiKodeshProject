@@ -63,9 +63,20 @@ namespace KitveiHakodeshLib.UserSettings
 
                 // Path changed or first call — replace the singleton.
                 _shared = null;
-                var instance = new UserSettingsDbAccess(desiredPath);
-                instance._EnsureSchemaExists();
-                _shared = instance;
+                try
+                {
+                    var instance = new UserSettingsDbAccess(desiredPath);
+                    instance._EnsureSchemaExists();
+                    _shared = instance;
+                }
+                catch (Exception ex)
+                {
+                    // Non-fatal — user annotations won't be saved this session,
+                    // but the rest of the app works normally.
+                    System.Diagnostics.Debug.WriteLine(
+                        "[UserSettingsDbAccess] Failed to open/init: " + ex.Message);
+                    _shared = null;
+                }
                 return _shared;
             }
         }
