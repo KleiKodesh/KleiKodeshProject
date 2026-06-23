@@ -360,20 +360,20 @@ Development fallback implementations for C# bridge functions when running in bro
 
 - `theme.css` — CSS custom properties (colors, fonts, spacing) for all themes
 - `themeStore.ts` — active theme preset + reading background color
-- `themes.ts` — theme loading, custom theme support, PDF theme observer
+- `themes.ts` — theme loading, PDF theme observer
 - `themeTypes.ts` — TypeScript types
 - `themeColorUtils.ts` — color manipulation utilities
 - `ThemeToggle.vue` — toggle button in the title bar
 - `themes.json` — built-in theme presets
 
-Default theme is `vscode-dark`. Custom themes are stored in `app-settings` IDB at key `customThemes`.
+Default theme is `vscode-dark`.
 
 ## Initialization Order (`main.ts`)
 
 1. `idbCheckAndExecReset()` — clear all DBs if a reset was scheduled last session
 2. Create Pinia
 3. `workspaceStore.init()` — must be first; `tabStore` depends on `activeId`
-4. In parallel: `tabStore.init()`, `bookViewStore.init()`, `settingsStore.init()`, `themeStore.init()`, `loadCustomThemes()`
+4. In parallel: `tabStore.init()`, `bookViewStore.init()`, `settingsStore.init()`, `themeStore.init()`
 5. Restore persisted local file tabs via `localFileStore.restoreTab()`
 6. Mount app to `#app`
 7. `initPdfThemeObserver()` — sync PDF iframe theme with app theme

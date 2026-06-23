@@ -246,7 +246,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
           <IconLineHorizontal320Regular />
         </button>
       </div>
-      <ThemeToggle @click.stop />
+      <ThemeToggle />
       <button
         v-if="bookViewStore.isBookViewActive || activeTab?.route === '/pdf-view'"
         class="bar-btn"
