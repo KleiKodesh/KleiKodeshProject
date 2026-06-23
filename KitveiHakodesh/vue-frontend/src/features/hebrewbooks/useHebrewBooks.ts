@@ -16,7 +16,6 @@ export function useHebrewBooks() {
   const isLoading = ref(false)
   const error = ref<string | null>(null)
   const searchTerm = ref('')
-  const isOnline = ref(navigator.onLine)
 
   async function load() {
     isLoading.value = true
@@ -64,17 +63,13 @@ export function useHebrewBooks() {
     triggerHbSaveAs(String(book.id), book.title, getHbPdfUrl(book.id)).catch(() => {})
   }
 
-  const displayedBooks = computed(() => {
-    if (isOnline.value || searchTerm.value) return books.value
-    return books.value.slice(0, 10)
-  })
+  const displayedBooks = computed(() => books.value)
 
   return {
     displayedBooks,
     isLoading,
     error,
     searchTerm,
-    isOnline,
     load,
     search,
     trackAccess,
