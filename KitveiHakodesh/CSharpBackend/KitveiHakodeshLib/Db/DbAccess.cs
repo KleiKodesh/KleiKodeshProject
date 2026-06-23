@@ -24,10 +24,12 @@ namespace KitveiHakodeshLib.Db
             _conn.Open();
             // Increase page cache to 64MB (default is ~2MB) — reduces cold-read latency
             // significantly for large text content in the line table.
-            _conn.Execute("PRAGMA cache_size = -65536");  // negative = kibibytes → 64MB
+            try { _conn.Execute("PRAGMA cache_size = -65536"); }  // negative = kibibytes → 64MB
+            catch { /* non-fatal — app works without it */ }
             // Enable memory-mapped I/O up to 256MB — lets the OS serve reads directly
             // from mapped memory instead of going through read() syscalls.
-            _conn.Execute("PRAGMA mmap_size = 268435456"); // 256MB
+            try { _conn.Execute("PRAGMA mmap_size = 268435456"); } // 256MB
+            catch { /* non-fatal */ }
         }
 
         public IEnumerable<IDictionary<string, object>> Query(string sql, object[] parameters)

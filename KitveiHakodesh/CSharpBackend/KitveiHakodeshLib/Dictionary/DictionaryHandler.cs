@@ -20,11 +20,23 @@ namespace KitveiHakodeshLib.Dictionary
         {
             string path = Path.Combine(appDir, "dictionary", "KitveiHakodesh_dictionary.db");
             if (File.Exists(path))
-                _db = new DbAccess(path);
+            {
+                try { _db = new DbAccess(path); }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine("[DictionaryHandler] Failed to open dictionary DB: " + ex.Message);
+                }
+            }
 
             string wikiPath = Path.Combine(appDir, "dictionary", "wikidictionary.db");
             if (File.Exists(wikiPath))
-                _wikiDb = new DbAccess(wikiPath);
+            {
+                try { _wikiDb = new DbAccess(wikiPath); }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine("[DictionaryHandler] Failed to open wiki DB: " + ex.Message);
+                }
+            }
         }
 
         public bool IsReady => _db != null;

@@ -194,9 +194,13 @@ namespace KitveiHakodeshLib.Diagnostics
             string envDir = SafeGet(() =>
                 System.Environment.GetEnvironmentVariable("PreLoadSQLite_BaseDirectory"));
 
-            d["sqlite.baseDir.assembly"]   = asmDir    ?? "unknown";
-            d["sqlite.baseDir.appDomain"]  = appDomainDir ?? "unknown";
-            d["sqlite.baseDir.envVar"]     = string.IsNullOrEmpty(envDir) ? "(not set)" : envDir;
+            d["sqlite.baseDir.assembly"]  = asmDir       ?? "unknown";
+            d["sqlite.baseDir.appDomain"] = appDomainDir ?? "unknown";
+            d["sqlite.baseDir.envVar"]    = string.IsNullOrEmpty(envDir) ? "(not set)" : envDir;
+
+            // Treat SafeGet "error: ..." returns as unusable paths.
+            static bool IsUsableDir(string s) =>
+                !string.IsNullOrEmpty(s) && !s.StartsWith("error:", StringComparison.Ordinal);
 
             // Check all three base directories so we can see exactly where SQLite
             // will (or won't) find the interop DLL.
@@ -204,46 +208,56 @@ namespace KitveiHakodeshLib.Diagnostics
             {
                 ("assembly",  asmDir),
                 ("appDomain", appDomainDir),
-                ("envVar",    string.IsNullOrEmpty(envDir) ? null : envDir),
+                ("envVar",    envDir),
             };
 
             foreach (var (label, dir) in dirsToCheck)
             {
-                if (string.IsNullOrEmpty(dir)) continue;
+                if (!IsUsableDir(dir)) continue;
 
                 foreach (string arch in new[] { "x86", "x64" })
                 {
-                    string path   = Path.Combine(dir, arch, "SQLite.Interop.dll");
                     string prefix = $"sqlite.interop.{label}.{arch}";
-
-                    if (!File.Exists(path))
+                    string path   = SafeGet(() => Path.Combine(dir, arch, "SQLite.Interop.dll"));
+                    if (path == null || path.StartsWith("error:", StringComparison.Ordinal))
                     {
                         d[prefix + ".present"] = "false";
-                        d[prefix + ".path"]    = path;
                         continue;
                     }
 
-                    d[prefix + ".present"]   = "true";
-                    d[prefix + ".path"]      = path;
-                    d[prefix + ".size"]      = SafeGet(() => new FileInfo(path).Length.ToString()) ?? "?";
-                    d[prefix + ".peMachine"] = SafeGet(() => ReadPeMachine(path)) ?? "unreadable";
+                    bool exists = SafeFileExists(path);
+                    d[prefix + ".present"] = exists.ToString().ToLowerInvariant();
+                    d[prefix + ".path"]    = path;
+                    if (exists)
+                    {
+                        d[prefix + ".size"]      = SafeGet(() => new FileInfo(path).Length.ToString()) ?? "?";
+                        d[prefix + ".peMachine"] = SafeGet(() => ReadPeMachine(path)) ?? "unreadable";
+                    }
                 }
 
                 // Also check flat (wrong layout — no arch subfolder)
-                string flat = Path.Combine(dir, "SQLite.Interop.dll");
-                d[$"sqlite.interop.{label}.flat.present"] = File.Exists(flat).ToString();
-                if (File.Exists(flat))
-                    d[$"sqlite.interop.{label}.flat.peMachine"] =
-                        SafeGet(() => ReadPeMachine(flat)) ?? "unreadable";
+                string flat = SafeGet(() => Path.Combine(dir, "SQLite.Interop.dll"));
+                if (flat != null && !flat.StartsWith("error:", StringComparison.Ordinal))
+                {
+                    bool flatExists = SafeFileExists(flat);
+                    d[$"sqlite.interop.{label}.flat.present"] = flatExists.ToString().ToLowerInvariant();
+                    if (flatExists)
+                        d[$"sqlite.interop.{label}.flat.peMachine"] =
+                            SafeGet(() => ReadPeMachine(flat)) ?? "unreadable";
+                }
             }
 
             // ── Check System.Data.SQLite.dll itself
             foreach (var (label, dir) in dirsToCheck)
             {
-                if (string.IsNullOrEmpty(dir)) continue;
-                string managedDll = Path.Combine(dir, "System.Data.SQLite.dll");
-                d[$"sqlite.managed.{label}.present"] = File.Exists(managedDll).ToString();
-                if (File.Exists(managedDll))
+                if (!IsUsableDir(dir)) continue;
+                string managedDll = SafeGet(() => Path.Combine(dir, "System.Data.SQLite.dll"));
+                if (managedDll == null || managedDll.StartsWith("error:", StringComparison.Ordinal))
+                    continue;
+
+                bool exists = SafeFileExists(managedDll);
+                d[$"sqlite.managed.{label}.present"] = exists.ToString().ToLowerInvariant();
+                if (exists)
                 {
                     d[$"sqlite.managed.{label}.size"] =
                         SafeGet(() => new FileInfo(managedDll).Length.ToString()) ?? "?";
@@ -252,6 +266,13 @@ namespace KitveiHakodeshLib.Diagnostics
                             .GetVersionInfo(managedDll).FileVersion) ?? "?";
                 }
             }
+        }
+
+        /// <summary>Returns true if the file exists; false on any exception.</summary>
+        private static bool SafeFileExists(string path)
+        {
+            try { return File.Exists(path); }
+            catch { return false; }
         }
 
         // ── assembly load paths ───────────────────────────────────────────────────
