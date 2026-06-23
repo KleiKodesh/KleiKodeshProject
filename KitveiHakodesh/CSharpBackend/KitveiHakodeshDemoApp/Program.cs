@@ -28,14 +28,10 @@ namespace KitveiHakodeshDemoApp
             {
                 if (createdNew)
                 {
-                    // This is the first (and only) instance. Start listening for file-open
-                    // requests from any second instances that Windows may spawn when the user
-                    // right-clicks "Open With" while the app is already running.
+                    // First instance — start the pipe listener and run the app.
                     StartPipeListener();
-
                     _mainForm = new MainForm(filePath);
                     Application.Run(_mainForm);
-
                     try { mutex.ReleaseMutex(); } catch { }
                 }
                 else
@@ -43,8 +39,21 @@ namespace KitveiHakodeshDemoApp
                     // An instance is already running. Forward the file path to it and exit.
                     if (!string.IsNullOrEmpty(filePath))
                         SendFilePathToPipe(filePath);
-                    // Bring the running instance to the foreground.
-                    BringExistingInstanceToForeground();
+
+                    // Only restore if minimized — do NOT call SetForegroundWindow cross-process.
+                    // On a maximized WebView2-hosted window, SetForegroundWindow posts a
+                    // WM_WINDOWPOSCHANGED/SIZE_RESTORED to the first process's queue, which
+                    // visibly flashes the window to Normal. The first process's pipe callback
+                    // already runs on its own UI thread and handles focus itself.
+                    foreach (System.Diagnostics.Process process in System.Diagnostics.Process.GetProcessesByName(
+                        System.Diagnostics.Process.GetCurrentProcess().ProcessName))
+                    {
+                        if (process.Id == System.Diagnostics.Process.GetCurrentProcess().Id) continue;
+                        if (process.MainWindowHandle == IntPtr.Zero) continue;
+                        if (IsIconic(process.MainWindowHandle))
+                            ShowWindow(process.MainWindowHandle, SW_RESTORE);
+                        break;
+                    }
                 }
             }
         }
@@ -53,12 +62,9 @@ namespace KitveiHakodeshDemoApp
 
         private static string GetFilePathArgument()
         {
-            // Environment.GetCommandLineArgs()[0] is the exe path; [1] is the first real arg.
             string[] args = Environment.GetCommandLineArgs();
             if (args.Length < 2) return null;
-
             string candidate = args[1];
-            // Verify the argument is an existing file (not some other flag).
             return File.Exists(candidate) ? candidate : null;
         }
 
@@ -66,8 +72,6 @@ namespace KitveiHakodeshDemoApp
 
         private static void StartPipeListener()
         {
-            // Run on a background thread — this loops forever accepting one connection at a
-            // time, which is the correct pattern for a WinForms single-instance app.
             var thread = new Thread(() =>
             {
                 while (true)
@@ -84,8 +88,8 @@ namespace KitveiHakodeshDemoApp
                                 {
                                     _mainForm?.BeginInvoke(new Action(() =>
                                     {
-                                        _mainForm.BringToFront();
-                                        _mainForm.Activate();
+                                        if (IsIconic(_mainForm.Handle))
+                                            ShowWindow(_mainForm.Handle, SW_RESTORE);
                                         _mainForm.OpenFile(path);
                                     }));
                                 }
@@ -94,7 +98,6 @@ namespace KitveiHakodeshDemoApp
                     }
                     catch
                     {
-                        // Pipe broke or app is shutting down — stop the loop.
                         break;
                     }
                 }
@@ -117,10 +120,7 @@ namespace KitveiHakodeshDemoApp
             catch { /* running instance may not be listening yet; best-effort */ }
         }
 
-        // ── Bring existing window to foreground ───────────────────────────────────
-
-        [System.Runtime.InteropServices.DllImport("user32.dll")]
-        private static extern bool SetForegroundWindow(IntPtr hWnd);
+        // ── Win32 ─────────────────────────────────────────────────────────────────
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
@@ -129,23 +129,5 @@ namespace KitveiHakodeshDemoApp
         private static extern bool IsIconic(IntPtr hWnd);
 
         private const int SW_RESTORE = 9;
-
-        private static void BringExistingInstanceToForeground()
-        {
-            // Find the existing MainForm window by its title (best-effort; the window may not
-            // have loaded yet if the machine is slow, but that is acceptable).
-            foreach (System.Diagnostics.Process process in System.Diagnostics.Process.GetProcessesByName(
-                System.Diagnostics.Process.GetCurrentProcess().ProcessName))
-            {
-                if (process.Id == System.Diagnostics.Process.GetCurrentProcess().Id) continue;
-                if (process.MainWindowHandle == IntPtr.Zero) continue;
-                // Only restore if the window is minimized — SW_RESTORE on a maximized window
-                // would incorrectly un-maximize it back to normal size.
-                if (IsIconic(process.MainWindowHandle))
-                    ShowWindow(process.MainWindowHandle, SW_RESTORE);
-                SetForegroundWindow(process.MainWindowHandle);
-                break;
-            }
-        }
     }
 }

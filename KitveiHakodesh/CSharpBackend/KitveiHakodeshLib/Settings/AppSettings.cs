@@ -44,6 +44,16 @@ namespace KitveiHakodeshLib.Settings
             Interaction.SaveSetting("KitveiHakodesh", "Database", "Path", path);
         }
 
+        public static void SaveMainWindowMaximized(bool isMaximized)
+        {
+            Interaction.SaveSetting("KitveiHakodesh", "MainWindow", "Maximized", isMaximized ? "1" : "0");
+        }
+
+        public static bool LoadMainWindowMaximized()
+        {
+            return Interaction.GetSetting("KitveiHakodesh", "MainWindow", "Maximized", "0") == "1";
+        }
+
         public static System.Drawing.Rectangle LoadPopoutBounds()
         {
             int x = int.Parse(Interaction.GetSetting("KitveiHakodesh", "Popout", "X", "-1"));
