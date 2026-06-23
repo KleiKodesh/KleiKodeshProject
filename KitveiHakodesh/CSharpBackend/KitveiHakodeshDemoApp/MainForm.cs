@@ -31,6 +31,7 @@ namespace KitveiHakodeshDemoApp
 
             Load        += MainForm_Load;
             FormClosing += MainForm_FormClosing;
+            ResizeEnd   += MainForm_ResizeEnd;
         }
 
         /// <summary>
@@ -45,11 +46,19 @@ namespace KitveiHakodeshDemoApp
         private void MainForm_Load(object sender, EventArgs e)
         {
             FormSettingsHelper.LoadFormSettings(this, "KitveiHakodesh", "KitveiHakodeshMain");
+            if (AppSettings.LoadMainWindowMaximized())
+                WindowState = FormWindowState.Maximized;
         }
 
         private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
         {
+            AppSettings.SaveMainWindowMaximized(WindowState == FormWindowState.Maximized);
             FormSettingsHelper.SaveFormSettings(this, "KitveiHakodesh", "KitveiHakodeshMain");
+        }
+
+        private void MainForm_ResizeEnd(object sender, EventArgs e)
+        {
+            AppSettings.SaveMainWindowMaximized(WindowState == FormWindowState.Maximized);
         }
 
         private static Icon CreateWindowIcon()
@@ -92,7 +101,6 @@ namespace KitveiHakodeshDemoApp
             _popoutWindow.Move += OnPopoutBoundsChanged;
             _popoutWindow.Show();
 
-            // If requested, enter fullscreen mode immediately after showing
             if (goFullScreen)
             {
                 _popoutWindow.FormBorderStyle = FormBorderStyle.None;
