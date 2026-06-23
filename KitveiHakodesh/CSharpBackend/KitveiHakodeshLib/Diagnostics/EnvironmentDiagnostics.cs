@@ -199,7 +199,7 @@ namespace KitveiHakodeshLib.Diagnostics
             d["sqlite.baseDir.envVar"]    = string.IsNullOrEmpty(envDir) ? "(not set)" : envDir;
 
             // Treat SafeGet "error: ..." returns as unusable paths.
-            static bool IsUsableDir(string s) =>
+            bool IsUsableDir(string s) =>
                 !string.IsNullOrEmpty(s) && !s.StartsWith("error:", StringComparison.Ordinal);
 
             // Check all three base directories so we can see exactly where SQLite
