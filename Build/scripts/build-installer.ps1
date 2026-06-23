@@ -161,25 +161,23 @@ function Build-Variant {
     $script:LastBuiltInstaller = $outFile
 }
 
-if (-not $AnyCpuOnly) {
-    Build-Variant -Platform "x64"    -Suffix "-x64"
-    $installerX64 = $script:LastBuiltInstaller
-
-    Build-Variant -Platform "x86"    -Suffix "-x86"
-    $installerX86 = $script:LastBuiltInstaller
-} else {
-    $installerX64 = $null
-    $installerX86 = $null
-}
+# if (-not $AnyCpuOnly) {
+#     Build-Variant -Platform "x64"    -Suffix "-x64"
+#     $installerX64 = $script:LastBuiltInstaller
+#
+#     Build-Variant -Platform "x86"    -Suffix "-x86"
+#     $installerX86 = $script:LastBuiltInstaller
+# } else {
+#     $installerX64 = $null
+#     $installerX86 = $null
+# }
+$installerX64 = $null
+$installerX86 = $null
 Build-Variant -Platform "AnyCPU" -Suffix ""
 $installerAny = $script:LastBuiltInstaller
 
 Write-Host ""
-if ($AnyCpuOnly) {
-    Write-Host "AnyCPU variant built successfully." -ForegroundColor Green
-} else {
-    Write-Host "All three variants built successfully." -ForegroundColor Green
-}
+Write-Host "AnyCPU variant built successfully." -ForegroundColor Green
 
 # ── 5. GitHub release ─────────────────────────────────────────────────────────
 if ($NoRelease) { Write-Host "GitHub release skipped." -ForegroundColor Yellow; exit 0 }
