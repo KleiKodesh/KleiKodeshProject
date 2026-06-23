@@ -582,6 +582,10 @@ namespace KitveiHakodeshLib
                 ToggleFormFullscreen();
         }
 
+        // The window state saved just before entering fullscreen, so we can restore
+        // it exactly (Normal or Maximized) when the user exits fullscreen.
+        private FormWindowState _preFullscreenWindowState = FormWindowState.Normal;
+
         private void ToggleFormFullscreen()
         {
             // AppViewer itself stays in the task pane host even when popped out —
@@ -599,14 +603,16 @@ namespace KitveiHakodeshLib
             // Already in a floating window — just toggle fullscreen, never touch popout
             if (hostForm.FormBorderStyle == FormBorderStyle.None && hostForm.WindowState == FormWindowState.Maximized)
             {
-                // Exit fullscreen
+                // Exit fullscreen — restore to whatever state we were in before entering
                 hostForm.FormBorderStyle = FormBorderStyle.Sizable;
-                hostForm.WindowState = FormWindowState.Normal;
+                hostForm.WindowState = _preFullscreenWindowState;
             }
             else
             {
-                // Enter fullscreen
-                // If window is already maximized, we must restore to Normal first,
+                // Save the current state before entering fullscreen so we can restore it on exit
+                _preFullscreenWindowState = hostForm.WindowState;
+
+                // Enter fullscreen — must be Normal before removing the border,
                 // otherwise setting Maximized again does nothing and chrome doesn't get removed.
                 if (hostForm.WindowState == FormWindowState.Maximized)
                 {
