@@ -39,7 +39,6 @@ const { titleBarVisible } = useUiChromeVisibility()
 const activeTab = computed(() => tabStore.activeTab)
 const dropdownOpen = ref(false)
 const navDropdownOpen = ref(false)
-const keyboardNavEnabled = ref(false)
 const barRef = ref<HTMLElement | null>(null)
 const navBtnRef = ref<HTMLElement | null>(null)
 
@@ -78,17 +77,7 @@ const ROUTE_MAP: Record<string, { title: string; route: TabRoute }> = {
 
 function toggleTabDropdown() {
   if (justClosed.value) return
-  keyboardNavEnabled.value = false
   dropdownOpen.value = !dropdownOpen.value
-}
-
-function openTabDropdownWithKeyboard() {
-  if (dropdownOpen.value) {
-    dropdownOpen.value = false
-    return
-  }
-  keyboardNavEnabled.value = true
-  dropdownOpen.value = true
 }
 
 function toggleNavDropdown() {
@@ -200,7 +189,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
     toggleNavDropdown()
   } else if (e.ctrlKey && e.code === 'KeyT') {
     e.preventDefault()
-    openTabDropdownWithKeyboard()
+    toggleTabDropdown()
   } else if (e.ctrlKey && e.code === 'KeyN') {
     e.preventDefault()
     openNewTab()
@@ -314,7 +303,6 @@ useEventListener('keydown', (e: KeyboardEvent) => {
     v-if="dropdownOpen"
     :tabs="tabStore.tabs"
     :active-tab-id="tabStore.activeTabId"
-    :keyboard-nav-enabled="keyboardNavEnabled"
     @select="selectTab"
     @close="tabStore.closeTab"
     @dismiss="dropdownOpen = false"
