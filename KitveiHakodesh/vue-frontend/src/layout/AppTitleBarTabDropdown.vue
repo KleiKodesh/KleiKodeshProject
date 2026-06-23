@@ -11,9 +11,10 @@ import {
   IconApps20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
+import { useListKeys } from '@/composables/useListKeyNav'
 import type { Tab } from '@/stores/tabStore'
 
-const props = defineProps<{ tabs: Tab[]; activeTabId: string }>()
+const props = defineProps<{ tabs: Tab[]; activeTabId: string; keyboardNavEnabled: boolean }>()
 const emit = defineEmits<{ select: [id: string]; close: [id: string]; dismiss: [] }>()
 
 const { titleBarVisible } = useUiChromeVisibility()
@@ -27,12 +28,21 @@ const visibleTabs = computed(() => {
   return filtered
 })
 
+const { focusedIndex } = useListKeys(
+  containerRef,
+  () => (props.keyboardNavEnabled ? visibleTabs.value.length : 0),
+  (index) => {
+    const tab = visibleTabs.value[index]
+    if (tab) emit('select', tab.id)
+  },
+)
+
 nextTick(() => containerRef.value?.focus())
 </script>
 
 <template>
   <div ref="containerRef" class="tab-dropdown" tabindex="0" @keydown.esc.stop="emit('dismiss')">
-    <div v-for="tab in visibleTabs" :key="tab.id" class="tab-row" :class="{ active: tab.id === activeTabId }" @click="emit('select', tab.id)">
+    <div v-for="(tab, tabIndex) in visibleTabs" :key="tab.id" data-nav-item class="tab-row" :class="{ active: tab.id === activeTabId, focused: keyboardNavEnabled && focusedIndex === tabIndex }" @click="emit('select', tab.id)">
       <div class="tab-row-start">
         <IconHome20Regular v-if="tab.route === '/'" class="tab-icon" />
         <IconBook20Filled v-else-if="tab.route === '/book-view'" class="tab-icon book-icon" />
@@ -84,6 +94,10 @@ nextTick(() => containerRef.value?.focus())
 .tab-row.active {
   background: color-mix(in srgb, var(--accent-color) 12%, transparent);
   border-top-color: var(--accent-color);
+}
+.tab-row.focused {
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  outline: none;
 }
 
 .tab-row-start {
