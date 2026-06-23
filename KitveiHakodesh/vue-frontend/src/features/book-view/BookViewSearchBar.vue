@@ -12,6 +12,7 @@ import type { SearchMode } from './bookViewTypes'
 const props = defineProps<{
   visible: boolean
   toolbarVisible: boolean
+  toolbarPosition: 'top' | 'bottom' | 'right' | 'left'
   matchCount: number
   currentMatch: number
   commentaryVisible: boolean
@@ -45,9 +46,10 @@ watch(() => props.commentaryVisible, (v) => {
 const APP_TITLE_BAR = 40
 const BOOK_TOOLBAR = 32
 
-const panelStyle = computed(() => ({
-  top: `${APP_TITLE_BAR + (props.toolbarVisible ? BOOK_TOOLBAR : 0) + 4}px`,
-}))
+const panelStyle = computed(() => {
+  const toolbarOffset = props.toolbarVisible && props.toolbarPosition === 'top' ? BOOK_TOOLBAR : 0
+  return { top: `${APP_TITLE_BAR + toolbarOffset + 4}px` }
+})
 
 const placeholder = computed(() =>
   searchMode.value === 'content' ? 'חיפוש בטקסט...' : 'חיפוש במפרשים...',
