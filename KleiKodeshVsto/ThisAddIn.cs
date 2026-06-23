@@ -15,6 +15,21 @@ namespace KleiKodesh
 
         private void ThisAddIn_Startup(object sender, System.EventArgs e)
         {
+            // Set the SQLite native library search directory BEFORE any type that
+            // references System.Data.SQLite is first accessed — specifically before
+            // KitveiHakodeshLib's static initializers trigger SQLite's own
+            // UnsafeNativeMethods static constructor, which calls PreLoadSQLiteDll.
+            //
+            // System.Data.SQLite checks this env var first (before AppDomain.BaseDirectory),
+            // so setting it here guarantees SQLite finds x86\SQLite.Interop.dll or
+            // x64\SQLite.Interop.dll in the correct install folder even when running
+            // inside a 32-bit Word process where AppDomain.BaseDirectory might differ.
+            //
+            // See: UnsafeNativeMethods.GetBaseDirectory() in System.Data.SQLite source.
+            string installDir = AppDomain.CurrentDomain.BaseDirectory;
+            System.Environment.SetEnvironmentVariable(
+                "PreLoadSQLite_BaseDirectory", installDir);
+
             WordToPdfConverter.HostApplication = this.Application;
             WordThesaurusProvider.HostApplication = this.Application;
         }

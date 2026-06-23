@@ -132,12 +132,6 @@ namespace KitveiHakodeshLib
 
         public AppViewer(string webCacheFolder = "webcache")
         {
-            // Pre-load SQLite.Interop.dll from the install directory's x64\ or x86\ subfolder
-            // before any SQLiteConnection is opened. This prevents the VSTO shadow-copy issue
-            // where the native DLL cannot be found in the temp shadow-copy directory, causing
-            // SQLite to fall back to a wrong-bitness copy on the PATH.
-            SqliteNativeLoader.EnsureLoaded(AppDomain.CurrentDomain.BaseDirectory);
-
             _webCacheFolder = webCacheFolder;
             RightToLeft = RightToLeft.No;
             AutoScaleMode = AutoScaleMode.None;
@@ -238,14 +232,83 @@ namespace KitveiHakodeshLib
                 // InitAsync is fire-and-forget — swallowed exceptions leave the splash up forever.
                 // Hide the splash and surface the error so the user isn't stuck on a blank screen.
                 _HideSplash();
+                string message = _BuildErrorMessage(ex);
                 if (InvokeRequired)
                     Invoke(new Action(() => MessageBox.Show(
-                        "שגיאה באתחול האפליקציה:\n" + ex.Message,
-                        "כזית", MessageBoxButtons.OK, MessageBoxIcon.Error)));
+                        message, "כזית", MessageBoxButtons.OK, MessageBoxIcon.Error)));
                 else
                     MessageBox.Show(
-                        "שגיאה באתחול האפליקציה:\n" + ex.Message,
-                        "כזית", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        message, "כזית", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        /// <summary>
+        /// Builds the error message for InitAsync failures.
+        /// For SQLite interop errors, appends environment diagnostics so users
+        /// can include the full context in a bug report.
+        /// </summary>
+        private static string _BuildErrorMessage(Exception ex)
+        {
+            string base_ = "שגיאה באתחול האפליקציה:\n" + ex.Message;
+
+            // Detect SQLite native interop failures — these are the hardest to
+            // diagnose remotely because they depend on process bitness, Word bitness,
+            // and what other SQLite copies exist on the machine.
+            bool isSqliteError =
+                ex is System.EntryPointNotFoundException ||
+                ex is System.DllNotFoundException ||
+                ex is System.BadImageFormatException ||
+                (ex.Message != null && ex.Message.IndexOf("SQLite", StringComparison.OrdinalIgnoreCase) >= 0) ||
+                (ex.Message != null && ex.Message.IndexOf("Interop", StringComparison.OrdinalIgnoreCase) >= 0);
+
+            if (!isSqliteError) return base_;
+
+            try
+            {
+                var diag = EnvironmentDiagnostics.Collect();
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine(base_);
+                sb.AppendLine();
+                sb.AppendLine("── פרטי סביבה ──");
+
+                // The most relevant fields for this error class
+                var keys = new[]
+                {
+                    "process.bitness",
+                    "process.executable",
+                    "office.wordBitness",
+                    "office.installType",
+                    "office.winwordPeBitness",
+                    "sqlite.baseDir.assembly",
+                    "sqlite.baseDir.appDomain",
+                    "sqlite.baseDir.envVar",
+                    "sqlite.interop.appDomain.x86.present",
+                    "sqlite.interop.appDomain.x86.path",
+                    "sqlite.interop.appDomain.x86.peMachine",
+                    "sqlite.interop.appDomain.x64.present",
+                    "sqlite.interop.appDomain.x64.path",
+                    "sqlite.interop.appDomain.x64.peMachine",
+                    "sqlite.interop.appDomain.flat.present",
+                    "sqlite.interop.assembly.x86.present",
+                    "sqlite.interop.assembly.x64.present",
+                    "sqlite.managed.appDomain.present",
+                    "sqlite.managed.appDomain.version",
+                    "assembly.appDomainBase",
+                    "assembly.executingLocation",
+                };
+
+                foreach (string key in keys)
+                {
+                    if (diag.TryGetValue(key, out string val))
+                        sb.AppendLine($"  {key}: {val}");
+                }
+
+                return sb.ToString();
+            }
+            catch
+            {
+                // Diagnostics collection failed — just return the base message.
+                return base_;
             }
         }
 

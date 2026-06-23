@@ -183,44 +183,74 @@ namespace KitveiHakodeshLib.Diagnostics
 
         private static void CollectSqliteInterop(Dictionary<string, string> d)
         {
-            // The stub SQLite package copies both x86\ and x64\ subfolders next to the
-            // executable. We check both, report presence, file size, and PE machine type.
-
-            string baseDir = SafeGet(() => Path.GetDirectoryName(
+            // ── 1. Directory from executing assembly location (may be shadow-copy temp under VSTO)
+            string asmDir = SafeGet(() => Path.GetDirectoryName(
                 Assembly.GetExecutingAssembly().Location));
 
-            if (string.IsNullOrEmpty(baseDir))
+            // ── 2. AppDomain base directory (the real install dir, even under VSTO)
+            string appDomainDir = SafeGet(() => AppDomain.CurrentDomain.BaseDirectory);
+
+            // ── 3. PreLoadSQLite_BaseDirectory env var (what SQLite itself uses first)
+            string envDir = SafeGet(() =>
+                System.Environment.GetEnvironmentVariable("PreLoadSQLite_BaseDirectory"));
+
+            d["sqlite.baseDir.assembly"]   = asmDir    ?? "unknown";
+            d["sqlite.baseDir.appDomain"]  = appDomainDir ?? "unknown";
+            d["sqlite.baseDir.envVar"]     = string.IsNullOrEmpty(envDir) ? "(not set)" : envDir;
+
+            // Check all three base directories so we can see exactly where SQLite
+            // will (or won't) find the interop DLL.
+            var dirsToCheck = new[]
             {
-                d["sqlite.baseDir"] = "unknown";
-                return;
-            }
+                ("assembly",  asmDir),
+                ("appDomain", appDomainDir),
+                ("envVar",    string.IsNullOrEmpty(envDir) ? null : envDir),
+            };
 
-            d["sqlite.baseDir"] = baseDir;
-
-            foreach (string arch in new[] { "x86", "x64" })
+            foreach (var (label, dir) in dirsToCheck)
             {
-                string path = Path.Combine(baseDir, arch, "SQLite.Interop.dll");
-                string prefix = "sqlite.interop." + arch;
+                if (string.IsNullOrEmpty(dir)) continue;
 
-                if (!File.Exists(path))
+                foreach (string arch in new[] { "x86", "x64" })
                 {
-                    d[prefix + ".present"]  = "false";
-                    d[prefix + ".path"]     = path;
-                    continue;
+                    string path   = Path.Combine(dir, arch, "SQLite.Interop.dll");
+                    string prefix = $"sqlite.interop.{label}.{arch}";
+
+                    if (!File.Exists(path))
+                    {
+                        d[prefix + ".present"] = "false";
+                        d[prefix + ".path"]    = path;
+                        continue;
+                    }
+
+                    d[prefix + ".present"]   = "true";
+                    d[prefix + ".path"]      = path;
+                    d[prefix + ".size"]      = SafeGet(() => new FileInfo(path).Length.ToString()) ?? "?";
+                    d[prefix + ".peMachine"] = SafeGet(() => ReadPeMachine(path)) ?? "unreadable";
                 }
 
-                d[prefix + ".present"]  = "true";
-                d[prefix + ".path"]     = path;
-                d[prefix + ".size"]     = SafeGet(() => new FileInfo(path).Length.ToString()) ?? "?";
-                d[prefix + ".peMachine"] = SafeGet(() => ReadPeMachine(path)) ?? "unreadable";
+                // Also check flat (wrong layout — no arch subfolder)
+                string flat = Path.Combine(dir, "SQLite.Interop.dll");
+                d[$"sqlite.interop.{label}.flat.present"] = File.Exists(flat).ToString();
+                if (File.Exists(flat))
+                    d[$"sqlite.interop.{label}.flat.peMachine"] =
+                        SafeGet(() => ReadPeMachine(flat)) ?? "unreadable";
             }
 
-            // Also check if SQLite.Interop.dll exists flat next to the exe (wrong layout)
-            string flat = Path.Combine(baseDir, "SQLite.Interop.dll");
-            d["sqlite.interop.flat.present"] = File.Exists(flat).ToString();
-            if (File.Exists(flat))
+            // ── Check System.Data.SQLite.dll itself
+            foreach (var (label, dir) in dirsToCheck)
             {
-                d["sqlite.interop.flat.peMachine"] = SafeGet(() => ReadPeMachine(flat)) ?? "unreadable";
+                if (string.IsNullOrEmpty(dir)) continue;
+                string managedDll = Path.Combine(dir, "System.Data.SQLite.dll");
+                d[$"sqlite.managed.{label}.present"] = File.Exists(managedDll).ToString();
+                if (File.Exists(managedDll))
+                {
+                    d[$"sqlite.managed.{label}.size"] =
+                        SafeGet(() => new FileInfo(managedDll).Length.ToString()) ?? "?";
+                    d[$"sqlite.managed.{label}.version"] = SafeGet(() =>
+                        System.Diagnostics.FileVersionInfo
+                            .GetVersionInfo(managedDll).FileVersion) ?? "?";
+                }
             }
         }
 

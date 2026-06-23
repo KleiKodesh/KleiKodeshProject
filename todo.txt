@@ -1,18 +1,23 @@
 taamey fonts?
 if doesn't have nikkud dont show the toggle
 וְרַבִּים כָּאֵ-לֶּה?
-full screen bug
-seprate zoom for commentaries
-add settings to reset document locator index
 add optional index drives with index saved on teh drive
 singleton pages shouldn't stay open?
 cntl tab should skip singleton tabs
 open with changes window size
 takes time till service starts
 fetch surrounding lines for context for very short lines - willr equire paying more attention during navigating to result?
-large pdf load time when jump scrolling
-אין מקור לבית יוסף אל הטור
-צריך לבדוק אם זה גם נשבר במקומות אחרים
+
+milti slect in lunes view
+תיקון rsets the msworf tollbars
+no need any cpu should be enough
+linesview scroll restore mutation observer?
+race conditions:
+- linesview loadin 
+- theme toggle
+- side panel
+- the unisnatll and תיקון are affecting the toolbars in egnral
+
 
 
 רא"ש מקוואות סימן ט
