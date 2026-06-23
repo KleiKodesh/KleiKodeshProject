@@ -732,19 +732,27 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         }
 
         // ── Word Resiliency ──────────────────────────────────────────────────────
+
         /// <summary>
-        /// Removes KleiKodesh from Word's DisabledItems list without touching other add-ins.
+        /// Removes only KleiKodesh entries from Word's DisabledItems registry key,
+        /// leaving all other disabled add-ins untouched.
         ///
-        /// Word writes DisabledItems (a binary blob) when an add-in fails to load, which
-        /// causes LoadBehavior to flip to 2 and the add-in to appear "disabled".
+        /// Word stores disabled items under:
+        ///   HKCU\Software\Microsoft\Office\{ver}\Word\Resiliency\DisabledItems
         ///
-        /// The blob is a sequence of variable-length records. We can't reliably parse the
-        /// binary format, so we use a safe heuristic: if the blob contains the UTF-16LE
-        /// bytes of "KleiKodesh" or "כלי קודש" we delete the whole value. Word recreates
-        /// it from scratch on next launch — other add-ins will be re-evaluated normally.
+        /// Each disabled item is a SEPARATE named value (random hex name like "63CB962"),
+        /// with a REG_BINARY record in the following format (all integers little-endian):
         ///
-        /// If the blob does NOT contain a KleiKodesh reference we leave it untouched,
-        /// so other add-ins' disabled state is preserved.
+        ///   Offset  Size  Description
+        ///   0       4     Type: 1=add-in, 2=document, 3=task pane
+        ///   4       4     Path length in bytes, including UTF-16LE null terminator
+        ///   8       4     Friendly name length in bytes, including UTF-16LE null terminator
+        ///   12      N     UTF-16LE path string + null (N = path length)
+        ///   12+N    M     UTF-16LE friendly name + null (M = friendly name length)
+        ///
+        /// We parse each value, extract the path and friendly name, and delete only the
+        /// values whose path or name contains a KleiKodesh token. Other add-ins' entries
+        /// are left completely untouched.
         /// </summary>
         private static async Task CleanWordResiliency(CleanupResult result, IProgress<string> log)
         {
@@ -753,24 +761,33 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                 // Office versions: 12.0=2007, 14.0=2010, 15.0=2013, 16.0=2016/2019/365
                 foreach (string officeVersion in new[] { "12.0", "14.0", "15.0", "16.0" })
                 {
-                    string resiliencyPath = $@"Software\Microsoft\Office\{officeVersion}\Word\Resiliency";
+                    string disabledItemsPath =
+                        $@"Software\Microsoft\Office\{officeVersion}\Word\Resiliency\DisabledItems";
                     try
                     {
-                        using (RegistryKey key = Registry.CurrentUser.OpenSubKey(resiliencyPath, writable: true))
+                        using (RegistryKey key = Registry.CurrentUser.OpenSubKey(disabledItemsPath, writable: true))
                         {
                             if (key == null) continue;
 
-                            byte[] blob = key.GetValue("DisabledItems") as byte[];
-                            if (blob == null || blob.Length == 0) continue;
+                            foreach (string valueName in key.GetValueNames().ToArray())
+                            {
+                                try
+                                {
+                                    byte[] record = key.GetValue(valueName) as byte[];
+                                    if (record == null || record.Length < 12) continue;
 
-                            // Check whether the blob contains a KleiKodesh reference
-                            // (UTF-16LE encoding, as used by Windows registry strings)
-                            if (!BlobContainsKleiKodesh(blob)) continue;
+                                    if (!DisabledItemRecordIsOurs(record)) continue;
 
-                            key.DeleteValue("DisabledItems", throwOnMissingValue: false);
-                            string fullPath = $@"HKCU\{resiliencyPath}\DisabledItems";
-                            result.DeletedRegistryKeys.Add(fullPath);
-                            log.Report($"🗝 {fullPath}");
+                                    key.DeleteValue(valueName, throwOnMissingValue: false);
+                                    string fullPath = $@"HKCU\{disabledItemsPath} [{valueName}]";
+                                    result.DeletedRegistryKeys.Add(fullPath);
+                                    log.Report($"🗝 {fullPath}");
+                                }
+                                catch (Exception ex)
+                                {
+                                    result.Errors.Add($"DisabledItems {officeVersion}[{valueName}]: {ex.Message}");
+                                }
+                            }
                         }
                     }
                     catch (Exception ex) { result.Errors.Add($"Resiliency {officeVersion}: {ex.Message}"); }
@@ -779,43 +796,42 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         }
 
         /// <summary>
-        /// Returns true if the DisabledItems binary blob contains any KleiKodesh identifier token
-        /// encoded as UTF-16LE (the encoding Windows uses for registry string data).
-        /// Covers all name variants: camelCase, split, lowercase, Hebrew joined/split.
+        /// Parses a single DisabledItems REG_BINARY record and returns true if its
+        /// path or friendly name contains a KleiKodesh token.
+        ///
+        /// Record layout (little-endian):
+        ///   [0..3]   type DWORD (1=add-in, 2=document, 3=task pane)
+        ///   [4..7]   pathLen DWORD  — byte count including UTF-16LE null terminator
+        ///   [8..11]  nameLen DWORD  — byte count including UTF-16LE null terminator
+        ///   [12 .. 12+pathLen-1]        UTF-16LE path  + null
+        ///   [12+pathLen .. 12+pathLen+nameLen-1]  UTF-16LE name  + null
         /// </summary>
-        private static bool BlobContainsKleiKodesh(byte[] blob)
+        private static bool DisabledItemRecordIsOurs(byte[] record)
         {
-            foreach (string token in KleiKodeshTokens)
+            try
             {
-                // UTF-16LE — how Windows stores strings in binary registry values
-                byte[] needle = System.Text.Encoding.Unicode.GetBytes(token);
-                if (ContainsSequence(blob, needle)) return true;
+                int pathLen = BitConverter.ToInt32(record, 4);
+                int nameLen = BitConverter.ToInt32(record, 8);
 
-                // Also check uppercase variant (OrdinalIgnoreCase on strings doesn't help
-                // with raw bytes, so we encode both cases explicitly for ASCII tokens)
-                byte[] needleUpper = System.Text.Encoding.Unicode.GetBytes(token.ToUpperInvariant());
-                if (!needleUpper.SequenceEqual(needle) && ContainsSequence(blob, needleUpper)) return true;
+                // Sanity-check lengths before slicing
+                if (pathLen < 2 || nameLen < 0) return false;
+                if (12 + pathLen > record.Length) return false;
 
-                byte[] needleLower = System.Text.Encoding.Unicode.GetBytes(token.ToLowerInvariant());
-                if (!needleLower.SequenceEqual(needle) && ContainsSequence(blob, needleLower)) return true;
+                // Decode path (strip the 2-byte null terminator)
+                string path = System.Text.Encoding.Unicode.GetString(record, 12, pathLen - 2);
+
+                // Decode friendly name if present
+                string name = "";
+                if (nameLen >= 2 && 12 + pathLen + nameLen <= record.Length)
+                    name = System.Text.Encoding.Unicode.GetString(record, 12 + pathLen, nameLen - 2);
+
+                return ContainsKleiKodesh(path) || ContainsKleiKodesh(name);
             }
-            return false;
-        }
-
-        private static bool ContainsSequence(byte[] haystack, byte[] needle)
-        {
-            if (needle.Length == 0 || haystack.Length < needle.Length) return false;
-            int limit = haystack.Length - needle.Length;
-            for (int i = 0; i <= limit; i++)
+            catch
             {
-                bool match = true;
-                for (int j = 0; j < needle.Length; j++)
-                {
-                    if (haystack[i + j] != needle[j]) { match = false; break; }
-                }
-                if (match) return true;
+                // Malformed record — don't delete it
+                return false;
             }
-            return false;
         }
 
         // ── Shortcuts ────────────────────────────────────────────────────────────

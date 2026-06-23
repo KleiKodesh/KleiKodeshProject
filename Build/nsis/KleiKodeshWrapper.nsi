@@ -375,17 +375,47 @@ Section Uninstall
   ; Applications entry: HKCU\Software\Classes\Applications\כתבי הקודש.exe
   DeleteRegKey HKCU "Software\Classes\Applications\כתבי הקודש.exe"
 
-  ; ── Explorer FileExts cleanup ────────────────────────────────────────────────
-  ; Windows writes these under FileExts when the user picks "Open With" from Explorer.
-  ; They are separate from the Software\Classes entries above and must be removed here;
-  ; otherwise Explorer still shows (and tries to launch) the uninstalled app.
+  ; ── Default-handler ProgId keys (<ext>_auto_file) ────────────────────────────
+  ; When the user sets כתבי הקודש as the *default* app for an extension via
+  ; "Always use this app" or Windows Settings → Default Apps, Windows creates a
+  ; per-user ProgId key named <ext>_auto_file under HKCU\Software\Classes and
+  ; points the extension's UserChoice to it.  The app never writes these — Windows
+  ; does — so they were never cleaned up before.
+  ; Deleting the HKCU\Software\Classes key is sufficient: HKCR\<ext>_auto_file is
+  ; only a merged view of HKCU\Software\Classes, so no elevation is required.
   ;
-  ; Each FileExts\.<ext>\OpenWithProgids sub-key may contain "KitveiHakodesh.Document.1".
-  ; Each FileExts\.<ext>\OpenWithList sub-key contains MRU letter entries ("a","b",...) and
-  ; an MRUList value; we delete only the value(s) that point to our exe, then remove the
-  ; entire sub-key only if it becomes empty (to avoid breaking other apps in the list).
-  ; Since NSIS cannot enumerate MRU slots, we delete the whole OpenWithList key — Windows
-  ; rebuilds it from remaining registered apps automatically.
+  ; SAFETY: before deleting, we read the shell\open\command value and verify it
+  ; contains "KleiKodesh" — so we never touch a key that belongs to another app.
+  !macro DeleteAutoFileIfOurs PROGID
+    ReadRegStr $R0 HKCU "Software\Classes\${PROGID}\shell\open\command" ""
+    Push $R0
+    Push "KleiKodesh"
+    Call un.StrStr
+    Pop $R1
+    StrCmp $R1 "" +2        ; skip delete if substring not found
+      DeleteRegKey HKCU "Software\Classes\${PROGID}"
+  !macroend
+  !insertmacro DeleteAutoFileIfOurs "pdf_auto_file"
+  !insertmacro DeleteAutoFileIfOurs "doc_auto_file"
+  !insertmacro DeleteAutoFileIfOurs "docx_auto_file"
+  !insertmacro DeleteAutoFileIfOurs "rtf_auto_file"
+  !insertmacro DeleteAutoFileIfOurs "txt_auto_file"
+  !insertmacro DeleteAutoFileIfOurs "htm_auto_file"
+  !insertmacro DeleteAutoFileIfOurs "html_auto_file"
+
+  ; ── Explorer FileExts cleanup ────────────────────────────────────────────────
+  ; Windows writes its own copy of OpenWithProgids under FileExts when the user picks
+  ; "Open With" from Explorer. These are separate from Software\Classes and must also
+  ; be removed; otherwise Explorer still shows the uninstalled app in the context menu.
+  ;
+  ; We only delete the specific KitveiHakodesh.Document.1 value — other apps' entries
+  ; in the same key are left untouched.
+  ;
+  ; We intentionally do NOT touch OpenWithList: that key is an MRU ordered list of all
+  ; apps the user has opened this extension with, not just ours. Deleting the whole key
+  ; would clear other apps' history. Since we remove the Applications\ key above,
+  ; Windows cannot launch our exe from the menu regardless, and Explorer will stop
+  ; showing it once SHChangeNotify fires.
   DetailPrint "מנקה רישומי FileExts (פתיחה עם)..."
 
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.pdf\OpenWithProgids"  "KitveiHakodesh.Document.1"
@@ -395,16 +425,6 @@ Section Uninstall
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.txt\OpenWithProgids"  "KitveiHakodesh.Document.1"
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.htm\OpenWithProgids"  "KitveiHakodesh.Document.1"
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.html\OpenWithProgids" "KitveiHakodesh.Document.1"
-
-  ; OpenWithList — delete the entire sub-key; Windows rebuilds it from registered apps.
-  ; Deleting just our entry is not reliably possible in NSIS (MRU slot names are dynamic).
-  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.pdf\OpenWithList"
-  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.doc\OpenWithList"
-  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.docx\OpenWithList"
-  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.rtf\OpenWithList"
-  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.txt\OpenWithList"
-  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.htm\OpenWithList"
-  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.html\OpenWithList"
 
   ; ── File system ──────────────────────────────────────────────────────────────
   DetailPrint "מסיר קבצי התוכנה..."

@@ -3,6 +3,7 @@ using KleiKodesh.Ribbon;
 using KitveiHakodeshLib.Pdf;
 using UpdateCheckerLib;
 using Office = Microsoft.Office.Core;
+using System;
 
 namespace KleiKodesh
 {

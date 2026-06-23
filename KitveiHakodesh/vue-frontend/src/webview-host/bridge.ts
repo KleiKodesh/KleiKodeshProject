@@ -73,19 +73,21 @@ export async function restoreLocalFile(filePath: string): Promise<LocalFileResto
 
 /**
  * Restore a HebrewBooks PDF tab from a persisted book ID.
- * C# checks the cache; if evicted, re-downloads.
+ * C# checks the local folder first, then the cache; if neither has it, re-downloads.
  * Returns null on failure.
  */
 export async function restoreHbPdf(
   bookId: string,
   bookTitle: string,
   tabId: string,
+  localFolder?: string,
 ): Promise<{ url: string } | { redownload: true } | null> {
   if (!isHosted) return null
   const res = await action<{ url?: string; redownload?: boolean; error?: string }>('restoreHbPdf', {
     bookId,
     bookTitle,
     tabId,
+    localFolder: localFolder || '',
   })
   if (res.error) return null
   if (res.redownload) return { redownload: true }
