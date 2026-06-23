@@ -13,4 +13,4 @@ Contains the .NET libraries that back the KitveiHakodesh Vue app.
 
 ## Solution
 
-`KitveiHakodesh.slnx` — builds KitveiHakodeshLib, Ftslib-Csharp, KitveiHakodeshDemoApp, DocumentLocator.Client, DocumentLocator.Service, and the core DocumentLocator library. Ftslib-Csharp has its own solution file (`Ftslib-Csharp/Ftslib-Csharp.sln`) and can be built independently.
+`KitveiHakodesh.slnx` — builds KitveiHakodeshLib, Ftslib-Csharp, KitveiHakodeshDemoApp, DocumentLocator.Client, DocumentLocator.Service, and the core DocumentLocator library. Ftslib-Csharp has its own solution file (`Ftslib-Csharp/FtsLib.slnx`) and can be built independently.

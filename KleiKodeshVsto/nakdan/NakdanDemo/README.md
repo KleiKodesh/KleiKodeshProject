@@ -8,7 +8,7 @@ Tests the Nakdan library independently of the Word VSTO context.
 
 ## Usage
 
-1. Open `Nakdan.sln` in Visual Studio
+1. Open `Nakdan.slnx` in Visual Studio
 2. Set `NakdanDemo` as the startup project
 3. Press F5 to run
 

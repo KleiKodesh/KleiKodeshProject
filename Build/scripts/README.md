@@ -4,7 +4,7 @@ PowerShell scripts that orchestrate the build, packaging, and deployment pipelin
 
 ## Files
 
-**`build-menu.bat`** — Entry point batch file that launches the interactive build menu.
+**`build-menu.bat`** (located at `Build/build-menu.bat`, not in this folder) — Entry point batch file that launches the interactive build menu.
 
 **`build-menu.ps1`** — Interactive build menu (prompts user for version, notes source, confirmation). Launched by `build-menu.bat`. Options:
 - Build (full three-variant build)

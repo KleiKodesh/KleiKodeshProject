@@ -11,6 +11,7 @@ Shared WPF utilities used by all task pane libraries in KleiKodesh (DocDesignLib
 | `Converters/` | WPF value converters (FlowDirection, Bool, String, Array/List) | All WPF libs |
 | `Controls/` | Custom controls (UpDownTextBox, UpDownFloatTextBox) | DocDesignLib |
 | `AttachedProperties/` | Attached behaviors (ButtonStrip, GridSetup, PopupListBox, TextBoxBehaviours) | All WPF libs |
+| `ThemedWindow/` | Custom window chrome (ThemedWindowDictionary.xaml, WindowButtons.cs) | Installer, KitveiHakodesh standalone |
 | `Themes/` | Unified Office-theme style palette (OfficePalette.xaml merges Brushes, ScrollBar, ComboBox, Button, CheckBox styles) | All WPF libs |
 
 ## Key Files
@@ -49,6 +50,10 @@ Shared WPF utilities used by all task pane libraries in KleiKodesh (DocDesignLib
 ### Controls/
 - **`UpDownTextBox.cs`** — Numeric TextBox with up/down spinner buttons. Integer mode.
 - **`UpDownFloatTextBox.cs`** — Float variant of UpDownTextBox with configurable decimal places.
+
+### ThemedWindow/
+- **`ThemedWindowDictionary.xaml`** — Resource dictionary with custom window chrome styles (caption buttons, borders).
+- **`WindowButtons.cs`** — Code-behind for window minimize/maximize/close buttons used by themed windows.
 
 ## Usage
 

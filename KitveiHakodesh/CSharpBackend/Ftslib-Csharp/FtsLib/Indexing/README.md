@@ -29,6 +29,7 @@ Database Lines
 | `SegmentWriter.cs` | `SegmentWriter` | Write posting lists (delta+varint) |
 | `SegmentReader.cs` | `SegmentReader` | Read posting lists |
 | `SegmentMerger.cs` | `SegmentMerger` | Merge segments |
+| `ForceMerger.cs` | `ForceMerger` | Incremental LSM-tree force merge with crash recovery |
 | `SegmentLiveState.cs` | `SegmentLiveState` | Segment metadata |
 | `SegmentHandle.cs` | `SegmentHandle` | Memory-mapped read access to .dat files |
 | `SegmentWal.cs` | `SegmentWal` | Write-ahead log |
@@ -40,6 +41,7 @@ Database Lines
 | `SearchLease.cs` | `SearchLease` | Allow reads during writes |
 | `CorruptIndexException.cs` | — | Exception type |
 | `IndexMergingException.cs` | — | Exception type |
+| `FtsLog.cs` | `FtsLog` | Lightweight append-only file logger |
 
 ## Key Concepts
 

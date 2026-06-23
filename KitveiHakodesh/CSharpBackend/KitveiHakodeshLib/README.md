@@ -10,23 +10,50 @@ A .NET class library that hosts the KitveiHakodesh Vue app inside a WebView2 con
 
 ```
 KitveiHakodeshLib/
-├── AppViewer.cs              — Root UserControl; initialises WebView2, wires up all handlers
-├── SplashOverlay.cs          — Fade-in splash screen shown while WebView2 loads
+├── AppViewer.cs                    — Root UserControl; initialises WebView2, wires up all handlers
+├── SplashOverlay.cs                — Fade-in splash screen shown while WebView2 loads
+├── WordExporter.cs                 — Exports content to Word
+├── HebrewBooks.db                  — Local HebrewBooks catalogue database
+├── KleiKodesh_Main.png             — Splash screen image resource
 ├── Bridge/
-│   ├── JsBridge.cs           — Injects window.__webviewAction into the page; routes messages
-│   └── WebBridge.cs          — Sends replies and push events back to the Vue app
+│   ├── JsBridge.cs                 — Injects window.__webviewAction into the page; routes messages
+│   └── WebBridge.cs                — Sends replies and push events back to the Vue app
 ├── Db/
-│   ├── DbHandler.cs          — Handles 'sql' and 'pickDbPath' messages; runs queries
-│   └── DbAccess.cs           — SQLite wrapper using Dapper
-├── Search/
-│   └── SearchHandler.cs      — FtsLib indexing & search; index lifecycle management
-├── Pdf/
-│   └── LocalFileHandler.cs   — File picker for local files; virtual host mapping; Word→PDF conversion
+│   ├── DbHandler.cs                — Handles 'sql' and 'pickDbPath' messages; runs queries
+│   └── DbAccess.cs                 — SQLite wrapper using Dapper
+├── Diagnostics/
+│   ├── AppLogger.cs                — Application-level logging
+│   └── EnvironmentDiagnostics.cs   — Environment info diagnostics
+├── Dictionary/
+│   ├── DictionaryHandler.cs        — Dictionary lookup handler
+│   └── WordThesaurusProvider.cs    — Thesaurus data provider
+├── FileSystemSearch/
+│   ├── FileSystemSearchHandler.cs  — File system search handler
+│   └── DocumentLocatorAdapter.cs   — Adapter for DocumentLocator service
 ├── HebrewBooks/
-│   ├── HebrewBooksHandler.cs — Download, cache, and serve HebrewBooks PDFs
-│   └── HebrewBooksCsvUpdater.cs — Updates the HebrewBooks catalogue CSV
-└── Settings/
-    └── AppSettings.cs        — Registry-backed settings for the KitveiHakodesh app
+│   ├── HebrewBooksHandler.cs       — Download, cache, and serve HebrewBooks PDFs
+│   └── HebrewBooksDb.cs            — HebrewBooks catalogue database access
+├── Helpers/
+│   ├── FontsProvider.cs            — Hebrew font provisioning
+│   └── SqliteNativeLoader.cs       — SQLite native binary loader
+├── Pdf/
+│   ├── LocalFileHandler.cs         — File picker for local files; virtual host mapping; Word→PDF conversion
+│   └── WordToPdfConverter.cs       — Converts Word documents to PDF
+├── Properties/
+│   └── AssemblyInfo.cs             — Assembly metadata
+├── Resources/
+│   └── HebrewBooks.db              — Embedded HebrewBooks catalogue DB resource
+├── Search/
+│   ├── SearchHandler.cs            — FtsLib indexing & search; index lifecycle management
+│   ├── FtsIndexBuilder.cs          — Background index builder
+│   ├── FtsIndexState.cs            — Tracks index build state
+│   └── FtsSearchExecutor.cs        — Executes search queries via FtsLib
+├── Settings/
+│   ├── AppSettings.cs              — Registry-backed settings for the KitveiHakodesh app
+│   └── ShellRegistration.cs        — Windows shell registration
+└── UserSettings/
+    ├── UserSettingsDbHandler.cs    — User settings database handler
+    └── UserSettingsDbAccess.cs     — User settings data access
 ```
 
 ## Message Flow

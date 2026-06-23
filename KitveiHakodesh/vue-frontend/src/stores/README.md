@@ -19,3 +19,5 @@ Initialization order matters: `workspaceStore` must init before `tabStore`. See 
 **searchCacheStore** — LRU cache for full-text search results, capped at 100 entries. Do not cache search results anywhere else.
 
 **hebrewBooksHistoryStore** — owns the `app-hb-history` IDB database. Tracks which HebrewBooks PDFs the user has downloaded, LRU-capped at 25 entries. All history reads and writes go through here — do not import from `persistence.ts` for this database anywhere else.
+
+**pdfOcrStore** — Pinia store for PDF OCR state. Manages OCR activation toggle, script selection (Hebrew/Rashi/mixed), and the skip-existing-text flag.

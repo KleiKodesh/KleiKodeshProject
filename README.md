@@ -34,6 +34,7 @@
 | [`KitveiHakodesh/CSharpBackend/Ftslib-Csharp`](KitveiHakodesh/CSharpBackend/Ftslib-Csharp/README.md) | .NET Library          | מנוע חיפוש Bloom filter                               |
 | [`KitveiHakodesh/CSharpBackend/DocumentLocator`](KitveiHakodesh/CSharpBackend/DocumentLocator/README.md) | Windows Service + .NET | שירות אינדוקס קבצים NTFS עבור חיפוש מהיר                     |
 | [`kleikodesh-website`](kleikodesh-website/README.md)                                             | Static HTML/CSS/JS    | אתר הפרויקט הציבורי ודף ההורדה                        |
+| [`hebrew-typing-tutor`](hebrew-typing-tutor/README.md)                                         | Web app (HTML/CSS/JS) | מאמן הקלדה עברית                                       |
 
 ## ארכיטקטורה
 

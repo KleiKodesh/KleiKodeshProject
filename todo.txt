@@ -9,11 +9,9 @@ takes time till service starts
 fetch surrounding lines for context for very short lines - willr equire paying more attention during navigating to result?
 
 milti slect in lunes view
-no need any cpu should be enough
 linesview scroll restore mutation observer?
 race conditions:
 - linesview loadin 
-- theme toggle
 - side panel
 - the unisnatll and תיקון are affecting the toolbars in egnral
 create excluded folders dilgue for the document locator

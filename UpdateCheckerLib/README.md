@@ -8,7 +8,7 @@ Monitors GitHub releases for new versions of KleiKodesh and automatically downlo
 
 - **UpdateChecker.cs** — Main service that fetches the latest release from GitHub, compares against the installed version (read from the Windows registry), and triggers download if a newer version exists.
 - **DownloadManager.cs** — Handles downloading the installer `.exe` file to a temp location and launching it (with UAC handling via `runas` verb).
-- **DownloadProgressWindow.xaml** — WPF window showing download progress and cancellation option.
+- **DownloadProgressForm.cs** — WinForms progress form showing download progress and cancellation option.
 - **GithubRelease.cs** — Data model for GitHub release JSON (version tag, download URL, etc.).
 
 ## Integration
@@ -21,7 +21,7 @@ The installer being downloaded is the **NSIS wrapper** (`KleiKodeshSetup-vX.Y.Z.
 
 ```
 UpdateChecker.GetCurrentVersionFromRegistry()
-  → reads HKCU\SOFTWARE\KleiKodesh\Version (e.g. "v3.4.0")
+  → reads HKCU\SOFTWARE\KleiKodesh\Version (e.g. "v8.2.1")
   ↓
 Fetches https://api.github.com/repos/KleiKodesh/KleiKodeshProject/releases/latest
   ↓
@@ -41,7 +41,7 @@ For full version management details, see `.kiro/steering/version-management.md`.
 UpdateCheckerLib/
 ├── UpdateChecker.cs           — Main service
 ├── DownloadManager.cs         — Download + install launcher
-├── DownloadProgressWindow.xaml — Progress UI (WPF)
+├── DownloadProgressForm.cs      — Progress UI (WinForms)
 ├── DownloadProgressWindow.xaml.cs
 ├── GithubRelease.cs           — API model
 ├── UpdateCheckerLib.csproj    — Must define Release|x64, Release|x86, Release|AnyCPU output paths

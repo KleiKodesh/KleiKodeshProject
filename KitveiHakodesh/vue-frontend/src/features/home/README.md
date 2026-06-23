@@ -6,9 +6,9 @@ Home page with navigation tiles.
 
 **HomePageTile.vue** — single tile with a filled colored icon and label. Navigates via `useAppNavigation` on tap. Add new tiles in `HomePage.vue` using this component.
 
-**useHomeDateInfo.ts** — loads today's Hebrew date and Daf Yomi for the bottom date bar.
+**homeDateInfo.ts** — loads today's Hebrew date and Daf Yomi for the bottom date bar.
 
-**useDafYomiNavigation.ts** — navigates to the Daf Yomi book and line when the user taps the Daf Yomi entry in the date bar.
+**dafYomiNavigation.ts** — navigates to the Daf Yomi book and line when the user taps the Daf Yomi entry in the date bar.
 
 ## Tile visibility rules
 

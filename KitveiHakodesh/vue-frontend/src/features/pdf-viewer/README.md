@@ -9,3 +9,5 @@ PDF viewer with OCR text extraction.
 **PdfOcrResultPopup.vue** — modal popup displaying OCR results. Shows extracted text in an editable textarea, allows script switching (Hebrew/Rashi), and provides copy-to-clipboard functionality. Dismisses on overlay click or Escape key.
 
 **pdfOcrInjectedScript.ts** — injected script that runs inside the PDF.js iframe. Implements the selection rectangle UI (crosshair cursor, dashed selection box), text layer hit testing, and canvas capture. Communicates back to the parent window via postMessage.
+
+**pdfViewerTypes.ts** — TypeScript types for the PDF viewer: `OcrScript` ('hebrew' | 'rashi' | 'mixed') and `OcrSelectionResult` (text + isOcr flag).

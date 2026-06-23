@@ -18,6 +18,8 @@ Full-text search using Category and book filters, virtual-scrolled results, inde
 
 **FullTextSearchIndexingOverlay.vue** — full-screen overlay shown while the Bloom index is being built.
 
+**FullTextSearchAdvancedPanel.vue** — advanced search options panel. Provides conjunction mode toggle (AND/OR), category proximity filtering, and search scope controls.
+
 ## Composables
 
 **useFullTextSearch.ts** — executes Bloom filter searches via the C# backend. Supports incremental caching: each batch is written to `searchCacheStore` as it arrives. On re-search or tab restore, cached partial results are shown immediately and the C# stream resumes from the last cached offset (`skipCount`). All search execution goes through here.

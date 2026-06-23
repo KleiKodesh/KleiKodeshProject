@@ -14,7 +14,7 @@ NSIS (Nullsoft Scriptable Install System) wrapper that surrounds the WPF install
 ## How the Wrapper Works
 
 The NSIS script is parameterized with:
-- `PRODUCT_VERSION` — Version string (e.g. "v3.6.1") passed by `build-installer.ps1`
+- `PRODUCT_VERSION` — Version string (e.g. "v8.2.1") passed by `build-installer.ps1`
 - `WPF_EXE_PATH` — Path to the built WPF installer exe
 
 The wrapper never extracts files itself — the WPF installer handles all file operations. The NSIS layer exists solely for:
@@ -36,4 +36,4 @@ Each is a self-extracting NSIS archive containing the WPF installer + prerequisi
 
 ## Build
 
-The NSIS script is compiled during `build-installer.ps1` execution. Requires NSIS 3.08+ with the Hebrew language module (`MUI_HEBREW.nsh`).
+The NSIS script is compiled during `build-installer.ps1` execution. Requires NSIS 3.08+.
