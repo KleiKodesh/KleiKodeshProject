@@ -8,14 +8,11 @@ import BottomSearchBar from '@/components/BottomSearchBar.vue'
 import { useHebrewBooks } from './useHebrewBooks'
 import { useVirtualListKeys } from '@/composables/useVirtualListKeyNav'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
-import { useEventListener } from '@vueuse/core'
-
 const {
   displayedBooks,
   isLoading,
   error,
   searchTerm,
-  isOnline,
   load,
   search,
   openBook,
@@ -49,17 +46,10 @@ useVirtualScrollerKeys(
   () => displayedBooks.value.length,
 )
 
-function updateOnline() {
-  isOnline.value = navigator.onLine
-}
-
 onMounted(() => {
   load()
   searchInputRef.value?.focus()
 })
-
-useEventListener(window, 'online', updateOnline)
-useEventListener(window, 'offline', updateOnline)
 
 function onBookClicked(i: number, book: (typeof displayedBooks.value)[number]) {
   focusedIndex.value = i
@@ -112,8 +102,7 @@ function onBookClicked(i: number, book: (typeof displayedBooks.value)[number]) {
         ref="searchInputRef"
         :value="searchTerm"
         type="search"
-        :placeholder="isOnline ? 'חפש ספרים, מחברים או נושאים...' : 'נדרש חיבור לאינטרנט'"
-        :disabled="!isOnline"
+        placeholder="חפש ספרים, מחברים או נושאים..."
         class="search-input"
         dir="rtl"
         @input="search(($event.target as HTMLInputElement).value)"
@@ -171,10 +160,6 @@ function onBookClicked(i: number, book: (typeof displayedBooks.value)[number]) {
 }
 .search-input::placeholder {
   color: var(--text-secondary);
-}
-.search-input:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 .search-input::-webkit-search-cancel-button {
   filter: grayscale(1) opacity(0.4);
