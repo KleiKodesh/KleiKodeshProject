@@ -9,7 +9,6 @@ takes time till service starts
 fetch surrounding lines for context for very short lines - willr equire paying more attention during navigating to result?
 
 milti slect in lunes view
-תיקון rsets the msworf tollbars
 no need any cpu should be enough
 linesview scroll restore mutation observer?
 race conditions:
