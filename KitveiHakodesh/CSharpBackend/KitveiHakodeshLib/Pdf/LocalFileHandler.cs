@@ -55,102 +55,85 @@ namespace KitveiHakodeshLib.LocalFile
         /// </summary>
         public async Task OpenFileFromPathAsync(string filePath)
         {
-            if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+            try
             {
-                _bridge.PushEvent(new { @event = "localFileError", message = "הקובץ לא נמצא: " + filePath });
-                return;
-            }
-
-            string ext = Path.GetExtension(filePath).ToLowerInvariant();
-
-            if (ext == ".pdf" || ext == ".htm" || ext == ".html" || ext == ".txt")
-            {
-                // Directly hostable — register the folder as a virtual host and fire
-                // localFileReady. Vue routes to /pdf-view or /html-view based on extension,
-                // and sets localFilePath for session restore.
-                // openInNewTab: true tells the Vue store to open in a new tab rather than
-                // replacing the current active tab (this path is only taken from OpenFileFromPathAsync,
-                // i.e. "Open With" / command-line — not from the in-app file picker).
-                string url = RegisterFolder(filePath);
-                _bridge.PushEvent(new
+                if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
                 {
-                    @event = "localFileReady",
-                    url,
-                    fileName = Path.GetFileName(filePath),
-                    filePath,
-                    openInNewTab = true,
-                });
-            }
-            else
-            {
-                // Word / RTF — needs conversion.
-                // Push localFileConversionStarted so Vue opens a new tab with the converting
-                // placeholder (openInNewTab: true, same reason as above).
-                string displayName = Path.GetFileNameWithoutExtension(filePath) + ".pdf";
-                string destPath    = GetCachePath(filePath);
-                string destFileName = Path.GetFileName(destPath);
-
-                _bridge.PushEvent(new { @event = "localFileConversionStarted", fileName = displayName, filePath, openInNewTab = true });
-
-                // Watch for the output PDF to appear — fires as soon as ExportAsFixedFormat
-                // writes the file, before Word has finished closing. This lets the tab update
-                // immediately without waiting for app.Quit() to return.
-                // localFileConversionReady is the terminal event for Word files: Vue calls
-                // finishLocalFileConversion which sets localFilePath to the *original* source
-                // path so session restore can reconvert if the cache is evicted.
-                Directory.CreateDirectory(WordCacheDir);
-                FileSystemWatcher watcher = null;
-                bool watcherFired = false;
-                if (!File.Exists(destPath))
-                {
-                    watcher = new FileSystemWatcher(WordCacheDir, destFileName)
-                    {
-                        NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
-                        EnableRaisingEvents = true,
-                    };
-                    FileSystemEventHandler onReady = null;
-                    onReady = (s, e) =>
-                    {
-                        if (!IsFileReady(e.FullPath)) return;
-                        if (watcherFired) return;
-                        watcherFired = true;
-                        watcher.EnableRaisingEvents = false;
-                        watcher.Dispose();
-                        string url2 = "http://KitveiHakodesh-vue-app/cache/word/" + destFileName;
-                        _bridge.PushEvent(new { @event = "localFileConversionReady", url = url2, fileName = displayName, filePath });
-                    };
-                    watcher.Created += onReady;
-                    watcher.Changed += onReady;
-                }
-
-                string cached = await ConvertToPdfAsync(filePath);
-
-                if (watcher != null)
-                {
-                    watcher.EnableRaisingEvents = false;
-                    watcher.Dispose();
-                }
-
-                if (cached == null)
-                {
-                    // Conversion failed — tab is still showing the converting placeholder.
-                    // Push localFileError so Vue's localFileStore resets it to home.
-                    _bridge.PushEvent(new { @event = "localFileError", message = "לא ניתן להמיר את הקובץ. ודא ש-Microsoft Word מותקן.", filePath });
+                    _bridge.PushEvent(new { @event = "localFileError", message = "הקובץ לא נמצא: " + filePath });
                     return;
                 }
 
-                // Push localFileConversionReady if it hasn't been pushed yet:
-                //   — watcher == null  → file was already cached; watcher was never set up
-                //   — !watcherFired    → watcher was set up but the callback lost the race
-                //                        with ConvertToPdfAsync returning (very rare)
-                // HandlePickFile has the same fallback via _bridge.Reply on the RPC path;
-                // the Vue hosted frontend ignores that reply but arrives at the same state
-                // because finishLocalFileConversion is idempotent (bails if !localFileConverting).
-                if (!watcherFired)
+                string ext = Path.GetExtension(filePath).ToLowerInvariant();
+
+                if (ext == ".pdf" || ext == ".htm" || ext == ".html" || ext == ".txt")
                 {
-                    string url = "http://KitveiHakodesh-vue-app/cache/word/" + Path.GetFileName(cached);
-                    _bridge.PushEvent(new { @event = "localFileConversionReady", url, fileName = displayName, filePath });
+                    string url = RegisterFolder(filePath);
+                    _bridge.PushEvent(new
+                    {
+                        @event = "localFileReady",
+                        url,
+                        fileName = Path.GetFileName(filePath),
+                        filePath,
+                        openInNewTab = true,
+                    });
                 }
+                else
+                {
+                    string displayName  = Path.GetFileNameWithoutExtension(filePath) + ".pdf";
+                    string destPath     = GetCachePath(filePath);
+                    string destFileName = Path.GetFileName(destPath);
+
+                    _bridge.PushEvent(new { @event = "localFileConversionStarted", fileName = displayName, filePath, openInNewTab = true });
+
+                    Directory.CreateDirectory(WordCacheDir);
+                    FileSystemWatcher watcher = null;
+                    bool watcherFired = false;
+                    if (!File.Exists(destPath))
+                    {
+                        watcher = new FileSystemWatcher(WordCacheDir, destFileName)
+                        {
+                            NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
+                            EnableRaisingEvents = true,
+                        };
+                        FileSystemEventHandler onReady = null;
+                        onReady = (s, e) =>
+                        {
+                            if (!IsFileReady(e.FullPath)) return;
+                            if (watcherFired) return;
+                            watcherFired = true;
+                            watcher.EnableRaisingEvents = false;
+                            watcher.Dispose();
+                            string url2 = "http://KitveiHakodesh-vue-app/cache/word/" + destFileName;
+                            _bridge.PushEvent(new { @event = "localFileConversionReady", url = url2, fileName = displayName, filePath });
+                        };
+                        watcher.Created += onReady;
+                        watcher.Changed += onReady;
+                    }
+
+                    string cached = await ConvertToPdfAsync(filePath);
+
+                    if (watcher != null)
+                    {
+                        watcher.EnableRaisingEvents = false;
+                        watcher.Dispose();
+                    }
+
+                    if (cached == null)
+                    {
+                        _bridge.PushEvent(new { @event = "localFileError", message = "לא ניתן להמיר את הקובץ. ודא ש-Microsoft Word מותקן.", filePath });
+                        return;
+                    }
+
+                    if (!watcherFired)
+                    {
+                        string url = "http://KitveiHakodesh-vue-app/cache/word/" + Path.GetFileName(cached);
+                        _bridge.PushEvent(new { @event = "localFileConversionReady", url, fileName = displayName, filePath });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _bridge.PushEvent(new { @event = "localFileError", message = ex.Message, filePath });
             }
         }
 
@@ -181,93 +164,99 @@ namespace KitveiHakodeshLib.LocalFile
         {
             owner.BeginInvoke(new Action(async () =>
             {
-                using (var dlg = new OpenFileDialog())
+                try
                 {
-                    dlg.Title  = "פתח קובץ";
-                    dlg.Filter = "קבצים נתמכים (*.pdf;*.doc;*.docx;*.rtf;*.txt;*.htm;*.html)|*.pdf;*.doc;*.docx;*.rtf;*.txt;*.htm;*.html|כל הקבצים (*.*)|*.*";
-                    if (dlg.ShowDialog() != DialogResult.OK) { _bridge.Reply(id, new { cancelled = true }); return; }
-
-                    string filePath = dlg.FileName;
-                    string ext = Path.GetExtension(filePath).ToLowerInvariant();
-
-                    // Handle already-webview-hostable files (PDF, HTML, and plain text) by
-                    // registering the parent folder as a virtual host and returning the URL
-                    // immediately. Plain text files are served as-is and rendered by the
-                    // browser inside the html-view iframe — no conversion needed.
-                    if (ext == ".pdf" || ext == ".htm" || ext == ".html" || ext == ".txt")
+                    using (var dlg = new OpenFileDialog())
                     {
-                        string url = RegisterFolder(filePath);
-                        _bridge.PushEvent(new { @event = "localFileReady", url, fileName = Path.GetFileName(filePath), filePath });
-                        _bridge.Reply(id, new { cancelled = false, url, fileName = Path.GetFileName(filePath), filePath });
-                    }
-                    else
-                    {
-                        string displayName = Path.GetFileNameWithoutExtension(filePath) + ".pdf";
-                        string destPath = GetCachePath(filePath);
-                        string destFileName = Path.GetFileName(destPath);
-                        _bridge.PushEvent(new { @event = "localFileConversionStarted", fileName = displayName, filePath });
+                        dlg.Title  = "פתח קובץ";
+                        dlg.Filter = "קבצים נתמכים (*.pdf;*.doc;*.docx;*.rtf;*.txt;*.htm;*.html)|*.pdf;*.doc;*.docx;*.rtf;*.txt;*.htm;*.html|כל הקבצים (*.*)|*.*";
+                        if (dlg.ShowDialog() != DialogResult.OK) { _bridge.Reply(id, new { cancelled = true }); return; }
 
-                        // Watch for the output PDF to appear — fires as soon as ExportAsFixedFormat
-                        // writes the file, before Word has finished closing. This lets the tab
-                        // update immediately without waiting for app.Quit() to return.
-                        Directory.CreateDirectory(WordCacheDir);
-                        FileSystemWatcher watcher = null;
-                        if (!File.Exists(destPath))
+                        string filePath = dlg.FileName;
+                        string ext = Path.GetExtension(filePath).ToLowerInvariant();
+
+                        if (ext == ".pdf" || ext == ".htm" || ext == ".html" || ext == ".txt")
                         {
-                            watcher = new FileSystemWatcher(WordCacheDir, destFileName)
+                            string url = RegisterFolder(filePath);
+                            _bridge.PushEvent(new { @event = "localFileReady", url, fileName = Path.GetFileName(filePath), filePath });
+                            _bridge.Reply(id, new { cancelled = false, url, fileName = Path.GetFileName(filePath), filePath });
+                        }
+                        else
+                        {
+                            string displayName = Path.GetFileNameWithoutExtension(filePath) + ".pdf";
+                            string destPath = GetCachePath(filePath);
+                            string destFileName = Path.GetFileName(destPath);
+                            _bridge.PushEvent(new { @event = "localFileConversionStarted", fileName = displayName, filePath });
+
+                            Directory.CreateDirectory(WordCacheDir);
+                            FileSystemWatcher watcher = null;
+                            if (!File.Exists(destPath))
                             {
-                                NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
-                                EnableRaisingEvents = true,
-                            };
-                            FileSystemEventHandler onReady = null;
-                            bool fired = false;
-                            onReady = (s, e) =>
+                                watcher = new FileSystemWatcher(WordCacheDir, destFileName)
+                                {
+                                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
+                                    EnableRaisingEvents = true,
+                                };
+                                FileSystemEventHandler onReady = null;
+                                bool fired = false;
+                                onReady = (s, e) =>
+                                {
+                                    if (!IsFileReady(e.FullPath)) return;
+                                    if (fired) return;
+                                    fired = true;
+                                    watcher.EnableRaisingEvents = false;
+                                    watcher.Dispose();
+                                    string url2 = "http://KitveiHakodesh-vue-app/cache/word/" + destFileName;
+                                    _bridge.PushEvent(new { @event = "localFileConversionReady", url = url2, fileName = displayName, filePath });
+                                };
+                                watcher.Created += onReady;
+                                watcher.Changed += onReady;
+                            }
+
+                            string cached = await ConvertToPdfAsync(filePath);
+
+                            if (watcher != null)
                             {
-                                // Wait until the file is fully written and no longer locked
-                                if (!IsFileReady(e.FullPath)) return;
-                                if (fired) return;
-                                fired = true;
                                 watcher.EnableRaisingEvents = false;
                                 watcher.Dispose();
-                                string url2 = "http://KitveiHakodesh-vue-app/cache/word/" + destFileName;
-                                _bridge.PushEvent(new { @event = "localFileConversionReady", url = url2, fileName = displayName, filePath });
-                            };
-                            watcher.Created += onReady;
-                            watcher.Changed += onReady;
+                            }
+
+                            if (cached == null) { _bridge.Reply(id, new { error = "לא ניתן להמיר את הקובץ. ודא ש-Microsoft Word מותקן." }); return; }
+                            string url = "http://KitveiHakodesh-vue-app/cache/word/" + Path.GetFileName(cached);
+                            _bridge.Reply(id, new { cancelled = false, url, fileName = displayName, filePath });
                         }
-
-                        string cached = await ConvertToPdfAsync(filePath);
-
-                        if (watcher != null)
-                        {
-                            watcher.EnableRaisingEvents = false;
-                            watcher.Dispose();
-                        }
-
-                        if (cached == null) { _bridge.Reply(id, new { error = "לא ניתן להמיר את הקובץ. ודא ש-Microsoft Word מותקן." }); return; }
-                        string url = "http://KitveiHakodesh-vue-app/cache/word/" + Path.GetFileName(cached);
-                        _bridge.Reply(id, new { cancelled = false, url, fileName = displayName, filePath });
                     }
+                }
+                catch (Exception ex)
+                {
+                    _bridge.Reply(id, new { error = ex.Message });
                 }
             }));
         }
 
         public async Task HandleRestoreLocalFile(JsonElement root, string id)
         {
-            string filePath = root.GetProperty("filePath").GetString();
-            if (!File.Exists(filePath)) { _bridge.Reply(id, new { error = "הקובץ לא נמצא" }); return; }
-
-            string ext = Path.GetExtension(filePath).ToLowerInvariant();
-            if (ext == ".pdf" || ext == ".htm" || ext == ".html" || ext == ".txt")
+            try
             {
-                _bridge.Reply(id, new { url = RegisterFolder(filePath) });
-                return;
-            }
+                string filePath = root.GetProperty("filePath").GetString();
+                if (!File.Exists(filePath)) { _bridge.Reply(id, new { error = "הקובץ לא נמצא" }); return; }
 
-            string cached = GetCachePath(filePath);
-            if (!File.Exists(cached)) cached = await ConvertToPdfAsync(filePath);
-            if (cached == null) { _bridge.Reply(id, new { error = "לא ניתן להמיר את הקובץ" }); return; }
-            _bridge.Reply(id, new { url = "http://KitveiHakodesh-vue-app/cache/word/" + Path.GetFileName(cached) });
+                string ext = Path.GetExtension(filePath).ToLowerInvariant();
+                if (ext == ".pdf" || ext == ".htm" || ext == ".html" || ext == ".txt")
+                {
+                    _bridge.Reply(id, new { url = RegisterFolder(filePath) });
+                    return;
+                }
+
+                string cached = GetCachePath(filePath);
+                if (!File.Exists(cached)) cached = await ConvertToPdfAsync(filePath);
+                if (cached == null) { _bridge.Reply(id, new { error = "לא ניתן להמיר את הקובץ" }); return; }
+                _bridge.Reply(id, new { url = "http://KitveiHakodesh-vue-app/cache/word/" + Path.GetFileName(cached) });
+            }
+            catch (Exception ex)
+            {
+                _bridge.Reply(id, new { error = ex.Message });
+            }
         }
 
         public void HandleDisposeLocalFileHost(JsonElement root, string id)

@@ -42,120 +42,137 @@ namespace KitveiHakodeshLib.HebrewBooks
 
         public void HandleRestoreHbPdf(JsonElement root, string id)
         {
-            string bookId    = root.GetProperty("bookId").GetString();
-            string bookTitle = root.GetProperty("bookTitle").GetString();
-            string tabId     = root.GetProperty("tabId").GetString();
-            string cached    = GetCachePath(bookId, bookTitle);
+            try
+            {
+                string bookId    = root.GetProperty("bookId").GetString();
+                string bookTitle = root.GetProperty("bookTitle").GetString();
+                string tabId     = root.GetProperty("tabId").GetString();
+                string cached    = GetCachePath(bookId, bookTitle);
 
-            if (File.Exists(cached)) { _bridge.Reply(id, new { url = CacheUrl(cached) }); return; }
+                if (File.Exists(cached)) { _bridge.Reply(id, new { url = CacheUrl(cached) }); return; }
 
-            // Cache miss — must re-download through the browser (direct HTTP is blocked by HebrewBooks)
-            _bridge.Reply(id, new { redownload = true });
-            _pendingDownload = new HbDownloadInfo { BookId = bookId, BookTitle = bookTitle, TabId = tabId };
-            NavigateSafe("https://download.hebrewbooks.org/downloadhandler.ashx?req=" + bookId);
+                _bridge.Reply(id, new { redownload = true });
+                _pendingDownload = new HbDownloadInfo { BookId = bookId, BookTitle = bookTitle, TabId = tabId };
+                NavigateSafe("https://download.hebrewbooks.org/downloadhandler.ashx?req=" + bookId);
+            }
+            catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
         }
 
         public void HandleTriggerHbDownload(JsonElement root, string id)
         {
-            _bridge.Reply(id, new { ok = true });
-            string bookId    = root.GetProperty("bookId").GetString();
-            string bookTitle = root.GetProperty("bookTitle").GetString();
-            string url       = root.GetProperty("url").GetString();
-            string tabId     = root.GetProperty("tabId").GetString();
-            string localFolder = root.TryGetProperty("localFolder", out var lf) ? (lf.GetString() ?? "") : "";
-
-            // Check the user's local offline collection first — fastest path, no download needed.
-            string localPath = GetLocalFolderPath(localFolder, bookId);
-            if (localPath != null)
+            try
             {
-                Log("Local folder hit: " + localPath);
-                string localUrl = RegisterLocalBookHost(localPath, bookId);
-                _bridge.PushEvent(new { @event = "hbPdfReady", url = localUrl, bookId, bookTitle, tabId });
-                return;
+                _bridge.Reply(id, new { ok = true });
+                string bookId      = root.GetProperty("bookId").GetString();
+                string bookTitle   = root.GetProperty("bookTitle").GetString();
+                string url         = root.GetProperty("url").GetString();
+                string tabId       = root.GetProperty("tabId").GetString();
+                string localFolder = root.TryGetProperty("localFolder", out var lf) ? (lf.GetString() ?? "") : "";
+
+                string localPath = GetLocalFolderPath(localFolder, bookId);
+                if (localPath != null)
+                {
+                    Log("Local folder hit: " + localPath);
+                    string localUrl = RegisterLocalBookHost(localPath, bookId);
+                    _bridge.PushEvent(new { @event = "hbPdfReady", url = localUrl, bookId, bookTitle, tabId });
+                    return;
+                }
+
+                string cached = GetCachePath(bookId, bookTitle);
+                if (File.Exists(cached)) { _bridge.PushEvent(new { @event = "hbPdfReady", url = CacheUrl(cached), bookId, bookTitle, tabId }); return; }
+
+                Log("Navigating to: " + url);
+                _pendingDownload = new HbDownloadInfo { BookId = bookId, BookTitle = bookTitle, TabId = tabId };
+                NavigateSafe(url);
             }
-
-            string cached = GetCachePath(bookId, bookTitle);
-            if (File.Exists(cached)) { _bridge.PushEvent(new { @event = "hbPdfReady", url = CacheUrl(cached), bookId, bookTitle, tabId }); return; }
-
-            Log("Navigating to: " + url);
-            _pendingDownload = new HbDownloadInfo { BookId = bookId, BookTitle = bookTitle, TabId = tabId };
-            NavigateSafe(url);
+            catch (Exception ex) { _bridge.PushEvent(new { @event = "hbPdfError", error = ex.Message }); }
         }
 
         public void HandleTriggerHbSaveAs(JsonElement root, string id)
         {
-            _bridge.Reply(id, new { ok = true });
-            string bookId    = root.GetProperty("bookId").GetString();
-            string bookTitle = root.GetProperty("bookTitle").GetString();
-            string url       = root.GetProperty("url").GetString();
+            try
+            {
+                _bridge.Reply(id, new { ok = true });
+                string bookId    = root.GetProperty("bookId").GetString();
+                string bookTitle = root.GetProperty("bookTitle").GetString();
+                string url       = root.GetProperty("url").GetString();
 
-            _pendingSaveAs = new HbSaveAsInfo { BookId = bookId, BookTitle = bookTitle };
-            NavigateSafe(url);
+                _pendingSaveAs = new HbSaveAsInfo { BookId = bookId, BookTitle = bookTitle };
+                NavigateSafe(url);
+            }
+            catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
         }
 
         public void OnDownloadStarting(object sender, CoreWebView2DownloadStartingEventArgs e)
         {
-            Log("OnDownloadStarting: uri=" + e.DownloadOperation.Uri + " pendingDownload=" + _pendingDownload.HasValue + " pendingSaveAs=" + _pendingSaveAs.HasValue);
-            if (_pendingSaveAs.HasValue)
+            try
             {
-                var saveAs = _pendingSaveAs.Value;
-                _pendingSaveAs = null;
-
-                string suggestedName = MakeSafeFileName(saveAs.BookTitle + "." + saveAs.BookId) + ".pdf";
-                string dest = null;
-                _owner.Invoke(new Action(() =>
+                Log("OnDownloadStarting: uri=" + e.DownloadOperation.Uri + " pendingDownload=" + _pendingDownload.HasValue + " pendingSaveAs=" + _pendingSaveAs.HasValue);
+                if (_pendingSaveAs.HasValue)
                 {
-                    using (var dlg = new SaveFileDialog())
+                    var saveAs = _pendingSaveAs.Value;
+                    _pendingSaveAs = null;
+
+                    string suggestedName = MakeSafeFileName(saveAs.BookTitle + "." + saveAs.BookId) + ".pdf";
+                    string dest = null;
+                    _owner.Invoke(new Action(() =>
                     {
-                        dlg.Title    = "שמור ספר";
-                        dlg.Filter   = "PDF (*.pdf)|*.pdf";
-                        dlg.FileName = suggestedName;
-                        if (dlg.ShowDialog() == DialogResult.OK) dest = dlg.FileName;
-                    }
-                }));
+                        using (var dlg = new SaveFileDialog())
+                        {
+                            dlg.Title    = "שמור ספר";
+                            dlg.Filter   = "PDF (*.pdf)|*.pdf";
+                            dlg.FileName = suggestedName;
+                            if (dlg.ShowDialog() == DialogResult.OK) dest = dlg.FileName;
+                        }
+                    }));
 
-                if (dest == null)
-                {
-                    e.Cancel = true;
+                    if (dest == null) { e.Cancel = true; return; }
+
+                    e.ResultFilePath = dest;
                     return;
                 }
 
-                e.ResultFilePath = dest;
-                // Do NOT set e.Handled — let the browser show its download progress UI
-                return;
+                if (!_pendingDownload.HasValue) return;
+
+                var info = _pendingDownload.Value;
+                _pendingDownload = null;
+
+                string cacheDest = GetCachePath(info.BookId, info.BookTitle);
+                Directory.CreateDirectory(HbCacheDir);
+                e.ResultFilePath = cacheDest;
+
+                e.DownloadOperation.StateChanged += (s, _) =>
+                {
+                    try
+                    {
+                        var op = (CoreWebView2DownloadOperation)s;
+                        if (op.State == CoreWebView2DownloadState.Completed)
+                        {
+                            EvictCache();
+                            _owner.Invoke(new Action(() =>
+                            {
+                                CloseDownloadDialogSafe();
+                                _bridge.PushEvent(new { @event = "hbPdfReady", url = CacheUrl(cacheDest), bookId = info.BookId, bookTitle = info.BookTitle, tabId = info.TabId });
+                            }));
+                        }
+                        else if (op.State == CoreWebView2DownloadState.Interrupted)
+                        {
+                            _owner.Invoke(new Action(() =>
+                            {
+                                CloseDownloadDialogSafe();
+                                _bridge.PushEvent(new { @event = "hbPdfCancelled", tabId = info.TabId });
+                            }));
+                        }
+                    }
+                    catch (Exception ex) { Log("StateChanged exception: " + ex.Message); }
+                };
             }
-
-            if (!_pendingDownload.HasValue) return;
-
-            var info = _pendingDownload.Value;
-            _pendingDownload = null;
-
-            string cacheDest = GetCachePath(info.BookId, info.BookTitle);
-            Directory.CreateDirectory(HbCacheDir);
-            e.ResultFilePath = cacheDest;
-            // Do NOT set e.Handled — let the browser show its download dialog so the user sees progress
-
-            e.DownloadOperation.StateChanged += (s, _) =>
+            catch (Exception ex)
             {
-                var op = (CoreWebView2DownloadOperation)s;
-                if (op.State == CoreWebView2DownloadState.Completed)
-                {
-                    EvictCache();
-                    _owner.Invoke(new Action(() =>
-                    {
-                        CloseDownloadDialogSafe();
-                        _bridge.PushEvent(new { @event = "hbPdfReady", url = CacheUrl(cacheDest), bookId = info.BookId, bookTitle = info.BookTitle, tabId = info.TabId });
-                    }));
-                }
-                else if (op.State == CoreWebView2DownloadState.Interrupted)
-                {
-                    _owner.Invoke(new Action(() =>
-                    {
-                        CloseDownloadDialogSafe();
-                        _bridge.PushEvent(new { @event = "hbPdfCancelled", tabId = info.TabId });
-                    }));
-                }
-            };
+                Log("OnDownloadStarting exception: " + ex.Message);
+                // Cancel the download rather than leaving state inconsistent
+                try { e.Cancel = true; } catch { }
+            }
         }
 
         /// <summary>
@@ -171,9 +188,10 @@ namespace KitveiHakodeshLib.HebrewBooks
                 string candidate = Path.Combine(localFolder, bookId + ".pdf");
                 return File.Exists(candidate) ? candidate : null;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 // Drive disconnected, path invalid, permission denied — fall back to download.
+                Log("GetLocalFolderPath error for \"" + localFolder + "\": " + ex.Message);
                 return null;
             }
         }
