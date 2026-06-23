@@ -24,13 +24,22 @@ namespace KitveiHakodeshLib.HebrewBooks
 
         private HbDownloadInfo? _pendingDownload;
         private HbSaveAsInfo? _pendingSaveAs;
-        // Virtual host names registered for local-folder books, keyed by folder path.
-        // Re-used across opens so the same folder is never mapped twice.
-        private readonly Dictionary<string, string> _localBookHosts =
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        private int _localBookHostCounter;
 
-        private struct HbDownloadInfo { public string BookId; public string BookTitle; public string TabId; }
+        // Process-global map from folder path → stable virtual host name.
+        // Shared across all AppViewer instances so the same folder always gets the
+        // same hostname (e.g. "kitvei-hb-local-1"), no matter how many viewers exist.
+        // Each AppViewer's WebView2 still needs its own SetVirtualHostNameToFolderMapping
+        // call, tracked in _registeredOnThisWebView below.
+        private static readonly Dictionary<string, string> _globalFolderHosts =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private static int _globalHostCounter;
+        private static readonly object _globalHostLock = new object();
+
+        // Host names already registered on THIS instance's WebView2.
+        // Avoids calling SetVirtualHostNameToFolderMapping more than once per host per WebView.
+        private readonly HashSet<string> _registeredOnThisWebView = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        private struct HbDownloadInfo { public string BookId; public string BookTitle; public string TabId; public string DestFolder; }
         private struct HbSaveAsInfo { public string BookId; public string BookTitle; }
 
         public HebrewBooksHandler(WebBridge bridge, WebView2 webView, Control owner)
@@ -44,15 +53,26 @@ namespace KitveiHakodeshLib.HebrewBooks
         {
             try
             {
-                string bookId    = root.GetProperty("bookId").GetString();
-                string bookTitle = root.GetProperty("bookTitle").GetString();
-                string tabId     = root.GetProperty("tabId").GetString();
-                string cached    = GetCachePath(bookId, bookTitle);
+                string bookId      = root.GetProperty("bookId").GetString();
+                string bookTitle   = root.GetProperty("bookTitle").GetString();
+                string tabId       = root.GetProperty("tabId").GetString();
+                string localFolder = root.TryGetProperty("localFolder", out var lf) ? (lf.GetString() ?? "") : "";
 
-                if (File.Exists(cached)) { _bridge.Reply(id, new { url = CacheUrl(cached) }); return; }
+                // Check local folder first — same priority order as HandleTriggerHbDownload.
+                string localPath = GetLocalFolderPath(localFolder, bookId);
+                if (localPath != null)
+                {
+                    Log("Restore — local folder hit: " + localPath);
+                    _bridge.Reply(id, new { url = RegisterLocalBookHost(localPath, bookId) });
+                    return;
+                }
 
+                string cached = GetCachePath(bookId);
+                if (File.Exists(cached)) { _bridge.Reply(id, new { url = CacheUrl(bookId) }); return; }
+
+                // Cache miss — must re-download.
                 _bridge.Reply(id, new { redownload = true });
-                _pendingDownload = new HbDownloadInfo { BookId = bookId, BookTitle = bookTitle, TabId = tabId };
+                _pendingDownload = new HbDownloadInfo { BookId = bookId, BookTitle = bookTitle, TabId = tabId, DestFolder = localFolder };
                 NavigateSafe("https://download.hebrewbooks.org/downloadhandler.ashx?req=" + bookId);
             }
             catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
@@ -69,20 +89,26 @@ namespace KitveiHakodeshLib.HebrewBooks
                 string tabId       = root.GetProperty("tabId").GetString();
                 string localFolder = root.TryGetProperty("localFolder", out var lf) ? (lf.GetString() ?? "") : "";
 
+                // 1. Local folder hit — serve directly, no download.
                 string localPath = GetLocalFolderPath(localFolder, bookId);
                 if (localPath != null)
                 {
                     Log("Local folder hit: " + localPath);
-                    string localUrl = RegisterLocalBookHost(localPath, bookId);
-                    _bridge.PushEvent(new { @event = "hbPdfReady", url = localUrl, bookId, bookTitle, tabId });
+                    _bridge.PushEvent(new { @event = "hbPdfReady", url = RegisterLocalBookHost(localPath, bookId), bookId, bookTitle, tabId });
                     return;
                 }
 
-                string cached = GetCachePath(bookId, bookTitle);
-                if (File.Exists(cached)) { _bridge.PushEvent(new { @event = "hbPdfReady", url = CacheUrl(cached), bookId, bookTitle, tabId }); return; }
+                // 2. Cache hit.
+                string cached = GetCachePath(bookId);
+                if (File.Exists(cached))
+                {
+                    _bridge.PushEvent(new { @event = "hbPdfReady", url = CacheUrl(bookId), bookId, bookTitle, tabId });
+                    return;
+                }
 
+                // 3. Download — destination is localFolder if configured, otherwise app cache.
                 Log("Navigating to: " + url);
-                _pendingDownload = new HbDownloadInfo { BookId = bookId, BookTitle = bookTitle, TabId = tabId };
+                _pendingDownload = new HbDownloadInfo { BookId = bookId, BookTitle = bookTitle, TabId = tabId, DestFolder = localFolder };
                 NavigateSafe(url);
             }
             catch (Exception ex) { _bridge.PushEvent(new { @event = "hbPdfError", error = ex.Message }); }
@@ -137,9 +163,12 @@ namespace KitveiHakodeshLib.HebrewBooks
                 var info = _pendingDownload.Value;
                 _pendingDownload = null;
 
-                string cacheDest = GetCachePath(info.BookId, info.BookTitle);
-                Directory.CreateDirectory(HbCacheDir);
-                e.ResultFilePath = cacheDest;
+                bool useLocalFolder = !string.IsNullOrWhiteSpace(info.DestFolder);
+                string destDir  = useLocalFolder ? info.DestFolder : HbCacheDir;
+                string destFile = Path.Combine(destDir, info.BookId + ".pdf");
+
+                Directory.CreateDirectory(destDir);
+                e.ResultFilePath = destFile;
 
                 e.DownloadOperation.StateChanged += (s, _) =>
                 {
@@ -148,11 +177,15 @@ namespace KitveiHakodeshLib.HebrewBooks
                         var op = (CoreWebView2DownloadOperation)s;
                         if (op.State == CoreWebView2DownloadState.Completed)
                         {
-                            EvictCache();
+                            // Only evict the app cache — never touch the user's local folder.
+                            if (!useLocalFolder) EvictCache();
+                            string resultUrl = useLocalFolder
+                                ? RegisterLocalBookHost(destFile, info.BookId)
+                                : CacheUrl(info.BookId);
                             _owner.Invoke(new Action(() =>
                             {
                                 CloseDownloadDialogSafe();
-                                _bridge.PushEvent(new { @event = "hbPdfReady", url = CacheUrl(cacheDest), bookId = info.BookId, bookTitle = info.BookTitle, tabId = info.TabId });
+                                _bridge.PushEvent(new { @event = "hbPdfReady", url = resultUrl, bookId = info.BookId, bookTitle = info.BookTitle, tabId = info.TabId });
                             }));
                         }
                         else if (op.State == CoreWebView2DownloadState.Interrupted)
@@ -197,19 +230,36 @@ namespace KitveiHakodeshLib.HebrewBooks
         }
 
         /// <summary>
-        /// Registers a virtual host for the folder containing the local book file (if not
-        /// already registered) and returns the http URL for the specific PDF.
+        /// Returns a virtual-host http URL for the given local PDF file.
+        /// The hostname is allocated once per folder path in a process-global map so
+        /// all AppViewer instances share the same stable hostname for the same folder.
+        /// Each AppViewer's WebView2 registers the mapping independently the first
+        /// time it is needed — SetVirtualHostNameToFolderMapping is per-WebView2,
+        /// not process-global.
         /// </summary>
         private string RegisterLocalBookHost(string filePath, string bookId)
         {
             string folder = Path.GetDirectoryName(filePath);
-            if (!_localBookHosts.TryGetValue(folder, out string hostName))
+            string hostName;
+
+            lock (_globalHostLock)
             {
-                hostName = "kitvei-hb-local-" + (++_localBookHostCounter);
+                if (!_globalFolderHosts.TryGetValue(folder, out hostName))
+                {
+                    hostName = "kitvei-hb-local-" + (++_globalHostCounter);
+                    _globalFolderHosts[folder] = hostName;
+                }
+            }
+
+            // Register on this WebView2 instance if not already done.
+            if (!_registeredOnThisWebView.Contains(hostName))
+            {
                 _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                     hostName, folder, CoreWebView2HostResourceAccessKind.Allow);
-                _localBookHosts[folder] = hostName;
+                _registeredOnThisWebView.Add(hostName);
+                Log("Registered virtual host \"" + hostName + "\" → \"" + folder + "\" on this WebView");
             }
+
             return "http://" + hostName + "/" + bookId + ".pdf";
         }
 
@@ -240,14 +290,11 @@ namespace KitveiHakodeshLib.HebrewBooks
             catch (Exception) { }
         }
 
-        private static string GetCachePath(string bookId, string bookTitle)
-        {
-            string safe = MakeSafeFileName(bookTitle + "-" + bookId);
-            return Path.Combine(HbCacheDir, safe + ".pdf");
-        }
+        private static string GetCachePath(string bookId) =>
+            Path.Combine(HbCacheDir, bookId + ".pdf");
 
-        private static string CacheUrl(string path) =>
-            "http://KitveiHakodesh-vue-app/cache/hebrewbooks/" + Path.GetFileName(path);
+        private static string CacheUrl(string bookId) =>
+            "http://KitveiHakodesh-vue-app/cache/hebrewbooks/" + bookId + ".pdf";
 
         private static void EvictCache()
         {

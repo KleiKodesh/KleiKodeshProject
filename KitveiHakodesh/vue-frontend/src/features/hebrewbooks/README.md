@@ -16,9 +16,11 @@ When a user clicks a book:
 1. **Frontend** — `openBook()` immediately shows a `/pdf-view` placeholder with a downloading spinner
 2. **Bridge** — calls C# action `triggerHbDownload` with the book ID, title, URL, and user's configured local folder path (if set)
 3. **C# resolution** — tries three paths in order:
-   - **Local folder** — if `hebrewBooksLocalFolder` is set in settings, checks `{localFolder}/{bookId}.pdf`. If found, registers a WebView2 virtual host and opens immediately (no download). I/O errors (e.g. disconnected drive, permissions, invalid path) are logged to the WebView debug console with the error message and folder path, then fall through to the next path.
-   - **Download cache** — checks `bin/.../KitveiHakodesh/cache/hebrewbooks/`. If the book is already cached, opens immediately.
-   - **Download** — navigates the WebView2 browser to `https://download.hebrewbooks.org/downloadhandler.ashx?req={bookId}`. The download is intercepted and saved to cache. On completion, the PDF opens. Cache is evicted by last-access time, keeping max 10 PDFs.
+   - **Local folder** — if `hebrewBooksLocalFolder` is set in settings, checks `{localFolder}/{bookId}.pdf`. If found, opens immediately (no download) via a WebView2 virtual host. The hostname is allocated in a process-global map shared across all AppViewer instances, so the same folder always maps to the same stable hostname (e.g. `kitvei-hb-local-1`). Each AppViewer's WebView2 registers the mapping independently on first use and reuses it for all subsequent opens. I/O errors (e.g. disconnected drive, permissions, invalid path) are logged to the WebView debug console with the error message and folder path, then fall through to the next path.
+   - **Download cache** — checks `bin/.../KitveiHakodesh/cache/hebrewbooks/{bookId}.pdf`. If found, opens immediately. Cache files are named by book ID only.
+   - **Download** — navigates the WebView2 browser to `https://download.hebrewbooks.org/downloadhandler.ashx?req={bookId}`. The download destination depends on whether a local folder is configured: if yes, the file goes to `{localFolder}/{bookId}.pdf` and LRU eviction is skipped; if no, the file goes to the app cache dir as `{bookId}.pdf` and LRU eviction runs (max 10 PDFs kept by last-access time).
+
+All book files — both in the user's local folder and in the app cache — are named `{bookId}.pdf` with no title in the filename. This is consistent between the local folder hit path, the cache hit path, and fresh downloads.
 
 ## Save As Flow
 

@@ -4,6 +4,7 @@ import { useTabStore } from './tabStore'
 import type { TabRoute } from './tabStore'
 import { disposeLocalFileHost, restoreLocalFile, restoreHbPdf } from '@/webview-host/bridge'
 import { onWebviewEvent } from '@/webview-host/seforimDb'
+import { useSettingsStore } from './settingsStore'
 
 export const useLocalFileStore = defineStore('localFile', () => {
   const tabStore = useTabStore()
@@ -238,9 +239,10 @@ export const useLocalFileStore = defineStore('localFile', () => {
     if (!tab || (tab.route !== '/pdf-view' && tab.route !== '/html-view')) return
 
     if (tab.localFileHbBookId) {
+      const localFolder = useSettingsStore().hebrewBooksLocalFolder || undefined
       tabStore.updateTab(tabId, { localFileConverting: true, localFileLoadingType: 'downloading' })
       _converting.add(tabId)
-      const res = await restoreHbPdf(tab.localFileHbBookId, tab.localFileHbBookTitle ?? '', tabId)
+      const res = await restoreHbPdf(tab.localFileHbBookId, tab.localFileHbBookTitle ?? '', tabId, localFolder)
       if (!res) {
         _converting.delete(tabId)
         tabStore.closeTab(tabId)
