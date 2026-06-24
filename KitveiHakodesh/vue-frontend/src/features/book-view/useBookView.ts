@@ -162,6 +162,18 @@ export function useBookView(
   const commentaryScrollOffset = ref<number | null>(null)
   let lastRestoredCommentaryKey: string | null = null
 
+  // ── Multi-select state ────────────────────────────────────────────────────
+  // anchorLineId is set on the first plain click; subsequent shift-clicks extend
+  // the selection from the anchor to the clicked line. A new plain click resets
+  // the anchor and clears any existing range.
+  const manualSelectionAnchorLineId = ref<number | null>(null)
+  const manualSelectionLineIds = ref<number[] | null>(null)
+
+  function clearManualSelection() {
+    manualSelectionAnchorLineId.value = null
+    manualSelectionLineIds.value = null
+  }
+
   const tocVisible = computed(() => sidePanelMode.value === 'toc')
   const commentaryTreeVisible = computed(() => sidePanelMode.value === 'commentary-tree')
   const sidePanelVisible = computed(() => sidePanelMode.value !== null)
@@ -188,6 +200,9 @@ export function useBookView(
   const hasToc = computed(() => tocLoaded.value && tocEntries.value.length > 0)
 
   const selectedSectionLineIds = computed<number[] | null>(() => {
+    // Manual multi-select takes priority over TOC-derived section range.
+    if (manualSelectionLineIds.value != null) return manualSelectionLineIds.value
+
     if (commentaryLineId.value == null || !tocEntries.value.length || !lines.value.length) return null
     const tocEntry = tocEntries.value.find((e) => e.lineId === commentaryLineId.value)
     if (!tocEntry || tocEntry.lineIndex == null) return null
@@ -202,6 +217,7 @@ export function useBookView(
       .map((l) => l.id)
     return ids.length > 0 ? ids : null
   })
+
 
   const pinnedCommentaryGroupForDisplay = ref<import('./bookViewTypes').PinnedCommentaryGroup | null>(null)
 
@@ -296,7 +312,7 @@ export function useBookView(
   )
   const { commentaryTocPaths } = useCommentaryTocPaths(
     () => groupsForDisplay.value,
-    () => selectedSectionLineIds.value != null,
+    () => selectedSectionLineIds.value != null && selectedSectionLineIds.value.length > 1,
   )
 
   // ── Book line renderer (for export) ──────────────────────────────────────
@@ -455,10 +471,36 @@ export function useBookView(
     })
   }
 
-  function onLineSelected(lineId: number) {
+  function onLineSelected(lineId: number, isShiftClick: boolean) {
     // Capture synchronously before any reactive state changes — activePinnedGroup
     // is still valid here (groups haven't been cleared yet).
     setPendingPin(commentaryViewRef()?.activePinnedGroup ?? null)
+
+    if (isShiftClick && manualSelectionAnchorLineId.value != null) {
+      // Extend the selection from the anchor to the clicked line (inclusive).
+      const anchorId = manualSelectionAnchorLineId.value
+      const anchorLine = lines.value.find((l) => l.id === anchorId)
+      const clickedLine = lines.value.find((l) => l.id === lineId)
+      if (anchorLine != null && clickedLine != null) {
+        const fromIndex = Math.min(anchorLine.lineIndex, clickedLine.lineIndex)
+        const toIndex = Math.max(anchorLine.lineIndex, clickedLine.lineIndex)
+        const rangeIds = lines.value
+          .filter((l) => l.lineIndex >= fromIndex && l.lineIndex <= toIndex && l.content !== null)
+          .map((l) => l.id)
+        if (rangeIds.length > 0) {
+          manualSelectionLineIds.value = rangeIds
+          // commentaryLineId drives which line commentary loads for — use the anchor
+          // so the first-load always comes from the anchor end of the range.
+          commentaryLineId.value = anchorId
+          selectedLineId.value = lineId
+          return
+        }
+      }
+    }
+
+    // Plain click — reset anchor and clear any existing range selection.
+    clearManualSelection()
+    manualSelectionAnchorLineId.value = lineId
     selectedLineId.value = lineId
     commentaryLineId.value = lineId
   }
@@ -471,6 +513,8 @@ export function useBookView(
   const { onNavigateSection: navigateSection } = useCommentaryNavigation(
     bookId, selectedLineId, commentaryLineId, commentaryVisible,
     () => lines.value, () => tocEntries.value, linesContentRef,
+    () => manualSelectionLineIds.value,
+    clearManualSelection,
   )
 
   function onNavigateSection(direction: 'next' | 'prev', commentaryBookId: number) {
@@ -498,6 +542,7 @@ export function useBookView(
   watch(() => bookId, () => {
     selectedLineId.value = null
     commentaryLineId.value = null
+    clearManualSelection()
     // Also clear groups directly to ensure loading animation shows immediately
     groups.value = []
   })
@@ -652,7 +697,7 @@ export function useBookView(
     lines, prioritise, hasCommentaries, hasRelatedBooks, hasToc,
     groups, groupsForDisplay, filterGroups, staticFilterGroups, commentaryLoading,
     tocEntries, tocSearchTree, altTocSections, selectedAltTocSection, tocLoading, tocError,
-    altTocLabelMap, pinnedCommentaryGroup, selectedSectionLineIds,
+    altTocLabelMap, pinnedCommentaryGroup, selectedSectionLineIds, manualSelectionLineIds,
     // commentary annotation & render (hoisted — survive v-if toggle)
     getHighlightsForLine, applyHighlight, clearHighlight,
     getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote,

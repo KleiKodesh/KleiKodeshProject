@@ -21,7 +21,11 @@ import { useBookViewLinesScroll } from './useBookViewLinesScroll'
 import { useBookViewLinesNavigation } from './useBookViewLinesNavigation'
 import BookViewNoteBubble from './BookViewNoteBubble.vue'
 
-const emit = defineEmits<{ scrolled: [number, number]; lineSelected: [number]; 'ctrl-f': [] }>()
+const emit = defineEmits<{
+  scrolled: [number, number]
+  lineSelected: [lineId: number, isShiftClick: boolean]
+  'ctrl-f': []
+}>()
 const props = defineProps<{
   lines: LineItem[]
   prioritise: (lineIndex: number) => void
@@ -50,6 +54,7 @@ const props = defineProps<{
   getTocPath?: (entry: TocEntry) => string
   pinnedCommentaryGroup?: PinnedCommentaryGroup | null
   selectedSectionLineIds?: number[] | null
+  multiSelectLineIds?: number[] | null
 }>()
 
 const tabStore = useTabStore()
@@ -185,17 +190,29 @@ const { scrollToLineId, scrollToLineIndex } = useBookViewLinesNavigation(
   props.prioritise,
 )
 
-function onLineClick(index: number) {
+function onLineClick(index: number, event: MouseEvent) {
   const line = props.lines[index]
-  if (props.commentaryVisible && line) emit('lineSelected', line.id)
+  if (props.commentaryVisible && line) emit('lineSelected', line.id, event.ctrlKey || event.metaKey)
 }
 
 const selectedSectionLineIdSet = computed(() =>
   props.selectedSectionLineIds ? new Set(props.selectedSectionLineIds) : null,
 )
 
+const multiSelectLineIdSet = computed(() =>
+  props.multiSelectLineIds ? new Set(props.multiSelectLineIds) : null,
+)
+
 function isInActiveSection(lineIndex: number): boolean {
   const set = selectedSectionLineIdSet.value
+  if (!set) return false
+  const line = props.lines[lineIndex]
+  if (!line) return false
+  return set.has(line.id)
+}
+
+function isMultiSelected(lineIndex: number): boolean {
+  const set = multiSelectLineIdSet.value
   if (!set) return false
   const line = props.lines[lineIndex]
   if (!line) return false
@@ -249,12 +266,13 @@ defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller })
             v-if="lines[vItem.index]?.content != null"
             class="line"
             :class="{
-              selected: props.commentaryVisible && selectedLineId === lines[vItem.index]?.id,
-              'toc-section': props.commentaryVisible && isInActiveSection(vItem.index),
+              selected: props.commentaryVisible && !multiSelectLineIdSet && selectedLineId === lines[vItem.index]?.id,
+              'toc-section': props.commentaryVisible && !multiSelectLineIdSet && isInActiveSection(vItem.index),
+              'multi-selected': props.commentaryVisible && isMultiSelected(vItem.index),
             }"
             :data-alt-toc="props.altTocLabelMap?.get(vItem.index)"
             v-html="lineContent(lines[vItem.index]!.content!, vItem.index, lines[vItem.index]!.id)"
-            @click="onLineClick(vItem.index)"
+            @click="onLineClick(vItem.index, $event)"
           />
           <div v-else class="line placeholder" />
         </div>
@@ -303,6 +321,12 @@ defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller })
   opacity: 0.2;
 }
 .line.selected::after {
+  opacity: 1;
+}
+.line.multi-selected {
+  background: color-mix(in srgb, var(--accent-color) 8%, transparent);
+}
+.line.multi-selected::after {
   opacity: 1;
 }
 .line[data-alt-toc]::before {

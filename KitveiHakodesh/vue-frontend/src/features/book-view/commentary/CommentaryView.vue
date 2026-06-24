@@ -324,9 +324,16 @@ const activeTocPath = computed(() =>
         />
         <div v-if="props.loading" class="state-overlay"><LoadingAnimation /></div>
         <div v-else-if="!flatItems.length" class="state-overlay">
-          <span class="hint">{{
-            props.selectedLineId == null ? 'בחר שורה לצפייה במפרשים' : 'אין מפרשים לשורה זו'
-          }}</span>
+          <div class="hint-container">
+            <div class="hint-title">{{
+              props.selectedLineId == null ? 'בחר שורה לצפייה במפרשים' : 'אין מפרשים לשורה זו'
+            }}</div>
+            <div v-if="props.selectedLineId == null" class="hint-instructions">
+              <div class="hint-row">לחץ על שורה מהספר כדי להציג מפרשים</div>
+              <div class="hint-row">Ctrl+לחץ על שורה כדי להתחיל בחירה על טווח שורות</div>
+              <div class="hint-row">לחץ על שורה שהיא כותרת כדי להציג מפרשים לכל הקטע</div>
+            </div>
+          </div>
         </div>
         <div
           v-else
@@ -412,6 +419,41 @@ const activeTocPath = computed(() =>
 .hint {
   font-size: 13px;
   color: var(--text-secondary);
+}
+.hint-container {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: center;
+  padding: 0 24px;
+  max-width: 340px;
+}
+.hint-title {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  text-align: center;
+}
+.hint-instructions {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.hint-row {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  border-block-end: 1px solid var(--border-color);
+}
+.hint-row:last-child {
+  border-block-end: none;
 }
 .scroller {
   flex: 1;

@@ -47,6 +47,28 @@ import CommentaryView from './commentary/CommentaryView.vue'
 import { useCommentary } from './commentary/useCommentary'
 ```
 
+## Line Selection Modes
+
+The book view supports two selection modes for loading commentary:
+
+### TOC Section Mode
+
+Clicking a line that is a TOC entry loads commentary for all lines in that TOC section. The commentary headers display the deepest common ancestor TOC path (one level up) that encompasses all lines in the range, rather than the specific path of the first line. Navigation via "next/prev section" in the commentary headers moves to the next/previous TOC section.
+
+### Multi-Select Mode
+
+Ctrl+Click (or Cmd+Click on Mac) a line to start a consecutive range selection, similar to Windows Explorer behavior. The first Ctrl+Click sets an anchor. Subsequent Ctrl+Clicks extend or modify the range. Once a range is selected, commentary loads for all lines in that range, using the same "one level up" TOC path adjustment as TOC section mode.
+
+**Visual Distinction:** Multi-selected lines display a full-opacity accent bar on the left side and a background tint. The side bar is more prominent than the faint accent used for TOC section ranges to clearly indicate manual selection.
+
+**Navigation in Multi-Select Mode:** The "next/prev section" buttons in the commentary headers navigate to the next/previous line *outside* the selected range, then clear the selection. This differs from TOC section mode, where "next/prev" navigates within the TOC hierarchy. After navigation, the newly selected single line becomes the anchor for the next potential Ctrl+Click.
+
+**Implementation Notes:**
+- `manualSelectionAnchorLineId` stores the first line Ctrl+Clicked
+- `manualSelectionLineIds` stores all lines in the current range (derived from anchor + last Ctrl+Click)
+- `selectedSectionLineIds` computed prioritizes manual selection, falling back to TOC range if no manual selection is active
+- Commentary headers use the same `getTocPath` logic for both modes, invoked when `selectedSectionLineIds.length > 1`
+
 ## Composables
 
 **useBookView.ts** - central composable for the book view page. Owns data loading, state, event handlers, watchers, and exposes everything `BookViewPage.vue` needs.
