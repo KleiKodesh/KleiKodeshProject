@@ -292,6 +292,8 @@ defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller })
 }
 .line {
   padding-inline: 12px;
+  max-width: var(--lines-content-max-width, none);
+  margin-inline: auto;
   font-family: var(--text-font);
   font-size: var(--font-size, 100%);
   line-height: var(--line-height, 1.7);
@@ -301,7 +303,9 @@ defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller })
 }
 .line.placeholder {
   height: 28px;
-  margin-inline: 12px;
+  max-width: var(--lines-content-max-width, none);
+  margin-inline: auto;
+  padding-inline: 0;
   margin-block: 4px;
   border-radius: 4px;
   background: color-mix(in srgb, var(--text-primary) 5%, transparent);

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, nextTick, onMounted } from 'vue'
+import { ref, computed, nextTick, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { IconSearch20Regular, IconNavigation20Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
@@ -32,7 +32,35 @@ const {
   commentaryFontSize,
   commentaryLinePadding,
   useSeparateCommentarySettings,
+  linesContentMaxWidth,
+  commentaryMaxWidth,
+  titleBarHiddenButtons,
 } = storeToRefs(settings)
+
+// ── Title bar button toggle ───────────────────────────────────────────────────
+
+const TITLE_BAR_BUTTONS = [
+  { id: 'hamburger',      label: 'תפריט' },
+  { id: 'theme-toggle',   label: 'ערכת נושא' },
+  { id: 'toolbar-toggle', label: 'סרגל כלים' },
+  { id: 'pdf-filter',     label: 'פילטרים PDF' },
+  { id: 'ocr',            label: 'OCR' },
+  { id: 'home',           label: 'בית' },
+  { id: 'new-tab',        label: 'לשונית חדשה' },
+  { id: 'close-tab',      label: 'סגור לשונית' },
+]
+
+function isTitleBarButtonEnabled(buttonId: string): boolean {
+  return !titleBarHiddenButtons.value.includes(buttonId)
+}
+
+function toggleTitleBarButton(buttonId: string) {
+  const hidden = titleBarHiddenButtons.value
+  const index = hidden.indexOf(buttonId)
+  titleBarHiddenButtons.value = index === -1
+    ? [...hidden, buttonId]
+    : hidden.filter((id) => id !== buttonId)
+}
 
 const bookViewStore = useBookViewStore()
 const { toolbarPosition } = storeToRefs(bookViewStore)
@@ -80,6 +108,28 @@ async function navigateToSection(sectionId: string) {
 
 const bookDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null>(null)
 const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null>(null)
+
+// 950 is the sentinel "ללא הגבלה" stop at the top of the slider.
+// Stored value is 0 (unlimited) or 400–900 (px). The slider uses 400–950 step 50.
+const CONTENT_MAX_WIDTH_UNLIMITED_SENTINEL = 950
+
+function formatMaxWidth(value: number): string {
+  return value === CONTENT_MAX_WIDTH_UNLIMITED_SENTINEL ? 'ללא הגבלה' : `${value}px`
+}
+
+const linesContentMaxWidthSlider = computed({
+  get: () => linesContentMaxWidth.value === 0 ? CONTENT_MAX_WIDTH_UNLIMITED_SENTINEL : linesContentMaxWidth.value,
+  set: (sliderValue: number) => {
+    linesContentMaxWidth.value = sliderValue === CONTENT_MAX_WIDTH_UNLIMITED_SENTINEL ? 0 : sliderValue
+  },
+})
+
+const commentaryMaxWidthSlider = computed({
+  get: () => commentaryMaxWidth.value === 0 ? CONTENT_MAX_WIDTH_UNLIMITED_SENTINEL : commentaryMaxWidth.value,
+  set: (sliderValue: number) => {
+    commentaryMaxWidth.value = sliderValue === CONTENT_MAX_WIDTH_UNLIMITED_SENTINEL ? 0 : sliderValue
+  },
+})
 </script>
 
 <template>
@@ -169,8 +219,23 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
           </SettingRow>
         </div>
 
-        <!-- ── קריאה ── -->
-        <div data-section="section-reading" data-section-label="קריאה">
+        <!-- ── כפתורי סרגל הכותרת ── -->
+        <div data-section="section-title-bar-buttons" data-section-label="כפתורי סרגל הכלים של האפליקציה">
+          <div id="section-title-bar-buttons" class="section-label">כפתורי סרגל הכלים של האפליקציה</div>
+          <SettingRow label="הצג / הסתר כפתורים" hint="לחץ על כפתור כדי להחליף מצב הצגה" wrap>
+            <div class="title-bar-chips">
+              <button
+                v-for="button in TITLE_BAR_BUTTONS"
+                :key="button.id"
+                class="title-bar-chip"
+                :class="{ active: isTitleBarButtonEnabled(button.id) }"
+                @click="toggleTitleBarButton(button.id)"
+              >{{ button.label }}</button>
+            </div>
+          </SettingRow>
+        </div>
+
+        <!-- ── קריאה ── -->        <div data-section="section-reading" data-section-label="קריאה">
           <div id="section-reading" class="section-label">קריאה</div>
 
           <SettingRow
@@ -223,6 +288,16 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
             @close-other="commentaryDisplayRef?.closeDropdowns()"
           />
 
+          <SliderSetting
+            label="רוחב מקסימלי עבור עמודת הטקסט"
+            hint="הגבל את רוחב שורת הקריאה לנוחות מרבית"
+            v-model="linesContentMaxWidthSlider"
+            :min="500"
+            :max="950"
+            :step="50"
+            :format-value="formatMaxWidth"
+          />
+
           <div id="section-commentary-display" class="subsection-label">תצוגת פירושים</div>
 
           <SettingRow hint="האם להשתמש בהגדרות גופן נפרדות לפירושים, או לרשת את הגדרות הספר">
@@ -243,6 +318,17 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
             v-model:font-size="commentaryFontSize"
             v-model:line-padding="commentaryLinePadding"
             @close-other="bookDisplayRef?.closeDropdowns()"
+          />
+
+          <SliderSetting
+            v-if="useSeparateCommentarySettings"
+            label="רוחב מקסימלי עבור עמודת הפירושים"
+            hint="הגבל את רוחב שורת הקריאה בפירושים לנוחות מרבית"
+            v-model="commentaryMaxWidthSlider"
+            :min="500"
+            :max="950"
+            :step="50"
+            :format-value="formatMaxWidth"
           />
         </div>
 
@@ -582,6 +668,36 @@ kbd {
   margin-bottom: 10px;
   border-bottom: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
   scroll-margin-top: 56px;
+}
+
+/* ── Title bar button chips ── */
+.title-bar-chips {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  width: 100%;
+}
+
+.title-bar-chip {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+  border-radius: 4px;
+}
+
+.title-bar-chip:hover {
+  background: var(--hover-bg);
+}
+
+.title-bar-chip.active {
+  background: var(--accent-color);
+  color: white;
+  border-color: var(--accent-color);
 }
 </style>
 

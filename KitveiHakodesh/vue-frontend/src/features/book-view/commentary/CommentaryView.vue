@@ -462,6 +462,8 @@ const activeTocPath = computed(() =>
 .line {
   padding-inline: 12px;
   padding-block: 2px;
+  max-width: var(--commentary-max-width, none);
+  margin-inline: auto;
   font-family: var(--commentary-text-font);
   font-size: var(--commentary-font-size, 100%);
   line-height: var(--commentary-line-height, 1.7);
