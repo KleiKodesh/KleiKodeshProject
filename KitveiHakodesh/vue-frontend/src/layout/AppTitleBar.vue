@@ -72,7 +72,7 @@ const toolbarTitle = computed(() => {
 })
 
 const pdfFilterTitle = computed(() =>
-  settingsStore.pdfPageFilters ? 'ביטול פילטרים' : 'החלת פילטרים',
+  settingsStore.pdfPageFilters ? 'בטל החלת ערכת נושא על דפי PDF' : 'החל ערכת נושא על דפי PDF',
 )
 
 const { justClosed } = useDropdownClose(barRef, () => {
@@ -276,7 +276,6 @@ useEventListener('keydown', (e: KeyboardEvent) => {
       <button
         v-if="isTitleBarButtonVisible('pdf-filter') && isPdfTab"
         class="bar-btn"
-        :class="{ active: settingsStore.pdfPageFilters }"
         :title="pdfFilterTitle"
         @click.stop="settingsStore.togglePdfPageFilters()"
       >

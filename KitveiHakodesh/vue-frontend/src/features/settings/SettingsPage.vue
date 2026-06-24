@@ -35,6 +35,7 @@ const {
   linesContentMaxWidth,
   commentaryMaxWidth,
   titleBarHiddenButtons,
+  pdfPageFilters,
 } = storeToRefs(settings)
 
 // ── Title bar button toggle ───────────────────────────────────────────────────
@@ -43,12 +44,16 @@ const TITLE_BAR_BUTTONS = [
   { id: 'hamburger',      label: 'תפריט' },
   { id: 'theme-toggle',   label: 'ערכת נושא' },
   { id: 'toolbar-toggle', label: 'סרגל כלים' },
-  { id: 'pdf-filter',     label: 'פילטרים PDF' },
+  { id: 'pdf-filter',     label: 'ערכת נושא ל-PDF' },
   { id: 'ocr',            label: 'OCR' },
   { id: 'home',           label: 'בית' },
   { id: 'new-tab',        label: 'לשונית חדשה' },
   { id: 'close-tab',      label: 'סגור לשונית' },
 ]
+
+function applyPdfPageFilters(value: boolean) {
+  if (value !== pdfPageFilters.value) settings.togglePdfPageFilters()
+}
 
 function isTitleBarButtonEnabled(buttonId: string): boolean {
   return !titleBarHiddenButtons.value.includes(buttonId)
@@ -182,6 +187,17 @@ const commentaryMaxWidthSlider = computed({
 
           <SettingRow label="ערכת נושא" hint="צבעי הממשק של האפליקציה">
             <ThemePicker />
+          </SettingRow>
+
+          <SettingRow label="החל ערכת נושא על דפי PDF" hint="מחיל את צבעי ערכת הנושא על תוכן דפי PDF">
+            <ToggleGroup
+              :model-value="pdfPageFilters"
+              :options="[
+                { label: 'כן', value: true },
+                { label: 'לא', value: false },
+              ]"
+              @update:model-value="applyPdfPageFilters"
+            />
           </SettingRow>
 
           <SliderSetting
