@@ -34,7 +34,6 @@ import { buildBookExportHtml } from './lines/useBookViewLineCopyMenu'
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { TocEntry } from './toc/useBookViewToc'
 import type { SearchMode, SidePanelMode, CommentaryTreeState } from './bookViewTypes'
-import { bookViewPerf } from '@/utils/bookViewPerf'
 export type { SearchMode } from './bookViewTypes'
 
 // Component instance types — used only for ref typing
@@ -457,9 +456,6 @@ export function useBookView(
     // Capture synchronously before any reactive state changes — activePinnedGroup
     // is still valid here (groups haven't been cleared yet).
     setPendingPin(commentaryViewRef()?.activePinnedGroup ?? null)
-    // Reset the perf session so all commentary timings are relative to this tap.
-    bookViewPerf.reset()
-    bookViewPerf.mark(`commentary:lineSelected (lineId=${lineId})`)
     selectedLineId.value = lineId
     commentaryLineId.value = lineId
   }

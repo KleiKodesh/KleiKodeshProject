@@ -2,7 +2,6 @@ import { computed, ref, watch, nextTick } from 'vue'
 import { scrollToIndexWithRetry } from '@/utils/scrollToIndexWithRetry'
 import { setCurrentMark } from '../lines/useBookViewLineRenderer'
 import type { Virtualizer } from '@tanstack/vue-virtual'
-import { bookViewPerf } from '@/utils/bookViewPerf'
 
 const NAV_HEIGHT = 32
 
@@ -65,7 +64,6 @@ export function useCommentaryScroll(
     const el = scrollerEl()
     if (!el) return
     const token = ++scrollToGroupToken
-    const scrollStart = bookViewPerf.mark(`commentary:scrollToGroup:start (bookId=${bookId})`)
 
     function resolveIndex(): number {
       return flatItems().findIndex(
@@ -107,8 +105,6 @@ export function useCommentaryScroll(
       if (applied) return
       if (tryApply()) {
         applied = true
-        bookViewPerf.measure('commentary:scrollToGroup', scrollStart)
-        bookViewPerf.mark('commentary:scrollToGroup:done')
         return
       }
 
@@ -119,8 +115,6 @@ export function useCommentaryScroll(
         if (tryApply()) {
           applied = true
           observer.disconnect()
-          bookViewPerf.measure('commentary:scrollToGroup', scrollStart)
-          bookViewPerf.mark('commentary:scrollToGroup:done')
         }
       })
       observer.observe(elCaptured, { childList: true, subtree: true, attributes: false })
@@ -130,8 +124,6 @@ export function useCommentaryScroll(
         if (!applied) {
           applied = true
           observer.disconnect()
-          bookViewPerf.measure('commentary:scrollToGroup', scrollStart)
-          bookViewPerf.mark('commentary:scrollToGroup:timeout')
         }
       }, 500)
     })
@@ -296,7 +288,6 @@ export function useCommentaryScroll(
     isRestoringScrollPos = true
     // Cancel any in-flight or queued scrollToGroup call — restore takes priority.
     scrollToGroupToken++
-    const restoreStart = bookViewPerf.mark(`commentary:restore:start (index=${scrollIndex}, offset=${scrollOffset})`)
     return new Promise<void>((resolve) => {
       let attempts = 0
       const MAX_ATTEMPTS = 20
@@ -367,8 +358,6 @@ export function useCommentaryScroll(
 
       startRestore()
     }).finally(() => {
-      bookViewPerf.measure('commentary:restore', restoreStart)
-      bookViewPerf.mark('commentary:restore:done')
       // Bump the token to cancel any scrollToGroup that started concurrently with
       // restore and is now in its rAF chain — restore takes priority.
       scrollToGroupToken++
