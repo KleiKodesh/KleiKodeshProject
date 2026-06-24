@@ -294,7 +294,10 @@ export function useBookView(
     getHighlightsForLine,
     getNotesForLine,
   )
-  const { commentaryTocPaths } = useCommentaryTocPaths(() => groupsForDisplay.value)
+  const { commentaryTocPaths } = useCommentaryTocPaths(
+    () => groupsForDisplay.value,
+    () => selectedSectionLineIds.value != null,
+  )
 
   // ── Book line renderer (for export) ──────────────────────────────────────
   // A dedicated renderer instance used only for export — keeps caching separate

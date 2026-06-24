@@ -157,6 +157,96 @@ export const SQL = {
     GROUP BY lineId
   `,
 
+  /**
+   * For a batch of (groupKey, firstLineId, lastLineId) triples, finds the deepest common
+   * ancestor TOC entry that covers both endpoints of each group, then builds and returns
+   * the full path string for that ancestor.
+   *
+   * Used by useCommentaryTocPaths in TOC-section mode, where a commentary group spans
+   * multiple source lines and we want the enclosing section label rather than the specific
+   * label of the first line.
+   *
+   * Parameters are interleaved: groupKey1, firstLineId1, lastLineId1, groupKey2, ...
+   * groupKey is an arbitrary integer tag (e.g. array index) used to correlate results.
+   */
+  GET_ENCLOSING_TOC_PATH_FOR_LINE_RANGES: (groupCount: number) => {
+    const valuePlaceholders = Array(groupCount)
+      .fill('(?, ?, ?)')
+      .join(', ')
+    return `
+      WITH
+      -- Input table: one row per group with its two endpoint lineIds
+      groups(groupKey, firstLineId, lastLineId) AS (
+        VALUES ${valuePlaceholders}
+      ),
+      -- Ancestor chain for the first endpoint of each group
+      firstAncestors(groupKey, entryId, parentId, depth) AS (
+        SELECT g.groupKey, te.id, te.parentId, 0
+        FROM groups g
+        JOIN line_toc lt ON lt.lineId = g.firstLineId
+        JOIN tocEntry te ON te.id = lt.tocEntryId
+        UNION ALL
+        SELECT fa.groupKey, te.id, te.parentId, fa.depth + 1
+        FROM firstAncestors fa
+        JOIN tocEntry te ON te.id = fa.parentId
+      ),
+      -- Ancestor chain for the last endpoint of each group
+      lastAncestors(groupKey, entryId, parentId, depth) AS (
+        SELECT g.groupKey, te.id, te.parentId, 0
+        FROM groups g
+        JOIN line_toc lt ON lt.lineId = g.lastLineId
+        JOIN tocEntry te ON te.id = lt.tocEntryId
+        UNION ALL
+        SELECT la.groupKey, te.id, te.parentId, la.depth + 1
+        FROM lastAncestors la
+        JOIN tocEntry te ON te.id = la.parentId
+      ),
+      -- Common ancestors: entries that appear in both chains for the same group.
+      -- The deepest one (min depth value = closest to the leaves) is the answer.
+      commonAncestors AS (
+        SELECT fa.groupKey, fa.entryId, fa.depth AS firstDepth
+        FROM firstAncestors fa
+        JOIN lastAncestors la ON la.groupKey = fa.groupKey AND la.entryId = fa.entryId
+      ),
+      -- Pick the deepest (smallest depth value = furthest from root = most specific)
+      -- common ancestor per group.
+      bestAncestor AS (
+        SELECT groupKey, entryId
+        FROM commonAncestors
+        WHERE firstDepth = (
+          SELECT MIN(firstDepth) FROM commonAncestors ca2 WHERE ca2.groupKey = commonAncestors.groupKey
+        )
+      ),
+      -- Walk up from the best ancestor to the root to build the full path string.
+      pathAncestors(groupKey, entryId, parentId, text, depth, bookId) AS (
+        SELECT ba.groupKey, te.id, te.parentId, tt.text, 0, te.bookId
+        FROM bestAncestor ba
+        JOIN tocEntry te ON te.id = ba.entryId
+        JOIN tocText tt ON tt.id = te.textId
+        UNION ALL
+        SELECT pa.groupKey, te.id, te.parentId, tt.text, pa.depth + 1, pa.bookId
+        FROM pathAncestors pa
+        JOIN tocEntry te ON te.id = pa.parentId
+        JOIN tocText tt ON tt.id = te.textId
+      ),
+      ordered AS (
+        SELECT pa.groupKey, pa.text, pa.depth, pa.bookId,
+               MAX(pa.depth) OVER (PARTITION BY pa.groupKey) AS maxDepth,
+               b.title AS bookTitle
+        FROM pathAncestors pa
+        JOIN book b ON b.id = pa.bookId
+      )
+      SELECT groupKey, MAX(bookId) AS bookId, group_concat(text, ' ') AS tocPath
+      FROM (
+        SELECT groupKey, bookId, text
+        FROM ordered
+        WHERE NOT (depth = maxDepth AND text = bookTitle)
+        ORDER BY groupKey, depth DESC
+      )
+      GROUP BY groupKey
+    `
+  },
+
   /** Fetch bookId for a batch of lineIds directly from the line table (fallback when line_toc has no entry). */
   GET_BOOK_IDS_FOR_LINES: (count: number) =>
     `SELECT id AS lineId, bookId FROM line WHERE id IN (${Array(count).fill('?').join(', ')})`,
