@@ -1,7 +1,10 @@
 /**
  * Section navigation for the commentary panel — next/prev section buttons.
  *
- * Supports two modes:
+ * Supports three modes:
+ *   - Multi-select mode: the user has shift-selected a range of lines; navigates to
+ *     the single line immediately after the last selected line (next) or before the
+ *     first selected line (prev), then clears the multi-select.
  *   - TOC mode: the selected line is a TOC entry line; navigates to the next/prev
  *     TOC entry at the same level that has commentary for the given book.
  *   - Normal mode: navigates to the next/prev line that has commentary for the book.
@@ -31,21 +34,46 @@ export function useCommentaryNavigation(
   lines: () => LineItem[],
   tocEntries: () => TocEntry[],
   linesContentRef: () => LinesContentRef | null,
+  manualSelectionLineIds: () => number[] | null,
+  onClearManualSelection: () => void,
 ) {
   async function onNavigateSection(direction: 'next' | 'prev', commentaryBookId: number) {
     if (selectedLineId.value == null || bookId == null) return
 
     function afterNavigate(targetLineId: number) {
+      onClearManualSelection()
       selectedLineId.value = targetLineId
       commentaryLineId.value = targetLineId
       commentaryVisible.value = true
-      // scrollToLineId uses scrollToIndexWithRetry internally — handles lines that
-      // haven't been measured yet without fighting the virtualizer.
       linesContentRef()?.scrollToLineId(targetLineId)
-      // Commentary scroll is handled by setupGroupReloadScroll in useCommentaryScroll,
-      // which watches groups with flush:'post' and calls scrollToGroup (now backed by
-      // scrollToIndexWithRetry) once the reload settles. This is the same path that
-      // fires when a user clicks a line — no manual watch(commentaryLoading) needed.
+    }
+
+    // Multi-select mode: navigate to the line immediately after the last selected
+    // line (next) or before the first selected line (prev), ignoring commentary
+    // availability — the user explicitly chose this range.
+    const multiIds = manualSelectionLineIds()
+    if (multiIds != null && multiIds.length > 0) {
+      const allLines = lines()
+      if (direction === 'next') {
+        const lastSelectedId = multiIds[multiIds.length - 1]!
+        const lastLine = allLines.find((l) => l.id === lastSelectedId)
+        if (lastLine == null) return
+        const targetLine = allLines.find(
+          (l) => l.lineIndex === lastLine.lineIndex + 1 && l.content !== null,
+        )
+        if (targetLine == null) return
+        afterNavigate(targetLine.id)
+      } else {
+        const firstSelectedId = multiIds[0]!
+        const firstLine = allLines.find((l) => l.id === firstSelectedId)
+        if (firstLine == null) return
+        const targetLine = allLines.find(
+          (l) => l.lineIndex === firstLine.lineIndex - 1 && l.content !== null,
+        )
+        if (targetLine == null) return
+        afterNavigate(targetLine.id)
+      }
+      return
     }
 
     // TOC mode: navigate to next/prev toc entry at same level that has commentary

@@ -69,7 +69,7 @@ const {
   bookHasTeamim,
   groups, groupsForDisplay, filterGroups, staticFilterGroups, commentaryLoading,
   tocEntries, tocSearchTree, selectedAltTocSection, tocLoading, tocError,
-  altTocLabelMap, pinnedCommentaryGroup, selectedSectionLineIds,
+  altTocLabelMap, pinnedCommentaryGroup, selectedSectionLineIds, manualSelectionLineIds,
   getHighlightsForLine, applyHighlight, clearHighlight,
   getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote,
   commentaryFontPx, renderContent, setCurrentMark, commentaryTocPaths,
@@ -262,6 +262,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, () => {
               :get-toc-path="getTocPath"
               :pinned-commentary-group="pinnedCommentaryGroup"
               :selected-section-line-ids="selectedSectionLineIds"
+              :multi-select-line-ids="manualSelectionLineIds"
               @scrolled="onLinesScrolled"
               @line-selected="onLineSelected"
               @ctrl-f="openContentSearch"
@@ -300,6 +301,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, () => {
               :get-toc-path="getTocPath"
               :pinned-commentary-group="pinnedCommentaryGroup"
               :selected-section-line-ids="selectedSectionLineIds"
+              :multi-select-line-ids="manualSelectionLineIds"
               @scrolled="onLinesScrolled"
               @line-selected="onLineSelected"
               @ctrl-f="openContentSearch"
