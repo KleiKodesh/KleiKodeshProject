@@ -36,6 +36,9 @@ const DEFAULTS = {
   searchGrammarWrap: false,
   copyCleanText: false,
   hebrewBooksLocalFolder: '',
+  linesContentMaxWidth: 0,
+  commentaryMaxWidth: 0,
+  titleBarHiddenButtons: [] as string[],
 }
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -66,6 +69,9 @@ export const useSettingsStore = defineStore('settings', () => {
   const searchGrammarWrap = ref(DEFAULTS.searchGrammarWrap)
   const copyCleanText = ref(DEFAULTS.copyCleanText)
   const hebrewBooksLocalFolder = ref(DEFAULTS.hebrewBooksLocalFolder)
+  const linesContentMaxWidth = ref(DEFAULTS.linesContentMaxWidth)
+  const commentaryMaxWidth = ref(DEFAULTS.commentaryMaxWidth)
+  const titleBarHiddenButtons = ref<string[]>(DEFAULTS.titleBarHiddenButtons)
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -100,6 +106,9 @@ export const useSettingsStore = defineStore('settings', () => {
     style.setProperty('--commentary-text-font', effectiveCommentaryTextFont)
     style.setProperty('--commentary-font-size', `${effectiveCommentaryFontSize}%`)
     style.setProperty('--commentary-line-height', effectiveCommentaryLinePadding.toString())
+    style.setProperty('--lines-content-max-width', linesContentMaxWidth.value > 0 ? `${linesContentMaxWidth.value}px` : 'none')
+    const effectiveCommentaryMaxWidth = useSeparateCommentarySettings.value ? commentaryMaxWidth.value : linesContentMaxWidth.value
+    style.setProperty('--commentary-max-width', effectiveCommentaryMaxWidth > 0 ? `${effectiveCommentaryMaxWidth}px` : 'none')
     document.documentElement.setAttribute('data-pdf-filters', pdfPageFilters.value ? 'true' : 'false')
     const app = document.getElementById('app')
     if (app) app.style.zoom = appZoom.value.toString()
@@ -137,6 +146,9 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_SEARCH_GRAMMAR_WRAP, searchGrammarWrap)
     loadSetting(KEYS.SETTINGS_COPY_CLEAN_TEXT, copyCleanText)
     loadSetting(KEYS.SETTINGS_HB_LOCAL_FOLDER, hebrewBooksLocalFolder)
+    loadSetting(KEYS.SETTINGS_LINES_CONTENT_MAX_WIDTH, linesContentMaxWidth)
+    loadSetting(KEYS.SETTINGS_COMMENTARY_MAX_WIDTH, commentaryMaxWidth)
+    loadSetting(KEYS.SETTINGS_TITLE_BAR_HIDDEN_BUTTONS, titleBarHiddenButtons)
     applyCSSVariables()
   }
 
@@ -167,6 +179,9 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(searchGrammarWrap, KEYS.SETTINGS_SEARCH_GRAMMAR_WRAP)
   persistSetting(copyCleanText, KEYS.SETTINGS_COPY_CLEAN_TEXT)
   persistSetting(hebrewBooksLocalFolder, KEYS.SETTINGS_HB_LOCAL_FOLDER)
+  persistSetting(linesContentMaxWidth, KEYS.SETTINGS_LINES_CONTENT_MAX_WIDTH, applyCSSVariables)
+  persistSetting(commentaryMaxWidth, KEYS.SETTINGS_COMMENTARY_MAX_WIDTH, applyCSSVariables)
+  persistSetting(titleBarHiddenButtons, KEYS.SETTINGS_TITLE_BAR_HIDDEN_BUTTONS)
 
   // ── Actions ───────────────────────────────────────────────────────────────
 
@@ -229,6 +244,9 @@ export const useSettingsStore = defineStore('settings', () => {
     searchGrammarWrap.value = DEFAULTS.searchGrammarWrap
     copyCleanText.value = DEFAULTS.copyCleanText
     hebrewBooksLocalFolder.value = DEFAULTS.hebrewBooksLocalFolder
+    linesContentMaxWidth.value = DEFAULTS.linesContentMaxWidth
+    commentaryMaxWidth.value = DEFAULTS.commentaryMaxWidth
+    titleBarHiddenButtons.value = DEFAULTS.titleBarHiddenButtons
     lsClearSettingsOnly()
     applyCSSVariables()
   }
@@ -241,6 +259,9 @@ export const useSettingsStore = defineStore('settings', () => {
     searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchWildcardWrap, searchGrammarWrap,
     copyCleanText,
     hebrewBooksLocalFolder,
+    linesContentMaxWidth,
+    commentaryMaxWidth,
+    titleBarHiddenButtons,
     init, cycleDiacritics, cycleDiacriticsNoTeamim, togglePdfPageFilters, reset, completeSetup, acceptMidotDisclaimer,
   }
 })

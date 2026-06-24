@@ -10,12 +10,14 @@ const props = defineProps<{
   step: number
   suffix?: string
   hint?: string
+  formatValue?: (value: number) => string
 }>()
 const emit = defineEmits<{ 'update:modelValue': [number] }>()
 
-const display = computed(() =>
-  props.suffix ? `${props.modelValue}${props.suffix}` : props.modelValue,
-)
+const display = computed(() => {
+  if (props.formatValue) return props.formatValue(props.modelValue)
+  return props.suffix ? `${props.modelValue}${props.suffix}` : props.modelValue
+})
 </script>
 
 <template>

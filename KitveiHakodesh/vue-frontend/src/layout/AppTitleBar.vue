@@ -36,6 +36,17 @@ const themeStore = useThemeStore()
 const { navigateInNewTab } = useAppNavigation()
 const { titleBarVisible } = useUiChromeVisibility()
 
+// ── Button visibility helpers ─────────────────────────────────────────────────
+
+/**
+ * Returns true when a button with the given identifier is NOT hidden in settings.
+ * The conditional buttons (toolbar toggle, PDF filter, OCR) have their own existing
+ * conditions — this setting is evaluated on top of those.
+ */
+function isTitleBarButtonVisible(buttonId: string): boolean {
+  return !settingsStore.titleBarHiddenButtons.includes(buttonId)
+}
+
 const activeTab = computed(() => tabStore.activeTab)
 const dropdownOpen = ref(false)
 const navDropdownOpen = ref(false)
@@ -242,13 +253,19 @@ useEventListener('keydown', (e: KeyboardEvent) => {
     <header class="title-bar" @click="toggleTabDropdown">
     <div class="bar-start">
       <div class="nav-btn-wrap">
-        <button ref="navBtnRef" class="bar-btn" title="תפריט (Ctrl+M)" @click.stop="toggleNavDropdown">
+        <button
+          v-if="isTitleBarButtonVisible('hamburger')"
+          ref="navBtnRef"
+          class="bar-btn"
+          title="תפריט (Ctrl+M)"
+          @click.stop="toggleNavDropdown"
+        >
           <IconLineHorizontal320Regular />
         </button>
       </div>
-      <ThemeToggle />
+      <ThemeToggle v-if="isTitleBarButtonVisible('theme-toggle')" />
       <button
-        v-if="bookViewStore.isBookViewActive || activeTab?.route === '/pdf-view'"
+        v-if="isTitleBarButtonVisible('toolbar-toggle') && (bookViewStore.isBookViewActive || activeTab?.route === '/pdf-view')"
         class="bar-btn"
         :title="toolbarTitle"
         @click.stop="bookViewStore.isBookViewActive ? bookViewStore.toggleToolbar() : tabStore.togglePdfViewerTitleBar()"
@@ -257,7 +274,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
         <IconOptions24Regular v-else />
       </button>
       <button
-        v-if="isPdfTab"
+        v-if="isTitleBarButtonVisible('pdf-filter') && isPdfTab"
         class="bar-btn"
         :class="{ active: settingsStore.pdfPageFilters }"
         :title="pdfFilterTitle"
@@ -275,7 +292,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
 
     <div class="bar-end">
       <button
-        v-if="activeTab?.route === '/pdf-view'"
+        v-if="isTitleBarButtonVisible('ocr') && activeTab?.route === '/pdf-view'"
         class="bar-btn"
         :class="{ active: pdfOcrStore.isActive }"
         title="בחירת טקסט באזור (OCR)"
@@ -283,11 +300,12 @@ useEventListener('keydown', (e: KeyboardEvent) => {
       >
         <IconCrop20Regular />
       </button>
-      <button class="bar-btn" title="בית (Ctrl+G)" @click.stop="goHome"><IconHome20Regular /></button>
-      <button class="bar-btn" title="לשונית חדשה (Ctrl+N)" @click.stop="openNewTab">
+      <button v-if="isTitleBarButtonVisible('home')" class="bar-btn" title="בית (Ctrl+G)" @click.stop="goHome"><IconHome20Regular /></button>
+      <button v-if="isTitleBarButtonVisible('new-tab')" class="bar-btn" title="לשונית חדשה (Ctrl+N)" @click.stop="openNewTab">
         <IconAdd20Regular />
       </button>
       <button
+        v-if="isTitleBarButtonVisible('close-tab')"
         class="bar-btn"
         title="סגור לשונית (Ctrl+W)"
         @click.stop="tabStore.closeTab(tabStore.activeTabId)"
