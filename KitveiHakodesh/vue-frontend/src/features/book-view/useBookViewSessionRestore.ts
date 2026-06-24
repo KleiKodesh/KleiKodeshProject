@@ -12,7 +12,6 @@ import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { Ref } from 'vue'
 import type { CommentaryTreeState } from './bookViewTypes'
-import { bookViewPerf } from '@/utils/bookViewPerf'
 
 interface CommentaryViewRef {
   restoreCommentaryScrollPos: (index: number, offset: number) => Promise<void>
@@ -50,15 +49,10 @@ export function useBookViewSessionRestore(
   const _idbPromise: Promise<void> = bookId == null
     ? Promise.resolve()
     : (() => {
-        const idbStart = bookViewPerf.mark('idb:readStart')
         return Promise.all([
           tabStore.getBookViewState(tabId, bookId),
           tabStore.getLastReadPos(bookId),
         ]).then(([bookSaved, lastRead]) => {
-          bookViewPerf.measure('idb:read', idbStart)
-          bookViewPerf.mark(
-            `idb:done (bookSaved=${bookSaved != null}, lastRead=${lastRead != null})`,
-          )
           const result = _applyRestoreData(bookSaved ?? null, lastRead ?? null)
           _restoredSi = result.si
           _restoredSo = result.so
@@ -156,10 +150,7 @@ export function useBookViewSessionRestore(
   }> {
     if (bookId == null) return {}
 
-    const restoreStart = bookViewPerf.mark('sessionRestore:start')
     await _idbPromise
-    bookViewPerf.measure('sessionRestore:idbAwait', restoreStart)
-    bookViewPerf.mark('sessionRestore:idbResolved')
 
     const si = _restoredSi
     const so = _restoredSo
@@ -172,9 +163,7 @@ export function useBookViewSessionRestore(
           stop()
           await nextTick()
           const doRestore = async (viewRef: CommentaryViewRef) => {
-            bookViewPerf.mark('sessionRestore:commentaryScrollRestoreStart')
             await viewRef.restoreCommentaryScrollPos(si, so)
-            bookViewPerf.mark('sessionRestore:commentaryScrollRestoreDone')
           }
           const viewRef = commentaryViewRef()
           if (viewRef) {
