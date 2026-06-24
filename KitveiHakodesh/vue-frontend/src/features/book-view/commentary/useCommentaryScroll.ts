@@ -2,6 +2,7 @@ import { computed, ref, watch, nextTick } from 'vue'
 import { scrollToIndexWithRetry } from '@/utils/scrollToIndexWithRetry'
 import { setCurrentMark } from '../lines/useBookViewLineRenderer'
 import type { Virtualizer } from '@tanstack/vue-virtual'
+import { bookViewPerf } from '@/utils/bookViewPerf'
 
 const NAV_HEIGHT = 32
 
@@ -64,6 +65,7 @@ export function useCommentaryScroll(
     const el = scrollerEl()
     if (!el) return
     const token = ++scrollToGroupToken
+    const scrollStart = bookViewPerf.mark(`commentary:scrollToGroup:start (bookId=${bookId})`)
 
     function resolveIndex(): number {
       return flatItems().findIndex(
@@ -75,38 +77,64 @@ export function useCommentaryScroll(
       )
     }
 
-    // After scrollToIndexWithRetry reports success, the virtualizer may still be
-    // re-measuring items (estimated → real DOM sizes), causing the scroll position
-    // to drift significantly. Poll until the target position stabilises across two
-    // consecutive frames with no drift, or give up after maxAttempts.
-    // topReserved is -8 so gap = 0, meaning targetScrollTop = m.start exactly.
-    function waitForStableAndVerify(attempt: number, lastExpected: number) {
-      const currentEl = scrollerEl()
-      if (token !== scrollToGroupToken || !currentEl) return
-      const idx = resolveIndex()
-      const m = idx >= 0 ? virtualizer().measurementsCache.find((c: any) => c.index === idx) : undefined
-      if (!m) return
-      const expectedScrollTop = Math.max(0, m.start)
-      const actual = currentEl.scrollTop
-      if (Math.abs(actual - expectedScrollTop) > 4) {
-        currentEl.scrollTop = expectedScrollTop
-        scrollTop.value = expectedScrollTop
-      }
-      const stillSettling = Math.abs(expectedScrollTop - lastExpected) > 2
-      if (attempt < 20 || stillSettling) {
-        requestAnimationFrame(() => waitForStableAndVerify(attempt + 1, expectedScrollTop))
-      }
+    const idx = resolveIndex()
+    if (idx < 0) return
+
+    // Step 1 — bring the target into the rendered range.
+    virtualizer().scrollToIndex(idx, { align: 'start' })
+
+    // Step 2 — as soon as the virtualizer measures the target item (which happens
+    // when it renders the item into the DOM), read the exact position and apply it.
+    // MutationObserver fires synchronously after each DOM mutation, so we correct
+    // as soon as measurements land — no rAF polling loop needed.
+    const elCaptured = el
+    let applied = false
+
+    function tryApply(): boolean {
+      if (token !== scrollToGroupToken) return true // cancelled — treat as done
+      const currentIdx = resolveIndex()
+      if (currentIdx < 0) return false
+      const m = virtualizer().measurementsCache.find((c: any) => c.index === currentIdx)
+      if (!m) return false
+      const targetScrollTop = Math.max(0, m.start)
+      elCaptured.scrollTop = targetScrollTop
+      scrollTop.value = targetScrollTop
+      return true
     }
 
-    scrollToIndexWithRetry(
-      virtualizer() as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
-      el, resolveIndex, -8, 5,
-      () => {
-        scrollTop.value = el.scrollTop
-        requestAnimationFrame(() => waitForStableAndVerify(0, el.scrollTop))
-      },
-      () => token !== scrollToGroupToken,
-    )
+    // Fast path — item already measured (e.g. already in the rendered window).
+    requestAnimationFrame(() => {
+      if (applied) return
+      if (tryApply()) {
+        applied = true
+        bookViewPerf.measure('commentary:scrollToGroup', scrollStart)
+        bookViewPerf.mark('commentary:scrollToGroup:done')
+        return
+      }
+
+      // Slow path — item not yet measured. Watch DOM mutations and apply the moment
+      // the measurement lands in the cache.
+      const observer = new MutationObserver(() => {
+        if (applied) return
+        if (tryApply()) {
+          applied = true
+          observer.disconnect()
+          bookViewPerf.measure('commentary:scrollToGroup', scrollStart)
+          bookViewPerf.mark('commentary:scrollToGroup:done')
+        }
+      })
+      observer.observe(elCaptured, { childList: true, subtree: true, attributes: false })
+
+      // Safety timeout.
+      setTimeout(() => {
+        if (!applied) {
+          applied = true
+          observer.disconnect()
+          bookViewPerf.measure('commentary:scrollToGroup', scrollStart)
+          bookViewPerf.mark('commentary:scrollToGroup:timeout')
+        }
+      }, 500)
+    })
   }
 
   function scrollToFlatIndex(flatIndex: number, occurrence = 0) {
@@ -268,6 +296,7 @@ export function useCommentaryScroll(
     isRestoringScrollPos = true
     // Cancel any in-flight or queued scrollToGroup call — restore takes priority.
     scrollToGroupToken++
+    const restoreStart = bookViewPerf.mark(`commentary:restore:start (index=${scrollIndex}, offset=${scrollOffset})`)
     return new Promise<void>((resolve) => {
       let attempts = 0
       const MAX_ATTEMPTS = 20
@@ -338,6 +367,8 @@ export function useCommentaryScroll(
 
       startRestore()
     }).finally(() => {
+      bookViewPerf.measure('commentary:restore', restoreStart)
+      bookViewPerf.mark('commentary:restore:done')
       // Bump the token to cancel any scrollToGroup that started concurrently with
       // restore and is now in its rAF chain — restore takes priority.
       scrollToGroupToken++
@@ -367,23 +398,18 @@ export function useCommentaryScroll(
         if (isFirstLoad) { isFirstLoad = false; return }
         if (!newGroups.length) return
         // Skip partial loads — only scroll when loading is fully complete.
-        // The safety-net watch in useCommentary can trigger a second load with the
-        // section range, causing groups to update twice. The first update has a
-        // measurement cache from the previous groups list, so the resolver finds
-        // the right flatIndex but wrong scrollTop. Wait for loading=false.
         if (isLoading()) return
         if (isRestoringScrollPos) return
         const generation = ++scrollGeneration
+        // Single nextTick with flush:'post' is sufficient — the virtualizer has
+        // the new items after Vue flushes. The previous double-nextTick + rAF added
+        // ~50ms of unnecessary scheduling overhead on every line tap.
         await nextTick()
         if (generation !== scrollGeneration) return
         const pinned = pinnedGroup()
         if (!pinned) return
         const found = newGroups.some((g: any) => g.bookId === pinned.bookId)
         if (found) {
-          await nextTick()
-          if (generation !== scrollGeneration) return
-          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-          if (generation !== scrollGeneration) return
           if (isRestoringScrollPos) return
           scrollToGroup(pinned.bookId, pinned.sectionLabel, pinned.subSectionLabel)
         }

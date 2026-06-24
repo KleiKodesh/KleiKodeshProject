@@ -1,7 +1,6 @@
 import { ref, watch } from 'vue'
 import { query } from '@/webview-host/seforimDb'
 import { SQL } from '@/webview-host/queries.sql'
-import { bookViewPerf } from '@/utils/bookViewPerf'
 
 export interface LineItem {
   id: number
@@ -31,10 +30,7 @@ export function useLines(bookId: () => number | undefined) {
   // prioritise() and the IDB-restore watcher never fire duplicate queries
   // for the same offset.
   const activePrefetches = new Set<number>()
-  // Perf tracking
   let chunksProcessed = 0
-  let chunk0StartTime = 0
-  let allChunksStartTime = 0
 
   // Write a completed chunk's rows into lines.value.
   function writeRows(rows: { id: number; lineIndex: number; content: string }[]) {
@@ -59,13 +55,6 @@ export function useLines(bookId: () => number | undefined) {
       while (fetchQueue.length > 0) {
         if (currentBookId !== bookIdAtStart) break
         const offset = fetchQueue.shift()!
-        const isFirstChunk = offset === 0
-
-        let chunkStart = 0
-        if (isFirstChunk) {
-          chunkStart = bookViewPerf.mark('lines:chunk0:queryStart')
-          chunk0StartTime = chunkStart
-        }
 
         let rows: { id: number; lineIndex: number; content: string }[]
         try {
@@ -81,24 +70,11 @@ export function useLines(bookId: () => number | undefined) {
 
         if (currentBookId !== bookIdAtStart) break
 
-        if (isFirstChunk) {
-          bookViewPerf.measure('lines:chunk0:query', chunk0StartTime)
-        }
-
         writeRows(rows)
         chunksProcessed++
-
-        if (isFirstChunk) {
-          bookViewPerf.mark(`lines:chunk0:done (${rows.length} rows)`)
-        }
       }
     } finally {
       activeWorkers--
-      // When the last worker exits and the queue is truly empty, all chunks are done.
-      if (activeWorkers === 0 && fetchQueue.length === 0) {
-        bookViewPerf.measure('lines:allChunks', allChunksStartTime)
-        bookViewPerf.mark(`lines:allChunksDone (${chunksProcessed} chunks, ${lines.value.length} total lines)`)
-      }
     }
   }
 
@@ -162,18 +138,15 @@ export function useLines(bookId: () => number | undefined) {
     const position = fetchQueue.indexOf(offset)
     if (position !== -1) fetchQueue.splice(position, 1)
 
-    const prefetchStart = bookViewPerf.mark(`lines:prefetch:queryStart (offset=${offset})`)
     void query<{ id: number; lineIndex: number; content: string }>(
       SQL.GET_LINES_PAGED,
       [id, CHUNK_SIZE, offset],
     )
       .then((rows) => {
         activePrefetches.delete(offset)
-        bookViewPerf.measure('lines:prefetch:query', prefetchStart)
         if (currentBookId !== id) return
         writeRows(rows)
         chunksProcessed++
-        bookViewPerf.mark(`lines:prefetch:done (${rows.length} rows, offset=${offset})`)
       })
       .catch(() => {
         activePrefetches.delete(offset)
@@ -190,12 +163,6 @@ export function useLines(bookId: () => number | undefined) {
     chunksProcessed = 0
     activePrefetches.clear()
 
-    // Reset is called by useBookView at setup time (before both useToc and useLines
-    // are constructed) so the session origin is shared across all perf marks.
-    // We still reset here as a safety net when the book changes mid-session.
-    bookViewPerf.reset()
-    allChunksStartTime = bookViewPerf.mark('lines:loadStart')
-
     type BookRow = {
       totalLines: number
       hasTeamim: number
@@ -206,12 +173,8 @@ export function useLines(bookId: () => number | undefined) {
       hasOtherConnection: number
     }
 
-    const metadataStart = bookViewPerf.mark('lines:metadata:queryStart')
     const metadataPromise = query<BookRow>(SQL.GET_BOOK_BY_ID, [id])
-      .then((rows) => {
-        bookViewPerf.measure('lines:metadata:query', metadataStart)
-        return rows[0]
-      })
+      .then((rows) => rows[0])
       .catch(() => undefined)
 
     // Kick off the first chunk immediately alongside metadata — don't wait.
@@ -220,8 +183,6 @@ export function useLines(bookId: () => number | undefined) {
 
     const book = await metadataPromise
     if (currentBookId !== id) return
-
-    bookViewPerf.mark('lines:metadata:done')
 
     const totalLines = book?.totalLines ?? 0
     hasTeamim.value = !!(book?.hasTeamim)
@@ -246,8 +207,6 @@ export function useLines(bookId: () => number | undefined) {
       }))
       lines.value = [...lines.value, ...extra]
     }
-
-    bookViewPerf.mark(`lines:placeholdersReady (${totalLines} total lines)`)
 
     // Queue remaining chunks and fill up to CONCURRENT_CHUNKS workers.
     const chunkCount = totalLines > 0 ? Math.ceil(totalLines / CHUNK_SIZE) : 1

@@ -174,10 +174,6 @@ export function useBookView(
 
   // ── Data loading ──────────────────────────────────────────────────────────
 
-  // Reset the perf session before any composable fires its immediate watcher,
-  // so useToc and useLines share the same session origin and TOC timing is accurate.
-  bookViewPerf.reset()
-
   const {
     getActiveTocEntry, getTocPath,
     altTocSections, selectedAltTocSection,
@@ -461,6 +457,8 @@ export function useBookView(
     // Capture synchronously before any reactive state changes — activePinnedGroup
     // is still valid here (groups haven't been cleared yet).
     setPendingPin(commentaryViewRef()?.activePinnedGroup ?? null)
+    // Reset the perf session so all commentary timings are relative to this tap.
+    bookViewPerf.reset()
     bookViewPerf.mark(`commentary:lineSelected (lineId=${lineId})`)
     selectedLineId.value = lineId
     commentaryLineId.value = lineId
@@ -515,20 +513,17 @@ export function useBookView(
     () => idbResolved.value && initialScrollTop.value != null,
     (ready) => {
       if (!ready) return
-      bookViewPerf.mark(`lines:prefetch:triggered (targetIndex=${initialScrollTop.value})`)
       prefetch(initialScrollTop.value!)
     },
     { immediate: true },
   )
 
   onMounted(async () => {
-    bookViewPerf.mark('bookView:mounted')
     // Clear groups before session restore so loading animation shows immediately
     groups.value = []
     // Warm up commentary metadata in the background so the first toggle is instant.
     void ensureStaticFilterGroupsLoaded()
     const result = await restoreSession()
-    bookViewPerf.mark('bookView:sessionRestoreDone')
     if (result?.commentaryMode) restoredCommentaryMode.value = result.commentaryMode
     if (result?.commentaryFraction != null) restoredCommentaryFraction.value = result.commentaryFraction
     if (result?.stackedCommentaryFraction != null) restoredStackedCommentaryFraction.value = result.stackedCommentaryFraction

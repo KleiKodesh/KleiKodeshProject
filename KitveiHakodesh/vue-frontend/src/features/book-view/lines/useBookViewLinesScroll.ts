@@ -22,7 +22,6 @@ import type { LineItem } from './useBookViewLinesTable'
 import type { CommentaryTreeState, CommentaryVisibilityItem, PinnedCommentaryGroup } from '../bookViewTypes'
 import type { useTabStore } from '@/stores/tabStore'
 import type { useBookViewStore } from '@/stores/bookViewStore'
-import { bookViewPerf } from '@/utils/bookViewPerf'
 
 // ── Props shape accepted by this composable ───────────────────────────────────
 
@@ -169,7 +168,6 @@ export function useBookViewLinesScroll(
         if (targetIndex >= currentLines.length) return
         stop?.()
         stop = null
-        bookViewPerf.mark(`lines:content:targetKnown (targetIndex=${targetIndex})`)
         prioritise(targetIndex)
 
         const offset = props.initialScrollIndex != null ? (props.initialScrollOffset ?? 0) : 0
@@ -180,7 +178,6 @@ export function useBookViewLinesScroll(
           restoreScrollPos(targetIndex, offset)
           requestAnimationFrame(() =>
             requestAnimationFrame(() => {
-              bookViewPerf.mark('lines:content:scrollRestored')
               const scrollTop = scrollerEl.value?.scrollTop ?? 0
               const items = virtualizer().getVirtualItems()
               const firstVisible = items.find((v) => v.start + v.size > scrollTop) ?? items[0]
@@ -211,7 +208,6 @@ export function useBookViewLinesScroll(
             (content) => {
               if (content == null) return
               stopContentWatch?.()
-              bookViewPerf.mark('lines:content:targetLineLoaded')
               nextTick(() => restoreScrollPos(targetIndex, offset))
             },
             { immediate: true, flush: 'post' },
@@ -231,7 +227,6 @@ export function useBookViewLinesScroll(
         if (props.initialLineIndex == null && props.initialScrollIndex == null) {
           stop?.()
           stop = null
-          bookViewPerf.mark('lines:content:noTargetFocusScroller')
           nextTick(() => scrollerEl.value?.focus({ preventScroll: true }))
         }
       },
