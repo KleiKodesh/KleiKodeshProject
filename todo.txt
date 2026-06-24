@@ -7,6 +7,7 @@ cntl tab should skip singleton tabs
 open with changes window size
 takes time till service starts
 fetch surrounding lines for context for very short lines - willr equire paying more attention during navigating to result?
+ספרים קרובים update for book with source
 
 milti slect in lunes view
 linesview scroll restore mutation observer?

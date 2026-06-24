@@ -131,7 +131,9 @@ The main book reader. Orchestrates a split pane (text above, commentary below), 
 - `CommentaryTreePanel.vue` — tree panel for commentary filtering
 - `CommentaryTreeSectionNode.vue` — node in the commentary tree
 - `commentaryTreeTypes.ts` — types for commentary tree
-- `useCommentary.ts` — fetches linked commentary for a selected line (or range), groups results by connection type and category
+- `useCommentary.ts` — reactive composable shell; owns all Vue state (`groups`, `staticFilterGroups`, `loading`) and watchers; delegates data fetching to `commentaryGroupBuilder.ts`
+- `commentaryConnectionTypes.ts` — all connection type constants, DB→canonical mapping, Hebrew label lookups, and the lazy-loaded connection type ID table
+- `commentaryGroupBuilder.ts` — all data fetching and group building (no Vue reactivity): `buildCommentaryGroupsFromEntries`, `buildCommentaryGroupsFromCombined`, `fetchSourceEntriesViaReverseQuery`, `fetchTargumEntriesViaReverseQuery`, `buildStaticCommentaryFilterGroups`
 - `useCommentarySearch.ts` — commentary search (flat index-based)
 - `useCommentaryNavigation.ts` — next/prev section navigation for the commentary panel
 - `useCommentaryRender.ts` — commentary rendering logic

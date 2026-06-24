@@ -16,7 +16,11 @@ Commentary display, filtering, and navigation for the book view. All commentary-
 
 ## Composables
 
-**useCommentary.ts** - fetches linked commentary for a selected line or range, groups by connection type and category, and prepares the commentary-filter data. Returns live `groups` for the commentary panel plus `filterGroups` for the filter tree. All commentary data fetching goes through here.
+**useCommentary.ts** - the reactive composable shell. Owns all Vue state (`groups`, `staticFilterGroups`, `loading`, etc.), the `load` watcher, and `ensureStaticFilterGroupsLoaded`. Exports the `CommentaryGroup`, `CommentaryLine`, and `CommentaryBookEntry` interfaces plus the re-exported constants from `commentaryConnectionTypes.ts`. Delegates all data fetching and transformation to `commentaryGroupBuilder.ts`.
+
+**commentaryConnectionTypes.ts** - all connection type knowledge: the DB→canonical mapping, Hebrew section labels, the reverse label→type lookup, the lazy-loaded ID table (`ensureConnectionTypeNamesLoaded`, `getConnectionTypeName`, `getConnectionTypeId`), and derived helpers (`getPrimaryConnectionType`, `getCommentaryConnectionTypeIds`, `getTargumConnectionTypeIds`). Nothing in the commentary feature should re-derive connection type logic outside this file.
+
+**commentaryGroupBuilder.ts** - all data fetching and group building. Contains `buildCommentaryGroupsFromEntries`, `buildCommentaryGroupsFromCombined`, `fetchSourceEntriesViaReverseQuery`, `fetchTargumEntriesViaReverseQuery`, `buildStaticCommentaryFilterGroups`, and the category ordering helpers. No Vue reactivity — purely async functions and pure transformations.
 
 **useCommentaryRender.ts** - manages content rendering for commentary lines: diacritics filtering, divine name censoring, search highlighting, and render caching to avoid re-running expensive DOM operations on every render cycle.
 
