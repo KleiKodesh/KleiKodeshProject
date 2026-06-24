@@ -163,11 +163,29 @@ namespace KitveiHakodeshLib.HebrewBooks
                 var info = _pendingDownload.Value;
                 _pendingDownload = null;
 
-                bool useLocalFolder = !string.IsNullOrWhiteSpace(info.DestFolder);
-                string destDir  = useLocalFolder ? info.DestFolder : HbCacheDir;
-                string destFile = Path.Combine(destDir, info.BookId + ".pdf");
+                bool useLocalFolder = false;
+                string destDir  = HbCacheDir;
+                if (!string.IsNullOrWhiteSpace(info.DestFolder))
+                {
+                    // Verify the configured local folder is actually reachable before
+                    // committing the download destination to it.  If the folder is on a
+                    // removable drive that has been disconnected, or the path is otherwise
+                    // inaccessible, fall back silently to the app cache so the download
+                    // can still complete.
+                    try
+                    {
+                        Directory.CreateDirectory(info.DestFolder);
+                        useLocalFolder = true;
+                        destDir = info.DestFolder;
+                    }
+                    catch (Exception ex)
+                    {
+                        Log("Local folder unavailable during download, falling back to cache: " + ex.Message);
+                    }
+                }
 
-                Directory.CreateDirectory(destDir);
+                string destFile = Path.Combine(destDir, info.BookId + ".pdf");
+                if (!useLocalFolder) Directory.CreateDirectory(destDir);
                 e.ResultFilePath = destFile;
 
                 e.DownloadOperation.StateChanged += (s, _) =>

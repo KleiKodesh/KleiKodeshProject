@@ -1,5 +1,20 @@
 # Developer Preferences
 
+## No Guessing
+
+Never assert facts about the codebase, database, runtime state, or system configuration that you have not directly verified using a tool. If the information is not in a file you have read, a command you have run, or a query result you have seen, say "I don't know — I need to check" and then check. This applies to:
+
+- Database schema details (indexes, columns, constraints) — the absence of `CREATE INDEX` in source code does not mean an index doesn't exist; it may be baked into a pre-built artifact. Always query `sqlite_master` or `PRAGMA index_list` to verify.
+- File contents, exports, or APIs — read the file before making claims about what it contains or exports.
+- Runtime behavior — "this probably works because..." is a guess. Run it or instrument it.
+- Package versions, installed tools, environment variables — check before assuming.
+
+A statement presented as a fact but derived from absence of evidence ("I didn't find X, therefore X doesn't exist") is a guess. Mark it as uncertain and verify before acting on it.
+
+## Virtual Scroller Rules
+
+`@tanstack/vue-virtual` is a virtualizer — it owns the scroll position and all position calculations. Never bypass its internal API by setting `scrollTop` directly, manipulating `measurementsCache`, or computing item positions manually. Always use `virtualizer.scrollToIndex()` for programmatic navigation. Any workaround that directly sets `scrollTop` to a calculated offset (e.g. `lineIndex * estimateSize`) is forbidden — it will break when item heights vary from the estimate and will fight the virtualizer's own scroll management.
+
 ## Code Philosophy
 
 - Prefer clarity over rigid rules

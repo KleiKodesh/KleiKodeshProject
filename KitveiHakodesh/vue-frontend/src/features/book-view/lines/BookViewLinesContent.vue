@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, nextTick, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useTabStore } from '@/stores/tabStore'
@@ -7,18 +7,18 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import type { LineItem } from './useBookViewLinesTable'
 import type { TocEntry } from '../toc/useBookViewToc'
-import type { CommentaryTreeState, CommentaryVisibilityItem, PinnedCommentaryGroup } from '../bookViewTypes'
+import type { CommentaryTreeState, PinnedCommentaryGroup } from '../bookViewTypes'
 import ContextMenu from '@/components/ContextMenu.vue'
-import { useEventListener, onLongPress } from '@vueuse/core'
+import { onLongPress } from '@vueuse/core'
 import { useScopedKeys } from '@/composables/useTextSelectionKeys'
 import { useScopedCopy } from '@/composables/useLineCopy'
-import { scrollToIndexWithRetry } from '@/utils/scrollToIndexWithRetry'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 import { useZoomHandler } from '@/composables/useZoom'
 import { useBookViewLineRenderer, setCurrentMark } from './useBookViewLineRenderer'
 import { useBookViewLineCopyMenu } from './useBookViewLineCopyMenu'
-import { useBookViewHighlights } from './useBookViewHighlights'
-import { useBookViewNotes } from './useBookViewNotes'
+import { useBookViewAnnotations } from './useBookViewAnnotations'
+import { useBookViewLinesScroll } from './useBookViewLinesScroll'
+import { useBookViewLinesNavigation } from './useBookViewLinesNavigation'
 import BookViewNoteBubble from './BookViewNoteBubble.vue'
 
 const emit = defineEmits<{ scrolled: [number, number]; lineSelected: [number]; 'ctrl-f': [] }>()
@@ -33,14 +33,11 @@ const props = defineProps<{
   stackedCommentaryFraction?: number
   commentaryScrollIndex?: number | null
   commentaryScrollOffset?: number | null
-  hiddenCommentaryBookIds?: Set<string>
   commentaryFilterState?: CommentaryTreeState
   searchQuery?: string
   currentMatchLineIndex?: number
   currentMatchOccurrence?: number
-  // TOC / search-result navigation: scroll to this line index on first load
   initialLineIndex?: number
-  // Session restore: scroll to this line index on first load (from persisted state)
   initialScrollIndex?: number
   initialScrollOffset?: number
   searchHighlightLineIndex?: number
@@ -63,169 +60,78 @@ const tabId = tabStore.activeTabId
 const bookId = tabStore.activeTab.bookId!
 const bookTitle = tabStore.activeTab.title
 
-// Read lines zoom directly by tabId+bookId — NOT via bookViewStore.zoom computed which is
-// gated on activeTab. If this tab is not active when savePos fires (e.g. user switched
-// tabs before closing), the activeTab-based computed returns DEFAULT and overwrites the
-// real zoom in IDB.
+// Read lines zoom directly by tabId+bookId — NOT via bookViewStore.zoom computed (gated on
+// activeTab). If this tab is not active when savePos fires, the computed returns DEFAULT.
 const zoom = computed({
   get: () => bookViewStore.getLinesZoom(tabId, bookId),
-  set: (v: number) => bookViewStore.setLinesZoom(tabId, bookId, v),
+  set: (value: number) => bookViewStore.setLinesZoom(tabId, bookId, value),
 })
 
 const diacriticsState = computed(() => settingsStore.diacriticsState)
 const fontPx = computed(() => (zoom.value / 100) * (settingsStore.fontSize / 100) * 15)
 
-// ── User highlights ───────────────────────────────────────────────────────────
+const scrollerEl = ref<HTMLElement | null>(null)
+useZoomHandler({ zoom, target: scrollerEl, keyboard: false })
+const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, {
+  onCtrlF: () => emit('ctrl-f'),
+})
+useScopedCopy(
+  scrollerEl,
+  () => props.lines.map((line) => line.content).filter(Boolean) as string[],
+  isSelectAll,
+)
 
-const { getHighlightsForLine, applyHighlight, clearHighlight } = useBookViewHighlights(bookId)
+const virtualizer = useVirtualizer(
+  computed(() => ({
+    count: props.lines.length,
+    getScrollElement: () => scrollerEl.value,
+    estimateSize: () => 32,
+    overscan: 10,
+  })),
+)
+const virtualItems = computed(() => virtualizer.value.getVirtualItems())
+const totalSize = computed(() => virtualizer.value.getTotalSize())
 
-// Active note bubble state — declared early so onAddNote/onMarkerClick can reference it
-const activeBubbleNote = ref<import('./useBookViewNotes').Note | null>(null)
-const activeBubbleAnchorRect = ref<DOMRect | null>(null)
+// Type alias for the concrete Virtualizer type — avoids repeating the double-cast
+// every time a composable that expects the concrete type receives virtualizer.value.
+type ConcreteVirtualizer = import('@tanstack/vue-virtual').Virtualizer<Element, Element>
+const getVirtualizer = () => virtualizer.value as unknown as ConcreteVirtualizer
 
-function openNoteBubble(note: import('./useBookViewNotes').Note, markerEl: HTMLElement) {
-  activeBubbleNote.value = note
-  activeBubbleAnchorRect.value = markerEl.getBoundingClientRect()
-}
+useVirtualScrollerKeys(
+  scrollerEl,
+  getVirtualizer,
+  () => props.lines.length,
+)
 
-function closeNoteBubble() {
-  activeBubbleNote.value = null
-  activeBubbleAnchorRect.value = null
-}
+const {
+  getHighlightsForLine,
+  getNotesForLine,
+  updateNote,
+  deleteNote,
+  activeBubbleNote,
+  activeBubbleAnchorRect,
+  closeNoteBubble,
+  onHighlight,
+  onClearHighlight,
+  onAddNote,
+  onMarkerClick,
+} = useBookViewAnnotations(
+  bookId,
+  scrollerEl,
+  () => props.lines,
+  () => virtualItems.value.map((v) => props.lines[v.index]?.id ?? 0).filter((id) => id > 0),
+)
 
-// ── Selection → line offsets ──────────────────────────────────────────────────
-
-interface SelectionOnLine {
-  lineId: number
-  lineIndex: number
-  startOffset: number
-  endOffset: number
-}
-
-/**
- * Multi-line selection support for highlights.
- * A selection spanning multiple lines is treated as a series of separate
- * highlights — one per line, each with its own start/end offsets.
- */
-interface MultiLineSelection {
-  lines: SelectionOnLine[]
-}
-
-function extractSelectionOnLine(): MultiLineSelection | null {
-  const sel = window.getSelection()
-  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null
-  const range = sel.getRangeAt(0)
-  if (!scrollerEl.value) return null
-  const lineEls = Array.from(scrollerEl.value.querySelectorAll('.line'))
-  const intersected = lineEls.filter((el) => range.intersectsNode(el))
-  if (intersected.length === 0) return null
-
-  const selectionLines: SelectionOnLine[] = []
-
-  for (let i = 0; i < intersected.length; i++) {
-    const lineEl = intersected[i] as HTMLElement
-    const vItemEl = lineEl.closest('[data-index]') as HTMLElement | null
-    if (!vItemEl) continue
-    const vIndex = parseInt(vItemEl.dataset['index'] ?? '', 10)
-    const lineItem = props.lines[vIndex]
-    if (!lineItem || lineItem.content == null) continue
-
-    const strippedText = (lineEl.textContent ?? '').replace(/[\u0591-\u05C7]/g, '')
-
-    function countStrippedOffset(node: Node, offsetInNode: number): number {
-      const walker = document.createTreeWalker(lineEl, NodeFilter.SHOW_TEXT)
-      let stripped = 0
-      let current: Text | null
-      while ((current = walker.nextNode() as Text | null)) {
-        if (current === node) {
-          const slice = current.textContent?.slice(0, offsetInNode) ?? ''
-          stripped += slice.replace(/[\u0591-\u05C7]/g, '').length
-          return stripped
-        }
-        stripped += (current.textContent ?? '').replace(/[\u0591-\u05C7]/g, '').length
-      }
-      return stripped
-    }
-
-    const isFirstLine = i === 0
-    const isLastLine = i === intersected.length - 1
-
-    let startOffset = 0
-    let endOffset = strippedText.length
-
-    if (isFirstLine) startOffset = countStrippedOffset(range.startContainer, range.startOffset)
-    if (isLastLine) endOffset = countStrippedOffset(range.endContainer, range.endOffset)
-
-    if (startOffset < endOffset) {
-      selectionLines.push({
-        lineId: lineItem.id,
-        lineIndex: lineItem.lineIndex,
-        startOffset,
-        endOffset: Math.min(endOffset, strippedText.length),
-      })
-    }
-  }
-
-  if (selectionLines.length === 0) return null
-  return { lines: selectionLines }
-}
-
-// ── Highlight actions (called from context menu) ──────────────────────────────
-
-function onHighlight(colorArgb: number) {
-  const selection = extractSelectionOnLine()
-  if (!selection) return
-  for (const line of selection.lines) {
-    applyHighlight(line.lineId, line.startOffset, line.endOffset, colorArgb)
-  }
-  window.getSelection()?.removeAllRanges()
-}
-
-function onClearHighlight() {
-  const selection = extractSelectionOnLine()
-  if (!selection) return
-  // Clear highlights from each line separately
-  for (const line of selection.lines) {
-    clearHighlight(line.lineId, line.startOffset, line.endOffset)
-  }
-  window.getSelection()?.removeAllRanges()
-}
-
-function onAddNote() {
-  const selection = extractSelectionOnLine()
-  if (!selection || selection.lines.length === 0) return
-  const firstLine = selection.lines[0]!
-  // Capture quoted text before clearing the selection
-  const rawQuote = window.getSelection()?.toString() ?? ''
-  const quote = rawQuote.replace(/[\u0591-\u05C7]/g, '').trim()
-  window.getSelection()?.removeAllRanges()
-  void createNote(firstLine.lineId, firstLine.startOffset, firstLine.endOffset, quote).then(
-    (note) => {
-      // After the renderer re-runs, find the new marker and open the bubble
-      nextTick(() => {
-        const marker = scrollerEl.value?.querySelector(
-          `[data-note-id="${note.id}"]`,
-        ) as HTMLElement | null
-        if (marker) openNoteBubble(note, marker)
-      })
-    },
-  )
-}
-
-function onMarkerClick(event: MouseEvent) {
-  const marker = (event.target as HTMLElement).closest('[data-note-id]') as HTMLElement | null
-  if (!marker) return
-  const noteId = parseInt(marker.dataset['noteId'] ?? '', 10)
-  if (isNaN(noteId)) return
-  event.stopPropagation()
-  // Walk notesByLine to find the note by id
-  for (const notes of notesByLine.value.values()) {
-    const found = notes.find((n) => n.id === noteId)
-    if (found) { openNoteBubble(found, marker); return }
-  }
-}
-
-// ── Line rendering ────────────────────────────────────────────────────────────
+const { setProgrammaticScroll, onScroll } = useBookViewLinesScroll(
+  scrollerEl,
+  getVirtualizer,
+  () => virtualItems.value,
+  () => props.lines,
+  props,
+  { tabStore, bookViewStore, autoSelectTopLine, zoom, tabId, bookId },
+  (event, firstVisible, firstFull) => emit(event, firstVisible, firstFull),
+  props.prioritise,
+)
 
 const { lineContent } = useBookViewLineRenderer(settingsStore, diacriticsState, () => ({
   searchQuery: props.searchQuery,
@@ -237,12 +143,7 @@ const { lineContent } = useBookViewLineRenderer(settingsStore, diacriticsState, 
   getNotesForLine,
 }))
 
-// Apply .current class via DOM toggle — no re-render needed when only the
-// active occurrence changes within an already-rendered line.
-// NOTE: occurrence is applied inside scrollToLineIndex which owns the full
-// scroll+mark flow. This watch handles the edge case where the occurrence
-// changes without a line change (same line, different occurrence) and
-// scrollToLineIndex has already positioned the scroller.
+// Apply .current class via DOM toggle — no re-render needed when only occurrence changes.
 watch(
   () => [props.currentMatchLineIndex, props.currentMatchOccurrence] as const,
   ([lineIndex, occurrence]) => {
@@ -253,53 +154,6 @@ watch(
     })
   },
 )
-
-// ── Scroller setup ────────────────────────────────────────────────────────────
-
-const scrollerEl = ref<HTMLElement | null>(null)
-
-// Zoom handler scoped to this scroller — Ctrl+scroll and pinch affect only the
-// lines panel. Keyboard Ctrl+±/0 fires on whichever element has focus, so it
-// also stays scoped to the lines panel when the scroller is focused.
-useZoomHandler({ zoom, target: scrollerEl, keyboard: false })
-
-const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, {
-  onCtrlF: () => emit('ctrl-f'),
-})
-useScopedCopy(
-  scrollerEl,
-  () => props.lines.map((l) => l.content).filter(Boolean) as string[],
-  isSelectAll,
-)
-useVirtualScrollerKeys(
-  scrollerEl,
-  () =>
-    virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
-  () => props.lines.length,
-)
-
-// ── Virtualizer ───────────────────────────────────────────────────────────────
-
-const virtualizer = useVirtualizer(
-  computed(() => ({
-    count: props.lines.length,
-    getScrollElement: () => scrollerEl.value,
-    estimateSize: () => 32,
-    overscan: 10,
-  })),
-)
-
-const virtualItems = computed(() => virtualizer.value.getVirtualItems())
-const totalSize = computed(() => virtualizer.value.getTotalSize())
-
-// ── User notes — lazy, viewport-driven ───────────────────────────────────────
-
-const { notesByLine, getNotesForLine, createNote, updateNote, deleteNote } = useBookViewNotes(
-  bookId,
-  () => virtualItems.value.map((v) => props.lines[v.index]?.id ?? 0).filter((id) => id > 0),
-)
-
-// ── Context menu ──────────────────────────────────────────────────────────────
 
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
 const contextMenuItems = useBookViewLineCopyMenu({
@@ -317,289 +171,19 @@ const contextMenuItems = useBookViewLineCopyMenu({
   onClearHighlight,
   onAddNote,
 })
-
-onLongPress(scrollerEl, (event) => contextMenuRef.value?.showAtPosition(event.clientX, event.clientY))
-
-// ── Scroll capture ────────────────────────────────────────────────────────────
-
-function captureScrollPos() {
-  const first = virtualItems.value[0]
-  if (!first || !scrollerEl.value) return null
-  return {
-    scrollIndex: first.index,
-    scrollOffset: Math.max(0, scrollerEl.value.scrollTop - first.start),
-  }
-}
-
-// ── Scroll restore ────────────────────────────────────────────────────────────
-
-let programmaticScrollTimer: ReturnType<typeof setTimeout> | null = null
-let programmaticScrolling = false
-
-function restoreScrollPos(lineIndex: number, scrollOffset = 0) {
-  programmaticScrolling = true
-  if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer)
-  virtualizer.value.scrollToIndex(lineIndex, { align: 'start' })
-  requestAnimationFrame(() => {
-    const item = virtualizer.value.measurementsCache.find((m) => m.index === lineIndex)
-    if (item && scrollerEl.value) scrollerEl.value.scrollTop = item.start + scrollOffset
-    requestAnimationFrame(() => { programmaticScrolling = false })
-  })
-}
-
-// ── Initial scroll on load ────────────────────────────────────────────────────
-// Watches lines and initialScrollIndex together. Waits for:
-//   1. lines to be non-empty (placeholders allocated)
-//   2. a target index to be known (either initialLineIndex from TOC nav, or
-//      initialScrollIndex from IDB session restore — which may arrive after mount)
-//   3. the target line's content to be loaded (not a placeholder)
-// Stops itself after the first successful restore.
-{
-  let restored = false
-  let stopContentWatch: (() => void) | null = null
-  let stop: (() => void) | null = null
-
-  stop = watch(
-    () => [props.lines, props.initialScrollIndex] as const,
-    ([val]) => {
-      if (!val.length) return
-      const targetIndex = props.initialLineIndex ?? props.initialScrollIndex
-      if (targetIndex == null) return
-      stop?.()
-      stop = null
-      props.prioritise(targetIndex)
-      stopContentWatch = watch(
-        () => props.lines[targetIndex]?.content,
-        (content) => {
-          if (content == null) return
-          if (restored) { stopContentWatch?.(); return }
-          restored = true
-          stopContentWatch?.()
-          nextTick(() => {
-            const offset = props.initialScrollIndex != null ? (props.initialScrollOffset ?? 0) : 0
-            restoreScrollPos(targetIndex, offset)
-            requestAnimationFrame(() =>
-              requestAnimationFrame(() => {
-                const scrollTop = scrollerEl.value?.scrollTop ?? 0
-                const items = virtualizer.value.getVirtualItems()
-                const firstVisible = items.find((v) => v.start + v.size > scrollTop) ?? items[0]
-                const firstFull = items.find((v) => v.start >= scrollTop) ?? firstVisible
-                emit('scrolled', firstVisible?.index ?? targetIndex, firstFull?.index ?? firstVisible?.index ?? targetIndex)
-              }),
-            )
-            if (props.searchHighlightLineIndex != null && scrollerEl.value) {
-              nextTick(() => {
-                const mark = scrollerEl.value!.querySelector('mark.search-match') as HTMLElement | null
-                mark?.scrollIntoView({ block: 'center' })
-              })
-            }
-            scrollerEl.value?.focus({ preventScroll: true })
-          })
-        },
-        { immediate: true, flush: 'post' },
-      )
-    },
-    { flush: 'post', immediate: true },
-  )
-
-  // If no target ever arrives (no saved position, no TOC nav), focus the scroller
-  // once lines are loaded so keyboard navigation works immediately.
-  // Gate on idbResolved so we don't give up before IDB has had a chance to respond —
-  // on page reload, lines (placeholders) arrive before IDB resolves, and without this
-  // guard the fallback would kill the outer watcher before the saved position is known.
-  watch(
-    () => [props.lines, props.idbResolved] as const,
-    ([val, resolved]) => {
-      if (!val.length || restored || !resolved) return
-      if (props.initialLineIndex == null && props.initialScrollIndex == null) {
-        stop?.()
-        stop = null
-        nextTick(() => scrollerEl.value?.focus({ preventScroll: true }))
-      }
-    },
-    { flush: 'post' },
-  )
-}
-
-// ── Persist scroll position ───────────────────────────────────────────────────
-
-// Last known good position — updated on every scroll so unmount always has fresh data
-// even if the DOM is already detached when onBeforeUnmount fires (WebView2 behaviour).
-let lastKnownPos: { scrollIndex: number; scrollOffset: number } | null = null
-
-function savePos() {
-  if (programmaticScrolling) return
-  const pos = lastKnownPos ?? captureScrollPos()
-  if (pos) {
-    // Serialize the reactive proxy to a plain object before writing to IDB.
-    // IDB's structured clone algorithm cannot serialize Vue reactive proxies.
-    const filterState = props.commentaryFilterState
-      ? {
-          searchQuery: props.commentaryFilterState.searchQuery,
-          tokens: [...props.commentaryFilterState.tokens],
-          visibilityList: props.commentaryFilterState.visibilityList.map(
-            (item: CommentaryVisibilityItem) => ({ ...item }),
-          ),
-        }
-      : undefined
-    const pinnedGroup = props.pinnedCommentaryGroup
-      ? {
-          bookId: props.pinnedCommentaryGroup.bookId,
-          sectionLabel: props.pinnedCommentaryGroup.sectionLabel,
-          subSectionLabel: props.pinnedCommentaryGroup.subSectionLabel,
-        }
-      : null
-    tabStore.setBookViewState(tabId, bookId, {
-      ...pos,
-      selectedLineId: props.selectedLineId,
-      commentaryScrollIndex: props.commentaryScrollIndex,
-      commentaryScrollOffset: props.commentaryScrollOffset,
-      commentaryFilterState: filterState,
-      zoom: zoom.value,
-      commentaryZoom: bookViewStore.getCommentaryZoom(tabId, bookId),
-      commentaryVisible: props.commentaryVisible,
-      commentaryMode: props.commentaryMode,
-      commentaryFraction: props.commentaryFraction,
-      stackedCommentaryFraction: props.stackedCommentaryFraction,
-      autoSelectTopLine: autoSelectTopLine.value,
-      pinnedCommentaryGroup: pinnedGroup,
-    })
-    tabStore.setLastReadPos(bookId, {
-      ...pos,
-      selectedLineId: props.selectedLineId,
-      commentaryScrollIndex: props.commentaryScrollIndex,
-      commentaryScrollOffset: props.commentaryScrollOffset,
-      commentaryFilterState: filterState,
-      commentaryMode: props.commentaryMode,
-      commentaryFraction: props.commentaryFraction,
-      stackedCommentaryFraction: props.stackedCommentaryFraction,
-      pinnedCommentaryGroup: pinnedGroup,
-    })
-  }
-}
-
-// Save when the commentary panel closes so the commentary scroll position
-// (which just arrived via prop update from onCommentaryScroll) is flushed to
-// IDB before CommentaryView unmounts and the position would otherwise be lost.
-watch(
-  () => props.commentaryVisible,
-  (visible) => { if (!visible) savePos() },
+onLongPress(scrollerEl, (event) =>
+  contextMenuRef.value?.showAtPosition(event.clientX, event.clientY),
 )
 
-useEventListener(document, 'visibilitychange', () => {
-  if (document.visibilityState === 'hidden') savePos()
-})
-useEventListener(window, 'beforeunload', savePos)
-onBeforeUnmount(() => {
-  // Force-clear the programmatic flag so savePos is never silently skipped at unmount.
-  programmaticScrolling = false
-  if (programmaticScrollTimer) {
-    clearTimeout(programmaticScrollTimer)
-    programmaticScrollTimer = null
-  }
-  savePos()
-})
-
-function onScroll() {
-  if (!scrollerEl.value || programmaticScrolling) return
-  const scrollTop = scrollerEl.value.scrollTop
-  const items = virtualizer.value.getVirtualItems()
-  // For scroll position tracking (TOC, persistence): first item with any part visible
-  const firstVisible = items.find((v) => v.start + v.size > scrollTop) ?? items[0]
-  const lineIndex = firstVisible?.index ?? 0
-  // For auto-select: first fully visible line (top edge at or below scrollTop)
-  const firstFull = items.find((v) => v.start >= scrollTop) ?? firstVisible
-  const fullLineIndex = firstFull?.index ?? lineIndex
-  lastKnownPos = captureScrollPos()
-  props.prioritise(lineIndex)
-  emit('scrolled', lineIndex, fullLineIndex)
-}
-
-// ── Programmatic navigation ───────────────────────────────────────────────────
-
-function setProgrammaticScroll() {
-  programmaticScrolling = true
-  if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer)
-  programmaticScrollTimer = setTimeout(() => { programmaticScrolling = false }, 300)
-}
-
-function scrollToLineId(lineId: number, fallbackLineIndex?: number) {
-  const lineIndex = props.lines.find((l) => l.id === lineId)?.lineIndex ?? fallbackLineIndex
-  if (lineIndex == null) return
-  props.prioritise(lineIndex)
-  const scroller = scrollerEl.value
-  const vItem = virtualItems.value.find((v) => v.index === lineIndex)
-  if (vItem && scroller) {
-    const viewTop = scroller.scrollTop
-    const viewBottom = viewTop + scroller.clientHeight
-    if (vItem.start >= viewTop && vItem.start + vItem.size <= viewBottom) return
-  }
-  setProgrammaticScroll()
-  virtualizer.value.scrollToIndex(lineIndex, { align: 'start' })
-}
-
-function scrollToLineIndex(lineIndex: number, occurrence = 0) {
-  if (!scrollerEl.value) return
-
-  const reserved = props.searchBarVisible ? 44 : 0
-  const virt = virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>
-  const m = virt.measurementsCache.find((c) => c.index === lineIndex)
-
-  // Apply the .current class synchronously — the marks are already in the DOM
-  // from the cached render; no re-render needed so no MutationObserver required.
-  // Scoped to the target line's data-index row so occurrence is per-line.
-  function applyCurrentMark() {
-    if (scrollerEl.value) setCurrentMark(scrollerEl.value, lineIndex, occurrence)
-  }
-
-  function adjustToMark(scroller: HTMLElement): boolean {
-    const mark = scroller.querySelector('mark.search-match.current') as HTMLElement | null
-    if (!mark) return false
-    const markRect = mark.getBoundingClientRect()
-    const scrollerRect = scroller.getBoundingClientRect()
-    const relativeTop = markRect.top - scrollerRect.top
-    const relativeBottom = markRect.bottom - scrollerRect.top
-    const alreadyVisible = relativeTop >= reserved + 4 && relativeBottom <= scrollerRect.height - 4
-    if (!alreadyVisible) {
-      scroller.scrollTop += relativeTop - reserved - 8
-    }
-    return true
-  }
-
-  if (m) {
-    setProgrammaticScroll()
-
-    // Scroll to line top so the line is visible.
-    const targetScrollTop = m.start - reserved - 8
-    if (Math.abs(scrollerEl.value.scrollTop - targetScrollTop) > 2) {
-      scrollerEl.value.scrollTop = targetScrollTop
-    }
-
-    // Apply .current mark then fine-adjust scroll position to center it.
-    const scroller = scrollerEl.value
-    requestAnimationFrame(() => {
-      applyCurrentMark()
-      requestAnimationFrame(() => adjustToMark(scroller))
-    })
-    return
-  }
-
-  // Line not yet rendered — bring it into range first, then apply mark and adjust.
-  setProgrammaticScroll()
-  scrollToIndexWithRetry(
-    virt,
-    scrollerEl.value,
-    lineIndex,
-    reserved,
-    5,
-    () => {
-      const scroller = scrollerEl.value
-      if (!scroller) return
-      applyCurrentMark()
-      requestAnimationFrame(() => requestAnimationFrame(() => adjustToMark(scroller)))
-    },
-  )
-}
+const { scrollToLineId, scrollToLineIndex } = useBookViewLinesNavigation(
+  scrollerEl,
+  getVirtualizer,
+  () => virtualItems.value,
+  () => props.lines,
+  () => props.searchBarVisible ?? false,
+  setProgrammaticScroll,
+  props.prioritise,
+)
 
 function onLineClick(index: number) {
   const line = props.lines[index]

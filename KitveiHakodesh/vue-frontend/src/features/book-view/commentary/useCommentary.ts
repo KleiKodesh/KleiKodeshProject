@@ -3,6 +3,7 @@ import { query } from '@/webview-host/seforimDb'
 import { SQL } from '@/webview-host/queries.sql'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import type { BookRow } from '../../book-catalog/bookCatalogTree'
+import { bookViewPerf } from '@/utils/bookViewPerf'
 
 export interface CommentaryLine {
   lineId: number
@@ -651,12 +652,15 @@ export function useCommentary(
     loadUsedSectionRange = isMulti
     groups.value = []
     loading.value = true
+    const loadStart = bookViewPerf.mark(`commentary:load:start (lineId=${lineId}, isMulti=${isMulti})`)
     try {
+      const catalogStart = bookViewPerf.mark('commentary:load:catalogEnsureStart')
       await booksDataStore.ensureLoaded()
       await booksDataStore.ensureCommentaryMetadataLoaded()
       // Must be loaded before the parallel queries below so getCommentaryConnectionTypeIds()
       // in fetchSourceEntriesViaReverseQuery has the ID map available.
       await ensureConnectionTypeNamesLoaded()
+      bookViewPerf.measure('commentary:load:catalogEnsure', catalogStart)
 
       const sql = isMulti
         ? SQL.GET_COMMENTARY_DATA_FOR_SOURCE_LINE_RANGE(multiIds.length)
@@ -667,6 +671,7 @@ export function useCommentary(
       // The reverse lookups find source and targum text by reversing the respective
       // link types instead of relying on unreliable forward-direction SOURCE/TARGUM links.
       const lineIdsForReverse = isMulti ? multiIds : [lineId]
+      const parallelStart = bookViewPerf.mark('commentary:load:parallelQueriesStart')
       const [rows, sourceEntries, targumEntries] = await Promise.all([
         query<{
           targetBookId: number
@@ -678,9 +683,17 @@ export function useCommentary(
         fetchSourceEntriesViaReverseQuery(lineIdsForReverse, booksDataStore.allBooksMap),
         fetchTargumEntriesViaReverseQuery(lineIdsForReverse, booksDataStore.allBooksMap),
       ])
+      bookViewPerf.measure('commentary:load:parallelQueries', parallelStart)
+      bookViewPerf.mark(
+        `commentary:load:queriesDone (forward=${rows.length} rows, source=${sourceEntries.length} books, targum=${targumEntries.length} books)`,
+      )
+
       if (!rows.length && !sourceEntries.length && !targumEntries.length) return
 
+      const buildStart = bookViewPerf.mark('commentary:load:buildGroupsStart')
       groups.value = await buildCommentaryGroupsFromCombined(rows, sourceEntries, targumEntries, booksDataStore.allBooksMap)
+      bookViewPerf.measure('commentary:load:buildGroups', buildStart)
+      bookViewPerf.mark(`commentary:load:done (${groups.value.length} groups)`)
 
       const pinned = pinnedBookId()
       if (pinned != null && !groups.value.some((g) => g.bookId === pinned)) {
@@ -713,6 +726,7 @@ export function useCommentary(
         }
       }
     } finally {
+      bookViewPerf.measure('commentary:load:total', loadStart)
       const refetchImminent = !loadUsedSectionRange && selectedLineIds() != null && selectedLineIds()!.length > 0
       if (!refetchImminent) loading.value = false
     }

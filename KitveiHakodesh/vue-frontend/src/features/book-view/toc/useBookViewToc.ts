@@ -3,6 +3,7 @@ import { query } from '@/webview-host/seforimDb'
 import { SQL } from '@/webview-host/queries.sql'
 import { SearchableTree, stripTocTitleRoots } from './tocSearchUtils'
 import type { TreeNodeItem } from '@/components/treeTypes'
+import { bookViewPerf } from '@/utils/bookViewPerf'
 
 export interface TocEntry extends TreeNodeItem {
   lineId: number | null
@@ -70,8 +71,11 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
   async function load(id: number) {
     loading.value = true
     error.value = null
+    const tocStart = bookViewPerf.mark('toc:queryStart')
     try {
       const entries = await query<TocEntry>(SQL.GET_ALL_TOC_ENTRIES, [id])
+      bookViewPerf.measure('toc:query', tocStart)
+      bookViewPerf.mark(`toc:done (${entries.length} entries)`)
       const stripped = stripBookTitleRoot(entries, bookTitle?.(), id)
       tocEntries.value = stripped
       tocSearchTree.value = new SearchableTree(stripped)
