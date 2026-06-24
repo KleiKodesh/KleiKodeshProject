@@ -18,9 +18,15 @@ Virtual-scrolled main text display for the book view. Handles line rendering, se
 
 **useBookViewLineCopyMenu.ts** - context menu for copying selected lines with optional source attribution. Provides three copy modes: block copy (selected HTML as-is), copy with source appended inline as "(Book Title, TOC Path)", and copy with source prepended as an `<h2>` block. The source is built from `getActiveTocEntry()` and `getTocPath()` for the selection's first line, falling back to `tabStore.activeTab.tocPath` for the live scroll position.
 
-**useBookViewHighlights.ts** - manages user highlights for the currently open book. Loads highlights on mount, handles apply/clear with overlap rules, persists to `user_settings.db` via `userSettingsDb.ts`.
+**useBookViewAnnotations.ts** - orchestrator that encapsulates all annotation state: highlights, notes, note bubble overlay, and selection-to-line-offset conversion. Exposes `onHighlight`, `onClearHighlight`, `onAddNote`, `onMarkerClick` handlers. Most annotation entry points go through here rather than the sub-composables directly.
 
-**useBookViewNotes.ts** - manages user notes for the currently open book. Lazy viewport-driven loading, create/update/delete mutations with immediate in-memory map updates.
+**useBookViewHighlights.ts** - manages user highlights for the currently open book. Loads highlights on mount, handles apply/clear with overlap rules, persists to `user_settings.db` via `userSettingsDb.ts`. Called internally by useBookViewAnnotations.
+
+**useBookViewNotes.ts** - manages user notes for the currently open book. Lazy viewport-driven loading, create/update/delete mutations with immediate in-memory map updates. Called internally by useBookViewAnnotations.
+
+**useBookViewLinesNavigation.ts** - programmatic scroll navigation. `scrollToLineId(id, fallbackIndex)` scrolls to a line by id, skipping if visible. `scrollToLineIndex(index, occurrenceOffset)` scrolls to a specific index with search match highlighting.
+
+**useBookViewLinesScroll.ts** - scroll position management. `captureScrollPos()` / `restoreScrollPos()` for session restore. Saves position to tabStore IDB on visibilitychange, beforeunload, and unmount.
 
 ## Utilities
 
