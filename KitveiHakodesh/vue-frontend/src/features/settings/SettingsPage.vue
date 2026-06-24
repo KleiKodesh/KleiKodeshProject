@@ -373,7 +373,7 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
             </div>
             <div class="shortcut-row">
               <kbd>F7</kbd>
-              <span class="shortcut-desc">הפעלת סמן טקסט מהבהב, בדומה לעורך טקסט</span>
+              <span class="shortcut-desc">הפעלת סמן טקסט לניווט ולבחירת טקסט באמצעות המקלדת</span>
             </div>
           </div>
         </div>

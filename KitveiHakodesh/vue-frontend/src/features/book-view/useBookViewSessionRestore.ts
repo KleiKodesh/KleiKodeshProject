@@ -12,6 +12,7 @@ import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { Ref } from 'vue'
 import type { CommentaryTreeState } from './bookViewTypes'
+import { bookViewPerf } from '@/utils/bookViewPerf'
 
 interface CommentaryViewRef {
   restoreCommentaryScrollPos: (index: number, offset: number) => Promise<void>
@@ -48,18 +49,25 @@ export function useBookViewSessionRestore(
 
   const _idbPromise: Promise<void> = bookId == null
     ? Promise.resolve()
-    : Promise.all([
-        tabStore.getBookViewState(tabId, bookId),
-        tabStore.getLastReadPos(bookId),
-      ]).then(([bookSaved, lastRead]) => {
-        const result = _applyRestoreData(bookSaved ?? null, lastRead ?? null)
-        _restoredSi = result.si
-        _restoredSo = result.so
-        _restoredCommentaryMode = result.commentaryMode
-        _restoredCommentaryFraction = result.commentaryFraction
-        _restoredStackedCommentaryFraction = result.stackedCommentaryFraction
-        _restoredPinnedCommentaryGroup = result.pinnedCommentaryGroup
-      })
+    : (() => {
+        const idbStart = bookViewPerf.mark('idb:readStart')
+        return Promise.all([
+          tabStore.getBookViewState(tabId, bookId),
+          tabStore.getLastReadPos(bookId),
+        ]).then(([bookSaved, lastRead]) => {
+          bookViewPerf.measure('idb:read', idbStart)
+          bookViewPerf.mark(
+            `idb:done (bookSaved=${bookSaved != null}, lastRead=${lastRead != null})`,
+          )
+          const result = _applyRestoreData(bookSaved ?? null, lastRead ?? null)
+          _restoredSi = result.si
+          _restoredSo = result.so
+          _restoredCommentaryMode = result.commentaryMode
+          _restoredCommentaryFraction = result.commentaryFraction
+          _restoredStackedCommentaryFraction = result.stackedCommentaryFraction
+          _restoredPinnedCommentaryGroup = result.pinnedCommentaryGroup
+        })
+      })()
 
   _idbPromise.then(() => { idbResolved.value = true })
 
@@ -148,38 +156,36 @@ export function useBookViewSessionRestore(
   }> {
     if (bookId == null) return {}
 
+    const restoreStart = bookViewPerf.mark('sessionRestore:start')
     await _idbPromise
+    bookViewPerf.measure('sessionRestore:idbAwait', restoreStart)
+    bookViewPerf.mark('sessionRestore:idbResolved')
 
     const si = _restoredSi
     const so = _restoredSo
-
-    
 
     if (si != null && so != null) {
       const stop = watch(
         () => !commentaryLoading.value && commentaryGroups().length > 0,
         async (ready) => {
-          
           if (!ready) return
           stop()
           await nextTick()
           const doRestore = async (viewRef: CommentaryViewRef) => {
-            
+            bookViewPerf.mark('sessionRestore:commentaryScrollRestoreStart')
             await viewRef.restoreCommentaryScrollPos(si, so)
+            bookViewPerf.mark('sessionRestore:commentaryScrollRestoreDone')
           }
           const viewRef = commentaryViewRef()
           if (viewRef) {
-            
             nextTick(() => {
               void doRestore(viewRef)
             })
           } else {
-            
             const stopRef = watch(
               () => commentaryViewRef(),
               (newRef) => {
                 if (!newRef) return
-                
                 stopRef()
                 nextTick(() => {
                   void doRestore(newRef)

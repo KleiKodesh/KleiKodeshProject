@@ -34,6 +34,7 @@ import { buildBookExportHtml } from './lines/useBookViewLineCopyMenu'
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { TocEntry } from './toc/useBookViewToc'
 import type { SearchMode, SidePanelMode, CommentaryTreeState } from './bookViewTypes'
+import { bookViewPerf } from '@/utils/bookViewPerf'
 export type { SearchMode } from './bookViewTypes'
 
 // Component instance types — used only for ref typing
@@ -173,6 +174,10 @@ export function useBookView(
 
   // ── Data loading ──────────────────────────────────────────────────────────
 
+  // Reset the perf session before any composable fires its immediate watcher,
+  // so useToc and useLines share the same session origin and TOC timing is accurate.
+  bookViewPerf.reset()
+
   const {
     getActiveTocEntry, getTocPath,
     altTocSections, selectedAltTocSection,
@@ -183,7 +188,7 @@ export function useBookView(
 
   // Lines load immediately in parallel with TOC — scrollStateReady is always true,
   // BookViewLinesContent mounts immediately and its scroll watcher handles late IDB restore.
-  const { lines, prioritise, hasCommentaries, hasRelatedBooks, hasTeamim: bookHasTeamim } = useLines(() => bookId)
+  const { lines, prioritise, prefetch, hasCommentaries, hasRelatedBooks, hasTeamim: bookHasTeamim } = useLines(() => bookId)
 
   const hasToc = computed(() => tocLoaded.value && tocEntries.value.length > 0)
 
@@ -456,6 +461,7 @@ export function useBookView(
     // Capture synchronously before any reactive state changes — activePinnedGroup
     // is still valid here (groups haven't been cleared yet).
     setPendingPin(commentaryViewRef()?.activePinnedGroup ?? null)
+    bookViewPerf.mark(`commentary:lineSelected (lineId=${lineId})`)
     selectedLineId.value = lineId
     commentaryLineId.value = lineId
   }
@@ -499,12 +505,30 @@ export function useBookView(
     groups.value = []
   })
 
+  // As soon as IDB resolves and the saved scroll position is known, fire an
+  // out-of-band prefetch for that chunk so it races the background workers.
+  // This is the fast-path for session-restore navigation: the target chunk
+  // is fetched independently rather than waiting for a worker slot to free up.
+  // Only fires once per book open; openTocLineIndex navigations already have
+  // their target index known at t=0 so they use prioritise() instead.
+  watch(
+    () => idbResolved.value && initialScrollTop.value != null,
+    (ready) => {
+      if (!ready) return
+      bookViewPerf.mark(`lines:prefetch:triggered (targetIndex=${initialScrollTop.value})`)
+      prefetch(initialScrollTop.value!)
+    },
+    { immediate: true },
+  )
+
   onMounted(async () => {
+    bookViewPerf.mark('bookView:mounted')
     // Clear groups before session restore so loading animation shows immediately
     groups.value = []
     // Warm up commentary metadata in the background so the first toggle is instant.
     void ensureStaticFilterGroupsLoaded()
     const result = await restoreSession()
+    bookViewPerf.mark('bookView:sessionRestoreDone')
     if (result?.commentaryMode) restoredCommentaryMode.value = result.commentaryMode
     if (result?.commentaryFraction != null) restoredCommentaryFraction.value = result.commentaryFraction
     if (result?.stackedCommentaryFraction != null) restoredStackedCommentaryFraction.value = result.stackedCommentaryFraction
