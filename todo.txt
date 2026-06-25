@@ -9,11 +9,7 @@ takes time till service starts
 fetch surrounding lines for context for very short lines - willr equire paying more attention during navigating to result?
 ספרים קרובים update for book with source
 
-milti slect in lunes view
-linesview scroll restore mutation observer?
-race conditions:
-- linesview loadin 
-- side panel
+add focused search to fts thi si seasy because it can be itegrated in te galloping 
 
 create excluded folders dilgue for the document locator
 
