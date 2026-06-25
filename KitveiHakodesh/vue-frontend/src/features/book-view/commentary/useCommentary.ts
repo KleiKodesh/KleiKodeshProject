@@ -136,26 +136,42 @@ export function useCommentary(
     groups.value = []
     loading.value = true
     try {
-      await booksDataStore.ensureLoaded()
-      await booksDataStore.ensureCommentaryMetadataLoaded()
-      await ensureConnectionTypeNamesLoaded()
-
+      // Fire all pre-flight work in parallel:
+      // - catalog + commentary metadata (needed by allBooksMap for group building)
+      // - connection type ID table (needed by reverse-lookup queries)
+      // - the forward commentary query (needs no ID table — pure SQL with a fixed line param)
+      // The reverse queries depend on connection type IDs so they start after that resolves,
+      // but they run concurrently with each other and with the catalog awaits.
       const sql = isMulti
         ? SQL.GET_COMMENTARY_DATA_FOR_SOURCE_LINE_RANGE(multiIds.length)
         : SQL.GET_COMMENTARY_DATA_FOR_SOURCE_LINE
       const params = isMulti ? multiIds : [lineId]
-
       const lineIdsForReverse = isMulti ? multiIds : [lineId]
+
+      const forwardQueryPromise = query<{
+        targetBookId: number
+        targetLineId: number
+        connectionTypeId: number
+        lineIndex: number
+        content: string
+      }>(sql, params)
+
       const [rows, sourceEntries, targumEntries] = await Promise.all([
-        query<{
-          targetBookId: number
-          targetLineId: number
-          connectionTypeId: number
-          lineIndex: number
-          content: string
-        }>(sql, params),
-        fetchSourceEntriesViaReverseQuery(lineIdsForReverse, booksDataStore.allBooksMap),
-        fetchTargumEntriesViaReverseQuery(lineIdsForReverse, booksDataStore.allBooksMap),
+        forwardQueryPromise,
+        Promise.all([
+          booksDataStore.ensureLoaded(),
+          booksDataStore.ensureCommentaryMetadataLoaded(),
+          ensureConnectionTypeNamesLoaded(),
+        ]).then(() =>
+          fetchSourceEntriesViaReverseQuery(lineIdsForReverse, booksDataStore.allBooksMap),
+        ),
+        Promise.all([
+          booksDataStore.ensureLoaded(),
+          booksDataStore.ensureCommentaryMetadataLoaded(),
+          ensureConnectionTypeNamesLoaded(),
+        ]).then(() =>
+          fetchTargumEntriesViaReverseQuery(lineIdsForReverse, booksDataStore.allBooksMap),
+        ),
       ])
 
       if (!rows.length && !sourceEntries.length && !targumEntries.length) return

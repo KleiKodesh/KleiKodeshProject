@@ -145,7 +145,8 @@ export async function buildCommentaryGroupsFromCombined(
   targumEntries: CommentaryBookEntry[],
   allBooksMap: Map<number, BookRow>,
 ): Promise<CommentaryGroup[]> {
-  await ensureConnectionTypeNamesLoaded()
+  // ensureConnectionTypeNamesLoaded is guaranteed by the caller (load() in useCommentary)
+  // before this function is called — no need to await it again here.
   const byBookConnection: ByBookConnectionMap = new Map()
   const lineData = new Map<number, { lineIndex: number; content: string }>()
 
