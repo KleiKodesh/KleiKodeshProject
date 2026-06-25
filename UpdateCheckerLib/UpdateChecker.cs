@@ -38,6 +38,8 @@ namespace UpdateCheckerLib
             const int maxAttempts = 3;
             const int retryDelayMs = 2000;
 
+            Exception lastException = null;
+
             for (int attempt = 1; attempt <= maxAttempts; attempt++)
             {
                 try
@@ -47,31 +49,22 @@ namespace UpdateCheckerLib
                 }
                 catch (HttpRequestException ex) when (IsRetryable(ex) && attempt < maxAttempts)
                 {
+                    lastException = ex;
                     Debug.WriteLine($"Update check attempt {attempt} failed ({ex.Message}), retrying in {retryDelayMs}ms...");
                     await Task.Delay(retryDelayMs);
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"Update check failed: {ex.Message}");
-                    return null;
+                    lastException = ex;
+                    break; // non-retryable — stop immediately
                 }
             }
-            return null;
-        }
 
-        /// <summary>
-        /// Returns true for HTTP errors that are worth retrying (404, 5xx, network issues).
-        /// 404 from GitHub can be a transient CDN/propagation glitch.
-        /// </summary>
-        private static bool IsRetryable(HttpRequestException ex)
-        {
-            var msg = ex.Message;
-            // HttpRequestException message contains the status code text for .NET Framework
-            return msg.Contains("404") ||
-                   msg.Contains("500") ||
-                   msg.Contains("502") ||
-                   msg.Contains("503") ||
-                   msg.Contains("504");
+            Debug.WriteLine($"Update check failed after all attempts: {lastException?.Message}");
+            // Rethrow so callers can decide whether to show a message.
+            if (lastException != null)
+                throw new UpdateCheckException("לא ניתן לבדוק עדכונים", API_URL, lastException);
+            return null;
         }
 
         public static int CompareVersions(string githubVersion, string registryVersion)
@@ -108,6 +101,16 @@ namespace UpdateCheckerLib
                 if (result == DialogResult.Yes)
                     await DownloadManager.DownloadAndScheduleInstallerAsync(release.TagName);
             }
+            catch (UpdateCheckException ex)
+            {
+                Debug.WriteLine($"Update check failed: {ex.Message} — {ex.InnerException?.Message}");
+                ShowHebrewMessageBox(
+                    $"בדיקת עדכונים נכשלה.\n\n{ex.ToUserMessage()}",
+                    "שגיאה - כלי קודש",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning
+                );
+            }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Update check failed: {ex.Message}");
@@ -125,6 +128,21 @@ namespace UpdateCheckerLib
                 return release?.TagName != null && CompareVersions(release.TagName, currentVersion) > 0;
             }
             catch { return false; }
+        }
+
+        /// <summary>
+        /// Returns true for HTTP errors that are worth retrying (404, 5xx, network issues).
+        /// 404 from GitHub can be a transient CDN/propagation glitch.
+        /// </summary>
+        private static bool IsRetryable(HttpRequestException ex)
+        {
+            var msg = ex.Message;
+            // HttpRequestException message contains the status code text for .NET Framework
+            return msg.Contains("404") ||
+                   msg.Contains("500") ||
+                   msg.Contains("502") ||
+                   msg.Contains("503") ||
+                   msg.Contains("504");
         }
 
         private static DialogResult ShowHebrewMessageBox(string text, string caption, MessageBoxButtons buttons, MessageBoxIcon icon) =>

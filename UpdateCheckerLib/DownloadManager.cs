@@ -61,15 +61,24 @@ namespace UpdateCheckerLib
                 if (form.IsCancelled) { TryDeleteFile(tempPath); return; }
 
                 if (!File.Exists(tempPath) || new FileInfo(tempPath).Length == 0)
-                    throw new InvalidOperationException("הורדת הקובץ נכשלה");
+                    throw new UpdateException("הורדת הקובץ נכשלה — הקובץ ריק או חסר", installerUrl, attempts: 1);
 
                 PendingInstallerPath = tempPath;
             }
             catch (OperationCanceledException) { TryDeleteFile(tempPath); }
+            catch (UpdateException ex)
+            {
+                MessageBox.Show(
+                    $"שגיאה בהורדת העדכון:\n\n{ex.ToUserMessage()}",
+                    "שגיאה - כלי קודש",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error,
+                    MessageBoxDefaultButton.Button1,
+                    MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
+            }
             catch (Exception ex)
             {
                 MessageBox.Show(
-                    $"שגיאה בהורדת העדכון:\n{ex.Message}",
+                    $"שגיאה בהורדת העדכון:\n\n{ex.Message}\n\nכתובת: {installerUrl}",
                     "שגיאה - כלי קודש",
                     MessageBoxButtons.OK, MessageBoxIcon.Error,
                     MessageBoxDefaultButton.Button1,
@@ -158,6 +167,10 @@ namespace UpdateCheckerLib
 
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
 
+            // Track the last HTTP status and inner exception for the final error message.
+            HttpStatusCode? lastStatus = null;
+            Exception lastException    = null;
+
             using (var client = new HttpClient { Timeout = TimeSpan.FromMinutes(5) })
             {
                 client.DefaultRequestHeaders.Add("User-Agent", "KleiKodesh-UpdateChecker");
@@ -180,11 +193,13 @@ namespace UpdateCheckerLib
                     try
                     {
                         response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, token);
+                        lastStatus = response.StatusCode;
 
                         if (IsRetryableStatus(response.StatusCode) && attempt < maxAttempts)
                         {
                             Debug.WriteLine($"Download attempt {attempt} got {(int)response.StatusCode}, retrying...");
                             response.Dispose();
+                            response = null;
                             continue;
                         }
 
@@ -213,11 +228,27 @@ namespace UpdateCheckerLib
 
                         return; // success
                     }
+                    catch (OperationCanceledException) { throw; } // let cancel propagate unchanged
+                    catch (Exception ex) when (!(ex is UpdateException))
+                    {
+                        lastException = ex;
+                        if (attempt >= maxAttempts)
+                            break; // fall through to throw below
+                        Debug.WriteLine($"Download attempt {attempt} threw: {ex.Message}, retrying...");
+                    }
                     finally
                     {
                         response?.Dispose();
                     }
                 }
+
+                // All attempts exhausted — throw a structured exception with full context.
+                var statusDesc = lastStatus.HasValue
+                    ? $"קוד שגיאת שרת {(int)lastStatus.Value}"
+                    : "שגיאת רשת";
+                throw new UpdateException(
+                    $"הורדת העדכון נכשלה לאחר {maxAttempts} ניסיונות ({statusDesc})",
+                    url, maxAttempts, lastStatus, lastException);
             }
         }
 
